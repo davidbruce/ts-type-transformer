@@ -1,0 +1,7 @@
+[package]
+name = "ts-type-transformer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+oxc = "0.69.0"
