@@ -10,10 +10,10 @@ interface AddressErrors {
     region?: string;
     sortingCode?: string;
 }
-interface AesCtrParams extends Algorithm {
+interface AesCtrParams extends GenericInterfaceTest<String> {
     counter: BufferSource;
     length: number;
 }
-interface Algorithm {
-    name: string;
+interface GenericInterfaceTest<T> {
+    name: T;
 }

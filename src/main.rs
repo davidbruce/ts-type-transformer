@@ -1,19 +1,37 @@
-use oxc::ast::ast::{Statement, TSSignature, TSType, TSTypeParameter};
-use std::{fs, path::Path};
 use oxc::allocator::Allocator;
+use oxc::ast::ast::{Statement, TSSignature, TSType, TSTypeParameter};
 use oxc::parser::{ParseOptions, Parser};
 use oxc::span::SourceType;
-use oxc::semantic::ScopeFlags;
+use std::{fs, path::Path};
 
 use oxc::ast::ast::*;
 
-use oxc::ast_visit::{Visit, walk};
+use oxc::ast_visit::{Visit, walk, walk_mut};
 
 struct PrintVisitor;
 
 impl<'a> Visit<'a> for PrintVisitor {
     fn visit_ts_interface_declaration(&mut self, it: &TSInterfaceDeclaration<'a>) {
         println!("Interface: {}", it.id.name);
+
+        //TODO: no idea why visit_ts_interface_heritages isn't working
+        for heritage in it.extends.iter() {
+            print!(
+                "Extends: {}",
+                //yeesh
+                heritage.expression.get_identifier_reference().unwrap().name
+            );
+            match &heritage.type_arguments {
+                Some(args) => {
+                    let mut result_list: Vec<String> = Vec::new();
+                    for arg in args.params.iter() {
+                        result_list.push(String::from(arg.get_identifier_reference().unwrap().name))
+                    }
+                    println!("<{}>", result_list.join(", "))
+                }
+                None => println!("none"),
+            }
+        }
         walk::walk_ts_interface_body(self, &it.body);
     }
     fn visit_identifier_name(&mut self, identifier: &IdentifierName<'a>) {
@@ -37,13 +55,12 @@ fn process_type(ts_type: &TSType) -> Result<String, String> {
         TSType::TSUndefinedKeyword(_) => "undefined",
         TSType::TSUnknownKeyword(_) => "unknown",
         TSType::TSVoidKeyword(_) => "void",
-        TSType::TSTypeReference(reference) => 
+        TSType::TSTypeReference(reference) =>
         //TODO: handle type arguments
-          reference.type_name
-            .get_identifier_reference()
-            .name
-            .as_str(), 
-        _ => "Err" 
+        {
+            reference.type_name.get_identifier_reference().name.as_str()
+        }
+        _ => "Err",
     };
     if result == "Err" {
         Err(result.to_string())
@@ -63,13 +80,19 @@ fn process_signature(signature: &TSSignature) -> Result<String, String> {
             // result.push_str(format!("{:?}", prop_sig).as_str());
             result.push_str(format!("\nProperty: {}", prop_sig.key.name().unwrap()).as_str());
             if let Some(type_annotation) = prop_sig.type_annotation.as_ref() {
-                result.push_str(format!("\n\tType: {}", process_type(&type_annotation.type_annotation).unwrap()).as_str());
+                result.push_str(
+                    format!(
+                        "\n\tType: {}",
+                        process_type(&type_annotation.type_annotation).unwrap()
+                    )
+                    .as_str(),
+                );
             }
             // process_type(prop_sig.type_annotation.unwrap().type_annotation);
             // result.push_str(format!("\n\tType: {}", process_type_annotation(prop_sig.type_annotation)).as_str());
             Ok(result)
         }
-        _ => Err("Error processing signature".to_string())
+        _ => Err("Error processing signature".to_string()),
     }
 }
 
@@ -85,19 +108,23 @@ fn process_statement(stmt: &Statement) -> Result<String, String> {
             }
             Ok(result)
         }
-        _ => Err("Error processing statement".to_string())
+        _ => Err("Error processing statement".to_string()),
     }
 }
 fn main() -> Result<(), String> {
-    let source_text = fs::read_to_string("test.d.ts").map_err(|_| "Missing 'test.ts'".to_string())?;
+    let source_text =
+        fs::read_to_string("test.d.ts").map_err(|_| "Missing 'test.ts'".to_string())?;
     let source_type = SourceType::from_path(Path::new("test.d.ts")).unwrap();
 
     // let source_text = fs::read_to_string("../node_modules/@types/web/index.d.ts").map_err(|_| "Missing 'test.ts'".to_string())?;
     // let source_type = SourceType::from_path(Path::new("../node_modules/@types/web/index.d.ts")).unwrap();
     let allocator = Allocator::default();
-    
+
     let ret = Parser::new(&allocator, &source_text, source_type)
-        .with_options(ParseOptions { parse_regular_expression: true, ..ParseOptions::default() })
+        .with_options(ParseOptions {
+            parse_regular_expression: true,
+            ..ParseOptions::default()
+        })
         .parse();
 
     let mut visitor = PrintVisitor;
