@@ -1,18 +1,33 @@
 use oxc::allocator::Allocator;
-use oxc::ast::ast::{Statement, TSSignature, TSType, TSTypeParameter};
+use oxc::ast::ast::{Statement, TSSignature, TSType};
 use oxc::parser::{ParseOptions, Parser};
 use oxc::span::SourceType;
 use std::{fs, path::Path};
 
 use oxc::ast::ast::*;
 
-use oxc::ast_visit::{Visit, walk, walk_mut};
+use oxc::ast_visit::{Visit, walk};
 
 struct PrintVisitor;
 
 impl<'a> Visit<'a> for PrintVisitor {
     fn visit_ts_interface_declaration(&mut self, it: &TSInterfaceDeclaration<'a>) {
-        println!("Interface: {}", it.id.name);
+        print!("Interface: {}", it.id.name);
+        match &it.type_parameters {
+            Some(param) => walk::walk_ts_type_parameters(self, &param.params),
+            None => println!(""),
+        }
+        // match &it.type_parameters {
+        //     Some(args) => {
+        //         let mut result_list: Vec<String> = Vec::new();
+        //         for arg in args.params.iter() {
+        //             //gotta love name.name
+        //             result_list.push(String::from(arg.name.name))
+        //         }
+        //         println!("<{}>", result_list.join(", "))
+        //     }
+        //     None => println!(""),
+        // }
 
         //TODO: no idea why visit_ts_interface_heritages isn't working
         for heritage in it.extends.iter() {
@@ -29,10 +44,22 @@ impl<'a> Visit<'a> for PrintVisitor {
                     }
                     println!("<{}>", result_list.join(", "))
                 }
-                None => println!("none"),
+                None => println!("e"),
             }
         }
+        //TODO: remove the above and replace with this walk
+        walk::walk_ts_interface_heritages(self, &it.extends);
         walk::walk_ts_interface_body(self, &it.body);
+    }
+
+    fn visit_ts_type_parameter(&mut self, it: &TSTypeParameter<'a>) {
+        println!("\tParameter: {}", it.name.name);
+    }
+    // fn visit_ts_type_parameter_instantiation(&mut self, it: &TSTypeParameterInstantiation<'a>) {
+    //     println!("\tParameter Instantiation: {}", it.)
+    // }
+    fn visit_ts_interface_heritage(&mut self, it: &TSInterfaceHeritage<'a>) {
+        println!("HIT")
     }
     fn visit_identifier_name(&mut self, identifier: &IdentifierName<'a>) {
         println!("\tIdentifier: {}", identifier.name);

@@ -1,3 +1,10 @@
+interface GenericInterfaceTest<T> {
+    name: T;
+}
+interface AesCtrParams extends GenericInterfaceTest<String> {
+    counter: BufferSource;
+    length: number;
+}
 interface AddressErrors {
     addressLine?: string;
     city?: string;
@@ -9,11 +16,4 @@ interface AddressErrors {
     recipient?: string;
     region?: string;
     sortingCode?: string;
-}
-interface AesCtrParams extends GenericInterfaceTest<String> {
-    counter: BufferSource;
-    length: number;
-}
-interface GenericInterfaceTest<T> {
-    name: T;
 }
