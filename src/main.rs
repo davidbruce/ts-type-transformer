@@ -2,32 +2,42 @@ use oxc::allocator::Allocator;
 use oxc::ast::ast::{Statement, TSSignature, TSType};
 use oxc::parser::{ParseOptions, Parser};
 use oxc::span::SourceType;
+use std::fmt::format;
 use std::{fs, path::Path};
 
 use oxc::ast::ast::*;
 
 use oxc::ast_visit::{Visit, walk};
 
-struct PrintVisitor;
+#[derive(Debug, Default)]
+struct PrintVisitor {
+    tab: usize,
+}
+impl PrintVisitor {
+    fn println_str(&mut self, value: &str) {
+        self.println(String::from(value));
+    }
+    fn println(&mut self, value: String) {
+        println!("{:indent$}{}", " ", value, indent = self.tab);
+    }
+    fn incr(&mut self) {
+        self.tab += 4
+    }
+    fn decr(&mut self) {
+        self.tab -= 4
+    }
+}
 
 impl<'a> Visit<'a> for PrintVisitor {
     fn visit_ts_interface_declaration(&mut self, it: &TSInterfaceDeclaration<'a>) {
-        print!("Interface: {}", it.id.name);
+        println!("<interface>");
+        self.incr();
+        self.println(format!("<name>{}</name>", it.id.name));
+
         match &it.type_parameters {
             Some(param) => walk::walk_ts_type_parameters(self, &param.params),
-            None => println!(""),
+            None => (),
         }
-        // match &it.type_parameters {
-        //     Some(args) => {
-        //         let mut result_list: Vec<String> = Vec::new();
-        //         for arg in args.params.iter() {
-        //             //gotta love name.name
-        //             result_list.push(String::from(arg.name.name))
-        //         }
-        //         println!("<{}>", result_list.join(", "))
-        //     }
-        //     None => println!(""),
-        // }
 
         //TODO: no idea why visit_ts_interface_heritages isn't working
         for heritage in it.extends.iter() {
@@ -48,24 +58,51 @@ impl<'a> Visit<'a> for PrintVisitor {
             }
         }
         //TODO: remove the above and replace with this walk
-        walk::walk_ts_interface_heritages(self, &it.extends);
-        walk::walk_ts_interface_body(self, &it.body);
+        self.visit_ts_interface_heritages(&it.extends);
+        self.visit_ts_interface_body(&it.body);
+        self.decr();
+        self.println_str("</interface>");
     }
 
     fn visit_ts_type_parameter(&mut self, it: &TSTypeParameter<'a>) {
-        println!("\tParameter: {}", it.name.name);
+        self.println(format!("<parameter>{}</parameter>", it.name.name));
     }
     // fn visit_ts_type_parameter_instantiation(&mut self, it: &TSTypeParameterInstantiation<'a>) {
     //     println!("\tParameter Instantiation: {}", it.)
     // }
+    fn visit_ts_interface_heritages(
+        &mut self,
+        it: &oxc::allocator::Vec<'a, TSInterfaceHeritage<'a>>,
+    ) {
+        println!("<extends>");
+        walk::walk_ts_interface_heritages(self, it);
+        println!("</extends>");
+    }
     fn visit_ts_interface_heritage(&mut self, it: &TSInterfaceHeritage<'a>) {
-        println!("HIT")
+        println!(
+            "Something: {}",
+            it.expression.get_identifier_reference().unwrap().name
+        );
+    }
+    fn visit_ts_interface_body(&mut self, it: &TSInterfaceBody<'a>) {
+        self.println_str("<body>");
+        self.incr();
+        walk::walk_ts_interface_body(self, it);
+        self.decr();
+        self.println_str("</body>");
+    }
+    fn visit_ts_property_signature(&mut self, it: &TSPropertySignature<'a>) {
+        self.println_str("<property>");
+        self.incr();
+        walk::walk_ts_property_signature(self, it);
+        self.decr();
+        self.println_str("</property>");
     }
     fn visit_identifier_name(&mut self, identifier: &IdentifierName<'a>) {
-        println!("\tIdentifier: {}", identifier.name);
+        self.println(format!("<name>{}</name>", identifier.name));
     }
     fn visit_ts_type(&mut self, ts_type: &TSType<'a>) {
-        println!("\t\tType: {}", process_type(ts_type).unwrap());
+        self.println(format!("<type>{}</type>", process_type(ts_type).unwrap()));
     }
 }
 
@@ -154,7 +191,7 @@ fn main() -> Result<(), String> {
         })
         .parse();
 
-    let mut visitor = PrintVisitor;
+    let mut visitor = PrintVisitor::default();
     visitor.visit_program(&ret.program);
     // ret.program(&mut visitor); //
     // if ret.errors.is_empty() {
