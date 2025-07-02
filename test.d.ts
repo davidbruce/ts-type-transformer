@@ -1,7 +1,8 @@
-interface GenericInterfaceTest<T> {
+interface GenericInterfaceTest<T, K> {
     name: T;
+    place: K;
 }
-interface AesCtrParams extends GenericInterfaceTest<String> {
+interface AesCtrParams extends GenericInterfaceTest<String, Number> {
     counter: BufferSource;
     length: number;
 }

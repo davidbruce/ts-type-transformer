@@ -2,7 +2,6 @@ use oxc::allocator::Allocator;
 use oxc::ast::ast::{Statement, TSSignature, TSType};
 use oxc::parser::{ParseOptions, Parser};
 use oxc::span::SourceType;
-use std::fmt::format;
 use std::{fs, path::Path};
 
 use oxc::ast::ast::*;
@@ -18,13 +17,23 @@ impl PrintVisitor {
         self.println(String::from(value));
     }
     fn println(&mut self, value: String) {
-        println!("{:indent$}{}", " ", value, indent = self.tab);
+        println!("{:indent$}{}", "", value, indent = self.tab);
     }
     fn incr(&mut self) {
         self.tab += 4
     }
     fn decr(&mut self) {
         self.tab -= 4
+    }
+    fn print_with_walker<F, T>(&mut self, tag: &str, walker_arg: T, walker_fn: F)
+    where
+        F: FnOnce(&mut Self, T),
+    {
+        self.println_str(&format!("<{}>", tag));
+        self.incr();
+        walker_fn(self, walker_arg);
+        self.decr();
+        self.println_str(&format!("</{}>", tag));
     }
 }
 
@@ -34,31 +43,13 @@ impl<'a> Visit<'a> for PrintVisitor {
         self.incr();
         self.println(format!("<name>{}</name>", it.id.name));
 
-        match &it.type_parameters {
-            Some(param) => walk::walk_ts_type_parameters(self, &param.params),
-            None => (),
+        if let Some(param) = &it.type_parameters {
+            walk::walk_ts_type_parameters(self, &param.params)
         }
 
-        //TODO: no idea why visit_ts_interface_heritages isn't working
-        for heritage in it.extends.iter() {
-            print!(
-                "Extends: {}",
-                //yeesh
-                heritage.expression.get_identifier_reference().unwrap().name
-            );
-            match &heritage.type_arguments {
-                Some(args) => {
-                    let mut result_list: Vec<String> = Vec::new();
-                    for arg in args.params.iter() {
-                        result_list.push(String::from(arg.get_identifier_reference().unwrap().name))
-                    }
-                    println!("<{}>", result_list.join(", "))
-                }
-                None => println!("e"),
-            }
+        if !it.extends.is_empty() {
+            self.visit_ts_interface_heritages(&it.extends);
         }
-        //TODO: remove the above and replace with this walk
-        self.visit_ts_interface_heritages(&it.extends);
         self.visit_ts_interface_body(&it.body);
         self.decr();
         self.println_str("</interface>");
@@ -67,36 +58,33 @@ impl<'a> Visit<'a> for PrintVisitor {
     fn visit_ts_type_parameter(&mut self, it: &TSTypeParameter<'a>) {
         self.println(format!("<parameter>{}</parameter>", it.name.name));
     }
-    // fn visit_ts_type_parameter_instantiation(&mut self, it: &TSTypeParameterInstantiation<'a>) {
-    //     println!("\tParameter Instantiation: {}", it.)
-    // }
+    fn visit_ts_type_parameter_instantiation(&mut self, it: &TSTypeParameterInstantiation<'a>) {
+        // println!("\tParameter Instantiation: {}", it.params)
+    }
     fn visit_ts_interface_heritages(
         &mut self,
         it: &oxc::allocator::Vec<'a, TSInterfaceHeritage<'a>>,
     ) {
-        println!("<extends>");
-        walk::walk_ts_interface_heritages(self, it);
-        println!("</extends>");
+        self.print_with_walker("extends", it, walk::walk_ts_interface_heritages);
     }
     fn visit_ts_interface_heritage(&mut self, it: &TSInterfaceHeritage<'a>) {
-        println!(
-            "Something: {}",
+        self.println(format!(
+            "<name>{}</name>",
             it.expression.get_identifier_reference().unwrap().name
-        );
+        ));
+
+        for args in it.type_arguments.as_ref().unwrap().params.iter() {
+            self.println(format!(
+                "<type>{}</type>",
+                args.get_identifier_reference().unwrap().name
+            ));
+        }
     }
     fn visit_ts_interface_body(&mut self, it: &TSInterfaceBody<'a>) {
-        self.println_str("<body>");
-        self.incr();
-        walk::walk_ts_interface_body(self, it);
-        self.decr();
-        self.println_str("</body>");
+        self.print_with_walker("body", it, walk::walk_ts_interface_body)
     }
     fn visit_ts_property_signature(&mut self, it: &TSPropertySignature<'a>) {
-        self.println_str("<property>");
-        self.incr();
-        walk::walk_ts_property_signature(self, it);
-        self.decr();
-        self.println_str("</property>");
+        self.print_with_walker("property", it, walk::walk_ts_property_signature)
     }
     fn visit_identifier_name(&mut self, identifier: &IdentifierName<'a>) {
         self.println(format!("<name>{}</name>", identifier.name));
@@ -193,19 +181,6 @@ fn main() -> Result<(), String> {
 
     let mut visitor = PrintVisitor::default();
     visitor.visit_program(&ret.program);
-    // ret.program(&mut visitor); //
-    // if ret.errors.is_empty() {
-    //     println!("Parsed Successfully.");
-    //     // println!("AST:\n{:#?}", ret.program); // Pr
-    //     for stmt in &ret.program.body {
-    //         println!("Statement: {}\n\n\n", process_statement(stmt).unwrap());
-    //     }
-    // } else {
-    //     for error in ret.errors {
-    //         println!("{:?}", error);
-    //     }
-    //     println!("Parsed with Errors.");
-    // }
 
     Ok(())
 }
