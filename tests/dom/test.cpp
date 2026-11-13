@@ -4,8 +4,6 @@
 #include "areas/core/AddEventListenerOptions.hpp"
 #include "areas/core/DOMRect.hpp"
 #include "areas/core/DOMTokenList.hpp"
-// A union is a std::variant: its alternatives must be complete to make one.
-#include "areas/core/EventListenerObject.hpp"
 #include "areas/core/Document.hpp"
 #include "areas/core/functions.hpp"
 #include "areas/css/CSSStyleDeclaration.hpp"
@@ -24,7 +22,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
     Document doc = get_document();
     HTMLElement body = doc.body();
 
-    // A typed key selects the element type: createElement("div") is an HTMLDivElement.
+    // A typed key selects the element type: createElement("div") is an HTMLDivElement,
+    // which is an HTMLElement, an Element, a Node...
     HTMLDivElement div = doc.createElement(HTMLElementTagNameMapKeys::div);
     HTMLElement box = div;
     box.id("made-by-cpp");
@@ -44,6 +43,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     HTMLElement copy = doc.createElement(HTMLElementTagNameMapKeys::p);
     copy.textContent(seed.textContent());
     box.appendChild(copy);
+
+    // An element where a std::optional<Node> is wanted: a derived-to-base conversion.
+    HTMLParagraphElement extra = doc.createElement(HTMLElementTagNameMapKeys::p);
+    box.insertBefore(extra, copy);
+    CHECK(box.children().length() == 2);
+    extra.remove();
+    CHECK(box.children().length() == 1);
 
     // A typed key selects the event type: the listener of "click" takes a PointerEvent.
     HTMLElement button = doc.createElement(HTMLElementTagNameMapKeys::button);

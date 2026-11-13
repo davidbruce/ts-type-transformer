@@ -1,9 +1,11 @@
 // XML -> C++ bindings for a wasm32 module, built with the WASI SDK.
 //
-// Every JavaScript object is a value holding a handle. A type's own members
-// are in a template, `<T>_members<Self>`; a class inherits the templates of
-// itself and all its ancestors, and converts implicitly to each ancestor. That
-// is multiple inheritance (the DOM's mixins) without repeated state.
+// Every JavaScript object is a value holding a handle, and every type
+// inherits, virtually, from `ts::Handle`: inheritance and mixins are real C++
+// inheritance, sharing one handle, and an HTMLDivElement is an Element.
+// Each type has two headers. `X.decl.hpp` defines the struct, declaring its
+// members, which needs only its bases complete; `X.hpp` defines the members
+// inline, after including the declaration headers of every type they name.
 // Strings go in as `std::string_view` and come back as `std::string`;
 // nullables are `std::optional`, unions `std::variant`, callbacks lambdas, and
 // keyed methods templates over typed keys:
@@ -116,9 +118,9 @@ fn raise(t: &Ty, r: &str, unions: &[NamedUnion]) -> String {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 enum Place {
-    // In a `_members` template: `self` is the handle of the object it is called on.
+    // A member of the class: `h` is the handle of the object it is called on.
     Member,
     // A static member of the class.
     Static,
@@ -145,27 +147,37 @@ fn cpp_name(f: &Func) -> String {
     }
 }
 
-// One function: its raw import declaration, and its C++ definition.
-fn function(f: &Func, place: Place, indent: &str, unions: &[NamedUnion], deferrable: &[&str]) -> (String, String, String) {
+// One function, in its parts.
+struct Function {
+    // The wasm import it calls.
+    import: String,
+    // Its declaration in the class; empty for a free function.
+    decl: String,
+    // Its inline definition.
+    def: String,
+    // What C++ tells overloads apart by: name and parameter types.
+    key: String,
+    // The types it names.
+    refs: BTreeSet<String>,
+}
+
+fn function(f: &Func, owner: &str, place: Place, unions: &[NamedUnion]) -> Function {
     let mut raw_params: Vec<&str> = Vec::new();
     let mut args: Vec<String> = Vec::new();
     if Class::has_self(f) {
         raw_params.push("uint32_t");
-        args.push("ts_h()".into());
+        args.push("h".into());
     }
-    // Types that may name a class not yet complete are deferred (`ts::dep`).
-    let defer = |t: String| -> String {
-        if matches!(t.as_str(), "void" | "double" | "bool" | "std::string" | "std::string_view" | "ts::Value" | "ts::Array" | "V") { t } else { format!("ts::dep<{t}, D>") }
-    };
     let mut params = Vec::new();
+    let mut refs = BTreeSet::new();
     for (name, t) in &f.params {
         let name = format!("{}_", ident(name));
-        // A key is deduced: it says what V is.
-        let ty = if matches!(t, Ty::Key(_)) { ty_in(t) } else { defer(ty_in(t)) };
-        params.push(format!("{ty} {name}"));
+        params.push(format!("{} {name}", ty_in(t)));
         raw_params.extend(raw(t));
         args.extend(lower(t, &name));
+        named_types(t, &mut refs);
     }
+    named_types(&f.ret, &mut refs);
     // A shared import takes the index of this function's fixed arguments after `self`.
     let import = match &f.shared {
         Some((shared, k)) => {
@@ -176,25 +188,32 @@ fn function(f: &Func, place: Place, indent: &str, unions: &[NamedUnion], deferra
         }
         None => f.import.clone(),
     };
-    let decl = format!("extern \"C\" TS_IMPORT({import}) {} ts_raw_{import}({});\n", raw_ret(&f.ret), raw_params.join(", "));
+    let import_decl = format!("extern \"C\" TS_IMPORT({import}) {} ts_raw_{import}({});\n", raw_ret(&f.ret), raw_params.join(", "));
     let call = format!("ts_raw_{import}({})", args.join(", "));
     let body = match &f.ret {
         Ty::Void => format!("{call};"),
         t => format!("auto r = {call}; return {};", raise(t, "r", unions)),
     };
-    // Even a template's body is checked where it is defined, but for what depends on D.
-    let body = deferred(&body, deferrable, "D");
-    let keyed = f.params.iter().any(|p| matches!(p.1, Ty::Key(_)));
-    let template = if keyed { "template <class V, class D = void> " } else { "template <class D = void> " };
-    let (qual, stat) = match place {
-        Place::Member => (" const", ""),
-        Place::Static => ("", "static "),
-        Place::Free => ("", "inline "),
+    let template = if f.params.iter().any(|p| matches!(p.1, Ty::Key(_))) { "template <class V>\n" } else { "" };
+    let (ret, name, params) = (ty_out(&f.ret, unions), cpp_name(f), params.join(", "));
+    let (decl, def) = match place {
+        Place::Member => (format!("    {}{ret} {name}({params}) const;\n", template.replace('\n', " ")), format!("{template}inline {ret} {owner}::{name}({params}) const {{ {body} }}\n")),
+        Place::Static => (format!("    {}static {ret} {name}({params});\n", template.replace('\n', " ")), format!("{template}inline {ret} {owner}::{name}({params}) {{ {body} }}\n")),
+        Place::Free => (String::new(), format!("{template}inline {ret} {name}({params}) {{ {body} }}\n")),
     };
-    let def = format!("{indent}{template}{stat}{} {}({}){qual} {{ {body} }}\n", defer(ty_out(&f.ret, unions)), cpp_name(f), params.join(", "));
-    // What C++ tells overloads apart by: name and parameter types.
-    let key = format!("{stat}{}({})", cpp_name(f), f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
-    (decl, def, key)
+    let key = format!("{}{name}({})", if place == Place::Static { "static " } else { "" }, f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
+    Function { import: import_decl, decl, def, key, refs }
+}
+
+// The declared types a type names: classes, callbacks, unions and maps.
+fn named_types(t: &Ty, out: &mut BTreeSet<String>) {
+    match t {
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) | Ty::Key(n) | Ty::Mapped(n) => {
+            out.insert(n.clone());
+        }
+        Ty::Nullable(inner, _) | Ty::Listener(inner) => named_types(inner, out),
+        _ => {}
+    }
 }
 
 const RUNTIME: &str = r#"// Generated.
@@ -227,15 +246,6 @@ TS_IMPORT(js_listener_from) uint32_t ts_raw_js_listener_from(uintptr_t, void*);
 }
 
 namespace ts {
-
-// `dep<T, D>` is T, but depends on D: a member declared with it is not looked
-// at until used, when every class it names is complete.
-template <class T, class D>
-struct dep_t {
-    using type = T;
-};
-template <class T, class D>
-using dep = typename dep_t<T, D>::type;
 
 // Tag for making a value from a handle.
 struct handle_t {
@@ -270,6 +280,15 @@ uint32_t to_handle(const H& v) { return v.h; }
 template <class... T>
 uint32_t to_handle(const std::variant<T...>& v) {
     return std::visit([](const auto& x) { return to_handle(x); }, v);
+}
+
+// A value of type T from a handle: a number, a flag, a string or an object.
+template <class T>
+T from_handle(uint32_t h) {
+    if constexpr (std::is_same_v<T, double>) return ts_raw_js_to_number(h);
+    else if constexpr (std::is_same_v<T, bool>) return ts_raw_js_to_bool(h) != 0;
+    else if constexpr (std::is_same_v<T, std::string>) return read_string(h);
+    else return T(handle, h);
 }
 
 // A JavaScript value of no particular type.
@@ -317,20 +336,42 @@ struct Listener : Handle {
 "#;
 
 // The bindings as files: `ts_runtime.hpp`; `ts_types.hpp` declaring every
-// class, enum, union, callback and key; a header per declaration in its
-// module's folder, including those of its ancestors; umbrella headers.
+// type; for each class `X.decl.hpp` and `X.hpp`; a header for each callback
+// and union; the functions of each module; umbrella headers.
 pub fn files(m: &Model) -> Vec<(String, String)> {
-    let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.hpp\"\n#include <functional>\n\n");
-    let classes: Vec<&str> = m.classes.iter().map(|c| c.name.as_str()).chain(m.opaque.iter().map(String::as_str)).chain(m.callbacks.iter().map(|c| c.name.as_str())).collect();
+    let unions = &m.unions;
+    let mut taken = HashMap::new();
+    // Where each declared type is defined, without the extension.
+    let mut home: HashMap<String, String> = HashMap::new();
+    for c in &m.classes {
+        home.insert(c.name.clone(), super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
+    }
+    for name in m.callbacks.iter().map(|c| &c.name).chain(m.unions.iter().map(|u| &u.name)) {
+        home.insert(name.clone(), super::wasm::file_name(&format!("types/{name}"), &mut taken));
+    }
+    let is_class = |n: &str| m.classes.iter().any(|c| c.name == n);
+    // `#include` from one generated file to another.
+    let include = |from: &str, to: &str| format!("#include \"{}{to}\"\n", "../".repeat(from.matches('/').count()));
+    // What a header must include to use the given types: the struct of a class,
+    // the full header of a callback or union.
+    let includes = |from: &str, types: &BTreeSet<String>| -> String {
+        types
+            .iter()
+            .filter_map(|t| home.get(t).map(|h| if is_class(t) { format!("{h}.decl.hpp") } else { format!("{h}.hpp") }))
+            .filter(|h| h != from)
+            .map(|h| include(from, &h))
+            .collect()
+    };
+
+    let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.hpp\"\n\n// Every type, declared: a struct may name any of them before it is defined.\n");
     for c in &m.classes {
         types += &format!("struct {};\n", c.name);
     }
-    for name in &m.opaque {
-        types += &format!("struct {name} : ts::Handle {{\n    using ts::Handle::Handle;\n}};\n");
-    }
-    // Callbacks are defined further down; unions may name them first.
     for c in &m.callbacks {
         types += &format!("struct {};\n", c.name);
+    }
+    for name in &m.opaque {
+        types += &format!("struct {name} : virtual ts::Handle {{\n    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n}};\n");
     }
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
@@ -341,11 +382,24 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
         types += &format!("enum class {name} : int32_t {{ {} }};\n", members.join(", "));
     }
-    // A union is a variant; one coming back is told apart by the runtime tests.
-    for u in &m.unions {
-        let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, &m.unions)).collect();
+    for u in unions {
+        let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions)).collect();
         types += &format!("using {} = std::variant<{}>;\n", u.name, parts.join(", "));
-        types += &format!("extern \"C\" TS_IMPORT({0}_tag) int32_t ts_raw_{0}_tag(uint32_t);\n", u.name);
+    }
+    // A map's keys, each typed by the value it selects.
+    for k in &m.maps {
+        let keys: Vec<String> = k.keys.iter().zip(&k.values).enumerate().map(|(i, (key, v))| format!("    inline constexpr ts::Key<{}, {}> {}{{{i}}};\n", k.name, ty_out(v, unions), ident(key))).collect();
+        types += &format!("namespace {}Keys {{\n{}}}\n", k.name, keys.concat());
+    }
+    let mut out = vec![("ts_runtime.hpp".to_string(), RUNTIME.to_string()), ("ts_types.hpp".to_string(), types)];
+
+    // A union: its alternatives, and how to tell which one came back.
+    for u in unions {
+        let path = format!("{}.hpp", home[&u.name]);
+        let mut parts = BTreeSet::new();
+        u.parts.iter().for_each(|p| named_types(p, &mut parts));
+        let mut text = format!("// Generated.\n#pragma once\n{}{}", include(&path, "ts_types.hpp"), includes(&path, &parts));
+        text += &format!("extern \"C\" TS_IMPORT({0}_tag) int32_t ts_raw_{0}_tag(uint32_t);\n", u.name);
         if u.decodable() {
             let cases: Vec<String> = u
                 .parts
@@ -355,44 +409,41 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
                     let value = match p {
                         Ty::Num => "ts_raw_js_to_number(h)".to_string(),
                         Ty::Bool => "ts_raw_js_to_bool(h) != 0".to_string(),
-                        p => raise(p, "h", &m.unions),
+                        p => raise(p, "h", unions),
                     };
-                    format!("case {i}: return ts::dep<{}, D>(std::in_place_index<{i}>, {value});", u.name)
+                    format!("        case {i}: return {}(std::in_place_index<{i}>, {value});\n", u.name)
                 })
                 .collect();
-            let body = deferred(&format!("switch (ts_raw_{0}_tag(h)) {{ {1} }}", u.name, cases.join(" ")), &classes, "D");
-            types += &format!("template <class D = void>\nts::dep<{0}, D> decode_{0}(uint32_t h) {{\n    {body}\n    __builtin_trap();\n}}\n", u.name);
+            text += &format!("inline {0} decode_{0}(uint32_t h) {{\n    switch (ts_raw_{0}_tag(h)) {{\n{1}    }}\n    __builtin_trap();\n}}\n", u.name, cases.concat());
         }
+        out.push((path, text));
     }
-    // A callback is made from a lambda, kept alive for as long as JavaScript may call it.
+    // A callback, made from a lambda that is kept alive for as long as JavaScript may call it.
     for c in &m.callbacks {
-        let raw_args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| format!("{} a{i}", raw_callback(t))).collect();
-        let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| raise_callback(t, &format!("a{i}"), &m.unions)).collect();
+        let path = format!("{}.hpp", home[&c.name]);
+        let mut used = BTreeSet::new();
+        c.params.iter().for_each(|p| named_types(&p.1, &mut used));
+        named_types(&c.ret, &mut used);
+        used.remove(&c.name);
+        let raw_args: String = c.params.iter().enumerate().map(|(i, (_, t))| format!(", {} a{i}", raw_callback(t))).collect();
+        let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| raise_callback(t, &format!("a{i}"), unions)).collect();
+        let call = format!("(*static_cast<F*>(ctx))({})", args.join(", "));
         let result = match &c.ret {
-            Ty::Void => format!("(*static_cast<F*>(ctx))({});", args.join(", ")),
-            t => format!("return {};", lower_callback(t, &format!("(*static_cast<F*>(ctx))({})", args.join(", ")))),
+            Ty::Void => format!("{call};"),
+            t => format!("return {};", lower_callback(t, &call)),
         };
-        let result = deferred(&result, &classes, "F");
-        types += &format!(
-            "extern \"C\" TS_IMPORT({0}_from) uint32_t ts_raw_{0}_from(uintptr_t, void*);\n\
-             struct {0} : ts::Handle {{\n    using ts::Handle::Handle;\n    \
+        let (name, ret, head) = (&c.name, raw_callback(&c.ret), format!("{}{}", include(&path, "ts_types.hpp"), includes(&path, &used)));
+        let text = format!(
+            "// Generated.\n#pragma once\n{head}extern \"C\" TS_IMPORT({name}_from) uint32_t ts_raw_{name}_from(uintptr_t, void*);\n\n\
+             struct {name} : virtual ts::Handle {{\n    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n    \
              template <class F, std::enable_if_t<!ts::is_handle<F>, int> = 0>\n    \
-             {0}(F f) : ts::Handle(ts::handle, ts_raw_{0}_from(reinterpret_cast<uintptr_t>(&call<F>), new F(std::move(f)))) {{}}\n\n  \
-             private:\n    template <class F>\n    static {1} call(void* ctx{2}) {{ {result} }}\n}};\n",
-            c.name,
-            raw_callback(&c.ret),
-            raw_args.iter().map(|a| format!(", {a}")).collect::<String>()
+             {name}(F f) : ts::Handle(ts::handle, ts_raw_{name}_from(reinterpret_cast<uintptr_t>(&call<F>), new F(std::move(f)))) {{}}\n\n  \
+             private:\n    template <class F>\n    static {ret} call(void* ctx{raw_args}) {{ {result} }}\n}};\n"
         );
-    }
-    // A map's keys, each typed by the value it selects.
-    for k in &m.maps {
-        let keys: Vec<String> = k.keys.iter().zip(&k.values).enumerate().map(|(i, (key, v))| format!("    inline constexpr ts::Key<{}, {}> {}{{{i}}};\n", k.name, ty_out(v, &m.unions), ident(key))).collect();
-        types += &format!("namespace {}Keys {{\n{}}}\n", k.name, keys.concat());
+        out.push((path, text));
     }
 
-    let mut out = vec![("ts_runtime.hpp".to_string(), RUNTIME.to_string()), ("ts_types.hpp".to_string(), types)];
-    let mut taken = HashMap::new();
-    let path_of: HashMap<&str, String> = m.classes.iter().map(|c| (c.name.as_str(), format!("{}.hpp", super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken)))).collect();
+    // Each class: a struct of declarations, and the definitions.
     let ancestors = |name: &str| -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         let mut todo = vec![name.to_string()];
@@ -409,90 +460,87 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     let member_names = |c: &Class| -> BTreeSet<String> { c.funcs.iter().filter(|f| Class::has_self(f)).map(cpp_name).collect() };
     let mut modules: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for c in &m.classes {
-        let path = &path_of[c.name.as_str()];
-        let up = "../".repeat(c.module.split('/').count());
-        let mut text = format!("// Generated.\n#pragma once\n#include \"{up}ts_types.hpp\"\n");
-        for a in &c.ancestors {
-            if let Some(p) = path_of.get(a.as_str()) {
-                text += &format!("#include \"{up}{p}\"\n");
-            }
-        }
-        let mut decls = BTreeSet::new();
-        let mut members = String::new();
-        let mut statics = String::new();
+        let base = &home[&c.name];
+        let (decl_path, impl_path) = (format!("{base}.decl.hpp"), format!("{base}.hpp"));
         let mut seen = BTreeSet::new();
+        let mut members = String::new();
+        let mut defs = String::new();
+        let mut imports = BTreeSet::new();
+        let mut used = BTreeSet::new();
         for f in &c.funcs {
             let place = if Class::has_self(f) { Place::Member } else { Place::Static };
-            let (decl, def, key) = function(f, place, "    ", &m.unions, &classes);
+            let func = function(f, &c.name, place, unions);
             // Overloads TypeScript tells apart and C++ cannot are the same C++ function.
-            if !seen.insert(key) {
+            if !seen.insert(func.key) {
                 continue;
             }
-            decls.insert(decl);
-            if Class::has_self(f) {
-                members += &def;
-            } else {
-                statics += &def;
-            }
+            members += &func.decl;
+            defs += &func.def;
+            imports.insert(func.import);
+            used.extend(func.refs);
         }
         for (name, value) in &c.consts {
             let ty = if value.starts_with('"') { "std::string_view" } else { "double" };
-            statics += &format!("    static constexpr {ty} {} = {value};\n", ident(name));
+            members += &format!("    static constexpr {ty} {} = {value};\n", ident(name));
         }
-        text += &decls.into_iter().collect::<String>();
-        text += &format!(
-            "\n// The members {0} declares, for {0} and every type that inherits from it.\ntemplate <class Self>\nstruct {0}_members {{\n{members}\n  private:\n    uint32_t ts_h() const {{ return static_cast<const Self&>(*this).h; }}\n}};\n\n",
-            c.name
-        );
-        // The class: its own members and every ancestor's, and a conversion to each ancestor.
+        // A name in two unrelated bases is ambiguous in C++. A more derived
+        // ancestor's member already hides its own ancestors' (`Element::textContent`
+        // over `Node::textContent`), as in TypeScript; the rest are brought in as overloads.
         let all = ancestors(&c.name);
-        let with_members: Vec<&String> = std::iter::once(&c.name).chain(all.iter().filter(|a| path_of.contains_key(a.as_str()))).collect();
-        let bases: Vec<String> = with_members.iter().map(|a| format!("{a}_members<{}>", c.name)).collect();
-        text += &format!("struct {} : ts::Handle{} {{\n    using ts::Handle::Handle;\n", c.name, bases.iter().map(|b| format!(", {b}")).collect::<String>());
-        // A name in several bases is ambiguous in C++: the class's own hides its ancestors',
-        // as in TypeScript; otherwise all are brought in as overloads.
         let own = member_names(c);
         let mut holders: BTreeMap<String, Vec<&String>> = BTreeMap::new();
-        for a in &with_members {
-            if let Some(k) = m.classes.iter().find(|k| k.name == **a) {
+        for a in &all {
+            if let Some(k) = m.classes.iter().find(|k| k.name == *a) {
                 for n in member_names(k) {
                     holders.entry(n).or_default().push(a);
                 }
             }
         }
-        for (name, hs) in holders.iter().filter(|(_, hs)| hs.len() > 1) {
-            if own.contains(name) {
-                text += &format!("    using {}_members<{}>::{name};\n", c.name, c.name);
-            } else {
-                // A more derived ancestor's member hides its own ancestors' (`Element::textContent` over `Node::textContent`).
-                for h in hs.iter().filter(|h| !hs.iter().any(|o| o != *h && ancestors(o).contains(**h))) {
-                    text += &format!("    using {h}_members<{}>::{name};\n", c.name);
+        let mut usings = String::new();
+        for (name, hs) in holders.iter().filter(|(n, _)| !own.contains(*n)) {
+            let visible: Vec<&&String> = hs.iter().filter(|h| !hs.iter().any(|o| o != *h && ancestors(o).contains(**h))).collect();
+            if visible.len() > 1 {
+                for h in visible {
+                    usings += &format!("    using {h}::{name};\n");
                 }
             }
         }
-        for a in &all {
-            text += &format!("    operator {a}() const {{ return {a}(ts::handle, h); }}\n");
+        let bases: Vec<String> = if c.ancestors.is_empty() { vec!["virtual ts::Handle".into()] } else { c.ancestors.iter().map(|a| format!("virtual {a}")).collect() };
+        let mut decl = format!("// Generated.\n#pragma once\n{}", include(&decl_path, "ts_types.hpp"));
+        for a in &c.ancestors {
+            if let Some(h) = home.get(a) {
+                decl += &include(&decl_path, &format!("{h}.decl.hpp"));
+            }
         }
-        text += &statics;
-        text += "};\n";
-        modules.entry(c.module.clone()).or_default().push(path.clone());
-        out.push((path.clone(), text));
+        decl += &format!(
+            "\nstruct {0} : {1} {{\n    {0}() = default;\n    {0}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n{usings}{members}}};\n",
+            c.name,
+            bases.join(", ")
+        );
+        used.remove(&c.name);
+        // Inherited members are defined with the ancestors.
+        let inherited: String = c.ancestors.iter().filter_map(|a| home.get(a)).map(|h| include(&impl_path, &format!("{h}.hpp"))).collect();
+        let imp = format!("// Generated.\n#pragma once\n{}{inherited}{}\n{}\n{defs}", include(&impl_path, &decl_path), includes(&impl_path, &used), imports.into_iter().collect::<String>());
+        modules.entry(c.module.clone()).or_default().push(impl_path.clone());
+        out.push((decl_path, decl));
+        out.push((impl_path, imp));
     }
-    let mut functions: BTreeMap<String, (BTreeSet<String>, String)> = BTreeMap::new();
+    let mut functions: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>, String)> = BTreeMap::new();
     let mut seen = BTreeSet::new();
     for f in &m.funcs {
-        let (decl, def, key) = function(f, Place::Free, "", &m.unions, &classes);
-        if !seen.insert(key) {
+        let func = function(f, "", Place::Free, unions);
+        if !seen.insert(func.key) {
             continue;
         }
         let entry = functions.entry(f.module.clone()).or_default();
-        entry.0.insert(decl);
-        entry.1 += &def;
+        entry.0.insert(func.import);
+        entry.1.extend(func.refs);
+        entry.2 += &func.def;
     }
-    for (module, (decls, defs)) in functions {
-        let up = "../".repeat(module.split('/').count());
+    for (module, (imports, used, defs)) in functions {
         let path = format!("{}.hpp", super::wasm::file_name(&format!("{module}/functions"), &mut taken));
-        out.push((path.clone(), format!("// Generated.\n#pragma once\n#include \"{up}ts_types.hpp\"\n\n{}\n{defs}", decls.into_iter().collect::<String>())));
+        let text = format!("// Generated.\n#pragma once\n{}{}\n{}\n{defs}", include(&path, "ts_types.hpp"), includes(&path, &used), imports.into_iter().collect::<String>());
+        out.push((path.clone(), text));
         modules.entry(module).or_default().push(path);
     }
     let mut all = String::from("// Generated.\n#pragma once\n");
@@ -503,19 +551,6 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         all += &format!("#include \"{module}.hpp\"\n");
     }
     out.push(("bindings.hpp".into(), all));
-    out
-}
-
-// Code in `ts_types.hpp` runs before the classes it makes are complete: each
-// construction is made to depend on the template parameter `d`, so it is only
-// checked when used.
-fn deferred(code: &str, classes: &[&str], d: &str) -> String {
-    let mut out = code.to_string();
-    for c in classes {
-        out = out.replace(&format!("std::optional<{c}>("), &format!("ts::dep<std::optional<{c}>, {d}>("));
-        out = out.replace(&format!(" {c}(ts::handle"), &format!(" ts::dep<{c}, {d}>(ts::handle"));
-        out = out.replace(&format!("({c}(ts::handle"), &format!("(ts::dep<{c}, {d}>(ts::handle"));
-    }
     out
 }
 

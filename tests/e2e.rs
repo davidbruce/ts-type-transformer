@@ -181,7 +181,9 @@ fn wasi_clang() -> Option<PathBuf> {
     found
 }
 
-const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Werror", "-Wl,--allow-undefined", "-Wl,--export-table"];
+// No `--allow-undefined`: the imports are declared as such, and anything else
+// missing is a link error rather than an import that fails when the page loads.
+const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Werror", "-Wl,--export-table"];
 
 fn cpp(fixture: &str) {
     let Some(clang) = wasi_clang() else { return };
