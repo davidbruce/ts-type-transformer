@@ -184,6 +184,12 @@ impl<'a> Builder<'a> {
                         self.model.num_enums.push((ident(&path), members));
                     }
                 }
+                // An interface that is only a call signature is a function type.
+                "interface" if is_function_interface(d) => {
+                    let owner = ident(&path);
+                    let (params, _, _, ret) = self.signature(only_child(d), &owner);
+                    self.model.callbacks.push(Callback { name: owner, params, ret });
+                }
                 "interface" | "class" => {
                     let c = self.class(d, &path);
                     self.model.classes.push(c);
@@ -425,6 +431,11 @@ impl<'a> Builder<'a> {
             _ => Ty::Any,
         }
     }
+}
+
+fn is_function_interface(d: Node) -> bool {
+    let mut members = elements(d);
+    members.next().is_some_and(|m| m.has_tag_name("call")) && members.next().is_none()
 }
 
 // The single type of an alias, which may be preceded by type parameters.

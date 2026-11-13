@@ -238,6 +238,59 @@ fn dom_case(target: &str) -> Case {
     Case { fixture: root().join("tests/dom"), out, xml }
 }
 
+// The page a wasm target runs in: loads the module with the generated glue,
+// runs it, then inspects the page.
+fn wasm_page(lang: &str) -> String {
+    format!(
+        r#"<!doctype html>
+<title>untouched</title>
+<div id="seed" data-x="42">seed text</div>
+<script type="module">
+import {{ makeEnv }} from './glue.mjs';
+import {{ verify }} from './verify.mjs';
+let instance;
+let passed = 0;
+const failed = [];
+const env = {{ ...makeEnv(() => instance), check: (ok, line) => (ok ? passed++ : failed.push('line ' + line)) }};
+({{ instance }} = await WebAssembly.instantiate(await (await fetch('./test.wasm')).arrayBuffer(), {{ env }}));
+instance.exports.run();
+const page = verify('{lang}');
+window.__result = {{ passed, failed, dom: page.problems, domChecks: page.checks }};
+</script>
+"#
+    )
+}
+
+// The page the F# target runs in: the compiled program runs when imported.
+const FSHARP_PAGE: &str = r#"<!doctype html>
+<title>untouched</title>
+<div id="seed" data-x="42">seed text</div>
+<script type="module">
+import { verify } from './verify.mjs';
+try {
+  await import('./js/Test.mjs');
+} catch (e) {
+  window.__fsharp = { passed: 0, failed: ['threw: ' + e] };
+}
+const page = verify('fsharp');
+const { passed, failed } = window.__fsharp ?? { passed: 0, failed: ['the program did not report'] };
+window.__result = { passed, failed, dom: page.problems, domChecks: page.checks };
+</script>
+"#;
+
+// Runs `index.html` of the case in a real browser.
+fn run_browser(c: &Case) {
+    let Some([node]) = tools(["node"]) else { return };
+    let out = Command::new(node).arg(root().join("tests/run_browser.mjs")).arg(&c.out).arg(&c.fixture).output().expect("run node");
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    // 77: no browser installed.
+    if out.status.code() == Some(77) {
+        return eprint!("{text}");
+    }
+    assert!(out.status.success(), "browser test failed:\n{text}");
+    print!("{text}");
+}
+
 mod dom {
     use super::*;
 
@@ -248,10 +301,11 @@ mod dom {
         let model = generators::wasm::model(&c.xml, "C");
         fs::write(c.out.join("bindings.h"), generators::c::header(&model)).unwrap();
         fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
+        fs::write(c.out.join("index.html"), wasm_page("c")).unwrap();
         print!("{}", skipped(&model.skipped));
         run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&c.out).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+        run_browser(&c);
     }
-
     #[test]
     fn fsharp() {
         let Some([fable]) = tools(["fable"]) else { return };
@@ -260,8 +314,10 @@ mod dom {
         fs::write(c.out.join("Bindings.fs"), &bindings.source).unwrap();
         fs::copy(c.fixture.join("test.fs"), c.out.join("Test.fs")).unwrap();
         fs::write(c.out.join("Test.fsproj"), FSPROJ).unwrap();
+        fs::write(c.out.join("index.html"), FSHARP_PAGE).unwrap();
         print!("{}", skipped(&bindings.skipped));
         run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+        run_browser(&c);
     }
 
     #[test]
@@ -272,7 +328,9 @@ mod dom {
         fs::write(c.out.join("bindings.zig"), generators::zig::module(&model)).unwrap();
         fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
         fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
+        fs::write(c.out.join("index.html"), wasm_page("zig")).unwrap();
         print!("{}", skipped(&model.skipped));
         run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
+        run_browser(&c);
     }
 }

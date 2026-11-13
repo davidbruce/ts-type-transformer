@@ -87,20 +87,34 @@ with each example target:
 
 ## Tests
 
-`cargo test` runs `tests/e2e.rs`. For each tested target (F# via Fable, C and
-Zig via wasm32) it:
+`cargo test` runs `tests/e2e.rs` (about 25 seconds). Missing toolchains or a
+missing Chrome skip their tests with a message.
 
-1. lowers `tests/fixtures/<name>/api.d.ts` with `examples/targets/<target>.toml`;
-2. generates bindings with a reference generator in `tests/generators/`;
-3. compiles them with the real toolchain;
-4. runs `test.fs` / `test.c` / `test.zig` against the fixture's `impl.mjs` in Node.
+**Fixtures in Node.** For each of `shapes`, `callbacks`, `data` and `globals`
+in `tests/fixtures/`, and each target (F# via Fable, C and Zig via wasm32):
+
+1. lower `api.d.ts` with `examples/targets/<target>.toml`;
+2. generate bindings with a reference generator in `tests/generators/`;
+3. compile them with the real toolchain;
+4. run `test.fs` / `test.c` / `test.zig` against `impl.mjs` in Node.
+
+**The whole DOM in Chrome.** `dom::{fsharp,c,zig}` generate bindings for all of
+`lib.dom.d.ts`, compile them (Zig references every declaration, so all of it
+is type-checked), and run `tests/dom/test.*` in headless Chrome via
+`tests/run_browser.mjs`. The program builds part of the page, reads existing
+content, adds and removes listeners driven by real clicks, dispatches events,
+and sets styles; then `tests/dom/verify.mjs` inspects the page with plain DOM
+calls, independent of the bindings.
+
+**The wasm boundary.** Objects, arrays, strings coming back and untyped values
+are integer handles; a callback is a handle made from a wasm function pointer
+and a context pointer. The JavaScript side is generated per API
+(`generators::wasm::glue`): about 107,000 imports, 10 MB, for the DOM.
 
 The generators are thin on purpose: they print what the config produced and
 panic on anything else. If a generator needs to be clever, the config or the
 XML is wrong. `*_rejects_*` tests pin that strictness, and
 `lowered_constructs_are_absent` checks every config on larger inputs.
-
-A missing toolchain skips its target with a message.
 
 ## Known gaps
 
@@ -109,6 +123,6 @@ A missing toolchain skips its target with a message.
 - A union with no common supertype (`string | number`) becomes `any`.
 - Tuples, and object types that are a `var`'s own type, are never hoisted.
 - Output is not closed: references to other files (`Promise`) are not pulled in.
-- Only the `fsharp`, `c` and `zig` example targets are tested, and only on one small fixture.
+- Only the `fsharp`, `c` and `zig` example targets are tested; `rust` and `ocaml` are not.
 - Each construct has one lowering strategy so far. Values are strings so more can be added
   (`unions = "tagged"`, `generics = "monomorphize"`).
