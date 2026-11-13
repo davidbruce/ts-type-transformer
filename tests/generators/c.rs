@@ -148,6 +148,45 @@ static inline void JsArray_push(JsArray a, JsValue v) { ts_raw_js_array_push(a.h
 
 ";
 
+// The function's own name as a macro that upcasts `self` and any argument
+// whose type has subtypes, so those can be passed as they are:
+// `Element_setAttribute(div, ...)`, `Node_appendChild(body, div)`. Inside the
+// macro, the name is the function. Empty when nothing needs upcasting.
+fn upcasting_macro(name: &str, owner: Option<&str>, f: &Func, descendants: &std::collections::BTreeMap<String, Vec<String>>) -> String {
+    let upcast = |t: &Ty| match t {
+        Ty::Obj(n) if descendants.contains_key(n) => Some(n.clone()),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::Obj(n) if descendants.contains_key(n) => Some(n.clone()),
+            _ => None,
+        },
+        _ => None,
+    };
+    let mut params = Vec::new();
+    let mut args = Vec::new();
+    let mut any = false;
+    if let Some(o) = owner {
+        params.push("self".to_string());
+        let upcast_self = descendants.contains_key(o);
+        any |= upcast_self;
+        args.push(if upcast_self { format!("AS_{o}(self)") } else { "(self)".into() });
+    }
+    for (i, (_, t)) in f.params.iter().enumerate() {
+        let a = format!("a{}", i + 1);
+        params.push(a.clone());
+        match upcast(t) {
+            Some(n) => {
+                any = true;
+                args.push(format!("AS_{n}({a})"));
+            }
+            None => args.push(format!("({a})")),
+        }
+    }
+    if !any {
+        return String::new();
+    }
+    format!("#define {name}({}) {name}({})\n", params.join(", "), args.join(", "))
+}
+
 // Direct and indirect bases, nearest first.
 fn all_ancestors(m: &Model, class: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -197,6 +236,18 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         types += &format!("typedef struct {{ uint32_t h; }} {name};\n");
     }
     // A callback is made from a function and a context pointer passed back to it.
+    // C11: one upcast per type with descendants. `AS_Element(div)` is `div` as
+    // an Element, and a compile error for anything that is not one.
+    let mut descendants: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for c in &m.classes {
+        for a in all_ancestors(m, &c.name) {
+            descendants.entry(a).or_default().push(c.name.clone());
+        }
+    }
+    for (base, subs) in &descendants {
+        let arms: Vec<String> = subs.iter().map(|s| format!("    {s}: ({base}){{ (x).h }}")).collect();
+        types += &format!("#define AS_{base}(x) _Generic((x), \\\n    {base}: (x), \\\n{})\n", arms.join(", \\\n"));
+    }
     for c in &m.callbacks {
         let mut params = vec!["void* ctx".to_string()];
         // A numeric enum arrives as the number it is.
@@ -223,6 +274,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         }
         for f in &c.funcs {
             func(&mut body, Some(&c.name), f);
+            body += &upcasting_macro(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &descendants);
         }
         let path = format!("{}.h", super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
         modules.entry(c.module.clone()).or_default().push(path.clone());
@@ -230,7 +282,9 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     }
     let mut functions: std::collections::BTreeMap<String, String> = Default::default();
     for f in &m.funcs {
-        func(functions.entry(f.module.clone()).or_default(), None, f);
+        let out = functions.entry(f.module.clone()).or_default();
+        func(out, None, f);
+        *out += &upcasting_macro(&f.name, None, f, &descendants);
     }
     for (module, body) in functions {
         let path = format!("{}.h", super::wasm::file_name(&format!("{module}/functions"), &mut taken));

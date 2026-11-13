@@ -140,7 +140,7 @@ fn write_fsharp(c: &Case, bindings: &generators::fsharp::Output) {
     .unwrap();
 }
 
-const CLANG_WASM: &[&str] = &["--target=wasm32", "-nostdlib", "-ffreestanding", "-O1", "-Wall", "-Werror", "-Wl,--no-entry", "-Wl,--allow-undefined", "-Wl,--export-table"];
+const CLANG_WASM: &[&str] = &["--target=wasm32", "-std=c11", "-pedantic", "-nostdlib", "-ffreestanding", "-O1", "-Wall", "-Werror", "-Wl,--no-entry", "-Wl,--allow-undefined", "-Wl,--export-table"];
 const ZIG_WASM: &[&str] = &["build-exe", "test.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic", "--export-table", "-O", "ReleaseSmall"];
 
 fn c(fixture: &str) {
@@ -343,6 +343,11 @@ mod dom {
         run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
         write_glue(&c, &model);
         run_browser(&c);
+        // A call with a type that is not a subtype is a compile error.
+        let flags = CLANG_WASM.iter().filter(|f| !f.starts_with("-Wl,"));
+        let out = Command::new(find("clang").unwrap()).args(flags).arg("-fsyntax-only").arg("-I").arg(c.out.join("bindings")).arg(c.fixture.join("wrong.c")).output().unwrap();
+        let errors = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success() && errors.contains("not compatible with any generic association"), "wrong.c should not compile:\n{errors}");
     }
     #[test]
     fn fsharp() {

@@ -1,6 +1,7 @@
 // Drives a real page through the generated DOM bindings; every CHECK must hold.
 // Only the declarations used: one header each. Inherited members are called
-// on the type that declares them, after a cast: Element_setAttribute(HTMLElement_as_Element(el), ...).
+// by the type that declares them, with any subtype: Element_setAttribute(div, ...).
+// C11 _Generic does the upcast, and rejects what is not a subtype.
 #include "areas/core/AddEventListenerOptions.h"
 #include "areas/core/DOMRect.h"
 #include "areas/core/DOMTokenList.h"
@@ -45,7 +46,7 @@ typedef struct {
 static void bump(Counter* counter) {
     counter->count++;
     char digits[2] = { '0' + counter->count, 0 };
-    Element_setAttribute(HTMLElement_as_Element(counter->box), counter->attribute, digits);
+    Element_setAttribute(counter->box, counter->attribute, digits);
 }
 
 static JsValue on_click(void* ctx, PointerEvent ev) {
@@ -65,32 +66,32 @@ __attribute__((export_name("run"))) void run(void) {
     // One method per tag, returning the tag's own element type.
     HTMLDivElement div = Document_createElement_div(doc);
     HTMLElement box = HTMLDivElement_as_HTMLElement(div);
-    Element_set_id(HTMLElement_as_Element(box), "made-by-c");
-    Node_set_textContent(HTMLElement_as_Node(box), "hello from c");
+    Element_set_id(box, "made-by-c");
+    Node_set_textContent(box, "hello from c");
     JsArray classes = JsArray_new();
     JsArray_push(classes, js_string("box"));
-    DOMTokenList_add_with_tokens(Element_get_classList(HTMLElement_as_Element(box)), classes);
-    Node_appendChild(HTMLElement_as_Node(body), HTMLElement_as_Node(box));
+    DOMTokenList_add_with_tokens(Element_get_classList(box), classes);
+    Node_appendChild(body, box);
     CHECK(Document_getElementById(doc, "made-by-c").h == box.h);
-    CHECK(DOMTokenList_contains(Element_get_classList(HTMLElement_as_Element(box)), "box"));
+    CHECK(DOMTokenList_contains(Element_get_classList(box), "box"));
 
     // Read an element that was already in the page, and copy its text.
     HTMLElement seed = Document_getElementById(doc, "seed");
-    CHECK(str_eq(Node_get_textContent(HTMLElement_as_Node(seed)), "seed text"));
-    CHECK(str_eq((Element_getAttribute(HTMLElement_as_Element(seed), "data-x")), "42"));
-    CHECK(Element_getAttribute(HTMLElement_as_Element(seed), "data-missing").h == 0);
+    CHECK(str_eq(Node_get_textContent(seed), "seed text"));
+    CHECK(str_eq((Element_getAttribute(seed, "data-x")), "42"));
+    CHECK(Element_getAttribute(seed, "data-missing").h == 0);
     char text[64];
-    JsString seed_text = Node_get_textContent(HTMLElement_as_Node(seed));
+    JsString seed_text = Node_get_textContent(seed);
     JsString_read(seed_text, text);
     text[JsString_len(seed_text)] = 0;
     HTMLElement copy = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc));
-    Node_set_textContent(HTMLElement_as_Node(copy), text);
-    Node_appendChild(HTMLElement_as_Node(box), HTMLElement_as_Node(copy));
+    Node_set_textContent(copy, text);
+    Node_appendChild(box, copy);
 
     // A listener called by real clicks, then removed.
     HTMLElement button = HTMLButtonElement_as_HTMLElement(Document_createElement_button(doc));
-    Node_set_textContent(HTMLElement_as_Node(button), "press");
-    Node_appendChild(HTMLElement_as_Node(box), HTMLElement_as_Node(button));
+    Node_set_textContent(button, "press");
+    Node_appendChild(box, button);
     clicks = (Counter){ box, "data-count", 0 };
     // One method per event, with the event's own type.
     HTMLElement_PointerEvent_fn listener = HTMLElement_PointerEvent_fn_from(on_click, &clicks);
@@ -108,16 +109,16 @@ __attribute__((export_name("run"))) void run(void) {
     AddEventListenerOptions_set_once(once, js_bool(true));
     JsValue ping_listener = { EventListener_from(on_ping, &pings).h };
     HTMLElement_addEventListener_with_AddEventListenerOptions(box, "ping", ping_listener, once);
-    EventTarget_dispatchEvent(HTMLElement_as_EventTarget(box), Event_new("ping"));
-    EventTarget_dispatchEvent(HTMLElement_as_EventTarget(box), Event_new("ping"));
+    EventTarget_dispatchEvent(box, Event_new("ping"));
+    EventTarget_dispatchEvent(box, Event_new("ping"));
     CHECK(pings.count == 1);
 
     // Style, layout and the window.
-    CSSStyleDeclaration style = ElementCSSInlineStyle_get_style(HTMLElement_as_ElementCSSInlineStyle(box));
-    CSSStyleDeclarationBase_setProperty(CSSStyleDeclaration_as_CSSStyleDeclarationBase(style), "color", "red");
-    CHECK(str_eq(CSSStyleProperties_get_color(CSSStyleDeclaration_as_CSSStyleProperties(style)), "red"));
-    CHECK(DOMRect_get_width(Element_getBoundingClientRect(HTMLElement_as_Element(box))) > 0);
-    CHECK(HTMLCollectionBase_get_length(HTMLCollection_as_HTMLCollectionBase(ParentNode_get_children(HTMLElement_as_ParentNode(box)))) == 2);
+    CSSStyleDeclaration style = ElementCSSInlineStyle_get_style(box);
+    CSSStyleDeclarationBase_setProperty(style, "color", "red");
+    CHECK(str_eq(CSSStyleProperties_get_color(style), "red"));
+    CHECK(DOMRect_get_width(Element_getBoundingClientRect(box)) > 0);
+    CHECK(HTMLCollectionBase_get_length(ParentNode_get_children(box)) == 2);
     CHECK(get_innerWidth() > 0);
     Document_set_title(doc, "driven by c");
 }
