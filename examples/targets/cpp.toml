@@ -5,7 +5,6 @@
 classes = "pair"
 type_ops = "evaluate"
 intersections = "merge"
-generics = "erase"
 nullable = "wrap"
 literals = "enum"
 anonymous = "hoist"

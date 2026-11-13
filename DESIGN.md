@@ -99,14 +99,17 @@ How a generator lays out files is its own choice. The test generators:
   ...)`; anything else is a compile error. Per-key
   methods share one wasm import per call shape (`addEventListener_keyed`).
   File names that would still clash get a suffix (`point_2.h`, `Con_.h`).
-- C++ (C++20, WASI SDK): a value class per type holding the handle; a type's
-  own members are in `<T>_members<Self>`, which every descendant inherits, with
-  conversions to each ancestor. Overloads and optional parameters are real
-  overloads, nullables `std::optional`, unions `std::variant`, callbacks
-  lambdas, keyed methods templates over typed keys
-  (`el.addEventListener(HTMLElementEventMapKeys::click, [](PointerEvent e) {...})`).
-  Signatures are deferred with `ts::dep<T, D>` so a header compiles before the
-  classes it names are complete. The DOM: 9.7 MB, nothing expanded per key.
+- C++ (C++20, WASI SDK): a value type per JavaScript type holding the
+  handle, inheriting virtually from `ts::Handle`, so inheritance and mixins
+  are real C++ inheritance (`HTMLDivElement` is an `Element`). Each type has a
+  declaration header (`X.decl.hpp`, the struct) and a definition header
+  (`X.hpp`, which includes what its members name). Overloads and optional
+  parameters are real overloads, nullables `std::optional`, unions
+  `std::variant`, callbacks lambdas, generic types class templates with their
+  default arguments (`NodeListOf<HTMLParagraphElement>`), keyed methods
+  templates over typed keys (`el.addEventListener(HTMLElementEventMapKeys::click,
+  [](PointerEvent e) {...})`). The DOM: 9.7 MB. Linked without
+  `--allow-undefined`, so a missing definition is a link error.
 - Zig: a file per module, in the same folders, importing by name what it uses
   from the others, and a root `bindings.zig`. Zig reads only what is used.
 - F#: files must not refer to each other in cycles. Files are ordered by what

@@ -79,10 +79,12 @@ extern "C" __attribute__((export_name("run"))) void run() {
     Item item(ts::handle, all[0].h);
     CHECK(all.size() == 2 && item.id() == 1 && item.tags().size() == 2);
 
-    // Generics are erased: values are untyped.
-    Box b = wrap(ts::Value::number(21));
-    CHECK(b.value().to_number() == 21);
-    CHECK(b.map([](ts::Value v) { return ts::Value::number(v.to_number() * 2); }).value().to_number() == 42);
-    CHECK(first(r).to_number() == 0);
-    CHECK(first(ts::Array::create()).is_null());
+    // Generics are templates: a T crosses as a handle and comes back a T.
+    Box<double> b = wrap(21.0);
+    CHECK(b.value() == 21);
+    CHECK(b.map<double>([](double v) { return v * 2; }).value() == 42);
+    Box<std::string> text = b.map<std::string>([](double v) { return std::to_string(int(v)); });
+    CHECK(text.value() == "21");
+    CHECK(first<double>(r) == 0.0);
+    CHECK(!first<double>(ts::Array::create()));
 }

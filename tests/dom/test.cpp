@@ -5,6 +5,7 @@
 #include "areas/core/DOMRect.hpp"
 #include "areas/core/DOMTokenList.hpp"
 #include "areas/core/Document.hpp"
+#include "areas/core/NodeListOf.hpp"
 #include "areas/core/functions.hpp"
 #include "areas/css/CSSStyleDeclaration.hpp"
 #include "areas/events/Event.hpp"
@@ -50,6 +51,14 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(box.children().length() == 2);
     extra.remove();
     CHECK(box.children().length() == 1);
+
+    // Generic types are class templates: querySelectorAll("p") is a NodeListOf<HTMLParagraphElement>.
+    NodeListOf<HTMLParagraphElement> paragraphs = box.querySelectorAll(HTMLElementTagNameMapKeys::p);
+    CHECK(paragraphs.length() == 1);
+    CHECK(paragraphs.item(0).textContent() == "seed text");
+    // A default type argument: querySelectorAll(selectors) is a NodeListOf<Element>.
+    NodeListOf<Element> all = box.querySelectorAll("p, button");
+    CHECK(all.length() == 1);
 
     // A typed key selects the event type: the listener of "click" takes a PointerEvent.
     HTMLElement button = doc.createElement(HTMLElementTagNameMapKeys::button);

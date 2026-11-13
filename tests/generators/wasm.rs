@@ -39,8 +39,13 @@ pub enum Ty {
     Mapped(String),
     // A callback taking one handle, whose type may depend on a key.
     Listener(Box<Ty>),
+    // A type parameter, and a generic type with its arguments (`Box<T>`).
+    // Only where generics are kept (C++); its values cross as handles.
+    Param(String),
+    Generic(String, Vec<Ty>),
 }
 
+#[derive(Clone)]
 pub enum Call {
     Method(String),
     Get(String),
@@ -58,6 +63,9 @@ pub enum Call {
 }
 
 pub struct Func {
+    // Its own type parameters, where generics are kept, and their defaults.
+    pub type_params: Vec<String>,
+    pub type_defaults: Vec<Option<Ty>>,
     // The module a top-level function is in; empty for members.
     pub module: String,
     // Name of the wasm import, unique in the module.
@@ -77,6 +85,10 @@ pub struct Func {
 }
 
 pub struct Class {
+    // Its type parameters, and its direct bases with their arguments, where generics are kept.
+    pub type_params: Vec<String>,
+    pub type_defaults: Vec<Option<Ty>>,
+    pub bases: Vec<Ty>,
     // The module it is in, from the XML.
     pub module: String,
     pub name: String,
@@ -109,6 +121,7 @@ pub struct KeyMap {
 }
 
 pub struct Callback {
+    pub type_params: Vec<String>,
     pub name: String,
     pub params: Vec<(String, Ty)>,
     pub ret: Ty,
@@ -138,6 +151,8 @@ pub struct Model {
     pub funcs: Vec<Func>,
     // Types declared elsewhere: handles with no members.
     pub opaque: Vec<String>,
+    // How many type arguments those that are generic take.
+    pub opaque_arity: BTreeMap<String, usize>,
     // What the generator does not bind yet, by reason.
     pub skipped: BTreeMap<String, usize>,
 }
@@ -197,6 +212,10 @@ struct Builder<'a> {
     bad: Option<String>,
     // The module of the declaration being read.
     module: String,
+    // Whether generics are kept (C++), and the type parameters of the signature just read.
+    generics: bool,
+    last_type_params: Vec<String>,
+    last_type_defaults: Vec<Option<Ty>>,
     // Module folders given out, by lowercased path: names that differ only in case get a suffix.
     folders: HashMap<String, String>,
     folder_names: HashMap<(String, String), String>,
@@ -207,13 +226,16 @@ pub fn model(xml: &str, target: &str) -> Model {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], skipped: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
         keyed: HashMap::new(),
         bad: None,
         module: String::new(),
+        generics: target == "C++",
+        last_type_params: Vec::new(),
+        last_type_defaults: Vec::new(),
         folders: HashMap::new(),
         folder_names: HashMap::new(),
     };
@@ -268,6 +290,21 @@ impl<'a> Builder<'a> {
         let path = file_name(&format!("{kind}/{module}"), &mut self.folders);
         self.folder_names.insert((kind.to_string(), module.to_string()), path.clone());
         path
+    }
+
+    // The default of a type parameter, if it has one: `E extends Element = Element`.
+    fn type_default(&mut self, p: Node<'a, 'a>) -> Option<Ty> {
+        let d = elements(p).find(|c| c.has_tag_name("default"))?;
+        Some(self.ty(only_child(d), ""))
+    }
+
+    // The type of an alias. Its type parameters come first; only where generics
+    // are kept can it have any.
+    fn alias_body(&self, d: Node<'a, 'a>) -> Node<'a, 'a> {
+        if !self.generics {
+            return only_child_after_params(d, self.target);
+        }
+        elements(d).find(|c| !c.has_tag_name("typeParameter")).unwrap_or_else(|| only_child(d))
     }
 
     // Functions whose glue is the same but for their fixed arguments share one
@@ -327,22 +364,25 @@ impl<'a> Builder<'a> {
                 "interface" if is_function_interface(d) => {
                     let owner = ident(&path);
                     let (params, _, _, ret) = self.signature(only_child(d), &owner);
-                    self.model.callbacks.push(Callback { name: owner, params, ret });
+                    self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
                 }
                 "interface" | "class" => {
                     let c = self.class(d, &path);
                     self.model.classes.push(c);
                 }
                 "typeAlias" => {
-                    let body = only_child_after_params(d, self.target);
+                    let body = self.alias_body(d);
+                    let alias_params: Vec<String> = named(d, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
                     if body.has_tag_name("functionType") {
                         let owner = ident(&path);
                         let (params, _, _, ret) = self.signature(body, &owner);
-                        self.model.callbacks.push(Callback { name: owner, params, ret });
+                        self.last_type_params = alias_params.clone();
+                        self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
                     }
                     // A named object type is an interface in all but syntax.
                     if body.has_tag_name("object") {
-                        let c = self.class(body, &path);
+                        let mut c = self.class(body, &path);
+                        c.type_params = alias_params;
                         self.model.classes.push(c);
                     }
                     // Other aliases are resolved where they are used.
@@ -352,7 +392,8 @@ impl<'a> Builder<'a> {
                     let js = join(prefix, d.attribute("jsName").unwrap_or(name));
                     let name = ident(&join(prefix, name));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret });
+                    let type_params = std::mem::take(&mut self.last_type_params);
+                    self.model.funcs.push(Func { type_params, type_defaults: std::mem::take(&mut self.last_type_defaults), module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret });
                 }
                 "var" => {
                     let body = only_child(d);
@@ -367,7 +408,7 @@ impl<'a> Builder<'a> {
                     let ret = self.ty(body, "");
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], shared: None, ret });
+                    self.model.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], shared: None, ret });
                 }
                 _ => unsupported(self.target, d),
             }
@@ -376,12 +417,12 @@ impl<'a> Builder<'a> {
 
     fn class(&mut self, d: Node<'a, 'a>, path: &str) -> Class {
         let owner = ident(path);
-        let mut c = Class { module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
+        let mut c = Class { type_params: vec![], type_defaults: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
         let mut names = HashSet::new();
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
             let import = self.import(format!("{owner}_create"));
-            c.funcs.push(Func { module: String::new(), import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()) });
+            c.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: String::new(), import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()) });
         }
         for m in elements(d) {
             self.member(&mut c, &mut names, m, path, m.has_tag_name("constructor") || flag(m, "static"));
@@ -390,7 +431,7 @@ impl<'a> Builder<'a> {
     }
 
     fn statics(&mut self, body: Node<'a, 'a>, path: &str, name: String) -> Class {
-        let mut c = Class { module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
+        let mut c = Class { type_params: vec![], type_defaults: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
         let mut names = HashSet::new();
         for m in elements(body) {
             self.member(&mut c, &mut names, m, path, true);
@@ -412,17 +453,24 @@ impl<'a> Builder<'a> {
         // A direct base, when inheritance is kept: members stay on the type that declares them.
         if tag == "extends" {
             let base = only_child(m);
-            if base.has_tag_name("ref") && elements(base).next().is_none() {
+            if base.has_tag_name("ref") && (elements(base).next().is_none() || self.generics) {
                 let name = base.attribute("qualified").unwrap_or(attr(base, "name"));
+                let t = self.reference(base);
                 if !self.decls.contains_key(name) {
                     self.opaque.insert(ident(name));
                 }
+                c.bases.push(t);
                 return c.ancestors.push(ident(name));
             }
             return self.skip("generic base");
         }
         if tag == "typeParameter" {
-            unsupported(self.target, m);
+            if !self.generics {
+                unsupported(self.target, m);
+            }
+            c.type_params.push(raw_name.to_string());
+            let default = self.type_default(m);
+            return c.type_defaults.push(default);
         }
         self.bad = None;
         let before = c.funcs.len();
@@ -432,9 +480,9 @@ impl<'a> Builder<'a> {
             if names.insert("get_at".into()) {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
-                c.funcs.push(Func { module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true) });
+                c.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true) });
                 let import = self.import(format!("{owner}_set_at"));
-                c.funcs.push(Func { module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
+                c.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
             }
             return;
         }
@@ -451,7 +499,7 @@ impl<'a> Builder<'a> {
             if !names.contains(&base) && self.bad.is_none() {
                 names.insert(base.clone());
                 let import = self.import(format!("{owner}_{base}"));
-                c.funcs.push(Func { module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret });
+                c.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret });
             }
             self.bad = None;
             return;
@@ -482,14 +530,20 @@ impl<'a> Builder<'a> {
                 let (params, rest, fixed, _) = self.signature(m, &owner);
                 let name = unique(if raw_name.is_empty() { "new".into() } else { ident(raw_name) }, names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret: Ty::Obj(owner) });
+                c.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret: Ty::Obj(owner) });
             }
             "method" => {
                 let (params, rest, fixed, ret) = self.signature(m, &owner);
                 let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js) };
                 let name = unique(ident(raw_name), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { module: String::new(), import, name, call, params, rest, fixed, shared: None, ret });
+                let type_params = std::mem::take(&mut self.last_type_params);
+                let type_defaults = std::mem::take(&mut self.last_type_defaults);
+                // A method's type parameter may not reuse its class's name in C++.
+                if type_params.iter().any(|t| c.type_params.contains(t)) {
+                    return self.skip("method type parameter shadowing its class's");
+                }
+                c.funcs.push(Func { type_params, type_defaults, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret });
             }
             // A constant needs no call across the boundary.
             "property" if m.has_attribute("const") => {
@@ -512,11 +566,11 @@ impl<'a> Builder<'a> {
                 };
                 let name = unique(format!("get_{}", ident(raw_name)), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone() });
+                c.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone() });
                 if !flag(m, "readonly") {
                     let name = unique(format!("set_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
-                    c.funcs.push(Func { module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
+                    c.funcs.push(Func { type_params: vec![], type_defaults: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
                 }
             }
             _ => unsupported(self.target, m),
@@ -530,6 +584,8 @@ impl<'a> Builder<'a> {
     fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
         // Type parameters left after `generics = "erase"` range over a map's keys.
         self.keyed.clear();
+        self.last_type_params.clear();
+        self.last_type_defaults.clear();
         for p in named(n, "typeParameter") {
             let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child);
             match map {
@@ -538,6 +594,11 @@ impl<'a> Builder<'a> {
                     if self.key_map(&name) {
                         self.keyed.insert(attr(p, "name").to_string(), ident(&name));
                     }
+                }
+                None if self.generics => {
+                    self.last_type_params.push(attr(p, "name").to_string());
+                    let default = self.type_default(p);
+                    self.last_type_defaults.push(default);
                 }
                 None => unsupported(self.target, p),
             }
@@ -596,7 +657,7 @@ impl<'a> Builder<'a> {
         }
         for p in props {
             let t = self.ty(only_child(p), "");
-            if !matches!(t, Ty::Obj(_)) {
+            if !matches!(t, Ty::Obj(_) | Ty::Generic(..)) {
                 self.bad = Some("map with values that are not objects".into());
                 return false;
             }
@@ -619,6 +680,7 @@ impl<'a> Builder<'a> {
             "this" => Ty::Obj(owner.to_string()),
             "ref" if attr(n, "kind") == "typeParameter" => match self.keyed.get(attr(n, "name")) {
                 Some(map) => Ty::Key(map.clone()),
+                None if self.generics => Ty::Param(attr(n, "name").to_string()),
                 None => unsupported(self.target, n),
             },
             "ref" => self.reference(n),
@@ -631,12 +693,16 @@ impl<'a> Builder<'a> {
                 }
             }
             // A callback written inline: kept so only when it takes `M[K]`.
-            "functionType" if !self.keyed.is_empty() => {
+            "functionType" if self.keyed.is_empty() => {
+                self.bad = Some("callback written inline".into());
+                Ty::Any
+            }
+            "functionType" => {
                 let params: Vec<Node> = named(n, "parameter").collect();
                 let ret = named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or(Ty::Void);
                 match (params.as_slice(), ret) {
                     ([p], Ty::Void | Ty::Any) => match self.ty(only_child(*p), owner) {
-                        t @ (Ty::Mapped(_) | Ty::Obj(_)) => Ty::Listener(Box::new(t)),
+                        t @ (Ty::Mapped(_) | Ty::Obj(_) | Ty::Generic(..)) => Ty::Listener(Box::new(t)),
                         _ => {
                             self.bad = Some("keyed callback of another shape".into());
                             Ty::Any
@@ -676,9 +742,17 @@ impl<'a> Builder<'a> {
             ("enum", Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "number") => Ty::NumEnum(ident(&key)),
             ("enum", _) => Ty::Num,
             (_, Some(d)) if d.has_tag_name("typeAlias") => {
-                let body = only_child_after_params(d, self.target);
+                let body = self.alias_body(d);
                 if body.has_tag_name("functionType") || body.has_tag_name("object") {
+                    if self.generics && elements(n).next().is_some() {
+                        let args: Vec<Ty> = elements(n).map(|a| self.ty(a, "")).collect();
+                        return Ty::Generic(ident(&key), args);
+                    }
                     return Ty::Obj(ident(&key));
+                }
+                // Another generic alias would need its arguments substituted.
+                if named(d, "typeParameter").next().is_some() {
+                    return Ty::Any;
                 }
                 if self.resolving.contains(&key) || self.resolving.len() > 8 {
                     return Ty::Any;
@@ -705,6 +779,15 @@ impl<'a> Builder<'a> {
                 let t = self.ty(body, "");
                 self.resolving.pop();
                 t
+            }
+            ("class" | "interface", declared) if self.generics && elements(n).next().is_some() => {
+                let args: Vec<Ty> = elements(n).map(|a| self.ty(a, "")).collect();
+                if declared.is_none() {
+                    self.opaque.insert(ident(&key));
+                    let arity = self.model.opaque_arity.entry(ident(&key)).or_default();
+                    *arity = (*arity).max(args.len());
+                }
+                Ty::Generic(ident(&key), args)
             }
             ("class" | "interface", Some(_)) => Ty::Obj(ident(&key)),
             ("class" | "interface", None) => {
@@ -742,7 +825,7 @@ fn value(t: Ty) -> Ty {
 fn absent(t: Ty, undefined: bool) -> Ty {
     match t {
         // A string that may be absent: a null pointer going in, a null handle coming back.
-        Ty::Obj(_) | Ty::Array | Ty::Str => Ty::Nullable(Box::new(t), undefined),
+        Ty::Obj(_) | Ty::Array | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
         Ty::Nullable(..) => t,
         Ty::Void => Ty::Void,
         _ => Ty::Any,
