@@ -58,12 +58,18 @@ fn ty_in(t: &Ty) -> String {
     }
 }
 
+thread_local! {
+    // The unions of the model being generated that values can be decoded to.
+    static DECODABLE: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
+}
+
 // A type as a template argument: a value type, not a view.
 fn ty_arg(t: &Ty) -> String {
     match t {
         Ty::Str => "std::string".into(),
         Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_arg(inner)),
-        // Nothing turns a handle into a union inside a template: it stays a value.
+        // A union a handle can be decoded to; any other stays a value.
+        Ty::NamedUnion(n) if DECODABLE.with(|d| d.borrow().contains(n)) => n.clone(),
         Ty::NamedUnion(_) | Ty::Union(_) => "ts::Value".into(),
         t => ty_in(t),
     }
@@ -162,9 +168,9 @@ fn lower(t: &Ty, x: &str) -> Vec<String> {
         Ty::Key(_) => vec![format!("{x}.index")],
         Ty::Str => vec![format!("{x}.data()"), format!("{x}.size()")],
         Ty::Nullable(inner, _) if **inner == Ty::Str => vec![format!("({x} ? {x}->data() : nullptr)"), format!("({x} ? {x}->size() : 0)")],
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::Param(_) | Ty::Generic(..)) => vec![format!("({x} ? ts::to_handle(*{x}) : 0)")],
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Param(_) | Ty::Generic(..)) => vec![format!("ts::Arg({x}).h")],
         Ty::Nullable(..) => vec![format!("({x} ? {x}->h : 0)")],
-        Ty::Param(_) | Ty::Generic(..) | Ty::NamedUnion(_) => vec![format!("ts::to_handle({x})")],
+        Ty::Param(_) | Ty::Generic(..) | Ty::NamedUnion(_) => vec![format!("ts::Arg({x}).h")],
         _ => vec![format!("{x}.h")],
     }
 }
@@ -176,7 +182,7 @@ fn raise(t: &Ty, r: &str, unions: &[NamedUnion]) -> String {
         Ty::NumEnum(e) => format!("{e}(int32_t({r}))"),
         Ty::Bool => format!("({r} != 0)"),
         Ty::Enum(e) => format!("{e}({r})"),
-        Ty::Str => format!("ts::read_string({r})"),
+        Ty::Str => format!("ts::from_handle<std::string>({r})"),
         Ty::Nullable(inner, _) => format!("({r} ? {}({}) : std::nullopt)", ty_out(t, unions), raise(inner, r, unions)),
         Ty::NamedUnion(n) if decodable(n, unions) => format!("decode_{n}({r})"),
         Ty::Generic(n, args) if decodable(n, unions) => format!("decode_{n}<{}>({r})", args.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
@@ -409,6 +415,9 @@ TS_IMPORT(js_array_get) uint32_t ts_raw_js_array_get(uint32_t, uint32_t);
 TS_IMPORT(js_array_push) void ts_raw_js_array_push(uint32_t, uint32_t);
 TS_IMPORT(js_listener_from) uint32_t ts_raw_js_listener_from(uintptr_t, void*);
 TS_IMPORT(js_callback_release) uint32_t ts_raw_js_callback_release(uint32_t);
+TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
+TS_IMPORT(js_release) void ts_raw_js_release(uint32_t);
+TS_IMPORT(js_live) uint32_t ts_raw_js_live();
 }
 
 namespace ts {
@@ -419,12 +428,28 @@ struct handle_t {
 };
 inline constexpr handle_t handle{};
 
-// A JavaScript object. Zero is null.
+// A JavaScript object. Zero is null. A handle is a counted reference:
+// copies retain it, and the last one to go frees it on the JavaScript side.
 struct Handle {
     uint32_t h = 0;
     Handle() = default;
+    // Takes over a reference: what JavaScript returned.
     Handle(handle_t, uint32_t h) : h(h) {}
+    Handle(const Handle& o) : h(o.h) {
+        if (h) ts_raw_js_retain(h);
+    }
+    Handle(Handle&& o) noexcept : h(std::exchange(o.h, 0)) {}
+    Handle& operator=(Handle o) noexcept {
+        std::swap(h, o.h);
+        return *this;
+    }
+    ~Handle() {
+        if (h) ts_raw_js_release(h);
+    }
 };
+
+// How many JavaScript values wasm holds handles to.
+inline uint32_t live_handles() { return ts_raw_js_live(); }
 
 template <class T>
 inline constexpr bool is_handle = std::is_base_of_v<Handle, std::decay_t<T>>;
@@ -443,34 +468,76 @@ inline std::string read_string(uint32_t h) {
     return s;
 }
 
-// A union member, or any value, as a handle.
-inline uint32_t to_handle(const std::string& s) { return ts_raw_js_from_string(s.data(), s.size()); }
-inline uint32_t to_handle(std::string_view s) { return ts_raw_js_from_string(s.data(), s.size()); }
-inline uint32_t to_handle(const char* s) { return to_handle(std::string_view(s)); }
-inline uint32_t to_handle(double x) { return ts_raw_js_from_number(x); }
-inline uint32_t to_handle(bool x) { return ts_raw_js_from_bool(x); }
-template <class H, std::enable_if_t<is_handle<H>, int> = 0>
-uint32_t to_handle(const H& v) { return v.h; }
-template <class... T>
-uint32_t to_handle(const std::variant<T...>& v) {
-    return std::visit([](const auto& x) { return to_handle(x); }, v);
-}
+// A value lent to JavaScript as a handle, for one call: an object's own
+// handle, or a new one for a number, flag or string, released after the call.
+struct Arg {
+    uint32_t h = 0;
+    bool own = false;
+    Arg(const std::string& s) : h(ts_raw_js_from_string(s.data(), s.size())), own(true) {}
+    Arg(std::string_view s) : h(ts_raw_js_from_string(s.data(), s.size())), own(true) {}
+    Arg(const char* s) : Arg(std::string_view(s)) {}
+    Arg(double x) : h(ts_raw_js_from_number(x)), own(true) {}
+    Arg(bool x) : h(ts_raw_js_from_bool(x)), own(true) {}
+    template <class H, std::enable_if_t<is_handle<H>, int> = 0>
+    Arg(const H& v) : h(v.h) {}
+    template <class... T>
+    Arg(const std::variant<T...>& v) {
+        std::visit([this](const auto& x) { take(Arg(x)); }, v);
+    }
+    template <class T>
+    Arg(const std::optional<T>& v) {
+        if (v) take(Arg(*v));
+    }
+    Arg(const Arg&) = delete;
+    Arg& operator=(const Arg&) = delete;
+    ~Arg() {
+        if (own) ts_raw_js_release(h);
+    }
+    // A reference for JavaScript to keep: what a callback returns.
+    uint32_t give() {
+        if (!own && h) ts_raw_js_retain(h);
+        own = false;
+        return h;
+    }
+
+  private:
+    void take(Arg&& a) {
+        h = a.h;
+        own = std::exchange(a.own, false);
+    }
+};
+
+// What `from_handle` turns into a union: specialized for each union a value can be decoded to.
+template <class T>
+struct decoder {};
+
+// What a type argument is, for telling a bare type parameter apart in a union:
+// 1 a number, 2 a string, 3 a flag, 0 anything else.
+template <class T>
+inline constexpr int32_t kind_of = std::is_same_v<T, double> ? 1 : std::is_same_v<T, std::string> ? 2 : std::is_same_v<T, bool> ? 3 : 0;
 
 template <class T>
 struct is_optional : std::false_type {};
 template <class T>
 struct is_optional<std::optional<T>> : std::true_type {};
 
-// A value of type T from a handle: a number, a flag, a string or an object.
+// A value of type T from a handle JavaScript returned: a number, a flag, a
+// string, a union or an object. Takes over the handle.
 template <class T>
 T from_handle(uint32_t h) {
     if constexpr (is_optional<T>::value) {
         if (!h) return std::nullopt;
         return from_handle<typename T::value_type>(h);
-    } else if constexpr (std::is_same_v<T, double>) return ts_raw_js_to_number(h);
-    else if constexpr (std::is_same_v<T, bool>) return ts_raw_js_to_bool(h) != 0;
-    else if constexpr (std::is_same_v<T, std::string>) return read_string(h);
-    else return T(handle, h);
+    } else if constexpr (requires { decoder<T>::from(h); }) {
+        return decoder<T>::from(h);
+    } else if constexpr (std::is_same_v<T, double> || std::is_same_v<T, bool> || std::is_same_v<T, std::string>) {
+        T x;
+        if constexpr (std::is_same_v<T, double>) x = ts_raw_js_to_number(h);
+        else if constexpr (std::is_same_v<T, bool>) x = ts_raw_js_to_bool(h) != 0;
+        else x = read_string(h);
+        ts_raw_js_release(h);
+        return x;
+    } else return T(handle, h);
 }
 
 // A JavaScript value of no particular type.
@@ -486,9 +553,14 @@ struct Value : Handle {
     friend bool operator==(Value a, Value b) { return ts_raw_js_equals(a.h, b.h) != 0; }
 };
 
-// TypeScript's `T extends U`, for a constraint. Anything extends `any`, and `any` anything.
+// TypeScript's `T extends U`, for a constraint. Anything extends `any`, and
+// `any` anything; a union, if each of its members does.
 template <class T, class U>
-concept extends = std::same_as<T, U> || std::derived_from<T, U> || std::same_as<T, Value> || std::same_as<U, Value>;
+struct extends_t : std::bool_constant<std::same_as<T, U> || std::derived_from<T, U> || std::same_as<T, Value> || std::same_as<U, Value>> {};
+template <class... A, class U>
+struct extends_t<std::variant<A...>, U> : std::bool_constant<(extends_t<A, U>::value && ...)> {};
+template <class T, class U>
+concept extends = extends_t<T, U>::value;
 
 // A JavaScript array of T; `Array<>` of any values.
 template <class T = Value>
@@ -504,8 +576,8 @@ struct Array : Handle {
     template <class U>
         requires std::same_as<T, Value> || std::convertible_to<const U&, T>
     void push(const U& v) const {
-        if constexpr (std::same_as<T, Value>) ts_raw_js_array_push(h, to_handle(v));
-        else ts_raw_js_array_push(h, to_handle(T(v)));
+        if constexpr (std::same_as<T, Value>) ts_raw_js_array_push(h, Arg(v).h);
+        else ts_raw_js_array_push(h, Arg(T(v)).h);
     }
 };
 
@@ -535,7 +607,7 @@ F& closure_fn(void* ctx) { return static_cast<ClosureOf<F>*>(static_cast<Closure
 struct Callback : virtual Handle {
     void release() {
         if (uint32_t ctx = ts_raw_js_callback_release(h)) delete static_cast<Closure*>(reinterpret_cast<void*>(uintptr_t(ctx)));
-        h = 0;
+        static_cast<Handle&>(*this) = Handle();
     }
 };
 
@@ -543,7 +615,7 @@ struct Callback : virtual Handle {
 template <class C>
 struct Scoped : C {
     template <class F>
-    Scoped(F f) : Handle(handle, C(std::move(f)).h) {}
+    Scoped(F f) : Handle(C(std::move(f))) {}
     Scoped(const Scoped&) = delete;
     Scoped& operator=(const Scoped&) = delete;
     ~Scoped() { this->release(); }
@@ -569,6 +641,7 @@ struct Listener : Callback {
 // The bindings as files: see the top of this file.
 pub fn files(m: &Model) -> Vec<(String, String)> {
     let unions = &m.unions;
+    DECODABLE.with(|d| *d.borrow_mut() = unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
     let mut taken = HashMap::new();
     // Where each declared type is defined, without the extension.
     let mut home: HashMap<String, String> = HashMap::new();
@@ -595,7 +668,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         u.parts.iter().for_each(|p| named_types(p, &mut parts));
         parts.remove(&u.name);
         let mut text = format!("// Generated.\n#pragma once\n{}{}", include(&path, "ts_types.hpp"), includes(&path, &parts));
-        text += &format!("extern \"C\" TS_IMPORT({0}_tag) int32_t ts_raw_{0}_tag(uint32_t);\n", u.name);
+        text += &format!("extern \"C\" TS_IMPORT({0}_tag) int32_t ts_raw_{0}_tag(uint32_t, int32_t);\n", u.name);
         if u.decodable() {
             let name = union_type(u);
             let cases: Vec<String> = u
@@ -604,14 +677,32 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
                 .enumerate()
                 .map(|(i, p)| {
                     let value = match p {
-                        Ty::Num => "ts_raw_js_to_number(h)".to_string(),
-                        Ty::Bool => "ts_raw_js_to_bool(h) != 0".to_string(),
+                        Ty::Num => "ts::from_handle<double>(h)".to_string(),
+                        Ty::Bool => "ts::from_handle<bool>(h)".to_string(),
                         p => raise(p, "h", unions),
                     };
                     format!("        case {i}: return {name}(std::in_place_index<{i}>, {value});\n")
                 })
                 .collect();
-            text += &format!("{}inline {name} decode_{}(uint32_t h) {{\n    switch (ts_raw_{1}_tag(h)) {{\n{2}    }}\n    __builtin_trap();\n}}\n", head(&u.type_params, false), u.name, cases.concat());
+            // A bare type parameter is told apart by its argument; with another
+            // member no test can recognise, only a number, string or flag can be.
+            let param = u.parts.iter().find_map(|p| if let Ty::Param(t) = p { Some(t.clone()) } else { None });
+            let kind = param.as_ref().map_or("0".to_string(), |t| format!("ts::kind_of<{t}>"));
+            let check = match &param {
+                Some(t) if u.tests.iter().zip(&u.parts).any(|(test, p)| test.is_none() && !matches!(p, Ty::Param(_))) => {
+                    format!("    static_assert(ts::kind_of<{t}> != 0, \"{t} must be a number, string or flag to be told apart\");\n")
+                }
+                _ => String::new(),
+            };
+            text += &format!(
+                "{}inline {name} decode_{}(uint32_t h) {{\n{check}    switch (ts_raw_{1}_tag(h, {kind})) {{\n{2}    }}\n    __builtin_trap();\n}}\n",
+                head(&u.type_params, false),
+                u.name,
+                cases.concat()
+            );
+            if decoder_owner(u, unions) {
+                text += &format!("inline ::{0} ts::decoder<::{0}>::from(uint32_t h) {{ return decode_{0}(h); }}\n", u.name);
+            }
         }
         out.push((path, text));
     }
@@ -799,6 +890,13 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     out
 }
 
+// Whether `u` declares the decoder of its variant: unions with the same
+// members are the same type, and the first one does.
+fn decoder_owner(u: &NamedUnion, unions: &[NamedUnion]) -> bool {
+    let key = |u: &NamedUnion| u.parts.iter().map(|p| ty_out(p, unions)).collect::<Vec<_>>();
+    u.type_params.is_empty() && u.decodable() && unions.iter().find(|o| o.type_params.is_empty() && o.decodable() && key(o) == key(u)).is_some_and(|o| o.name == u.name)
+}
+
 // A union as a type in its own definitions: `Either` or `Either<T>`.
 fn union_type(u: &NamedUnion) -> String {
     if u.type_params.is_empty() { u.name.clone() } else { format!("{}<{}>", u.name, u.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) }
@@ -856,6 +954,10 @@ fn declarations(m: &Model) -> String {
         // Defined with the union, used wherever one comes back.
         if u.decodable() {
             types += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false), union_type(u), u.name);
+            // Unions with the same members are the same variant: one decoder.
+            if decoder_owner(u, unions) {
+                types += &format!("template <>\nstruct ts::decoder<::{0}> {{\n    static ::{0} from(uint32_t h);\n}};\n", u.name);
+            }
         }
     }
     // A map's keys, each typed by the value it selects.
@@ -894,6 +996,6 @@ fn lower_callback(t: &Ty, x: &str) -> String {
         Ty::NumEnum(_) => format!("double({x})"),
         Ty::Bool => format!("({x} ? 1 : 0)"),
         Ty::Enum(_) => format!("int32_t({x})"),
-        _ => format!("ts::to_handle({x})"),
+        _ => format!("ts::Arg({x}).give()"),
     }
 }

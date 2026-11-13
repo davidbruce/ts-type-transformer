@@ -92,6 +92,14 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // A generic union alias is an alias template: Either<double> is std::variant<double, Box<double>>.
     CHECK(unbox<double>(5.0) == 5);
     CHECK(unbox<double>(b) == 21);
+    // Coming back, a bare T is told apart by what T is.
+    CHECK(std::get<0>(either(5.0, false)) == 5);
+    CHECK(std::get<1>(either(5.0, true)).value() == 5);
+    CHECK(std::get<0>(either<std::string>("s", false)) == "s");
+    // A union as a type argument is the union: Id is std::variant<double, std::string>.
+    ts::Array<Id> some = ids();
+    CHECK(std::get<double>(some[0]) == 1 && std::get<std::string>(some[1]) == "two");
+    CHECK(std::get<std::string>(boxedId().value()) == "three");
     // A constraint is a requires-clause: largest takes arrays of Items.
     CHECK(largest(all).id() == 2);
     // A name both generic bases have is declared again on Pipe.
@@ -99,4 +107,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(pp.label() == "pipe");
     pp.put(4);
     CHECK(pp.take() == 4);
+
+    // Handles are counted: what goes out of scope is freed in JavaScript too.
+    uint32_t live = ts::live_handles();
+    for (int i = 0; i < 1000; i++) {
+        Box<double> t = wrap(double(i));
+        Box<double> copy = t;
+        CHECK(copy.value() == i && words("a b")[1] == "b");
+    }
+    CHECK(ts::live_handles() == live);
 }

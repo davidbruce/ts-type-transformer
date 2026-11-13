@@ -40,6 +40,11 @@ declare function wrap<T>(value: T): Box<T>;
 declare function first<T>(values: T[]): T | undefined;
 type Either<T> = T | Box<T>;
 declare function unbox<T>(value: Either<T>): T;
+declare function either<T>(value: T, boxed: boolean): Either<T>;
+// Unions as type arguments.
+type Id = number | string;
+declare function ids(): Id[];
+declare function boxedId(): Box<Id>;
 declare function largest<T extends Item>(values: T[]): T;
 
 // Generic bases with a member of the same name.

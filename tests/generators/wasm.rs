@@ -109,9 +109,16 @@ pub struct NamedUnion {
 }
 
 impl NamedUnion {
-    // A value coming back can be told apart: every member has a test, but one.
+    // A value coming back can be told apart: every member has a test, but
+    // one. A bare type parameter is told apart where its argument is known,
+    // if it is a number, a string or a flag.
     pub fn decodable(&self) -> bool {
-        self.tests.iter().filter(|t| t.is_none()).count() <= 1
+        let untested = self.tests.iter().zip(&self.parts).filter(|(t, p)| t.is_none() && !matches!(p, Ty::Param(_))).count();
+        untested <= 1 && self.params() <= 1
+    }
+
+    pub fn params(&self) -> usize {
+        self.parts.iter().filter(|p| matches!(p, Ty::Param(_))).count()
     }
 }
 
@@ -165,6 +172,9 @@ pub struct Model {
     pub opaque_arity: BTreeMap<String, usize>,
     // What the generator does not bind yet, by reason.
     pub skipped: BTreeMap<String, usize>,
+    // Handles are counted references: wasm retains and releases them, and
+    // owns what a callback returns. Else a handle lives as long as the page.
+    pub counted: bool,
 }
 
 impl Class {
@@ -235,7 +245,7 @@ pub fn model(xml: &str, target: &str) -> Model {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -733,7 +743,7 @@ impl<'a> Builder<'a> {
             }
             // Elements that cross as a number, a flag, a string or a handle.
             "array" if self.generics => match self.ty(only_child(n), owner) {
-                e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::Generic(..) | Ty::Param(_) | Ty::ArrayOf(_)) => Ty::ArrayOf(Box::new(e)),
+                e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::Generic(..) | Ty::Param(_) | Ty::ArrayOf(_) | Ty::NamedUnion(_)) => Ty::ArrayOf(Box::new(e)),
                 _ => Ty::Array,
             },
             "array" | "tuple" => Ty::Array,
@@ -1047,14 +1057,37 @@ pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
         "// Generated. Implements the wasm imports by calling the JavaScript API.
 export function makeEnv(getInstance) {
   const objs = [null];
-  // One handle per value, so handles can be compared for identity.
+  // One handle per value, so handles can be compared for identity. Each
+  // `put` is a reference wasm owns; a handle is freed when none are left.
   const ids = new Map();
+  const refs = [0];
+  const free = [];
   const put = v => {
     if (v === null || v === undefined) return 0;
-    if (!ids.has(v)) ids.set(v, objs.push(v) - 1);
-    return ids.get(v);
+    let h = ids.get(v);
+    if (h === undefined) {
+      h = free.length ? free.pop() : objs.length;
+      objs[h] = v;
+      refs[h] = 0;
+      ids.set(v, h);
+    }
+    refs[h]++;
+    return h;
+  };
+  const release = h => {
+    if (h && --refs[h] === 0) {
+      ids.delete(objs[h]);
+      objs[h] = undefined;
+      free.push(h);
+    }
   };
   const get = h => objs[h];
+  // A handle wasm gave up: what a callback returns.
+  const take = h => {
+    const v = get(h);
+    release(h);
+    return v;
+  };
   const memory = () => getInstance().exports.memory.buffer;
   const table = () => getInstance().exports.__indirect_function_table;
   const enc = new TextEncoder(), dec = new TextDecoder();
@@ -1062,19 +1095,18 @@ export function makeEnv(getInstance) {
   // One JavaScript function per wasm function and context, so that a
   // callback passed twice is the same function (removeEventListener).
   const callbacks = new Map();
-  // Callbacks made here, by handle: their key and context, until released.
+  // Callbacks made here: their key and context, until released.
   const owned = new Map();
   const callback = (kind, fn, ctx, make) => {
     const key = `${kind}:${fn}:${ctx}`;
     if (!callbacks.has(key)) {
       const f = make(table().get(fn));
-      let h = 0;
+      const state = { key, ctx, alive: true };
       const live = (...args) => {
-        if (!owned.has(h)) throw new Error('callback called after release');
+        if (!state.alive) throw new Error('callback called after release');
         return f(...args);
       };
-      h = put(live);
-      owned.set(h, [key, ctx]);
+      owned.set(live, state);
       callbacks.set(key, live);
     }
     return put(callbacks.get(key));
@@ -1107,33 +1139,50 @@ export function makeEnv(getInstance) {
     js_listener_from: (fn, ctx) => callback('listener', fn, ctx, f => ev => { f(ctx, put(ev)); }),
     // Forgets a callback made here; returns its context, for wasm to free, or 0.
     js_callback_release: h => {
-      const o = owned.get(h);
+      const o = owned.get(get(h));
       if (!o) return 0;
-      owned.delete(h);
-      callbacks.delete(o[0]);
-      ids.delete(objs[h]);
-      objs[h] = undefined;
-      return o[1];
+      owned.delete(get(h));
+      callbacks.delete(o.key);
+      o.alive = false;
+      return o.ctx;
     },
+    js_retain: h => { if (h) refs[h]++; },
+    js_release: release,
+    // Values wasm holds handles to.
+    js_live: () => ids.size,
 ";
     // Which member of a union a value is: its index, or -1.
     for u in m.unions.iter().filter(|u| wanted(&format!("{}_tag", u.name))) {
         let mut arms = Vec::new();
         let mut default = None;
-        for (i, test) in u.tests.iter().enumerate() {
+        // A bare type parameter: `k` says what its argument is, 1 a number, 2 a string, 3 a flag, 0 anything else.
+        let mut param = None;
+        for (i, (test, part)) in u.tests.iter().zip(&u.parts).enumerate() {
             match test {
+                _ if matches!(part, Ty::Param(_)) => {
+                    arms.insert(0, format!("if (typeof v === [, 'number', 'string', 'boolean'][k]) return {i};"));
+                    param = Some(i);
+                }
                 Some(t) => arms.push(format!("if ({}) return {i};", js_test(t, u.discriminant.as_deref()))),
                 None => default = Some(i),
             }
         }
-        out += &format!("    {}_tag: h => {{ const v = get(h); {} return {}; }},\n", u.name, arms.join(" "), default.map_or("-1".to_string(), |d| d.to_string()));
+        let default = match (default, param) {
+            (Some(d), _) => d.to_string(),
+            (None, Some(p)) => format!("(k === 0 ? {p} : -1)"),
+            (None, None) => "-1".into(),
+        };
+        out += &format!("    {}_tag: (h, k) => {{ const v = get(h); {} return {default}; }},\n", u.name, arms.join(" "));
     }
     for c in m.callbacks.iter().filter(|c| wanted(&format!("{}_from", c.name))) {
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let mut args = vec!["ctx".to_string()];
         args.extend(c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t)));
         let call = format!("f({})", args.join(", "));
-        let body = if c.ret == Ty::Void { format!("{{ {call}; }}") } else { from_wasm(&call, &c.ret) };
+        // What a callback returns is wasm's to give up, where handles are counted.
+        let ret = from_wasm("r", &c.ret);
+        let ret = if m.counted { ret.replace("get(r)", "take(r)") } else { ret };
+        let body = if c.ret == Ty::Void { format!("{{ {call}; }}") } else { format!("{{ const r = {call}; return {ret}; }}") };
         out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, f => ({}) => {body}),\n", c.name, c.name, names.join(", "));
     }
     for f in m.all_funcs().filter(|f| f.shared.is_none() && wanted(&f.import)) {

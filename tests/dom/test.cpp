@@ -90,4 +90,12 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(box.children().length() == 2);
     CHECK(get_innerWidth() > 0);
     doc.title("driven by cpp");
+
+    // Handles are counted: elements and strings fetched in a loop are freed.
+    uint32_t live = ts::live_handles();
+    for (int i = 0; i < 500; i++) {
+        HTMLElement found = *doc.getElementById("made-by-cpp");
+        CHECK(found.classList().contains("box") && found.id() == "made-by-cpp");
+    }
+    CHECK(ts::live_handles() == live);
 }

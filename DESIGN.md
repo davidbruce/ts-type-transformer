@@ -112,7 +112,11 @@ How a generator lays out files is its own choice. The test generators:
   `.cpp` per module, compiled once (the DOM: 25, about 10 s in parallel).
   A struct's own header, `X.decl.hpp`, includes only its ancestors', so
   include cycles never meet an incomplete base. Linked without
-  `--allow-undefined`: a missing definition is a link error.
+  `--allow-undefined`: a missing definition is a link error. Handles are
+  counted references (copies retain, destructors release), so the glue frees
+  what C++ no longer holds; C and Zig handles live as long as the page.
+  Unions decode wherever a handle becomes a value, in templates too
+  (`NodeListOf<A | B>`); a bare `T` in a union is told apart by what `T` is.
 - Zig: a file per module, in the same folders, importing by name what it uses
   from the others, and a root `bindings.zig`. Zig reads only what is used.
 - F#: files must not refer to each other in cycles. Files are ordered by what
