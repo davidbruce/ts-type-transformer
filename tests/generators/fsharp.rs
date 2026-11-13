@@ -389,6 +389,13 @@ impl Gen {
                         functions.push(line);
                     }
                 }
+                "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
+                    let body = only_child_type(d);
+                    if !self.named_union(&name, body, indent) {
+                        self.skip("union whose members cannot be told apart, bound as obj");
+                        self.out += &format!("{indent}type {name} = obj\n\n");
+                    }
+                }
                 "typeAlias" => {
                     let body = only_child_type(d);
                     // F# abbreviations cannot refer to themselves.
@@ -418,6 +425,55 @@ impl Gen {
         }
     }
 
+    // A union declared as an F# type: told apart by a property when it has a
+    // discriminant, else erased, each case with the runtime test the XML gives.
+    // False if Fable could not tell the cases apart.
+    fn named_union(&mut self, name: &str, union: Node, indent: &str) -> bool {
+        let members: Vec<Node> = elements(union).collect();
+        let mut cases: Vec<(String, String, Option<String>)> = Vec::new();
+        let mut seen_names = HashSet::new();
+        let mut seen_tests = HashSet::new();
+        let mut untested = 0;
+        for m in &members {
+            let payload = self.ty(*m, "");
+            let mut case = case_name(*m);
+            while !seen_names.insert(case.clone()) {
+                case.push('_');
+            }
+            let test = m.attribute("test").map(str::to_string);
+            // Fable tests these itself; anything else needs a test from the XML.
+            let native = matches!(payload.as_str(), "string" | "float" | "bool");
+            match &test {
+                Some(t) if !seen_tests.insert(t.clone()) => return false,
+                None if !native => untested += 1,
+                _ => {}
+            }
+            cases.push((case, payload, test));
+        }
+        if untested > 1 || cases.iter().any(|c| c.1 == "obj" || c.1 == "unit") {
+            return false;
+        }
+        if let Some(d) = union.attribute("discriminant") {
+            self.out += &format!("{indent}[<TypeScriptTaggedUnion({d:?})>]\n{indent}type {name} =\n");
+            for (case, payload, test) in &cases {
+                let value = test.as_deref().and_then(|t| t.strip_prefix("tag:")).unwrap_or_default();
+                self.out += &format!("{indent}    | [<CompiledName({value:?})>] {case} of {payload}\n");
+            }
+        } else {
+            self.out += &format!("{indent}[<Erase; RequireQualifiedAccess>]\n{indent}type {name} =\n");
+            for (case, payload, test) in &cases {
+                let native = matches!(payload.as_str(), "string" | "float" | "bool");
+                let attr = match test.as_deref().and_then(case_test) {
+                    Some(js) if !native => format!("[<CaseTest(\"{}\")>] ", js.replace('"', "\\\"")),
+                    _ => String::new(),
+                };
+                self.out += &format!("{indent}    | {attr}{case} of {payload}\n");
+            }
+        }
+        self.out += "\n";
+        true
+    }
+
     fn numeric_enum(&mut self, d: Node, name: &str, indent: &str) {
         self.out += &format!("{indent}[<RequireQualifiedAccess>]\n{indent}type {name} =\n");
         for (i, v) in named(d, "member").enumerate() {
@@ -432,6 +488,41 @@ impl Gen {
 fn js_access(name: &str) -> String {
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
     if plain { format!(".{name}") } else { format!("[{name:?}]") }
+}
+
+// The JavaScript test of a union member, from its `test` attribute; `$0` is the value.
+fn case_test(test: &str) -> Option<String> {
+    let (kind, arg) = test.split_once(':').unwrap_or((test, ""));
+    Some(match kind {
+        "typeof" => format!("typeof $0 === '{arg}'"),
+        "array" => "Array.isArray($0)".into(),
+        "instanceof" => format!("$0 instanceof globalThis{}", arg.split('.').map(js_access).collect::<String>()),
+        "has" => format!("typeof $0 === 'object' && $0 !== null && {arg:?} in $0"),
+        _ => return None,
+    })
+}
+
+// The name of a union case, from its member: `String`, `Widget`, `Array`.
+fn case_name(m: Node) -> String {
+    let raw = match m.tag_name().name() {
+        "primitive" => match attr(m, "name") {
+            "number" => "Number".to_string(),
+            "boolean" => "Bool".to_string(),
+            p => p.to_string(),
+        },
+        "ref" => attr(m, "name").rsplit('.').next().unwrap_or_default().to_string(),
+        "array" => "Array".into(),
+        "tuple" => "Tuple".into(),
+        "functionType" => "Function".into(),
+        "object" => "Object".into(),
+        t => t.to_string(),
+    };
+    let mut case: String = raw.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+    if case.is_empty() || !case.as_bytes()[0].is_ascii_alphabetic() {
+        case.insert(0, 'C');
+    }
+    case[..1].make_ascii_uppercase();
+    case
 }
 
 fn js_path(prefix: &str, name: &str) -> String {

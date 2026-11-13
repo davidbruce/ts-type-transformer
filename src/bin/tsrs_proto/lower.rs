@@ -27,6 +27,8 @@ pub struct Options {
     pub unions: bool,
     pub overloads: bool,
     pub keyed: bool,
+    // Unions become named declarations (`unions = "name"`).
+    pub name_unions: bool,
     // Most keys a keyed signature is expanded over.
     pub keyed_limit: usize,
     // Most overloads one signature may expand into through union parameters.
@@ -43,7 +45,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             classes: false, typeops: false, intersections: false, inheritance: false, generics: false, nullable: false,
-            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, keyed_limit: 256,
+            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, name_unions: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
         }
     }
@@ -143,6 +145,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
             true
         });
     }
+    if o.name_unions {
+        name_unions(decls, o.separator);
+    }
     if o.overloads {
         each_member_list(decls, &mut |members| rename_members(members, o));
         rename_functions(decls, o);
@@ -150,6 +155,91 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     if o.classes {
         mark_class_refs(decls);
     }
+    annotate_unions(front, decls);
+}
+
+// ---- unions ----
+
+// Each union that is not already a declaration's body becomes one: named by
+// its members when there are few (`boolean_or_AddEventListenerOptions`),
+// else by where it appears.
+fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
+    let mut names: HashSet<String> = decls.iter().filter_map(decl_name).map(str::to_string).collect();
+    let mut by_key: HashMap<String, String> = HashMap::new();
+    let mut bodies: HashSet<*const Type> = HashSet::new();
+    collect_bodies(decls, &mut bodies);
+    let mut added = Vec::new();
+    walk(decls, &mut |t, path| {
+        if !matches!(t, Type::Union(_)) || bodies.contains(&(t as *const Type)) {
+            return true;
+        }
+        let Type::Union(parts) = &*t else { unreachable!() };
+        let name = by_key
+            .entry(type_key(t))
+            .or_insert_with(|| {
+                let base = if parts.len() <= 3 { parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}")) } else { path.join(sep) };
+                let name = unique(base, &mut names);
+                // Type parameters the union mentions become its own.
+                let free = free_type_params(t);
+                let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
+                added.push((Decl::Alias(Alias { name: name.clone(), sym: None, type_params, ty: t.clone(), computed: false, synthetic: true }), free));
+                name
+            })
+            .clone();
+        let args = added.iter().find_map(|(d, free)| matches!(d, Decl::Alias(a) if a.name == name).then(|| free.clone())).unwrap_or_default();
+        *t = Type::synthetic_ref(name, "typeAlias", args.into_iter().map(Type::Ref).collect());
+        false
+    });
+    decls.extend(added.into_iter().map(|(d, _)| d));
+}
+
+// Says how each member of each union is recognised at runtime, so a
+// generator can tell which one a value is: `typeof:string`, `array`,
+// `instanceof:HTMLElement`, `has:once`, or `tag:circle` when one property
+// (`discriminant`) tells them all apart.
+fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
+    walk(decls, &mut |t, _| {
+        let Type::Union(parts) = t else { return true };
+        let shapes: Vec<Option<Vec<(String, bool, Option<String>)>>> = parts.iter().map(|p| front.object_shape(p)).collect();
+        let discriminant = discriminant_of(&shapes);
+        let tests: Vec<Option<Test>> = parts
+            .iter()
+            .enumerate()
+            .map(|(i, p)| match &discriminant {
+                Some(d) => shapes[i].as_ref().and_then(|s| s.iter().find(|f| f.0 == *d)).and_then(|f| f.2.clone()).map(Test::Tag),
+                None => front.runtime_test(p).or_else(|| unique_property(&shapes, i).map(Test::Has)),
+            })
+            .collect();
+        for (p, test) in parts.iter_mut().zip(tests) {
+            if let Some(test) = test {
+                *p = Type::Tested(Box::new(std::mem::replace(p, Type::This)), test);
+            }
+        }
+        if let Some(d) = discriminant {
+            *t = Type::Tested(Box::new(std::mem::replace(t, Type::This)), Test::Discriminant(d));
+        }
+        // Members of a union are not themselves annotated again.
+        false
+    });
+}
+
+// A property every member has, required, with a different literal value in each.
+fn discriminant_of(shapes: &[Option<Vec<(String, bool, Option<String>)>>]) -> Option<String> {
+    let shapes: Vec<&Vec<(String, bool, Option<String>)>> = shapes.iter().map(|s| s.as_ref()).collect::<Option<_>>()?;
+    let first = shapes.first()?;
+    first.iter().map(|f| &f.0).find(|name| {
+        let mut values = HashSet::new();
+        shapes.iter().all(|s| s.iter().any(|f| f.0 == **name && !f.1 && f.2.as_ref().is_some_and(|v| values.insert(v.clone()))))
+    }).cloned()
+}
+
+// A required property of member `i` that no other member has.
+fn unique_property(shapes: &[Option<Vec<(String, bool, Option<String>)>>], i: usize) -> Option<String> {
+    let own = shapes[i].as_ref()?;
+    own.iter()
+        .filter(|f| !f.1)
+        .find(|f| shapes.iter().enumerate().all(|(j, s)| j == i || s.as_ref().is_none_or(|s| !s.iter().any(|g| g.0 == f.0))))
+        .map(|f| f.0.clone())
 }
 
 // ---- traversal ----
@@ -270,6 +360,7 @@ fn walk_type(t: &mut Type, path: &mut Vec<String>, f: &mut TypeFn) {
         Type::Tuple(els) => els.iter_mut().for_each(|e| walk_type(&mut e.ty, path, f)),
         Type::Function(sig) | Type::Constructor(sig) => walk_signature(sig, path, f),
         Type::Object(members) => walk_members(members, path, f),
+        Type::Tested(inner, _) => walk_type(inner, path, f),
         Type::Op(op, _) => match &mut **op {
             Op::KeyOf(a) | Op::Unique(a) => walk_type(a, path, f),
             Op::IndexedAccess(a, b) => {

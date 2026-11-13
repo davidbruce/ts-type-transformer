@@ -35,7 +35,7 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         // A null handle is zero.
         Ty::Nullable(inner, _) => typed(inner, param),
-        Ty::Union(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
+        Ty::Union(_) | Ty::NamedUnion(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
     }
 }
 

@@ -1,7 +1,7 @@
 // XML -> Zig module for a wasm32 module. As C, but unions of simple types
 // become tagged unions, and nullable objects become optionals.
 
-use super::wasm::{Class, Func, Model, Ty};
+use super::wasm::{Class, Func, Model, NamedUnion, Ty};
 
 // Quoted identifiers accept any name, keywords included.
 fn ident(name: &str) -> String {
@@ -28,8 +28,44 @@ fn union_field(t: &Ty) -> String {
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
         Ty::Obj(n) => n.clone(),
+        Ty::Array => "array".into(),
         _ => unreachable!(),
     }
+}
+
+// A named union: a Zig tagged union, the same for arguments and results.
+// Strings in it are handles: `JsString.from("text")`.
+fn union_decl(u: &NamedUnion) -> String {
+    let fields: Vec<String> = u
+        .parts
+        .iter()
+        .map(|p| {
+            let t = match p {
+                Ty::Str => "JsString".to_string(),
+                p => typed(p, false),
+            };
+            format!("{}: {t}", ident(&union_field(p)))
+        })
+        .collect();
+    format!("pub const {} = union(enum) {{ {} }};\n", u.name, fields.join(", "))
+}
+
+// Turns a handle coming back into the union's member: `raw.U_tag` says which.
+fn decode_union(u: &NamedUnion, h: &str) -> String {
+    let arms: Vec<String> = u
+        .parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let value = match p {
+                Ty::Num => format!("(JsValue{{ .h = {h} }}).toNumber()"),
+                Ty::Bool => format!("(JsValue{{ .h = {h} }}).toBool()"),
+                _ => format!(".{{ .h = {h} }}"),
+            };
+            format!("{i} => .{{ .{} = {value} }}", ident(&union_field(p)))
+        })
+        .collect();
+    format!("switch (raw.{}_tag({h})) {{ {}, else => unreachable }}", u.name, arms.join(", "))
 }
 
 fn typed(t: &Ty, is_param: bool) -> String {
@@ -46,14 +82,16 @@ fn typed(t: &Ty, is_param: bool) -> String {
             let fields: Vec<String> = parts.iter().map(|p| format!("{}: {}", union_field(p), typed(p, true))).collect();
             format!("union(enum) {{ {} }}", fields.join(", "))
         }
+        Ty::NamedUnion(n) => n.clone(),
         Ty::Any | Ty::Union(_) => "JsValue".into(),
     }
 }
 
-// Types a C-convention callback can take: no slices, no optionals.
+// Types a C-convention callback can take: no slices, no optionals, no unions.
 fn callback_typed(t: &Ty) -> String {
     match t {
         Ty::Nullable(inner, _) => callback_typed(inner),
+        Ty::NamedUnion(_) => "JsValue".into(),
         Ty::NumEnum(_) => "f64".into(),
         t => typed(t, false),
     }
@@ -67,6 +105,8 @@ fn lower_arg(name: &str, t: &Ty) -> String {
         Ty::Enum(_) => format!("@intFromEnum({name})"),
         Ty::NumEnum(_) => format!("@floatFromInt(@intFromEnum({name}))"),
         Ty::Nullable(..) => format!("if ({name}) |v| v.h else 0"),
+        // Each member becomes a JavaScript value.
+        Ty::NamedUnion(_) => format!("switch ({name}) {{ inline else => |v| JsValue.of(v).h }}"),
         // Each alternative becomes a JavaScript value.
         Ty::Union(parts) if !parts.is_empty() => {
             let arms: Vec<String> = parts
@@ -87,7 +127,7 @@ fn lower_arg(name: &str, t: &Ty) -> String {
     }
 }
 
-fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, indent: &str) {
+fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, indent: &str, unions: &[NamedUnion]) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
@@ -108,7 +148,17 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
         }
     }
     let call = format!("raw.{}({})", f.import, args.join(", "));
+    // A union result that cannot be told apart is an untyped value.
+    let union = match &f.ret {
+        Ty::NamedUnion(n) => unions.iter().find(|u| u.name == *n),
+        _ => None,
+    };
+    let ret_type = match union {
+        Some(u) if !u.decodable() => "JsValue".to_string(),
+        _ => typed(&f.ret, false),
+    };
     let body = match &f.ret {
+        Ty::NamedUnion(_) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; return {};", decode_union(union.unwrap(), "h")),
         Ty::Void => format!("{call};"),
         Ty::Num => format!("return {call};"),
         Ty::Bool => format!("return {call} != 0;"),
@@ -118,7 +168,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
         _ => format!("return .{{ .h = {call} }};"),
     };
     *externs += &format!("    extern \"env\" fn {}({}) {};\n", f.import, raw_params.join(", "), raw(&f.ret));
-    *out += &format!("{indent}pub fn {}({}) {} {{ {body} }}\n", ident(&f.name), params.join(", "), typed(&f.ret, false));
+    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {body} }}\n", ident(&f.name), params.join(", "));
 }
 
 const RUNTIME: &str = "// Generated.
@@ -134,9 +184,18 @@ pub const JsValue = extern struct {
     pub fn toString(self: JsValue) JsString { return .{ .h = self.h }; }
     pub fn eql(self: JsValue, other: JsValue) bool { return raw.js_equals(self.h, other.h) != 0; }
     pub fn isNull(self: JsValue) bool { return self.h == 0; }
+    // Any value a union member can hold.
+    pub fn of(v: anytype) JsValue {
+        return switch (@TypeOf(v)) {
+            f64 => number(v),
+            bool => boolean(v),
+            else => .{ .h = v.h },
+        };
+    }
 };
 pub const JsString = extern struct {
     h: u32,
+    pub fn from(s: []const u8) JsString { return .{ .h = raw.js_from_string(s.ptr, s.len) }; }
     pub fn len(self: JsString) usize { return raw.js_string_len(self.h); }
     pub fn read(self: JsString, buf: []u8) []u8 { const n = self.len(); raw.js_string_read(self.h, buf.ptr); return buf[0..n]; }
 };
@@ -176,6 +235,10 @@ pub fn module(m: &Model) -> String {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
         out += &format!("pub const {name} = enum(i32) {{ {} }};\n", members.join(", "));
     }
+    for u in &m.unions {
+        out += &union_decl(u);
+        externs += &format!("    extern \"env\" fn {}_tag(h: u32) i32;\n", u.name);
+    }
     for name in &m.opaque {
         out += &format!("pub const {name} = extern struct {{ h: u32 }};\n");
     }
@@ -198,13 +261,13 @@ pub fn module(m: &Model) -> String {
             out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);
         }
         for f in &c.funcs {
-            func(&mut out, &mut externs, Some(&c.name), f, "    ");
+            func(&mut out, &mut externs, Some(&c.name), f, "    ", &m.unions);
         }
         out += "};\n";
     }
     out += "\n";
     for f in &m.funcs {
-        func(&mut out, &mut externs, None, f, "");
+        func(&mut out, &mut externs, None, f, "", &m.unions);
     }
     out + "\nconst raw = struct {\n" + &externs + "};\n"
 }

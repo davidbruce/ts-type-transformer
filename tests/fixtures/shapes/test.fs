@@ -40,9 +40,9 @@ check (s.size = 2.6) "optional omitted"
 s.resize (2.6, true)
 check (s.size = 3.0) "optional given"
 
-// Union parameter: an erased union.
-check (s.label (U2.Case1 "a") = "string:a") "union string"
-check (s.label (U2.Case2 7.0) = "number:7") "union number"
+// Union parameter: a named union.
+check (s.label (string_or_number.String "a") = "string:a") "union string"
+check (s.label (string_or_number.Number 7.0) = "number:7") "union number"
 
 // Nullable with `null`: the type's own null.
 check (isNull s.parent) "null"

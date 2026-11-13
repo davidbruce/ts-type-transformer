@@ -24,8 +24,25 @@ pub enum Type {
     This,
     // Lowered form of `T | null | undefined`, with which of the two it was.
     Nullable(Box<Type>, Absent),
+    // A type with how to recognise its values at runtime, or for a union, the
+    // property that tells its members apart. Added last, by `lower::annotate_unions`.
+    Tested(Box<Type>, Test),
     // Type-level expression; only the checker can evaluate it.
     Op(Box<Op>, Option<P<Node>>),
+}
+
+// How a JavaScript value is recognised as one member of a union.
+#[derive(Clone, PartialEq)]
+pub enum Test {
+    TypeOf(&'static str),
+    Array,
+    InstanceOf(String),
+    // An object that has this property and no other member does.
+    Has(String),
+    // The union's discriminant property has this value.
+    Tag(String),
+    // On a union: the property that tells its members apart.
+    Discriminant(String),
 }
 
 // The value that stands for "no value". APIs that check `=== null` reject

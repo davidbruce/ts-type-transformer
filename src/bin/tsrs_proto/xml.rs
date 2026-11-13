@@ -11,6 +11,8 @@ pub struct Xml {
     depth: usize,
     // Element and flag counts: what a consumer of this output must handle.
     pub census: BTreeMap<String, usize>,
+    // Attributes for the next element, from `Type::Tested`.
+    pending: Vec<(&'static str, String)>,
 }
 
 type Attrs<'a> = Vec<(&'a str, &'a str)>;
@@ -23,6 +25,10 @@ impl Xml {
     fn line(&mut self, tag: &str, attrs: &Attrs, close: bool) {
         self.tally(tag);
         let _ = write!(self.out, "{:w$}<{tag}", "", w = self.depth * 2);
+        for (k, v) in std::mem::take(&mut self.pending) {
+            self.tally(&format!("{tag}@{k}"));
+            let _ = write!(self.out, " {k}=\"{}\"", escape(&v));
+        }
         for (k, v) in attrs {
             if matches!(*k, "optional" | "rest" | "lossy") {
                 self.tally(&format!("{tag}@{k}"));
@@ -297,6 +303,13 @@ impl Xml {
                 self.close("object");
             }
             Type::Op(op, _) => self.op(op),
+            Type::Tested(inner, test) => {
+                self.pending.push(match test {
+                    Test::Discriminant(p) => ("discriminant", p.clone()),
+                    t => ("test", test_text(t)),
+                });
+                self.ty(inner);
+            }
         }
     }
 
@@ -380,6 +393,18 @@ pub fn signature_key(s: &Signature) -> String {
     let mut x = Xml::default();
     x.signature(s);
     x.out
+}
+
+// `typeof:string`, `array`, `instanceof:HTMLElement`, `has:once`, `tag:circle`.
+pub fn test_text(t: &Test) -> String {
+    match t {
+        Test::TypeOf(k) => format!("typeof:{k}"),
+        Test::Array => "array".into(),
+        Test::InstanceOf(c) => format!("instanceof:{c}"),
+        Test::Has(p) => format!("has:{p}"),
+        Test::Tag(v) => format!("tag:{v}"),
+        Test::Discriminant(p) => format!("discriminant:{p}"),
+    }
 }
 
 fn escape(s: &str) -> String {

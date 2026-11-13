@@ -18,7 +18,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("anonymous", "hoist", "inline object and function types", "named declarations"),
     ("optional_params", "overloads", "optional parameters", "one overload per arity"),
     ("union_params", "overloads", "union-typed parameters", "one overload per union member"),
-    ("unions", "erase", "other unions", "their common supertype, or any"),
+    ("unions", "erase|name", "other unions", "erase: their common supertype, or any. name: a named declaration"),
     ("overloads", "rename", "same-named members", "unique names, with jsName"),
     ("keyed_params", "expand", "f<K extends keyof M>(key: K, value: M[K])", "one overload per key, the key a fixed argument"),
 ];
@@ -48,7 +48,14 @@ pub fn load(path: Option<&str>, overrides: &[String]) -> Result<Options, String>
                 ("constructs", _) => {
                     let known = || CONSTRUCTS.iter().map(|c| c.0).collect::<Vec<_>>().join(", ");
                     let (_, lowered, ..) = CONSTRUCTS.iter().find(|c| c.0 == key).ok_or_else(|| format!("unknown construct `{key}`; known: {}", known()))?;
-                    *o.slot(key).unwrap() = one_of(&at, value, &["keep", lowered])? == *lowered;
+                    let mut allowed = vec!["keep"];
+                    allowed.extend(lowered.split('|'));
+                    let chosen = one_of(&at, value, &allowed)?;
+                    // The first strategy is the switch; others are alternatives to it.
+                    *o.slot(key).unwrap() = chosen == allowed[1];
+                    if key == "unions" {
+                        o.name_unions = chosen == "name";
+                    }
                 }
                 ("limits", "union_param_overloads") => o.union_param_limit = count(&at, value)?,
                 ("limits", "intersection_members") => o.intersection_limit = count(&at, value)?,
@@ -81,7 +88,15 @@ fn count(at: &str, v: &Value) -> Result<usize, String> {
 
 // The strategy in effect for every construct.
 pub fn describe(mut o: Options) -> Vec<(&'static str, &'static str)> {
-    CONSTRUCTS.iter().map(|(key, lowered, ..)| (*key, if *o.slot(key).unwrap() { *lowered } else { "keep" })).collect()
+    let name_unions = o.name_unions;
+    CONSTRUCTS
+        .iter()
+        .map(|(key, lowered, ..)| {
+            let first = lowered.split('|').next().unwrap();
+            let chosen = if *key == "unions" && name_unions { "name" } else if *o.slot(key).unwrap() { first } else { "keep" };
+            (*key, chosen)
+        })
+        .collect()
 }
 
 // A config with every setting at its default, documented.
@@ -89,7 +104,7 @@ pub fn template() -> String {
     let d = Options::default();
     let mut out = String::from("# Strategy per TypeScript construct. \"keep\" leaves it in the output as written.\n[constructs]\n");
     for (key, lowered, kept, becomes) in CONSTRUCTS {
-        out += &format!("# {kept} -> {becomes}\n{key} = \"keep\" # or \"{lowered}\"\n");
+        out += &format!("# {kept} -> {becomes}\n{key} = \"keep\" # or \"{}\"\n", lowered.replace('|', "\" or \""));
     }
     out += &format!(
         "\n[limits]\n# Most overloads one signature may expand into through union parameters.\nunion_param_overloads = {}\n\

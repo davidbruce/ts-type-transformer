@@ -70,7 +70,7 @@ let onPing: EventListener =
         box.setAttribute ("data-pings", string pings))
 
 let once = jsOptions<AddEventListenerOptions> (fun o -> o.once <- Some true)
-box.addEventListener ("ping", U2.Case1 onPing, U2.Case2 once)
+box.addEventListener ("ping", EventListenerOrEventListenerObject.EventListener onPing, boolean_or_AddEventListenerOptions.AddEventListenerOptions once)
 box.dispatchEvent (Event.Create "ping") |> ignore
 box.dispatchEvent (Event.Create "ping") |> ignore
 check (pings = 1) "once listener"

@@ -46,7 +46,7 @@ export fn run() void {
     expect(s.get_size() == 3, @src());
 
     // Union parameter: a tagged union.
-    expect(strEq(s.label(.{ .string = "a" }), "string:a"), @src());
+    expect(strEq(s.label(.{ .string = b.JsString.from("a") }), "string:a"), @src());
     expect(strEq(s.label(.{ .number = 7 }), "number:7"), @src());
 
     // Nullable: an optional.

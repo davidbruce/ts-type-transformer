@@ -53,10 +53,45 @@ are errors. Example targets are in `examples/targets/`.
 | `optional_params` | `overloads` | optional parameters | one overload per arity | no |
 | `union_params` | `overloads` | union-typed parameters | one overload per member | no |
 | `unions` | `erase` | remaining unions | common supertype, else `any` | yes |
+| `unions` | `name` | inline unions | a named declaration: `boolean_or_Options`, or named by where it appears | no |
+| `keyed_params` | `expand` | `f<K extends keyof M>(key: K, value: M[K])` | one overload per key: `addEventListener_click`, `createElement_div` | yes |
 | `overloads` | `rename` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
 
 Four passes need the type checker. That is why lowering lives here and not in
 each generator: a generator written in F# or C has no checker.
+
+## Unions
+
+Every union member says how to recognise it at runtime, whatever the config:
+
+```xml
+<union>
+  <primitive test="typeof:string" name="string"/>
+  <ref test="instanceof:Widget" name="Widget" kind="class"/>
+  <ref test="has:verbose" name="Options" kind="interface"/>
+</union>
+<union discriminant="kind">
+  <ref test="tag:circle" name="Circle" kind="interface"/>
+  <ref test="tag:square" name="Square" kind="interface"/>
+</union>
+```
+
+`instanceof` is given for classes with a global constructor, `has:` for the
+first required property no other member has, `tag:` when one required
+property has a distinct literal value in every member. F# turns these into
+`[<Erase>]` unions with `CaseTest`s or `[<TypeScriptTaggedUnion>]`; the wasm
+glue into a tag function, so Zig can `switch` on a union a call returns.
+
+## Overload names
+
+Overloads with fixed values (from `keyed_params` or literal parameters) are a
+family named after them: `addEventListener_click`,
+`addEventListener_click_with_options`. Within a family the first keeps the
+name, the others are named by the parameters they add (only the last, when
+they extend it), else by the types that differ among same-named overloads, else
+the one type that differs, else a number. An overload whose parameters repeat
+an earlier one's is dropped: TypeScript would never choose it. A callback type
+used in several places is named by what it takes: `HTMLElement_MouseEvent_fn`.
 
 ## Provenance
 
@@ -119,7 +154,8 @@ XML is wrong. `*_rejects_*` tests pin that strictness, and
 ## Known gaps
 
 - Synthetic names come from the first place a type appears (`Shape_new_kind`). Not stable or pretty.
-- `M[K]` with `K extends keyof M` widens to the union of all values. The per-key expansion (`on_abort(...)`) is not implemented.
+- `keyed_params = "expand"` makes the DOM bindings large: the C header is 123 MB, the glue 40 MB. `limits.keyed_overloads` caps keys per signature.
+- 18 DOM unions have members no test can tell apart (`ArrayBufferLike | ArrayBufferView`); F# binds them as `obj`.
 - A union with no common supertype (`string | number`) becomes `any`.
 - Tuples, and object types that are a `var`'s own type, are never hoisted.
 - Output is not closed: references to other files (`Promise`) are not pulled in.

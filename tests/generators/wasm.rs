@@ -31,6 +31,8 @@ pub enum Ty {
     Nullable(Box<Ty>, bool),
     // Zig only: a parameter that takes one of several simple types.
     Union(Vec<Ty>),
+    // A union declared by name, in `Model::unions`.
+    NamedUnion(String),
 }
 
 pub enum Call {
@@ -71,6 +73,21 @@ pub struct Class {
     pub consts: Vec<(String, String)>,
 }
 
+pub struct NamedUnion {
+    pub name: String,
+    pub parts: Vec<Ty>,
+    // How each member is recognised at runtime, from the XML.
+    pub tests: Vec<Option<String>>,
+    pub discriminant: Option<String>,
+}
+
+impl NamedUnion {
+    // A value coming back can be told apart: every member has a test, but one.
+    pub fn decodable(&self) -> bool {
+        self.tests.iter().filter(|t| t.is_none()).count() <= 1
+    }
+}
+
 pub struct Callback {
     pub name: String,
     pub params: Vec<(String, Ty)>,
@@ -83,6 +100,7 @@ pub struct Model {
     pub num_enums: Vec<(String, Vec<(String, String)>)>,
     pub classes: Vec<Class>,
     pub callbacks: Vec<Callback>,
+    pub unions: Vec<NamedUnion>,
     pub funcs: Vec<Func>,
     // Types declared elsewhere: handles with no members.
     pub opaque: Vec<String>,
@@ -121,7 +139,7 @@ pub fn model(xml: &str, target: &str) -> Model {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], funcs: vec![], opaque: vec![], skipped: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], funcs: vec![], opaque: vec![], skipped: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -418,6 +436,24 @@ impl<'a> Builder<'a> {
                 if self.resolving.contains(&key) || self.resolving.len() > 8 {
                     return Ty::Any;
                 }
+                // A union with a name of its own is declared once.
+                if body.has_tag_name("union") && self.target == "Zig" {
+                    let name = ident(&key);
+                    if self.model.unions.iter().any(|u| u.name == name) {
+                        return Ty::NamedUnion(name);
+                    }
+                    self.resolving.push(key.clone());
+                    let parts: Vec<Ty> = elements(body).map(|p| self.ty(p, "")).collect();
+                    self.resolving.pop();
+                    if !parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array)) || !distinct(&parts) {
+                        self.skip("union bound as an untyped value");
+                        return Ty::Any;
+                    }
+                    let tests = elements(body).map(|p| p.attribute("test").map(str::to_string)).collect();
+                    let discriminant = body.attribute("discriminant").map(str::to_string);
+                    self.model.unions.push(NamedUnion { name: name.clone(), parts, tests, discriminant });
+                    return Ty::NamedUnion(name);
+                }
                 self.resolving.push(key.clone());
                 let t = self.ty(body, "");
                 self.resolving.pop();
@@ -493,6 +529,19 @@ fn to_wasm(x: &str, t: &Ty) -> String {
     }
 }
 
+// A union member's runtime test as a JavaScript condition on `v`.
+fn js_test(test: &str, discriminant: Option<&str>) -> String {
+    let (kind, arg) = test.split_once(':').unwrap_or((test, ""));
+    match kind {
+        "typeof" => format!("typeof v === {arg:?}"),
+        "array" => "Array.isArray(v)".into(),
+        "instanceof" => format!("v instanceof globalThis{}", access_path(arg)),
+        "has" => format!("typeof v === 'object' && v !== null && {arg:?} in v"),
+        "tag" => format!("v != null && String(v[{:?}]) === {arg:?}", discriminant.unwrap_or_default()),
+        _ => "false".into(),
+    }
+}
+
 // `.name`, or `["some-name"]` where the name is not an identifier.
 fn access(name: &str) -> String {
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
@@ -550,6 +599,18 @@ export function makeEnv(getInstance) {
     js_array_get: (h, i) => put(get(h)[i]),
     js_array_push: (h, v) => { get(h).push(get(v)); },
 ";
+    // Which member of a union a value is: its index, or -1.
+    for u in &m.unions {
+        let mut arms = Vec::new();
+        let mut default = None;
+        for (i, test) in u.tests.iter().enumerate() {
+            match test {
+                Some(t) => arms.push(format!("if ({}) return {i};", js_test(t, u.discriminant.as_deref()))),
+                None => default = Some(i),
+            }
+        }
+        out += &format!("    {}_tag: h => {{ const v = get(h); {} return {}; }},\n", u.name, arms.join(" "), default.map_or("-1".to_string(), |d| d.to_string()));
+    }
     for c in &m.callbacks {
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let mut args = vec!["ctx".to_string()];

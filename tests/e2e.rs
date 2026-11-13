@@ -98,7 +98,7 @@ fn fsharp(fixture: &str) {
 const FSPROJ: &str = r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup><Compile Include="Bindings.fs" /><Compile Include="Test.fs" /></ItemGroup>
-  <ItemGroup><PackageReference Include="Fable.Core" Version="4.*" /></ItemGroup>
+  <ItemGroup><PackageReference Include="Fable.Core" Version="5.6.1" /></ItemGroup>
 </Project>
 "#;
 
@@ -142,7 +142,7 @@ macro_rules! fixtures {
     })* };
 }
 
-fixtures!(shapes, callbacks, data, globals);
+fixtures!(shapes, callbacks, data, globals, unions);
 
 // The generators must refuse what their target cannot express; otherwise a
 // config that lowers too little would go unnoticed.
@@ -202,7 +202,12 @@ fn lowered_constructs_are_absent() {
                     "keyof" | "indexedAccess" | "conditional" | "mapped" | "template" | "infer" | "typeof" | "predicate" | "raw" => on("type_ops"),
                     "intersection" => on("intersections"),
                     "literal" => on("literals"),
-                    "union" => on("unions") || on("nullable") && elements(n).any(|c| matches!(c.attribute("name"), Some("null" | "undefined")) && c.has_tag_name("primitive")),
+                    // Named unions remain, as the body of their declaration.
+                    "union" => (match attr(lowering, "unions") {
+                        "erase" => true,
+                        "name" => parent != "typeAlias",
+                        _ => false,
+                    }) || on("nullable") && elements(n).any(|c| matches!(c.attribute("name"), Some("null" | "undefined")) && c.has_tag_name("primitive")),
                     "parameter" if flag(n, "optional") => on("optional_params") && !matches!(parent, "functionType" | "constructorType"),
                     "functionType" | "constructorType" => inline(parent),
                     _ => false,

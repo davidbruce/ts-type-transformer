@@ -727,6 +727,92 @@ impl<'c> Front<'c> {
         None
     }
 
+    // How to recognise a value of this type at runtime, when the type says so
+    // by itself: a primitive, an array, a function, a class with a constructor.
+    pub fn runtime_test(&mut self, t: &Type) -> Option<Test> {
+        match t {
+            Type::Primitive(p) => match p.as_str() {
+                "string" => Some(Test::TypeOf("string")),
+                "number" => Some(Test::TypeOf("number")),
+                "boolean" => Some(Test::TypeOf("boolean")),
+                "bigint" => Some(Test::TypeOf("bigint")),
+                "symbol" => Some(Test::TypeOf("symbol")),
+                "undefined" => Some(Test::TypeOf("undefined")),
+                _ => None,
+            },
+            Type::Literal { kind, .. } if *kind != "bigint" => Some(Test::TypeOf(kind)),
+            Type::Array(_) | Type::Tuple(_) => Some(Test::Array),
+            Type::Function(_) | Type::Constructor(_) => Some(Test::TypeOf("function")),
+            Type::Ref(r) => {
+                let s = self.c.get_merged_symbol_exported(r.sym?);
+                match r.kind {
+                    "enum" => None,
+                    // An interface that is only a call signature is a function.
+                    "interface" if {
+                        let t = self.c.get_declared_type_of_symbol_exported(s);
+                        self.c.get_properties_of_type_exported(t).is_empty() && !self.c.get_signatures_of_type_exported(t, SignatureKind::Call).is_empty()
+                    } =>
+                    {
+                        Some(Test::TypeOf("function"))
+                    }
+                    // A class, or an interface with a global constructor of the same name.
+                    _ if s.flags().intersects(SymbolFlags::Class) || s.flags().intersects(SymbolFlags::Interface) && s.flags().intersects(SymbolFlags::Variable) => {
+                        let name = self.c.get_fully_qualified_name_exported(s);
+                        let constructible = s.flags().intersects(SymbolFlags::Class) || {
+                            let v = self.c.get_type_of_symbol_exported(s);
+                            !self.c.get_signatures_of_type_exported(v, SignatureKind::Construct).is_empty()
+                        };
+                        constructible.then_some(Test::InstanceOf(name))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    // The properties of an object type: name, optional, literal value if it has one.
+    pub fn object_shape(&mut self, t: &Type) -> Option<Vec<(String, bool, Option<String>)>> {
+        match t {
+            Type::Object(members) => Some(
+                members
+                    .iter()
+                    .filter(|m| m.kind == MemberKind::Property || m.kind == MemberKind::Method)
+                    .map(|m| {
+                        let literal = match (&m.ty, &m.constant) {
+                            (_, Some(c)) => Some(c.clone()),
+                            (Some(Type::Literal { value, .. }), _) => Some(value.clone()),
+                            _ => None,
+                        };
+                        (m.name.clone(), m.optional, literal)
+                    })
+                    .collect(),
+            ),
+            Type::Ref(r) if matches!(r.kind, "interface" | "class" | "typeAlias") && r.args.is_empty() => {
+                let s = r.sym?;
+                if r.kind == "typeAlias" && !s.flags().intersects(SymbolFlags::TypeAlias) {
+                    return None;
+                }
+                let t = self.c.get_declared_type_of_symbol_exported(s);
+                if !t.flags().intersects(TypeFlags::Object) {
+                    return None;
+                }
+                let mut out = Vec::new();
+                for p in self.c.get_properties_of_type_exported(t) {
+                    let pt = self.c.get_type_of_symbol_exported(*p);
+                    let literal = match pt.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral).then(|| pt.as_literal_type().value()) {
+                        Some(Some(LiteralValue::String(s))) => Some(s.to_string()),
+                        Some(Some(LiteralValue::Number(n))) => Some(n.to_string()),
+                        _ => None,
+                    };
+                    out.push((p.name().to_string(), p.flags().intersects(SymbolFlags::Optional), literal));
+                }
+                Some(out)
+            }
+            _ => None,
+        }
+    }
+
     // The string keys of a declared object type.
     pub fn keys_of(&mut self, sym: P<Symbol>) -> Vec<String> {
         let t = self.c.get_declared_type_of_symbol_exported(sym);
