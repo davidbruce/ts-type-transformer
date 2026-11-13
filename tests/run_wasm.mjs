@@ -10,7 +10,7 @@ const { makeEnv } = await import(pathToFileURL(glue));
 let instance;
 let passed = 0;
 const failed = [];
-const env = { ...makeEnv(() => instance.exports.memory), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
+const env = { ...makeEnv(() => instance), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
 ({ instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), { env }));
 instance.exports.run();
 if (failed.length || passed === 0) {

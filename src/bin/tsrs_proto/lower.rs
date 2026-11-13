@@ -396,13 +396,19 @@ fn flatten(front: &mut Front, decls: &mut [Decl]) {
 fn evaluate(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     if o.typeops {
         drop_type_functions(decls);
-        // An alias body is evaluated without folding back into the alias itself.
-        for_each_alias(decls, &mut |a| {
-            if let (Type::Op(_, Some(node)), Some(sym)) = (&a.ty, a.sym) {
-                a.ty = front.eval_alias_body(*node, sym);
-            }
-        });
     }
+    // An alias body is evaluated without folding back into the alias itself.
+    for_each_alias(decls, &mut |a| {
+        let node = match &a.ty {
+            Type::Op(_, node) if o.typeops => *node,
+            Type::Ref(r) if o.typeops && r.computed => r.node,
+            Type::Intersection(_, node) if o.intersections => *node,
+            _ => None,
+        };
+        if let (Some(node), Some(sym)) = (node, a.sym) {
+            a.ty = front.eval_alias_body(node, sym);
+        }
+    });
     walk(decls, &mut |t, _| {
         let replacement = match t {
             Type::Op(op, node) if o.typeops => Some(match (&**op, node) {
@@ -577,7 +583,7 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     let mut best: HashMap<Vec<String>, Vec<String>> = HashMap::new();
     walk(decls, &mut |t, path| {
         if let Some(strings) = string_union(t) {
-            let known = best.entry(strings).or_insert_with(|| path.to_vec());
+            let known = best.entry(sorted(strings)).or_insert_with(|| path.to_vec());
             if path.len() < known.len() {
                 *known = path.to_vec();
             }
@@ -587,8 +593,8 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     });
     walk(decls, &mut |t, _| {
         if let Some(strings) = string_union(t) {
-            let path = &best[&strings];
-            let name = by_values.entry(strings.clone()).or_insert_with(|| {
+            let path = &best[&sorted(strings.clone())];
+            let name = by_values.entry(sorted(strings.clone())).or_insert_with(|| {
                 let name = unique(path.join(sep), &mut names);
                 let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone() }).collect();
                 enums.push(Enum { name: name.clone(), members, synthetic: true });
@@ -642,6 +648,12 @@ fn string_union(t: &Type) -> Option<Vec<String>> {
     (strings.len() == parts.len() && strings.len() > 1).then_some(strings)
 }
 
+// The checker orders union members its own way: compare sets, not sequences.
+fn sorted(mut strings: Vec<String>) -> Vec<String> {
+    strings.sort();
+    strings
+}
+
 fn widen(t: &mut Type) {
     if let Type::Literal { kind, .. } = t {
         *t = Type::prim(kind);
@@ -664,6 +676,16 @@ fn unique(base: String, taken: &mut HashSet<String>) -> String {
 fn hoist(decls: &mut Vec<Decl>, sep: &str) {
     let mut names: HashSet<String> = HashSet::new();
     let mut by_key: HashMap<String, (String, Vec<Type>)> = HashMap::new();
+    // An inline type that already has a name (`type Listener = (e: Event) => void`) uses it.
+    for d in decls.iter() {
+        if let Decl::Alias(a) = d
+            && a.type_params.is_empty()
+            && matches!(a.ty, Type::Function(_) | Type::Constructor(_))
+        {
+            names.insert(a.name.clone());
+            by_key.entry(type_key(&a.ty)).or_insert_with(|| (a.name.clone(), Vec::new()));
+        }
+    }
     let mut start = 0;
     // Hoisted declarations may themselves contain inline types.
     loop {

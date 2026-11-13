@@ -3,6 +3,7 @@ module Test
 
 open Fable.Core
 open Bindings
+open type Bindings.Globals
 
 let mutable passed = 0
 

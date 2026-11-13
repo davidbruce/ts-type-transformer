@@ -1,17 +1,25 @@
 // XML -> C header for a wasm32 module. No inheritance, generics, overloads,
 // optional parameters or unions: the config must have lowered them all.
 
-use super::wasm::{Call, Func, Model, Ty};
+use super::wasm::{Class, Func, Model, Ty};
 
 const T: &str = "C";
+
+fn ident(name: &str) -> String {
+    const KEYWORDS: &[&str] = &[
+        "auto", "bool", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "false", "float", "for",
+        "goto", "if", "inline", "int", "long", "register", "restrict", "return", "self", "short", "signed", "sizeof", "static", "struct", "switch",
+        "true", "typedef", "union", "unsigned", "void", "volatile", "while",
+    ];
+    if KEYWORDS.contains(&name) { format!("{name}_") } else { name.to_string() }
+}
 
 fn raw(t: &Ty) -> &'static str {
     match t {
         Ty::Void => "void",
-        Ty::Num => "double",
+        Ty::Num | Ty::NumEnum(_) => "double",
         Ty::Bool | Ty::Enum(_) => "int32_t",
-        Ty::Str | Ty::Any | Ty::Obj(_) | Ty::Nullable(..) => "uint32_t",
-        Ty::Union(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
+        _ => "uint32_t",
     }
 }
 
@@ -23,27 +31,25 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Str if param => "const char*".into(),
         Ty::Str => "JsString".into(),
         Ty::Any => "JsValue".into(),
-        Ty::Obj(n) | Ty::Enum(n) => n.clone(),
-        // A null object is the zero handle.
-        Ty::Nullable(inner, _) => match &**inner {
-            Ty::Obj(n) => n.clone(),
-            _ => panic!("{T} generator only supports nullable objects"),
-        },
+        Ty::Array => "JsArray".into(),
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
+        // A null handle is zero.
+        Ty::Nullable(inner, _) => typed(inner, param),
         Ty::Union(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
     }
 }
 
 fn func(out: &mut String, owner: Option<&str>, f: &Func) {
-    let has_self = matches!(f.call, Call::Method(_) | Call::Get(_) | Call::Set(_));
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
-    if has_self {
+    if Class::has_self(f) {
         raw_params.push("uint32_t".to_string());
         params.push(format!("{} self", owner.unwrap()));
         args.push("self.h".to_string());
     }
     for (name, t) in &f.params {
+        let name = ident(name);
         params.push(format!("{} {name}", typed(t, true)));
         match t {
             Ty::Str => {
@@ -52,7 +58,11 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
             }
             Ty::Num | Ty::Bool | Ty::Enum(_) => {
                 raw_params.push(raw(t).into());
-                args.push(name.clone());
+                args.push(name);
+            }
+            Ty::NumEnum(_) => {
+                raw_params.push(raw(t).into());
+                args.push(format!("(double){name}"));
             }
             _ => {
                 raw_params.push(raw(t).into());
@@ -71,41 +81,89 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         Ty::Num => format!("return {call};"),
         Ty::Bool => format!("return {call} != 0;"),
         Ty::Enum(e) => format!("return ({e}){call};"),
+        Ty::NumEnum(e) => format!("return ({e})(int32_t){call};"),
         t => format!("return ({}){{ {call} }};", typed(t, false)),
     };
     *out += &format!("TS_IMPORT({}) {} ts_raw_{}({});\n", f.import, raw(&f.ret), f.import, void(&raw_params));
     *out += &format!("static inline {} {name}({}) {{ {body} }}\n", typed(&f.ret, false), void(&params));
 }
 
-pub fn header(m: &Model) -> String {
-    let mut out = String::from(
-        "// Generated.
+const RUNTIME: &str = "// Generated.
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
 #define TS_IMPORT(name) __attribute__((import_module(\"env\"), import_name(#name)))
 
+// Handles to JavaScript values. Zero is null.
 typedef struct { uint32_t h; } JsValue;
 typedef struct { uint32_t h; } JsString;
+typedef struct { uint32_t h; } JsArray;
 static inline uint32_t ts_strlen(const char* s) { uint32_t n = 0; while (s[n]) n++; return n; }
 TS_IMPORT(js_string_len) uint32_t ts_raw_js_string_len(uint32_t);
 TS_IMPORT(js_string_read) void ts_raw_js_string_read(uint32_t, char*);
 TS_IMPORT(js_from_number) uint32_t ts_raw_js_from_number(double);
+TS_IMPORT(js_from_bool) uint32_t ts_raw_js_from_bool(int32_t);
 TS_IMPORT(js_from_string) uint32_t ts_raw_js_from_string(const char*, uint32_t);
+TS_IMPORT(js_to_number) double ts_raw_js_to_number(uint32_t);
+TS_IMPORT(js_to_bool) int32_t ts_raw_js_to_bool(uint32_t);
+TS_IMPORT(js_equals) int32_t ts_raw_js_equals(uint32_t, uint32_t);
+TS_IMPORT(js_array_new) uint32_t ts_raw_js_array_new(void);
+TS_IMPORT(js_array_length) uint32_t ts_raw_js_array_length(uint32_t);
+TS_IMPORT(js_array_get) uint32_t ts_raw_js_array_get(uint32_t, uint32_t);
+TS_IMPORT(js_array_push) void ts_raw_js_array_push(uint32_t, uint32_t);
 static inline uint32_t JsString_len(JsString s) { return ts_raw_js_string_len(s.h); }
 static inline void JsString_read(JsString s, char* buf) { ts_raw_js_string_read(s.h, buf); }
 static inline JsValue js_number(double x) { return (JsValue){ ts_raw_js_from_number(x) }; }
+static inline JsValue js_bool(bool x) { return (JsValue){ ts_raw_js_from_bool(x) }; }
 static inline JsValue js_string(const char* s) { return (JsValue){ ts_raw_js_from_string(s, ts_strlen(s)) }; }
+static inline double js_to_number(JsValue v) { return ts_raw_js_to_number(v.h); }
+static inline bool js_to_bool(JsValue v) { return ts_raw_js_to_bool(v.h) != 0; }
+static inline JsString js_to_string(JsValue v) { return (JsString){ v.h }; }
+static inline bool js_equals(JsValue a, JsValue b) { return ts_raw_js_equals(a.h, b.h) != 0; }
+static inline JsArray JsArray_new(void) { return (JsArray){ ts_raw_js_array_new() }; }
+static inline uint32_t JsArray_length(JsArray a) { return ts_raw_js_array_length(a.h); }
+static inline JsValue JsArray_get(JsArray a, uint32_t i) { return (JsValue){ ts_raw_js_array_get(a.h, i) }; }
+static inline void JsArray_push(JsArray a, JsValue v) { ts_raw_js_array_push(a.h, v.h); }
 
-",
-    );
+";
+
+pub fn header(m: &Model) -> String {
+    let mut out = String::from(RUNTIME);
     for (name, values) in &m.enums {
-        let members: Vec<String> = values.iter().map(|v| format!("{name}_{v}")).collect();
+        let mut seen = std::collections::HashSet::new();
+        let members: Vec<String> = values
+            .iter()
+            .map(|v| {
+                let base = format!("{name}_{}", super::wasm::ident(v));
+                let mut id = base.clone();
+                let mut n = 2;
+                while !seen.insert(id.clone()) {
+                    id = format!("{base}_{n}");
+                    n += 1;
+                }
+                id
+            })
+            .collect();
+        out += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
+    }
+    for (name, members) in &m.num_enums {
+        let members: Vec<String> = members.iter().map(|(member, value)| format!("{name}_{member} = {value}")).collect();
         out += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
     }
     // Every object is an opaque handle; the struct keeps the types apart.
-    for c in &m.classes {
-        out += &format!("typedef struct {{ uint32_t h; }} {};\n", c.name);
+    let handles = m.opaque.iter().chain(m.classes.iter().map(|c| &c.name)).chain(m.callbacks.iter().map(|c| &c.name));
+    for name in handles {
+        out += &format!("typedef struct {{ uint32_t h; }} {name};\n");
+    }
+    // A callback is made from a function and a context pointer passed back to it.
+    for c in &m.callbacks {
+        let mut params = vec!["void* ctx".to_string()];
+        // A numeric enum arrives as the number it is.
+        let plain = |t: &Ty| if matches!(t, Ty::NumEnum(_)) { "double".to_string() } else { typed(t, false) };
+        params.extend(c.params.iter().map(|(n, t)| format!("{} {}", plain(t), ident(n))));
+        out += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
+        out += &format!("TS_IMPORT({0}_from) uint32_t ts_raw_{0}_from({0}_fn, void*);\n", c.name);
+        out += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ ts_raw_{0}_from(fn, ctx) }}; }}\n", c.name);
     }
     for c in &m.classes {
         out += &format!("\n// {}\n", c.name);

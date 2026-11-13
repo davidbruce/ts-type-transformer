@@ -83,56 +83,66 @@ fn run_wasm(c: &Case, node: &Path) {
     print!("{report}");
 }
 
-#[test]
-fn shapes_fsharp() {
+fn fsharp(fixture: &str) {
     let Some([fable, node]) = tools(["fable", "node"]) else { return };
-    let c = case("shapes", "fsharp");
-    fs::write(c.out.join("Bindings.fs"), generators::fsharp::module(&c.xml)).unwrap();
+    let c = case(fixture, "fsharp");
+    let bindings = generators::fsharp::module(&c.xml);
+    fs::write(c.out.join("Bindings.fs"), &bindings.source).unwrap();
     fs::copy(c.fixture.join("test.fs"), c.out.join("Test.fs")).unwrap();
-    fs::write(
-        c.out.join("Test.fsproj"),
-        r#"<Project Sdk="Microsoft.NET.Sdk">
+    fs::write(c.out.join("Test.fsproj"), FSPROJ).unwrap();
+    run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+    let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("js/Test.mjs")));
+    print!("{report}{}", skipped(&bindings.skipped));
+}
+
+const FSPROJ: &str = r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup><Compile Include="Bindings.fs" /><Compile Include="Test.fs" /></ItemGroup>
   <ItemGroup><PackageReference Include="Fable.Core" Version="4.*" /></ItemGroup>
 </Project>
-"#,
-    )
-    .unwrap();
-    run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
-    let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("js/Test.mjs")));
-    print!("{report}");
-}
+"#;
 
-#[test]
-fn shapes_c() {
+const CLANG_WASM: &[&str] = &["--target=wasm32", "-nostdlib", "-ffreestanding", "-O1", "-Wall", "-Werror", "-Wl,--no-entry", "-Wl,--allow-undefined", "-Wl,--export-table"];
+const ZIG_WASM: &[&str] = &["build-exe", "test.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic", "--export-table", "-O", "ReleaseSmall"];
+
+fn c(fixture: &str) {
     let Some([clang, node]) = tools(["clang", "node"]) else { return };
-    let c = case("shapes", "c");
+    let c = case(fixture, "c");
     let model = generators::wasm::model(&c.xml, "C");
     fs::write(c.out.join("bindings.h"), generators::c::header(&model)).unwrap();
     fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
-    run(Command::new(clang)
-        .args(["--target=wasm32", "-nostdlib", "-ffreestanding", "-O1", "-Wall", "-Werror"])
-        .args(["-Wl,--no-entry", "-Wl,--allow-undefined"])
-        .arg("-I")
-        .arg(&c.out)
-        .arg("-o")
-        .arg(c.out.join("test.wasm"))
-        .arg(c.fixture.join("test.c")));
+    run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&c.out).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
     run_wasm(&c, &node);
+    print!("{}", skipped(&model.skipped));
 }
 
-#[test]
-fn shapes_zig() {
+fn zig(fixture: &str) {
     let Some([zig, node]) = tools(["zig", "node"]) else { return };
-    let c = case("shapes", "zig");
+    let c = case(fixture, "zig");
     let model = generators::wasm::model(&c.xml, "Zig");
     fs::write(c.out.join("bindings.zig"), generators::zig::module(&model)).unwrap();
     fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
     fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
-    run(Command::new(zig).current_dir(&c.out).args(["build-exe", "test.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic", "-O", "ReleaseSmall"]));
+    run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
     run_wasm(&c, &node);
+    print!("{}", skipped(&model.skipped));
 }
+
+// What a generator left unbound, for the test log.
+fn skipped(counts: &std::collections::BTreeMap<String, usize>) -> String {
+    counts.iter().map(|(why, n)| format!("  not bound: {n} x {why}\n")).collect()
+}
+
+// One test per fixture and target.
+macro_rules! fixtures {
+    ($($fixture:ident),*) => { $(mod $fixture {
+        #[test] fn fsharp() { super::fsharp(stringify!($fixture)); }
+        #[test] fn c() { super::c(stringify!($fixture)); }
+        #[test] fn zig() { super::zig(stringify!($fixture)); }
+    })* };
+}
+
+fixtures!(shapes, callbacks, data, globals);
 
 // The generators must refuse what their target cannot express; otherwise a
 // config that lowers too little would go unnoticed.
@@ -184,6 +194,8 @@ fn lowered_constructs_are_absent() {
                 let tag = n.tag_name().name();
                 let parent = n.parent_element().map(|p| p.tag_name().name()).unwrap_or_default();
                 let in_decl = matches!(parent, "interface" | "class");
+                // Inline types may only remain as the body of a named declaration.
+                let inline = |parent: &str| on("anonymous") && !matches!(parent, "typeAlias" | "var");
                 let bad = match tag {
                     "extends" if in_decl => on("inheritance"),
                     "typeParameter" => on("generics"),
@@ -192,17 +204,18 @@ fn lowered_constructs_are_absent() {
                     "literal" => on("literals"),
                     "union" => on("unions") || on("nullable") && elements(n).any(|c| matches!(c.attribute("name"), Some("null" | "undefined")) && c.has_tag_name("primitive")),
                     "parameter" if flag(n, "optional") => on("optional_params") && !matches!(parent, "functionType" | "constructorType"),
-                    // Inline types may only remain as the body of a named declaration.
-                    "object" | "functionType" | "constructorType" => on("anonymous") && !matches!(parent, "typeAlias" | "var"),
-                    "interface" | "class" | "object" if on("overloads") => {
-                        let mut names: Vec<&str> = elements(n).filter(|m| m.has_tag_name("method") && !flag(*m, "static")).map(|m| attr(m, "name")).collect();
-                        let count = names.len();
-                        names.sort();
-                        names.dedup();
-                        names.len() != count
-                    }
+                    "functionType" | "constructorType" => inline(parent),
                     _ => false,
                 };
+                // Members of one type must have distinct names once overloads are renamed.
+                let duplicate_names = matches!(tag, "interface" | "class" | "object") && on("overloads") && {
+                    let mut names: Vec<&str> = elements(n).filter(|m| m.has_tag_name("method") && !flag(*m, "static")).map(|m| attr(m, "name")).collect();
+                    let count = names.len();
+                    names.sort();
+                    names.dedup();
+                    names.len() != count
+                };
+                let bad = bad || duplicate_names || tag == "object" && inline(parent);
                 if bad {
                     problems.push(format!("<{tag}> at {}", path(n)));
                 }
