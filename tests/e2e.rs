@@ -224,3 +224,55 @@ fn lowered_constructs_are_absent() {
         }
     }
 }
+
+// ---- the whole DOM ----
+//
+// Bindings for all of lib.dom.d.ts, compiled, then run in a real browser.
+
+fn dom_case(target: &str) -> Case {
+    let out = root().join("target/e2e").join(format!("dom-{target}"));
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(&out).unwrap();
+    let xml = lower(Path::new("lib.dom.d.ts"), Some(target), &[]);
+    fs::write(out.join("api.xml"), &xml).unwrap();
+    Case { fixture: root().join("tests/dom"), out, xml }
+}
+
+mod dom {
+    use super::*;
+
+    #[test]
+    fn c() {
+        let Some([clang]) = tools(["clang"]) else { return };
+        let c = dom_case("c");
+        let model = generators::wasm::model(&c.xml, "C");
+        fs::write(c.out.join("bindings.h"), generators::c::header(&model)).unwrap();
+        fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
+        print!("{}", skipped(&model.skipped));
+        run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&c.out).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+    }
+
+    #[test]
+    fn fsharp() {
+        let Some([fable]) = tools(["fable"]) else { return };
+        let c = dom_case("fsharp");
+        let bindings = generators::fsharp::module(&c.xml);
+        fs::write(c.out.join("Bindings.fs"), &bindings.source).unwrap();
+        fs::copy(c.fixture.join("test.fs"), c.out.join("Test.fs")).unwrap();
+        fs::write(c.out.join("Test.fsproj"), FSPROJ).unwrap();
+        print!("{}", skipped(&bindings.skipped));
+        run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+    }
+
+    #[test]
+    fn zig() {
+        let Some([zig]) = tools(["zig"]) else { return };
+        let c = dom_case("zig");
+        let model = generators::wasm::model(&c.xml, "Zig");
+        fs::write(c.out.join("bindings.zig"), generators::zig::module(&model)).unwrap();
+        fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
+        fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
+        print!("{}", skipped(&model.skipped));
+        run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
+    }
+}

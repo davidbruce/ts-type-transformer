@@ -217,6 +217,9 @@ impl Xml {
             if p.rest {
                 attrs.push(("rest", "true"));
             }
+            if let Some(c) = &p.constant {
+                attrs.push(("const", c));
+            }
             self.open("parameter", &attrs);
             self.ty(&p.ty);
             self.close("parameter");

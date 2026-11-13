@@ -183,9 +183,19 @@ impl Gen {
     // `a: float * ?b: string -> Shape`, or the same as arguments of a static member.
     fn params(&mut self, n: Node, owner: &str) -> Vec<String> {
         let mut out = Vec::new();
+        let has_optional = named(n, "parameter").any(|p| flag(p, "optional"));
         for p in named(n, "parameter") {
+            // An argument with one possible value is written into the call instead.
+            if p.has_attribute("const") {
+                continue;
+            }
             let t = only_child(p);
             let name = ident(attr(p, "name"));
+            // F# wants optional arguments last and a parameter array last: not both.
+            if flag(p, "rest") && has_optional {
+                self.skip("rest parameter after optional ones");
+                continue;
+            }
             if flag(p, "rest") {
                 let element = if t.has_tag_name("array") { self.ty(only_child(t), owner) } else { "obj".into() };
                 out.push(format!("[<System.ParamArray>] {name}: {element}[]"));
@@ -194,6 +204,32 @@ impl Gen {
             }
         }
         out
+    }
+
+    // For a signature with fixed arguments: a name suffix made of their values,
+    // and the argument list of the call with them written in. `first` is the
+    // placeholder of the first real argument.
+    fn fixed(&mut self, n: Node, first: usize) -> Option<(String, String)> {
+        if !named(n, "parameter").any(|p| p.has_attribute("const")) {
+            return None;
+        }
+        let mut suffix = Vec::new();
+        let mut args = Vec::new();
+        let mut next = first;
+        for p in named(n, "parameter") {
+            if let Some(value) = p.attribute("const") {
+                suffix.push(value.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect::<String>());
+                args.push(if only_child(p).attribute("name") == Some("string") { format!("{value:?}") } else { value.to_string() });
+            } else if flag(p, "optional") || flag(p, "rest") {
+                // Whatever is left is passed through as given.
+                args.push(format!("${next}..."));
+                break;
+            } else {
+                args.push(format!("${next}"));
+                next += 1;
+            }
+        }
+        Some((suffix.join("_"), args.join(", ")))
     }
 
     fn returns(&mut self, n: Node, owner: &str) -> String {
@@ -228,7 +264,13 @@ impl Gen {
                 }
                 "get" => format!("abstract {name}: {}{}", self.returns(m, owner), if setters.contains(raw) { " with get, set" } else { "" }),
                 "set" => continue,
-                "method" => format!("abstract {name}{}: {}", self.type_params(m), self.signature(m, owner, None)),
+                "method" => match self.fixed(m, 1) {
+                    Some((suffix, args)) => {
+                        let call = format!("$0{}({args})", js_access(raw)).replace('"', "\\\"");
+                        format!("[<Emit(\"{call}\")>] abstract {}{}: {}", ident(&format!("{raw}_{suffix}")), self.type_params(m), self.signature(m, owner, None))
+                    }
+                    None => format!("abstract {name}{}: {}", self.type_params(m), self.signature(m, owner, None)),
+                },
                 "call" => format!("[<Emit(\"$0($1...)\")>] abstract Invoke{}: {}", self.type_params(m), self.signature(m, owner, None)),
                 "construct" | "constructor" => format!("[<EmitConstructor>] abstract Create{}: {}", self.type_params(m), self.signature(m, owner, None)),
                 "index" => {
@@ -338,7 +380,11 @@ impl Gen {
                 "function" => {
                     let params = self.params(d, "");
                     let ret = self.returns(d, "");
-                    let line = format!("{indent}    [<Emit(\"{path}($0...)\")>] static member {name}{} ({}): {ret} = jsNative\n", self.type_params(d), params.join(", "));
+                    let (name, args) = match self.fixed(d, 0) {
+                        Some((suffix, args)) => (ident(&format!("{raw}_{suffix}")), args.replace('"', "\\\"")),
+                        None => (name, "$0...".to_string()),
+                    };
+                    let line = format!("{indent}    [<Emit(\"{path}({args})\")>] static member {name}{} ({}): {ret} = jsNative\n", self.type_params(d), params.join(", "));
                     if !functions.contains(&line) {
                         functions.push(line);
                     }
@@ -380,6 +426,12 @@ impl Gen {
         }
         self.out += "\n";
     }
+}
+
+// `.name`, or `["some-name"]` where the name is not an identifier.
+fn js_access(name: &str) -> String {
+    let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
+    if plain { format!(".{name}") } else { format!("[{name:?}]") }
 }
 
 fn js_path(prefix: &str, name: &str) -> String {

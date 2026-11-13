@@ -215,7 +215,7 @@ impl<'c> Front<'c> {
                 sig.this = Some(ty);
                 continue;
             }
-            sig.params.push(Param { name, optional: pd.question_token().is_some(), rest: pd.dot_dot_dot_token().is_some(), ty });
+            sig.params.push(Param { name, optional: pd.question_token().is_some(), rest: pd.dot_dot_dot_token().is_some(), constant: None, ty });
         }
         sig.ret = node.type_node().map(|r| self.ty(r));
         sig
@@ -347,7 +347,24 @@ impl<'c> Front<'c> {
         let written = text(name);
         let sym = self.c.get_symbol_at_location_exported(name);
         let args = args.map(|l| l.nodes()).unwrap_or(&[]);
-        let args = self.types(args);
+        let mut args = self.types(args);
+        // `Float32Array` means `Float32Array<ArrayBufferLike>`: spell out the
+        // defaults, so every reference has all its type arguments.
+        if let Some(s) = sym {
+            let params = s
+                .declarations()
+                .iter()
+                .filter(|d| matches!(d.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::TypeAliasDeclaration))
+                .map(|d| d.type_parameters())
+                .find(|p| !p.is_empty())
+                .unwrap_or(&[]);
+            for p in params.iter().skip(args.len()) {
+                let default = p.as_type_parameter_declaration().default_type().map(|d| self.ty(d));
+                // A default may name an earlier parameter, which means nothing here.
+                let usable = default.filter(|d| !crate::xml::type_key(d).contains("kind=\"typeParameter\""));
+                args.push(usable.unwrap_or_else(|| Type::prim("any")));
+            }
+        }
         let mut r = self.make_ref(sym, args);
         r.name = written;
         r.qualified = r.qualified.filter(|q| *q != r.name);
@@ -610,7 +627,7 @@ impl<'c> Front<'c> {
         for info in self.c.get_index_infos_of_type_exported(t) {
             let mut m = Member::new(MemberKind::Index, String::new());
             m.readonly = info.is_readonly();
-            let key = Param { name: "key".into(), optional: false, rest: false, ty: self.from_type(info.key_type()) };
+            let key = Param { name: "key".into(), optional: false, rest: false, constant: None, ty: self.from_type(info.key_type()) };
             m.sig = Some(Signature { params: vec![key], ret: Some(self.from_type(info.value_type())), ..Default::default() });
             out.push(m);
         }
@@ -669,7 +686,7 @@ impl<'c> Front<'c> {
             if optional {
                 ty = strip_undefined(ty);
             }
-            out.params.push(Param { name: p.name().to_string(), optional, rest, ty });
+            out.params.push(Param { name: p.name().to_string(), optional, rest, constant: None, ty });
         }
         let ret = self.c.get_return_type_of_signature_exported(sig);
         out.ret = Some(self.from_type(ret));

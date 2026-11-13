@@ -96,6 +96,8 @@ pub struct Param {
     pub name: String,
     pub optional: bool,
     pub rest: bool,
+    // The one value this parameter can take, once its literal type is widened.
+    pub constant: Option<String>,
     pub ty: Type,
 }
 

@@ -78,6 +78,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     }
     if o.typeops || o.intersections {
         evaluate(front, decls, o);
+        flatten_unions(decls);
     }
     if o.generics {
         erase_generics(decls);
@@ -462,23 +463,54 @@ fn drop_type_functions(decls: &mut Vec<Decl>) {
     });
 }
 
+// Evaluation can put a union inside a union: `A | keyof B`.
+fn flatten_unions(decls: &mut [Decl]) {
+    walk(decls, &mut |t, _| {
+        while let Type::Union(parts) = t
+            && parts.iter().any(|p| matches!(p, Type::Union(_)))
+        {
+            let mut flat = Vec::new();
+            let mut seen = HashSet::new();
+            for p in parts.drain(..) {
+                match p {
+                    Type::Union(inner) => flat.extend(inner),
+                    p => flat.push(p),
+                }
+            }
+            flat.retain(|p| !matches!(p, Type::Union(_)) && seen.insert(type_key(p)) || matches!(p, Type::Union(_)));
+            *t = Type::Union(flat);
+        }
+        true
+    });
+}
+
 // ---- generics ----
 
 fn erase_generics(decls: &mut [Decl]) {
+    erase_type_params(decls, true, &|_| true);
+}
+
+// Removes the type parameters `erase` picks, replacing each use by its
+// constraint. `declarations` includes those of interfaces and aliases, not
+// only those of signatures.
+fn erase_type_params(decls: &mut [Decl], declarations: bool, erase: &dyn Fn(&TypeParam) -> bool) {
     // Type parameters have unique identities, so no scoping is needed.
     let mut constraints: Constraints = HashMap::new();
     let mut collect = |params: &mut Vec<TypeParam>| {
-        for p in params.drain(..) {
-            if let Some(s) = p.sym {
-                constraints.insert((s, p.tid), p.constraint);
+        params.retain(|p| {
+            if !erase(p) {
+                return true;
             }
-        }
+            if let Some(s) = p.sym {
+                constraints.insert((s, p.tid), p.constraint.clone());
+            }
+            false
+        });
     };
-    for_each_type_params(decls, &mut collect);
+    for_each_type_params(decls, declarations, &mut collect);
     walk(decls, &mut |t, _| {
         if matches!(t, Type::Ref(r) if r.kind == "typeParameter") {
-            substitute_constraint(t, &constraints, 0);
-            return false;
+            return !substitute_constraint(t, &constraints, declarations, 0);
         }
         true
     });
@@ -488,7 +520,11 @@ type Constraints = HashMap<(P<Symbol>, Option<u32>), Option<Type>>;
 
 // Replaces a type parameter by its constraint. Constraints may mention other
 // type parameters, or themselves (`T extends Comparable<T>`).
-fn substitute_constraint(t: &mut Type, constraints: &Constraints, depth: usize) {
+// With `all`, a type parameter that is not known is erased to `any`;
+// otherwise it is left alone. Returns whether the type itself was replaced.
+fn substitute_constraint(t: &mut Type, constraints: &Constraints, all: bool, depth: usize) -> bool {
+    let top = t as *const Type;
+    let mut replaced = false;
     walk_type(t, &mut Vec::new(), &mut |t, _| {
         let Type::Ref(r) = t else { return true };
         if r.kind != "typeParameter" {
@@ -496,45 +532,65 @@ fn substitute_constraint(t: &mut Type, constraints: &Constraints, depth: usize) 
         }
         // Checker-made references carry a type identity; written ones do not.
         let found = r.sym.and_then(|s| constraints.get(&(s, r.tid)).or_else(|| constraints.get(&(s, None))));
+        if found.is_none() && !all {
+            return true;
+        }
+        replaced |= std::ptr::eq(t, top);
         *t = match found {
             Some(Some(k)) if depth < 3 => {
                 let mut k = k.clone();
-                substitute_constraint(&mut k, constraints, depth + 1);
+                substitute_constraint(&mut k, constraints, all, depth + 1);
                 k
             }
             _ => Type::prim("any"),
         };
         false
     });
+    replaced
 }
 
-fn for_each_type_params(decls: &mut [Decl], f: &mut dyn FnMut(&mut Vec<TypeParam>)) {
-    fn members(ms: &mut [Member], f: &mut dyn FnMut(&mut Vec<TypeParam>)) {
-        for m in ms {
-            if let Some(s) = &mut m.sig {
-                f(&mut s.type_params);
-            }
-        }
-    }
-    for d in decls.iter_mut() {
-        match d {
-            Decl::Interface(i) => {
-                f(&mut i.type_params);
-                members(&mut i.members, f);
-                if let Some(c) = &mut i.class {
-                    members(&mut c.statics, f);
-                    members(&mut c.constructors, f);
+fn for_each_type_params(decls: &mut [Decl], declarations: bool, f: &mut dyn FnMut(&mut Vec<TypeParam>)) {
+    if declarations {
+        fn of_decls(decls: &mut [Decl], f: &mut dyn FnMut(&mut Vec<TypeParam>)) {
+            for d in decls {
+                match d {
+                    Decl::Interface(i) => f(&mut i.type_params),
+                    Decl::Alias(a) => f(&mut a.type_params),
+                    Decl::Namespace(n) => of_decls(&mut n.decls, f),
+                    _ => {}
                 }
             }
-            Decl::Alias(a) => f(&mut a.type_params),
-            Decl::Function(func) => f(&mut func.sig.type_params),
-            Decl::Namespace(n) => for_each_type_params(&mut n.decls, f),
-            _ => {}
+        }
+        of_decls(decls, f);
+    }
+    each_signature(decls, &mut |s| f(&mut s.type_params));
+}
+
+// Visits every signature: members, constructors, functions and function types.
+fn each_signature(decls: &mut [Decl], f: &mut dyn FnMut(&mut Signature)) {
+    fn members(ms: &mut [Member], f: &mut dyn FnMut(&mut Signature)) {
+        ms.iter_mut().filter_map(|m| m.sig.as_mut()).for_each(f);
+    }
+    fn of_decls(decls: &mut [Decl], f: &mut dyn FnMut(&mut Signature)) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) => {
+                    members(&mut i.members, f);
+                    if let Some(c) = &mut i.class {
+                        members(&mut c.statics, f);
+                        members(&mut c.constructors, f);
+                    }
+                }
+                Decl::Function(func) => f(&mut func.sig),
+                Decl::Namespace(n) => of_decls(&mut n.decls, f),
+                _ => {}
+            }
         }
     }
+    of_decls(decls, f);
     walk(decls, &mut |t, _| {
         match t {
-            Type::Function(s) | Type::Constructor(s) => f(&mut s.type_params),
+            Type::Function(s) | Type::Constructor(s) => f(s),
             Type::Object(ms) => members(ms, f),
             _ => {}
         }
@@ -568,7 +624,33 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     let mut widened = 0;
     let mut enums: Vec<Enum> = Vec::new();
     let mut by_values: HashMap<Vec<String>, String> = HashMap::new();
+    // Generated names must not collide with declared ones. An alias that is
+    // itself a string union gives its name to the enum.
     let mut names: HashSet<String> = HashSet::new();
+    for d in decls.iter() {
+        if !matches!(d, Decl::Alias(a) if string_union(&a.ty).is_some()) {
+            names.extend(decl_name(d).map(str::to_string));
+        }
+    }
+    // `f<K extends "a" | "b">(key: K)`: without literal types K has no meaning
+    // of its own, so it becomes the values it stands for.
+    let only_literals = |t: &Type| match t {
+        Type::Literal { .. } => true,
+        Type::Union(parts) => parts.iter().all(|p| matches!(p, Type::Literal { .. })),
+        _ => false,
+    };
+    erase_type_params(decls, false, &|p| p.constraint.as_ref().is_some_and(only_literals));
+    // `createEvent(type: "MouseEvent")`: the parameter has one value. Keep it.
+    each_signature(decls, &mut |s| {
+        for p in s.params.iter_mut().filter(|p| !p.rest) {
+            if let Type::Literal { kind, value } = &p.ty {
+                p.constant = Some(value.clone());
+                p.ty = Type::prim(kind);
+            }
+        }
+    });
+    let mut bodies: HashSet<*const Type> = HashSet::new();
+    collect_bodies(decls, &mut bodies);
     // `readonly DEPTH_TEST: 0x0B71` is a constant: keep its value.
     each_member_list(decls, &mut |members| {
         for m in members.iter_mut().filter(|m| m.kind == MemberKind::Property) {
@@ -583,9 +665,14 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     let mut best: HashMap<Vec<String>, Vec<String>> = HashMap::new();
     walk(decls, &mut |t, path| {
         if let Some(strings) = string_union(t) {
-            let known = best.entry(sorted(strings)).or_insert_with(|| path.to_vec());
+            // Inside an alias but not all of it: the alias keeps its own name.
+            let mut path = path.to_vec();
+            if path.len() == 1 && !bodies.contains(&(t as *const Type)) {
+                path.push("value".into());
+            }
+            let known = best.entry(sorted(strings)).or_insert_with(|| path.clone());
             if path.len() < known.len() {
-                *known = path.to_vec();
+                *known = path;
             }
             return false;
         }
@@ -678,11 +765,12 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
     let mut by_key: HashMap<String, (String, Vec<Type>)> = HashMap::new();
     // An inline type that already has a name (`type Listener = (e: Event) => void`) uses it.
     for d in decls.iter() {
+        // Generated names must not collide with declared ones.
+        names.extend(decl_name(d).map(str::to_string));
         if let Decl::Alias(a) = d
             && a.type_params.is_empty()
             && matches!(a.ty, Type::Function(_) | Type::Constructor(_))
         {
-            names.insert(a.name.clone());
             by_key.entry(type_key(&a.ty)).or_insert_with(|| (a.name.clone(), Vec::new()));
         }
     }
@@ -690,10 +778,12 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
     // Hoisted declarations may themselves contain inline types.
     loop {
         let mut added: Vec<Decl> = Vec::new();
+        // The body of an alias, or of a `var`, already has the declaration's name.
+        let mut bodies: HashSet<*const Type> = HashSet::new();
+        collect_bodies(&decls[start..], &mut bodies);
         walk(&mut decls[start..], &mut |t, path| {
-            // A callback alias or a declaration's own body is already named.
             let is_function = matches!(t, Type::Function(_) | Type::Constructor(_));
-            if !(matches!(t, Type::Object(_)) || is_function) || path.len() < 2 {
+            if !(matches!(t, Type::Object(_)) || is_function) || bodies.contains(&(t as *const Type)) {
                 return true;
             }
             let key = type_key(t);
@@ -724,6 +814,31 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         }
         start = decls.len();
         decls.extend(added);
+    }
+}
+
+fn decl_name(d: &Decl) -> Option<&str> {
+    Some(match d {
+        Decl::Interface(i) => &i.name,
+        Decl::Alias(a) => &a.name,
+        Decl::Enum(e) => &e.name,
+        Decl::Namespace(n) => &n.name,
+        Decl::Function(_) | Decl::Var(_) => return None,
+    })
+}
+
+fn collect_bodies(decls: &[Decl], out: &mut HashSet<*const Type>) {
+    for d in decls {
+        match d {
+            Decl::Alias(a) => {
+                out.insert(&a.ty);
+            }
+            Decl::Var(v) if matches!(v.ty, Type::Object(_)) => {
+                out.insert(&v.ty);
+            }
+            Decl::Namespace(n) => collect_bodies(&n.decls, out),
+            _ => {}
+        }
     }
 }
 
@@ -847,7 +962,11 @@ fn expand_functions(decls: &mut Vec<Decl>, o: Options) {
 fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, o: Options) -> Vec<String> {
     let sep = o.separator;
     let first = sigs[0];
-    let mut out = vec![base.to_string()];
+    let with = format!("{sep}with{sep}");
+    let and = format!("{sep}and{sep}");
+    // A fixed argument names its overload: `createEvent_with_MouseEvent`.
+    let constants = |s: &Signature| -> Vec<String> { s.params.iter().filter_map(|p| p.constant.as_deref()).map(name_part).collect() };
+    let mut out = vec![if constants(first).is_empty() || o.numbered_overloads { base.to_string() } else { unique(format!("{base}{with}{}", constants(first).join(&and)), taken) }];
     for (n, s) in sigs.iter().enumerate().skip(1) {
         if o.numbered_overloads {
             out.push(unique(format!("{base}{sep}{}", n + 1), taken));
@@ -857,11 +976,15 @@ fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, 
             .params
             .iter()
             .enumerate()
-            .filter(|(i, p)| first.params.get(*i).is_none_or(|q| q.name != p.name || type_key(&q.ty) != type_key(&p.ty)))
+            .filter(|(i, p)| first.params.get(*i).is_none_or(|q| q.name != p.name || q.constant != p.constant || type_key(&q.ty) != type_key(&p.ty)))
             .map(|(_, p)| p)
             .collect();
         // `f(x: string)` / `f(x: number)`: the name says nothing, the type does.
-        let part = |p: &Param| if first.params.iter().any(|q| q.name == p.name) { mnemonic(&p.ty) } else { p.name.clone() };
+        let part = |p: &Param| match &p.constant {
+            Some(c) => name_part(c),
+            None if first.params.iter().any(|q| q.name == p.name) => mnemonic(&p.ty),
+            None => p.name.clone(),
+        };
         let mut name = if differing.is_empty() {
             format!("{base}{sep}{}", s.params.len())
         } else {
@@ -874,6 +997,12 @@ fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, 
         out.push(unique(name, taken));
     }
     out
+}
+
+// A value as part of a name: `2d`, `image_png`.
+fn name_part(value: &str) -> String {
+    let s: String = value.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+    if s.is_empty() { "empty".into() } else { s }
 }
 
 fn mnemonic(t: &Type) -> String {

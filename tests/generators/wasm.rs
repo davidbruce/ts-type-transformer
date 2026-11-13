@@ -58,6 +58,8 @@ pub struct Func {
     pub params: Vec<(String, Ty)>,
     // The last parameter is an array spread into the call.
     pub rest: bool,
+    // Arguments with one possible value: position in the call, JavaScript literal.
+    pub fixed: Vec<(usize, String)>,
     pub ret: Ty,
 }
 
@@ -190,7 +192,7 @@ impl<'a> Builder<'a> {
                     let body = only_child_after_params(d, self.target);
                     if body.has_tag_name("functionType") {
                         let owner = ident(&path);
-                        let (params, _, ret) = self.signature(body, &owner);
+                        let (params, _, _, ret) = self.signature(body, &owner);
                         self.model.callbacks.push(Callback { name: owner, params, ret });
                     }
                     // A named object type is an interface in all but syntax.
@@ -201,11 +203,11 @@ impl<'a> Builder<'a> {
                     // Other aliases are resolved where they are used.
                 }
                 "function" => {
-                    let (params, rest, ret) = self.signature(d, "");
+                    let (params, rest, fixed, ret) = self.signature(d, "");
                     let js = join(prefix, d.attribute("jsName").unwrap_or(name));
                     let name = ident(&join(prefix, name));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { import, name, call: Call::Static(js), params, rest, ret });
+                    self.model.funcs.push(Func { import, name, call: Call::Static(js), params, rest, fixed, ret });
                 }
                 "var" => {
                     let body = only_child(d);
@@ -218,7 +220,7 @@ impl<'a> Builder<'a> {
                     let ret = self.ty(body, "");
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { import, name, call: Call::StaticGet(path), params: vec![], rest: false, ret });
+                    self.model.funcs.push(Func { import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], ret });
                 }
                 _ => unsupported(self.target, d),
             }
@@ -232,7 +234,7 @@ impl<'a> Builder<'a> {
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
             let import = self.import(format!("{owner}_create"));
-            c.funcs.push(Func { import, name: "create".into(), call: Call::Create, params: vec![], rest: false, ret: Ty::Obj(owner.clone()) });
+            c.funcs.push(Func { import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], ret: Ty::Obj(owner.clone()) });
         }
         for m in elements(d) {
             self.member(&mut c, &mut names, m, path, m.has_tag_name("constructor") || flag(m, "static"));
@@ -254,20 +256,24 @@ impl<'a> Builder<'a> {
         let raw_name = m.attribute("name").unwrap_or_default();
         let tag = m.tag_name().name();
         if matches!(tag, "ancestor") {
+            // A base from another file is still a type to convert to.
+            if !self.decls.contains_key(raw_name) {
+                self.opaque.insert(ident(raw_name));
+            }
             return c.ancestors.push(ident(raw_name));
         }
         if matches!(tag, "extends" | "typeParameter") {
             unsupported(self.target, m);
         }
         if tag == "index" && !is_static {
-            let (params, _, value) = self.signature(m, &owner);
+            let (params, _, _, value) = self.signature(m, &owner);
             let key = params.into_iter().next().map(|p| p.1).unwrap_or(Ty::Str);
             if names.insert("get_at".into()) {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
-                c.funcs.push(Func { import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, ret: absent(value.clone(), true) });
+                c.funcs.push(Func { import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], ret: absent(value.clone(), true) });
                 let import = self.import(format!("{owner}_set_at"));
-                c.funcs.push(Func { import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, ret: Ty::Void });
+                c.funcs.push(Func { import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], ret: Ty::Void });
             }
             return;
         }
@@ -289,26 +295,29 @@ impl<'a> Builder<'a> {
         let js = m.attribute("jsName").unwrap_or(raw_name).to_string();
         match tag {
             "constructor" | "construct" => {
-                let (params, rest, _) = self.signature(m, &owner);
+                let (params, rest, fixed, _) = self.signature(m, &owner);
                 let name = unique(if raw_name.is_empty() { "new".into() } else { ident(raw_name) }, names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { import, name, call: Call::New(path.to_string()), params, rest, ret: Ty::Obj(owner) });
+                c.funcs.push(Func { import, name, call: Call::New(path.to_string()), params, rest, fixed, ret: Ty::Obj(owner) });
             }
             "method" => {
-                let (params, rest, ret) = self.signature(m, &owner);
+                let (params, rest, fixed, ret) = self.signature(m, &owner);
                 let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js) };
                 let name = unique(ident(raw_name), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { import, name, call, params, rest, ret });
+                c.funcs.push(Func { import, name, call, params, rest, fixed, ret });
             }
             // A constant needs no call across the boundary.
             "property" if m.has_attribute("const") => {
                 let quoted = only_child(m).attribute("name") == Some("string");
                 let value = attr(m, "const");
-                c.consts.push((ident(raw_name), if quoted { format!("{value:?}") } else { value.to_string() }));
+                // The same constant is often on both the class and its instances.
+                if !c.consts.iter().any(|(n, _)| *n == ident(raw_name)) {
+                    c.consts.push((ident(raw_name), if quoted { format!("{value:?}") } else { value.to_string() }));
+                }
             }
             "property" => {
-                let mut t = self.ty(only_child(m), &owner);
+                let mut t = value(self.ty(only_child(m), &owner));
                 if flag(m, "optional") {
                     t = absent(t, true);
                 }
@@ -319,35 +328,42 @@ impl<'a> Builder<'a> {
                 };
                 let name = unique(format!("get_{}", ident(raw_name)), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { import, name, call: get, params: vec![], rest: false, ret: t.clone() });
+                c.funcs.push(Func { import, name, call: get, params: vec![], rest: false, fixed: vec![], ret: t.clone() });
                 if !flag(m, "readonly") {
                     let name = unique(format!("set_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
-                    c.funcs.push(Func { import, name, call: set, params: vec![("value".into(), t)], rest: false, ret: Ty::Void });
+                    c.funcs.push(Func { import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], ret: Ty::Void });
                 }
             }
             _ => unsupported(self.target, m),
         }
     }
 
-    fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Ty) {
+    fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
         let mut params = Vec::new();
         let mut rest = false;
+        let mut fixed = Vec::new();
         let mut ret = Ty::Void;
         for p in elements(n) {
             match p.tag_name().name() {
                 // The receiver of a callback is not an argument.
                 "this" => {}
+                // An argument with one possible value is supplied by the glue.
+                "parameter" if p.has_attribute("const") => {
+                    let value = attr(p, "const");
+                    let literal = if only_child(p).attribute("name") == Some("string") { format!("{value:?}") } else { value.to_string() };
+                    fixed.push((params.len() + fixed.len(), literal));
+                }
                 "parameter" if flag(p, "optional") => unsupported(self.target, p),
                 "parameter" => {
                     rest |= flag(p, "rest");
-                    params.push((ident(attr(p, "name")), self.ty(only_child(p), owner)));
+                    params.push((ident(attr(p, "name")), value(self.ty(only_child(p), owner))));
                 }
                 "returns" => ret = self.ty(only_child(p), owner),
                 _ => unsupported(self.target, p),
             }
         }
-        (params, rest, ret)
+        (params, rest, fixed, ret)
     }
 
     fn ty(&mut self, n: Node<'a, 'a>, owner: &str) -> Ty {
@@ -423,6 +439,11 @@ fn distinct(parts: &[Ty]) -> bool {
     parts.iter().enumerate().all(|(i, p)| !parts[..i].contains(p))
 }
 
+// `void` is only a result. A parameter or property of type `undefined` holds a value.
+fn value(t: Ty) -> Ty {
+    if t == Ty::Void { Ty::Any } else { t }
+}
+
 // A handle can be null; anything else that may be absent is an untyped value.
 fn absent(t: Ty, undefined: bool) -> Ty {
     match t {
@@ -459,6 +480,16 @@ fn to_wasm(x: &str, t: &Ty) -> String {
         Ty::Enum(e) => format!("enums.{e}.indexOf({x})"),
         _ => format!("put({x})"),
     }
+}
+
+// `.name`, or `["some-name"]` where the name is not an identifier.
+fn access(name: &str) -> String {
+    let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
+    if plain { format!(".{name}") } else { format!("[{name:?}]") }
+}
+
+fn access_path(path: &str) -> String {
+    path.split('.').map(access).collect()
 }
 
 // JavaScript that implements every import by calling the real API.
@@ -535,16 +566,19 @@ export function makeEnv(getInstance) {
             args.push(format!("{spread}{}", from_wasm(&p, t)));
             wasm_params.push(p);
         }
+        for (position, literal) in &f.fixed {
+            args.insert((*position).min(args.len()), literal.clone());
+        }
         let (first, second) = (args.first().cloned().unwrap_or_default(), args.get(1).cloned().unwrap_or_default());
         let args = args.join(", ");
         let call = match &f.call {
-            Call::Method(js) => format!("get(self).{js}({args})"),
-            Call::Get(prop) => format!("get(self).{prop}"),
-            Call::Set(prop) => format!("get(self).{prop} = {args}"),
-            Call::New(path) => format!("new globalThis.{path}({args})"),
-            Call::Static(path) => format!("globalThis.{path}({args})"),
-            Call::StaticGet(path) => format!("globalThis.{path}"),
-            Call::StaticSet(path) => format!("globalThis.{path} = {args}"),
+            Call::Method(js) => format!("get(self){}({args})", access(js)),
+            Call::Get(prop) => format!("get(self){}", access(prop)),
+            Call::Set(prop) => format!("get(self){} = {args}", access(prop)),
+            Call::New(path) => format!("new globalThis{}({args})", access_path(path)),
+            Call::Static(path) => format!("globalThis{}({args})", access_path(path)),
+            Call::StaticGet(path) => format!("globalThis{}", access_path(path)),
+            Call::StaticSet(path) => format!("globalThis{} = {args}", access_path(path)),
             Call::Create => "({})".to_string(),
             Call::IndexGet => format!("get(self)[{args}]"),
             Call::IndexSet => format!("get(self)[{first}] = {second}"),
