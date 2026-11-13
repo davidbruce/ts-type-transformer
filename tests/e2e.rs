@@ -78,6 +78,12 @@ fn case(fixture: &str, target: &str) -> Case {
     Case { fixture: dir, out, xml }
 }
 
+// The glue for what the compiled module imports, and nothing else.
+fn write_glue(c: &Case, model: &generators::wasm::Model) {
+    let used = generators::wasm::imports(&fs::read(c.out.join("test.wasm")).unwrap());
+    fs::write(c.out.join("glue.mjs"), generators::wasm::glue(model, Some(&used))).unwrap();
+}
+
 fn run_wasm(c: &Case, node: &Path) {
     let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("glue.mjs")).arg(c.out.join("test.wasm")));
     print!("{report}");
@@ -110,8 +116,8 @@ fn c(fixture: &str) {
     let c = case(fixture, "c");
     let model = generators::wasm::model(&c.xml, "C");
     fs::write(c.out.join("bindings.h"), generators::c::header(&model)).unwrap();
-    fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
     run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&c.out).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+    write_glue(&c, &model);
     run_wasm(&c, &node);
     print!("{}", skipped(&model.skipped));
 }
@@ -121,9 +127,9 @@ fn zig(fixture: &str) {
     let c = case(fixture, "zig");
     let model = generators::wasm::model(&c.xml, "Zig");
     fs::write(c.out.join("bindings.zig"), generators::zig::module(&model)).unwrap();
-    fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
     fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
     run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
+    write_glue(&c, &model);
     run_wasm(&c, &node);
     print!("{}", skipped(&model.skipped));
 }
@@ -305,10 +311,10 @@ mod dom {
         let c = dom_case("c");
         let model = generators::wasm::model(&c.xml, "C");
         fs::write(c.out.join("bindings.h"), generators::c::header(&model)).unwrap();
-        fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
-        fs::write(c.out.join("index.html"), wasm_page("c")).unwrap();
+            fs::write(c.out.join("index.html"), wasm_page("c")).unwrap();
         print!("{}", skipped(&model.skipped));
         run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&c.out).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+        write_glue(&c, &model);
         run_browser(&c);
     }
     #[test]
@@ -331,11 +337,11 @@ mod dom {
         let c = dom_case("zig");
         let model = generators::wasm::model(&c.xml, "Zig");
         fs::write(c.out.join("bindings.zig"), generators::zig::module(&model)).unwrap();
-        fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model)).unwrap();
-        fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
+            fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
         fs::write(c.out.join("index.html"), wasm_page("zig")).unwrap();
         print!("{}", skipped(&model.skipped));
         run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
+        write_glue(&c, &model);
         run_browser(&c);
     }
 }

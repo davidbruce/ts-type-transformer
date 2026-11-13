@@ -553,7 +553,77 @@ fn access_path(path: &str) -> String {
 }
 
 // JavaScript that implements every import by calling the real API.
-pub fn glue(m: &Model) -> String {
+// The functions a compiled module imports from `env`: what the glue must provide.
+pub fn imports(wasm: &[u8]) -> HashSet<String> {
+    fn leb(b: &[u8], i: &mut usize) -> usize {
+        let (mut v, mut shift) = (0usize, 0);
+        loop {
+            let byte = b[*i];
+            *i += 1;
+            v |= ((byte & 0x7f) as usize) << shift;
+            if byte & 0x80 == 0 {
+                return v;
+            }
+            shift += 7;
+        }
+    }
+    fn name(b: &[u8], i: &mut usize) -> String {
+        let n = leb(b, i);
+        let s = String::from_utf8_lossy(&b[*i..*i + n]).into_owned();
+        *i += n;
+        s
+    }
+    let mut out = HashSet::new();
+    let mut i = 8;
+    while i < wasm.len() {
+        let id = wasm[i];
+        i += 1;
+        let size = leb(wasm, &mut i);
+        let end = i + size;
+        if id == 2 {
+            for _ in 0..leb(wasm, &mut i) {
+                let module = name(wasm, &mut i);
+                let field = name(wasm, &mut i);
+                let kind = wasm[i];
+                i += 1;
+                match kind {
+                    0 => {
+                        leb(wasm, &mut i);
+                    }
+                    1 => {
+                        i += 1;
+                        let flags = leb(wasm, &mut i);
+                        leb(wasm, &mut i);
+                        if flags & 1 != 0 {
+                            leb(wasm, &mut i);
+                        }
+                    }
+                    2 => {
+                        let flags = leb(wasm, &mut i);
+                        leb(wasm, &mut i);
+                        if flags & 1 != 0 {
+                            leb(wasm, &mut i);
+                        }
+                    }
+                    3 => i += 2,
+                    _ => {
+                        i += 1;
+                        leb(wasm, &mut i);
+                    }
+                }
+                if module == "env" {
+                    out.insert(field);
+                }
+            }
+        }
+        i = end;
+    }
+    out
+}
+
+// The glue for every import in the model, or with `used`, only those a compiled module needs.
+pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
+    let wanted = |name: &str| used.is_none_or(|u| u.contains(name));
     let mut out = String::from(
         "// Generated. Implements the wasm imports by calling the JavaScript API.
 export function makeEnv(getInstance) {
@@ -600,7 +670,7 @@ export function makeEnv(getInstance) {
     js_array_push: (h, v) => { get(h).push(get(v)); },
 ";
     // Which member of a union a value is: its index, or -1.
-    for u in &m.unions {
+    for u in m.unions.iter().filter(|u| wanted(&format!("{}_tag", u.name))) {
         let mut arms = Vec::new();
         let mut default = None;
         for (i, test) in u.tests.iter().enumerate() {
@@ -611,7 +681,7 @@ export function makeEnv(getInstance) {
         }
         out += &format!("    {}_tag: h => {{ const v = get(h); {} return {}; }},\n", u.name, arms.join(" "), default.map_or("-1".to_string(), |d| d.to_string()));
     }
-    for c in &m.callbacks {
+    for c in m.callbacks.iter().filter(|c| wanted(&format!("{}_from", c.name))) {
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let mut args = vec!["ctx".to_string()];
         args.extend(c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t)));
@@ -619,7 +689,7 @@ export function makeEnv(getInstance) {
         let body = if c.ret == Ty::Void { format!("{{ {call}; }}") } else { from_wasm(&call, &c.ret) };
         out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, f => ({}) => {body}),\n", c.name, c.name, names.join(", "));
     }
-    for f in m.all_funcs() {
+    for f in m.all_funcs().filter(|f| wanted(&f.import)) {
         let mut wasm_params = Vec::new();
         let mut args = Vec::new();
         if Class::has_self(f) {
