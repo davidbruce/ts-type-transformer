@@ -102,7 +102,8 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
     };
     let decl = format!("TS_IMPORT({import}) {} ts_raw_{import}({});\n", raw(&f.ret), void(&raw_params));
     // Declared once per header, though several functions use it.
-    if !out.contains(&decl) {
+    // Only a shared import can repeat; checking others would be quadratic.
+    if f.shared.is_none() || !out.contains(&decl) {
         *out += &decl;
     }
     *out += &format!("static inline {} {name}({}) {{ {body} }}\n", typed(&f.ret, false), void(&params));

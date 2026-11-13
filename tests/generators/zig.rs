@@ -195,7 +195,8 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     };
     let decl = format!("    extern \"env\" fn {import}({}) {};\n", raw_params.join(", "), raw(&f.ret));
     // Declared once per file, though several functions use it.
-    if !externs.contains(&decl) {
+    // Only a shared import can repeat; checking others would be quadratic.
+    if f.shared.is_none() || !externs.contains(&decl) {
         *externs += &decl;
     }
     *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {body} }}\n", ident(&f.name), params.join(", "));
