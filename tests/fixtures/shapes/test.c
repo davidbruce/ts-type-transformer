@@ -29,15 +29,15 @@ __attribute__((export_name("run"))) void run(void) {
     Shape_set_size(s, 4);
     CHECK(Shape_get_size(s) == 4);
 
-    // Flattened inheritance, and passing a Shape where a Named is wanted.
-    CHECK(str_eq(Shape_get_name(s), "square-3"));
-    CHECK(str_eq(Shape_describe(s), "square-3 (16)"));
+    // Inherited members are called on the type that declares them.
+    CHECK(str_eq(Named_get_name(Shape_as_Named(s)), "square-3"));
+    CHECK(str_eq(Named_describe(Shape_as_Named(s)), "square-3 (16)"));
     CHECK(str_eq(nameOf(Shape_as_Named(s)), "square-3"));
 
     // Overloads.
     Shape big = Shape_scale(s, 2);
     CHECK(Shape_get_size(big) == 8);
-    CHECK(str_eq(Shape_get_name(Shape_scale_with_name(s, 2, "big")), "big"));
+    CHECK(str_eq(Named_get_name(Shape_as_Named(Shape_scale_with_name(s, 2, "big"))), "big"));
 
     // Optional parameter.
     Shape_resize(s, 2.6);

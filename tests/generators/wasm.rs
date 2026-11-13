@@ -317,7 +317,19 @@ impl<'a> Builder<'a> {
             }
             return c.ancestors.push(ident(raw_name));
         }
-        if matches!(tag, "extends" | "typeParameter") {
+        // A direct base, when inheritance is kept: members stay on the type that declares them.
+        if tag == "extends" {
+            let base = only_child(m);
+            if base.has_tag_name("ref") && elements(base).next().is_none() {
+                let name = base.attribute("qualified").unwrap_or(attr(base, "name"));
+                if !self.decls.contains_key(name) {
+                    self.opaque.insert(ident(name));
+                }
+                return c.ancestors.push(ident(name));
+            }
+            return self.skip("generic base");
+        }
+        if tag == "typeParameter" {
             unsupported(self.target, m);
         }
         self.bad = None;
@@ -332,6 +344,24 @@ impl<'a> Builder<'a> {
                 let import = self.import(format!("{owner}_set_at"));
                 c.funcs.push(Func { module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], ret: Ty::Void });
             }
+            return;
+        }
+        // An accessor: `get classList(): DOMTokenList`, `set classList(value: string)`.
+        if matches!(tag, "get" | "set") && !raw_name.starts_with('[') {
+            let (params, _, _, ret) = self.signature(m, &owner);
+            let js = m.attribute("jsName").unwrap_or(raw_name).to_string();
+            let (prefix, call, ret) = if tag == "get" {
+                ("get", if is_static { Call::StaticGet(format!("{path}.{js}")) } else { Call::Get(js) }, ret)
+            } else {
+                ("set", if is_static { Call::StaticSet(format!("{path}.{js}")) } else { Call::Set(js) }, Ty::Void)
+            };
+            let base = format!("{prefix}_{}", ident(raw_name));
+            if !names.contains(&base) && self.bad.is_none() {
+                names.insert(base.clone());
+                let import = self.import(format!("{owner}_{base}"));
+                c.funcs.push(Func { module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], ret });
+            }
+            self.bad = None;
             return;
         }
         if matches!(tag, "call" | "index" | "get" | "set") || tag == "construct" && !is_static {
@@ -601,7 +631,8 @@ fn value(t: Ty) -> Ty {
 // A handle can be null; anything else that may be absent is an untyped value.
 fn absent(t: Ty, undefined: bool) -> Ty {
     match t {
-        Ty::Obj(_) | Ty::Array => Ty::Nullable(Box::new(t), undefined),
+        // A string that may be absent: a null pointer going in, a null handle coming back.
+        Ty::Obj(_) | Ty::Array | Ty::Str => Ty::Nullable(Box::new(t), undefined),
         Ty::Nullable(..) => t,
         Ty::Void => Ty::Void,
         _ => Ty::Any,
@@ -816,6 +847,14 @@ export function makeEnv(getInstance) {
                 wasm_params.push(format!("{p}_ptr"));
                 wasm_params.push(format!("{p}_len"));
                 args.push(format!("str({p}_ptr, {p}_len)"));
+                continue;
+            }
+            if let Ty::Nullable(inner, undefined) = t
+                && **inner == Ty::Str
+            {
+                wasm_params.push(format!("{p}_ptr"));
+                wasm_params.push(format!("{p}_len"));
+                args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", if *undefined { "undefined" } else { "null" }));
                 continue;
             }
             let spread = if f.rest && i == f.params.len() - 1 { "..." } else { "" };

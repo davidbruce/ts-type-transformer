@@ -58,8 +58,8 @@ export fn run() void {
     // Read an element that was already in the page, and copy its text.
     const seed = doc.getElementById("seed").?;
     expect(strEq(seed.get_textContent(), "seed text"), @src());
-    expect(strEq(seed.getAttribute("data-x").toString(), "42"), @src());
-    expect(seed.getAttribute("data-missing").isNull(), @src());
+    expect(strEq(seed.getAttribute("data-x").?, "42"), @src());
+    expect(seed.getAttribute("data-missing") == null, @src());
     var text: [64]u8 = undefined;
     const copy = doc.createElement(.p).asHTMLElement();
     copy.set_textContent(seed.get_textContent().read(&text));
@@ -95,7 +95,7 @@ export fn run() void {
     expect(pings.count == 1, @src());
 
     // Style, layout and the window.
-    box.get_style().setProperty("color", b.JsValue.string("red"));
+    box.get_style().setProperty("color", "red");
     expect(strEq(box.get_style().get_color(), "red"), @src());
     expect(box.getBoundingClientRect().get_width() > 0, @src());
     expect(box.get_children().get_length() == 2, @src());

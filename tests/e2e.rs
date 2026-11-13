@@ -197,12 +197,6 @@ fn c_rejects_unions() {
 }
 
 #[test]
-#[should_panic(expected = "cannot express <extends>")]
-fn c_rejects_inheritance() {
-    generators::wasm::model(&shapes_xml("c", &["inheritance=keep"]), "C");
-}
-
-#[test]
 #[should_panic(expected = "cannot express <parameter>")]
 fn zig_rejects_optional_parameters() {
     generators::wasm::model(&shapes_xml("zig", &["optional_params=keep"]), "Zig");

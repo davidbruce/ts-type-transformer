@@ -34,6 +34,7 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Array => "JsArray".into(),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         // A null handle is zero.
+        // NULL, or a null handle, is the absent value.
         Ty::Nullable(inner, _) => typed(inner, param),
         Ty::Union(_) | Ty::NamedUnion(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
         Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => panic!("{T} generator cannot express keyed generics: the target config must expand them"),
@@ -56,6 +57,10 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
             Ty::Str => {
                 raw_params.extend(["const char*".to_string(), "uint32_t".to_string()]);
                 args.extend([name.clone(), format!("ts_strlen({name})")]);
+            }
+            Ty::Nullable(inner, _) if **inner == Ty::Str => {
+                raw_params.extend(["const char*".to_string(), "uint32_t".to_string()]);
+                args.extend([name.clone(), format!("({name} ? ts_strlen({name}) : 0)")]);
             }
             Ty::Num | Ty::Bool | Ty::Enum(_) => {
                 raw_params.push(raw(t).into());
@@ -128,6 +133,21 @@ static inline void JsArray_push(JsArray a, JsValue v) { ts_raw_js_array_push(a.h
 
 ";
 
+// Direct and indirect bases, nearest first.
+fn all_ancestors(m: &Model, class: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut todo = vec![class.to_string()];
+    while let Some(c) = todo.pop() {
+        for a in m.classes.iter().filter(|k| k.name == c).flat_map(|k| &k.ancestors) {
+            if !out.contains(a) {
+                out.push(a.clone());
+                todo.insert(0, a.clone());
+            }
+        }
+    }
+    out
+}
+
 // The bindings as files: `ts_runtime.h`; `ts_types.h` with every handle type,
 // enum and callback (so headers never need each other); one header per
 // declaration in a directory per module, `<module>/<Name>.h`, with the module's
@@ -180,7 +200,8 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         for (name, value) in &c.consts {
             body += &format!("#define {}_{name} {value}\n", c.name);
         }
-        for a in &c.ancestors {
+        // A cast to every ancestor: an inherited member is called on the type that declares it.
+        for a in all_ancestors(m, &c.name) {
             body += &format!("static inline {a} {}_as_{a}({} self) {{ return ({a}){{ self.h }}; }}\n", c.name, c.name);
         }
         for f in &c.funcs {

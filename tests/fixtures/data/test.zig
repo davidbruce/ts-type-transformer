@@ -25,7 +25,7 @@ export fn run() void {
     o.set_mode(.fill);
     expect(strEq(b.describe(o), "3x? fill"), @src());
     o.set_height(b.JsValue.number(2));
-    o.set_title(b.JsValue.string("hi"));
+    o.set_title("hi");
     expect(strEq(b.describe(o), "3x2 fill \"hi\""), @src());
 
     // Built by JavaScript, read here. A missing optional property is null.

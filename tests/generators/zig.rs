@@ -155,6 +155,9 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
         if *t == Ty::Str {
             raw_params.extend(["[*]const u8".to_string(), "usize".to_string()]);
             args.extend([format!("{id}.ptr"), format!("{id}.len")]);
+        } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
+            raw_params.extend(["?[*]const u8".to_string(), "usize".to_string()]);
+            args.extend([format!("if ({id}) |v| v.ptr else null"), format!("if ({id}) |v| v.len else 0")]);
         } else {
             raw_params.push(raw(t).to_string());
             args.push(lower_arg(&id, t));

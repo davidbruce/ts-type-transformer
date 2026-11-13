@@ -3,7 +3,6 @@
 classes = "pair"
 type_ops = "evaluate"
 intersections = "merge"
-inheritance = "flatten"
 generics = "erase"
 nullable = "wrap"
 literals = "enum"

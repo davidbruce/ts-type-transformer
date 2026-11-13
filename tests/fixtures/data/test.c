@@ -23,7 +23,7 @@ __attribute__((export_name("run"))) void run(void) {
     Options_set_mode(o, Options_mode_fill);
     CHECK(str_eq(describe(o), "3x? fill"));
     Options_set_height(o, js_number(2));
-    Options_set_title(o, js_string("hi"));
+    Options_set_title(o, "hi");
     CHECK(str_eq(describe(o), "3x2 fill \"hi\""));
 
     // Built by JavaScript, read here. A missing optional property is null.
