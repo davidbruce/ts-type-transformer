@@ -36,6 +36,7 @@ fn typed(t: &Ty, param: bool) -> String {
         // A null handle is zero.
         Ty::Nullable(inner, _) => typed(inner, param),
         Ty::Union(_) | Ty::NamedUnion(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
+        Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => panic!("{T} generator cannot express keyed generics: the target config must expand them"),
     }
 }
 

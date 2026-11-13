@@ -17,7 +17,7 @@ fn raw(t: &Ty) -> &'static str {
     match t {
         Ty::Void => "void",
         Ty::Num | Ty::NumEnum(_) => "f64",
-        Ty::Bool | Ty::Enum(_) => "i32",
+        Ty::Bool | Ty::Enum(_) | Ty::Key(_) => "i32",
         _ => "u32",
     }
 }
@@ -83,6 +83,10 @@ fn typed(t: &Ty, is_param: bool) -> String {
             format!("union(enum) {{ {} }}", fields.join(", "))
         }
         Ty::NamedUnion(n) => n.clone(),
+        // `KEY` is replaced by the name of the signature's key parameter.
+        Ty::Key(m) => format!("{m}.Key"),
+        Ty::Mapped(m) => format!("{m}.Type(KEY)"),
+        Ty::Listener(ev) => format!("JsListener({})", typed(ev, false)),
         Ty::Any | Ty::Union(_) => "JsValue".into(),
     }
 }
@@ -102,7 +106,7 @@ fn lower_arg(name: &str, t: &Ty) -> String {
     match t {
         Ty::Num => name.into(),
         Ty::Bool => format!("@intFromBool({name})"),
-        Ty::Enum(_) => format!("@intFromEnum({name})"),
+        Ty::Enum(_) | Ty::Key(_) => format!("@intFromEnum({name})"),
         Ty::NumEnum(_) => format!("@floatFromInt(@intFromEnum({name}))"),
         Ty::Nullable(..) => format!("if ({name}) |v| v.h else 0"),
         // Each member becomes a JavaScript value.
@@ -136,9 +140,12 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
         params.push(format!("self: {}", owner.unwrap()));
         args.push("self.h".to_string());
     }
+    // A key is known at compile time: the types it selects are computed from it.
+    let key = f.params.iter().find(|p| matches!(p.1, Ty::Key(_))).map(|p| param(&p.0)).unwrap_or_default();
     for (name, t) in &f.params {
         let id = param(name);
-        params.push(format!("{id}: {}", typed(t, true)));
+        let comptime = if matches!(t, Ty::Key(_)) { "comptime " } else { "" };
+        params.push(format!("{comptime}{id}: {}", typed(t, true).replace("KEY", &key)));
         if *t == Ty::Str {
             raw_params.extend(["[*]const u8".to_string(), "usize".to_string()]);
             args.extend([format!("{id}.ptr"), format!("{id}.len")]);
@@ -155,7 +162,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     };
     let ret_type = match union {
         Some(u) if !u.decodable() => "JsValue".to_string(),
-        _ => typed(&f.ret, false),
+        _ => typed(&f.ret, false).replace("KEY", &key),
     };
     let body = match &f.ret {
         Ty::NamedUnion(_) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; return {};", decode_union(union.unwrap(), "h")),
@@ -199,6 +206,14 @@ pub const JsString = extern struct {
     pub fn len(self: JsString) usize { return raw.js_string_len(self.h); }
     pub fn read(self: JsString, buf: []u8) []u8 { const n = self.len(); raw.js_string_read(self.h, buf.ptr); return buf[0..n]; }
 };
+// A callback taking one object: `JsListener(PointerEvent).from(onClick, &state)`.
+pub fn JsListener(comptime Ev: type) type {
+    return extern struct {
+        h: u32,
+        pub const Fn = *const fn (?*anyopaque, Ev) callconv(.c) void;
+        pub fn from(f: Fn, ctx: ?*anyopaque) @This() { return .{ .h = raw.js_listener_from(@intFromPtr(f), ctx) }; }
+    };
+}
 pub const JsArray = extern struct {
     h: u32,
     pub fn new() JsArray { return .{ .h = raw.js_array_new() }; }
@@ -221,6 +236,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_array_length(h: u32) usize;
     extern \"env\" fn js_array_get(h: u32, i: usize) u32;
     extern \"env\" fn js_array_push(h: u32, v: u32) void;
+    extern \"env\" fn js_listener_from(f: usize, ctx: ?*anyopaque) u32;
 ";
 
 pub fn module(m: &Model) -> String {
@@ -256,6 +272,13 @@ pub fn module(m: &Model) -> String {
         out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
         for (name, value) in &c.consts {
             out += &format!("    pub const {} = {value};\n", ident(name));
+        }
+        // A map's keys, and the type each selects, known at compile time.
+        if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
+            let keys: Vec<String> = map.keys.iter().map(|k| ident(k)).collect();
+            out += &format!("    pub const Key = enum(i32) {{ {} }};\n", keys.join(", "));
+            let arms: Vec<String> = keys.iter().zip(&map.values).map(|(k, v)| format!(".{k} => {}", typed(v, false))).collect();
+            out += &format!("    pub fn Type(comptime key: Key) type {{ return switch (key) {{ {} }}; }}\n", arms.join(", "));
         }
         for a in &c.ancestors {
             out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);

@@ -33,6 +33,12 @@ pub enum Ty {
     Union(Vec<Ty>),
     // A union declared by name, in `Model::unions`.
     NamedUnion(String),
+    // A key of a map (`K extends keyof M`): crosses as its index in `Model::maps`.
+    Key(String),
+    // The value a key selects (`M[K]`): a handle.
+    Mapped(String),
+    // A callback taking one handle, whose type may depend on a key.
+    Listener(Box<Ty>),
 }
 
 pub enum Call {
@@ -88,6 +94,13 @@ impl NamedUnion {
     }
 }
 
+// A map whose keys select types: `HTMLElementEventMap`.
+pub struct KeyMap {
+    pub name: String,
+    pub keys: Vec<String>,
+    pub values: Vec<Ty>,
+}
+
 pub struct Callback {
     pub name: String,
     pub params: Vec<(String, Ty)>,
@@ -101,6 +114,7 @@ pub struct Model {
     pub classes: Vec<Class>,
     pub callbacks: Vec<Callback>,
     pub unions: Vec<NamedUnion>,
+    pub maps: Vec<KeyMap>,
     pub funcs: Vec<Func>,
     // Types declared elsewhere: handles with no members.
     pub opaque: Vec<String>,
@@ -132,6 +146,10 @@ struct Builder<'a> {
     imports: HashSet<String>,
     // Aliases being resolved, to stop on recursive ones.
     resolving: Vec<String>,
+    // In the signature being read: type parameters over a map's keys, and their map.
+    keyed: HashMap<String, String>,
+    // Why the member being read cannot be bound, if it cannot.
+    bad: Option<String>,
 }
 
 pub fn model(xml: &str, target: &str) -> Model {
@@ -139,10 +157,12 @@ pub fn model(xml: &str, target: &str) -> Model {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], funcs: vec![], opaque: vec![], skipped: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], funcs: vec![], opaque: vec![], skipped: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
+        keyed: HashMap::new(),
+        bad: None,
     };
     b.index(doc.root_element(), "");
     b.decls_of(doc.root_element(), "");
@@ -289,6 +309,8 @@ impl<'a> Builder<'a> {
         if matches!(tag, "extends" | "typeParameter") {
             unsupported(self.target, m);
         }
+        self.bad = None;
+        let before = c.funcs.len();
         if tag == "index" && !is_static {
             let (params, _, _, value) = self.signature(m, &owner);
             let key = params.into_iter().next().map(|p| p.1).unwrap_or(Ty::Str);
@@ -361,9 +383,27 @@ impl<'a> Builder<'a> {
             }
             _ => unsupported(self.target, m),
         }
+        if let Some(why) = self.bad.take() {
+            c.funcs.truncate(before);
+            self.skip(&why);
+        }
     }
 
     fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
+        // Type parameters left after `generics = "erase"` range over a map's keys.
+        self.keyed.clear();
+        for p in named(n, "typeParameter") {
+            let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child);
+            match map {
+                Some(m) => {
+                    let name = m.attribute("qualified").unwrap_or(attr(m, "name")).to_string();
+                    if self.key_map(&name) {
+                        self.keyed.insert(attr(p, "name").to_string(), ident(&name));
+                    }
+                }
+                None => unsupported(self.target, p),
+            }
+        }
         let mut params = Vec::new();
         let mut rest = false;
         let mut fixed = Vec::new();
@@ -384,10 +424,36 @@ impl<'a> Builder<'a> {
                     params.push((ident(attr(p, "name")), value(self.ty(only_child(p), owner))));
                 }
                 "returns" => ret = self.ty(only_child(p), owner),
+                "typeParameter" => {}
                 _ => unsupported(self.target, p),
             }
         }
         (params, rest, fixed, ret)
+    }
+
+    // Registers a map whose values are all handles; false, with a reason, if it is not one.
+    fn key_map(&mut self, name: &str) -> bool {
+        let id = ident(name);
+        if self.model.maps.iter().any(|m| m.name == id) {
+            return true;
+        }
+        let Some(decl) = self.decls.get(name).copied() else {
+            self.bad = Some("map declared elsewhere".into());
+            return false;
+        };
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+        for p in named(decl, "property") {
+            let t = self.ty(only_child(p), "");
+            if !matches!(t, Ty::Obj(_)) {
+                self.bad = Some("map with values that are not objects".into());
+                return false;
+            }
+            keys.push(attr(p, "name").to_string());
+            values.push(t);
+        }
+        self.model.maps.push(KeyMap { name: id, keys, values });
+        true
     }
 
     fn ty(&mut self, n: Node<'a, 'a>, owner: &str) -> Ty {
@@ -400,7 +466,37 @@ impl<'a> Builder<'a> {
                 _ => Ty::Any,
             },
             "this" => Ty::Obj(owner.to_string()),
+            "ref" if attr(n, "kind") == "typeParameter" => match self.keyed.get(attr(n, "name")) {
+                Some(map) => Ty::Key(map.clone()),
+                None => unsupported(self.target, n),
+            },
             "ref" => self.reference(n),
+            // `M[K]`: the value the key selects.
+            "indexedAccess" => {
+                let index = elements(n).nth(1).unwrap();
+                match index.attribute("name").and_then(|k| self.keyed.get(k)) {
+                    Some(map) => Ty::Mapped(map.clone()),
+                    None => unsupported(self.target, n),
+                }
+            }
+            // A callback written inline: kept so only when it takes `M[K]`.
+            "functionType" if !self.keyed.is_empty() => {
+                let params: Vec<Node> = named(n, "parameter").collect();
+                let ret = named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or(Ty::Void);
+                match (params.as_slice(), ret) {
+                    ([p], Ty::Void | Ty::Any) => match self.ty(only_child(*p), owner) {
+                        t @ (Ty::Mapped(_) | Ty::Obj(_)) => Ty::Listener(Box::new(t)),
+                        _ => {
+                            self.bad = Some("keyed callback of another shape".into());
+                            Ty::Any
+                        }
+                    },
+                    _ => {
+                        self.bad = Some("keyed callback of another shape".into());
+                        Ty::Any
+                    }
+                }
+            }
             "nullable" => {
                 let inner = self.ty(only_child(n), owner);
                 absent(inner, attr(n, "absent") == "undefined")
@@ -514,6 +610,7 @@ fn from_wasm(p: &str, t: &Ty) -> String {
         Ty::Bool => format!("!!{p}"),
         Ty::Enum(e) => format!("enums.{e}[{p}]"),
         Ty::Nullable(_, true) => format!("({p} === 0 ? undefined : get({p}))"),
+        Ty::Key(m) => format!("keys.{m}[{p}]"),
         _ => format!("get({p})"),
     }
 }
@@ -654,6 +751,11 @@ export function makeEnv(getInstance) {
     for (name, values) in &m.enums {
         out += &format!("    {name}: {values:?},\n");
     }
+    // The keys of each map, by index.
+    out += "  };\n  const keys = {\n";
+    for k in &m.maps {
+        out += &format!("    {}: {:?},\n", k.name, k.keys);
+    }
     out += "  };
   return {
     js_string_len: h => enc.encode(get(h)).length,
@@ -668,6 +770,7 @@ export function makeEnv(getInstance) {
     js_array_length: h => get(h).length,
     js_array_get: (h, i) => put(get(h)[i]),
     js_array_push: (h, v) => { get(h).push(get(v)); },
+    js_listener_from: (fn, ctx) => callback('listener', fn, ctx, f => ev => { f(ctx, put(ev)); }),
 ";
     // Which member of a union a value is: its index, or -1.
     for u in m.unions.iter().filter(|u| wanted(&format!("{}_tag", u.name))) {

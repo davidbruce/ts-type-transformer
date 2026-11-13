@@ -20,7 +20,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("union_params", "overloads", "union-typed parameters", "one overload per union member"),
     ("unions", "erase|name", "other unions", "erase: their common supertype, or any. name: a named declaration"),
     ("overloads", "rename", "same-named members", "unique names, with jsName"),
-    ("keyed_params", "expand", "f<K extends keyof M>(key: K, value: M[K])", "one overload per key, the key a fixed argument"),
+    ("keyed_params", "expand|map", "f<K extends keyof M>(key: K, value: M[K])", "expand: one overload per key, the key a fixed argument. map: kept generic, with keyof M and M[K] as written"),
 ];
 
 const OVERLOAD_NAMES: &[&str] = &["with_params", "numbered"];
@@ -55,6 +55,9 @@ pub fn load(path: Option<&str>, overrides: &[String]) -> Result<Options, String>
                     *o.slot(key).unwrap() = chosen == allowed[1];
                     if key == "unions" {
                         o.name_unions = chosen == "name";
+                    }
+                    if key == "keyed_params" {
+                        o.map_keyed = chosen == "map";
                     }
                 }
                 ("limits", "union_param_overloads") => o.union_param_limit = count(&at, value)?,
@@ -93,7 +96,15 @@ pub fn describe(mut o: Options) -> Vec<(&'static str, &'static str)> {
         .iter()
         .map(|(key, lowered, ..)| {
             let first = lowered.split('|').next().unwrap();
-            let chosen = if *key == "unions" && name_unions { "name" } else if *o.slot(key).unwrap() { first } else { "keep" };
+            let chosen = if *key == "unions" && name_unions {
+                "name"
+            } else if *key == "keyed_params" && o.map_keyed {
+                "map"
+            } else if *o.slot(key).unwrap() {
+                first
+            } else {
+                "keep"
+            };
             (*key, chosen)
         })
         .collect()

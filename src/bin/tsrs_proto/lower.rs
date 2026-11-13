@@ -27,6 +27,8 @@ pub struct Options {
     pub unions: bool,
     pub overloads: bool,
     pub keyed: bool,
+    // Keep keyed signatures generic, with their map (`keyed_params = "map"`).
+    pub map_keyed: bool,
     // Unions become named declarations (`unions = "name"`).
     pub name_unions: bool,
     // Most keys a keyed signature is expanded over.
@@ -45,7 +47,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             classes: false, typeops: false, intersections: false, inheritance: false, generics: false, nullable: false,
-            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, name_unions: false, keyed_limit: 256,
+            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, map_keyed: false, name_unions: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
         }
     }
@@ -77,6 +79,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.merge_intersections = o.intersections;
     front.intersection_limit = o.intersection_limit;
     front.expand_keyed = o.keyed;
+    front.map_keyed = o.map_keyed;
     front.keyed_limit = o.keyed_limit;
     if o.keyed {
         expand_keyed(front, decls, o);
@@ -95,7 +98,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         flatten_unions(decls);
     }
     if o.generics {
-        erase_generics(decls);
+        erase_generics(decls, o.map_keyed);
     }
     if o.nullable {
         walk(decls, &mut |t, _| {
@@ -146,6 +149,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         });
     }
     if o.name_unions {
+        flatten_unions(decls);
         name_unions(decls, o.separator);
     }
     if o.overloads {
@@ -520,7 +524,25 @@ fn evaluate(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
             a.ty = front.eval_alias_body(node, sym);
         }
     });
+    // `keyed_params = "map"`: `K extends keyof M` and `M[K]` stay as written.
+    let keyed = if o.map_keyed { keyed_syms(decls) } else { HashSet::new() };
+    let mut kept: HashSet<*const Type> = HashSet::new();
+    each_signature(decls, &mut |s| {
+        for p in s.type_params.iter().filter(|p| keyed_map(p).is_some()) {
+            kept.insert(p.constraint.as_ref().unwrap() as *const Type);
+        }
+    });
     walk(decls, &mut |t, _| {
+        if kept.contains(&(t as *const Type)) {
+            return false;
+        }
+        if let Type::Op(op, _) = t
+            && let Op::IndexedAccess(Type::Ref(m), Type::Ref(k)) = &**op
+            && m.kind != "typeParameter"
+            && k.sym.is_some_and(|s| keyed.contains(&s))
+        {
+            return false;
+        }
         let replacement = match t {
             Type::Op(op, node) if o.typeops => Some(match (&**op, node) {
                 (Op::Predicate { asserts, .. }, _) => Type::prim(if *asserts { "void" } else { "boolean" }),
@@ -733,14 +755,45 @@ fn flatten_unions(decls: &mut [Decl]) {
 
 // ---- generics ----
 
-fn erase_generics(decls: &mut [Decl]) {
-    erase_type_params(decls, true, &|_| true);
+// With `keep_keyed`, type parameters over the keys of a map stay: `keyed_params = "map"`.
+fn erase_generics(decls: &mut [Decl], keep_keyed: bool) {
+    let keep = if keep_keyed { keyed_syms(decls) } else { HashSet::new() };
+    erase_type_params(decls, true, &|p| p.sym.is_none_or(|s| !keep.contains(&s)), &keep);
+}
+
+// `K extends keyof M`, for a map `M` that is not generic: the map.
+pub fn keyed_map(tp: &TypeParam) -> Option<&Ref> {
+    match &tp.constraint {
+        Some(Type::Op(op, _)) => match &**op {
+            Op::KeyOf(Type::Ref(m)) if m.kind != "typeParameter" && m.args.is_empty() => Some(m),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+// The type parameters of signatures that range over the keys of a map.
+fn keyed_syms(decls: &mut [Decl]) -> HashSet<P<Symbol>> {
+    let mut out = HashSet::new();
+    each_signature(decls, &mut |s| out.extend(s.type_params.iter().filter(|p| keyed_map(p).is_some()).filter_map(|p| p.sym)));
+    out
+}
+
+// Whether a type mentions one of these type parameters.
+fn mentions(t: &Type, syms: &HashSet<P<Symbol>>) -> bool {
+    let mut found = false;
+    let mut probe = t.clone();
+    walk_type(&mut probe, &mut Vec::new(), &mut |t, _| {
+        found |= matches!(t, Type::Ref(r) if r.kind == "typeParameter" && r.sym.is_some_and(|s| syms.contains(&s)));
+        !found
+    });
+    found
 }
 
 // Removes the type parameters `erase` picks, replacing each use by its
 // constraint. `declarations` includes those of interfaces and aliases, not
 // only those of signatures.
-fn erase_type_params(decls: &mut [Decl], declarations: bool, erase: &dyn Fn(&TypeParam) -> bool) {
+fn erase_type_params(decls: &mut [Decl], declarations: bool, erase: &dyn Fn(&TypeParam) -> bool, keep: &HashSet<P<Symbol>>) {
     // Type parameters have unique identities, so no scoping is needed.
     let mut constraints: Constraints = HashMap::new();
     let mut collect = |params: &mut Vec<TypeParam>| {
@@ -757,7 +810,7 @@ fn erase_type_params(decls: &mut [Decl], declarations: bool, erase: &dyn Fn(&Typ
     for_each_type_params(decls, declarations, &mut collect);
     walk(decls, &mut |t, _| {
         if matches!(t, Type::Ref(r) if r.kind == "typeParameter") {
-            return !substitute_constraint(t, &constraints, declarations, 0);
+            return !substitute_constraint(t, &constraints, declarations, keep, 0);
         }
         true
     });
@@ -769,7 +822,7 @@ type Constraints = HashMap<(P<Symbol>, Option<u32>), Option<Type>>;
 // type parameters, or themselves (`T extends Comparable<T>`).
 // With `all`, a type parameter that is not known is erased to `any`;
 // otherwise it is left alone. Returns whether the type itself was replaced.
-fn substitute_constraint(t: &mut Type, constraints: &Constraints, all: bool, depth: usize) -> bool {
+fn substitute_constraint(t: &mut Type, constraints: &Constraints, all: bool, keep: &HashSet<P<Symbol>>, depth: usize) -> bool {
     let top = t as *const Type;
     let mut replaced = false;
     walk_type(t, &mut Vec::new(), &mut |t, _| {
@@ -779,14 +832,14 @@ fn substitute_constraint(t: &mut Type, constraints: &Constraints, all: bool, dep
         }
         // Checker-made references carry a type identity; written ones do not.
         let found = r.sym.and_then(|s| constraints.get(&(s, r.tid)).or_else(|| constraints.get(&(s, None))));
-        if found.is_none() && !all {
+        if found.is_none() && (!all || r.sym.is_some_and(|s| keep.contains(&s))) {
             return true;
         }
         replaced |= std::ptr::eq(t, top);
         *t = match found {
             Some(Some(k)) if depth < 3 => {
                 let mut k = k.clone();
-                substitute_constraint(&mut k, constraints, all, depth + 1);
+                substitute_constraint(&mut k, constraints, all, keep, depth + 1);
                 k
             }
             _ => Type::prim("any"),
@@ -886,7 +939,7 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
         Type::Union(parts) => parts.iter().all(|p| matches!(p, Type::Literal { .. })),
         _ => false,
     };
-    erase_type_params(decls, false, &|p| p.constraint.as_ref().is_some_and(only_literals));
+    erase_type_params(decls, false, &|p| p.constraint.as_ref().is_some_and(only_literals), &HashSet::new());
     // `createEvent(type: "MouseEvent")`: the parameter has one value. Keep it.
     each_signature(decls, &mut |s| {
         for p in s.params.iter_mut().filter(|p| !p.rest) {
@@ -1030,6 +1083,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         collect_bodies(&decls[start..], &mut bodies);
         // A callback type used in several places is named by what it takes,
         // not by the first place it was found.
+        let keyed = keyed_syms(&mut decls[start..]);
         let mut uses: HashMap<String, usize> = HashMap::new();
         walk(&mut decls[start..], &mut |t, _| {
             if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
@@ -1041,6 +1095,10 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
             let is_function = matches!(t, Type::Function(_) | Type::Constructor(_));
             if !(matches!(t, Type::Object(_)) || is_function) || bodies.contains(&(t as *const Type)) {
                 return true;
+            }
+            // A callback of `M[K]` depends on its signature's key: it stays inline.
+            if !keyed.is_empty() && mentions(t, &keyed) {
+                return false;
             }
             let key = type_key(t);
             let (name, args) = by_key
@@ -1278,10 +1336,8 @@ fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut H
         // Overloads with the same parameter names: the first is named by what
         // it adds, the others by the types that vary among them.
         let group: Vec<&Signature> = sigs.iter().copied().filter(|t| names(t) == names(s)).collect();
-        let varying: Vec<String> = (0..s.params.len())
-            .filter(|&i| group.iter().any(|t| type_key(&t.params[i].ty) != type_key(&s.params[i].ty)))
-            .map(|i| mnemonic(&s.params[i].ty))
-            .collect();
+        let varying_at: Vec<usize> = (0..s.params.len()).filter(|&i| group.iter().any(|t| type_key(&t.params[i].ty) != type_key(&s.params[i].ty))).collect();
+        let varying: Vec<String> = varying_at.iter().map(|&i| param_mnemonic(s, &s.params[i].ty)).collect();
         let leads = std::ptr::eq(group[0], *s);
         // Parameters the plain overload does not have. When they only extend
         // it (`f(a)`, `f(a, b, c)`), the last one says it: `f_with_c`.
@@ -1296,10 +1352,15 @@ fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut H
             .iter()
             .enumerate()
             .filter(|(i, p)| first.params.get(*i).is_none_or(|q| type_key(&q.ty) != type_key(&p.ty)))
-            .map(|(_, p)| mnemonic(&p.ty))
+            .map(|(_, p)| param_mnemonic(s, &p.ty))
             .collect();
+        // Named by the first type that sets it apart, plus what it adds:
+        // `addEventListener_with_string_and_options`.
+        let first_name = varying_at.first().map(|&i| s.params[i].name.clone());
+        let first_varying: Vec<String> = varying.first().cloned().into_iter().chain(added.iter().filter(|a| Some(*a) != first_name.as_ref()).cloned()).collect();
         let candidates = [
             (leads && !added.is_empty()).then(|| with(added.clone())),
+            (!leads && !varying.is_empty()).then(|| with(first_varying.clone())),
             (!leads && !varying.is_empty()).then(|| with(varying.clone())),
             (!added.is_empty()).then(|| with(added.clone())),
             retyped.last().map(|t| with(vec![t.clone()])),
@@ -1317,6 +1378,17 @@ fn name_part(value: &str) -> String {
     let value = if value.contains("://") { value.trim_end_matches('/').rsplit('/').next().unwrap_or(value) } else { value };
     let s: String = value.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
     if s.is_empty() { "empty".into() } else { s }
+}
+
+// A parameter's type in a name; a key of a map is named by its map.
+fn param_mnemonic(s: &Signature, t: &Type) -> String {
+    if let Type::Ref(r) = t
+        && r.kind == "typeParameter"
+        && let Some(map) = s.type_params.iter().find(|p| p.sym.is_some() && p.sym == r.sym).and_then(keyed_map)
+    {
+        return map.name.rsplit('.').next().unwrap_or_default().to_string();
+    }
+    mnemonic(t)
 }
 
 fn mnemonic(t: &Type) -> String {

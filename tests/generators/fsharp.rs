@@ -1,7 +1,7 @@
 // XML -> F# bindings for Fable. Keeps inheritance, generics, overloads,
 // optional parameters and unions; needs literals and type-level expressions gone.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use roxmltree::{Document, Node};
 
@@ -22,6 +22,10 @@ struct Gen {
     declared: HashSet<String>,
     // Types declared elsewhere, with the most type arguments seen.
     external: BTreeMap<String, usize>,
+    // In the signature being written: type parameters over a map's keys, and their map.
+    keyed: HashMap<String, String>,
+    // Maps whose keys are used: a `<Map>Keys` module is written for each.
+    maps: BTreeSet<String>,
 }
 
 fn ident(name: &str) -> String {
@@ -39,10 +43,15 @@ fn ident(name: &str) -> String {
 
 pub fn module(xml: &str) -> Output {
     let doc = Document::parse(xml).expect("well-formed XML");
-    let mut g = Gen { out: String::new(), skipped: BTreeMap::new(), declared: HashSet::new(), external: BTreeMap::new() };
+    let mut g = Gen { out: String::new(), skipped: BTreeMap::new(), declared: HashSet::new(), external: BTreeMap::new(), keyed: HashMap::new(), maps: BTreeSet::new() };
     g.index(doc.root_element(), "");
     g.decls(doc.root_element(), "", "");
-    let mut source = String::from("// Generated.\nmodule rec Bindings\n\nopen Fable.Core\n\n");
+    g.key_modules(doc.root_element());
+    let mut source = String::from(
+        "// Generated.\nmodule rec Bindings\n\nopen Fable.Core\n\n\
+         /// A key of the map 'Map whose value has type 'V: `el.addEventListener (HTMLElementEventMapKeys.click, fun e -> ...)`.\n\
+         [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n",
+    );
     // Types from other files are opaque.
     for (name, arity) in &g.external {
         let params: Vec<String> = (1..=*arity).map(|i| format!("'T{i}")).collect();
@@ -139,6 +148,14 @@ impl Gen {
                 }
             }
             "array" => format!("ResizeArray<{}>", self.ty(only_child(n), owner)),
+            // `M[K]` for a key parameter: the value type the key selects.
+            "indexedAccess" => {
+                let index = elements(n).nth(1).unwrap();
+                match index.attribute("name").filter(|k| index.attribute("kind") == Some("typeParameter") && self.keyed.contains_key(*k)) {
+                    Some(k) => format!("'{k}"),
+                    None => unsupported(T, n),
+                }
+            }
             // Fable compiles tuples to arrays.
             "tuple" => {
                 let parts: Vec<String> = named(n, "element").map(|e| self.ty(only_child(e), owner)).collect();
@@ -175,6 +192,40 @@ impl Gen {
         }
     }
 
+    // Notes the type parameters of a signature that range over a map's keys.
+    fn enter_keyed(&mut self, n: Node) {
+        self.keyed.clear();
+        for p in named(n, "typeParameter") {
+            let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child).filter(|r| r.has_tag_name("ref"));
+            if let Some(map) = map {
+                let name = map.attribute("qualified").unwrap_or(attr(map, "name")).to_string();
+                self.maps.insert(name.clone());
+                self.keyed.insert(attr(p, "name").to_string(), name.split('.').map(ident).collect::<Vec<_>>().join("."));
+            }
+        }
+    }
+
+    // For each map whose keys are used: a module with one typed key per property.
+    fn key_modules(&mut self, root: Node) {
+        for map in std::mem::take(&mut self.maps) {
+            let Some(decl) = find_decl(root, &map) else {
+                self.skip("map declared elsewhere, no keys");
+                continue;
+            };
+            let map_type = map.split('.').map(ident).collect::<Vec<_>>().join(".");
+            let module = ident(&format!("{}Keys", map.rsplit('.').next().unwrap()));
+            self.out += &format!("/// The keys of {map}.\nmodule {module} =\n");
+            let mut seen = HashSet::new();
+            for (key, ty) in map_properties(root, decl) {
+                if seen.insert(key.clone()) {
+                    let t = self.ty(ty, "");
+                    self.out += &format!("    let {}: TypedKey<{map_type}, {t}> = TypedKey {key:?}\n", ident(&key));
+                }
+            }
+            self.out += "\n";
+        }
+    }
+
     fn type_params(&self, n: Node) -> String {
         let params: Vec<String> = named(n, "typeParameter").map(|p| format!("'{}", attr(p, "name"))).collect();
         if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) }
@@ -182,6 +233,7 @@ impl Gen {
 
     // `a: float * ?b: string -> Shape`, or the same as arguments of a static member.
     fn params(&mut self, n: Node, owner: &str) -> Vec<String> {
+        self.enter_keyed(n);
         let mut out = Vec::new();
         let has_optional = named(n, "parameter").any(|p| flag(p, "optional"));
         for p in named(n, "parameter") {
@@ -194,6 +246,11 @@ impl Gen {
             // F# wants optional arguments last and a parameter array last: not both.
             if flag(p, "rest") && has_optional {
                 self.skip("rest parameter after optional ones");
+                continue;
+            }
+            // A key of a map: typed by the value it selects.
+            if t.has_tag_name("ref") && attr(t, "kind") == "typeParameter" && let Some(map) = self.keyed.get(attr(t, "name")) {
+                out.push(format!("{}{name}: TypedKey<{map}, '{}>", if flag(p, "optional") { "?" } else { "" }, attr(t, "name")));
                 continue;
             }
             if flag(p, "rest") {
@@ -233,6 +290,7 @@ impl Gen {
     }
 
     fn returns(&mut self, n: Node, owner: &str) -> String {
+        self.enter_keyed(n);
         named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or("unit".into())
     }
 
@@ -523,6 +581,29 @@ fn case_name(m: Node) -> String {
     }
     case[..1].make_ascii_uppercase();
     case
+}
+
+// A declaration by qualified name: `WebAssembly.Module`.
+fn find_decl<'a>(root: Node<'a, 'a>, path: &str) -> Option<Node<'a, 'a>> {
+    let mut scope = root;
+    let mut parts = path.split('.').peekable();
+    while let Some(part) = parts.next() {
+        let last = parts.peek().is_none();
+        scope = elements(scope).find(|d| d.attribute("name") == Some(part) && (last || d.has_tag_name("namespace")))?;
+    }
+    Some(scope)
+}
+
+// The properties of a map, its own and those of the maps it extends.
+fn map_properties<'a>(root: Node<'a, 'a>, decl: Node<'a, 'a>) -> Vec<(String, Node<'a, 'a>)> {
+    let mut out: Vec<(String, Node)> = named(decl, "property").map(|p| (attr(p, "name").to_string(), only_child(p))).collect();
+    for e in named(decl, "extends") {
+        let base = only_child(e);
+        if let Some(b) = find_decl(root, base.attribute("qualified").unwrap_or(attr(base, "name"))) {
+            out.extend(map_properties(root, b));
+        }
+    }
+    out
 }
 
 fn js_path(prefix: &str, name: &str) -> String {

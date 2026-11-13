@@ -17,8 +17,8 @@ let report (passed: int) (failed: ResizeArray<string>) : unit = jsNative
 let body = document.body
 
 // Create an element and put it in the page.
-// One method per tag, returning the tag's own element type.
-let div: HTMLDivElement = document.createElement_div ()
+// A typed key selects the element type: createElement "div" returns an HTMLDivElement.
+let div: HTMLDivElement = document.createElement HTMLElementTagNameMapKeys.div
 let box: HTMLElement = div
 box.id <- "made-by-fsharp"
 box.textContent <- "hello from fsharp"
@@ -43,7 +43,7 @@ let button = document.createElement "button"
 button.textContent <- "press"
 box.appendChild button |> ignore
 
-// One method per event, with the event's own type.
+// A typed key selects the event type: the listener of "click" takes a PointerEvent.
 let onClick: PointerEvent -> obj =
     let f =
         fun (_: PointerEvent) ->
@@ -53,11 +53,11 @@ let onClick: PointerEvent -> obj =
 
     f
 
-button.addEventListener_click onClick
+button.addEventListener (HTMLElementEventMapKeys.click, onClick)
 button.click ()
 button.click ()
 check (clicks = 2) "listener called"
-button.removeEventListener_click onClick
+button.removeEventListener (HTMLElementEventMapKeys.click, onClick)
 button.click ()
 check (clicks = 2) "listener removed"
 

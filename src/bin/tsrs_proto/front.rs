@@ -27,6 +27,9 @@ pub struct Front<'c> {
     pub intersection_limit: usize,
     // Lowering: expand a signature over the keys its type parameter may take.
     pub expand_keyed: bool,
+    // Keep keyed signatures generic: `K extends keyof M` and `M[K]` stay.
+    pub map_keyed: bool,
+    kept_keyed: HashSet<TypeId>,
     pub keyed_limit: usize,
     // During expansion: the type parameter being replaced, and its key.
     key_binding: Option<(TypeId, String)>,
@@ -42,7 +45,7 @@ const DEFERRED: TypeFlags = TypeFlags::Index
 
 impl<'c> Front<'c> {
     pub fn new(c: &'c mut Checker, root_file: String) -> Self {
-        Front { c, root_file, seen: HashSet::new(), stats: BTreeMap::new(), computed_alias: HashMap::new(), in_progress: Vec::new(), merge_intersections: false, intersection_limit: 64, expand_keyed: false, keyed_limit: 0, key_binding: None, skip_alias: None }
+        Front { c, root_file, seen: HashSet::new(), stats: BTreeMap::new(), computed_alias: HashMap::new(), in_progress: Vec::new(), merge_intersections: false, intersection_limit: 64, expand_keyed: false, map_keyed: false, kept_keyed: HashSet::new(), keyed_limit: 0, key_binding: None, skip_alias: None }
     }
 
     pub fn count(&mut self, what: &str) {
@@ -515,6 +518,17 @@ impl<'c> Front<'c> {
                 }
             }
         }
+        // `M[K]` for a kept keyed type parameter stays as written.
+        if f.intersects(TypeFlags::IndexedAccess) {
+            let ia = t.as_indexed_access_type();
+            if let (Some(i), Some(object)) = (ia.index_type(), ia.object_type())
+                && self.kept_keyed.contains(&i.id())
+            {
+                let map = self.from_type(object);
+                let key = self.from_type(i);
+                return Type::Op(Box::new(Op::IndexedAccess(map, key)), None);
+            }
+        }
         if f.intersects(TypeFlags::TypeParameter) {
             if t.as_type_parameter().is_this_type() {
                 return Type::This;
@@ -813,6 +827,22 @@ impl<'c> Front<'c> {
         }
     }
 
+    // `K extends keyof M` as declared, for a map `M` that is not generic: `M`.
+    fn declared_key_map(&mut self, tp: P<CType>) -> Option<P<Symbol>> {
+        let decl = tp.symbol()?.declarations().iter().copied().find(|d| d.kind() == Kind::TypeParameter)?;
+        let constraint = decl.as_type_parameter_declaration().constraint()?;
+        if constraint.kind() != Kind::TypeOperator || constraint.as_type_operator_node().operator() != Kind::KeyOfKeyword {
+            return None;
+        }
+        let target = constraint.as_type_operator_node().type_();
+        if target.kind() != Kind::TypeReference || target.as_type_reference_node().type_arguments().is_some() {
+            return None;
+        }
+        let sym = self.c.get_symbol_at_location_exported(target.as_type_reference_node().type_name())?;
+        let sym = self.c.get_merged_symbol_exported(sym);
+        sym.flags().intersects(SymbolFlags::Interface).then_some(sym)
+    }
+
     // The string keys of a declared object type.
     pub fn keys_of(&mut self, sym: P<Symbol>) -> Vec<String> {
         let t = self.c.get_declared_type_of_symbol_exported(sym);
@@ -832,11 +862,20 @@ impl<'c> Front<'c> {
         let mut out = Signature::default();
         let bound = self.key_binding.as_ref().map(|b| b.0);
         for tp in sig.type_parameters().iter().filter(|tp| Some(tp.id()) != bound) {
+            // The checker has evaluated `keyof M`; the declaration still says it.
+            let constraint = match self.map_keyed.then(|| self.declared_key_map(*tp)).flatten() {
+                Some(map) => {
+                    self.kept_keyed.insert(tp.id());
+                    let map = Type::Ref(self.make_ref(Some(map), Vec::new()));
+                    Some(Type::Op(Box::new(Op::KeyOf(map)), None))
+                }
+                None => self.c.get_constraint_of_type_parameter_exported(*tp).map(|k| self.from_type(k)),
+            };
             out.type_params.push(TypeParam {
                 name: tp.symbol().map(|s| s.name().to_string()).unwrap_or_default(),
                 sym: tp.symbol(),
                 tid: Some(tp.id().0),
-                constraint: self.c.get_constraint_of_type_parameter_exported(*tp).map(|k| self.from_type(k)),
+                constraint,
                 default: None,
             });
         }
