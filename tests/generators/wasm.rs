@@ -358,7 +358,9 @@ impl<'a> Builder<'a> {
                     let body = only_child(d);
                     if body.has_tag_name("object") {
                         // A value with members of its own: bound like a class with only statics.
-                        let c = self.statics(body, &path);
+                        // A type may have the same name (`type NodeFilter` and `var NodeFilter`).
+                        let name = if self.decls.contains_key(&path) { format!("{}_statics", ident(&path)) } else { ident(&path) };
+                        let c = self.statics(body, &path, name);
                         self.model.classes.push(c);
                         continue;
                     }
@@ -387,8 +389,8 @@ impl<'a> Builder<'a> {
         c
     }
 
-    fn statics(&mut self, body: Node<'a, 'a>, path: &str) -> Class {
-        let mut c = Class { module: self.module.clone(), name: ident(path), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
+    fn statics(&mut self, body: Node<'a, 'a>, path: &str, name: String) -> Class {
+        let mut c = Class { module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
         let mut names = HashSet::new();
         for m in elements(body) {
             self.member(&mut c, &mut names, m, path, true);
@@ -460,7 +462,12 @@ impl<'a> Builder<'a> {
         if raw_name.starts_with('[') {
             return self.skip("symbol-named member");
         }
+        // A target with overloading keeps one name for all of a method's overloads.
+        let overloading = self.target == "C++";
         let unique = |base: String, names: &mut HashSet<String>| {
+            if overloading {
+                return base;
+            }
             let mut name = base.clone();
             let mut n = 2;
             while !names.insert(name.clone()) {
@@ -574,7 +581,20 @@ impl<'a> Builder<'a> {
         };
         let mut keys = Vec::new();
         let mut values = Vec::new();
-        for p in named(decl, "property") {
+        // Its own properties and those of the maps it extends, the nearest first.
+        let mut props: Vec<Node> = Vec::new();
+        let mut todo = vec![decl];
+        let mut seen_keys = HashSet::new();
+        while let Some(d) = todo.pop() {
+            props.extend(named(d, "property").filter(|p| seen_keys.insert(attr(*p, "name").to_string())));
+            for e in named(d, "extends") {
+                let base = only_child(e);
+                if let Some(b) = self.decls.get(base.attribute("qualified").unwrap_or(attr(base, "name"))) {
+                    todo.insert(0, *b);
+                }
+            }
+        }
+        for p in props {
             let t = self.ty(only_child(p), "");
             if !matches!(t, Ty::Obj(_)) {
                 self.bad = Some("map with values that are not objects".into());
@@ -664,7 +684,7 @@ impl<'a> Builder<'a> {
                     return Ty::Any;
                 }
                 // A union with a name of its own is declared once.
-                if body.has_tag_name("union") && self.target == "Zig" {
+                if body.has_tag_name("union") && self.target != "C" {
                     let name = ident(&key);
                     if self.model.unions.iter().any(|u| u.name == name) {
                         return Ty::NamedUnion(name);

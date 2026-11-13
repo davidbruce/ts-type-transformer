@@ -1,0 +1,14 @@
+# Example target: C++. Inheritance, overloads and union parameters stay;
+# literals become enum classes, unions std::variant, nullables std::optional,
+# keyed signatures templates over typed keys.
+[constructs]
+classes = "pair"
+type_ops = "evaluate"
+intersections = "merge"
+generics = "erase"
+nullable = "wrap"
+literals = "enum"
+anonymous = "hoist"
+optional_params = "overloads"
+unions = "name"
+keyed_params = "map"

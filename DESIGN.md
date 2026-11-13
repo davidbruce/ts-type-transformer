@@ -91,13 +91,22 @@ their own, apart from areas (`areas/css/`, `namespaces/CSS/`).
 
 How a generator lays out files is its own choice. The test generators:
 
-- C: `ts_types.h` with every handle, enum and callback; one header per
+- C (C11): `ts_types.h` with every handle, enum and callback; one header per
   declaration in `areas/<module>/` or `namespaces/<module>/`; umbrella
   headers. A program includes what it uses. Inheritance is kept: a member is
-  defined once, on its declaring type, and every type has a cast to each
-  ancestor (`Element_setAttribute(HTMLElement_as_Element(el), ...)`). Per-key
+  defined once, on its declaring type. `_Generic` upcasts (`AS_Element(x)`)
+  and same-name macros let any subtype be passed: `Element_setAttribute(div,
+  ...)`; anything else is a compile error. Per-key
   methods share one wasm import per call shape (`addEventListener_keyed`).
   File names that would still clash get a suffix (`point_2.h`, `Con_.h`).
+- C++ (C++20, WASI SDK): a value class per type holding the handle; a type's
+  own members are in `<T>_members<Self>`, which every descendant inherits, with
+  conversions to each ancestor. Overloads and optional parameters are real
+  overloads, nullables `std::optional`, unions `std::variant`, callbacks
+  lambdas, keyed methods templates over typed keys
+  (`el.addEventListener(HTMLElementEventMapKeys::click, [](PointerEvent e) {...})`).
+  Signatures are deferred with `ts::dep<T, D>` so a header compiles before the
+  classes it names are complete. The DOM: 9.7 MB, nothing expanded per key.
 - Zig: a file per module, in the same folders, importing by name what it uses
   from the others, and a root `bindings.zig`. Zig reads only what is used.
 - F#: files must not refer to each other in cycles. Files are ordered by what
@@ -169,7 +178,8 @@ with each example target:
 
 ## Tests
 
-`cargo test` runs `tests/e2e.rs` (about 25 seconds). Missing toolchains or a
+`cargo test` runs `tests/e2e.rs` (about 45 seconds). Targets: F# (Fable), C
+and Zig (wasm32), C++ (wasm32 with the WASI SDK). Missing toolchains or a
 missing Chrome skip their tests with a message.
 
 **Fixtures in Node.** For each of `shapes`, `callbacks`, `data` and `globals`

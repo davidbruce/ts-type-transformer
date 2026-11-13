@@ -166,6 +166,35 @@ fn zig(fixture: &str) {
     print!("{}", skipped(&model.skipped));
 }
 
+// The WASI SDK's clang++, which has a C++ standard library for wasm32.
+fn wasi_clang() -> Option<PathBuf> {
+    let from_env = env::var_os("WASI_SDK_PATH").map(|p| PathBuf::from(p).join("bin/clang++"));
+    let from_home = env::var_os("HOME").and_then(|h| {
+        let mut sdks: Vec<PathBuf> = fs::read_dir(PathBuf::from(h).join(".wasi-sdk")).ok()?.filter_map(|e| e.ok()).map(|e| e.path().join("bin/clang++")).collect();
+        sdks.sort();
+        sdks.pop()
+    });
+    let found = from_env.into_iter().chain(from_home).find(|p| p.is_file());
+    if found.is_none() {
+        eprintln!("SKIPPED: no WASI SDK (set WASI_SDK_PATH)");
+    }
+    found
+}
+
+const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Werror", "-Wl,--allow-undefined", "-Wl,--export-table"];
+
+fn cpp(fixture: &str) {
+    let Some(clang) = wasi_clang() else { return };
+    let Some([node]) = tools(["node"]) else { return };
+    let c = case(fixture, "cpp");
+    let model = generators::wasm::model(&c.xml, "C++");
+    write_files(&c.out.join("bindings"), generators::cpp::files(&model));
+    run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")));
+    write_glue(&c, &model);
+    run_wasm(&c, &node);
+    print!("{}", skipped(&model.skipped));
+}
+
 // What a generator left unbound, for the test log.
 fn skipped(counts: &std::collections::BTreeMap<String, usize>) -> String {
     counts.iter().map(|(why, n)| format!("  not bound: {n} x {why}\n")).collect()
@@ -177,6 +206,7 @@ macro_rules! fixtures {
         #[test] fn fsharp() { super::fsharp(stringify!($fixture)); }
         #[test] fn c() { super::c(stringify!($fixture)); }
         #[test] fn zig() { super::zig(stringify!($fixture)); }
+        #[test] fn cpp() { super::cpp(stringify!($fixture)); }
     })* };
 }
 
@@ -213,7 +243,7 @@ fn fsharp_rejects_literal_types() {
 fn lowered_constructs_are_absent() {
     use generators::{attr, elements, flag, path};
     let inputs = ["tests/fixtures/shapes/api.d.ts", "examples/lowering.d.ts", "examples/features.d.ts", "lib.es5.d.ts"];
-    for target in ["fsharp", "ocaml", "rust", "c", "zig"] {
+    for target in ["fsharp", "ocaml", "rust", "c", "zig", "cpp"] {
         for input in inputs {
             // A bare `lib.*.d.ts` name selects a bundled library.
             let file = if input.starts_with("lib.") { PathBuf::from(input) } else { root().join(input) };
@@ -290,7 +320,9 @@ let instance;
 let passed = 0;
 const failed = [];
 const env = {{ ...makeEnv(() => instance), check: (ok, line) => (ok ? passed++ : failed.push('line ' + line)) }};
-({{ instance }} = await WebAssembly.instantiate(await (await fetch('./test.wasm')).arrayBuffer(), {{ env }}));
+const wasi = new Proxy({{}}, {{ get: () => () => 0 }});
+({{ instance }} = await WebAssembly.instantiate(await (await fetch('./test.wasm')).arrayBuffer(), {{ env, wasi_snapshot_preview1: wasi }}));
+instance.exports._initialize?.();
 instance.exports.run();
 const page = verify('{lang}');
 window.__result = {{ passed, failed, dom: page.problems, domChecks: page.checks }};
@@ -349,6 +381,24 @@ mod dom {
         let errors = String::from_utf8_lossy(&out.stderr);
         assert!(!out.status.success() && errors.contains("not compatible with any generic association"), "wrong.c should not compile:\n{errors}");
     }
+    #[test]
+    fn cpp() {
+        let Some(clang) = wasi_clang() else { return };
+        let c = dom_case("cpp");
+        let model = generators::wasm::model(&c.xml, "C++");
+        write_files(&c.out.join("bindings"), generators::cpp::files(&model));
+        fs::write(c.out.join("index.html"), wasm_page("cpp")).unwrap();
+        print!("{}", skipped(&model.skipped));
+        run(Command::new(&clang).args(CLANGXX_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")));
+        write_glue(&c, &model);
+        run_browser(&c);
+        // A listener of the wrong event type is a compile error.
+        let flags = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model"));
+        let out = Command::new(&clang).args(flags).arg("-fsyntax-only").arg("-I").arg(c.out.join("bindings")).arg(c.fixture.join("wrong.cpp")).output().unwrap();
+        let errors = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success() && errors.contains("no matching member function for call to 'addEventListener'"), "wrong.cpp should not compile:\n{errors}");
+    }
+
     #[test]
     fn fsharp() {
         let Some([fable]) = tools(["fable"]) else { return };

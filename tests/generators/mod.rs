@@ -3,6 +3,7 @@
 // a construct the config should have lowered fails the test.
 
 pub mod c;
+pub mod cpp;
 pub mod fsharp;
 pub mod wasm;
 pub mod zig;
