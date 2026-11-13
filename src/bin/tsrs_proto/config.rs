@@ -20,6 +20,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("union_params", "overloads", "union-typed parameters", "one overload per union member"),
     ("unions", "erase", "other unions", "their common supertype, or any"),
     ("overloads", "rename", "same-named members", "unique names, with jsName"),
+    ("keyed_params", "expand", "f<K extends keyof M>(key: K, value: M[K])", "one overload per key, the key a fixed argument"),
 ];
 
 const OVERLOAD_NAMES: &[&str] = &["with_params", "numbered"];
@@ -51,6 +52,7 @@ pub fn load(path: Option<&str>, overrides: &[String]) -> Result<Options, String>
                 }
                 ("limits", "union_param_overloads") => o.union_param_limit = count(&at, value)?,
                 ("limits", "intersection_members") => o.intersection_limit = count(&at, value)?,
+                ("limits", "keyed_overloads") => o.keyed_limit = count(&at, value)?,
                 ("naming", "separator") => o.separator = Box::leak(string(&at, value)?.to_string().into_boxed_str()),
                 ("naming", "overloads") => o.numbered_overloads = one_of(&at, value, OVERLOAD_NAMES)? == "numbered",
                 _ => return Err(format!("unknown setting `{at}`")),
@@ -92,9 +94,10 @@ pub fn template() -> String {
     out += &format!(
         "\n[limits]\n# Most overloads one signature may expand into through union parameters.\nunion_param_overloads = {}\n\
          # Largest merged intersection that is written out inline.\nintersection_members = {}\n\
+         # Most keys a keyed signature is expanded over.\nkeyed_overloads = {}\n\
          \n[naming]\n# Joins the parts of generated names.\nseparator = \"{}\"\n\
          # \"with_params\": f_with_x. \"numbered\": f_2.\noverloads = \"with_params\"\n",
-        d.union_param_limit, d.intersection_limit, d.separator
+        d.union_param_limit, d.intersection_limit, d.keyed_limit, d.separator
     );
     out
 }

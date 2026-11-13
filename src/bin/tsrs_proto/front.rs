@@ -25,6 +25,11 @@ pub struct Front<'c> {
     // Lowering: merge `A & B` into one object type.
     pub merge_intersections: bool,
     pub intersection_limit: usize,
+    // Lowering: expand a signature over the keys its type parameter may take.
+    pub expand_keyed: bool,
+    pub keyed_limit: usize,
+    // During expansion: the type parameter being replaced, and its key.
+    key_binding: Option<(TypeId, String)>,
     skip_alias: Option<P<Symbol>>,
 }
 
@@ -37,7 +42,7 @@ const DEFERRED: TypeFlags = TypeFlags::Index
 
 impl<'c> Front<'c> {
     pub fn new(c: &'c mut Checker, root_file: String) -> Self {
-        Front { c, root_file, seen: HashSet::new(), stats: BTreeMap::new(), computed_alias: HashMap::new(), in_progress: Vec::new(), merge_intersections: false, intersection_limit: 64, skip_alias: None }
+        Front { c, root_file, seen: HashSet::new(), stats: BTreeMap::new(), computed_alias: HashMap::new(), in_progress: Vec::new(), merge_intersections: false, intersection_limit: 64, expand_keyed: false, keyed_limit: 0, key_binding: None, skip_alias: None }
     }
 
     pub fn count(&mut self, what: &str) {
@@ -493,6 +498,23 @@ impl<'c> Front<'c> {
         ) {
             return Type::prim(t.as_intrinsic_type().intrinsic_name());
         }
+        // A type parameter being expanded is its key, and `M[K]` the type of that property.
+        if let Some((tp, key)) = self.key_binding.clone() {
+            if t.id() == tp {
+                return Type::Literal { kind: "string", value: key };
+            }
+            if f.intersects(TypeFlags::IndexedAccess) {
+                let ia = t.as_indexed_access_type();
+                if ia.index_type().is_some_and(|i| i.id() == tp)
+                    && let Some(object) = ia.object_type()
+                {
+                    return match self.c.get_type_of_property_of_type_exported(object, &key) {
+                        Some(p) => self.from_type(p),
+                        None => self.erased("missing key"),
+                    };
+                }
+            }
+        }
         if f.intersects(TypeFlags::TypeParameter) {
             if t.as_type_parameter().is_this_type() {
                 return Type::This;
@@ -640,11 +662,13 @@ impl<'c> Front<'c> {
             };
             if prop.flags().intersects(SymbolFlags::Method) {
                 for sig in self.c.get_signatures_of_type_exported(pty, SignatureKind::Call) {
-                    let mut m = Member::new(MemberKind::Method, name.clone());
-                    m.optional = prop.flags().intersects(SymbolFlags::Optional);
-                    m.from = from.clone();
-                    m.sig = Some(self.from_signature(*sig));
-                    out.push(m);
+                    for variant in self.keyed_variants(*sig) {
+                        let mut m = Member::new(MemberKind::Method, name.clone());
+                        m.optional = prop.flags().intersects(SymbolFlags::Optional);
+                        m.from = from.clone();
+                        m.sig = Some(variant);
+                        out.push(m);
+                    }
                 }
                 continue;
             }
@@ -662,9 +686,66 @@ impl<'c> Front<'c> {
         out
     }
 
+    // `on<K extends "a" | "b">(type: K, f: (ev: Map[K]) => void)`: one signature
+    // per key, the key a fixed argument and `Map[K]` its property's type.
+    fn keyed_variants(&mut self, sig: P<CSignature>) -> Vec<Signature> {
+        if self.expand_keyed
+            && let Some((tp, keys)) = self.keyed_parameter(sig)
+        {
+            self.count("expanded: keyed signature");
+            return keys
+                .into_iter()
+                .map(|key| {
+                    self.key_binding = Some((tp, key));
+                    let s = self.from_signature(sig);
+                    self.key_binding = None;
+                    s
+                })
+                .collect();
+        }
+        vec![self.from_signature(sig)]
+    }
+
+    // A type parameter constrained to a set of string keys and taken directly by a parameter.
+    fn keyed_parameter(&mut self, sig: P<CSignature>) -> Option<(TypeId, Vec<String>)> {
+        for tp in sig.type_parameters() {
+            let Some(k) = self.c.get_constraint_of_type_parameter_exported(*tp) else { continue };
+            let parts: Vec<P<CType>> = if k.flags().intersects(TypeFlags::Union) { k.types().to_vec() } else { vec![k] };
+            let keys: Option<Vec<String>> = parts
+                .iter()
+                .map(|p| match p.flags().intersects(TypeFlags::StringLiteral).then(|| p.as_literal_type().value()) {
+                    Some(Some(LiteralValue::String(s))) => Some(s.to_string()),
+                    _ => None,
+                })
+                .collect();
+            let Some(keys) = keys else { continue };
+            let taken = sig.parameters().iter().any(|p| self.c.get_type_of_symbol_exported(*p).id() == tp.id());
+            if taken && !keys.is_empty() && keys.len() <= self.keyed_limit {
+                return Some((tp.id(), keys));
+            }
+        }
+        None
+    }
+
+    // The string keys of a declared object type.
+    pub fn keys_of(&mut self, sym: P<Symbol>) -> Vec<String> {
+        let t = self.c.get_declared_type_of_symbol_exported(sym);
+        self.c.get_properties_of_type_exported(t).iter().map(|p| p.name()).filter(|n| !n.starts_with('\u{7f}')).map(str::to_string).collect()
+    }
+
+    // The type of one property of a declared object type.
+    pub fn property_type(&mut self, sym: P<Symbol>, key: &str) -> Type {
+        let t = self.c.get_declared_type_of_symbol_exported(sym);
+        match self.c.get_type_of_property_of_type_exported(t, key) {
+            Some(p) => self.from_type(p),
+            None => self.erased("missing key"),
+        }
+    }
+
     fn from_signature(&mut self, sig: P<CSignature>) -> Signature {
         let mut out = Signature::default();
-        for tp in sig.type_parameters() {
+        let bound = self.key_binding.as_ref().map(|b| b.0);
+        for tp in sig.type_parameters().iter().filter(|tp| Some(tp.id()) != bound) {
             out.type_params.push(TypeParam {
                 name: tp.symbol().map(|s| s.name().to_string()).unwrap_or_default(),
                 sym: tp.symbol(),
@@ -682,6 +763,13 @@ impl<'c> Front<'c> {
             let rest = sig.has_rest_parameter() && i == params.len() - 1;
             let optional = !rest && i >= sig.min_argument_count();
             let t = self.c.get_type_of_symbol_exported(*p);
+            // The parameter that takes the key being expanded is fixed to it.
+            if let Some((tp, key)) = &self.key_binding
+                && t.id() == *tp
+            {
+                out.params.push(Param { name: p.name().to_string(), optional, rest, constant: Some(key.clone()), ty: Type::prim("string") });
+                continue;
+            }
             let mut ty = self.from_type(t);
             if optional {
                 ty = strip_undefined(ty);

@@ -27,7 +27,7 @@ const Counter = struct {
     }
 };
 
-fn onClick(ctx: ?*anyopaque, _: b.JsValue) callconv(.c) b.JsValue {
+fn onClick(ctx: ?*anyopaque, _: b.PointerEvent) callconv(.c) b.JsValue {
     Counter.bump(@ptrCast(@alignCast(ctx)));
     return .{ .h = 0 };
 }
@@ -44,7 +44,9 @@ export fn run() void {
     const body = doc.get_body();
 
     // Create an element and put it in the page.
-    const box = doc.createElement_with_string("div");
+    // One method per tag, returning the tag's own element type.
+    const div: b.HTMLDivElement = doc.createElement_div();
+    const box = div.asHTMLElement();
     box.set_id("made-by-zig");
     box.set_textContent("hello from zig");
     const classes = b.JsArray.new();
@@ -60,21 +62,22 @@ export fn run() void {
     expect(strEq(seed.getAttribute("data-x").toString(), "42"), @src());
     expect(seed.getAttribute("data-missing").isNull(), @src());
     var text: [64]u8 = undefined;
-    const copy = doc.createElement_with_string("p");
+    const copy = doc.createElement_p().asHTMLElement();
     copy.set_textContent(seed.get_textContent().read(&text));
     _ = box.appendChild(copy.asNode());
 
     // A listener called by real clicks, then removed.
-    const button = doc.createElement_with_string("button");
+    const button = doc.createElement_button().asHTMLElement();
     button.set_textContent("press");
     _ = box.appendChild(button.asNode());
     clicks = .{ .box = box, .attribute = "data-count" };
-    const listener = b.HTMLElement_addEventListener_listener.from(onClick, &clicks);
-    button.addEventListener(.click, listener);
+    // One method per event, with the event's own type.
+    const listener = b.HTMLElement_PointerEvent_fn.from(onClick, &clicks);
+    button.addEventListener_click(listener);
     button.click();
     button.click();
     expect(clicks.count == 2, @src());
-    button.removeEventListener(.click, listener);
+    button.removeEventListener_click(listener);
     button.click();
     expect(clicks.count == 2, @src());
 
@@ -83,7 +86,7 @@ export fn run() void {
     pings = .{ .box = box, .attribute = "data-pings" };
     const once = b.AddEventListenerOptions.create();
     once.set_once(b.JsValue.boolean(true));
-    box.addEventListener_with_string_and_EventListenerOrEventListenerObject_and_options(
+    box.addEventListener_with_options(
         "ping",
         .{ .EventListener = b.EventListener.from(onPing, &pings) },
         .{ .AddEventListenerOptions = once },

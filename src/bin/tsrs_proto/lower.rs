@@ -26,6 +26,9 @@ pub struct Options {
     pub param_unions: bool,
     pub unions: bool,
     pub overloads: bool,
+    pub keyed: bool,
+    // Most keys a keyed signature is expanded over.
+    pub keyed_limit: usize,
     // Most overloads one signature may expand into through union parameters.
     pub union_param_limit: usize,
     // Largest merged intersection that is written out inline.
@@ -40,7 +43,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             classes: false, typeops: false, intersections: false, inheritance: false, generics: false, nullable: false,
-            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false,
+            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
         }
     }
@@ -62,6 +65,7 @@ impl Options {
             "union_params" => &mut self.param_unions,
             "unions" => &mut self.unions,
             "overloads" => &mut self.overloads,
+            "keyed_params" => &mut self.keyed,
             _ => return None,
         })
     }
@@ -70,11 +74,19 @@ impl Options {
 pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.merge_intersections = o.intersections;
     front.intersection_limit = o.intersection_limit;
+    front.expand_keyed = o.keyed;
+    front.keyed_limit = o.keyed_limit;
+    if o.keyed {
+        expand_keyed(front, decls, o);
+    }
     if o.classes {
         pair_classes(decls);
     }
     if o.inheritance {
         flatten(front, decls);
+    }
+    if o.keyed {
+        drop_unreachable_overloads(decls);
     }
     if o.typeops || o.intersections {
         evaluate(front, decls, o);
@@ -199,7 +211,14 @@ fn walk_members(members: &mut [Member], path: &mut Vec<String>, f: &mut TypeFn) 
             MemberKind::Call => "call".to_string(),
             MemberKind::Construct => "new".to_string(),
             MemberKind::Index => "index".to_string(),
-            _ => m.js_name.clone().unwrap_or_else(|| m.name.clone()),
+            // A fixed argument is part of what the member is: `addEventListener_click`.
+            _ => {
+                let mut seg = m.js_name.clone().unwrap_or_else(|| m.name.clone());
+                for c in m.sig.iter().flat_map(|s| s.params.iter().filter_map(|p| p.constant.as_deref())) {
+                    seg = format!("{seg}_{}", name_part(c));
+                }
+                seg
+            }
         };
         path.push(seg);
         if let Some(t) = &mut m.ty {
@@ -461,6 +480,143 @@ fn drop_type_functions(decls: &mut Vec<Decl>) {
         }
         _ => true,
     });
+}
+
+// ---- keyed signatures ----
+
+// `on<K extends keyof Map>(type: K, f: (ev: Map[K]) => void)`, written in the
+// source: one signature per key, with the key a fixed argument. Members the
+// checker builds are expanded as they are built (`Front::keyed_variants`).
+fn expand_keyed(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
+    let mut expanded = 0;
+    each_member_list(decls, &mut |members| {
+        let mut out = Vec::new();
+        for m in members.drain(..) {
+            match m.sig.as_ref().and_then(|s| keyed_variants(front, s, o.keyed_limit)) {
+                Some(variants) => {
+                    expanded += 1;
+                    out.extend(variants.into_iter().map(|s| Member { sig: Some(s), ..m.clone() }));
+                }
+                None => out.push(m),
+            }
+        }
+        *members = out;
+    });
+    expand_keyed_functions(front, decls, o.keyed_limit, &mut expanded);
+    *front.stats.entry("expanded: keyed signature".into()).or_default() += expanded;
+}
+
+fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize, expanded: &mut usize) {
+    let mut out = Vec::new();
+    for d in decls.drain(..) {
+        match d {
+            Decl::Function(f) => match keyed_variants(front, &f.sig, limit) {
+                Some(variants) => {
+                    *expanded += 1;
+                    out.extend(variants.into_iter().map(|sig| Decl::Function(Function { name: f.name.clone(), js_name: None, sig })));
+                }
+                None => out.push(Decl::Function(f)),
+            },
+            Decl::Namespace(mut n) => {
+                expand_keyed_functions(front, &mut n.decls, limit, expanded);
+                out.push(Decl::Namespace(n));
+            }
+            d => out.push(d),
+        }
+    }
+    *decls = out;
+}
+
+// TypeScript picks the first overload that matches a call, so an overload
+// whose parameters repeat an earlier one's can never be chosen. Expansion
+// makes these: `"a"` is a key of both the HTML and the SVG tag maps.
+fn drop_unreachable_overloads(decls: &mut Vec<Decl>) {
+    let call_key = |name: &str, s: &Signature| {
+        let params: Vec<String> = s.params.iter().map(|p| format!("{:?}{}{}{}", p.constant, p.optional, p.rest, type_key(&p.ty))).collect();
+        format!("{name}({})", params.join(","))
+    };
+    each_member_list(decls, &mut |members| {
+        let mut seen = HashSet::new();
+        members.retain(|m| m.kind != MemberKind::Method || m.sig.as_ref().is_none_or(|s| seen.insert(call_key(&m.name, s))));
+    });
+    fn functions(decls: &mut Vec<Decl>, key: &dyn Fn(&str, &Signature) -> String) {
+        let mut seen = HashSet::new();
+        decls.retain_mut(|d| match d {
+            Decl::Function(f) => seen.insert(key(&f.name, &f.sig)),
+            Decl::Namespace(n) => {
+                functions(&mut n.decls, key);
+                true
+            }
+            _ => true,
+        });
+    }
+    functions(decls, &call_key);
+}
+
+fn keyed_variants(front: &mut Front, sig: &Signature, limit: usize) -> Option<Vec<Signature>> {
+    for (i, tp) in sig.type_params.iter().enumerate() {
+        let Some(sym) = tp.sym else { continue };
+        let is_tp = |t: &Type| matches!(t, Type::Ref(r) if r.kind == "typeParameter" && r.sym == Some(sym));
+        if !sig.params.iter().any(|p| is_tp(&p.ty)) {
+            continue;
+        }
+        let keys: Vec<String> = match &tp.constraint {
+            // `keyof Map`, for a map that is not generic.
+            Some(Type::Op(op, _)) => match &**op {
+                Op::KeyOf(Type::Ref(m)) if m.args.is_empty() && m.kind != "typeParameter" => match m.sym {
+                    Some(s) => front.keys_of(s),
+                    None => continue,
+                },
+                _ => continue,
+            },
+            Some(t) => match t {
+                Type::Literal { kind: "string", value } => vec![value.clone()],
+                Type::Union(parts) => match parts.iter().map(|p| if let Type::Literal { kind: "string", value } = p { Some(value.clone()) } else { None }).collect() {
+                    Some(v) => v,
+                    None => continue,
+                },
+                _ => continue,
+            },
+            None => continue,
+        };
+        if keys.is_empty() || keys.len() > limit {
+            continue;
+        }
+        let variants = keys
+            .iter()
+            .map(|key| {
+                let mut s = sig.clone();
+                s.type_params.remove(i);
+                for p in &mut s.params {
+                    if is_tp(&p.ty) {
+                        p.constant = Some(key.clone());
+                        p.ty = Type::prim("string");
+                    }
+                }
+                let mut probe = std::mem::take(&mut s);
+                walk_signature(&mut probe, &mut Vec::new(), &mut |t, _| {
+                    if is_tp(t) {
+                        *t = Type::Literal { kind: "string", value: key.clone() };
+                        return false;
+                    }
+                    // `Map[K]` is the type of the key's property.
+                    if let Type::Op(op, _) = t
+                        && let Op::IndexedAccess(Type::Ref(m), index) = &**op
+                        && is_tp(index)
+                        && m.kind != "typeParameter"
+                        && let Some(ms) = m.sym
+                    {
+                        *t = front.property_type(ms, key);
+                        return false;
+                    }
+                    true
+                });
+                probe
+            })
+            .collect();
+        return Some(variants);
+    }
+    None
 }
 
 // Evaluation can put a union inside a union: `A | keyof B`.
@@ -781,6 +937,15 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         // The body of an alias, or of a `var`, already has the declaration's name.
         let mut bodies: HashSet<*const Type> = HashSet::new();
         collect_bodies(&decls[start..], &mut bodies);
+        // A callback type used in several places is named by what it takes,
+        // not by the first place it was found.
+        let mut uses: HashMap<String, usize> = HashMap::new();
+        walk(&mut decls[start..], &mut |t, _| {
+            if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
+                *uses.entry(type_key(t)).or_default() += 1;
+            }
+            true
+        });
         walk(&mut decls[start..], &mut |t, path| {
             let is_function = matches!(t, Type::Function(_) | Type::Constructor(_));
             if !(matches!(t, Type::Object(_)) || is_function) || bodies.contains(&(t as *const Type)) {
@@ -790,7 +955,12 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
             let (name, args) = by_key
                 .entry(key)
                 .or_insert_with(|| {
-                    let name = unique(path.join(sep), &mut names);
+                    let shared = uses.get(&type_key(t)).is_some_and(|n| *n > 1);
+                    let base = match t {
+                        Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep),
+                        _ => path.join(sep),
+                    };
+                    let name = unique(base, &mut names);
                     // Enclosing type parameters the type mentions become its own.
                     let free = free_type_params(t);
                     let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
@@ -815,6 +985,16 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         start = decls.len();
         decls.extend(added);
     }
+}
+
+// `(this: HTMLElement, ev: MouseEvent) => any` -> `HTMLElement_MouseEvent_fn`.
+fn callback_name(s: &Signature, sep: &str) -> String {
+    let mut parts: Vec<String> = s.this.iter().chain(s.params.iter().map(|p| &p.ty)).map(mnemonic).collect();
+    if parts.is_empty() {
+        parts.push("void".into());
+    }
+    parts.push("fn".into());
+    parts.join(sep)
 }
 
 fn decl_name(d: &Decl) -> Option<&str> {
@@ -958,42 +1138,83 @@ fn expand_functions(decls: &mut Vec<Decl>, o: Options) {
     *decls = out;
 }
 
-// Names for overloads, in the style of web-sys: `f`, `f_with_x`, `f_with_x_and_y`.
+// Names for overloads. An overload with fixed arguments is named by their
+// values: `createEvent_MouseEvent`. The first one without is the plain name;
+// each other one by the least that tells it apart: the parameters it adds
+// (`f_with_options`), else the one type that differs (`f_with_Blob`), else a number.
 fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, o: Options) -> Vec<String> {
     let sep = o.separator;
-    let first = sigs[0];
-    let with = format!("{sep}with{sep}");
-    let and = format!("{sep}and{sep}");
-    // A fixed argument names its overload: `createEvent_with_MouseEvent`.
     let constants = |s: &Signature| -> Vec<String> { s.params.iter().filter_map(|p| p.constant.as_deref()).map(name_part).collect() };
-    let mut out = vec![if constants(first).is_empty() || o.numbered_overloads { base.to_string() } else { unique(format!("{base}{with}{}", constants(first).join(&and)), taken) }];
-    for (n, s) in sigs.iter().enumerate().skip(1) {
+    // Overloads with the same fixed values are named as a family of their own,
+    // after the values: `addEventListener_click`, `addEventListener_click_with_options`.
+    let mut out = vec![String::new(); sigs.len()];
+    let mut families: Vec<(Vec<String>, Vec<usize>)> = Vec::new();
+    for (i, s) in sigs.iter().enumerate() {
+        let key = constants(s);
+        match families.iter_mut().find(|f| f.0 == key) {
+            Some(f) => f.1.push(i),
+            None => families.push((key, vec![i])),
+        }
+    }
+    for (fixed, members) in families {
+        let family_base = if fixed.is_empty() || o.numbered_overloads { base.to_string() } else { format!("{base}{sep}{}", fixed.join(sep)) };
+        let family: Vec<&Signature> = members.iter().map(|&i| sigs[i]).collect();
+        let names = family_names(&family_base, &family, fixed.is_empty(), taken, o);
+        for (i, name) in members.into_iter().zip(names) {
+            out[i] = name;
+        }
+    }
+    out
+}
+
+// Names for overloads that share their fixed values. The first takes `base`;
+// `base_taken` says whether it is already the member's own name.
+fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut HashSet<String>, o: Options) -> Vec<String> {
+    let sep = o.separator;
+    let first = sigs[0];
+    let mut out = Vec::new();
+    for (n, s) in sigs.iter().enumerate() {
+        if n == 0 {
+            out.push(if base_taken { base.to_string() } else { unique(base.to_string(), taken) });
+            continue;
+        }
         if o.numbered_overloads {
             out.push(unique(format!("{base}{sep}{}", n + 1), taken));
             continue;
         }
-        let differing: Vec<&Param> = s
+        let with = |parts: Vec<String>| format!("{base}{sep}with{sep}{}", parts.join(&format!("{sep}and{sep}")));
+        let names = |s: &Signature| s.params.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+        // Overloads with the same parameter names: the first is named by what
+        // it adds, the others by the types that vary among them.
+        let group: Vec<&Signature> = sigs.iter().copied().filter(|t| names(t) == names(s)).collect();
+        let varying: Vec<String> = (0..s.params.len())
+            .filter(|&i| group.iter().any(|t| type_key(&t.params[i].ty) != type_key(&s.params[i].ty)))
+            .map(|i| mnemonic(&s.params[i].ty))
+            .collect();
+        let leads = std::ptr::eq(group[0], *s);
+        // Parameters the plain overload does not have. When they only extend
+        // it (`f(a)`, `f(a, b, c)`), the last one says it: `f_with_c`.
+        let mut added: Vec<String> = s.params.iter().filter(|p| !first.params.iter().any(|q| q.name == p.name)).map(|p| p.name.clone()).collect();
+        let extends = s.params.len() > first.params.len() && first.params.iter().zip(&s.params).all(|(a, b)| a.name == b.name && type_key(&a.ty) == type_key(&b.ty));
+        if extends && added.len() > 1 {
+            added = vec![added.pop().unwrap()];
+        }
+        // Parameters whose type differs from the plain overload's.
+        let retyped: Vec<String> = s
             .params
             .iter()
             .enumerate()
-            .filter(|(i, p)| first.params.get(*i).is_none_or(|q| q.name != p.name || q.constant != p.constant || type_key(&q.ty) != type_key(&p.ty)))
-            .map(|(_, p)| p)
+            .filter(|(i, p)| first.params.get(*i).is_none_or(|q| type_key(&q.ty) != type_key(&p.ty)))
+            .map(|(_, p)| mnemonic(&p.ty))
             .collect();
-        // `f(x: string)` / `f(x: number)`: the name says nothing, the type does.
-        let part = |p: &Param| match &p.constant {
-            Some(c) => name_part(c),
-            None if first.params.iter().any(|q| q.name == p.name) => mnemonic(&p.ty),
-            None => p.name.clone(),
-        };
-        let mut name = if differing.is_empty() {
-            format!("{base}{sep}{}", s.params.len())
-        } else {
-            format!("{base}{sep}with{sep}{}", differing.iter().map(|p| part(p)).collect::<Vec<_>>().join(&format!("{sep}and{sep}")))
-        };
-        // Same parameter names, different types: name the types.
-        if taken.contains(&name) {
-            name = format!("{name}{sep}{}", differing.iter().map(|p| mnemonic(&p.ty)).collect::<Vec<_>>().join(sep));
-        }
+        let candidates = [
+            (leads && !added.is_empty()).then(|| with(added.clone())),
+            (!leads && !varying.is_empty()).then(|| with(varying.clone())),
+            (!added.is_empty()).then(|| with(added.clone())),
+            retyped.last().map(|t| with(vec![t.clone()])),
+            (!retyped.is_empty()).then(|| with(retyped.clone())),
+        ];
+        let name = candidates.into_iter().flatten().find(|c| !taken.contains(c)).unwrap_or_else(|| format!("{base}{sep}{}", n + 1));
         out.push(unique(name, taken));
     }
     out
@@ -1001,6 +1222,8 @@ fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, 
 
 // A value as part of a name: `2d`, `image_png`.
 fn name_part(value: &str) -> String {
+    // A URL is known by its last part: `http://www.w3.org/2000/svg` -> `svg`.
+    let value = if value.contains("://") { value.trim_end_matches('/').rsplit('/').next().unwrap_or(value) } else { value };
     let s: String = value.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
     if s.is_empty() { "empty".into() } else { s }
 }
@@ -1035,9 +1258,11 @@ fn rename_members(members: &mut [Member], o: Options) {
         let base = members[idx[0]].name.clone();
         let sigs: Vec<&Signature> = idx.iter().map(|i| members[*i].sig.as_ref().unwrap()).collect();
         let names = overload_names(&base, &sigs, &mut taken, o);
-        for (i, name) in idx.into_iter().zip(names).skip(1) {
-            members[i].js_name = Some(base.clone());
-            members[i].name = name;
+        for (i, name) in idx.into_iter().zip(names) {
+            if name != base {
+                members[i].js_name = Some(base.clone());
+                members[i].name = name;
+            }
         }
     }
 }
@@ -1061,8 +1286,10 @@ fn rename_functions(decls: &mut [Decl], o: Options) {
     for (base, idx) in groups.into_iter().filter(|g| g.1.len() > 1) {
         let sigs: Vec<&Signature> = idx.iter().map(|i| if let Decl::Function(f) = &decls[*i] { &f.sig } else { unreachable!() }).collect();
         let names = overload_names(&base, &sigs, &mut taken, o);
-        for (i, name) in idx.into_iter().zip(names).skip(1) {
-            if let Decl::Function(f) = &mut decls[i] {
+        for (i, name) in idx.into_iter().zip(names) {
+            if let Decl::Function(f) = &mut decls[i]
+                && name != base
+            {
                 f.js_name = Some(base.clone());
                 f.name = name;
             }

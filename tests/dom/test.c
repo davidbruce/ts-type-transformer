@@ -27,7 +27,7 @@ static void bump(Counter* counter) {
     HTMLElement_setAttribute(counter->box, counter->attribute, digits);
 }
 
-static JsValue on_click(void* ctx, JsValue ev) {
+static JsValue on_click(void* ctx, PointerEvent ev) {
     bump(ctx);
     return (JsValue){ 0 };
 }
@@ -41,7 +41,9 @@ __attribute__((export_name("run"))) void run(void) {
     HTMLElement body = Document_get_body(doc);
 
     // Create an element and put it in the page.
-    HTMLElement box = Document_createElement_with_string(doc, "div");
+    // One method per tag, returning the tag's own element type.
+    HTMLDivElement div = Document_createElement_div(doc);
+    HTMLElement box = HTMLDivElement_as_HTMLElement(div);
     HTMLElement_set_id(box, "made-by-c");
     HTMLElement_set_textContent(box, "hello from c");
     JsArray classes = JsArray_new();
@@ -60,21 +62,22 @@ __attribute__((export_name("run"))) void run(void) {
     JsString seed_text = HTMLElement_get_textContent(seed);
     JsString_read(seed_text, text);
     text[JsString_len(seed_text)] = 0;
-    HTMLElement copy = Document_createElement_with_string(doc, "p");
+    HTMLElement copy = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc));
     HTMLElement_set_textContent(copy, text);
     HTMLElement_appendChild(box, HTMLElement_as_Node(copy));
 
     // A listener called by real clicks, then removed.
-    HTMLElement button = Document_createElement_with_string(doc, "button");
+    HTMLElement button = HTMLButtonElement_as_HTMLElement(Document_createElement_button(doc));
     HTMLElement_set_textContent(button, "press");
     HTMLElement_appendChild(box, HTMLElement_as_Node(button));
     clicks = (Counter){ box, "data-count", 0 };
-    HTMLElement_addEventListener_listener listener = HTMLElement_addEventListener_listener_from(on_click, &clicks);
-    HTMLElement_addEventListener(button, HTMLAnchorElement_addEventListener_type_click, listener);
+    // One method per event, with the event's own type.
+    HTMLElement_PointerEvent_fn listener = HTMLElement_PointerEvent_fn_from(on_click, &clicks);
+    HTMLElement_addEventListener_click(button, listener);
     HTMLElement_click(button);
     HTMLElement_click(button);
     CHECK(clicks.count == 2);
-    HTMLElement_removeEventListener(button, HTMLAnchorElement_addEventListener_type_click, listener);
+    HTMLElement_removeEventListener_click(button, listener);
     HTMLElement_click(button);
     CHECK(clicks.count == 2);
 
@@ -83,7 +86,7 @@ __attribute__((export_name("run"))) void run(void) {
     AddEventListenerOptions once = AddEventListenerOptions_create();
     AddEventListenerOptions_set_once(once, js_bool(true));
     JsValue ping_listener = { EventListener_from(on_ping, &pings).h };
-    HTMLElement_addEventListener_with_string_and_EventListenerOrEventListenerObject_and_options_string_EventListenerOrEventListenerObject_AddEventListenerOptions(box, "ping", ping_listener, once);
+    HTMLElement_addEventListener_with_AddEventListenerOptions(box, "ping", ping_listener, once);
     HTMLElement_dispatchEvent(box, Event_new("ping"));
     HTMLElement_dispatchEvent(box, Event_new("ping"));
     CHECK(pings.count == 1);
