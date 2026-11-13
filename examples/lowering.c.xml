@@ -12,7 +12,7 @@
         <primitive name="void"/>
       </returns>
     </method>
-    <method name="on_with_type" jsName="on">
+    <method name="on_with_number" jsName="on">
       <parameter name="type">
         <primitive name="number"/>
       </parameter>
@@ -23,7 +23,7 @@
         <primitive name="void"/>
       </returns>
     </method>
-    <method name="on_with_type_symbol" jsName="on">
+    <method name="on_with_symbol" jsName="on">
       <parameter name="type">
         <primitive name="symbol"/>
       </parameter>
@@ -55,12 +55,12 @@
     <ancestor name="Emitter"/>
     <constructor name="new">
       <parameter name="kind">
-        <ref name="Shape_new_kind" kind="enum"/>
+        <ref name="Shape_kind" kind="enum"/>
       </parameter>
     </constructor>
     <constructor name="new_with_size" jsName="new">
       <parameter name="kind">
-        <ref name="Shape_new_kind" kind="enum"/>
+        <ref name="Shape_kind" kind="enum"/>
       </parameter>
       <parameter name="size">
         <primitive name="number"/>
@@ -72,7 +72,7 @@
       </returns>
     </method>
     <property name="kind" readonly="true">
-      <ref name="Shape_new_kind" kind="enum"/>
+      <ref name="Shape_kind" kind="enum"/>
     </property>
     <method name="area">
       <returns>
@@ -84,8 +84,8 @@
         <primitive name="number"/>
       </parameter>
       <returns>
-        <nullable>
-          <ref name="Shape" kind="interface"/>
+        <nullable absent="null">
+          <ref name="Shape" kind="class"/>
         </nullable>
       </returns>
     </method>
@@ -97,8 +97,8 @@
         <ref name="Point" kind="interface"/>
       </parameter>
       <returns>
-        <nullable>
-          <ref name="Shape" kind="interface"/>
+        <nullable absent="null">
+          <ref name="Shape" kind="class"/>
         </nullable>
       </returns>
     </method>
@@ -117,21 +117,21 @@
         </tuple>
       </parameter>
       <returns>
-        <nullable>
-          <ref name="Shape" kind="interface"/>
+        <nullable absent="null">
+          <ref name="Shape" kind="class"/>
         </nullable>
       </returns>
     </method>
-    <method name="scale_with_factor" jsName="scale">
+    <method name="scale_with_Shape_scale_factor" jsName="scale">
       <parameter name="factor">
         <ref name="Shape_scale_factor" kind="interface"/>
       </parameter>
       <returns>
-        <ref name="Shape" kind="interface"/>
+        <ref name="Shape" kind="class"/>
       </returns>
     </method>
     <property name="onchange">
-      <nullable>
+      <nullable absent="null">
         <ref name="Shape_onchange" kind="typeAlias"/>
       </nullable>
     </property>
@@ -184,7 +184,7 @@
       </returns>
     </functionType>
   </typeAlias>
-  <enum name="Shape_new_kind" synthetic="true">
+  <enum name="Shape_kind" synthetic="true">
     <member name="circle" type="string" value="circle"/>
     <member name="square" type="string" value="square"/>
   </enum>
@@ -243,7 +243,7 @@
   <typeAlias name="Shape_on_listener" synthetic="true">
     <functionType>
       <this>
-        <ref name="Shape" kind="interface"/>
+        <ref name="Shape" kind="class"/>
       </this>
       <parameter name="ev">
         <ref name="Event" kind="interface" file="lib.dom.d.ts"/>

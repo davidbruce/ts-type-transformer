@@ -57,7 +57,7 @@
     </extends>
     <constructor name="new">
       <parameter name="kind">
-        <ref name="Shape_new_kind" kind="enum"/>
+        <ref name="Shape_kind" kind="enum"/>
       </parameter>
       <parameter name="size" optional="true">
         <primitive name="number"/>
@@ -69,7 +69,7 @@
       </returns>
     </method>
     <property name="kind" readonly="true">
-      <ref name="Shape_new_kind" kind="enum"/>
+      <ref name="Shape_kind" kind="enum"/>
     </property>
     <method name="area">
       <returns>
@@ -94,7 +94,7 @@
         </union>
       </parameter>
       <returns>
-        <nullable>
+        <nullable absent="null">
           <ref name="Shape" kind="class"/>
         </nullable>
       </returns>
@@ -115,7 +115,7 @@
       </returns>
     </method>
     <property name="onchange">
-      <nullable>
+      <nullable absent="null">
         <functionType>
           <parameter name="ev">
             <ref name="Event" kind="interface" file="lib.dom.d.ts"/>
@@ -173,7 +173,7 @@
       </returns>
     </functionType>
   </typeAlias>
-  <enum name="Shape_new_kind" synthetic="true">
+  <enum name="Shape_kind" synthetic="true">
     <member name="circle" type="string" value="circle"/>
     <member name="square" type="string" value="square"/>
   </enum>

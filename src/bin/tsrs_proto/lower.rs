@@ -134,6 +134,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         each_member_list(decls, &mut |members| rename_members(members, o));
         rename_functions(decls, o);
     }
+    if o.classes {
+        mark_class_refs(decls);
+    }
 }
 
 // ---- traversal ----
@@ -243,7 +246,7 @@ fn walk_type(t: &mut Type, path: &mut Vec<String>, f: &mut TypeFn) {
         Type::Primitive(_) | Type::Erased(_) | Type::Literal { .. } | Type::This => {}
         Type::Ref(r) => r.args.iter_mut().for_each(|a| walk_type(a, path, f)),
         Type::Union(ts) | Type::Intersection(ts, _) => ts.iter_mut().for_each(|a| walk_type(a, path, f)),
-        Type::Array(inner) | Type::Readonly(inner) | Type::Nullable(inner) => walk_type(inner, path, f),
+        Type::Array(inner) | Type::Readonly(inner) | Type::Nullable(inner, _) => walk_type(inner, path, f),
         Type::Tuple(els) => els.iter_mut().for_each(|e| walk_type(&mut e.ty, path, f)),
         Type::Function(sig) | Type::Constructor(sig) => walk_signature(sig, path, f),
         Type::Object(members) => walk_members(members, path, f),
@@ -335,7 +338,6 @@ fn pair_classes(decls: &mut Vec<Decl>) {
         classes.insert(v.name.clone(), class);
         false
     });
-    let names: HashSet<String> = classes.keys().cloned().collect();
     for d in decls.iter_mut() {
         match d {
             Decl::Interface(i) => i.class = classes.remove(&i.name),
@@ -343,10 +345,26 @@ fn pair_classes(decls: &mut Vec<Decl>) {
             _ => {}
         }
     }
+}
+
+// References to a paired interface are references to a class. Runs last:
+// later passes bring in references the checker made.
+fn mark_class_refs(decls: &mut [Decl]) {
+    fn collect(decls: &[Decl], out: &mut HashSet<P<Symbol>>) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) if i.class.is_some() => out.extend(i.sym),
+                Decl::Namespace(n) => collect(&n.decls, out),
+                _ => {}
+            }
+        }
+    }
+    let mut classes = HashSet::new();
+    collect(decls, &mut classes);
     walk(decls, &mut |t, _| {
         if let Type::Ref(r) = t
             && r.kind == "interface"
-            && names.contains(&r.name)
+            && r.sym.is_some_and(|s| classes.contains(&s))
         {
             r.kind = "class";
         }
@@ -523,16 +541,19 @@ fn for_each_type_params(decls: &mut [Decl], f: &mut dyn FnMut(&mut Vec<TypeParam
 fn nullable(t: &mut Type) {
     let Type::Union(parts) = t else { return };
     let is_null = |p: &Type| p.is_prim("null") || p.is_prim("undefined");
-    if !parts.iter().any(is_null) {
-        return;
-    }
+    let absent = match (parts.iter().any(|p| p.is_prim("null")), parts.iter().any(|p| p.is_prim("undefined"))) {
+        (true, true) => Absent::Either,
+        (true, false) => Absent::Null,
+        (false, true) => Absent::Undefined,
+        (false, false) => return,
+    };
     let mut rest: Vec<Type> = parts.drain(..).filter(|p| !is_null(p)).collect();
     let inner = match rest.len() {
         0 => Type::prim("null"),
         1 => rest.pop().unwrap(),
         _ => Type::Union(rest),
     };
-    *t = Type::Nullable(Box::new(inner));
+    *t = Type::Nullable(Box::new(inner), absent);
 }
 
 // ---- literals ----
@@ -551,24 +572,33 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
             }
         }
     });
+    // The same set of strings can appear in several places: name it after
+    // the shortest (`Shape.kind` over `Shape.new.kind`).
+    let mut best: HashMap<Vec<String>, Vec<String>> = HashMap::new();
     walk(decls, &mut |t, path| {
+        if let Some(strings) = string_union(t) {
+            let known = best.entry(strings).or_insert_with(|| path.to_vec());
+            if path.len() < known.len() {
+                *known = path.to_vec();
+            }
+            return false;
+        }
+        true
+    });
+    walk(decls, &mut |t, _| {
+        if let Some(strings) = string_union(t) {
+            let path = &best[&strings];
+            let name = by_values.entry(strings.clone()).or_insert_with(|| {
+                let name = unique(path.join(sep), &mut names);
+                let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone() }).collect();
+                enums.push(Enum { name: name.clone(), members, synthetic: true });
+                name
+            });
+            *t = Type::synthetic_ref(name.clone(), "enum", vec![]);
+            return false;
+        }
         match t {
             Type::Union(parts) => {
-                let strings: Vec<String> = parts
-                    .iter()
-                    .filter_map(|p| if let Type::Literal { kind: "string", value } = p { Some(value.clone()) } else { None })
-                    .collect();
-                if strings.len() == parts.len() && strings.len() > 1 {
-                    // A closed set of strings is an enum, named after where it appears.
-                    let name = by_values.entry(strings.clone()).or_insert_with(|| {
-                        let name = unique(path.join(sep), &mut names);
-                        let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone() }).collect();
-                        enums.push(Enum { name: name.clone(), members, synthetic: true });
-                        name
-                    });
-                    *t = Type::synthetic_ref(name.clone(), "enum", vec![]);
-                    return false;
-                }
                 // Mixed unions: widen the literals and drop duplicates.
                 let mut seen = HashSet::new();
                 widened += parts.iter().filter(|p| matches!(p, Type::Literal { .. })).count();
@@ -602,6 +632,14 @@ fn remove_enum_aliases(decls: &mut Vec<Decl>, enums: &HashSet<&str>) {
         }
         _ => true,
     });
+}
+
+// The values of a union made only of string literals: a closed set.
+fn string_union(t: &Type) -> Option<Vec<String>> {
+    let Type::Union(parts) = t else { return None };
+    let strings: Vec<String> =
+        parts.iter().filter_map(|p| if let Type::Literal { kind: "string", value } = p { Some(value.clone()) } else { None }).collect();
+    (strings.len() == parts.len() && strings.len() > 1).then_some(strings)
 }
 
 fn widen(t: &mut Type) {
@@ -708,10 +746,10 @@ fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
         for s in out {
             let mut variants = vec![s.clone()];
             for (i, p) in s.params.iter().enumerate() {
-                let (parts, wrap): (&[Type], bool) = match &p.ty {
-                    Type::Union(parts) => (parts, false),
-                    Type::Nullable(inner) => match &**inner {
-                        Type::Union(parts) => (parts, true),
+                let (parts, wrap): (&[Type], Option<Absent>) = match &p.ty {
+                    Type::Union(parts) => (parts, None),
+                    Type::Nullable(inner, absent) => match &**inner {
+                        Type::Union(parts) => (parts, Some(*absent)),
                         _ => continue,
                     },
                     _ => continue,
@@ -725,7 +763,10 @@ fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
                     .flat_map(|v| {
                         parts.iter().map(move |part| {
                             let mut v = v.clone();
-                            v.params[i].ty = if wrap { Type::Nullable(Box::new(part.clone())) } else { part.clone() };
+                            v.params[i].ty = match wrap {
+                                Some(absent) => Type::Nullable(Box::new(part.clone()), absent),
+                                None => part.clone(),
+                            };
                             v
                         })
                     })
@@ -797,10 +838,12 @@ fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, 
             .filter(|(i, p)| first.params.get(*i).is_none_or(|q| q.name != p.name || type_key(&q.ty) != type_key(&p.ty)))
             .map(|(_, p)| p)
             .collect();
+        // `f(x: string)` / `f(x: number)`: the name says nothing, the type does.
+        let part = |p: &Param| if first.params.iter().any(|q| q.name == p.name) { mnemonic(&p.ty) } else { p.name.clone() };
         let mut name = if differing.is_empty() {
             format!("{base}{sep}{}", s.params.len())
         } else {
-            format!("{base}{sep}with{sep}{}", differing.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(&format!("{sep}and{sep}")))
+            format!("{base}{sep}with{sep}{}", differing.iter().map(|p| part(p)).collect::<Vec<_>>().join(&format!("{sep}and{sep}")))
         };
         // Same parameter names, different types: name the types.
         if taken.contains(&name) {
@@ -816,7 +859,7 @@ fn mnemonic(t: &Type) -> String {
         Type::Primitive(n) => n.clone(),
         Type::Ref(r) => r.name.clone(),
         Type::Array(inner) => format!("{}_array", mnemonic(inner)),
-        Type::Nullable(inner) => format!("opt_{}", mnemonic(inner)),
+        Type::Nullable(inner, _) => format!("opt_{}", mnemonic(inner)),
         Type::Function(_) => "fn".into(),
         Type::Tuple(_) => "tuple".into(),
         Type::Erased(_) => "any".into(),

@@ -22,10 +22,19 @@ pub enum Type {
     Object(Vec<Member>),
     Readonly(Box<Type>),
     This,
-    // Lowered form of `T | null | undefined`.
-    Nullable(Box<Type>),
+    // Lowered form of `T | null | undefined`, with which of the two it was.
+    Nullable(Box<Type>, Absent),
     // Type-level expression; only the checker can evaluate it.
     Op(Box<Op>, Option<P<Node>>),
+}
+
+// The value that stands for "no value". APIs that check `=== null` reject
+// `undefined` and the reverse, so a binding must send the right one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Absent {
+    Null,
+    Undefined,
+    Either,
 }
 
 #[derive(Clone)]

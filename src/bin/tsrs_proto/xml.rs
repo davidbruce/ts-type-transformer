@@ -252,7 +252,16 @@ impl Xml {
             Type::Intersection(ts, _) => self.wrap("intersection", &ts.iter().collect::<Vec<_>>()),
             Type::Array(el) => self.wrap("array", &[el]),
             Type::Readonly(inner) => self.wrap("readonly", &[inner]),
-            Type::Nullable(inner) => self.wrap("nullable", &[inner]),
+            Type::Nullable(inner, absent) => {
+                let absent = match absent {
+                    Absent::Null => "null",
+                    Absent::Undefined => "undefined",
+                    Absent::Either => "either",
+                };
+                self.open("nullable", &vec![("absent", absent)]);
+                self.ty(inner);
+                self.close("nullable");
+            }
             Type::This => self.leaf("this", &vec![]),
             Type::Tuple(els) => {
                 self.open("tuple", &vec![]);

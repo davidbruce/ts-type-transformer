@@ -47,7 +47,7 @@ are errors. Example targets are in `examples/targets/`.
 | `intersections` | `merge` | `A & B` | one merged object type | yes |
 | `inheritance` | `flatten` | `<extends>` | inherited members copied in, base type arguments applied; `<ancestor>` list kept | yes |
 | `generics` | `erase` | type parameters | their constraint, or `any` | no |
-| `nullable` | `wrap` | `T \| null \| undefined` | `<nullable>` | no |
+| `nullable` | `wrap` | `T \| null \| undefined` | `<nullable absent="null\|undefined\|either">` | no |
 | `literals` | `enum` | literal types | string unions -> `<enum>`, constants -> `const=`, others widened | no |
 | `anonymous` | `hoist` | inline object and function types | named synthetic declarations | no |
 | `optional_params` | `overloads` | optional parameters | one overload per arity | no |
@@ -85,6 +85,23 @@ with each example target:
 | `any` introduced (`lossy`) | 0 | 2 | 2 | 329 | 1433 |
 | output lines | 102k | 100k | 100k | 126k | 508k |
 
+## Tests
+
+`cargo test` runs `tests/e2e.rs`. For each tested target (F# via Fable, C and
+Zig via wasm32) it:
+
+1. lowers `tests/fixtures/<name>/api.d.ts` with `examples/targets/<target>.toml`;
+2. generates bindings with a reference generator in `tests/generators/`;
+3. compiles them with the real toolchain;
+4. runs `test.fs` / `test.c` / `test.zig` against the fixture's `impl.mjs` in Node.
+
+The generators are thin on purpose: they print what the config produced and
+panic on anything else. If a generator needs to be clever, the config or the
+XML is wrong. `*_rejects_*` tests pin that strictness, and
+`lowered_constructs_are_absent` checks every config on larger inputs.
+
+A missing toolchain skips its target with a message.
+
 ## Known gaps
 
 - Synthetic names come from the first place a type appears (`Shape_new_kind`). Not stable or pretty.
@@ -92,6 +109,6 @@ with each example target:
 - A union with no common supertype (`string | number`) becomes `any`.
 - Tuples, and object types that are a `var`'s own type, are never hoisted.
 - Output is not closed: references to other files (`Promise`) are not pulled in.
-- The example targets are guesses. No generator has consumed any output yet.
+- Only the `fsharp`, `c` and `zig` example targets are tested, and only on one small fixture.
 - Each construct has one lowering strategy so far. Values are strings so more can be added
   (`unions = "tagged"`, `generics = "monomorphize"`).

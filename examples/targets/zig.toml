@@ -1,0 +1,12 @@
+# Example target: as c.toml, but with tagged unions.
+[constructs]
+classes = "pair"
+type_ops = "evaluate"
+intersections = "merge"
+inheritance = "flatten"
+generics = "erase"
+nullable = "wrap"
+literals = "enum"
+anonymous = "hoist"
+optional_params = "overloads"
+overloads = "rename"
