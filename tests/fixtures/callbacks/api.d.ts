@@ -11,3 +11,6 @@ interface Counter {
 declare var Counter: { prototype: Counter; new(): Counter };
 declare function later(f: () => void): void;
 declare function flush(): number;
+// A callback taking a union.
+type Id = number | string;
+declare function eachId(f: (id: Id) => void): number;

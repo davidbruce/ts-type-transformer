@@ -983,8 +983,9 @@ fn raw_callback(t: &Ty) -> &'static str {
 fn raise_callback(t: &Ty, a: &str, unions: &[NamedUnion]) -> String {
     match t {
         Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Str => raise(t, a, unions),
-        Ty::NamedUnion(_) | Ty::Union(_) => format!("ts::Value(ts::handle, {a})"),
-        Ty::Generic(n, _) if is_union(n, unions) => format!("ts::Value(ts::handle, {a})"),
+        // A union that can be decoded is the variant; any other a value.
+        Ty::NamedUnion(n) | Ty::Generic(n, _) if decodable(n, unions) => format!("ts::from_handle<ts::dep<F, {}>>({a})", ty_out(t, unions)),
+        Ty::NamedUnion(_) | Ty::Union(_) | Ty::Generic(..) if !matches!(t, Ty::Generic(n, _) if !is_union(n, unions)) => format!("ts::Value(ts::handle, {a})"),
         t => format!("ts::from_handle<ts::dep<F, {}>>({a})", ty_out(t, unions)),
     }
 }

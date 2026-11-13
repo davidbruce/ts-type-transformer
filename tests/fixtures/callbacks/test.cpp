@@ -49,4 +49,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(ran == 0);
     CHECK(flush() == 2);
     CHECK(ran == 2);
+
+    // A union argument arrives as the variant.
+    double number = 0;
+    std::string text;
+    CHECK(eachId([&](Id id) {
+        if (auto* n = std::get_if<double>(&id)) number = *n;
+        else text = std::get<std::string>(id);
+    }) == 2);
+    CHECK(number == 1 && text == "two");
 }

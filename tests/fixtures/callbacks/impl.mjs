@@ -23,3 +23,8 @@ globalThis.flush = () => {
     for (const f of pending.splice(0)) f();
     return n;
 };
+globalThis.eachId = f => {
+    f(1);
+    f("two");
+    return 2;
+};
