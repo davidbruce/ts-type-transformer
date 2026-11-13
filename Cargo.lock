@@ -1277,6 +1277,7 @@ dependencies = [
  "tsrs_checker",
  "tsrs_compiler",
  "tsrs_core",
+ "tsrs_scanner",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]

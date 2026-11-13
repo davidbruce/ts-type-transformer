@@ -1,113 +1,275 @@
-<interface name="AbortSignal">
-  <extends type="EventTarget"/>
-  <property name="aborted" type="boolean" readonly="true"/>
-  <property name="onabort" type="((this: AbortSignal, ev: Event) =&gt; any) | null"/>
-  <property name="reason" type="any" readonly="true"/>
-  <method name="throwIfAborted">
-    <returns type="void"/>
-  </method>
-  <method name="addEventListener">
-    <typeParameter name="K" extends="&quot;abort&quot;"/>
-    <parameter name="type" type="K"/>
-    <parameter name="listener" type="(this: AbortSignal, ev: AbortSignalEventMap[K]) =&gt; any"/>
-    <parameter name="options" type="boolean | AddEventListenerOptions | undefined" optional="true"/>
-    <returns type="void"/>
-  </method>
-  <method name="addEventListener">
-    <parameter name="type" type="string"/>
-    <parameter name="listener" type="EventListenerOrEventListenerObject"/>
-    <parameter name="options" type="boolean | AddEventListenerOptions | undefined" optional="true"/>
-    <returns type="void"/>
-  </method>
-  <method name="removeEventListener">
-    <typeParameter name="K" extends="&quot;abort&quot;"/>
-    <parameter name="type" type="K"/>
-    <parameter name="listener" type="(this: AbortSignal, ev: AbortSignalEventMap[K]) =&gt; any"/>
-    <parameter name="options" type="boolean | EventListenerOptions | undefined" optional="true"/>
-    <returns type="void"/>
-  </method>
-  <method name="removeEventListener">
-    <parameter name="type" type="string"/>
-    <parameter name="listener" type="EventListenerOrEventListenerObject"/>
-    <parameter name="options" type="boolean | EventListenerOptions | undefined" optional="true"/>
-    <returns type="void"/>
-  </method>
-  <method name="dispatchEvent">
-    <parameter name="event" type="Event"/>
-    <returns type="boolean"/>
-  </method>
-</interface>
-<interface name="NodeListOf">
-  <typeParameter name="TNode" extends="Node"/>
-  <extends type="NodeList"/>
-  <index key="number" type="TNode"/>
-  <method name="item">
-    <parameter name="index" type="number"/>
-    <returns type="TNode"/>
-  </method>
-  <method name="forEach">
-    <parameter name="callbackfn" type="(value: TNode, key: number, parent: NodeListOf&lt;TNode&gt;) =&gt; void"/>
-    <parameter name="thisArg" type="any" optional="true"/>
-    <returns type="void"/>
-  </method>
-  <method name="[Symbol.iterator]">
-    <returns type="ArrayIterator&lt;TNode&gt;"/>
-  </method>
-  <method name="entries">
-    <returns type="ArrayIterator&lt;[number, TNode]&gt;"/>
-  </method>
-  <method name="keys">
-    <returns type="ArrayIterator&lt;number&gt;"/>
-  </method>
-  <method name="values">
-    <returns type="ArrayIterator&lt;TNode&gt;"/>
-  </method>
-  <property name="length" type="number" readonly="true"/>
-</interface>
-<interface name="ReadableStream">
-  <typeParameter name="R"/>
-  <property name="locked" type="boolean" readonly="true"/>
-  <method name="cancel">
-    <parameter name="reason" type="any" optional="true"/>
-    <returns type="Promise&lt;void&gt;"/>
-  </method>
-  <method name="getReader">
-    <parameter name="options" type="{ mode: &quot;byob&quot;; }"/>
-    <returns type="ReadableStreamBYOBReader"/>
-  </method>
-  <method name="getReader">
-    <returns type="ReadableStreamDefaultReader&lt;R&gt;"/>
-  </method>
-  <method name="getReader">
-    <parameter name="options" type="ReadableStreamGetReaderOptions | undefined" optional="true"/>
-    <returns type="ReadableStreamReader&lt;R&gt;"/>
-  </method>
-  <method name="pipeThrough">
-    <typeParameter name="T"/>
-    <parameter name="transform" type="ReadableWritablePair&lt;T, R&gt;"/>
-    <parameter name="options" type="StreamPipeOptions | undefined" optional="true"/>
-    <returns type="ReadableStream&lt;T&gt;"/>
-  </method>
-  <method name="pipeTo">
-    <parameter name="destination" type="WritableStream&lt;R&gt;"/>
-    <parameter name="options" type="StreamPipeOptions | undefined" optional="true"/>
-    <returns type="Promise&lt;void&gt;"/>
-  </method>
-  <method name="tee">
-    <returns type="[ReadableStream&lt;R&gt;, ReadableStream&lt;R&gt;]"/>
-  </method>
-  <method name="[Symbol.asyncIterator]">
-    <parameter name="options" type="ReadableStreamIteratorOptions | undefined" optional="true"/>
-    <returns type="ReadableStreamAsyncIterator&lt;R&gt;"/>
-  </method>
-  <method name="values">
-    <parameter name="options" type="ReadableStreamIteratorOptions | undefined" optional="true"/>
-    <returns type="ReadableStreamAsyncIterator&lt;R&gt;"/>
-  </method>
-</interface>
-<interface name="EventListenerObject">
-  <method name="handleEvent">
-    <parameter name="object" type="Event"/>
-    <returns type="void"/>
-  </method>
-</interface>
+<declarations>
+  <interface name="AbortSignal">
+    <extends>
+      <ref name="EventTarget" kind="interface"/>
+    </extends>
+    <property name="aborted" readonly="true">
+      <primitive name="boolean"/>
+    </property>
+    <property name="onabort">
+      <union>
+        <function>
+          <parameter name="this">
+            <ref name="AbortSignal" kind="interface"/>
+          </parameter>
+          <parameter name="ev">
+            <ref name="Event" kind="interface"/>
+          </parameter>
+          <returns>
+            <primitive name="any"/>
+          </returns>
+        </function>
+        <primitive name="null"/>
+      </union>
+    </property>
+    <property name="reason" readonly="true">
+      <primitive name="any"/>
+    </property>
+    <method name="throwIfAborted">
+      <returns>
+        <primitive name="void"/>
+      </returns>
+    </method>
+    <method name="addEventListener">
+      <typeParameter name="K">
+        <constraint>
+          <keyof>
+            <ref name="AbortSignalEventMap" kind="interface"/>
+          </keyof>
+        </constraint>
+      </typeParameter>
+      <parameter name="type">
+        <ref name="K" kind="typeParameter"/>
+      </parameter>
+      <parameter name="listener">
+        <function>
+          <parameter name="this">
+            <ref name="AbortSignal" kind="interface"/>
+          </parameter>
+          <parameter name="ev">
+            <indexedAccess>
+              <ref name="AbortSignalEventMap" kind="interface"/>
+              <ref name="K" kind="typeParameter"/>
+            </indexedAccess>
+          </parameter>
+          <returns>
+            <primitive name="any"/>
+          </returns>
+        </function>
+      </parameter>
+      <parameter name="options" optional="true">
+        <union>
+          <primitive name="boolean"/>
+          <ref name="AddEventListenerOptions" kind="interface"/>
+        </union>
+      </parameter>
+      <returns>
+        <primitive name="void"/>
+      </returns>
+    </method>
+    <method name="addEventListener">
+      <parameter name="type">
+        <primitive name="string"/>
+      </parameter>
+      <parameter name="listener">
+        <ref name="EventListenerOrEventListenerObject" kind="typeAlias"/>
+      </parameter>
+      <parameter name="options" optional="true">
+        <union>
+          <primitive name="boolean"/>
+          <ref name="AddEventListenerOptions" kind="interface"/>
+        </union>
+      </parameter>
+      <returns>
+        <primitive name="void"/>
+      </returns>
+    </method>
+    <method name="removeEventListener">
+      <typeParameter name="K">
+        <constraint>
+          <keyof>
+            <ref name="AbortSignalEventMap" kind="interface"/>
+          </keyof>
+        </constraint>
+      </typeParameter>
+      <parameter name="type">
+        <ref name="K" kind="typeParameter"/>
+      </parameter>
+      <parameter name="listener">
+        <function>
+          <parameter name="this">
+            <ref name="AbortSignal" kind="interface"/>
+          </parameter>
+          <parameter name="ev">
+            <indexedAccess>
+              <ref name="AbortSignalEventMap" kind="interface"/>
+              <ref name="K" kind="typeParameter"/>
+            </indexedAccess>
+          </parameter>
+          <returns>
+            <primitive name="any"/>
+          </returns>
+        </function>
+      </parameter>
+      <parameter name="options" optional="true">
+        <union>
+          <primitive name="boolean"/>
+          <ref name="EventListenerOptions" kind="interface"/>
+        </union>
+      </parameter>
+      <returns>
+        <primitive name="void"/>
+      </returns>
+    </method>
+    <method name="removeEventListener">
+      <parameter name="type">
+        <primitive name="string"/>
+      </parameter>
+      <parameter name="listener">
+        <ref name="EventListenerOrEventListenerObject" kind="typeAlias"/>
+      </parameter>
+      <parameter name="options" optional="true">
+        <union>
+          <primitive name="boolean"/>
+          <ref name="EventListenerOptions" kind="interface"/>
+        </union>
+      </parameter>
+      <returns>
+        <primitive name="void"/>
+      </returns>
+    </method>
+  </interface>
+  <var name="AbortSignal">
+    <object>
+      <property name="prototype">
+        <ref name="AbortSignal" kind="interface"/>
+      </property>
+      <construct>
+        <returns>
+          <ref name="AbortSignal" kind="interface"/>
+        </returns>
+      </construct>
+      <method name="abort">
+        <parameter name="reason" optional="true">
+          <primitive name="any"/>
+        </parameter>
+        <returns>
+          <ref name="AbortSignal" kind="interface"/>
+        </returns>
+      </method>
+      <method name="any">
+        <parameter name="signals">
+          <array>
+            <ref name="AbortSignal" kind="interface"/>
+          </array>
+        </parameter>
+        <returns>
+          <ref name="AbortSignal" kind="interface"/>
+        </returns>
+      </method>
+      <method name="timeout">
+        <parameter name="milliseconds">
+          <primitive name="number"/>
+        </parameter>
+        <returns>
+          <ref name="AbortSignal" kind="interface"/>
+        </returns>
+      </method>
+    </object>
+  </var>
+  <interface name="NodeListOf">
+    <typeParameter name="TNode">
+      <constraint>
+        <ref name="Node" kind="interface"/>
+      </constraint>
+    </typeParameter>
+    <extends>
+      <ref name="NodeList" kind="interface"/>
+    </extends>
+    <method name="item">
+      <parameter name="index">
+        <primitive name="number"/>
+      </parameter>
+      <returns>
+        <ref name="TNode" kind="typeParameter"/>
+      </returns>
+    </method>
+    <method name="forEach">
+      <parameter name="callbackfn">
+        <function>
+          <parameter name="value">
+            <ref name="TNode" kind="typeParameter"/>
+          </parameter>
+          <parameter name="key">
+            <primitive name="number"/>
+          </parameter>
+          <parameter name="parent">
+            <ref name="NodeListOf" kind="interface">
+              <ref name="TNode" kind="typeParameter"/>
+            </ref>
+          </parameter>
+          <returns>
+            <primitive name="void"/>
+          </returns>
+        </function>
+      </parameter>
+      <parameter name="thisArg" optional="true">
+        <primitive name="any"/>
+      </parameter>
+      <returns>
+        <primitive name="void"/>
+      </returns>
+    </method>
+    <index>
+      <parameter name="index">
+        <primitive name="number"/>
+      </parameter>
+      <returns>
+        <ref name="TNode" kind="typeParameter"/>
+      </returns>
+    </index>
+    <method name="[Symbol.iterator]">
+      <returns>
+        <ref name="ArrayIterator" kind="interface">
+          <ref name="TNode" kind="typeParameter"/>
+        </ref>
+      </returns>
+    </method>
+    <method name="entries">
+      <returns>
+        <ref name="ArrayIterator" kind="interface">
+          <tuple>
+            <element>
+              <primitive name="number"/>
+            </element>
+            <element>
+              <ref name="TNode" kind="typeParameter"/>
+            </element>
+          </tuple>
+        </ref>
+      </returns>
+    </method>
+    <method name="keys">
+      <returns>
+        <ref name="ArrayIterator" kind="interface">
+          <primitive name="number"/>
+        </ref>
+      </returns>
+    </method>
+    <method name="values">
+      <returns>
+        <ref name="ArrayIterator" kind="interface">
+          <ref name="TNode" kind="typeParameter"/>
+        </ref>
+      </returns>
+    </method>
+  </interface>
+  <typeAlias name="BufferSource">
+    <union>
+      <ref name="ArrayBufferView" kind="interface">
+        <ref name="ArrayBuffer" kind="interface"/>
+      </ref>
+      <ref name="ArrayBuffer" kind="interface"/>
+    </union>
+  </typeAlias>
+</declarations>
