@@ -33,6 +33,17 @@ declare function items(): Item[];
 interface Box<T> {
     value: T;
     map<U>(f: (value: T) => U): Box<U>;
+    // A type parameter named like its interface's.
+    replace<T>(value: T): Box<T>;
 }
 declare function wrap<T>(value: T): Box<T>;
 declare function first<T>(values: T[]): T | undefined;
+type Either<T> = T | Box<T>;
+declare function unbox<T>(value: Either<T>): T;
+declare function largest<T extends Item>(values: T[]): T;
+
+// Generic bases with a member of the same name.
+interface Source<T> { label: string; take(): T }
+interface Sink<T> { label: string; put(value: T): void }
+interface Pipe extends Source<number>, Sink<number> {}
+declare function pipe(): Pipe;

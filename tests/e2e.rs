@@ -185,13 +185,36 @@ fn wasi_clang() -> Option<PathBuf> {
 // missing is a link error rather than an import that fails when the page loads.
 const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Werror", "-Wl,--export-table"];
 
+// Writes the C++ bindings, compiles their definitions once, each module in
+// parallel, and links them with the program.
+fn build_cpp(clang: &Path, c: &Case, model: &generators::wasm::Model) {
+    let bindings = c.out.join("bindings");
+    let files = generators::cpp::files(model);
+    let sources: Vec<String> = files.iter().map(|f| f.0.clone()).filter(|p| p.ends_with(".cpp")).collect();
+    write_files(&bindings, files);
+    let flags: Vec<&str> = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model")).copied().collect();
+    let objects: Vec<PathBuf> = sources.iter().map(|s| c.out.join("obj").join(s.replace('/', "_")).with_extension("o")).collect();
+    fs::create_dir_all(c.out.join("obj")).unwrap();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                while let Some(i) = Some(next.fetch_add(1, std::sync::atomic::Ordering::SeqCst)).filter(|i| *i < sources.len()) {
+                    run(Command::new(clang).args(&flags).arg("-c").arg("-I").arg(&bindings).arg(bindings.join(&sources[i])).arg("-o").arg(&objects[i]));
+                }
+            });
+        }
+    });
+    run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(&bindings).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")).args(&objects));
+}
+
 fn cpp(fixture: &str) {
     let Some(clang) = wasi_clang() else { return };
     let Some([node]) = tools(["node"]) else { return };
     let c = case(fixture, "cpp");
     let model = generators::wasm::model(&c.xml, "C++");
-    write_files(&c.out.join("bindings"), generators::cpp::files(&model));
-    run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")));
+    build_cpp(&clang, &c, &model);
     write_glue(&c, &model);
     run_wasm(&c, &node);
     print!("{}", skipped(&model.skipped));
@@ -388,17 +411,17 @@ mod dom {
         let Some(clang) = wasi_clang() else { return };
         let c = dom_case("cpp");
         let model = generators::wasm::model(&c.xml, "C++");
-        write_files(&c.out.join("bindings"), generators::cpp::files(&model));
         fs::write(c.out.join("index.html"), wasm_page("cpp")).unwrap();
         print!("{}", skipped(&model.skipped));
-        run(Command::new(&clang).args(CLANGXX_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")));
+        build_cpp(&clang, &c, &model);
         write_glue(&c, &model);
         run_browser(&c);
         // A listener of the wrong event type is a compile error.
         let flags = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model"));
         let out = Command::new(&clang).args(flags).arg("-fsyntax-only").arg("-I").arg(c.out.join("bindings")).arg(c.fixture.join("wrong.cpp")).output().unwrap();
         let errors = String::from_utf8_lossy(&out.stderr);
-        assert!(!out.status.success() && errors.contains("no matching member function for call to 'addEventListener'"), "wrong.cpp should not compile:\n{errors}");
+        let expected = ["no matching member function for call to 'addEventListener'", "constraints not satisfied"];
+        assert!(!out.status.success() && expected.iter().all(|e| errors.contains(e)), "wrong.cpp should not compile, for both reasons:\n{errors}");
     }
 
     #[test]

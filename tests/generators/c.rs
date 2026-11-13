@@ -38,7 +38,7 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Nullable(inner, _) => typed(inner, param),
         Ty::Union(_) | Ty::NamedUnion(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
         Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => panic!("{T} generator cannot express keyed generics: the target config must expand them"),
-        Ty::Param(_) | Ty::Generic(..) => panic!("{T} generator cannot express generics: the target config must erase them"),
+        Ty::Param(_) | Ty::Generic(..) | Ty::ArrayOf(_) => panic!("{T} generator cannot express generics: the target config must erase them"),
     }
 }
 

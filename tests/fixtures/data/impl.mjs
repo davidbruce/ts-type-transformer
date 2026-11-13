@@ -24,6 +24,13 @@ globalThis.items = () => [{ id: 1, tags: ["a", "b"] }, { id: 2, tags: [] }];
 class Box {
     constructor(value) { this.value = value; }
     map(f) { return new Box(f(this.value)); }
+    replace(value) { return new Box(value); }
 }
 globalThis.wrap = value => new Box(value);
 globalThis.first = values => values[0];
+globalThis.unbox = v => (v instanceof Box ? v.value : v);
+globalThis.largest = values => values.reduce((a, b) => (b.id > a.id ? b : a));
+globalThis.pipe = () => {
+    const queue = [];
+    return { label: "pipe", take: () => queue.shift(), put: v => { queue.push(v); } };
+};

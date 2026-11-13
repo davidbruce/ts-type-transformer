@@ -1,20 +1,9 @@
 // Drives a real page through the generated DOM bindings; every CHECK must hold.
 #include <string>
 
-#include "areas/core/AddEventListenerOptions.hpp"
-#include "areas/core/DOMRect.hpp"
-#include "areas/core/DOMTokenList.hpp"
+// A header brings in every type its members name.
 #include "areas/core/Document.hpp"
-#include "areas/core/NodeListOf.hpp"
 #include "areas/core/functions.hpp"
-#include "areas/css/CSSStyleDeclaration.hpp"
-#include "areas/events/Event.hpp"
-#include "areas/events/PointerEvent.hpp"
-#include "areas/html/HTMLButtonElement.hpp"
-#include "areas/html/HTMLCollection.hpp"
-#include "areas/html/HTMLDivElement.hpp"
-#include "areas/html/HTMLElement.hpp"
-#include "areas/html/HTMLParagraphElement.hpp"
 
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
@@ -29,12 +18,10 @@ extern "C" __attribute__((export_name("run"))) void run() {
     HTMLElement box = div;
     box.id("made-by-cpp");
     box.textContent("hello from cpp");
-    ts::Array classes = ts::Array::create();
-    classes.push(std::string("box"));
-    box.classList().add(classes);
+    box.classList().add({"box", "made"});
     body.appendChild(box);
     CHECK(doc.getElementById("made-by-cpp")->h == box.h);
-    CHECK(box.classList().contains("box"));
+    CHECK(box.classList().contains("box") && box.classList().contains("made"));
 
     // Read an element that was already in the page, and copy its text.
     HTMLElement seed = *doc.getElementById("seed");
@@ -76,18 +63,24 @@ extern "C" __attribute__((export_name("run"))) void run() {
     button.removeEventListener(HTMLElementEventMapKeys::click, onClick);
     button.click();
     CHECK(clicks == 2);
+    // Frees the lambda.
+    onClick.release();
+    CHECK(onClick.h == 0);
 
     // An options object, { once: true }, and events made and dispatched here.
     int pings = 0;
     AddEventListenerOptions once = AddEventListenerOptions::create();
     once.once(ts::Value::boolean(true));
-    EventListener onPing = [&](Event) {
-        pings++;
-        box.setAttribute("data-pings", std::to_string(pings));
-    };
-    box.addEventListener("ping", onPing, once);
-    box.dispatchEvent(Event::create("ping"));
-    box.dispatchEvent(Event::create("ping"));
+    {
+        // Released at the end of the block.
+        ts::Scoped<EventListener> onPing = [&](Event) {
+            pings++;
+            box.setAttribute("data-pings", std::to_string(pings));
+        };
+        box.addEventListener("ping", onPing, once);
+        box.dispatchEvent(Event::create("ping"));
+        box.dispatchEvent(Event::create("ping"));
+    }
     CHECK(pings == 1);
 
     // Style, layout and the window.

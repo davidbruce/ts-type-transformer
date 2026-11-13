@@ -25,11 +25,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(Geometry_Deep_twice(4) == 8);
 
     // Rest parameters take an array; overloads keep the name.
-    ts::Array parts = ts::Array::create();
-    parts.push(std::string("a"));
-    parts.push(std::string("b"));
-    parts.push(std::string("c"));
-    CHECK(join("-", parts) == "a-b-c");
+    CHECK(join("-", {"a", "b", "c"}) == "a-b-c");
     CHECK(join("-") == "");
 
     // Numeric enums.

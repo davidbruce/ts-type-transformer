@@ -58,26 +58,26 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(norm(point) == 5);
     CHECK(origin().x() == 0);
 
-    // Arrays.
-    ts::Array r = range(4);
-    CHECK(r.size() == 4 && r[3].to_number() == 3);
+    // Arrays are typed: T[] is ts::Array<T>.
+    ts::Array<double> r = range(4);
+    CHECK(r.size() == 4 && r[3] == 3);
     CHECK(sum(r) == 6);
-    ts::Array mine = ts::Array::create();
-    mine.push(10.0);
-    mine.push(5.0);
+    ts::Array<double> mine = ts::Array<double>::create();
+    mine.push(10);
+    mine.push(5);
     CHECK(sum(mine) == 15);
-    CHECK(words("a bc")[1].to_string() == "bc");
+    CHECK(sum({1, 2, 3}) == 6);
+    CHECK(words("a bc")[1] == "bc");
 
-    // Tuples are arrays.
-    ts::Array p = pair(1, "one");
+    // Tuples are untyped arrays.
+    ts::Array<> p = pair(1, "one");
     CHECK(p[0].to_number() == 1);
-    ts::Array swapped = swap(p);
+    ts::Array<> swapped = swap(p);
     CHECK(swapped[0].to_string() == "one" && swapped[1].to_number() == 1);
 
     // Arrays of objects.
-    ts::Array all = items();
-    Item item(ts::handle, all[0].h);
-    CHECK(all.size() == 2 && item.id() == 1 && item.tags().size() == 2);
+    ts::Array<Item> all = items();
+    CHECK(all.size() == 2 && all[0].id() == 1 && all[0].tags().size() == 2 && all[0].tags()[1] == "b");
 
     // Generics are templates: a T crosses as a handle and comes back a T.
     Box<double> b = wrap(21.0);
@@ -85,6 +85,18 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(b.map<double>([](double v) { return v * 2; }).value() == 42);
     Box<std::string> text = b.map<std::string>([](double v) { return std::to_string(int(v)); });
     CHECK(text.value() == "21");
-    CHECK(first<double>(r) == 0.0);
-    CHECK(!first<double>(ts::Array::create()));
+    CHECK(first(r) == 0.0);
+    CHECK(!first(ts::Array<double>::create()));
+    // A method's T, apart from its interface's.
+    CHECK(b.replace<std::string>("x").value() == "x");
+    // A generic union alias is an alias template: Either<double> is std::variant<double, Box<double>>.
+    CHECK(unbox<double>(5.0) == 5);
+    CHECK(unbox<double>(b) == 21);
+    // A constraint is a requires-clause: largest takes arrays of Items.
+    CHECK(largest(all).id() == 2);
+    // A name both generic bases have is declared again on Pipe.
+    Pipe pp = pipe();
+    CHECK(pp.label() == "pipe");
+    pp.put(4);
+    CHECK(pp.take() == 4);
 }

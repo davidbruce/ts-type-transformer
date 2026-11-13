@@ -101,15 +101,18 @@ How a generator lays out files is its own choice. The test generators:
   File names that would still clash get a suffix (`point_2.h`, `Con_.h`).
 - C++ (C++20, WASI SDK): a value type per JavaScript type holding the
   handle, inheriting virtually from `ts::Handle`, so inheritance and mixins
-  are real C++ inheritance (`HTMLDivElement` is an `Element`). Each type has a
-  declaration header (`X.decl.hpp`, the struct) and a definition header
-  (`X.hpp`, which includes what its members name). Overloads and optional
-  parameters are real overloads, nullables `std::optional`, unions
-  `std::variant`, callbacks lambdas, generic types class templates with their
-  default arguments (`NodeListOf<HTMLParagraphElement>`), keyed methods
-  templates over typed keys (`el.addEventListener(HTMLElementEventMapKeys::click,
-  [](PointerEvent e) {...})`). The DOM: 9.7 MB. Linked without
-  `--allow-undefined`, so a missing definition is a link error.
+  are real C++ inheritance (`HTMLDivElement` is an `Element`). Overloads and
+  optional parameters are real overloads, nullables `std::optional`, unions
+  `std::variant`, arrays `ts::Array<T>`, callbacks lambdas (freed by
+  `release()` or `ts::Scoped`), generic types and aliases templates with their
+  defaults and constraints, keyed methods templates over typed keys
+  (`el.addEventListener(HTMLElementEventMapKeys::click, [](PointerEvent e) {...})`).
+  `X.hpp` includes everything its members name, so a program includes only
+  what it starts from; template definitions are in headers, the rest in one
+  `.cpp` per module, compiled once (the DOM: 25, about 10 s in parallel).
+  A struct's own header, `X.decl.hpp`, includes only its ancestors', so
+  include cycles never meet an incomplete base. Linked without
+  `--allow-undefined`: a missing definition is a link error.
 - Zig: a file per module, in the same folders, importing by name what it uses
   from the others, and a root `bindings.zig`. Zig reads only what is used.
 - F#: files must not refer to each other in cycles. Files are ordered by what

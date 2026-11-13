@@ -93,7 +93,7 @@ fn typed(t: &Ty, is_param: bool) -> String {
         Ty::Key(m) => format!("{m}.Key"),
         Ty::Mapped(m) => format!("{m}.Type(KEY)"),
         Ty::Listener(ev) => format!("JsListener({})", typed(ev, false)),
-        Ty::Param(_) | Ty::Generic(..) => panic!("Zig generator cannot express generics: the target config must erase them"),
+        Ty::Param(_) | Ty::Generic(..) | Ty::ArrayOf(_) => panic!("Zig generator cannot express generics: the target config must erase them"),
         Ty::Any | Ty::Union(_) => "JsValue".into(),
     }
 }
