@@ -10,7 +10,8 @@ use super::{attr, elements, flag, named, only_child, unsupported};
 const T: &str = "F#";
 
 pub struct Output {
-    pub source: String,
+    // File name and contents, in compilation order.
+    pub files: Vec<(String, String)>,
     // What the generator does not bind yet, by reason.
     pub skipped: BTreeMap<String, usize>,
 }
@@ -26,6 +27,9 @@ struct Gen {
     keyed: HashMap<String, String>,
     // Maps whose keys are used: a `<Map>Keys` module is written for each.
     maps: BTreeSet<String>,
+    // Top-level declarations' types: name, module and text. Top-level values go in a file of their own.
+    types: Vec<(String, String, String)>,
+    values: String,
 }
 
 fn ident(name: &str) -> String {
@@ -41,14 +45,28 @@ fn ident(name: &str) -> String {
     if KEYWORDS.contains(&name) || !plain { format!("``{name}``") } else { name.to_string() }
 }
 
+// The bindings as files, in the order F# compiles them: a prelude; the types
+// of each module, in dependency order, with modules that refer to each other
+// merged into one file (F# allows no cycles between files); and last the
+// values: globals, functions as `Globals`, and the `<Map>Keys` modules.
 pub fn module(xml: &str) -> Output {
     let doc = Document::parse(xml).expect("well-formed XML");
-    let mut g = Gen { out: String::new(), skipped: BTreeMap::new(), declared: HashSet::new(), external: BTreeMap::new(), keyed: HashMap::new(), maps: BTreeSet::new() };
+    let mut g = Gen {
+        out: String::new(),
+        skipped: BTreeMap::new(),
+        declared: HashSet::new(),
+        external: BTreeMap::new(),
+        keyed: HashMap::new(),
+        maps: BTreeSet::new(),
+        types: Vec::new(),
+        values: String::new(),
+    };
     g.index(doc.root_element(), "");
     g.decls(doc.root_element(), "", "");
     g.key_modules(doc.root_element());
-    let mut source = String::from(
-        "// Generated.\nmodule rec Bindings\n\nopen Fable.Core\n\n\
+
+    let mut prelude = String::from(
+        "// Generated.\nnamespace Bindings\n\nopen Fable.Core\n\n\
          /// A key of the map 'Map whose value has type 'V: `el.addEventListener (HTMLElementEventMapKeys.click, fun e -> ...)`.\n\
          [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n",
     );
@@ -56,9 +74,138 @@ pub fn module(xml: &str) -> Output {
     for (name, arity) in &g.external {
         let params: Vec<String> = (1..=*arity).map(|i| format!("'T{i}")).collect();
         let params = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
-        source += &format!("[<AllowNullLiteral>]\ntype {}{params} = interface end\n\n", ident(name));
+        prelude += &format!("[<AllowNullLiteral>]\ntype {}{params} = interface end\n\n", ident(name));
     }
-    Output { source: source + &g.out, skipped: g.skipped }
+    let mut files = vec![("Bindings.Prelude.fs".to_string(), prelude)];
+    for (i, (keys, members)) in file_order(&g.types).into_iter().enumerate() {
+        let name = if keys.len() == 1 { keys[0].clone() } else { format!("{}_and_{}_more", keys[0], keys.len() - 1) };
+        let body: String = members.iter().map(|&j| g.types[j].2.as_str()).collect();
+        files.push((format!("Bindings.{:02}.{name}.fs", i + 1), format!("// Generated. Parts: {}.\nnamespace rec Bindings\n\nopen Fable.Core\n\n{body}", keys.join(", "))));
+    }
+    let values: String = g.values.lines().map(|l| if l.is_empty() { "\n".to_string() } else { format!("    {l}\n") }).collect();
+    let globals = std::mem::take(&mut g.out);
+    files.push(("Bindings.Values.fs".into(), format!("// Generated.\nnamespace Bindings\n\nopen Fable.Core\n\n{globals}[<AutoOpen>]\nmodule Values =\n    let private _values = ()\n\n{values}")));
+    Output { files, skipped: g.skipped }
+}
+
+// The files of types, in the order F# must see them, each with its parts and
+// the declarations in it. F# allows no cycles between files, and the types of
+// a library like the DOM form one large cycle (`Window`, `Document`, `Node`,
+// ...). That cycle gets a file of its own; every other declaration stays in
+// its module, split into what the cycle uses (`<module>.base`, before it) and
+// what uses the cycle (after it). Parts that still refer to each other are
+// merged into one file.
+fn file_order(types: &[(String, String, String)]) -> Vec<(Vec<String>, Vec<usize>)> {
+    // A name can have several declarations: `type X` and `var X`.
+    let mut index: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, t) in types.iter().enumerate() {
+        index.entry(t.0.as_str()).or_default().push(i);
+    }
+    // Declarations a declaration's text mentions.
+    let edges: Vec<BTreeSet<usize>> = types
+        .iter()
+        .enumerate()
+        .map(|(i, t)| words(&t.2).into_iter().filter_map(|w| index.get(w)).flatten().copied().filter(|&j| j != i).collect())
+        .collect();
+    let sccs = tarjan(types.len(), &edges);
+    let big: HashSet<usize> = sccs.iter().filter(|c| c.len() > 1).max_by_key(|c| c.len()).map(|c| c.iter().copied().collect()).unwrap_or_default();
+    let mut before: HashSet<usize> = HashSet::new();
+    let mut todo: Vec<usize> = big.iter().copied().collect();
+    while let Some(v) = todo.pop() {
+        for &w in &edges[v] {
+            if !big.contains(&w) && before.insert(w) {
+                todo.push(w);
+            }
+        }
+    }
+    let part = |i: usize| -> String {
+        if big.contains(&i) {
+            "cycle".into()
+        } else if before.contains(&i) {
+            format!("{}.base", types[i].1)
+        } else {
+            types[i].1.clone()
+        }
+    };
+    let parts: Vec<String> = {
+        let mut p: Vec<String> = (0..types.len()).map(part).collect();
+        p.sort();
+        p.dedup();
+        p
+    };
+    let pindex: HashMap<String, usize> = parts.iter().enumerate().map(|(i, p)| (p.clone(), i)).collect();
+    let mut pedges = vec![BTreeSet::new(); parts.len()];
+    for (i, es) in edges.iter().enumerate() {
+        for &j in es {
+            let (a, b) = (pindex[&part(i)], pindex[&part(j)]);
+            if a != b {
+                pedges[a].insert(b);
+            }
+        }
+    }
+    tarjan(parts.len(), &pedges)
+        .into_iter()
+        .map(|group| {
+            let mut keys: Vec<String> = group.iter().map(|&p| parts[p].clone()).collect();
+            keys.sort();
+            let members = (0..types.len()).filter(|&i| keys.contains(&part(i))).collect();
+            (keys, members)
+        })
+        .collect()
+}
+
+// The identifiers in F# source.
+fn words(src: &str) -> HashSet<&str> {
+    src.split(|c: char| !(c.is_alphanumeric() || c == '_')).filter(|w| !w.is_empty()).collect()
+}
+
+// Strongly connected components, each after those it has edges to.
+fn tarjan(n: usize, edges: &[BTreeSet<usize>]) -> Vec<Vec<usize>> {
+    struct State<'a> {
+        edges: &'a [BTreeSet<usize>],
+        index: Vec<Option<usize>>,
+        low: Vec<usize>,
+        on: Vec<bool>,
+        stack: Vec<usize>,
+        next: usize,
+        out: Vec<Vec<usize>>,
+    }
+    fn visit(v: usize, s: &mut State) {
+        s.index[v] = Some(s.next);
+        s.low[v] = s.next;
+        s.next += 1;
+        s.stack.push(v);
+        s.on[v] = true;
+        for &w in s.edges[v].iter() {
+            match s.index[w] {
+                None => {
+                    visit(w, s);
+                    s.low[v] = s.low[v].min(s.low[w]);
+                }
+                Some(iw) if s.on[w] => s.low[v] = s.low[v].min(iw),
+                _ => {}
+            }
+        }
+        if Some(s.low[v]) == s.index[v] {
+            let mut group = Vec::new();
+            loop {
+                let w = s.stack.pop().unwrap();
+                s.on[w] = false;
+                group.push(w);
+                if w == v {
+                    break;
+                }
+            }
+            s.out.push(group);
+        }
+    }
+    let mut s = State { edges, index: vec![None; n], low: vec![0; n], on: vec![false; n], stack: Vec::new(), next: 0, out: Vec::new() };
+    for v in 0..n {
+        if s.index[v].is_none() {
+            visit(v, &mut s);
+        }
+    }
+    s.out
 }
 
 impl Gen {
@@ -392,7 +539,13 @@ impl Gen {
             lines.push(format!("{indent}    interface end\n"));
         }
         self.out += &lines.concat();
-        self.out += &format!("\n{indent}[<Emit({path:?})>]\n{indent}let {name}: {static_name} = jsNative\n\n");
+        self.out += "\n";
+        let value = format!("{indent}[<Emit({path:?})>]\n{indent}let {name}: {static_name} = jsNative\n\n");
+        if indent.is_empty() {
+            self.values += &value;
+        } else {
+            self.out += &value;
+        }
     }
 
     fn decls(&mut self, scope: Node, prefix: &str, indent: &str) {
@@ -403,6 +556,29 @@ impl Gen {
             let raw = d.attribute("name").unwrap_or_default();
             let name = ident(raw);
             let path = js_path(prefix, d.attribute("jsName").unwrap_or(raw));
+            // A top-level declaration's types go in its module's file.
+            let start = self.out.len();
+            self.decl(d, raw, &name, &path, prefix, indent, &mut functions);
+            if indent.is_empty()
+                && let Some(module) = d.attribute("module")
+            {
+                let text = self.out.split_off(start);
+                // A value (`declare var X`) has no type text of its own.
+                if !text.trim().is_empty() {
+                    self.types.push((raw.to_string(), module.to_string(), text));
+                }
+            }
+        }
+        if !functions.is_empty() {
+            self.out += &format!("{indent}[<Erase>]\n{indent}type Globals =\n{}\n", functions.concat());
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn decl(&mut self, d: Node, raw: &str, name: &str, path: &str, prefix: &str, indent: &str, functions: &mut Vec<String>) {
+        let name = name.to_string();
+        let path = path.to_string();
+        {
             match d.tag_name().name() {
                 "lowering" => {}
                 "namespace" => {
@@ -416,7 +592,7 @@ impl Gen {
                 "enum" => {
                     if named(d, "member").any(|v| attr(v, "type") != "string") {
                         self.numeric_enum(d, &name, indent);
-                        continue;
+                        return;
                     }
                     self.out += &format!("{indent}[<StringEnum; RequireQualifiedAccess>]\n{indent}type {name} =\n");
                     let mut seen = HashSet::new();
@@ -460,7 +636,7 @@ impl Gen {
                     if body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(raw)) {
                         self.skip("recursive type alias, bound as obj");
                         self.out += &format!("{indent}type {name} = obj\n\n");
-                        continue;
+                        return;
                     }
                     let t = self.ty(body, "");
                     self.out += &format!("{indent}type {name}{} = {t}\n\n", self.type_params(d));
@@ -472,14 +648,16 @@ impl Gen {
                         self.static_side(&name, &path, &members, None, indent);
                     } else {
                         let t = self.ty(body, "");
-                        self.out += &format!("{indent}[<Emit({path:?})>]\n{indent}let {name}: {t} = jsNative\n\n");
+                        let value = format!("{indent}[<Emit({path:?})>]\n{indent}let {name}: {t} = jsNative\n\n");
+                        if indent.is_empty() {
+                            self.values += &value;
+                        } else {
+                            self.out += &value;
+                        }
                     }
                 }
                 _ => unsupported(T, d),
             }
-        }
-        if !functions.is_empty() {
-            self.out += &format!("{indent}[<Erase>]\n{indent}type Globals =\n{}\n", functions.concat());
         }
     }
 

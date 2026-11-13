@@ -1,0 +1,73 @@
+# Areas of lib.dom.d.ts, for splitting bindings into modules. Use with a
+# target config: --config examples/targets/zig.toml --config examples/modules/dom.toml
+# The first area with a matching pattern wins; namespaces are modules of their own.
+[modules]
+default = "core"
+
+[[modules.area]]
+name = "svg"
+match = ["SVG*"]
+
+[[modules.area]]
+name = "mathml"
+match = ["MathML*"]
+
+[[modules.area]]
+name = "webgl"
+match = ["WebGL*", "ANGLE_*", "EXT_*", "OES_*", "WEBGL_*", "OVR_*", "KHR_*"]
+
+[[modules.area]]
+name = "webgpu"
+match = ["GPU*"]
+
+[[modules.area]]
+name = "webaudio"
+match = ["Audio*", "BaseAudio*", "*AudioContext*", "*AudioNode*", "Analyser*", "Biquad*", "ChannelMerger*", "ChannelSplitter*", "ConstantSource*", "Convolver*", "Delay*", "DynamicsCompressor*", "Gain*", "IIRFilter*", "MediaElementAudio*", "MediaStreamAudio*", "MediaStreamTrackAudio*", "Oscillator*", "Panner*", "PeriodicWave*", "StereoPanner*", "WaveShaper*", "DecodeErrorCallback", "DecodeSuccessCallback"]
+
+[[modules.area]]
+name = "webrtc"
+match = ["RTC*"]
+
+[[modules.area]]
+name = "media"
+match = ["Media*", "Video*", "TextTrack*", "VTT*", "Encoded*", "ImageDecoder*", "ImageTrack*", "*Track", "*TrackList", "Picture*", "RemotePlayback*"]
+
+[[modules.area]]
+name = "cssom"
+match = ["CSS*", "*StyleSheet*", "StyleMedia", "StyleProperty*", "MediaList", "FontFace*"]
+
+[[modules.area]]
+name = "canvas"
+match = ["Canvas*", "OffscreenCanvas*", "ImageBitmap*", "ImageData*", "Path2D", "TextMetrics", "DOMMatrix*", "*2DSettings"]
+
+[[modules.area]]
+name = "html"
+match = ["HTML*"]
+
+[[modules.area]]
+name = "storage"
+match = ["IDB*", "Storage*", "Cache*", "FileSystem*", "File", "FileList", "FileReader*", "Blob*"]
+
+[[modules.area]]
+name = "network"
+match = ["Request*", "Response*", "Headers*", "Body*", "Fetch*", "XMLHttpRequest*", "WebSocket*", "EventSource*", "WebTransport*", "URL*", "FormData*"]
+
+[[modules.area]]
+name = "streams"
+match = ["ReadableStream*", "WritableStream*", "TransformStream*", "*QueuingStrategy*", "Underlying*", "Transformer*", "ReadableByte*", "Compression*", "Decompression*", "TextDecoder*", "TextEncoder*"]
+
+[[modules.area]]
+name = "workers"
+match = ["*Worker*", "MessageChannel", "MessagePort*", "BroadcastChannel*", "Clients", "Client"]
+
+[[modules.area]]
+name = "security"
+match = ["Crypto*", "Subtle*", "Credential*", "PublicKeyCredential*", "Authenticator*", "*KeyGenParams", "*KeyImportParams", "*KeyAlgorithm", "*Params", "Json Web Key", "JsonWebKey", "Permission*", "SecurityPolicy*", "Trusted*", "Sanitizer*"]
+
+[[modules.area]]
+name = "payment"
+match = ["Payment*"]
+
+[[modules.area]]
+name = "events"
+match = ["*Event", "*EventInit", "*EventMap", "*EventHandler*"]

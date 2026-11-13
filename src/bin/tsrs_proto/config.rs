@@ -25,11 +25,59 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
 
 const OVERLOAD_NAMES: &[&str] = &["with_params", "numbered"];
 
-pub fn load(path: Option<&str>, overrides: &[String]) -> Result<Options, String> {
-    let mut table = match path {
-        Some(p) => std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?,
-        None => Table::new(),
-    };
+// Which module each top-level declaration goes in: the first area whose
+// pattern matches its name, else `default`. A namespace is a module of its own.
+#[derive(Clone)]
+pub struct Modules {
+    pub default: String,
+    pub areas: Vec<(String, Vec<String>)>,
+}
+
+impl Modules {
+    pub fn module_of(&self, name: &str) -> &str {
+        self.areas.iter().find(|(_, patterns)| patterns.iter().any(|p| glob(p, name))).map(|(n, _)| n.as_str()).unwrap_or(&self.default)
+    }
+}
+
+// `SVG*`, `*Event`, `*Audio*`, `Node`.
+fn glob(pattern: &str, name: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    if parts.len() == 1 {
+        return pattern == name;
+    }
+    let (first, last) = (parts[0], parts[parts.len() - 1]);
+    if !name.starts_with(first) || !name[first.len()..].ends_with(last) || name.len() < first.len() + last.len() {
+        return false;
+    }
+    let mut rest = &name[first.len()..name.len() - last.len()];
+    for middle in &parts[1..parts.len() - 1] {
+        match rest.find(middle) {
+            Some(i) => rest = &rest[i + middle.len()..],
+            None => return false,
+        }
+    }
+    true
+}
+
+// Later tables override earlier ones, key by key.
+fn merge(into: &mut Table, from: Table) {
+    for (k, v) in from {
+        match (into.get_mut(&k), v) {
+            (Some(Value::Table(a)), Value::Table(b)) => merge(a, b),
+            (_, v) => {
+                into.insert(k, v);
+            }
+        }
+    }
+}
+
+pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules), String> {
+    let mut table = Table::new();
+    for p in paths {
+        let t = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?;
+        merge(&mut table, t);
+    }
+    let mut modules = Modules { default: "main".into(), areas: Vec::new() };
     // `--set generics=erase`, `--set limits.union_param_overloads=4`.
     for o in overrides {
         let (key, value) = o.split_once('=').ok_or_else(|| format!("--set {o}: expected key=value"))?;
@@ -65,6 +113,25 @@ pub fn load(path: Option<&str>, overrides: &[String]) -> Result<Options, String>
                 ("limits", "keyed_overloads") => o.keyed_limit = count(&at, value)?,
                 ("naming", "separator") => o.separator = Box::leak(string(&at, value)?.to_string().into_boxed_str()),
                 ("naming", "overloads") => o.numbered_overloads = one_of(&at, value, OVERLOAD_NAMES)? == "numbered",
+                ("modules", "default") => modules.default = string(&at, value)?.to_string(),
+                // [[modules.area]] name = "svg", match = ["SVG*"]
+                ("modules", "area") => {
+                    for area in value.as_array().ok_or_else(|| format!("{at} must be an array of tables"))? {
+                        let area = area.as_table().ok_or_else(|| format!("{at} must be an array of tables"))?;
+                        let name = string(&at, area.get("name").ok_or_else(|| format!("{at}: an area needs a name"))?)?.to_string();
+                        let patterns = area
+                            .get("match")
+                            .and_then(|m| m.as_array())
+                            .ok_or_else(|| format!("{at} {name}: `match` must be a list of patterns"))?
+                            .iter()
+                            .map(|p| string(&at, p).map(str::to_string))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        if let Some(k) = area.keys().find(|k| !matches!(k.as_str(), "name" | "match")) {
+                            return Err(format!("{at} {name}: unknown setting `{k}`"));
+                        }
+                        modules.areas.push((name, patterns));
+                    }
+                }
                 _ => return Err(format!("unknown setting `{at}`")),
             }
         }
@@ -73,7 +140,7 @@ pub fn load(path: Option<&str>, overrides: &[String]) -> Result<Options, String>
     if o.inheritance && !o.typeops {
         return Err("inheritance = \"flatten\" requires type_ops = \"evaluate\"".into());
     }
-    Ok(o)
+    Ok((o, modules))
 }
 
 fn string<'a>(at: &str, v: &'a Value) -> Result<&'a str, String> {

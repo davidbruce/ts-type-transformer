@@ -1,6 +1,8 @@
 // XML -> Zig module for a wasm32 module. As C, but unions of simple types
 // become tagged unions, and nullable objects become optionals.
 
+use std::collections::{BTreeMap, HashMap, HashSet};
+
 use super::wasm::{Class, Func, Model, NamedUnion, Ty};
 
 // Quoted identifiers accept any name, keywords included.
@@ -47,7 +49,11 @@ fn union_decl(u: &NamedUnion) -> String {
             format!("{}: {t}", ident(&union_field(p)))
         })
         .collect();
-    format!("pub const {} = union(enum) {{ {} }};\n", u.name, fields.join(", "))
+    format!(
+        "pub const {0} = union(enum) {{\n    {1},\n    // Which member a value is: its index.\n    pub fn tag(h: u32) i32 {{ return raw.{0}_tag(h); }}\n}};\n",
+        u.name,
+        fields.join(",\n    ")
+    )
 }
 
 // Turns a handle coming back into the union's member: `raw.U_tag` says which.
@@ -65,7 +71,7 @@ fn decode_union(u: &NamedUnion, h: &str) -> String {
             format!("{i} => .{{ .{} = {value} }}", ident(&union_field(p)))
         })
         .collect();
-    format!("switch (raw.{}_tag({h})) {{ {}, else => unreachable }}", u.name, arms.join(", "))
+    format!("switch ({}.tag({h})) {{ {}, else => unreachable }}", u.name, arms.join(", "))
 }
 
 fn typed(t: &Ty, is_param: bool) -> String {
@@ -239,58 +245,127 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_listener_from(f: usize, ctx: ?*anyopaque) u32;
 ";
 
-pub fn module(m: &Model) -> String {
-    let mut out = String::from(RUNTIME);
-    let mut externs = String::from(RUNTIME_EXTERNS);
+// The bindings as files: `runtime.zig`; `types.zig` with enums, unions,
+// callbacks and handles declared elsewhere; one file per module with its
+// types and functions; and `bindings.zig`, which re-exports every name. Each
+// file imports by name what it uses from the others, and Zig only reads a
+// file when one of its names is used.
+pub fn files(m: &Model) -> Vec<(String, String)> {
+    // File -> (declarations, externs, names it declares).
+    let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsListener"].map(String::from).to_vec()));
+    let mut types = (String::new(), String::new(), Vec::new());
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
         let members: Vec<String> = values.iter().map(|v| if v.is_empty() { "empty" } else { v }).filter(|v| seen.insert(v.to_string())).map(ident).collect();
-        out += &format!("pub const {name} = enum(i32) {{ {} }};\n", members.join(", "));
+        types.0 += &format!("pub const {name} = enum(i32) {{ {} }};\n", members.join(", "));
+        types.2.push(name.clone());
     }
     for (name, members) in &m.num_enums {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
-        out += &format!("pub const {name} = enum(i32) {{ {} }};\n", members.join(", "));
+        types.0 += &format!("pub const {name} = enum(i32) {{ {} }};\n", members.join(", "));
+        types.2.push(name.clone());
     }
     for u in &m.unions {
-        out += &union_decl(u);
-        externs += &format!("    extern \"env\" fn {}_tag(h: u32) i32;\n", u.name);
+        types.0 += &union_decl(u);
+        types.1 += &format!("    extern \"env\" fn {}_tag(h: u32) i32;\n", u.name);
+        types.2.push(u.name.clone());
     }
     for name in &m.opaque {
-        out += &format!("pub const {name} = extern struct {{ h: u32 }};\n");
+        types.0 += &format!("pub const {name} = extern struct {{ h: u32 }};\n");
+        types.2.push(name.clone());
     }
     // A callback is made from a function and a context pointer passed back to it.
     for c in &m.callbacks {
         let mut params = vec!["?*anyopaque".to_string()];
         params.extend(c.params.iter().map(|(_, t)| callback_typed(t)));
-        out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
-        out += &format!("    pub const Fn = *const fn ({}) callconv(.c) {};\n", params.join(", "), callback_typed(&c.ret));
-        out += &format!("    pub fn from(f: Fn, ctx: ?*anyopaque) {} {{ return .{{ .h = raw.{}_from(f, ctx) }}; }}\n}};\n", c.name, c.name);
-        externs += &format!("    extern \"env\" fn {0}_from(f: {0}.Fn, ctx: ?*anyopaque) u32;\n", c.name);
+        types.0 += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
+        types.0 += &format!("    pub const Fn = *const fn ({}) callconv(.c) {};\n", params.join(", "), callback_typed(&c.ret));
+        types.0 += &format!("    pub fn from(f: Fn, ctx: ?*anyopaque) {} {{ return .{{ .h = raw.{}_from(f, ctx) }}; }}\n}};\n", c.name, c.name);
+        types.1 += &format!("    extern \"env\" fn {0}_from(f: {0}.Fn, ctx: ?*anyopaque) u32;\n", c.name);
+        types.2.push(c.name.clone());
     }
+    files.insert("types".into(), types);
     // Every object is an opaque handle; methods live in the struct's namespace.
     for c in &m.classes {
-        out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
+        let (out, externs, names) = files.entry(c.module.clone()).or_default();
+        names.push(c.name.clone());
+        *out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
         for (name, value) in &c.consts {
-            out += &format!("    pub const {} = {value};\n", ident(name));
+            *out += &format!("    pub const {} = {value};\n", ident(name));
         }
         // A map's keys, and the type each selects, known at compile time.
         if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
             let keys: Vec<String> = map.keys.iter().map(|k| ident(k)).collect();
-            out += &format!("    pub const Key = enum(i32) {{ {} }};\n", keys.join(", "));
+            *out += &format!("    pub const Key = enum(i32) {{ {} }};\n", keys.join(", "));
             let arms: Vec<String> = keys.iter().zip(&map.values).map(|(k, v)| format!(".{k} => {}", typed(v, false))).collect();
-            out += &format!("    pub fn Type(comptime key: Key) type {{ return switch (key) {{ {} }}; }}\n", arms.join(", "));
+            *out += &format!("    pub fn Type(comptime key: Key) type {{ return switch (key) {{ {} }}; }}\n", arms.join(", "));
         }
         for a in &c.ancestors {
-            out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);
+            *out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);
         }
         for f in &c.funcs {
-            func(&mut out, &mut externs, Some(&c.name), f, "    ", &m.unions);
+            func(out, externs, Some(&c.name), f, "    ", &m.unions);
         }
-        out += "};\n";
+        *out += "};\n";
     }
-    out += "\n";
     for f in &m.funcs {
-        func(&mut out, &mut externs, None, f, "", &m.unions);
+        let (out, externs, names) = files.entry(f.module.clone()).or_default();
+        names.push(f.name.clone());
+        func(out, externs, None, f, "", &m.unions);
     }
-    out + "\nconst raw = struct {\n" + &externs + "};\n"
+
+    // Which file declares each name.
+    let home: HashMap<&str, &str> = files.iter().flat_map(|(file, (_, _, names))| names.iter().map(move |n| (n.as_str(), file.as_str()))).collect();
+    let mut out = Vec::new();
+    let mut root = String::from("// Generated. Every name, from the file that declares it.\n");
+    for (file, (body, externs, names)) in &files {
+        let own: HashSet<&str> = names.iter().map(String::as_str).collect();
+        let mut used: Vec<&str> = identifiers(body).into_iter().filter(|n| !own.contains(n) && home.contains_key(n)).collect();
+        used.sort();
+        used.dedup();
+        let imports: String = used.iter().map(|n| format!("const {n} = @import(\"{}.zig\").{n};\n", home[n])).collect();
+        let body = if file == "runtime" { body.clone() } else { format!("// Generated.\n{imports}\n{body}") };
+        out.push((format!("{file}.zig"), format!("{body}\nconst raw = struct {{\n{externs}}};\n")));
+        for n in names {
+            root += &format!("pub const {} = @import(\"{file}.zig\").{};\n", ident(n), ident(n));
+        }
+    }
+    out.push(("bindings.zig".into(), root));
+    out
+}
+
+// The plain identifiers in Zig source: not quoted ones (`@"x"`), not strings.
+fn identifiers(src: &str) -> HashSet<&str> {
+    let mut out = HashSet::new();
+    let b = src.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'"' => {
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            c if c.is_ascii_alphabetic() || c == b'_' => {
+                let start = i;
+                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+                    i += 1;
+                }
+                // Not a field (`.name`) or builtin (`@name`).
+                if start == 0 || !matches!(b[start - 1], b'.' | b'@') {
+                    out.insert(&src[start..i]);
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    out
 }

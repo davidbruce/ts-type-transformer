@@ -58,6 +58,8 @@ pub enum Call {
 }
 
 pub struct Func {
+    // The module a top-level function is in; empty for members.
+    pub module: String,
     // Name of the wasm import, unique in the module.
     pub import: String,
     // Name in the target language, unique in its class.
@@ -72,6 +74,8 @@ pub struct Func {
 }
 
 pub struct Class {
+    // The module it is in, from the XML.
+    pub module: String,
     pub name: String,
     pub ancestors: Vec<String>,
     pub funcs: Vec<Func>,
@@ -150,6 +154,8 @@ struct Builder<'a> {
     keyed: HashMap<String, String>,
     // Why the member being read cannot be bound, if it cannot.
     bad: Option<String>,
+    // The module of the declaration being read.
+    module: String,
 }
 
 pub fn model(xml: &str, target: &str) -> Model {
@@ -163,6 +169,7 @@ pub fn model(xml: &str, target: &str) -> Model {
         resolving: Vec::new(),
         keyed: HashMap::new(),
         bad: None,
+        module: String::new(),
     };
     b.index(doc.root_element(), "");
     b.decls_of(doc.root_element(), "");
@@ -208,6 +215,10 @@ impl<'a> Builder<'a> {
 
     fn decls_of(&mut self, scope: Node<'a, 'a>, prefix: &str) {
         for d in elements(scope) {
+            // Members of a namespace are in the namespace's module.
+            if let Some(m) = d.attribute("module") {
+                self.module = m.to_string();
+            }
             let name = d.attribute("name").unwrap_or_default();
             let path = join(prefix, name);
             match d.tag_name().name() {
@@ -251,7 +262,7 @@ impl<'a> Builder<'a> {
                     let js = join(prefix, d.attribute("jsName").unwrap_or(name));
                     let name = ident(&join(prefix, name));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { import, name, call: Call::Static(js), params, rest, fixed, ret });
+                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, ret });
                 }
                 "var" => {
                     let body = only_child(d);
@@ -264,7 +275,7 @@ impl<'a> Builder<'a> {
                     let ret = self.ty(body, "");
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], ret });
+                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], ret });
                 }
                 _ => unsupported(self.target, d),
             }
@@ -273,12 +284,12 @@ impl<'a> Builder<'a> {
 
     fn class(&mut self, d: Node<'a, 'a>, path: &str) -> Class {
         let owner = ident(path);
-        let mut c = Class { name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
+        let mut c = Class { module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
         let mut names = HashSet::new();
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
             let import = self.import(format!("{owner}_create"));
-            c.funcs.push(Func { import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], ret: Ty::Obj(owner.clone()) });
+            c.funcs.push(Func { module: String::new(), import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], ret: Ty::Obj(owner.clone()) });
         }
         for m in elements(d) {
             self.member(&mut c, &mut names, m, path, m.has_tag_name("constructor") || flag(m, "static"));
@@ -287,7 +298,7 @@ impl<'a> Builder<'a> {
     }
 
     fn statics(&mut self, body: Node<'a, 'a>, path: &str) -> Class {
-        let mut c = Class { name: ident(path), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
+        let mut c = Class { module: self.module.clone(), name: ident(path), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new() };
         let mut names = HashSet::new();
         for m in elements(body) {
             self.member(&mut c, &mut names, m, path, true);
@@ -317,9 +328,9 @@ impl<'a> Builder<'a> {
             if names.insert("get_at".into()) {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
-                c.funcs.push(Func { import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], ret: absent(value.clone(), true) });
+                c.funcs.push(Func { module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], ret: absent(value.clone(), true) });
                 let import = self.import(format!("{owner}_set_at"));
-                c.funcs.push(Func { import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], ret: Ty::Void });
+                c.funcs.push(Func { module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], ret: Ty::Void });
             }
             return;
         }
@@ -344,14 +355,14 @@ impl<'a> Builder<'a> {
                 let (params, rest, fixed, _) = self.signature(m, &owner);
                 let name = unique(if raw_name.is_empty() { "new".into() } else { ident(raw_name) }, names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { import, name, call: Call::New(path.to_string()), params, rest, fixed, ret: Ty::Obj(owner) });
+                c.funcs.push(Func { module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, ret: Ty::Obj(owner) });
             }
             "method" => {
                 let (params, rest, fixed, ret) = self.signature(m, &owner);
                 let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js) };
                 let name = unique(ident(raw_name), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { import, name, call, params, rest, fixed, ret });
+                c.funcs.push(Func { module: String::new(), import, name, call, params, rest, fixed, ret });
             }
             // A constant needs no call across the boundary.
             "property" if m.has_attribute("const") => {
@@ -374,11 +385,11 @@ impl<'a> Builder<'a> {
                 };
                 let name = unique(format!("get_{}", ident(raw_name)), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { import, name, call: get, params: vec![], rest: false, fixed: vec![], ret: t.clone() });
+                c.funcs.push(Func { module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], ret: t.clone() });
                 if !flag(m, "readonly") {
                     let name = unique(format!("set_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
-                    c.funcs.push(Func { import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], ret: Ty::Void });
+                    c.funcs.push(Func { module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], ret: Ty::Void });
                 }
             }
             _ => unsupported(self.target, m),

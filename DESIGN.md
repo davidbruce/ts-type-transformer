@@ -55,10 +55,45 @@ are errors. Example targets are in `examples/targets/`.
 | `unions` | `erase` | remaining unions | common supertype, else `any` | yes |
 | `unions` | `name` | inline unions | a named declaration: `boolean_or_Options`, or named by where it appears | no |
 | `keyed_params` | `expand` | `f<K extends keyof M>(key: K, value: M[K])` | one overload per key: `addEventListener_click`, `createElement_div` | yes |
+| `keyed_params` | `map` | the same | kept generic, `keyof M` and `M[K]` as written, for targets with type-level keys | no |
 | `overloads` | `rename` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
 
 Four passes need the type checker. That is why lowering lives here and not in
 each generator: a generator written in F# or C has no checker.
+
+## Keyed signatures
+
+`keyed_params` picks how `addEventListener<K extends keyof M>(type: K, listener: (ev: M[K]) => any)`
+reaches a target. `expand` suits languages without generics (C:
+`HTMLElement_addEventListener_click`). `map` keeps one generic method and the
+map; the example targets use it as:
+
+- Zig, comptime: `el.addEventListener(.click, JsListener(PointerEvent).from(f, &ctx))`,
+  where `HTMLElementEventMap.Type(.click)` is `PointerEvent`.
+- F#, typed keys: `el.addEventListener (HTMLElementEventMapKeys.click, fun (e: PointerEvent) -> ...)`,
+  where `click: TypedKey<HTMLElementEventMap, PointerEvent>`.
+
+Both reject a listener of the wrong event type at compile time.
+
+## Modules
+
+`[modules]` assigns each top-level declaration a module, written as
+`module="..."`: the first `[[modules.area]]` whose `match` pattern fits its
+name, else `default`; a namespace is a module of its own. Areas belong to a
+library, not a target, so they live in their own file and are passed as a
+second `--config` (`examples/modules/dom.toml`).
+
+How a generator lays out files is its own choice. The test generators:
+
+- C: `ts_types.h` with every handle, enum and callback; one header per
+  declaration in a directory per module; umbrella headers. A program includes
+  what it uses: the DOM test parses in 0.3 s instead of 3.2 s.
+- Zig: a file per module, importing by name what it uses from the others, and
+  a root `bindings.zig`. Zig reads only what is used: 0.9 s instead of 7.6 s.
+- F#: files must not refer to each other in cycles, and the DOM's core types
+  (`Window`, `Document`, `Node`, ...) form one large cycle. It gets a file of
+  its own; every other declaration stays in its module, split into what the
+  cycle uses and what uses it. Parts still in a cycle are merged: 30 files.
 
 ## Unions
 
@@ -154,7 +189,7 @@ XML is wrong. `*_rejects_*` tests pin that strictness, and
 ## Known gaps
 
 - Synthetic names come from the first place a type appears (`Shape_new_kind`). Not stable or pretty.
-- `keyed_params = "expand"` makes the DOM bindings large: the C header is 123 MB, the glue 40 MB. `limits.keyed_overloads` caps keys per signature.
+- `keyed_params = "expand"` makes the C bindings large (121 MB in all, under 2 MB per header). The wasm glue is trimmed to what a program imports.
 - 18 DOM unions have members no test can tell apart (`ArrayBufferLike | ArrayBufferView`); F# binds them as `obj`.
 - A union with no common supertype (`string | number`) becomes `any`.
 - Tuples, and object types that are a `var`'s own type, are never hoisted.

@@ -1,5 +1,5 @@
 // tsrs feasibility prototype: .d.ts -> IR -> lowering passes -> XML.
-// Usage: tsrs_proto <file.d.ts | lib.dom.d.ts> [--config target.toml]
+// Usage: tsrs_proto <file.d.ts | lib.dom.d.ts> [--config target.toml ...]
 //                   [--set key=value] [--census] | --default-config
 
 mod config;
@@ -30,20 +30,20 @@ impl ParseConfigHost for ConfigHost {
 
 fn main() {
     let mut input = "test.d.ts".to_string();
-    let mut config_path: Option<String> = None;
+    let mut config_paths: Vec<String> = Vec::new();
     let mut overrides: Vec<String> = Vec::new();
     let mut census = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
-            "--config" => config_path = Some(args.next().expect("config path")),
+            "--config" => config_paths.push(args.next().expect("config path")),
             "--set" => overrides.push(args.next().expect("key=value")),
             "--default-config" => return print!("{}", config::template()),
             "--census" => census = true,
             _ => input = a,
         }
     }
-    let opts = config::load(config_path.as_deref(), &overrides).unwrap_or_else(|e| {
+    let (opts, modules) = config::load(&config_paths, &overrides).unwrap_or_else(|e| {
         eprintln!("config error: {e}");
         std::process::exit(2);
     });
@@ -72,7 +72,7 @@ fn main() {
     lower::lower(&mut front, &mut decls, opts);
 
     let mut x = xml::Xml::default();
-    x.decls(&decls);
+    x.top(&decls, &modules);
     // The strategies in effect, so a consumer can check what it is reading.
     let strategies: Vec<String> = config::describe(opts).iter().map(|(k, v)| format!("{k}=\"{v}\"")).collect();
     println!("<declarations>");

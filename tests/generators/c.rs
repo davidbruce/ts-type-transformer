@@ -128,8 +128,13 @@ static inline void JsArray_push(JsArray a, JsValue v) { ts_raw_js_array_push(a.h
 
 ";
 
-pub fn header(m: &Model) -> String {
-    let mut out = String::from(RUNTIME);
+// The bindings as files: `ts_runtime.h`; `ts_types.h` with every handle type,
+// enum and callback (so headers never need each other); one header per
+// declaration in a directory per module, `<module>/<Name>.h`, with the module's
+// functions in `<module>/functions.h`; an umbrella `<module>.h` per module, and
+// `bindings.h` for everything.
+pub fn files(m: &Model) -> Vec<(String, String)> {
+    let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n\n");
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
         let members: Vec<String> = values
@@ -145,16 +150,16 @@ pub fn header(m: &Model) -> String {
                 id
             })
             .collect();
-        out += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
+        types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
     }
     for (name, members) in &m.num_enums {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{name}_{member} = {value}")).collect();
-        out += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
+        types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
     }
     // Every object is an opaque handle; the struct keeps the types apart.
     let handles = m.opaque.iter().chain(m.classes.iter().map(|c| &c.name)).chain(m.callbacks.iter().map(|c| &c.name));
     for name in handles {
-        out += &format!("typedef struct {{ uint32_t h; }} {name};\n");
+        types += &format!("typedef struct {{ uint32_t h; }} {name};\n");
     }
     // A callback is made from a function and a context pointer passed back to it.
     for c in &m.callbacks {
@@ -162,25 +167,44 @@ pub fn header(m: &Model) -> String {
         // A numeric enum arrives as the number it is.
         let plain = |t: &Ty| if matches!(t, Ty::NumEnum(_)) { "double".to_string() } else { typed(t, false) };
         params.extend(c.params.iter().map(|(n, t)| format!("{} {}", plain(t), ident(n))));
-        out += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
-        out += &format!("TS_IMPORT({0}_from) uint32_t ts_raw_{0}_from({0}_fn, void*);\n", c.name);
-        out += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ ts_raw_{0}_from(fn, ctx) }}; }}\n", c.name);
+        types += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
+        types += &format!("TS_IMPORT({0}_from) uint32_t ts_raw_{0}_from({0}_fn, void*);\n", c.name);
+        types += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ ts_raw_{0}_from(fn, ctx) }}; }}\n", c.name);
     }
+
+    let mut out = vec![("ts_runtime.h".to_string(), RUNTIME.to_string()), ("ts_types.h".to_string(), types)];
+    let mut modules: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    let header = |body: String| format!("// Generated.\n#pragma once\n#include \"../ts_types.h\"\n\n{body}");
     for c in &m.classes {
-        out += &format!("\n// {}\n", c.name);
+        let mut body = String::new();
         for (name, value) in &c.consts {
-            out += &format!("#define {}_{name} {value}\n", c.name);
+            body += &format!("#define {}_{name} {value}\n", c.name);
         }
         for a in &c.ancestors {
-            out += &format!("static inline {a} {}_as_{a}({} self) {{ return ({a}){{ self.h }}; }}\n", c.name, c.name);
+            body += &format!("static inline {a} {}_as_{a}({} self) {{ return ({a}){{ self.h }}; }}\n", c.name, c.name);
         }
         for f in &c.funcs {
-            func(&mut out, Some(&c.name), f);
+            func(&mut body, Some(&c.name), f);
         }
+        let path = format!("{}/{}.h", c.module, c.name);
+        modules.entry(c.module.clone()).or_default().push(path.clone());
+        out.push((path, header(body)));
     }
-    out += "\n";
+    let mut functions: std::collections::BTreeMap<String, String> = Default::default();
     for f in &m.funcs {
-        func(&mut out, None, f);
+        func(functions.entry(f.module.clone()).or_default(), None, f);
     }
+    for (module, body) in functions {
+        let path = format!("{module}/functions.h");
+        modules.entry(module).or_default().push(path.clone());
+        out.push((path, header(body)));
+    }
+    let mut all = String::from("// Generated.\n#pragma once\n");
+    for (module, headers) in &modules {
+        let includes: String = headers.iter().map(|h| format!("#include \"{h}\"\n")).collect();
+        out.push((format!("{module}.h"), format!("// Generated.\n#pragma once\n{includes}")));
+        all += &format!("#include \"{module}.h\"\n");
+    }
+    out.push(("bindings.h".into(), all));
     out
 }

@@ -1,5 +1,17 @@
 // Drives a real page through the generated DOM bindings; every CHECK must hold.
-#include "bindings.h"
+// Only the declarations used: one header each.
+#include "core/AddEventListenerOptions.h"
+#include "core/DOMRect.h"
+#include "core/DOMTokenList.h"
+#include "core/Document.h"
+#include "core/functions.h"
+#include "cssom/CSSStyleDeclaration.h"
+#include "events/Event.h"
+#include "html/HTMLButtonElement.h"
+#include "html/HTMLCollection.h"
+#include "html/HTMLDivElement.h"
+#include "html/HTMLElement.h"
+#include "html/HTMLParagraphElement.h"
 
 TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)

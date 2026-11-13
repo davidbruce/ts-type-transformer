@@ -56,6 +56,22 @@ impl Xml {
         self.close(tag);
     }
 
+    // Top-level declarations, each with the module it belongs to.
+    pub fn top(&mut self, decls: &[Decl], modules: &crate::config::Modules) {
+        for d in decls {
+            let module = match d {
+                Decl::Namespace(n) => n.name.clone(),
+                Decl::Interface(i) => modules.module_of(&i.name).to_string(),
+                Decl::Alias(a) => modules.module_of(&a.name).to_string(),
+                Decl::Function(f) => modules.module_of(f.js_name.as_deref().unwrap_or(&f.name)).to_string(),
+                Decl::Var(v) => modules.module_of(&v.name).to_string(),
+                Decl::Enum(e) => modules.module_of(&e.name).to_string(),
+            };
+            self.pending.push(("module", module));
+            self.decls(std::slice::from_ref(d));
+        }
+    }
+
     pub fn decls(&mut self, decls: &[Decl]) {
         for d in decls {
             match d {

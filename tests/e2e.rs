@@ -28,10 +28,18 @@ fn run(cmd: &mut Command) -> String {
 
 // Lowers `input` with a target config, plus `key=value` overrides, and returns the XML.
 fn lower(input: &Path, target: Option<&str>, overrides: &[&str]) -> String {
+    lower_with(input, target, &[], overrides)
+}
+
+// As `lower`, with more config files after the target's: module areas, say.
+fn lower_with(input: &Path, target: Option<&str>, configs: &[PathBuf], overrides: &[&str]) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"));
     cmd.arg(input);
     if let Some(t) = target {
         cmd.arg("--config").arg(config(t));
+    }
+    for c in configs {
+        cmd.arg("--config").arg(c);
     }
     for o in overrides {
         cmd.args(["--set", o]);
@@ -78,6 +86,15 @@ fn case(fixture: &str, target: &str) -> Case {
     Case { fixture: dir, out, xml }
 }
 
+// Writes generated files under `dir`, creating directories as needed.
+fn write_files(dir: &Path, files: Vec<(String, String)>) {
+    for (path, content) in files {
+        let path = dir.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
+}
+
 // The glue for what the compiled module imports, and nothing else.
 fn write_glue(c: &Case, model: &generators::wasm::Model) {
     let used = generators::wasm::imports(&fs::read(c.out.join("test.wasm")).unwrap());
@@ -93,20 +110,35 @@ fn fsharp(fixture: &str) {
     let Some([fable, node]) = tools(["fable", "node"]) else { return };
     let c = case(fixture, "fsharp");
     let bindings = generators::fsharp::module(&c.xml);
-    fs::write(c.out.join("Bindings.fs"), &bindings.source).unwrap();
-    fs::copy(c.fixture.join("test.fs"), c.out.join("Test.fs")).unwrap();
-    fs::write(c.out.join("Test.fsproj"), FSPROJ).unwrap();
+    write_fsharp(&c, &bindings);
     run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
     let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("js/Test.mjs")));
     print!("{report}{}", skipped(&bindings.skipped));
 }
 
-const FSPROJ: &str = r#"<Project Sdk="Microsoft.NET.Sdk">
+// The bindings, the test, and a project that compiles them in order.
+fn write_fsharp(c: &Case, bindings: &generators::fsharp::Output) {
+    let mut compile = String::new();
+    for (name, content) in &bindings.files {
+        fs::write(c.out.join(name), content).unwrap();
+        compile += &format!("    <Compile Include=\"{name}\" />\n");
+    }
+    fs::copy(c.fixture.join("test.fs"), c.out.join("Test.fs")).unwrap();
+    fs::write(
+        c.out.join("Test.fsproj"),
+        format!(
+            r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-  <ItemGroup><Compile Include="Bindings.fs" /><Compile Include="Test.fs" /></ItemGroup>
+  <ItemGroup>
+{compile}    <Compile Include="Test.fs" />
+  </ItemGroup>
   <ItemGroup><PackageReference Include="Fable.Core" Version="5.6.1" /></ItemGroup>
 </Project>
-"#;
+"#
+        ),
+    )
+    .unwrap();
+}
 
 const CLANG_WASM: &[&str] = &["--target=wasm32", "-nostdlib", "-ffreestanding", "-O1", "-Wall", "-Werror", "-Wl,--no-entry", "-Wl,--allow-undefined", "-Wl,--export-table"];
 const ZIG_WASM: &[&str] = &["build-exe", "test.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic", "--export-table", "-O", "ReleaseSmall"];
@@ -115,8 +147,8 @@ fn c(fixture: &str) {
     let Some([clang, node]) = tools(["clang", "node"]) else { return };
     let c = case(fixture, "c");
     let model = generators::wasm::model(&c.xml, "C");
-    fs::write(c.out.join("bindings.h"), generators::c::header(&model)).unwrap();
-    run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&c.out).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+    write_files(&c.out.join("bindings"), generators::c::files(&model));
+    run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
     write_glue(&c, &model);
     run_wasm(&c, &node);
     print!("{}", skipped(&model.skipped));
@@ -126,7 +158,7 @@ fn zig(fixture: &str) {
     let Some([zig, node]) = tools(["zig", "node"]) else { return };
     let c = case(fixture, "zig");
     let model = generators::wasm::model(&c.xml, "Zig");
-    fs::write(c.out.join("bindings.zig"), generators::zig::module(&model)).unwrap();
+    write_files(&c.out, generators::zig::files(&model));
     fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
     run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
     write_glue(&c, &model);
@@ -161,7 +193,7 @@ fn shapes_xml(target: &str, overrides: &[&str]) -> String {
 #[should_panic(expected = "cannot express a union")]
 fn c_rejects_unions() {
     let xml = shapes_xml("c", &["union_params=keep", "unions=keep"]);
-    generators::c::header(&generators::wasm::model(&xml, "C"));
+    generators::c::files(&generators::wasm::model(&xml, "C"));
 }
 
 #[test]
@@ -244,7 +276,8 @@ fn dom_case(target: &str) -> Case {
     let out = root().join("target/e2e").join(format!("dom-{target}"));
     let _ = fs::remove_dir_all(&out);
     fs::create_dir_all(&out).unwrap();
-    let xml = lower(Path::new("lib.dom.d.ts"), Some(target), &[]);
+    // Split by the DOM's areas, as a real build would.
+    let xml = lower_with(Path::new("lib.dom.d.ts"), Some(target), &[root().join("examples/modules/dom.toml")], &[]);
     fs::write(out.join("api.xml"), &xml).unwrap();
     Case { fixture: root().join("tests/dom"), out, xml }
 }
@@ -310,10 +343,10 @@ mod dom {
         let Some([clang]) = tools(["clang"]) else { return };
         let c = dom_case("c");
         let model = generators::wasm::model(&c.xml, "C");
-        fs::write(c.out.join("bindings.h"), generators::c::header(&model)).unwrap();
+        write_files(&c.out.join("bindings"), generators::c::files(&model));
             fs::write(c.out.join("index.html"), wasm_page("c")).unwrap();
         print!("{}", skipped(&model.skipped));
-        run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&c.out).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+        run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
         write_glue(&c, &model);
         run_browser(&c);
     }
@@ -322,9 +355,7 @@ mod dom {
         let Some([fable]) = tools(["fable"]) else { return };
         let c = dom_case("fsharp");
         let bindings = generators::fsharp::module(&c.xml);
-        fs::write(c.out.join("Bindings.fs"), &bindings.source).unwrap();
-        fs::copy(c.fixture.join("test.fs"), c.out.join("Test.fs")).unwrap();
-        fs::write(c.out.join("Test.fsproj"), FSPROJ).unwrap();
+        write_fsharp(&c, &bindings);
         fs::write(c.out.join("index.html"), FSHARP_PAGE).unwrap();
         print!("{}", skipped(&bindings.skipped));
         run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
@@ -336,7 +367,7 @@ mod dom {
         let Some([zig]) = tools(["zig"]) else { return };
         let c = dom_case("zig");
         let model = generators::wasm::model(&c.xml, "Zig");
-        fs::write(c.out.join("bindings.zig"), generators::zig::module(&model)).unwrap();
+        write_files(&c.out, generators::zig::files(&model));
             fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
         fs::write(c.out.join("index.html"), wasm_page("zig")).unwrap();
         print!("{}", skipped(&model.skipped));
