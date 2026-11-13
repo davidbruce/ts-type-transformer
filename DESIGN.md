@@ -98,6 +98,7 @@ How a generator lays out files is its own choice. The test generators:
   and same-name macros let any subtype be passed: `Element_setAttribute(div,
   ...)`; anything else is a compile error. Per-key
   methods share one wasm import per call shape (`addEventListener_keyed`).
+  Arrays are typed per element (`JsArray_double`, `JsArray_Element`).
   File names that would still clash get a suffix (`point_2.h`, `Con_.h`).
 - C++ (C++20, WASI SDK): a value type per JavaScript type holding the
   handle, inheriting virtually from `ts::Handle`, so inheritance and mixins
@@ -119,12 +120,16 @@ How a generator lays out files is its own choice. The test generators:
   (`NodeListOf<A | B>`); a bare `T` in a union is told apart by what `T` is.
 - Zig: a file per module, in the same folders, importing by name what it uses
   from the others, and a root `bindings.zig`. Zig reads only what is used.
+  Arrays are `JsArrayOf(T)`; a union decodes wherever a handle becomes a
+  value, a callback's arguments included (through a comptime trampoline).
 - F#: files must not refer to each other in cycles. Files are ordered by what
   F# cannot refer to forward: base types and namespaces. What other modules
   inherit from is split off as `<module>.base`; aliases go where their parts
   are. A member that mentions a type of a later file becomes an extension
   member there (`type Node with member this.ownerDocument ...`): 725 of
-  11,500 for the DOM. One file per area, the largest 168 KB.
+  11,500 for the DOM. One file per area, the largest 168 KB. Constraints of
+  methods and functions are F# constraints (`'E when 'E :> Element`);
+  interfaces' are left out, as F# would check them wherever one is named.
 
 ## Unions
 
@@ -210,7 +215,10 @@ calls, independent of the bindings.
 
 **The wasm boundary.** Objects, arrays, strings coming back and untyped values
 are integer handles; a callback is a handle made from a wasm function pointer
-and a context pointer. The JavaScript side is generated per API
+and a context pointer. A handle is a counted reference: what a function
+returns is the caller's, arguments are lent, and what a callback returns is
+given to JavaScript. C++ counts copies itself; C and Zig release explicitly
+(`js_release(x)`, `defer jsRelease(x)`). The JavaScript side is generated per API
 (`generators::wasm::glue`): about 107,000 imports, 10 MB, for the DOM.
 
 The generators are thin on purpose: they print what the config produced and
