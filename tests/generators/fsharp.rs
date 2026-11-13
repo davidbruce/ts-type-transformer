@@ -480,6 +480,32 @@ impl Gen {
         }
     }
 
+    // A method's or function's type parameters, with the constraints F# can
+    // state: `<'E when 'E :> Element>`, checked where it is called. An
+    // interface's are left unconstrained: F# would check them wherever the
+    // interface is named, erased unions and `obj` arguments included.
+    fn constrained_type_params(&mut self, n: Node) -> String {
+        let mut params = Vec::new();
+        let mut constraints = Vec::new();
+        for p in named(n, "typeParameter") {
+            let name = format!("'{}", attr(p, "name"));
+            let c = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child);
+            if let Some(c) = c.filter(|c| c.has_tag_name("ref") && matches!(attr(*c, "kind"), "interface" | "class")) {
+                let t = self.ty(c, "");
+                if t != "obj" {
+                    constraints.push(format!("{name} :> {t}"));
+                }
+            }
+            params.push(name);
+        }
+        match (params.is_empty(), constraints.is_empty()) {
+            (true, _) => String::new(),
+            (false, true) => format!("<{}>", params.join(", ")),
+            // `X<Y> >`: F# would read `>>` as an operator.
+            (false, false) => format!("<{} when {}{}>", params.join(", "), constraints.join(" and "), if constraints.last().unwrap().ends_with('>') { " " } else { "" }),
+        }
+    }
+
     fn type_params(&self, n: Node) -> String {
         let params: Vec<String> = named(n, "typeParameter").map(|p| format!("'{}", attr(p, "name"))).collect();
         if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) }
@@ -595,7 +621,7 @@ impl Gen {
         let raw = m.attribute("name").unwrap_or_default();
         let name = ident(raw);
         let js = js_access(m.attribute("jsName").unwrap_or(raw));
-        let tps = self.type_params(m);
+        let tps = self.constrained_type_params(m);
         let property = |name: &str, t: &str, settable: bool, js: &str| {
             let get = format!("[<Emit(\"$0{}\")>] get (): {t} = jsNative", js.replace('"', "\\\""));
             let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
@@ -795,7 +821,8 @@ impl Gen {
                         Some((suffix, args)) => (ident(&format!("{raw}_{suffix}")), args.replace('"', "\\\"")),
                         None => (name, "$0...".to_string()),
                     };
-                    let line = format!("{indent}    [<Emit(\"{path}({args})\")>] static member {name}{} ({}): {ret} = jsNative\n", self.type_params(d), params.join(", "));
+                    let tps = self.constrained_type_params(d);
+                    let line = format!("{indent}    [<Emit(\"{path}({args})\")>] static member {name}{tps} ({}): {ret} = jsNative\n", params.join(", "));
                     if !functions.contains(&line) {
                         functions.push(line);
                     }

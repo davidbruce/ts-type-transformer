@@ -73,5 +73,6 @@ check ((b.map (fun v -> v * 2.0)).value = 42.0) "generic method"
 check ((b.map (fun v -> string v)).value = "21") "generic method, other type"
 check (first r = Some 0.0) "generic function"
 check (first (ResizeArray<float>()) = None) "generic function, undefined"
+check ((largest all).id = 2.0) "constrained generic function"
 
 printfn "%d checks passed" passed

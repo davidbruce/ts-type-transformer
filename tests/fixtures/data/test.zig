@@ -72,18 +72,16 @@ export fn run() void {
     expect(b.norm(point) == 5, @src());
     expect(b.origin().get_x() == 0, @src());
 
-    // Arrays.
+    // Arrays are typed: number[] is JsArrayOf(f64).
     const r = b.range(4);
     expect(r.len() == 4, @src());
-    expect(r.get(3).toNumber() == 3, @src());
+    expect(r.get(3) == 3, @src());
     expect(b.sum(r) == 6, @src());
-    const mine = b.JsArray.new();
-    mine.push(b.JsValue.number(10));
-    mine.push(b.JsValue.number(5));
+    const mine = b.JsArrayOf(f64).of(&.{ 10, 5 });
     expect(b.sum(mine) == 15, @src());
     const w = b.words("a bc");
     expect(w.len() == 2, @src());
-    expect(strEq(w.get(1).toString(), "bc"), @src());
+    expect(strEq(w.get(1), "bc"), @src());
 
     // Tuples are arrays.
     const p = b.pair(1, "one");
@@ -95,7 +93,7 @@ export fn run() void {
     // Arrays of objects.
     const all = b.items();
     expect(all.len() == 2, @src());
-    const item: b.Item = .{ .h = all.get(0).h };
+    const item = all.get(0);
     expect(item.get_id() == 1, @src());
     expect(item.get_tags().len() == 2, @src());
 
@@ -103,6 +101,29 @@ export fn run() void {
     const bx = b.wrap(b.JsValue.number(21));
     expect(bx.get_value().toNumber() == 21, @src());
     expect(bx.map(b.Box_map_f.from(doubled, null)).get_value().toNumber() == 42, @src());
-    expect(b.first(r).toNumber() == 0, @src());
+    expect(b.first(r.any()).toNumber() == 0, @src());
     expect(b.first(b.JsArray.new()).isNull(), @src());
+
+    // A union as an array element: Id is number | string.
+    const some = b.ids();
+    expect(some.get(0).number == 1 and strEq(some.get(1).string, "two"), @src());
+
+    // A handle a function returns is the caller's to release.
+    const live = b.jsLiveHandles();
+    for (0..1000) |i| {
+        const x: f64 = @floatFromInt(i);
+        // Made here, so released here; wrap only borrows it.
+        const n = b.JsValue.number(x);
+        defer b.jsRelease(n);
+        const t = b.wrap(n);
+        defer b.jsRelease(t);
+        const v = t.get_value();
+        defer b.jsRelease(v);
+        const parts = b.words("a b");
+        defer b.jsRelease(parts);
+        const second = parts.get(1);
+        defer b.jsRelease(second);
+        expect(v.toNumber() == x and strEq(second, "b"), @src());
+    }
+    expect(b.jsLiveHandles() == live, @src());
 }

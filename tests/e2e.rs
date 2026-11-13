@@ -77,8 +77,13 @@ struct Case {
 }
 
 fn case(fixture: &str, target: &str) -> Case {
+    case_in(fixture, target, &format!("{fixture}-{target}"))
+}
+
+// As `case`, in `target/e2e/<name>`.
+fn case_in(fixture: &str, target: &str, name: &str) -> Case {
     let dir = root().join("tests/fixtures").join(fixture);
-    let out = root().join("target/e2e").join(format!("{fixture}-{target}"));
+    let out = root().join("target/e2e").join(name);
     let _ = fs::remove_dir_all(&out);
     fs::create_dir_all(&out).unwrap();
     let xml = lower(&dir.join("api.d.ts"), Some(target), &[]);
@@ -261,6 +266,19 @@ fn zig_rejects_optional_parameters() {
 #[should_panic(expected = "cannot express <literal>")]
 fn fsharp_rejects_literal_types() {
     generators::fsharp::module(&shapes_xml("fsharp", &["literals=keep"]));
+}
+
+// A type argument outside its parameter's constraint is an F# compile error:
+// `largest<T extends Item>` takes no array of numbers.
+#[test]
+fn fsharp_checks_constraints() {
+    let Some([fable]) = tools(["fable"]) else { return };
+    let c = case_in("data", "fsharp", "data-fsharp-wrong");
+    write_fsharp(&c, &generators::fsharp::module(&c.xml));
+    fs::write(c.out.join("Test.fs"), "module Test\nopen type Bindings.Globals\nlet wrong = largest (ResizeArray<float>())\n").unwrap();
+    let out = Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]).output().unwrap();
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    assert!(!out.status.success() && text.contains("Test.fs") && text.contains("Item"), "a float array should not satisfy T :> Item:\n{text}");
 }
 
 // Whatever the input, a construct the config lowers must not appear in the output.

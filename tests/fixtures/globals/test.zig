@@ -36,10 +36,11 @@ export fn run() void {
     expect(b.Geometry_Deep_twice(4) == 8, @src());
 
     // Rest parameters take an array.
-    const parts = b.JsArray.new();
-    parts.push(b.JsValue.string("a"));
-    parts.push(b.JsValue.string("b"));
-    parts.push(b.JsValue.string("c"));
+    const parts = b.JsArrayOf(b.JsString).new();
+    defer b.jsRelease(parts);
+    parts.pushString("a");
+    parts.pushString("b");
+    parts.pushString("c");
     expect(strEq(b.join_with_parts("-", parts), "a-b-c"), @src());
     expect(strEq(b.join("-"), ""), @src());
 

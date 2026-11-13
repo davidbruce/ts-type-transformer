@@ -48,8 +48,9 @@ export fn run() void {
     const box = div.asHTMLElement();
     box.set_id("made-by-zig");
     box.set_textContent("hello from zig");
-    const classes = b.JsArray.new();
-    classes.push(b.JsValue.string("box"));
+    const classes = b.JsArrayOf(b.JsString).new();
+    defer b.jsRelease(classes);
+    classes.pushString("box");
     box.get_classList().add_with_tokens(classes);
     _ = body.appendChild(box.asNode());
     expect(doc.getElementById("made-by-zig").?.h == box.h, @src());
@@ -101,6 +102,19 @@ export fn run() void {
     expect(box.get_children().get_length() == 2, @src());
     expect(b.get_innerWidth() > 0, @src());
     doc.set_title("driven by zig");
+
+    // A handle a function returns is the caller's to release.
+    const live = b.jsLiveHandles();
+    for (0..500) |_| {
+        const found = doc.getElementById("made-by-zig").?;
+        defer b.jsRelease(found);
+        const list = found.get_classList();
+        defer b.jsRelease(list);
+        const id = found.get_id();
+        defer b.jsRelease(id);
+        expect(list.contains("box") and strEq(id, "made-by-zig"), @src());
+    }
+    expect(b.jsLiveHandles() == live, @src());
 }
 
 // Reference every declaration so the whole module is checked, not just what is used.

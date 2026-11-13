@@ -36,10 +36,10 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Geometry_Deep_twice(4) == 8);
 
     // Rest parameters take an array.
-    JsArray parts = JsArray_new();
-    JsArray_push(parts, js_string("a"));
-    JsArray_push(parts, js_string("b"));
-    JsArray_push(parts, js_string("c"));
+    JsArray_JsString parts = JsArray_JsString_new();
+    JsArray_JsString_push(parts, "a");
+    JsArray_JsString_push(parts, "b");
+    JsArray_JsString_push(parts, "c");
     CHECK(str_eq(join_with_parts("-", parts), "a-b-c"));
     CHECK(str_eq(join("-"), ""));
 

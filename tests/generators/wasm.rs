@@ -741,9 +741,12 @@ impl<'a> Builder<'a> {
                 let inner = self.ty(only_child(n), owner);
                 absent(inner, attr(n, "absent") == "undefined")
             }
-            // Elements that cross as a number, a flag, a string or a handle.
-            "array" if self.generics => match self.ty(only_child(n), owner) {
-                e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::Generic(..) | Ty::Param(_) | Ty::ArrayOf(_) | Ty::NamedUnion(_)) => Ty::ArrayOf(Box::new(e)),
+            // Elements that cross as a number, a flag, a string, a handle or a
+            // union that can be told apart.
+            "array" => match self.ty(only_child(n), owner) {
+                e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_)) => Ty::ArrayOf(Box::new(e)),
+                e @ (Ty::Generic(..) | Ty::Param(_)) if self.generics => Ty::ArrayOf(Box::new(e)),
+                Ty::NamedUnion(u) if self.model.unions.iter().any(|x| x.name == u && x.decodable()) => Ty::ArrayOf(Box::new(Ty::NamedUnion(u))),
                 _ => Ty::Array,
             },
             "array" | "tuple" => Ty::Array,
@@ -799,7 +802,7 @@ impl<'a> Builder<'a> {
                     self.resolving.push(key.clone());
                     let parts: Vec<Ty> = elements(body).map(|p| self.ty(p, "")).collect();
                     self.resolving.pop();
-                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_) | Ty::ArrayOf(_));
+                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
                     if !parts.iter().all(simple) || !distinct(&parts) {
                         self.skip("union bound as an untyped value");
                         return Ty::Any;
@@ -846,8 +849,11 @@ fn only_child_after_params<'a>(d: Node<'a, 'a>, target: &str) -> Node<'a, 'a> {
     only_child(d)
 }
 
+// No two members alike. Arrays are alike whatever they hold: a test sees only an array.
 fn distinct(parts: &[Ty]) -> bool {
-    parts.iter().enumerate().all(|(i, p)| !parts[..i].contains(p))
+    let shape = |p: &Ty| if matches!(p, Ty::ArrayOf(_)) { Ty::Array } else { p.clone() };
+    let shapes: Vec<Ty> = parts.iter().map(shape).collect();
+    shapes.iter().enumerate().all(|(i, p)| !shapes[..i].contains(p))
 }
 
 // `void` is only a result. A parameter or property of type `undefined` holds a value.
@@ -1053,7 +1059,8 @@ pub fn imports(wasm: &[u8]) -> HashSet<String> {
 // The glue for every import in the model, or with `used`, only those a compiled module needs.
 pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
     let wanted = |name: &str| used.is_none_or(|u| u.contains(name));
-    let mut out = String::from(
+    let mut out = format!("const COUNTED = {};\n", m.counted);
+    out += &String::from(
         "// Generated. Implements the wasm imports by calling the JavaScript API.
 export function makeEnv(getInstance) {
   const objs = [null];
@@ -1082,6 +1089,13 @@ export function makeEnv(getInstance) {
     }
   };
   const get = h => objs[h];
+  // A handle lent to a callback, released when it returns. Where wasm counts
+  // handles, it releases them itself: the handle is its own.
+  const lend = (lent, v) => {
+    const h = put(v);
+    if (!COUNTED && h) lent.push(h);
+    return h;
+  };
   // A handle wasm gave up: what a callback returns.
   const take = h => {
     const v = get(h);
@@ -1136,7 +1150,7 @@ export function makeEnv(getInstance) {
     js_array_length: h => get(h).length,
     js_array_get: (h, i) => put(get(h)[i]),
     js_array_push: (h, v) => { get(h).push(get(v)); },
-    js_listener_from: (fn, ctx) => callback('listener', fn, ctx, f => ev => { f(ctx, put(ev)); }),
+    js_listener_from: (fn, ctx) => callback('listener', fn, ctx, f => ev => { const lent = []; try { f(ctx, lend(lent, ev)); } finally { lent.forEach(release); } }),
     // Forgets a callback made here; returns its context, for wasm to free, or 0.
     js_callback_release: h => {
       const o = owned.get(get(h));
@@ -1177,12 +1191,12 @@ export function makeEnv(getInstance) {
     for c in m.callbacks.iter().filter(|c| wanted(&format!("{}_from", c.name))) {
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let mut args = vec!["ctx".to_string()];
-        args.extend(c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t)));
+        args.extend(c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t).replace("put(", "lend(lent, ")));
         let call = format!("f({})", args.join(", "));
-        // What a callback returns is wasm's to give up, where handles are counted.
-        let ret = from_wasm("r", &c.ret);
-        let ret = if m.counted { ret.replace("get(r)", "take(r)") } else { ret };
-        let body = if c.ret == Ty::Void { format!("{{ {call}; }}") } else { format!("{{ const r = {call}; return {ret}; }}") };
+        // What a callback returns, wasm gives up.
+        let ret = from_wasm("r", &c.ret).replace("get(r)", "take(r)");
+        let body = if c.ret == Ty::Void { format!("{call};") } else { format!("const r = {call}; return {ret};") };
+        let body = format!("{{ const lent = []; try {{ {body} }} finally {{ lent.forEach(release); }} }}");
         out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, f => ({}) => {body}),\n", c.name, c.name, names.join(", "));
     }
     for f in m.all_funcs().filter(|f| f.shared.is_none() && wanted(&f.import)) {

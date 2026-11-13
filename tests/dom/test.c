@@ -68,9 +68,10 @@ __attribute__((export_name("run"))) void run(void) {
     HTMLElement box = HTMLDivElement_as_HTMLElement(div);
     Element_set_id(box, "made-by-c");
     Node_set_textContent(box, "hello from c");
-    JsArray classes = JsArray_new();
-    JsArray_push(classes, js_string("box"));
+    JsArray_JsString classes = JsArray_JsString_new();
+    JsArray_JsString_push(classes, "box");
     DOMTokenList_add_with_tokens(Element_get_classList(box), classes);
+    js_release(classes);
     Node_appendChild(body, box);
     CHECK(Document_getElementById(doc, "made-by-c").h == box.h);
     CHECK(DOMTokenList_contains(Element_get_classList(box), "box"));
@@ -121,4 +122,17 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(HTMLCollectionBase_get_length(ParentNode_get_children(box)) == 2);
     CHECK(get_innerWidth() > 0);
     Document_set_title(doc, "driven by c");
+
+    // A handle a function returns is the caller's to release.
+    uint32_t live = js_live_handles();
+    for (int i = 0; i < 500; i++) {
+        HTMLElement found = Document_getElementById(doc, "made-by-c");
+        DOMTokenList list = Element_get_classList(found);
+        JsString id = Element_get_id(found);
+        CHECK(DOMTokenList_contains(list, "box") && str_eq(id, "made-by-c"));
+        js_release(id);
+        js_release(list);
+        js_release(found);
+    }
+    CHECK(js_live_handles() == live);
 }

@@ -21,6 +21,15 @@ fn fold(_: ?*anyopaque, total: f64, label: b.JsString) callconv(.c) f64 {
 fn isFive(_: ?*anyopaque, c: b.Counter) callconv(.c) bool {
     return c.get_count() == 5;
 }
+// A union argument arrives decoded; the function is known at compile time.
+var number: f64 = 0;
+var text_len: usize = 0;
+fn onId(_: ?*anyopaque, id: b.Id) void {
+    switch (id) {
+        .number => |n| number = n,
+        .string => |s| text_len = s.len(),
+    }
+}
 fn bump(ctx: ?*anyopaque) callconv(.c) void {
     const n: *u32 = @ptrCast(@alignCast(ctx));
     n.* += 1;
@@ -66,4 +75,7 @@ export fn run() void {
     expect(ran == 0, @src());
     expect(b.flush() == 2, @src());
     expect(ran == 2, @src());
+
+    expect(b.eachId(b.eachId_f.from(onId, null)) == 2, @src());
+    expect(number == 1 and text_len == 3, @src());
 }

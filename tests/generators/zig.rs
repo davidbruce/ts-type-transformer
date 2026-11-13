@@ -30,7 +30,7 @@ fn union_field(t: &Ty) -> String {
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
         Ty::Obj(n) => n.clone(),
-        Ty::Array => "array".into(),
+        Ty::Array | Ty::ArrayOf(_) => "array".into(),
         _ => unreachable!(),
     }
 }
@@ -49,29 +49,42 @@ fn union_decl(u: &NamedUnion) -> String {
             format!("{}: {t}", ident(&union_field(p)))
         })
         .collect();
+    let decode = if u.decodable() {
+        format!(
+            "    // The member a handle a function returned holds; takes the handle over.\n    pub fn fromHandle(h: u32) @This() {{ return {}; }}\n    \
+             // The member a handle lent to a callback holds; it stays lent.\n    pub fn lent(h: u32) @This() {{ return {}; }}\n",
+            decode_union(u, "h", true),
+            decode_union(u, "h", false)
+        )
+    } else {
+        String::new()
+    };
     format!(
-        "pub const {0} = union(enum) {{\n    {1},\n    // Which member a value is: its index.\n    pub fn tag(h: u32) i32 {{ return raw.{0}_tag(h); }}\n}};\n",
+        "pub const {0} = union(enum) {{\n    {1},\n    // Which member a value is: its index.\n    pub fn tag(h: u32) i32 {{ return raw.{0}_tag(h, 0); }}\n{decode}}};\n",
         u.name,
         fields.join(",\n    ")
     )
 }
 
-// Turns a handle coming back into the union's member: `raw.U_tag` says which.
-fn decode_union(u: &NamedUnion, h: &str) -> String {
+// Turns a handle into the union's member: `raw.U_tag` says which. A number
+// or flag is read from the handle, and with `take` the handle released.
+fn decode_union(u: &NamedUnion, h: &str, take: bool) -> String {
     let arms: Vec<String> = u
         .parts
         .iter()
         .enumerate()
         .map(|(i, p)| {
-            let value = match p {
-                Ty::Num => format!("(JsValue{{ .h = {h} }}).toNumber()"),
-                Ty::Bool => format!("(JsValue{{ .h = {h} }}).toBool()"),
+            let value = match (p, take) {
+                (Ty::Num, true) => format!("JsValue.takeNumber({h})"),
+                (Ty::Bool, true) => format!("JsValue.takeBool({h})"),
+                (Ty::Num, false) => format!("(JsValue{{ .h = {h} }}).toNumber()"),
+                (Ty::Bool, false) => format!("(JsValue{{ .h = {h} }}).toBool()"),
                 _ => format!(".{{ .h = {h} }}"),
             };
             format!("{i} => .{{ .{} = {value} }}", ident(&union_field(p)))
         })
         .collect();
-    format!("switch ({}.tag({h})) {{ {}, else => unreachable }}", u.name, arms.join(", "))
+    format!("switch (tag({h})) {{ {}, else => unreachable }}", arms.join(", "))
 }
 
 fn typed(t: &Ty, is_param: bool) -> String {
@@ -82,6 +95,7 @@ fn typed(t: &Ty, is_param: bool) -> String {
         Ty::Str if is_param => "[]const u8".into(),
         Ty::Str => "JsString".into(),
         Ty::Array => "JsArray".into(),
+        Ty::ArrayOf(e) => format!("JsArrayOf({})", typed(e, false)),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         Ty::Nullable(inner, _) => format!("?{}", typed(inner, is_param)),
         Ty::Union(parts) if !parts.is_empty() && is_param => {
@@ -93,7 +107,7 @@ fn typed(t: &Ty, is_param: bool) -> String {
         Ty::Key(m) => format!("{m}.Key"),
         Ty::Mapped(m) => format!("{m}.Type(KEY)"),
         Ty::Listener(ev) => format!("JsListener({})", typed(ev, false)),
-        Ty::Param(_) | Ty::Generic(..) | Ty::ArrayOf(_) => panic!("Zig generator cannot express generics: the target config must erase them"),
+        Ty::Param(_) | Ty::Generic(..) => panic!("Zig generator cannot express generics: the target config must erase them"),
         Ty::Any | Ty::Union(_) => "JsValue".into(),
     }
 }
@@ -116,24 +130,8 @@ fn lower_arg(name: &str, t: &Ty) -> String {
         Ty::Enum(_) | Ty::Key(_) => format!("@intFromEnum({name})"),
         Ty::NumEnum(_) => format!("@floatFromInt(@intFromEnum({name}))"),
         Ty::Nullable(..) => format!("if ({name}) |v| v.h else 0"),
-        // Each member becomes a JavaScript value.
-        Ty::NamedUnion(_) => format!("switch ({name}) {{ inline else => |v| JsValue.of(v).h }}"),
-        // Each alternative becomes a JavaScript value.
-        Ty::Union(parts) if !parts.is_empty() => {
-            let arms: Vec<String> = parts
-                .iter()
-                .map(|p| {
-                    let field = union_field(p);
-                    match p {
-                        Ty::Num => format!(".{field} => |v| JsValue.number(v).h"),
-                        Ty::Str => format!(".{field} => |v| JsValue.string(v).h"),
-                        Ty::Bool => format!(".{field} => |v| JsValue.boolean(v).h"),
-                        _ => format!(".{field} => |v| v.h"),
-                    }
-                })
-                .collect();
-            format!("switch ({name}) {{ {} }}", arms.join(", "))
-        }
+        // A union is lent for the call: see `func`.
+        Ty::NamedUnion(_) | Ty::Union(_) => format!("lent_{name}.h"),
         _ => format!("{name}.h"),
     }
 }
@@ -149,8 +147,14 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     }
     // A key is known at compile time: the types it selects are computed from it.
     let key = f.params.iter().find(|p| matches!(p.1, Ty::Key(_))).map(|p| param(&p.0)).unwrap_or_default();
+    // Statements before the call: a union argument made a JavaScript value,
+    // released after the call if it was made for it.
+    let mut pre = String::new();
     for (name, t) in &f.params {
         let id = param(name);
+        if matches!(t, Ty::NamedUnion(_)) || matches!(t, Ty::Union(parts) if !parts.is_empty()) {
+            pre += &format!("const lent_{id} = switch ({id}) {{ inline else => |v| Lent.of(v) }}; defer lent_{id}.done(); ");
+        }
         let comptime = if matches!(t, Ty::Key(_)) { "comptime " } else { "" };
         params.push(format!("{comptime}{id}: {}", typed(t, true).replace("KEY", &key)));
         if *t == Ty::Str {
@@ -185,7 +189,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
         _ => typed(&f.ret, false).replace("KEY", &key),
     };
     let body = match &f.ret {
-        Ty::NamedUnion(_) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; return {};", decode_union(union.unwrap(), "h")),
+        Ty::NamedUnion(n) if union.is_some_and(|u| u.decodable()) => format!("return {n}.fromHandle({call});"),
         Ty::Void => format!("{call};"),
         Ty::Num => format!("return {call};"),
         Ty::Bool => format!("return {call} != 0;"),
@@ -200,7 +204,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     if f.shared.is_none() || !externs.contains(&decl) {
         *externs += &decl;
     }
-    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {body} }}\n", ident(&f.name), params.join(", "));
+    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {pre}{body} }}\n", ident(&f.name), params.join(", "));
 }
 
 const RUNTIME: &str = "// Generated.
@@ -216,6 +220,9 @@ pub const JsValue = extern struct {
     pub fn toString(self: JsValue) JsString { return .{ .h = self.h }; }
     pub fn eql(self: JsValue, other: JsValue) bool { return raw.js_equals(self.h, other.h) != 0; }
     pub fn isNull(self: JsValue) bool { return self.h == 0; }
+    // A number or flag from a handle a function returned, which is released.
+    pub fn takeNumber(h: u32) f64 { const x = raw.js_to_number(h); raw.js_release(h); return x; }
+    pub fn takeBool(h: u32) bool { const x = raw.js_to_bool(h) != 0; raw.js_release(h); return x; }
     // Any value a union member can hold.
     pub fn of(v: anytype) JsValue {
         return switch (@TypeOf(v)) {
@@ -239,6 +246,56 @@ pub fn JsListener(comptime Ev: type) type {
         pub fn from(f: Fn, ctx: ?*anyopaque) @This() { return .{ .h = raw.js_listener_from(@intFromPtr(f), ctx) }; }
     };
 }
+// A handle a function returns is the caller's: `defer jsRelease(x)`.
+// Arguments, and a callback's arguments, are lent: `jsRetain` one to keep it.
+// What a callback returns is given to JavaScript: `jsRetain` a handle to return it and keep it.
+pub fn jsRelease(x: anytype) void { raw.js_release(x.h); }
+pub fn jsRetain(x: anytype) @TypeOf(x) { raw.js_retain(x.h); return x; }
+// How many JavaScript values wasm holds handles to.
+pub fn jsLiveHandles() u32 { return raw.js_live(); }
+// Forgets a callback made with `from`, and returns its context. Its handle is released as any other.
+pub fn jsForgetCallback(x: anytype) ?*anyopaque { return @ptrFromInt(raw.js_callback_release(x.h)); }
+
+// A value lent to JavaScript for one call: an object's own handle, or a
+// new one for a number, flag or string, released by `done`.
+pub const Lent = struct {
+    h: u32,
+    own: bool,
+    pub fn of(v: anytype) Lent {
+        const T = @TypeOf(v);
+        if (T == f64 or T == comptime_float or T == comptime_int) return .{ .h = raw.js_from_number(v), .own = true };
+        if (T == bool) return .{ .h = raw.js_from_bool(@intFromBool(v)), .own = true };
+        if (T == []const u8) return .{ .h = raw.js_from_string(v.ptr, v.len), .own = true };
+        if (@typeInfo(T) == .@\"union\") return switch (v) { inline else => |x| of(x) };
+        return .{ .h = v.h, .own = false };
+    }
+    pub fn done(self: Lent) void { if (self.own) raw.js_release(self.h); }
+};
+
+// A T from a handle a function returned: takes the handle over.
+pub fn jsTake(comptime T: type, h: u32) T {
+    if (T == f64) return JsValue.takeNumber(h);
+    if (T == bool) return JsValue.takeBool(h);
+    if (@typeInfo(T) == .@\"union\") return T.fromHandle(h);
+    return .{ .h = h };
+}
+
+// A JavaScript array of T: f64, bool, JsString, a handle, or a union.
+pub fn JsArrayOf(comptime T: type) type {
+    return extern struct {
+        h: u32,
+        pub fn new() @This() { return .{ .h = raw.js_array_new() }; }
+        pub fn of(items: []const T) @This() { const a = new(); for (items) |x| a.push(x); return a; }
+        pub fn len(self: @This()) usize { return raw.js_array_length(self.h); }
+        // What it returns is the caller's, as from any function.
+        pub fn get(self: @This(), i: usize) T { return jsTake(T, raw.js_array_get(self.h, i)); }
+        pub fn push(self: @This(), v: T) void { const l = Lent.of(v); defer l.done(); raw.js_array_push(self.h, l.h); }
+        pub fn pushString(self: @This(), s: []const u8) void { const l = Lent.of(s); defer l.done(); raw.js_array_push(self.h, l.h); }
+        // The same array, untyped.
+        pub fn any(self: @This()) JsArray { return .{ .h = self.h }; }
+    };
+}
+
 pub const JsArray = extern struct {
     h: u32,
     pub fn new() JsArray { return .{ .h = raw.js_array_new() }; }
@@ -262,6 +319,10 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_array_get(h: u32, i: usize) u32;
     extern \"env\" fn js_array_push(h: u32, v: u32) void;
     extern \"env\" fn js_listener_from(f: usize, ctx: ?*anyopaque) u32;
+    extern \"env\" fn js_retain(h: u32) void;
+    extern \"env\" fn js_release(h: u32) void;
+    extern \"env\" fn js_live() u32;
+    extern \"env\" fn js_callback_release(h: u32) usize;
 ";
 
 // The bindings as files: `runtime.zig`; `types.zig` with enums, unions,
@@ -272,7 +333,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 pub fn files(m: &Model) -> Vec<(String, String)> {
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsListener"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
@@ -287,7 +348,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     }
     for u in &m.unions {
         types.0 += &union_decl(u);
-        types.1 += &format!("    extern \"env\" fn {}_tag(h: u32) i32;\n", u.name);
+        types.1 += &format!("    extern \"env\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
         types.2.push(u.name.clone());
     }
     for name in &m.opaque {
@@ -295,7 +356,27 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         types.2.push(name.clone());
     }
     // A callback is made from a function and a context pointer passed back to it.
-    for c in &m.callbacks {
+    let decodable = |t: &Ty| matches!(t, Ty::NamedUnion(n) if m.unions.iter().any(|u| u.name == *n && u.decodable()));
+    for c in m.callbacks.iter().filter(|c| c.params.iter().any(|p| decodable(&p.1))) {
+        // The function is known at compile time: a C-convention trampoline
+        // decodes the union arguments and calls it.
+        let mut params = vec!["?*anyopaque".to_string()];
+        params.extend(c.params.iter().map(|(_, t)| if decodable(t) { typed(t, false) } else { callback_typed(t) }));
+        let raw_params: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| format!("a{i}: {}", if decodable(t) { "u32".into() } else { callback_typed(t) })).collect();
+        let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| if decodable(t) { format!("{}.lent(a{i})", typed(t, false)) } else { format!("a{i}") }).collect();
+        let ret = callback_typed(&c.ret);
+        types.0 += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
+        types.0 += &format!("    pub const Fn = fn ({}) {ret};\n", params.join(", "));
+        types.0 += &format!(
+            "    pub fn from(comptime f: Fn, ctx: ?*anyopaque) {0} {{\n        const T = struct {{\n            fn call(c: ?*anyopaque, {1}) callconv(.c) {ret} {{ return f(c, {2}); }}\n        }};\n        return .{{ .h = raw.{0}_from(@intFromPtr(&T.call), ctx) }};\n    }}\n}};\n",
+            c.name,
+            raw_params.join(", "),
+            args.join(", ")
+        );
+        types.1 += &format!("    extern \"env\" fn {}_from(f: usize, ctx: ?*anyopaque) u32;\n", c.name);
+        types.2.push(c.name.clone());
+    }
+    for c in m.callbacks.iter().filter(|c| !c.params.iter().any(|p| decodable(&p.1))) {
         let mut params = vec!["?*anyopaque".to_string()];
         params.extend(c.params.iter().map(|(_, t)| callback_typed(t)));
         types.0 += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);

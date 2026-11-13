@@ -70,18 +70,18 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(norm(point) == 5);
     CHECK(norm_point_get_x(origin()) == 0);
 
-    // Arrays.
-    JsArray r = range(4);
-    CHECK(JsArray_length(r) == 4);
-    CHECK(js_to_number(JsArray_get(r, 3)) == 3);
+    // Arrays are typed: number[] is JsArray_double.
+    JsArray_double r = range(4);
+    CHECK(JsArray_double_length(r) == 4);
+    CHECK(JsArray_double_get(r, 3) == 3);
     CHECK(sum(r) == 6);
-    JsArray mine = JsArray_new();
-    JsArray_push(mine, js_number(10));
-    JsArray_push(mine, js_number(5));
+    JsArray_double mine = JsArray_double_new();
+    JsArray_double_push(mine, 10);
+    JsArray_double_push(mine, 5);
     CHECK(sum(mine) == 15);
-    JsArray w = words("a bc");
-    CHECK(JsArray_length(w) == 2);
-    CHECK(str_eq(js_to_string(JsArray_get(w, 1)), "bc"));
+    JsArray_JsString w = words("a bc");
+    CHECK(JsArray_JsString_length(w) == 2);
+    CHECK(str_eq(JsArray_JsString_get(w, 1), "bc"));
 
     // Tuples are arrays.
     JsArray p = pair(1, "one");
@@ -91,16 +91,34 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(js_to_number(JsArray_get(swapped, 1)) == 1);
 
     // Arrays of objects.
-    JsArray all = items();
-    CHECK(JsArray_length(all) == 2);
-    Item item = { JsArray_get(all, 0).h };
+    JsArray_Item all = items();
+    CHECK(JsArray_Item_length(all) == 2);
+    Item item = JsArray_Item_get(all, 0);
     CHECK(Item_get_id(item) == 1);
-    CHECK(JsArray_length(Item_get_tags(item)) == 2);
+    CHECK(JsArray_JsString_length(Item_get_tags(item)) == 2);
 
     // Generics are erased: values are untyped.
     Box b = wrap(js_number(21));
     CHECK(js_to_number(Box_get_value(b)) == 21);
     CHECK(js_to_number(Box_get_value(Box_map(b, Box_map_f_from(doubled, 0)))) == 42);
-    CHECK(js_to_number(first(r)) == 0);
+    CHECK(js_to_number(first(JsArray_double_any(r))) == 0);
     CHECK(first(JsArray_new()).h == 0);
+
+    // A handle a function returns is the caller's to release.
+    uint32_t live = js_live_handles();
+    for (int i = 0; i < 1000; i++) {
+        // Made here, so released here; wrap only borrows it.
+        JsValue n = js_number(i);
+        Box t = wrap(n);
+        js_release(n);
+        JsValue v = Box_get_value(t);
+        JsArray_JsString parts = words("a b");
+        JsString second = JsArray_JsString_get(parts, 1);
+        CHECK(js_to_number(v) == i && str_eq(second, "b"));
+        js_release(second);
+        js_release(parts);
+        js_release(v);
+        js_release(t);
+    }
+    CHECK(js_live_handles() == live);
 }

@@ -32,14 +32,60 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Str => "JsString".into(),
         Ty::Any => "JsValue".into(),
         Ty::Array => "JsArray".into(),
+        Ty::ArrayOf(e) => format!("JsArray_{}", element(e)),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         // A null handle is zero.
         // NULL, or a null handle, is the absent value.
         Ty::Nullable(inner, _) => typed(inner, param),
         Ty::Union(_) | Ty::NamedUnion(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
         Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => panic!("{T} generator cannot express keyed generics: the target config must expand them"),
-        Ty::Param(_) | Ty::Generic(..) | Ty::ArrayOf(_) => panic!("{T} generator cannot express generics: the target config must erase them"),
+        Ty::Param(_) | Ty::Generic(..) => panic!("{T} generator cannot express generics: the target config must erase them"),
     }
+}
+
+// An array's element type, as a name: `double`, `JsString`, `Element`, `JsArray_double`.
+fn element(t: &Ty) -> String {
+    match t {
+        Ty::Str => "JsString".into(),
+        t => typed(t, false),
+    }
+}
+
+// The element types of the arrays a type names, innermost first.
+fn arrays(t: &Ty, out: &mut Vec<Ty>) {
+    match t {
+        Ty::ArrayOf(e) => {
+            arrays(e, out);
+            if !out.contains(e) {
+                out.push((**e).clone());
+            }
+        }
+        Ty::Nullable(inner, _) => arrays(inner, out),
+        _ => {}
+    }
+}
+
+// A typed array: `JsArray_double`, with `_new`, `_length`, `_get` and `_push`.
+// What `_get` returns is the caller's to release; a number or flag is read and released.
+fn array_type(e: &Ty) -> String {
+    let (name, elem) = (format!("JsArray_{}", element(e)), typed(e, false));
+    let (get, push_param, push) = match e {
+        Ty::Num => ("double x = ts_raw_js_to_number(h); ts_raw_js_release(h); return x;".to_string(), "double v".to_string(), "uint32_t h = ts_raw_js_from_number(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
+        Ty::Bool => ("bool x = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); return x;".to_string(), "bool v".to_string(), "uint32_t h = ts_raw_js_from_bool(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
+        Ty::Str => ("return (JsString){ h };".to_string(), "const char* v".to_string(), "uint32_t h = ts_raw_js_from_string(v, ts_strlen(v)); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
+        _ => (format!("return ({elem}){{ h }};"), format!("{elem} v"), "ts_raw_js_array_push(a.h, v.h);".to_string()),
+    };
+    [
+        format!("typedef struct {{ uint32_t h; }} {name};"),
+        format!("static inline {name} {name}_new(void) {{ return ({name}){{ ts_raw_js_array_new() }}; }}"),
+        format!("static inline uint32_t {name}_length({name} a) {{ return ts_raw_js_array_length(a.h); }}"),
+        format!("static inline {elem} {name}_get({name} a, uint32_t i) {{ uint32_t h = ts_raw_js_array_get(a.h, i); {get} }}"),
+        format!("static inline void {name}_push({name} a, {push_param}) {{ {push} }}"),
+        // The same array, untyped.
+        format!("static inline JsArray {name}_any({name} a) {{ return (JsArray){{ a.h }}; }}"),
+    ]
+    .map(|l| l + "\n")
+    .concat()
 }
 
 fn func(out: &mut String, owner: Option<&str>, f: &Func) {
@@ -133,6 +179,20 @@ TS_IMPORT(js_array_new) uint32_t ts_raw_js_array_new(void);
 TS_IMPORT(js_array_length) uint32_t ts_raw_js_array_length(uint32_t);
 TS_IMPORT(js_array_get) uint32_t ts_raw_js_array_get(uint32_t, uint32_t);
 TS_IMPORT(js_array_push) void ts_raw_js_array_push(uint32_t, uint32_t);
+TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
+TS_IMPORT(js_release) void ts_raw_js_release(uint32_t);
+TS_IMPORT(js_live) uint32_t ts_raw_js_live(void);
+TS_IMPORT(js_callback_release) uint32_t ts_raw_js_callback_release(uint32_t);
+
+// A handle a function returns is the caller's: release it when done with it.
+// Arguments, and a callback's arguments, are lent: retain one to keep it.
+// What a callback returns is given to JavaScript: retain a handle to return it and keep it.
+#define js_release(x) ts_raw_js_release((x).h)
+#define js_retain(x) ts_raw_js_retain((x).h)
+// How many JavaScript values wasm holds handles to.
+static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
+// Forgets a callback made with `X_from`, and returns its context. Its handle is released as any other.
+#define js_forget_callback(x) ((void*)(uintptr_t)ts_raw_js_callback_release((x).h))
 static inline uint32_t JsString_len(JsString s) { return ts_raw_js_string_len(s.h); }
 static inline void JsString_read(JsString s, char* buf) { ts_raw_js_string_read(s.h, buf); }
 static inline JsValue js_number(double x) { return (JsValue){ ts_raw_js_from_number(x) }; }
@@ -248,6 +308,19 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     for (base, subs) in &descendants {
         let arms: Vec<String> = subs.iter().map(|s| format!("    {s}: ({base}){{ (x).h }}")).collect();
         types += &format!("#define AS_{base}(x) _Generic((x), \\\n    {base}: (x), \\\n{})\n", arms.join(", \\\n"));
+    }
+    // Each typed array, after its element type and before what uses it.
+    let mut elements = Vec::new();
+    for f in m.all_funcs() {
+        f.params.iter().for_each(|p| arrays(&p.1, &mut elements));
+        arrays(&f.ret, &mut elements);
+    }
+    for c in &m.callbacks {
+        c.params.iter().for_each(|p| arrays(&p.1, &mut elements));
+        arrays(&c.ret, &mut elements);
+    }
+    for e in &elements {
+        types += &array_type(e);
     }
     for c in &m.callbacks {
         let mut params = vec!["void* ctx".to_string()];
