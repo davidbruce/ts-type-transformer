@@ -81,7 +81,17 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         Some(o) => format!("{o}_{}", f.name),
         None => f.name.clone(),
     };
-    let call = format!("ts_raw_{}({})", f.import, args.join(", "));
+    // A shared import takes the index of this function's fixed arguments after `self`.
+    let import = match &f.shared {
+        Some((shared, k)) => {
+            let at = usize::from(Class::has_self(f));
+            raw_params.insert(at, "int32_t".into());
+            args.insert(at, k.to_string());
+            shared.as_str()
+        }
+        None => f.import.as_str(),
+    };
+    let call = format!("ts_raw_{import}({})", args.join(", "));
     let body = match &f.ret {
         Ty::Void => format!("{call};"),
         Ty::Num => format!("return {call};"),
@@ -90,7 +100,11 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         Ty::NumEnum(e) => format!("return ({e})(int32_t){call};"),
         t => format!("return ({}){{ {call} }};", typed(t, false)),
     };
-    *out += &format!("TS_IMPORT({}) {} ts_raw_{}({});\n", f.import, raw(&f.ret), f.import, void(&raw_params));
+    let decl = format!("TS_IMPORT({import}) {} ts_raw_{import}({});\n", raw(&f.ret), void(&raw_params));
+    // Declared once per header, though several functions use it.
+    if !out.contains(&decl) {
+        *out += &decl;
+    }
     *out += &format!("static inline {} {name}({}) {{ {body} }}\n", typed(&f.ret, false), void(&params));
 }
 

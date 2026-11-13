@@ -70,6 +70,9 @@ pub struct Func {
     pub rest: bool,
     // Arguments with one possible value: position in the call, JavaScript literal.
     pub fixed: Vec<(usize, String)>,
+    // An import shared with functions that differ only in their fixed
+    // arguments, and this function's index among them.
+    pub shared: Option<(String, usize)>,
     pub ret: Ty,
 }
 
@@ -111,6 +114,18 @@ pub struct Callback {
     pub ret: Ty,
 }
 
+// One import for functions that differ only in their fixed arguments:
+// `addEventListener("click", ...)`, `addEventListener("keydown", ...)`.
+pub struct Shared {
+    pub name: String,
+    // The glue: its parameters after the index, and its body, in which
+    // `$F<j>` stands for the j-th fixed argument.
+    pub params: Vec<String>,
+    pub body: String,
+    // The fixed arguments of each function, by index.
+    pub values: Vec<Vec<String>>,
+}
+
 pub struct Model {
     pub enums: Vec<(String, Vec<String>)>,
     // Name, then member names and values.
@@ -119,6 +134,7 @@ pub struct Model {
     pub callbacks: Vec<Callback>,
     pub unions: Vec<NamedUnion>,
     pub maps: Vec<KeyMap>,
+    pub shared: Vec<Shared>,
     pub funcs: Vec<Func>,
     // Types declared elsewhere: handles with no members.
     pub opaque: Vec<String>,
@@ -163,7 +179,7 @@ pub fn model(xml: &str, target: &str) -> Model {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], funcs: vec![], opaque: vec![], skipped: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], skipped: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -173,6 +189,7 @@ pub fn model(xml: &str, target: &str) -> Model {
     };
     b.index(doc.root_element(), "");
     b.decls_of(doc.root_element(), "");
+    b.share_imports();
     let mut opaque: Vec<String> = b.opaque.into_iter().collect();
     opaque.sort();
     b.model.opaque = opaque;
@@ -211,6 +228,37 @@ impl<'a> Builder<'a> {
             n += 1;
         }
         name
+    }
+
+    // Functions whose glue is the same but for their fixed arguments share one
+    // import, which takes the index of the function's arguments.
+    fn share_imports(&mut self) {
+        let mut groups: BTreeMap<String, Vec<(usize, usize)>> = BTreeMap::new();
+        for (ci, c) in self.model.classes.iter().enumerate() {
+            for (fi, f) in c.funcs.iter().enumerate().filter(|(_, f)| !f.fixed.is_empty()) {
+                let (params, body) = entry(f, &|j, _| format!("$F{j}"));
+                groups.entry(format!("{}|{body}", params.join(","))).or_default().push((ci, fi));
+            }
+        }
+        for (_, members) in groups.into_iter().filter(|g| g.1.len() > 1) {
+            let (ci, fi) = members[0];
+            let first = &self.model.classes[ci].funcs[fi];
+            let (params, body) = entry(first, &|j, _| format!("$F{j}"));
+            // Named after what it calls: `addEventListener_keyed`.
+            let what = match &first.call {
+                Call::Method(js) => js.clone(),
+                Call::New(path) | Call::Static(path) => path.rsplit('.').next().unwrap_or_default().to_string(),
+                _ => first.import.clone(),
+            };
+            let name = self.import(format!("{}_keyed", ident(&what)));
+            let mut values = Vec::new();
+            for (k, (ci, fi)) in members.into_iter().enumerate() {
+                let f = &mut self.model.classes[ci].funcs[fi];
+                values.push(f.fixed.iter().map(|x| x.1.clone()).collect());
+                f.shared = Some((name.clone(), k));
+            }
+            self.model.shared.push(Shared { name, params, body, values });
+        }
     }
 
     fn decls_of(&mut self, scope: Node<'a, 'a>, prefix: &str) {
@@ -262,7 +310,7 @@ impl<'a> Builder<'a> {
                     let js = join(prefix, d.attribute("jsName").unwrap_or(name));
                     let name = ident(&join(prefix, name));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, ret });
+                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret });
                 }
                 "var" => {
                     let body = only_child(d);
@@ -275,7 +323,7 @@ impl<'a> Builder<'a> {
                     let ret = self.ty(body, "");
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], ret });
+                    self.model.funcs.push(Func { module: self.module.clone(), import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], shared: None, ret });
                 }
                 _ => unsupported(self.target, d),
             }
@@ -289,7 +337,7 @@ impl<'a> Builder<'a> {
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
             let import = self.import(format!("{owner}_create"));
-            c.funcs.push(Func { module: String::new(), import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], ret: Ty::Obj(owner.clone()) });
+            c.funcs.push(Func { module: String::new(), import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()) });
         }
         for m in elements(d) {
             self.member(&mut c, &mut names, m, path, m.has_tag_name("constructor") || flag(m, "static"));
@@ -340,9 +388,9 @@ impl<'a> Builder<'a> {
             if names.insert("get_at".into()) {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
-                c.funcs.push(Func { module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], ret: absent(value.clone(), true) });
+                c.funcs.push(Func { module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true) });
                 let import = self.import(format!("{owner}_set_at"));
-                c.funcs.push(Func { module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], ret: Ty::Void });
+                c.funcs.push(Func { module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
             }
             return;
         }
@@ -359,7 +407,7 @@ impl<'a> Builder<'a> {
             if !names.contains(&base) && self.bad.is_none() {
                 names.insert(base.clone());
                 let import = self.import(format!("{owner}_{base}"));
-                c.funcs.push(Func { module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], ret });
+                c.funcs.push(Func { module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret });
             }
             self.bad = None;
             return;
@@ -385,14 +433,14 @@ impl<'a> Builder<'a> {
                 let (params, rest, fixed, _) = self.signature(m, &owner);
                 let name = unique(if raw_name.is_empty() { "new".into() } else { ident(raw_name) }, names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, ret: Ty::Obj(owner) });
+                c.funcs.push(Func { module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret: Ty::Obj(owner) });
             }
             "method" => {
                 let (params, rest, fixed, ret) = self.signature(m, &owner);
                 let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js) };
                 let name = unique(ident(raw_name), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { module: String::new(), import, name, call, params, rest, fixed, ret });
+                c.funcs.push(Func { module: String::new(), import, name, call, params, rest, fixed, shared: None, ret });
             }
             // A constant needs no call across the boundary.
             "property" if m.has_attribute("const") => {
@@ -415,11 +463,11 @@ impl<'a> Builder<'a> {
                 };
                 let name = unique(format!("get_{}", ident(raw_name)), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], ret: t.clone() });
+                c.funcs.push(Func { module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone() });
                 if !flag(m, "readonly") {
                     let name = unique(format!("set_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
-                    c.funcs.push(Func { module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], ret: Ty::Void });
+                    c.funcs.push(Func { module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
                 }
             }
             _ => unsupported(self.target, m),
@@ -681,6 +729,59 @@ fn js_test(test: &str, discriminant: Option<&str>) -> String {
     }
 }
 
+// The glue of one import: its parameters and body. `fixed` writes the j-th
+// fixed argument, given its literal.
+fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, String) {
+    let mut wasm_params = Vec::new();
+    let mut args = Vec::new();
+    if Class::has_self(f) {
+        wasm_params.push("self".to_string());
+    }
+    for (i, (_, t)) in f.params.iter().enumerate() {
+        let p = format!("a{i}");
+        // A string is a pointer and a length; everything else is one value.
+        if *t == Ty::Str {
+            wasm_params.push(format!("{p}_ptr"));
+            wasm_params.push(format!("{p}_len"));
+            args.push(format!("str({p}_ptr, {p}_len)"));
+            continue;
+        }
+        if let Ty::Nullable(inner, undefined) = t
+            && **inner == Ty::Str
+        {
+            wasm_params.push(format!("{p}_ptr"));
+            wasm_params.push(format!("{p}_len"));
+            args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", if *undefined { "undefined" } else { "null" }));
+            continue;
+        }
+        let spread = if f.rest && i == f.params.len() - 1 { "..." } else { "" };
+        args.push(format!("{spread}{}", from_wasm(&p, t)));
+        wasm_params.push(p);
+    }
+    for (j, (position, literal)) in f.fixed.iter().enumerate() {
+        args.insert((*position).min(args.len()), fixed(j, literal));
+    }
+    let (first, second) = (args.first().cloned().unwrap_or_default(), args.get(1).cloned().unwrap_or_default());
+    let args = args.join(", ");
+    let call = match &f.call {
+        Call::Method(js) => format!("get(self){}({args})", access(js)),
+        Call::Get(prop) => format!("get(self){}", access(prop)),
+        Call::Set(prop) => format!("get(self){} = {args}", access(prop)),
+        Call::New(path) => format!("new globalThis{}({args})", access_path(path)),
+        Call::Static(path) => format!("globalThis{}({args})", access_path(path)),
+        Call::StaticGet(path) => format!("globalThis{}", access_path(path)),
+        Call::StaticSet(path) => format!("globalThis{} = {args}", access_path(path)),
+        Call::Create => "({})".to_string(),
+        Call::IndexGet => format!("get(self)[{args}]"),
+        Call::IndexSet => format!("get(self)[{first}] = {second}"),
+    };
+    let body = match &f.ret {
+        Ty::Void => format!("{{ {call}; }}"),
+        t => to_wasm(&call, t),
+    };
+    (wasm_params, body)
+}
+
 // `.name`, or `["some-name"]` where the name is not an identifier.
 fn access(name: &str) -> String {
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
@@ -834,55 +935,21 @@ export function makeEnv(getInstance) {
         let body = if c.ret == Ty::Void { format!("{{ {call}; }}") } else { from_wasm(&call, &c.ret) };
         out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, f => ({}) => {body}),\n", c.name, c.name, names.join(", "));
     }
-    for f in m.all_funcs().filter(|f| wanted(&f.import)) {
-        let mut wasm_params = Vec::new();
-        let mut args = Vec::new();
-        if Class::has_self(f) {
-            wasm_params.push("self".to_string());
+    for f in m.all_funcs().filter(|f| f.shared.is_none() && wanted(&f.import)) {
+        let (params, body) = entry(f, &|_, literal| literal.to_string());
+        out += &format!("    {}: ({}) => {body},\n", f.import, params.join(", "));
+    }
+    // A shared import takes the index of the fixed arguments after `self`.
+    for s in m.shared.iter().filter(|s| wanted(&s.name)) {
+        let mut params = s.params.clone();
+        let at = usize::from(params.first().is_some_and(|p| p == "self"));
+        params.insert(at, "k".into());
+        let mut body = s.body.clone();
+        for j in 0..s.values.first().map_or(0, Vec::len) {
+            body = body.replace(&format!("$F{j}"), &format!("F[k][{j}]"));
         }
-        for (i, (_, t)) in f.params.iter().enumerate() {
-            let p = format!("a{i}");
-            // A string is a pointer and a length; everything else is one value.
-            if *t == Ty::Str {
-                wasm_params.push(format!("{p}_ptr"));
-                wasm_params.push(format!("{p}_len"));
-                args.push(format!("str({p}_ptr, {p}_len)"));
-                continue;
-            }
-            if let Ty::Nullable(inner, undefined) = t
-                && **inner == Ty::Str
-            {
-                wasm_params.push(format!("{p}_ptr"));
-                wasm_params.push(format!("{p}_len"));
-                args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", if *undefined { "undefined" } else { "null" }));
-                continue;
-            }
-            let spread = if f.rest && i == f.params.len() - 1 { "..." } else { "" };
-            args.push(format!("{spread}{}", from_wasm(&p, t)));
-            wasm_params.push(p);
-        }
-        for (position, literal) in &f.fixed {
-            args.insert((*position).min(args.len()), literal.clone());
-        }
-        let (first, second) = (args.first().cloned().unwrap_or_default(), args.get(1).cloned().unwrap_or_default());
-        let args = args.join(", ");
-        let call = match &f.call {
-            Call::Method(js) => format!("get(self){}({args})", access(js)),
-            Call::Get(prop) => format!("get(self){}", access(prop)),
-            Call::Set(prop) => format!("get(self){} = {args}", access(prop)),
-            Call::New(path) => format!("new globalThis{}({args})", access_path(path)),
-            Call::Static(path) => format!("globalThis{}({args})", access_path(path)),
-            Call::StaticGet(path) => format!("globalThis{}", access_path(path)),
-            Call::StaticSet(path) => format!("globalThis{} = {args}", access_path(path)),
-            Call::Create => "({})".to_string(),
-            Call::IndexGet => format!("get(self)[{args}]"),
-            Call::IndexSet => format!("get(self)[{first}] = {second}"),
-        };
-        let body = match &f.ret {
-            Ty::Void => format!("{{ {call}; }}"),
-            t => to_wasm(&call, t),
-        };
-        out += &format!("    {}: ({}) => {body},\n", f.import, wasm_params.join(", "));
+        let table: Vec<String> = s.values.iter().map(|v| format!("[{}]", v.join(", "))).collect();
+        out += &format!("    {}: (() => {{ const F = [{}]; return ({}) => {body}; }})(),\n", s.name, table.join(", "), params.join(", "));
     }
     out + "  };\n}\n"
 }

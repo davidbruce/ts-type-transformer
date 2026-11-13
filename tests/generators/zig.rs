@@ -163,7 +163,17 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
             args.push(lower_arg(&id, t));
         }
     }
-    let call = format!("raw.{}({})", f.import, args.join(", "));
+    // A shared import takes the index of this function's fixed arguments after `self`.
+    let import = match &f.shared {
+        Some((shared, k)) => {
+            let at = usize::from(Class::has_self(f));
+            raw_params.insert(at, "i32".into());
+            args.insert(at, k.to_string());
+            shared.as_str()
+        }
+        None => f.import.as_str(),
+    };
+    let call = format!("raw.{import}({})", args.join(", "));
     // A union result that cannot be told apart is an untyped value.
     let union = match &f.ret {
         Ty::NamedUnion(n) => unions.iter().find(|u| u.name == *n),
@@ -183,7 +193,11 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
         Ty::Nullable(..) => format!("const h = {call}; return if (h == 0) null else .{{ .h = h }};"),
         _ => format!("return .{{ .h = {call} }};"),
     };
-    *externs += &format!("    extern \"env\" fn {}({}) {};\n", f.import, raw_params.join(", "), raw(&f.ret));
+    let decl = format!("    extern \"env\" fn {import}({}) {};\n", raw_params.join(", "), raw(&f.ret));
+    // Declared once per file, though several functions use it.
+    if !externs.contains(&decl) {
+        *externs += &decl;
+    }
     *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {body} }}\n", ident(&f.name), params.join(", "));
 }
 
