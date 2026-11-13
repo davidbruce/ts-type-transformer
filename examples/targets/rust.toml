@@ -1,0 +1,13 @@
+# Example target: inheritance and generics, but no unions, overloads,
+# optional arguments or inline types.
+[constructs]
+classes = "pair"
+type_ops = "evaluate"
+intersections = "merge"
+nullable = "wrap"
+literals = "enum"
+anonymous = "hoist"
+optional_params = "overloads"
+union_params = "overloads"
+unions = "erase"
+overloads = "rename"

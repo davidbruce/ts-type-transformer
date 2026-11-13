@@ -7,38 +7,53 @@ Experiment on the `tsrs-prototype` branch (`src/bin/tsrs_proto/`).
 Targets differ in *which* TypeScript constructs they lack, not in *how much*
 flattening they need. OCaml has inheritance and generics but no overloading;
 Rust has generics but no unions or optional arguments; C has none of them.
-So there is no single flattening dial. There is one switch per construct, and
-a profile is a named set of switches.
+So there is no single flattening dial. There is one strategy per construct,
+and a target is a config file that picks them. The tool knows no languages.
 
 ```
 .d.ts -> front end -> IR -> lowering passes -> XML
             (tsrs)    as written,   one per construct,
-                      refs resolved chosen by profile
+                      refs resolved chosen by config
 ```
 
 The XML schema is the same at every level. Lowering only removes element
-kinds, so a generator handles exactly the kinds its profile leaves in.
+kinds, so a generator handles exactly the kinds its config leaves in. The
+output starts with a `<lowering>` element naming the strategies in effect.
 
-## Switches
+## Config
 
-`true` = lower the construct away. `--profile P`, then `--lower a,b` / `--keep a,b`.
+```toml
+[constructs]            # each: "keep" (default) or the strategy below
+inheritance = "flatten"
+generics = "erase"
 
-| Switch | Removes | Becomes | Needs checker |
-|---|---|---|---|
-| `classes` | `var X: { prototype: X; new() }` + `interface X` | `<class>` with constructors and statics | no |
-| `typeops` | `keyof`, `T[K]`, conditional, mapped, template, `typeof`, predicates, `Partial<T>`-style aliases | their evaluated type | yes |
-| `intersections` | `A & B` | one merged object type | yes |
-| `inheritance` | `<extends>` | inherited members copied in, base type arguments applied; `<ancestor>` list kept | yes |
-| `generics` | type parameters | their constraint, or `any` | no |
-| `nullable` | `T \| null \| undefined` | `<nullable>` | no |
-| `literals` | literal types | string unions -> `<enum>`, constants -> `const=`, others widened | no |
-| `anonymous` | inline object and function types | named synthetic declarations | no |
-| `optionals` | optional parameters | one overload per arity | no |
-| `param_unions` | union-typed parameters | one overload per member | no |
-| `unions` | remaining unions | common supertype, else `any` | yes |
-| `overloads` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
+[limits]
+union_param_overloads = 16
+intersection_members = 64
 
-Profiles: `raw` (nothing), `fsharp`, `ocaml`, `rust`, `c` (everything). See `Options::profile`.
+[naming]
+separator = "_"
+overloads = "with_params"   # or "numbered"
+```
+
+`--config target.toml`, `--set generics=erase` to override one setting,
+`--default-config` to print a documented template. Unknown keys and values
+are errors. Example targets are in `examples/targets/`.
+
+| Construct | Strategy | Removes | Becomes | Needs checker |
+|---|---|---|---|---|
+| `classes` | `pair` | `var X: { prototype: X; new() }` + `interface X` | `<class>` with constructors and statics | no |
+| `type_ops` | `evaluate` | `keyof`, `T[K]`, conditional, mapped, template, `typeof`, predicates, `Partial<T>`-style aliases | their evaluated type | yes |
+| `intersections` | `merge` | `A & B` | one merged object type | yes |
+| `inheritance` | `flatten` | `<extends>` | inherited members copied in, base type arguments applied; `<ancestor>` list kept | yes |
+| `generics` | `erase` | type parameters | their constraint, or `any` | no |
+| `nullable` | `wrap` | `T \| null \| undefined` | `<nullable>` | no |
+| `literals` | `enum` | literal types | string unions -> `<enum>`, constants -> `const=`, others widened | no |
+| `anonymous` | `hoist` | inline object and function types | named synthetic declarations | no |
+| `optional_params` | `overloads` | optional parameters | one overload per arity | no |
+| `union_params` | `overloads` | union-typed parameters | one overload per member | no |
+| `unions` | `erase` | remaining unions | common supertype, else `any` | yes |
+| `overloads` | `rename` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
 
 Four passes need the type checker. That is why lowering lives here and not in
 each generator: a generator written in F# or C has no checker.
@@ -55,7 +70,8 @@ Lowering never silently loses the link to the source:
 
 ## Measured (lib.dom.d.ts)
 
-Constructs left in the output, from `--census`:
+Constructs left in the output, from `--census`, with no config (raw) and
+with each example target:
 
 | | raw | fsharp | ocaml | rust | c |
 |---|---|---|---|---|---|
@@ -76,4 +92,6 @@ Constructs left in the output, from `--census`:
 - A union with no common supertype (`string | number`) becomes `any`.
 - Tuples, and object types that are a `var`'s own type, are never hoisted.
 - Output is not closed: references to other files (`Promise`) are not pulled in.
-- The `rust` and `ocaml` profiles are guesses. No generator has consumed any profile yet.
+- The example targets are guesses. No generator has consumed any output yet.
+- Each construct has one lowering strategy so far. Values are strings so more can be added
+  (`unions = "tagged"`, `generics = "monomorphize"`).

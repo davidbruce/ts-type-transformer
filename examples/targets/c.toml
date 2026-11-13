@@ -1,0 +1,14 @@
+# Example target: flat functions over opaque handles. Everything is lowered.
+[constructs]
+classes = "pair"
+type_ops = "evaluate"
+intersections = "merge"
+inheritance = "flatten"
+generics = "erase"
+nullable = "wrap"
+literals = "enum"
+anonymous = "hoist"
+optional_params = "overloads"
+union_params = "overloads"
+unions = "erase"
+overloads = "rename"

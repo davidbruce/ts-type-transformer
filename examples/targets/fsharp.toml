@@ -1,0 +1,7 @@
+# Example target: interfaces with inheritance, generics, overloads and unions.
+[constructs]
+classes = "pair"
+type_ops = "evaluate"
+intersections = "merge"
+nullable = "wrap"
+literals = "enum"

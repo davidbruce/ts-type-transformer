@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 oxc = { version = "0.69.0", features = ["full"] }
+toml = "1.2.1"
 tsrs_ast = "7.1.0-beta.tsrs1"
 tsrs_checker = "7.1.0-beta.tsrs1"
 tsrs_compiler = "7.1.0-beta.tsrs1"

@@ -11,77 +11,65 @@ use crate::front::Front;
 use crate::ir::*;
 use crate::xml::{member_key, signature_key, type_key};
 
-// One switch per construct; `true` means "lower it away".
-#[derive(Clone, Copy, Default)]
+// What to lower. Built from a config file; see config.rs.
+#[derive(Clone, Copy)]
 pub struct Options {
-    pub classes: bool,       // pair `var X: { prototype; new() }` with interface X
-    pub typeops: bool,       // evaluate keyof, T[K], conditional, mapped, template, typeof
-    pub intersections: bool, // merge A & B into one object type
-    pub inheritance: bool,   // copy inherited members into each type
-    pub generics: bool,      // erase type parameters to their constraints
-    pub nullable: bool,      // T | null | undefined -> nullable T
-    pub literals: bool,      // literal unions -> enums, lone literals -> primitives
-    pub anonymous: bool,     // hoist inline object and function types to named declarations
-    pub optionals: bool,     // optional parameters -> overloads
-    pub param_unions: bool,  // union-typed parameters -> overloads
-    pub unions: bool,        // remaining unions -> any
-    pub overloads: bool,     // overloads -> uniquely named members
+    pub classes: bool,
+    pub typeops: bool,
+    pub intersections: bool,
+    pub inheritance: bool,
+    pub generics: bool,
+    pub nullable: bool,
+    pub literals: bool,
+    pub anonymous: bool,
+    pub optionals: bool,
+    pub param_unions: bool,
+    pub unions: bool,
+    pub overloads: bool,
+    // Most overloads one signature may expand into through union parameters.
+    pub union_param_limit: usize,
+    // Largest merged intersection that is written out inline.
+    pub intersection_limit: usize,
+    // Joins the parts of generated names.
+    pub separator: &'static str,
+    // Overload names: `f_2`, `f_3` instead of `f_with_x`.
+    pub numbered_overloads: bool,
 }
 
-pub const SWITCHES: &[&str] = &[
-    "classes", "typeops", "intersections", "inheritance", "generics", "nullable", "literals", "anonymous", "optionals",
-    "param_unions", "unions", "overloads",
-];
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, nullable: false,
+            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false,
+            union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
+        }
+    }
+}
 
 impl Options {
-    pub fn set(&mut self, name: &str, on: bool) -> bool {
-        let slot = match name {
+    // Whether the construct with this config key is lowered.
+    pub fn slot(&mut self, key: &str) -> Option<&mut bool> {
+        Some(match key {
             "classes" => &mut self.classes,
-            "typeops" => &mut self.typeops,
+            "type_ops" => &mut self.typeops,
             "intersections" => &mut self.intersections,
             "inheritance" => &mut self.inheritance,
             "generics" => &mut self.generics,
             "nullable" => &mut self.nullable,
             "literals" => &mut self.literals,
             "anonymous" => &mut self.anonymous,
-            "optionals" => &mut self.optionals,
-            "param_unions" => &mut self.param_unions,
+            "optional_params" => &mut self.optionals,
+            "union_params" => &mut self.param_unions,
             "unions" => &mut self.unions,
             "overloads" => &mut self.overloads,
-            _ => return false,
-        };
-        *slot = on;
-        true
-    }
-
-    // Presets: what each kind of target cannot express.
-    pub fn profile(name: &str) -> Option<Options> {
-        let lower: &[&str] = match name {
-            "raw" => &[],
-            // Interfaces, generics, overloads, erased unions, anonymous records.
-            "fsharp" => &["classes", "typeops", "intersections", "nullable", "literals"],
-            // As F#, but no overloading and no anonymous function-typed members.
-            "ocaml" => &["classes", "typeops", "intersections", "nullable", "literals", "overloads"],
-            // Traits and generics, but no unions, overloads, optional arguments or inline types.
-            "rust" => &["classes", "typeops", "intersections", "nullable", "literals", "anonymous", "optionals", "param_unions", "unions", "overloads"],
-            // Flat functions over opaque handles.
-            "c" => SWITCHES,
             _ => return None,
-        };
-        let mut o = Options::default();
-        for s in lower {
-            o.set(s, true);
-        }
-        Some(o)
+        })
     }
 }
 
-pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, mut o: Options) {
-    // Flattened members come from the checker, which has already evaluated them.
-    if o.inheritance {
-        o.typeops = true;
-    }
+pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.merge_intersections = o.intersections;
+    front.intersection_limit = o.intersection_limit;
     if o.classes {
         pair_classes(decls);
     }
@@ -101,11 +89,11 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, mut o: Options) {
         });
     }
     if o.literals {
-        let widened = literals(decls);
+        let widened = literals(decls, o.separator);
         *front.stats.entry("widened: literal -> primitive".into()).or_default() += widened;
     }
     if o.anonymous {
-        hoist(decls);
+        hoist(decls, o.separator);
     }
     if o.optionals || o.param_unions {
         each_member_list(decls, &mut |members| expand_members(members, o));
@@ -143,8 +131,8 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, mut o: Options) {
         });
     }
     if o.overloads {
-        each_member_list(decls, &mut |members| rename_members(members));
-        rename_functions(decls);
+        each_member_list(decls, &mut |members| rename_members(members, o));
+        rename_functions(decls, o);
     }
 }
 
@@ -549,7 +537,7 @@ fn nullable(t: &mut Type) {
 
 // ---- literals ----
 
-fn literals(decls: &mut Vec<Decl>) -> usize {
+fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     let mut widened = 0;
     let mut enums: Vec<Enum> = Vec::new();
     let mut by_values: HashMap<Vec<String>, String> = HashMap::new();
@@ -573,7 +561,7 @@ fn literals(decls: &mut Vec<Decl>) -> usize {
                 if strings.len() == parts.len() && strings.len() > 1 {
                     // A closed set of strings is an enum, named after where it appears.
                     let name = by_values.entry(strings.clone()).or_insert_with(|| {
-                        let name = unique(path.join("_"), &mut names);
+                        let name = unique(path.join(sep), &mut names);
                         let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone() }).collect();
                         enums.push(Enum { name: name.clone(), members, synthetic: true });
                         name
@@ -635,7 +623,7 @@ fn unique(base: String, taken: &mut HashSet<String>) -> String {
 // ---- anonymous types ----
 
 // Inline object and function types become named declarations.
-fn hoist(decls: &mut Vec<Decl>) {
+fn hoist(decls: &mut Vec<Decl>, sep: &str) {
     let mut names: HashSet<String> = HashSet::new();
     let mut by_key: HashMap<String, (String, Vec<Type>)> = HashMap::new();
     let mut start = 0;
@@ -652,7 +640,7 @@ fn hoist(decls: &mut Vec<Decl>) {
             let (name, args) = by_key
                 .entry(key)
                 .or_insert_with(|| {
-                    let name = unique(path.join("_"), &mut names);
+                    let name = unique(path.join(sep), &mut names);
                     // Enclosing type parameters the type mentions become its own.
                     let free = free_type_params(t);
                     let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
@@ -729,7 +717,7 @@ fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
                     _ => continue,
                 };
                 // Too many combinations: leave the union for a later pass.
-                if variants.len() * parts.len() > 16 {
+                if variants.len() * parts.len() > o.union_param_limit {
                     continue;
                 }
                 variants = variants
@@ -793,10 +781,15 @@ fn expand_functions(decls: &mut Vec<Decl>, o: Options) {
 }
 
 // Names for overloads, in the style of web-sys: `f`, `f_with_x`, `f_with_x_and_y`.
-fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>) -> Vec<String> {
+fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, o: Options) -> Vec<String> {
+    let sep = o.separator;
     let first = sigs[0];
     let mut out = vec![base.to_string()];
-    for s in &sigs[1..] {
+    for (n, s) in sigs.iter().enumerate().skip(1) {
+        if o.numbered_overloads {
+            out.push(unique(format!("{base}{sep}{}", n + 1), taken));
+            continue;
+        }
         let differing: Vec<&Param> = s
             .params
             .iter()
@@ -805,13 +798,13 @@ fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>) 
             .map(|(_, p)| p)
             .collect();
         let mut name = if differing.is_empty() {
-            format!("{base}_{}", s.params.len())
+            format!("{base}{sep}{}", s.params.len())
         } else {
-            format!("{base}_with_{}", differing.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join("_and_"))
+            format!("{base}{sep}with{sep}{}", differing.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(&format!("{sep}and{sep}")))
         };
         // Same parameter names, different types: name the types.
         if taken.contains(&name) {
-            name = format!("{name}_{}", differing.iter().map(|p| mnemonic(&p.ty)).collect::<Vec<_>>().join("_"));
+            name = format!("{name}{sep}{}", differing.iter().map(|p| mnemonic(&p.ty)).collect::<Vec<_>>().join(sep));
         }
         out.push(unique(name, taken));
     }
@@ -831,7 +824,7 @@ fn mnemonic(t: &Type) -> String {
     }
 }
 
-fn rename_members(members: &mut [Member]) {
+fn rename_members(members: &mut [Member], o: Options) {
     let mut taken: HashSet<String> = members.iter().map(|m| m.name.clone()).collect();
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
     for (i, m) in members.iter().enumerate() {
@@ -847,7 +840,7 @@ fn rename_members(members: &mut [Member]) {
     for (_, idx) in groups.into_iter().filter(|g| g.1.len() > 1) {
         let base = members[idx[0]].name.clone();
         let sigs: Vec<&Signature> = idx.iter().map(|i| members[*i].sig.as_ref().unwrap()).collect();
-        let names = overload_names(&base, &sigs, &mut taken);
+        let names = overload_names(&base, &sigs, &mut taken, o);
         for (i, name) in idx.into_iter().zip(names).skip(1) {
             members[i].js_name = Some(base.clone());
             members[i].name = name;
@@ -855,7 +848,7 @@ fn rename_members(members: &mut [Member]) {
     }
 }
 
-fn rename_functions(decls: &mut [Decl]) {
+fn rename_functions(decls: &mut [Decl], o: Options) {
     let mut taken: HashSet<String> = HashSet::new();
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
     for (i, d) in decls.iter_mut().enumerate() {
@@ -867,13 +860,13 @@ fn rename_functions(decls: &mut [Decl]) {
                     None => groups.push((f.name.clone(), vec![i])),
                 }
             }
-            Decl::Namespace(n) => rename_functions(&mut n.decls),
+            Decl::Namespace(n) => rename_functions(&mut n.decls, o),
             _ => {}
         }
     }
     for (base, idx) in groups.into_iter().filter(|g| g.1.len() > 1) {
         let sigs: Vec<&Signature> = idx.iter().map(|i| if let Decl::Function(f) = &decls[*i] { &f.sig } else { unreachable!() }).collect();
-        let names = overload_names(&base, &sigs, &mut taken);
+        let names = overload_names(&base, &sigs, &mut taken, o);
         for (i, name) in idx.into_iter().zip(names).skip(1) {
             if let Decl::Function(f) = &mut decls[i] {
                 f.js_name = Some(base.clone());

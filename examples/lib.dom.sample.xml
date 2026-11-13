@@ -1,4 +1,5 @@
-<declarations profile="raw">
+<declarations>
+  <lowering classes="keep" type_ops="keep" intersections="keep" inheritance="keep" generics="keep" nullable="keep" literals="keep" anonymous="keep" optional_params="keep" union_params="keep" unions="keep" overloads="keep"/>
   <interface name="AbortSignal">
     <extends>
       <ref name="EventTarget" kind="interface"/>

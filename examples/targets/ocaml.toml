@@ -1,0 +1,8 @@
+# Example target: as fsharp.toml, but without overloading.
+[constructs]
+classes = "pair"
+type_ops = "evaluate"
+intersections = "merge"
+nullable = "wrap"
+literals = "enum"
+overloads = "rename"

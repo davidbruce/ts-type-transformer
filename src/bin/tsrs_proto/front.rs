@@ -24,6 +24,7 @@ pub struct Front<'c> {
     in_progress: Vec<TypeId>,
     // Lowering: merge `A & B` into one object type.
     pub merge_intersections: bool,
+    pub intersection_limit: usize,
     skip_alias: Option<P<Symbol>>,
 }
 
@@ -36,7 +37,7 @@ const DEFERRED: TypeFlags = TypeFlags::Index
 
 impl<'c> Front<'c> {
     pub fn new(c: &'c mut Checker, root_file: String) -> Self {
-        Front { c, root_file, seen: HashSet::new(), stats: BTreeMap::new(), computed_alias: HashMap::new(), in_progress: Vec::new(), merge_intersections: false, skip_alias: None }
+        Front { c, root_file, seen: HashSet::new(), stats: BTreeMap::new(), computed_alias: HashMap::new(), in_progress: Vec::new(), merge_intersections: false, intersection_limit: 64, skip_alias: None }
     }
 
     pub fn count(&mut self, what: &str) {
@@ -506,7 +507,7 @@ impl<'c> Front<'c> {
                 return self.from_type(*p);
             }
             let mergeable = t.types().iter().all(|p| p.flags().intersects(TypeFlags::Object));
-            if mergeable && self.c.get_properties_of_type_exported(t).len() <= 64 {
+            if mergeable && self.c.get_properties_of_type_exported(t).len() <= self.intersection_limit {
                 return Type::Object(self.members_of_type(t, None));
             }
             // Too large to inline (`Window & typeof globalThis`): keep the named part.

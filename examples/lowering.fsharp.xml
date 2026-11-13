@@ -1,4 +1,5 @@
-<declarations profile="fsharp">
+<declarations>
+  <lowering classes="pair" type_ops="evaluate" intersections="merge" inheritance="keep" generics="keep" nullable="wrap" literals="enum" anonymous="keep" optional_params="keep" union_params="keep" unions="keep" overloads="keep"/>
   <interface name="Emitter">
     <typeParameter name="M"/>
     <method name="on">
