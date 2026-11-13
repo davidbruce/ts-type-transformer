@@ -68,6 +68,10 @@ impl Xml {
                 Decl::Enum(e) => modules.module_of(&e.name).to_string(),
             };
             self.pending.push(("module", module));
+            // A namespace comes from the library, an area from the config: kept apart in file layouts.
+            if matches!(d, Decl::Namespace(_)) {
+                self.pending.push(("moduleKind", "namespace".into()));
+            }
             self.decls(std::slice::from_ref(d));
         }
     }

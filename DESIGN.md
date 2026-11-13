@@ -83,17 +83,29 @@ name, else `default`; a namespace is a module of its own. Areas belong to a
 library, not a target, so they live in their own file and are passed as a
 second `--config` (`examples/modules/dom.toml`).
 
+Module names become file and folder names, so the tool rejects area names
+that are equal ignoring letter case, or reserved on Windows (`CON`, `NUL`,
+`COM1`, ...). Namespace modules are marked `moduleKind="namespace"`: they come
+from the library and cannot be renamed, so layouts keep them in a folder of
+their own, apart from areas (`areas/css/`, `namespaces/CSS/`).
+
 How a generator lays out files is its own choice. The test generators:
 
 - C: `ts_types.h` with every handle, enum and callback; one header per
-  declaration in a directory per module; umbrella headers. A program includes
-  what it uses: the DOM test parses in 0.3 s instead of 3.2 s.
-- Zig: a file per module, importing by name what it uses from the others, and
-  a root `bindings.zig`. Zig reads only what is used: 0.9 s instead of 7.6 s.
-- F#: files must not refer to each other in cycles, and the DOM's core types
-  (`Window`, `Document`, `Node`, ...) form one large cycle. It gets a file of
-  its own; every other declaration stays in its module, split into what the
-  cycle uses and what uses it. Parts still in a cycle are merged: 30 files.
+  declaration in `areas/<module>/` or `namespaces/<module>/`; umbrella
+  headers. A program includes what it uses. Inheritance is kept: a member is
+  defined once, on its declaring type, and every type has a cast to each
+  ancestor (`Element_setAttribute(HTMLElement_as_Element(el), ...)`). Per-key
+  methods share one wasm import per call shape (`addEventListener_keyed`).
+  File names that would still clash get a suffix (`point_2.h`, `Con_.h`).
+- Zig: a file per module, in the same folders, importing by name what it uses
+  from the others, and a root `bindings.zig`. Zig reads only what is used.
+- F#: files must not refer to each other in cycles. Files are ordered by what
+  F# cannot refer to forward: base types and namespaces. What other modules
+  inherit from is split off as `<module>.base`; aliases go where their parts
+  are. A member that mentions a type of a later file becomes an extension
+  member there (`type Node with member this.ownerDocument ...`): 725 of
+  11,500 for the DOM. One file per area, the largest 168 KB.
 
 ## Unions
 
@@ -189,7 +201,7 @@ XML is wrong. `*_rejects_*` tests pin that strictness, and
 ## Known gaps
 
 - Synthetic names come from the first place a type appears (`Shape_new_kind`). Not stable or pretty.
-- `keyed_params = "expand"` makes the C bindings large (121 MB in all, under 2 MB per header). The wasm glue is trimmed to what a program imports.
+- `keyed_params = "expand"` still makes the C bindings large (36 MB): every HTML and SVG element redeclares `addEventListener` with its own `this`. The wasm glue is trimmed to what a program imports.
 - 18 DOM unions have members no test can tell apart (`ArrayBufferLike | ArrayBufferView`); F# binds them as `obj`.
 - A union with no common supertype (`string | number`) becomes `any`.
 - Tuples, and object types that are a `var`'s own type, are never hoisted.

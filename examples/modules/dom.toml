@@ -33,7 +33,7 @@ name = "media"
 match = ["Media*", "Video*", "TextTrack*", "VTT*", "Encoded*", "ImageDecoder*", "ImageTrack*", "*Track", "*TrackList", "Picture*", "RemotePlayback*"]
 
 [[modules.area]]
-name = "cssom"
+name = "css"
 match = ["CSS*", "*StyleSheet*", "StyleMedia", "StyleProperty*", "MediaList", "FontFace*"]
 
 [[modules.area]]

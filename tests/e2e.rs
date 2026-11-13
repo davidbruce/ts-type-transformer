@@ -370,3 +370,35 @@ mod dom {
         run_browser(&c);
     }
 }
+
+// File names must differ where letter case does not count, and avoid names
+// Windows reserves.
+#[test]
+fn file_names_never_clash() {
+    let xml = lower(&root().join("tests/fixtures/names/api.d.ts"), Some("c"), &[]);
+    let files: Vec<String> = generators::c::files(&generators::wasm::model(&xml, "C")).into_iter().map(|f| f.0).collect();
+    let mut lower: Vec<String> = files.iter().map(|f| f.to_lowercase()).collect();
+    lower.sort();
+    let count = lower.len();
+    lower.dedup();
+    assert_eq!(lower.len(), count, "clashing files: {files:?}");
+    assert!(files.contains(&"areas/main/Point.h".to_string()) && files.contains(&"areas/main/point_2.h".to_string()), "{files:?}");
+    assert!(files.contains(&"areas/main/Con_.h".to_string()), "{files:?}");
+}
+
+// Module names come from the config: clashes there are errors to fix.
+#[test]
+fn module_names_are_checked() {
+    let dir = root().join("target/e2e/config-checks");
+    fs::create_dir_all(&dir).unwrap();
+    for (config, error) in [
+        ("[modules]\n[[modules.area]]\nname = \"Svg\"\nmatch = [\"A*\"]\n[[modules.area]]\nname = \"svg\"\nmatch = [\"B*\"]\n", "differ only in letter case"),
+        ("[modules]\ndefault = \"nul\"\n", "Windows reserves"),
+    ] {
+        let path = dir.join("modules.toml");
+        fs::write(&path, config).unwrap();
+        let out = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(root().join("tests/fixtures/names/api.d.ts")).arg("--config").arg(&path).output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success() && stderr.contains(error), "expected `{error}`, got: {stderr}");
+    }
+}

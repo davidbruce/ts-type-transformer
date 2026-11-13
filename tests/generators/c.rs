@@ -209,7 +209,9 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
 
     let mut out = vec![("ts_runtime.h".to_string(), RUNTIME.to_string()), ("ts_types.h".to_string(), types)];
     let mut modules: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-    let header = |body: String| format!("// Generated.\n#pragma once\n#include \"../ts_types.h\"\n\n{body}");
+    // `areas/css/X.h` includes `../../ts_types.h`.
+    let header = |module: &str, body: String| format!("// Generated.\n#pragma once\n#include \"{}ts_types.h\"\n\n{body}", "../".repeat(module.split('/').count()));
+    let mut taken = std::collections::HashMap::new();
     for c in &m.classes {
         let mut body = String::new();
         for (name, value) in &c.consts {
@@ -222,22 +224,24 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         for f in &c.funcs {
             func(&mut body, Some(&c.name), f);
         }
-        let path = format!("{}/{}.h", c.module, c.name);
+        let path = format!("{}.h", super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
         modules.entry(c.module.clone()).or_default().push(path.clone());
-        out.push((path, header(body)));
+        out.push((path, header(&c.module, body)));
     }
     let mut functions: std::collections::BTreeMap<String, String> = Default::default();
     for f in &m.funcs {
         func(functions.entry(f.module.clone()).or_default(), None, f);
     }
     for (module, body) in functions {
-        let path = format!("{module}/functions.h");
-        modules.entry(module).or_default().push(path.clone());
-        out.push((path, header(body)));
+        let path = format!("{}.h", super::wasm::file_name(&format!("{module}/functions"), &mut taken));
+        out.push((path.clone(), header(&module, body)));
+        modules.entry(module).or_default().push(path);
     }
     let mut all = String::from("// Generated.\n#pragma once\n");
     for (module, headers) in &modules {
-        let includes: String = headers.iter().map(|h| format!("#include \"{h}\"\n")).collect();
+        // `areas/css.h` includes `css/X.h`, next to it.
+        let parent = module.rsplit_once('/').map_or("", |p| p.0);
+        let includes: String = headers.iter().map(|h| format!("#include \"{}\"\n", h.strip_prefix(&format!("{parent}/")).unwrap_or(h))).collect();
         out.push((format!("{module}.h"), format!("// Generated.\n#pragma once\n{includes}")));
         all += &format!("#include \"{module}.h\"\n");
     }

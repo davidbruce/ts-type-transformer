@@ -148,6 +148,31 @@ impl Class {
     }
 }
 
+// A file or folder name that no other one in `taken` equals ignoring letter
+// case, and that is not reserved on Windows: `foo` after `Foo` is `foo_2`.
+pub fn file_name(path: &str, taken: &mut HashMap<String, String>) -> String {
+    let (dir, name) = path.rsplit_once('/').map_or(("", path), |(d, n)| (d, n));
+    let reserved = |n: &str| {
+        let n = n.to_ascii_uppercase();
+        matches!(n.as_str(), "CON" | "PRN" | "AUX" | "NUL") || (n.len() == 4 && (n.starts_with("COM") || n.starts_with("LPT")) && n.as_bytes()[3].is_ascii_digit())
+    };
+    let mut candidate = if reserved(name) { format!("{name}_") } else { name.to_string() };
+    let mut n = 2;
+    loop {
+        let full = if dir.is_empty() { candidate.clone() } else { format!("{dir}/{candidate}") };
+        match taken.get(&full.to_lowercase()) {
+            Some(existing) if *existing != full => {
+                candidate = format!("{name}_{n}");
+                n += 1;
+            }
+            _ => {
+                taken.insert(full.to_lowercase(), full.clone());
+                return full;
+            }
+        }
+    }
+}
+
 // A name usable in C, Zig and JavaScript.
 pub fn ident(name: &str) -> String {
     let mut s: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' }).collect();
@@ -172,6 +197,9 @@ struct Builder<'a> {
     bad: Option<String>,
     // The module of the declaration being read.
     module: String,
+    // Module folders given out, by lowercased path: names that differ only in case get a suffix.
+    folders: HashMap<String, String>,
+    folder_names: HashMap<(String, String), String>,
 }
 
 pub fn model(xml: &str, target: &str) -> Model {
@@ -186,6 +214,8 @@ pub fn model(xml: &str, target: &str) -> Model {
         keyed: HashMap::new(),
         bad: None,
         module: String::new(),
+        folders: HashMap::new(),
+        folder_names: HashMap::new(),
     };
     b.index(doc.root_element(), "");
     b.decls_of(doc.root_element(), "");
@@ -230,6 +260,16 @@ impl<'a> Builder<'a> {
         name
     }
 
+    // The folder of a module, unique even where letter case does not count.
+    fn folder(&mut self, kind: &str, module: &str) -> String {
+        if let Some(f) = self.folder_names.get(&(kind.to_string(), module.to_string())) {
+            return f.clone();
+        }
+        let path = file_name(&format!("{kind}/{module}"), &mut self.folders);
+        self.folder_names.insert((kind.to_string(), module.to_string()), path.clone());
+        path
+    }
+
     // Functions whose glue is the same but for their fixed arguments share one
     // import, which takes the index of the function's arguments.
     fn share_imports(&mut self) {
@@ -263,9 +303,11 @@ impl<'a> Builder<'a> {
 
     fn decls_of(&mut self, scope: Node<'a, 'a>, prefix: &str) {
         for d in elements(scope) {
-            // Members of a namespace are in the namespace's module.
+            // Members of a namespace are in the namespace's module. The module is
+            // a folder: `areas/css`, or `namespaces/CSS` for one from the library.
             if let Some(m) = d.attribute("module") {
-                self.module = m.to_string();
+                let kind = if d.attribute("moduleKind") == Some("namespace") { "namespaces" } else { "areas" };
+                self.module = self.folder(kind, m);
             }
             let name = d.attribute("name").unwrap_or_default();
             let path = join(prefix, name);

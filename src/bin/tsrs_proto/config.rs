@@ -1,6 +1,8 @@
 // Lowering configuration. A target is described by a TOML file with one
 // strategy per TypeScript construct; nothing here knows about any language.
 
+use std::collections::HashMap;
+
 use toml::{Table, Value};
 
 use crate::lower::Options;
@@ -57,6 +59,30 @@ fn glob(pattern: &str, name: &str) -> bool {
         }
     }
     true
+}
+
+// Module names become file and folder names: they must differ even where
+// letter case does not count (macOS, Windows), and must not be names Windows
+// reserves.
+fn check_module_names(m: &Modules) -> Result<(), String> {
+    let mut seen: HashMap<String, &str> = HashMap::new();
+    for name in std::iter::once(m.default.as_str()).chain(m.areas.iter().map(|a| a.0.as_str())) {
+        if reserved(name) {
+            return Err(format!("module `{name}`: a name Windows reserves for devices; choose another"));
+        }
+        if let Some(other) = seen.insert(name.to_lowercase(), name)
+            && other != name
+        {
+            return Err(format!("modules `{other}` and `{name}` differ only in letter case: their files would clash"));
+        }
+    }
+    Ok(())
+}
+
+// `CON`, `NUL`, `COM1`, ...: not usable as file names on Windows, with any extension.
+pub fn reserved(name: &str) -> bool {
+    let n = name.to_ascii_uppercase();
+    matches!(n.as_str(), "CON" | "PRN" | "AUX" | "NUL") || (n.len() == 4 && (n.starts_with("COM") || n.starts_with("LPT")) && n.as_bytes()[3].is_ascii_digit())
 }
 
 // Later tables override earlier ones, key by key.
@@ -140,6 +166,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules)
     if o.inheritance && !o.typeops {
         return Err("inheritance = \"flatten\" requires type_ops = \"evaluate\"".into());
     }
+    check_module_names(&modules)?;
     Ok((o, modules))
 }
 

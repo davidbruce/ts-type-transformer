@@ -342,7 +342,9 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         let mut used: Vec<&str> = identifiers(body).into_iter().filter(|n| !own.contains(n) && home.contains_key(n)).collect();
         used.sort();
         used.dedup();
-        let imports: String = used.iter().map(|n| format!("const {n} = @import(\"{}.zig\").{n};\n", home[n])).collect();
+        // Paths are relative to the importing file: `areas/css.zig` imports `../types.zig`.
+        let up = "../".repeat(file.matches('/').count());
+        let imports: String = used.iter().map(|n| format!("const {n} = @import(\"{up}{}.zig\").{n};\n", home[n])).collect();
         let body = if file == "runtime" { body.clone() } else { format!("// Generated.\n{imports}\n{body}") };
         out.push((format!("{file}.zig"), format!("{body}\nconst raw = struct {{\n{externs}}};\n")));
         for n in names {
