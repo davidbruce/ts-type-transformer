@@ -1,4 +1,4 @@
-<declarations>
+<declarations profile="raw">
   <interface name="AbortSignal">
     <extends>
       <ref name="EventTarget" kind="interface"/>
@@ -8,17 +8,17 @@
     </property>
     <property name="onabort">
       <union>
-        <function>
-          <parameter name="this">
+        <functionType>
+          <this>
             <ref name="AbortSignal" kind="interface"/>
-          </parameter>
+          </this>
           <parameter name="ev">
             <ref name="Event" kind="interface"/>
           </parameter>
           <returns>
             <primitive name="any"/>
           </returns>
-        </function>
+        </functionType>
         <primitive name="null"/>
       </union>
     </property>
@@ -42,10 +42,10 @@
         <ref name="K" kind="typeParameter"/>
       </parameter>
       <parameter name="listener">
-        <function>
-          <parameter name="this">
+        <functionType>
+          <this>
             <ref name="AbortSignal" kind="interface"/>
-          </parameter>
+          </this>
           <parameter name="ev">
             <indexedAccess>
               <ref name="AbortSignalEventMap" kind="interface"/>
@@ -55,7 +55,7 @@
           <returns>
             <primitive name="any"/>
           </returns>
-        </function>
+        </functionType>
       </parameter>
       <parameter name="options" optional="true">
         <union>
@@ -96,10 +96,10 @@
         <ref name="K" kind="typeParameter"/>
       </parameter>
       <parameter name="listener">
-        <function>
-          <parameter name="this">
+        <functionType>
+          <this>
             <ref name="AbortSignal" kind="interface"/>
-          </parameter>
+          </this>
           <parameter name="ev">
             <indexedAccess>
               <ref name="AbortSignalEventMap" kind="interface"/>
@@ -109,7 +109,7 @@
           <returns>
             <primitive name="any"/>
           </returns>
-        </function>
+        </functionType>
       </parameter>
       <parameter name="options" optional="true">
         <union>
@@ -191,27 +191,27 @@
         <primitive name="number"/>
       </parameter>
       <returns>
-        <ref name="TNode" kind="typeParameter"/>
+        <ref name="TNode" kind="typeParameter" qualified="NodeListOf.TNode"/>
       </returns>
     </method>
     <method name="forEach">
       <parameter name="callbackfn">
-        <function>
+        <functionType>
           <parameter name="value">
-            <ref name="TNode" kind="typeParameter"/>
+            <ref name="TNode" kind="typeParameter" qualified="NodeListOf.TNode"/>
           </parameter>
           <parameter name="key">
             <primitive name="number"/>
           </parameter>
           <parameter name="parent">
             <ref name="NodeListOf" kind="interface">
-              <ref name="TNode" kind="typeParameter"/>
+              <ref name="TNode" kind="typeParameter" qualified="NodeListOf.TNode"/>
             </ref>
           </parameter>
           <returns>
             <primitive name="void"/>
           </returns>
-        </function>
+        </functionType>
       </parameter>
       <parameter name="thisArg" optional="true">
         <primitive name="any"/>
@@ -225,25 +225,25 @@
         <primitive name="number"/>
       </parameter>
       <returns>
-        <ref name="TNode" kind="typeParameter"/>
+        <ref name="TNode" kind="typeParameter" qualified="NodeListOf.TNode"/>
       </returns>
     </index>
     <method name="[Symbol.iterator]">
       <returns>
-        <ref name="ArrayIterator" kind="interface">
-          <ref name="TNode" kind="typeParameter"/>
+        <ref name="ArrayIterator" kind="interface" file="lib.es2015.iterable.d.ts">
+          <ref name="TNode" kind="typeParameter" qualified="NodeListOf.TNode"/>
         </ref>
       </returns>
     </method>
     <method name="entries">
       <returns>
-        <ref name="ArrayIterator" kind="interface">
+        <ref name="ArrayIterator" kind="interface" file="lib.es2015.iterable.d.ts">
           <tuple>
             <element>
               <primitive name="number"/>
             </element>
             <element>
-              <ref name="TNode" kind="typeParameter"/>
+              <ref name="TNode" kind="typeParameter" qualified="NodeListOf.TNode"/>
             </element>
           </tuple>
         </ref>
@@ -251,25 +251,25 @@
     </method>
     <method name="keys">
       <returns>
-        <ref name="ArrayIterator" kind="interface">
+        <ref name="ArrayIterator" kind="interface" file="lib.es2015.iterable.d.ts">
           <primitive name="number"/>
         </ref>
       </returns>
     </method>
     <method name="values">
       <returns>
-        <ref name="ArrayIterator" kind="interface">
-          <ref name="TNode" kind="typeParameter"/>
+        <ref name="ArrayIterator" kind="interface" file="lib.es2015.iterable.d.ts">
+          <ref name="TNode" kind="typeParameter" qualified="NodeListOf.TNode"/>
         </ref>
       </returns>
     </method>
   </interface>
   <typeAlias name="BufferSource">
     <union>
-      <ref name="ArrayBufferView" kind="interface">
-        <ref name="ArrayBuffer" kind="interface"/>
+      <ref name="ArrayBufferView" kind="interface" file="lib.es5.d.ts">
+        <ref name="ArrayBuffer" kind="interface" file="lib.es5.d.ts"/>
       </ref>
-      <ref name="ArrayBuffer" kind="interface"/>
+      <ref name="ArrayBuffer" kind="interface" file="lib.es5.d.ts"/>
     </union>
   </typeAlias>
 </declarations>

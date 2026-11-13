@@ -1,4 +1,4 @@
-<declarations>
+<declarations profile="raw">
   <enum name="Color">
     <member name="Red" type="number" value="0"/>
     <member name="Green" type="number" value="4"/>
@@ -29,7 +29,7 @@
         <ref name="T" kind="typeParameter"/>
       </check>
       <extends>
-        <ref name="Promise" kind="interface">
+        <ref name="Promise" kind="interface" file="lib.es5.d.ts">
           <infer>
             <typeParameter name="U"/>
           </infer>
@@ -51,7 +51,7 @@
     </typeParameter>
     <template>
       <text value="on"/>
-      <ref name="Capitalize" kind="typeAlias">
+      <ref name="Capitalize" kind="typeAlias" file="lib.es5.d.ts">
         <ref name="T" kind="typeParameter"/>
       </ref>
       <text value=""/>
@@ -95,19 +95,19 @@
       </default>
     </typeParameter>
     <property name="value">
-      <ref name="T" kind="typeParameter"/>
+      <ref name="T" kind="typeParameter" qualified="Box.T"/>
     </property>
     <method name="[Symbol.iterator]">
       <returns>
-        <ref name="Iterator" kind="interface">
-          <ref name="T" kind="typeParameter"/>
+        <ref name="Iterator" kind="interface" file="lib.es2015.iterable.d.ts">
+          <ref name="T" kind="typeParameter" qualified="Box.T"/>
         </ref>
       </returns>
     </method>
     <property name="quoted-name">
       <tuple>
         <element name="first">
-          <ref name="T" kind="typeParameter"/>
+          <ref name="T" kind="typeParameter" qualified="Box.T"/>
         </element>
         <element name="rest" rest="true">
           <array>
@@ -126,7 +126,7 @@
       <returns>
         <predicate parameter="x">
           <ref name="Box" kind="interface">
-            <ref name="T" kind="typeParameter"/>
+            <ref name="T" kind="typeParameter" qualified="Box.T"/>
           </ref>
         </predicate>
       </returns>

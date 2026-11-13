@@ -1,0 +1,93 @@
+// tsrs feasibility prototype: .d.ts -> IR -> lowering passes -> XML.
+// Usage: tsrs_proto <file.d.ts | lib.dom.d.ts> [--profile raw|fsharp|ocaml|rust|c]
+//                   [--lower a,b] [--keep a,b] [--census]
+
+mod front;
+mod ir;
+mod lower;
+mod xml;
+
+use std::sync::Arc;
+
+use tsrs_compiler::{Context, ProgramOptions, new_compiler_host, new_program};
+use tsrs_core::P;
+use tsrs_tsoptions::{self as tsoptions, ParseConfigHost};
+use tsrs_vfs::{FS, bundled, vfstest};
+
+struct ConfigHost {
+    fs: Arc<dyn FS>,
+}
+
+impl ParseConfigHost for ConfigHost {
+    fn fs(&self) -> &dyn FS {
+        &*self.fs
+    }
+    fn get_current_directory(&self) -> &str {
+        "/"
+    }
+}
+
+fn main() {
+    let mut input = "test.d.ts".to_string();
+    let mut profile = "raw".to_string();
+    let mut opts = lower::Options::default();
+    let mut overrides: Vec<(String, bool)> = Vec::new();
+    let mut census = false;
+    let mut args = std::env::args().skip(1);
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--profile" => profile = args.next().expect("profile name"),
+            "--lower" | "--keep" => {
+                let list = args.next().expect("switch list");
+                overrides.extend(list.split(',').map(|s| (s.to_string(), a == "--lower")));
+            }
+            "--census" => census = true,
+            _ => input = a,
+        }
+    }
+    if profile != "raw" {
+        opts = lower::Options::profile(&profile).unwrap_or_else(|| panic!("unknown profile {profile}"));
+    }
+    for (name, on) in &overrides {
+        assert!(opts.set(name, *on), "unknown switch {name}; known: {}", lower::SWITCHES.join(","));
+    }
+
+    // Bare `lib.*.d.ts` names select a bundled lib file.
+    let is_lib = input.starts_with("lib.") && !std::path::Path::new(&input).exists();
+    let src = if is_lib { String::new() } else { std::fs::read_to_string(&input).expect("read input") };
+    let tsconfig = r#"{ "compilerOptions": { "lib": ["es2020", "dom", "dom.iterable", "dom.asynciterable"], "noEmit": true }, "files": ["/input.d.ts"] }"#;
+    let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(
+        [("/tsconfig.json", tsconfig.to_string()), ("/input.d.ts", src)],
+        true,
+    )));
+    let host: &'static ConfigHost = Box::leak(Box::new(ConfigHost { fs: Arc::clone(&fs) }));
+    let (config, errs) =
+        tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, host, None);
+    assert!(errs.is_empty(), "tsconfig errors: {}", errs.len());
+
+    let compiler_host = new_compiler_host("/", fs, &bundled::lib_path(), None, None, None);
+    let program = new_program(ProgramOptions::new(P::new(config.unwrap()), compiler_host));
+    let name = if is_lib { format!("{}/{}", bundled::lib_path(), input) } else { "/input.d.ts".into() };
+    let file = program.get_source_file(&name).unwrap_or_else(|| panic!("{name} not in program"));
+    let mut checker = program.get_type_checker_for_file(&Context::default(), file);
+
+    let mut front = front::Front::new(&mut checker, name);
+    let mut decls = front.statements(file.statements().nodes());
+    lower::lower(&mut front, &mut decls, opts);
+
+    let mut x = xml::Xml::default();
+    x.decls(&decls);
+    println!("<declarations profile=\"{profile}\">");
+    for line in x.out.lines() {
+        println!("  {line}");
+    }
+    println!("</declarations>");
+    if census {
+        for (what, n) in &x.census {
+            eprintln!("{what}\t{n}");
+        }
+        for (what, n) in &front.stats {
+            eprintln!("# {what}\t{n}");
+        }
+    }
+}
