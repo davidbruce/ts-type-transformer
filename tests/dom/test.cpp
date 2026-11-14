@@ -35,7 +35,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     box.textContent("hello from cpp");
     box.classList().add({"box", "made"});
     body.appendChild(box);
-    CHECK(doc.getElementById("made-by-cpp")->h == box.h);
+    CHECK(doc.getElementById("made-by-cpp") == box);
     CHECK(box.classList().contains("box") && box.classList().contains("made"));
 
     // Read an element that was already in the page, and copy its text.

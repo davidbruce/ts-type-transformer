@@ -64,7 +64,7 @@ __attribute__((export_name("run"))) void run(void) {
     DOMTokenList_add(Element_get_classList(box), classes);
     js_release(classes);
     Node_appendChild(body, box);
-    CHECK(Document_getElementById(doc, "made-by-c").h == box.h);
+    CHECK(js_same(Document_getElementById(doc, "made-by-c"), box));
     CHECK(DOMTokenList_contains(Element_get_classList(box), "box"));
 
     // Read an element that was already in the page, and copy its text.

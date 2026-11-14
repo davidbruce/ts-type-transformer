@@ -41,18 +41,18 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // Nullable: std::optional.
     CHECK(!s.parent());
-    CHECK(big.parent()->h == s.h);
+    CHECK(big.parent() == s);
     big.parent(std::nullopt);
     CHECK(!big.parent());
 
     // Free functions.
     CHECK(totalArea(s, Shape::unit()) == 10);
-    CHECK(largest(s, std::nullopt)->h == s.h);
-    CHECK(largest(Shape::unit(), s)->h == s.h);
+    CHECK(largest(s, std::nullopt) == s);
+    CHECK(largest(Shape::unit(), s) == s);
 
     // `undefined` rather than `null`.
     CHECK(orUnit(std::nullopt).area() == 1);
-    CHECK(orUnit(s).h == s.h);
+    CHECK(orUnit(s) == s);
     CHECK(!find("nothing"));
     CHECK(find("unit")->area() == 1);
 }

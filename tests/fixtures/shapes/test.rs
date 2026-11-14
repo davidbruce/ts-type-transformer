@@ -52,18 +52,18 @@ pub extern "C" fn run() {
 
     // Nullable: an Option. One object is one handle.
     check!(s.get_parent().is_none());
-    check!(big.get_parent().map(|p| p.0 .0) == Some(s.0 .0));
+    check!(big.get_parent() == Some(s.clone()));
     big.set_parent(None);
     check!(big.get_parent().is_none());
 
     // Free functions.
     check!(totalArea(&s, &Shape::unit()) == 10.0);
-    check!(largest(&s, None).map(|p| p.0 .0) == Some(s.0 .0));
-    check!(largest(&Shape::unit(), Some(s.clone())).map(|p| p.0 .0) == Some(s.0 .0));
+    check!(largest(&s, None) == Some(s.clone()));
+    check!(largest(&Shape::unit(), Some(s.clone())) == Some(s.clone()));
 
     // `undefined` rather than `null`.
     check!(orUnit(None).area() == 1.0);
-    check!(orUnit(Some(s.clone())).0 .0 == s.0 .0);
+    check!(orUnit(Some(s.clone())) == s);
     check!(find("nothing").is_none());
     check!(find("unit").map(|u| u.area()) == Some(1.0));
 

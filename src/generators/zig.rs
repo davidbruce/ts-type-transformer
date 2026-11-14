@@ -329,7 +329,14 @@ pub fn JsListener(comptime Ev: type) type {
 // What a callback returns is given to JavaScript: `jsRetain` a handle to return it and keep it.
 pub fn jsRelease(x: anytype) void { raw.js_release(x.h); }
 pub fn jsRetain(x: anytype) @TypeOf(x) { raw.js_retain(x.h); return x; }
-// The exception a call threw, taken. A call that throws returns a zero value.
+// Whether two handles are one JavaScript value.
+pub fn jsSame(a: anytype, b: anytype) bool { return a.h == b.h or raw.js_equals(a.h, b.h) != 0; }
+// What a call returned, or error.JsException if it threw; the exception is
+// then `jsTakeError()`: `const el = try b.jsTry(doc.querySelector(text));`.
+pub fn jsTry(value: anytype) error{JsException}!@TypeOf(value) { return if (raw.js_has_error() != 0) error.JsException else value; }
+// The exception a call threw, taken. A call that throws returns a zero value,
+// and an exception not taken by the time control returns to JavaScript is
+// reported there.
 pub fn jsTakeError() ?JsValue { const e = raw.js_take_error(); return if (e == 0) null else .{ .h = e }; }
 // An exception's message, the caller's to release.
 pub fn jsErrorMessage(e: JsValue) JsString { return .{ .h = raw.js_error_message(e.h) }; }
@@ -445,6 +452,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_release(h: u32) void;
     extern \"env\" fn js_live() u32;
     extern \"env\" fn js_take_error() u32;
+    extern \"env\" fn js_has_error() i32;
     extern \"env\" fn js_string_copy(h: u32, ptr: [*]u8, cap: usize) usize;
     extern \"env\" fn js_string_equals(h: u32, ptr: [*]const u8, len: usize) i32;
     extern \"env\" fn js_scope_open() void;
@@ -463,7 +471,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 pub fn files(m: &Model) -> Vec<(String, String)> {
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "JsScope", "jsTake"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsSame", "jsTry", "JsScope", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();

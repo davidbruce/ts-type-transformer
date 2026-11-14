@@ -12,7 +12,9 @@ let passed = 0;
 const failed = [];
 // C++ is built for WASI: its few imports are not used by the tests.
 const wasi = new Proxy({}, { get: () => () => 0 });
-const env = { ...makeEnv(() => instance), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
+// Mistakes with handles are checked, and an exception no one took is a failure.
+const options = { check: true, unchecked: e => failed.push(`unchecked exception: ${e?.message ?? e}`) };
+const env = { ...makeEnv(() => instance, options), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
 ({ instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), { env, wasi_snapshot_preview1: wasi }));
 instance.exports._initialize?.();
 instance.exports.run();

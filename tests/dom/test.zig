@@ -48,7 +48,7 @@ export fn run() void {
     classes.pushString("box");
     box.get_classList().add(classes);
     _ = body.appendChild(box.asNode());
-    expect(doc.getElementById("made-by-zig").?.h == box.h, @src());
+    expect(b.jsSame(doc.getElementById("made-by-zig").?, box), @src());
     expect(box.get_classList().contains("box"), @src());
 
     // Read an element that was already in the page, and copy its text.

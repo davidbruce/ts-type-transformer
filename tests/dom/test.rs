@@ -38,7 +38,7 @@ pub extern "C" fn run() {
     el.set_textContent(Some("hello from rust"));
     el.get_classList().add(["box", "made"].into_iter().collect());
     body.appendChild(el.clone());
-    check!(doc.getElementById("made-by-rust").map(|e| e.0 .0) == Some(el.0 .0));
+    check!(doc.getElementById("made-by-rust") == Some(el.clone()));
     check!(el.get_classList().contains("box") && el.get_classList().contains("made"));
 
     // Read an element that was already in the page, and copy its text.

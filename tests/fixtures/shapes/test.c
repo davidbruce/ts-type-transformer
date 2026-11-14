@@ -51,18 +51,18 @@ __attribute__((export_name("run"))) void run(void) {
 
     // Nullable.
     CHECK(Shape_get_parent(s).h == 0);
-    CHECK(Shape_get_parent(big).h == s.h);
+    CHECK(js_same(Shape_get_parent(big), s));
     Shape_set_parent(big, (Shape){ 0 });
     CHECK(Shape_get_parent(big).h == 0);
 
     // Global functions.
     CHECK(totalArea(s, Shape_unit()) == 10);
-    CHECK(largest(s, (Shape){ 0 }).h == s.h);
-    CHECK(largest(Shape_unit(), s).h == s.h);
+    CHECK(js_same(largest(s, (Shape){ 0 }), s));
+    CHECK(js_same(largest(Shape_unit(), s), s));
 
     // `undefined` rather than `null`.
     CHECK(Shape_area(orUnit((Shape){ 0 })) == 1);
-    CHECK(orUnit(s).h == s.h);
+    CHECK(js_same(orUnit(s), s));
     CHECK(find("nothing").h == 0);
     CHECK(Shape_area(find("unit")) == 1);
 }

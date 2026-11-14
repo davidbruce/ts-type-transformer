@@ -377,6 +377,7 @@ TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
 TS_IMPORT(js_release) void ts_raw_js_release(uint32_t);
 TS_IMPORT(js_live) uint32_t ts_raw_js_live();
 TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error();
+TS_IMPORT(js_string_take) uint32_t ts_raw_js_string_take(uint32_t, char*, size_t);
 TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
 TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, uintptr_t, void*);
 TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
@@ -411,6 +412,8 @@ struct Handle {
     ~Handle() {
         if (h) ts_raw_js_release(h);
     }
+    // Whether two handles are one JavaScript value.
+    friend bool operator==(const Handle& a, const Handle& b) { return a.h == b.h || ts_raw_js_equals(a.h, b.h) != 0; }
 };
 
 // How many JavaScript values wasm holds handles to.
@@ -430,6 +433,18 @@ using dep = typename dep_<D, T>::type;
 inline std::string read_string(uint32_t h) {
     std::string s(ts_raw_js_string_len(h), '\0');
     ts_raw_js_string_read(h, s.data());
+    return s;
+}
+
+// A string from a handle JavaScript returned, which is released: in one
+// call, when it fits a small buffer.
+inline std::string take_string(uint32_t h) {
+    char buf[256];
+    uint32_t n = ts_raw_js_string_take(h, buf, sizeof buf);
+    if (n <= sizeof buf) return std::string(buf, n);
+    std::string s(n, '\0');
+    ts_raw_js_string_read(h, s.data());
+    ts_raw_js_release(h);
     return s;
 }
 
@@ -495,11 +510,12 @@ T from_handle(uint32_t h) {
         return from_handle<typename T::value_type>(h);
     } else if constexpr (requires { decoder<T>::from(h); }) {
         return decoder<T>::from(h);
-    } else if constexpr (std::is_same_v<T, double> || std::is_same_v<T, bool> || std::is_same_v<T, std::string>) {
+    } else if constexpr (std::is_same_v<T, std::string>) {
+        return take_string(h);
+    } else if constexpr (std::is_same_v<T, double> || std::is_same_v<T, bool>) {
         T x;
         if constexpr (std::is_same_v<T, double>) x = ts_raw_js_to_number(h);
-        else if constexpr (std::is_same_v<T, bool>) x = ts_raw_js_to_bool(h) != 0;
-        else x = read_string(h);
+        else x = ts_raw_js_to_bool(h) != 0;
         ts_raw_js_release(h);
         return x;
     } else return T(handle, h);
@@ -515,7 +531,6 @@ struct Value : Handle {
     bool to_bool() const { return ts_raw_js_to_bool(h) != 0; }
     std::string to_string() const { return read_string(h); }
     bool is_null() const { return h == 0; }
-    friend bool operator==(Value a, Value b) { return ts_raw_js_equals(a.h, b.h) != 0; }
 };
 
 // TypeScript's `T extends U`, for a constraint. Anything extends `any`, and
@@ -552,16 +567,18 @@ struct Error : Handle {
     std::string message() const { return from_handle<std::string>(ts_raw_js_error_message(h)); }
 };
 
-// The exception a call threw, taken. A call that throws returns a zero value:
-// `auto list = el.querySelectorAll("<bad"); if (auto e = ts::take_error()) ...`.
+// The exception a call threw, taken. A call that throws returns a zero
+// value, and an exception not taken by the time control returns to
+// JavaScript is reported there: see `attempt`.
 inline std::optional<Error> take_error() {
     if (uint32_t e = ts_raw_js_take_error()) return Error(handle, e);
     return std::nullopt;
 }
 
-// A value, or the error that came instead: what a promise settles with.
+// A value, or the error that came instead: what a promise settles with, and
+// what `attempt` returns.
 template <class T>
-struct Result {
+struct [[nodiscard]] Result {
     Result(T x) : v(std::in_place_index<0>, std::move(x)) {}
     Result(Error e) : v(std::in_place_index<1>, std::move(e)) {}
     explicit operator bool() const { return v.index() == 0; }
@@ -573,7 +590,7 @@ struct Result {
     std::variant<T, Error> v;
 };
 template <>
-struct Result<void> {
+struct [[nodiscard]] Result<void> {
     Result() = default;
     Result(Error e) : e(std::move(e)) {}
     explicit operator bool() const { return !e; }
@@ -582,6 +599,22 @@ struct Result<void> {
   private:
     std::optional<Error> e;
 };
+
+// Runs f and gives what it returned, or the exception a call in it threw:
+// `auto found = ts::attempt([&] { return el.querySelector(text); });`.
+template <class F>
+auto attempt(F f) -> Result<std::invoke_result_t<F>> {
+    using T = std::invoke_result_t<F>;
+    if constexpr (std::is_void_v<T>) {
+        f();
+        if (auto e = take_error()) return Result<void>(std::move(*e));
+        return Result<void>();
+    } else {
+        T x = f();
+        if (auto e = take_error()) return Result<T>(std::move(*e));
+        return Result<T>(std::move(x));
+    }
+}
 
 // A JavaScript promise. `then` calls a function with its Result once it
 // settles; in a coroutine, `co_await` waits for it: `auto r = co_await fetch(url);`.

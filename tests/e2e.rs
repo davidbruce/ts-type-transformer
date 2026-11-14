@@ -288,6 +288,100 @@ fn c_rejects_unions() {
     generators::c::files(&generators::wasm::model(&xml, "C"));
 }
 
+// Mistakes the glue reports: a handle used after its release, a handle
+// released twice, and an exception no one took.
+#[test]
+fn mistakes_are_reported() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+    let programs = [
+        ("shapes", "used-after-release", "Shape s = Shape_unit(); js_release(s); Shape_area(s);", "used after its release"),
+        ("shapes", "released-twice", "Shape s = Shape_unit(); js_release(s); js_release(s);", "released twice"),
+        ("callbacks", "not-taken", "explode(\"boom\");", "unchecked exception: boom"),
+    ];
+    for (fixture, name, body, expected) in programs {
+        let c = case_in(fixture, "c", &format!("mistake-{name}"));
+        let model = generators::wasm::model(&c.xml, "C");
+        write_files(&c.out.join("bindings"), generators::c::files(&model));
+        fs::write(c.out.join("test.c"), format!("#include \"bindings.h\"\nTS_IMPORT(check) void check(int ok, int line);\n__attribute__((export_name(\"run\"))) void run(void) {{ check(1, 1); {body} }}\n")).unwrap();
+        run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.out.join("test.c")));
+        write_glue(&c, &model);
+        let out = Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("glue.mjs")).arg(c.out.join("test.wasm")).output().unwrap();
+        let report = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success() && report.contains(expected), "{name} should be reported as `{expected}`:\n{report}");
+    }
+}
+
+// Benchmarks: the same workloads in TypeScript and through each target's
+// bindings, timed from JavaScript. Not part of the suite:
+// `cargo test --test e2e bench -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn bench() {
+    let Some([node]) = tools(["node"]) else { return };
+    let dir = root().join("tests/bench");
+    let out = root().join("target/e2e/bench");
+    let _ = fs::remove_dir_all(&out);
+    let xml = |target: &str| lower(&dir.join("api.d.ts"), Some(target), &[]);
+    let glue = |o: &Path, model: &generators::wasm::Model| {
+        let used = generators::wasm::imports(&fs::read(o.join("bench.wasm")).unwrap());
+        fs::write(o.join("glue.mjs"), generators::wasm::glue(model, Some(&used))).unwrap();
+    };
+    let optimized = |flags: &[&'static str]| -> Vec<&'static str> { flags.iter().map(|f| if *f == "-O1" { "-O2" } else { *f }).collect() };
+    let mut names: Vec<&str> = Vec::new();
+    if let Some(fable) = find("fable") {
+        let o = out.join("fsharp");
+        fs::create_dir_all(&o).unwrap();
+        let bindings = generators::fsharp::module(&xml("fsharp"));
+        let mut compile = String::new();
+        for (name, content) in &bindings.files {
+            fs::write(o.join(name), content).unwrap();
+            compile += &format!("    <Compile Include=\"{name}\" />\n");
+        }
+        fs::copy(dir.join("bench.fs"), o.join("Bench.fs")).unwrap();
+        fs::write(o.join("Bench.fsproj"), format!("<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n  <ItemGroup>\n{compile}    <Compile Include=\"Bench.fs\" />\n  </ItemGroup>\n  <ItemGroup><PackageReference Include=\"Fable.Core\" Version=\"5.6.1\" /></ItemGroup>\n</Project>\n")).unwrap();
+        run(Command::new(fable).current_dir(&o).args(["Bench.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+        names.push("fsharp");
+    }
+    if let Some(clang) = find("clang") {
+        let o = out.join("c");
+        let model = generators::wasm::model(&xml("c"), "C");
+        write_files(&o.join("bindings"), generators::c::files(&model));
+        run(Command::new(clang).args(optimized(CLANG_WASM)).arg("-I").arg(o.join("bindings")).arg("-o").arg(o.join("bench.wasm")).arg(dir.join("bench.c")));
+        glue(&o, &model);
+        names.push("c");
+    }
+    if let Some(clang) = wasi_clang() {
+        let o = out.join("cpp");
+        let model = generators::wasm::model(&xml("cpp"), "C++");
+        let files = generators::cpp::files(&model);
+        let sources: Vec<PathBuf> = files.iter().filter(|f| f.0.ends_with(".cpp")).map(|f| o.join("bindings").join(&f.0)).collect();
+        write_files(&o.join("bindings"), files);
+        run(Command::new(clang).args(optimized(CLANGXX_WASM)).arg("-I").arg(o.join("bindings")).arg("-o").arg(o.join("bench.wasm")).arg(dir.join("bench.cpp")).args(&sources));
+        glue(&o, &model);
+        names.push("cpp");
+    }
+    if let Some(zig) = find("zig") {
+        let o = out.join("zig");
+        let model = generators::wasm::model(&xml("zig"), "Zig");
+        write_files(&o, generators::zig::files(&model));
+        fs::copy(dir.join("bench.zig"), o.join("bench.zig")).unwrap();
+        run(Command::new(zig).current_dir(&o).args(["build-exe", "bench.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic", "--export-table", "-O", "ReleaseFast"]));
+        glue(&o, &model);
+        names.push("zig");
+    }
+    if let Some(rustc) = rustc_wasm() {
+        let o = out.join("rust");
+        let model = generators::wasm::model(&xml("rust"), "Rust");
+        write_files(&o, generators::rust::files(&model));
+        fs::copy(dir.join("bench.rs"), o.join("bench.rs")).unwrap();
+        run(Command::new(rustc).current_dir(&o).args(RUSTC_WASM).args(["-C", "opt-level=3", "-o", "bench.wasm", "bench.rs"]));
+        glue(&o, &model);
+        names.push("rust");
+    }
+    let report = run(Command::new(node).arg(root().join("tests/run_bench.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("bench.ts")).arg(&out).args(&names));
+    print!("{report}");
+}
+
 // `--emit` writes bindings with their glue; what a generator cannot express is an error.
 #[test]
 fn emit_writes_bindings_or_says_why_not() {
@@ -434,7 +528,8 @@ import {{ verify }} from './verify.mjs';
 let instance;
 let passed = 0;
 const failed = [];
-const env = {{ ...makeEnv(() => instance), check: (ok, line) => (ok ? passed++ : failed.push('line ' + line)) }};
+const options = {{ check: true, unchecked: e => failed.push('unchecked exception: ' + (e?.message ?? e)) }};
+const env = {{ ...makeEnv(() => instance, options), check: (ok, line) => (ok ? passed++ : failed.push('line ' + line)) }};
 const wasi = new Proxy({{}}, {{ get: () => () => 0 }});
 ({{ instance }} = await WebAssembly.instantiate(await (await fetch('./test.wasm')).arrayBuffer(), {{ env, wasi_snapshot_preview1: wasi }}));
 instance.exports._initialize?.();
@@ -487,14 +582,17 @@ mod dom {
         let c = dom_case("c");
         let model = generators::wasm::model(&c.xml, "C");
         write_files(&c.out.join("bindings"), generators::c::files(&model));
-            fs::write(c.out.join("index.html"), wasm_page("c")).unwrap();
+        fs::write(c.out.join("index.html"), wasm_page("c")).unwrap();
         print!("{}", skipped(&model.skipped));
         run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
         write_glue(&c, &model);
         run_browser(&c);
+        // Every header compiles, not only those the program includes.
+        let flags: Vec<&str> = CLANG_WASM.iter().filter(|f| !f.starts_with("-Wl,")).copied().collect();
+        fs::write(c.out.join("all.c"), "#include \"bindings.h\"\n").unwrap();
+        run(Command::new(find("clang").unwrap()).args(&flags).arg("-fsyntax-only").arg("-I").arg(c.out.join("bindings")).arg(c.out.join("all.c")));
         // A call with a type that is not a subtype is a compile error.
-        let flags = CLANG_WASM.iter().filter(|f| !f.starts_with("-Wl,"));
-        let out = Command::new(find("clang").unwrap()).args(flags).arg("-fsyntax-only").arg("-I").arg(c.out.join("bindings")).arg(c.fixture.join("wrong.c")).output().unwrap();
+        let out = Command::new(find("clang").unwrap()).args(&flags).arg("-fsyntax-only").arg("-I").arg(c.out.join("bindings")).arg(c.fixture.join("wrong.c")).output().unwrap();
         let errors = String::from_utf8_lossy(&out.stderr);
         assert!(!out.status.success() && errors.contains("not compatible with any generic association"), "wrong.c should not compile:\n{errors}");
     }

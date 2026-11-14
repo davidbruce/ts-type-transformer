@@ -224,6 +224,7 @@ mod rt {
     unsafe extern "C" {
         pub fn js_string_len(h: u32) -> u32;
         pub fn js_string_read(h: u32, p: *mut u8);
+        pub fn js_string_take(h: u32, p: *mut u8, cap: usize) -> u32;
         pub fn js_from_number(x: f64) -> u32;
         pub fn js_from_bool(x: i32) -> u32;
         pub fn js_from_string(p: *const u8, n: usize) -> u32;
@@ -267,9 +268,14 @@ impl Drop for Handle {
     }
 }
 
-// How many JavaScript values wasm holds handles to.
+// How many references to JavaScript values wasm holds.
 pub fn live_handles() -> u32 {
     unsafe { rt::js_live() }
+}
+
+// Whether two handles are one JavaScript value: what `==` means for every handle type.
+pub fn same(a: &Handle, b: &Handle) -> bool {
+    a.0 == b.0 || unsafe { rt::js_equals(a.0, b.0) != 0 }
 }
 
 // A value lent to JavaScript for one call: an object's own handle, or a new
@@ -367,7 +373,13 @@ impl ToJs for String {
 }
 impl FromJs for String {
     const KIND: i32 = 2;
+    // In one call, when it fits a small buffer.
     fn from_handle(h: u32) -> Self {
+        let mut buf = [0u8; 256];
+        let n = unsafe { rt::js_string_take(h, buf.as_mut_ptr(), buf.len()) } as usize;
+        if n <= buf.len() {
+            return String::from_utf8(buf[..n].to_vec()).unwrap_or_default();
+        }
         let s = read_string(h);
         unsafe { rt::js_release(h) };
         s
@@ -419,6 +431,11 @@ macro_rules! handle {
                 &self.0
             }
         }
+        impl $(<$($p),*>)? PartialEq for $name $(<$($p),*>)? {
+            fn eq(&self, o: &Self) -> bool {
+                same(&self.0, &o.0)
+            }
+        }
         impl $(<$($p),*>)? ToJs for $name $(<$($p),*>)? {
             fn lend(&self) -> Lent {
                 Lent::borrow(self.0 .0)
@@ -456,11 +473,6 @@ impl JsValue {
     }
     pub fn is_null(&self) -> bool {
         self.0 .0 == 0
-    }
-}
-impl PartialEq for JsValue {
-    fn eq(&self, o: &Self) -> bool {
-        unsafe { rt::js_equals(self.0 .0, o.0 .0) != 0 }
     }
 }
 
@@ -621,10 +633,22 @@ impl Error {
     }
 }
 
-// The exception a call threw, taken. A call that throws returns a zero value.
+// The exception a call threw, taken. A call that throws returns a zero
+// value, and an exception not taken by the time control returns to
+// JavaScript is reported there: see `attempt`.
 pub fn take_error() -> Option<Error> {
     let e = unsafe { rt::js_take_error() };
     if e == 0 { None } else { Some(Error(Handle(e))) }
+}
+
+// Runs f and gives what it returned, or the exception a call in it threw:
+// `let found = attempt(|| el.querySelector(text))?;`.
+pub fn attempt<T>(f: impl FnOnce() -> T) -> Result<T, Error> {
+    let x = f();
+    match take_error() {
+        Some(e) => Err(e),
+        None => Ok(x),
+    }
 }
 
 // A JavaScript promise: `then` calls a closure with its result once it settles.

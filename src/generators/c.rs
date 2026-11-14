@@ -363,7 +363,15 @@ static inline JsOptionalBool js_none_bool(void) { return (JsOptionalBool){ false
 #define js_retain(x) ts_raw_js_retain((x).h)
 TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error(void);
 TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
-// The exception a call threw, taken, or a null handle. A call that throws returns a zero value.
+TS_IMPORT(js_has_error) int32_t ts_raw_js_has_error(void);
+// Whether two handles are one JavaScript value.
+static inline bool ts_same(uint32_t a, uint32_t b) { return a == b || ts_raw_js_equals(a, b) != 0; }
+#define js_same(a, b) ts_same((a).h, (b).h)
+// Whether the last call threw: its exception waits to be taken.
+static inline bool js_failed(void) { return ts_raw_js_has_error() != 0; }
+// The exception a call threw, taken, or a null handle. A call that throws
+// returns a zero value, and an exception not taken by the time control
+// returns to JavaScript is reported there.
 static inline JsValue js_take_error(void) { return (JsValue){ ts_raw_js_take_error() }; }
 // An exception's message, the caller's to release.
 static inline JsString js_error_message(JsValue e) { return (JsString){ ts_raw_js_error_message(e.h) }; }

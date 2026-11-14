@@ -1175,26 +1175,59 @@ pub fn imports(wasm: &[u8]) -> HashSet<String> {
 // The glue for every import in the model, or with `used`, only those a compiled module needs.
 pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
     let wanted = |name: &str| used.is_none_or(|u| u.contains(name));
-    let mut out = format!("const COUNTED = {};\n", m.counted);
-    out += &String::from(
+    // A value handed to a callback: wasm's own where it counts handles, else
+    // lent, and released when the callback returns.
+    let lend = |args: &[String]| -> (String, String) {
+        if m.counted {
+            return (args.iter().map(|a| a.replace("put(", "ref(")).collect::<Vec<_>>().join(", "), String::new());
+        }
+        let mut pre = String::new();
+        let mut post = String::new();
+        let mut out = Vec::new();
+        for (i, a) in args.iter().enumerate() {
+            match a.strip_prefix("put(") {
+                Some(_) => {
+                    pre += &format!("const h{i} = {}; ", a.replace("put(", "ref("));
+                    post += &format!("release(h{i}); ");
+                    out.push(format!("h{i}"));
+                }
+                None => out.push(a.clone()),
+            }
+        }
+        (format!("{pre}\u{1}{}", out.join(", ")), post)
+    };
+    // `call` with its lent arguments released afterwards.
+    let lending = |call: &dyn Fn(&str) -> String, args: &[String]| -> String {
+        let (args, post) = lend(args);
+        match args.split_once('\u{1}') {
+            Some((pre, args)) if !post.is_empty() => format!("{pre}try {{ {} }} finally {{ {post}}}", call(args)),
+            Some((_, args)) => call(args),
+            None => call(&args),
+        }
+    };
+    let mut out = String::from(
         "// Generated. Implements the wasm imports by calling the JavaScript API.
-export function makeEnv(getInstance) {
+//
+// makeEnv(getInstance, options): `options.check` reports mistakes with
+// handles (one used after its release, or released twice), at some cost in
+// speed; `options.unchecked(e)` is called with an exception no one took,
+// and by default writes it to the console.
+export function makeEnv(getInstance, options = {}) {
+  const CHECK = !!options.check;
+  const RELEASED = Symbol('released');
+  // Values by handle. Each `ref` is a reference wasm owns, in a slot of its
+  // own; the slot is freed when its count reaches zero. Zero is null.
   const objs = [null];
-  // One handle per value, so handles can be compared for identity. Each
-  // `put` is a reference wasm owns; a handle is freed when none are left.
-  const ids = new Map();
   const refs = [0];
   const free = [];
+  let live = 0;
   const ref = v => {
     if (v === null || v === undefined) return 0;
-    let h = ids.get(v);
-    if (h === undefined) {
-      h = free.length ? free.pop() : objs.length;
-      objs[h] = v;
-      refs[h] = 0;
-      ids.set(v, h);
-    }
-    refs[h]++;
+    // When checking, a slot is never reused: a stale handle stays stale.
+    const h = free.length ? free.pop() : objs.length;
+    objs[h] = v;
+    refs[h] = 1;
+    live++;
     return h;
   };
   // Open scopes: each holds the handles given to wasm while it is innermost,
@@ -1202,52 +1235,143 @@ export function makeEnv(getInstance) {
   const scopes = [];
   const put = v => {
     const h = ref(v);
-    if (h && scopes.length) scopes[scopes.length - 1].push(h);
+    if (h !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(h);
     return h;
   };
   const release = h => {
-    if (h && --refs[h] === 0) {
-      ids.delete(objs[h]);
-      objs[h] = undefined;
-      free.push(h);
+    if (h === 0) return;
+    if (!(refs[h] > 0)) return fail(new Error(`handle ${h} released twice`));
+    if (--refs[h] === 0) {
+      live--;
+      if (CHECK) objs[h] = RELEASED;
+      else {
+        objs[h] = undefined;
+        free.push(h);
+      }
     }
   };
-  const get = h => objs[h];
-  // A handle lent to a callback, released when it returns. Where wasm counts
-  // handles, it releases them itself: the handle is its own.
-  const lend = (lent, v) => {
-    const h = COUNTED ? put(v) : ref(v);
-    if (!COUNTED && h) lent.push(h);
-    return h;
-  };
+  const get = CHECK
+    ? h => {
+        const v = objs[h];
+        if (v === RELEASED) throw new Error(`handle ${h} used after its release`);
+        return v;
+      }
+    : h => objs[h];
   // A handle wasm gave up: what a callback returns.
   const take = h => {
     const v = get(h);
     release(h);
     return v;
   };
-  const memory = () => getInstance().exports.memory.buffer;
+  // The exception a call threw, until wasm takes it: a handle, or 0. One that
+  // is not taken by the time control returns to JavaScript, or before the
+  // next one, is reported.
+  let error = 0;
+  const unchecked = options.unchecked ?? (e => console.error('Uncaught in a wasm call:', e));
+  const fail = e => {
+    if (error !== 0) {
+      const old = objs[error];
+      release(error);
+      unchecked(old);
+    }
+    const mine = (error = ref(e));
+    queueMicrotask(() => {
+      if (error === mine && objs[mine] === e) {
+        error = 0;
+        release(mine);
+        unchecked(e);
+      }
+    });
+    return 0;
+  };
+  // Runtime calls that can throw, with up to four arguments.
+  const guard = f => (a, b, c, d) => {
+    try {
+      return f(a, b, c, d);
+    } catch (e) {
+      return fail(e);
+    }
+  };
+  // The module's memory, as bytes: a new view when it has grown.
+  let bytes = new Uint8Array(0);
+  const mem = () => (bytes.byteLength !== 0 ? bytes : (bytes = new Uint8Array(getInstance().exports.memory.buffer)));
   const table = () => getInstance().exports.__indirect_function_table;
   const enc = new TextEncoder(), dec = new TextDecoder();
-  const str = (ptr, len) => dec.decode(new Uint8Array(memory(), ptr, len));
+  // A string from memory. Short ones are usually ASCII, read faster by hand.
+  const decode = (m, ptr, len) => {
+    if (len <= 16) {
+      let s = '';
+      for (let i = 0; i < len; i++) {
+        const c = m[ptr + i];
+        if (c > 127) return dec.decode(m.subarray(ptr, ptr + len));
+        s += String.fromCharCode(c);
+      }
+      return s;
+    }
+    return dec.decode(m.subarray(ptr, ptr + len));
+  };
+  // Strings seen at an address, reused while the bytes there are the same:
+  // most strings a program passes are its literals, passed again and again.
+  const seen = new Map();
+  const str = (ptr, len) => {
+    const m = mem();
+    const key = ptr * 65536 + len;
+    const e = seen.get(key);
+    if (e !== undefined) {
+      const b = e.bytes;
+      let i = 0;
+      while (i < len && m[ptr + i] === b[i]) i++;
+      if (i === len) return e.s;
+      // A buffer that keeps changing is not worth remembering.
+      if (e.misses++ > 2) return decode(m, ptr, len);
+    }
+    const s = decode(m, ptr, len);
+    if (len > 256) return s;
+    if (seen.size > 1024) seen.clear();
+    seen.set(key, { s, bytes: m.slice(ptr, ptr + len), misses: e === undefined ? 0 : e.misses });
+    return s;
+  };
+  // The length of a string in UTF-8.
+  const utf8Length = s => {
+    const n = s.length;
+    for (let i = 0; i < n; i++) if (s.charCodeAt(i) > 127) return enc.encode(s).length;
+    return n;
+  };
+  // Writes at most `cap` bytes of a string to memory; returns its whole length in UTF-8.
+  const write = (s, ptr, cap) => {
+    const m = mem();
+    const n = s.length;
+    const fits = n <= cap ? n : cap;
+    let i = 0;
+    for (; i < fits; i++) {
+      const c = s.charCodeAt(i);
+      if (c > 127) break;
+      m[ptr + i] = c;
+    }
+    if (i === n) return n;
+    if (i === fits && n > cap) return utf8Length(s);
+    const r = enc.encodeInto(s, m.subarray(ptr, ptr + cap));
+    return r.read === n ? r.written : utf8Length(s);
+  };
+  const text = h => String(get(h) ?? '');
   // One JavaScript function per wasm function and context, so that a
   // callback passed twice is the same function (removeEventListener).
   const callbacks = new Map();
   // Callbacks made here: their key and context, until released.
   const owned = new Map();
+  const dead = () => {
+    throw new Error('callback called after release');
+  };
   const callback = (kind, fn, ctx, make) => {
     const key = `${kind}:${fn}:${ctx}`;
-    if (!callbacks.has(key)) {
-      const f = make(table().get(fn));
+    let f = callbacks.get(key);
+    if (f === undefined) {
       const state = { key, ctx, alive: true };
-      const live = (...args) => {
-        if (!state.alive) throw new Error('callback called after release');
-        return f(...args);
-      };
-      owned.set(live, state);
-      callbacks.set(key, live);
+      f = make(table().get(fn), state);
+      owned.set(f, state);
+      callbacks.set(key, f);
     }
-    return put(callbacks.get(key));
+    return put(f);
   };
   const enums = {
 ",
@@ -1260,56 +1384,62 @@ export function makeEnv(getInstance) {
     for k in &m.maps {
         out += &format!("    {}: {:?},\n", k.name, k.keys);
     }
-    out += "  };
-  // The first exception a call threw, until wasm takes it: a handle, or 0.
-  let error = 0;
-  const env = {
-    js_string_len: h => enc.encode(String(get(h) ?? '')).length,
-    js_string_read: (h, ptr) => { new Uint8Array(memory()).set(enc.encode(String(get(h) ?? '')), ptr); },
+    let listener = lending(&|args| format!("f(ctx, {args});"), &["put(ev)".to_string()]);
+    let settle = lending(&|args| format!("table().get(fn)(ctx, ok, {args});"), &["put(v)".to_string()]);
+    out += &format!(
+        "  }};
+  const env = {{
+    js_string_len: guard(h => utf8Length(text(h))),
+    js_string_read: guard((h, ptr) => {{ write(text(h), ptr, 0x7fffffff); }}),
     // At most `cap` bytes of the string; returns its whole length.
-    js_string_copy: (h, ptr, cap) => { const s = String(get(h) ?? ''); enc.encodeInto(s, new Uint8Array(memory(), ptr, cap)); return enc.encode(s).length; },
-    js_string_equals: (h, ptr, len) => (String(get(h) ?? '') === str(ptr, len) ? 1 : 0),
+    js_string_copy: guard((h, ptr, cap) => write(text(h), ptr, cap)),
+    // As js_string_copy, and if it fit, the handle is released.
+    js_string_take: guard((h, ptr, cap) => {{ const n = write(text(h), ptr, cap); if (n <= cap) release(h); return n; }}),
+    js_string_equals: guard((h, ptr, len) => (text(h) === str(ptr, len) ? 1 : 0)),
     js_from_number: x => put(x),
     js_from_bool: x => put(!!x),
     js_from_string: (ptr, len) => put(str(ptr, len)),
-    js_to_number: h => Number(get(h)),
-    js_to_bool: h => (get(h) ? 1 : 0),
-    js_equals: (a, b) => (get(a) === get(b) ? 1 : 0),
+    js_to_number: guard(h => Number(get(h))),
+    js_to_bool: guard(h => (get(h) ? 1 : 0)),
+    // Whether two handles are one JavaScript value.
+    js_equals: guard((a, b) => (a === b || get(a) === get(b) ? 1 : 0)),
     js_array_new: () => put([]),
-    js_array_length: h => get(h).length,
-    js_array_get: (h, i) => put(get(h)[i]),
-    js_array_push: (h, v) => { get(h).push(get(v)); },
-    js_listener_from: (fn, ctx) => callback('listener', fn, ctx, f => ev => { const lent = []; try { f(ctx, lend(lent, ev)); } finally { lent.forEach(release); } }),
+    js_array_length: guard(h => get(h).length),
+    js_array_get: guard((h, i) => put(get(h)[i])),
+    js_array_push: guard((h, v) => {{ get(h).push(get(v)); }}),
+    js_listener_from: (fn, ctx) => callback('listener', fn, ctx, (f, s) => ev => {{ if (!s.alive) dead(); {listener} }}),
     // Forgets a callback made here; returns its context, for wasm to free, or 0.
-    js_callback_release: h => {
+    js_callback_release: guard(h => {{
       const o = owned.get(get(h));
       if (!o) return 0;
       owned.delete(get(h));
       callbacks.delete(o.key);
       o.alive = false;
       return o.ctx;
-    },
-    js_retain: h => { if (h) refs[h]++; },
-    js_scope_open: () => { scopes.push([]); },
-    js_scope_close: () => { (scopes.pop() ?? []).forEach(release); },
+    }}),
+    js_retain: guard(h => {{ if (h !== 0 && get(h) !== undefined) refs[h]++; }}),
     js_release: release,
-    // Values wasm holds handles to.
-    js_live: () => ids.size,
+    js_scope_open: () => {{ scopes.push([]); }},
+    js_scope_close: () => {{ (scopes.pop() ?? []).forEach(release); }},
+    // References wasm holds.
+    js_live: () => live,
     // Iteration: an iterator over a value, and its next value, or -1 at the end.
-    js_iterate: h => put(get(h)[Symbol.iterator]()),
-    js_iterator_next: it => { const r = get(it).next(); return r.done ? -1 : put(r.value); },
+    js_iterate: guard(h => put(get(h)[Symbol.iterator]())),
+    js_iterator_next: guard(it => {{ const r = get(it).next(); return r.done ? -1 : put(r.value); }}),
     // Asynchronous iteration: a promise of the next value, or of nothing at the end.
-    js_async_iterate: h => put(get(h)[Symbol.asyncIterator]()),
-    js_async_iterator_next: it => put(Promise.resolve(get(it).next()).then(r => (r.done ? undefined : r.value))),
-    // The pending exception, which wasm now holds, or 0.
-    js_take_error: () => { const e = error; error = 0; return e; },
-    js_error_message: h => { const e = get(h); return put(String(e instanceof Error ? e.message : e)); },
+    js_async_iterate: guard(h => put(get(h)[Symbol.asyncIterator]())),
+    js_async_iterator_next: guard(it => put(Promise.resolve(get(it).next()).then(r => (r.done ? undefined : r.value)))),
+    // Whether an exception waits to be taken; the exception, which wasm now holds, or 0.
+    js_has_error: () => (error !== 0 ? 1 : 0),
+    js_take_error: () => {{ const e = error; error = 0; if (e !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(e); return e; }},
+    js_error_message: guard(h => {{ const e = get(h); return put(String(e instanceof Error ? e.message : e)); }}),
     // Calls fn(ctx, ok, value) once the promise settles: ok 1 with its value, 0 with its reason.
-    js_promise_then: (p, fn, ctx) => {
-      const settle = ok => v => { const lent = []; try { table().get(fn)(ctx, ok, lend(lent, v)); } finally { lent.forEach(release); } };
+    js_promise_then: guard((p, fn, ctx) => {{
+      const settle = ok => v => {{ {settle} }};
       Promise.resolve(get(p)).then(settle(1), settle(0));
-    },
-";
+    }}),
+"
+    );
     // Which member of a union a value is: its index, or -1.
     for u in m.unions.iter().filter(|u| wanted(&format!("{}_tag", u.name))) {
         let mut arms = Vec::new();
@@ -1331,22 +1461,30 @@ export function makeEnv(getInstance) {
             (None, Some(p)) => format!("(k === 0 ? {p} : -1)"),
             (None, None) => "-1".into(),
         };
-        out += &format!("    {}_tag: (h, k) => {{ const v = get(h); {} return {default}; }},\n", u.name, arms.join(" "));
+        out += &format!("    {}_tag: guard((h, k) => {{ const v = get(h); {} return {default}; }}),\n", u.name, arms.join(" "));
     }
     for c in m.callbacks.iter().filter(|c| wanted(&format!("{}_from", c.name))) {
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
-        let mut args = vec!["ctx".to_string()];
-        args.extend(c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t).replace("put(", "lend(lent, ")));
-        let call = format!("f({})", args.join(", "));
+        let args: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t)).collect();
         // What a callback returns, wasm gives up.
         let ret = from_wasm("r", &c.ret).replace("get(r)", "take(r)");
-        let body = if c.ret == Ty::Void { format!("{call};") } else { format!("const r = {call}; return {ret};") };
-        let body = format!("{{ const lent = []; try {{ {body} }} finally {{ lent.forEach(release); }} }}");
-        out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, f => ({}) => {body}),\n", c.name, c.name, names.join(", "));
+        let body = lending(
+            &|args| {
+                let call = if args.is_empty() { "f(ctx)".to_string() } else { format!("f(ctx, {args})") };
+                if c.ret == Ty::Void { format!("{call};") } else { format!("const r = {call}; return {ret};") }
+            },
+            &args,
+        );
+        out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, (f, s) => ({}) => {{ if (!s.alive) dead(); {body} }}),\n", c.name, c.name, names.join(", "));
     }
+    // A call that throws returns zero, and its exception is kept for wasm to take.
+    let guarded = |body: &str| match body.strip_prefix('{') {
+        Some(_) => format!("{{ try {body} catch (e) {{ fail(e); }} }}"),
+        None => format!("{{ try {{ return {body}; }} catch (e) {{ return fail(e); }} }}"),
+    };
     for f in m.all_funcs().filter(|f| f.shared.is_none() && wanted(&f.import)) {
         let (params, body) = entry(f, &|_, literal| literal.to_string());
-        out += &format!("    {}: ({}) => {body},\n", f.import, params.join(", "));
+        out += &format!("    {}: ({}) => {},\n", f.import, params.join(", "), guarded(&body));
     }
     // A shared import takes the index of the fixed arguments after `self`.
     for s in m.shared.iter().filter(|s| wanted(&s.name)) {
@@ -1358,25 +1496,9 @@ export function makeEnv(getInstance) {
             body = body.replace(&format!("$F{j}"), &format!("F[k][{j}]"));
         }
         let table: Vec<String> = s.values.iter().map(|v| format!("[{}]", v.join(", "))).collect();
-        out += &format!("    {}: (() => {{ const F = [{}]; return ({}) => {body}; }})(),\n", s.name, table.join(", "), params.join(", "));
+        out += &format!("    {}: (() => {{ const F = [{}]; return ({}) => {}; }})(),\n", s.name, table.join(", "), params.join(", "), guarded(&body));
     }
-    // A call that throws returns zero, and its exception is kept for wasm to take.
-    out + "  };
-  const calls = ['js_take_error', 'js_error_message', 'js_promise_then', 'js_retain', 'js_release', 'js_live', 'js_scope_open', 'js_scope_close'];
-  for (const [name, f] of Object.entries(env)) {
-    if (calls.includes(name)) continue;
-    env[name] = (...args) => {
-      try {
-        return f(...args);
-      } catch (e) {
-        if (error === 0) error = put(e);
-        return 0;
-      }
-    };
-  }
-  return env;
-}
-"
+    out + "  };\n  return env;\n}\n"
 }
 
 // A function with its types rewritten.

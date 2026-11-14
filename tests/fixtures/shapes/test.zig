@@ -51,18 +51,18 @@ export fn run() void {
 
     // Nullable: an optional.
     expect(s.get_parent() == null, @src());
-    expect(big.get_parent().?.h == s.h, @src());
+    expect(b.jsSame(big.get_parent().?, s), @src());
     big.set_parent(null);
     expect(big.get_parent() == null, @src());
 
     // Global functions.
     expect(b.totalArea(s, b.Shape.unit()) == 10, @src());
-    expect(b.largest(s, null).?.h == s.h, @src());
-    expect(b.largest(b.Shape.unit(), s).?.h == s.h, @src());
+    expect(b.jsSame(b.largest(s, null).?, s), @src());
+    expect(b.jsSame(b.largest(b.Shape.unit(), s).?, s), @src());
 
     // `undefined` rather than `null`.
     expect(b.orUnit(null).area() == 1, @src());
-    expect(b.orUnit(s).h == s.h, @src());
+    expect(b.jsSame(b.orUnit(s), s), @src());
     expect(b.find("nothing") == null, @src());
     expect(b.find("unit").?.area() == 1, @src());
 }
