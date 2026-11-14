@@ -49,7 +49,7 @@ pub enum Ty {
     Tuple(Vec<Ty>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Call {
     Method(String),
     Get(String),

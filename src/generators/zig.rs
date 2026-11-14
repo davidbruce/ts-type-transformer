@@ -565,6 +565,47 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         types.2.push(c.name.clone());
     }
     files.insert("types".into(), types);
+    // With inheritance flattened, a type has its ancestors' members. Each is
+    // written once, by the furthest ancestor that declares it, in
+    // `X.Methods(Self)`; a subtype's member of that name is an alias of it.
+    let class_of: HashMap<&str, &Class> = m.classes.iter().map(|c| (c.name.as_str(), c)).collect();
+    let mut ancestors: HashMap<&str, Vec<&Class>> = HashMap::new();
+    for c in &m.classes {
+        let mut up: Vec<&Class> = Vec::new();
+        let mut todo: Vec<&Class> = vec![c];
+        while let Some(k) = todo.pop() {
+            for a in k.ancestors.iter().filter_map(|a| class_of.get(a.as_str())) {
+                if !up.iter().any(|u| u.name == a.name) {
+                    up.push(a);
+                    todo.push(a);
+                }
+            }
+        }
+        up.sort_by(|a, b| a.name.cmp(&b.name));
+        ancestors.insert(&c.name, up);
+    }
+    let same = |a: &Func, b: &Func| a.call == b.call && a.params == b.params && a.ret == b.ret && a.rest == b.rest && a.fixed == b.fixed && a.type_params == b.type_params;
+    let members: HashMap<&str, HashMap<String, Vec<&Func>>> = m
+        .classes
+        .iter()
+        .map(|c| {
+            let mut by_call: HashMap<String, Vec<&Func>> = HashMap::new();
+            c.funcs.iter().filter(|f| Class::has_self(f)).for_each(|f| by_call.entry(format!("{:?}", f.call)).or_default().push(f));
+            (c.name.as_str(), by_call)
+        })
+        .collect();
+    let declares = |k: &Class, f: &Func| members[k.name.as_str()].get(&format!("{:?}", f.call)).and_then(|fs| fs.iter().find(|g| same(g, f)).copied());
+    // (type, member) -> (the ancestor that writes it, its name there).
+    let mut homes: HashMap<(&str, &str), (&str, &str)> = HashMap::new();
+    for c in &m.classes {
+        for f in c.funcs.iter().filter(|f| Class::has_self(f)) {
+            let home = ancestors[c.name.as_str()].iter().filter_map(|a| declares(a, f).map(|g| (*a, g))).find(|(a, _)| !ancestors[a.name.as_str()].iter().any(|b| declares(b, f).is_some()));
+            if let Some((a, g)) = home {
+                homes.insert((&c.name, &f.name), (&a.name, &g.name));
+            }
+        }
+    }
+    let shares: HashSet<&str> = homes.values().map(|h| h.0).collect();
     // Every object is an opaque handle; methods live in the struct's namespace.
     for c in &m.classes {
         let (out, externs, names) = files.entry(c.module.clone()).or_default();
@@ -593,8 +634,21 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         for a in &c.ancestors {
             *out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);
         }
+        let inherited = |f: &Func| if Class::has_self(f) { homes.get(&(c.name.as_str(), f.name.as_str())).copied() } else { None };
+        let shared = |f: &Func| shares.contains(c.name.as_str()) && Class::has_self(f) && inherited(f).is_none();
+        if c.funcs.iter().any(|f| shared(f)) {
+            *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
+            for f in c.funcs.iter().filter(|f| shared(f)) {
+                func(out, externs, Some("Self"), f, "            ", &m.unions);
+            }
+            *out += "        };\n    }\n";
+        }
         for f in &c.funcs {
-            func(out, externs, Some(&c.name), f, "    ", &m.unions);
+            match inherited(f) {
+                Some((from, name)) => *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(&f.name), ident(name)),
+                None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(&f.name)),
+                None => func(out, externs, Some(&c.name), f, "    ", &m.unions),
+            }
         }
         *out += "};\n";
     }
