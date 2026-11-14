@@ -10,7 +10,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     o.width(3);
     o.mode(Options_mode::fill);
     CHECK(describe(o) == "3x? fill");
-    o.height(ts::Value::number(2));
+    o.height(2);
     o.title("hi");
     CHECK(describe(o) == "3x2 fill \"hi\"");
 
@@ -18,12 +18,12 @@ extern "C" __attribute__((export_name("run"))) void run() {
     Options d = defaults();
     CHECK(d.width() == 4);
     CHECK(d.mode() == Options_mode::fit);
-    CHECK(d.height().is_null());
+    CHECK(!d.height());
     CHECK(!d.title());
 
     // Partial<Options>.
     patch_changes changes = patch_changes::create();
-    changes.width(ts::Value::number(9));
+    changes.width(9);
     Options patched = patch(d, changes);
     CHECK(patched.width() == 9 && patched.mode() == Options_mode::fit);
 
@@ -31,7 +31,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     area_size size = area_size::create();
     size.width(3);
     CHECK(area(size) == 9);
-    size.height(ts::Value::number(5));
+    size.height(5);
     CHECK(area(size) == 15);
 
     // keyof Options.
@@ -42,8 +42,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
     table.set_at("a", 7);
     CHECK(lookup(table, "a") == 7);
     CHECK(lookup(table, "b") == -1);
-    CHECK(table.at("a").to_number() == 7);
-    CHECK(table.at("b").is_null());
+    CHECK(table.at("a") == 7.0);
+    CHECK(!table.at("b"));
 
     // An intersection of object types.
     Tagged tagged = Tagged::create();

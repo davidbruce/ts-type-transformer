@@ -24,7 +24,7 @@ export fn run() void {
     o.set_width(3);
     o.set_mode(.fill);
     expect(strEq(b.describe(o), "3x? fill"), @src());
-    o.set_height(b.JsValue.number(2));
+    o.set_height(2);
     o.set_title("hi");
     expect(strEq(b.describe(o), "3x2 fill \"hi\""), @src());
 
@@ -32,11 +32,11 @@ export fn run() void {
     const d = b.defaults();
     expect(d.get_width() == 4, @src());
     expect(d.get_mode() == .fit, @src());
-    expect(d.get_height().isNull(), @src());
+    expect(d.get_height() == null, @src());
 
     // Partial<Options>.
     const changes = b.patch_changes.create();
-    changes.set_width(b.JsValue.number(9));
+    changes.set_width(9);
     const patched = b.patch(d, changes);
     expect(patched.get_width() == 9, @src());
     expect(patched.get_mode() == .fit, @src());
@@ -45,7 +45,7 @@ export fn run() void {
     const size = b.area_size.create();
     size.set_width(3);
     expect(b.area(size) == 9, @src());
-    size.set_height(b.JsValue.number(5));
+    size.set_height(5);
     expect(b.area(size) == 15, @src());
 
     // keyof Options.
@@ -56,8 +56,8 @@ export fn run() void {
     table.set_at("a", 7);
     expect(b.lookup(table, "a") == 7, @src());
     expect(b.lookup(table, "b") == -1, @src());
-    expect(table.get_at("a").toNumber() == 7, @src());
-    expect(table.get_at("b").isNull(), @src());
+    expect(table.get_at("a") == 7, @src());
+    expect(table.get_at("b") == null, @src());
 
     // An intersection of object types.
     const tagged = b.Tagged.create();

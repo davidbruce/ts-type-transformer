@@ -85,7 +85,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // An options object, { once: true }, and events made and dispatched here.
     int pings = 0;
     AddEventListenerOptions once = AddEventListenerOptions::create();
-    once.once(ts::Value::boolean(true));
+    once.once(true);
     {
         // Released at the end of the block.
         ts::Scoped<EventListener> onPing = [&](Event) {

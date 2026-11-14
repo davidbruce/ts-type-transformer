@@ -107,7 +107,7 @@ __attribute__((export_name("run"))) void run(void) {
     // An options object, { once: true }, and events made and dispatched here.
     pings = (Counter){ box, "data-pings", 0 };
     AddEventListenerOptions once = AddEventListenerOptions_create();
-    AddEventListenerOptions_set_once(once, js_bool(true));
+    AddEventListenerOptions_set_once(once, js_some_bool(true));
     JsValue ping_listener = { EventListener_from(on_ping, &pings).h };
     HTMLElement_addEventListener_with_AddEventListenerOptions(box, "ping", ping_listener, once);
     EventTarget_dispatchEvent(box, Event_new("ping"));

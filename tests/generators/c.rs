@@ -19,6 +19,8 @@ fn raw(t: &Ty) -> &'static str {
         Ty::Void => "void",
         Ty::Num | Ty::NumEnum(_) => "double",
         Ty::Bool | Ty::Enum(_) => "int32_t",
+        // An optional flag or enum is -1 when absent.
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "int32_t",
         _ => "uint32_t",
     }
 }
@@ -34,7 +36,9 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Array => "JsArray".into(),
         Ty::ArrayOf(e) => format!("JsArray_{}", element(e)),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
-        // A null handle is zero.
+        // An optional number or flag says whether it is there; an optional enum is `E_absent` when it is not.
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsOptionalDouble".into(),
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => "JsOptionalBool".into(),
         // NULL, or a null handle, is the absent value.
         Ty::Nullable(inner, _) => typed(inner, param),
         Ty::Union(_) | Ty::NamedUnion(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
@@ -117,6 +121,18 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
                 raw_params.push(raw(t).into());
                 args.push(format!("(double){name}"));
             }
+            Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => {
+                raw_params.extend(["int32_t".to_string(), "double".to_string()]);
+                args.extend([format!("{name}.has"), format!("{name}.value")]);
+            }
+            Ty::Nullable(inner, _) if **inner == Ty::Bool => {
+                raw_params.push("int32_t".into());
+                args.push(format!("({name}.has ? ({name}.value ? 1 : 0) : -1)"));
+            }
+            Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => {
+                raw_params.push("int32_t".into());
+                args.push(format!("(int32_t){name}"));
+            }
             _ => {
                 raw_params.push(raw(t).into());
                 args.push(format!("{name}.h"));
@@ -145,6 +161,12 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         Ty::Bool => format!("return {call} != 0;"),
         Ty::Enum(e) => format!("return ({e}){call};"),
         Ty::NumEnum(e) => format!("return ({e})(int32_t){call};"),
+        // An optional number comes back as a handle, read and released.
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => {
+            format!("uint32_t h = {call}; JsOptionalDouble r = {{ h != 0, h ? ts_raw_js_to_number(h) : 0 }}; if (h) ts_raw_js_release(h); return r;")
+        }
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("int32_t r = {call}; return (JsOptionalBool){{ r >= 0, r > 0 }};"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("return ({}){call};", typed(inner, false)),
         t => format!("return ({}){{ {call} }};", typed(t, false)),
     };
     let decl = format!("TS_IMPORT({import}) {} ts_raw_{import}({});\n", raw(&f.ret), void(&raw_params));
@@ -183,6 +205,13 @@ TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
 TS_IMPORT(js_release) void ts_raw_js_release(uint32_t);
 TS_IMPORT(js_live) uint32_t ts_raw_js_live(void);
 TS_IMPORT(js_callback_release) uint32_t ts_raw_js_callback_release(uint32_t);
+
+// An optional number or flag: `has` says whether `value` is there.
+typedef struct { bool has; double value; } JsOptionalDouble;
+typedef struct { bool has; bool value; } JsOptionalBool;
+static inline JsOptionalDouble js_some_double(double x) { return (JsOptionalDouble){ true, x }; }
+static inline JsOptionalBool js_some_bool(bool x) { return (JsOptionalBool){ true, x }; }
+#define JS_NONE { 0 }
 
 // A handle a function returns is the caller's: release it when done with it.
 // Arguments, and a callback's arguments, are lent: retain one to keep it.
@@ -278,6 +307,9 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n\n");
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
+        // `E_absent`, -1, is an optional enum that is not there.
+        let absent = format!("{name}_absent");
+        seen.insert(absent.clone());
         let members: Vec<String> = values
             .iter()
             .map(|v| {
@@ -291,7 +323,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
                 id
             })
             .collect();
-        types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
+        types += &format!("typedef enum {{ {absent} = -1, {} }} {name};\n", members.join(", "));
     }
     for (name, members) in &m.num_enums {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{name}_{member} = {value}")).collect();
@@ -338,7 +370,13 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     for c in &m.callbacks {
         let mut params = vec!["void* ctx".to_string()];
         // A numeric enum arrives as the number it is.
-        let plain = |t: &Ty| if matches!(t, Ty::NumEnum(_)) { "double".to_string() } else { typed(t, false) };
+        // An optional number arrives as a lent handle, an optional flag as -1, 0 or 1.
+        let plain = |t: &Ty| match t {
+            Ty::NumEnum(_) => "double".to_string(),
+            Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsValue".to_string(),
+            Ty::Nullable(inner, _) if **inner == Ty::Bool => "int32_t".to_string(),
+            t => typed(t, false),
+        };
         params.extend(c.params.iter().map(|(n, t)| format!("{} {}", plain(t), ident(n))));
         types += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
         types += &format!("TS_IMPORT({0}_from) uint32_t ts_raw_{0}_from({0}_fn, void*);\n", c.name);

@@ -871,11 +871,13 @@ fn rename_param(t: &mut Ty, from: &str, to: &str) {
     }
 }
 
-// A handle can be null; anything else that may be absent is an untyped value.
+// What may be absent. A handle can be null; a string is a null pointer going
+// in and a null handle coming back; a number is a flag and the number going
+// in, and a handle coming back; a flag or an enum is -1 when absent.
 fn absent(t: Ty, undefined: bool) -> Ty {
     match t {
-        // A string that may be absent: a null pointer going in, a null handle coming back.
         Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
+        Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) => Ty::Nullable(Box::new(t), undefined),
         Ty::Nullable(..) => t,
         Ty::Void => Ty::Void,
         _ => Ty::Any,
@@ -894,6 +896,12 @@ fn from_wasm(p: &str, t: &Ty) -> String {
         Ty::Num | Ty::NumEnum(_) => p.to_string(),
         Ty::Bool => format!("!!{p}"),
         Ty::Enum(e) => format!("enums.{e}[{p}]"),
+        // A flag or an enum that may be absent is -1 when it is.
+        Ty::Nullable(inner, u) if matches!(**inner, Ty::Bool) => format!("({p} < 0 ? {} : !!{p})", if *u { "undefined" } else { "null" }),
+        Ty::Nullable(inner, u) if matches!(**inner, Ty::Enum(_)) => {
+            let Ty::Enum(e) = &**inner else { unreachable!() };
+            format!("({p} < 0 ? {} : enums.{e}[{p}])", if *u { "undefined" } else { "null" })
+        }
         Ty::Nullable(_, true) => format!("({p} === 0 ? undefined : get({p}))"),
         Ty::Key(m) => format!("keys.{m}[{p}]"),
         _ => format!("get({p})"),
@@ -907,6 +915,11 @@ fn to_wasm(x: &str, t: &Ty) -> String {
         Ty::Num | Ty::NumEnum(_) => x.to_string(),
         Ty::Bool => format!("(({x}) ? 1 : 0)"),
         Ty::Enum(e) => format!("enums.{e}.indexOf({x})"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool) => format!("(v => (v == null ? -1 : v ? 1 : 0))({x})"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => {
+            let Ty::Enum(e) = &**inner else { unreachable!() };
+            format!("(v => (v == null ? -1 : enums.{e}.indexOf(v)))({x})")
+        }
         _ => format!("put({x})"),
     }
 }
@@ -947,6 +960,14 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             wasm_params.push(format!("{p}_ptr"));
             wasm_params.push(format!("{p}_len"));
             args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", if *undefined { "undefined" } else { "null" }));
+            continue;
+        }
+        if let Ty::Nullable(inner, undefined) = t
+            && matches!(**inner, Ty::Num | Ty::NumEnum(_))
+        {
+            wasm_params.push(format!("{p}_has"));
+            wasm_params.push(format!("{p}_value"));
+            args.push(format!("({p}_has ? {p}_value : {})", if *undefined { "undefined" } else { "null" }));
             continue;
         }
         let spread = if f.rest && i == f.params.len() - 1 { "..." } else { "" };

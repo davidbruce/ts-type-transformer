@@ -46,6 +46,7 @@ fn ty_in(t: &Ty) -> String {
         Ty::Array => "ts::Array<>".into(),
         Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg(e)),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("std::optional<{}>", ty_in(inner).trim_start_matches("const ").trim_end_matches('&')),
         Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_in(inner)),
         Ty::NamedUnion(n) => format!("const {n}&"),
         Ty::Union(_) => "ts::Value".into(),
@@ -121,12 +122,19 @@ fn unconstrained(params: &[TParam]) -> Vec<TParam> {
     params.iter().map(|p| TParam { constraint: None, ..p.clone() }).collect()
 }
 
-// Constraints as checks in a class template's body, made where it is instantiated.
-fn checks(params: &[TParam]) -> String {
-    params
+// A class template's constructors, which check its constraints: they are
+// instantiated where an object is made, when the types are complete, unlike
+// the class itself, which a base or a declaration can instantiate earlier.
+fn constructors(name: &str, params: &[TParam]) -> String {
+    let checks: String = params
         .iter()
-        .filter_map(|p| constraint(&p.name, p.constraint.as_ref()?).map(|c| format!("    static_assert({c}, \"{} must extend {}\");\n", p.name, ty_arg(p.constraint.as_ref().unwrap()))))
-        .collect()
+        .filter_map(|p| constraint(&p.name, p.constraint.as_ref()?).map(|c| format!(" static_assert({c}, \"{} must extend {}\");", p.name, ty_arg(p.constraint.as_ref().unwrap()))))
+        .collect();
+    if checks.is_empty() {
+        format!("    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n")
+    } else {
+        format!("    {name}() {{{checks} }}\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{{checks} }}\n")
+    }
 }
 
 // A type parameter's constraint, where C++ can state it.
@@ -145,6 +153,10 @@ fn raw(t: &Ty) -> Vec<&'static str> {
         Ty::Bool | Ty::Enum(_) | Ty::Key(_) => vec!["int32_t"],
         Ty::Str => vec!["const char*", "size_t"],
         Ty::Nullable(inner, _) if **inner == Ty::Str => vec!["const char*", "size_t"],
+        // An optional number: whether it is there, and the number.
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => vec!["int32_t", "double"],
+        // An optional flag or enum: -1 when absent.
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => vec!["int32_t"],
         _ => vec!["uint32_t"],
     }
 }
@@ -154,6 +166,7 @@ fn raw_ret(t: &Ty) -> &'static str {
         Ty::Void => "void",
         Ty::Num | Ty::NumEnum(_) => "double",
         Ty::Bool | Ty::Enum(_) => "int32_t",
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "int32_t",
         _ => "uint32_t",
     }
 }
@@ -168,7 +181,11 @@ fn lower(t: &Ty, x: &str) -> Vec<String> {
         Ty::Key(_) => vec![format!("{x}.index")],
         Ty::Str => vec![format!("{x}.data()"), format!("{x}.size()")],
         Ty::Nullable(inner, _) if **inner == Ty::Str => vec![format!("({x} ? {x}->data() : nullptr)"), format!("({x} ? {x}->size() : 0)")],
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::Param(_) | Ty::Generic(..)) => vec![format!("ts::Arg({x}).h")],
+        Ty::Nullable(inner, _) if **inner == Ty::Num => vec![format!("({x} ? 1 : 0)"), format!("({x} ? *{x} : 0.0)")],
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::NumEnum(_)) => vec![format!("({x} ? 1 : 0)"), format!("({x} ? double(*{x}) : 0.0)")],
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => vec![format!("({x} ? (*{x} ? 1 : 0) : -1)")],
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => vec![format!("({x} ? int32_t(*{x}) : -1)")],
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Param(_) | Ty::Generic(..) | Ty::NamedUnion(_)) => vec![format!("ts::Arg({x}).h")],
         Ty::Nullable(..) => vec![format!("({x} ? {x}->h : 0)")],
         Ty::Param(_) | Ty::Generic(..) | Ty::NamedUnion(_) => vec![format!("ts::Arg({x}).h")],
         _ => vec![format!("{x}.h")],
@@ -183,6 +200,12 @@ fn raise(t: &Ty, r: &str, unions: &[NamedUnion]) -> String {
         Ty::Bool => format!("({r} != 0)"),
         Ty::Enum(e) => format!("{e}({r})"),
         Ty::Str => format!("ts::from_handle<std::string>({r})"),
+        Ty::Nullable(inner, _) if **inner == Ty::Num => format!("ts::from_handle<std::optional<double>>({r})"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::NumEnum(_)) => {
+            format!("({r} ? {}({}(int32_t(ts::from_handle<double>({r})))) : std::nullopt)", ty_out(t, unions), ty_in(inner))
+        }
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("({r} < 0 ? std::nullopt : std::optional<bool>({r} != 0))"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("({r} < 0 ? std::nullopt : {}({}({r})))", ty_out(t, unions), ty_in(inner)),
         Ty::Nullable(inner, _) => format!("({r} ? {}({}) : std::nullopt)", ty_out(t, unions), raise(inner, r, unions)),
         Ty::NamedUnion(n) if decodable(n, unions) => format!("decode_{n}({r})"),
         Ty::Generic(n, args) if decodable(n, unions) => format!("decode_{n}<{}>({r})", args.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
@@ -816,12 +839,12 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         let tpl = head(&unconstrained(&c.type_params), false);
         let text = format!(
             "// Generated.\n#pragma once\n{}extern \"C\" TS_IMPORT({name}_from) uint32_t ts_raw_{name}_from(uintptr_t, void*);\n\n\
-             {tpl}struct {name} : ts::Callback {{\n{}    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n    \
+             {tpl}struct {name} : ts::Callback {{\n{}    \
              template <class F, std::enable_if_t<!ts::is_handle<F>, int> = 0>\n    \
              {name}(F f) : ts::Handle(ts::handle, ts_raw_{name}_from(reinterpret_cast<uintptr_t>(&call<F>), ts::closure(std::move(f)))) {{}}\n\n  \
              private:\n    template <class F>\n    static {ret} call(void* ctx{raw_args}) {{ {result} }}\n}};\n\n{}",
             include(&path, "ts_types.hpp"),
-            checks(&c.type_params),
+            constructors(name, &c.type_params),
             includes(&path, &used)
         );
         out.push((path, text));
@@ -923,10 +946,10 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
             }
         }
         decl += &format!(
-            "\n{class_head}struct {0} : {1} {{\n{2}    {0}() = default;\n    {0}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n{members}}};\n",
+            "\n{class_head}struct {0} : {1} {{\n{2}{members}}};\n",
             c.name,
             bases.join(", "),
-            checks(&c.type_params)
+            constructors(&c.name, &c.type_params)
         );
         used.remove(&c.name);
         used.extend(c.ancestors.iter().cloned());
@@ -1069,6 +1092,7 @@ fn raw_callback(t: &Ty) -> &'static str {
         Ty::Void => "void",
         Ty::Num | Ty::NumEnum(_) => "double",
         Ty::Bool | Ty::Enum(_) => "int32_t",
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "int32_t",
         _ => "uint32_t",
     }
 }
@@ -1078,6 +1102,7 @@ fn raw_callback(t: &Ty) -> &'static str {
 fn raise_callback(t: &Ty, a: &str, unions: &[NamedUnion]) -> String {
     match t {
         Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Str => raise(t, a, unions),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => raise(t, a, unions),
         // A union that can be decoded is the variant; any other a value.
         Ty::NamedUnion(n) | Ty::Generic(n, _) if decodable(n, unions) => format!("ts::from_handle<ts::dep<F, {}>>({a})", ty_out(t, unions)),
         Ty::NamedUnion(_) | Ty::Union(_) | Ty::Generic(..) if !matches!(t, Ty::Generic(n, _) if !is_union(n, unions)) => format!("ts::Value(ts::handle, {a})"),
@@ -1092,6 +1117,8 @@ fn lower_callback(t: &Ty, x: &str) -> String {
         Ty::NumEnum(_) => format!("double({x})"),
         Ty::Bool => format!("({x} ? 1 : 0)"),
         Ty::Enum(_) => format!("int32_t({x})"),
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("[](std::optional<bool> v) {{ return v ? int32_t(*v) : -1; }}({x})"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("[](auto v) {{ return v ? int32_t(*v) : -1; }}({x})"),
         _ => format!("ts::Arg({x}).give()"),
     }
 }

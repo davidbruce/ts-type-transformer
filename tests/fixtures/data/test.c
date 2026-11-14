@@ -22,7 +22,7 @@ __attribute__((export_name("run"))) void run(void) {
     Options_set_width(o, 3);
     Options_set_mode(o, Options_mode_fill);
     CHECK(str_eq(describe(o), "3x? fill"));
-    Options_set_height(o, js_number(2));
+    Options_set_height(o, js_some_double(2));
     Options_set_title(o, "hi");
     CHECK(str_eq(describe(o), "3x2 fill \"hi\""));
 
@@ -30,11 +30,11 @@ __attribute__((export_name("run"))) void run(void) {
     Options d = defaults();
     CHECK(Options_get_width(d) == 4);
     CHECK(Options_get_mode(d) == Options_mode_fit);
-    CHECK(Options_get_height(d).h == 0);
+    CHECK(!Options_get_height(d).has);
 
     // Partial<Options>.
     patch_changes changes = patch_changes_create();
-    patch_changes_set_width(changes, js_number(9));
+    patch_changes_set_width(changes, js_some_double(9));
     Options patched = patch(d, changes);
     CHECK(Options_get_width(patched) == 9);
     CHECK(Options_get_mode(patched) == Options_mode_fit);
@@ -43,7 +43,7 @@ __attribute__((export_name("run"))) void run(void) {
     area_size size = area_size_create();
     area_size_set_width(size, 3);
     CHECK(area(size) == 9);
-    area_size_set_height(size, js_number(5));
+    area_size_set_height(size, js_some_double(5));
     CHECK(area(size) == 15);
 
     // keyof Options.
@@ -54,8 +54,8 @@ __attribute__((export_name("run"))) void run(void) {
     lookup_table_set_at(table, "a", 7);
     CHECK(lookup(table, "a") == 7);
     CHECK(lookup(table, "b") == -1);
-    CHECK(js_to_number(lookup_table_get_at(table, "a")) == 7);
-    CHECK(lookup_table_get_at(table, "b").h == 0);
+    CHECK(lookup_table_get_at(table, "a").value == 7);
+    CHECK(!lookup_table_get_at(table, "b").has);
 
     // An intersection of object types.
     Tagged tagged = Tagged_create();

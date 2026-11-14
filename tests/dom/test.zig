@@ -85,7 +85,7 @@ export fn run() void {
     // Both union-typed parameters are tagged unions.
     pings = .{ .box = box, .attribute = "data-pings" };
     const once = b.AddEventListenerOptions.create();
-    once.set_once(b.JsValue.boolean(true));
+    once.set_once(true);
     box.addEventListener_with_string_and_options(
         "ping",
         .{ .EventListener = b.EventListener.from(onPing, &pings) },

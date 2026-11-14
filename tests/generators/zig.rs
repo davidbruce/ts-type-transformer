@@ -20,6 +20,8 @@ fn raw(t: &Ty) -> &'static str {
         Ty::Void => "void",
         Ty::Num | Ty::NumEnum(_) => "f64",
         Ty::Bool | Ty::Enum(_) | Ty::Key(_) => "i32",
+        // An optional flag or enum is -1 when absent.
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "i32",
         _ => "u32",
     }
 }
@@ -113,8 +115,11 @@ fn typed(t: &Ty, is_param: bool) -> String {
 }
 
 // Types a C-convention callback can take: no slices, no optionals, no unions.
+// An optional number arrives as a lent handle, an optional flag or enum as -1 when absent.
 fn callback_typed(t: &Ty) -> String {
     match t {
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsValue".into(),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "i32".into(),
         Ty::Nullable(inner, _) => callback_typed(inner),
         Ty::NamedUnion(_) => "JsValue".into(),
         Ty::NumEnum(_) => "f64".into(),
@@ -129,6 +134,9 @@ fn lower_arg(name: &str, t: &Ty) -> String {
         Ty::Bool => format!("@intFromBool({name})"),
         Ty::Enum(_) | Ty::Key(_) => format!("@intFromEnum({name})"),
         Ty::NumEnum(_) => format!("@floatFromInt(@intFromEnum({name}))"),
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("if ({name}) |v| @as(i32, @intFromBool(v)) else -1"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("if ({name}) |v| @intFromEnum(v) else -1"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("lent_{name}.h"),
         Ty::Nullable(..) => format!("if ({name}) |v| v.h else 0"),
         // A union is lent for the call: see `func`.
         Ty::NamedUnion(_) | Ty::Union(_) => format!("lent_{name}.h"),
@@ -155,11 +163,19 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
         if matches!(t, Ty::NamedUnion(_)) || matches!(t, Ty::Union(parts) if !parts.is_empty()) {
             pre += &format!("const lent_{id} = switch ({id}) {{ inline else => |v| Lent.of(v) }}; defer lent_{id}.done(); ");
         }
+        if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_))) {
+            pre += &format!("const lent_{id} = if ({id}) |u| switch (u) {{ inline else => |v| Lent.of(v) }} else Lent{{ .h = 0, .own = false }}; defer lent_{id}.done(); ");
+        }
         let comptime = if matches!(t, Ty::Key(_)) { "comptime " } else { "" };
         params.push(format!("{comptime}{id}: {}", typed(t, true).replace("KEY", &key)));
         if *t == Ty::Str {
             raw_params.extend(["[*]const u8".to_string(), "usize".to_string()]);
             args.extend([format!("{id}.ptr"), format!("{id}.len")]);
+        } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_))) {
+            // An optional number: whether it is there, and the number.
+            let value = if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Num) { format!("{id} orelse 0") } else { format!("if ({id}) |v| @floatFromInt(@intFromEnum(v)) else 0") };
+            raw_params.extend(["i32".to_string(), "f64".to_string()]);
+            args.extend([format!("@intFromBool({id} != null)"), value]);
         } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
             raw_params.extend(["?[*]const u8".to_string(), "usize".to_string()]);
             args.extend([format!("if ({id}) |v| v.ptr else null"), format!("if ({id}) |v| v.len else 0")]);
@@ -182,6 +198,10 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     // A union result that cannot be told apart is an untyped value.
     let union = match &f.ret {
         Ty::NamedUnion(n) => unions.iter().find(|u| u.name == *n),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::NamedUnion(n) => unions.iter().find(|u| u.name == *n),
+            _ => None,
+        },
         _ => None,
     };
     let ret_type = match union {
@@ -190,6 +210,12 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     };
     let body = match &f.ret {
         Ty::NamedUnion(n) if union.is_some_and(|u| u.decodable()) => format!("return {n}.fromHandle({call});"),
+        Ty::Nullable(inner, _) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; return if (h == 0) null else {}.fromHandle(h);", typed(inner, false)),
+        Ty::Nullable(..) if union.is_some() => format!("return .{{ .h = {call} }};"),
+        Ty::Nullable(inner, _) if **inner == Ty::Num => format!("return jsTake(?f64, {call});"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::NumEnum(_)) => format!("const h = {call}; return if (h == 0) null else @enumFromInt(@as(i32, @intFromFloat(JsValue.takeNumber(h))));"),
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("const r = {call}; return if (r < 0) null else r != 0;"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("const r = {call}; return if (r < 0) null else @enumFromInt(r);"),
         Ty::Void => format!("{call};"),
         Ty::Num => format!("return {call};"),
         Ty::Bool => format!("return {call} != 0;"),
@@ -278,6 +304,7 @@ pub const Lent = struct {
 
 // A T from a handle a function returned: takes the handle over.
 pub fn jsTake(comptime T: type, h: u32) T {
+    if (@typeInfo(T) == .optional) return if (h == 0) null else jsTake(@typeInfo(T).optional.child, h);
     if (T == f64) return JsValue.takeNumber(h);
     if (T == bool) return JsValue.takeBool(h);
     if (@typeInfo(T) == .@\"union\") return T.fromHandle(h);
