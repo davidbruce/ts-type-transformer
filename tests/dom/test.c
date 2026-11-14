@@ -26,15 +26,6 @@
 TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
-static bool str_eq(JsString s, const char* expected) {
-    char buf[128];
-    uint32_t n = JsString_len(s);
-    if (n != ts_strlen(expected) || n > sizeof buf) return false;
-    JsString_read(s, buf);
-    for (uint32_t i = 0; i < n; i++)
-        if (buf[i] != expected[i]) return false;
-    return true;
-}
 
 // What a listener needs: where to count, and where to show the count.
 typedef struct {
@@ -78,13 +69,15 @@ __attribute__((export_name("run"))) void run(void) {
 
     // Read an element that was already in the page, and copy its text.
     HTMLElement seed = Document_getElementById(doc, "seed");
-    CHECK(str_eq(Node_get_textContent(seed), "seed text"));
-    CHECK(str_eq((Element_getAttribute(seed, "data-x")), "42"));
+    CHECK(JsString_equals(Node_get_textContent(seed), "seed text"));
+    CHECK(JsString_equals((Element_getAttribute(seed, "data-x")), "42"));
     CHECK(Element_getAttribute(seed, "data-missing").h == 0);
     char text[64];
     JsString seed_text = Node_get_textContent(seed);
-    JsString_read(seed_text, text);
-    text[JsString_len(seed_text)] = 0;
+    CHECK(JsString_copy(seed_text, text, sizeof text) == 9);
+    // What does not fit is cut, and the copy still ends in NUL.
+    char short_text[5];
+    CHECK(JsString_copy(seed_text, short_text, sizeof short_text) == 9 && short_text[3] == 'd' && short_text[4] == 0);
     HTMLElement copy = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc));
     Node_set_textContent(copy, text);
     Node_appendChild(box, copy);
@@ -117,7 +110,7 @@ __attribute__((export_name("run"))) void run(void) {
     // Style, layout and the window.
     CSSStyleDeclaration style = ElementCSSInlineStyle_get_style(box);
     CSSStyleDeclarationBase_setProperty(style, "color", "red");
-    CHECK(str_eq(CSSStyleProperties_get_color(style), "red"));
+    CHECK(JsString_equals(CSSStyleProperties_get_color(style), "red"));
     CHECK(DOMRect_get_width(Element_getBoundingClientRect(box)) > 0);
     CHECK(HTMLCollectionBase_get_length(ParentNode_get_children(box)) == 2);
 
@@ -148,7 +141,7 @@ __attribute__((export_name("run"))) void run(void) {
     for (int i = 0; i < 500; i++) {
         js_scope_open();
         HTMLElement found = Document_getElementById(doc, "made-by-c");
-        CHECK(DOMTokenList_contains(Element_get_classList(found), "box") && str_eq(Element_get_id(found), "made-by-c"));
+        CHECK(DOMTokenList_contains(Element_get_classList(found), "box") && JsString_equals(Element_get_id(found), "made-by-c"));
         js_scope_close();
     }
     CHECK(js_live_handles() == live);

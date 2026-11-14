@@ -304,6 +304,12 @@ pub const JsString = extern struct {
     pub fn from(s: []const u8) JsString { return .{ .h = raw.js_from_string(s.ptr, s.len) }; }
     pub fn len(self: JsString) usize { return raw.js_string_len(self.h); }
     pub fn read(self: JsString, buf: []u8) []u8 { const n = self.len(); raw.js_string_read(self.h, buf.ptr); return buf[0..n]; }
+    // As much as fits in buf.
+    pub fn copy(self: JsString, buf: []u8) []u8 { const n = raw.js_string_copy(self.h, buf.ptr, buf.len); return buf[0..@min(n, buf.len)]; }
+    // A copy the caller owns.
+    pub fn toOwned(self: JsString, allocator: anytype) ![]u8 { const buf = try allocator.alloc(u8, self.len()); return self.copy(buf); }
+    // Compares in JavaScript, without copying.
+    pub fn eql(self: JsString, s: []const u8) bool { return raw.js_string_equals(self.h, s.ptr, s.len) != 0; }
 };
 // A callback taking one object: `JsListener(PointerEvent).from(onClick, &state)`.
 pub fn JsListener(comptime Ev: type) type {
@@ -439,6 +445,8 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_release(h: u32) void;
     extern \"env\" fn js_live() u32;
     extern \"env\" fn js_take_error() u32;
+    extern \"env\" fn js_string_copy(h: u32, ptr: [*]u8, cap: usize) usize;
+    extern \"env\" fn js_string_equals(h: u32, ptr: [*]const u8, len: usize) i32;
     extern \"env\" fn js_scope_open() void;
     extern \"env\" fn js_scope_close() void;
     extern \"env\" fn js_iterate(h: u32) u32;

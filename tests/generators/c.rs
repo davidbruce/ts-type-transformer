@@ -268,6 +268,17 @@ static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
 #define js_forget_callback(x) ((void*)(uintptr_t)ts_raw_js_callback_release((x).h))
 static inline uint32_t JsString_len(JsString s) { return ts_raw_js_string_len(s.h); }
 static inline void JsString_read(JsString s, char* buf) { ts_raw_js_string_read(s.h, buf); }
+TS_IMPORT(js_string_copy) uint32_t ts_raw_js_string_copy(uint32_t, char*, uint32_t);
+TS_IMPORT(js_string_equals) int32_t ts_raw_js_string_equals(uint32_t, const char*, uint32_t);
+// Copies at most cap - 1 bytes and a terminating NUL; returns the string's whole length in bytes.
+static inline uint32_t JsString_copy(JsString s, char* buf, uint32_t cap) {
+    if (cap == 0) return JsString_len(s);
+    uint32_t n = ts_raw_js_string_copy(s.h, buf, cap - 1);
+    buf[n < cap - 1 ? n : cap - 1] = 0;
+    return n;
+}
+// Compares in JavaScript, without copying.
+static inline bool JsString_equals(JsString s, const char* text) { return ts_raw_js_string_equals(s.h, text, ts_strlen(text)) != 0; }
 static inline JsValue js_number(double x) { return (JsValue){ ts_raw_js_from_number(x) }; }
 static inline JsValue js_bool(bool x) { return (JsValue){ ts_raw_js_from_bool(x) }; }
 static inline JsValue js_string(const char* s) { return (JsValue){ ts_raw_js_from_string(s, ts_strlen(s)) }; }

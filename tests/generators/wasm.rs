@@ -1253,6 +1253,9 @@ export function makeEnv(getInstance) {
   const env = {
     js_string_len: h => enc.encode(String(get(h) ?? '')).length,
     js_string_read: (h, ptr) => { new Uint8Array(memory()).set(enc.encode(String(get(h) ?? '')), ptr); },
+    // At most `cap` bytes of the string; returns its whole length.
+    js_string_copy: (h, ptr, cap) => { const s = String(get(h) ?? ''); enc.encodeInto(s, new Uint8Array(memory(), ptr, cap)); return enc.encode(s).length; },
+    js_string_equals: (h, ptr, len) => (String(get(h) ?? '') === str(ptr, len) ? 1 : 0),
     js_from_number: x => put(x),
     js_from_bool: x => put(!!x),
     js_from_string: (ptr, len) => put(str(ptr, len)),

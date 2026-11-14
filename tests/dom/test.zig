@@ -8,11 +8,6 @@ fn expect(ok: bool, src: std.builtin.SourceLocation) void {
     check(@intFromBool(ok), src.line);
 }
 
-fn strEq(s: b.JsString, expected: []const u8) bool {
-    var buf: [128]u8 = undefined;
-    if (s.len() > buf.len) return false;
-    return std.mem.eql(u8, s.read(&buf), expected);
-}
 
 // What a listener needs: where to count, and where to show the count.
 const Counter = struct {
@@ -58,8 +53,8 @@ export fn run() void {
 
     // Read an element that was already in the page, and copy its text.
     const seed = doc.getElementById("seed").?;
-    expect(strEq(seed.get_textContent(), "seed text"), @src());
-    expect(strEq(seed.getAttribute("data-x").?, "42"), @src());
+    expect(seed.get_textContent().eql("seed text"), @src());
+    expect(seed.getAttribute("data-x").?.eql("42"), @src());
     expect(seed.getAttribute("data-missing") == null, @src());
     var text: [64]u8 = undefined;
     const copy = doc.createElement(.p).asHTMLElement();
@@ -97,7 +92,7 @@ export fn run() void {
 
     // Style, layout and the window.
     box.get_style().setProperty("color", "red");
-    expect(strEq(box.get_style().get_color(), "red"), @src());
+    expect(box.get_style().get_color().eql("red"), @src());
     expect(box.getBoundingClientRect().get_width() > 0, @src());
     expect(box.get_children().get_length() == 2, @src());
 
@@ -113,6 +108,14 @@ export fn run() void {
     expect(b.get_innerWidth() > 0, @src());
     doc.set_title("driven by zig");
 
+    // Strings: compared in JavaScript, or copied.
+    var short: [4]u8 = undefined;
+    const seed_text = doc.getElementById("seed").?.get_textContent();
+    expect(std.mem.eql(u8, seed_text.copy(&short), "seed"), @src());
+    var fba_buf: [64]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&fba_buf);
+    expect(std.mem.eql(u8, seed_text.toOwned(fba.allocator()) catch "", "seed text"), @src());
+
     // An invalid selector throws: the call returns null, and the exception is kept.
     expect(box.querySelector_with_string("<bad") == null, @src());
     const bad = b.jsTakeError();
@@ -126,7 +129,7 @@ export fn run() void {
         const scope = b.JsScope.open();
         defer scope.close();
         const found = doc.getElementById("made-by-zig").?;
-        expect(found.get_classList().contains("box") and strEq(found.get_id(), "made-by-zig"), @src());
+        expect(found.get_classList().contains("box") and found.get_id().eql("made-by-zig"), @src());
     }
     expect(b.jsLiveHandles() == live, @src());
 }
