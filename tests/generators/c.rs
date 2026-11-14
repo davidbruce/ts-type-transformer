@@ -189,6 +189,12 @@ TS_IMPORT(js_callback_release) uint32_t ts_raw_js_callback_release(uint32_t);
 // What a callback returns is given to JavaScript: retain a handle to return it and keep it.
 #define js_release(x) ts_raw_js_release((x).h)
 #define js_retain(x) ts_raw_js_retain((x).h)
+TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error(void);
+TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
+// The exception a call threw, taken, or a null handle. A call that throws returns a zero value.
+static inline JsValue js_take_error(void) { return (JsValue){ ts_raw_js_take_error() }; }
+// An exception's message, the caller's to release.
+static inline JsString js_error_message(JsValue e) { return (JsString){ ts_raw_js_error_message(e.h) }; }
 // How many JavaScript values wasm holds handles to.
 static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
 // Forgets a callback made with `X_from`, and returns its context. Its handle is released as any other.
@@ -308,6 +314,13 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     for (base, subs) in &descendants {
         let arms: Vec<String> = subs.iter().map(|s| format!("    {s}: ({base}){{ (x).h }}")).collect();
         types += &format!("#define AS_{base}(x) _Generic((x), \\\n    {base}: (x), \\\n{})\n", arms.join(", \\\n"));
+    }
+    // A promise: `Promise_then(p, fn, ctx)` calls fn(ctx, ok, value) once it
+    // settles, ok with its value or not with its reason; the value is lent.
+    if m.opaque.iter().any(|n| n == "Promise") {
+        types += "typedef void (*Promise_fn)(void* ctx, bool ok, JsValue value);\n\
+                  TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, Promise_fn, void*);\n\
+                  static inline void Promise_then(Promise p, Promise_fn fn, void* ctx) { ts_raw_js_promise_then(p.h, fn, ctx); }\n";
     }
     // Each typed array, after its element type and before what uses it.
     let mut elements = Vec::new();

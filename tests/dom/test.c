@@ -123,6 +123,12 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(get_innerWidth() > 0);
     Document_set_title(doc, "driven by c");
 
+    // An invalid selector throws: the call returns a null handle, and the exception is kept.
+    CHECK(ParentNode_querySelector(box, "<bad").h == 0);
+    JsValue bad = js_take_error();
+    CHECK(bad.h != 0);
+    js_release(bad);
+
     // A handle a function returns is the caller's to release.
     uint32_t live = js_live_handles();
     for (int i = 0; i < 500; i++) {

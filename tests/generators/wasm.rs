@@ -1137,9 +1137,11 @@ export function makeEnv(getInstance) {
         out += &format!("    {}: {:?},\n", k.name, k.keys);
     }
     out += "  };
-  return {
-    js_string_len: h => enc.encode(get(h)).length,
-    js_string_read: (h, ptr) => { new Uint8Array(memory()).set(enc.encode(get(h)), ptr); },
+  // The first exception a call threw, until wasm takes it: a handle, or 0.
+  let error = 0;
+  const env = {
+    js_string_len: h => enc.encode(String(get(h) ?? '')).length,
+    js_string_read: (h, ptr) => { new Uint8Array(memory()).set(enc.encode(String(get(h) ?? '')), ptr); },
     js_from_number: x => put(x),
     js_from_bool: x => put(!!x),
     js_from_string: (ptr, len) => put(str(ptr, len)),
@@ -1164,6 +1166,14 @@ export function makeEnv(getInstance) {
     js_release: release,
     // Values wasm holds handles to.
     js_live: () => ids.size,
+    // The pending exception, which wasm now holds, or 0.
+    js_take_error: () => { const e = error; error = 0; return e; },
+    js_error_message: h => { const e = get(h); return put(String(e instanceof Error ? e.message : e)); },
+    // Calls fn(ctx, ok, value) once the promise settles: ok 1 with its value, 0 with its reason.
+    js_promise_then: (p, fn, ctx) => {
+      const settle = ok => v => { const lent = []; try { table().get(fn)(ctx, ok, lend(lent, v)); } finally { lent.forEach(release); } };
+      Promise.resolve(get(p)).then(settle(1), settle(0));
+    },
 ";
     // Which member of a union a value is: its index, or -1.
     for u in m.unions.iter().filter(|u| wanted(&format!("{}_tag", u.name))) {
@@ -1215,5 +1225,21 @@ export function makeEnv(getInstance) {
         let table: Vec<String> = s.values.iter().map(|v| format!("[{}]", v.join(", "))).collect();
         out += &format!("    {}: (() => {{ const F = [{}]; return ({}) => {body}; }})(),\n", s.name, table.join(", "), params.join(", "));
     }
-    out + "  };\n}\n"
+    // A call that throws returns zero, and its exception is kept for wasm to take.
+    out + "  };
+  const calls = ['js_take_error', 'js_error_message', 'js_promise_then', 'js_retain', 'js_release', 'js_live'];
+  for (const [name, f] of Object.entries(env)) {
+    if (calls.includes(name)) continue;
+    env[name] = (...args) => {
+      try {
+        return f(...args);
+      } catch (e) {
+        if (error === 0) error = put(e);
+        return 0;
+      }
+    };
+  }
+  return env;
+}
+"
 }

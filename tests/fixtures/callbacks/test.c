@@ -10,7 +10,51 @@ static double fold(void* ctx, double total, JsString label) { return total * 2 +
 static bool is_five(void* ctx, Counter c) { return Counter_get_count(c) == 5; }
 static void bump(void* ctx) { (*(int*)ctx)++; }
 
+static bool str_eq(JsString s, const char* expected) {
+    char buf[64];
+    uint32_t n = JsString_len(s);
+    if (n != ts_strlen(expected) || n > sizeof buf) return false;
+    JsString_read(s, buf);
+    for (uint32_t i = 0; i < n; i++)
+        if (buf[i] != expected[i]) return false;
+    return true;
+}
+
+// What the promises settled with, checked by `finish`.
+static double awaited;
+static bool reason_ok;
+static void on_delayed(void* ctx, bool ok, JsValue v) { if (ok) awaited = js_to_number(v); }
+static void on_rejected(void* ctx, bool ok, JsValue v) {
+    if (ok) return;
+    JsString m = js_error_message(v);
+    reason_ok = str_eq(m, "nope");
+    js_release(m);
+}
+
+__attribute__((export_name("finish"))) void finish(void) {
+    CHECK(awaited == 42);
+    CHECK(reason_ok);
+}
+
 __attribute__((export_name("run"))) void run(void) {
+    // A promise calls a function once it settles.
+    Promise p = delayed(21);
+    Promise_then(p, on_delayed, 0);
+    js_release(p);
+    Promise q = rejected("nope");
+    Promise_then(q, on_rejected, 0);
+    js_release(q);
+    CHECK(awaited == 0);
+
+    // A call that throws returns zero; its exception is kept to take.
+    CHECK(explode("boom") == 0);
+    JsValue e = js_take_error();
+    JsString m = js_error_message(e);
+    CHECK(e.h != 0 && str_eq(m, "boom"));
+    js_release(m);
+    js_release(e);
+    CHECK(js_take_error().h == 0);
+
     Counter c = Counter_new();
     double last = 0;
 

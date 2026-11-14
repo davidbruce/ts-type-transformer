@@ -8,6 +8,21 @@
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
+// A real request, awaited: the page's own verify.mjs.
+static int fetched_status = 0;
+static bool fetched_text = false;
+static ts::Task fetch_page() {
+    ts::Result<Response> r = co_await fetch(ts::Value::string("./verify.mjs"));
+    if (!r) co_return;
+    fetched_status = int(r->status());
+    ts::Result<std::string> text = co_await r->text();
+    fetched_text = text && text->find("verify") != std::string::npos;
+}
+
+extern "C" __attribute__((export_name("finish"))) void finish() {
+    CHECK(fetched_status == 200 && fetched_text);
+}
+
 extern "C" __attribute__((export_name("run"))) void run() {
     Document doc = get_document();
     HTMLElement body = doc.body();
@@ -90,6 +105,12 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(box.children().length() == 2);
     CHECK(get_innerWidth() > 0);
     doc.title("driven by cpp");
+
+    // An invalid selector throws: the call returns nothing, and the exception is kept.
+    CHECK(!box.querySelector("<bad"));
+    std::optional<ts::Error> bad = ts::take_error();
+    CHECK(bad && bad->message().find("not a valid selector") != std::string::npos);
+    fetch_page();
 
     // Handles are counted: elements and strings fetched in a loop are freed.
     uint32_t live = ts::live_handles();

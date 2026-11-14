@@ -4,7 +4,41 @@
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
+// What the asynchronous code saw, checked by `finish`.
+static double awaited = 0;
+static std::string reason;
+static bool settled_ok = false;
+static double then_value = 0;
+
+// Awaits promises in turn; a rejection is a Result holding the error.
+static ts::Task wait() {
+    ts::Result<double> r = co_await delayed(21);
+    if (r) awaited = *r;
+    ts::Result<double> f = co_await rejected("nope");
+    if (!f) reason = f.error().message();
+    settled_ok = bool(co_await settled());
+}
+
+extern "C" __attribute__((export_name("finish"))) void finish() {
+    CHECK(awaited == 42);
+    CHECK(reason == "nope");
+    CHECK(settled_ok);
+    CHECK(then_value == 2);
+}
+
 extern "C" __attribute__((export_name("run"))) void run() {
+    // Promises: awaited in a coroutine, or given a function to call.
+    wait();
+    CHECK(awaited == 0);
+    delayed(1).then([](ts::Result<double> r) { then_value = *r; });
+
+    // A call that throws returns a zero value; its exception is kept to take.
+    CHECK(!ts::take_error());
+    CHECK(explode("boom") == 0);
+    std::optional<ts::Error> e = ts::take_error();
+    CHECK(e && e->message() == "boom");
+    CHECK(!ts::take_error());
+
     Counter c = Counter::create();
     double last = 0;
     int calls = 0;

@@ -103,6 +103,12 @@ export fn run() void {
     expect(b.get_innerWidth() > 0, @src());
     doc.set_title("driven by zig");
 
+    // An invalid selector throws: the call returns null, and the exception is kept.
+    expect(box.querySelector_with_string("<bad") == null, @src());
+    const bad = b.jsTakeError();
+    expect(bad != null, @src());
+    if (bad) |e| b.jsRelease(e);
+
     // A handle a function returns is the caller's to release.
     const live = b.jsLiveHandles();
     for (0..500) |_| {

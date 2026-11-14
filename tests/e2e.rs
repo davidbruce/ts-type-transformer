@@ -367,6 +367,8 @@ const wasi = new Proxy({{}}, {{ get: () => () => 0 }});
 ({{ instance }} = await WebAssembly.instantiate(await (await fetch('./test.wasm')).arrayBuffer(), {{ env, wasi_snapshot_preview1: wasi }}));
 instance.exports._initialize?.();
 instance.exports.run();
+await new Promise(r => setTimeout(r, 500));
+instance.exports.finish?.();
 const page = verify('{lang}');
 window.__result = {{ passed, failed, dom: page.problems, domChecks: page.checks }};
 </script>

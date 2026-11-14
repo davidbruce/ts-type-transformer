@@ -14,3 +14,9 @@ declare function flush(): number;
 // A callback taking a union.
 type Id = number | string;
 declare function eachId(f: (id: Id) => void): number;
+
+// Promises and exceptions.
+declare function delayed(n: number): Promise<number>;
+declare function rejected(message: string): Promise<number>;
+declare function settled(): Promise<void>;
+declare function explode(message: string): number;

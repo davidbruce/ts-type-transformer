@@ -388,6 +388,7 @@ fn param_types(params: &[TParam], out: &mut BTreeSet<String>) {
 const RUNTIME: &str = r#"// Generated.
 #pragma once
 #include <concepts>
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -418,6 +419,9 @@ TS_IMPORT(js_callback_release) uint32_t ts_raw_js_callback_release(uint32_t);
 TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
 TS_IMPORT(js_release) void ts_raw_js_release(uint32_t);
 TS_IMPORT(js_live) uint32_t ts_raw_js_live();
+TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error();
+TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
+TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, uintptr_t, void*);
 }
 
 namespace ts {
@@ -579,6 +583,93 @@ struct Array : Handle {
         if constexpr (std::same_as<T, Value>) ts_raw_js_array_push(h, Arg(v).h);
         else ts_raw_js_array_push(h, Arg(T(v)).h);
     }
+};
+
+// A JavaScript exception, or the reason a promise was rejected.
+struct Error : Handle {
+    using Handle::Handle;
+    std::string message() const { return from_handle<std::string>(ts_raw_js_error_message(h)); }
+};
+
+// The exception a call threw, taken. A call that throws returns a zero value:
+// `auto list = el.querySelectorAll("<bad"); if (auto e = ts::take_error()) ...`.
+inline std::optional<Error> take_error() {
+    if (uint32_t e = ts_raw_js_take_error()) return Error(handle, e);
+    return std::nullopt;
+}
+
+// A value, or the error that came instead: what a promise settles with.
+template <class T>
+struct Result {
+    Result(T x) : v(std::in_place_index<0>, std::move(x)) {}
+    Result(Error e) : v(std::in_place_index<1>, std::move(e)) {}
+    explicit operator bool() const { return v.index() == 0; }
+    T& operator*() { return std::get<0>(v); }
+    T* operator->() { return &std::get<0>(v); }
+    const Error& error() const { return std::get<1>(v); }
+
+  private:
+    std::variant<T, Error> v;
+};
+template <>
+struct Result<void> {
+    Result() = default;
+    Result(Error e) : e(std::move(e)) {}
+    explicit operator bool() const { return !e; }
+    const Error& error() const { return *e; }
+
+  private:
+    std::optional<Error> e;
+};
+
+// A JavaScript promise. `then` calls a function with its Result once it
+// settles; in a coroutine, `co_await` waits for it: `auto r = co_await fetch(url);`.
+template <class T>
+struct Promise : virtual Handle {
+    Promise() = default;
+    Promise(handle_t, uint32_t h) : Handle(handle, h) {}
+
+    template <class F>
+    void then(F f) const {
+        ts_raw_js_promise_then(h, reinterpret_cast<uintptr_t>(&settle<F>), new F(std::move(f)));
+    }
+
+    struct Awaiter {
+        Promise p;
+        std::optional<Result<T>> r;
+        bool await_ready() const { return false; }
+        void await_suspend(std::coroutine_handle<> c) {
+            p.then([this, c](Result<T> x) {
+                r.emplace(std::move(x));
+                c.resume();
+            });
+        }
+        Result<T> await_resume() { return std::move(*r); }
+    };
+    Awaiter operator co_await() const { return Awaiter{*this, std::nullopt}; }
+
+  private:
+    template <class F>
+    static void settle(void* ctx, int32_t ok, uint32_t v) {
+        F* f = static_cast<F*>(ctx);
+        if (!ok) (*f)(Result<T>(Error(handle, v)));
+        else if constexpr (std::is_void_v<T>) {
+            if (v) ts_raw_js_release(v);
+            (*f)(Result<T>());
+        } else (*f)(Result<T>(from_handle<T>(v)));
+        delete f;
+    }
+};
+
+// A coroutine that starts at once and runs to its end, awaiting promises on the way.
+struct Task {
+    struct promise_type {
+        Task get_return_object() { return {}; }
+        std::suspend_never initial_suspend() noexcept { return {}; }
+        std::suspend_never final_suspend() noexcept { return {}; }
+        void return_void() {}
+        void unhandled_exception() {}
+    };
 };
 
 // A key of a map whose value has type V: `HTMLElementEventMapKeys::click`.
@@ -935,7 +1026,11 @@ fn declarations(m: &Model) -> String {
         if c.type_params.is_empty() { types += &text } else { template(&c.name, &c.type_params, text) }
     }
     // Types declared elsewhere: handles, generic or not.
-    for name in &m.opaque {
+    // Promises are the runtime's.
+    for name in m.opaque.iter().filter(|n| matches!(n.as_str(), "Promise" | "PromiseLike")) {
+        types += &format!("template <class T = void>\nusing {name} = ts::Promise<T>;\n");
+    }
+    for name in m.opaque.iter().filter(|n| !matches!(n.as_str(), "Promise" | "PromiseLike")) {
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
         let params: Vec<TParam> = (1..=arity).map(|i| TParam { name: format!("T{i}"), default: None, constraint: None }).collect();
         if params.is_empty() { types += &opaque(name, &params) } else { template(name, &params, opaque(name, &params)) }

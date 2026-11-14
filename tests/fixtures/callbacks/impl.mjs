@@ -28,3 +28,7 @@ globalThis.eachId = f => {
     f("two");
     return 2;
 };
+globalThis.delayed = n => new Promise(resolve => setTimeout(() => resolve(n * 2), 1));
+globalThis.rejected = message => Promise.reject(new Error(message));
+globalThis.settled = () => Promise.resolve();
+globalThis.explode = message => { throw new Error(message); };

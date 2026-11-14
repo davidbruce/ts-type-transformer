@@ -61,4 +61,10 @@ check (ran = 0) "not called yet"
 check (flush () = 2.0) "flush"
 check (ran = 2) "called later"
 
+// Exceptions are F# exceptions; promises are Fable's JS.Promise.
+let message = try explode "boom" |> ignore; "" with e -> e.Message
+check (message = "boom") "exception"
+let pending: JS.Promise<float> = delayed 21.0
+check (not (isNull (box pending))) "promise"
+
 printfn "%d checks passed" passed

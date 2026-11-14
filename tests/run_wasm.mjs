@@ -16,6 +16,9 @@ const env = { ...makeEnv(() => instance), check: (ok, line) => (ok ? passed++ : 
 ({ instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), { env, wasi_snapshot_preview1: wasi }));
 instance.exports._initialize?.();
 instance.exports.run();
+// Asynchronous work settles, then `finish` checks what it did.
+await new Promise(r => setTimeout(r, 50));
+instance.exports.finish?.();
 if (failed.length || passed === 0) {
     console.error(`${failed.length} checks failed (test source lines: ${failed.join(', ')}); ${passed} passed`);
     process.exit(1);

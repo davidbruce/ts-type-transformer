@@ -251,6 +251,10 @@ pub fn JsListener(comptime Ev: type) type {
 // What a callback returns is given to JavaScript: `jsRetain` a handle to return it and keep it.
 pub fn jsRelease(x: anytype) void { raw.js_release(x.h); }
 pub fn jsRetain(x: anytype) @TypeOf(x) { raw.js_retain(x.h); return x; }
+// The exception a call threw, taken. A call that throws returns a zero value.
+pub fn jsTakeError() ?JsValue { const e = raw.js_take_error(); return if (e == 0) null else .{ .h = e }; }
+// An exception's message, the caller's to release.
+pub fn jsErrorMessage(e: JsValue) JsString { return .{ .h = raw.js_error_message(e.h) }; }
 // How many JavaScript values wasm holds handles to.
 pub fn jsLiveHandles() u32 { return raw.js_live(); }
 // Forgets a callback made with `from`, and returns its context. Its handle is released as any other.
@@ -322,6 +326,8 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_retain(h: u32) void;
     extern \"env\" fn js_release(h: u32) void;
     extern \"env\" fn js_live() u32;
+    extern \"env\" fn js_take_error() u32;
+    extern \"env\" fn js_error_message(h: u32) u32;
     extern \"env\" fn js_callback_release(h: u32) usize;
 ";
 
@@ -333,7 +339,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 pub fn files(m: &Model) -> Vec<(String, String)> {
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTake"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
@@ -352,7 +358,16 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         types.2.push(u.name.clone());
     }
     for name in &m.opaque {
-        types.0 += &format!("pub const {name} = extern struct {{ h: u32 }};\n");
+        if name == "Promise" {
+            // Calls f(ctx, ok, value) once it settles, ok with its value or not with its reason; the value is lent.
+            types.0 += "pub const Promise = extern struct {\n    h: u32,\n    \
+                        pub fn then(self: Promise, comptime f: fn (?*anyopaque, bool, JsValue) void, ctx: ?*anyopaque) void {\n        \
+                        const T = struct {\n            fn call(c: ?*anyopaque, ok: i32, v: u32) callconv(.c) void { f(c, ok != 0, .{ .h = v }); }\n        };\n        \
+                        raw.js_promise_then(self.h, @intFromPtr(&T.call), ctx);\n    }\n};\n";
+            types.1 += "    extern \"env\" fn js_promise_then(p: u32, f: usize, ctx: ?*anyopaque) void;\n";
+        } else {
+            types.0 += &format!("pub const {name} = extern struct {{ h: u32 }};\n");
+        }
         types.2.push(name.clone());
     }
     // A callback is made from a function and a context pointer passed back to it.

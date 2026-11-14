@@ -30,12 +30,44 @@ fn onId(_: ?*anyopaque, id: b.Id) void {
         .string => |s| text_len = s.len(),
     }
 }
+// What the promises settled with, checked by `finish`.
+var awaited: f64 = 0;
+var reason_len: usize = 0;
+fn onDelayed(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
+    if (ok) awaited = v.toNumber();
+}
+fn onRejected(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
+    if (ok) return;
+    const m = b.jsErrorMessage(v);
+    defer b.jsRelease(m);
+    reason_len = m.len();
+}
+export fn finish() void {
+    expect(awaited == 42 and reason_len == 4, @src());
+}
 fn bump(ctx: ?*anyopaque) callconv(.c) void {
     const n: *u32 = @ptrCast(@alignCast(ctx));
     n.* += 1;
 }
 
 export fn run() void {
+    // A promise calls a function once it settles.
+    const p = b.delayed(21);
+    defer b.jsRelease(p);
+    p.then(onDelayed, null);
+    const q = b.rejected("nope");
+    defer b.jsRelease(q);
+    q.then(onRejected, null);
+    expect(awaited == 0, @src());
+
+    // A call that throws returns zero; its exception is kept to take.
+    expect(b.explode("boom") == 0, @src());
+    const e = b.jsTakeError().?;
+    defer b.jsRelease(e);
+    const m = b.jsErrorMessage(e);
+    defer b.jsRelease(m);
+    expect(m.len() == 4 and b.jsTakeError() == null, @src());
+
     const c = b.Counter.new();
     var last: f64 = 0;
 
