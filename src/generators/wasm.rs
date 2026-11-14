@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use roxmltree::{Document, Node};
 
-use super::{attr, elements, flag, named, only_child, unsupported};
+use super::{Problems, attr, elements, flag, named, only_child};
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Ty {
@@ -243,6 +243,8 @@ struct Builder<'a> {
     keyed: HashMap<String, String>,
     // Why the member being read cannot be bound, if it cannot.
     bad: Option<String>,
+    // What the target cannot express at all.
+    problems: std::cell::RefCell<Problems>,
     // The module of the declaration being read.
     module: String,
     // Whether generics are kept (C++), and the type parameters of the signature just read.
@@ -253,8 +255,9 @@ struct Builder<'a> {
     folder_names: HashMap<(String, String), String>,
 }
 
-pub fn model(xml: &str, target: &str) -> Model {
-    let doc = Document::parse(xml).expect("well-formed XML");
+// The model of the XML for a target, or what the target cannot express.
+pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
+    let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let mut b = Builder {
         target,
         decls: HashMap::new(),
@@ -264,6 +267,7 @@ pub fn model(xml: &str, target: &str) -> Model {
         resolving: Vec::new(),
         keyed: HashMap::new(),
         bad: None,
+        problems: Default::default(),
         module: String::new(),
         generics: target == "C++" || target == "Rust",
         last_type_params: Vec::new(),
@@ -276,7 +280,7 @@ pub fn model(xml: &str, target: &str) -> Model {
     let mut opaque: Vec<String> = b.opaque.into_iter().collect();
     opaque.sort();
     b.model.opaque = opaque;
-    b.model
+    b.problems.into_inner().result(b.model)
 }
 
 fn join(prefix: &str, name: &str) -> String {
@@ -331,11 +335,18 @@ impl<'a> Builder<'a> {
         TParam { name: attr(p, "name").to_string(), default, constraint }
     }
 
+    // Notes an element the target has no form for.
+    fn unsupported(&self, n: Node) {
+        self.problems.borrow_mut().element(self.target, n);
+    }
+
     // The type of an alias. Its type parameters come first; only where generics
     // are kept can it have any.
     fn alias_body(&self, d: Node<'a, 'a>) -> Node<'a, 'a> {
         if !self.generics {
-            return only_child_after_params(d, self.target);
+            if let Some(p) = named(d, "typeParameter").next() {
+                self.unsupported(p);
+            }
         }
         elements(d).find(|c| !c.has_tag_name("typeParameter")).unwrap_or_else(|| only_child(d))
     }
@@ -443,7 +454,7 @@ impl<'a> Builder<'a> {
                     let import = self.import(name.clone());
                     self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], shared: None, ret });
                 }
-                _ => unsupported(self.target, d),
+                _ => self.unsupported(d),
             }
         }
     }
@@ -514,7 +525,7 @@ impl<'a> Builder<'a> {
         }
         if tag == "typeParameter" {
             if !self.generics {
-                unsupported(self.target, m);
+                return self.unsupported(m);
             }
             let p = self.tparam(m);
             return c.type_params.push(p);
@@ -670,7 +681,7 @@ impl<'a> Builder<'a> {
                     c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
                 }
             }
-            _ => unsupported(self.target, m),
+            _ => self.unsupported(m),
         }
         if let Some(why) = self.bad.take() {
             c.funcs.truncate(before);
@@ -695,7 +706,7 @@ impl<'a> Builder<'a> {
                     let p = self.tparam(p);
                     self.last_type_params.push(p);
                 }
-                None => unsupported(self.target, p),
+                None => self.unsupported(p),
             }
         }
         let mut params = Vec::new();
@@ -727,7 +738,7 @@ impl<'a> Builder<'a> {
                 }
                 "returns" => ret = self.ty(only_child(p), owner),
                 "typeParameter" => {}
-                _ => unsupported(self.target, p),
+                _ => self.unsupported(p),
             }
         }
         (params, rest, fixed, ret)
@@ -784,7 +795,10 @@ impl<'a> Builder<'a> {
             "ref" if attr(n, "kind") == "typeParameter" => match self.keyed.get(attr(n, "name")) {
                 Some(map) => Ty::Key(map.clone()),
                 None if self.generics => Ty::Param(attr(n, "name").to_string()),
-                None => unsupported(self.target, n),
+                None => {
+                    self.unsupported(n);
+                    Ty::Any
+                }
             },
             "ref" => self.reference(n),
             // `M[K]`: the value the key selects.
@@ -792,7 +806,10 @@ impl<'a> Builder<'a> {
                 let index = elements(n).nth(1).unwrap();
                 match index.attribute("name").and_then(|k| self.keyed.get(k)) {
                     Some(map) => Ty::Mapped(map.clone()),
-                    None => unsupported(self.target, n),
+                    None => {
+                        self.unsupported(n);
+                        Ty::Any
+                    }
                 }
             }
             // A callback written inline: kept so only when it takes `M[K]`.
@@ -852,7 +869,10 @@ impl<'a> Builder<'a> {
                     Ty::Union(vec![])
                 }
             }
-            _ => unsupported(self.target, n),
+            _ => {
+                self.unsupported(n);
+                Ty::Any
+            }
         }
     }
 
@@ -881,7 +901,10 @@ impl<'a> Builder<'a> {
             };
         }
         match (attr(n, "kind"), declared) {
-            ("typeParameter", _) => unsupported(self.target, n),
+            ("typeParameter", _) => {
+                self.unsupported(n);
+                Ty::Any
+            }
             // By what is declared: an alias of string literals has become an enum.
             (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "string") => Ty::Enum(ident(&key)),
             (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "number") => Ty::NumEnum(ident(&key)),
@@ -982,14 +1005,6 @@ impl<'a> Builder<'a> {
 fn is_function_interface(d: Node) -> bool {
     let mut members = elements(d);
     members.next().is_some_and(|m| m.has_tag_name("call")) && members.next().is_none()
-}
-
-// The single type of an alias, which may be preceded by type parameters.
-fn only_child_after_params<'a>(d: Node<'a, 'a>, target: &str) -> Node<'a, 'a> {
-    if let Some(p) = named(d, "typeParameter").next() {
-        unsupported(target, p);
-    }
-    only_child(d)
 }
 
 // No two members alike. Arrays are alike whatever they hold: a test sees only an array.
@@ -1642,4 +1657,42 @@ pub fn base_args(m: &Model, c: &Class, ancestor: &str) -> Option<Vec<Ty>> {
         }
     }
     None
+}
+
+// Calls `f` with every type the model names, and the types inside it, and where: for a generator to check what it can express.
+pub fn each_type(m: &Model, f: &mut dyn FnMut(&str, &Ty)) {
+    fn visit(at: &str, t: &Ty, f: &mut dyn FnMut(&str, &Ty)) {
+        f(at, t);
+        match t {
+            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => visit(at, inner, f),
+            Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().for_each(|a| visit(at, a, f)),
+            _ => {}
+        }
+    }
+    let func = |owner: &str, func: &Func, f: &mut dyn FnMut(&str, &Ty)| {
+        let at = if owner.is_empty() { func.name.clone() } else { format!("{owner}.{}", func.name) };
+        func.params.iter().for_each(|p| visit(&at, &p.1, f));
+        visit(&at, &func.ret, f);
+        if let Some(p) = func.type_params.first() {
+            f(&at, &Ty::Param(p.name.clone()));
+        }
+    };
+    for c in &m.classes {
+        if let Some(p) = c.type_params.first() {
+            f(&c.name, &Ty::Param(p.name.clone()));
+        }
+        c.bases.iter().chain(&c.iterates).chain(&c.iterates_async).for_each(|t| visit(&c.name, t, f));
+        c.funcs.iter().for_each(|x| func(&c.name, x, f));
+    }
+    m.funcs.iter().for_each(|x| func("", x, f));
+    for c in &m.callbacks {
+        c.params.iter().for_each(|p| visit(&c.name, &p.1, f));
+        visit(&c.name, &c.ret, f);
+    }
+    for u in &m.unions {
+        u.parts.iter().for_each(|p| visit(&u.name, p, f));
+    }
+    for k in &m.maps {
+        k.values.iter().for_each(|v| visit(&k.name, v, f));
+    }
 }

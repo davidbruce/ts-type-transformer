@@ -46,6 +46,46 @@ pub fn path(n: Node) -> String {
     parts.join("/")
 }
 
-pub fn unsupported(target: &str, n: Node) -> ! {
-    panic!("{target} generator cannot express <{}> at {}: the target config must lower it", n.tag_name().name(), path(n))
+// What a generator cannot express: each kind once, with how often it occurs
+// and where first, and the setting that lowers it.
+#[derive(Default)]
+pub struct Problems(std::collections::BTreeMap<String, (usize, String)>);
+
+impl Problems {
+    pub fn add(&mut self, what: String, at: String) {
+        self.0.entry(what).or_insert((0, at)).0 += 1;
+    }
+
+    // An element of the XML the generator has no form for.
+    pub fn element(&mut self, target: &str, n: Node) {
+        let tag = n.tag_name().name();
+        self.add(format!("{target} generator cannot express <{tag}>: {}", hint(tag)), path(n));
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn into_messages(self) -> Vec<String> {
+        self.0.into_iter().map(|(what, (n, at))| if n == 1 { format!("{what} (at {at})") } else { format!("{what} ({n} places, first at {at})") }).collect()
+    }
+
+    pub fn result<T>(self, value: T) -> Result<T, Vec<String>> {
+        if self.is_empty() { Ok(value) } else { Err(self.into_messages()) }
+    }
+}
+
+// The setting that lowers an element.
+fn hint(tag: &str) -> &'static str {
+    match tag {
+        "typeParameter" => "set generics = \"erase\"",
+        "union" => "set unions = \"name\" or \"erase\"",
+        "literal" => "set literals = \"enum\"",
+        "object" | "functionType" | "constructorType" => "set anonymous = \"hoist\"",
+        "intersection" => "set intersections = \"merge\"",
+        "keyof" | "indexedAccess" | "conditional" | "mapped" | "template" | "typeQuery" | "typeOperator" | "predicate" | "infer" => "set type_ops = \"evaluate\"",
+        "extends" => "set inheritance = \"flatten\"",
+        "var" => "set classes = \"pair\", or anonymous = \"hoist\"",
+        _ => "the target config must lower it",
+    }
 }

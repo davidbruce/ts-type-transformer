@@ -788,7 +788,7 @@ struct Listener : Callback {
 "#;
 
 // The bindings as files: see the top of this file.
-pub fn files(m: &Model) -> Vec<(String, String)> {
+pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let unions = &m.unions;
     DECODABLE.with(|d| *d.borrow_mut() = unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
     let mut taken = HashMap::new();
@@ -1077,7 +1077,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         all += &format!("#include \"{module}.hpp\"\n");
     }
     out.push(("bindings.hpp".into(), all));
-    out
+    Ok(out)
 }
 
 // Whether `u` declares the decoder of its variant: unions with the same

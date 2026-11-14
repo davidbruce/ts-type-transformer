@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use roxmltree::{Document, Node};
 
-use super::{attr, elements, flag, named, only_child, unsupported};
+use super::{Problems, attr, elements, flag, named, only_child};
 
 const T: &str = "F#";
 
@@ -46,6 +46,8 @@ struct Gen {
     // by name; and the same, by how a type extension names the interface.
     constrained: HashMap<String, Vec<Option<String>>>,
     constrained_owner: HashMap<String, String>,
+    // What F# cannot express at all.
+    problems: Problems,
 }
 
 // The constraints each generic interface can keep, by position: those every
@@ -120,9 +122,11 @@ fn ident(name: &str) -> String {
 // of each module, in dependency order, with modules that refer to each other
 // merged into one file (F# allows no cycles between files); and last the
 // values: globals, functions as `Globals`, and the `<Map>Keys` modules.
-pub fn module(xml: &str) -> Output {
-    let doc = Document::parse(xml).expect("well-formed XML");
+// The bindings, or what F# cannot express of the XML.
+pub fn module(xml: &str) -> Result<Output, Vec<String>> {
+    let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let mut g = Gen {
+        problems: Problems::default(),
         out: String::new(),
         skipped: BTreeMap::new(),
         declared: HashSet::new(),
@@ -194,7 +198,7 @@ pub fn module(xml: &str) -> Output {
     let values: String = g.values.lines().map(|l| if l.is_empty() { "\n".to_string() } else { format!("    {l}\n") }).collect();
     let globals = std::mem::take(&mut g.out);
     files.push(("Bindings.Values.fs".into(), format!("// Generated.\nnamespace Bindings\n\nopen Fable.Core\n\n{globals}[<AutoOpen>]\nmodule Values =\n    let private _values = ()\n\n{values}")));
-    Output { files, skipped: g.skipped }
+    g.problems.result(Output { files, skipped: g.skipped })
 }
 
 // The files of types, in the order F# must see them: one per module, each
@@ -487,7 +491,10 @@ impl Gen {
                 let index = elements(n).nth(1).unwrap();
                 match index.attribute("name").filter(|k| index.attribute("kind") == Some("typeParameter") && self.keyed.contains_key(*k)) {
                     Some(k) => format!("'{k}"),
-                    None => unsupported(T, n),
+                    None => {
+                        self.problems.element(T, n);
+                        "obj".into()
+                    }
                 }
             }
             // Fable compiles tuples to arrays.
@@ -522,7 +529,10 @@ impl Gen {
                 self.skip("inline type with methods, bound as obj");
                 "obj".into()
             }
-            _ => unsupported(T, n),
+            _ => {
+                self.problems.element(T, n);
+                "obj".into()
+            }
         }
     }
 
@@ -760,7 +770,10 @@ impl Gen {
                 };
                 (abstract_line, ext)
             }
-            _ => unsupported(T, m),
+            _ => {
+                self.problems.element(T, m);
+                return None;
+            }
         })
     }
 
@@ -996,7 +1009,7 @@ impl Gen {
                         }
                     }
                 }
-                _ => unsupported(T, d),
+                _ => self.problems.element(T, d),
             }
         }
     }

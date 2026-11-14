@@ -114,7 +114,7 @@ fn run_wasm(c: &Case, node: &Path) {
 fn fsharp(fixture: &str) {
     let Some([fable, node]) = tools(["fable", "node"]) else { return };
     let c = case(fixture, "fsharp");
-    let bindings = generators::fsharp::module(&c.xml);
+    let bindings = generators::fsharp::module(&c.xml).unwrap();
     write_fsharp(&c, &bindings);
     run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
     let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("js/Test.mjs")));
@@ -151,8 +151,8 @@ const ZIG_WASM: &[&str] = &["build-exe", "test.zig", "-target", "wasm32-freestan
 fn c(fixture: &str) {
     let Some([clang, node]) = tools(["clang", "node"]) else { return };
     let c = case(fixture, "c");
-    let model = generators::wasm::model(&c.xml, "C");
-    write_files(&c.out.join("bindings"), generators::c::files(&model));
+    let model = model(&c.xml, "C");
+    write_files(&c.out.join("bindings"), generators::c::files(&model).unwrap());
     run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
     write_glue(&c, &model);
     run_wasm(&c, &node);
@@ -162,8 +162,8 @@ fn c(fixture: &str) {
 fn zig(fixture: &str) {
     let Some([zig, node]) = tools(["zig", "node"]) else { return };
     let c = case(fixture, "zig");
-    let model = generators::wasm::model(&c.xml, "Zig");
-    write_files(&c.out, generators::zig::files(&model));
+    let model = model(&c.xml, "Zig");
+    write_files(&c.out, generators::zig::files(&model).unwrap());
     fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
     run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
     write_glue(&c, &model);
@@ -194,7 +194,7 @@ const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor"
 // parallel, and links them with the program.
 fn build_cpp(clang: &Path, c: &Case, model: &generators::wasm::Model) {
     let bindings = c.out.join("bindings");
-    let files = generators::cpp::files(model);
+    let files = generators::cpp::files(model).unwrap();
     let sources: Vec<String> = files.iter().map(|f| f.0.clone()).filter(|p| p.ends_with(".cpp")).collect();
     write_files(&bindings, files);
     let flags: Vec<&str> = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model")).copied().collect();
@@ -218,7 +218,7 @@ fn cpp(fixture: &str) {
     let Some(clang) = wasi_clang() else { return };
     let Some([node]) = tools(["node"]) else { return };
     let c = case(fixture, "cpp");
-    let model = generators::wasm::model(&c.xml, "C++");
+    let model = model(&c.xml, "C++");
     build_cpp(&clang, &c, &model);
     write_glue(&c, &model);
     run_wasm(&c, &node);
@@ -240,7 +240,7 @@ const RUSTC_WASM: &[&str] = &["--edition", "2024", "--target", "wasm32-unknown-u
 
 // Writes the Rust bindings next to the program and compiles them together.
 fn build_rust(rustc: &Path, c: &Case, model: &generators::wasm::Model) {
-    write_files(&c.out, generators::rust::files(model));
+    write_files(&c.out, generators::rust::files(model).unwrap());
     fs::copy(c.fixture.join("test.rs"), c.out.join("test.rs")).unwrap();
     run(Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(["-o", "test.wasm", "test.rs"]));
 }
@@ -249,11 +249,16 @@ fn rust(fixture: &str) {
     let Some(rustc) = rustc_wasm() else { return };
     let Some([node]) = tools(["node"]) else { return };
     let c = case(fixture, "rust");
-    let model = generators::wasm::model(&c.xml, "Rust");
+    let model = model(&c.xml, "Rust");
     build_rust(&rustc, &c, &model);
     write_glue(&c, &model);
     run_wasm(&c, &node);
     print!("{}", skipped(&model.skipped));
+}
+
+// The model of a target, which its config must have made expressible.
+fn model(xml: &str, target: &str) -> generators::wasm::Model {
+    generators::wasm::model(xml, target).unwrap_or_else(|problems| panic!("{}", problems.join("\n")))
 }
 
 // What a generator left unbound, for the test log.
@@ -282,10 +287,21 @@ fn shapes_xml(target: &str, overrides: &[&str]) -> String {
 }
 
 #[test]
-#[should_panic(expected = "cannot express a union")]
 fn c_rejects_unions() {
     let xml = shapes_xml("c", &["union_params=keep", "unions=keep"]);
-    generators::c::files(&generators::wasm::model(&xml, "C"));
+    let problems = generators::c::files(&model(&xml, "C")).unwrap_err();
+    // Each kind once: what, the setting that lowers it, how often and where first.
+    assert!(problems.iter().any(|p| p.contains("cannot express a union: set unions = \"name\" or \"erase\"") && p.contains("Shape.label")), "{problems:?}");
+}
+
+// Everything a target cannot express is reported at once, not only the first.
+#[test]
+fn every_problem_is_reported() {
+    let xml = shapes_xml("c", &["generics=keep", "literals=keep", "anonymous=keep"]);
+    let problems = generators::wasm::model(&lower(&root().join("tests/fixtures/data/api.d.ts"), Some("c"), &["generics=keep", "literals=keep"]), "C").err().unwrap_or_default();
+    assert!(problems.iter().any(|p| p.contains("<typeParameter>") && p.contains("generics = \"erase\"")), "{problems:?}");
+    assert!(problems.iter().any(|p| p.contains("<literal>") && p.contains("places, first at")), "{problems:?}");
+    let _ = xml;
 }
 
 // Every output follows `schema/declarations.rng`: each input unlowered and
@@ -336,8 +352,8 @@ fn mistakes_are_reported() {
     ];
     for (fixture, name, body, expected) in programs {
         let c = case_in(fixture, "c", &format!("mistake-{name}"));
-        let model = generators::wasm::model(&c.xml, "C");
-        write_files(&c.out.join("bindings"), generators::c::files(&model));
+        let model = model(&c.xml, "C");
+        write_files(&c.out.join("bindings"), generators::c::files(&model).unwrap());
         fs::write(c.out.join("test.c"), format!("#include \"bindings.h\"\nTS_IMPORT(check) void check(int ok, int line);\n__attribute__((export_name(\"run\"))) void run(void) {{ check(1, 1); {body} }}\n")).unwrap();
         run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.out.join("test.c")));
         write_glue(&c, &model);
@@ -367,7 +383,7 @@ fn bench() {
     if let Some(fable) = find("fable") {
         let o = out.join("fsharp");
         fs::create_dir_all(&o).unwrap();
-        let bindings = generators::fsharp::module(&xml("fsharp"));
+        let bindings = generators::fsharp::module(&xml("fsharp")).unwrap();
         let mut compile = String::new();
         for (name, content) in &bindings.files {
             fs::write(o.join(name), content).unwrap();
@@ -380,16 +396,16 @@ fn bench() {
     }
     if let Some(clang) = find("clang") {
         let o = out.join("c");
-        let model = generators::wasm::model(&xml("c"), "C");
-        write_files(&o.join("bindings"), generators::c::files(&model));
+        let model = model(&xml("c"), "C");
+        write_files(&o.join("bindings"), generators::c::files(&model).unwrap());
         run(Command::new(clang).args(optimized(CLANG_WASM)).arg("-I").arg(o.join("bindings")).arg("-o").arg(o.join("bench.wasm")).arg(dir.join("bench.c")));
         glue(&o, &model);
         names.push("c");
     }
     if let Some(clang) = wasi_clang() {
         let o = out.join("cpp");
-        let model = generators::wasm::model(&xml("cpp"), "C++");
-        let files = generators::cpp::files(&model);
+        let model = model(&xml("cpp"), "C++");
+        let files = generators::cpp::files(&model).unwrap();
         let sources: Vec<PathBuf> = files.iter().filter(|f| f.0.ends_with(".cpp")).map(|f| o.join("bindings").join(&f.0)).collect();
         write_files(&o.join("bindings"), files);
         run(Command::new(clang).args(optimized(CLANGXX_WASM)).arg("-I").arg(o.join("bindings")).arg("-o").arg(o.join("bench.wasm")).arg(dir.join("bench.cpp")).args(&sources));
@@ -398,8 +414,8 @@ fn bench() {
     }
     if let Some(zig) = find("zig") {
         let o = out.join("zig");
-        let model = generators::wasm::model(&xml("zig"), "Zig");
-        write_files(&o, generators::zig::files(&model));
+        let model = model(&xml("zig"), "Zig");
+        write_files(&o, generators::zig::files(&model).unwrap());
         fs::copy(dir.join("bench.zig"), o.join("bench.zig")).unwrap();
         run(Command::new(zig).current_dir(&o).args(["build-exe", "bench.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic", "--export-table", "-O", "ReleaseFast"]));
         glue(&o, &model);
@@ -407,8 +423,8 @@ fn bench() {
     }
     if let Some(rustc) = rustc_wasm() {
         let o = out.join("rust");
-        let model = generators::wasm::model(&xml("rust"), "Rust");
-        write_files(&o, generators::rust::files(&model));
+        let model = model(&xml("rust"), "Rust");
+        write_files(&o, generators::rust::files(&model).unwrap());
         fs::copy(dir.join("bench.rs"), o.join("bench.rs")).unwrap();
         run(Command::new(rustc).current_dir(&o).args(RUSTC_WASM).args(["-C", "opt-level=3", "-o", "bench.wasm", "bench.rs"]));
         glue(&o, &model);
@@ -460,14 +476,14 @@ fn generated_names_do_not_depend_on_order() {
 // Kept optional parameters are optional values, not overloads.
 #[test]
 fn optional_parameters_are_optional_values() {
-    let m = generators::wasm::model(&shapes_xml("zig", &[]), "Zig");
+    let m = model(&shapes_xml("zig", &[]), "Zig");
     assert!(m.all_funcs().any(|f| f.params.iter().any(|p| matches!(p.1, generators::wasm::Ty::Nullable(..)))));
 }
 
 #[test]
-#[should_panic(expected = "cannot express <literal>")]
 fn fsharp_rejects_literal_types() {
-    generators::fsharp::module(&shapes_xml("fsharp", &["literals=keep"]));
+    let problems = generators::fsharp::module(&shapes_xml("fsharp", &["literals=keep"])).err().unwrap();
+    assert!(problems.iter().any(|p| p.contains("cannot express <literal>: set literals = \"enum\"")), "{problems:?}");
 }
 
 // A type argument outside its parameter's constraint is an F# compile error:
@@ -476,7 +492,7 @@ fn fsharp_rejects_literal_types() {
 fn fsharp_checks_constraints() {
     let Some([fable]) = tools(["fable"]) else { return };
     let c = case_in("data", "fsharp", "data-fsharp-wrong");
-    write_fsharp(&c, &generators::fsharp::module(&c.xml));
+    write_fsharp(&c, &generators::fsharp::module(&c.xml).unwrap());
     fs::write(c.out.join("Test.fs"), "module Test\nopen Bindings\nopen type Bindings.Globals\nlet wrong = largest (ResizeArray<float>())\nlet held: Holder<float> = null\n").unwrap();
     let out = Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]).output().unwrap();
     let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
@@ -616,8 +632,8 @@ mod dom {
     fn c() {
         let Some([clang]) = tools(["clang"]) else { return };
         let c = dom_case("c");
-        let model = generators::wasm::model(&c.xml, "C");
-        write_files(&c.out.join("bindings"), generators::c::files(&model));
+        let model = model(&c.xml, "C");
+        write_files(&c.out.join("bindings"), generators::c::files(&model).unwrap());
         fs::write(c.out.join("index.html"), wasm_page("c")).unwrap();
         print!("{}", skipped(&model.skipped));
         run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
@@ -636,7 +652,7 @@ mod dom {
     fn cpp() {
         let Some(clang) = wasi_clang() else { return };
         let c = dom_case("cpp");
-        let model = generators::wasm::model(&c.xml, "C++");
+        let model = model(&c.xml, "C++");
         fs::write(c.out.join("index.html"), wasm_page("cpp")).unwrap();
         print!("{}", skipped(&model.skipped));
         build_cpp(&clang, &c, &model);
@@ -654,7 +670,7 @@ mod dom {
     fn rust() {
         let Some(rustc) = super::rustc_wasm() else { return };
         let c = dom_case("rust");
-        let model = generators::wasm::model(&c.xml, "Rust");
+        let model = model(&c.xml, "Rust");
         fs::write(c.out.join("index.html"), wasm_page("rust")).unwrap();
         print!("{}", skipped(&model.skipped));
         super::build_rust(&rustc, &c, &model);
@@ -666,7 +682,7 @@ mod dom {
     fn fsharp() {
         let Some([fable]) = tools(["fable"]) else { return };
         let c = dom_case("fsharp");
-        let bindings = generators::fsharp::module(&c.xml);
+        let bindings = generators::fsharp::module(&c.xml).unwrap();
         write_fsharp(&c, &bindings);
         fs::write(c.out.join("index.html"), FSHARP_PAGE).unwrap();
         print!("{}", skipped(&bindings.skipped));
@@ -678,8 +694,8 @@ mod dom {
     fn zig() {
         let Some([zig]) = tools(["zig"]) else { return };
         let c = dom_case("zig");
-        let model = generators::wasm::model(&c.xml, "Zig");
-        write_files(&c.out, generators::zig::files(&model));
+        let model = model(&c.xml, "Zig");
+        write_files(&c.out, generators::zig::files(&model).unwrap());
             fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
         fs::write(c.out.join("index.html"), wasm_page("zig")).unwrap();
         print!("{}", skipped(&model.skipped));
@@ -694,7 +710,7 @@ mod dom {
 #[test]
 fn file_names_never_clash() {
     let xml = lower(&root().join("tests/fixtures/names/api.d.ts"), Some("c"), &[]);
-    let files: Vec<String> = generators::c::files(&generators::wasm::model(&xml, "C")).into_iter().map(|f| f.0).collect();
+    let files: Vec<String> = generators::c::files(&model(&xml, "C")).unwrap().into_iter().map(|f| f.0).collect();
     let mut lower: Vec<String> = files.iter().map(|f| f.to_lowercase()).collect();
     lower.sort();
     let count = lower.len();

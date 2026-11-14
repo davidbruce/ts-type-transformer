@@ -482,7 +482,26 @@ fn all_ancestors(m: &Model, class: &str) -> Vec<String> {
 // declaration in a directory per module, `<module>/<Name>.h`, with the module's
 // functions in `<module>/functions.h`; an umbrella `<module>.h` per module, and
 // `bindings.h` for everything.
-pub fn files(m: &Model) -> Vec<(String, String)> {
+// What C cannot express of a model: inline unions, generics, keyed signatures.
+fn check(m: &Model) -> super::Problems {
+    let mut problems = super::Problems::default();
+    super::wasm::each_type(m, &mut |at, t| {
+        let what = match t {
+            Ty::Union(_) => "a union: set unions = \"name\" or \"erase\"",
+            Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => "a keyed signature: set keyed_params = \"expand\"",
+            Ty::Param(_) | Ty::Generic(..) => "generics: set generics = \"erase\"",
+            _ => return,
+        };
+        problems.add(format!("{T} generator cannot express {what}"), at.to_string());
+    });
+    problems
+}
+
+pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
+    let problems = check(m);
+    if !problems.is_empty() {
+        return Err(problems.into_messages());
+    }
     DECODABLE.with(|d| *d.borrow_mut() = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
     let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n\n");
     for (name, values) in &m.enums {
@@ -667,5 +686,5 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         all += &format!("#include \"{module}.h\"\n");
     }
     out.push(("bindings.h".into(), all));
-    out
+    Ok(out)
 }

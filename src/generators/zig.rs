@@ -479,7 +479,22 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 // types and functions; and `bindings.zig`, which re-exports every name. Each
 // file imports by name what it uses from the others, and Zig only reads a
 // file when one of its names is used.
-pub fn files(m: &Model) -> Vec<(String, String)> {
+// What Zig cannot express of a model: generics.
+fn check(m: &Model) -> super::Problems {
+    let mut problems = super::Problems::default();
+    super::wasm::each_type(m, &mut |at, t| {
+        if matches!(t, Ty::Param(_) | Ty::Generic(..)) {
+            problems.add("Zig generator cannot express generics: set generics = \"erase\"".into(), at.to_string());
+        }
+    });
+    problems
+}
+
+pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
+    let problems = check(m);
+    if !problems.is_empty() {
+        return Err(problems.into_messages());
+    }
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
     files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsEnumOf", "jsSame", "jsTry", "JsScope", "jsTake"].map(String::from).to_vec()));
@@ -608,7 +623,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         }
     }
     out.push(("bindings.zig".into(), root));
-    out
+    Ok(out)
 }
 
 // The plain identifiers in Zig source: not quoted ones (`@"x"`), not strings.

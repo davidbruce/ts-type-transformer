@@ -724,7 +724,7 @@ fn variant(t: &Ty) -> String {
 
 // The bindings: `runtime.rs`, and `bindings.rs` with every type, trait and
 // function, which includes the runtime.
-pub fn files(m: &Model) -> Vec<(String, String)> {
+pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     DECODABLE.with(|d| *d.borrow_mut() = m.unions.iter().filter(|u| u.decodable()).map(|u| u.name.clone()).collect());
     UNIONS.with(|d| *d.borrow_mut() = m.unions.iter().map(|u| u.name.clone()).collect());
     let mut out = String::from("// Generated.\n#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, dead_code, unused_imports, unused_unsafe, unused_parens, unused_variables, clippy::all)]\n\n#[path = \"runtime.rs\"]\nmod runtime;\npub use runtime::*;\nuse runtime::handle;\nuse core::marker::PhantomData;\n\n");
@@ -883,7 +883,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     out += "\nmod raw {\n    use core::ffi::c_void;\n    #[link(wasm_import_module = \"env\")]\n    unsafe extern \"C\" {\n";
     out += &imports.into_values().collect::<String>();
     out += "    }\n}\n";
-    vec![("runtime.rs".into(), RUNTIME.into()), ("bindings.rs".into(), out)]
+    Ok(vec![("runtime.rs".into(), RUNTIME.into()), ("bindings.rs".into(), out)])
 }
 
 // A subtype as its ancestor: by value with `into()`, by reference with
