@@ -1072,11 +1072,11 @@ fn to_wasm(x: &str, t: &Ty) -> String {
         Ty::Void => format!("void ({x})"),
         Ty::Num | Ty::NumEnum(_) => x.to_string(),
         Ty::Bool => format!("(({x}) ? 1 : 0)"),
-        Ty::Enum(e) => format!("enums.{e}.indexOf({x})"),
+        Ty::Enum(e) => format!("(places.{e}.get({x}) ?? -1)"),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool) => format!("(v => (v == null ? -1 : v ? 1 : 0))({x})"),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => {
             let Ty::Enum(e) = &**inner else { unreachable!() };
-            format!("(v => (v == null ? -1 : enums.{e}.indexOf(v)))({x})")
+            format!("(places.{e}.get({x}) ?? -1)")
         }
         _ => format!("put({x})"),
     }
@@ -1473,6 +1473,10 @@ export function makeEnv(getInstance, options = {}) {
     out += &format!(
         "  }};
   const enumList = Object.values(enums);
+  // Each enum's values by name, to their place: looked up, not searched for.
+  const places = {{}};
+  for (const name in enums) places[name] = new Map(enums[name].map((v, i) => [v, i]));
+  const placeList = Object.values(places);
   const env = {{
     js_string_len: guard(h => utf8Length(text(h))),
     js_string_read: guard((h, ptr) => {{ write(text(h), ptr, 0x7fffffff); }}),
@@ -1510,7 +1514,7 @@ export function makeEnv(getInstance, options = {}) {
     js_live: () => live,
     // An enum's value as a handle, and back as its index: enums by the order they are declared in.
     js_enum_value: (id, i) => put(enumList[id][i]),
-    js_enum_index: guard((id, h) => enumList[id].indexOf(get(h))),
+    js_enum_index: guard((id, h) => placeList[id].get(get(h)) ?? -1),
     // Iteration: an iterator over a value, and its next value, or -1 at the end.
     js_iterate: guard(h => put(get(h)[Symbol.iterator]())),
     js_iterator_next: guard(it => {{ const r = get(it).next(); return r.done ? -1 : put(r.value); }}),
