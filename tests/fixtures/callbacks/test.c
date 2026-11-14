@@ -45,6 +45,11 @@ static void on_tick(void* ctx, bool ok, JsValue v) {
     js_release(p);
 }
 
+// A union argument arrives as a lent handle.
+static int ids_seen;
+static bool first_is_one;
+static void on_id(void* ctx, JsValue id) { first_is_one |= ids_seen++ == 0 && js_to_number(id) == 1; }
+
 __attribute__((export_name("finish"))) void finish(void) {
     CHECK(ticks == 6);
     CHECK(awaited == 42);
@@ -60,6 +65,8 @@ __attribute__((export_name("run"))) void run(void) {
     Promise_then(q, on_rejected, 0);
     js_release(q);
     CHECK(awaited == 0);
+    CHECK(eachId(eachId_f_from(on_id, 0)) == 2);
+    CHECK(ids_seen == 2 && first_is_one);
     Ticker tk = ticker(3);
     tick_it = Ticker_iterate_async(tk);
     js_release(tk);

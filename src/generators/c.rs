@@ -572,6 +572,8 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
             Ty::NumEnum(_) => "double".to_string(),
             Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsValue".to_string(),
             Ty::Nullable(inner, _) if **inner == Ty::Bool => "int32_t".to_string(),
+            // A union arrives as a lent handle.
+            Ty::NamedUnion(_) | Ty::Nullable(..) if matches!(t, Ty::NamedUnion(_)) || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_))) => "JsValue".to_string(),
             t => typed(t, false),
         };
         params.extend(c.params.iter().map(|(n, t)| format!("{} {}", plain(t), ident(n))));
