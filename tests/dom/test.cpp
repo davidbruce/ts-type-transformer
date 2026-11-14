@@ -12,7 +12,7 @@ extern "C" TS_IMPORT(check) void check(int ok, int line);
 static int fetched_status = 0;
 static bool fetched_text = false;
 static ts::Task fetch_page() {
-    ts::Result<Response> r = co_await fetch(ts::Value::string("./verify.mjs"));
+    ts::Result<Response> r = co_await fetch("./verify.mjs");
     if (!r) co_return;
     fetched_status = int(r->status());
     ts::Result<std::string> text = co_await r->text();

@@ -12,7 +12,7 @@ use roxmltree::{Document, Node};
 
 use super::{attr, elements, flag, named, only_child, unsupported};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Ty {
     Void,
     Num,
@@ -130,7 +130,7 @@ pub struct KeyMap {
 }
 
 // A type parameter: `E extends Element = Element`.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TParam {
     pub name: String,
     pub default: Option<Ty>,
@@ -756,7 +756,7 @@ impl<'a> Builder<'a> {
                 if parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_))) && distinct(&parts) {
                     Ty::Union(parts)
                 } else {
-                    self.skip("union bound as an untyped value");
+                    self.skip("union whose members cannot be told apart, bound as an untyped value");
                     Ty::Union(vec![])
                 }
             }
@@ -769,8 +769,9 @@ impl<'a> Builder<'a> {
         let declared = self.decls.get(&key).copied();
         match (attr(n, "kind"), declared) {
             ("typeParameter", _) => unsupported(self.target, n),
-            ("enum", Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "string") => Ty::Enum(ident(&key)),
-            ("enum", Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "number") => Ty::NumEnum(ident(&key)),
+            // By what is declared: an alias of string literals has become an enum.
+            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "string") => Ty::Enum(ident(&key)),
+            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "number") => Ty::NumEnum(ident(&key)),
             ("enum", _) => Ty::Num,
             (_, Some(d)) if d.has_tag_name("typeAlias") => {
                 let body = self.alias_body(d);
@@ -794,20 +795,35 @@ impl<'a> Builder<'a> {
                 if body.has_tag_name("union") && self.target != "C" {
                     let name = ident(&key);
                     let args: Vec<Ty> = if generic_union { elements(n).map(|a| self.ty(a, "")).collect() } else { Vec::new() };
-                    let named_type = |name: String| if generic_union { Ty::Generic(name, args.clone()) } else { Ty::NamedUnion(name) };
+                    // `void` in a union is a value that may be absent: `void | Promise<void>`.
+                    let is_void = |p: Node| p.has_tag_name("primitive") && attr(p, "name") == "void";
+                    let has_void = elements(body).any(is_void);
+                    let named_type = |name: String| {
+                        let t = if generic_union { Ty::Generic(name, args.clone()) } else { Ty::NamedUnion(name) };
+                        if has_void { absent(t, true) } else { t }
+                    };
                     if self.model.unions.iter().any(|u| u.name == name) {
                         return named_type(name);
                     }
                     let type_params: Vec<TParam> = named(d, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
+                    let members: Vec<Node> = elements(body).filter(|p| !is_void(*p)).collect();
                     self.resolving.push(key.clone());
-                    let parts: Vec<Ty> = elements(body).map(|p| self.ty(p, "")).collect();
+                    let parts: Vec<Ty> = members.iter().map(|p| self.ty(*p, "")).collect();
                     self.resolving.pop();
-                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
-                    if !parts.iter().all(simple) || !distinct(&parts) {
-                        self.skip("union bound as an untyped value");
+                    // `X | any` is any.
+                    if parts.contains(&Ty::Any) {
+                        self.skip("union with an any member, which is any");
                         return Ty::Any;
                     }
-                    let tests = elements(body).map(|p| p.attribute("test").map(str::to_string)).collect();
+                    if let [only] = parts.as_slice() {
+                        return if has_void { absent(only.clone(), true) } else { only.clone() };
+                    }
+                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
+                    if !parts.iter().all(simple) || !distinct(&parts) {
+                        self.skip("union whose members cannot be told apart, bound as an untyped value");
+                        return Ty::Any;
+                    }
+                    let tests = members.iter().map(|p| p.attribute("test").map(str::to_string)).collect();
                     let discriminant = body.attribute("discriminant").map(str::to_string);
                     self.model.unions.push(NamedUnion { name: name.clone(), type_params, parts, tests, discriminant });
                     return named_type(name);
@@ -827,7 +843,8 @@ impl<'a> Builder<'a> {
                 Ty::Generic(ident(&key), args)
             }
             ("class" | "interface", Some(_)) => Ty::Obj(ident(&key)),
-            ("class" | "interface", None) => {
+            // Declared in another library: a handle, by name. An alias may be of anything, and a handle can hold anything.
+            ("class" | "interface" | "typeAlias", None) => {
                 self.opaque.insert(ident(&key));
                 Ty::Obj(ident(&key))
             }

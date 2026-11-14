@@ -149,6 +149,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         });
     }
     if o.name_unions {
+        splice_union_aliases(decls);
         flatten_unions(decls);
         name_unions(decls, o.separator);
     }
@@ -733,6 +734,40 @@ fn keyed_variants(front: &mut Front, sig: &Signature, limit: usize) -> Option<Ve
 }
 
 // Evaluation can put a union inside a union: `A | keyof B`.
+// A union member that names a union alias becomes that alias's members:
+// `string | BufferSource` is `string | ArrayBufferView | ArrayBuffer`, so each
+// member can be told apart from all the others.
+fn splice_union_aliases(decls: &mut [Decl]) {
+    let mut bodies: HashMap<String, Type> = HashMap::new();
+    for d in decls.iter() {
+        if let Decl::Alias(a) = d
+            && a.type_params.is_empty()
+            && matches!(a.ty, Type::Union(_))
+        {
+            bodies.insert(a.name.clone(), a.ty.clone());
+        }
+    }
+    let splice = |t: &mut Type| {
+        let Type::Union(parts) = t else { return };
+        for p in parts.iter_mut() {
+            if let Type::Ref(r) = p
+                && r.kind == "typeAlias"
+                && r.args.is_empty()
+                && let Some(body) = bodies.get(&r.name)
+            {
+                *p = body.clone();
+            }
+        }
+    };
+    // Aliases of aliases: a few rounds reach the bottom.
+    for _ in 0..4 {
+        walk(decls, &mut |t, _| {
+            splice(t);
+            true
+        });
+    }
+}
+
 fn flatten_unions(decls: &mut [Decl]) {
     walk(decls, &mut |t, _| {
         while let Type::Union(parts) = t
@@ -1012,6 +1047,16 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     // `type X = "a" | "b"` becomes `enum X` itself.
     let named: HashSet<&str> = enums.iter().map(|e| e.name.as_str()).collect();
     remove_enum_aliases(decls, &named);
+    // What referred to such an alias now refers to the enum.
+    walk(decls, &mut |t, _| {
+        if let Type::Ref(r) = t
+            && r.kind == "typeAlias"
+            && named.contains(r.name.as_str())
+        {
+            r.kind = "enum";
+        }
+        true
+    });
     decls.extend(enums.into_iter().map(Decl::Enum));
     widened
 }
