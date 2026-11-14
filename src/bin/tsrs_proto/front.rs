@@ -906,7 +906,7 @@ impl<'c> Front<'c> {
                         Some(Some(LiteralValue::Number(n))) => Some(n.to_string()),
                         _ => None,
                     };
-                    out.push((p.name().to_string(), p.flags().intersects(SymbolFlags::Optional), literal));
+                    out.push((symbol_member_name(*p), p.flags().intersects(SymbolFlags::Optional), literal));
                 }
                 Some(out)
             }

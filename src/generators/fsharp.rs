@@ -435,14 +435,15 @@ impl Gen {
                     match (name, args.len()) {
                         ("Array" | "ReadonlyArray", 1) => "ResizeArray".into(),
                         ("Promise" | "PromiseLike", 1) => "JS.Promise".into(),
-                        _ if matches!(attr(n, "kind"), "class" | "interface") => {
+                        // A type from another library, an alias too: an opaque type by its name.
+                        _ if matches!(attr(n, "kind"), "class" | "interface" | "typeAlias") => {
                             let arity = self.external.entry(name.to_string()).or_default();
                             *arity = (*arity).max(args.len());
                             ident(name)
                         }
-                        // An alias or value from another file: nothing to refer to.
+                        // A value from another file: nothing to refer to.
                         _ => {
-                            self.skip("reference to an undeclared alias, bound as obj");
+                            self.skip("reference to an undeclared value, bound as obj");
                             return "obj".into();
                         }
                     }

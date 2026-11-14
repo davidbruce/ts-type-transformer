@@ -1,0 +1,577 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The XML that tsrs_proto prints: src/bin/tsrs_proto/xml.rs, wrapped by main.rs.
+  Three layers: declarations, members and signatures, types.
+  Validate with: xmllint -noout -relaxng schema/declarations.rng out.xml
+-->
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+
+  <start>
+    <element name="declarations">
+      <ref name="lowering"/>
+      <zeroOrMore>
+        <ref name="topDeclaration"/>
+      </zeroOrMore>
+    </element>
+  </start>
+
+  <!-- ==== lowering: the strategy in effect per construct (config.rs CONSTRUCTS) ==== -->
+
+  <define name="lowering">
+    <element name="lowering">
+      <attribute name="classes"><choice><value>keep</value><value>pair</value></choice></attribute>
+      <attribute name="type_ops"><choice><value>keep</value><value>evaluate</value></choice></attribute>
+      <attribute name="intersections"><choice><value>keep</value><value>merge</value></choice></attribute>
+      <attribute name="inheritance"><choice><value>keep</value><value>flatten</value></choice></attribute>
+      <attribute name="generics"><choice><value>keep</value><value>erase</value></choice></attribute>
+      <attribute name="nullable"><choice><value>keep</value><value>wrap</value></choice></attribute>
+      <attribute name="literals"><choice><value>keep</value><value>enum</value></choice></attribute>
+      <attribute name="anonymous"><choice><value>keep</value><value>hoist</value></choice></attribute>
+      <attribute name="optional_params"><choice><value>keep</value><value>overloads</value></choice></attribute>
+      <attribute name="union_params"><choice><value>keep</value><value>overloads</value></choice></attribute>
+      <attribute name="unions"><choice><value>keep</value><value>erase</value><value>name</value></choice></attribute>
+      <attribute name="overloads"><choice><value>keep</value><value>rename</value></choice></attribute>
+      <attribute name="redeclarations"><choice><value>keep</value><value>drop</value></choice></attribute>
+      <attribute name="keyed_params"><choice><value>keep</value><value>expand</value><value>map</value></choice></attribute>
+    </element>
+  </define>
+
+  <!-- ==== declarations ==== -->
+
+  <!-- Children of <declarations>: each says which module it goes in. -->
+  <define name="topDeclaration">
+    <choice>
+      <element name="interface"><ref name="module"/><ref name="interface.body"/></element>
+      <element name="class"><ref name="module"/><ref name="class.body"/></element>
+      <element name="typeAlias"><ref name="module"/><ref name="typeAlias.body"/></element>
+      <element name="function"><ref name="module"/><ref name="function.body"/></element>
+      <element name="var"><ref name="module"/><ref name="var.body"/></element>
+      <element name="enum"><ref name="module"/><ref name="enum.body"/></element>
+      <element name="namespace">
+        <ref name="module"/>
+        <attribute name="moduleKind">
+          <a:documentation>Only on a top-level namespace: its module comes from the library
+            (the namespace's own name), not from a [[modules.area]] of the config.</a:documentation>
+          <value>namespace</value>
+        </attribute>
+        <ref name="namespace.body"/>
+      </element>
+    </choice>
+  </define>
+
+  <!-- Inside a namespace: the same declarations, without module. -->
+  <define name="nestedDeclaration">
+    <choice>
+      <element name="interface"><ref name="interface.body"/></element>
+      <element name="class"><ref name="class.body"/></element>
+      <element name="typeAlias"><ref name="typeAlias.body"/></element>
+      <element name="function"><ref name="function.body"/></element>
+      <element name="var"><ref name="var.body"/></element>
+      <element name="enum"><ref name="enum.body"/></element>
+      <element name="namespace"><ref name="namespace.body"/></element>
+    </choice>
+  </define>
+
+  <define name="module">
+    <attribute name="module">
+      <a:documentation>The module (output file) the declaration belongs to: the first
+        [[modules.area]] whose pattern matches its JavaScript name, else [modules] default
+        ("main"). For a namespace, its own name.</a:documentation>
+    </attribute>
+  </define>
+
+  <define name="synthetic">
+    <optional>
+      <attribute name="synthetic">
+        <a:documentation>The declaration was created by a lowering (hoisted inline type, named
+          union, enum of string literals); the library has nothing of that name.</a:documentation>
+        <value>true</value>
+      </attribute>
+    </optional>
+  </define>
+
+  <define name="jsName">
+    <attribute name="jsName">
+      <a:documentation>The real JavaScript name, when overloads=rename gave this overload a
+        unique name. Absent: name is the JavaScript name.</a:documentation>
+    </attribute>
+  </define>
+
+  <define name="interface.body">
+    <attribute name="name"/>
+    <ref name="synthetic"/>
+    <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
+    <ref name="bases"/>
+    <ref name="members"/>
+  </define>
+
+  <!-- classes=pair: an interface and its `var X: { prototype: X; new(); statics }`. -->
+  <define name="class.body">
+    <attribute name="name"/>
+    <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
+    <ref name="bases"/>
+    <zeroOrMore>
+      <element name="constructor">
+        <attribute name="name"><a:documentation>"new", or a generated overload name.</a:documentation></attribute>
+        <optional>
+          <attribute name="jsName">
+            <a:documentation>See jsName; a constructor's is always "new".</a:documentation>
+            <value>new</value>
+          </attribute>
+        </optional>
+        <!-- No type parameters or result: they are the class's own. -->
+        <optional><ref name="thisParameter"/></optional>
+        <zeroOrMore><ref name="parameter"/></zeroOrMore>
+      </element>
+    </zeroOrMore>
+    <ref name="staticMembers"/>
+    <ref name="members"/>
+  </define>
+
+  <!-- <extends> as written, or with inheritance=flatten every transitive base as <ancestor>. -->
+  <define name="bases">
+    <choice>
+      <zeroOrMore><ref name="extends"/></zeroOrMore>
+      <zeroOrMore>
+        <element name="ancestor"><attribute name="name"/></element>
+      </zeroOrMore>
+    </choice>
+  </define>
+
+  <!-- A base type; also the right-hand side of a conditional type. -->
+  <define name="extends">
+    <element name="extends"><ref name="type"/></element>
+  </define>
+
+  <define name="typeAlias.body">
+    <attribute name="name"/>
+    <ref name="synthetic"/>
+    <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
+    <ref name="type"/>
+  </define>
+
+  <define name="function.body">
+    <attribute name="name"/>
+    <optional><ref name="jsName"/></optional>
+    <ref name="signature"/>
+  </define>
+
+  <define name="var.body">
+    <attribute name="name"/>
+    <ref name="type"/>
+  </define>
+
+  <define name="enum.body">
+    <attribute name="name"/>
+    <ref name="synthetic"/>
+    <zeroOrMore>
+      <element name="member">
+        <attribute name="name"/>
+        <attribute name="type">
+          <a:documentation>computed: value is the initializer's source text, not a constant.</a:documentation>
+          <choice><value>string</value><value>number</value><value>computed</value></choice>
+        </attribute>
+        <attribute name="value"/>
+      </element>
+    </zeroOrMore>
+  </define>
+
+  <define name="namespace.body">
+    <attribute name="name"/>
+    <zeroOrMore><ref name="nestedDeclaration"/></zeroOrMore>
+  </define>
+
+  <!-- ==== members ==== -->
+
+  <!-- Of an interface, a class instance, or an <object> type. -->
+  <define name="members">
+    <zeroOrMore>
+      <choice>
+        <element name="property"><ref name="property.body"/></element>
+        <element name="method"><ref name="method.body"/></element>
+        <element name="call"><ref name="callable.body"/></element>
+        <element name="construct"><ref name="callable.body"/></element>
+        <element name="index"><ref name="index.body"/></element>
+        <element name="get"><ref name="get.body"/></element>
+        <element name="set"><ref name="set.body"/></element>
+      </choice>
+    </zeroOrMore>
+  </define>
+
+  <!-- Of a class: what its `var` declared besides prototype and constructors. Written before the instance members. -->
+  <define name="staticMembers">
+    <zeroOrMore>
+      <choice>
+        <element name="property"><ref name="static"/><ref name="property.body"/></element>
+        <element name="method"><ref name="static"/><ref name="method.body"/></element>
+        <element name="call"><ref name="static"/><ref name="callable.body"/></element>
+        <element name="construct"><ref name="static"/><ref name="callable.body"/></element>
+        <element name="index"><ref name="static"/><ref name="index.body"/></element>
+        <element name="get"><ref name="static"/><ref name="get.body"/></element>
+        <element name="set"><ref name="static"/><ref name="set.body"/></element>
+      </choice>
+    </zeroOrMore>
+  </define>
+
+  <define name="static">
+    <attribute name="static"><value>true</value></attribute>
+  </define>
+
+  <define name="memberName">
+    <attribute name="name">
+      <a:documentation>As written, unquoted; `[Symbol.iterator]` stays as is.</a:documentation>
+    </attribute>
+  </define>
+
+  <define name="optional">
+    <optional><attribute name="optional"><value>true</value></attribute></optional>
+  </define>
+
+  <define name="readonly">
+    <optional><attribute name="readonly"><value>true</value></attribute></optional>
+  </define>
+
+  <define name="from">
+    <optional>
+      <attribute name="from">
+        <a:documentation>The interface that declares this member, when it is not the enclosing
+          one: inherited members copied in by inheritance=flatten, or by evaluating a
+          type.</a:documentation>
+      </attribute>
+    </optional>
+  </define>
+
+  <define name="const">
+    <optional>
+      <attribute name="const">
+        <a:documentation>The one value this can take: its type was a single literal, widened to
+          the primitive by literals=enum, or it is the key of an expanded keyed
+          overload.</a:documentation>
+      </attribute>
+    </optional>
+  </define>
+
+  <define name="property.body">
+    <ref name="memberName"/>
+    <ref name="optional"/>
+    <ref name="readonly"/>
+    <ref name="from"/>
+    <ref name="const"/>
+    <ref name="type"/>
+  </define>
+
+  <define name="method.body">
+    <ref name="memberName"/>
+    <optional><ref name="jsName"/></optional>
+    <ref name="optional"/>
+    <ref name="from"/>
+    <ref name="signature"/>
+  </define>
+
+  <!-- Call and construct signatures have no name. -->
+  <define name="callable.body">
+    <ref name="signature"/>
+  </define>
+
+  <define name="index.body">
+    <ref name="readonly"/>
+    <ref name="parameter"/>
+    <ref name="returns"/>
+  </define>
+
+  <define name="get.body">
+    <ref name="memberName"/>
+    <optional><ref name="returns"/></optional>
+  </define>
+
+  <define name="set.body">
+    <ref name="memberName"/>
+    <ref name="parameter"/>
+  </define>
+
+  <!-- ==== signatures ==== -->
+
+  <define name="signature">
+    <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
+    <optional><ref name="thisParameter"/></optional>
+    <zeroOrMore><ref name="parameter"/></zeroOrMore>
+    <!-- Absent when the declaration has no return type annotation. -->
+    <optional><ref name="returns"/></optional>
+  </define>
+
+  <define name="typeParameter">
+    <element name="typeParameter">
+      <attribute name="name"/>
+      <optional>
+        <element name="constraint"><ref name="type"/></element>
+      </optional>
+      <optional>
+        <element name="default"><ref name="type"/></element>
+      </optional>
+    </element>
+  </define>
+
+  <!-- The declared receiver, `(this: T, ...)`. Not the <this/> type. -->
+  <define name="thisParameter">
+    <element name="this"><ref name="type"/></element>
+  </define>
+
+  <define name="parameter">
+    <element name="parameter">
+      <attribute name="name"/>
+      <ref name="optional"/>
+      <optional><attribute name="rest"><value>true</value></attribute></optional>
+      <ref name="const"/>
+      <ref name="type"/>
+    </element>
+  </define>
+
+  <define name="returns">
+    <element name="returns">
+      <choice>
+        <ref name="type"/>
+        <!-- `x is T`, `asserts x`, `asserts x is T`. -->
+        <element name="predicate">
+          <attribute name="parameter"/>
+          <optional><attribute name="asserts"><value>true</value></attribute></optional>
+          <optional><ref name="type"/></optional>
+        </element>
+      </choice>
+    </element>
+  </define>
+
+  <!-- ==== types ==== -->
+
+  <define name="type">
+    <choice>
+      <element name="primitive"><ref name="primitive.body"/></element>
+      <element name="literal"><ref name="literal.body"/></element>
+      <element name="ref"><ref name="ref.body"/></element>
+      <element name="union">
+        <optional>
+          <attribute name="discriminant">
+            <a:documentation>The property every member of this union has, with a different
+              literal value in each; the members then carry test="tag:value".</a:documentation>
+          </attribute>
+        </optional>
+        <ref name="union.body"/>
+      </element>
+      <element name="intersection"><ref name="types"/></element>
+      <element name="array"><ref name="type"/></element>
+      <element name="readonly"><ref name="type"/></element>
+      <element name="nullable"><ref name="nullable.body"/></element>
+      <element name="this"><empty/></element>
+      <element name="tuple"><ref name="tuple.body"/></element>
+      <element name="functionType"><ref name="signature"/></element>
+      <element name="constructorType"><ref name="signature"/></element>
+      <element name="object"><ref name="members"/></element>
+      <element name="keyof"><ref name="type"/></element>
+      <element name="unique"><ref name="type"/></element>
+      <element name="indexedAccess"><ref name="type"/><ref name="type"/></element>
+      <element name="typeof"><attribute name="name"/></element>
+      <element name="template"><ref name="template.body"/></element>
+      <element name="conditional"><ref name="conditional.body"/></element>
+      <element name="infer"><ref name="typeParameter"/></element>
+      <element name="mapped"><ref name="mapped.body"/></element>
+      <element name="raw"><ref name="raw.body"/></element>
+    </choice>
+  </define>
+
+  <!-- The same types as a direct child of <union>, where each may say how it is recognised. -->
+  <define name="unionMember">
+    <choice>
+      <element name="primitive"><ref name="test"/><ref name="primitive.body"/></element>
+      <element name="literal"><ref name="test"/><ref name="literal.body"/></element>
+      <element name="ref"><ref name="test"/><ref name="ref.body"/></element>
+      <!-- A union inside a union is not annotated itself: no discriminant, no tests on its members. -->
+      <element name="union"><ref name="test"/><ref name="union.body"/></element>
+      <element name="intersection"><ref name="test"/><ref name="types"/></element>
+      <element name="array"><ref name="test"/><ref name="type"/></element>
+      <element name="readonly"><ref name="test"/><ref name="type"/></element>
+      <element name="nullable"><ref name="test"/><ref name="nullable.body"/></element>
+      <element name="this"><ref name="test"/></element>
+      <element name="tuple"><ref name="test"/><ref name="tuple.body"/></element>
+      <element name="functionType"><ref name="test"/><ref name="signature"/></element>
+      <element name="constructorType"><ref name="test"/><ref name="signature"/></element>
+      <element name="object"><ref name="test"/><ref name="members"/></element>
+      <element name="keyof"><ref name="test"/><ref name="type"/></element>
+      <element name="unique"><ref name="test"/><ref name="type"/></element>
+      <element name="indexedAccess"><ref name="test"/><ref name="type"/><ref name="type"/></element>
+      <element name="typeof"><ref name="test"/><attribute name="name"/></element>
+      <element name="template"><ref name="test"/><ref name="template.body"/></element>
+      <element name="conditional"><ref name="test"/><ref name="conditional.body"/></element>
+      <element name="infer"><ref name="test"/><ref name="typeParameter"/></element>
+      <element name="mapped"><ref name="test"/><ref name="mapped.body"/></element>
+      <element name="raw"><ref name="test"/><ref name="raw.body"/></element>
+    </choice>
+  </define>
+
+  <define name="test">
+    <optional>
+      <attribute name="test">
+        <a:documentation>How a JavaScript value is recognised as this member of the union:
+          typeof:K (typeof v === K), array (Array.isArray), instanceof:C, has:P (only this
+          member has property P), tag:V (the union's discriminant property equals V).
+          Absent when nothing tells it apart, as for null.</a:documentation>
+        <data type="string">
+          <param name="pattern">typeof:(string|number|boolean|bigint|symbol|undefined|function)|array|instanceof:.+|has:.*|tag:.*</param>
+        </data>
+      </attribute>
+    </optional>
+  </define>
+
+  <define name="types">
+    <oneOrMore><ref name="type"/></oneOrMore>
+  </define>
+
+  <define name="primitive.body">
+    <choice>
+      <attribute name="name">
+        <choice>
+          <value>any</value>
+          <value>unknown</value>
+          <value>string</value>
+          <value>number</value>
+          <value>bigint</value>
+          <value>boolean</value>
+          <value>symbol</value>
+          <value>object</value>
+          <value>void</value>
+          <value>undefined</value>
+          <value>null</value>
+          <value>never</value>
+          <!-- Not a TypeScript type: the checker's error type, from evaluating what it could not resolve. -->
+          <value>error</value>
+        </choice>
+      </attribute>
+      <group>
+        <attribute name="name"><value>any</value></attribute>
+        <attribute name="lossy">
+          <a:documentation>This `any` stands for a type a lowering could not express; the value
+            says what was lost.</a:documentation>
+          <choice>
+            <value>union</value>
+            <value>intersection</value>
+            <value>unsupported syntax</value>
+            <value>type-level expression</value>
+            <value>type function</value>
+            <value>generic type-level expression</value>
+            <value>generic mapped type</value>
+            <value>typeof namespace/class/enum</value>
+            <value>recursive anonymous type</value>
+            <value>anonymous type parameter</value>
+            <value>missing key</value>
+            <value>unknown type kind</value>
+          </choice>
+        </attribute>
+      </group>
+    </choice>
+  </define>
+
+  <define name="literal.body">
+    <attribute name="type">
+      <choice><value>string</value><value>number</value><value>boolean</value><value>bigint</value></choice>
+    </attribute>
+    <attribute name="value"><a:documentation>Unquoted; a bigint keeps its `n`.</a:documentation></attribute>
+  </define>
+
+  <define name="ref.body">
+    <attribute name="name"><a:documentation>As written at the use: may be dotted (`Geo.Point`).</a:documentation></attribute>
+    <attribute name="kind">
+      <a:documentation>What the name resolves to. class: an interface paired by classes=pair.
+        import, value, unresolved: not a type declared in this output.</a:documentation>
+      <choice>
+        <value>interface</value>
+        <value>class</value>
+        <value>typeAlias</value>
+        <value>enum</value>
+        <value>typeParameter</value>
+        <value>import</value>
+        <value>value</value>
+        <value>unresolved</value>
+      </choice>
+    </attribute>
+    <optional>
+      <attribute name="qualified"><a:documentation>Fully qualified name, when it differs from name.</a:documentation></attribute>
+    </optional>
+    <optional>
+      <attribute name="file"><a:documentation>Declaring file's base name, when it is not the input.</a:documentation></attribute>
+    </optional>
+    <!-- Type arguments, defaults spelled out. -->
+    <zeroOrMore><ref name="type"/></zeroOrMore>
+  </define>
+
+  <define name="union.body">
+    <oneOrMore><ref name="unionMember"/></oneOrMore>
+  </define>
+
+  <!-- nullable=wrap: `T | null | undefined` without the absent members. -->
+  <define name="nullable.body">
+    <attribute name="absent">
+      <a:documentation>Which value stands for "no value": null, undefined, or either.</a:documentation>
+      <choice><value>null</value><value>undefined</value><value>either</value></choice>
+    </attribute>
+    <ref name="type"/>
+  </define>
+
+  <define name="tuple.body">
+    <zeroOrMore>
+      <element name="element">
+        <optional><attribute name="name"/></optional>
+        <ref name="optional"/>
+        <optional><attribute name="rest"><value>true</value></attribute></optional>
+        <ref name="type"/>
+      </element>
+    </zeroOrMore>
+  </define>
+
+  <!-- `a${T}b`: texts and types alternate, starting and ending with a text. -->
+  <define name="template.body">
+    <ref name="template.text"/>
+    <zeroOrMore>
+      <ref name="type"/>
+      <ref name="template.text"/>
+    </zeroOrMore>
+  </define>
+
+  <define name="template.text">
+    <element name="text"><attribute name="value"/></element>
+  </define>
+
+  <define name="conditional.body">
+    <element name="check"><ref name="type"/></element>
+    <ref name="extends"/>
+    <element name="true"><ref name="type"/></element>
+    <element name="false"><ref name="type"/></element>
+  </define>
+
+  <!-- `{ readonly [K in C as N]?: V }`. Here readonly and optional are the modifier as written, not flags. -->
+  <define name="mapped.body">
+    <optional>
+      <attribute name="readonly">
+        <choice><value>readonly</value><value>+</value><value>-</value></choice>
+      </attribute>
+    </optional>
+    <optional>
+      <attribute name="optional">
+        <choice><value>?</value><value>+</value><value>-</value></choice>
+      </attribute>
+    </optional>
+    <ref name="typeParameter"/>
+    <optional>
+      <element name="as"><ref name="type"/></element>
+    </optional>
+    <optional>
+      <element name="value"><ref name="type"/></element>
+    </optional>
+  </define>
+
+  <!-- Syntax the tool has no element for (`intrinsic`, import types), kept as source text. -->
+  <define name="raw.body">
+    <attribute name="kind"><a:documentation>The parser's name for the node kind, e.g. ImportType.</a:documentation></attribute>
+    <attribute name="text"/>
+  </define>
+
+</grammar>

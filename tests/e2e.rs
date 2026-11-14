@@ -288,6 +288,42 @@ fn c_rejects_unions() {
     generators::c::files(&generators::wasm::model(&xml, "C"));
 }
 
+// Every output follows `schema/declarations.rng`: each input unlowered and
+// with each target's config.
+#[test]
+fn xml_follows_the_schema() {
+    let Some([xmllint]) = tools(["xmllint"]) else { return };
+    let out = root().join("target/e2e/schema");
+    fs::create_dir_all(&out).unwrap();
+    let mut inputs: Vec<PathBuf> = ["shapes", "callbacks", "data", "globals", "unions"].iter().map(|f| root().join("tests/fixtures").join(f).join("api.d.ts")).collect();
+    inputs.extend(["tests/pts/pts.d.ts", "tests/bench/api.d.ts", "examples/lowering.d.ts", "examples/features.d.ts"].map(|p| root().join(p)));
+    inputs.push(PathBuf::from("lib.es5.d.ts"));
+    // Text that XML cannot hold as it is: a control character, a line break, an empty name.
+    let odd = out.join("odd.d.ts");
+    fs::write(&odd, "type Odd = \"a\\u0001b\" | \"line\\nbreak\";\ninterface Empty { \"\": number }\n").unwrap();
+    let xml = lower(&odd, None, &[]);
+    let doc = roxmltree::Document::parse(&xml).expect("well-formed XML");
+    let values: Vec<&str> = doc.descendants().filter(|n| n.has_tag_name("literal")).filter_map(|n| n.attribute("value")).collect();
+    assert_eq!(values, ["a\\u0001b", "line\nbreak"]);
+    assert!(doc.descendants().any(|n| n.has_tag_name("property") && n.attribute("name") == Some("")));
+    inputs.push(odd);
+    let mut files = Vec::new();
+    for (i, input) in inputs.iter().enumerate() {
+        for target in [None, Some("fsharp"), Some("ocaml"), Some("rust"), Some("c"), Some("cpp"), Some("zig")] {
+            let file = out.join(format!("{i}-{}.xml", target.unwrap_or("raw")));
+            fs::write(&file, lower(input, target, &[])).unwrap();
+            files.push(file);
+        }
+    }
+    // The whole DOM too, with the config that changes it most.
+    files.push(out.join("dom-c.xml"));
+    fs::write(files.last().unwrap(), lower_with(Path::new("lib.dom.d.ts"), Some("c"), &[root().join("examples/modules/dom.toml")], &[])).unwrap();
+    let result = Command::new(xmllint).arg("--noout").arg("--relaxng").arg(root().join("schema/declarations.rng")).args(&files).output().unwrap();
+    let report = String::from_utf8_lossy(&result.stderr);
+    let failures: Vec<&str> = report.lines().filter(|l| !l.ends_with(" validates")).take(20).collect();
+    assert!(result.status.success(), "{}", failures.join("\n"));
+}
+
 // Mistakes the glue reports: a handle used after its release, a handle
 // released twice, and an exception no one took.
 #[test]

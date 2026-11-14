@@ -178,7 +178,8 @@ impl Xml {
             MemberKind::Set => "set",
         };
         let mut attrs: Attrs = Vec::new();
-        if !m.name.is_empty() {
+        // A property or method always has a name, if an empty one: `"": number`.
+        if !m.name.is_empty() || matches!(m.kind, MemberKind::Property | MemberKind::Method | MemberKind::Get | MemberKind::Set) {
             attrs.push(("name", &m.name));
         }
         if let Some(js) = &m.js_name {
@@ -428,5 +429,21 @@ pub fn test_text(t: &Test) -> String {
 }
 
 fn escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out += "&amp;",
+            '<' => out += "&lt;",
+            '>' => out += "&gt;",
+            '"' => out += "&quot;",
+            // As references, or a parser would read them as spaces.
+            '\n' => out += "&#10;",
+            '\t' => out += "&#9;",
+            '\r' => out += "&#13;",
+            // XML 1.0 cannot hold other control characters: written as JavaScript would.
+            c if (c as u32) < 0x20 || c == '\u{7f}' => out += &format!("\\u{:04x}", c as u32),
+            c => out.push(c),
+        }
+    }
+    out
 }

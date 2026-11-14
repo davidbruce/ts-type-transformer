@@ -1636,7 +1636,8 @@ fn rename_members(members: &mut [Member], o: Options) {
     let mut taken: HashSet<String> = members.iter().map(|m| m.name.clone()).collect();
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
     for (i, m) in members.iter().enumerate() {
-        if !matches!(m.kind, MemberKind::Method | MemberKind::Construct | MemberKind::Call) {
+        // A call or construct signature has no name to tell overloads apart by.
+        if !matches!(m.kind, MemberKind::Method | MemberKind::Construct | MemberKind::Call) || m.name.is_empty() {
             continue;
         }
         let key = format!("{:?}{}", m.kind as u8, m.name);
