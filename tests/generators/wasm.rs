@@ -1172,7 +1172,7 @@ export function makeEnv(getInstance) {
   const ids = new Map();
   const refs = [0];
   const free = [];
-  const put = v => {
+  const ref = v => {
     if (v === null || v === undefined) return 0;
     let h = ids.get(v);
     if (h === undefined) {
@@ -1182,6 +1182,14 @@ export function makeEnv(getInstance) {
       ids.set(v, h);
     }
     refs[h]++;
+    return h;
+  };
+  // Open scopes: each holds the handles given to wasm while it is innermost,
+  // released when it closes.
+  const scopes = [];
+  const put = v => {
+    const h = ref(v);
+    if (h && scopes.length) scopes[scopes.length - 1].push(h);
     return h;
   };
   const release = h => {
@@ -1195,7 +1203,7 @@ export function makeEnv(getInstance) {
   // A handle lent to a callback, released when it returns. Where wasm counts
   // handles, it releases them itself: the handle is its own.
   const lend = (lent, v) => {
-    const h = put(v);
+    const h = COUNTED ? put(v) : ref(v);
     if (!COUNTED && h) lent.push(h);
     return h;
   };
@@ -1266,6 +1274,8 @@ export function makeEnv(getInstance) {
       return o.ctx;
     },
     js_retain: h => { if (h) refs[h]++; },
+    js_scope_open: () => { scopes.push([]); },
+    js_scope_close: () => { (scopes.pop() ?? []).forEach(release); },
     js_release: release,
     // Values wasm holds handles to.
     js_live: () => ids.size,
@@ -1336,7 +1346,7 @@ export function makeEnv(getInstance) {
     }
     // A call that throws returns zero, and its exception is kept for wasm to take.
     out + "  };
-  const calls = ['js_take_error', 'js_error_message', 'js_promise_then', 'js_retain', 'js_release', 'js_live'];
+  const calls = ['js_take_error', 'js_error_message', 'js_promise_then', 'js_retain', 'js_release', 'js_live', 'js_scope_open', 'js_scope_close'];
   for (const [name, f] of Object.entries(env)) {
     if (calls.includes(name)) continue;
     env[name] = (...args) => {

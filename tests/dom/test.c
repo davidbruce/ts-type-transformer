@@ -142,16 +142,14 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(bad.h != 0);
     js_release(bad);
 
-    // A handle a function returns is the caller's to release.
+    // A handle a function returns is the caller's to release: one by one, or
+    // all that came back while a scope was open.
     uint32_t live = js_live_handles();
     for (int i = 0; i < 500; i++) {
+        js_scope_open();
         HTMLElement found = Document_getElementById(doc, "made-by-c");
-        DOMTokenList list = Element_get_classList(found);
-        JsString id = Element_get_id(found);
-        CHECK(DOMTokenList_contains(list, "box") && str_eq(id, "made-by-c"));
-        js_release(id);
-        js_release(list);
-        js_release(found);
+        CHECK(DOMTokenList_contains(Element_get_classList(found), "box") && str_eq(Element_get_id(found), "made-by-c"));
+        js_scope_close();
     }
     CHECK(js_live_handles() == live);
 }

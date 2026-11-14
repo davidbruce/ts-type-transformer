@@ -282,6 +282,12 @@ pub fn jsRetain(x: anytype) @TypeOf(x) { raw.js_retain(x.h); return x; }
 pub fn jsTakeError() ?JsValue { const e = raw.js_take_error(); return if (e == 0) null else .{ .h = e }; }
 // An exception's message, the caller's to release.
 pub fn jsErrorMessage(e: JsValue) JsString { return .{ .h = raw.js_error_message(e.h) }; }
+// A scope: every handle a function returns while it is the innermost open
+// scope is released when it closes. `jsRetain` one to keep it.
+pub const JsScope = struct {
+    pub fn open() JsScope { raw.js_scope_open(); return .{}; }
+    pub fn close(_: JsScope) void { raw.js_scope_close(); }
+};
 // How many JavaScript values wasm holds handles to.
 pub fn jsLiveHandles() u32 { return raw.js_live(); }
 // Forgets a callback made with `from`, and returns its context. Its handle is released as any other.
@@ -388,6 +394,8 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_release(h: u32) void;
     extern \"env\" fn js_live() u32;
     extern \"env\" fn js_take_error() u32;
+    extern \"env\" fn js_scope_open() void;
+    extern \"env\" fn js_scope_close() void;
     extern \"env\" fn js_iterate(h: u32) u32;
     extern \"env\" fn js_iterator_next(it: u32) u32;
     extern \"env\" fn js_error_message(h: u32) u32;
@@ -402,7 +410,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 pub fn files(m: &Model) -> Vec<(String, String)> {
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsTake"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "JsScope", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();

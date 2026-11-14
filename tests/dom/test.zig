@@ -122,13 +122,11 @@ export fn run() void {
     // A handle a function returns is the caller's to release.
     const live = b.jsLiveHandles();
     for (0..500) |_| {
+        // Everything that comes back while the scope is open is released with it.
+        const scope = b.JsScope.open();
+        defer scope.close();
         const found = doc.getElementById("made-by-zig").?;
-        defer b.jsRelease(found);
-        const list = found.get_classList();
-        defer b.jsRelease(list);
-        const id = found.get_id();
-        defer b.jsRelease(id);
-        expect(list.contains("box") and strEq(id, "made-by-zig"), @src());
+        expect(found.get_classList().contains("box") and strEq(found.get_id(), "made-by-zig"), @src());
     }
     expect(b.jsLiveHandles() == live, @src());
 }

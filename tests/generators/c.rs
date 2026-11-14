@@ -258,6 +258,10 @@ TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
 TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
 TS_IMPORT(js_async_iterate) uint32_t ts_raw_js_async_iterate(uint32_t);
 TS_IMPORT(js_async_iterator_next) uint32_t ts_raw_js_async_iterator_next(uint32_t);
+// A scope: every handle a function returns while it is the innermost open
+// scope is released when it closes. Retain one to keep it.
+TS_IMPORT(js_scope_open) void js_scope_open(void);
+TS_IMPORT(js_scope_close) void js_scope_close(void);
 // How many JavaScript values wasm holds handles to.
 static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
 // Forgets a callback made with `X_from`, and returns its context. Its handle is released as any other.
