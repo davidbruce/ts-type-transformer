@@ -34,6 +34,9 @@ intersection_members = 64
 [naming]
 separator = "_"
 overloads = "with_params"   # or "numbered"
+
+[rename]                # names for declarations a pass generated
+SVGSVGElement_getEnclosureList_result = "SVGShapeElement"
 ```
 
 `--config target.toml`, `--set generics=erase` to override one setting,
@@ -57,9 +60,22 @@ are errors. Example targets are in `examples/targets/`.
 | `keyed_params` | `expand` | `f<K extends keyof M>(key: K, value: M[K])` | one overload per key: `addEventListener_click`, `createElement_div` | yes |
 | `keyed_params` | `map` | the same | kept generic, `keyof M` and `M[K]` as written, for targets with type-level keys | no |
 | `overloads` | `rename` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
+| `redeclarations` | `drop` | a method a type declares again as its ancestor does, but for `this` | the ancestor's alone | no |
 
 Four passes need the type checker. That is why lowering lives here and not in
 each generator: a generator written in F# or C has no checker.
+
+`declare class` is a `<class>` as written: constructors, statics, `extends`
+and `implements`; private and protected members are left out.
+
+`[rename]` names generated declarations (hoisted types, enums, unions), and
+every reference follows. A declared name is the library's and JavaScript's,
+so renaming one is an error; a name a target did not generate is skipped,
+since a library's table serves every target.
+
+The XML has a schema, `schema/declarations.rng` (RELAX NG, notes in
+`schema/README.md`); `xml_follows_the_schema` validates every fixture, the
+DOM and Pts against it for each target.
 
 ## Keyed signatures
 
@@ -94,45 +110,81 @@ their own, apart from areas (`areas/css/`, `namespaces/CSS/`).
 `--emit c|cpp|zig|rust|fsharp --out <dir>` writes bindings for the lowered
 XML, and for wasm targets the JavaScript glue; `--glue-for <module.wasm>`
 trims the glue to what a compiled module imports. The generators
-(`src/generators/`) are thin: what a config left in that a generator cannot
-express is an error naming the setting to change.
+(`src/generators/`) are thin and return errors: everything a config left in
+that a target cannot express, each kind once, with how often, where first,
+and the setting that lowers it.
+
+```
+C generator cannot express <literal>: set literals = "enum" (8 places, first at declarations/typeAlias[x_or_x]/union/literal)
+```
 
 Every wasm target shares one model (`generators::wasm`) and one glue. A
 handle is a counted reference: what a function returns is the caller's,
-arguments are lent, what a callback returns is given to JavaScript. A call
-that throws returns a zero value and keeps the exception to take. Promises
+arguments are lent, what a callback returns is given to JavaScript. Promises
 settle into a function; iterators and async iterators are walked; unions are
 told apart by their tests, and a bare `T` by what `T` is.
+
+The glue is `makeEnv(getInstance, options)`:
+
+- `root`: the object the API is found on, for a library that is a module
+  rather than globals (`import * as pts from "pts"; makeEnv(.., { root: pts })`).
+- `check`: handle mistakes are reported: `handle 7 used after its release`,
+  `released twice`. Off by default: slots are reused.
+- `unchecked(e)`: called with an exception nobody took (default `console.error`).
+
+A call that throws returns a zero value and keeps the exception to take
+(`js_take_error`, `ts::attempt`, `jsTry`, `js::attempt`); one not taken by
+the time control returns to JavaScript is reported, not lost.
 
 - C (C11): `ts_types.h` with every handle, enum, union and callback; one
   header per declaration in `areas/<module>/` or `namespaces/<module>/`.
   Inheritance is kept: `_Generic` upcasts (`AS_Element(x)`) let any subtype
-  be passed. Optional values are `JsOptionalDouble`, `JsOptionalBool`, null
-  handles and `E_absent`; unions tagged structs (`Value v = { .tag =
-  Value_number, .as.number = 42 }`); arrays and tuples typed
-  (`JsArray_double`, `JsTuple_double_JsString`). Handles are released one by
-  one or by scope (`js_scope_open()`/`js_scope_close()`). The DOM: 8.5 MB.
+  be passed. A function's name is also a macro, so trailing optional
+  arguments may be left out (`Event_new("ping")`) and the first of a family
+  of overloads picks one by its argument's type (`Shape_label(s, "a")`,
+  `Shape_label(s, 7)`). Optional values are `JsOptionalDouble`,
+  `JsOptionalBool`, null handles and `E_absent`; unions tagged structs made
+  from a member (`Value_of(widget)`, `Value_of_number(42)`); arrays and
+  tuples typed (`JsArray_double`, `JsTuple_double_JsString`). Handles are
+  released one by one or by scope (`js_scope_open()`/`js_scope_close()`).
+  The DOM: 12 MB.
 - C++ (C++20, WASI SDK): a value type per JavaScript type, inheriting
   virtually from `ts::Handle`; copies retain, destructors release. Overloads,
   `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`, lambdas
-  (`release()`, `ts::Scoped`), class templates with defaults and constraints,
-  keyed methods over typed keys, `co_await` on promises (`ts::Task`), range-for
-  over iterables. `X.hpp` includes what its members name; non-template
-  definitions are one `.cpp` per module, compiled once. 6.9 MB.
+  (`release()`, `ts::Scoped`), class templates with defaults and
+  `requires`-clauses, keyed methods over typed keys, `co_await` on promises
+  (`ts::Task`), range-for over iterables and over subclasses of Array.
+  Constraints are checked of types that are only declared: each type's bases
+  are declared beside it (`ts::bases<X>`) and `ts::extends` walks them.
+  `X.hpp` includes what its members name; non-template definitions are one
+  `.cpp` per module, compiled once. 7 MB.
 - Zig: a file per module and a root `bindings.zig`; Zig reads only what is
   used. `?T`, tagged unions, `JsArrayOf(T)`, `JsTuple(&.{...})`; callbacks
   are comptime functions with Zig types, behind a C-convention trampoline;
-  `defer jsRelease(x)` or `JsScope`.
-- Rust (wasm32-unknown-unknown): a handle type per JavaScript type, `Clone`
-  retaining and `Drop` releasing it. Each type's members are a trait
-  (`ElementMethods`) implemented for it and its subtypes; where two traits
-  share a name, an inherent method says which. Parameters of object types
-  take `&impl AsRef<T>`, so any subtype goes in. `Option`, enums for unions,
-  `JsArray<T>`, `Tuple2<A, B>`, closures, `Promise::then`, `Iterator`.
+  `defer jsRelease(x)` or `JsScope`. Inheritance is flattened, and an
+  inherited member is written once: the furthest ancestor that declares it
+  writes it in `X.Methods(Self)`, and each subtype's member is an alias. 12 MB.
+- Rust (wasm32-unknown-unknown): a crate (`Cargo.toml`, `src/`), compiled
+  once: a DOM program then builds in under a second. A handle type per
+  JavaScript type, `Clone` retaining and `Drop` releasing it. Each type's
+  members are a trait (`ElementMethods`) implemented for it and its subtypes;
+  where two traits share a name, an inherent method says which. Names are
+  Rust's: `get_element_by_id`, `text_content()` and `set_text_content(..)`,
+  `ShapeKind::Square`, `HTMLElementEventMap::CLICK`. Arguments are borrowed:
+  an object is `&impl AsRef<T>`, so any subtype goes in; a union or an array
+  is `impl Into<..>`, so `describe(42.0)` and `join("-", ["a", "b"])` work; a
+  value of a type parameter goes by value. Overloads that differ in a
+  key-or-string parameter are one method (`query_selector(HTMLElementTagNameMap::P)`,
+  `query_selector("p.intro")`); a defaulted type argument is stated with
+  `query_selector_as::<T>`. `T extends Node` is `T: Is<Node>`. Callbacks are
+  closures, kept (`new`, `release`) or for the length of a call and free to
+  borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
 - F#: files must not refer to each other in cycles: they are ordered by what
   F# cannot refer to forward, and a member that mentions a later file's type
-  becomes an extension there. Iterables are `seq<T>`; constraints of methods,
-  functions, and interfaces every reference satisfies, are F# constraints.
+  becomes an extension there. Iterables are `seq<T>`, async iterables
+  `JsAsyncIterator<'T>`, a subclass of Array a `seq<T>` with an indexer;
+  constraints of methods, functions and interfaces are F# constraints, kept
+  through keyed values (`getElementsByTagName<'K when 'K :> Element>`).
 
 ## Unions
 
@@ -197,18 +249,49 @@ with each example target:
 Type parameters and type-level expressions that remain are keyed signatures
 (`K extends keyof M`, `M[K]`) kept for typed keys.
 
+## Benchmarks
+
+`cargo test --test e2e bench -- --ignored --nocapture` runs
+`tests/bench/` in Node: the same loops in TypeScript, F# (Fable) and each
+wasm target, warmed, interleaved, best of five, checksums compared.
+Nanoseconds per iteration on an Apple M4 Max:
+
+| | TypeScript | F# | C | C++ | Zig | Rust |
+|---|---|---|---|---|---|---|
+| call a function | 1.3 | 5.3 | 6.4 | 6.2 | 7.0 | 6.6 |
+| make an object, call a method | 0.8 | 0.9 | 23 | 24 | 23 | 24 |
+| set and get a property | 0.6 | 0.6 | 8.1 | 8.5 | 8.1 | 8.0 |
+| pass a string (same bytes) | 0.3 | 0.3 | 22 | 19 | 22 | 24 |
+| pass a string (new each time) | 0.5 | 0.5 | 61 | 61 | 60 | 62 |
+| receive a string | 0.3 | 0.5 | 45 | 43 | 49 | 56 |
+| be called back | 6.3 | 6.2 | 5.1 | 5.1 | 5.1 | 6.6 |
+| compute without crossing | 1.1 | 1.1 | 0.6 | 1.0 | 0.6 | 0.6 |
+
+F# compiles to JavaScript and costs what TypeScript does. A wasm target
+pays 5 to 8 ns to cross the boundary, a handle-table slot per object, and a
+decode or encode per string (a string at the same address with the same
+bytes is decoded once). Code that stays inside wasm is as fast or faster.
+So: bind coarse operations, not inner loops; keep strings out of hot paths.
+
 ## Tests
 
-`cargo test` runs `tests/e2e.rs`: about 40 seconds, or 12 with
+`cargo test` runs `tests/e2e.rs`: 49 tests in about 25 seconds, or 10 with
 `-- --skip dom::`. Targets: F# (Fable), C and Zig (wasm32), C++ (WASI SDK),
 Rust (`rustup target add wasm32-unknown-unknown`). A missing toolchain or
 Chrome skips its tests with a message.
 
-**Fixtures in Node.** For each of `shapes`, `callbacks`, `data`, `globals` and
-`unions` in `tests/fixtures/`, and each target: lower `api.d.ts` with
-`examples/targets/<target>.toml`, generate bindings, compile them with the
-real toolchain, and run `test.*` against `impl.mjs` in Node. A program may
-export `finish`, called once asynchronous work has settled.
+**Fixtures in Node.** For each of `shapes`, `callbacks`, `data`, `globals`,
+`unions` and `pts` in `tests/fixtures/`, and each target: lower `api.d.ts`
+with `examples/targets/<target>.toml`, generate bindings, compile them with
+the real toolchain, and run `test.*` against `impl.mjs` in Node, with handle
+checks on. A program may export `finish`, called once asynchronous work has
+settled.
+
+**A real library.** `pts` is Pts 1.0.3 (Apache-2.0), vendored unchanged: its
+`index.d.ts` and its module. Every target compiles all of its bindings and
+runs the same program: constructors with rest arguments, accessors, methods
+that return `this`, statics, unions as arguments, a subclass of Array
+indexed and iterated.
 
 **The whole DOM in Chrome.** `dom::{fsharp,c,zig,cpp,rust}` generate bindings
 for all of `lib.dom.d.ts`, compile them, and run `tests/dom/test.*` in
@@ -217,20 +300,30 @@ remove listeners driven by real clicks, dispatch events, set styles, iterate,
 catch an exception, fetch, and check that handles are freed. Then
 `tests/dom/verify.mjs` inspects the page with plain DOM calls.
 
-Strictness is pinned: `*_rejects_*` tests, `lowered_constructs_are_absent`
-over every config, `generated_names_do_not_depend_on_order`, `wrong.c` and
-`wrong.cpp` (which must not compile), and `fsharp_checks_constraints`.
+Strictness is pinned: `*_rejects_*` and `every_problem_is_reported`,
+`lowered_constructs_are_absent` over every config,
+`generated_names_do_not_depend_on_order`, `mistakes_are_reported`, `wrong.c`
+and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
+`rust_checks_constraints`.
 
 ## Known gaps
 
 - OCaml has a config but no generator: it needs `js_of_ocaml` or `wasm_of_ocaml`.
 - 8 DOM unions have members no runtime test can tell apart (two array types,
-  `ArrayBufferLike | ArrayBufferView`): bound as untyped values.
-- C++ class templates check constraints in constructors, not with `requires`:
-  a template is named before its arguments are complete. Rust states none.
-- F# has no async iteration. Rust and Zig callbacks with a union argument
-  receive it decoded; C's receive a handle.
-- Hoisted names are stable but come from paths: `SVGSVGElement_getEnclosureList_result`.
-- Zig flattens inheritance: its DOM bindings are 26 MB on disk, read lazily.
+  `ArrayBufferLike | ArrayBufferView`): bound as untyped values. A union with
+  an `any` member is `any`.
+- F# on Pts skips a recursive alias, a rest parameter after an optional one,
+  and inline object types with methods; its union tests look classes up on
+  `globalThis`, so a module's classes must be put there.
+- C: a call with no arguments cannot leave its one optional argument out, and
+  a compound literal with a comma needs parentheses to pass through a macro;
+  `_Generic` takes exact types, so a subtype is upcast first. The macros
+  cost size: 12 MB of headers for the DOM, from 8.5.
+- Rust: a nullable union argument is `Option<Union>` (`Some(true.into())`);
+  overloads that differ in more than one parameter keep their names
+  (`add_event_listener_with_string`).
+- Zig passes `null` for an optional argument it leaves out.
+- Rust and Zig callbacks with a union argument receive it decoded; C's
+  receive a handle.
 - Each construct has one lowering strategy so far. Values are strings so more
   can be added (`generics = "monomorphize"`).

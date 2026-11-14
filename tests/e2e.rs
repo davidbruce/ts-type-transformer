@@ -238,7 +238,8 @@ fn rustc_wasm() -> Option<PathBuf> {
 
 const RUSTC_WASM: &[&str] = &["--edition", "2024", "--target", "wasm32-unknown-unknown", "-O", "-D", "warnings"];
 // A program, linked against the bindings.
-const RUSTC_PROGRAM: &[&str] = &["--crate-type", "cdylib", "-C", "link-arg=--export-table", "--extern", "bindings=libbindings.rlib"];
+// Without the standard library's debug information, which is most of a megabyte.
+const RUSTC_PROGRAM: &[&str] = &["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "--extern", "bindings=libbindings.rlib"];
 
 // Writes the bindings crate in `bindings/` and compiles it to a library. The
 // library is kept in `target/e2e-cache`, and compiled again only when what
