@@ -256,10 +256,11 @@ fn c_rejects_unions() {
     generators::c::files(&generators::wasm::model(&xml, "C"));
 }
 
+// Kept optional parameters are optional values, not overloads.
 #[test]
-#[should_panic(expected = "cannot express <parameter>")]
-fn zig_rejects_optional_parameters() {
-    generators::wasm::model(&shapes_xml("zig", &["optional_params=keep"]), "Zig");
+fn optional_parameters_are_optional_values() {
+    let m = generators::wasm::model(&shapes_xml("zig", &[]), "Zig");
+    assert!(m.all_funcs().any(|f| f.params.iter().any(|p| matches!(p.1, generators::wasm::Ty::Nullable(..)))));
 }
 
 #[test]

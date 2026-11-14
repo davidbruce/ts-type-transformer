@@ -97,9 +97,9 @@ export fn run() void {
 
     // A callback is called with its context.
     c.subscribe(b.Listener.from(onValue, &last));
-    expect(c.increment() == 1, @src());
+    expect(c.increment(null) == 1, @src());
     expect(last == 1, @src());
-    _ = c.increment_with_by(4);
+    _ = c.increment(4);
     expect(last == 5 and calls == 2, @src());
 
     // A callback that takes an object and returns a value.
@@ -107,7 +107,7 @@ export fn run() void {
 
     // The same function and context is the same JavaScript function.
     c.unsubscribe(b.Listener.from(onValue, &last));
-    _ = c.increment();
+    _ = c.increment(null);
     expect(last == 5 and calls == 2, @src());
 
     // A nullable callback property.
@@ -115,10 +115,10 @@ export fn run() void {
     var prop: f64 = 0;
     c.set_onchange(b.Listener.from(onValue, &prop));
     expect(c.get_onchange() != null, @src());
-    _ = c.increment();
+    _ = c.increment(null);
     expect(prop == 7, @src());
     c.set_onchange(null);
-    _ = c.increment();
+    _ = c.increment(null);
     expect(prop == 7, @src());
 
     // Several arguments, a string among them, and a result.

@@ -40,9 +40,9 @@ export fn run() void {
     expect(strEq(s.scale_with_name(2, "big").get_name(), "big"), @src());
 
     // Optional parameter.
-    s.resize(2.6);
+    s.resize(2.6, null);
     expect(s.get_size() == 2.6, @src());
-    s.resize_with_round(2.6, true);
+    s.resize(2.6, true);
     expect(s.get_size() == 3, @src());
 
     // Union parameter: a tagged union.

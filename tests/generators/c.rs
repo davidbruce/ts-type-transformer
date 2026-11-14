@@ -209,6 +209,7 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
 const RUNTIME: &str = "// Generated.
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #define TS_IMPORT(name) __attribute__((import_module(\"env\"), import_name(#name)))
 
@@ -239,7 +240,8 @@ typedef struct { bool has; double value; } JsOptionalDouble;
 typedef struct { bool has; bool value; } JsOptionalBool;
 static inline JsOptionalDouble js_some_double(double x) { return (JsOptionalDouble){ true, x }; }
 static inline JsOptionalBool js_some_bool(bool x) { return (JsOptionalBool){ true, x }; }
-#define JS_NONE { 0 }
+static inline JsOptionalDouble js_none_double(void) { return (JsOptionalDouble){ false, 0 }; }
+static inline JsOptionalBool js_none_bool(void) { return (JsOptionalBool){ false, false }; }
 
 // A handle a function returns is the caller's: release it when done with it.
 // Arguments, and a callback's arguments, are lent: retain one to keep it.

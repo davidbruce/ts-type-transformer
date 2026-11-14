@@ -88,9 +88,9 @@ __attribute__((export_name("run"))) void run(void) {
 
     // A callback is called with its context.
     Counter_subscribe(c, Listener_from(on_value, &last));
-    CHECK(Counter_increment(c) == 1);
+    CHECK(Counter_increment(c, js_none_double()) == 1);
     CHECK(last == 1);
-    Counter_increment_with_by(c, 4);
+    Counter_increment(c, js_some_double(4));
     CHECK(last == 5 && calls == 2);
 
     // A callback that takes an object and returns a value.
@@ -98,7 +98,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // The same function and context is the same JavaScript function.
     Counter_unsubscribe(c, Listener_from(on_value, &last));
-    Counter_increment(c);
+    Counter_increment(c, js_none_double());
     CHECK(last == 5 && calls == 2);
 
     // A nullable callback property.
@@ -106,10 +106,10 @@ __attribute__((export_name("run"))) void run(void) {
     double prop = 0;
     Counter_set_onchange(c, Listener_from(on_value, &prop));
     CHECK(Counter_get_onchange(c).h != 0);
-    Counter_increment(c);
+    Counter_increment(c, js_none_double());
     CHECK(prop == 7);
     Counter_set_onchange(c, (Listener){ 0 });
-    Counter_increment(c);
+    Counter_increment(c, js_none_double());
     CHECK(prop == 7);
 
     // Several arguments, a string among them, and a result.

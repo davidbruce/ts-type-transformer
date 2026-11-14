@@ -81,6 +81,11 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.expand_keyed = o.keyed;
     front.map_keyed = o.map_keyed;
     front.keyed_limit = o.keyed_limit;
+    // Where inheritance is kept, an inherited member serves every subtype.
+    if !o.inheritance {
+        let dropped = drop_redeclared(decls);
+        *front.stats.entry("dropped: member redeclared as inherited".into()).or_default() += dropped;
+    }
     if o.keyed {
         expand_keyed(front, decls, o);
     }
@@ -161,6 +166,63 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         mark_class_refs(decls);
     }
     annotate_unions(front, decls);
+}
+
+// A method a type redeclares as its ancestor declares it, but for the types
+// of `this`: `HTMLDivElement.addEventListener` is `HTMLElement.addEventListener`.
+fn drop_redeclared(decls: &mut [Decl]) -> usize {
+    let key = |m: &Member| -> Option<String> {
+        let mut sig = m.sig.clone()?;
+        sig.this = None;
+        let mut path = Vec::new();
+        walk_signature(&mut sig, &mut path, &mut |t, _| {
+            if let Type::Function(s) | Type::Constructor(s) = t {
+                s.this = None;
+            }
+            true
+        });
+        let params: Vec<String> = sig.params.iter().map(|p| format!("{}{}{}", p.optional, p.rest, crate::xml::type_key(&p.ty))).collect();
+        let tps: Vec<String> = sig.type_params.iter().map(|t| format!("{}:{}", t.name, t.constraint.as_ref().map(crate::xml::type_key).unwrap_or_default())).collect();
+        Some(format!("{}({})<{}>{}", m.name, params.join(","), tps.join(","), sig.ret.as_ref().map(crate::xml::type_key).unwrap_or_default()))
+    };
+    let mut own: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut bases: HashMap<String, Vec<String>> = HashMap::new();
+    for d in decls.iter() {
+        if let Decl::Interface(i) = d {
+            own.entry(i.name.clone()).or_default().extend(i.members.iter().filter(|m| m.kind == MemberKind::Method).filter_map(key));
+            bases.entry(i.name.clone()).or_default().extend(i.extends.iter().filter_map(|t| if let Type::Ref(r) = t { Some(r.name.clone()) } else { None }));
+        }
+    }
+    let inherited = |name: &str| -> HashSet<String> {
+        let mut out = HashSet::new();
+        let mut todo: Vec<String> = bases.get(name).cloned().unwrap_or_default();
+        let mut seen = HashSet::new();
+        while let Some(b) = todo.pop() {
+            if seen.insert(b.clone()) {
+                out.extend(own.get(&b).cloned().unwrap_or_default());
+                todo.extend(bases.get(&b).cloned().unwrap_or_default());
+            }
+        }
+        out
+    };
+    let mut dropped = 0;
+    for d in decls.iter_mut() {
+        if let Decl::Interface(i) = d {
+            let from_bases = inherited(&i.name);
+            if from_bases.is_empty() {
+                continue;
+            }
+            // Only whole overload sets: a set split between a type and its
+            // ancestor is resolved differently, or hidden, in some targets.
+            let redeclared = |m: &Member| m.kind == MemberKind::Method && key(m).is_some_and(|k| from_bases.contains(&k));
+            let names: HashSet<String> = i.members.iter().filter(|m| m.kind == MemberKind::Method).map(|m| m.name.clone()).collect();
+            let whole: HashSet<String> = names.into_iter().filter(|n| i.members.iter().filter(|m| m.kind == MemberKind::Method && m.name == *n).all(redeclared)).collect();
+            let before = i.members.len();
+            i.members.retain(|m| !(m.kind == MemberKind::Method && whole.contains(&m.name)));
+            dropped += before - i.members.len();
+        }
+    }
+    dropped
 }
 
 // ---- unions ----
@@ -1243,7 +1305,10 @@ fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
     if o.optionals {
         // Every prefix that ends after the last required parameter is callable.
         let required = sig.params.iter().rposition(|p| !p.optional && !p.rest).map_or(0, |i| i + 1);
+        // A rest parameter takes an empty array: the overload without it says nothing more.
+        let rest_at = sig.params.last().filter(|p| p.rest).map(|_| sig.params.len() - 1);
         out = (required..=sig.params.len())
+            .filter(|n| Some(*n) != rest_at)
             .map(|n| {
                 let mut s = sig.clone();
                 s.params.truncate(n);

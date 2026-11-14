@@ -26,7 +26,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // Rest parameters take an array; overloads keep the name.
     CHECK(join("-", {"a", "b", "c"}) == "a-b-c");
-    CHECK(join("-") == "");
+    CHECK(join("-", {}) == "");
 
     // Numeric enums.
     CHECK(bump(Level::Low) == Level::High);

@@ -40,8 +40,8 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_JsString_push(parts, "a");
     JsArray_JsString_push(parts, "b");
     JsArray_JsString_push(parts, "c");
-    CHECK(str_eq(join_with_parts("-", parts), "a-b-c"));
-    CHECK(str_eq(join("-"), ""));
+    CHECK(str_eq(join("-", parts), "a-b-c"));
+    CHECK(str_eq(join("-", JsArray_JsString_new()), ""));
 
     // Numeric enums.
     CHECK(bump(Level_Low) == Level_High);

@@ -689,7 +689,15 @@ impl<'a> Builder<'a> {
                     let literal = if only_child(p).attribute("name") == Some("string") { format!("{value:?}") } else { value.to_string() };
                     fixed.push((params.len() + fixed.len(), literal));
                 }
-                "parameter" if flag(p, "optional") => unsupported(self.target, p),
+                // An optional parameter is an optional value: null, or a null handle, when absent.
+                "parameter" if flag(p, "optional") => {
+                    let t = value(self.ty(only_child(p), owner));
+                    let optional = absent(t.clone(), true);
+                    if optional == Ty::Any && t != Ty::Any {
+                        self.skip("optional parameter of a type that cannot be absent, bound as an untyped value");
+                    }
+                    params.push((ident(attr(p, "name")), optional));
+                }
                 "parameter" => {
                     rest |= flag(p, "rest");
                     params.push((ident(attr(p, "name")), value(self.ty(only_child(p), owner))));
@@ -957,7 +965,7 @@ fn rename_param(t: &mut Ty, from: &str, to: &str) {
 fn absent(t: Ty, undefined: bool) -> Ty {
     match t {
         Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
-        Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) => Ty::Nullable(Box::new(t), undefined),
+        Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) | Ty::Listener(_) => Ty::Nullable(Box::new(t), undefined),
         Ty::Nullable(..) => t,
         Ty::Void => Ty::Void,
         _ => Ty::Any,
@@ -1050,8 +1058,12 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             args.push(format!("({p}_has ? {p}_value : {})", if *undefined { "undefined" } else { "null" }));
             continue;
         }
-        let spread = if f.rest && i == f.params.len() - 1 { "..." } else { "" };
-        args.push(format!("{spread}{}", from_wasm(&p, t)));
+        // A rest parameter's array is spread; a null one is empty.
+        if f.rest && i == f.params.len() - 1 {
+            args.push(format!("...({} ?? [])", from_wasm(&p, t)));
+        } else {
+            args.push(from_wasm(&p, t));
+        }
         wasm_params.push(p);
     }
     for (j, (position, literal)) in f.fixed.iter().enumerate() {

@@ -40,9 +40,9 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(str_eq(Named_get_name(Shape_scale_with_name(s, 2, "big")), "big"));
 
     // Optional parameter.
-    Shape_resize(s, 2.6);
+    Shape_resize(s, 2.6, js_none_bool());
     CHECK(Shape_get_size(s) == 2.6);
-    Shape_resize_with_round(s, 2.6, true);
+    Shape_resize(s, 2.6, js_some_bool(true));
     CHECK(Shape_get_size(s) == 3);
 
     // Union parameter.

@@ -942,8 +942,21 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
             }
         }
         let mut again: Vec<Func> = Vec::new();
-        for (name, hs) in holders.iter().filter(|(n, _)| !own.contains(*n)) {
+        // A name the type declares itself hides its ancestors' overloads in C++,
+        // where TypeScript merges them: `using Base::name;` brings them back, and
+        // an own overload of the same signature still hides its base's.
+        let mut usings = String::new();
+        for (name, hs) in &holders {
             let visible: Vec<&&String> = hs.iter().filter(|h| !hs.iter().any(|o| o != *h && ancestors(o).contains(**h))).collect();
+            if own.contains(name) && visible.len() == 1 {
+                let h = visible[0];
+                let base = match base_args(m, c, h) {
+                    Some(args) if !args.is_empty() => ty_in(&Ty::Generic((*h).clone(), args)),
+                    _ => (*h).clone(),
+                };
+                usings += &format!("    using {base}::{};\n", ident(name));
+                continue;
+            }
             if visible.len() < 2 {
                 continue;
             }
@@ -1018,7 +1031,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
             }
         }
         decl += &format!(
-            "\n{class_head}struct {0} : {1} {{\n{2}{members}}};\n",
+            "\n{class_head}struct {0} : {1} {{\n{2}{usings}{members}}};\n",
             c.name,
             bases.join(", "),
             constructors(&c.name, &c.type_params)
