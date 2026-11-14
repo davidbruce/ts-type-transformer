@@ -350,11 +350,12 @@ const RUNTIME: &str = "// Generated.
 #define TS_IMPORT(name) __attribute__((import_module(\"env\"), import_name(#name)))
 
 // `name__N`, by the number of arguments: how trailing optional arguments are left out.
-#define TS_COUNT(...) TS_COUNT_(__VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
-#define TS_COUNT_(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, n, ...) n
+// An empty call counts as none: `orUnit()` (C23, or C11 without -pedantic).
+#define TS_COUNT(...) TS_COUNT_(0 __VA_OPT__(,) __VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define TS_COUNT_(z, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, n, ...) n
 #define TS_PASTE(name, n) TS_PASTE_(name, n)
 #define TS_PASTE_(name, n) name##__##n
-#define TS_BY_COUNT(name, ...) TS_PASTE(name, TS_COUNT(__VA_ARGS__))
+#define TS_CALL(name, ...) TS_PASTE(name, TS_COUNT(__VA_ARGS__))(__VA_ARGS__)
 
 // Handles to JavaScript values. Zero is null.
 typedef struct { uint32_t h; } JsValue;
@@ -503,7 +504,9 @@ fn family<'a>(f: &'a Func, all: &'a [Func]) -> Option<(usize, Vec<&'a Func>)> {
 // A function's name as a macro, so a call may: pass any subtype
 // (`AS_Element(x)` is applied), leave out trailing optional arguments, and
 // for the first of a family of overloads, have `_Generic` choose among them.
-fn call_macros(name: &str, owner: Option<&str>, f: &Func, family: Option<(usize, Vec<String>, Vec<&Func>)>, descendants: &std::collections::BTreeMap<String, Vec<String>>) -> String {
+// `earlier` are the functions declared before f beside it: where one of them,
+// called with the same leading arguments, leaves out the same ones, f does not.
+fn call_macros(name: &str, owner: Option<&str>, f: &Func, earlier: &[&Func], family: Option<(usize, Vec<String>, Vec<&Func>)>, descendants: &std::collections::BTreeMap<String, Vec<String>>) -> String {
     let upcast = |t: &Ty| match t {
         Ty::Obj(n) if descendants.contains_key(n) => Some(n.clone()),
         Ty::Nullable(inner, _) => match &**inner {
@@ -540,20 +543,32 @@ fn call_macros(name: &str, owner: Option<&str>, f: &Func, family: Option<(usize,
         }
         None => name.to_string(),
     };
-    let optional = f.params.iter().rev().take_while(|p| absent(&p.1).is_some()).count();
-    // A call without arguments cannot be told from one with an empty argument.
-    if optional == 0 || params.len() > 15 || params.len() == 1 {
-        if !any && family.is_none() {
-            return String::new();
-        }
-        return format!("#define {name}({}) {callee}({})\n", params.join(", "), args.join(", "));
-    }
-    // By the number of arguments: what is left out is absent.
-    let mut out = format!("#define {name}(...) TS_BY_COUNT({name}, __VA_ARGS__)(__VA_ARGS__)\n");
+    // A setter's value is never left out: that is not setting it.
+    let setter = matches!(f.call, Call::Set(_) | Call::StaticSet(_) | Call::IndexSet);
+    let n = params.len();
     let own = usize::from(owner.is_some());
-    for given in (params.len() - optional).max(1)..=params.len() {
-        let filled: Vec<String> = args[..given].iter().cloned().chain(f.params[given - own..].iter().filter_map(|p| absent(&p.1))).collect();
-        out += &format!("#define {name}__{given}({}) {callee}({})\n", params[..given].join(", "), filled.join(", "));
+    let optional = if setter || n > 15 { 0 } else { f.params.iter().rev().take_while(|p| absent(&p.1).is_some()).count() };
+    let shadowed = |given: usize| {
+        let k = given - own;
+        earlier.iter().any(|g| g.call == f.call && g.fixed == f.fixed && g.params.len() >= k && g.params[..k] == f.params[..k] && g.params[k..].iter().all(|p| absent(&p.1).is_some()))
+    };
+    // The shorter calls this function answers: down to where an earlier one does.
+    let shorter: Vec<usize> = (n - optional..n).rev().take_while(|g| !shadowed(*g)).collect();
+    let forward = (any || family.is_some()).then(|| format!("{callee}({})", args.join(", ")));
+    if shorter.is_empty() {
+        return forward.map(|call| format!("#define {name}({}) {call}\n", params.join(", "))).unwrap_or_default();
+    }
+    // By the number of arguments: each shorter call adds what is absent and
+    // makes the next longer one. All of them is the function, upcast or chosen.
+    let mut out = format!("#define {name}(...) TS_CALL({name}, __VA_ARGS__)\n");
+    out += &match forward {
+        Some(call) => format!("#define {name}__{n}({}) {call}\n", params.join(", ")),
+        None => format!("#define {name}__{n} {name}\n"),
+    };
+    for given in shorter {
+        let mut next: Vec<String> = params[..given].to_vec();
+        next.push(absent(&f.params[given - own].1).unwrap());
+        out += &format!("#define {name}__{given}({}) {name}__{}({})\n", params[..given].join(", "), given + 1, next.join(", "));
     }
     out
 }
@@ -758,9 +773,10 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             func(&mut body, Some(&c.name), f);
         }
         // After every function: a macro may choose a later one.
-        for f in &c.funcs {
+        for (i, f) in c.funcs.iter().enumerate() {
             let overloads = family(f, &c.funcs).map(|(at, members)| (at, members.iter().map(|o| format!("{}_{}", c.name, o.name)).collect(), members));
-            body += &call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, overloads, &descendants);
+            let earlier: Vec<&Func> = c.funcs[..i].iter().collect();
+            body += &call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants);
         }
         let path = format!("{}.h", super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
         modules.entry(c.module.clone()).or_default().push(path.clone());
@@ -770,10 +786,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     for f in &m.funcs {
         func(functions.entry(f.module.clone()).or_default(), None, f);
     }
-    for f in &m.funcs {
+    for (i, f) in m.funcs.iter().enumerate() {
         // Overloads in one module: in one header.
         let overloads = family(f, &m.funcs).filter(|(_, members)| members.iter().all(|o| o.module == f.module)).map(|(at, members)| (at, members.iter().map(|o| o.name.clone()).collect(), members));
-        *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, overloads, &descendants);
+        let earlier: Vec<&Func> = m.funcs[..i].iter().filter(|g| g.module == f.module).collect();
+        *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, &earlier, overloads, &descendants);
     }
     for (module, body) in functions {
         let path = format!("{}.h", super::wasm::file_name(&format!("{module}/functions"), &mut taken));

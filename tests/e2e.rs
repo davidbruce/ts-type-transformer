@@ -459,6 +459,17 @@ fn bench() {
     print!("{report}");
 }
 
+// A call may leave out its only argument in C23: `orUnit()`. C11 counts the
+// arguments the same way, but under -pedantic warns of an empty call.
+#[test]
+fn c_calls_may_be_empty() {
+    let Some([clang]) = tools(["clang"]) else { return };
+    let c = case_in("shapes", "c", "shapes-c-empty-call");
+    write_files(&c.out.join("bindings"), generators::c::files(&model(&c.xml, "C")).unwrap());
+    fs::write(c.out.join("t.c"), "#include \"bindings.h\"\nShape unit(void) { return orUnit(); }\nShape same(Shape s) { return orUnit(s); }\n").unwrap();
+    run(Command::new(clang).current_dir(&c.out).args(["--target=wasm32", "-std=c2x", "-pedantic", "-Werror", "-nostdlib", "-ffreestanding", "-fsyntax-only", "-I", "bindings", "t.c"]));
+}
+
 // `[rename]` names what a pass generated, wherever it is referred to; a
 // declared name is the library's to choose.
 #[test]
