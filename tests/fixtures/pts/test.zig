@@ -45,15 +45,15 @@ export fn run() void {
         const moved = p._add(xy(1, 1));
         expect(!b.jsSame(moved, p) and moved.get_x() == 4 and p.get_x() == 3, @src());
         expect(b.jsSame(p.add(xy(1, 1)), p) and p.get_x() == 4, @src());
-        // A union is a tagged union; an optional argument is null.
-        expect(p.equals(.{ .Pt = moved }, null), @src());
-        expect(p.clone().equals(.{ .Pt = p }, 0.001) and !b.jsSame(p.clone(), p), @src());
+        // A union is a tagged union; trailing optional arguments are a struct of them.
+        expect(p.equals(.{ .Pt = moved }, .{}), @src());
+        expect(p.clone().equals(.{ .Pt = p }, .{ .threshold = 0.001 }) and !b.jsSame(p.clone(), p), @src());
 
         // Statics.
         expect(b.Num.lerp(0, 10, 0.5) == 5, @src());
         expect(b.Num.clamp(12, 0, 10) == 10, @src());
         expect(b.Geom.toDegree(std.math.pi) == 180, @src());
-        expect(strEq(b.Pt.make(3, 2, null).toString(), "Pt(2, 2, 2)"), @src());
+        expect(strEq(b.Pt.make(3, .{ .defaultValue = 2 }).toString(), "Pt(2, 2, 2)"), @src());
 
         // A Group is an array of Pt: indexed and iterated.
         const square = b.Group.new(b.JsArrayOf(b.Pt).of(&.{ pt(0, 0), pt(4, 0), pt(4, 4), pt(0, 4) }));

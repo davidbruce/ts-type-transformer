@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::wasm::{Class, Func, Model, NamedUnion, Ty};
+use super::wasm::{Call, Class, Func, Model, NamedUnion, Ty};
 
 // Quoted identifiers accept any name, keywords included.
 fn ident(name: &str) -> String {
@@ -198,10 +198,20 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     }
     // A key is known at compile time: the types it selects are computed from it.
     let key = f.params.iter().find(|p| matches!(p.1, Ty::Key(_))).map(|p| param(&p.0)).unwrap_or_default();
+    // Trailing optional parameters are one struct of fields that default to
+    // null: `s.resize(2.6, .{})`, `s.resize(2.6, .{ .round = true })`. Not a
+    // setter's value: leaving that out is not setting it.
+    let setter = matches!(f.call, Call::Set(_) | Call::StaticSet(_) | Call::IndexSet);
+    let optional = if setter { 0 } else { f.params.iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, true))).count() };
+    // A lone parameter stays one: `orUnit(s)`, `orUnit(null)`.
+    let optional = if optional == f.params.len() && optional == 1 { 0 } else { optional };
+    let first_optional = f.params.len() - optional;
+    let mut fields = Vec::new();
+    let mut unpack = String::new();
     // Statements before the call: a union argument made a JavaScript value,
     // released after the call if it was made for it.
     let mut pre = String::new();
-    for (name, t) in &f.params {
+    for (i, (name, t)) in f.params.iter().enumerate() {
         let id = param(name);
         if matches!(t, Ty::NamedUnion(_)) || matches!(t, Ty::Union(parts) if !parts.is_empty()) {
             pre += &format!("const lent_{id} = switch ({id}) {{ inline else => |v| Lent.of(v) }}; defer lent_{id}.done(); ");
@@ -210,7 +220,12 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
             pre += &format!("const lent_{id} = if ({id}) |u| switch (u) {{ inline else => |v| Lent.of(v) }} else Lent{{ .h = 0, .own = false }}; defer lent_{id}.done(); ");
         }
         let comptime = if matches!(t, Ty::Key(_)) { "comptime " } else { "" };
-        params.push(format!("{comptime}{id}: {}", typed(t, true).replace("KEY", &key)));
+        if i >= first_optional {
+            fields.push(format!("{}: {} = null", ident(name), typed(t, true).replace("KEY", &key)));
+            unpack += &format!("const {id} = options.{}; ", ident(name));
+        } else {
+            params.push(format!("{comptime}{id}: {}", typed(t, true).replace("KEY", &key)));
+        }
         if *t == Ty::Str {
             raw_params.extend(["[*]const u8".to_string(), "usize".to_string()]);
             args.extend([format!("{id}.ptr"), format!("{id}.len")]);
@@ -273,7 +288,10 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     if f.shared.is_none() || !externs.contains(&decl) {
         *externs += &decl;
     }
-    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {pre}{body} }}\n", ident(&f.name), params.join(", "));
+    if !fields.is_empty() {
+        params.push(format!("options: struct {{ {} }}", fields.join(", ")));
+    }
+    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {unpack}{pre}{body} }}\n", ident(&f.name), params.join(", "));
 }
 
 const RUNTIME: &str = "// Generated.
