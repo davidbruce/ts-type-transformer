@@ -83,12 +83,20 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
         let Some(cs) = out.get(attr(r, "name")) else { continue };
         for (i, arg) in elements(r).enumerate() {
             let Some(Some(c)) = cs.get(i) else { continue };
-            let ok = arg.has_tag_name("ref")
-                && match attr(arg, "kind") {
-                    "interface" | "class" => extends(attr(arg, "name"), c),
-                    "typeParameter" => param_constraint(r, attr(arg, "name")).is_some_and(|pc| extends(&pc, c)),
-                    _ => false,
-                };
+            let is = |t: Node| t.has_tag_name("ref") && matches!(attr(t, "kind"), "interface" | "class") && extends(attr(t, "name"), c);
+            let ok = match (arg.tag_name().name(), arg.attribute("kind")) {
+                ("ref", Some("interface" | "class")) => is(arg),
+                ("ref", Some("typeParameter")) => param_constraint(r, attr(arg, "name")).is_some_and(|pc| extends(&pc, c)),
+                // A union of such types: the reference names the constraint instead.
+                ("ref", Some("typeAlias")) => union_members(root, arg).is_some_and(|ms| ms.into_iter().all(is)),
+                // `M[K]`: one of a map's values, each of which must be one. The
+                // signature's type parameter then has the constraint.
+                ("indexedAccess", _) => {
+                    let map = elements(arg).next().filter(|m| m.has_tag_name("ref")).and_then(|m| find_decl(root, m.attribute("qualified").unwrap_or(attr(m, "name"))));
+                    map.is_some_and(|m| map_properties(root, m).into_iter().all(|(_, t)| is(t)))
+                }
+                _ => false,
+            };
             if !ok {
                 broken.insert((attr(r, "name").to_string(), i));
             }
@@ -103,6 +111,13 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
     }
     out.retain(|_, cs| cs.iter().any(Option::is_some));
     out
+}
+
+// The members of a union an alias names, if `r` refers to one.
+fn union_members<'a>(root: Node<'a, 'a>, r: Node<'a, 'a>) -> Option<Vec<Node<'a, 'a>>> {
+    let d = find_decl(root, r.attribute("qualified").unwrap_or(attr(r, "name")))?;
+    let body = elements(d).find(|c| !c.has_tag_name("typeParameter"))?;
+    body.has_tag_name("union").then(|| elements(body).collect())
 }
 
 fn ident(name: &str) -> String {
@@ -432,7 +447,15 @@ impl Gen {
             "ref" if attr(n, "kind") == "typeParameter" => format!("'{}", attr(n, "name")),
             "ref" => {
                 let name = n.attribute("qualified").unwrap_or(attr(n, "name"));
-                let args: Vec<String> = elements(n).map(|a| self.ty(a, owner)).collect();
+                // Where the interface keeps a constraint, a union of subtypes is named as the constraint: F# has no union that is one.
+                let kept = self.constrained.get(name).cloned().unwrap_or_default();
+                let args: Vec<String> = elements(n)
+                    .enumerate()
+                    .map(|(i, a)| match kept.get(i) {
+                        Some(Some(c)) if a.has_tag_name("ref") && a.attribute("kind") == Some("typeAlias") => ident(c),
+                        _ => self.ty(a, owner),
+                    })
+                    .collect();
                 let name = if self.declared.contains(name) {
                     name.split('.').map(ident).collect::<Vec<_>>().join(".")
                 } else {
@@ -584,6 +607,22 @@ impl Gen {
                 let t = self.ty(c, "");
                 if t != "obj" {
                     constraints.push(format!("{name} :> {t}"));
+                }
+            }
+            // `K extends keyof M`: 'K is the value the key selects. Where the
+            // signature passes `M[K]` to a constrained interface, 'K has that constraint.
+            for r in n.descendants().filter(|r| r.has_tag_name("ref")) {
+                let Some(kept) = self.constrained.get(attr(r, "name")) else { continue };
+                for (i, arg) in elements(r).enumerate() {
+                    let index = elements(arg).nth(1).filter(|_| arg.has_tag_name("indexedAccess"));
+                    if let (Some(Some(c)), Some(k)) = (kept.get(i), index)
+                        && k.attribute("name") == p.attribute("name")
+                    {
+                        let bound = format!("{name} :> {}", ident(c));
+                        if !constraints.contains(&bound) {
+                            constraints.push(bound);
+                        }
+                    }
                 }
             }
             params.push(name);

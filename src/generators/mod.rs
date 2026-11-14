@@ -58,7 +58,8 @@ impl Problems {
 
     // An element of the XML the generator has no form for.
     pub fn element(&mut self, target: &str, n: Node) {
-        let tag = n.tag_name().name();
+        // A reference to a type parameter is the type parameter's problem.
+        let tag = if n.has_tag_name("ref") && n.attribute("kind") == Some("typeParameter") { "typeParameter" } else { n.tag_name().name() };
         self.add(format!("{target} generator cannot express <{tag}>: {}", hint(tag)), path(n));
     }
 

@@ -486,6 +486,19 @@ fn fsharp_rejects_literal_types() {
     assert!(problems.iter().any(|p| p.contains("cannot express <literal>: set literals = \"enum\"")), "{problems:?}");
 }
 
+// A type argument outside its parameter's constraint is a Rust compile error:
+// `largest<T extends Item>` takes no array of numbers.
+#[test]
+fn rust_checks_constraints() {
+    let Some(rustc) = rustc_wasm() else { return };
+    let c = case_in("data", "rust", "data-rust-wrong");
+    write_files(&c.out, generators::rust::files(&model(&c.xml, "Rust")).unwrap());
+    fs::write(c.out.join("test.rs"), "#![no_main]\nmod bindings;\nuse bindings::*;\npub fn wrong() { largest(JsArray::<f64>::new()); }\n").unwrap();
+    let out = Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(["-o", "test.wasm", "test.rs"]).output().unwrap();
+    let errors = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success() && errors.contains("Is<Item>"), "an array of numbers should not satisfy T: Is<Item>:\n{errors}");
+}
+
 // A type argument outside its parameter's constraint is an F# compile error:
 // `largest<T extends Item>` takes no array of numbers.
 #[test]
@@ -662,7 +675,7 @@ mod dom {
         let flags = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model"));
         let out = Command::new(&clang).args(flags).arg("-fsyntax-only").arg("-I").arg(c.out.join("bindings")).arg(c.fixture.join("wrong.cpp")).output().unwrap();
         let errors = String::from_utf8_lossy(&out.stderr);
-        let expected = ["no matching member function for call to 'addEventListener'", "constraints not satisfied"];
+        let expected = ["no matching member function for call to 'addEventListener'", "no matching member function for call to 'querySelectorAll'", "constraints not satisfied for class template 'NodeListOf'"];
         assert!(!out.status.success() && expected.iter().all(|e| errors.contains(e)), "wrong.cpp should not compile, for both reasons:\n{errors}");
     }
 

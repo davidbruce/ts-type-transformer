@@ -32,6 +32,7 @@ thread_local! {
     // The unions of the model being generated that values can be decoded to.
     static DECODABLE: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
     static UNIONS: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
+    static CLASSES: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
 }
 
 fn decodable(n: &str) -> bool {
@@ -40,6 +41,11 @@ fn decodable(n: &str) -> bool {
 
 fn is_union(n: &str) -> bool {
     UNIONS.with(|d| d.borrow().contains(n))
+}
+
+// A type the bindings declare without type parameters: one `Is` is implemented for.
+fn is_class(n: &str) -> bool {
+    CLASSES.with(|d| d.borrow().contains(n))
 }
 
 // The Rust type of a value: owned, as it comes back or as a type argument.
@@ -155,9 +161,18 @@ fn lower_callback(t: &Ty, x: &str) -> String {
     }
 }
 
+// A type parameter with its bounds: `T: JsType`, and for `T extends Node`,
+// `T: JsType + Is<Node>`.
+fn bound(p: &TParam) -> String {
+    match &p.constraint {
+        Some(Ty::Obj(n)) if is_class(n) => format!("{}: JsType + Is<{n}>", p.name),
+        _ => format!("{}: JsType", p.name),
+    }
+}
+
 // `<T: JsType, U: JsType>`, or nothing.
 fn generics(params: &[TParam]) -> String {
-    if params.is_empty() { String::new() } else { format!("<{}>", params.iter().map(|p| format!("{}: JsType", p.name)).collect::<Vec<_>>().join(", ")) }
+    if params.is_empty() { String::new() } else { format!("<{}>", params.iter().map(bound).collect::<Vec<_>>().join(", ")) }
 }
 
 // `<T, U>`, or nothing.
@@ -198,7 +213,7 @@ fn function(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>
         None => f.import.clone(),
     };
     imports.entry(import.clone()).or_insert_with(|| format!("        pub fn {import}({}) -> {};\n", raw_params.join(", "), raw_ret(&f.ret)));
-    let mut type_params: Vec<String> = f.type_params.iter().map(|p| format!("{}: JsType", p.name)).collect();
+    let mut type_params: Vec<String> = f.type_params.iter().map(bound).collect();
     if f.params.iter().any(|p| matches!(p.1, Ty::Key(_))) {
         type_params.insert(0, "V: JsType".into());
     }
@@ -449,6 +464,11 @@ macro_rules! handle {
     };
 }
 pub(crate) use handle;
+
+// `T: Is<B>` says a T is a B: itself, a subtype of it, a union of such, or
+// any value. It is what a type parameter's `extends` becomes.
+pub trait Is<B> {}
+impl<B> Is<B> for JsValue {}
 
 // A JavaScript value of no particular type.
 handle!(JsValue);
@@ -727,6 +747,7 @@ fn variant(t: &Ty) -> String {
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     DECODABLE.with(|d| *d.borrow_mut() = m.unions.iter().filter(|u| u.decodable()).map(|u| u.name.clone()).collect());
     UNIONS.with(|d| *d.borrow_mut() = m.unions.iter().map(|u| u.name.clone()).collect());
+    CLASSES.with(|d| *d.borrow_mut() = m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).cloned()).collect());
     let mut out = String::from("// Generated.\n#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, dead_code, unused_imports, unused_unsafe, unused_parens, unused_variables, clippy::all)]\n\n#[path = \"runtime.rs\"]\nmod runtime;\npub use runtime::*;\nuse runtime::handle;\nuse core::marker::PhantomData;\n\n");
     let mut imports: BTreeMap<String, String> = BTreeMap::new();
 
@@ -767,6 +788,9 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
         let params: Vec<String> = (1..=arity).map(|i| format!("T{i}")).collect();
         out += &format!("handle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
+        if params.is_empty() {
+            out += &format!("impl Is<{name}> for {name} {{}}\n");
+        }
     }
     // Unions that can be decoded: enums.
     for u in m.unions.iter().filter(|u| u.decodable()) {
@@ -802,6 +826,9 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let (bounds, args) = (generics(&c.type_params), args_of(&c.type_params));
         let me = format!("{}{args}", c.name);
         out += &format!("\nhandle!({}{});\n", c.name, if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
+        if params.is_empty() {
+            out += &format!("impl Is<{0}> for {0} {{}}\n", c.name);
+        }
         let _ = phantom(&params);
         // The trait of its own members.
         let mut trait_body = String::new();
@@ -891,7 +918,8 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
 fn upcast(sub: &str, base: &str) -> String {
     format!(
         "impl From<{sub}> for {base} {{ fn from(x: {sub}) -> Self {{ {base}(x.0) }} }}\n\
-         impl AsRef<{base}> for {sub} {{ fn as_ref(&self) -> &{base} {{ unsafe {{ &*(self as *const {sub} as *const {base}) }} }} }}\n"
+         impl AsRef<{base}> for {sub} {{ fn as_ref(&self) -> &{base} {{ unsafe {{ &*(self as *const {sub} as *const {base}) }} }} }}\n\
+         impl Is<{base}> for {sub} {{}}\n"
     )
 }
 
@@ -905,7 +933,11 @@ fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String 
     let decode: String = u.parts.iter().enumerate().map(|(i, p)| format!("{i} => {n}::{}(<{}>::from_handle(h)), ", variant(p), ty(p))).collect();
     let lend: String = u.parts.iter().map(|p| format!("{n}::{}(x) => x.lend(), ", variant(p))).collect();
     imports.insert(format!("{n}_tag"), format!("        pub fn {n}_tag(h: u32, k: i32) -> i32;\n"));
-    format!(
+    // A union is what each of its members is.
+    let is_bounds: Vec<String> = u.parts.iter().map(|p| format!("{}: Is<B_>", ty(p))).collect();
+    let is_params = std::iter::once("B_".to_string()).chain(u.type_params.iter().map(bound)).collect::<Vec<_>>().join(", ");
+    let is = format!("impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n", is_bounds.join(", "));
+    is + &format!(
         "pub enum {n}{bounds} {{ {} }}\n\
          impl{bounds} Clone for {n}{args} {{ fn clone(&self) -> Self {{ match self {{ {} }} }} }}\n\
          impl{bounds} ToJs for {n}{args} {{ fn lend(&self) -> Lent {{ match self {{ {lend}}} }} }}\n\

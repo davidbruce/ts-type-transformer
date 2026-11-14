@@ -118,26 +118,9 @@ fn head(params: &[TParam], defaults: bool) -> String {
     format!("template <{}>{requires}\n", ps.join(", "))
 }
 
-// A class template's parameters, without constraints: a template-id names
-// its arguments before they are complete (`ProgressEvent<FileReader>` in a
-// map), so its constraints are checked in the class, by `checks`.
-fn unconstrained(params: &[TParam]) -> Vec<TParam> {
-    params.iter().map(|p| TParam { constraint: None, ..p.clone() }).collect()
-}
-
-// A class template's constructors, which check its constraints: they are
-// instantiated where an object is made, when the types are complete, unlike
-// the class itself, which a base or a declaration can instantiate earlier.
-fn constructors(name: &str, params: &[TParam]) -> String {
-    let checks: String = params
-        .iter()
-        .filter_map(|p| constraint(&p.name, p.constraint.as_ref()?).map(|c| format!(" static_assert({c}, \"{} must extend {}\");", p.name, ty_arg(p.constraint.as_ref().unwrap()))))
-        .collect();
-    if checks.is_empty() {
-        format!("    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n")
-    } else {
-        format!("    {name}() {{{checks} }}\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{{checks} }}\n")
-    }
+// A type's constructors: none, or from a handle.
+fn constructors(name: &str) -> String {
+    format!("    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n")
 }
 
 // A type parameter's constraint, where C++ can state it.
@@ -548,10 +531,26 @@ struct Value : Handle {
     bool is_null() const { return h == 0; }
 };
 
+// The direct bases of a type, declared beside it in `ts_types.hpp`: what
+// `extends` follows. A constraint is then checked of types that are only
+// declared, as a template's arguments are when the template is named.
+template <class... T>
+struct list {};
+template <class T>
+struct bases {
+    using type = list<>;
+};
+
 // TypeScript's `T extends U`, for a constraint. Anything extends `any`, and
 // `any` anything; a union, if each of its members does.
 template <class T, class U>
-struct extends_t : std::bool_constant<std::same_as<T, U> || std::derived_from<T, U> || std::same_as<T, Value> || std::same_as<U, Value>> {};
+struct extends_t;
+template <class U, class L>
+struct any_extends : std::false_type {};
+template <class U, class B, class... R>
+struct any_extends<U, list<B, R...>> : std::bool_constant<extends_t<B, U>::value || any_extends<U, list<R...>>::value> {};
+template <class T, class U>
+struct extends_t : std::bool_constant<std::same_as<T, U> || std::same_as<T, Value> || std::same_as<U, Value> || any_extends<U, typename bases<T>::type>::value> {};
 template <class... A, class U>
 struct extends_t<std::variant<A...>, U> : std::bool_constant<(extends_t<A, U>::value && ...)> {};
 template <class T, class U>
@@ -872,7 +871,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             t => format!("return {};", lower_callback(t, &call)),
         };
         let (name, ret) = (&c.name, raw_callback(&c.ret));
-        let tpl = head(&unconstrained(&c.type_params), false);
+        let tpl = head(&c.type_params, false);
         let text = format!(
             "// Generated.\n#pragma once\n{}extern \"C\" TS_IMPORT({name}_from) uint32_t ts_raw_{name}_from(uintptr_t, void*);\n\n\
              {tpl}struct {name} : ts::Callback {{\n{}    \
@@ -880,7 +879,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
              {name}(F f) : ts::Handle(ts::handle, ts_raw_{name}_from(reinterpret_cast<uintptr_t>(&call<F>), ts::closure(std::move(f)))) {{}}\n\n  \
              private:\n    template <class F>\n    static {ret} call(void* ctx{raw_args}) {{ {result} }}\n}};\n\n{}",
             include(&path, "ts_types.hpp"),
-            constructors(name, &c.type_params),
+            constructors(name),
             includes(&path, &used)
         );
         out.push((path, text));
@@ -908,7 +907,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let base = &home[&c.name];
         let (decl_path, impl_path) = (format!("{base}.decl.hpp"), format!("{base}.hpp"));
         // A class template is written `Box<T>` where its members are defined.
-        let class_head = head(&unconstrained(&c.type_params), false);
+        let class_head = head(&c.type_params, false);
         let owner = if c.type_params.is_empty() { c.name.clone() } else { format!("{}<{}>", c.name, c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
         // A member named `create` leaves the constructors `make`.
         let ctor = if c.funcs.iter().any(|f| !matches!(f.call, Call::New(_) | Call::Create) && cpp_name(f, "") == "create") { "make" } else { "create" };
@@ -1025,7 +1024,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             "\n{class_head}struct {0} : {1} {{\n{2}{usings}{members}}};\n",
             c.name,
             bases.join(", "),
-            constructors(&c.name, &c.type_params)
+            constructors(&c.name)
         );
         used.remove(&c.name);
         used.extend(c.ancestors.iter().cloned());
@@ -1117,11 +1116,11 @@ fn declarations(m: &Model) -> String {
         templates.push((name.to_string(), text, needs));
     };
     for c in &m.classes {
-        let text = format!("{}struct {};\n", head(&unconstrained(&c.type_params), true), c.name);
+        let text = format!("{}struct {};\n", head(&c.type_params, true), c.name);
         if c.type_params.is_empty() { types += &text } else { template(&c.name, &c.type_params, text) }
     }
     for c in &m.callbacks {
-        let text = format!("{}struct {};\n", head(&unconstrained(&c.type_params), true), c.name);
+        let text = format!("{}struct {};\n", head(&c.type_params, true), c.name);
         if c.type_params.is_empty() { types += &text } else { template(&c.name, &c.type_params, text) }
     }
     // Types declared elsewhere: handles, generic or not.
@@ -1141,6 +1140,32 @@ fn declarations(m: &Model) -> String {
         let (name, text, _) = templates.remove(ready);
         types += &text;
         done.insert(name);
+    }
+    // What each type extends, for constraints: see `ts::bases`.
+    // A type's bases, and the types they name, come first: naming a
+    // constrained template checks its constraint at once.
+    let mut ordered: Vec<&Class> = Vec::new();
+    let mut state: HashMap<&str, bool> = HashMap::new();
+    fn visit<'a>(c: &'a Class, m: &'a Model, state: &mut HashMap<&'a str, bool>, out: &mut Vec<&'a Class>) {
+        if state.insert(c.name.as_str(), false).is_some() {
+            return;
+        }
+        let mut named = BTreeSet::new();
+        c.bases.iter().for_each(|b| named_types(b, &mut named));
+        for n in &named {
+            if let Some(k) = m.classes.iter().find(|k| k.name == *n) {
+                visit(k, m, state, out);
+            }
+        }
+        out.push(c);
+    }
+    for c in &m.classes {
+        visit(c, m, &mut state, &mut ordered);
+    }
+    for c in ordered.into_iter().filter(|c| !c.bases.is_empty()) {
+        let args = if c.type_params.is_empty() { String::new() } else { format!("<{}>", c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
+        let header = if c.type_params.is_empty() { "template <>\n".to_string() } else { head(&c.type_params, false) };
+        types += &format!("{header}struct ts::bases<{}{args}> {{\n    using type = ts::list<{}>;\n}};\n", c.name, c.bases.iter().map(ty_in).collect::<Vec<_>>().join(", "));
     }
     for u in unions {
         let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions)).collect();
