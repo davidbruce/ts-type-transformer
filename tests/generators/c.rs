@@ -35,6 +35,7 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Any => "JsValue".into(),
         Ty::Array => "JsArray".into(),
         Ty::ArrayOf(e) => format!("JsArray_{}", element(e)),
+        Ty::Tuple(es) => format!("JsTuple_{}", es.iter().map(element).collect::<Vec<_>>().join("_")),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         // An optional number or flag says whether it is there; an optional enum is `E_absent` when it is not.
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsOptionalDouble".into(),
@@ -55,18 +56,45 @@ fn element(t: &Ty) -> String {
     }
 }
 
-// The element types of the arrays a type names, innermost first.
+// The typed arrays and tuples a type names, innermost first.
 fn arrays(t: &Ty, out: &mut Vec<Ty>) {
     match t {
-        Ty::ArrayOf(e) => {
-            arrays(e, out);
-            if !out.contains(e) {
-                out.push((**e).clone());
-            }
-        }
-        Ty::Nullable(inner, _) => arrays(inner, out),
-        _ => {}
+        Ty::ArrayOf(e) => arrays(e, out),
+        Ty::Tuple(es) => es.iter().for_each(|e| arrays(e, out)),
+        Ty::Nullable(inner, _) => return arrays(inner, out),
+        _ => return,
     }
+    if !out.contains(t) {
+        out.push(t.clone());
+    }
+}
+
+// A tuple: `JsTuple_double_JsString`, made by `_new(1, "one")`, read by `_get_0`.
+// What a getter returns is the caller's to release; a number or flag is read and released.
+fn tuple_type(es: &[Ty]) -> String {
+    let name = typed(&Ty::Tuple(es.to_vec()), false);
+    let params: Vec<String> = es.iter().enumerate().map(|(i, e)| format!("{} v{i}", if *e == Ty::Str { "const char*".into() } else { typed(e, false) })).collect();
+    let pushes: String = es
+        .iter()
+        .enumerate()
+        .map(|(i, e)| match e {
+            Ty::Num => format!(" {{ uint32_t h = ts_raw_js_from_number(v{i}); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
+            Ty::Bool => format!(" {{ uint32_t h = ts_raw_js_from_bool(v{i}); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
+            Ty::Str => format!(" {{ uint32_t h = ts_raw_js_from_string(v{i}, ts_strlen(v{i})); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
+            _ => format!(" ts_raw_js_array_push(a.h, v{i}.h);"),
+        })
+        .collect();
+    let mut out = format!("typedef struct {{ uint32_t h; }} {name};\nstatic inline {name} {name}_new({}) {{ {name} a = {{ ts_raw_js_array_new() }};{pushes} return a; }}\n", params.join(", "));
+    for (i, e) in es.iter().enumerate() {
+        let elem = typed(e, false);
+        let get = match e {
+            Ty::Num => "double x = ts_raw_js_to_number(h); ts_raw_js_release(h); return x;".to_string(),
+            Ty::Bool => "bool x = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); return x;".to_string(),
+            _ => format!("return ({elem}){{ h }};"),
+        };
+        out += &format!("static inline {elem} {name}_get_{i}({name} a) {{ uint32_t h = ts_raw_js_array_get(a.h, {i}); {get} }}\n");
+    }
+    out + &format!("static inline JsArray {name}_any({name} a) {{ return (JsArray){{ a.h }}; }}\n")
 }
 
 // A typed array: `JsArray_double`, with `_new`, `_length`, `_get` and `_push`.
@@ -377,8 +405,12 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         c.params.iter().for_each(|p| arrays(&p.1, &mut elements));
         arrays(&c.ret, &mut elements);
     }
-    for e in &elements {
-        types += &array_type(e);
+    for t in &elements {
+        types += &match t {
+            Ty::ArrayOf(e) => array_type(e),
+            Ty::Tuple(es) => tuple_type(es),
+            _ => unreachable!(),
+        };
     }
     for c in &m.callbacks {
         let mut params = vec!["void* ctx".to_string()];

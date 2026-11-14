@@ -32,7 +32,7 @@ fn union_field(t: &Ty) -> String {
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
         Ty::Obj(n) => n.clone(),
-        Ty::Array | Ty::ArrayOf(_) => "array".into(),
+        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         _ => unreachable!(),
     }
 }
@@ -98,6 +98,7 @@ fn typed(t: &Ty, is_param: bool) -> String {
         Ty::Str => "JsString".into(),
         Ty::Array => "JsArray".into(),
         Ty::ArrayOf(e) => format!("JsArrayOf({})", typed(e, false)),
+        Ty::Tuple(es) => format!("JsTuple(&.{{ {} }})", es.iter().map(|e| typed(e, false)).collect::<Vec<_>>().join(", ")),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         Ty::Nullable(inner, _) => format!("?{}", typed(inner, is_param)),
         Ty::Union(parts) if !parts.is_empty() && is_param => {
@@ -286,6 +287,14 @@ pub fn jsLiveHandles() u32 { return raw.js_live(); }
 // Forgets a callback made with `from`, and returns its context. Its handle is released as any other.
 pub fn jsForgetCallback(x: anytype) ?*anyopaque { return @ptrFromInt(raw.js_callback_release(x.h)); }
 
+// A slice of bytes, or a string literal.
+fn isString(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .pointer => |p| p.child == u8 or (@typeInfo(p.child) == .array and @typeInfo(p.child).array.child == u8),
+        else => false,
+    };
+}
+
 // A value lent to JavaScript for one call: an object's own handle, or a
 // new one for a number, flag or string, released by `done`.
 pub const Lent = struct {
@@ -295,7 +304,7 @@ pub const Lent = struct {
         const T = @TypeOf(v);
         if (T == f64 or T == comptime_float or T == comptime_int) return .{ .h = raw.js_from_number(v), .own = true };
         if (T == bool) return .{ .h = raw.js_from_bool(@intFromBool(v)), .own = true };
-        if (T == []const u8) return .{ .h = raw.js_from_string(v.ptr, v.len), .own = true };
+        if (comptime isString(T)) { const s: []const u8 = v; return .{ .h = raw.js_from_string(s.ptr, s.len), .own = true }; }
         if (@typeInfo(T) == .@\"union\") return switch (v) { inline else => |x| of(x) };
         return .{ .h = v.h, .own = false };
     }
@@ -318,6 +327,21 @@ pub fn JsIteratorOf(comptime T: type) type {
         pub fn over(h: u32) @This() { return .{ .h = raw.js_iterate(h) }; }
         // The next value, or null at the end.
         pub fn next(self: @This()) ?T { const v = raw.js_iterator_next(self.h); return if (v == 0xFFFFFFFF) null else jsTake(T, v); }
+    };
+}
+
+// A JavaScript array of fixed length and element types: `[number, string]` is
+// `JsTuple(&.{ f64, JsString })`. `get(0)` reads an element, the caller's.
+pub fn JsTuple(comptime Types: []const type) type {
+    return extern struct {
+        h: u32,
+        // From a Zig tuple of values: `.{ 1, \"one\" }`.
+        pub fn of(values: anytype) @This() {
+            const a: @This() = .{ .h = raw.js_array_new() };
+            inline for (values) |v| { const l = Lent.of(v); defer l.done(); raw.js_array_push(a.h, l.h); }
+            return a;
+        }
+        pub fn get(self: @This(), comptime i: usize) Types[i] { return jsTake(Types[i], raw.js_array_get(self.h, i)); }
     };
 }
 
@@ -378,7 +402,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 pub fn files(m: &Model) -> Vec<(String, String)> {
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsTake"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();

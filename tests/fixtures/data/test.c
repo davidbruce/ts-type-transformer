@@ -83,12 +83,13 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(JsArray_JsString_length(w) == 2);
     CHECK(str_eq(JsArray_JsString_get(w, 1), "bc"));
 
-    // Tuples are arrays.
-    JsArray p = pair(1, "one");
-    CHECK(js_to_number(JsArray_get(p, 0)) == 1);
-    JsArray swapped = swap(p);
-    CHECK(str_eq(js_to_string(JsArray_get(swapped, 0)), "one"));
-    CHECK(js_to_number(JsArray_get(swapped, 1)) == 1);
+    // Tuples are typed: [number, string] is JsTuple_double_JsString.
+    JsTuple_double_JsString p = pair(1, "one");
+    CHECK(JsTuple_double_JsString_get_0(p) == 1 && str_eq(JsTuple_double_JsString_get_1(p), "one"));
+    JsTuple_double_JsString made = JsTuple_double_JsString_new(2, "two");
+    JsTuple_JsString_double swapped = swap(made);
+    CHECK(str_eq(JsTuple_JsString_double_get_0(swapped), "two"));
+    CHECK(JsTuple_JsString_double_get_1(swapped) == 2);
 
     // Arrays of objects.
     JsArray_Item all = items();

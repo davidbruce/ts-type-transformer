@@ -45,6 +45,7 @@ fn ty_in(t: &Ty) -> String {
         Ty::Any => "ts::Value".into(),
         Ty::Array => "ts::Array<>".into(),
         Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg(e)),
+        Ty::Tuple(es) => format!("ts::Tuple<{}>", es.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("std::optional<{}>", ty_in(inner).trim_start_matches("const ").trim_end_matches('&')),
         Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_in(inner)),
@@ -213,7 +214,7 @@ fn raise(t: &Ty, r: &str, unions: &[NamedUnion]) -> String {
         Ty::Obj(n) => format!("{n}(ts::handle, {r})"),
         Ty::Mapped(_) => format!("V(ts::handle, {r})"),
         Ty::Param(n) => format!("ts::from_handle<{n}>({r})"),
-        Ty::Generic(..) | Ty::Array | Ty::ArrayOf(_) => format!("{}(ts::handle, {r})", ty_in(t)),
+        Ty::Generic(..) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => format!("{}(ts::handle, {r})", ty_in(t)),
         _ => format!("ts::Value(ts::handle, {r})"),
     }
 }
@@ -343,6 +344,7 @@ fn walk(t: &Ty, f: &dyn Fn(&Ty) -> Option<Ty>) -> Ty {
         Ty::Nullable(inner, u) => Ty::Nullable(Box::new(walk(inner, f)), *u),
         Ty::Listener(inner) => Ty::Listener(Box::new(walk(inner, f))),
         Ty::ArrayOf(inner) => Ty::ArrayOf(Box::new(walk(inner, f))),
+        Ty::Tuple(es) => Ty::Tuple(es.iter().map(|e| walk(e, f)).collect()),
         Ty::Generic(n, args) => Ty::Generic(n.clone(), args.iter().map(|a| walk(a, f)).collect()),
         t => t.clone(),
     }
@@ -394,6 +396,7 @@ fn named_types(t: &Ty, out: &mut BTreeSet<String>) {
             out.insert(n.clone());
         }
         Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => named_types(inner, out),
+        Ty::Tuple(es) => es.iter().for_each(|e| named_types(e, out)),
         Ty::Generic(n, args) => {
             out.insert(n.clone());
             args.iter().for_each(|a| named_types(a, out));
@@ -418,6 +421,7 @@ const RUNTIME: &str = r#"// Generated.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -726,6 +730,19 @@ struct Iterator {
   private:
     Handle it;
     std::optional<T> cur;
+};
+
+// A JavaScript array of fixed length and element types: `[number, string]`
+// is `Tuple<double, std::string>`. `get<0>()` reads an element.
+template <class... T>
+struct Tuple : Handle {
+    Tuple() = default;
+    Tuple(handle_t, uint32_t h) : Handle(handle, h) {}
+    explicit Tuple(const T&... xs) : Handle(handle, ts_raw_js_array_new()) { (ts_raw_js_array_push(h, Arg(xs).h), ...); }
+    template <size_t I>
+    std::tuple_element_t<I, std::tuple<T...>> get() const {
+        return from_handle<std::tuple_element_t<I, std::tuple<T...>>>(ts_raw_js_array_get(h, I));
+    }
 };
 
 // A key of a map whose value has type V: `HTMLElementEventMapKeys::click`.

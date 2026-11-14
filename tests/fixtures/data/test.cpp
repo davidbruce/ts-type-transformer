@@ -69,11 +69,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(sum({1, 2, 3}) == 6);
     CHECK(words("a bc")[1] == "bc");
 
-    // Tuples are untyped arrays.
-    ts::Array<> p = pair(1, "one");
-    CHECK(p[0].to_number() == 1);
-    ts::Array<> swapped = swap(p);
-    CHECK(swapped[0].to_string() == "one" && swapped[1].to_number() == 1);
+    // Tuples are typed: [number, string] is ts::Tuple<double, std::string>.
+    ts::Tuple<double, std::string> p = pair(1, "one");
+    CHECK(p.get<0>() == 1 && p.get<1>() == "one");
+    ts::Tuple<std::string, double> swapped = swap(ts::Tuple<double, std::string>(2, "two"));
+    CHECK(swapped.get<0>() == "two" && swapped.get<1>() == 2);
 
     // Arrays of objects.
     ts::Array<Item> all = items();

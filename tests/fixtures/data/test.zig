@@ -83,12 +83,11 @@ export fn run() void {
     expect(w.len() == 2, @src());
     expect(strEq(w.get(1), "bc"), @src());
 
-    // Tuples are arrays.
+    // Tuples are typed: [number, string] is JsTuple(&.{ f64, JsString }).
     const p = b.pair(1, "one");
-    expect(p.get(0).toNumber() == 1, @src());
-    const swapped = b.swap(p);
-    expect(strEq(swapped.get(0).toString(), "one"), @src());
-    expect(swapped.get(1).toNumber() == 1, @src());
+    expect(p.get(0) == 1 and strEq(p.get(1), "one"), @src());
+    const swapped = b.swap(b.JsTuple(&.{ f64, b.JsString }).of(.{ 2, "two" }));
+    expect(strEq(swapped.get(0), "two") and swapped.get(1) == 2, @src());
 
     // Arrays of objects.
     const all = b.items();

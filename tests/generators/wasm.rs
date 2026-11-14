@@ -43,8 +43,10 @@ pub enum Ty {
     // Only where generics are kept (C++); its values cross as handles.
     Param(String),
     Generic(String, Vec<Ty>),
-    // An array of a known element type, where generics are kept.
+    // An array of a known element type.
     ArrayOf(Box<Ty>),
+    // An array of fixed length and element types: `[number, string]`.
+    Tuple(Vec<Ty>),
 }
 
 #[derive(Clone)]
@@ -796,7 +798,21 @@ impl<'a> Builder<'a> {
                 Ty::NamedUnion(u) if self.model.unions.iter().any(|x| x.name == u && x.decodable()) => Ty::ArrayOf(Box::new(Ty::NamedUnion(u))),
                 _ => Ty::Array,
             },
-            "array" | "tuple" => Ty::Array,
+            // A tuple whose elements all cross, none optional or rest.
+            "tuple" => {
+                let elems: Vec<Node> = elements(n).collect();
+                if elems.is_empty() || elems.iter().any(|e| e.attributes().len() > 0) {
+                    return Ty::Array;
+                }
+                let ts: Vec<Ty> = elems.iter().map(|e| self.ty(only_child(*e), owner)).collect();
+                let crosses = |t: &Ty| match t {
+                    Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_) | Ty::Array | Ty::Tuple(_) => true,
+                    Ty::Generic(..) | Ty::Param(_) => self.generics,
+                    Ty::NamedUnion(u) => self.model.unions.iter().any(|x| x.name == *u && x.decodable()),
+                    _ => false,
+                };
+                if ts.iter().all(crosses) { Ty::Tuple(ts) } else { Ty::Array }
+            }
             "union" => {
                 let parts: Vec<Ty> = elements(n).map(|p| self.ty(p, owner)).collect();
                 // Only alternatives a tagged union can hold directly.
@@ -865,7 +881,7 @@ impl<'a> Builder<'a> {
                     if let [only] = parts.as_slice() {
                         return if has_void { absent(only.clone(), true) } else { only.clone() };
                     }
-                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
+                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
                     if !parts.iter().all(simple) || !distinct(&parts) {
                         self.skip("union whose members cannot be told apart, bound as an untyped value");
                         return Ty::Any;
@@ -915,7 +931,7 @@ fn only_child_after_params<'a>(d: Node<'a, 'a>, target: &str) -> Node<'a, 'a> {
 
 // No two members alike. Arrays are alike whatever they hold: a test sees only an array.
 fn distinct(parts: &[Ty]) -> bool {
-    let shape = |p: &Ty| if matches!(p, Ty::ArrayOf(_)) { Ty::Array } else { p.clone() };
+    let shape = |p: &Ty| if matches!(p, Ty::ArrayOf(_) | Ty::Tuple(_)) { Ty::Array } else { p.clone() };
     let shapes: Vec<Ty> = parts.iter().map(shape).collect();
     shapes.iter().enumerate().all(|(i, p)| !shapes[..i].contains(p))
 }
@@ -930,7 +946,7 @@ fn rename_param(t: &mut Ty, from: &str, to: &str) {
     match t {
         Ty::Param(n) if n == from => *n = to.to_string(),
         Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => rename_param(inner, from, to),
-        Ty::Generic(_, args) => args.iter_mut().for_each(|a| rename_param(a, from, to)),
+        Ty::Generic(_, args) | Ty::Tuple(args) => args.iter_mut().for_each(|a| rename_param(a, from, to)),
         _ => {}
     }
 }
@@ -940,7 +956,7 @@ fn rename_param(t: &mut Ty, from: &str, to: &str) {
 // in, and a handle coming back; a flag or an enum is -1 when absent.
 fn absent(t: Ty, undefined: bool) -> Ty {
     match t {
-        Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
+        Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
         Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) => Ty::Nullable(Box::new(t), undefined),
         Ty::Nullable(..) => t,
         Ty::Void => Ty::Void,
