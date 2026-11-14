@@ -586,7 +586,9 @@ impl<'c> Front<'c> {
             TypeFlags::Any | TypeFlags::Unknown | TypeFlags::String | TypeFlags::Number | TypeFlags::BigInt | TypeFlags::ESSymbol
                 | TypeFlags::Void | TypeFlags::Undefined | TypeFlags::Null | TypeFlags::Never | TypeFlags::NonPrimitive,
         ) {
-            return Type::prim(t.as_intrinsic_type().intrinsic_name());
+            // The checker's error type is what it could not resolve: not a primitive.
+            let name = t.as_intrinsic_type().intrinsic_name();
+            return if name == "error" { Type::Erased("unresolved") } else { Type::prim(name) };
         }
         // A type parameter being expanded is its key, and `M[K]` the type of that property.
         if let Some((tp, key)) = self.key_binding.clone() {

@@ -317,7 +317,7 @@
 
   <!-- The declared receiver, `(this: T, ...)`. Not the <this/> type. -->
   <define name="thisParameter">
-    <element name="this"><ref name="type"/></element>
+    <element name="thisParameter"><ref name="type"/></element>
   </define>
 
   <define name="parameter">
@@ -444,8 +444,6 @@
           <value>undefined</value>
           <value>null</value>
           <value>never</value>
-          <!-- Not a TypeScript type: the checker's error type, from evaluating what it could not resolve. -->
-          <value>error</value>
         </choice>
       </attribute>
       <group>
@@ -466,6 +464,7 @@
             <value>anonymous type parameter</value>
             <value>missing key</value>
             <value>unknown type kind</value>
+            <value>unresolved</value>
           </choice>
         </attribute>
       </group>
@@ -544,21 +543,22 @@
 
   <define name="conditional.body">
     <element name="check"><ref name="type"/></element>
-    <ref name="extends"/>
+    <!-- `T extends U ? ...`: not a base type, <extends>. -->
+    <element name="extendsType"><ref name="type"/></element>
     <element name="true"><ref name="type"/></element>
     <element name="false"><ref name="type"/></element>
   </define>
 
-  <!-- `{ readonly [K in C as N]?: V }`. Here readonly and optional are the modifier as written, not flags. -->
+  <!-- `{ readonly [K in C as N]?: V }`: whether the mapping adds or removes each modifier. -->
   <define name="mapped.body">
     <optional>
-      <attribute name="readonly">
-        <choice><value>readonly</value><value>+</value><value>-</value></choice>
+      <attribute name="readonlyModifier">
+        <choice><value>add</value><value>remove</value></choice>
       </attribute>
     </optional>
     <optional>
-      <attribute name="optional">
-        <choice><value>?</value><value>+</value><value>-</value></choice>
+      <attribute name="optionalModifier">
+        <choice><value>add</value><value>remove</value></choice>
       </attribute>
     </optional>
     <ref name="typeParameter"/>

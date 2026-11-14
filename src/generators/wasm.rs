@@ -716,7 +716,7 @@ impl<'a> Builder<'a> {
         for p in elements(n) {
             match p.tag_name().name() {
                 // The receiver of a callback is not an argument.
-                "this" => {}
+                "thisParameter" => {}
                 // An argument with one possible value is supplied by the glue.
                 "parameter" if p.has_attribute("const") => {
                     let value = attr(p, "const");

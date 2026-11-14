@@ -233,8 +233,9 @@ impl Xml {
 
     fn signature(&mut self, s: &Signature) {
         self.type_params(&s.type_params);
+        // The declared receiver: not the `this` type, <this/>.
         if let Some(t) = &s.this {
-            self.wrap("this", &[t]);
+            self.wrap("thisParameter", &[t]);
         }
         for p in &s.params {
             let mut attrs = vec![("name", p.name.as_str())];
@@ -364,7 +365,8 @@ impl Xml {
             Op::Conditional { check, extends, yes, no } => {
                 self.open("conditional", &vec![]);
                 self.wrap("check", &[check]);
-                self.wrap("extends", &[extends]);
+                // Not a base type, <extends>.
+                self.wrap("extendsType", &[extends]);
                 self.wrap("true", &[yes]);
                 self.wrap("false", &[no]);
                 self.close("conditional");
@@ -375,12 +377,15 @@ impl Xml {
                 self.close("infer");
             }
             Op::Mapped { readonly, optional, param, as_, value } => {
+                // `readonly`, `+readonly` add the modifier, `-readonly` removes it;
+                // so `?`, `+?` and `-?`. Not the flags `readonly="true"`, `optional="true"`.
+                let change = |m: &str| if m == "-" { "remove" } else { "add" };
                 let mut attrs: Attrs = Vec::new();
                 if let Some(r) = readonly {
-                    attrs.push(("readonly", r));
+                    attrs.push(("readonlyModifier", change(r)));
                 }
                 if let Some(o) = optional {
-                    attrs.push(("optional", o));
+                    attrs.push(("optionalModifier", change(o)));
                 }
                 self.open("mapped", &attrs);
                 self.type_param(param);
