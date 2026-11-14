@@ -853,6 +853,10 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
                 inherent += &format!("    pub {sig} {body}\n");
             }
         }
+        // A subclass of Array, as the array it is.
+        if let Some(elem) = &c.elements {
+            inherent += &format!("    pub fn as_array(&self) -> runtime::JsArray<{}> {{ runtime::JsArray::from_handle(give(self)) }}\n", ty(elem));
+        }
         if !inherent.is_empty() {
             out += &format!("impl{bounds} {me} {{\n{inherent}}}\n");
         }

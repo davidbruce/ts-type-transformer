@@ -27,6 +27,7 @@ pub struct Options {
     pub unions: bool,
     pub overloads: bool,
     pub keyed: bool,
+    pub redeclared: bool,
     // Keep keyed signatures generic, with their map (`keyed_params = "map"`).
     pub map_keyed: bool,
     // Unions become named declarations (`unions = "name"`).
@@ -47,7 +48,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             classes: false, typeops: false, intersections: false, inheritance: false, generics: false, nullable: false,
-            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, map_keyed: false, name_unions: false, keyed_limit: 256,
+            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
         }
     }
@@ -70,6 +71,7 @@ impl Options {
             "unions" => &mut self.unions,
             "overloads" => &mut self.overloads,
             "keyed_params" => &mut self.keyed,
+            "redeclarations" => &mut self.redeclared,
             _ => return None,
         })
     }
@@ -81,8 +83,8 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.expand_keyed = o.keyed;
     front.map_keyed = o.map_keyed;
     front.keyed_limit = o.keyed_limit;
-    // Where inheritance is kept, an inherited member serves every subtype.
-    if !o.inheritance {
+    // An inherited member serves every subtype, where a target has subtypes.
+    if o.redeclared && !o.inheritance {
         let dropped = drop_redeclared(decls);
         *front.stats.entry("dropped: member redeclared as inherited".into()).or_default() += dropped;
     }
@@ -154,8 +156,13 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         });
     }
     if o.name_unions {
-        splice_union_aliases(decls);
-        flatten_unions(decls);
+        // Merging arrays can bring a union alias next to its own members: a few rounds settle it.
+        for _ in 0..3 {
+            splice_union_aliases(decls);
+            flatten_unions(decls);
+            merge_array_members(decls);
+        }
+        absorb_enums(decls);
         name_unions(decls, o.separator);
     }
     if o.overloads {
@@ -230,9 +237,77 @@ fn drop_redeclared(decls: &mut [Decl]) -> usize {
 // Each union that is not already a declaration's body becomes one: named by
 // its members when there are few (`boolean_or_AddEventListenerOptions`),
 // else by where it appears.
+// `A[] | B[]` is `(A | B)[]`: a value of either is an array, and nothing at
+// runtime says of which.
+fn merge_array_members(decls: &mut [Decl]) {
+    walk(decls, &mut |t, _| {
+        let Type::Union(parts) = t else { return true };
+        if parts.iter().filter(|p| matches!(p, Type::Array(_))).count() < 2 {
+            return true;
+        }
+        let mut rest = Vec::new();
+        let mut elems = Vec::new();
+        let mut seen = HashSet::new();
+        let mut at = None;
+        for p in parts.drain(..) {
+            match p {
+                Type::Array(inner) => {
+                    at.get_or_insert(rest.len());
+                    let inner = match *inner {
+                        Type::Union(us) => us,
+                        e => vec![e],
+                    };
+                    elems.extend(inner.into_iter().filter(|e| seen.insert(type_key(e))));
+                }
+                p => rest.push(p),
+            }
+        }
+        let elem = if elems.len() == 1 { elems.pop().unwrap() } else { Type::Union(elems) };
+        rest.insert(at.unwrap(), Type::Array(Box::new(elem)));
+        *t = if rest.len() == 1 { rest.pop().unwrap() } else { Type::Union(rest) };
+        true
+    });
+}
+
+// `"a" | "b" | string` is `string`: an enum of strings beside `string` adds nothing.
+fn absorb_enums(decls: &mut [Decl]) {
+    let string_enums: HashSet<String> = decls.iter().filter_map(|d| if let Decl::Enum(e) = d { Some(e) } else { None }).filter(|e| e.members.iter().all(|m| m.kind == "string")).map(|e| e.name.clone()).collect();
+    walk(decls, &mut |t, _| {
+        let Type::Union(parts) = t else { return true };
+        if parts.iter().any(|p| p.is_prim("string")) {
+            parts.retain(|p| !matches!(p, Type::Ref(r) if r.kind == "enum" && string_enums.contains(&r.name)));
+            if parts.len() == 1 {
+                *t = parts.pop().unwrap();
+            }
+        }
+        true
+    });
+}
+
 fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
     let mut names: HashSet<String> = decls.iter().filter_map(decl_name).map(str::to_string).collect();
+    // A union written inline that a declared alias already names uses that name.
     let mut by_key: HashMap<String, String> = HashMap::new();
+    for d in decls.iter() {
+        if let Decl::Alias(a) = d
+            && a.type_params.is_empty()
+            && matches!(a.ty, Type::Union(_))
+        {
+            by_key.entry(type_key(&a.ty)).or_insert_with(|| a.name.clone());
+        }
+    }
+    // A named union may itself hold unions, inside its arrays: until none is left.
+    let mut free_of: HashMap<String, Vec<Ref>> = HashMap::new();
+    loop {
+        let before = decls.len();
+        name_unions_once(decls, sep, &mut names, &mut by_key, &mut free_of);
+        if decls.len() == before {
+            break;
+        }
+    }
+}
+
+fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String>, by_key: &mut HashMap<String, String>, free_of: &mut HashMap<String, Vec<Ref>>) {
     let mut bodies: HashSet<*const Type> = HashSet::new();
     collect_bodies(decls, &mut bodies);
     let mut added = Vec::new();
@@ -245,19 +320,20 @@ fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
             .entry(type_key(t))
             .or_insert_with(|| {
                 let base = if parts.len() <= 3 { parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}")) } else { path.join(sep) };
-                let name = unique(base, &mut names);
+                let name = unique(base, names);
                 // Type parameters the union mentions become its own.
                 let free = free_type_params(t);
                 let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
-                added.push((Decl::Alias(Alias { name: name.clone(), sym: None, type_params, ty: t.clone(), computed: false, synthetic: true }), free));
+                free_of.insert(name.clone(), free);
+                added.push(Decl::Alias(Alias { name: name.clone(), sym: None, type_params, ty: t.clone(), computed: false, synthetic: true }));
                 name
             })
             .clone();
-        let args = added.iter().find_map(|(d, free)| matches!(d, Decl::Alias(a) if a.name == name).then(|| free.clone())).unwrap_or_default();
+        let args = free_of.get(&name).cloned().unwrap_or_default();
         *t = Type::synthetic_ref(name, "typeAlias", args.into_iter().map(Type::Ref).collect());
         false
     });
-    decls.extend(added.into_iter().map(|(d, _)| d));
+    decls.extend(added);
 }
 
 // Says how each member of each union is recognised at runtime, so a
@@ -518,7 +594,12 @@ fn pair_classes(decls: &mut Vec<Decl>) {
     });
     for d in decls.iter_mut() {
         match d {
-            Decl::Interface(i) => i.class = classes.remove(&i.name),
+            // A declared class keeps its own constructors and statics.
+            Decl::Interface(i) => {
+                if let Some(class) = classes.remove(&i.name) {
+                    i.class = Some(class);
+                }
+            }
             Decl::Namespace(n) => pair_classes(&mut n.decls),
             _ => {}
         }

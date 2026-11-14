@@ -548,6 +548,9 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     for u in &m.unions {
         u.parts.iter().for_each(|p| arrays(p, &mut elements));
     }
+    for c in m.classes.iter().filter(|c| c.elements.is_some()) {
+        arrays(&Ty::ArrayOf(Box::new(c.elements.clone().unwrap())), &mut elements);
+    }
     // The structs first, then unions, which may hold arrays, then the
     // functions, which may read unions out of arrays.
     let containers: Vec<String> = elements
@@ -599,6 +602,11 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         let mut body = String::new();
         for (name, value) in &c.consts {
             body += &format!("#define {}_{name} {value}\n", c.name);
+        }
+        // A subclass of Array, as the array it is: the same handle.
+        if let Some(elem) = &c.elements {
+            let array = typed(&Ty::ArrayOf(Box::new(elem.clone())), false);
+            body += &format!("static inline {array} {0}_as_array({0} self) {{ return ({array}){{ self.h }}; }}\n", c.name);
         }
         // Asynchronous iteration: `X_iterate_async(x)`, then `JsIterator_next_async(it)`, a
         // promise of the next value, or of a null handle at the end.

@@ -104,6 +104,8 @@ pub struct Class {
     // What iterating it yields, from `[Symbol.iterator]()`, and asynchronously, from `[Symbol.asyncIterator]()`.
     pub iterates: Option<Ty>,
     pub iterates_async: Option<Ty>,
+    // What it is an array of, when it extends Array: `class Group extends Array<Pt>`.
+    pub elements: Option<Ty>,
 }
 
 pub struct NamedUnion {
@@ -445,7 +447,7 @@ impl<'a> Builder<'a> {
 
     fn class(&mut self, d: Node<'a, 'a>, path: &str) -> Class {
         let owner = ident(path);
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None };
         let mut names = HashSet::new();
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
@@ -459,7 +461,7 @@ impl<'a> Builder<'a> {
     }
 
     fn statics(&mut self, body: Node<'a, 'a>, path: &str, name: String) -> Class {
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None };
         let mut names = HashSet::new();
         for m in elements(body) {
             self.member(&mut c, &mut names, m, path, true);
@@ -483,6 +485,20 @@ impl<'a> Builder<'a> {
             let base = only_child(m);
             if base.has_tag_name("ref") {
                 let name = base.attribute("qualified").unwrap_or(attr(base, "name"));
+                // A subclass of Array is an array of its elements.
+                if matches!(name, "Array" | "ReadonlyArray") && !self.decls.contains_key(name) {
+                    if let Some(e) = elements(base).next() {
+                        let elem = self.ty(e, &owner);
+                        if let Ty::ArrayOf(elem) = self.array_of(elem) {
+                            c.elements = Some(*elem.clone());
+                            // Where generics are kept, the array is its base.
+                            if self.generics {
+                                c.bases.push(Ty::ArrayOf(elem));
+                            }
+                        }
+                    }
+                    return;
+                }
                 // Where generics are erased, a generic base is the base without its arguments.
                 let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(ident(name)) } else { self.reference(base) };
                 if !self.decls.contains_key(name) {
@@ -801,12 +817,10 @@ impl<'a> Builder<'a> {
             }
             // Elements that cross as a number, a flag, a string, a handle or a
             // union that can be told apart.
-            "array" => match self.ty(only_child(n), owner) {
-                e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_)) => Ty::ArrayOf(Box::new(e)),
-                e @ (Ty::Generic(..) | Ty::Param(_)) if self.generics => Ty::ArrayOf(Box::new(e)),
-                Ty::NamedUnion(u) if self.model.unions.iter().any(|x| x.name == u && x.decodable()) => Ty::ArrayOf(Box::new(Ty::NamedUnion(u))),
-                _ => Ty::Array,
-            },
+            "array" => {
+                let elem = self.ty(only_child(n), owner);
+                self.array_of(elem)
+            }
             // A tuple whose elements all cross, none optional or rest.
             "tuple" => {
                 let elems: Vec<Node> = elements(n).collect();
@@ -836,9 +850,30 @@ impl<'a> Builder<'a> {
         }
     }
 
+    // An array of the given elements: typed, if they cross as a number, a
+    // flag, a string, a handle or a union that can be told apart.
+    fn array_of(&mut self, elem: Ty) -> Ty {
+        match elem {
+            e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_)) => Ty::ArrayOf(Box::new(e)),
+            e @ (Ty::Generic(..) | Ty::Param(_)) if self.generics => Ty::ArrayOf(Box::new(e)),
+            Ty::NamedUnion(u) if self.model.unions.iter().any(|x| x.name == u && x.decodable()) => Ty::ArrayOf(Box::new(Ty::NamedUnion(u))),
+            _ => Ty::Array,
+        }
+    }
+
     fn reference(&mut self, n: Node<'a, 'a>) -> Ty {
         let key = n.attribute("qualified").unwrap_or(attr(n, "name")).to_string();
         let declared = self.decls.get(&key).copied();
+        // `Array<T>` is `T[]`.
+        if declared.is_none() && matches!(key.as_str(), "Array" | "ReadonlyArray") {
+            return match elements(n).next() {
+                Some(e) => {
+                    let elem = self.ty(e, "");
+                    self.array_of(elem)
+                }
+                None => Ty::Array,
+            };
+        }
         match (attr(n, "kind"), declared) {
             ("typeParameter", _) => unsupported(self.target, n),
             // By what is declared: an alias of string literals has become an enum.
@@ -882,6 +917,9 @@ impl<'a> Builder<'a> {
                     self.resolving.push(key.clone());
                     let parts: Vec<Ty> = members.iter().map(|p| self.ty(*p, "")).collect();
                     self.resolving.pop();
+                    // Members that are one type here, as two generic types are once erased, are one member.
+                    let mut kept = Vec::new();
+                    let (members, parts): (Vec<Node>, Vec<Ty>) = members.into_iter().zip(parts).filter(|(_, p)| if kept.contains(p) { false } else { kept.push(p.clone()); true }).unzip();
                     // `X | any` is any.
                     if parts.contains(&Ty::Any) {
                         self.skip("union with an any member, which is any");
@@ -892,6 +930,9 @@ impl<'a> Builder<'a> {
                     }
                     let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
                     if !parts.iter().all(simple) || !distinct(&parts) {
+                        if std::env::var_os("TS_UNION_DEBUG").is_some() {
+                            eprintln!("UNION {name}: distinct={} {:?}", distinct(&parts), parts);
+                        }
                         self.skip("union whose members cannot be told apart, bound as an untyped value");
                         return Ty::Any;
                     }
@@ -1019,7 +1060,7 @@ fn js_test(test: &str, discriminant: Option<&str>) -> String {
     match kind {
         "typeof" => format!("typeof v === {arg:?}"),
         "array" => "Array.isArray(v)".into(),
-        "instanceof" => format!("v instanceof globalThis{}", access_path(arg)),
+        "instanceof" => format!("v instanceof {}", global(arg)),
         "has" => format!("typeof v === 'object' && v !== null && {arg:?} in v"),
         "tag" => format!("v != null && String(v[{:?}]) === {arg:?}", discriminant.unwrap_or_default()),
         _ => "false".into(),
@@ -1076,10 +1117,12 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
         Call::Method(js) => format!("get(self){}({args})", access(js)),
         Call::Get(prop) => format!("get(self){}", access(prop)),
         Call::Set(prop) => format!("get(self){} = {args}", access(prop)),
-        Call::New(path) => format!("new globalThis{}({args})", access_path(path)),
-        Call::Static(path) => format!("globalThis{}({args})", access_path(path)),
-        Call::StaticGet(path) => format!("globalThis{}", access_path(path)),
-        Call::StaticSet(path) => format!("globalThis{} = {args}", access_path(path)),
+        Call::New(path) => format!("new ({})({args})", global(path)),
+        Call::Static(path) => format!("{}({args})", global(path)),
+        Call::StaticGet(path) => global(path),
+        // A variable of the library's own module cannot be assigned from outside it.
+        Call::StaticSet(path) if !path.contains('.') => format!("globalThis{} = {args}", access_path(path)),
+        Call::StaticSet(path) => format!("{} = {args}", global(path)),
         Call::Create => "({})".to_string(),
         Call::Invoke => format!("get(self)({args})"),
         Call::Construct => format!("new (get(self))({args})"),
@@ -1091,6 +1134,13 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
         t => to_wasm(&call, t),
     };
     (wasm_params, body)
+}
+
+// A name the API declares at its top level: in `options.root`, the library's
+// module, if it is there, else a global. `Pt.make` is `(G.Pt ?? globalThis.Pt).make`.
+fn global(path: &str) -> String {
+    let (first, rest) = path.split_once('.').map_or((path, String::new()), |(f, r)| (f, access_path(r)));
+    format!("(G{0} ?? globalThis{0}){rest}", access(first))
 }
 
 // `.name`, or `["some-name"]` where the name is not an identifier.
@@ -1208,11 +1258,13 @@ pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
     let mut out = String::from(
         "// Generated. Implements the wasm imports by calling the JavaScript API.
 //
-// makeEnv(getInstance, options): `options.check` reports mistakes with
-// handles (one used after its release, or released twice), at some cost in
-// speed; `options.unchecked(e)` is called with an exception no one took,
-// and by default writes it to the console.
+// makeEnv(getInstance, options): `options.root` is where the API's names
+// are, when not all are globals: a library's module, say. `options.check`
+// reports mistakes with handles (one used after its release, or released
+// twice), at some cost in speed; `options.unchecked(e)` is called with an
+// exception no one took, and by default writes it to the console.
 export function makeEnv(getInstance, options = {}) {
+  const G = options.root ?? globalThis;
   const CHECK = !!options.check;
   const RELEASED = Symbol('released');
   // Values by handle. Each `ref` is a reference wasm owns, in a slot of its

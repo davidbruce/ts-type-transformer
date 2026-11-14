@@ -30,6 +30,8 @@ fn ident(name: &str) -> String {
         "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "requires", "return", "short", "signed", "sizeof", "static",
         "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid",
         "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq", "errno", "assert", "NULL",
+        // The handle every type holds.
+        "h",
     ];
     let s = super::wasm::ident(name);
     if KEYWORDS.contains(&s.as_str()) { format!("{s}_") } else { s }
@@ -542,9 +544,14 @@ struct extends_t<std::variant<A...>, U> : std::bool_constant<(extends_t<A, U>::v
 template <class T, class U>
 concept extends = extends_t<T, U>::value;
 
-// A JavaScript array of T; `Array<>` of any values.
+template <class T>
+struct Iterator;
+struct IterationEnd {};
+
+// A JavaScript array of T; `Array<>` of any values. A type that extends
+// Array inherits this: it can be indexed and iterated.
 template <class T = Value>
-struct Array : Handle {
+struct Array : virtual Handle {
     Array() = default;
     Array(handle_t, uint32_t h) : Handle(handle, h) {}
     Array(std::initializer_list<T> items) : Handle(handle, ts_raw_js_array_new()) {
@@ -559,6 +566,8 @@ struct Array : Handle {
         if constexpr (std::same_as<T, Value>) ts_raw_js_array_push(h, Arg(v).h);
         else ts_raw_js_array_push(h, Arg(T(v)).h);
     }
+    Iterator<T> begin() const;
+    IterationEnd end() const { return {}; }
 };
 
 // A JavaScript exception, or the reason a promise was rejected.
@@ -674,9 +683,6 @@ struct Task {
     };
 };
 
-// The end of an iteration.
-struct IterationEnd {};
-
 // Walks a JavaScript iterator, for a range-for: `for (Node n : list)`.
 template <class T>
 struct Iterator {
@@ -694,6 +700,9 @@ struct Iterator {
     Handle it;
     std::optional<T> cur;
 };
+
+template <class T>
+Iterator<T> Array<T>::begin() const { return Iterator<T>(ts_raw_js_iterate(h)); }
 
 // A JavaScript array of fixed length and element types: `[number, string]`
 // is `Tuple<double, std::string>`. `get<0>()` reads an element.
@@ -940,9 +949,14 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         let mut used = BTreeSet::new();
         param_types(&c.type_params, &mut used);
         let lib = library.entry(c.module.clone()).or_default();
+        // C++ cannot overload a static member with a non-static one of the
+        // same parameters, as TypeScript can: the static one says it is.
+        let signature = |f: &Func| format!("{}({})", cpp_name(f, ctor), f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
+        let instance: BTreeSet<String> = c.funcs.iter().filter(|f| Class::has_self(f)).map(|f| signature(&with_self_args(f, c))).collect();
         for f in c.funcs.iter().map(|f| with_self_args(f, c)).chain(again) {
             let place = if Class::has_self(&f) { Place::Member } else { Place::Static };
-            let func = function(&f, cpp_name(&f, ctor), &owner, &class_head, place, unions);
+            let name = if place == Place::Static && instance.contains(&signature(&f)) { format!("{}_static", cpp_name(&f, ctor)) } else { cpp_name(&f, ctor) };
+            let func = function(&f, name, &owner, &class_head, place, unions);
             // Overloads TypeScript tells apart and C++ cannot are the same C++ function.
             if !seen.insert(func.key) {
                 continue;

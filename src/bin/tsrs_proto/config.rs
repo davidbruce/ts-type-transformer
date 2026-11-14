@@ -22,6 +22,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("union_params", "overloads", "union-typed parameters", "one overload per union member"),
     ("unions", "erase|name", "other unions", "erase: their common supertype, or any. name: a named declaration"),
     ("overloads", "rename", "same-named members", "unique names, with jsName"),
+    ("redeclarations", "drop", "a method a type declares again as its ancestor declares it, but for the type of `this`", "the ancestor's alone"),
     ("keyed_params", "expand|map", "f<K extends keyof M>(key: K, value: M[K])", "expand: one overload per key, the key a fixed argument. map: kept generic, with keyof M and M[K] as written"),
 ];
 

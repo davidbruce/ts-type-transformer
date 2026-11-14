@@ -782,9 +782,20 @@ impl Gen {
         let statics: Vec<Node> = elements(d).filter(|m| m.has_tag_name("constructor") || is_member(m) && flag(*m, "static")).collect();
         self.out += &format!("{indent}[<AllowNullLiteral>]\n{indent}type {header} =\n");
         let mut body = Vec::new();
+        // A subclass of Array is a seq with an indexer and a length: an F#
+        // interface cannot inherit ResizeArray, which is a class.
+        let mut is_array = false;
         for e in named(d, "extends") {
             let base = self.ty(only_child(e), &owner);
-            body.push(format!("{indent}    inherit {base}\n"));
+            match base.strip_prefix("ResizeArray<").and_then(|b| b.strip_suffix('>')) {
+                Some(elem) => {
+                    is_array = true;
+                    body.push(format!("{indent}    inherit seq<{elem}>\n"));
+                    body.push(format!("{indent}    [<EmitIndexer>] abstract Item: index: int -> {elem} with get, set\n"));
+                    body.push(format!("{indent}    [<Emit(\"$0.length\")>] abstract length: int\n"));
+                }
+                None => body.push(format!("{indent}    inherit {base}\n")),
+            }
         }
         // `[Symbol.iterator](): ArrayIterator<Node>`: a seq of Nodes, which Fable iterates by that method.
         let iterator = elements(d).find(|m| m.attribute("name") == Some("[Symbol.iterator]") && !flag(*m, "static"));
@@ -799,7 +810,7 @@ impl Gen {
                 todo.extend(self.bases.get(&b).cloned().unwrap_or_default());
             }
         }
-        if let Some(elem) = iterator.filter(|_| !inherited).and_then(|m| named(m, "returns").next()).and_then(|r| elements(r).next()).and_then(|it| elements(it).next()) {
+        if let Some(elem) = iterator.filter(|_| !inherited && !is_array).and_then(|m| named(m, "returns").next()).and_then(|r| elements(r).next()).and_then(|it| elements(it).next()) {
             let line = format!("inherit seq<{}>", self.ty(elem, &owner));
             // F# files cannot refer forward, and an inherited interface cannot be an extension.
             let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);

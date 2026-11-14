@@ -76,6 +76,7 @@ impl<'c> Front<'c> {
         for &s in stmts {
             match s.kind() {
                 Kind::InterfaceDeclaration => out.extend(self.interface(s).map(Decl::Interface)),
+                Kind::ClassDeclaration => out.extend(self.class(s).map(Decl::Interface)),
                 Kind::TypeAliasDeclaration => {
                     let sym = self.c.get_symbol_of_declaration_exported(s);
                     out.push(Decl::Alias(Alias {
@@ -136,6 +137,92 @@ impl<'c> Front<'c> {
             ancestors: Vec::new(),
             members,
             class: None,
+            synthetic: false,
+        })
+    }
+
+    // `declare class X extends B implements I { ... }`: the interface of its
+    // instances, with its constructors and static members. Private and
+    // protected members are not what a caller sees.
+    fn class(&mut self, node: P<Node>) -> Option<Interface> {
+        let (sym, _) = self.first_time(node)?;
+        let mut extends = Vec::new();
+        let mut keys = HashSet::new();
+        for clause in node.as_class_declaration().heritage_clauses().iter().flat_map(|l| l.nodes()) {
+            for t in clause.as_heritage_clause().types().nodes() {
+                let base = if t.kind() == Kind::ExpressionWithTypeArguments {
+                    self.reference(t.expression().unwrap(), t.type_argument_list(), None)
+                } else {
+                    self.ty(*t)
+                };
+                if keys.insert(format!("extends {}", crate::xml::type_key(&base))) {
+                    extends.push(base);
+                }
+            }
+        }
+        let mut members = Vec::new();
+        let mut class = Class { constructors: Vec::new(), statics: Vec::new() };
+        let mut declares_constructor = false;
+        for &m in node.members() {
+            let hidden = has_syntactic_modifier(m, ModifierFlags::Private) || has_syntactic_modifier(m, ModifierFlags::Protected);
+            if m.kind() == Kind::Constructor {
+                declares_constructor = true;
+                if !hidden {
+                    let mut c = Member::new(MemberKind::Construct, "new".into());
+                    // The constructor's result and type parameters are the class's own.
+                    c.sig = Some(Signature { type_params: Vec::new(), ret: None, ..self.signature(m) });
+                    class.constructors.push(c);
+                }
+                continue;
+            }
+            if hidden || m.name().is_some_and(|n| n.kind() == Kind::PrivateIdentifier) {
+                continue;
+            }
+            let kind = match m.kind() {
+                Kind::PropertyDeclaration => MemberKind::Property,
+                Kind::MethodDeclaration => MemberKind::Method,
+                Kind::IndexSignature => MemberKind::Index,
+                Kind::GetAccessor => MemberKind::Get,
+                Kind::SetAccessor => MemberKind::Set,
+                k => {
+                    self.count(&format!("unhandled class member {k:?}"));
+                    continue;
+                }
+            };
+            let mut member = Member::new(kind, m.name().map(member_name).unwrap_or_default());
+            member.optional = m.question_token().is_some();
+            member.readonly = has_syntactic_modifier(m, ModifierFlags::Readonly);
+            if kind == MemberKind::Property {
+                member.ty = Some(self.opt_type(m.type_node()));
+            } else {
+                member.sig = Some(self.signature(m));
+            }
+            let is_static = has_syntactic_modifier(m, ModifierFlags::Static);
+            if keys.insert(format!("{is_static}{}", crate::xml::member_key(&member))) {
+                if is_static { class.statics.push(member) } else { members.push(member) }
+            }
+        }
+        // A class that declares no constructor has its base's, or one without
+        // arguments: the checker knows which. An abstract class has none to call.
+        if !declares_constructor && !has_syntactic_modifier(node, ModifierFlags::Abstract) {
+            let t = self.c.get_type_of_symbol_exported(sym);
+            for sig in self.c.get_signatures_of_type_exported(t, SignatureKind::Construct) {
+                let mut c = Member::new(MemberKind::Construct, "new".into());
+                c.sig = Some(Signature { type_params: Vec::new(), ret: None, ..self.from_signature(*sig) });
+                class.constructors.push(c);
+            }
+        }
+        if has_syntactic_modifier(node, ModifierFlags::Abstract) {
+            class.constructors.clear();
+        }
+        Some(Interface {
+            name: text(name_of(node)),
+            sym: Some(sym),
+            type_params: self.type_params(node.type_parameters()),
+            extends,
+            ancestors: Vec::new(),
+            members,
+            class: Some(class),
             synthetic: false,
         })
     }

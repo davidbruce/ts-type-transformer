@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const [impl, glue, wasm] = process.argv.slice(2);
-await import(pathToFileURL(impl));
+// The API is globals the implementation sets, or the module it exports as `root`.
+const { root } = await import(pathToFileURL(impl));
 const { makeEnv } = await import(pathToFileURL(glue));
 
 let instance;
@@ -13,7 +14,7 @@ const failed = [];
 // C++ is built for WASI: its few imports are not used by the tests.
 const wasi = new Proxy({}, { get: () => () => 0 });
 // Mistakes with handles are checked, and an exception no one took is a failure.
-const options = { check: true, unchecked: e => failed.push(`unchecked exception: ${e?.message ?? e}`) };
+const options = { root, check: true, unchecked: e => failed.push(`unchecked exception: ${e?.message ?? e}`) };
 const env = { ...makeEnv(() => instance, options), check: (ok, line) => (ok ? passed++ : failed.push(line)) };
 ({ instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), { env, wasi_snapshot_preview1: wasi }));
 instance.exports._initialize?.();
