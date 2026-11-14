@@ -34,6 +34,9 @@ const OVERLOAD_NAMES: &[&str] = &["with_params", "numbered"];
 pub struct Modules {
     pub default: String,
     pub areas: Vec<(String, Vec<String>)>,
+    // The ES module the library is imported from (`[library] module = "pts"`),
+    // where it is not globals.
+    pub import: Option<String>,
 }
 
 impl Modules {
@@ -107,7 +110,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
         let t = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?;
         merge(&mut table, t);
     }
-    let mut modules = Modules { default: "main".into(), areas: Vec::new() };
+    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None };
     // `--set generics=erase`, `--set limits.union_param_overloads=4`.
     for o in overrides {
         let (key, value) = o.split_once('=').ok_or_else(|| format!("--set {o}: expected key=value"))?;
@@ -144,6 +147,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
                 ("limits", "keyed_overloads") => o.keyed_limit = count(&at, value)?,
                 ("naming", "separator") => o.separator = Box::leak(string(&at, value)?.to_string().into_boxed_str()),
                 ("naming", "overloads") => o.numbered_overloads = one_of(&at, value, OVERLOAD_NAMES)? == "numbered",
+                ("library", "module") => modules.import = Some(string(&at, value)?.to_string()),
                 ("rename", old) => renames.push((old.to_string(), string(&at, value)?.to_string())),
                 ("modules", "default") => modules.default = string(&at, value)?.to_string(),
                 // [[modules.area]] name = "svg", match = ["SVG*"]

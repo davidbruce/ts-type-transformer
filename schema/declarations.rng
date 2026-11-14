@@ -10,6 +10,8 @@
 
   <start>
     <element name="declarations">
+      <!-- The ES module the library is imported from; absent, it is globals. -->
+      <optional><attribute name="import"/></optional>
       <ref name="lowering"/>
       <zeroOrMore>
         <ref name="topDeclaration"/>

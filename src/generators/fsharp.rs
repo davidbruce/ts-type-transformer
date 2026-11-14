@@ -17,6 +17,13 @@ pub struct Output {
 }
 
 struct Gen {
+    // The module the library is imported from, if it is not globals.
+    import: Option<String>,
+    // Classes a union tells apart by `instanceof`: imported types, which Fable tests itself.
+    tested_classes: HashSet<String>,
+    // For a method with optional parameters and then a rest parameter, which
+    // of its two overloads is being written: true, the one with the rest.
+    split_rest: Option<bool>,
     out: String,
     skipped: BTreeMap<String, usize>,
     // Qualified names declared in the XML.
@@ -159,7 +166,13 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         bases: HashMap::new(),
         constrained: HashMap::new(),
         constrained_owner: HashMap::new(),
+        import: doc.root_element().attribute("import").map(str::to_string),
+        tested_classes: HashSet::new(),
+        split_rest: None,
     };
+    if g.import.is_some() {
+        g.tested_classes = doc.root_element().descendants().filter_map(|n| n.attribute("test")?.strip_prefix("instanceof:").filter(|c| !c.contains('.')).map(str::to_string)).collect();
+    }
     for d in elements(doc.root_element()).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
         let name = attr(d, "name").to_string();
         if elements(d).any(|m| m.attribute("name") == Some("[Symbol.iterator]")) {
@@ -186,6 +199,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          /// A key of the map 'Map whose value has type 'V: `el.addEventListener (HTMLElementEventMapKeys.click, fun e -> ...)`.\n\
          [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n\
          /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
+         /// A JavaScript object used as a map: `{ [key: string]: T }` is `JsRecord<string, T>`.\n\
+         [<AllowNullLiteral>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n\n\
          [<AllowNullLiteral>]\ntype JsAsyncIterator<'T> =\n    \
          [<Emit(\"$0.next().then(r => r.done ? undefined : r.value)\")>] abstract next: unit -> JS.Promise<'T option>\n\n",
     );
@@ -414,6 +429,29 @@ fn tarjan(n: usize, edges: &[BTreeSet<usize>]) -> Vec<Vec<usize>> {
 }
 
 impl Gen {
+    // The attribute that reaches `path`, a global, or a value of the imported
+    // module: `[<Emit("Shape")>]`, `[<Import("Shape", "lib")>]`; called with
+    // `args`, `[<Emit("f($0...)")>]` or `[<Import("f", "lib"); Emit("$0($1...)")>]`.
+    fn at(&self, path: &str, args: Option<&str>) -> String {
+        let emit = |text: String| format!("Emit(\"{}\")", text.replace('"', "\\\""));
+        match &self.import {
+            None => format!("[<{}>]", emit(match args {
+                Some(args) => format!("{path}({args})"),
+                None => path.to_string(),
+            })),
+            Some(module) => {
+                let (first, rest) = path.split_once('.').map_or((path, String::new()), |(a, b)| (a, format!(".{b}")));
+                let import = format!("Import({first:?}, {module:?})");
+                match args {
+                    // The import is $0: each argument moves up one.
+                    Some(args) => format!("[<{import}; {}>]", emit(format!("$0{rest}({})", shift(args)))),
+                    None if rest.is_empty() => format!("[<{import}>]"),
+                    None => format!("[<{import}; {}>]", emit(format!("$0{rest}"))),
+                }
+            }
+        }
+    }
+
     fn skip(&mut self, why: &str) {
         *self.skipped.entry(why.to_string()).or_default() += 1;
     }
@@ -548,6 +586,14 @@ impl Gen {
                     .collect();
                 format!("{{| {} |}}", fields.join("; "))
             }
+            // `{}`: any object.
+            "object" if elements(n).next().is_none() => "obj".into(),
+            // Only an index signature: a map.
+            "object" if elements(n).count() == 1 && elements(n).all(|m| m.has_tag_name("index")) => {
+                let m = elements(n).next().unwrap();
+                let key = named(m, "parameter").next().map(|p| self.ty(only_child(p), owner)).unwrap_or("string".into());
+                format!("JsRecord<{key}, {}>", self.returns(m, owner))
+            }
             "object" | "constructorType" => {
                 self.skip("inline type with methods, bound as obj");
                 "obj".into()
@@ -652,21 +698,25 @@ impl Gen {
             }
             let t = only_child(p);
             let name = ident(attr(p, "name"));
-            // F# wants optional arguments last and a parameter array last: not both.
-            if flag(p, "rest") && has_optional {
-                self.skip("rest parameter after optional ones");
+            // F# wants optional arguments last and a parameter array last: not
+            // both. A method is two overloads (see `members`); elsewhere the rest is left out.
+            if flag(p, "rest") && has_optional && self.split_rest != Some(true) {
+                if self.split_rest.is_none() {
+                    self.skip("rest parameter after optional ones");
+                }
                 continue;
             }
+            let optional = flag(p, "optional") && self.split_rest != Some(true);
             // A key of a map: typed by the value it selects.
             if t.has_tag_name("ref") && attr(t, "kind") == "typeParameter" && let Some(map) = self.keyed.get(attr(t, "name")) {
-                out.push(format!("{}{name}: TypedKey<{map}, '{}>", if flag(p, "optional") { "?" } else { "" }, attr(t, "name")));
+                out.push(format!("{}{name}: TypedKey<{map}, '{}>", if optional { "?" } else { "" }, attr(t, "name")));
                 continue;
             }
             if flag(p, "rest") {
                 let element = if t.has_tag_name("array") { self.ty(only_child(t), owner) } else { "obj".into() };
                 out.push(format!("[<System.ParamArray>] {name}: {element}[]"));
             } else {
-                out.push(format!("{}{name}: {}", if flag(p, "optional") { "?" } else { "" }, self.ty(t, owner)));
+                out.push(format!("{}{name}: {}", if optional { "?" } else { "" }, self.ty(t, owner)));
             }
         }
         out
@@ -722,33 +772,43 @@ impl Gen {
             if raw == "[Symbol.iterator]" || m.has_tag_name("set") {
                 continue;
             }
-            let pair = if raw == "[Symbol.asyncIterator]" {
+            let pairs: Vec<(String, String)> = if raw == "[Symbol.asyncIterator]" {
                 // `x.asyncIterator ()`, whose `next ()` is a promise of the next value.
                 let elem = named(m, "returns").next().and_then(|r| elements(r).next()).and_then(|it| elements(it).next());
                 let t = elem.map_or("obj".to_string(), |e| self.ty(e, owner));
                 let emit = "[<Emit(\"$0[Symbol.asyncIterator]()\")>]";
-                Some((format!("{emit} abstract asyncIterator: unit -> JsAsyncIterator<{t}>"), format!("{emit} member this.asyncIterator(): JsAsyncIterator<{t}> = jsNative")))
+                vec![(format!("{emit} abstract asyncIterator: unit -> JsAsyncIterator<{t}>"), format!("{emit} member this.asyncIterator(): JsAsyncIterator<{t}> = jsNative"))]
             } else if raw.starts_with('[') {
                 self.skip("symbol-named member");
-                None
-            } else {
-                self.member(m, owner, setters.contains(raw))
-            };
-            let Some((line, ext)) = pair else { continue };
-            // The latest file a type in the member is declared in.
-            let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
-            if latest > self.current_file && indent.is_empty() {
-                let lines = self.extensions.entry(latest).or_default().entry(extend.to_string()).or_default();
-                let ext = format!("        {ext}\n");
-                if !lines.contains(&ext) {
-                    lines.push(ext);
+                Vec::new()
+            } else if m.has_tag_name("method") && named(m, "parameter").any(|p| flag(p, "rest")) && named(m, "parameter").any(|p| flag(p, "optional")) {
+                // `f(a, b?, ...rest)`: `f(a, ?b)` and `f(a, b, [<ParamArray>] rest)`.
+                let mut both = Vec::new();
+                for with_rest in [false, true] {
+                    self.split_rest = Some(with_rest);
+                    both.extend(self.member(m, owner, setters.contains(raw)));
                 }
-                continue;
-            }
-            // Distinct TypeScript overloads can map to the same F# signature.
-            let line = format!("{indent}    {line}\n");
-            if !lines.contains(&line) {
-                lines.push(line);
+                self.split_rest = None;
+                both
+            } else {
+                self.member(m, owner, setters.contains(raw)).into_iter().collect()
+            };
+            for (line, ext) in pairs {
+                // The latest file a type in the member is declared in.
+                let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
+                if latest > self.current_file && indent.is_empty() {
+                    let lines = self.extensions.entry(latest).or_default().entry(extend.to_string()).or_default();
+                    let ext = format!("        {ext}\n");
+                    if !lines.contains(&ext) {
+                        lines.push(ext);
+                    }
+                    continue;
+                }
+                // Distinct TypeScript overloads can map to the same F# signature.
+                let line = format!("{indent}    {line}\n");
+                if !lines.contains(&line) {
+                    lines.push(line);
+                }
             }
         }
         lines
@@ -831,9 +891,16 @@ impl Gen {
             None => owner.clone(),
         };
         let is_member = |m: &Node| matches!(m.tag_name().name(), "property" | "method" | "call" | "construct" | "index" | "get" | "set");
-        let instance: Vec<Node> = elements(d).filter(|m| is_member(m) && !flag(*m, "static")).collect();
-        let statics: Vec<Node> = elements(d).filter(|m| m.has_tag_name("constructor") || is_member(m) && flag(*m, "static")).collect();
-        self.out += &format!("{indent}[<AllowNullLiteral>]\n{indent}type {header} =\n");
+        // An alias of an object type has its members in the object.
+        let src = if d.has_tag_name("typeAlias") { only_child_type(d) } else { d };
+        let instance: Vec<Node> = elements(src).filter(|m| is_member(m) && !flag(*m, "static")).collect();
+        let statics: Vec<Node> = elements(src).filter(|m| m.has_tag_name("constructor") || is_member(m) && flag(*m, "static")).collect();
+        // A class of an imported library that unions tell apart: Fable tests it with instanceof.
+        let origin = match &self.import {
+            Some(module) if prefix.is_empty() && self.tested_classes.contains(attr(d, "name")) => format!("{indent}[<Import({:?}, {module:?})>]\n", attr(d, "name")),
+            _ => String::new(),
+        };
+        self.out += &format!("{origin}{indent}[<AllowNullLiteral>]\n{indent}type {header} =\n");
         let mut body = Vec::new();
         // A subclass of Array is a seq with an indexer and a length: an F#
         // interface cannot inherit ResizeArray, which is a class.
@@ -922,7 +989,7 @@ impl Gen {
         }
         self.out += &lines.concat();
         self.out += "\n";
-        let value = format!("{indent}[<Emit({path:?})>]\n{indent}let {name}: {static_name} = jsNative\n\n");
+        let value = format!("{indent}{}\n{indent}let {name}: {static_name} = jsNative\n\n", self.at(&path, None));
         if indent.is_empty() {
             self.values += &value;
         } else {
@@ -1010,7 +1077,7 @@ impl Gen {
                         None => (name, "$0...".to_string()),
                     };
                     let tps = self.constrained_type_params(d);
-                    let line = format!("{indent}    [<Emit(\"{path}({args})\")>] static member {name}{tps} ({}): {ret} = jsNative\n", params.join(", "));
+                    let line = format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", "));
                     if !functions.contains(&line) {
                         functions.push(line);
                     }
@@ -1024,8 +1091,13 @@ impl Gen {
                 }
                 "typeAlias" => {
                     let body = only_child_type(d);
-                    // F# abbreviations cannot refer to themselves.
-                    if body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(raw)) {
+                    // F# abbreviations cannot refer to themselves; an interface can.
+                    let recursive = body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(raw));
+                    if recursive && body.has_tag_name("object") {
+                        self.interface(d, prefix, indent);
+                        return;
+                    }
+                    if recursive {
                         self.skip("recursive type alias, bound as obj");
                         self.out += &format!("{indent}type {name} = obj\n\n");
                         return;
@@ -1040,7 +1112,7 @@ impl Gen {
                         self.static_side(&name, &path, &members, None, indent);
                     } else {
                         let t = self.ty(body, "");
-                        let value = format!("{indent}[<Emit({path:?})>]\n{indent}let {name}: {t} = jsNative\n\n");
+                        let value = format!("{indent}{}\n{indent}let {name}: {t} = jsNative\n\n", self.at(&path, None));
                         if indent.is_empty() {
                             self.values += &value;
                         } else {
@@ -1091,8 +1163,9 @@ impl Gen {
             self.out += &format!("{indent}[<Erase; RequireQualifiedAccess>]\n{indent}type {name} =\n");
             for (case, payload, test) in &cases {
                 let native = matches!(payload.as_str(), "string" | "float" | "bool");
+                let imported = test.as_deref().and_then(|t| t.strip_prefix("instanceof:")).is_some_and(|c| self.tested_classes.contains(c));
                 let attr = match test.as_deref().and_then(case_test) {
-                    Some(js) if !native => format!("[<CaseTest(\"{}\")>] ", js.replace('"', "\\\"")),
+                    Some(js) if !native && !imported => format!("[<CaseTest(\"{}\")>] ", js.replace('"', "\\\"")),
                     _ => String::new(),
                 };
                 self.out += &format!("{indent}    | {attr}{case} of {payload}\n");
@@ -1116,6 +1189,24 @@ impl Gen {
 fn js_access(name: &str) -> String {
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
     if plain { format!(".{name}") } else { format!("[{name:?}]") }
+}
+
+// `$0, $1...` as `$1, $2...`.
+fn shift(args: &str) -> String {
+    let mut out = String::new();
+    let mut chars = args.chars().peekable();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c == '$' && chars.peek().is_some_and(char::is_ascii_digit) {
+            let mut n = String::new();
+            while let Some(d) = chars.peek().filter(|d| d.is_ascii_digit()) {
+                n.push(*d);
+                chars.next();
+            }
+            out += &(n.parse::<usize>().unwrap() + 1).to_string();
+        }
+    }
+    out
 }
 
 // The JavaScript test of a union member, from its `test` attribute; `$0` is the value.

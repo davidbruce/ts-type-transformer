@@ -1,0 +1,3 @@
+# Pts is an ES module, not globals: bindings import it.
+[library]
+module = "pts"

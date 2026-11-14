@@ -428,7 +428,7 @@ pub fn test_text(t: &Test) -> String {
     }
 }
 
-fn escape(s: &str) -> String {
+pub fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {

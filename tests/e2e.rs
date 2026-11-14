@@ -86,7 +86,9 @@ fn case_in(fixture: &str, target: &str, name: &str) -> Case {
     let out = root().join("target/e2e").join(name);
     let _ = fs::remove_dir_all(&out);
     fs::create_dir_all(&out).unwrap();
-    let xml = lower(&dir.join("api.d.ts"), Some(target), &[]);
+    // The library's own settings: the module it is, say.
+    let library: Vec<PathBuf> = Some(dir.join("library.toml")).filter(|p| p.exists()).into_iter().collect();
+    let xml = lower_with(&dir.join("api.d.ts"), Some(target), &library, &[]);
     fs::write(out.join("api.xml"), &xml).unwrap();
     Case { fixture: dir, out, xml }
 }
@@ -116,6 +118,13 @@ fn fsharp(fixture: &str) {
     let c = case(fixture, "fsharp");
     let bindings = generators::fsharp::module(&c.xml).unwrap();
     write_fsharp(&c, &bindings);
+    // A library that is a module, `<module>.mjs` in the fixture, installed where the compiled test imports it.
+    if let Some(module) = c.xml.lines().next().and_then(|l| l.split("import=\"").nth(1)).and_then(|r| r.split('"').next()) {
+        let dir = c.out.join("node_modules").join(module);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("package.json"), format!("{{ \"name\": \"{module}\", \"type\": \"module\", \"exports\": \"./index.mjs\" }}\n")).unwrap();
+        fs::copy(c.fixture.join(format!("{module}.mjs")), dir.join("index.mjs")).unwrap();
+    }
     run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
     let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("js/Test.mjs")));
     print!("{report}{}", skipped(&bindings.skipped));

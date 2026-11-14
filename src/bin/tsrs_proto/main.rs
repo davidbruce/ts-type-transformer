@@ -93,7 +93,8 @@ fn main() {
     x.top(&decls, &modules);
     // The strategies in effect, so a consumer can check what it is reading.
     let strategies: Vec<String> = config::describe(opts).iter().map(|(k, v)| format!("{k}=\"{v}\"")).collect();
-    let mut doc = format!("<declarations>\n  <lowering {}/>\n", strategies.join(" "));
+    let import = modules.import.as_ref().map(|m| format!(" import=\"{}\"", xml::escape(m))).unwrap_or_default();
+    let mut doc = format!("<declarations{import}>\n  <lowering {}/>\n", strategies.join(" "));
     for line in x.out.lines() {
         doc += &format!("  {line}\n");
     }

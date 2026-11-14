@@ -16,7 +16,6 @@ process.on('exit', code => {
         process.exitCode = 1;
     }
 });
-// Fable's bindings name globals: a module's exports are made global.
-const { root } = await import(pathToFileURL(impl));
-if (root) Object.assign(globalThis, root);
+// A library of globals sets them; one that is a module the bindings import.
+await import(pathToFileURL(impl));
 await import(pathToFileURL(test));

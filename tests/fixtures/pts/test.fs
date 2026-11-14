@@ -45,5 +45,21 @@ check (Line.magnitude (PtIterable.Group(Group.Create(Pt.Create(0.0, 0.0), Pt.Cre
 let ray = Line.fromAngle (PtLike.Pt(Pt.Create(1.0, 1.0)), 0.0, 5.0)
 check (ray.p2.x = 6.0 && ray.p2.y = 1.0) "from angle"
 
+// A union value from JavaScript is told apart by the class it is an instance
+// of: imported from the module, not looked up as a global.
+let kind (p: PtLike) =
+    match p with
+    | PtLike.Pt _ -> "pt"
+    | PtLike.Float32Array _ -> "float32"
+    | PtLike.Array _ -> "array"
+check (kind (unbox<PtLike> (Pt.Create(1.0, 2.0))) = "pt") "instanceof an imported class"
+check (kind (unbox<PtLike> (ResizeArray [ 1.0; 2.0 ])) = "array") "an array"
+let groups (g: PtIterable) =
+    match g with
+    | PtIterable.Group g -> g.length
+    | PtIterable.Array a -> a.Count
+    | PtIterable.Iterable _ -> -1
+check (groups (unbox<PtIterable> square) = 4) "a Group, not an array"
+
 
 printfn "%d checks passed" passed
