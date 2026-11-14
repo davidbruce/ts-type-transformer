@@ -1,7 +1,16 @@
 // XML -> C header for a wasm32 module. No inheritance, generics, overloads,
 // optional parameters or unions: the config must have lowered them all.
 
-use super::wasm::{Class, Func, Model, Ty};
+use super::wasm::{Class, Func, Model, NamedUnion, Ty};
+
+thread_local! {
+    // The unions of the model being generated that values can be decoded to.
+    static DECODABLE: std::cell::RefCell<std::collections::HashSet<String>> = std::cell::RefCell::new(Default::default());
+}
+
+fn decodable(n: &str) -> bool {
+    DECODABLE.with(|d| d.borrow().contains(n))
+}
 
 const T: &str = "C";
 
@@ -42,7 +51,10 @@ fn typed(t: &Ty, param: bool) -> String {
         Ty::Nullable(inner, _) if **inner == Ty::Bool => "JsOptionalBool".into(),
         // NULL, or a null handle, is the absent value.
         Ty::Nullable(inner, _) => typed(inner, param),
-        Ty::Union(_) | Ty::NamedUnion(_) => panic!("{T} generator cannot express a union: the target config must erase unions"),
+        // A union a handle can be decoded to: a tagged struct. Any other is a value.
+        Ty::NamedUnion(n) if decodable(n) => n.clone(),
+        Ty::NamedUnion(_) => "JsValue".into(),
+        Ty::Union(_) => panic!("{T} generator cannot express a union: the target config must name or erase unions"),
         Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => panic!("{T} generator cannot express keyed generics: the target config must expand them"),
         Ty::Param(_) | Ty::Generic(..) => panic!("{T} generator cannot express generics: the target config must erase them"),
     }
@@ -67,6 +79,65 @@ fn arrays(t: &Ty, out: &mut Vec<Ty>) {
     if !out.contains(t) {
         out.push(t.clone());
     }
+}
+
+// A union's member name: `number`, `string`, `Element`, `array`.
+fn union_field(t: &Ty) -> String {
+    match t {
+        Ty::Num => "number".into(),
+        Ty::Str => "string".into(),
+        Ty::Bool => "boolean".into(),
+        Ty::Obj(n) => n.clone(),
+        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
+        t => panic!("{T} generator: a union member it cannot hold: {t:?}"),
+    }
+}
+
+// A union: a struct with a tag and its members, tag constants, and
+// conversions to and from handles: `Id_from_handle` takes a handle a function
+// returned; `Id_to_handle` gives one the caller releases.
+fn union_type(u: &NamedUnion) -> (String, String) {
+    let n = &u.name;
+    let fields: Vec<String> = u.parts.iter().map(|p| format!("{} {};", if *p == Ty::Str { "JsString".to_string() } else { typed(p, false) }, union_field(p))).collect();
+    let tags: Vec<String> = u.parts.iter().enumerate().map(|(i, p)| format!("{n}_{} = {i}", union_field(p))).collect();
+    let decl = format!(
+        "// {n}: `tag` says which member it holds; -1 is none.\ntypedef struct {{ int32_t tag; union {{ {} }} as; }} {n};\nenum {{ {} }};\n",
+        fields.join(" "),
+        tags.join(", ")
+    );
+    let to: String = u
+        .parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let f = union_field(p);
+            match p {
+                Ty::Num => format!(" case {i}: return ts_raw_js_from_number(u.as.{f});"),
+                Ty::Bool => format!(" case {i}: return ts_raw_js_from_bool(u.as.{f});"),
+                _ => format!(" case {i}: ts_raw_js_retain(u.as.{f}.h); return u.as.{f}.h;"),
+            }
+        })
+        .collect();
+    let from: String = u
+        .parts
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let f = union_field(p);
+            match p {
+                Ty::Num => format!(" case {i}: u.as.{f} = ts_raw_js_to_number(h); ts_raw_js_release(h); break;"),
+                Ty::Bool => format!(" case {i}: u.as.{f} = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); break;"),
+                Ty::Str => format!(" case {i}: u.as.{f} = (JsString){{ h }}; break;"),
+                p => format!(" case {i}: u.as.{f} = ({}){{ h }}; break;", typed(p, false)),
+            }
+        })
+        .collect();
+    let functions = format!(
+        "TS_IMPORT({n}_tag) int32_t ts_raw_{n}_tag(uint32_t, int32_t);\n\
+         static inline uint32_t {n}_to_handle({n} u) {{ switch (u.tag) {{{to} }} return 0; }}\n\
+         static inline {n} {n}_from_handle(uint32_t h) {{ {n} u; u.tag = ts_raw_{n}_tag(h, 0); switch (u.tag) {{{from} }} return u; }}\n"
+    );
+    (decl, functions)
 }
 
 // A tuple: `JsTuple_double_JsString`, made by `_new(1, "one")`, read by `_get_0`.
@@ -102,6 +173,7 @@ fn tuple_type(es: &[Ty]) -> String {
 fn array_type(e: &Ty) -> String {
     let (name, elem) = (format!("JsArray_{}", element(e)), typed(e, false));
     let (get, push_param, push) = match e {
+        Ty::NamedUnion(n) => (format!("return {n}_from_handle(h);"), format!("{n} v"), format!("uint32_t h = {n}_to_handle(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);")),
         Ty::Num => ("double x = ts_raw_js_to_number(h); ts_raw_js_release(h); return x;".to_string(), "double v".to_string(), "uint32_t h = ts_raw_js_from_number(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
         Ty::Bool => ("bool x = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); return x;".to_string(), "bool v".to_string(), "uint32_t h = ts_raw_js_from_bool(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
         Ty::Str => ("return (JsString){ h };".to_string(), "const char* v".to_string(), "uint32_t h = ts_raw_js_from_string(v, ts_strlen(v)); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
@@ -129,9 +201,25 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         params.push(format!("{} self", owner.unwrap()));
         args.push("self.h".to_string());
     }
+    // A union argument is lent as a handle, released after the call.
+    let mut lent = Vec::new();
     for (name, t) in &f.params {
         let name = ident(name);
         params.push(format!("{} {name}", typed(t, true)));
+        let union = match t {
+            Ty::NamedUnion(n) => Some(n),
+            Ty::Nullable(inner, _) => match &**inner {
+                Ty::NamedUnion(n) => Some(n),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(n) = union.filter(|n| decodable(n)) {
+            raw_params.push("uint32_t".into());
+            args.push(format!("lent_{name}"));
+            lent.push(format!("uint32_t lent_{name} = {n}_to_handle({name});"));
+            continue;
+        }
         match t {
             Ty::Str => {
                 raw_params.extend(["const char*".to_string(), "uint32_t".to_string()]);
@@ -182,8 +270,33 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         }
         None => f.import.as_str(),
     };
-    let call = format!("ts_raw_{import}({})", args.join(", "));
+    let mut call = format!("ts_raw_{import}({})", args.join(", "));
+    // With lent arguments: the call, their release, then the result.
+    let mut pre = lent.concat();
+    if !lent.is_empty() {
+        let release: String = lent.iter().map(|l| format!(" ts_raw_js_release({});", l.split(' ').nth(1).unwrap())).collect();
+        if f.ret == Ty::Void {
+            pre += &format!(" {call};{release}");
+            call = String::new();
+        } else {
+            pre += &format!(" {} raw_result = {call};{release}", raw(&f.ret));
+            call = "raw_result".into();
+        }
+    }
+    let union_ret = match &f.ret {
+        Ty::NamedUnion(n) => Some((n, false)),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::NamedUnion(n) => Some((n, true)),
+            _ => None,
+        },
+        _ => None,
+    };
     let body = match &f.ret {
+        Ty::Void if call.is_empty() => String::new(),
+        _ if union_ret.is_some_and(|(n, _)| decodable(n)) => {
+            let (n, optional) = union_ret.unwrap();
+            if optional { format!("uint32_t h = {call}; if (h) return {n}_from_handle(h); {n} none = {{ -1 }}; return none;") } else { format!("return {n}_from_handle({call});") }
+        }
         Ty::Void => format!("{call};"),
         Ty::Num => format!("return {call};"),
         Ty::Bool => format!("return {call} != 0;"),
@@ -203,7 +316,7 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
     if f.shared.is_none() || !out.contains(&decl) {
         *out += &decl;
     }
-    *out += &format!("static inline {} {name}({}) {{ {body} }}\n", typed(&f.ret, false), void(&params));
+    *out += &format!("static inline {} {name}({}) {{ {pre}{body} }}\n", typed(&f.ret, false), void(&params));
 }
 
 const RUNTIME: &str = "// Generated.
@@ -284,6 +397,7 @@ static inline bool JsString_equals(JsString s, const char* text) { return ts_raw
 static inline JsValue js_number(double x) { return (JsValue){ ts_raw_js_from_number(x) }; }
 static inline JsValue js_bool(bool x) { return (JsValue){ ts_raw_js_from_bool(x) }; }
 static inline JsValue js_string(const char* s) { return (JsValue){ ts_raw_js_from_string(s, ts_strlen(s)) }; }
+static inline JsString JsString_from(const char* s) { return (JsString){ ts_raw_js_from_string(s, ts_strlen(s)) }; }
 static inline double js_to_number(JsValue v) { return ts_raw_js_to_number(v.h); }
 static inline bool js_to_bool(JsValue v) { return ts_raw_js_to_bool(v.h) != 0; }
 static inline JsString js_to_string(JsValue v) { return (JsString){ v.h }; }
@@ -355,6 +469,7 @@ fn all_ancestors(m: &Model, class: &str) -> Vec<String> {
 // functions in `<module>/functions.h`; an umbrella `<module>.h` per module, and
 // `bindings.h` for everything.
 pub fn files(m: &Model) -> Vec<(String, String)> {
+    DECODABLE.with(|d| *d.borrow_mut() = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
     let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n\n");
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
@@ -422,12 +537,32 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         c.params.iter().for_each(|p| arrays(&p.1, &mut elements));
         arrays(&c.ret, &mut elements);
     }
-    for t in &elements {
-        types += &match t {
+    for u in &m.unions {
+        u.parts.iter().for_each(|p| arrays(p, &mut elements));
+    }
+    // The structs first, then unions, which may hold arrays, then the
+    // functions, which may read unions out of arrays.
+    let containers: Vec<String> = elements
+        .iter()
+        .map(|t| match t {
             Ty::ArrayOf(e) => array_type(e),
             Ty::Tuple(es) => tuple_type(es),
             _ => unreachable!(),
-        };
+        })
+        .collect();
+    for c in &containers {
+        types += c.lines().next().unwrap();
+        types += "\n";
+    }
+    let unions: Vec<(String, String)> = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(union_type).collect();
+    for (decl, _) in &unions {
+        types += decl;
+    }
+    for (_, functions) in &unions {
+        types += functions;
+    }
+    for c in &containers {
+        types += &c.lines().skip(1).map(|l| format!("{l}\n")).collect::<String>();
     }
     for c in &m.callbacks {
         let mut params = vec!["void* ctx".to_string()];

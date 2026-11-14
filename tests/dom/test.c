@@ -101,7 +101,10 @@ __attribute__((export_name("run"))) void run(void) {
     pings = (Counter){ box, "data-pings", 0 };
     AddEventListenerOptions once = AddEventListenerOptions_create();
     AddEventListenerOptions_set_once(once, js_some_bool(true));
-    JsValue ping_listener = { EventListener_from(on_ping, &pings).h };
+    EventListenerOrEventListenerObject ping_listener = {
+        .tag = EventListenerOrEventListenerObject_EventListener,
+        .as.EventListener = EventListener_from(on_ping, &pings),
+    };
     Element_addEventListener_with_AddEventListenerOptions(box, "ping", ping_listener, once);
     EventTarget_dispatchEvent(box, Event_new("ping", (EventInit){ 0 }));
     EventTarget_dispatchEvent(box, Event_new("ping", (EventInit){ 0 }));

@@ -481,9 +481,10 @@ impl<'a> Builder<'a> {
         // A direct base, when inheritance is kept: members stay on the type that declares them.
         if tag == "extends" {
             let base = only_child(m);
-            if base.has_tag_name("ref") && (elements(base).next().is_none() || self.generics) {
+            if base.has_tag_name("ref") {
                 let name = base.attribute("qualified").unwrap_or(attr(base, "name"));
-                let t = self.reference(base);
+                // Where generics are erased, a generic base is the base without its arguments.
+                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(ident(name)) } else { self.reference(base) };
                 if !self.decls.contains_key(name) {
                     self.opaque.insert(ident(name));
                 }
@@ -863,7 +864,7 @@ impl<'a> Builder<'a> {
                     return Ty::Any;
                 }
                 // A union with a name of its own is declared once.
-                if body.has_tag_name("union") && self.target != "C" {
+                if body.has_tag_name("union") {
                     let name = ident(&key);
                     let args: Vec<Ty> = if generic_union { elements(n).map(|a| self.ty(a, "")).collect() } else { Vec::new() };
                     // `void` in a union is a value that may be absent: `void | Promise<void>`.
