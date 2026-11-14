@@ -37,6 +37,9 @@ overloads = "with_params"   # or "numbered"
 
 [rename]                # names for declarations a pass generated
 SVGSVGElement_getEnclosureList_result = "SVGShapeElement"
+
+[library]               # an ES module, not globals: written as <declarations import="pts">
+module = "pts"
 ```
 
 `--config target.toml`, `--set generics=erase` to override one setting,
@@ -140,14 +143,16 @@ the time control returns to JavaScript is reported, not lost.
   header per declaration in `areas/<module>/` or `namespaces/<module>/`.
   Inheritance is kept: `_Generic` upcasts (`AS_Element(x)`) let any subtype
   be passed. A function's name is also a macro, so trailing optional
-  arguments may be left out (`Event_new("ping")`) and the first of a family
-  of overloads picks one by its argument's type (`Shape_label(s, "a")`,
-  `Shape_label(s, 7)`). Optional values are `JsOptionalDouble`,
+  arguments may be left out (`Event_new("ping")`; all of them, `orUnit()`,
+  in C23) and the first of a family of overloads picks one by its
+  argument's type (`Shape_label(s, "a")`, `Shape_label(s, 7)`). Each shorter
+  call is one line that makes the next longer one, and is written once
+  where several overloads share it. Optional values are `JsOptionalDouble`,
   `JsOptionalBool`, null handles and `E_absent`; unions tagged structs made
   from a member (`Value_of(widget)`, `Value_of_number(42)`); arrays and
   tuples typed (`JsArray_double`, `JsTuple_double_JsString`). Handles are
   released one by one or by scope (`js_scope_open()`/`js_scope_close()`).
-  The DOM: 12 MB.
+  The DOM: 10 MB.
 - C++ (C++20, WASI SDK): a value type per JavaScript type, inheriting
   virtually from `ts::Handle`; copies retain, destructors release. Overloads,
   `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`, lambdas
@@ -161,7 +166,9 @@ the time control returns to JavaScript is reported, not lost.
 - Zig: a file per module and a root `bindings.zig`; Zig reads only what is
   used. `?T`, tagged unions, `JsArrayOf(T)`, `JsTuple(&.{...})`; callbacks
   are comptime functions with Zig types, behind a C-convention trampoline;
-  `defer jsRelease(x)` or `JsScope`. Inheritance is flattened, and an
+  `defer jsRelease(x)` or `JsScope`. Trailing optional parameters are one
+  struct whose fields default to null (`s.resize(2.6, .{})`,
+  `s.resize(2.6, .{ .round = true })`); a lone one stays a `?T`. Inheritance is flattened, and an
   inherited member is written once: the furthest ancestor that declares it
   writes it in `X.Methods(Self)`, and each subtype's member is an alias. 12 MB.
 - Rust (wasm32-unknown-unknown): a crate (`Cargo.toml`, `src/`), compiled
@@ -175,7 +182,10 @@ the time control returns to JavaScript is reported, not lost.
   is `impl Into<..>`, so `describe(42.0)` and `join("-", ["a", "b"])` work; a
   value of a type parameter goes by value. Overloads that differ in a
   key-or-string parameter are one method (`query_selector(HTMLElementTagNameMap::P)`,
-  `query_selector("p.intro")`); a defaulted type argument is stated with
+  `query_selector("p.intro")`), and where they differ in other parameters too,
+  the key fixes their types (`add_event_listener(HTMLElementEventMap::CLICK,
+  &listener, None)`, `add_event_listener("ping", on_ping, &options)`). An
+  optional union argument is any member or `None`. A defaulted type argument is stated with
   `query_selector_as::<T>`. `T extends Node` is `T: Is<Node>`. Callbacks are
   closures, kept (`new`, `release`) or for the length of a call and free to
   borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
@@ -184,7 +194,11 @@ the time control returns to JavaScript is reported, not lost.
   becomes an extension there. Iterables are `seq<T>`, async iterables
   `JsAsyncIterator<'T>`, a subclass of Array a `seq<T>` with an indexer;
   constraints of methods, functions and interfaces are F# constraints, kept
-  through keyed values (`getElementsByTagName<'K when 'K :> Element>`).
+  through keyed values (`getElementsByTagName<'K when 'K :> Element>`). An
+  index signature is `JsRecord<string, T>`; `f(a, b?, ...rest)` is two
+  overloads. A library that is a module is imported (`[<Import("Pt",
+  "pts")>]`): values, functions and classes, and a union case of a class is
+  tested by `instanceof` on the import.
 
 ## Unions
 
@@ -315,17 +329,15 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 - 8 DOM unions have members no runtime test can tell apart (two array types,
   `ArrayBufferLike | ArrayBufferView`): bound as untyped values. A union with
   an `any` member is `any`.
-- F# on Pts skips a recursive alias, a rest parameter after an optional one,
-  and inline object types with methods; its union tests look classes up on
-  `globalThis`, so a module's classes must be put there.
-- C: a call with no arguments cannot leave its one optional argument out, and
-  a compound literal with a comma needs parentheses to pass through a macro;
-  `_Generic` takes exact types, so a subtype is upcast first. The macros
-  cost size: 12 MB of headers for the DOM, from 8.5.
-- Rust: a nullable union argument is `Option<Union>` (`Some(true.into())`);
-  overloads that differ in more than one parameter keep their names
-  (`add_event_listener_with_string`).
-- Zig passes `null` for an optional argument it leaves out.
+- F# on Pts skips 7 unions whose members no test tells apart. Namespaced
+  classes of a module library are still tested through `globalThis`.
+- C: an empty call (`orUnit()`) is C23; under C11 `-pedantic` warns of it. A
+  compound literal with a comma needs parentheses to pass through a macro:
+  unions have `U_of` so it is seldom written. `_Generic` takes exact types,
+  so a subtype is upcast first.
+- Rust: a nullable union argument takes a member or `None`, not `Some(member)`.
+- The wasm glue takes a module library as `options.root`; it does not read
+  `import` yet.
 - Rust and Zig callbacks with a union argument receive it decoded; C's
   receive a handle.
 - Each construct has one lowering strategy so far. Values are strings so more
