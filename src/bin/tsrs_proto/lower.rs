@@ -1067,8 +1067,9 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
             if path.len() == 1 && !bodies.contains(&(t as *const Type)) {
                 path.push("value".into());
             }
+            // The shortest path, then the first in alphabetical order: not the first found.
             let known = best.entry(sorted(strings)).or_insert_with(|| path.clone());
-            if path.len() < known.len() {
+            if (path.len(), &path) < (known.len(), &*known) {
                 *known = path;
             }
             return false;
@@ -1192,9 +1193,19 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         // not by the first place it was found.
         let keyed = keyed_syms(&mut decls[start..]);
         let mut uses: HashMap<String, usize> = HashMap::new();
-        walk(&mut decls[start..], &mut |t, _| {
+        // A type is named after the best place it appears: the shortest path,
+        // then the first in alphabetical order. Moving declarations around
+        // does not rename it.
+        let mut best: HashMap<String, Vec<String>> = HashMap::new();
+        walk(&mut decls[start..], &mut |t, path| {
             if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
                 *uses.entry(type_key(t)).or_default() += 1;
+            }
+            if matches!(t, Type::Object(_) | Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
+                let known = best.entry(type_key(t)).or_insert_with(|| path.to_vec());
+                if (path.len(), path) < (known.len(), &known[..]) {
+                    *known = path.to_vec();
+                }
             }
             true
         });
@@ -1214,7 +1225,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let shared = uses.get(&type_key(t)).is_some_and(|n| *n > 1);
                     let base = match t {
                         Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep),
-                        _ => path.join(sep),
+                        _ => best.get(&type_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep)),
                     };
                     let name = unique(base, &mut names);
                     // Enclosing type parameters the type mentions become its own.

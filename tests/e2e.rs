@@ -256,6 +256,31 @@ fn c_rejects_unions() {
     generators::c::files(&generators::wasm::model(&xml, "C"));
 }
 
+// Generated names do not depend on the order of declarations.
+#[test]
+fn generated_names_do_not_depend_on_order() {
+    let decls = [
+        "declare function zoom(point: { x: number; y: number }): number;",
+        "declare function at(point: { x: number; y: number }): number;",
+        "declare function pick(mode: \"a\" | \"b\"): number;",
+        "interface Area { mode: \"a\" | \"b\"; corner: { x: number; y: number } }",
+    ];
+    let dir = root().join("target/e2e/names-order");
+    fs::create_dir_all(&dir).unwrap();
+    let names = |order: &[usize], file: &str| {
+        let path = dir.join(file);
+        fs::write(&path, order.iter().map(|&i| decls[i]).collect::<Vec<_>>().join("\n")).unwrap();
+        let xml = lower(&path, Some("c"), &[]);
+        let doc = roxmltree::Document::parse(&xml).unwrap();
+        let mut out: Vec<String> = doc.root_element().children().filter(|n| n.attribute("synthetic") == Some("true")).filter_map(|n| n.attribute("name").map(str::to_string)).collect();
+        out.sort();
+        out
+    };
+    let forward = names(&[0, 1, 2, 3], "forward.d.ts");
+    assert!(!forward.is_empty());
+    assert_eq!(forward, names(&[3, 2, 1, 0], "backward.d.ts"));
+}
+
 // Kept optional parameters are optional values, not overloads.
 #[test]
 fn optional_parameters_are_optional_values() {
