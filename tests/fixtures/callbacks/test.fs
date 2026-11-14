@@ -61,6 +61,10 @@ check (ran = 0) "not called yet"
 check (flush () = 2.0) "flush"
 check (ran = 2) "called later"
 
+// An object that is also a function, and can be constructed.
+let s = scaler 2.0
+check (s.Invoke 5.0 = 10.0 && s.factor = 2.0 && (s.Create 3.0).Invoke 5.0 = 15.0) "callable object"
+
 // Exceptions are F# exceptions; promises are Fable's JS.Promise.
 let message = try explode "boom" |> ignore; "" with e -> e.Message
 check (message = "boom") "exception"

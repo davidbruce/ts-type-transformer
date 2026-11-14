@@ -46,6 +46,13 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(q);
     CHECK(awaited == 0);
 
+    // An object that is also a function, and can be constructed.
+    Scaler s = scaler(2);
+    Scaler t = Scaler_construct(s, 3);
+    CHECK(Scaler_invoke(s, 5) == 10 && Scaler_get_factor(s) == 2 && Scaler_invoke(t, 5) == 15);
+    js_release(t);
+    js_release(s);
+
     // A call that throws returns zero; its exception is kept to take.
     CHECK(explode("boom") == 0);
     JsValue e = js_take_error();

@@ -32,3 +32,8 @@ globalThis.delayed = n => new Promise(resolve => setTimeout(() => resolve(n * 2)
 globalThis.rejected = message => Promise.reject(new Error(message));
 globalThis.settled = () => Promise.resolve();
 globalThis.explode = message => { throw new Error(message); };
+globalThis.scaler = factor => {
+    function s(x) { return new.target ? scaler(x) : x * factor; }
+    s.factor = factor;
+    return s;
+};

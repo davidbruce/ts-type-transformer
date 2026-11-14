@@ -32,6 +32,10 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(awaited == 0);
     delayed(1).then([](ts::Result<double> r) { then_value = *r; });
 
+    // An object that is also a function, and can be constructed.
+    Scaler s = scaler(2);
+    CHECK(s.invoke(5) == 10 && s.factor() == 2 && s.construct(3).invoke(5) == 15);
+
     // A call that throws returns a zero value; its exception is kept to take.
     CHECK(!ts::take_error());
     CHECK(explode("boom") == 0);

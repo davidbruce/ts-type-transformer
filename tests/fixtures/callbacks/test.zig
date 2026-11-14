@@ -60,6 +60,13 @@ export fn run() void {
     q.then(onRejected, null);
     expect(awaited == 0, @src());
 
+    // An object that is also a function, and can be constructed.
+    const s = b.scaler(2);
+    defer b.jsRelease(s);
+    const t = s.construct(3);
+    defer b.jsRelease(t);
+    expect(s.invoke(5) == 10 and s.get_factor() == 2 and t.invoke(5) == 15, @src());
+
     // A call that throws returns zero; its exception is kept to take.
     expect(b.explode("boom") == 0, @src());
     const e = b.jsTakeError().?;

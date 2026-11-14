@@ -20,3 +20,11 @@ declare function delayed(n: number): Promise<number>;
 declare function rejected(message: string): Promise<number>;
 declare function settled(): Promise<void>;
 declare function explode(message: string): number;
+
+// An object that is also a function, and can be constructed.
+interface Scaler {
+    (x: number): number;
+    new (factor: number): Scaler;
+    factor: number;
+}
+declare function scaler(factor: number): Scaler;

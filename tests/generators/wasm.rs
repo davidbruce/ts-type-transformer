@@ -59,6 +59,9 @@ pub enum Call {
     StaticSet(String),
     // An empty object, for interfaces used as option bags.
     Create,
+    // The object called, or constructed with `new`: a callable interface.
+    Invoke,
+    Construct,
     // `object[key]`, from an index signature.
     IndexGet,
     IndexSet,
@@ -181,7 +184,7 @@ pub struct Model {
 
 impl Class {
     pub fn has_self(f: &Func) -> bool {
-        matches!(f.call, Call::Method(_) | Call::Get(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet)
+        matches!(f.call, Call::Method(_) | Call::Get(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::Invoke | Call::Construct)
     }
 }
 
@@ -525,7 +528,29 @@ impl<'a> Builder<'a> {
             self.bad = None;
             return;
         }
-        if matches!(tag, "call" | "index" | "get" | "set") || tag == "construct" && !is_static {
+        // An object that is also a function: `invoke(...)`, `construct(...)`.
+        if tag == "call" || tag == "construct" && !is_static {
+            let (params, rest, fixed, ret) = self.signature(m, &owner);
+            let (base, call) = if tag == "call" { ("invoke", Call::Invoke) } else { ("construct", Call::Construct) };
+            let name = if self.target == "C++" { base.to_string() } else {
+                let mut name = base.to_string();
+                let mut n = 2;
+                while !names.insert(name.clone()) {
+                    name = format!("{base}_{n}");
+                    n += 1;
+                }
+                name
+            };
+            let import = self.import(format!("{owner}_{name}"));
+            let type_params = std::mem::take(&mut self.last_type_params);
+            c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret });
+            if let Some(why) = self.bad.take() {
+                c.funcs.pop();
+                self.skip(&why);
+            }
+            return;
+        }
+        if matches!(tag, "index" | "get" | "set") {
             return self.skip(&format!("<{tag}> member"));
         }
         // `[Symbol.iterator](): ArrayIterator<Node>` iterates Nodes.
@@ -1020,6 +1045,8 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
         Call::StaticGet(path) => format!("globalThis{}", access_path(path)),
         Call::StaticSet(path) => format!("globalThis{} = {args}", access_path(path)),
         Call::Create => "({})".to_string(),
+        Call::Invoke => format!("get(self)({args})"),
+        Call::Construct => format!("new (get(self))({args})"),
         Call::IndexGet => format!("get(self)[{args}]"),
         Call::IndexSet => format!("get(self)[{first}] = {second}"),
     };
