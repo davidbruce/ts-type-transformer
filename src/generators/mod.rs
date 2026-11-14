@@ -1,6 +1,6 @@
-// Reference generators, used only by the tests. They are deliberately thin:
-// each prints what its target config produced and rejects anything else, so
-// a construct the config should have lowered fails the test.
+// Generators: lowered XML to bindings. They are deliberately thin: each
+// prints what its target config produced and rejects anything else, so a
+// construct the config should have lowered is an error, not a guess.
 
 pub mod c;
 pub mod cpp;

@@ -5,7 +5,7 @@
 //
 // A target whose toolchain is not installed is skipped with a message.
 
-mod generators;
+use ts_type_transformer::generators;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -254,6 +254,20 @@ fn shapes_xml(target: &str, overrides: &[&str]) -> String {
 fn c_rejects_unions() {
     let xml = shapes_xml("c", &["union_params=keep", "unions=keep"]);
     generators::c::files(&generators::wasm::model(&xml, "C"));
+}
+
+// `--emit` writes bindings with their glue; what a generator cannot express is an error.
+#[test]
+fn emit_writes_bindings_or_says_why_not() {
+    let out = root().join("target/e2e/emit");
+    let _ = fs::remove_dir_all(&out);
+    let shapes = root().join("tests/fixtures/shapes/api.d.ts");
+    let run = |extra: &[&str]| Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&shapes).arg("--config").arg(config("c")).args(extra).arg("--emit").arg("c").arg("--out").arg(&out).output().unwrap();
+    let ok = run(&[]);
+    assert!(ok.status.success() && out.join("bindings.h").exists() && out.join("glue.mjs").exists(), "{}", String::from_utf8_lossy(&ok.stderr));
+    let bad = run(&["--set", "unions=keep", "--set", "union_params=keep"]);
+    let errors = String::from_utf8_lossy(&bad.stderr);
+    assert!(!bad.status.success() && errors.contains("cannot express a union"), "{errors}");
 }
 
 // Generated names do not depend on the order of declarations.

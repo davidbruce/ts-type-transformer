@@ -1,8 +1,12 @@
-// tsrs feasibility prototype: .d.ts -> IR -> lowering passes -> XML.
+// tsrs feasibility prototype: .d.ts -> IR -> lowering passes -> XML, and
+// from the XML, bindings.
 // Usage: tsrs_proto <file.d.ts | lib.dom.d.ts> [--config target.toml ...]
-//                   [--set key=value] [--census] | --default-config
+//                   [--set key=value] [--census]
+//                   [--emit c|cpp|zig|fsharp --out <dir> [--glue-for <module.wasm>]]
+//        tsrs_proto --default-config
 
 mod config;
+mod emit;
 mod front;
 mod ir;
 mod lower;
@@ -33,6 +37,9 @@ fn main() {
     let mut config_paths: Vec<String> = Vec::new();
     let mut overrides: Vec<String> = Vec::new();
     let mut census = false;
+    let mut emit: Option<String> = None;
+    let mut out_dir: Option<String> = None;
+    let mut glue_for: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -40,6 +47,9 @@ fn main() {
             "--set" => overrides.push(args.next().expect("key=value")),
             "--default-config" => return print!("{}", config::template()),
             "--census" => census = true,
+            "--emit" => emit = Some(args.next().expect("c, cpp, zig or fsharp")),
+            "--out" => out_dir = Some(args.next().expect("output directory")),
+            "--glue-for" => glue_for = Some(args.next().expect("compiled module")),
             _ => input = a,
         }
     }
@@ -75,12 +85,21 @@ fn main() {
     x.top(&decls, &modules);
     // The strategies in effect, so a consumer can check what it is reading.
     let strategies: Vec<String> = config::describe(opts).iter().map(|(k, v)| format!("{k}=\"{v}\"")).collect();
-    println!("<declarations>");
-    println!("  <lowering {}/>", strategies.join(" "));
+    let mut doc = format!("<declarations>\n  <lowering {}/>\n", strategies.join(" "));
     for line in x.out.lines() {
-        println!("  {line}");
+        doc += &format!("  {line}\n");
     }
-    println!("</declarations>");
+    doc += "</declarations>\n";
+    match emit {
+        None => print!("{doc}"),
+        Some(target) => {
+            let out = std::path::PathBuf::from(out_dir.unwrap_or_else(|| "bindings".into()));
+            if let Err(e) = emit::bindings(&target, &doc, &out, glue_for.as_deref().map(std::path::Path::new)) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     if census {
         for (what, n) in &x.census {
             eprintln!("{what}\t{n}");
