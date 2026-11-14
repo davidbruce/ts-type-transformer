@@ -99,7 +99,9 @@ pub extern "C" fn run() {
             el.set_attribute("data-pings", &pings.get().to_string());
         }
     });
-    el.add_event_listener_with_string("ping", on_ping, Some(once.into()));
+    // One method: a typed key and its listener, or a string and any listener.
+    // An optional union argument is any member, or None.
+    el.add_event_listener("ping", on_ping, &once);
     el.dispatch_event(&Event::new("ping", None));
     el.dispatch_event(&Event::new("ping", None));
     check!(pings.get() == 1);

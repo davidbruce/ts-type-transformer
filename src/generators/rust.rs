@@ -158,8 +158,8 @@ fn param(t: &Ty, x: &str) -> (String, Vec<String>) {
             Ty::Num => (ty(t), vec![format!("{x}.is_some() as i32"), format!("{x}.unwrap_or(0.0)")]),
             Ty::NumEnum(_) => (ty(t), vec![format!("{x}.is_some() as i32"), format!("{x}.map_or(0.0, |v| v as i32 as f64)")]),
             Ty::Bool | Ty::Enum(_) => (ty(t), vec![format!("{x}.map_or(-1, |v| v as i32)")]),
-            // A union is made where it is passed: by value.
-            Ty::NamedUnion(n) | Ty::Generic(n, _) if is_union(n) && decodable(n) => (ty(t), lend(x)),
+            // Any member, the union, or None: `options: true`, `Some(u)`, `None`.
+            Ty::NamedUnion(n) | Ty::Generic(n, _) if is_union(n) && decodable(n) => (format!("impl Optional<{}>", ty(inner)), vec![format!("Optional::<{}>::into_option({x}).lend().h", ty(inner))]),
             Ty::Param(_) => (ty(t), lend(x)),
             inner => (option(format!("&{}", ty(inner))), lend(x)),
         },
@@ -347,11 +347,30 @@ fn parts(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>) -
 // one map or another, or a string: one method, generic in that parameter.
 // `el.query_selector(HTMLElementTagNameMap::P)` is an HTMLParagraphElement,
 // `el.query_selector("p.intro")` an Element.
+// Where they differ in other parameters too, those are the trait's type
+// argument, which the chosen overload fixes: `add_event_listener(HTMLElementEventMap::CLICK,
+// &listener, None)` takes a JsListener<PointerEvent>, `add_event_listener("ping", on_ping, None)`
+// anything that is an EventListenerOrEventListenerObject.
 struct Family {
     name: String,
     trait_name: String,
     at: usize,
+    // The other parameters in which they differ.
+    others: Vec<usize>,
     members: Vec<Func>,
+}
+
+// A parameter's type as an impl can name it: `impl Into<X>` becomes a type
+// parameter, and a reference has the impl's lifetime.
+fn nameable(written: &str, i: usize) -> (Vec<String>, String) {
+    let g = format!("P{i}_");
+    if let Some(bound) = written.strip_prefix("&impl ") {
+        return (vec![format!("{g}: {bound}")], format!("&'a {g}"));
+    }
+    if let Some(bound) = written.strip_prefix("impl ") {
+        return (vec![format!("{g}: {bound}")], g);
+    }
+    (Vec::new(), written.replace('&', "&'a "))
 }
 
 fn uses_key(t: &Ty) -> bool {
@@ -383,29 +402,46 @@ fn families(c: &Class, names: &HashMap<String, String>, types: &HashSet<String>)
             continue;
         }
         let differing: Vec<usize> = (0..first.params.len()).filter(|&i| fs.iter().any(|f| f.params[i].1 != first.params[i].1)).collect();
-        let [at] = differing[..] else { continue };
-        let mut seen = HashSet::new();
-        let dispatchable = fs.iter().all(|f| matches!(f.params[at].1, Ty::Key(_) | Ty::Str) && seen.insert(format!("{:?}", f.params[at].1)));
-        // The other parameters are written once, for every overload.
-        let plain = fs.iter().all(|f| f.params.iter().enumerate().all(|(i, (_, t))| i == at || !(uses_key(t) || f.type_params.iter().any(|p| mentions(t, &p.name)))));
+        // The first that tells them apart: a key of one map or another, or a string.
+        let tells = |at: usize| {
+            let mut seen = HashSet::new();
+            fs.iter().all(|f| matches!(f.params[at].1, Ty::Key(_) | Ty::Str) && seen.insert(format!("{:?}", f.params[at].1)))
+        };
+        let Some(&at) = differing.iter().find(|&&i| tells(i)) else { continue };
+        let others: Vec<usize> = differing.iter().copied().filter(|&i| i != at).collect();
+        // The rest are written once, for every overload.
+        let plain = fs.iter().all(|f| f.params.iter().enumerate().all(|(i, (_, t))| differing.contains(&i) || !(uses_key(t) || f.type_params.iter().any(|p| mentions(t, &p.name)))));
         let name = names[&first.name].clone();
         let trait_name = format!("{}{}Arg", tn(&c.name), camel(&name));
-        if dispatchable && plain && !types.contains(&trait_name) {
-            out.push(Family { name, trait_name, at, members: fs.into_iter().map(|f| with_self_args(f, c)).collect() });
+        if plain && !types.contains(&trait_name) {
+            out.push(Family { name, trait_name, at, others, members: fs.into_iter().map(|f| with_self_args(f, c)).collect() });
         }
     }
     out
 }
 
 impl Family {
+    // `<R1_, R2_>` for the other differing parameters, or nothing.
+    fn rest(&self) -> String {
+        if self.others.is_empty() { String::new() } else { format!("<{}>", self.others.iter().map(|i| format!("R{i}_")).collect::<Vec<_>>().join(", ")) }
+    }
+
     // The method: `fn query_selector<A_: ..Arg>(&self, selectors: A_) -> A_::Output`,
     // and for an overload with a type argument to state, `query_selector_as::<T>`.
     fn methods(&self, vis: &str, imports: &mut BTreeMap<String, String>, this: &str) -> Vec<String> {
         let first = &self.members[0];
         let names: Vec<String> = first.params.iter().map(|(p, _)| ident(&snake(p))).collect();
-        let params: Vec<String> = first.params.iter().zip(&names).enumerate().map(|(i, ((_, t), p))| if i == self.at { format!("{p}: A_") } else { format!("{p}: {}", param(t, p).0) }).collect();
-        let others: String = names.iter().enumerate().filter(|(i, _)| *i != self.at).map(|(_, p)| format!(", {p}")).collect();
-        let mut out = vec![format!("{vis}fn {}<A_: {}>(&self, {}) -> A_::Output {{ A_::call({}, {this}{others}) }}", self.name, self.trait_name, params.join(", "), names[self.at])];
+        let params: Vec<String> = first
+            .params
+            .iter()
+            .zip(&names)
+            .enumerate()
+            .map(|(i, ((_, t), p))| if i == self.at { format!("{p}: A_") } else if self.others.contains(&i) { format!("{p}: R{i}_") } else { format!("{p}: {}", param(t, p).0) })
+            .collect();
+        let rest = if self.others.is_empty() { String::new() } else { format!(", ({},)", self.others.iter().map(|&i| names[i].as_str()).collect::<Vec<_>>().join(", ")) };
+        let same: String = names.iter().enumerate().filter(|(i, _)| *i != self.at && !self.others.contains(i)).map(|(_, p)| format!(", {p}")).collect();
+        let generics: String = self.others.iter().map(|i| format!(", R{i}_")).collect();
+        let mut out = vec![format!("{vis}fn {}<A_: {}{}{generics}>(&self, {}) -> A_::Output {{ A_::call({}, {this}{rest}{same}) }}", self.name, self.trait_name, self.rest(), params.join(", "), names[self.at])];
         if let Some(f) = self.members.iter().find(|f| f.params[self.at].1 == Ty::Str && !hidden(f).is_empty()) {
             out.push(one_function(f, &format!("{}_as", self.name), vis, imports, Some(this)));
         }
@@ -414,21 +450,42 @@ impl Family {
 
     // The trait of what the parameter may be, and each overload as one of them.
     fn dispatch(&self, imports: &mut BTreeMap<String, String>) -> String {
-        let others = |p: &Parts| -> String { p.params.iter().skip(1).enumerate().filter(|(i, _)| *i != self.at).map(|(_, p)| format!(", {p}")).collect() };
+        let same = |p: &Parts| -> String { p.params.iter().skip(1).enumerate().filter(|(i, _)| *i != self.at && !self.others.contains(i)).map(|(_, p)| format!(", {p}")).collect() };
         let first = &self.members[0];
         let p = parts(first, &mut BTreeMap::new(), Some("this"));
-        let mut out = format!("pub trait {} {{\n    type Output;\n    #[doc(hidden)]\n    fn call(self, this: u32{}) -> Self::Output;\n}}\n", self.trait_name, others(&p));
+        let rest_param = if self.others.is_empty() { String::new() } else { format!(", rest: ({},)", self.others.iter().map(|i| format!("R{i}_")).collect::<Vec<_>>().join(", ")) };
+        let trait_params = if self.others.is_empty() { String::new() } else { format!("<{}>", self.others.iter().map(|i| format!("R{i}_")).collect::<Vec<_>>().join(", ")) };
+        let mut out = format!("pub trait {}{trait_params} {{\n    type Output;\n    #[doc(hidden)]\n    fn call(self, this: u32{rest_param}{}) -> Self::Output;\n}}\n", self.trait_name, same(&p));
         for f in &self.members {
             let f = &defaulted(f);
             let p = parts(f, imports, Some("this"));
             let key = ident(&snake(&f.params[self.at].0));
-            let generics = if p.generics.is_empty() { String::new() } else { format!("<{}>", p.generics.join(", ")) };
+            let mut generics = p.generics.clone();
+            let (mut rest_types, mut rest_names) = (Vec::new(), Vec::new());
+            for &i in &self.others {
+                let name = ident(&snake(&f.params[i].0));
+                let (bounds, t) = nameable(&param(&f.params[i].1, &name).0, i);
+                generics.extend(bounds);
+                rest_types.push(t);
+                rest_names.push(name);
+            }
+            let (self_generics, self_type) = nameable(&param(&f.params[self.at].1, &key).0, self.at);
+            generics.extend(self_generics);
+            let header = format!("{self_type} {}", rest_types.join(" "));
+            if header.contains("&'a") {
+                generics.insert(0, "'a".into());
+            }
+            let generics = if generics.is_empty() { String::new() } else { format!("<{}>", generics.join(", ")) };
+            let (trait_args, rest_param, unpack) = if self.others.is_empty() {
+                (String::new(), String::new(), String::new())
+            } else {
+                (format!("<{}>", rest_types.join(", ")), format!(", rest: ({},)", rest_types.join(", ")), format!("let ({},) = rest; ", rest_names.join(", ")))
+            };
             out += &format!(
-                "impl{generics} {} for {} {{\n    type Output = {};\n    fn call(self, this: u32{}) -> Self::Output {{ let {key} = self; {} }}\n}}\n",
+                "impl{generics} {}{trait_args} for {self_type} {{\n    type Output = {};\n    fn call(self, this: u32{rest_param}{}) -> Self::Output {{ let {key} = self; {unpack}{} }}\n}}\n",
                 self.trait_name,
-                param(&f.params[self.at].1, &key).0,
                 p.ret,
-                others(&p),
+                same(&p),
                 p.body
             );
         }
@@ -542,6 +599,17 @@ pub trait FromJs: Sized {
 }
 pub trait JsType: FromJs + ToJs + Clone + 'static {}
 impl<T: FromJs + ToJs + Clone + 'static> JsType for T {}
+
+// What an optional union argument may be: any member, as the union is made
+// from it, or an Option of the union (each union implements it for that).
+pub trait Optional<U> {
+    fn into_option(self) -> Option<U>;
+}
+impl<U, T: Into<U>> Optional<U> for T {
+    fn into_option(self) -> Option<U> {
+        Some(self.into())
+    }
+}
 
 // `T: Is<B>` says a T is a B: itself, a subtype of it, a union of such, or
 // any value. It is what a type parameter's `extends` becomes.
@@ -1379,6 +1447,7 @@ fn upcast(sub: &str, base: &str) -> String {
 // and made from any member: `describe(42.0)`.
 fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String {
     let n = tn(&u.name);
+    let opt = option();
     let import = &u.name;
     let (bounds, args) = (generics(&u.type_params), args_of(&u.type_params));
     let variants: Vec<String> = u.parts.iter().map(|p| format!("{}({})", variant(p), ty(p))).collect();
@@ -1396,7 +1465,8 @@ fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String 
          impl{bounds} Clone for {n}{args} {{ fn clone(&self) -> Self {{ match self {{ {clone}}} }} }}\n\
          impl{bounds} ToJs for {n}{args} {{ fn lend(&self) -> Lent {{ match self {{ {lend}}} }} }}\n\
          impl{bounds} FromJs for {n}{args} {{ fn from_handle(h: u32) -> Self {{ match unsafe {{ raw::{import}_tag(h, {kind}) }} {{ {decode}_ => unreachable!() }} }} }}\n\
-         impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n",
+         impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n\
+         impl{bounds} Optional<{n}{args}> for {opt}<{n}{args}> {{ fn into_option(self) -> {opt}<{n}{args}> {{ self }} }}\n",
         variants.join(", "),
         is_bounds.join(", ")
     );
