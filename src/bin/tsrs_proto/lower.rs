@@ -341,6 +341,27 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
 // `instanceof:HTMLElement`, `has:once`, or `tag:circle` when one property
 // (`discriminant`) tells them all apart.
 fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
+    // An enum's values are all strings, or all numbers: that tells it apart.
+    fn enums(decls: &[Decl], out: &mut HashMap<String, &'static str>) {
+        for d in decls {
+            match d {
+                Decl::Enum(e) if !e.members.is_empty() && e.members.iter().all(|m| m.kind == "string") => {
+                    out.insert(e.name.clone(), "string");
+                }
+                Decl::Enum(e) if !e.members.is_empty() && e.members.iter().all(|m| m.kind == "number") => {
+                    out.insert(e.name.clone(), "number");
+                }
+                Decl::Namespace(n) => enums(&n.decls, out),
+                _ => {}
+            }
+        }
+    }
+    let mut enum_kinds = HashMap::new();
+    enums(decls, &mut enum_kinds);
+    let enum_test = |p: &Type| match p {
+        Type::Ref(r) if r.kind == "enum" => enum_kinds.get(&r.name).map(|k| Test::TypeOf(k)),
+        _ => None,
+    };
     walk(decls, &mut |t, _| {
         let Type::Union(parts) = t else { return true };
         let shapes: Vec<Option<Vec<(String, bool, Option<String>)>>> = parts.iter().map(|p| front.object_shape(p)).collect();
@@ -350,7 +371,7 @@ fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
             .enumerate()
             .map(|(i, p)| match &discriminant {
                 Some(d) => shapes[i].as_ref().and_then(|s| s.iter().find(|f| f.0 == *d)).and_then(|f| f.2.clone()).map(Test::Tag),
-                None => front.runtime_test(p).or_else(|| unique_property(&shapes, i).map(Test::Has)),
+                None => enum_test(p).or_else(|| front.runtime_test(p)).or_else(|| unique_property(&shapes, i).map(Test::Has)),
             })
             .collect();
         for (p, test) in parts.iter_mut().zip(tests) {
@@ -881,22 +902,27 @@ fn keyed_variants(front: &mut Front, sig: &Signature, limit: usize) -> Option<Ve
 // `string | BufferSource` is `string | ArrayBufferView | ArrayBuffer`, so each
 // member can be told apart from all the others.
 fn splice_union_aliases(decls: &mut [Decl]) {
-    let mut bodies: HashMap<String, Type> = HashMap::new();
-    for d in decls.iter() {
-        if let Decl::Alias(a) = d
-            && a.type_params.is_empty()
-            && matches!(a.ty, Type::Union(_))
-        {
-            bodies.insert(a.name.clone(), a.ty.clone());
+    // By name, and for an alias in a namespace, by its qualified name.
+    fn collect(decls: &[Decl], prefix: &str, out: &mut HashMap<String, Type>) {
+        for d in decls {
+            match d {
+                Decl::Alias(a) if a.type_params.is_empty() && matches!(a.ty, Type::Union(_)) => {
+                    out.insert(format!("{prefix}{}", a.name), a.ty.clone());
+                }
+                Decl::Namespace(n) => collect(&n.decls, &format!("{prefix}{}.", n.name), out),
+                _ => {}
+            }
         }
     }
+    let mut bodies: HashMap<String, Type> = HashMap::new();
+    collect(decls, "", &mut bodies);
     let splice = |t: &mut Type| {
         let Type::Union(parts) = t else { return };
         for p in parts.iter_mut() {
             if let Type::Ref(r) = p
                 && r.kind == "typeAlias"
                 && r.args.is_empty()
-                && let Some(body) = bodies.get(&r.name)
+                && let Some(body) = bodies.get(r.qualified.as_deref().unwrap_or(&r.name))
             {
                 *p = body.clone();
             }

@@ -383,6 +383,8 @@ TS_IMPORT(js_string_take) uint32_t ts_raw_js_string_take(uint32_t, char*, size_t
 TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
 TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, uintptr_t, void*);
 TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
+TS_IMPORT(js_enum_value) uint32_t ts_raw_js_enum_value(int32_t, int32_t);
+TS_IMPORT(js_enum_index) int32_t ts_raw_js_enum_index(int32_t, uint32_t);
 TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
 TS_IMPORT(js_async_iterate) uint32_t ts_raw_js_async_iterate(uint32_t);
 TS_IMPORT(js_async_iterator_next) uint32_t ts_raw_js_async_iterator_next(uint32_t);
@@ -450,6 +452,11 @@ inline std::string take_string(uint32_t h) {
     return s;
 }
 
+// Which enum of strings a type is, for its values to cross as handles: -1 for
+// an enum of numbers.
+template <class T>
+inline constexpr int32_t enum_id = -1;
+
 // A value lent to JavaScript as a handle, for one call: an object's own
 // handle, or a new one for a number, flag or string, released after the call.
 struct Arg {
@@ -462,6 +469,8 @@ struct Arg {
     Arg(bool x) : h(ts_raw_js_from_bool(x)), own(true) {}
     template <class H, std::enable_if_t<is_handle<H>, int> = 0>
     Arg(const H& v) : h(v.h) {}
+    template <class E, std::enable_if_t<std::is_enum_v<E>, int> = 0>
+    Arg(E x) : h(enum_id<E> < 0 ? ts_raw_js_from_number(double(int32_t(x))) : ts_raw_js_enum_value(enum_id<E>, int32_t(x))), own(true) {}
     template <class... T>
     Arg(const std::variant<T...>& v) {
         std::visit([this](const auto& x) { take(Arg(x)); }, v);
@@ -514,6 +523,10 @@ T from_handle(uint32_t h) {
         return decoder<T>::from(h);
     } else if constexpr (std::is_same_v<T, std::string>) {
         return take_string(h);
+    } else if constexpr (std::is_enum_v<T>) {
+        T x = enum_id<T> < 0 ? T(int32_t(ts_raw_js_to_number(h))) : T(ts_raw_js_enum_index(enum_id<T>, h));
+        ts_raw_js_release(h);
+        return x;
     } else if constexpr (std::is_same_v<T, double> || std::is_same_v<T, bool>) {
         T x;
         if constexpr (std::is_same_v<T, double>) x = ts_raw_js_to_number(h);
@@ -815,6 +828,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
                     let value = match p {
                         Ty::Num => "ts::from_handle<double>(h)".to_string(),
                         Ty::Bool => "ts::from_handle<bool>(h)".to_string(),
+                        Ty::Enum(e) => format!("ts::from_handle<{e}>(h)"),
                         p => raise(p, "h", unions),
                     };
                     format!("        case {i}: return {name}(std::in_place_index<{i}>, {value});\n")
@@ -1084,10 +1098,10 @@ fn union_type(u: &NamedUnion) -> String {
 fn declarations(m: &Model) -> String {
     let unions = &m.unions;
     let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.hpp\"\n\n");
-    for (name, values) in &m.enums {
+    for (id, (name, values)) in m.enums.iter().enumerate() {
         let mut seen = std::collections::HashSet::new();
         let members: Vec<String> = values.iter().map(|v| ident(if v.is_empty() { "empty" } else { v })).map(|v| if seen.insert(v.clone()) { v } else { format!("{v}_{}", seen.len()) }).collect();
-        types += &format!("enum class {name} : int32_t {{ {} }};\n", members.join(", "));
+        types += &format!("enum class {name} : int32_t {{ {} }};\ntemplate <>\ninline constexpr int32_t ts::enum_id<{name}> = {id};\n", members.join(", "));
     }
     for (name, members) in &m.num_enums {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();

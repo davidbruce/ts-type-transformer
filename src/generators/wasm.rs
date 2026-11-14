@@ -124,7 +124,10 @@ impl NamedUnion {
     // if it is a number, a string or a flag.
     pub fn decodable(&self) -> bool {
         let untested = self.tests.iter().zip(&self.parts).filter(|(t, p)| t.is_none() && !matches!(p, Ty::Param(_))).count();
-        untested <= 1 && self.params() <= 1
+        // Two members with one test are not told apart by it: two enums of strings, say.
+        let tests: Vec<&String> = self.tests.iter().flatten().filter(|t| !t.starts_with("tag:")).collect();
+        let unique = tests.iter().enumerate().all(|(i, t)| !tests[..i].contains(t));
+        untested <= 1 && self.params() <= 1 && unique
     }
 
     pub fn params(&self) -> usize {
@@ -592,9 +595,12 @@ impl<'a> Builder<'a> {
             self.bad = None;
             return;
         }
-        if raw_name.starts_with('[') {
-            return self.skip("symbol-named member");
+        // A member keyed by a well-known symbol is named by it: `[Symbol.toStringTag]` is `toStringTag`.
+        let symbol = raw_name.strip_prefix("[Symbol.").and_then(|s| s.strip_suffix(']'));
+        if raw_name.starts_with('[') && symbol.is_none() {
+            return self.skip("member with a computed name");
         }
+        let (raw_name, key) = (symbol.unwrap_or(raw_name), raw_name);
         // A target with overloading keeps one name for all of a method's overloads.
         let overloading = self.target == "C++";
         let unique = |base: String, names: &mut HashSet<String>| {
@@ -609,7 +615,7 @@ impl<'a> Builder<'a> {
             }
             name
         };
-        let js = m.attribute("jsName").unwrap_or(raw_name).to_string();
+        let js = m.attribute("jsName").unwrap_or(key).to_string();
         match tag {
             "constructor" | "construct" => {
                 let (params, rest, fixed, _) = self.signature(m, &owner);
@@ -839,7 +845,7 @@ impl<'a> Builder<'a> {
             "union" => {
                 let parts: Vec<Ty> = elements(n).map(|p| self.ty(p, owner)).collect();
                 // Only alternatives a tagged union can hold directly.
-                if parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_))) && distinct(&parts) {
+                if parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_))) && distinct(&parts) {
                     Ty::Union(parts)
                 } else {
                     self.skip("union whose members cannot be told apart, bound as an untyped value");
@@ -903,8 +909,9 @@ impl<'a> Builder<'a> {
                     let name = ident(&key);
                     let args: Vec<Ty> = if generic_union { elements(n).map(|a| self.ty(a, "")).collect() } else { Vec::new() };
                     // `void` in a union is a value that may be absent: `void | Promise<void>`.
+                    // So is a member that may itself be absent: `string | (number | null)`.
                     let is_void = |p: Node| p.has_tag_name("primitive") && attr(p, "name") == "void";
-                    let has_void = elements(body).any(is_void);
+                    let has_void = elements(body).any(|p| is_void(p) || p.has_tag_name("nullable"));
                     let named_type = |name: String| {
                         let t = if generic_union { Ty::Generic(name, args.clone()) } else { Ty::NamedUnion(name) };
                         if has_void { absent(t, true) } else { t }
@@ -915,7 +922,13 @@ impl<'a> Builder<'a> {
                     let type_params: Vec<TParam> = named(d, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
                     let members: Vec<Node> = elements(body).filter(|p| !is_void(*p)).collect();
                     self.resolving.push(key.clone());
-                    let parts: Vec<Ty> = members.iter().map(|p| self.ty(*p, "")).collect();
+                    let parts: Vec<Ty> = members
+                        .iter()
+                        .map(|p| match self.ty(*p, "") {
+                            Ty::Nullable(inner, _) => *inner,
+                            t => t,
+                        })
+                        .collect();
                     self.resolving.pop();
                     // Members that are one type here, as two generic types are once erased, are one member.
                     let mut kept = Vec::new();
@@ -928,7 +941,7 @@ impl<'a> Builder<'a> {
                     if let [only] = parts.as_slice() {
                         return if has_void { absent(only.clone(), true) } else { only.clone() };
                     }
-                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
+                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
                     if !parts.iter().all(simple) || !distinct(&parts) {
                         if std::env::var_os("TS_UNION_DEBUG").is_some() {
                             eprintln!("UNION {name}: distinct={} {:?}", distinct(&parts), parts);
@@ -1145,6 +1158,10 @@ fn global(path: &str) -> String {
 
 // `.name`, or `["some-name"]` where the name is not an identifier.
 fn access(name: &str) -> String {
+    // A symbol's key is written as it is: `[Symbol.toStringTag]`.
+    if name.starts_with("[Symbol.") {
+        return name.to_string();
+    }
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
     if plain { format!(".{name}") } else { format!("[{name:?}]") }
 }
@@ -1440,6 +1457,7 @@ export function makeEnv(getInstance, options = {}) {
     let settle = lending(&|args| format!("table().get(fn)(ctx, ok, {args});"), &["put(v)".to_string()]);
     out += &format!(
         "  }};
+  const enumList = Object.values(enums);
   const env = {{
     js_string_len: guard(h => utf8Length(text(h))),
     js_string_read: guard((h, ptr) => {{ write(text(h), ptr, 0x7fffffff); }}),
@@ -1475,6 +1493,9 @@ export function makeEnv(getInstance, options = {}) {
     js_scope_close: () => {{ (scopes.pop() ?? []).forEach(release); }},
     // References wasm holds.
     js_live: () => live,
+    // An enum's value as a handle, and back as its index: enums by the order they are declared in.
+    js_enum_value: (id, i) => put(enumList[id][i]),
+    js_enum_index: guard((id, h) => enumList[id].indexOf(get(h))),
     // Iteration: an iterator over a value, and its next value, or -1 at the end.
     js_iterate: guard(h => put(get(h)[Symbol.iterator]())),
     js_iterator_next: guard(it => {{ const r = get(it).next(); return r.done ? -1 : put(r.value); }}),

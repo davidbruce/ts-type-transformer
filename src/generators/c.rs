@@ -87,7 +87,7 @@ fn union_field(t: &Ty) -> String {
         Ty::Num => "number".into(),
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
-        Ty::Obj(n) => n.clone(),
+        Ty::Obj(n) | Ty::Enum(n) => n.clone(),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         t => panic!("{T} generator: a union member it cannot hold: {t:?}"),
     }
@@ -96,7 +96,9 @@ fn union_field(t: &Ty) -> String {
 // A union: a struct with a tag and its members, tag constants, and
 // conversions to and from handles: `Id_from_handle` takes a handle a function
 // returned; `Id_to_handle` gives one the caller releases.
-fn union_type(u: &NamedUnion) -> (String, String) {
+fn union_type(u: &NamedUnion, m: &Model) -> (String, String) {
+    // An enum of strings crosses as a handle by its place among the enums.
+    let enum_id = |e: &str| m.enums.iter().position(|x| x.0 == e).unwrap_or(0);
     let n = &u.name;
     let fields: Vec<String> = u.parts.iter().map(|p| format!("{} {};", if *p == Ty::Str { "JsString".to_string() } else { typed(p, false) }, union_field(p))).collect();
     let tags: Vec<String> = u.parts.iter().enumerate().map(|(i, p)| format!("{n}_{} = {i}", union_field(p))).collect();
@@ -114,6 +116,7 @@ fn union_type(u: &NamedUnion) -> (String, String) {
             match p {
                 Ty::Num => format!(" case {i}: return ts_raw_js_from_number(u.as.{f});"),
                 Ty::Bool => format!(" case {i}: return ts_raw_js_from_bool(u.as.{f});"),
+                Ty::Enum(e) => format!(" case {i}: return ts_raw_js_enum_value({}, u.as.{f});", enum_id(e)),
                 _ => format!(" case {i}: ts_raw_js_retain(u.as.{f}.h); return u.as.{f}.h;"),
             }
         })
@@ -128,6 +131,7 @@ fn union_type(u: &NamedUnion) -> (String, String) {
                 Ty::Num => format!(" case {i}: u.as.{f} = ts_raw_js_to_number(h); ts_raw_js_release(h); break;"),
                 Ty::Bool => format!(" case {i}: u.as.{f} = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); break;"),
                 Ty::Str => format!(" case {i}: u.as.{f} = (JsString){{ h }}; break;"),
+                Ty::Enum(e) => format!(" case {i}: u.as.{f} = ({e})ts_raw_js_enum_index({}, h); ts_raw_js_release(h); break;", enum_id(e)),
                 p => format!(" case {i}: u.as.{f} = ({}){{ h }}; break;", typed(p, false)),
             }
         })
@@ -378,6 +382,8 @@ static inline JsString js_error_message(JsValue e) { return (JsString){ ts_raw_j
 // A JavaScript iterator: see `X_iterate`.
 typedef struct { uint32_t h; } JsIterator;
 TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
+TS_IMPORT(js_enum_value) uint32_t ts_raw_js_enum_value(int32_t, int32_t);
+TS_IMPORT(js_enum_index) int32_t ts_raw_js_enum_index(int32_t, uint32_t);
 TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
 TS_IMPORT(js_async_iterate) uint32_t ts_raw_js_async_iterate(uint32_t);
 TS_IMPORT(js_async_iterator_next) uint32_t ts_raw_js_async_iterator_next(uint32_t);
@@ -565,7 +571,7 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         types += c.lines().next().unwrap();
         types += "\n";
     }
-    let unions: Vec<(String, String)> = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(union_type).collect();
+    let unions: Vec<(String, String)> = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| union_type(u, m)).collect();
     for (decl, _) in &unions {
         types += decl;
     }

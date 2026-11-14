@@ -716,7 +716,7 @@ fn variant(t: &Ty) -> String {
         Ty::Num => "number".into(),
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
-        Ty::Obj(n) | Ty::Param(n) | Ty::Generic(n, _) => n.clone(),
+        Ty::Obj(n) | Ty::Param(n) | Ty::Generic(n, _) | Ty::Enum(n) => n.clone(),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         t => panic!("Rust generator: a union member it cannot hold: {t:?}"),
     }

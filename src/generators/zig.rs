@@ -31,7 +31,7 @@ fn union_field(t: &Ty) -> String {
         Ty::Num => "number".into(),
         Ty::Str => "string".into(),
         Ty::Bool => "boolean".into(),
-        Ty::Obj(n) => n.clone(),
+        Ty::Obj(n) | Ty::Enum(n) => n.clone(),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         _ => unreachable!(),
     }
@@ -81,6 +81,8 @@ fn decode_union(u: &NamedUnion, h: &str, take: bool) -> String {
                 (Ty::Bool, true) => format!("JsValue.takeBool({h})"),
                 (Ty::Num, false) => format!("(JsValue{{ .h = {h} }}).toNumber()"),
                 (Ty::Bool, false) => format!("(JsValue{{ .h = {h} }}).toBool()"),
+                (Ty::Enum(e), true) => format!("jsTake({e}, {h})"),
+                (Ty::Enum(e), false) => format!("jsEnumOf({e}, {h})"),
                 _ => format!(".{{ .h = {h} }}"),
             };
             format!("{i} => .{{ .{} = {value} }}", ident(&union_field(p)))
@@ -368,6 +370,7 @@ pub const Lent = struct {
         const T = @TypeOf(v);
         if (T == f64 or T == comptime_float or T == comptime_int) return .{ .h = raw.js_from_number(v), .own = true };
         if (T == bool) return .{ .h = raw.js_from_bool(@intFromBool(v)), .own = true };
+        if (@typeInfo(T) == .@\"enum\") return .{ .h = if (@hasDecl(T, \"js_id\")) raw.js_enum_value(T.js_id, @intFromEnum(v)) else raw.js_from_number(@floatFromInt(@intFromEnum(v))), .own = true };
         if (comptime isString(T)) { const s: []const u8 = v; return .{ .h = raw.js_from_string(s.ptr, s.len), .own = true }; }
         if (@typeInfo(T) == .@\"union\") return switch (v) { inline else => |x| of(x) };
         return .{ .h = v.h, .own = false };
@@ -375,9 +378,15 @@ pub const Lent = struct {
     pub fn done(self: Lent) void { if (self.own) raw.js_release(self.h); }
 };
 
+// An enum's value from a handle, which stays as it was.
+pub fn jsEnumOf(comptime T: type, h: u32) T {
+    return @enumFromInt(if (@hasDecl(T, \"js_id\")) raw.js_enum_index(T.js_id, h) else @as(i32, @intFromFloat(raw.js_to_number(h))));
+}
+
 // A T from a handle a function returned: takes the handle over.
 pub fn jsTake(comptime T: type, h: u32) T {
     if (@typeInfo(T) == .optional) return if (h == 0) null else jsTake(@typeInfo(T).optional.child, h);
+    if (@typeInfo(T) == .@\"enum\") { const x = jsEnumOf(T, h); raw.js_release(h); return x; }
     if (T == f64) return JsValue.takeNumber(h);
     if (T == bool) return JsValue.takeBool(h);
     if (@typeInfo(T) == .@\"union\") return T.fromHandle(h);
@@ -452,6 +461,8 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_release(h: u32) void;
     extern \"env\" fn js_live() u32;
     extern \"env\" fn js_take_error() u32;
+    extern \"env\" fn js_enum_value(id: i32, i: i32) u32;
+    extern \"env\" fn js_enum_index(id: i32, h: u32) i32;
     extern \"env\" fn js_has_error() i32;
     extern \"env\" fn js_string_copy(h: u32, ptr: [*]u8, cap: usize) usize;
     extern \"env\" fn js_string_equals(h: u32, ptr: [*]const u8, len: usize) i32;
@@ -471,12 +482,13 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 pub fn files(m: &Model) -> Vec<(String, String)> {
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsSame", "jsTry", "JsScope", "jsTake"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsEnumOf", "jsSame", "jsTry", "JsScope", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
-    for (name, values) in &m.enums {
+    for (id, (name, values)) in m.enums.iter().enumerate() {
         let mut seen = std::collections::HashSet::new();
         let members: Vec<String> = values.iter().map(|v| if v.is_empty() { "empty" } else { v }).filter(|v| seen.insert(v.to_string())).map(ident).collect();
-        types.0 += &format!("pub const {name} = enum(i32) {{ {} }};\n", members.join(", "));
+        // `js_id`: which enum of strings it is, for its values to cross as handles.
+        types.0 += &format!("pub const {name} = enum(i32) {{ {}, pub const js_id: i32 = {id}; }};\n", members.join(", "));
         types.2.push(name.clone());
     }
     for (name, members) in &m.num_enums {
