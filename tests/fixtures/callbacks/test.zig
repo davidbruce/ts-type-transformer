@@ -10,15 +10,15 @@ fn expect(ok: bool, src: std.builtin.SourceLocation) void {
 
 var calls: u32 = 0;
 
-fn onValue(ctx: ?*anyopaque, value: f64) callconv(.c) void {
+fn onValue(ctx: ?*anyopaque, value: f64) void {
     const out: *f64 = @ptrCast(@alignCast(ctx));
     out.* = value;
     calls += 1;
 }
-fn fold(_: ?*anyopaque, total: f64, label: b.JsString) callconv(.c) f64 {
+fn fold(_: ?*anyopaque, total: f64, label: b.JsString) f64 {
     return total * 2 + @as(f64, @floatFromInt(label.len()));
 }
-fn isFive(_: ?*anyopaque, c: b.Counter) callconv(.c) bool {
+fn isFive(_: ?*anyopaque, c: b.Counter) bool {
     return c.get_count() == 5;
 }
 // A union argument arrives decoded; the function is known at compile time.
@@ -56,7 +56,7 @@ export fn finish() void {
     expect(ticks == 6, @src());
     expect(awaited == 42 and reason_len == 4, @src());
 }
-fn bump(ctx: ?*anyopaque) callconv(.c) void {
+fn bump(ctx: ?*anyopaque) void {
     const n: *u32 = @ptrCast(@alignCast(ctx));
     n.* += 1;
 }

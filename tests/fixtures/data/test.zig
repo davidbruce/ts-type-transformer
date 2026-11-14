@@ -14,7 +14,7 @@ fn strEq(s: b.JsString, expected: []const u8) bool {
     return std.mem.eql(u8, s.read(&buf), expected);
 }
 
-fn doubled(_: ?*anyopaque, value: b.JsValue) callconv(.c) b.JsValue {
+fn doubled(_: ?*anyopaque, value: b.JsValue) b.JsValue {
     return b.JsValue.number(value.toNumber() * 2);
 }
 

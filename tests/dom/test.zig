@@ -27,11 +27,11 @@ const Counter = struct {
     }
 };
 
-fn onClick(ctx: ?*anyopaque, _: b.PointerEvent) callconv(.c) void {
+fn onClick(ctx: ?*anyopaque, _: b.PointerEvent) void {
     Counter.bump(@ptrCast(@alignCast(ctx)));
 }
 
-fn onPing(ctx: ?*anyopaque, _: b.Event) callconv(.c) void {
+fn onPing(ctx: ?*anyopaque, _: b.Event) void {
     Counter.bump(@ptrCast(@alignCast(ctx)));
 }
 

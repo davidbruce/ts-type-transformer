@@ -115,16 +115,56 @@ fn typed(t: &Ty, is_param: bool) -> String {
     }
 }
 
-// Types a C-convention callback can take: no slices, no optionals, no unions.
-// An optional number arrives as a lent handle, an optional flag or enum as -1 when absent.
-fn callback_typed(t: &Ty) -> String {
+
+// What a callback argument or result crosses as: the glue's `to_wasm`.
+fn raw_callback(t: &Ty) -> &'static str {
     match t {
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsValue".into(),
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "i32".into(),
-        Ty::Nullable(inner, _) => callback_typed(inner),
-        Ty::NamedUnion(_) => "JsValue".into(),
-        Ty::NumEnum(_) => "f64".into(),
-        t => typed(t, false),
+        Ty::Void => "void",
+        Ty::Num | Ty::NumEnum(_) => "f64",
+        Ty::Bool | Ty::Enum(_) => "i32",
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "i32",
+        _ => "u32",
+    }
+}
+
+// A callback argument, lent, as its Zig type.
+fn callback_arg(t: &Ty, a: &str, unions: &[NamedUnion]) -> String {
+    let decodable = |n: &str| unions.iter().any(|u| u.name == n && u.decodable());
+    match t {
+        Ty::Num => a.into(),
+        Ty::NumEnum(_) => format!("@enumFromInt(@as(i32, @intFromFloat({a})))"),
+        Ty::Bool => format!("{a} != 0"),
+        Ty::Enum(_) => format!("@enumFromInt({a})"),
+        Ty::NamedUnion(n) if decodable(n) => format!("{n}.lent({a})"),
+        Ty::NamedUnion(_) | Ty::Union(_) | Ty::Any => format!("JsValue{{ .h = {a} }}"),
+        Ty::Nullable(inner, _) => {
+            let some = match &**inner {
+                Ty::Bool => return format!("if ({a} < 0) null else {a} != 0"),
+                Ty::Enum(e) => return format!("if ({a} < 0) null else @as({e}, @enumFromInt({a}))"),
+                Ty::Num => format!("(JsValue{{ .h = {a} }}).toNumber()"),
+                Ty::NamedUnion(n) if decodable(n) => format!("{n}.lent({a})"),
+                inner => format!("{}{{ .h = {a} }}", typed(inner, false)),
+            };
+            format!("@as({}, if ({a} == 0) null else {some})", typed(t, false))
+        }
+        t => format!("{}{{ .h = {a} }}", typed(t, false)),
+    }
+}
+
+// Returns what a callback's function returned, given to JavaScript.
+fn callback_result(t: &Ty, call: &str) -> String {
+    match t {
+        Ty::Void => format!("{call};"),
+        Ty::Num => format!("return {call};"),
+        Ty::NumEnum(_) => format!("return @floatFromInt(@intFromEnum({call}));"),
+        Ty::Bool => format!("return @intFromBool({call});"),
+        Ty::Enum(_) => format!("return @intFromEnum({call});"),
+        Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("return if ({call}) |v| @intFromBool(v) else -1;"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("return if ({call}) |v| @intFromEnum(v) else -1;"),
+        Ty::Nullable(inner, _) if **inner == Ty::Num => format!("return if ({call}) |v| raw.js_from_number(v) else 0;"),
+        Ty::Nullable(..) => format!("const r = {call}; return if (r) |v| Lent.of(v).h else 0;"),
+        Ty::NamedUnion(_) => format!("const r = {call}; return switch (r) {{ inline else => |v| Lent.of(v).h }};"),
+        _ => format!("return {call}.h;"),
     }
 }
 
@@ -269,8 +309,13 @@ pub const JsString = extern struct {
 pub fn JsListener(comptime Ev: type) type {
     return extern struct {
         h: u32,
-        pub const Fn = *const fn (?*anyopaque, Ev) callconv(.c) void;
-        pub fn from(f: Fn, ctx: ?*anyopaque) @This() { return .{ .h = raw.js_listener_from(@intFromPtr(f), ctx) }; }
+        pub const Fn = fn (?*anyopaque, Ev) void;
+        pub fn from(comptime f: Fn, ctx: ?*anyopaque) @This() {
+            const T = struct {
+                fn call(c: ?*anyopaque, ev: u32) callconv(.c) void { f(c, .{ .h = ev }); }
+            };
+            return .{ .h = raw.js_listener_from(@intFromPtr(&T.call), ctx) };
+        }
     };
 }
 // A handle a function returns is the caller's: `defer jsRelease(x)`.
@@ -455,33 +500,25 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         types.2.push(name.clone());
     }
     // A callback is made from a function and a context pointer passed back to it.
-    let decodable = |t: &Ty| matches!(t, Ty::NamedUnion(n) if m.unions.iter().any(|u| u.name == *n && u.decodable()));
-    for c in m.callbacks.iter().filter(|c| c.params.iter().any(|p| decodable(&p.1))) {
-        // The function is known at compile time: a C-convention trampoline
-        // decodes the union arguments and calls it.
+    // A callback is a Zig function known at compile time, with Zig types: a
+    // C-convention trampoline turns what JavaScript passes into them.
+    for c in &m.callbacks {
         let mut params = vec!["?*anyopaque".to_string()];
-        params.extend(c.params.iter().map(|(_, t)| if decodable(t) { typed(t, false) } else { callback_typed(t) }));
-        let raw_params: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| format!("a{i}: {}", if decodable(t) { "u32".into() } else { callback_typed(t) })).collect();
-        let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| if decodable(t) { format!("{}.lent(a{i})", typed(t, false)) } else { format!("a{i}") }).collect();
-        let ret = callback_typed(&c.ret);
+        params.extend(c.params.iter().map(|(_, t)| typed(t, false)));
+        let raw_params: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| format!("a{i}: {}", raw_callback(t))).collect();
+        let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| callback_arg(t, &format!("a{i}"), &m.unions)).collect();
+        let ret = typed(&c.ret, false);
+        let call = format!("f(c, {})", args.join(", "));
+        let body = callback_result(&c.ret, &call);
         types.0 += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
         types.0 += &format!("    pub const Fn = fn ({}) {ret};\n", params.join(", "));
         types.0 += &format!(
-            "    pub fn from(comptime f: Fn, ctx: ?*anyopaque) {0} {{\n        const T = struct {{\n            fn call(c: ?*anyopaque, {1}) callconv(.c) {ret} {{ return f(c, {2}); }}\n        }};\n        return .{{ .h = raw.{0}_from(@intFromPtr(&T.call), ctx) }};\n    }}\n}};\n",
+            "    pub fn from(comptime f: Fn, ctx: ?*anyopaque) {0} {{\n        const T = struct {{\n            fn call(c: ?*anyopaque{1}) callconv(.c) {2} {{ {body} }}\n        }};\n        return .{{ .h = raw.{0}_from(@intFromPtr(&T.call), ctx) }};\n    }}\n}};\n",
             c.name,
-            raw_params.join(", "),
-            args.join(", ")
+            raw_params.iter().map(|p| format!(", {p}")).collect::<String>(),
+            raw_callback(&c.ret)
         );
         types.1 += &format!("    extern \"env\" fn {}_from(f: usize, ctx: ?*anyopaque) u32;\n", c.name);
-        types.2.push(c.name.clone());
-    }
-    for c in m.callbacks.iter().filter(|c| !c.params.iter().any(|p| decodable(&p.1))) {
-        let mut params = vec!["?*anyopaque".to_string()];
-        params.extend(c.params.iter().map(|(_, t)| callback_typed(t)));
-        types.0 += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
-        types.0 += &format!("    pub const Fn = *const fn ({}) callconv(.c) {};\n", params.join(", "), callback_typed(&c.ret));
-        types.0 += &format!("    pub fn from(f: Fn, ctx: ?*anyopaque) {} {{ return .{{ .h = raw.{}_from(f, ctx) }}; }}\n}};\n", c.name, c.name);
-        types.1 += &format!("    extern \"env\" fn {0}_from(f: {0}.Fn, ctx: ?*anyopaque) u32;\n", c.name);
         types.2.push(c.name.clone());
     }
     files.insert("types".into(), types);
