@@ -48,7 +48,8 @@ fn snake(name: &str) -> String {
         if c.is_uppercase() {
             let prev = i.checked_sub(1).map(|j| chars[j]);
             let next = chars.get(i + 1);
-            let after_word = prev.is_some_and(|p| p.is_lowercase() || p.is_ascii_digit());
+            // `rotate2D` is `rotate2d`; `toBase64Url`, `to_base64_url`.
+            let after_word = prev.is_some_and(|p| p.is_lowercase() || (p.is_ascii_digit() && next.is_some_and(|n| n.is_lowercase())));
             let ends_acronym = prev.is_some_and(|p| p.is_uppercase()) && next.is_some_and(|n| n.is_lowercase());
             if (after_word || ends_acronym) && !out.is_empty() && !out.ends_with('_') {
                 out.push('_');

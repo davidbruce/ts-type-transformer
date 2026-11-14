@@ -1,0 +1,11768 @@
+/*! Copyright © 2017-present William Ngan and contributors.
+Licensed under Apache 2.0 License.
+See https://github.com/williamngan/pts for details. */
+//#region src/LinearAlgebra.ts
+var Vec = class Vec {
+	static add(a, b) {
+		if (typeof b == "number") for (let i = 0, len = a.length; i < len; i++) a[i] += b;
+		else for (let i = 0, len = a.length; i < len; i++) a[i] += b[i] || 0;
+		return a;
+	}
+	static subtract(a, b) {
+		if (typeof b == "number") for (let i = 0, len = a.length; i < len; i++) a[i] -= b;
+		else for (let i = 0, len = a.length; i < len; i++) a[i] -= b[i] || 0;
+		return a;
+	}
+	static multiply(a, b) {
+		if (typeof b == "number") for (let i = 0, len = a.length; i < len; i++) a[i] *= b;
+		else {
+			if (a.length != b.length) throw new Error(`Cannot do element-wise multiply since the array lengths don't match: ${a.toString()} multiply-with ${b.toString()}`);
+			for (let i = 0, len = a.length; i < len; i++) a[i] *= b[i];
+		}
+		return a;
+	}
+	static divide(a, b) {
+		if (typeof b == "number") {
+			if (b === 0) throw new Error("Cannot divide by zero");
+			for (let i = 0, len = a.length; i < len; i++) a[i] /= b;
+		} else {
+			if (a.length != b.length) throw new Error(`Cannot do element-wise divide since the array lengths don't match. ${a.toString()} divide-by ${b.toString()}`);
+			for (let i = 0, len = a.length; i < len; i++) a[i] /= b[i];
+		}
+		return a;
+	}
+	static dot(a, b) {
+		if (a.length != b.length) throw new Error("Array lengths don't match");
+		let d = 0;
+		for (let i = 0, len = a.length; i < len; i++) d += a[i] * b[i];
+		return d;
+	}
+	static cross2D(a, b) {
+		return a[0] * b[1] - a[1] * b[0];
+	}
+	static cross(a, b) {
+		return new Pt(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]);
+	}
+	static magnitude(a) {
+		return Math.sqrt(Vec.dot(a, a));
+	}
+	static unit(a, magnitude = void 0) {
+		const m = magnitude === void 0 ? Vec.magnitude(a) : magnitude;
+		if (m === 0) return a;
+		return Vec.divide(a, m);
+	}
+	static abs(a) {
+		return Vec.map(a, Math.abs);
+	}
+	static floor(a) {
+		return Vec.map(a, Math.floor);
+	}
+	static ceil(a) {
+		return Vec.map(a, Math.ceil);
+	}
+	static round(a) {
+		return Vec.map(a, Math.round);
+	}
+	static max(a) {
+		let m = -Infinity;
+		let index = 0;
+		for (let i = 0, len = a.length; i < len; i++) if (a[i] >= m) {
+			m = a[i];
+			index = i;
+		}
+		return {
+			value: m,
+			index
+		};
+	}
+	static min(a) {
+		let m = Infinity;
+		let index = 0;
+		for (let i = 0, len = a.length; i < len; i++) if (a[i] <= m) {
+			m = a[i];
+			index = i;
+		}
+		return {
+			value: m,
+			index
+		};
+	}
+	static sum(a) {
+		let s = 0;
+		for (let i = 0, len = a.length; i < len; i++) s += a[i];
+		return s;
+	}
+	static map(a, fn) {
+		for (let i = 0, len = a.length; i < len; i++) a[i] = fn(a[i], i, a);
+		return a;
+	}
+};
+var Mat = class Mat {
+	constructor() {
+		this.reset();
+	}
+	get value() {
+		return this._33;
+	}
+	get domMatrix() {
+		return new DOMMatrix(Mat.toDOMMatrix(this._33));
+	}
+	reset() {
+		this._33 = Mat.scale2DMatrix(1, 1);
+	}
+	scale2D(val, at = [0, 0]) {
+		var _val$, _val$2;
+		const m = Mat.scaleAt2DMatrix((_val$ = val[0]) !== null && _val$ !== void 0 ? _val$ : 1, (_val$2 = val[1]) !== null && _val$2 !== void 0 ? _val$2 : 1, at);
+		this._33 = Mat.multiply(this._33, m);
+		return this;
+	}
+	rotate2D(ang, at = [0, 0]) {
+		const m = Mat.rotateAt2DMatrix(Math.cos(ang), Math.sin(ang), at);
+		this._33 = Mat.multiply(this._33, m);
+		return this;
+	}
+	translate2D(val) {
+		const m = Mat.translate2DMatrix(val[0] || 0, val[1] || 0);
+		this._33 = Mat.multiply(this._33, m);
+		return this;
+	}
+	shear2D(val, at = [0, 0]) {
+		var _val$3, _val$4;
+		const m = Mat.shearAt2DMatrix(Math.tan((_val$3 = val[0]) !== null && _val$3 !== void 0 ? _val$3 : 0), Math.tan((_val$4 = val[1]) !== null && _val$4 !== void 0 ? _val$4 : 0), at);
+		this._33 = Mat.multiply(this._33, m);
+		return this;
+	}
+	static add(a, b) {
+		if (typeof b != "number") {
+			if (a[0].length != b[0].length) throw new Error("Cannot add matrix if rows' and columns' size don't match.");
+			if (a.length != b.length) throw new Error("Cannot add matrix if rows' and columns' size don't match.");
+		}
+		const g = new Group();
+		const isNum = typeof b == "number";
+		for (let i = 0, len = a.length; i < len; i++) g.push(a[i].$add(isNum ? b : b[i]));
+		return g;
+	}
+	static multiply(a, b, transposed = false, elementwise = false) {
+		const g = new Group();
+		if (typeof b != "number") {
+			if (elementwise) {
+				if (a.length != b.length) throw new Error("Cannot multiply matrix element-wise because the matrices' sizes don't match.");
+				for (let ai = 0, alen = a.length; ai < alen; ai++) g.push(a[ai].$multiply(b[ai]));
+			} else {
+				if (!transposed && a[0].length != b.length) throw new Error("Cannot multiply matrix if rows in matrix-a don't match columns in matrix-b.");
+				if (transposed && a[0].length != b[0].length) throw new Error("Cannot multiply matrix if transposed and the columns in both matrices don't match.");
+				if (!transposed) b = Mat.transpose(b);
+				for (let ai = 0, alen = a.length; ai < alen; ai++) {
+					const p = Pt.make(b.length, 0);
+					for (let bi = 0, blen = b.length; bi < blen; bi++) p[bi] = Vec.dot(a[ai], b[bi]);
+					g.push(p);
+				}
+			}
+		} else for (let ai = 0, alen = a.length; ai < alen; ai++) g.push(a[ai].$multiply(b));
+		return g;
+	}
+	static zipSlice(g, index, defaultValue = false) {
+		const z = [];
+		for (let i = 0, len = g.length; i < len; i++) if (g[i].length - 1 < index) {
+			if (defaultValue === false) throw new Error(`Index ${index} is out of bounds`);
+			z.push(defaultValue);
+		} else z.push(g[i][index]);
+		return new Pt(z);
+	}
+	static zip(g, defaultValue = false, useLongest = false) {
+		const ps = new Group();
+		const len = useLongest ? g.reduce((a, b) => Math.max(a, b.length), 0) : g[0].length;
+		for (let i = 0; i < len; i++) ps.push(Mat.zipSlice(g, i, defaultValue));
+		return ps;
+	}
+	static transpose(g, defaultValue = false, useLongest = false) {
+		return Mat.zip(g, defaultValue, useLongest);
+	}
+	static toDOMMatrix(m) {
+		return [
+			m[0][0],
+			m[0][1],
+			m[1][0],
+			m[1][1],
+			m[2][0],
+			m[2][1]
+		];
+	}
+	static transform2D(pt, m) {
+		const x = pt[0] * m[0][0] + pt[1] * m[1][0] + m[2][0];
+		const y = pt[0] * m[0][1] + pt[1] * m[1][1] + m[2][1];
+		return new Pt(x, y);
+	}
+	static scale2DMatrix(x, y) {
+		return new Group(new Pt(x, 0, 0), new Pt(0, y, 0), new Pt(0, 0, 1));
+	}
+	static rotate2DMatrix(cosA, sinA) {
+		return new Group(new Pt(cosA, sinA, 0), new Pt(-sinA, cosA, 0), new Pt(0, 0, 1));
+	}
+	static shear2DMatrix(tanX, tanY) {
+		return new Group(new Pt(1, tanX, 0), new Pt(tanY, 1, 0), new Pt(0, 0, 1));
+	}
+	static translate2DMatrix(x, y) {
+		return new Group(new Pt(1, 0, 0), new Pt(0, 1, 0), new Pt(x, y, 1));
+	}
+	static scaleAt2DMatrix(sx, sy, at) {
+		const m = Mat.scale2DMatrix(sx, sy);
+		m[2][0] = -at[0] * sx + at[0];
+		m[2][1] = -at[1] * sy + at[1];
+		return m;
+	}
+	static rotateAt2DMatrix(cosA, sinA, at) {
+		const m = Mat.rotate2DMatrix(cosA, sinA);
+		m[2][0] = at[0] * (1 - cosA) + at[1] * sinA;
+		m[2][1] = at[1] * (1 - cosA) - at[0] * sinA;
+		return m;
+	}
+	static shearAt2DMatrix(tanX, tanY, at) {
+		const m = Mat.shear2DMatrix(tanX, tanY);
+		m[2][0] = -at[1] * tanY;
+		m[2][1] = -at[0] * tanX;
+		return m;
+	}
+	static reflectAt2DMatrix(p1, p2) {
+		if (p2[0] - p1[0] === 0) return [
+			new Pt([
+				-1,
+				0,
+				0
+			]),
+			new Pt([
+				0,
+				1,
+				0
+			]),
+			new Pt([
+				p1[0] + p2[0],
+				0,
+				1
+			])
+		];
+		else {
+			const slope = (p2[1] - p1[1]) / (p2[0] - p1[0]);
+			const yi = p1[1] - slope * p1[0];
+			const ang2 = Math.atan(slope) * 2;
+			const cosA = Math.cos(ang2);
+			const sinA = Math.sin(ang2);
+			return [
+				new Pt([
+					cosA,
+					sinA,
+					0
+				]),
+				new Pt([
+					sinA,
+					-cosA,
+					0
+				]),
+				new Pt([
+					-yi * sinA,
+					yi + yi * cosA,
+					1
+				])
+			];
+		}
+	}
+};
+
+//#endregion
+//#region src/uheprng.ts
+function Mash() {
+	let n = 4022871197;
+	return function(data) {
+		if (data) {
+			data = data.toString();
+			for (let i = 0; i < data.length; i++) {
+				n += data.charCodeAt(i);
+				let h = .02519603282416938 * n;
+				n = h >>> 0;
+				h -= n;
+				h *= n;
+				n = h >>> 0;
+				h -= n;
+				n += h * 4294967296;
+			}
+			return (n >>> 0) * 23283064365386963e-26;
+		}
+		n = 4022871197;
+		return 0;
+	};
+}
+function uheprng(seed) {
+	const o = 48;
+	let c = 1;
+	let p = o;
+	const s = new Array(o);
+	const mash = Mash();
+	function initState() {
+		mash();
+		for (let i = 0; i < o; i++) s[i] = mash(" ");
+		c = 1;
+		p = o;
+	}
+	function cleanString(inStr) {
+		inStr = inStr.replace(/(^\s*)|(\s*$)/gi, "");
+		inStr = inStr.replace(/[\x00-\x1F]/gi, "");
+		return inStr;
+	}
+	function hashString(inStr) {
+		inStr = cleanString(inStr);
+		mash(inStr);
+		for (let i = 0; i < inStr.length; i++) {
+			const k = inStr.charCodeAt(i).toString();
+			for (let j = 0; j < o; j++) {
+				s[j] -= mash(k);
+				if (s[j] < 0) s[j] += 1;
+			}
+		}
+	}
+	initState();
+	hashString(seed);
+	return { random() {
+		if (++p >= o) p = 0;
+		const t = 1768863 * s[p] + c * 23283064365386963e-26;
+		return s[p] = t - (c = t | 0);
+	} };
+}
+
+//#endregion
+//#region src/Num.ts
+var Num = class Num {
+	static equals(a, b, threshold = 1e-5) {
+		return a === b || Math.abs(a - b) <= threshold;
+	}
+	static lerp(a, b, t) {
+		return (1 - t) * a + t * b;
+	}
+	static clamp(val, min, max) {
+		return Math.max(min, Math.min(max, val));
+	}
+	static boundValue(val, min, max) {
+		if (min > max) {
+			const t = min;
+			min = max;
+			max = t;
+		}
+		const len = max - min;
+		if (len === 0) return min;
+		let a = (val - min) % len;
+		if (a < 0) a += len;
+		const result = a + min;
+		return result >= max ? min : result;
+	}
+	static within(p, a, b) {
+		return p >= Math.min(a, b) && p <= Math.max(a, b);
+	}
+	static randomRange(a, b = 0) {
+		const r = a > b ? a - b : b - a;
+		return Math.min(a, b) + Num.random() * r;
+	}
+	static randomPt(a, b) {
+		const p = new Pt(a.length);
+		const range = b ? Vec.subtract(b.slice(), a) : a;
+		const start = b ? a : new Pt(a.length).fill(0);
+		for (let i = 0, len = p.length; i < len; i++) p[i] = Num.random() * range[i] + start[i];
+		return p;
+	}
+	static normalizeValue(n, a, b) {
+		const min = Math.min(a, b);
+		const max = Math.max(a, b);
+		return (n - min) / (max - min);
+	}
+	static sum(pts) {
+		const _pts = Util.iterToArray(pts);
+		const c = new Pt(_pts[0]);
+		for (let i = 1, len = _pts.length; i < len; i++) Vec.add(c, _pts[i]);
+		return c;
+	}
+	static average(pts) {
+		const _pts = Util.iterToArray(pts);
+		return Num.sum(_pts).divide(_pts.length);
+	}
+	static cycle(t, method = Shaping.sineInOut) {
+		return method(t > .5 ? 2 - t * 2 : t * 2);
+	}
+	static mapToRange(n, currA, currB, targetA, targetB) {
+		if (currA == currB) throw new Error("[currMin, currMax] must define a range that is not zero");
+		return targetA + (n - currA) / (currB - currA) * (targetB - targetA);
+	}
+	static seed(seed) {
+		this.generator = uheprng(seed);
+	}
+	static random() {
+		return this.generator ? this.generator.random() : Math.random();
+	}
+};
+var Geom = class Geom {
+	static boundAngle(angle) {
+		return Num.boundValue(angle, 0, 360);
+	}
+	static boundRadian(radian) {
+		return Num.boundValue(radian, 0, Const.two_pi);
+	}
+	static toRadian(angle) {
+		return angle * Const.deg_to_rad;
+	}
+	static toDegree(radian) {
+		return radian * Const.rad_to_deg;
+	}
+	static boundingBox(pts) {
+		let minPt, maxPt;
+		for (const p of pts) if (minPt == void 0) {
+			minPt = p.clone();
+			maxPt = p.clone();
+		} else for (let i = 0, len = Math.min(minPt.length, p.length); i < len; i++) {
+			minPt[i] = Math.min(minPt[i], p[i]);
+			maxPt[i] = Math.max(maxPt[i], p[i]);
+		}
+		return minPt ? new Group(minPt, maxPt) : new Group();
+	}
+	static centroid(pts) {
+		return Num.average(pts);
+	}
+	static anchor(pts, ptOrIndex = 0, direction = "to") {
+		const method = direction == "to" ? "subtract" : "add";
+		let i = 0;
+		for (const p of pts) {
+			if (typeof ptOrIndex == "number") {
+				if (ptOrIndex !== i) p[method](pts[ptOrIndex]);
+			} else p[method](ptOrIndex);
+			i++;
+		}
+	}
+	static interpolate(a, b, t = .5) {
+		const len = Math.min(a.length, b.length);
+		const d = Pt.make(len);
+		for (let i = 0; i < len; i++) d[i] = a[i] * (1 - t) + b[i] * t;
+		return d;
+	}
+	static perpendicular(pt, axis = Const.xy) {
+		const y = axis[1];
+		const x = axis[0];
+		const p = new Pt(pt);
+		const pa = new Pt(p);
+		pa[x] = -p[y];
+		pa[y] = p[x];
+		const pb = new Pt(p);
+		pb[x] = p[y];
+		pb[y] = -p[x];
+		return new Group(pa, pb);
+	}
+	static isPerpendicular(p1, p2) {
+		let dot = 0;
+		let ma = 0;
+		let mb = 0;
+		for (let i = 0, len = Math.min(p1.length, p2.length); i < len; i++) {
+			dot += p1[i] * p2[i];
+			ma += p1[i] * p1[i];
+			mb += p2[i] * p2[i];
+		}
+		return Math.abs(dot) <= Const.epsilon * Math.sqrt(ma * mb);
+	}
+	static withinBound(pt, boundPt1, boundPt2) {
+		for (let i = 0, len = Math.min(pt.length, boundPt1.length, boundPt2.length); i < len; i++) if (!Num.within(pt[i], boundPt1[i], boundPt2[i])) return false;
+		return true;
+	}
+	static sortEdges(pts) {
+		const _pts = Util.iterToArray(pts);
+		if (_pts.length < 2) return _pts;
+		const bounds = Geom.boundingBox(_pts);
+		const center = bounds[1].add(bounds[0]).divide(2);
+		const cx = center[0];
+		const cy = center[1];
+		const fn = (a, b) => {
+			if (a.length < 2 || b.length < 2) throw new Error("Pt dimension cannot be less than 2");
+			const dax = a[0] - cx;
+			const day = a[1] - cy;
+			const dbx = b[0] - cx;
+			const dby = b[1] - cy;
+			if (dax >= 0 && dbx < 0) return 1;
+			if (dax < 0 && dbx >= 0) return -1;
+			if (dax == 0 && dbx == 0) {
+				if (day >= 0 || dby >= 0) return day > dby ? 1 : -1;
+				return dby > day ? 1 : -1;
+			}
+			const det = dax * dby - day * dbx;
+			if (det < 0) return 1;
+			if (det > 0) return -1;
+			return dax * dax + day * day > dbx * dbx + dby * dby ? 1 : -1;
+		};
+		return _pts.sort(fn);
+	}
+	static scale(ps, scale, anchor) {
+		const pts = Util.iterToArray(ps[0] !== void 0 && typeof ps[0] == "number" ? [ps] : ps);
+		const scs = typeof scale == "number" ? Pt.make(pts[0].length, scale) : scale;
+		if (!anchor) anchor = Pt.make(pts[0].length, 0);
+		for (let i = 0, len = pts.length; i < len; i++) {
+			const p = pts[i];
+			for (let k = 0, lenP = p.length; k < lenP; k++) p[k] = anchor && anchor[k] ? anchor[k] + (p[k] - anchor[k]) * scs[k] : p[k] * scs[k];
+		}
+		return Geom;
+	}
+	static rotate2D(ps, angle, anchor, axis) {
+		const pts = Util.iterToArray(ps[0] !== void 0 && typeof ps[0] == "number" ? [ps] : ps);
+		const fn = anchor ? Mat.rotateAt2DMatrix : Mat.rotate2DMatrix;
+		if (!anchor) anchor = Pt.make(pts[0].length, 0);
+		const mat = fn(Math.cos(angle), Math.sin(angle), anchor);
+		for (let i = 0, len = pts.length; i < len; i++) {
+			const p = axis ? pts[i].$take(axis) : pts[i];
+			p.to(Mat.transform2D(p, mat));
+			if (axis) for (let k = 0; k < axis.length; k++) pts[i][axis[k]] = p[k];
+		}
+		return Geom;
+	}
+	static shear2D(ps, scale, anchor, axis) {
+		const pts = Util.iterToArray(ps[0] !== void 0 && typeof ps[0] == "number" ? [ps] : ps);
+		const s = typeof scale == "number" ? [scale, scale] : scale;
+		if (!anchor) anchor = Pt.make(pts[0].length, 0);
+		const mat = (anchor ? Mat.shearAt2DMatrix : Mat.shear2DMatrix)(Math.tan(s[0]), Math.tan(s[1]), anchor);
+		for (let i = 0, len = pts.length; i < len; i++) {
+			const p = axis ? pts[i].$take(axis) : pts[i];
+			p.to(Mat.transform2D(p, mat));
+			if (axis) for (let k = 0; k < axis.length; k++) pts[i][axis[k]] = p[k];
+		}
+		return Geom;
+	}
+	static reflect2D(ps, line, axis) {
+		const pts = Util.iterToArray(ps[0] !== void 0 && typeof ps[0] == "number" ? [ps] : ps);
+		const _line = Util.iterToArray(line);
+		const mat = Mat.reflectAt2DMatrix(_line[0], _line[1]);
+		for (let i = 0, len = pts.length; i < len; i++) {
+			const p = axis ? pts[i].$take(axis) : pts[i];
+			p.to(Mat.transform2D(p, mat));
+			if (axis) for (let k = 0; k < axis.length; k++) pts[i][axis[k]] = p[k];
+		}
+		return Geom;
+	}
+	static cosTable() {
+		const cos = /* @__PURE__ */ new Float64Array(360);
+		for (let i = 0; i < 360; i++) cos[i] = Math.cos(i * Math.PI / 180);
+		const find = (rad) => cos[Math.floor(Geom.boundAngle(Geom.toDegree(rad)))];
+		return {
+			table: cos,
+			cos: find
+		};
+	}
+	static sinTable() {
+		const sin = /* @__PURE__ */ new Float64Array(360);
+		for (let i = 0; i < 360; i++) sin[i] = Math.sin(i * Math.PI / 180);
+		const find = (rad) => sin[Math.floor(Geom.boundAngle(Geom.toDegree(rad)))];
+		return {
+			table: sin,
+			sin: find
+		};
+	}
+};
+var Shaping = class Shaping {
+	static linear(t, c = 1) {
+		return c * t;
+	}
+	static quadraticIn(t, c = 1) {
+		return c * t * t;
+	}
+	static quadraticOut(t, c = 1) {
+		return -c * t * (t - 2);
+	}
+	static quadraticInOut(t, c = 1) {
+		const dt = t * 2;
+		return t < .5 ? c / 2 * t * t * 4 : -c / 2 * ((dt - 1) * (dt - 3) - 1);
+	}
+	static cubicIn(t, c = 1) {
+		return c * t * t * t;
+	}
+	static cubicOut(t, c = 1) {
+		const dt = t - 1;
+		return c * (dt * dt * dt + 1);
+	}
+	static cubicInOut(t, c = 1) {
+		const dt = t * 2;
+		return t < .5 ? c / 2 * dt * dt * dt : c / 2 * ((dt - 2) * (dt - 2) * (dt - 2) + 2);
+	}
+	static exponentialIn(t, c = 1, p = .25) {
+		return c * Math.pow(t, 1 / p);
+	}
+	static exponentialOut(t, c = 1, p = .25) {
+		return c * Math.pow(t, p);
+	}
+	static sineIn(t, c = 1) {
+		return -c * Math.cos(t * Const.half_pi) + c;
+	}
+	static sineOut(t, c = 1) {
+		return c * Math.sin(t * Const.half_pi);
+	}
+	static sineInOut(t, c = 1) {
+		return -c / 2 * (Math.cos(Math.PI * t) - 1);
+	}
+	static cosineApprox(t, c = 1) {
+		const t2 = t * t;
+		const t4 = t2 * t2;
+		return c * (4 * (t4 * t2) / 9 - 17 * t4 / 9 + 22 * t2 / 9);
+	}
+	static circularIn(t, c = 1) {
+		return -c * (Math.sqrt(1 - t * t) - 1);
+	}
+	static circularOut(t, c = 1) {
+		const dt = t - 1;
+		return c * Math.sqrt(1 - dt * dt);
+	}
+	static circularInOut(t, c = 1) {
+		const dt = t * 2;
+		return t < .5 ? -c / 2 * (Math.sqrt(1 - dt * dt) - 1) : c / 2 * (Math.sqrt(1 - (dt - 2) * (dt - 2)) + 1);
+	}
+	static elasticIn(t, c = 1, p = .7) {
+		const dt = t - 1;
+		const s = p / Const.two_pi * 1.5707963267948966;
+		return c * (-Math.pow(2, 10 * dt) * Math.sin((dt - s) * Const.two_pi / p));
+	}
+	static elasticOut(t, c = 1, p = .7) {
+		const s = p / Const.two_pi * 1.5707963267948966;
+		return c * (Math.pow(2, -10 * t) * Math.sin((t - s) * Const.two_pi / p)) + c;
+	}
+	static elasticInOut(t, c = 1, p = .6) {
+		let dt = t * 2;
+		const s = p / Const.two_pi * 1.5707963267948966;
+		if (t < .5) {
+			dt -= 1;
+			return c * (-.5 * (Math.pow(2, 10 * dt) * Math.sin((dt - s) * Const.two_pi / p)));
+		} else {
+			dt -= 1;
+			return c * (.5 * (Math.pow(2, -10 * dt) * Math.sin((dt - s) * Const.two_pi / p))) + c;
+		}
+	}
+	static bounceIn(t, c = 1) {
+		return c - Shaping.bounceOut(1 - t, c);
+	}
+	static bounceOut(t, c = 1) {
+		if (t < 1 / 2.75) return c * (7.5625 * t * t);
+		else if (t < 2 / 2.75) {
+			t -= 1.5 / 2.75;
+			return c * (7.5625 * t * t + .75);
+		} else if (t < 2.5 / 2.75) {
+			t -= 2.25 / 2.75;
+			return c * (7.5625 * t * t + .9375);
+		} else {
+			t -= 2.625 / 2.75;
+			return c * (7.5625 * t * t + .984375);
+		}
+	}
+	static bounceInOut(t, c = 1) {
+		return t < .5 ? Shaping.bounceIn(t * 2, c) / 2 : Shaping.bounceOut(t * 2 - 1, c) / 2 + c / 2;
+	}
+	static sigmoid(t, c = 1, p = 10) {
+		const d = p * (t - .5);
+		return c / (1 + Math.exp(-d));
+	}
+	static logSigmoid(t, c = 1, p = .7) {
+		p = Math.max(Const.epsilon, Math.min(1 - Const.epsilon, p));
+		p = 1 / (1 - p);
+		const A = 1 / (1 + Math.exp((t - .5) * p * -2));
+		const B = 1 / (1 + Math.exp(p));
+		const C = 1 / (1 + Math.exp(-p));
+		return c * (A - B) / (C - B);
+	}
+	static seat(t, c = 1, p = .5) {
+		if (t < .5) return c * Math.pow(2 * t, 1 - p) / 2;
+		else return c * (1 - Math.pow(2 * (1 - t), 1 - p) / 2);
+	}
+	static quadraticBezier(t, c = 1, p = [.05, .95]) {
+		const a = typeof p != "number" ? p[0] : p;
+		const b = typeof p != "number" ? p[1] : .5;
+		let om2a = 1 - 2 * a;
+		if (om2a === 0) om2a = Const.epsilon;
+		const d = (Math.sqrt(a * a + om2a * t) - a) / om2a;
+		return c * ((1 - 2 * b) * (d * d) + 2 * b * d);
+	}
+	static cubicBezier(t, c = 1, p1 = [.1, .7], p2 = [.9, .2]) {
+		const t3 = Math.fround(t * t * t);
+		const t2 = Math.fround(t * t);
+		const t1 = Math.fround(t);
+		const y = (-t3 + 3 * t2 - 3 * t1 + 1) * 0 + (3 * t3 - 6 * t2 + 3 * t1) * new Pt(p1)[1] + (-3 * t3 + 3 * t2) * new Pt(p2)[1] + t3 * 1;
+		return c * Math.fround(y);
+	}
+	static quadraticTarget(t, c = 1, p1 = [.2, .35]) {
+		const a = Math.min(1 - Const.epsilon, Math.max(Const.epsilon, p1[0]));
+		const b = Math.min(1, Math.max(0, p1[1]));
+		const A = (1 - b) / (1 - a) - b / a;
+		const B = (A * (a * a) - b) / a;
+		const y = A * (t * t) - B * t;
+		return c * Math.min(1, Math.max(0, y));
+	}
+	static cliff(t, c = 1, p = .5) {
+		return t > p ? c : 0;
+	}
+	static step(fn, steps, t, c, ...args) {
+		const s = 1 / steps;
+		return fn(Math.floor(t / s) * s, c, ...args);
+	}
+};
+var Range = class {
+	constructor(g) {
+		this._dims = 0;
+		this._source = Group.fromPtArray(g);
+		this.calc();
+	}
+	get max() {
+		return this._max.clone();
+	}
+	get min() {
+		return this._min.clone();
+	}
+	get magnitude() {
+		return this._mag.clone();
+	}
+	calc() {
+		if (!this._source) return;
+		const dims = this._source[0].length;
+		this._dims = dims;
+		const max = new Pt(dims);
+		const min = new Pt(dims);
+		const mag = new Pt(dims);
+		for (let i = 0; i < dims; i++) {
+			max[i] = -Infinity;
+			min[i] = Infinity;
+			mag[i] = 0;
+			const s = this._source.zipSlice(i);
+			for (let k = 0, len = s.length; k < len; k++) {
+				max[i] = Math.max(max[i], s[k]);
+				min[i] = Math.min(min[i], s[k]);
+				mag[i] = max[i] - min[i];
+			}
+		}
+		this._max = max;
+		this._min = min;
+		this._mag = mag;
+		return this;
+	}
+	mapTo(min, max, exclude) {
+		const target = new Group();
+		for (let i = 0, len = this._source.length; i < len; i++) {
+			const g = this._source[i];
+			const n = new Pt(this._dims);
+			for (let k = 0; k < this._dims; k++) n[k] = exclude && exclude[k] ? g[k] : Num.mapToRange(g[k], this._min[k], this._max[k], min, max);
+			target.push(n);
+		}
+		return target;
+	}
+	append(pts, update = true) {
+		const _pts = Util.iterToArray(pts);
+		if (_pts[0].length !== this._dims) throw new Error(`Dimensions don't match. ${this._dims} dimensions in Range and ${_pts[0].length} provided in parameter. `);
+		this._source = this._source.concat(_pts);
+		if (update) this.calc();
+		return this;
+	}
+	ticks(count) {
+		const g = new Group();
+		for (let i = 0; i <= count; i++) {
+			const p = new Pt(this._dims);
+			const t = count > 0 ? i / count : 0;
+			for (let k = 0, len = this._max.length; k < len; k++) p[k] = Num.lerp(this._min[k], this._max[k], t);
+			g.push(p);
+		}
+		return g;
+	}
+};
+
+//#endregion
+//#region src/Util.ts
+const Const = {
+	xy: "xy",
+	yz: "yz",
+	xz: "xz",
+	xyz: "xyz",
+	horizontal: 0,
+	vertical: 1,
+	identical: 0,
+	right: 4,
+	bottom_right: 5,
+	bottom: 6,
+	bottom_left: 7,
+	left: 8,
+	top_left: 1,
+	top: 2,
+	top_right: 3,
+	epsilon: 1e-4,
+	max: Number.MAX_VALUE,
+	min: Number.MIN_VALUE,
+	pi: Math.PI,
+	two_pi: 6.283185307179586,
+	half_pi: 1.5707963267948966,
+	quarter_pi: .7853981633974483,
+	one_degree: .017453292519943295,
+	rad_to_deg: 57.29577951308232,
+	deg_to_rad: .017453292519943295,
+	gravity: 9.81,
+	newton: .10197,
+	gaussian: .3989422804014327
+};
+let _utilWarnLevel = "mute";
+var Util = class Util {
+	static get _warnLevel() {
+		return _utilWarnLevel;
+	}
+	static set _warnLevel(lv) {
+		if (this === Util) _utilWarnLevel = lv;
+		else Object.defineProperty(this, "_warnLevel", {
+			value: lv,
+			writable: true,
+			enumerable: true,
+			configurable: true
+		});
+	}
+	static warnLevel(lv) {
+		if (lv) Util._warnLevel = lv;
+		return Util._warnLevel;
+	}
+	static getArgs(args) {
+		if (args.length < 1) return [];
+		let pos = [];
+		let isArray = Array.isArray(args[0]) || ArrayBuffer.isView(args[0]);
+		if (typeof args[0] === "number") pos = Array.prototype.slice.call(args);
+		else if (typeof args[0] === "object" && !isArray) {
+			let a = [
+				"x",
+				"y",
+				"z",
+				"w"
+			];
+			let p = args[0];
+			for (let i = 0; i < a.length; i++) {
+				if (p.length && i >= p.length || !(a[i] in p)) break;
+				pos.push(p[a[i]]);
+			}
+		} else if (isArray) pos = Util.toNumericArray(args[0]);
+		return pos;
+	}
+	static toNumericArray(a) {
+		if (Array.isArray(a)) return a.slice();
+		const out = [];
+		for (let i = 0, len = a.length; i < len; i++) out.push(a[i]);
+		return out;
+	}
+	static getPtLike(args) {
+		const a0 = args[0];
+		if (typeof a0 === "number") return args;
+		if (args.length === 1 && (Array.isArray(a0) || ArrayBuffer.isView(a0))) return a0;
+		return Util.getArgs(args);
+	}
+	static warn(message = "error", defaultReturn = void 0) {
+		if (Util.warnLevel() == "error") throw new Error(message);
+		else if (Util.warnLevel() == "warn") console.warn(message);
+		return defaultReturn;
+	}
+	static randomInt(range, start = 0) {
+		Util.warn("Util.randomInt is deprecated. Please use `Num.randomRange`");
+		return Math.floor(Num.random() * range) + start;
+	}
+	static split(pts, size, stride, loopBack = false, matchSize = true) {
+		let chunks = [];
+		let part = [];
+		let st = stride || size;
+		let index = 0;
+		if (pts.length <= 0 || st <= 0) return [];
+		while (index < pts.length) {
+			part = [];
+			for (let k = 0; k < size; k++) if (loopBack) part.push(pts[(index + k) % pts.length]);
+			else {
+				if (index + k >= pts.length) break;
+				part.push(pts[index + k]);
+			}
+			index += st;
+			if (!matchSize || matchSize && part.length === size) chunks.push(part);
+		}
+		return chunks;
+	}
+	static flatten(pts, flattenAsGroup = true) {
+		const arr = flattenAsGroup ? new Group() : [];
+		for (let i = 0, len = pts.length; i < len; i++) {
+			const p = pts[i];
+			if (Array.isArray(p)) for (let k = 0, lenP = p.length; k < lenP; k++) arr.push(p[k]);
+			else arr.push(p);
+		}
+		return arr;
+	}
+	static combine(a, b, op) {
+		let result = [];
+		for (let i = 0, len = a.length; i < len; i++) for (let k = 0, lenB = b.length; k < lenB; k++) result.push(op(a[i], b[k]));
+		return result;
+	}
+	static zip(arrays) {
+		let z = [];
+		for (let i = 0, len = arrays[0].length; i < len; i++) {
+			let p = [];
+			for (let k = 0; k < arrays.length; k++) p.push(arrays[k][i]);
+			z.push(p);
+		}
+		return z;
+	}
+	static stepper(max, min = 0, stride = 1, callback) {
+		let c = min;
+		return function() {
+			c += stride;
+			if (c >= max) c = min + (c - min) % (max - min);
+			if (callback) callback(c);
+			return c;
+		};
+	}
+	static forRange(fn, range, start = 0, step = 1) {
+		let temp = [];
+		for (let i = start, len = range; i < len; i += step) temp[i] = fn(i);
+		return temp;
+	}
+	static load(url, callback) {
+		let request = new XMLHttpRequest();
+		request.open("GET", url, true);
+		request.onload = function() {
+			if (request.status >= 200 && request.status < 400) callback(request.responseText, true);
+			else callback(`Server error (${request.status}) when loading "${url}"`, false);
+		};
+		request.onerror = function() {
+			callback(`Unknown network error`, false);
+		};
+		request.send();
+	}
+	static download(space, filename = "pts_canvas_image", filetype = "png", quality = 1) {
+		const ftype = filetype === "jpg" ? "jpeg" : filetype;
+		space.element.toBlob(function(blob) {
+			const link = document.createElement("a");
+			const url = URL.createObjectURL(blob);
+			link.href = url;
+			link.download = `${filename}.${filetype}`;
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			URL.revokeObjectURL(url);
+		}, `image/${ftype}`, quality);
+	}
+	static performance(avgFrames = 10) {
+		let last = Date.now();
+		let avg = [];
+		return function() {
+			const now = Date.now();
+			avg.push(now - last);
+			if (avg.length > avgFrames) avg.shift();
+			last = now;
+			return Math.floor(avg.reduce((a, b) => a + b, 0) / avg.length);
+		};
+	}
+	static arrayCheck(pts, minRequired = 2) {
+		if (Array.isArray(pts) && pts.length < minRequired) {
+			Util.warn(`Requires ${minRequired} or more Pts in this Group.`);
+			return false;
+		}
+		return true;
+	}
+	static iterToArray(it) {
+		return !Array.isArray(it) ? [...it] : it;
+	}
+	static isMobile() {
+		return /iPhone|iPad|Android/i.test(navigator.userAgent);
+	}
+	static uniqueId(useCrypto = false) {
+		var _crypto;
+		return useCrypto && typeof crypto !== "undefined" && ((_crypto = crypto) === null || _crypto === void 0 ? void 0 : _crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substring(2);
+	}
+};
+
+//#endregion
+//#region src/Pt.ts
+function _isBuffer(a) {
+	return a instanceof ArrayBuffer || typeof SharedArrayBuffer !== "undefined" && a instanceof SharedArrayBuffer;
+}
+var Pt = class Pt extends Float32Array {
+	constructor(...args) {
+		let params;
+		let offset;
+		let length;
+		const a0 = args[0];
+		if (args.length === 1 && typeof a0 == "number") params = a0;
+		else if (args.length === 0) params = 2;
+		else if (args.length === 1 && (Array.isArray(a0) || ArrayBuffer.isView(a0))) params = a0;
+		else if (typeof a0 === "number") params = args;
+		else if (_isBuffer(a0)) {
+			params = a0;
+			offset = args[1];
+			length = args[2];
+		} else params = Util.getArgs(args);
+		super(params, offset, length);
+	}
+	static make(dimensions, defaultValue = 0, randomize = false) {
+		const p = new Pt(dimensions);
+		if (defaultValue) p.fill(defaultValue);
+		if (randomize) for (let i = 0, len = p.length; i < len; i++) p[i] = p[i] * Num.random();
+		return p;
+	}
+	get id() {
+		return this._id;
+	}
+	set id(s) {
+		this._id = s;
+	}
+	get x() {
+		return this[0];
+	}
+	set x(n) {
+		this[0] = n;
+	}
+	get y() {
+		return this[1];
+	}
+	set y(n) {
+		this[1] = n;
+	}
+	get z() {
+		return this[2];
+	}
+	set z(n) {
+		this[2] = n;
+	}
+	get w() {
+		return this[3];
+	}
+	set w(n) {
+		this[3] = n;
+	}
+	clone() {
+		return new Pt(this);
+	}
+	equals(p, threshold = 1e-6) {
+		for (let i = 0, len = this.length; i < len; i++) if (!(Math.abs(this[i] - p[i]) <= threshold)) return false;
+		return true;
+	}
+	to(...args) {
+		const p = Util.getPtLike(args);
+		for (let i = 0, len = Math.min(this.length, p.length); i < len; i++) this[i] = p[i];
+		return this;
+	}
+	$to(...args) {
+		return this.clone().to(...args);
+	}
+	toAngle(radian, magnitude, anchorFromPt = false) {
+		const m = magnitude != void 0 ? magnitude : this.magnitude();
+		const change = [Math.cos(radian) * m, Math.sin(radian) * m];
+		return anchorFromPt ? this.add(change) : this.to(change);
+	}
+	op(fn) {
+		const self = this;
+		return (...params) => {
+			return fn(self, ...params);
+		};
+	}
+	ops(fns) {
+		const _ops = [];
+		for (let i = 0, len = fns.length; i < len; i++) _ops.push(this.op(fns[i]));
+		return _ops;
+	}
+	$take(axis) {
+		const p = [];
+		for (let i = 0, len = axis.length; i < len; i++) p.push(this[axis[i]] || 0);
+		return new Pt(p);
+	}
+	$concat(...args) {
+		return new Pt(this.toArray().concat(Util.getArgs(args)));
+	}
+	add(...args) {
+		args.length === 1 && typeof args[0] == "number" ? Vec.add(this, args[0]) : Vec.add(this, Util.getPtLike(args));
+		return this;
+	}
+	$add(...args) {
+		return this.clone().add(...args);
+	}
+	subtract(...args) {
+		args.length === 1 && typeof args[0] == "number" ? Vec.subtract(this, args[0]) : Vec.subtract(this, Util.getPtLike(args));
+		return this;
+	}
+	$subtract(...args) {
+		return this.clone().subtract(...args);
+	}
+	multiply(...args) {
+		args.length === 1 && typeof args[0] == "number" ? Vec.multiply(this, args[0]) : Vec.multiply(this, Util.getPtLike(args));
+		return this;
+	}
+	$multiply(...args) {
+		return this.clone().multiply(...args);
+	}
+	divide(...args) {
+		args.length === 1 && typeof args[0] == "number" ? Vec.divide(this, args[0]) : Vec.divide(this, Util.getPtLike(args));
+		return this;
+	}
+	$divide(...args) {
+		return this.clone().divide(...args);
+	}
+	magnitudeSq() {
+		return Vec.dot(this, this);
+	}
+	magnitude() {
+		return Vec.magnitude(this);
+	}
+	unit(magnitude = void 0) {
+		Vec.unit(this, magnitude);
+		return this;
+	}
+	$unit(magnitude = void 0) {
+		return this.clone().unit(magnitude);
+	}
+	dot(...args) {
+		return Vec.dot(this, Util.getPtLike(args));
+	}
+	$cross2D(...args) {
+		return Vec.cross2D(this, Util.getPtLike(args));
+	}
+	$cross(...args) {
+		return Vec.cross(this, Util.getPtLike(args));
+	}
+	$project(...args) {
+		return this.$multiply(this.dot(...args) / this.magnitudeSq());
+	}
+	projectScalar(...args) {
+		return this.dot(...args) / this.magnitude();
+	}
+	abs() {
+		Vec.abs(this);
+		return this;
+	}
+	$abs() {
+		return this.clone().abs();
+	}
+	floor() {
+		Vec.floor(this);
+		return this;
+	}
+	$floor() {
+		return this.clone().floor();
+	}
+	ceil() {
+		Vec.ceil(this);
+		return this;
+	}
+	$ceil() {
+		return this.clone().ceil();
+	}
+	round() {
+		Vec.round(this);
+		return this;
+	}
+	$round() {
+		return this.clone().round();
+	}
+	minValue() {
+		return Vec.min(this);
+	}
+	maxValue() {
+		return Vec.max(this);
+	}
+	$min(...args) {
+		const p = Util.getPtLike(args);
+		const m = this.clone();
+		for (let i = 0, len = Math.min(this.length, p.length); i < len; i++) m[i] = Math.min(this[i], p[i]);
+		return m;
+	}
+	$max(...args) {
+		const p = Util.getPtLike(args);
+		const m = this.clone();
+		for (let i = 0, len = Math.min(this.length, p.length); i < len; i++) m[i] = Math.max(this[i], p[i]);
+		return m;
+	}
+	angle(axis = Const.xy) {
+		return Math.atan2(this[axis[1]], this[axis[0]]);
+	}
+	angleBetween(p, axis = Const.xy) {
+		return Geom.boundRadian(this.angle(axis) - p.angle(axis) + Math.PI) - Math.PI;
+	}
+	scale(scale, anchor) {
+		Geom.scale(this, scale, anchor || Pt.make(this.length, 0));
+		return this;
+	}
+	rotate2D(angle, anchor, axis) {
+		Geom.rotate2D(this, angle, anchor || Pt.make(this.length, 0), axis);
+		return this;
+	}
+	shear2D(scale, anchor, axis) {
+		Geom.shear2D(this, scale, anchor || Pt.make(this.length, 0), axis);
+		return this;
+	}
+	reflect2D(line, axis) {
+		Geom.reflect2D(this, line, axis);
+		return this;
+	}
+	toString() {
+		return `Pt(${this.join(", ")})`;
+	}
+	toArray() {
+		const a = [];
+		for (let i = 0, len = this.length; i < len; i++) a.push(this[i]);
+		return a;
+	}
+	toGroup() {
+		return new Group(Pt.make(this.length), this.clone());
+	}
+	toBound() {
+		return new Bound(Pt.make(this.length), this.clone());
+	}
+};
+var Group = class Group extends Array {
+	constructor(...args) {
+		super(...args);
+	}
+	get id() {
+		return this._id;
+	}
+	set id(s) {
+		this._id = s;
+	}
+	get p1() {
+		return this[0];
+	}
+	get p2() {
+		return this[1];
+	}
+	get p3() {
+		return this[2];
+	}
+	get p4() {
+		return this[3];
+	}
+	get q1() {
+		return this[this.length - 1];
+	}
+	get q2() {
+		return this[this.length - 2];
+	}
+	get q3() {
+		return this[this.length - 3];
+	}
+	get q4() {
+		return this[this.length - 4];
+	}
+	clone() {
+		const group = new Group();
+		for (let i = 0, len = this.length; i < len; i++) group.push(this[i].clone());
+		return group;
+	}
+	static fromArray(list) {
+		const g = new Group();
+		for (const li of list) {
+			const p = li instanceof Pt ? li : new Pt(li);
+			g.push(p);
+		}
+		return g;
+	}
+	static fromPtArray(list) {
+		return Group.from(list);
+	}
+	split(chunkSize, stride, loopBack = false) {
+		const st = stride || chunkSize;
+		const chunks = [];
+		if (this.length <= 0 || st <= 0) return chunks;
+		let index = 0;
+		while (index < this.length) {
+			const g = new Group();
+			let size = 0;
+			for (let k = 0; k < chunkSize; k++) if (loopBack) g[size++] = this[(index + k) % this.length];
+			else {
+				if (index + k >= this.length) break;
+				g[size++] = this[index + k];
+			}
+			index += st;
+			if (size === chunkSize) chunks.push(g);
+		}
+		return chunks;
+	}
+	insert(pts, index = 0) {
+		let _pts = Util.iterToArray(pts);
+		if (_pts === this) _pts = _pts.slice();
+		const len = this.length;
+		const n = _pts.length;
+		if (n === 0) return this;
+		let start = Math.trunc(index) || 0;
+		start = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+		this.length = len + n;
+		for (let i = len - 1; i >= start; i--) this[i + n] = this[i];
+		for (let i = 0; i < n; i++) this[start + i] = _pts[i];
+		return this;
+	}
+	remove(index = 0, count = 1) {
+		const param = index < 0 ? [index * -1 - 1, count] : [index, count];
+		return Group.prototype.splice.apply(this, param);
+	}
+	segments(pts_per_segment = 2, stride = 1, loopBack = false) {
+		return this.split(pts_per_segment, stride, loopBack);
+	}
+	lines() {
+		return this.segments(2, 1);
+	}
+	centroid() {
+		return Geom.centroid(this);
+	}
+	boundingBox() {
+		return Geom.boundingBox(this);
+	}
+	anchorTo(ptOrIndex = 0) {
+		Geom.anchor(this, ptOrIndex, "to");
+	}
+	anchorFrom(ptOrIndex = 0) {
+		Geom.anchor(this, ptOrIndex, "from");
+	}
+	op(fn) {
+		const self = this;
+		return (...params) => {
+			return fn(self, ...params);
+		};
+	}
+	ops(fns) {
+		const _ops = [];
+		for (let i = 0, len = fns.length; i < len; i++) _ops.push(this.op(fns[i]));
+		return _ops;
+	}
+	interpolate(t) {
+		t = Num.clamp(t, 0, 1);
+		const chunk = this.length - 1;
+		const tc = 1 / (this.length - 1);
+		const idx = Math.floor(t / tc);
+		return Geom.interpolate(this[idx], this[Math.min(this.length - 1, idx + 1)], (t - idx * tc) * chunk);
+	}
+	moveBy(...args) {
+		return this.add(...args);
+	}
+	moveTo(...args) {
+		const d = new Pt(...args).subtract(this[0]);
+		this.moveBy(d);
+		return this;
+	}
+	scale(scale, anchor) {
+		for (let i = 0, len = this.length; i < len; i++) Geom.scale(this[i], scale, anchor || this[0]);
+		return this;
+	}
+	rotate2D(angle, anchor, axis) {
+		for (let i = 0, len = this.length; i < len; i++) Geom.rotate2D(this[i], angle, anchor || this[0], axis);
+		return this;
+	}
+	shear2D(scale, anchor, axis) {
+		for (let i = 0, len = this.length; i < len; i++) Geom.shear2D(this[i], scale, anchor || this[0], axis);
+		return this;
+	}
+	reflect2D(line, axis) {
+		for (let i = 0, len = this.length; i < len; i++) Geom.reflect2D(this[i], line, axis);
+		return this;
+	}
+	sortByDimension(dim, desc = false) {
+		return this.sort((a, b) => desc ? b[dim] - a[dim] : a[dim] - b[dim]);
+	}
+	forEachPt(ptFn, ...args) {
+		if (this.length === 0) return this;
+		if (!this[0][ptFn]) {
+			Util.warn(`${ptFn} is not a function of Pt`);
+			return this;
+		}
+		for (let i = 0, len = this.length; i < len; i++) this[i] = this[i][ptFn](...args);
+		return this;
+	}
+	_vecOp(fn, args) {
+		const b = args.length === 1 && typeof args[0] == "number" ? args[0] : Util.getPtLike(args);
+		for (let i = 0, len = this.length; i < len; i++) fn(this[i], b);
+		return this;
+	}
+	add(...args) {
+		return this._vecOp(Vec.add, args);
+	}
+	subtract(...args) {
+		return this._vecOp(Vec.subtract, args);
+	}
+	multiply(...args) {
+		return this._vecOp(Vec.multiply, args);
+	}
+	divide(...args) {
+		return this._vecOp(Vec.divide, args);
+	}
+	$matrixAdd(g) {
+		return Mat.add(this, g);
+	}
+	$matrixMultiply(g, transposed = false, elementwise = false) {
+		return Mat.multiply(this, g, transposed, elementwise);
+	}
+	zipSlice(index, defaultValue = false) {
+		return Mat.zipSlice(this, index, defaultValue);
+	}
+	$zip(defaultValue = void 0, useLongest = false) {
+		return Mat.zip(this, defaultValue, useLongest);
+	}
+	toBound() {
+		return Bound.fromGroup(this);
+	}
+	toString() {
+		return "Group[ " + this.reduce((p, c) => p + c.toString() + " ", "") + " ]";
+	}
+};
+var Bound = class Bound extends Group {
+	constructor(...args) {
+		super(...args);
+		this._center = new Pt();
+		this._size = new Pt();
+		this._inited = false;
+		this.init();
+	}
+	static fromBoundingRect(rect) {
+		const b = new Bound(new Pt(rect.left || 0, rect.top || 0), new Pt(rect.right || 0, rect.bottom || 0));
+		if (rect.width && rect.height) b.size = new Pt(rect.width, rect.height);
+		return b;
+	}
+	static fromGroup(g) {
+		const _g = Util.iterToArray(g);
+		if (_g.length < 2) throw new Error("Cannot create a Bound from a group that has less than 2 Pt");
+		const first = _g[0];
+		const last = _g[_g.length - 1];
+		return new Bound(first instanceof Pt ? first : new Pt(first), last instanceof Pt ? last : new Pt(last));
+	}
+	init() {
+		if (this.p1) {
+			this._size = this.p1.clone();
+			this._inited = true;
+		}
+		if (this.p1 && this.p2) {
+			this._updateSize();
+			this._inited = true;
+		}
+	}
+	clone() {
+		return new Bound(this.topLeft, this.bottomRight);
+	}
+	_updateSize() {
+		const a = this[0];
+		const b = this[1];
+		const n = b ? b.length : 0;
+		if (this._size.length !== n) this._size = new Pt(n);
+		for (let i = 0; i < n; i++) {
+			let lo = a ? a[i] || 0 : 0;
+			if (a && b[i] < lo) {
+				a[i] = b[i];
+				b[i] = lo;
+				lo = a[i];
+			}
+			this._size[i] = Math.abs(b[i] - lo);
+		}
+		this._updateCenter();
+	}
+	_updateCenter() {
+		const a = this[0];
+		const n = this._size.length;
+		if (this._center.length !== n) this._center = new Pt(n);
+		for (let i = 0; i < n; i++) this._center[i] = this._size[i] * .5 + (a ? a[i] || 0 : 0);
+	}
+	_updatePosFromTop() {
+		this.bottomRight = this.topLeft.$add(this._size);
+		this._updateCenter();
+	}
+	_updatePosFromBottom() {
+		this.topLeft = this.bottomRight.$subtract(this._size);
+		this._updateCenter();
+	}
+	_updatePosFromCenter() {
+		const half = this._size.$multiply(.5);
+		const center = this._center;
+		this[0] = center.$subtract(half);
+		this[1] = center.$add(half);
+	}
+	get size() {
+		return new Pt(this._size);
+	}
+	set size(p) {
+		this._size = new Pt(p);
+		this._updatePosFromTop();
+	}
+	get center() {
+		return new Pt(this._center);
+	}
+	set center(p) {
+		this._center = new Pt(p);
+		this._updatePosFromCenter();
+	}
+	get topLeft() {
+		return new Pt(this[0]);
+	}
+	set topLeft(p) {
+		this[0] = new Pt(p);
+		this._updateSize();
+	}
+	get bottomRight() {
+		return new Pt(this[1]);
+	}
+	set bottomRight(p) {
+		this[1] = new Pt(p);
+		this._updateSize();
+	}
+	get width() {
+		return this._size.length > 0 ? this._size.x : 0;
+	}
+	set width(w) {
+		this._size.x = w;
+		this._updatePosFromTop();
+	}
+	get height() {
+		return this._size.length > 1 ? this._size.y : 0;
+	}
+	set height(h) {
+		this._size.y = h;
+		this._updatePosFromTop();
+	}
+	get depth() {
+		return this._size.length > 2 ? this._size.z : 0;
+	}
+	set depth(d) {
+		this._size.z = d;
+		this._updatePosFromTop();
+	}
+	get x() {
+		return this[0] ? this[0][0] : void 0;
+	}
+	get y() {
+		return this[0] ? this[0][1] : void 0;
+	}
+	get z() {
+		return this[0] ? this[0][2] : void 0;
+	}
+	get inited() {
+		return this._inited;
+	}
+	update() {
+		this._updateSize();
+		return this;
+	}
+};
+
+//#endregion
+//#region src/_triangulate.ts
+const EMPTY = {
+	triangles: /* @__PURE__ */ new Uint32Array(0),
+	neighbors: /* @__PURE__ */ new Int32Array(0),
+	hull: /* @__PURE__ */ new Uint32Array(0)
+};
+const EPS = 11102230246251565e-32;
+const errorBound = (a, b) => (a + b * EPS) * EPS;
+const ORIENT_BOUND = /* @__PURE__ */ errorBound(3, 16);
+const INCIRCLE_BOUND = /* @__PURE__ */ errorBound(10, 96);
+const INT_LIMIT = 2147483648;
+const _input = /* @__PURE__ */ new Float64Array(8);
+let _presetScale = 0;
+function _integerScale(count) {
+	if (_presetScale > 0) return _presetScale;
+	let scale = 1;
+	for (let k = 0; k <= 30; k++) {
+		let exact = true;
+		for (let i = 0; i < count; i++) {
+			const v = _input[i] * scale;
+			if (v >= INT_LIMIT || v <= -2147483648) return 0;
+			if ((v | 0) !== v) exact = false;
+		}
+		if (exact) return scale;
+		scale *= 2;
+	}
+	return 0;
+}
+function orient2d(ax, ay, bx, by, cx, cy) {
+	const left = (ax - cx) * (by - cy);
+	const right = (ay - cy) * (bx - cx);
+	const det = left - right;
+	const bound = ORIENT_BOUND * (Math.abs(left) + Math.abs(right));
+	if (det > bound) return 1;
+	if (-det > bound) return -1;
+	_input[0] = ax;
+	_input[1] = ay;
+	_input[2] = bx;
+	_input[3] = by;
+	_input[4] = cx;
+	_input[5] = cy;
+	const scale = _integerScale(6);
+	if (scale !== 0) return _orientInt((ax - cx) * scale, (by - cy) * scale, (ay - cy) * scale, (bx - cx) * scale);
+	return orient2dExact(ax, ay, bx, by, cx, cy);
+}
+function incircle(ax, ay, bx, by, cx, cy, dx, dy) {
+	const adx = ax - dx;
+	const ady = ay - dy;
+	const bdx = bx - dx;
+	const bdy = by - dy;
+	const cdx = cx - dx;
+	const cdy = cy - dy;
+	const bdxcdy = bdx * cdy;
+	const cdxbdy = cdx * bdy;
+	const alift = adx * adx + ady * ady;
+	const cdxady = cdx * ady;
+	const adxcdy = adx * cdy;
+	const blift = bdx * bdx + bdy * bdy;
+	const adxbdy = adx * bdy;
+	const bdxady = bdx * ady;
+	const clift = cdx * cdx + cdy * cdy;
+	const det = alift * (bdxcdy - cdxbdy) + blift * (cdxady - adxcdy) + clift * (adxbdy - bdxady);
+	const permanent = (Math.abs(bdxcdy) + Math.abs(cdxbdy)) * alift + (Math.abs(cdxady) + Math.abs(adxcdy)) * blift + (Math.abs(adxbdy) + Math.abs(bdxady)) * clift;
+	const bound = INCIRCLE_BOUND * permanent;
+	if (det > bound) return 1;
+	if (-det > bound) return -1;
+	_input[0] = ax;
+	_input[1] = ay;
+	_input[2] = bx;
+	_input[3] = by;
+	_input[4] = cx;
+	_input[5] = cy;
+	_input[6] = dx;
+	_input[7] = dy;
+	const scale = _integerScale(8);
+	if (scale !== 0) return _incircleInt(adx * scale, ady * scale, bdx * scale, bdy * scale, cdx * scale, cdy * scale);
+	return incircleExact(ax, ay, bx, by, cx, cy, dx, dy);
+}
+const LIMB = 262144;
+const INV_LIMB = 1 / LIMB;
+const _acc = /* @__PURE__ */ new Float64Array(8);
+const _liftA = /* @__PURE__ */ new Float64Array(4);
+const _liftB = /* @__PURE__ */ new Float64Array(4);
+const _liftC = /* @__PURE__ */ new Float64Array(4);
+const _crossA = /* @__PURE__ */ new Float64Array(4);
+const _crossB = /* @__PURE__ */ new Float64Array(4);
+const _crossC = /* @__PURE__ */ new Float64Array(4);
+function _mulAdd22(x, y, sign, at) {
+	const x0 = x & 262143;
+	const x1 = x >>> 18;
+	const y0 = y & 262143;
+	const y1 = y >>> 18;
+	_acc[at] += sign * x0 * y0;
+	_acc[at + 1] += sign * (x0 * y1 + x1 * y0);
+	_acc[at + 2] += sign * x1 * y1;
+}
+function _mulAdd44(a, m, sign) {
+	for (let i = 0; i < 4; i++) {
+		const ai = sign * a[i];
+		if (ai === 0) continue;
+		for (let j = 0; j < 4; j++) _acc[i + j] += ai * m[j];
+	}
+}
+function _carry(n) {
+	let carry = 0;
+	for (let k = 0; k < n; k++) {
+		const v = _acc[k] + carry;
+		carry = Math.floor(v * INV_LIMB);
+		_acc[k] = v - carry * LIMB;
+	}
+	return carry;
+}
+function _accSign(n, carry) {
+	if (carry !== 0) return carry > 0 ? 1 : -1;
+	for (let k = 0; k < n; k++) if (_acc[k] !== 0) return 1;
+	return 0;
+}
+function _magnitude(n, carry, out) {
+	if (carry >= 0) {
+		let zero = carry === 0;
+		for (let k = 0; k < n; k++) {
+			out[k] = _acc[k];
+			if (_acc[k] !== 0) zero = false;
+		}
+		out[n] = carry;
+		return zero ? 0 : 1;
+	}
+	let up = 1;
+	for (let k = 0; k < n; k++) {
+		let m = 262143 - _acc[k] + up;
+		up = 0;
+		if (m === LIMB) {
+			m = 0;
+			up = 1;
+		}
+		out[k] = m;
+	}
+	out[n] = -carry - 1 + up;
+	return -1;
+}
+function _orientInt(a, b, c, d) {
+	_acc[0] = 0;
+	_acc[1] = 0;
+	_acc[2] = 0;
+	_mulAdd22(Math.abs(a), Math.abs(b), a < 0 !== b < 0 ? -1 : 1, 0);
+	_mulAdd22(Math.abs(c), Math.abs(d), c < 0 !== d < 0 ? 1 : -1, 0);
+	return _accSign(3, _carry(3));
+}
+function _lift(dx, dy, out) {
+	_acc[0] = 0;
+	_acc[1] = 0;
+	_acc[2] = 0;
+	_mulAdd22(Math.abs(dx), Math.abs(dx), 1, 0);
+	_mulAdd22(Math.abs(dy), Math.abs(dy), 1, 0);
+	const carry = _carry(3);
+	out[0] = _acc[0];
+	out[1] = _acc[1];
+	out[2] = _acc[2];
+	out[3] = carry;
+}
+function _cross(p, q, r, t, out) {
+	_acc[0] = 0;
+	_acc[1] = 0;
+	_acc[2] = 0;
+	_mulAdd22(Math.abs(p), Math.abs(q), p < 0 !== q < 0 ? -1 : 1, 0);
+	_mulAdd22(Math.abs(r), Math.abs(t), r < 0 !== t < 0 ? 1 : -1, 0);
+	return _magnitude(3, _carry(3), out);
+}
+function _incircleInt(adx, ady, bdx, bdy, cdx, cdy) {
+	_lift(adx, ady, _liftA);
+	_lift(bdx, bdy, _liftB);
+	_lift(cdx, cdy, _liftC);
+	const sa = _cross(bdx, cdy, cdx, bdy, _crossA);
+	const sb = _cross(cdx, ady, adx, cdy, _crossB);
+	const sc = _cross(adx, bdy, bdx, ady, _crossC);
+	for (let k = 0; k < 7; k++) _acc[k] = 0;
+	if (sa !== 0) _mulAdd44(_liftA, _crossA, sa);
+	if (sb !== 0) _mulAdd44(_liftB, _crossB, sb);
+	if (sc !== 0) _mulAdd44(_liftC, _crossC, sc);
+	return _accSign(7, _carry(7));
+}
+const _buffer = /* @__PURE__ */ new ArrayBuffer(8);
+const _bits = /* @__PURE__ */ new Float64Array(_buffer);
+const _words = /* @__PURE__ */ new Uint32Array(_buffer);
+const HI = /* @__PURE__ */ wordIndex(true);
+const LO = /* @__PURE__ */ wordIndex(false);
+function wordIndex(high) {
+	const probe = new Float64Array([1]);
+	return high === (new Uint32Array(probe.buffer)[1] === 1072693248) ? 1 : 0;
+}
+const _mant = /* @__PURE__ */ new Float64Array(8);
+const _expo = /* @__PURE__ */ new Int32Array(8);
+function _scaled(values, count) {
+	let minExpo = 2147483647;
+	for (let i = 0; i < count; i++) {
+		_bits[0] = values[i];
+		const hi = _words[HI];
+		const biased = hi >>> 20 & 2047;
+		let m = (hi & 1048575) * 4294967296 + _words[LO];
+		let e = -1074;
+		if (biased !== 0) {
+			m += 4503599627370496;
+			e = biased - 1075;
+		}
+		_mant[i] = hi >>> 31 ? -m : m;
+		_expo[i] = e;
+		if (m !== 0 && e < minExpo) minExpo = e;
+	}
+	const out = [];
+	for (let i = 0; i < count; i++) out.push(_mant[i] === 0 ? BigInt(0) : BigInt(_mant[i]) << BigInt(_expo[i] - minExpo));
+	return out;
+}
+let _finiteLimit;
+let _shiftStep;
+function crossingParameter(ax, ay, bx, by, cx, cy, dx, dy) {
+	_input.set([
+		ax,
+		ay,
+		bx,
+		by,
+		cx,
+		cy,
+		dx,
+		dy
+	]);
+	const [a, b, c, d, e, f, g, h] = _scaled(_input, 8);
+	const rx = g - e;
+	const ry = h - f;
+	let numerator = rx * (b - f) - ry * (a - e);
+	let denominator = numerator - (rx * (d - f) - ry * (c - e));
+	if (denominator < BigInt(0)) {
+		numerator = -numerator;
+		denominator = -denominator;
+	}
+	if (_finiteLimit === void 0) {
+		_finiteLimit = BigInt(1) << BigInt(1023);
+		_shiftStep = BigInt(64);
+	}
+	let shift = BigInt(0);
+	let scaled = denominator;
+	while (scaled >= _finiteLimit) {
+		scaled >>= _shiftStep;
+		shift += _shiftStep;
+	}
+	return Number(numerator >> shift) / Number(scaled);
+}
+function orient2dFiltered(ax, ay, bx, by, cx, cy) {
+	const left = (ax - cx) * (by - cy);
+	const right = (ay - cy) * (bx - cx);
+	const det = left - right;
+	const bound = ORIENT_BOUND * (Math.abs(left) + Math.abs(right));
+	if (det > bound) return 1;
+	if (-det > bound) return -1;
+	return orient2dExact(ax, ay, bx, by, cx, cy);
+}
+function orient2dExact(ax, ay, bx, by, cx, cy) {
+	_input[0] = ax;
+	_input[1] = ay;
+	_input[2] = bx;
+	_input[3] = by;
+	_input[4] = cx;
+	_input[5] = cy;
+	const s = _scaled(_input, 6);
+	const det = (s[0] - s[4]) * (s[3] - s[5]) - (s[1] - s[5]) * (s[2] - s[4]);
+	const zero = BigInt(0);
+	return det > zero ? 1 : det < zero ? -1 : 0;
+}
+function incircleExact(ax, ay, bx, by, cx, cy, dx, dy) {
+	_input[0] = ax;
+	_input[1] = ay;
+	_input[2] = bx;
+	_input[3] = by;
+	_input[4] = cx;
+	_input[5] = cy;
+	_input[6] = dx;
+	_input[7] = dy;
+	const s = _scaled(_input, 8);
+	const adx = s[0] - s[6];
+	const ady = s[1] - s[7];
+	const bdx = s[2] - s[6];
+	const bdy = s[3] - s[7];
+	const cdx = s[4] - s[6];
+	const cdy = s[5] - s[7];
+	const det = (adx * adx + ady * ady) * (bdx * cdy - cdx * bdy) + (bdx * bdx + bdy * bdy) * (cdx * ady - adx * cdy) + (cdx * cdx + cdy * cdy) * (adx * bdy - bdx * ady);
+	const zero = BigInt(0);
+	return det > zero ? 1 : det < zero ? -1 : 0;
+}
+function hilbertIndex(order, x, y) {
+	const n = 1 << order;
+	let d = 0;
+	for (let s = n >> 1; s > 0; s >>= 1) {
+		const rx = (x & s) !== 0 ? 1 : 0;
+		const ry = (y & s) !== 0 ? 1 : 0;
+		d += s * s * (3 * rx ^ ry);
+		if (ry === 0) {
+			if (rx === 1) {
+				x = n - 1 - x;
+				y = n - 1 - y;
+			}
+			const t = x;
+			x = y;
+			y = t;
+		}
+	}
+	return d;
+}
+function hilbertOrder(coords, n) {
+	let minX = Infinity;
+	let minY = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	for (let i = 0; i < n; i++) {
+		const x = coords[2 * i];
+		const y = coords[2 * i + 1];
+		if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+		if (x < minX) minX = x;
+		if (x > maxX) maxX = x;
+		if (y < minY) minY = y;
+		if (y > maxY) maxY = y;
+	}
+	let order = 2;
+	while (order < 16 && 1 << 2 * order < 16 * n) order++;
+	const cells = (1 << order) - 1;
+	const span = Math.max(maxX - minX, maxY - minY);
+	const scale = span > 0 && Number.isFinite(span) ? cells / span : 0;
+	const keys = new Uint32Array(n);
+	for (let i = 0; i < n; i++) {
+		const x = coords[2 * i];
+		const y = coords[2 * i + 1];
+		let gx = 0;
+		let gy = 0;
+		if (Number.isFinite(x) && Number.isFinite(y)) {
+			gx = Math.min(cells, Math.max(0, Math.floor((x - minX) * scale)));
+			gy = Math.min(cells, Math.max(0, Math.floor((y - minY) * scale)));
+		}
+		keys[i] = hilbertIndex(order, gx, gy);
+	}
+	let from = new Uint32Array(n);
+	let to = new Uint32Array(n);
+	for (let i = 0; i < n; i++) from[i] = i;
+	const counts = /* @__PURE__ */ new Int32Array(257);
+	for (let shift = 0; shift < 2 * order; shift += 8) {
+		counts.fill(0);
+		for (let i = 0; i < n; i++) counts[(keys[i] >>> shift & 255) + 1]++;
+		for (let b = 0; b < 256; b++) counts[b + 1] += counts[b];
+		for (let i = 0; i < n; i++) {
+			const p = from[i];
+			to[counts[keys[p] >>> shift & 255]++] = p;
+		}
+		const swap = from;
+		from = to;
+		to = swap;
+	}
+	return from;
+}
+function triangulate(coords, n = coords.length >> 1) {
+	if (n < 3) return EMPTY;
+	_presetScale = sharedScale(coords, n);
+	try {
+		return _triangulate(coords, n);
+	} finally {
+		_presetScale = 0;
+	}
+}
+function sharedScale(coords, n) {
+	let bits = 0;
+	let max = 0;
+	for (let i = 0; i < 2 * n; i++) {
+		const v = coords[i];
+		if (!Number.isFinite(v)) continue;
+		if (v === 0) continue;
+		if (Math.abs(v) > max) max = Math.abs(v);
+		_bits[0] = v;
+		const hi = _words[HI];
+		const lo = _words[LO];
+		const biased = hi >>> 20 & 2047;
+		const e = biased === 0 ? -1074 : biased - 1075;
+		let trailing;
+		if (lo !== 0) trailing = 31 - Math.clz32(lo & -lo);
+		else {
+			const m = hi & 1048575 | (biased === 0 ? 0 : 1048576);
+			trailing = 32 + (31 - Math.clz32(m & -m));
+		}
+		const fractional = -(e + trailing);
+		if (fractional > bits) bits = fractional;
+		if (bits > 30) return 0;
+	}
+	const scale = Math.pow(2, bits);
+	return max * scale < INT_LIMIT ? scale : 0;
+}
+function _triangulate(coords, n) {
+	const order = hilbertOrder(coords, n);
+	let i0 = -1;
+	let i1 = -1;
+	let i2 = -1;
+	let k = 0;
+	for (; k < n; k++) {
+		const i = order[k];
+		if (Number.isFinite(coords[2 * i]) && Number.isFinite(coords[2 * i + 1])) {
+			i0 = i;
+			k++;
+			break;
+		}
+	}
+	if (i0 < 0) return EMPTY;
+	for (; k < n; k++) {
+		const i = order[k];
+		const x = coords[2 * i];
+		const y = coords[2 * i + 1];
+		if (Number.isFinite(x) && Number.isFinite(y) && (x !== coords[2 * i0] || y !== coords[2 * i0 + 1])) {
+			i1 = i;
+			k++;
+			break;
+		}
+	}
+	if (i1 < 0) return EMPTY;
+	for (; k < n; k++) {
+		const i = order[k];
+		const x = coords[2 * i];
+		const y = coords[2 * i + 1];
+		if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+		const o = orient2d(coords[2 * i0], coords[2 * i0 + 1], coords[2 * i1], coords[2 * i1 + 1], x, y);
+		if (o !== 0) {
+			i2 = i;
+			if (o < 0) {
+				const swap = i1;
+				i1 = i2;
+				i2 = swap;
+			}
+			break;
+		}
+	}
+	if (i2 < 0) return EMPTY;
+	const INF = n;
+	const capacity = 2 * n + 4;
+	const tv = new Int32Array(capacity * 3);
+	const adj = new Int32Array(capacity * 3);
+	const live = new Uint8Array(capacity);
+	const mark = new Int32Array(capacity);
+	const freed = new Int32Array(capacity);
+	let freedCount = 0;
+	let triCount = 0;
+	const stack = new Int32Array(capacity);
+	const cavity = new Int32Array(capacity);
+	const edgeFrom = new Int32Array(capacity * 3);
+	const edgeTo = new Int32Array(capacity * 3);
+	const edgeTwin = new Int32Array(capacity * 3);
+	const toPoint = new Int32Array(n + 1);
+	const fromPoint = new Int32Array(n + 1);
+	let stamp = 0;
+	const alloc = (a, b, c) => {
+		const t = freedCount > 0 ? freed[--freedCount] : triCount++;
+		const h = 3 * t;
+		tv[h] = a;
+		tv[h + 1] = b;
+		tv[h + 2] = c;
+		live[t] = 1;
+		return t;
+	};
+	const link = (h, g) => {
+		adj[h] = g;
+		adj[g] = h;
+	};
+	const t0 = alloc(i0, i1, i2);
+	const g0 = alloc(i1, i0, INF);
+	const g1 = alloc(i2, i1, INF);
+	const g2 = alloc(i0, i2, INF);
+	link(3 * t0, 3 * g0);
+	link(3 * t0 + 1, 3 * g1);
+	link(3 * t0 + 2, 3 * g2);
+	link(3 * g0 + 1, 3 * g2 + 2);
+	link(3 * g1 + 1, 3 * g0 + 2);
+	link(3 * g2 + 1, 3 * g1 + 2);
+	const inGhostDisk = (g, px, py) => {
+		const u = tv[3 * g];
+		const v = tv[3 * g + 1];
+		const ux = coords[2 * u];
+		const uy = coords[2 * u + 1];
+		const vx = coords[2 * v];
+		const vy = coords[2 * v + 1];
+		const o = orient2d(ux, uy, vx, vy, px, py);
+		if (o !== 0) return o > 0;
+		return Math.abs(vx - ux) >= Math.abs(vy - uy) ? vx > ux ? px > ux && px < vx : px < ux && px > vx : vy > uy ? py > uy && py < vy : py < uy && py > vy;
+	};
+	const inDisk = (t, px, py) => {
+		const h = 3 * t;
+		if (tv[h + 2] === INF) return inGhostDisk(t, px, py);
+		const a = tv[h];
+		const b = tv[h + 1];
+		const c = tv[h + 2];
+		return incircle(coords[2 * a], coords[2 * a + 1], coords[2 * b], coords[2 * b + 1], coords[2 * c], coords[2 * c + 1], px, py) > 0;
+	};
+	const locate = (t, px, py) => {
+		let steps = 0;
+		const limit = 4 * triCount + 64;
+		while (true) {
+			const h = 3 * t;
+			const a = tv[h];
+			const b = tv[h + 1];
+			const c = tv[h + 2];
+			const ax = coords[2 * a];
+			const ay = coords[2 * a + 1];
+			const bx = coords[2 * b];
+			const by = coords[2 * b + 1];
+			if (c === INF) {
+				if (orient2d(ax, ay, bx, by, px, py) > 0) return t;
+				t = adj[h] / 3 | 0;
+			} else {
+				const cx = coords[2 * c];
+				const cy = coords[2 * c + 1];
+				if (orient2d(ax, ay, bx, by, px, py) < 0) t = adj[h] / 3 | 0;
+				else if (orient2d(bx, by, cx, cy, px, py) < 0) t = adj[h + 1] / 3 | 0;
+				else if (orient2d(cx, cy, ax, ay, px, py) < 0) t = adj[h + 2] / 3 | 0;
+				else if (px === ax && py === ay || px === bx && py === by || px === cx && py === cy) return -1;
+				else return t;
+			}
+			if (++steps > limit) throw new Error("Delaunay walk did not terminate");
+		}
+	};
+	const insert = (p, start) => {
+		const px = coords[2 * p];
+		const py = coords[2 * p + 1];
+		const t = locate(start, px, py);
+		if (t < 0) return start;
+		stamp++;
+		let top = 0;
+		let count = 0;
+		stack[top++] = t;
+		mark[t] = stamp;
+		while (top > 0) {
+			const s = stack[--top];
+			cavity[count++] = s;
+			const h = 3 * s;
+			for (let e = 0; e < 3; e++) {
+				const o = adj[h + e] / 3 | 0;
+				if (mark[o] !== stamp && inDisk(o, px, py)) {
+					mark[o] = stamp;
+					stack[top++] = o;
+				}
+			}
+		}
+		let edges = 0;
+		for (let i = 0; i < count; i++) {
+			const h = 3 * cavity[i];
+			for (let e = 0; e < 3; e++) {
+				const twin = adj[h + e];
+				if (mark[twin / 3 | 0] !== stamp) {
+					edgeFrom[edges] = tv[h + e];
+					edgeTo[edges] = tv[h + (e + 1) % 3];
+					edgeTwin[edges] = twin;
+					edges++;
+				}
+			}
+		}
+		for (let i = 0; i < count; i++) {
+			live[cavity[i]] = 0;
+			freed[freedCount++] = cavity[i];
+		}
+		let first = -1;
+		for (let i = 0; i < edges; i++) {
+			const u = edgeFrom[i];
+			const v = edgeTo[i];
+			let t2;
+			let hEdge;
+			let hToP;
+			let hFromP;
+			if (u === INF) {
+				t2 = alloc(v, p, INF);
+				hEdge = 3 * t2 + 2;
+				hToP = 3 * t2;
+				hFromP = 3 * t2 + 1;
+			} else if (v === INF) {
+				t2 = alloc(p, u, INF);
+				hEdge = 3 * t2 + 1;
+				hToP = 3 * t2 + 2;
+				hFromP = 3 * t2;
+			} else {
+				t2 = alloc(u, v, p);
+				hEdge = 3 * t2;
+				hToP = 3 * t2 + 1;
+				hFromP = 3 * t2 + 2;
+				if (first < 0) first = t2;
+			}
+			link(hEdge, edgeTwin[i]);
+			toPoint[v] = hToP;
+			fromPoint[u] = hFromP;
+		}
+		for (let i = 0; i < edges; i++) {
+			const v = edgeTo[i];
+			link(toPoint[v], fromPoint[v]);
+		}
+		return first < 0 ? start : first;
+	};
+	let last = t0;
+	for (let j = 0; j < n; j++) {
+		const i = order[j];
+		if (i === i0 || i === i1 || i === i2) continue;
+		if (!Number.isFinite(coords[2 * i]) || !Number.isFinite(coords[2 * i + 1])) continue;
+		last = insert(i, last);
+	}
+	const index = new Int32Array(triCount);
+	let m = 0;
+	let ghost = -1;
+	for (let t = 0; t < triCount; t++) if (!live[t]) index[t] = -1;
+	else if (tv[3 * t + 2] === INF) {
+		index[t] = -1;
+		ghost = t;
+	} else index[t] = m++;
+	const triangles = new Uint32Array(m * 3);
+	const neighbors = new Int32Array(m * 3);
+	for (let t = 0; t < triCount; t++) {
+		const k2 = index[t];
+		if (k2 < 0) continue;
+		for (let e = 0; e < 3; e++) {
+			triangles[3 * k2 + e] = tv[3 * t + e];
+			const o = adj[3 * t + e];
+			const ot = index[o / 3 | 0];
+			neighbors[3 * k2 + e] = ot < 0 ? -1 : 3 * ot + o % 3;
+		}
+	}
+	let hullCount = 0;
+	let g = ghost;
+	do {
+		hullCount++;
+		g = adj[3 * g + 2] / 3 | 0;
+	} while (g !== ghost);
+	const hull = new Uint32Array(hullCount);
+	g = ghost;
+	for (let i = 0; i < hullCount; i++) {
+		hull[i] = tv[3 * g + 1];
+		g = adj[3 * g + 2] / 3 | 0;
+	}
+	return {
+		triangles,
+		neighbors,
+		hull
+	};
+}
+
+//#endregion
+//#region src/_path.ts
+const CELL_TOLS = 64;
+const CELL_OFFSET = 16384;
+const CELL_SPAN = 32768;
+const RAY_TREE_PER_LOG = 1.5;
+const PAIR_BUFFER = 1 << 18;
+function ringsOf(shape) {
+	const list = Util.iterToArray(shape);
+	if (list.length === 0) return [];
+	const first = list[0];
+	if (first != null && typeof first[0] === "number") return [list];
+	const rings = new Array(list.length);
+	for (let i = 0; i < list.length; i++) rings[i] = Util.iterToArray(list[i]);
+	return rings;
+}
+function pseudoAngle(dx, dy) {
+	const s = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+	const d = dy >= 0 ? dx >= 0 ? dy / s : 1 - dx / s : dx < 0 ? 2 - dy / s : 3 + dx / s;
+	return d >= 2 ? d - 2 : d + 2;
+}
+function addWinding(vector, shape, delta) {
+	var _vector$get;
+	const value = ((_vector$get = vector.get(shape)) !== null && _vector$get !== void 0 ? _vector$get : 0) + delta;
+	if (value === 0) vector.delete(shape);
+	else vector.set(shape, value);
+}
+function distinctPoints(ring) {
+	const seen = [];
+	for (let i = 0; i < ring.length && seen.length < 3; i++) {
+		const p = ring[i];
+		let dup = false;
+		for (let j = 0; j < seen.length; j++) if (seen[j][0] === p[0] && seen[j][1] === p[1]) {
+			dup = true;
+			break;
+		}
+		if (!dup) seen.push(p);
+	}
+	return seen.length;
+}
+function selectByKey(items, key, lo, hi, k) {
+	let l = lo;
+	let r = hi - 1;
+	while (l < r) {
+		const pivot = key[items[l + r >> 1]];
+		let i = l;
+		let j = r;
+		while (i <= j) {
+			while (key[items[i]] < pivot) i++;
+			while (key[items[j]] > pivot) j--;
+			if (i <= j) {
+				const t = items[i];
+				items[i] = items[j];
+				items[j] = t;
+				i++;
+				j--;
+			}
+		}
+		if (k <= j) r = j;
+		else if (k >= i) l = i;
+		else return;
+	}
+}
+function outputPerimeter(ring) {
+	let length = 0;
+	for (let i = 0, n = ring.length; i < n; i++) {
+		const a = ring[i];
+		const b = ring[i === n - 1 ? 0 : i + 1];
+		length += Math.hypot(b[0] - a[0], b[1] - a[1]);
+	}
+	return length;
+}
+function outputArea(ring) {
+	let area = 0;
+	const a = ring[0];
+	for (let i = 1; i + 1 < ring.length; i++) {
+		const b = ring[i], c = ring[i + 1];
+		area += (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+	}
+	return area / 2;
+}
+const SWEEP_SCAN = 256;
+const SWEEP_SAMPLES = 64;
+const SWEEP_TRIAL = 32;
+const SWEEP_BLOCK_BITS = 4;
+const SWEEP_BLOCK = 16;
+function windowEnd(minX, order, from, limit) {
+	let end = order.length;
+	for (let a = from; a < end;) {
+		const mid = a + end >> 1;
+		if (minX[order[mid]] > limit) end = mid;
+		else a = mid + 1;
+	}
+	return end;
+}
+function runStart(minX, order, i) {
+	const x = minX[order[i]];
+	let a = 0;
+	for (let b = i; a < b;) {
+		const mid = a + b >> 1;
+		if (minX[order[mid]] < x) a = mid + 1;
+		else b = mid;
+	}
+	return a;
+}
+function scattered(boxes, r0, r1) {
+	const { minY, maxY, order } = boxes;
+	let lo = Infinity;
+	let hi = -Infinity;
+	let blockLo = Infinity;
+	let blockHi = -Infinity;
+	let spans = 0;
+	for (let j = r0; j < r1; j++) {
+		const e = order[j];
+		if (minY[e] < blockLo) blockLo = minY[e];
+		if (maxY[e] > blockHi) blockHi = maxY[e];
+		if ((j + 1 & 15) === 0 || j + 1 === r1) {
+			spans += blockHi - blockLo;
+			if (blockLo < lo) lo = blockLo;
+			if (blockHi > hi) hi = blockHi;
+			blockLo = Infinity;
+			blockHi = -Infinity;
+		}
+	}
+	return spans > 2 * (hi - lo);
+}
+function blockSpan(from, to) {
+	return (to - 1 >> SWEEP_BLOCK_BITS) - (from >> SWEEP_BLOCK_BITS) + 1;
+}
+function sweepTree(boxes) {
+	const { minX, minY, maxY, order } = boxes;
+	const E = order.length;
+	let edges = order;
+	for (let r0 = 0, r1 = 1; r0 < E; r0 = r1++) {
+		while (r1 < E && minX[order[r1]] === minX[order[r0]]) r1++;
+		if (r1 - r0 > SWEEP_BLOCK && scattered(boxes, r0, r1)) {
+			if (edges === order) edges = order.slice();
+			edges.subarray(r0, r1).sort((p, q) => minY[p] - minY[q]);
+		}
+	}
+	let ties;
+	if (edges !== order) {
+		ties = {
+			rank: new Uint32Array(E),
+			found: new Uint32Array(E)
+		};
+		for (let j = 0; j < E; j++) ties.rank[order[j]] = j;
+	}
+	const blocks = E + SWEEP_BLOCK - 1 >> SWEEP_BLOCK_BITS;
+	let size = 1;
+	let depth = 0;
+	while (size < blocks) {
+		size *= 2;
+		depth++;
+	}
+	const low = new Float64Array(2 * size).fill(Infinity);
+	const high = new Float64Array(2 * size).fill(-Infinity);
+	for (let j = 0; j < E; j++) {
+		const e = edges[j];
+		const leaf = size + (j >> SWEEP_BLOCK_BITS);
+		if (minY[e] < low[leaf]) low[leaf] = minY[e];
+		if (maxY[e] > high[leaf]) high[leaf] = maxY[e];
+	}
+	for (let n = size - 1; n > 0; n--) {
+		low[n] = Math.min(low[2 * n], low[2 * n + 1]);
+		high[n] = Math.max(high[2 * n], high[2 * n + 1]);
+	}
+	return {
+		low,
+		high,
+		size,
+		edges,
+		ties,
+		stack: new Int32Array(3 * (depth + 2)),
+		scanned: 0
+	};
+}
+var Overlay = class {
+	constructor() {
+		this.tol = 0;
+		this.rounding = 0;
+		this.k = 0;
+		this.vx = [];
+		this.vy = [];
+		this.cells = /* @__PURE__ */ new Map();
+		this.ea = [];
+		this.eb = [];
+		this.es = [];
+		this.spE = [];
+		this.spT = [];
+		this.spV = [];
+		this.gu = [];
+		this.gv = [];
+		this.deltas = [];
+		this.cycleArea = [];
+		this.cycleStart = [];
+		this.touching = false;
+		this.dryRun = false;
+	}
+	origin(h) {
+		return h & 1 ? this.gv[h >> 1] : this.gu[h >> 1];
+	}
+	target(h) {
+		return h & 1 ? this.gu[h >> 1] : this.gv[h >> 1];
+	}
+	read(shapes) {
+		let list = Util.iterToArray(shapes);
+		if (list.length > 0 && list[0] != null && typeof list[0][0] === "number") list = [list];
+		this.k = list.length;
+		const rings = [];
+		const ringShape = [];
+		let maxAbs = 0;
+		for (let s = 0; s < list.length; s++) {
+			const shapeRings = ringsOf(list[s]);
+			for (let r = 0; r < shapeRings.length; r++) {
+				const ring = shapeRings[r];
+				if (ring.length < 3) continue;
+				let finite = true;
+				let max = maxAbs;
+				for (let i = 0, n = ring.length; i < n; i++) {
+					const x = +ring[i][0];
+					const y = +ring[i][1];
+					if (!(Number.isFinite(x) && Number.isFinite(y))) {
+						finite = false;
+						break;
+					}
+					const ax = x < 0 ? -x : x;
+					const ay = y < 0 ? -y : y;
+					if (ax > max) max = ax;
+					if (ay > max) max = ay;
+				}
+				if (!finite) {
+					Util.warn("Path skipped a ring with a non-finite coordinate");
+					continue;
+				}
+				maxAbs = max;
+				rings.push(ring);
+				ringShape.push(s);
+			}
+		}
+		if (rings.length === 0 || maxAbs === 0) return false;
+		this.tol = maxAbs * 1e-6;
+		this.rounding = maxAbs * Number.EPSILON * 8;
+		const ids = [];
+		for (let r = 0; r < rings.length; r++) {
+			const ring = rings[r];
+			ids.length = 0;
+			let prev = -1;
+			for (let i = 0, n = ring.length; i < n; i++) {
+				const v = this.vertexAt(+ring[i][0], +ring[i][1]);
+				if (v !== prev) {
+					ids.push(v);
+					prev = v;
+				}
+			}
+			while (ids.length > 1 && ids[ids.length - 1] === ids[0]) ids.pop();
+			if (ids.length >= 3) for (let i = 0, n = ids.length; i < n; i++) {
+				this.ea.push(ids[i]);
+				this.eb.push(ids[i === n - 1 ? 0 : i + 1]);
+				this.es.push(ringShape[r]);
+			}
+			else if (distinctPoints(ring) >= 3) Util.warn("Path dropped a ring whose points merge within the tolerance; use local coordinates for small shapes at large offsets");
+		}
+		return this.ea.length > 0;
+	}
+	vertexAt(x, y, tol = this.tol) {
+		const cellSize = this.tol * CELL_TOLS;
+		const fx = x / cellSize;
+		const fy = y / cellSize;
+		const cx = Math.floor(fx);
+		const cy = Math.floor(fy);
+		const border = tol / cellSize;
+		const x0 = fx - cx <= border ? -1 : 0;
+		const x1 = fx - cx >= 1 - border ? 1 : 0;
+		const y0 = fy - cy <= border ? -1 : 0;
+		const y1 = fy - cy >= 1 - border ? 1 : 0;
+		const t2 = tol * tol;
+		for (let i = x0; i <= x1; i++) for (let j = y0; j <= y1; j++) {
+			const cell = this.cells.get((cx + i + CELL_OFFSET) * CELL_SPAN + (cy + j + CELL_OFFSET));
+			if (!cell) continue;
+			for (let n = 0; n < cell.length; n++) {
+				const v = cell[n];
+				const dx = this.vx[v] - x;
+				const dy = this.vy[v] - y;
+				if (dx * dx + dy * dy <= t2) return v;
+			}
+		}
+		const id = this.vx.length;
+		this.vx.push(x);
+		this.vy.push(y);
+		const key = (cx + CELL_OFFSET) * CELL_SPAN + (cy + CELL_OFFSET);
+		const cell = this.cells.get(key);
+		if (cell) cell.push(id);
+		else this.cells.set(key, [id]);
+		return id;
+	}
+	split() {
+		let boxes = this.boxes();
+		const pairs = this.sweep(boxes, this.tol, true);
+		if (this.spE.length > 0) {
+			this.applySplits();
+			boxes = this.boxes();
+			this.sweep(boxes, 0, false);
+		} else if (pairs) for (let i = 0; i < pairs.length; i += 2) this.crossPair(pairs[i], pairs[i + 1]);
+		else this.sweep(boxes, 0, false);
+	}
+	boxes() {
+		const E = this.ea.length;
+		const vx = this.vx;
+		const vy = this.vy;
+		const minX = new Float64Array(E);
+		const maxX = new Float64Array(E);
+		const minY = new Float64Array(E);
+		const maxY = new Float64Array(E);
+		for (let e = 0; e < E; e++) {
+			const ax = vx[this.ea[e]];
+			const ay = vy[this.ea[e]];
+			const bx = vx[this.eb[e]];
+			const by = vy[this.eb[e]];
+			minX[e] = ax < bx ? ax : bx;
+			maxX[e] = ax < bx ? bx : ax;
+			minY[e] = ay < by ? ay : by;
+			maxY[e] = ay < by ? by : ay;
+		}
+		const order = new Uint32Array(E);
+		for (let e = 0; e < E; e++) order[e] = e;
+		order.sort((p, q) => minX[p] - minX[q]);
+		return {
+			minX,
+			maxX,
+			minY,
+			maxY,
+			order
+		};
+	}
+	sweep(boxes, margin, touching) {
+		const tree = this.searchTree(boxes, margin);
+		if (tree) return this.searchSweep(boxes, margin, touching, tree);
+		const { minX, maxX, minY, maxY, order } = boxes;
+		let pairs = touching ? [] : void 0;
+		for (let i = 0, E = order.length; i < E; i++) {
+			const e1 = order[i];
+			const limit = maxX[e1] + margin;
+			const lo = minY[e1] - margin;
+			const hi = maxY[e1] + margin;
+			for (let j = i + 1; j < E; j++) {
+				const e2 = order[j];
+				if (minX[e2] > limit) break;
+				if (minY[e2] > hi || maxY[e2] < lo) continue;
+				if (touching) {
+					this.touchPair(e1, e2, boxes);
+					if (pairs) {
+						if (pairs.length < 2 * PAIR_BUFFER) pairs.push(e1, e2);
+						else pairs = void 0;
+					}
+				} else this.crossPair(e1, e2);
+			}
+		}
+		return pairs;
+	}
+	searchTree(boxes, margin) {
+		const { minX, maxX, minY, maxY, order } = boxes;
+		const E = order.length;
+		if (E <= 2 * SWEEP_SCAN) return void 0;
+		let tree;
+		let long = 0;
+		let windowBlocks = 0;
+		for (let k = 0; k < SWEEP_SAMPLES; k++) {
+			var _tree;
+			const i = Math.floor(k * E / SWEEP_SAMPLES);
+			const e1 = order[i];
+			const end = windowEnd(minX, order, i + 1, maxX[e1] + margin);
+			if (end - i - 1 <= SWEEP_SCAN) continue;
+			long++;
+			(_tree = tree) !== null && _tree !== void 0 || (tree = sweepTree(boxes));
+			this.dryRun = true;
+			windowBlocks += this.searchPairs(e1, i, end, minY[e1] - margin, maxY[e1] + margin, boxes, tree);
+			this.dryRun = false;
+		}
+		if (!tree || long * 8 < SWEEP_SAMPLES || tree.scanned * 2 > windowBlocks) return void 0;
+		tree.scanned = 0;
+		return tree;
+	}
+	searchSweep(boxes, margin, touching, tree) {
+		const { minX, maxX, minY, maxY, order } = boxes;
+		this.pairs = touching ? [] : void 0;
+		this.touching = touching;
+		let searchable = true;
+		let searches = 0;
+		let windowBlocks = 0;
+		for (let i = 0, E = order.length; i < E; i++) {
+			const e1 = order[i];
+			const limit = maxX[e1] + margin;
+			const lo = minY[e1] - margin;
+			const hi = maxY[e1] + margin;
+			const end = windowEnd(minX, order, i + 1, limit);
+			if (!searchable || end - i - 1 <= SWEEP_SCAN) {
+				for (let j = i + 1; j < end; j++) {
+					const e2 = order[j];
+					if (minY[e2] > hi || maxY[e2] < lo) continue;
+					this.visitPair(e1, e2, boxes);
+				}
+				continue;
+			}
+			windowBlocks += this.searchPairs(e1, i, end, lo, hi, boxes, tree);
+			if (++searches === SWEEP_TRIAL) searchable = tree.scanned * 2 <= windowBlocks;
+		}
+		const pairs = this.pairs;
+		this.pairs = void 0;
+		return pairs;
+	}
+	visitPair(e1, e2, boxes) {
+		if (this.touching) {
+			this.touchPair(e1, e2, boxes);
+			const pairs = this.pairs;
+			if (pairs) {
+				if (pairs.length < 2 * PAIR_BUFFER) pairs.push(e1, e2);
+				else this.pairs = void 0;
+			}
+		} else this.crossPair(e1, e2);
+	}
+	searchPairs(e1, i, to, lo, hi, boxes, tree) {
+		const { minX, minY, maxY, order } = boxes;
+		const { low, high, size, edges, ties } = tree;
+		let from = i + 1;
+		if (ties && from < to && minX[order[from]] === minX[e1]) from = runStart(minX, order, i);
+		const first = from >> SWEEP_BLOCK_BITS;
+		const last = to - 1 >> SWEEP_BLOCK_BITS;
+		let count = 0;
+		let sorted = true;
+		const stack = tree.stack;
+		let top = 0;
+		stack[top++] = 1;
+		stack[top++] = 0;
+		stack[top++] = size - 1;
+		while (top > 0) {
+			const b1 = stack[--top];
+			const b0 = stack[--top];
+			const n = stack[--top];
+			if (b1 < first || b0 > last || low[n] > hi || high[n] < lo) continue;
+			if (n >= size) {
+				tree.scanned++;
+				const start = b0 << SWEEP_BLOCK_BITS;
+				const stopAt = start + SWEEP_BLOCK < to ? start + SWEEP_BLOCK : to;
+				for (let j = start > from ? start : from; j < stopAt; j++) {
+					const e2 = edges[j];
+					if (minY[e2] > hi || maxY[e2] < lo) continue;
+					if (ties) {
+						const r = ties.rank[e2];
+						if (r <= i) continue;
+						if (count > 0 && r < ties.found[count - 1]) sorted = false;
+						ties.found[count++] = r;
+					} else if (!this.dryRun) this.visitPair(e1, e2, boxes);
+				}
+			} else {
+				const mid = b0 + b1 >> 1;
+				stack[top++] = 2 * n + 1;
+				stack[top++] = mid + 1;
+				stack[top++] = b1;
+				stack[top++] = 2 * n;
+				stack[top++] = b0;
+				stack[top++] = mid;
+			}
+		}
+		if (ties && !this.dryRun) {
+			const found = ties.found;
+			if (!sorted) found.subarray(0, count).sort();
+			for (let k = 0; k < count; k++) this.visitPair(e1, order[found[k]], boxes);
+		}
+		return blockSpan(from, to);
+	}
+	touchPair(e1, e2, boxes) {
+		const a = this.ea[e1];
+		const b = this.eb[e1];
+		const c = this.ea[e2];
+		const d = this.eb[e2];
+		if (this.inBox(a, e2, boxes)) this.touch(e2, a, c, d);
+		if (this.inBox(b, e2, boxes)) this.touch(e2, b, c, d);
+		if (this.inBox(c, e1, boxes)) this.touch(e1, c, a, b);
+		if (this.inBox(d, e1, boxes)) this.touch(e1, d, a, b);
+	}
+	inBox(v, e, boxes) {
+		const x = this.vx[v];
+		const y = this.vy[v];
+		const tol = this.tol;
+		return x >= boxes.minX[e] - tol && x <= boxes.maxX[e] + tol && y >= boxes.minY[e] - tol && y <= boxes.maxY[e] + tol;
+	}
+	touch(e, v, p, q) {
+		if (v === p || v === q) return;
+		const vx = this.vx;
+		const vy = this.vy;
+		const px = vx[p];
+		const py = vy[p];
+		const rx = vx[q] - px;
+		const ry = vy[q] - py;
+		const len2 = rx * rx + ry * ry;
+		const dx = vx[v] - px;
+		const dy = vy[v] - py;
+		const t = (dx * rx + dy * ry) / len2;
+		if (t <= 0 || t >= 1) return;
+		const cross = rx * dy - ry * dx;
+		if (cross * cross > this.tol * this.tol * len2) return;
+		this.registerSplit(e, v);
+	}
+	crossPair(e1, e2) {
+		const a = this.ea[e1];
+		const b = this.eb[e1];
+		const c = this.ea[e2];
+		const d = this.eb[e2];
+		if (a === c || a === d || b === c || b === d) return;
+		const vx = this.vx;
+		const vy = this.vy;
+		const ax = vx[a];
+		const ay = vy[a];
+		const bx = vx[b];
+		const by = vy[b];
+		const cx = vx[c];
+		const cy = vy[c];
+		const dx = vx[d];
+		const dy = vy[d];
+		if (orient2d(ax, ay, bx, by, cx, cy) * orient2d(ax, ay, bx, by, dx, dy) >= 0) return;
+		if (orient2d(cx, cy, dx, dy, ax, ay) * orient2d(cx, cy, dx, dy, bx, by) >= 0) return;
+		const t = crossingParameter(ax, ay, bx, by, cx, cy, dx, dy);
+		const v = this.vertexAt(ax + t * (bx - ax), ay + t * (by - ay), this.rounding);
+		this.registerSplit(e1, v);
+		this.registerSplit(e2, v);
+	}
+	applySplits() {
+		const E = this.ea.length;
+		const S = this.spE.length;
+		const spE = this.spE;
+		const spT = this.spT;
+		const spV = this.spV;
+		const order = new Uint32Array(S);
+		for (let i = 0; i < S; i++) order[i] = i;
+		order.sort((p, q) => spE[p] - spE[q] || spT[p] - spT[q]);
+		const ea = [];
+		const eb = [];
+		const es = [];
+		let si = 0;
+		for (let e = 0; e < E; e++) {
+			let u = this.ea[e];
+			const end = this.eb[e];
+			const s = this.es[e];
+			while (si < S && spE[order[si]] === e) {
+				const v = spV[order[si++]];
+				if (v === u) continue;
+				ea.push(u);
+				eb.push(v);
+				es.push(s);
+				u = v;
+			}
+			if (u !== end) {
+				ea.push(u);
+				eb.push(end);
+				es.push(s);
+			}
+		}
+		this.ea = ea;
+		this.eb = eb;
+		this.es = es;
+		spE.length = 0;
+		spT.length = 0;
+		spV.length = 0;
+	}
+	registerSplit(e, v) {
+		const a = this.ea[e];
+		const b = this.eb[e];
+		if (v === a || v === b) return;
+		const ax = this.vx[a];
+		const ay = this.vy[a];
+		const rx = this.vx[b] - ax;
+		const ry = this.vy[b] - ay;
+		const t = ((this.vx[v] - ax) * rx + (this.vy[v] - ay) * ry) / (rx * rx + ry * ry);
+		if (t <= 0 || t >= 1) return;
+		this.spE.push(e);
+		this.spT.push(t);
+		this.spV.push(v);
+	}
+	merge() {
+		if (this.spE.length > 0) this.applySplits();
+		const V = this.vx.length;
+		const index = /* @__PURE__ */ new Map();
+		const gu = this.gu;
+		const gv = this.gv;
+		const deltas = this.deltas;
+		for (let e = 0, E = this.ea.length; e < E; e++) {
+			const u = this.ea[e];
+			const v = this.eb[e];
+			const lo = u < v ? u : v;
+			const hi = u < v ? v : u;
+			const key = lo * V + hi;
+			let g = index.get(key);
+			if (g === void 0) {
+				g = gu.length;
+				gu.push(lo);
+				gv.push(hi);
+				deltas.push(/* @__PURE__ */ new Map());
+				index.set(key, g);
+			}
+			addWinding(deltas[g], this.es[e], u === lo ? 1 : -1);
+		}
+		let n = 0;
+		for (let e = 0, len = gu.length; e < len; e++) {
+			if (deltas[e].size === 0) continue;
+			if (n !== e) {
+				gu[n] = gu[e];
+				gv[n] = gv[e];
+				deltas[n] = deltas[e];
+			}
+			n++;
+		}
+		gu.length = n;
+		gv.length = n;
+		deltas.length = n;
+	}
+	rayTree() {
+		return this.rayIndex;
+	}
+	expectRayQueries(queries) {
+		const E = this.gu.length;
+		if (this.rayIndex === void 0 && queries > RAY_TREE_PER_LOG * Math.log2(E + 1) + 1) {
+			var _this$indexRays;
+			this.rayIndex = (_this$indexRays = this.indexRays()) !== null && _this$indexRays !== void 0 ? _this$indexRays : null;
+		}
+	}
+	indexRays() {
+		const E = this.gu.length;
+		const vx = this.vx;
+		const vy = this.vy;
+		let n = 0;
+		const edges = new Uint32Array(E);
+		for (let e = 0; e < E; e++) if (vy[this.gu[e]] !== vy[this.gv[e]]) edges[n++] = e;
+		if (n === 0) return void 0;
+		const cx = new Float64Array(E);
+		const cy = new Float64Array(E);
+		for (let e = 0; e < E; e++) {
+			cx[e] = vx[this.gu[e]] + vx[this.gv[e]];
+			cy[e] = vy[this.gu[e]] + vy[this.gv[e]];
+		}
+		const build = (lo, hi) => {
+			const node = {
+				x0: Infinity,
+				x1: -Infinity,
+				y0: Infinity,
+				y1: -Infinity,
+				allY0: -Infinity,
+				allY1: Infinity,
+				sum: /* @__PURE__ */ new Map()
+			};
+			for (let i = lo; i < hi; i++) {
+				const e = edges[i];
+				const u = this.gu[e];
+				const v = this.gv[e];
+				const y0 = Math.min(vy[u], vy[v]);
+				const y1 = Math.max(vy[u], vy[v]);
+				node.x0 = Math.min(node.x0, vx[u], vx[v]);
+				node.x1 = Math.max(node.x1, vx[u], vx[v]);
+				node.y0 = Math.min(node.y0, y0);
+				node.y1 = Math.max(node.y1, y1);
+				node.allY0 = Math.max(node.allY0, y0);
+				node.allY1 = Math.min(node.allY1, y1);
+			}
+			if (hi - lo <= 8) {
+				node.edges = Array.from(edges.subarray(lo, hi));
+				if (node.allY0 < node.allY1) for (const e of node.edges) {
+					const sign = vy[this.gv[e]] > vy[this.gu[e]] ? -1 : 1;
+					for (const [s, d] of this.deltas[e]) addWinding(node.sum, s, sign * d);
+				}
+			} else {
+				const key = node.x1 - node.x0 >= node.y1 - node.y0 ? cx : cy;
+				const mid = lo + hi >> 1;
+				selectByKey(edges, key, lo, hi, mid);
+				node.left = build(lo, mid);
+				node.right = build(mid, hi);
+				if (node.allY0 < node.allY1) for (const child of [node.left, node.right]) for (const [s, d] of child.sum) addWinding(node.sum, s, d);
+			}
+			return node;
+		};
+		return build(0, n);
+	}
+	trace() {
+		const E = this.gu.length;
+		const H = 2 * E;
+		const V = this.vx.length;
+		const vx = this.vx;
+		const vy = this.vy;
+		const gu = this.gu;
+		const gv = this.gv;
+		const angle = new Float64Array(H);
+		for (let e = 0; e < E; e++) {
+			const dx = vx[gv[e]] - vx[gu[e]];
+			const dy = vy[gv[e]] - vy[gu[e]];
+			angle[2 * e] = pseudoAngle(dx, dy);
+			angle[2 * e + 1] = pseudoAngle(-dx, -dy);
+		}
+		const offset = new Int32Array(V + 1);
+		for (let e = 0; e < E; e++) {
+			offset[gu[e] + 1]++;
+			offset[gv[e] + 1]++;
+		}
+		for (let v = 0; v < V; v++) offset[v + 1] += offset[v];
+		const out = new Int32Array(H);
+		const cursor = offset.slice(0, V);
+		for (let e = 0; e < E; e++) {
+			out[cursor[gu[e]]++] = 2 * e;
+			out[cursor[gv[e]]++] = 2 * e + 1;
+		}
+		const slot = new Int32Array(H);
+		for (let v = 0; v < V; v++) {
+			const lo = offset[v];
+			const hi = offset[v + 1];
+			for (let i = lo + 1; i < hi; i++) {
+				const h = out[i];
+				const a = angle[h];
+				let j = i - 1;
+				while (j >= lo && (angle[out[j]] > a || angle[out[j]] === a && this.target(out[j]) > this.target(h))) {
+					out[j + 1] = out[j];
+					j--;
+				}
+				out[j + 1] = h;
+			}
+			for (let i = lo; i < hi; i++) slot[out[i]] = i - lo;
+		}
+		const next = new Int32Array(H);
+		for (let h = 0; h < H; h++) {
+			const v = this.target(h);
+			const base = offset[v];
+			const n = offset[v + 1] - base;
+			const s = slot[h ^ 1];
+			next[h] = out[base + (s === 0 ? n - 1 : s - 1)];
+		}
+		const cycle = new Int32Array(H).fill(-1);
+		const cycleArea = this.cycleArea;
+		const cycleStart = this.cycleStart;
+		for (let h = 0; h < H; h++) {
+			if (cycle[h] >= 0) continue;
+			const c = cycleArea.length;
+			let area = 0;
+			let cur = h;
+			do {
+				cycle[cur] = c;
+				const o = this.origin(cur);
+				const t = this.target(cur);
+				area += vx[o] * vy[t] - vx[t] * vy[o];
+				cur = next[cur];
+			} while (cur !== h);
+			cycleArea.push(area / 2);
+			cycleStart.push(h);
+		}
+		this.offset = offset;
+		this.out = out;
+		this.slot = slot;
+		this.next = next;
+		this.cycle = cycle;
+	}
+	label(full = false) {
+		const V = this.vx.length;
+		const E = this.gu.length;
+		const C = this.cycleArea.length;
+		const vx = this.vx;
+		const vy = this.vy;
+		const offset = this.offset;
+		const parent = new Int32Array(V);
+		for (let v = 0; v < V; v++) parent[v] = v;
+		const find = (v) => {
+			while (parent[v] !== v) {
+				parent[v] = parent[parent[v]];
+				v = parent[v];
+			}
+			return v;
+		};
+		for (let e = 0; e < E; e++) {
+			const a = find(this.gu[e]);
+			const b = find(this.gv[e]);
+			if (a !== b) parent[a] = b;
+		}
+		const leftmost = new Int32Array(V).fill(-1);
+		let components = 0;
+		for (let v = 0; v < V; v++) {
+			if (offset[v + 1] === offset[v]) continue;
+			const r = find(v);
+			const l = leftmost[r];
+			if (l < 0) components++;
+			if (l < 0 || vx[v] < vx[l] || vx[v] === vx[l] && vy[v] < vy[l]) leftmost[r] = v;
+		}
+		const count = new Int32Array(C);
+		const hasFirst = new Uint8Array(C);
+		const hasLast = new Uint8Array(C);
+		const labels = full ? new Array(C) : void 0;
+		const labeled = new Uint8Array(C);
+		const last = this.k - 1;
+		const w = /* @__PURE__ */ new Map();
+		const record = (c) => {
+			count[c] = w.size;
+			hasFirst[c] = w.has(0) ? 1 : 0;
+			hasLast[c] = w.has(last) ? 1 : 0;
+			if (labels) labels[c] = new Map(w);
+			labeled[c] = 1;
+		};
+		const step = (h, dir) => {
+			const sign = (h & 1 ? 1 : -1) * dir;
+			for (const [s, d] of this.deltas[h >> 1]) addWinding(w, s, sign * d);
+		};
+		const fc = new Int32Array(C);
+		const fh = new Int32Array(C);
+		const fvia = new Int32Array(C);
+		if (components > 1) this.expectRayQueries(components);
+		for (let r = 0; r < V; r++) {
+			const p = leftmost[r];
+			if (p < 0) continue;
+			const g = this.out[offset[p + 1] - 1];
+			const c0 = this.cycle[g];
+			if (labeled[c0]) continue;
+			w.clear();
+			if (components > 1) this.windingWest(p, w);
+			record(c0);
+			let depth = 0;
+			fc[0] = c0;
+			fh[0] = this.cycleStart[c0];
+			fvia[0] = -1;
+			while (depth >= 0) {
+				const h = fh[depth];
+				if (h < 0) {
+					if (fvia[depth] >= 0) step(fvia[depth], -1);
+					depth--;
+					continue;
+				}
+				const hn = this.next[h];
+				fh[depth] = hn === this.cycleStart[fc[depth]] ? -1 : hn;
+				const c2 = this.cycle[h ^ 1];
+				if (labeled[c2]) continue;
+				step(h, 1);
+				record(c2);
+				depth++;
+				fc[depth] = c2;
+				fh[depth] = this.cycleStart[c2];
+				fvia[depth] = h;
+			}
+		}
+		this.count = count;
+		this.hasFirst = hasFirst;
+		this.hasLast = hasLast;
+		this.labels = labels;
+	}
+	windingWest(p, labels) {
+		const px = this.vx[p];
+		const py = this.vy[p];
+		const gu = this.gu;
+		const gv = this.gv;
+		const vy = this.vy;
+		const deltas = this.deltas;
+		const cross = (e) => {
+			const u = gu[e];
+			const v = gv[e];
+			if (u === p || v === p) return;
+			const uy = vy[u];
+			const wy = vy[v];
+			if (uy > py === wy > py) return;
+			if (this.crossingX(u, v, py) >= px) return;
+			const sign = wy > uy ? -1 : 1;
+			for (const [s, d] of deltas[e]) addWinding(labels, s, sign * d);
+		};
+		const tree = this.rayTree();
+		if (tree === void 0) {
+			for (let e = 0, E = this.gu.length; e < E; e++) cross(e);
+			return;
+		}
+		const stack = tree ? [tree] : [];
+		while (stack.length > 0) {
+			const node = stack.pop();
+			if (node.x0 >= px || py < node.y0 || py >= node.y1) continue;
+			if (node.x1 < px && py >= node.allY0 && py < node.allY1) {
+				for (const [s, d] of node.sum) addWinding(labels, s, d);
+				continue;
+			}
+			if (!node.edges) {
+				stack.push(node.left, node.right);
+				continue;
+			}
+			for (const e of node.edges) cross(e);
+		}
+	}
+	crossingX(u, v, y) {
+		const uy = this.vy[u];
+		const wy = this.vy[v];
+		if (uy === y) return this.vx[u];
+		if (wy === y) return this.vx[v];
+		const ux = this.vx[u];
+		return ux + (y - uy) * (this.vx[v] - ux) / (wy - uy);
+	}
+	select(mode) {
+		const C = this.cycleArea.length;
+		const k = this.k;
+		const keep = new Uint8Array(C);
+		for (let c = 0; c < C; c++) {
+			const count = this.count[c];
+			const first = this.hasFirst[c] === 1;
+			const last = this.hasLast[c] === 1;
+			let on = false;
+			switch (mode) {
+				case "intersect":
+					on = count === k;
+					break;
+				case "exclude":
+					on = (count & 1) === 1;
+					break;
+				case "minusFront":
+					on = first && count === 1;
+					break;
+				case "minusBack":
+					on = last && count === 1;
+					break;
+				case "crop":
+					on = last && count >= 2;
+					break;
+				default: on = count > 0;
+			}
+			keep[c] = on ? 1 : 0;
+		}
+		return keep;
+	}
+	mergedRings(keep, ringOf) {
+		const H = ringOf.length;
+		const cycle = this.cycle;
+		const boundary = (h) => keep[cycle[h]] === 1 && keep[cycle[h ^ 1]] === 0;
+		const rings = [];
+		for (let h = 0; h < H; h++) {
+			if (ringOf[h] >= 0 || !boundary(h)) continue;
+			const r = rings.length;
+			const seq = [];
+			let cur = h;
+			do {
+				ringOf[cur] = r;
+				seq.push(cur);
+				const v = this.target(cur);
+				const base = this.offset[v];
+				const n = this.offset[v + 1] - base;
+				const s = this.slot[cur ^ 1];
+				let found = -1;
+				for (let i = 1; i <= n; i++) {
+					const cand = this.out[base + (s - i + n) % n];
+					if (boundary(cand)) {
+						found = cand;
+						break;
+					}
+				}
+				if (found < 0) break;
+				cur = found;
+			} while (cur !== h);
+			rings.push(seq);
+		}
+		return rings;
+	}
+	simpleRings(walks, ringOf) {
+		const at = new Int32Array(this.vx.length).fill(-1);
+		const rings = [];
+		const walk = [];
+		const emit = (seq, w) => {
+			for (let i = 0; i < seq.length; i++) ringOf[seq[i]] = rings.length;
+			rings.push(seq);
+			walk.push(w);
+		};
+		for (let w = 0; w < walks.length; w++) {
+			const seq = walks[w];
+			const open = [];
+			for (let i = 0; i < seq.length; i++) {
+				const h = seq[i];
+				const o = this.origin(h);
+				const pos = at[o];
+				if (pos >= 0) {
+					const loop = open.splice(pos);
+					for (let j = 0; j < loop.length; j++) at[this.origin(loop[j])] = -1;
+					emit(loop, w);
+				}
+				at[o] = open.length;
+				open.push(h);
+			}
+			for (let j = 0; j < open.length; j++) at[this.origin(open[j])] = -1;
+			emit(open, w);
+		}
+		return {
+			rings,
+			walk
+		};
+	}
+	faceRings(keep, ringOf) {
+		const rings = [];
+		for (let c = 0, C = this.cycleArea.length; c < C; c++) {
+			if (!keep[c]) continue;
+			const r = rings.length;
+			const seq = [];
+			const start = this.cycleStart[c];
+			let h = start;
+			do {
+				ringOf[h] = r;
+				seq.push(h);
+				h = this.next[h];
+			} while (h !== start);
+			rings.push(seq);
+		}
+		return rings;
+	}
+	assemble(rings, ringOf, walk) {
+		const R = rings.length;
+		const vx = this.vx;
+		const vy = this.vy;
+		const area = new Float64Array(R);
+		const left = new Int32Array(R);
+		for (let r = 0; r < R; r++) {
+			const seq = rings[r];
+			let a = 0;
+			let l = this.origin(seq[0]);
+			for (let i = 0; i < seq.length; i++) {
+				const o = this.origin(seq[i]);
+				const t = this.target(seq[i]);
+				a += vx[o] * vy[t] - vx[t] * vy[o];
+				if (vx[o] < vx[l] || vx[o] === vx[l] && vy[o] < vy[l]) l = o;
+			}
+			area[r] = a / 2;
+			left[r] = l;
+		}
+		const sliver = this.tol * this.tol;
+		const parent = new Int32Array(R).fill(-2);
+		const rayFrom = left;
+		const pieces = /* @__PURE__ */ new Map();
+		if (walk.length > 0 && walk[walk.length - 1] !== R - 1) for (let r = 0; r < R; r++) {
+			const list = pieces.get(walk[r]);
+			if (list) list.push(r);
+			else pieces.set(walk[r], [r]);
+		}
+		for (const list of pieces.values()) {
+			if (list.length < 2) continue;
+			let l = left[list[0]];
+			for (const q of list) {
+				const v = left[q];
+				if (vx[v] < vx[l] || vx[v] === vx[l] && vy[v] < vy[l]) l = v;
+			}
+			for (const r of list) {
+				if (area[r] >= 0) continue;
+				const o = this.origin(rings[r][0]);
+				const t = this.target(rings[r][0]);
+				const mx = (vx[o] + vx[t]) / 2;
+				const my = (vy[o] + vy[t]) / 2;
+				let best = -1;
+				for (const q of list) {
+					if (area[q] <= sliver || best >= 0 && area[q] >= area[best]) continue;
+					if (this.encloses(rings[q], mx, my)) best = q;
+				}
+				if (best >= 0) parent[r] = best;
+				else rayFrom[r] = l;
+			}
+		}
+		let holes = 0;
+		for (let r = 0; r < R; r++) if (area[r] < 0 && parent[r] === -2) holes++;
+		this.expectRayQueries(holes);
+		const resolve = (r) => {
+			const chain = [];
+			let p = r;
+			while (p >= 0 && area[p] < 0 && parent[p] === -2) {
+				chain.push(p);
+				parent[p] = -1;
+				p = this.westHit(rayFrom[p], ringOf);
+			}
+			if (p >= 0 && area[p] < 0) p = parent[p];
+			if (p >= 0 && !(area[p] > sliver)) p = -1;
+			for (const hole of chain) parent[hole] = p;
+			return p;
+		};
+		const hairline = (ring, a) => Math.abs(a) < this.tol * outputPerimeter(ring) / 2;
+		const outers = new Int32Array(R).fill(-1);
+		const polygons = [];
+		for (let r = 0; r < R; r++) if (area[r] > sliver) {
+			const outer = this.ring(rings[r]);
+			const a = outputArea(outer);
+			if (a <= 0 || hairline(outer, a)) continue;
+			outers[r] = polygons.length;
+			polygons.push([outer]);
+		}
+		for (let r = 0; r < R; r++) {
+			if (area[r] >= -sliver) continue;
+			const p = resolve(r);
+			if (p >= 0 && outers[p] >= 0) {
+				const hole = this.ring(rings[r]);
+				const a = outputArea(hole);
+				if (a < 0 && !hairline(hole, a)) polygons[outers[p]].push(hole);
+			}
+		}
+		return polygons;
+	}
+	encloses(seq, x, y) {
+		const vx = this.vx;
+		const vy = this.vy;
+		let inside = false;
+		for (let i = 0; i < seq.length; i++) {
+			const o = this.origin(seq[i]);
+			const t = this.target(seq[i]);
+			const oy = vy[o];
+			const ty = vy[t];
+			if (oy > y === ty > y) continue;
+			if (vx[o] + (y - oy) * (vx[t] - vx[o]) / (ty - oy) < x) inside = !inside;
+		}
+		return inside;
+	}
+	westHit(p, ringOf) {
+		const px = this.vx[p];
+		const py = this.vy[p];
+		let best = -Infinity;
+		let bestSlope = -Infinity;
+		let ring = -1;
+		const gu = this.gu;
+		const gv = this.gv;
+		const vx = this.vx;
+		const vy = this.vy;
+		const visit = (e) => {
+			if (ringOf[2 * e] < 0 && ringOf[2 * e + 1] < 0) return;
+			const u = gu[e];
+			const v = gv[e];
+			if (u === p || v === p) return;
+			const uy = vy[u];
+			const wy = vy[v];
+			if (uy > py === wy > py) return;
+			const xc = this.crossingX(u, v, py);
+			if (xc >= px) return;
+			const ux = vx[u];
+			const wx = vx[v];
+			const up = wy > uy;
+			const slope = up ? (wx - ux) / (wy - uy) : (ux - wx) / (uy - wy);
+			if (xc > best || xc === best && slope > bestSlope) {
+				best = xc;
+				bestSlope = slope;
+				ring = ringOf[up ? 2 * e + 1 : 2 * e];
+			}
+		};
+		const tree = this.rayTree();
+		if (tree === void 0) {
+			for (let e = 0, E = this.gu.length; e < E; e++) visit(e);
+			return ring;
+		}
+		const stack = tree ? [tree] : [];
+		while (stack.length > 0) {
+			const node = stack.pop();
+			if (node.x0 >= px || node.x1 < best || py < node.y0 || py >= node.y1) continue;
+			if (!node.edges) {
+				const a = node.left, b = node.right;
+				if (a.x1 < b.x1) stack.push(a, b);
+				else stack.push(b, a);
+				continue;
+			}
+			for (const e of node.edges) visit(e);
+		}
+		return ring;
+	}
+	ring(seq) {
+		const vx = this.vx;
+		const vy = this.vy;
+		const n = seq.length;
+		const ids = [];
+		for (let i = 0; i < n; i++) ids.push(this.origin(seq[i]));
+		const keep = [ids[0]];
+		const straight = (prev, v, w) => {
+			const rx = vx[w] - vx[prev];
+			const ry = vy[w] - vy[prev];
+			const t = ((vx[v] - vx[prev]) * rx + (vy[v] - vy[prev]) * ry) / (rx * rx + ry * ry);
+			return t > 0 && t < 1 && orient2d(vx[prev], vy[prev], vx[w], vy[w], vx[v], vy[v]) === 0;
+		};
+		for (let i = 1; i < n; i++) {
+			const v = ids[i];
+			const w = ids[i === n - 1 ? 0 : i + 1];
+			if (straight(keep[keep.length - 1], v, w)) continue;
+			keep.push(v);
+		}
+		if (keep.length > 3 && straight(keep[keep.length - 1], keep[0], keep[1])) keep.shift();
+		const g = new Group();
+		for (let i = 0; i < keep.length; i++) {
+			const pt = new Pt(2);
+			pt[0] = vx[keep[i]];
+			pt[1] = vy[keep[i]];
+			const prev = g[g.length - 1];
+			if (!prev || prev[0] !== pt[0] || prev[1] !== pt[1]) g.push(pt);
+		}
+		if (g.length > 1 && g[0][0] === g[g.length - 1][0] && g[0][1] === g[g.length - 1][1]) g.pop();
+		return g;
+	}
+};
+function overlay(shapes, mode) {
+	const faces = mode === "divide" || mode === "crop";
+	const ov = new Overlay();
+	if (!ov.read(shapes)) return [];
+	ov.split();
+	ov.merge();
+	if (ov.gu.length === 0) return [];
+	ov.trace();
+	ov.label();
+	const keep = ov.select(mode);
+	const ringOf = new Int32Array(2 * ov.gu.length).fill(-1);
+	const walks = faces ? ov.faceRings(keep, ringOf) : ov.mergedRings(keep, ringOf);
+	const { rings, walk } = ov.simpleRings(walks, ringOf);
+	const polygons = ov.assemble(rings, ringOf, walk);
+	if (faces) return polygons;
+	const flat = [];
+	for (let i = 0; i < polygons.length; i++) for (let j = 0; j < polygons[i].length; j++) flat.push(polygons[i][j]);
+	return flat;
+}
+
+//#endregion
+//#region src/Op.ts
+let _errorLength = (obj, param = "expected") => Util.warn("Group's length is less than " + param, obj);
+let _errorOutofBound = (obj, param = "") => Util.warn(`Index ${param} is out of bound in Group`, obj);
+var Line = class Line {
+	static fromAngle(anchor, angle, magnitude) {
+		let g = new Group(new Pt(anchor), new Pt(anchor));
+		g[1].toAngle(angle, magnitude, true);
+		return g;
+	}
+	static slope(p1, p2) {
+		return p2[0] - p1[0] === 0 ? void 0 : (p2[1] - p1[1]) / (p2[0] - p1[0]);
+	}
+	static intercept(p1, p2) {
+		if (p2[0] - p1[0] === 0) return;
+		else {
+			let m = (p2[1] - p1[1]) / (p2[0] - p1[0]);
+			let c = p1[1] - m * p1[0];
+			return {
+				slope: m,
+				yi: c,
+				xi: m === 0 ? void 0 : -c / m
+			};
+		}
+	}
+	static sideOfPt2D(line, pt) {
+		let _line = Util.iterToArray(line);
+		return (_line[1][0] - _line[0][0]) * (pt[1] - _line[0][1]) - (pt[0] - _line[0][0]) * (_line[1][1] - _line[0][1]);
+	}
+	static collinear(p1, p2, p3, threshold = .01) {
+		const a = new Pt(0, 0, 0).to(p1).$subtract(p2);
+		const b = new Pt(0, 0, 0).to(p1).$subtract(p3);
+		const magSq = a.magnitudeSq() * b.magnitudeSq();
+		if (magSq === 0) return true;
+		return a.$cross(b).magnitudeSq() / magSq <= threshold * threshold;
+	}
+	static magnitude(line) {
+		let _line = Util.iterToArray(line);
+		return _line.length >= 2 ? _line[1].$subtract(_line[0]).magnitude() : 0;
+	}
+	static magnitudeSq(line) {
+		let _line = Util.iterToArray(line);
+		return _line.length >= 2 ? _line[1].$subtract(_line[0]).magnitudeSq() : 0;
+	}
+	static perpendicularFromPt(line, pt, asProjection = false) {
+		let _line = Util.iterToArray(line);
+		if (_line[0].equals(_line[1])) return void 0;
+		let a = _line[0].$subtract(_line[1]);
+		let b = _line[1].$subtract(pt);
+		let proj = b.$subtract(a.$project(b));
+		return asProjection ? proj : proj.$add(pt);
+	}
+	static distanceFromPt(line, pt) {
+		let _line = Util.iterToArray(line);
+		let projectionVector = Line.perpendicularFromPt(_line, pt, true);
+		if (projectionVector) return projectionVector.magnitude();
+		else return _line[0].$subtract(pt).magnitude();
+	}
+	static intersectRay2D(la, lb) {
+		const _la = Util.iterToArray(la);
+		const _lb = Util.iterToArray(lb);
+		const pa = _la[0];
+		const pb = _lb[0];
+		const rx = _la[1][0] - pa[0];
+		const ry = _la[1][1] - pa[1];
+		const sx = _lb[1][0] - pb[0];
+		const sy = _lb[1][1] - pb[1];
+		if (rx === 0 && ry === 0 || sx === 0 && sy === 0) return void 0;
+		const det = rx * sy - ry * sx;
+		if (det === 0) {
+			const qpx = pb[0] - pa[0];
+			const qpy = pb[1] - pa[1];
+			return qpx * ry - qpy * rx === 0 ? new Pt(pa[0], pa[1]) : void 0;
+		}
+		const t = ((pb[0] - pa[0]) * sy - (pb[1] - pa[1]) * sx) / det;
+		return new Pt(pa[0] + t * rx, pa[1] + t * ry);
+	}
+	static intersectLine2D(la, lb) {
+		let _la = Util.iterToArray(la);
+		let _lb = Util.iterToArray(lb);
+		const rx = _la[1][0] - _la[0][0];
+		const ry = _la[1][1] - _la[0][1];
+		const sx = _lb[1][0] - _lb[0][0];
+		const sy = _lb[1][1] - _lb[0][1];
+		const m = rx * sy;
+		const cross = m - ry * sx;
+		if (Math.abs(cross) <= 1e-12 * Math.abs(m) && orient2dFiltered(_la[0][0], _la[0][1], _la[1][0], _la[1][1], _lb[0][0], _lb[0][1]) === 0 && orient2dFiltered(_la[0][0], _la[0][1], _la[1][0], _la[1][1], _lb[1][0], _lb[1][1]) === 0 && orient2dFiltered(_lb[0][0], _lb[0][1], _lb[1][0], _lb[1][1], _la[0][0], _la[0][1]) === 0) {
+			const shared = [..._la, ..._lb].filter((p) => Geom.withinBound(p, _la[0], _la[1]) && Geom.withinBound(p, _lb[0], _lb[1]));
+			shared.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+			return shared.length ? new Pt(shared[0]) : void 0;
+		}
+		const pa = _la[0];
+		const pb = _lb[0];
+		if (rx === 0 && ry === 0 || sx === 0 && sy === 0) return void 0;
+		let pt;
+		if (cross === 0) {
+			const qpx = pb[0] - pa[0];
+			const qpy = pb[1] - pa[1];
+			if (qpx * ry - qpy * rx === 0) pt = new Pt(pa[0], pa[1]);
+		} else {
+			const t = ((pb[0] - pa[0]) * sy - (pb[1] - pa[1]) * sx) / cross;
+			pt = new Pt(pa[0] + t * rx, pa[1] + t * ry);
+		}
+		return pt && Geom.withinBound(pt, _la[0], _la[1]) && Geom.withinBound(pt, _lb[0], _lb[1]) ? pt : void 0;
+	}
+	static intersectLineWithRay2D(line, ray) {
+		let _line = Util.iterToArray(line);
+		let _ray = Util.iterToArray(ray);
+		let pt = Line.intersectRay2D(_line, _ray);
+		return pt && Geom.withinBound(pt, _line[0], _line[1]) ? pt : void 0;
+	}
+	static intersectPolygon2D(lineOrRay, poly, sourceIsRay = false) {
+		let _lineOrRay = Util.iterToArray(lineOrRay);
+		let _poly = Util.iterToArray(poly);
+		let fn = sourceIsRay ? Line.intersectLineWithRay2D : Line.intersectLine2D;
+		let pts = new Group();
+		for (let i = 0, len = _poly.length; i < len; i++) {
+			let next = i === len - 1 ? 0 : i + 1;
+			let d = fn([_poly[i], _poly[next]], _lineOrRay);
+			if (d) pts.push(d);
+		}
+		return pts.length > 0 ? pts : void 0;
+	}
+	static intersectLines2D(lines1, lines2, isRay = false) {
+		let group = new Group();
+		let fn = isRay ? Line.intersectLineWithRay2D : Line.intersectLine2D;
+		for (let l1 of lines1) for (let l2 of lines2) {
+			let _ip = fn(l1, l2);
+			if (_ip) group.push(_ip);
+		}
+		return group;
+	}
+	static intersectGridWithRay2D(ray, gridPt) {
+		let _ray = Util.iterToArray(ray);
+		let t = Line.intercept(new Pt(_ray[0]).subtract(gridPt), new Pt(_ray[1]).subtract(gridPt));
+		let g = new Group();
+		if (t && t.xi !== void 0) g.push(new Pt(gridPt[0] + t.xi, gridPt[1]));
+		if (t && t.yi !== void 0) g.push(new Pt(gridPt[0], gridPt[1] + t.yi));
+		return g;
+	}
+	static intersectGridWithLine2D(line, gridPt) {
+		let _line = Util.iterToArray(line);
+		let g = Line.intersectGridWithRay2D(_line, gridPt);
+		let gg = new Group();
+		for (let i = 0, len = g.length; i < len; i++) if (Geom.withinBound(g[i], _line[0], _line[1])) gg.push(g[i]);
+		return gg;
+	}
+	static intersectRect2D(line, rect) {
+		let _line = Util.iterToArray(line);
+		let _rect = Util.iterToArray(rect);
+		let box = Geom.boundingBox(Group.fromPtArray(_line));
+		if (!Rectangle.hasIntersectRect2D(box, _rect)) return new Group();
+		return Line.intersectLines2D([_line], Rectangle.sides(_rect));
+	}
+	static subpoints(line, num) {
+		let _line = Util.iterToArray(line);
+		let pts = new Group();
+		for (let i = 1; i <= num; i++) pts.push(Geom.interpolate(_line[0], _line[1], i / (num + 1)));
+		return pts;
+	}
+	static crop(line, size, index = 0, cropAsCircle = true) {
+		let _line = Util.iterToArray(line);
+		let ls = _line[index === 0 ? 1 : 0].$subtract(_line[index]);
+		if (ls.magnitudeSq() === 0) return _line[index];
+		if (cropAsCircle) {
+			let d = ls.unit().multiply(size[1]);
+			return _line[index].$add(d);
+		} else {
+			if (size[0] === 0) return _line[index];
+			let rect = Rectangle.fromCenter(_line[index], size);
+			let sides = Rectangle.sides(rect);
+			let sideIdx = 0;
+			if (Math.abs(ls[1] / ls[0]) > Math.abs(size[1] / size[0])) sideIdx = ls[1] < 0 ? 0 : 2;
+			else sideIdx = ls[0] < 0 ? 3 : 1;
+			return Line.intersectRay2D(sides[sideIdx], _line);
+		}
+	}
+	static marker(line, size, graphic = "arrow", atTail = true) {
+		let _line = Util.iterToArray(line);
+		let h = atTail ? 0 : 1;
+		let t = atTail ? 1 : 0;
+		let unit = _line[h].$subtract(_line[t]);
+		if (unit.magnitudeSq() === 0) return new Group();
+		unit.unit();
+		let ps = Geom.perpendicular(unit).multiply(size[0]).add(_line[t]);
+		if (graphic == "arrow") {
+			ps.add(unit.$multiply(size[1]));
+			return new Group(_line[t], ps[0], ps[1]);
+		} else return new Group(ps[0], ps[1]);
+	}
+	static toRect(line) {
+		let _line = Util.iterToArray(line);
+		return new Group(_line[0].$min(_line[1]), _line[0].$max(_line[1]));
+	}
+};
+var Rectangle = class Rectangle {
+	static from(topLeft, widthOrSize, height) {
+		return Rectangle.fromTopLeft(topLeft, widthOrSize, height);
+	}
+	static fromTopLeft(topLeft, widthOrSize, height) {
+		let size = typeof widthOrSize == "number" ? [widthOrSize, height !== null && height !== void 0 ? height : widthOrSize] : widthOrSize;
+		return new Group(new Pt(topLeft), new Pt(topLeft).add(size));
+	}
+	static fromCenter(center, widthOrSize, height) {
+		let half = typeof widthOrSize == "number" ? [widthOrSize / 2, (height !== null && height !== void 0 ? height : widthOrSize) / 2] : new Pt(widthOrSize).divide(2);
+		return new Group(new Pt(center).subtract(half), new Pt(center).add(half));
+	}
+	static toCircle(pts, enclose = true) {
+		return Circle.fromRect(pts, enclose);
+	}
+	static toSquare(pts, enclose = false) {
+		let _pts = Util.iterToArray(pts);
+		let s = Rectangle.size(_pts);
+		let m = enclose ? s.maxValue().value : s.minValue().value;
+		return Rectangle.fromCenter(Rectangle.center(_pts), m, m);
+	}
+	static size(pts) {
+		let p = Util.iterToArray(pts);
+		return p[0].$max(p[1]).subtract(p[0].$min(p[1]));
+	}
+	static center(pts) {
+		let p = Util.iterToArray(pts);
+		let min = p[0].$min(p[1]);
+		let max = p[0].$max(p[1]);
+		return min.add(max.$subtract(min).divide(2));
+	}
+	static corners(rect) {
+		let _rect = Util.iterToArray(rect);
+		let p0 = _rect[0].$min(_rect[1]);
+		let p2 = _rect[0].$max(_rect[1]);
+		return new Group(p0, new Pt(p2.x, p0.y), p2, new Pt(p0.x, p2.y));
+	}
+	static sides(rect) {
+		let [p0, p1, p2, p3] = Rectangle.corners(rect);
+		return [
+			new Group(p0, p1),
+			new Group(p1, p2),
+			new Group(p2, p3),
+			new Group(p3, p0)
+		];
+	}
+	static boundingBox(rects) {
+		let _rects = Util.iterToArray(rects);
+		let merged = Util.flatten(_rects, false);
+		if (merged.length === 0) return new Group();
+		let min = Pt.make(2, Infinity);
+		let max = Pt.make(2, -Infinity);
+		for (let i = 0, len = merged.length; i < len; i++) {
+			let p = merged[i];
+			let dim = Math.min(2, p.length);
+			for (let k = 0; k < dim; k++) {
+				min[k] = Math.min(min[k], p[k]);
+				max[k] = Math.max(max[k], p[k]);
+			}
+		}
+		return new Group(min, max);
+	}
+	static polygon(rect) {
+		return Rectangle.corners(rect);
+	}
+	static quadrants(rect, center) {
+		let _rect = Util.iterToArray(rect);
+		let corners = Rectangle.corners(_rect);
+		let _center = center != void 0 ? new Pt(center) : Rectangle.center(_rect);
+		return corners.map((c) => new Group(c, _center).boundingBox());
+	}
+	static halves(rect, ratio = .5, asRows = false) {
+		let _rect = Util.iterToArray(rect);
+		let min = _rect[0].$min(_rect[1]);
+		let max = _rect[0].$max(_rect[1]);
+		let mid = asRows ? Num.lerp(min[1], max[1], ratio) : Num.lerp(min[0], max[0], ratio);
+		return asRows ? [new Group(min, new Pt(max[0], mid)), new Group(new Pt(min[0], mid), max)] : [new Group(min, new Pt(mid, max[1])), new Group(new Pt(mid, min[1]), max)];
+	}
+	static withinBound(rect, pt) {
+		let _rect = Util.iterToArray(rect);
+		return Geom.withinBound(pt, _rect[0], _rect[1]);
+	}
+	static hasIntersectRect2D(rect1, rect2, resetBoundingBox = false) {
+		let _rect1 = Util.iterToArray(rect1);
+		let _rect2 = Util.iterToArray(rect2);
+		if (resetBoundingBox) {
+			_rect1 = Geom.boundingBox(_rect1);
+			_rect2 = Geom.boundingBox(_rect2);
+		}
+		if (_rect1[0][0] > _rect2[1][0] || _rect2[0][0] > _rect1[1][0]) return false;
+		if (_rect1[0][1] > _rect2[1][1] || _rect2[0][1] > _rect1[1][1]) return false;
+		return true;
+	}
+	static intersectRect2D(rect1, rect2) {
+		let _rect1 = Util.iterToArray(rect1);
+		let _rect2 = Util.iterToArray(rect2);
+		if (!Rectangle.hasIntersectRect2D(_rect1, _rect2)) return new Group();
+		return Line.intersectLines2D(Rectangle.sides(_rect1), Rectangle.sides(_rect2));
+	}
+};
+var Circle = class Circle {
+	static fromRect(pts, enclose = false) {
+		let _pts = Util.iterToArray(pts);
+		let r = 0;
+		let min = r = Rectangle.size(_pts).minValue().value / 2;
+		if (enclose) {
+			let max = Rectangle.size(_pts).maxValue().value / 2;
+			r = Math.sqrt(min * min + max * max);
+		} else r = min;
+		return new Group(Rectangle.center(_pts), new Pt(r, r));
+	}
+	static fromTriangle(pts, enclose = false) {
+		if (enclose) return Triangle.circumcircle(pts);
+		else return Triangle.incircle(pts);
+	}
+	static fromCenter(pt, radius) {
+		return new Group(new Pt(pt), new Pt(radius, radius));
+	}
+	static withinBound(pts, pt, threshold = 0) {
+		let _pts = Util.iterToArray(pts);
+		let d = _pts[0].$subtract(pt);
+		return d.dot(d) + threshold < _pts[1].x * _pts[1].x;
+	}
+	static intersectRay2D(circle, ray) {
+		let _pts = Util.iterToArray(circle);
+		let _ray = Util.iterToArray(ray);
+		let d = _ray[0].$subtract(_ray[1]);
+		let f = _pts[0].$subtract(_ray[0]);
+		let a = d.dot(d);
+		if (a === 0) return new Group();
+		let b = f.dot(d);
+		let c = f.dot(f) - _pts[1].x * _pts[1].x;
+		let p = b / a;
+		let q = c / a;
+		let disc = p * p - q;
+		if (disc < 0) return new Group();
+		else {
+			let discSqrt = Math.sqrt(disc);
+			let t1 = -p + discSqrt;
+			let p1 = _ray[0].$subtract(d.$multiply(t1));
+			if (disc === 0) return new Group(p1);
+			let t2 = -p - discSqrt;
+			let p2 = _ray[0].$subtract(d.$multiply(t2));
+			return new Group(p1, p2);
+		}
+	}
+	static intersectLine2D(circle, line) {
+		let _pts = Util.iterToArray(circle);
+		let _line = Util.iterToArray(line);
+		let ps = Circle.intersectRay2D(_pts, _line);
+		let g = new Group();
+		if (ps.length > 0) {
+			for (let i = 0, len = ps.length; i < len; i++) if (Rectangle.withinBound(_line, ps[i])) g.push(ps[i]);
+		}
+		return g;
+	}
+	static intersectCircle2D(circle1, circle2) {
+		let _pts = Util.iterToArray(circle1);
+		let _circle = Util.iterToArray(circle2);
+		let dv = _circle[0].$subtract(_pts[0]);
+		let dr2 = dv.magnitudeSq();
+		let dr = Math.sqrt(dr2);
+		let ar = _pts[1].x;
+		let br = _circle[1].x;
+		let ar2 = ar * ar;
+		let br2 = br * br;
+		if (dr > ar + br) return new Group();
+		else if (dr < Math.abs(ar - br)) return new Group();
+		else if (dr === 0) return new Group();
+		else {
+			let a = (ar2 - br2 + dr2) / (2 * dr);
+			let h = Math.sqrt(ar2 - a * a);
+			let p = dv.$multiply(a / dr).add(_pts[0]);
+			return new Group(new Pt(p.x + h * dv.y / dr, p.y - h * dv.x / dr), new Pt(p.x - h * dv.y / dr, p.y + h * dv.x / dr));
+		}
+	}
+	static intersectRect2D(circle, rect) {
+		let _pts = Util.iterToArray(circle);
+		let _rect = Util.iterToArray(rect);
+		let sides = Rectangle.sides(_rect);
+		let g = [];
+		for (let i = 0, len = sides.length; i < len; i++) {
+			let ps = Circle.intersectLine2D(_pts, sides[i]);
+			if (ps.length > 0) g.push(ps);
+		}
+		return Util.flatten(g);
+	}
+	static toRect(circle, within = false) {
+		let _pts = Util.iterToArray(circle);
+		let r = _pts[1][0];
+		if (within) {
+			let half = r / Math.SQRT2;
+			return new Group(_pts[0].$subtract(half), _pts[0].$add(half));
+		} else return new Group(_pts[0].$subtract(r), _pts[0].$add(r));
+	}
+	static toTriangle(circle, within = true) {
+		let _pts = Util.iterToArray(circle);
+		if (within) {
+			let ang = -Math.PI / 2;
+			let inc = Math.PI * 2 / 3;
+			let g = new Group();
+			for (let i = 0; i < 3; i++) {
+				g.push(_pts[0].clone().toAngle(ang, _pts[1][0], true));
+				ang += inc;
+			}
+			return g;
+		} else return Triangle.fromCenter(_pts[0], _pts[1][0]);
+	}
+};
+var Triangle = class Triangle {
+	static fromRect(rect) {
+		let _rect = Util.iterToArray(rect);
+		let top = _rect[0].$add(_rect[1]).divide(2);
+		top.y = _rect[0][1];
+		let left = _rect[1].clone();
+		left.x = _rect[0][0];
+		return new Group(top, _rect[1].clone(), left);
+	}
+	static fromCircle(circle) {
+		return Circle.toTriangle(circle, true);
+	}
+	static fromCenter(pt, size) {
+		return Triangle.fromCircle(Circle.fromCenter(pt, size));
+	}
+	static medial(tri) {
+		let _pts = Util.iterToArray(tri);
+		if (_pts.length < 3) return _errorLength(new Group(), 3);
+		return Polygon.midpoints(_pts, true);
+	}
+	static oppositeSide(tri, index) {
+		let _pts = Util.iterToArray(tri);
+		if (_pts.length < 3) return _errorLength(new Group(), 3);
+		if (index === 0) return Group.fromPtArray([_pts[1], _pts[2]]);
+		else if (index === 1) return Group.fromPtArray([_pts[0], _pts[2]]);
+		else return Group.fromPtArray([_pts[0], _pts[1]]);
+	}
+	static altitude(tri, index) {
+		let _pts = Util.iterToArray(tri);
+		let opp = Triangle.oppositeSide(_pts, index);
+		if (opp.length > 1) return new Group(_pts[index], Line.perpendicularFromPt(opp, _pts[index]));
+		else return new Group();
+	}
+	static orthocenter(tri) {
+		let _pts = Util.iterToArray(tri);
+		if (_pts.length < 3) return _errorLength(void 0, 3);
+		let a = Triangle.altitude(_pts, 0);
+		let b = Triangle.altitude(_pts, 1);
+		return Line.intersectRay2D(a, b);
+	}
+	static incenter(tri) {
+		let _pts = Util.iterToArray(tri);
+		if (_pts.length < 3) return _errorLength(void 0, 3);
+		let a = Polygon.bisector(_pts, 0).add(_pts[0]);
+		let b = Polygon.bisector(_pts, 1).add(_pts[1]);
+		return Line.intersectRay2D(new Group(_pts[0], a), new Group(_pts[1], b));
+	}
+	static incircle(tri, center) {
+		let _pts = Util.iterToArray(tri);
+		let c = center ? center : Triangle.incenter(_pts);
+		if (!c) return void 0;
+		let area = Polygon.area(_pts);
+		let perim = Polygon.perimeter(_pts, true);
+		let r = 2 * area / perim.total;
+		if (!(r > 0)) return void 0;
+		return Circle.fromCenter(c, r);
+	}
+	static circumcenter(tri) {
+		let _pts = Util.iterToArray(tri);
+		let md = Triangle.medial(_pts);
+		let a = [md[0], Geom.perpendicular(_pts[0].$subtract(md[0])).p1.$add(md[0])];
+		let b = [md[1], Geom.perpendicular(_pts[1].$subtract(md[1])).p1.$add(md[1])];
+		return Line.intersectRay2D(a, b);
+	}
+	static circumcircle(tri, center) {
+		let _pts = Util.iterToArray(tri);
+		let c = center ? center : Triangle.circumcenter(_pts);
+		if (!c) return void 0;
+		let r = _pts[0].$subtract(c).magnitude();
+		return Circle.fromCenter(c, r);
+	}
+};
+var Polygon = class Polygon {
+	static centroid(pts) {
+		return Geom.centroid(pts);
+	}
+	static rectangle(center, widthOrSize, height) {
+		return Rectangle.corners(Rectangle.fromCenter(center, widthOrSize, height));
+	}
+	static fromCenter(center, radius, sides) {
+		let g = new Group();
+		for (let i = 0; i < sides; i++) {
+			let ang = Math.PI * 2 * i / sides;
+			g.push(new Pt(Math.cos(ang) * radius, Math.sin(ang) * radius).add(center));
+		}
+		return g;
+	}
+	static lineAt(pts, index) {
+		let _pts = Util.iterToArray(pts);
+		if (index < 0 || index >= _pts.length) throw new Error("index out of the Polygon's range");
+		return new Group(_pts[index], index === _pts.length - 1 ? _pts[0] : _pts[index + 1]);
+	}
+	static lines(poly, closePath = true) {
+		let _pts = Util.iterToArray(poly);
+		if (_pts.length < 2) return _errorLength(new Group(), 2);
+		const count = closePath ? _pts.length : _pts.length - 1;
+		const sp = new Array(count);
+		for (let i = 0; i < count; i++) {
+			const seg = new Group();
+			seg[0] = _pts[i];
+			seg[1] = _pts[i === _pts.length - 1 ? 0 : i + 1];
+			sp[i] = seg;
+		}
+		return sp;
+	}
+	static midpoints(poly, closePath = false, t = .5) {
+		const sides = Polygon.lines(poly, closePath);
+		const mids = new Group();
+		for (let i = 0, len = sides.length; i < len; i++) mids[i] = Geom.interpolate(sides[i][0], sides[i][1], t);
+		return mids;
+	}
+	static adjacentSides(poly, index, closePath = false) {
+		let _pts = Util.iterToArray(poly);
+		if (_pts.length < 2) return _errorLength(new Group(), 2);
+		if (index < 0 || index >= _pts.length) return _errorOutofBound(new Group(), index);
+		let gs = [];
+		let left = index - 1;
+		if (closePath && left < 0) left = _pts.length - 1;
+		if (left >= 0) gs.push(new Group(_pts[index], _pts[left]));
+		let right = index + 1;
+		if (closePath && right > _pts.length - 1) right = 0;
+		if (right <= _pts.length - 1) gs.push(new Group(_pts[index], _pts[right]));
+		return gs;
+	}
+	static bisector(poly, index) {
+		let sides = Polygon.adjacentSides(poly, index, true);
+		if (sides.length >= 2) {
+			let a = sides[0][1].$subtract(sides[0][0]).unit();
+			let b = sides[1][1].$subtract(sides[1][0]).unit();
+			return a.add(b).divide(2);
+		} else return;
+	}
+	static perimeter(poly, closePath = false) {
+		const _pts = Util.iterToArray(poly);
+		if (_pts.length < 2) {
+			_errorLength(new Group(), 2);
+			return {
+				total: 0,
+				segments: Pt.make(0, 0)
+			};
+		}
+		const count = closePath ? _pts.length : _pts.length - 1;
+		const p = Pt.make(count, 0);
+		let mag = 0;
+		for (let i = 0; i < count; i++) {
+			const a = _pts[i];
+			const b = _pts[i === _pts.length - 1 ? 0 : i + 1];
+			const dx = b[0] - a[0];
+			const dy = b[1] - a[1];
+			const m = Math.sqrt(dx * dx + dy * dy);
+			mag += m;
+			p[i] = m;
+		}
+		return {
+			total: mag,
+			segments: p
+		};
+	}
+	static area(pts) {
+		let _pts = Util.iterToArray(pts);
+		if (_pts.length < 3) return _errorLength(0, 3);
+		let det = (a, b) => a[0] * b[1] - a[1] * b[0];
+		let area = 0;
+		for (let i = 0, len = _pts.length; i < len; i++) if (i < _pts.length - 1) area += det(_pts[i], _pts[i + 1]);
+		else area += det(_pts[i], _pts[0]);
+		return Math.abs(area / 2);
+	}
+	static convexHull(pts, sorted = false) {
+		let _pts = Util.iterToArray(pts);
+		if (_pts.length < 3) return _errorLength(new Group(), 3);
+		const compare = (a, b) => a[0] - b[0] || a[1] - b[1];
+		let unsorted = !sorted;
+		let duplicates = unsorted;
+		if (sorted) {
+			let px = _pts[0][0];
+			let py = _pts[0][1];
+			for (let i = 1, len = _pts.length; i < len; i++) {
+				const x = _pts[i][0];
+				const y = _pts[i][1];
+				if (x < px || x === px && y <= py) {
+					duplicates = true;
+					if (x < px || y < py) {
+						unsorted = true;
+						break;
+					}
+				}
+				px = x;
+				py = y;
+			}
+		}
+		if (unsorted) _pts = _pts.slice().sort(compare);
+		else if (duplicates) _pts = _pts.slice();
+		if (duplicates) {
+			let n = 1;
+			const len = _pts.length;
+			while (n < len && compare(_pts[n - 1], _pts[n]) !== 0) n++;
+			for (let i = n + 1; i < len; i++) if (compare(_pts[n - 1], _pts[i]) !== 0) _pts[n++] = _pts[i];
+			if (n < len) _pts.length = n;
+		}
+		let left = (a, b, c) => {
+			const l = (b[0] - a[0]) * (c[1] - a[1]);
+			const r = (c[0] - a[0]) * (b[1] - a[1]);
+			const bound = 33306690738754716e-32 * (Math.abs(l) + Math.abs(r));
+			return l - r > bound ? true : r - l > bound ? false : orient2dFiltered(a[0], a[1], b[0], b[1], c[0], c[1]) > 0;
+		};
+		let seed = 2;
+		while (seed < _pts.length && orient2dFiltered(_pts[0][0], _pts[0][1], _pts[1][0], _pts[1][1], _pts[seed][0], _pts[seed][1]) === 0) seed++;
+		if (seed >= _pts.length) {
+			const hull = new Group();
+			hull.push(_pts[0]);
+			if (_pts.length > 1) hull.push(_pts[_pts.length - 1]);
+			return hull;
+		}
+		let dq = [];
+		let bot = _pts.length - 2;
+		let top = bot + 3;
+		dq[bot] = _pts[seed];
+		dq[top] = _pts[seed];
+		const p0 = _pts[0];
+		const p1 = _pts[seed - 1];
+		const p2 = _pts[seed];
+		if (orient2dFiltered(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1]) > 0) {
+			dq[bot + 1] = p0;
+			dq[bot + 2] = p1;
+		} else {
+			dq[bot + 1] = p1;
+			dq[bot + 2] = p0;
+		}
+		for (let i = seed + 1, len = _pts.length; i < len; i++) {
+			let pt = _pts[i];
+			if (left(dq[bot], dq[bot + 1], pt) && left(dq[top - 1], dq[top], pt)) continue;
+			while (bot + 1 < top && !left(dq[bot], dq[bot + 1], pt)) bot += 1;
+			bot -= 1;
+			dq[bot] = pt;
+			while (top - 1 > bot && !left(dq[top - 1], dq[top], pt)) top -= 1;
+			top += 1;
+			dq[top] = pt;
+		}
+		let hull = new Group();
+		for (let h = 0; h < top - bot; h++) hull.push(dq[bot + h]);
+		return hull;
+	}
+	static network(poly, originIndex = 0) {
+		let _pts = Util.iterToArray(poly);
+		let g = [];
+		for (let i = 0, len = _pts.length; i < len; i++) if (i != originIndex) g.push(new Group(_pts[originIndex], _pts[i]));
+		return g;
+	}
+	static nearestPt(poly, pt) {
+		const _poly = Util.iterToArray(poly);
+		const px = pt[0];
+		const py = pt[1];
+		let _near = Number.MAX_VALUE;
+		let _item = -1;
+		for (let i = 0, len = _poly.length; i < len; i++) {
+			const dx = _poly[i][0] - px;
+			const dy = _poly[i][1] - py;
+			const d = dx * dx + dy * dy;
+			if (d < _near) {
+				_near = d;
+				_item = i;
+			}
+		}
+		return _item;
+	}
+	static projectAxis(poly, unitAxis) {
+		let _poly = Util.iterToArray(poly);
+		let min = unitAxis.dot(_poly[0]);
+		let max = min;
+		for (let n = 1, len = _poly.length; n < len; n++) {
+			const dot = unitAxis.dot(_poly[n]);
+			if (dot < min) min = dot;
+			else if (dot > max) max = dot;
+		}
+		return new Pt(min, max);
+	}
+	static _axisOverlap2D(poly1, poly2, ax, ay) {
+		let min1 = ax * poly1[0][0] + ay * poly1[0][1];
+		let max1 = min1;
+		for (let n = 1, len = poly1.length; n < len; n++) {
+			const d = ax * poly1[n][0] + ay * poly1[n][1];
+			if (d < min1) min1 = d;
+			else if (d > max1) max1 = d;
+		}
+		let min2 = ax * poly2[0][0] + ay * poly2[0][1];
+		let max2 = min2;
+		for (let n = 1, len = poly2.length; n < len; n++) {
+			const d = ax * poly2[n][0] + ay * poly2[n][1];
+			if (d < min2) min2 = d;
+			else if (d > max2) max2 = d;
+		}
+		return min1 < min2 ? min2 - max1 : min1 - max2;
+	}
+	static _axisOverlap(poly1, poly2, unitAxis) {
+		let pa = Polygon.projectAxis(poly1, unitAxis);
+		let pb = Polygon.projectAxis(poly2, unitAxis);
+		return pa[0] < pb[0] ? pb[0] - pa[1] : pa[0] - pb[1];
+	}
+	static hasIntersectPoint(poly, pt) {
+		const _poly = Util.iterToArray(poly);
+		const px = pt[0];
+		const py = pt[1];
+		let c = false;
+		for (let i = 0, len = _poly.length; i < len; i++) {
+			const a = _poly[i];
+			const b = _poly[i === len - 1 ? 0 : i + 1];
+			if (a[1] > py != b[1] > py && px < (b[0] - a[0]) * (py - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+		}
+		return c;
+	}
+	static hasIntersectCircle(poly, circle) {
+		let _poly = Util.iterToArray(poly);
+		let _circle = Util.iterToArray(circle);
+		const c = _circle[0];
+		const r = _circle[1][0];
+		let bx0 = Infinity;
+		let by0 = Infinity;
+		let bx1 = -Infinity;
+		let by1 = -Infinity;
+		for (let i = 0, len = _poly.length; i < len; i++) {
+			const p = _poly[i];
+			if (p[0] < bx0) bx0 = p[0];
+			if (p[0] > bx1) bx1 = p[0];
+			if (p[1] < by0) by0 = p[1];
+			if (p[1] > by1) by1 = p[1];
+		}
+		if (c[0] + r < bx0 || c[0] - r > bx1 || c[1] + r < by0 || c[1] - r > by1) return null;
+		let minDist = Number.MAX_SAFE_INTEGER;
+		let minEdge = null;
+		let minAx = 0;
+		let minAy = 0;
+		let which = -1;
+		const contained = _poly.some((p) => Math.pow(p[0] - c[0], 2) + Math.pow(p[1] - c[1], 2) <= r * r) || Polygon.hasIntersectPoint(_poly, c);
+		for (let i = 0, len = _poly.length; i < len; i++) {
+			const ea = _poly[i];
+			const eb = _poly[i === len - 1 ? 0 : i + 1];
+			let ax = ea[1] - eb[1];
+			let ay = eb[0] - ea[0];
+			const alen = Math.sqrt(ax * ax + ay * ay);
+			if (alen === 0) continue;
+			ax /= alen;
+			ay /= alen;
+			let minP = ax * _poly[0][0] + ay * _poly[0][1];
+			let maxP = minP;
+			for (let n = 1; n < len; n++) {
+				const d = ax * _poly[n][0] + ay * _poly[n][1];
+				if (d < minP) minP = d;
+				else if (d > maxP) maxP = d;
+			}
+			const dotC = ax * c[0] + ay * c[1];
+			const dist = minP < dotC - r ? dotC - r - maxP : minP - (dotC + r);
+			if (dist > 0) return null;
+			else if (Math.abs(dist) < minDist) {
+				const edge = Polygon.lineAt(_poly, i);
+				if (contained || Rectangle.withinBound(edge, Line.perpendicularFromPt(edge, c)) || Circle.intersectLine2D(_circle, edge).length > 0) {
+					minEdge = edge;
+					minAx = ax;
+					minAy = ay;
+					minDist = Math.abs(dist);
+					which = i;
+				}
+			}
+		}
+		if (!minEdge) return null;
+		let vx = 0;
+		let vy = 0;
+		let vd = Infinity;
+		for (let i = 0, len = _poly.length; i < len; i++) {
+			const dx = c[0] - _poly[i][0];
+			const dy = c[1] - _poly[i][1];
+			const d = dx * dx + dy * dy;
+			if (d < vd) {
+				vd = d;
+				vx = dx;
+				vy = dy;
+			}
+		}
+		if (vd > 0) {
+			const vlen = Math.sqrt(vd);
+			vx /= vlen;
+			vy /= vlen;
+			let minP = Infinity;
+			let maxP = -Infinity;
+			for (let i = 0, len = _poly.length; i < len; i++) {
+				const d = vx * _poly[i][0] + vy * _poly[i][1];
+				if (d < minP) minP = d;
+				if (d > maxP) maxP = d;
+			}
+			const dotC = vx * c[0] + vy * c[1];
+			if (dotC - r > maxP || dotC + r < minP) return null;
+		}
+		const centroid = Polygon.centroid(_poly);
+		if (minAx * (c[0] - centroid[0]) + minAy * (c[1] - centroid[1]) < 0) {
+			minAx = -minAx;
+			minAy = -minAy;
+		}
+		return {
+			which,
+			dist: minDist,
+			normal: new Pt(minAx, minAy),
+			edge: minEdge,
+			vertex: c
+		};
+	}
+	static hasIntersectPolygon(poly1, poly2) {
+		let _poly1 = Util.iterToArray(poly1);
+		let _poly2 = Util.iterToArray(poly2);
+		const len1 = _poly1.length;
+		const len2 = _poly2.length;
+		let ax0 = Infinity;
+		let ay0 = Infinity;
+		let ax1 = -Infinity;
+		let ay1 = -Infinity;
+		for (let i = 0; i < len1; i++) {
+			const p = _poly1[i];
+			if (p[0] < ax0) ax0 = p[0];
+			if (p[0] > ax1) ax1 = p[0];
+			if (p[1] < ay0) ay0 = p[1];
+			if (p[1] > ay1) ay1 = p[1];
+		}
+		let bx0 = Infinity;
+		let by0 = Infinity;
+		let bx1 = -Infinity;
+		let by1 = -Infinity;
+		for (let i = 0; i < len2; i++) {
+			const p = _poly2[i];
+			if (p[0] < bx0) bx0 = p[0];
+			if (p[0] > bx1) bx1 = p[0];
+			if (p[1] < by0) by0 = p[1];
+			if (p[1] > by1) by1 = p[1];
+		}
+		if (ax0 > bx1 || bx0 > ax1 || ay0 > by1 || by0 > ay1) return null;
+		let minDist = Number.MAX_SAFE_INTEGER;
+		let minIndex = -1;
+		let minAx = 0;
+		let minAy = 0;
+		for (let i = 0, plen = len1 + len2; i < plen; i++) {
+			const src = i < len1 ? _poly1 : _poly2;
+			const ei = i < len1 ? i : i - len1;
+			const ea = src[ei];
+			const eb = src[ei === src.length - 1 ? 0 : ei + 1];
+			let ax = ea[1] - eb[1];
+			let ay = eb[0] - ea[0];
+			const alen = Math.sqrt(ax * ax + ay * ay);
+			if (alen === 0) continue;
+			ax /= alen;
+			ay /= alen;
+			const dist = Polygon._axisOverlap2D(_poly1, _poly2, ax, ay);
+			if (dist > 0) return null;
+			else if (Math.abs(dist) < minDist) {
+				minDist = Math.abs(dist);
+				minIndex = i;
+				minAx = ax;
+				minAy = ay;
+			}
+		}
+		if (minIndex < 0) return null;
+		const which = minIndex < len1 ? 0 : 1;
+		const edge = which === 0 ? Polygon.lineAt(_poly1, minIndex) : Polygon.lineAt(_poly2, minIndex - len1);
+		const b1 = which === 0 ? _poly2 : _poly1;
+		const b2 = which === 0 ? _poly1 : _poly2;
+		const c1 = Polygon.centroid(b1);
+		const c2 = Polygon.centroid(b2);
+		if (minAx * (c1[0] - c2[0]) + minAy * (c1[1] - c2[1]) < 0) {
+			minAx = -minAx;
+			minAy = -minAy;
+		}
+		let smallest = Number.MAX_SAFE_INTEGER;
+		let vertex = null;
+		for (let i = 0, len = b1.length; i < len; i++) {
+			const d = minAx * (b1[i][0] - c2[0]) + minAy * (b1[i][1] - c2[1]);
+			if (d < smallest) {
+				smallest = d;
+				vertex = b1[i];
+			}
+		}
+		return {
+			which,
+			dist: minDist,
+			normal: new Pt(minAx, minAy),
+			edge,
+			vertex
+		};
+	}
+	static intersectPolygon2D(poly1, poly2) {
+		let _poly1 = Util.iterToArray(poly1);
+		let _poly2 = Util.iterToArray(poly2);
+		let lp = Polygon.lines(_poly1);
+		let g = [];
+		for (let i = 0, len = lp.length; i < len; i++) {
+			let ins = Line.intersectPolygon2D(lp[i], _poly2, false);
+			if (ins) g.push(ins);
+		}
+		return Util.flatten(g, true);
+	}
+	static toRects(polys) {
+		let boxes = [];
+		for (let g of polys) boxes.push(Geom.boundingBox(g));
+		let merged = Util.flatten(boxes, false);
+		boxes.unshift(Geom.boundingBox(merged));
+		return boxes;
+	}
+};
+var Path = class {
+	static unite(shapes) {
+		return overlay(shapes, "unite");
+	}
+	static intersect(shapes) {
+		return overlay(shapes, "intersect");
+	}
+	static exclude(shapes) {
+		return overlay(shapes, "exclude");
+	}
+	static minusFront(shapes) {
+		return overlay(shapes, "minusFront");
+	}
+	static minusBack(shapes) {
+		return overlay(shapes, "minusBack");
+	}
+	static divide(shapes) {
+		return overlay(shapes, "divide");
+	}
+	static crop(shapes) {
+		return overlay(shapes, "crop");
+	}
+};
+var Curve = class Curve {
+	static getSteps(steps) {
+		let ts = new Group();
+		for (let i = 0; i <= steps; i++) {
+			let t = i / steps;
+			ts.push(new Pt(t * t * t, t * t, t, 1));
+		}
+		return ts;
+	}
+	static controlPoints(pts, index = 0, copyStart = false) {
+		let _pts = Util.iterToArray(pts);
+		if (index > _pts.length - 1) return new Group();
+		let _index = (i) => i < _pts.length - 1 ? i : _pts.length - 1;
+		let p0 = _pts[index];
+		index = copyStart ? index : index + 1;
+		return new Group(p0, _pts[_index(index++)], _pts[_index(index++)], _pts[_index(index++)]);
+	}
+	static _weights(steps, fill) {
+		const w = new Float64Array((steps + 1) * 4);
+		for (let i = 0; i <= steps; i++) fill(i / steps, w, i * 4);
+		return w;
+	}
+	static _evalSegment(out, c, w, steps) {
+		const c0 = c[0];
+		const c1 = c[1];
+		const c2 = c[2];
+		const c3 = c[3];
+		const dim3 = c0.length > 2;
+		for (let i = 0; i <= steps; i++) {
+			const o = i * 4;
+			const w0 = w[o];
+			const w1 = w[o + 1];
+			const w2 = w[o + 2];
+			const w3 = w[o + 3];
+			const x = w0 * c0[0] + w1 * c1[0] + w2 * c2[0] + w3 * c3[0];
+			const y = w0 * c0[1] + w1 * c1[1] + w2 * c2[1] + w3 * c3[1];
+			out.push(dim3 ? new Pt(x, y, w0 * c0[2] + w1 * c1[2] + w2 * c2[2] + w3 * c3[2]) : new Pt(x, y));
+		}
+	}
+	static _calcPt(ctrls, params) {
+		let x = ctrls.reduce((a, c, i) => a + c.x * params[i], 0);
+		let y = ctrls.reduce((a, c, i) => a + c.y * params[i], 0);
+		if (ctrls[0].length > 2) {
+			let z = ctrls.reduce((a, c, i) => a + c.z * params[i], 0);
+			return new Pt(x, y, z);
+		}
+		return new Pt(x, y);
+	}
+	static _stepPt(ctrls, w0, w1, w2, w3) {
+		const c0 = ctrls[0];
+		const c1 = ctrls[1];
+		const c2 = ctrls[2];
+		const c3 = ctrls[3];
+		const x = w0 * c0[0] + w1 * c1[0] + w2 * c2[0] + w3 * c3[0];
+		const y = w0 * c0[1] + w1 * c1[1] + w2 * c2[1] + w3 * c3[1];
+		return c0.length > 2 ? new Pt(x, y, w0 * c0[2] + w1 * c1[2] + w2 * c2[2] + w3 * c3[2]) : new Pt(x, y);
+	}
+	static catmullRom(pts, steps = 10) {
+		let _pts = Util.iterToArray(pts);
+		if (_pts.length < 2) return new Group();
+		let ps = new Group();
+		const w = Curve._weights(steps, (t, out, o) => {
+			const t2 = t * t;
+			const t3 = t2 * t;
+			out[o] = -.5 * t3 + t2 - .5 * t;
+			out[o + 1] = 1.5 * t3 - 2.5 * t2 + 1;
+			out[o + 2] = -1.5 * t3 + 2 * t2 + .5 * t;
+			out[o + 3] = .5 * t3 - .5 * t2;
+		});
+		Curve._evalSegment(ps, Curve.controlPoints(_pts, 0, true), w, steps);
+		let k = 0;
+		while (k < _pts.length - 2) {
+			let cp = Curve.controlPoints(_pts, k);
+			if (cp.length > 0) {
+				Curve._evalSegment(ps, cp, w, steps);
+				k++;
+			}
+		}
+		return ps;
+	}
+	static catmullRomStep(step, ctrls) {
+		const t3 = step[0];
+		const t2 = step[1];
+		const t = step[2];
+		return Curve._stepPt(ctrls, -.5 * t3 + t2 - .5 * t, 1.5 * t3 - 2.5 * t2 + 1, -1.5 * t3 + 2 * t2 + .5 * t, .5 * t3 - .5 * t2);
+	}
+	static cardinal(pts, steps = 10, tension = .5) {
+		let _pts = Util.iterToArray(pts);
+		if (_pts.length < 2) return new Group();
+		let ps = new Group();
+		const w = Curve._weights(steps, (t, out, o) => {
+			const t2 = t * t;
+			const t3 = t2 * t;
+			out[o] = tension * (-t3 + 2 * t2 - t);
+			out[o + 1] = tension * (-t3 + t2) + (2 * t3 - 3 * t2 + 1);
+			out[o + 2] = tension * (t3 - 2 * t2 + t) + (-2 * t3 + 3 * t2);
+			out[o + 3] = tension * (t3 - t2);
+		});
+		Curve._evalSegment(ps, Curve.controlPoints(_pts, 0, true), w, steps);
+		let k = 0;
+		while (k < _pts.length - 2) {
+			let cp = Curve.controlPoints(_pts, k);
+			if (cp.length > 0) {
+				Curve._evalSegment(ps, cp, w, steps);
+				k++;
+			}
+		}
+		return ps;
+	}
+	static cardinalStep(step, ctrls, tension = .5) {
+		const t3 = step[0];
+		const t2 = step[1];
+		const t = step[2];
+		return Curve._stepPt(ctrls, tension * (-t3 + 2 * t2 - t), tension * (-t3 + t2) + (2 * t3 - 3 * t2 + 1), tension * (t3 - 2 * t2 + t) + (-2 * t3 + 3 * t2), tension * (t3 - t2));
+	}
+	static cardinalToBezier(pts, tension = .5, alpha = 0) {
+		const out = new Group();
+		if (!(alpha >= 0) || alpha === Infinity) return Util.warn("cardinalToBezier needs a finite alpha of 0 or more", out);
+		const p = Util.iterToArray(pts);
+		const n = p.length;
+		if (n < 2) return out;
+		const dim3 = p[0].length > 2;
+		const dt = alpha === 0 ? void 0 : new Float64Array(n - 1);
+		if (dt) for (let i = 0; i < n - 1; i++) {
+			const dx = p[i + 1][0] - p[i][0];
+			const dy = p[i + 1][1] - p[i][1];
+			const dz = dim3 ? p[i + 1][2] - p[i][2] : 0;
+			const d = Math.pow(Math.hypot(dx, dy, dz), alpha);
+			dt[i] = d < Infinity ? d : 0;
+		}
+		const control = (o, k, mx, my, mz) => {
+			const pt = new Pt(dim3 ? 3 : 2);
+			pt[0] = o[0] + k * mx;
+			pt[1] = o[1] + k * my;
+			if (dim3) pt[2] = o[2] + k * mz;
+			return pt;
+		};
+		for (let i = 0; i < n; i++) {
+			const p0 = p[Math.max(i - 1, 0)];
+			const p1 = p[i];
+			const p2 = p[Math.min(i + 1, n - 1)];
+			const a = dt ? dt[Math.max(i - 1, 0)] : 1;
+			const b = dt ? dt[Math.min(i, n - 2)] : 1;
+			let wa = 0;
+			let wb = 0;
+			if (dt && a > 0 && b > 0) {
+				const s = 2 * tension / (a + b);
+				wa = s * (b / a);
+				wb = s * (a / b);
+			}
+			const mx = dt ? wa * (p1[0] - p0[0]) + wb * (p2[0] - p1[0]) : tension * (p2[0] - p0[0]);
+			const my = dt ? wa * (p1[1] - p0[1]) + wb * (p2[1] - p1[1]) : tension * (p2[1] - p0[1]);
+			const mz = dim3 ? dt ? wa * (p1[2] - p0[2]) + wb * (p2[2] - p1[2]) : tension * (p2[2] - p0[2]) : 0;
+			if (i > 0) out.push(control(p1, -a / 3, mx, my, mz));
+			out.push(new Pt(p1));
+			if (i < n - 1) out.push(control(p1, b / 3, mx, my, mz));
+		}
+		return out;
+	}
+	static bezierToCardinal(pts) {
+		const p = Util.iterToArray(pts);
+		const m = Math.floor((p.length - 1) / 3);
+		const out = new Group();
+		if (m < 1) return out;
+		for (let k = 0; k <= m; k++) out.push(new Pt(p[3 * k]));
+		return out;
+	}
+	static bezier(pts, steps = 10) {
+		let _pts = Util.iterToArray(pts);
+		if (_pts.length < 4) return new Group();
+		let ps = new Group();
+		const w = Curve._weights(steps, (t, out, o) => {
+			const t2 = t * t;
+			const t3 = t2 * t;
+			out[o] = -t3 + 3 * t2 - 3 * t + 1;
+			out[o + 1] = 3 * t3 - 6 * t2 + 3 * t;
+			out[o + 2] = -3 * t3 + 3 * t2;
+			out[o + 3] = t3;
+		});
+		let k = 0;
+		while (k < _pts.length - 3) {
+			let c = Curve.controlPoints(_pts, k);
+			if (c.length > 0) {
+				Curve._evalSegment(ps, c, w, steps);
+				k += 3;
+			}
+		}
+		return ps;
+	}
+	static bezierStep(step, ctrls) {
+		const t3 = step[0];
+		const t2 = step[1];
+		const t = step[2];
+		return Curve._stepPt(ctrls, -t3 + 3 * t2 - 3 * t + 1, 3 * t3 - 6 * t2 + 3 * t, -3 * t3 + 3 * t2, t3);
+	}
+	static bspline(pts, steps = 10, tension = 1) {
+		let _pts = Util.iterToArray(pts);
+		if (_pts.length < 2) return new Group();
+		let ps = new Group();
+		const w = tension !== 1 ? Curve._weights(steps, (t, out, o) => {
+			const t2 = t * t;
+			const t3 = t2 * t;
+			const b1 = 2 * t3 - 3 * t2 + 1;
+			const b2 = -2 * t3 + 3 * t2;
+			out[o] = tension * (-t3 / 6 + .5 * t2 - .5 * t + 1 / 6);
+			out[o + 1] = tension * (-1.5 * t3 + 2 * t2 - 1 / 3) + b1;
+			out[o + 2] = tension * (1.5 * t3 - 2.5 * t2 + .5 * t + 1 / 6) + b2;
+			out[o + 3] = tension * (t3 / 6);
+		}) : Curve._weights(steps, (t, out, o) => {
+			const t2 = t * t;
+			const t3 = t2 * t;
+			out[o] = -t3 / 6 + .5 * t2 - .5 * t + 1 / 6;
+			out[o + 1] = .5 * t3 - t2 + 2 / 3;
+			out[o + 2] = -.5 * t3 + .5 * t2 + .5 * t + 1 / 6;
+			out[o + 3] = t3 / 6;
+		});
+		let k = 0;
+		while (k < _pts.length - 3) {
+			let c = Curve.controlPoints(_pts, k);
+			if (c.length > 0) {
+				Curve._evalSegment(ps, c, w, steps);
+				k++;
+			}
+		}
+		return ps;
+	}
+	static bsplineStep(step, ctrls) {
+		const t3 = step[0];
+		const t2 = step[1];
+		const t = step[2];
+		return Curve._stepPt(ctrls, -t3 / 6 + .5 * t2 - .5 * t + 1 / 6, .5 * t3 - t2 + 2 / 3, -.5 * t3 + .5 * t2 + .5 * t + 1 / 6, t3 / 6);
+	}
+	static bsplineTensionStep(step, ctrls, tension = 1) {
+		const t3 = step[0];
+		const t2 = step[1];
+		const t = step[2];
+		const b1 = 2 * t3 - 3 * t2 + 1;
+		const b2 = -2 * t3 + 3 * t2;
+		return Curve._stepPt(ctrls, tension * (-t3 / 6 + .5 * t2 - .5 * t + 1 / 6), tension * (-1.5 * t3 + 2 * t2 - 1 / 3) + b1, tension * (1.5 * t3 - 2.5 * t2 + .5 * t + 1 / 6) + b2, tension * (t3 / 6));
+	}
+	static bsplineToBezier(pts, tension = 1) {
+		const p = Util.iterToArray(pts);
+		const n = p.length;
+		const out = new Group();
+		if (n < 4) return out;
+		const dim3 = p[0].length > 2;
+		const a = tension / 6;
+		const c = 1 - 2 * a;
+		const blend = (u, v, w, wu, wv, ww) => {
+			const pt = new Pt(dim3 ? 3 : 2);
+			pt[0] = wu * u[0] + wv * v[0] + ww * w[0];
+			pt[1] = wu * u[1] + wv * v[1] + ww * w[1];
+			if (dim3) pt[2] = wu * u[2] + wv * v[2] + ww * w[2];
+			return pt;
+		};
+		out.push(blend(p[0], p[1], p[2], a, c, a));
+		for (let i = 1; i < n - 2; i++) {
+			const p1 = p[i];
+			const p2 = p[i + 1];
+			out.push(blend(p1, p2, p2, c, 2 * a, 0), blend(p1, p2, p2, 2 * a, c, 0), blend(p1, p2, p[i + 2], a, c, a));
+		}
+		return out;
+	}
+	static bezierToBspline(pts) {
+		const p = Util.iterToArray(pts);
+		const m = Math.floor((p.length - 1) / 3);
+		const out = new Group();
+		if (m < 1) return out;
+		const dim = p[0].length > 2 ? 3 : 2;
+		const n = m + 1;
+		const r = new Float64Array(n * dim);
+		const d = new Float64Array(n);
+		for (let k = 0; k < n; k++) {
+			const src = k === 0 ? p[1] : k === m ? p[3 * m - 1] : p[3 * k];
+			const w = k === 0 || k === m ? 3 : 6;
+			for (let j = 0; j < dim; j++) r[k * dim + j] = w * src[j];
+		}
+		d[0] = 2;
+		for (let k = 1; k < n; k++) {
+			const w = 1 / d[k - 1];
+			d[k] = (k < m ? 4 : 2) - w;
+			for (let j = 0; j < dim; j++) r[k * dim + j] -= w * r[(k - 1) * dim + j];
+		}
+		for (let j = 0; j < dim; j++) r[(n - 1) * dim + j] /= d[n - 1];
+		for (let k = n - 2; k >= 0; k--) for (let j = 0; j < dim; j++) r[k * dim + j] = (r[k * dim + j] - r[(k + 1) * dim + j]) / d[k];
+		const first = new Pt(dim);
+		const last = new Pt(dim);
+		for (let j = 0; j < dim; j++) {
+			first[j] = r[dim + j] - 6 * (p[1][j] - p[0][j]);
+			last[j] = r[(m - 1) * dim + j] + 6 * (p[3 * m][j] - p[3 * m - 1][j]);
+		}
+		out.push(first);
+		for (let k = 0; k < n; k++) {
+			const pt = new Pt(dim);
+			for (let j = 0; j < dim; j++) pt[j] = r[k * dim + j];
+			out.push(pt);
+		}
+		out.push(last);
+		return out;
+	}
+};
+
+//#endregion
+//#region \0@oxc-project+runtime@0.143.0/helpers/esm/typeof.js
+function _typeof(o) {
+	"@babel/helpers - typeof";
+	return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o) {
+		return typeof o;
+	} : function(o) {
+		return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o;
+	}, _typeof(o);
+}
+
+//#endregion
+//#region \0@oxc-project+runtime@0.143.0/helpers/esm/toPrimitive.js
+function toPrimitive(t, r) {
+	if ("object" != _typeof(t) || !t) return t;
+	var e = t[Symbol.toPrimitive];
+	if (void 0 !== e) {
+		var i = e.call(t, r || "default");
+		if ("object" != _typeof(i)) return i;
+		throw new TypeError("@@toPrimitive must return a primitive value.");
+	}
+	return ("string" === r ? String : Number)(t);
+}
+
+//#endregion
+//#region \0@oxc-project+runtime@0.143.0/helpers/esm/toPropertyKey.js
+function toPropertyKey(t) {
+	var i = toPrimitive(t, "string");
+	return "symbol" == _typeof(i) ? i : i + "";
+}
+
+//#endregion
+//#region \0@oxc-project+runtime@0.143.0/helpers/esm/defineProperty.js
+function _defineProperty(e, r, t) {
+	return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
+		value: t,
+		enumerable: !0,
+		configurable: !0,
+		writable: !0
+	}) : e[r] = t, e;
+}
+
+//#endregion
+//#region \0@oxc-project+runtime@0.143.0/helpers/esm/objectSpread2.js
+function ownKeys(e, r) {
+	var t = Object.keys(e);
+	if (Object.getOwnPropertySymbols) {
+		var o = Object.getOwnPropertySymbols(e);
+		r && (o = o.filter(function(r) {
+			return Object.getOwnPropertyDescriptor(e, r).enumerable;
+		})), t.push.apply(t, o);
+	}
+	return t;
+}
+function _objectSpread2(e) {
+	for (var r = 1; r < arguments.length; r++) {
+		var t = null != arguments[r] ? arguments[r] : {};
+		r % 2 ? ownKeys(Object(t), !0).forEach(function(r) {
+			_defineProperty(e, r, t[r]);
+		}) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function(r) {
+			Object.defineProperty(e, r, Object.getOwnPropertyDescriptor(t, r));
+		});
+	}
+	return e;
+}
+
+//#endregion
+//#region src/UI.ts
+function _withinSegment(a, b, pt, threshold) {
+	if (threshold < 0) return false;
+	const dx = b[0] - a[0];
+	const dy = b[1] - a[1];
+	const lengthSq = dx * dx + dy * dy;
+	const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / lengthSq));
+	const px = pt[0] - a[0] - t * dx;
+	const py = pt[1] - a[1] - t * dy;
+	return px * px + py * py <= threshold * threshold;
+}
+const _shapeTests = {
+	rectangle: (group, pt) => Rectangle.withinBound(group, pt),
+	circle: (group, pt) => Circle.withinBound(group, pt),
+	polygon: (group, pt) => Polygon.hasIntersectPoint(group, pt),
+	line: (group, pt, states) => {
+		var _states$lineThreshold;
+		const threshold = (_states$lineThreshold = states.lineThreshold) !== null && _states$lineThreshold !== void 0 ? _states$lineThreshold : 5;
+		return group.length >= 2 && _withinSegment(group[0], group[1], pt, threshold);
+	},
+	polyline: (group, pt, states) => {
+		var _states$lineThreshold2;
+		const threshold = (_states$lineThreshold2 = states.lineThreshold) !== null && _states$lineThreshold2 !== void 0 ? _states$lineThreshold2 : 5;
+		for (let i = 0, len = group.length - 1; i < len; i++) if (_withinSegment(group[i], group[i + 1], pt, threshold)) return true;
+		return false;
+	}
+};
+const UIShape = {
+	rectangle: "rectangle",
+	circle: "circle",
+	polygon: "polygon",
+	polyline: "polyline",
+	line: "line"
+};
+const UIPointerActions = {
+	up: "up",
+	down: "down",
+	move: "move",
+	drag: "drag",
+	uidrag: "uidrag",
+	drop: "drop",
+	uidrop: "uidrop",
+	over: "over",
+	out: "out",
+	enter: "enter",
+	leave: "leave",
+	click: "click",
+	keydown: "keydown",
+	keyup: "keyup",
+	pointerdown: "pointerdown",
+	pointerup: "pointerup",
+	contextmenu: "contextmenu",
+	all: "all"
+};
+let _uiCounter = 0;
+var UI = class UI {
+	static get _counter() {
+		return _uiCounter;
+	}
+	static set _counter(n) {
+		if (this === UI) _uiCounter = n;
+		else Object.defineProperty(this, "_counter", {
+			value: n,
+			writable: true,
+			enumerable: true,
+			configurable: true
+		});
+	}
+	constructor(group, shape, states = {}, id) {
+		this._abortCleanup = {};
+		this._holds = /* @__PURE__ */ new Map();
+		this._group = Group.fromArray(group);
+		this._shape = shape;
+		this._id = id === void 0 ? `ui_${UI._counter++}` : id;
+		this._states = states;
+		this._actions = {};
+		this._sysActions = {};
+	}
+	static registerShape(shape, fn) {
+		_shapeTests[shape] = fn;
+	}
+	static fromRectangle(group, states, id) {
+		return new this(group, UIShape.rectangle, states, id);
+	}
+	static fromCircle(group, states, id) {
+		return new this(group, UIShape.circle, states, id);
+	}
+	static fromPolygon(group, states, id) {
+		return new this(group, UIShape.polygon, states, id);
+	}
+	static fromUI(ui, states, id) {
+		return new this(ui.group, ui.shape, states || _objectSpread2({}, ui._states), id);
+	}
+	get id() {
+		return this._id;
+	}
+	set id(d) {
+		this._id = d;
+	}
+	get group() {
+		return this._group;
+	}
+	set group(d) {
+		this._group = d;
+	}
+	get shape() {
+		return this._shape;
+	}
+	set shape(d) {
+		this._shape = d;
+	}
+	state(key, value) {
+		if (!key) return null;
+		if (value !== void 0) {
+			this._states[key] = value;
+			return this;
+		}
+		return this._states[key];
+	}
+	getState(key) {
+		return this._states[key];
+	}
+	setState(key, value) {
+		this._states[key] = value;
+		return this;
+	}
+	on(type, fn, options) {
+		var _options$signal;
+		if (!fn) return -1;
+		if (options === null || options === void 0 || (_options$signal = options.signal) === null || _options$signal === void 0 ? void 0 : _options$signal.aborted) return -1;
+		if (!this._actions[type]) this._actions[type] = [];
+		let handler = fn;
+		let id = -1;
+		if (options === null || options === void 0 ? void 0 : options.once) handler = (t, p, ty, e) => {
+			this.off(type, id);
+			fn(t, p, ty, e);
+		};
+		id = UI._addHandler(this._actions[type], handler);
+		if (options === null || options === void 0 ? void 0 : options.signal) {
+			const signal = options.signal;
+			const abort = () => this.off(type, id);
+			signal.addEventListener("abort", abort, { once: true });
+			if (!this._abortCleanup[type]) this._abortCleanup[type] = /* @__PURE__ */ new Map();
+			this._abortCleanup[type].set(id, () => signal.removeEventListener("abort", abort));
+		}
+		return id;
+	}
+	off(type, which) {
+		if (!this._actions[type]) return false;
+		if (which === void 0) {
+			var _this$_abortCleanup$t;
+			(_this$_abortCleanup$t = this._abortCleanup[type]) === null || _this$_abortCleanup$t === void 0 || _this$_abortCleanup$t.forEach((cleanup) => cleanup());
+			delete this._abortCleanup[type];
+			delete this._actions[type];
+			return true;
+		} else {
+			var _this$_abortCleanup$t2, _this$_abortCleanup$t3, _this$_abortCleanup$t4;
+			(_this$_abortCleanup$t2 = this._abortCleanup[type]) === null || _this$_abortCleanup$t2 === void 0 || (_this$_abortCleanup$t3 = _this$_abortCleanup$t2.get(which)) === null || _this$_abortCleanup$t3 === void 0 || _this$_abortCleanup$t3.call(_this$_abortCleanup$t2);
+			(_this$_abortCleanup$t4 = this._abortCleanup[type]) === null || _this$_abortCleanup$t4 === void 0 || _this$_abortCleanup$t4.delete(which);
+			return UI._removeHandler(this._actions[type], which);
+		}
+	}
+	listen(type, p, evt) {
+		let fired = false;
+		const userActions = this._actions[type];
+		const sysActions = this._sysActions[type];
+		if (userActions || sysActions) {
+			if (this._within(p) || this._holdsType(type)) {
+				if (sysActions) {
+					UI._trigger(sysActions, this, p, type, evt);
+					fired = true;
+				}
+				if (userActions) {
+					UI._trigger(userActions, this, p, type, evt);
+					fired = true;
+				}
+			}
+		}
+		if (this._actions["all"]) {
+			UI._trigger(this._actions["all"], this, p, type, evt);
+			fired = true;
+		}
+		return fired;
+	}
+	_holdsType(type) {
+		for (const held of this._holds.values()) if (held === type) return true;
+		return false;
+	}
+	_sysOn(type, fn) {
+		if (!this._sysActions[type]) this._sysActions[type] = [];
+		return UI._addHandler(this._sysActions[type], fn);
+	}
+	_sysOff(type, which) {
+		if (!this._sysActions[type]) return false;
+		return UI._removeHandler(this._sysActions[type], which);
+	}
+	hold(type) {
+		let newKey = Math.max(0, ...Array.from(this._holds.keys())) + 1;
+		this._holds.set(newKey, type);
+		return newKey;
+	}
+	unhold(key) {
+		if (key !== void 0) this._holds.delete(key);
+		else this._holds.clear();
+	}
+	static track(uis, type, p, evt) {
+		for (let i = 0, len = uis.length; i < len; i++) uis[i].listen(type, p, evt);
+	}
+	render(fn) {
+		fn(this._group, this._states);
+	}
+	toString() {
+		return `UI ${this.group.toString()}`;
+	}
+	_within(p) {
+		const fn = _shapeTests[this._shape];
+		if (!fn) return false;
+		return fn(this._group, p, this._states);
+	}
+	static _trigger(fns, target, pt, type, evt) {
+		if (fns) {
+			for (let i = 0, len = fns.length; i < len; i++) if (fns[i]) fns[i](target, pt, type, evt);
+		}
+	}
+	static _addHandler(fns, fn) {
+		if (!fn) return -1;
+		for (let i = 0, len = fns.length; i < len; i++) if (fns[i] === null) {
+			fns[i] = fn;
+			return i;
+		}
+		fns.push(fn);
+		return fns.length - 1;
+	}
+	static _removeHandler(fns, index) {
+		if (index >= 0 && index < fns.length && fns[index]) {
+			fns[index] = null;
+			return true;
+		}
+		return false;
+	}
+};
+var UIButton = class extends UI {
+	constructor(group, shape, states = {}, id) {
+		super(group, shape, states, id);
+		this._hoverID = -1;
+		if (states.hover === void 0) this._states["hover"] = false;
+		if (states.clicks === void 0) this._states["clicks"] = 0;
+		const UA = UIPointerActions;
+		this._sysOn(UA.up, () => {
+			this.state("clicks", this._states.clicks + 1);
+		});
+		this._sysOn(UA.move, (target, pt, type, evt) => {
+			if (this._within(pt) && !this._states.hover) {
+				this.state("hover", true);
+				UI._trigger(this._actions[UA.enter], this, pt, UA.enter, evt);
+				let _capID = this.hold(UA.move);
+				this._hoverID = this._sysOn(UA.move, (t, p, ty, e) => {
+					if (!this._within(p) && !this.state("dragging")) {
+						this.state("hover", false);
+						UI._trigger(this._actions[UA.leave], this, p, UA.leave, e);
+						this._sysOff(UA.move, this._hoverID);
+						this.unhold(_capID);
+					}
+				});
+			}
+		});
+	}
+	onClick(fn) {
+		return this.on(UIPointerActions.up, fn);
+	}
+	offClick(id) {
+		return this.off(UIPointerActions.up, id);
+	}
+	onContextMenu(fn) {
+		return this.on(UIPointerActions.contextmenu, fn);
+	}
+	offContextMenu(id) {
+		return this.off(UIPointerActions.contextmenu, id);
+	}
+	onHover(enter, leave) {
+		let ids = [void 0, void 0];
+		if (enter) ids[0] = this.on(UIPointerActions.enter, enter);
+		if (leave) ids[1] = this.on(UIPointerActions.leave, leave);
+		return ids;
+	}
+	offHover(enterID, leaveID) {
+		let s = [false, false];
+		if (enterID === void 0 || enterID >= 0) s[0] = this.off(UIPointerActions.enter, enterID);
+		if (leaveID === void 0 || leaveID >= 0) s[1] = this.off(UIPointerActions.leave, leaveID);
+		return s;
+	}
+};
+var UIDragger = class extends UIButton {
+	_ownsDrag(evt) {
+		if (!this._dragPointer) return true;
+		if ("pointerId" in evt) return !this._dragPointer.touch && evt.pointerId === this._dragPointer.id;
+		if ("changedTouches" in evt) return this._dragPointer.touch && Array.from(evt.changedTouches).some((t) => t.identifier === this._dragPointer.id);
+		return true;
+	}
+	constructor(group, shape, states = {}, id) {
+		super(group, shape, states, id);
+		this._draggingID = -1;
+		this._dragID = -1;
+		this._moveHoldID = -1;
+		this._dragHoldID = -1;
+		this._dropHoldID = -1;
+		this._upHoldID = -1;
+		this._outHoldID = -1;
+		if (states.dragging === void 0) this._states["dragging"] = false;
+		if (states.moved === void 0) this._states["moved"] = false;
+		if (states.offset === void 0) this._states["offset"] = new Pt();
+		const UA = UIPointerActions;
+		this._sysOn(UA.down, (target, pt, type, evt) => {
+			if (this._moveHoldID === -1) {
+				this._dragPointer = "pointerId" in evt ? {
+					id: evt.pointerId,
+					touch: false
+				} : "changedTouches" in evt && evt.changedTouches.length ? {
+					id: evt.changedTouches.item(0).identifier,
+					touch: true
+				} : void 0;
+				this.state("dragging", true);
+				this.state("offset", new Pt(pt).subtract(target.group[0]));
+				this._moveHoldID = this.hold(UA.move);
+				this._dragHoldID = this.hold(UA.drag);
+				this._outHoldID = this.hold(UA.out);
+			}
+			if (this._dropHoldID === -1) this._dropHoldID = this.hold(UA.drop);
+			if (this._upHoldID === -1) this._upHoldID = this.hold(UA.up);
+			if (this._draggingID === -1) {
+				const drag = (t, p, ty, e) => {
+					if (!this._ownsDrag(e)) return;
+					const paired = ty === UA.drag && e === this._lastMoveEvent;
+					this._lastMoveEvent = ty === UA.move ? e : void 0;
+					if (paired) return;
+					if (this.state("dragging")) {
+						UI._trigger(this._actions[UA.uidrag], t, p, UA.uidrag, e);
+						this.state("moved", true);
+					}
+				};
+				this._draggingID = this._sysOn(UA.move, drag);
+				this._dragID = this._sysOn(UA.drag, drag);
+			}
+		});
+		const endDrag = (target, pt, type, evt) => {
+			if (!this._ownsDrag(evt)) return;
+			this._dragPointer = void 0;
+			this.state("dragging", false);
+			this._sysOff(UA.move, this._draggingID);
+			this._sysOff(UA.drag, this._dragID);
+			this._draggingID = -1;
+			this._dragID = -1;
+			this._lastMoveEvent = void 0;
+			this.unhold(this._moveHoldID);
+			this._moveHoldID = -1;
+			this.unhold(this._dragHoldID);
+			this._dragHoldID = -1;
+			this.unhold(this._outHoldID);
+			this._outHoldID = -1;
+			this.unhold(this._dropHoldID);
+			this._dropHoldID = -1;
+			this.unhold(this._upHoldID);
+			this._upHoldID = -1;
+			if (this.state("moved")) {
+				UI._trigger(this._actions[UA.uidrop], target, pt, UA.uidrop, evt);
+				this.state("moved", false);
+			}
+		};
+		this._sysOn(UA.drop, endDrag);
+		this._sysOn(UA.up, endDrag);
+		this._sysOn(UA.out, endDrag);
+	}
+	onDrag(fn) {
+		return this.on(UIPointerActions.uidrag, fn);
+	}
+	offDrag(id) {
+		return this.off(UIPointerActions.uidrag, id);
+	}
+	onDrop(fn) {
+		return this.on(UIPointerActions.uidrop, fn);
+	}
+	offDrop(id) {
+		return this.off(UIPointerActions.uidrop, id);
+	}
+};
+
+//#endregion
+//#region src/Space.ts
+var Space = class {
+	constructor() {
+		this.id = "space";
+		this.bound = new Bound();
+		this._time = {
+			prev: 0,
+			diff: 0,
+			end: -1,
+			min: 0
+		};
+		this._stopAfter = -1;
+		this.players = {};
+		this.playerCount = 0;
+		this._animID = -1;
+		this._fromFrame = false;
+		this._pause = false;
+		this._refresh = void 0;
+		this._pointer = new Pt();
+		this._isReady = false;
+		this._playing = false;
+		this._firstFrame = true;
+	}
+	refresh(b) {
+		this._refresh = b;
+		return this;
+	}
+	minFrameTime(ms = 0) {
+		this._time.min = ms;
+		return this;
+	}
+	add(p) {
+		const player = typeof p == "function" ? { animate: p } : p;
+		const k = this.playerCount++;
+		const pid = player.animateID || this.id + k;
+		this.players[pid] = player;
+		player.animateID = pid;
+		if (player.resize && this.bound.inited) player.resize(this.bound);
+		if (this._refresh === void 0) this._refresh = true;
+		return this;
+	}
+	remove(player) {
+		delete this.players[player.animateID];
+		return this;
+	}
+	removeAll() {
+		this.players = {};
+		return this;
+	}
+	play(time = 0) {
+		const fromFrame = this._fromFrame;
+		this._fromFrame = false;
+		if (time === 0 && this._animID !== -1 && !fromFrame) return this;
+		if (this._animID !== -1) cancelAnimationFrame(this._animID);
+		this._animID = requestAnimationFrame((frameTime) => {
+			this._fromFrame = true;
+			try {
+				this.play(frameTime);
+			} finally {
+				this._fromFrame = false;
+			}
+		});
+		if (this._pause) {
+			this._time.prev = time;
+			return this;
+		}
+		if (this._firstFrame) {
+			this._firstFrame = time === 0 && !fromFrame;
+			this._time.diff = 0;
+			this._time.prev = time;
+		} else {
+			const diff = time - this._time.prev;
+			if (diff < this._time.min) return this;
+			this._time.diff = diff;
+			this._time.prev = time;
+		}
+		try {
+			this.playItems(time);
+		} catch (err) {
+			cancelAnimationFrame(this._animID);
+			this._animID = -1;
+			this._playing = false;
+			this._firstFrame = true;
+			throw err;
+		}
+		return this;
+	}
+	replay() {
+		this._time.end = -1;
+		this.play();
+	}
+	playItems(time) {
+		this._playing = true;
+		this._animatePlayers(time, this._time.diff);
+		if (this._stopAfter >= 0) {
+			this._time.end = time + this._stopAfter;
+			this._stopAfter = -1;
+		}
+		if (this._time.end >= 0 && time > this._time.end) {
+			cancelAnimationFrame(this._animID);
+			this._animID = -1;
+			this._playing = false;
+			this._firstFrame = true;
+		}
+	}
+	_animatePlayers(time, ftime) {
+		if (this._refresh) this.clear();
+		if (this._isReady) {
+			for (const k in this.players) if (this.players[k].animate) this.players[k].animate(time, ftime, this);
+		}
+	}
+	pause(toggle = false) {
+		this._pause = toggle ? !this._pause : true;
+		return this;
+	}
+	resume() {
+		this._pause = false;
+		return this;
+	}
+	stop(t = 0) {
+		this._stopAfter = t > 0 ? t : -1;
+		this._time.end = t > 0 ? -1 : t;
+		return this;
+	}
+	_cancelAnimation() {
+		if (this._animID !== -1) cancelAnimationFrame(this._animID);
+		this._animID = -1;
+		this._playing = false;
+		this._firstFrame = true;
+		return this;
+	}
+	playOnce(duration = 0) {
+		this.play();
+		this.stop(duration);
+		return this;
+	}
+	render(context) {
+		if (this._renderFunc) this._renderFunc(context, this);
+		return this;
+	}
+	set customRendering(f) {
+		this._renderFunc = f;
+	}
+	get customRendering() {
+		return this._renderFunc;
+	}
+	get isPlaying() {
+		return this._playing;
+	}
+	get outerBound() {
+		return this.bound.clone();
+	}
+	get innerBound() {
+		return new Bound(Pt.make(this.size.length, 0), this.size.clone());
+	}
+	get size() {
+		return this.bound.size.clone();
+	}
+	get center() {
+		return this.size.divide(2);
+	}
+	get width() {
+		return this.bound.width;
+	}
+	get height() {
+		return this.bound.height;
+	}
+};
+var MultiTouchSpace = class extends Space {
+	constructor(..._args) {
+		super(..._args);
+		this._pressed = false;
+		this._dragged = false;
+		this._pressId = null;
+		this._pressIsTouch = false;
+		this._pressType = "";
+		this._pressCapture = null;
+		this._pressSeen = false;
+		this._unsentEnd = 0;
+		this._hasMouse = false;
+		this._hasTouch = false;
+		this._hasKeyboard = false;
+		this._touchPassive = false;
+		this._mouseDownBind = this._mouseDown.bind(this);
+		this._mouseUpBind = this._mouseUp.bind(this);
+		this._mouseOverBind = this._mouseOver.bind(this);
+		this._mouseOutBind = this._mouseOut.bind(this);
+		this._mouseMoveBind = this._mouseMove.bind(this);
+		this._mouseClickBind = this._mouseClick.bind(this);
+		this._contextMenuBind = this._contextMenu.bind(this);
+		this._touchStartBind = this._touchStart.bind(this);
+		this._touchMoveBind = this._touchMove.bind(this);
+		this._keyDownBind = this._keyDown.bind(this);
+		this._keyUpBind = this._keyUp.bind(this);
+		this._trackedUIs = [];
+		this._uiPlayer = null;
+	}
+	get pointer() {
+		const p = this._pointer.clone();
+		p.id = this._pointer.id;
+		return p;
+	}
+	bindCanvas(evt, callback, options = {}, customTarget) {
+		(customTarget ? customTarget : this._canvas).addEventListener(evt, callback, options);
+	}
+	unbindCanvas(evt, callback, options = {}, customTarget) {
+		(customTarget ? customTarget : this._canvas).removeEventListener(evt, callback, options);
+	}
+	bindDoc(evt, callback, options = {}) {
+		if (typeof document !== "undefined") document.addEventListener(evt, callback, options);
+	}
+	unbindDoc(evt, callback, options = {}) {
+		if (typeof document !== "undefined") document.removeEventListener(evt, callback, options);
+	}
+	bindMouse(bind = true, customTarget) {
+		if (bind) {
+			if (this._hasMouse) {
+				if (this._mouseTarget === customTarget) return this;
+				this.bindMouse(false);
+			}
+			this._mouseTarget = customTarget;
+			this.bindCanvas("pointerdown", this._mouseDownBind, {}, customTarget);
+			this.bindCanvas("pointerup", this._mouseUpBind, {}, customTarget);
+			this.bindCanvas("pointerover", this._mouseOverBind, {}, customTarget);
+			this.bindCanvas("pointerout", this._mouseOutBind, {}, customTarget);
+			this.bindCanvas("pointercancel", this._mouseOutBind, {}, customTarget);
+			this.bindCanvas("pointermove", this._mouseMoveBind, {}, customTarget);
+			this.bindCanvas("click", this._mouseClickBind, {}, customTarget);
+			this.bindCanvas("contextmenu", this._contextMenuBind, {}, customTarget);
+			this._hasMouse = true;
+		} else if (this._hasMouse) {
+			if (this._pressed && !this._pressIsTouch) this._abandonPress();
+			const target = this._mouseTarget;
+			this.unbindCanvas("pointerdown", this._mouseDownBind, {}, target);
+			this.unbindCanvas("pointerup", this._mouseUpBind, {}, target);
+			this.unbindCanvas("pointerover", this._mouseOverBind, {}, target);
+			this.unbindCanvas("pointerout", this._mouseOutBind, {}, target);
+			this.unbindCanvas("pointercancel", this._mouseOutBind, {}, target);
+			this.unbindCanvas("pointermove", this._mouseMoveBind, {}, target);
+			this.unbindCanvas("click", this._mouseClickBind, {}, target);
+			this.unbindCanvas("contextmenu", this._contextMenuBind, {}, target);
+			this._hasMouse = false;
+			this._mouseTarget = void 0;
+		}
+		return this;
+	}
+	bindTouch(bind = true, passive = false, customTarget) {
+		if (bind) {
+			if (this._hasTouch) {
+				if (this._touchTarget === customTarget && this._touchPassive === passive) return this;
+				this.bindTouch(false);
+			}
+			this._touchTarget = customTarget;
+			this._touchPassive = passive;
+			this.bindCanvas("touchstart", this._touchStartBind, { passive }, customTarget);
+			this.bindCanvas("touchend", this._mouseUpBind, {}, customTarget);
+			this.bindCanvas("touchmove", this._touchMoveBind, { passive }, customTarget);
+			this.bindCanvas("touchcancel", this._mouseOutBind, {}, customTarget);
+			this._hasTouch = true;
+		} else if (this._hasTouch) {
+			if (this._pressed && this._pressIsTouch) this._abandonPress();
+			const target = this._touchTarget;
+			const options = { passive: this._touchPassive };
+			this.unbindCanvas("touchstart", this._touchStartBind, options, target);
+			this.unbindCanvas("touchend", this._mouseUpBind, {}, target);
+			this.unbindCanvas("touchmove", this._touchMoveBind, options, target);
+			this.unbindCanvas("touchcancel", this._mouseOutBind, {}, target);
+			this._hasTouch = false;
+			this._touchTarget = void 0;
+		}
+		return this;
+	}
+	bindKeyboard(bind = true, customTarget) {
+		if (bind) {
+			const target = customTarget || (typeof document !== "undefined" ? document : this._canvas);
+			if (this._hasKeyboard) {
+				if (this._keyboardTarget === target) return this;
+				this.bindKeyboard(false);
+			}
+			target.addEventListener("keydown", this._keyDownBind, {});
+			target.addEventListener("keyup", this._keyUpBind, {});
+			this._keyboardTarget = target;
+			this._hasKeyboard = true;
+		} else if (this._hasKeyboard) {
+			this._keyboardTarget.removeEventListener("keydown", this._keyDownBind, {});
+			this._keyboardTarget.removeEventListener("keyup", this._keyUpBind, {});
+			this._keyboardTarget = void 0;
+			this._hasKeyboard = false;
+		}
+		return this;
+	}
+	_unbindAll() {
+		this.bindMouse(false);
+		this.bindTouch(false);
+		this.bindKeyboard(false);
+		return this;
+	}
+	removeAll() {
+		this.untrack();
+		this._uiPlayer = null;
+		return super.removeAll();
+	}
+	track(uis) {
+		const list = Array.isArray(uis) ? uis : [uis];
+		for (let i = 0, len = list.length; i < len; i++) if (this._trackedUIs.indexOf(list[i]) < 0) this._trackedUIs.push(list[i]);
+		if (!this._uiPlayer) {
+			this._uiPlayer = {
+				animate: () => {},
+				action: (type, px, py, evt) => {
+					UI.track(this._trackedUIs, type, new Pt(px, py), evt);
+				}
+			};
+			this.add(this._uiPlayer);
+		}
+		return this;
+	}
+	untrack(uis) {
+		const list = uis === void 0 ? this._trackedUIs.slice() : Array.isArray(uis) ? uis : [uis];
+		for (let i = 0, len = list.length; i < len; i++) {
+			const at = this._trackedUIs.indexOf(list[i]);
+			if (at < 0) continue;
+			this._trackedUIs.splice(at, 1);
+			if (list[i].state("dragging")) list[i].listen(UIPointerActions.drop, this._pointer, new Event("pointercancel"));
+		}
+		return this;
+	}
+	_inputTransform() {
+		if (typeof Element !== "undefined" && this._canvas instanceof Element) {
+			const rect = this._canvas.getBoundingClientRect();
+			return [
+				rect.left,
+				rect.top,
+				rect.width ? this.width / rect.width : 1,
+				rect.height ? this.height / rect.height : 1
+			];
+		}
+		return [
+			this.bound.topLeft.x - (typeof window === "undefined" ? 0 : window.scrollX),
+			this.bound.topLeft.y - (typeof window === "undefined" ? 0 : window.scrollY),
+			1,
+			1
+		];
+	}
+	touchesToPoints(evt, which = "touches") {
+		if (!evt || !evt[which]) return [];
+		const ts = [];
+		const [left, top, scaleX, scaleY] = this._inputTransform();
+		for (let i = 0; i < evt[which].length; i++) {
+			const t = evt[which].item(i);
+			ts.push(new Pt((t.clientX - left) * scaleX, (t.clientY - top) * scaleY));
+		}
+		return ts;
+	}
+	_mouseAction(type, evt, touchId) {
+		if (!this.isPlaying) return;
+		const [left, top, scaleX, scaleY] = this._inputTransform();
+		let px = 0, py = 0;
+		if (typeof MouseEvent !== "undefined" && evt instanceof MouseEvent || "clientX" in evt) {
+			px = (evt.clientX - left) * scaleX;
+			py = (evt.clientY - top) * scaleY;
+		} else {
+			const touch = touchId != null ? Array.from(evt.changedTouches).find((t) => t.identifier === touchId) : evt.changedTouches && evt.changedTouches.length > 0 ? evt.changedTouches.item(0) : null;
+			if (touch) {
+				px = (touch.clientX - left) * scaleX;
+				py = (touch.clientY - top) * scaleY;
+			}
+		}
+		this._sendAction(type, px, py, evt);
+	}
+	_sendAction(type, px, py, evt) {
+		if (type) {
+			this._pointer.to(px, py);
+			this._pointer.id = type;
+		}
+		for (const k in this.players) if (this.players.hasOwnProperty(k)) {
+			const v = this.players[k];
+			if (v.action) v.action(type, px, py, evt);
+		}
+	}
+	_isTouchHandled(evt) {
+		return "pointerType" in evt && evt.pointerType === "touch" && this._hasTouch && evt.composedPath().includes(this._touchTarget || this._canvas);
+	}
+	_ownsPress(evt) {
+		if (!this._pressed) return false;
+		return "changedTouches" in evt ? this._pressIsTouch && Array.from(evt.changedTouches).some((t) => t.identifier === this._pressId) : !this._pressIsTouch && evt.pointerId === this._pressId;
+	}
+	_releasePress() {
+		if (this._pressSeen && !this.isPlaying) this._unsentEnd = this._dragged ? 2 : 1;
+		this._pressed = this._dragged = this._pressSeen = false;
+		this._pressId = null;
+		this._pressCapture = null;
+	}
+	_beginPress(evt, id, touch, type) {
+		if (this._pressed) {
+			const first = "changedTouches" in evt ? evt.touches.length === evt.changedTouches.length : evt.isPrimary !== false;
+			const capture = this._pressCapture;
+			if (this._pressType === type ? id === this._pressId || first : first && !!capture && !capture.hasPointerCapture(this._pressId)) this._abandonPress();
+		}
+		if (!this._pressed) {
+			this._pressId = id;
+			this._pressIsTouch = touch;
+			this._pressType = type;
+			this._pressed = true;
+			this._pressSeen = this.isPlaying;
+		}
+	}
+	_abandonPress() {
+		const dragged = this._dragged;
+		const playing = this.isPlaying;
+		this._releasePress();
+		if (playing) this._sendEnd(dragged);
+	}
+	_sendEnd(dragged) {
+		const evt = new Event("pointercancel");
+		this._sendAction(UIPointerActions.out, this._pointer.x, this._pointer.y, evt);
+		if (dragged) this._sendAction(UIPointerActions.drop, this._pointer.x, this._pointer.y, evt);
+	}
+	playItems(time) {
+		if (this._unsentEnd) {
+			const dragged = this._unsentEnd === 2;
+			this._unsentEnd = 0;
+			this._playing = true;
+			this._sendEnd(dragged);
+		}
+		super.playItems(time);
+	}
+	_mouseDown(evt) {
+		if (this._isTouchHandled(evt)) return false;
+		this._beginPress(evt, evt.pointerId, false, evt.pointerType || "mouse");
+		this._mouseAction(UIPointerActions.down, evt);
+		this._mouseAction(UIPointerActions.pointerdown, evt);
+		if (typeof Element !== "undefined" && evt.target instanceof Element) try {
+			evt.target.setPointerCapture(evt.pointerId);
+			if (!this._pressIsTouch && this._pressId === evt.pointerId) this._pressCapture = evt.target;
+		} catch (_unused) {}
+		return false;
+	}
+	_mouseUp(evt) {
+		if (this._isTouchHandled(evt)) return false;
+		const owns = this._ownsPress(evt);
+		const touchId = owns && this._pressIsTouch ? this._pressId : void 0;
+		this._mouseAction(UIPointerActions.pointerup, evt, touchId);
+		if (owns && this._dragged) this._mouseAction(UIPointerActions.drop, evt, touchId);
+		else this._mouseAction(UIPointerActions.up, evt, touchId);
+		if (owns || "touches" in evt && evt.touches.length === 0 && this._pressIsTouch) this._releasePress();
+		if (typeof PointerEvent !== "undefined" && evt instanceof PointerEvent && typeof Element !== "undefined" && evt.target instanceof Element && evt.target.hasPointerCapture(evt.pointerId)) evt.target.releasePointerCapture(evt.pointerId);
+		return false;
+	}
+	_mouseMove(evt) {
+		if (this._isTouchHandled(evt)) return false;
+		if (this._ownsPress(evt)) {
+			this._dragged = true;
+			this._mouseAction(UIPointerActions.drag, evt);
+		} else this._mouseAction(UIPointerActions.move, evt);
+		return false;
+	}
+	_mouseOver(evt) {
+		if (this._isTouchHandled(evt)) return false;
+		this._mouseAction(UIPointerActions.over, evt);
+		return false;
+	}
+	_mouseOut(evt) {
+		if (this._isTouchHandled(evt)) return false;
+		this._mouseAction(UIPointerActions.out, evt, this._ownsPress(evt) && this._pressIsTouch ? this._pressId : void 0);
+		if (this._ownsPress(evt)) {
+			if (this._dragged) this._mouseAction(UIPointerActions.drop, evt, this._pressIsTouch ? this._pressId : void 0);
+			this._releasePress();
+		} else if ("touches" in evt && evt.touches.length === 0 && this._pressIsTouch) this._releasePress();
+		return false;
+	}
+	_mouseClick(evt) {
+		this._mouseAction(UIPointerActions.click, evt);
+		return false;
+	}
+	_contextMenu(evt) {
+		this._mouseAction(UIPointerActions.contextmenu, evt);
+		return false;
+	}
+	_touchMove(evt) {
+		const owns = this._ownsPress(evt);
+		this._mouseAction(UIPointerActions.move, evt, owns ? this._pressId : void 0);
+		if (owns) {
+			this._dragged = true;
+			this._mouseAction(UIPointerActions.drag, evt, this._pressId);
+		}
+		if (!this._touchPassive) evt.preventDefault();
+		return false;
+	}
+	_touchStart(evt) {
+		if (evt.changedTouches.length) this._beginPress(evt, evt.changedTouches.item(0).identifier, true, "touchevent");
+		this._mouseAction(UIPointerActions.down, evt);
+		this._mouseAction(UIPointerActions.pointerdown, evt);
+		if (!this._touchPassive) evt.preventDefault();
+		return false;
+	}
+	_keyDown(evt) {
+		this._keyboardAction(UIPointerActions.keydown, evt);
+		return false;
+	}
+	_keyUp(evt) {
+		this._keyboardAction(UIPointerActions.keyup, evt);
+		return false;
+	}
+	_keyboardAction(type, evt) {
+		if (!this.isPlaying) return;
+		for (const k in this.players) if (this.players.hasOwnProperty(k)) {
+			const v = this.players[k];
+			if (v.action) v.action(type, evt.shiftKey ? 1 : 0, evt.altKey ? 1 : 0, evt);
+		}
+	}
+};
+
+//#endregion
+//#region src/Form.ts
+var Form = class {
+	constructor() {
+		this._ready = false;
+	}
+	get ready() {
+		return this._ready;
+	}
+};
+var VisualForm = class extends Form {
+	constructor(..._args) {
+		super(..._args);
+		this._filled = true;
+		this._stroked = true;
+		this._font = new Font(14, "sans-serif");
+	}
+	get filled() {
+		return this._filled;
+	}
+	set filled(b) {
+		this._filled = b;
+	}
+	get stroked() {
+		return this._stroked;
+	}
+	set stroked(b) {
+		this._stroked = b;
+	}
+	get currentFont() {
+		return this._font;
+	}
+	_multiple(groups, shape, ...rest) {
+		if (!groups) return this;
+		for (let i = 0, len = groups.length; i < len; i++) this[shape](groups[i], ...rest);
+		return this;
+	}
+	alpha(a) {
+		return this;
+	}
+	fill(c) {
+		return this;
+	}
+	fillOnly(c) {
+		this.stroke(false);
+		return this.fill(c);
+	}
+	stroke(c, width, linejoin, linecap) {
+		return this;
+	}
+	strokeOnly(c, width, linejoin, linecap) {
+		this.fill(false);
+		return this.stroke(c, width, linejoin, linecap);
+	}
+	points(pts, radius, shape) {
+		if (!pts) return this;
+		for (let i = 0, len = pts.length; i < len; i++) this.point(pts[i], radius, shape);
+		return this;
+	}
+	circles(groups) {
+		return this._multiple(groups, "circle");
+	}
+	squares(groups) {
+		return this._multiple(groups, "square");
+	}
+	lines(groups) {
+		return this._multiple(groups, "line");
+	}
+	polygons(groups) {
+		return this._multiple(groups, "polygon");
+	}
+	rects(groups) {
+		return this._multiple(groups, "rect");
+	}
+};
+var Font = class {
+	constructor(size = 12, face = "sans-serif", weight = "", style = "", lineHeight = 1.5) {
+		this.size = size;
+		this.face = face;
+		this.style = style;
+		this.weight = weight;
+		this.lineHeight = lineHeight;
+	}
+	get value() {
+		const prefix = [this.style, this.weight].filter(Boolean).join(" ");
+		const base = `${this.size}px/${this.lineHeight} ${this.face}`;
+		return prefix ? `${prefix} ${base}` : base;
+	}
+	toString() {
+		return this.value;
+	}
+};
+
+//#endregion
+//#region src/Typography.ts
+var Typography = class {
+	static textWidthEstimator(fn, samples = [
+		"M",
+		"n",
+		"."
+	], distribution = [
+		.06,
+		.8,
+		.14
+	]) {
+		if (samples.length !== distribution.length) throw new Error(`textWidthEstimator: samples (${samples.length}) and distribution (${distribution.length}) must have the same length`);
+		const m = samples.map(fn);
+		const avg = new Pt(distribution).dot(m);
+		return (text) => text.length * avg;
+	}
+	static charWidthCache(fn) {
+		const latin = (/* @__PURE__ */ new Float64Array(256)).fill(NaN);
+		const cache = /* @__PURE__ */ new Map();
+		return (text) => {
+			let sum = 0;
+			for (let i = 0, len = text.length; i < len; i++) {
+				const code = text.charCodeAt(i);
+				if (code < 256) {
+					let w = latin[code];
+					if (w !== w) {
+						w = fn(text[i]);
+						latin[code] = w;
+					}
+					sum += w;
+				} else {
+					let ch = text[i];
+					if (code >= 55296 && code <= 56319 && i + 1 < len) {
+						ch += text[i + 1];
+						i++;
+					}
+					let w = cache.get(ch);
+					if (w === void 0) {
+						w = fn(ch);
+						cache.set(ch, w);
+					}
+					sum += w;
+				}
+			}
+			return sum;
+		};
+	}
+	static truncate(fn, str, width, tail = "", hint) {
+		const len = str.length;
+		let budget;
+		let max;
+		let seed;
+		if (hint !== void 0 && !tail) {
+			budget = width;
+			max = len;
+			seed = Math.min(max, Math.max(0, Math.floor(hint)));
+		} else {
+			const full = fn(str);
+			if (full <= width) return [str, len];
+			budget = width - (tail ? fn(tail) : 0);
+			max = len - 1;
+			seed = hint !== void 0 ? Math.min(max, Math.max(0, Math.floor(hint))) : Math.min(max, Math.max(0, Math.floor(len * budget / full)));
+		}
+		const fits = (k) => fn(str.slice(0, k)) <= budget;
+		let best = -1;
+		let lo = 0;
+		let hi = max;
+		if (budget >= 0) {
+			const k = seed;
+			if (fits(k)) {
+				best = k;
+				lo = k + 1;
+				for (let inc = 1; lo <= hi; inc *= 2) {
+					const p = Math.min(hi, k + inc);
+					if (!fits(p)) {
+						hi = p - 1;
+						break;
+					}
+					best = p;
+					lo = p + 1;
+				}
+			} else {
+				hi = k - 1;
+				for (let inc = 1; lo <= hi; inc *= 2) {
+					const p = Math.max(lo, k - inc);
+					if (fits(p)) {
+						best = p;
+						lo = p + 1;
+						break;
+					}
+					hi = p - 1;
+				}
+			}
+			while (lo <= hi) {
+				const p = lo + hi >> 1;
+				if (fits(p)) {
+					best = p;
+					lo = p + 1;
+				} else hi = p - 1;
+			}
+		}
+		if (best < 0) return ["", 0];
+		if (best === len) return [str, len];
+		let cut = best;
+		if (cut > 0) {
+			const code = str.charCodeAt(cut - 1);
+			if (code >= 55296 && code <= 56319) cut--;
+		}
+		return [str.slice(0, cut) + tail, cut];
+	}
+	static fontSizeToBox(ratio = 1, byHeight = true, legacyByHeight) {
+		if (typeof ratio !== "number") {
+			Util.warn("Typography.fontSizeToBox(box, ratio, byHeight) is deprecated: the initial box never affected the result. Use fontSizeToBox(ratio, byHeight) instead.");
+			ratio = typeof byHeight === "number" ? byHeight : 1;
+			byHeight = legacyByHeight === void 0 ? true : legacyByHeight;
+		}
+		const r = ratio;
+		const by = byHeight;
+		return (box) => {
+			const bound = Bound.fromGroup(box);
+			return r * (by ? bound.height : bound.width);
+		};
+	}
+	static fontSizeToThreshold(threshold, direction = 0) {
+		if (threshold === 0) throw new Error("fontSizeToThreshold: threshold cannot be 0");
+		return function(defaultSize, val) {
+			const d = defaultSize * val / threshold;
+			if (direction < 0) return Math.min(d, defaultSize);
+			if (direction > 0) return Math.max(d, defaultSize);
+			return d;
+		};
+	}
+};
+
+//#endregion
+//#region \0@oxc-project+runtime@0.143.0/helpers/esm/asyncToGenerator.js
+function asyncGeneratorStep(n, t, e, r, o, a, c) {
+	try {
+		var i = n[a](c), u = i.value;
+	} catch (n) {
+		e(n);
+		return;
+	}
+	i.done ? t(u) : Promise.resolve(u).then(r, o);
+}
+function _asyncToGenerator(n) {
+	return function() {
+		var t = this, e = arguments;
+		return new Promise(function(r, o) {
+			var a = n.apply(t, e);
+			function _next(n) {
+				asyncGeneratorStep(a, r, o, _next, _throw, "next", n);
+			}
+			function _throw(n) {
+				asyncGeneratorStep(a, r, o, _next, _throw, "throw", n);
+			}
+			_next(void 0);
+		});
+	};
+}
+
+//#endregion
+//#region src/Image.ts
+var Img = class Img {
+	constructor(editable = false, space, crossOrigin) {
+		var _opts$pixelScale;
+		this._scale = 1;
+		this._loaded = false;
+		this._pendingLoadReject = null;
+		this._disposed = false;
+		this._dataDirty = false;
+		const opts = typeof editable === "object" ? editable : {
+			editable,
+			space,
+			crossOrigin
+		};
+		this._editable = !!opts.editable;
+		this._space = opts.space;
+		this._scale = (_opts$pixelScale = opts.pixelScale) !== null && _opts$pixelScale !== void 0 ? _opts$pixelScale : this._space ? this._space.pixelScale : 1;
+		this._img = new Image();
+		if (opts.crossOrigin) this._img.crossOrigin = "Anonymous";
+	}
+	static load(src, editable = false, space, ready) {
+		return new Img(editable, space).load(src).then((res) => {
+			if (ready) ready(res);
+			return res;
+		});
+	}
+	static loadAsync(src, editable = false, space) {
+		return _asyncToGenerator(function* () {
+			return Img.load(src, editable, space);
+		})();
+	}
+	static loadPattern(src, space, repeat = "repeat", editable = false) {
+		return _asyncToGenerator(function* () {
+			return (yield Img.loadAsync(src, editable, space)).pattern(repeat);
+		})();
+	}
+	static blank(size, space, scale) {
+		let img = new Img(true, space);
+		const s = scale ? scale : space ? space.pixelScale : 1;
+		img.initCanvas(size[0], size[1], s);
+		return img;
+	}
+	load(src) {
+		if (this._editable && typeof document === "undefined") return Promise.reject(/* @__PURE__ */ new Error("Cannot create html canvas element. document not found."));
+		return this._loadImageSrc(src).then(() => {
+			if (this._disposed) throw new Error("Img has been disposed");
+			if (this._editable) {
+				if (!this._cv) this._cv = document.createElement("canvas");
+				this._drawToScale(this._scale, this._img);
+				this._dataDirty = true;
+			}
+			this._loaded = true;
+			return this;
+		});
+	}
+	_loadImageSrc(src) {
+		if (this._disposed) return Promise.reject(/* @__PURE__ */ new Error("Img has been disposed"));
+		return new Promise((resolve, reject) => {
+			if (this._pendingLoadReject) this._pendingLoadReject(/* @__PURE__ */ new Error("Img loading superseded by a newer load"));
+			this._pendingLoadReject = reject;
+			this._img.onload = () => {
+				this._pendingLoadReject = null;
+				resolve();
+			};
+			this._img.onerror = () => {
+				this._pendingLoadReject = null;
+				reject(/* @__PURE__ */ new Error(`Img cannot load ${src}`));
+			};
+			this._img.src = src;
+		});
+	}
+	_refreshData() {
+		this._data = this._ctx.getImageData(0, 0, this._cv.width, this._cv.height);
+		this._dataDirty = false;
+	}
+	_ensureData() {
+		if ((this._dataDirty || !this._data) && this._ctx && this._cv) this._refreshData();
+	}
+	_drawToScale(canvasScale, img) {
+		const nw = img.width;
+		const nh = img.height;
+		this._initCanvas(nw, nh, canvasScale);
+		if (img) this._ctx.drawImage(img, 0, 0, nw, nh, 0, 0, this._cv.width, this._cv.height);
+	}
+	initCanvas(width, height, canvasScale = 1) {
+		this._initCanvas(width, height, canvasScale);
+	}
+	_initCanvas(width, height, canvasScale = 1) {
+		if (!this._editable) {
+			Util.warn("Cannot initiate canvas because this Img is not set to be editable");
+			return;
+		}
+		if (!this._cv) this._cv = document.createElement("canvas");
+		const cms = typeof canvasScale === "number" ? [canvasScale, canvasScale] : canvasScale;
+		this._cv.width = width * cms[0];
+		this._cv.height = height * cms[1];
+		this._ctx = this._cv.getContext("2d", { willReadFrequently: true });
+		CanvasForm.resetStyleCache(this._ctx);
+		if (typeof canvasScale === "number") this._scale = canvasScale;
+		this._dataDirty = true;
+		this._loaded = true;
+	}
+	bitmap(size) {
+		const w = size ? size[0] : this._cv.width;
+		const h = size ? size[1] : this._cv.height;
+		return createImageBitmap(this._cv, 0, 0, w, h);
+	}
+	pattern(reptition = "repeat", dynamic = false) {
+		let ctx = this._space ? this._space.ctx : void 0;
+		if (!ctx) {
+			if (!this._patternCtx) this._patternCtx = document.createElement("canvas").getContext("2d");
+			ctx = this._patternCtx;
+		}
+		return ctx.createPattern(dynamic ? this._cv : this._img, reptition);
+	}
+	sync() {
+		var _this = this;
+		return _asyncToGenerator(function* () {
+			if (_this._disposed) throw new Error("Img has been disposed");
+			let source = _this._cv;
+			if (_this._scale !== 1) {
+				source = document.createElement("canvas");
+				source.width = _this._cv.width / _this._scale;
+				source.height = _this._cv.height / _this._scale;
+				source.getContext("2d").drawImage(_this._cv, 0, 0, _this._cv.width, _this._cv.height, 0, 0, source.width, source.height);
+			}
+			const blob = yield new Promise((resolve, reject) => {
+				source.toBlob((b) => b ? resolve(b) : reject(/* @__PURE__ */ new Error("Img cannot export canvas to blob")));
+			});
+			const url = URL.createObjectURL(blob);
+			_this._objectUrl = url;
+			try {
+				yield _this._loadImageSrc(url);
+				if (_this._disposed) throw new Error("Img has been disposed");
+				_this._loaded = true;
+			} finally {
+				URL.revokeObjectURL(url);
+				_this._objectUrl = null;
+			}
+			return _this;
+		})();
+	}
+	pixel(p, rescale = true) {
+		this._ensureData();
+		if (!this._data) {
+			Util.warn("Img has no pixel data — create it as editable and wait for load");
+			return new Pt(0, 0, 0, 0);
+		}
+		const s = typeof rescale == "number" ? rescale : rescale ? this._scale : 1;
+		return Img.getPixel(this._data, [p[0] * s, p[1] * s]);
+	}
+	setPixel(p, rgba, rescale = true) {
+		this._ensureData();
+		if (!this._data) {
+			Util.warn("Img has no pixel data — create it as editable");
+			return this;
+		}
+		const s = typeof rescale == "number" ? rescale : rescale ? this._scale : 1;
+		const x = Math.floor(p[0] * s);
+		const y = Math.floor(p[1] * s);
+		if (x < 0 || y < 0 || x >= this._data.width || y >= this._data.height) return this;
+		const i = y * this._data.width * 4 + x * 4;
+		this._data.data[i] = rgba[0];
+		this._data.data[i + 1] = rgba[1];
+		this._data.data[i + 2] = rgba[2];
+		this._data.data[i + 3] = rgba[3] !== void 0 ? rgba[3] : 255;
+		return this;
+	}
+	loadPixels() {
+		if (!this._ctx) {
+			Util.warn("Img has no canvas — create it as editable");
+			return this;
+		}
+		this._refreshData();
+		return this;
+	}
+	updatePixels() {
+		if (!this._ctx || !this._data) {
+			Util.warn("Img has no canvas — create it as editable");
+			return this;
+		}
+		this._ctx.putImageData(this._data, 0, 0);
+		this._dataDirty = false;
+		return this;
+	}
+	static getPixel(imgData, p) {
+		const out = new Pt(4);
+		if (p[0] < 0 || p[1] < 0 || p[0] >= imgData.width || p[1] >= imgData.height) return out;
+		const i = Math.floor(p[1]) * (imgData.width * 4) + Math.floor(p[0]) * 4;
+		const d = imgData.data;
+		if (i > d.length - 4) return out;
+		out[0] = d[i];
+		out[1] = d[i + 1];
+		out[2] = d[i + 2];
+		out[3] = d[i + 3];
+		return out;
+	}
+	resize(sizeOrScale, asScale = false) {
+		const hasImage = this._img.naturalWidth > 0;
+		const refW = hasImage ? this._img.naturalWidth : this._cv.width;
+		const refH = hasImage ? this._img.naturalHeight : this._cv.height;
+		if (!refW || !refH) {
+			Util.warn("Img cannot resize before an image or canvas exists");
+			return this;
+		}
+		const s = asScale ? sizeOrScale : [sizeOrScale[0] / refW, sizeOrScale[1] / refH];
+		let source = this._img;
+		if (!hasImage) {
+			const snap = document.createElement("canvas");
+			snap.width = this._cv.width;
+			snap.height = this._cv.height;
+			snap.getContext("2d").drawImage(this._cv, 0, 0);
+			source = snap;
+		}
+		this._drawToScale(s, source);
+		this._dataDirty = true;
+		return this;
+	}
+	crop(box) {
+		const s = this._scale;
+		return this._ctx.getImageData(box[0][0] * s, box[0][1] * s, box.width * s, box.height * s);
+	}
+	filter(css) {
+		const op = this._ctx.globalCompositeOperation;
+		this._ctx.globalCompositeOperation = "copy";
+		this._ctx.filter = css;
+		this._ctx.drawImage(this._cv, 0, 0);
+		this._ctx.filter = "none";
+		this._ctx.globalCompositeOperation = op;
+		this._dataDirty = true;
+		return this;
+	}
+	dispose() {
+		var _this$_pendingLoadRej;
+		this._disposed = true;
+		(_this$_pendingLoadRej = this._pendingLoadReject) === null || _this$_pendingLoadRej === void 0 || _this$_pendingLoadRej.call(this, /* @__PURE__ */ new Error("Img has been disposed"));
+		this._pendingLoadReject = null;
+		if (this._img) {
+			this._img.onload = null;
+			this._img.onerror = null;
+			this._img.removeAttribute("src");
+		}
+		if (this._objectUrl) {
+			URL.revokeObjectURL(this._objectUrl);
+			this._objectUrl = null;
+		}
+		if (this._cv) this._cv.remove();
+		if (this._img) this._img.remove();
+		this._cv = null;
+		this._ctx = null;
+		this._patternCtx = null;
+		this._img = null;
+		this._data = null;
+		this._loaded = false;
+		return this;
+	}
+	cleanup() {
+		this.dispose();
+	}
+	static fromBlob(blob, editable = false, space) {
+		const url = URL.createObjectURL(blob);
+		const img = new Img(editable, space);
+		img._objectUrl = url;
+		const done = () => {
+			URL.revokeObjectURL(url);
+			img._objectUrl = null;
+		};
+		return img.load(url).then((res) => {
+			done();
+			return res;
+		}, (err) => {
+			done();
+			throw err;
+		});
+	}
+	static imageDataToBlob(data) {
+		return new Promise(function(resolve, reject) {
+			if (typeof document === "undefined") {
+				reject(/* @__PURE__ */ new Error("Cannot create html canvas element. document not found."));
+				return;
+			}
+			let cv = document.createElement("canvas");
+			cv.width = data.width;
+			cv.height = data.height;
+			cv.getContext("2d").putImageData(data, 0, 0);
+			cv.toBlob((blob) => {
+				resolve(blob);
+				cv.remove();
+			});
+		});
+	}
+	toBase64() {
+		return this._cv.toDataURL();
+	}
+	toBlob() {
+		return new Promise((resolve) => {
+			this._cv.toBlob((blob) => resolve(blob));
+		});
+	}
+	getForm() {
+		if (!this._editable) Util.warn("Cannot get a CanvasForm because this Img is not editable");
+		return this._ctx ? new CanvasForm(this._ctx) : void 0;
+	}
+	get current() {
+		return this._editable ? this._cv : this._img;
+	}
+	get image() {
+		return this._img;
+	}
+	get canvas() {
+		return this._cv;
+	}
+	get data() {
+		this._ensureData();
+		return this._data;
+	}
+	get ctx() {
+		return this._ctx;
+	}
+	get loaded() {
+		return this._loaded;
+	}
+	get pixelScale() {
+		return this._scale;
+	}
+	get imageSize() {
+		if (!this._img || !this._img.width || !this._img.height) return this._cv ? this.canvasSize.$divide(this._scale) : new Pt(0, 0);
+		else return new Pt(this._img.width, this._img.height);
+	}
+	get canvasSize() {
+		return new Pt(this._cv.width, this._cv.height);
+	}
+	get scaledMatrix() {
+		const s = 1 / this._scale;
+		return new Mat().scale2D([s, s]);
+	}
+};
+
+//#endregion
+//#region src/Canvas.ts
+var CanvasSpace = class extends MultiTouchSpace {
+	constructor(elem = "pt", callback) {
+		super();
+		this._pixelScale = 1;
+		this._bgcolor = "#e1e9f0";
+		this._offscreen = false;
+		this._autoResize = true;
+		this._initialResize = false;
+		this._hasPlayed = false;
+		this._frameTime = 0;
+		this._disposed = false;
+		this._ownsCanvas = false;
+		this._ownsContainer = false;
+		let _selector = null;
+		let _existed = false;
+		this.id = Util.uniqueId();
+		if (elem instanceof Element) {
+			_selector = elem;
+			this.id = _selector.id || this.id;
+		} else {
+			const target = elem || "pt";
+			const id = target[0] === "#" || target[0] === "." ? target : "#" + target;
+			_selector = document.querySelector(id);
+			this.id = id.substr(1);
+		}
+		if (!_selector) {
+			this._ownsContainer = true;
+			this._container = this._createElement("div", this.id + "_container");
+			this._canvas = this._createElement("canvas", this.id);
+			document.body.appendChild(this._container);
+		} else if (_selector.nodeName.toLowerCase() != "canvas") {
+			this._container = _selector;
+			this._canvas = this._createElement("canvas", this.id + "_canvas");
+			this._initialResize = true;
+		} else {
+			this._canvas = _selector;
+			this._container = _selector.parentElement;
+			this._autoResize = false;
+			_existed = true;
+		}
+		this._ctx = this._canvas.getContext("2d");
+		if (!_existed) {
+			this._ownsCanvas = true;
+			this._readyObserver = new MutationObserver((mutations) => {
+				mutations.forEach((mutation) => {
+					if (mutation.type === "childList" && mutation.addedNodes.length) {
+						for (let node of mutation.addedNodes) if (node === this._canvas) {
+							var _this$_readyObserver;
+							this._ready(callback);
+							(_this$_readyObserver = this._readyObserver) === null || _this$_readyObserver === void 0 || _this$_readyObserver.disconnect();
+							this._readyObserver = void 0;
+							return;
+						}
+					}
+				});
+			});
+			this._readyObserver.observe(this._container, { childList: true });
+			this._container.appendChild(this._canvas);
+		} else this._readyTimer = window.setTimeout(() => this._ready(callback), 100);
+	}
+	_createElement(elem = "div", id) {
+		const d = document.createElement(elem);
+		d.setAttribute("id", id);
+		return d;
+	}
+	_ready(callback) {
+		if (this._disposed) return;
+		this._readyTimer = void 0;
+		if (!this._container) throw new Error(`Cannot initiate #${this.id} element`);
+		this._isReady = true;
+		this._resizeHandler(null);
+		this.clear(this._bgcolor);
+		this._canvas.dispatchEvent(new Event("ready"));
+		for (const k in this.players) if (this.players.hasOwnProperty(k)) {
+			if (this.players[k].start) this.players[k].start(this.bound.clone(), this);
+		}
+		this._pointer = this.center;
+		this._initialResize = false;
+		if (callback) callback(this.bound, this._canvas);
+	}
+	setup(opt) {
+		this._bgcolor = opt.bgcolor ? opt.bgcolor : "transparent";
+		this.autoResize = opt.resize != void 0 ? opt.resize : false;
+		if (opt.retina !== false) {
+			const r1 = window ? window.devicePixelRatio || 1 : 1;
+			this._pixelScale = Math.max(1, r1);
+		}
+		if (opt.offscreen) {
+			this._offscreen = true;
+			this._offCanvas = this._createElement("canvas", this.id + "_offscreen");
+			this._offCtx = this._offCanvas.getContext("2d");
+		} else this._offscreen = false;
+		if (opt.pixelDensity) this._pixelScale = opt.pixelDensity;
+		return this;
+	}
+	set autoResize(auto) {
+		if (this._autoResize === auto && (!auto || this._resizeObserver)) return;
+		if (this._resizeObserver) {
+			this._resizeObserver.disconnect();
+			this._resizeObserver = void 0;
+		}
+		this._autoResize = auto;
+		if (auto) {
+			this._resizeObserver = new ResizeObserver((entries) => {
+				this._resizeHandler(null);
+			});
+			this._resizeObserver.observe(this._container);
+		}
+	}
+	get autoResize() {
+		return this._autoResize;
+	}
+	resize(b, evt) {
+		this.bound = b;
+		this._canvas.width = Math.ceil(this.bound.size.x) * this._pixelScale;
+		this._canvas.height = Math.ceil(this.bound.size.y) * this._pixelScale;
+		this._canvas.style.width = this.bound.size.x + "px";
+		this._canvas.style.height = this.bound.size.y + "px";
+		if (this._offscreen) {
+			this._offCanvas.width = Math.ceil(this.bound.size.x) * this._pixelScale;
+			this._offCanvas.height = Math.ceil(this.bound.size.y) * this._pixelScale;
+		}
+		if (this._pixelScale != 1) {
+			this._ctx.scale(this._pixelScale, this._pixelScale);
+			if (this._offscreen) this._offCtx.scale(this._pixelScale, this._pixelScale);
+		}
+		CanvasForm.resetStyleCache(this._ctx);
+		if (this._offscreen) CanvasForm.resetStyleCache(this._offCtx);
+		for (const k in this.players) if (this.players.hasOwnProperty(k)) {
+			const p = this.players[k];
+			if (p.resize) p.resize(this.bound, evt);
+		}
+		this.render(this._ctx);
+		if (this._isReady && (!this.isPlaying || this._pause) && (evt || this._hasPlayed)) this._repaint();
+		return this;
+	}
+	_resizeHandler(evt) {
+		const b = this._autoResize || this._initialResize ? this._container.getBoundingClientRect() : this._canvas.getBoundingClientRect();
+		if (b) {
+			var _window, _window2;
+			const box = Bound.fromBoundingRect(b);
+			box.center = box.center.add(((_window = window) === null || _window === void 0 ? void 0 : _window.scrollX) || 0, ((_window2 = window) === null || _window2 === void 0 ? void 0 : _window2.scrollY) || 0);
+			this.resize(box, evt);
+		}
+	}
+	set background(bg) {
+		this._bgcolor = bg;
+	}
+	get background() {
+		return this._bgcolor;
+	}
+	get pixelScale() {
+		return this._pixelScale;
+	}
+	get hasOffscreen() {
+		return this._offscreen;
+	}
+	get offscreenCtx() {
+		return this._offCtx;
+	}
+	get offscreenCanvas() {
+		return this._offCanvas;
+	}
+	getForm() {
+		return new CanvasForm(this);
+	}
+	get element() {
+		return this._canvas;
+	}
+	get parent() {
+		return this._container;
+	}
+	get ready() {
+		return this._isReady;
+	}
+	get ctx() {
+		return this._ctx;
+	}
+	clear(bg) {
+		if (bg) this._bgcolor = bg;
+		const lastColor = this._ctx.fillStyle;
+		const px = Math.ceil(this.pixelScale);
+		if (!this._bgcolor || this._bgcolor === "transparent") this._ctx.clearRect(-px, -px, this._canvas.width + px, this._canvas.height + px);
+		else {
+			if (this._bgcolor.indexOf("rgba") === 0 || this._bgcolor.length === 9 && this._bgcolor.indexOf("#") === 0) this._ctx.clearRect(-px, -px, this._canvas.width + px, this._canvas.height + px);
+			this._ctx.fillStyle = this._bgcolor;
+			this._ctx.fillRect(-px, -px, this._canvas.width + px, this._canvas.height + px);
+		}
+		this._ctx.fillStyle = lastColor;
+		return this;
+	}
+	clearOffscreen(bg) {
+		if (this._offscreen) {
+			const px = Math.ceil(this.pixelScale);
+			if (bg) {
+				this._offCtx.fillStyle = bg;
+				this._offCtx.fillRect(-px, -px, this._canvas.width + px, this._canvas.height + px);
+			} else this._offCtx.clearRect(-px, -px, this._offCanvas.width + px, this._offCanvas.height + px);
+		}
+		return this;
+	}
+	playItems(time) {
+		if (this._isReady) {
+			this._hasPlayed = true;
+			this._frameTime = time;
+			this._beginDraw();
+			super.playItems(time);
+			this._endDraw();
+		}
+	}
+	_repaint() {
+		this._beginDraw();
+		this._animatePlayers(this._frameTime, 0);
+		this._endDraw();
+	}
+	_beginDraw() {
+		this._ctx.save();
+		if (this._offscreen) this._offCtx.save();
+	}
+	_endDraw() {
+		this._ctx.restore();
+		if (this._offscreen) this._offCtx.restore();
+		this.render(this._ctx);
+	}
+	dispose() {
+		if (this._disposed) return this;
+		this._disposed = true;
+		if (this._readyTimer !== void 0) {
+			window.clearTimeout(this._readyTimer);
+			this._readyTimer = void 0;
+		}
+		if (this._readyObserver) {
+			this._readyObserver.disconnect();
+			this._readyObserver = void 0;
+		}
+		if (this._resizeObserver) {
+			this._resizeObserver.disconnect();
+			this._resizeObserver = void 0;
+		}
+		this._unbindAll();
+		this._cancelAnimation();
+		this.removeAll();
+		this._isReady = false;
+		if (this._ownsCanvas) this._canvas.remove();
+		if (this._ownsContainer && this._container.childNodes.length === 0) this._container.remove();
+		return this;
+	}
+	recorder(downloadOrCallback, filetype = "webm", bitrate = 15e6) {
+		const stream = this._canvas.captureStream();
+		const recorder = new MediaRecorder(stream, {
+			mimeType: `video/${filetype}`,
+			bitsPerSecond: bitrate
+		});
+		recorder.ondataavailable = function(d) {
+			const url = URL.createObjectURL(new Blob([d.data], { type: `video/${filetype}` }));
+			if (typeof downloadOrCallback === "function") downloadOrCallback(url);
+			else if (downloadOrCallback) {
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = `canvas_video.${filetype}`;
+				a.click();
+				a.remove();
+				setTimeout(() => URL.revokeObjectURL(url), 100);
+			}
+		};
+		return recorder;
+	}
+};
+const _STATE = Symbol("pts.styleState");
+const _uncached = /* @__PURE__ */ Object.freeze({});
+const _observers = /* @__PURE__ */ new WeakMap();
+const _observedStyles = [
+	"fillStyle",
+	"strokeStyle",
+	"lineWidth",
+	"lineJoin",
+	"lineCap",
+	"globalAlpha",
+	"globalCompositeOperation",
+	"font"
+];
+const _cssColor = /currentcolor|light-dark|accent|background|border|button|canvas|caption|field|highlight|mark|menu|scrollbar|selecteditem|text|threed|window|workspace/i;
+const _cssFont = /bolder|lighter|larger|smaller|\d(?!px)[a-z%]/i;
+const _plain = [
+	void 0,
+	void 0,
+	void 0
+];
+const _plainColors = /* @__PURE__ */ new Set();
+const _plainFonts = /* @__PURE__ */ new Set();
+function _cssHit(v, slot) {
+	return v !== _plain[slot] && _cssTest(v, slot);
+}
+function _cssTest(v, slot) {
+	if (typeof v !== "string") return false;
+	const font = slot === 2;
+	if (font || v.charCodeAt(0) !== 35) {
+		const known = font ? _plainFonts : _plainColors;
+		if (!known.has(v)) {
+			if ((font ? _cssFont : _cssColor).test(v) || v.includes("\\")) return true;
+			if (known.size === 256) known.clear();
+			known.add(v);
+		}
+	}
+	_plain[slot] = v;
+	return false;
+}
+function _forgetStyles(cache) {
+	for (const k in cache) cache[k] = void 0;
+}
+function _findDescriptor(obj, key) {
+	for (let o = obj; o; o = Object.getPrototypeOf(o)) {
+		const d = Object.getOwnPropertyDescriptor(o, key);
+		if (d) return d;
+	}
+}
+function _method(value) {
+	return {
+		value,
+		configurable: true,
+		writable: true,
+		enumerable: false
+	};
+}
+function _makeObservers(proto) {
+	const natives = {};
+	for (const key of _observedStyles.concat("lineDashOffset")) {
+		const d = _findDescriptor(proto, key);
+		if (!d || !d.get || !d.set) return null;
+		natives[key] = d;
+	}
+	const fill = natives.fillStyle.set;
+	const stroke = natives.strokeStyle.set;
+	const width = natives.lineWidth.set;
+	const join = natives.lineJoin.set;
+	const cap = natives.lineCap.set;
+	const alpha = natives.globalAlpha.set;
+	const composite = natives.globalCompositeOperation.set;
+	const font = natives.font.set;
+	const offset = natives.lineDashOffset.set;
+	const setters = {
+		fillStyle(v) {
+			fill.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.fillStyle = v;
+		},
+		strokeStyle(v) {
+			stroke.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.strokeStyle = v;
+		},
+		lineWidth(v) {
+			width.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.lineWidth = v;
+		},
+		lineJoin(v) {
+			join.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.lineJoin = v;
+		},
+		lineCap(v) {
+			cap.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.lineCap = v;
+		},
+		globalAlpha(v) {
+			alpha.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.globalAlpha = v;
+		},
+		globalCompositeOperation(v) {
+			composite.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.globalCompositeOperation = v;
+		},
+		font(v) {
+			font.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.font = v;
+		},
+		lineDashOffset(v) {
+			offset.call(this, v);
+			const state = this[_STATE];
+			if (state) state.styles.dash = void 0;
+		}
+	};
+	const observers = {};
+	for (const key in setters) observers[key] = {
+		get: natives[key].get,
+		set: setters[key],
+		configurable: true,
+		enumerable: natives[key].enumerable
+	};
+	const { setLineDash, save, restore, reset } = proto;
+	if (typeof setLineDash !== "function" || typeof save !== "function" || typeof restore !== "function") return null;
+	observers.setLineDash = _method(function(segments) {
+		setLineDash.call(this, segments);
+		const state = this[_STATE];
+		if (state) state.styles.dash = void 0;
+	});
+	observers.save = _method(function() {
+		save.call(this);
+		const state = this[_STATE];
+		if (state) state.saved.push(Object.assign({}, state.styles));
+	});
+	observers.restore = _method(function() {
+		restore.call(this);
+		const state = this[_STATE];
+		if (!state) return;
+		const saved = state.saved.pop();
+		if (saved) for (const k in state.styles) state.styles[k] = saved[k];
+		else _forgetStyles(state.styles);
+	});
+	if (typeof reset === "function") observers.reset = _method(function() {
+		reset.call(this);
+		const state = this[_STATE];
+		if (!state) return;
+		state.saved.length = 0;
+		_forgetStyles(state.styles);
+	});
+	return observers;
+}
+function _styleState(ctx) {
+	if (Object.prototype.hasOwnProperty.call(ctx, _STATE)) return ctx[_STATE];
+	const proto = Object.getPrototypeOf(ctx);
+	if (!proto || !Object.isExtensible(ctx)) return null;
+	let observers = _observers.get(proto);
+	if (observers === void 0) {
+		try {
+			observers = _makeObservers(proto);
+		} catch (_unused) {
+			observers = null;
+		}
+		_observers.set(proto, observers);
+	}
+	if (!observers || Object.keys(observers).some((k) => Object.prototype.hasOwnProperty.call(ctx, k))) return null;
+	const state = {
+		styles: {},
+		saved: []
+	};
+	try {
+		Object.defineProperties(ctx, observers);
+		Object.defineProperty(ctx, _STATE, { value: state });
+	} catch (_unused2) {
+		return null;
+	}
+	return state;
+}
+var CanvasForm = class CanvasForm extends VisualForm {
+	_cacheForCtx() {
+		if (this._styleCacheCtx !== this._ctx) {
+			const state = _styleState(this._ctx);
+			this._styleCache = state ? state.styles : _uncached;
+			this._styleCacheCtx = this._ctx;
+		}
+		return this._styleCache;
+	}
+	static resetStyleCache(ctx) {
+		const state = Object.prototype.hasOwnProperty.call(ctx, _STATE) ? ctx[_STATE] : null;
+		if (state) {
+			_forgetStyles(state.styles);
+			state.saved.length = 0;
+		}
+	}
+	_set(key, value) {
+		const cache = this._cacheForCtx();
+		const ctx = this._ctx;
+		switch (key) {
+			case "fillStyle":
+				if (cache.fillStyle !== value || _cssHit(value, 0)) ctx.fillStyle = value;
+				return;
+			case "strokeStyle":
+				if (cache.strokeStyle !== value || _cssHit(value, 1)) ctx.strokeStyle = value;
+				return;
+			case "lineWidth":
+				if (cache.lineWidth !== value) ctx.lineWidth = value;
+				return;
+			case "lineJoin":
+				if (cache.lineJoin !== value) ctx.lineJoin = value;
+				return;
+			case "lineCap":
+				if (cache.lineCap !== value) ctx.lineCap = value;
+				return;
+			case "globalAlpha":
+				if (cache.globalAlpha !== value) ctx.globalAlpha = value;
+				return;
+			case "globalCompositeOperation":
+				if (cache.globalCompositeOperation !== value) ctx.globalCompositeOperation = value;
+				return;
+			case "font":
+				if (cache.font !== value || _cssHit(value, 2)) ctx.font = value;
+				return;
+			default: if (cache[key] !== value) ctx[key] = value;
+		}
+	}
+	constructor(space) {
+		super();
+		this._styleCache = null;
+		this._styleCacheCtx = null;
+		this._style = {
+			fillStyle: "#f03",
+			strokeStyle: "#fff",
+			lineWidth: 1,
+			lineJoin: "bevel",
+			lineCap: "butt",
+			globalAlpha: 1
+		};
+		if (!space) return this;
+		const _setup = (ctx) => {
+			this._ctx = ctx;
+			this._set("fillStyle", this._style.fillStyle);
+			this._set("strokeStyle", this._style.strokeStyle);
+			this._set("lineJoin", "bevel");
+			this._set("font", this._font.value);
+			this._ready = true;
+		};
+		if (space instanceof CanvasSpace) {
+			this._space = space;
+			if (this._space.ready && this._space.ctx) _setup(this._space.ctx);
+			else this._space.add({ start: () => {
+				_setup(this._space.ctx);
+			} });
+		} else _setup(space);
+	}
+	get space() {
+		return this._space;
+	}
+	get ctx() {
+		return this._ctx;
+	}
+	useOffscreen(off = true, clear = false) {
+		if (clear) this._space.clearOffscreen(typeof clear == "string" ? clear : null);
+		this._ctx = this._space.hasOffscreen && off ? this._space.offscreenCtx : this._space.ctx;
+		return this;
+	}
+	renderOffscreen(offset = [0, 0]) {
+		if (this._space.hasOffscreen) this._space.ctx.drawImage(this._space.offscreenCanvas, offset[0], offset[1], this._space.width, this._space.height);
+	}
+	alpha(a) {
+		this._set("globalAlpha", a);
+		this._style.globalAlpha = a;
+		return this;
+	}
+	fill(c) {
+		if (typeof c == "boolean") this.filled = c;
+		else {
+			this.filled = true;
+			this._style.fillStyle = c;
+			this._set("fillStyle", c);
+		}
+		return this;
+	}
+	fillOnly(c) {
+		this.stroke(false);
+		return this.fill(c);
+	}
+	stroke(c, width, linejoin, linecap) {
+		if (typeof c == "boolean") this.stroked = c;
+		else {
+			this.stroked = true;
+			this._style.strokeStyle = c;
+			this._set("strokeStyle", c);
+			if (width) {
+				this._set("lineWidth", width);
+				this._style.lineWidth = width;
+			}
+			if (linejoin) {
+				this._set("lineJoin", linejoin);
+				this._style.lineJoin = linejoin;
+			}
+			if (linecap) {
+				this._set("lineCap", linecap);
+				this._style.lineCap = linecap;
+			}
+		}
+		return this;
+	}
+	strokeOnly(c, width, linejoin, linecap) {
+		this.fill(false);
+		return this.stroke(c, width, linejoin, linecap);
+	}
+	applyFillStroke(filled = true, stroked = true, strokeWidth = 1) {
+		if (filled) {
+			if (typeof filled === "string") this.fill(filled);
+			this._ctx.fill();
+		}
+		if (stroked) {
+			if (typeof stroked === "string") this.stroke(stroked, strokeWidth);
+			this._ctx.stroke();
+		}
+		return this;
+	}
+	gradient(stops) {
+		const vals = [];
+		if (stops.length < 2) stops = [
+			...stops,
+			[.99, "#000"],
+			[1, "#000"]
+		];
+		for (let i = 0, len = stops.length; i < len; i++) {
+			const t = typeof stops[i] === "string" ? i * (1 / (stops.length - 1)) : stops[i][0];
+			const v = typeof stops[i] === "string" ? stops[i] : stops[i][1];
+			vals.push([t, v]);
+		}
+		return (area1, area2) => {
+			const grad = area2 ? this._ctx.createRadialGradient(area1[0][0], area1[0][1], Math.abs(area1[1][0]), area2[0][0], area2[0][1], Math.abs(area2[1][0])) : this._ctx.createLinearGradient(area1[0][0], area1[0][1], area1[1][0], area1[1][1]);
+			for (let i = 0, len = vals.length; i < len; i++) grad.addColorStop(vals[i][0], vals[i][1]);
+			return grad;
+		};
+	}
+	composite(mode = "source-over") {
+		this._set("globalCompositeOperation", mode);
+		return this;
+	}
+	clip() {
+		this._ctx.clip();
+		return this;
+	}
+	dash(segments = true, offset = 0) {
+		const cache = this._cacheForCtx();
+		if (segments === false || segments !== true && segments.length === 0) {
+			if (cache.dash !== "/0") {
+				this._ctx.setLineDash([]);
+				this._ctx.lineDashOffset = 0;
+				if (cache !== _uncached) cache.dash = "/0";
+			}
+		} else {
+			const seg = segments === true ? [5, 5] : segments;
+			const key = `${Array.prototype.join.call(seg, ",")}/${offset}`;
+			if (cache.dash !== key) {
+				this._ctx.setLineDash(seg);
+				this._ctx.lineDashOffset = offset;
+				if (cache !== _uncached) cache.dash = key;
+			}
+		}
+		return this;
+	}
+	font(sizeOrFont, weight, style, lineHeight, family) {
+		if (typeof sizeOrFont == "number") {
+			this._font.size = sizeOrFont;
+			if (family) this._font.face = family;
+			if (weight) this._font.weight = weight;
+			if (style) this._font.style = style;
+			if (lineHeight) this._font.lineHeight = lineHeight;
+		} else this._font = sizeOrFont;
+		this._set("font", this._font.value);
+		if (this._estimateMode) this.fontWidthEstimate(this._estimateMode);
+		return this;
+	}
+	fontWidthEstimate(estimate = true) {
+		if (!estimate) {
+			this._estimateMode = void 0;
+			this._estimateTextWidth = void 0;
+		} else {
+			const measure = (c) => this._ctx.measureText(c).width;
+			this._estimateMode = estimate === true ? "sample" : estimate;
+			this._estimateTextWidth = this._estimateMode === "char" ? Typography.charWidthCache(measure) : Typography.textWidthEstimator(measure);
+		}
+		return this;
+	}
+	getTextWidth(c) {
+		return !this._estimateTextWidth ? this._ctx.measureText(c).width : this._estimateTextWidth(c);
+	}
+	_textTruncate(str, width, tail = "", hint) {
+		return Typography.truncate(this.getTextWidth.bind(this), str, width, tail, hint);
+	}
+	_textAlign(box, vertical, offset, center) {
+		const _box = Util.iterToArray(box);
+		if (!Util.arrayCheck(_box)) return;
+		if (!center) center = Rectangle.center(_box);
+		let px = _box[0][0];
+		if (this._ctx.textAlign == "end" || this._ctx.textAlign == "right") px = _box[1][0];
+		else if (this._ctx.textAlign == "center" || this._ctx.textAlign == "middle") px = center[0];
+		let py = center[1];
+		if (vertical == "top" || vertical == "start") py = _box[0][1];
+		else if (vertical == "end" || vertical == "bottom") py = _box[1][1];
+		return offset ? new Pt(px + offset[0], py + offset[1]) : new Pt(px, py);
+	}
+	reset() {
+		this._cacheForCtx();
+		for (const k in this._style) if (this._style.hasOwnProperty(k)) this._ctx[k] = this._style[k];
+		this._font = new Font(14, "sans-serif");
+		this._ctx.font = this._font.value;
+		return this;
+	}
+	_paint() {
+		if (this._filled) this._ctx.fill();
+		if (this._stroked) this._ctx.stroke();
+	}
+	static point(ctx, p, radius = 5, shape = "square") {
+		if (!p) return;
+		if (!CanvasForm[shape]) throw new Error(`${shape} is not a static function of CanvasForm`);
+		CanvasForm[shape](ctx, p, radius);
+	}
+	point(p, radius = 5, shape = "square") {
+		CanvasForm.point(this._ctx, p, radius, shape);
+		this._paint();
+		return this;
+	}
+	static circle(ctx, pt, radius = 10) {
+		if (!pt) return;
+		ctx.beginPath();
+		ctx.arc(pt[0], pt[1], radius, 0, Const.two_pi, false);
+		ctx.closePath();
+	}
+	circle(pts) {
+		const p = Util.iterToArray(pts);
+		CanvasForm.circle(this._ctx, p[0], p[1][0]);
+		this._paint();
+		return this;
+	}
+	static ellipse(ctx, pt, radius, rotation = 0, startAngle = 0, endAngle = Const.two_pi, cc = false) {
+		if (!pt || !radius) return;
+		ctx.beginPath();
+		ctx.ellipse(pt[0], pt[1], radius[0], radius[1], rotation, startAngle, endAngle, cc);
+	}
+	ellipse(pt, radius, rotation = 0, startAngle = 0, endAngle = Const.two_pi, cc = false) {
+		CanvasForm.ellipse(this._ctx, pt, radius, rotation, startAngle, endAngle, cc);
+		this._paint();
+		return this;
+	}
+	static arc(ctx, pt, radius, startAngle, endAngle, cc) {
+		if (!pt) return;
+		ctx.beginPath();
+		ctx.arc(pt[0], pt[1], radius, startAngle, endAngle, cc);
+	}
+	arc(pt, radius, startAngle, endAngle, cc) {
+		CanvasForm.arc(this._ctx, pt, radius, startAngle, endAngle, cc);
+		this._paint();
+		return this;
+	}
+	static square(ctx, pt, halfsize) {
+		if (!pt) return;
+		const x1 = pt[0] - halfsize;
+		const y1 = pt[1] - halfsize;
+		const x2 = pt[0] + halfsize;
+		const y2 = pt[1] + halfsize;
+		ctx.beginPath();
+		ctx.moveTo(x1, y1);
+		ctx.lineTo(x1, y2);
+		ctx.lineTo(x2, y2);
+		ctx.lineTo(x2, y1);
+		ctx.closePath();
+	}
+	square(pt, halfsize) {
+		CanvasForm.square(this._ctx, pt, halfsize);
+		this._paint();
+		return this;
+	}
+	static line(ctx, pts) {
+		if (!Util.arrayCheck(pts)) return;
+		ctx.beginPath();
+		let i = 0;
+		if (Array.isArray(pts)) for (let k = 0, len = pts.length; k < len; k++) {
+			const it = pts[k];
+			if (it) {
+				if (i++ > 0) ctx.lineTo(it[0], it[1]);
+				else ctx.moveTo(it[0], it[1]);
+			}
+		}
+		else for (const it of pts) if (it) {
+			if (i++ > 0) ctx.lineTo(it[0], it[1]);
+			else ctx.moveTo(it[0], it[1]);
+		}
+	}
+	line(pts) {
+		const p = Util.iterToArray(pts);
+		if (Util.arrayCheck(p)) {
+			CanvasForm.line(this._ctx, p);
+			this._paint();
+		}
+		return this;
+	}
+	static bezier(ctx, pts) {
+		const p = Util.iterToArray(pts);
+		if (p.length < 4) return;
+		ctx.beginPath();
+		ctx.moveTo(p[0][0], p[0][1]);
+		for (let i = 3; i < p.length; i += 3) {
+			const c1 = p[i - 2];
+			const c2 = p[i - 1];
+			ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], p[i][0], p[i][1]);
+		}
+	}
+	bezier(pts) {
+		const p = Util.iterToArray(pts);
+		if (Util.arrayCheck(p, 4)) {
+			CanvasForm.bezier(this._ctx, p);
+			this._paint();
+		}
+		return this;
+	}
+	static polygon(ctx, pts) {
+		if (!Util.arrayCheck(pts)) return;
+		CanvasForm.line(ctx, pts);
+		ctx.closePath();
+	}
+	polygon(pts) {
+		const p = Util.iterToArray(pts);
+		if (Util.arrayCheck(p)) {
+			CanvasForm.polygon(this._ctx, p);
+			this._paint();
+		}
+		return this;
+	}
+	static compound(ctx, rings) {
+		let started = false;
+		for (const ring of rings) {
+			const p = Util.iterToArray(ring);
+			if (p.length < 2) continue;
+			if (typeof p[0][0] !== "number") {
+				Util.warn("compound expects rings of points; draw each polygon of a divide or crop result separately");
+				return;
+			}
+			if (!started) {
+				ctx.beginPath();
+				started = true;
+			}
+			ctx.moveTo(p[0][0], p[0][1]);
+			for (let i = 1, len = p.length; i < len; i++) ctx.lineTo(p[i][0], p[i][1]);
+			ctx.closePath();
+		}
+	}
+	compound(rings) {
+		const list = [];
+		let drawable = false;
+		for (const ring of rings) {
+			const p = Util.iterToArray(ring);
+			if (p.length > 0 && typeof p[0][0] !== "number") return Util.warn("compound expects rings of points; draw each polygon of a divide or crop result separately", this);
+			if (p.length >= 2) drawable = true;
+			list.push(p);
+		}
+		if (drawable) {
+			CanvasForm.compound(this._ctx, list);
+			this._paint();
+		}
+		return this;
+	}
+	static rect(ctx, pts) {
+		const p = Util.iterToArray(pts);
+		if (!Util.arrayCheck(p)) return;
+		ctx.beginPath();
+		ctx.moveTo(p[0][0], p[0][1]);
+		ctx.lineTo(p[0][0], p[1][1]);
+		ctx.lineTo(p[1][0], p[1][1]);
+		ctx.lineTo(p[1][0], p[0][1]);
+		ctx.closePath();
+	}
+	rect(pts) {
+		CanvasForm.rect(this._ctx, pts);
+		this._paint();
+		return this;
+	}
+	static image(ctx, ptOrRect, img, orig) {
+		const t = Util.iterToArray(ptOrRect);
+		let pos;
+		if (typeof t[0] === "number") pos = t;
+		else if (orig) {
+			const o = Util.iterToArray(orig);
+			pos = [
+				o[0][0],
+				o[0][1],
+				o[1][0] - o[0][0],
+				o[1][1] - o[0][1],
+				t[0][0],
+				t[0][1],
+				t[1][0] - t[0][0],
+				t[1][1] - t[0][1]
+			];
+		} else pos = [
+			t[0][0],
+			t[0][1],
+			t[1][0] - t[0][0],
+			t[1][1] - t[0][1]
+		];
+		if (img instanceof Img) {
+			if (img.loaded) ctx.drawImage(img.image, ...pos);
+		} else ctx.drawImage(img, ...pos);
+	}
+	image(ptOrRect, img, orig) {
+		if (img instanceof Img) {
+			if (img.loaded) CanvasForm.image(this._ctx, ptOrRect, img.image, orig);
+		} else CanvasForm.image(this._ctx, ptOrRect, img, orig);
+		return this;
+	}
+	static imageData(ctx, ptOrRect, img) {
+		const t = Util.iterToArray(ptOrRect);
+		if (typeof t[0] === "number") ctx.putImageData(img, t[0], t[1]);
+		else ctx.putImageData(img, t[0][0], t[0][1], 0, 0, t[1][0] - t[0][0], t[1][1] - t[0][1]);
+	}
+	imageData(ptOrRect, img) {
+		CanvasForm.imageData(this._ctx, ptOrRect, img);
+		return this;
+	}
+	static text(ctx, pt, txt, maxWidth) {
+		if (!pt) return;
+		ctx.fillText(txt, pt[0], pt[1], maxWidth);
+	}
+	text(pt, txt, maxWidth) {
+		CanvasForm.text(this._ctx, pt, txt, maxWidth);
+		return this;
+	}
+	textBox(box, txt, verticalAlign = "middle", tail = "", overrideBaseline = true) {
+		if (overrideBaseline) this._ctx.textBaseline = verticalAlign === "center" ? "middle" : verticalAlign === "start" ? "top" : verticalAlign === "end" ? "bottom" : verticalAlign;
+		const size = Rectangle.size(box);
+		const t = this._textTruncate(txt, size[0], tail);
+		this.text(this._textAlign(box, verticalAlign), t[0]);
+		return this;
+	}
+	paragraphBox(box, txt, lineHeight = 1.2, verticalAlign = "top", crop = true) {
+		const b = Group.fromArray(box);
+		const size = Rectangle.size(b);
+		this._ctx.textBaseline = "top";
+		const lstep = this._font.size * lineHeight;
+		let hint = Math.ceil(size[0] / Math.max(1, this.getTextWidth("n")));
+		const lines = [];
+		let sub = txt;
+		while (sub) {
+			var _dt;
+			if (crop && (lines.length + 1) * lstep > size[1]) break;
+			const t = this._textTruncate(sub, size[0], "", hint);
+			if (t[1] > 0) hint = t[1];
+			const newln = t[0].indexOf("\n");
+			if (newln >= 0) {
+				lines.push(t[0].slice(0, newln));
+				sub = sub.slice(newln + 1);
+				continue;
+			}
+			const consumedAll = t[1] === sub.length;
+			let dt;
+			if (consumedAll) dt = void 0;
+			else if (sub[t[1]] === " ") dt = t[1] + 1;
+			else {
+				dt = t[0].lastIndexOf(" ") + 1;
+				if (dt <= 0) dt = void 0;
+			}
+			lines.push(dt === void 0 ? t[0] : t[0].slice(0, dt));
+			if (t[1] <= 0 || consumedAll) break;
+			sub = sub.slice((_dt = dt) !== null && _dt !== void 0 ? _dt : t[1]);
+		}
+		const lsize = lines.length * lstep;
+		let lbox = b;
+		if (verticalAlign == "middle" || verticalAlign == "center") {
+			let lpad = (size[1] - lsize) / 2;
+			if (crop) lpad = Math.max(0, lpad);
+			lbox = new Group(b[0].$add(0, lpad), b[1].$subtract(0, lpad));
+		} else if (verticalAlign == "bottom") lbox = new Group(b[0].$add(0, size[1] - lsize), b[1]);
+		else lbox = new Group(b[0], b[0].$add(size[0], lsize));
+		const center = Rectangle.center(lbox);
+		for (let i = 0, len = lines.length; i < len; i++) this.text(this._textAlign(lbox, "top", [0, i * lstep], center), lines[i]);
+		return this;
+	}
+	alignText(alignment = "left", baseline = "alphabetic") {
+		if (baseline == "center") baseline = "middle";
+		if (baseline == "baseline") baseline = "alphabetic";
+		this._ctx.textAlign = alignment;
+		this._ctx.textBaseline = baseline;
+		return this;
+	}
+	log(txt) {
+		const w = this._ctx.measureText(txt).width + 20;
+		this.stroke(false).fill("rgba(0,0,0,.4)").rect([[0, 0], [w, 20]]);
+		this.fill("#fff").text([10, 14], txt);
+		return this;
+	}
+};
+
+//#endregion
+//#region src/Create.ts
+var Create = class {
+	static distributeRandom(bound, count, dimensions = 2) {
+		let pts = new Group();
+		for (let i = 0; i < count; i++) {
+			let p = [bound.x + Num.random() * bound.width];
+			if (dimensions > 1) p.push(bound.y + Num.random() * bound.height);
+			if (dimensions > 2) p.push(bound.z + Num.random() * bound.depth);
+			pts.push(new Pt(p));
+		}
+		return pts;
+	}
+	static distributeLinear(line, count) {
+		if (count <= 0) return new Group();
+		let _line = Util.iterToArray(line);
+		if (count === 1) return new Group(_line[0]);
+		let ln = Line.subpoints(_line, count - 2);
+		ln.unshift(_line[0]);
+		ln.push(_line[_line.length - 1]);
+		return ln;
+	}
+	static gridPts(bound, columns, rows, orientation = [.5, .5]) {
+		if (columns === 0 || rows === 0) throw new Error("grid columns and rows cannot be 0");
+		let unit = bound.size.$subtract(1).$divide(columns, rows);
+		let offset = unit.$multiply(orientation);
+		let g = new Group();
+		for (let r = 0; r < rows; r++) for (let c = 0; c < columns; c++) g.push(bound.topLeft.$add(unit.$multiply(c, r)).add(offset));
+		return g;
+	}
+	static gridCells(bound, columns, rows) {
+		if (columns === 0 || rows === 0) throw new Error("grid columns and rows cannot be 0");
+		let unit = bound.size.$subtract(1).divide(columns, rows);
+		let g = [];
+		for (let r = 0; r < rows; r++) for (let c = 0; c < columns; c++) g.push(new Group(bound.topLeft.$add(unit.$multiply(c, r)), bound.topLeft.$add(unit.$multiply(c, r).add(unit))));
+		return g;
+	}
+	static radialPts(center, radius, count, angleOffset = -Const.half_pi) {
+		let g = new Group();
+		let a = Const.two_pi / count;
+		for (let i = 0; i < count; i++) g.push(new Pt(center).toAngle(a * i + angleOffset, radius, true));
+		return g;
+	}
+	static noisePts(pts, dx = .01, dy = .01, rows = 0, columns = 0) {
+		let seed = Num.random();
+		let g = new Group();
+		let i = 0;
+		const perRow = columns > 0 ? columns : rows > 0 ? rows : 0;
+		for (let p of pts) {
+			let np = new Noise(p);
+			let r = perRow > 0 ? Math.floor(i / perRow) : i;
+			let c = perRow > 0 ? i % perRow : i;
+			np.initNoise(dx * c, dy * r);
+			np.seed(seed);
+			g.push(np);
+			i++;
+		}
+		return g;
+	}
+	static delaunay(pts) {
+		return Delaunay.from(pts);
+	}
+	static flock(pts, options = {}) {
+		const flock = new Flock();
+		flock.setup(options);
+		for (const p of pts) flock.addBoid(p);
+		return flock;
+	}
+	static sampling(bound, radius, options = {}) {
+		return new PoissonDisk().setup(bound, radius, options).sample();
+	}
+};
+const __noise_grad3 = [
+	[
+		1,
+		1,
+		0
+	],
+	[
+		-1,
+		1,
+		0
+	],
+	[
+		1,
+		-1,
+		0
+	],
+	[
+		-1,
+		-1,
+		0
+	],
+	[
+		1,
+		0,
+		1
+	],
+	[
+		-1,
+		0,
+		1
+	],
+	[
+		1,
+		0,
+		-1
+	],
+	[
+		-1,
+		0,
+		-1
+	],
+	[
+		0,
+		1,
+		1
+	],
+	[
+		0,
+		-1,
+		1
+	],
+	[
+		0,
+		1,
+		-1
+	],
+	[
+		0,
+		-1,
+		-1
+	]
+];
+const __noise_permTable = [
+	151,
+	160,
+	137,
+	91,
+	90,
+	15,
+	131,
+	13,
+	201,
+	95,
+	96,
+	53,
+	194,
+	233,
+	7,
+	225,
+	140,
+	36,
+	103,
+	30,
+	69,
+	142,
+	8,
+	99,
+	37,
+	240,
+	21,
+	10,
+	23,
+	190,
+	6,
+	148,
+	247,
+	120,
+	234,
+	75,
+	0,
+	26,
+	197,
+	62,
+	94,
+	252,
+	219,
+	203,
+	117,
+	35,
+	11,
+	32,
+	57,
+	177,
+	33,
+	88,
+	237,
+	149,
+	56,
+	87,
+	174,
+	20,
+	125,
+	136,
+	171,
+	168,
+	68,
+	175,
+	74,
+	165,
+	71,
+	134,
+	139,
+	48,
+	27,
+	166,
+	77,
+	146,
+	158,
+	231,
+	83,
+	111,
+	229,
+	122,
+	60,
+	211,
+	133,
+	230,
+	220,
+	105,
+	92,
+	41,
+	55,
+	46,
+	245,
+	40,
+	244,
+	102,
+	143,
+	54,
+	65,
+	25,
+	63,
+	161,
+	1,
+	216,
+	80,
+	73,
+	209,
+	76,
+	132,
+	187,
+	208,
+	89,
+	18,
+	169,
+	200,
+	196,
+	135,
+	130,
+	116,
+	188,
+	159,
+	86,
+	164,
+	100,
+	109,
+	198,
+	173,
+	186,
+	3,
+	64,
+	52,
+	217,
+	226,
+	250,
+	124,
+	123,
+	5,
+	202,
+	38,
+	147,
+	118,
+	126,
+	255,
+	82,
+	85,
+	212,
+	207,
+	206,
+	59,
+	227,
+	47,
+	16,
+	58,
+	17,
+	182,
+	189,
+	28,
+	42,
+	223,
+	183,
+	170,
+	213,
+	119,
+	248,
+	152,
+	2,
+	44,
+	154,
+	163,
+	70,
+	221,
+	153,
+	101,
+	155,
+	167,
+	43,
+	172,
+	9,
+	129,
+	22,
+	39,
+	253,
+	9,
+	98,
+	108,
+	110,
+	79,
+	113,
+	224,
+	232,
+	178,
+	185,
+	112,
+	104,
+	218,
+	246,
+	97,
+	228,
+	251,
+	34,
+	242,
+	193,
+	238,
+	210,
+	144,
+	12,
+	191,
+	179,
+	162,
+	241,
+	81,
+	51,
+	145,
+	235,
+	249,
+	14,
+	239,
+	107,
+	49,
+	192,
+	214,
+	31,
+	181,
+	199,
+	106,
+	157,
+	184,
+	84,
+	204,
+	176,
+	115,
+	121,
+	50,
+	45,
+	127,
+	4,
+	150,
+	254,
+	138,
+	236,
+	205,
+	93,
+	222,
+	114,
+	67,
+	29,
+	24,
+	72,
+	243,
+	141,
+	128,
+	195,
+	78,
+	66,
+	215,
+	61,
+	156,
+	180
+];
+const __noise_permDoubled = /* @__PURE__ */ __noise_permTable.concat(__noise_permTable);
+let __noise_lastSeed = void 0;
+let __noise_lastPerm = null;
+function __noise_seededPerm(seed) {
+	if (seed === __noise_lastSeed && __noise_lastPerm) return __noise_lastPerm;
+	let s = seed;
+	if (s > 0 && s < 1) s *= 65536;
+	s = Math.floor(s);
+	if (s < 256) s |= s << 8;
+	const perm = new Array(512);
+	for (let i = 0; i < 256; i++) {
+		const v = i & 1 ? __noise_permTable[i] ^ s & 255 : __noise_permTable[i] ^ s >> 8 & 255;
+		perm[i] = perm[i + 256] = v;
+	}
+	__noise_lastSeed = seed;
+	__noise_lastPerm = perm;
+	return perm;
+}
+var Noise = class extends Pt {
+	constructor(...args) {
+		super(...args);
+		this.perm = [];
+		this._n = new Pt(.01, .01);
+		this.perm = __noise_permDoubled;
+	}
+	initNoise(...args) {
+		this._n = new Pt(...args);
+		return this;
+	}
+	step(x = 0, y = 0) {
+		this._n.add(x, y);
+		return this;
+	}
+	seed(s) {
+		this.perm = __noise_seededPerm(s);
+		return this;
+	}
+	noise2D() {
+		const perm = this.perm;
+		const nx = this._n[0];
+		const ny = this._n[1];
+		const cx = Math.floor(nx);
+		const cy = Math.floor(ny);
+		const i = cx & 255;
+		const j = cy & 255;
+		const x = nx - cx;
+		const y = ny - cy;
+		const g00 = __noise_grad3[perm[i + perm[j]] % 12];
+		const g01 = __noise_grad3[perm[i + perm[j + 1]] % 12];
+		const g10 = __noise_grad3[perm[i + 1 + perm[j]] % 12];
+		const g11 = __noise_grad3[perm[i + 1 + perm[j + 1]] % 12];
+		const n00 = g00[0] * x + g00[1] * y;
+		const n01 = g01[0] * x + g01[1] * (y - 1);
+		const n10 = g10[0] * (x - 1) + g10[1] * y;
+		const n11 = g11[0] * (x - 1) + g11[1] * (y - 1);
+		const _fade = (f) => f * f * f * (f * (f * 6 - 15) + 10);
+		const tx = _fade(x);
+		const u = n00 + tx * (n10 - n00);
+		const v = n01 + tx * (n11 - n01);
+		return u + _fade(y) * (v - u);
+	}
+};
+function _clipCellToRect(cell, x0, y0, x1, y1) {
+	let inside = true;
+	for (let i = 0, len = cell.length; i < len; i++) {
+		const px = cell[i][0];
+		const py = cell[i][1];
+		if (px < x0 || px > x1 || py < y0 || py > y1 || !Number.isFinite(px + py)) {
+			inside = false;
+			break;
+		}
+	}
+	if (inside) return cell;
+	if (cell.length < 3) {
+		const kept = new Group();
+		for (let i = 0, len = cell.length; i < len; i++) {
+			const px = cell[i][0];
+			const py = cell[i][1];
+			if (px >= x0 && px <= x1 && py >= y0 && py <= y1) kept.push(cell[i]);
+		}
+		return kept;
+	}
+	const big = 1e7;
+	let pts = [];
+	for (let i = 0, len = cell.length; i < len; i++) {
+		let px = cell[i][0];
+		let py = cell[i][1];
+		if (!Number.isFinite(px)) px = px > 0 ? big : -1e7;
+		if (!Number.isFinite(py)) py = py > 0 ? big : -1e7;
+		if (Number.isNaN(px) || Number.isNaN(py)) continue;
+		pts.push([px, py]);
+	}
+	const clip = (input, keep, cross) => {
+		const output = [];
+		for (let i = 0, len = input.length; i < len; i++) {
+			const a = input[i === 0 ? len - 1 : i - 1];
+			const b = input[i];
+			const keepB = keep(b);
+			if (keep(a)) {
+				if (keepB) output.push(b);
+				else output.push(cross(a, b));
+			} else if (keepB) output.push(cross(a, b), b);
+		}
+		return output;
+	};
+	const lerpAt = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+	pts = clip(pts, (p) => p[0] >= x0, (a, b) => lerpAt(a, b, (x0 - a[0]) / (b[0] - a[0])));
+	pts = clip(pts, (p) => p[0] <= x1, (a, b) => lerpAt(a, b, (x1 - a[0]) / (b[0] - a[0])));
+	pts = clip(pts, (p) => p[1] >= y0, (a, b) => lerpAt(a, b, (y0 - a[1]) / (b[1] - a[1])));
+	pts = clip(pts, (p) => p[1] <= y1, (a, b) => lerpAt(a, b, (y1 - a[1]) / (b[1] - a[1])));
+	const out = new Group();
+	for (let i = 0, len = pts.length; i < len; i++) out.push(new Pt(pts[i]));
+	return out;
+}
+function _clipCellToBisector(cell, a, b) {
+	const dx = b[0] - a[0];
+	const dy = b[1] - a[1];
+	const mx = a[0] + dx / 2;
+	const my = a[1] + dy / 2;
+	const out = new Group();
+	for (let i = 0; i < cell.length; i++) {
+		const p = cell[i === 0 ? cell.length - 1 : i - 1];
+		const q = cell[i];
+		const dp = (p[0] - mx) * dx + (p[1] - my) * dy;
+		const dq = (q[0] - mx) * dx + (q[1] - my) * dy;
+		if (dp <= 0 !== dq <= 0) {
+			const t = dp / (dp - dq);
+			out.push(new Pt(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t));
+		}
+		if (dq <= 0) out.push(q);
+	}
+	return out;
+}
+function _circumcircle(ax, ay, bx, by, cx, cy) {
+	const bx2 = bx - ax;
+	const by2 = by - ay;
+	const cx2 = cx - ax;
+	const cy2 = cy - ay;
+	const d = 2 * (bx2 * cy2 - by2 * cx2);
+	const bl = bx2 * bx2 + by2 * by2;
+	const cl = cx2 * cx2 + cy2 * cy2;
+	const ux = (cy2 * bl - by2 * cl) / d;
+	const uy = (bx2 * cl - cx2 * bl) / d;
+	return [
+		ax + ux,
+		ay + uy,
+		Math.sqrt(ux * ux + uy * uy)
+	];
+}
+var Delaunay = class extends Group {
+	constructor(..._args) {
+		super(..._args);
+		this._mesh = [];
+		this._meshBuilt = true;
+		this._count = 0;
+		this._tri = null;
+		this._shapes = null;
+	}
+	delaunay(triangleOnly = true) {
+		const n = this.length;
+		this._count = n;
+		this._mesh = [];
+		this._meshBuilt = false;
+		this._tri = null;
+		this._shapes = null;
+		if (n < 3) return [];
+		const coords = new Float64Array(n * 2);
+		for (let i = 0; i < n; i++) {
+			coords[2 * i] = this[i][0];
+			coords[2 * i + 1] = this[i][1];
+		}
+		const tri = triangulate(coords, n);
+		if (tri.triangles.length === 0) return [];
+		this._tri = tri;
+		const indices = tri.triangles;
+		const shapes = [];
+		const tris = [];
+		for (let t = 0, len = indices.length; t < len; t += 3) {
+			const i = indices[t];
+			const j = indices[t + 1];
+			const k = indices[t + 2];
+			const triangle = this._triangle(i, j, k);
+			const [ccx, ccy, r] = _circumcircle(coords[2 * i], coords[2 * i + 1], coords[2 * j], coords[2 * j + 1], coords[2 * k], coords[2 * k + 1]);
+			const circle = new Group(new Pt(ccx, ccy), new Pt(r, r));
+			shapes.push({
+				i,
+				j,
+				k,
+				triangle,
+				circle
+			});
+			tris.push(triangle);
+		}
+		this._shapes = shapes;
+		return triangleOnly ? tris : shapes;
+	}
+	_ensureMesh() {
+		if (!this._meshBuilt) {
+			this._meshBuilt = true;
+			this._mesh = [];
+			for (let i = 0; i < this._count; i++) this._mesh[i] = {};
+			if (this._shapes) for (let s = 0, len = this._shapes.length; s < len; s++) this._cache(this._shapes[s]);
+		}
+		return this._mesh;
+	}
+	voronoi(bound) {
+		const cells = this._voronoiCells();
+		if (!bound) return cells;
+		const _bound = Geom.boundingBox(Util.iterToArray(bound));
+		const x0 = _bound[0][0];
+		const y0 = _bound[0][1];
+		const x1 = _bound[1][0];
+		const y1 = _bound[1][1];
+		const hull = /* @__PURE__ */ new Set();
+		if (this._tri) for (const i of this._tri.hull) hull.add(i);
+		const seen = /* @__PURE__ */ new Set();
+		for (let i = 0, len = cells.length; i < len; i++) {
+			const key = `${this[i][0]},${this[i][1]}`;
+			if (seen.has(key)) {
+				cells[i] = new Group();
+				continue;
+			}
+			seen.add(key);
+			if (!hull.has(i) && cells[i].length >= 3) {
+				cells[i] = _clipCellToRect(cells[i], x0, y0, x1, y1);
+				continue;
+			}
+			const neighbors = /* @__PURE__ */ new Set();
+			for (const shape of this.neighbors(i)) for (const index of [
+				shape.i,
+				shape.j,
+				shape.k
+			]) if (index !== i) neighbors.add(index);
+			if (neighbors.size === 0) {
+				for (let j = 0; j < this.length; j++) if (j !== i) neighbors.add(j);
+			}
+			let cell = Group.fromArray([
+				[x0, y0],
+				[x1, y0],
+				[x1, y1],
+				[x0, y1]
+			]);
+			for (const j of neighbors) cell = _clipCellToBisector(cell, this[i], this[j]);
+			cells[i] = cell;
+		}
+		return cells;
+	}
+	_voronoiCells() {
+		const tri = this._tri;
+		const shapes = this._shapes;
+		if (!tri || !shapes) {
+			const vs = [];
+			const n = this._ensureMesh();
+			for (let i = 0, len = n.length; i < len; i++) vs.push(this.neighborPts(i, true));
+			return vs;
+		}
+		const n = this._count;
+		const triangles = tri.triangles;
+		const neighbors = tri.neighbors;
+		const start = new Int32Array(n).fill(-1);
+		for (let h = 0, len = triangles.length; h < len; h++) {
+			const p = triangles[h];
+			if (neighbors[h] === -1 || start[p] === -1) start[p] = h;
+		}
+		const vs = [];
+		for (let i = 0; i < n; i++) {
+			const cell = new Group();
+			let h = start[i];
+			if (h !== -1) {
+				const first = h / 3 | 0;
+				for (;;) {
+					const t = h / 3 | 0;
+					const center = shapes[t].circle[0];
+					if (!cell.length || !center.equals(cell[cell.length - 1], 0)) cell.push(center);
+					const twin = neighbors[3 * t + (h + 2) % 3];
+					if (twin === -1 || (twin / 3 | 0) === first) break;
+					h = twin;
+				}
+			}
+			if (cell.length > 1 && cell[0].equals(cell[cell.length - 1], 0)) cell.pop();
+			vs.push(cell);
+		}
+		return vs;
+	}
+	mesh() {
+		return this._ensureMesh();
+	}
+	neighborPts(i, sort = false) {
+		let cs = new Group();
+		let n = this._ensureMesh();
+		for (let k in n[i]) if (n[i].hasOwnProperty(k)) cs.push(n[i][k].circle[0]);
+		return sort && cs.length > 1 ? Geom.sortEdges(cs) : cs;
+	}
+	neighbors(i) {
+		let cs = [];
+		let n = this._ensureMesh();
+		for (let k in n[i]) if (n[i].hasOwnProperty(k)) cs.push(n[i][k]);
+		return cs;
+	}
+	_cache(o) {
+		this._mesh[o.i][`${Math.min(o.j, o.k)}-${Math.max(o.j, o.k)}`] = o;
+		this._mesh[o.j][`${Math.min(o.i, o.k)}-${Math.max(o.i, o.k)}`] = o;
+		this._mesh[o.k][`${Math.min(o.i, o.j)}-${Math.max(o.i, o.j)}`] = o;
+	}
+	_superTriangle() {
+		let minPt = this[0];
+		let maxPt = this[0];
+		for (let i = 1, len = this.length; i < len; i++) {
+			minPt = minPt.$min(this[i]);
+			maxPt = maxPt.$max(this[i]);
+		}
+		let d = maxPt.$subtract(minPt);
+		let mid = minPt.$add(maxPt).divide(2);
+		let dmax = Math.max(d[0], d[1]);
+		return new Group(mid.$subtract(20 * dmax, dmax), mid.$add(0, 20 * dmax), mid.$add(20 * dmax, -dmax));
+	}
+	_triangle(i, j, k, pts = this) {
+		return new Group(pts[i], pts[j], pts[k]);
+	}
+	_circum(i, j, k, tri, pts = this) {
+		let t = tri || this._triangle(i, j, k, pts);
+		return {
+			i,
+			j,
+			k,
+			triangle: t,
+			circle: Triangle.circumcircle(t)
+		};
+	}
+	static _dedupe(edges) {
+		let j = edges.length;
+		while (j > 1) {
+			let b = edges[--j];
+			let a = edges[--j];
+			let i = j;
+			while (i > 1) {
+				let n = edges[--i];
+				let m = edges[--i];
+				if (a == m && b == n || a == n && b == m) {
+					edges.splice(j, 2);
+					edges.splice(i, 2);
+					break;
+				}
+			}
+		}
+		return edges;
+	}
+};
+function __flock_accumulateUnit(out, dx, dy, weight) {
+	const mag2 = dx * dx + dy * dy;
+	if (mag2 <= 0) return;
+	const scale = weight / Math.sqrt(mag2);
+	out[0] += dx * scale;
+	out[1] += dy * scale;
+}
+const __flock_tieBreak = 1;
+const __flock_minSepFraction = .01;
+const __flock_maxCell = 2147483647;
+const __flock_noCell = -2147483648;
+var Boid = class extends Pt {
+	constructor(..._args2) {
+		super(..._args2);
+		this._vel = new Pt(0, 0);
+	}
+	get velocity() {
+		return this._vel;
+	}
+	set velocity(v) {
+		this._vel = v;
+	}
+	get speed() {
+		return Math.sqrt(this._vel[0] * this._vel[0] + this._vel[1] * this._vel[1]);
+	}
+	get heading() {
+		return Math.atan2(this._vel[1], this._vel[0]);
+	}
+};
+var Flock = class extends Group {
+	constructor(..._args3) {
+		super(..._args3);
+		this._perception = 40;
+		this._separation = 20;
+		this._cohesionWeight = 1;
+		this._alignWeight = 1;
+		this._separateWeight = 1.5;
+		this._maxSpeed = 100;
+		this._minSpeed = 0;
+		this._maxForce = 200;
+		this._boundary = "steer";
+		this._margin = 50;
+		this._maxTimeStep = 50;
+		this._bound = null;
+		this._initialSpeed = void 0;
+		this._pos = /* @__PURE__ */ new Float32Array(0);
+		this._vel = /* @__PURE__ */ new Float32Array(0);
+		this._sums = /* @__PURE__ */ new Float32Array(0);
+		this._counts = /* @__PURE__ */ new Uint32Array(0);
+		this._hashKeys = /* @__PURE__ */ new Uint32Array(0);
+		this._cellX = /* @__PURE__ */ new Int32Array(0);
+		this._cellY = /* @__PURE__ */ new Int32Array(0);
+		this._cellStart = /* @__PURE__ */ new Uint32Array(0);
+		this._cellEntries = /* @__PURE__ */ new Uint32Array(0);
+		this._steerOut = /* @__PURE__ */ new Float32Array(2);
+	}
+	setup(options) {
+		if (options.perception !== void 0) this.perception = options.perception;
+		if (options.separation !== void 0) this.separation = options.separation;
+		if (options.cohesionWeight !== void 0) this._cohesionWeight = options.cohesionWeight;
+		if (options.alignWeight !== void 0) this._alignWeight = options.alignWeight;
+		if (options.separateWeight !== void 0) this._separateWeight = options.separateWeight;
+		if (options.maxSpeed !== void 0) this.maxSpeed = options.maxSpeed;
+		if (options.minSpeed !== void 0) this.minSpeed = options.minSpeed;
+		if (options.maxForce !== void 0) this._maxForce = options.maxForce;
+		if (options.bound !== void 0) this._bound = options.bound;
+		if (options.boundary !== void 0) this._boundary = options.boundary;
+		if (options.margin !== void 0) this.margin = options.margin;
+		if (options.maxTimeStep !== void 0) this.maxTimeStep = options.maxTimeStep;
+		if (options.initialSpeed !== void 0) this._initialSpeed = options.initialSpeed;
+		return this;
+	}
+	get perception() {
+		return this._perception;
+	}
+	set perception(r) {
+		this._perception = Math.max(0, r);
+	}
+	get separation() {
+		return this._separation;
+	}
+	set separation(r) {
+		this._separation = Math.max(0, r);
+	}
+	get cohesionWeight() {
+		return this._cohesionWeight;
+	}
+	set cohesionWeight(w) {
+		this._cohesionWeight = w;
+	}
+	get alignWeight() {
+		return this._alignWeight;
+	}
+	set alignWeight(w) {
+		this._alignWeight = w;
+	}
+	get separateWeight() {
+		return this._separateWeight;
+	}
+	set separateWeight(w) {
+		this._separateWeight = w;
+	}
+	get maxSpeed() {
+		return this._maxSpeed;
+	}
+	set maxSpeed(s) {
+		this._maxSpeed = Math.max(0, s);
+	}
+	get minSpeed() {
+		return this._minSpeed;
+	}
+	set minSpeed(s) {
+		this._minSpeed = Math.max(0, s);
+	}
+	get maxForce() {
+		return this._maxForce;
+	}
+	set maxForce(f) {
+		this._maxForce = f;
+	}
+	get bound() {
+		return this._bound;
+	}
+	set bound(b) {
+		this._bound = b;
+	}
+	get boundary() {
+		return this._boundary;
+	}
+	set boundary(b) {
+		this._boundary = b;
+	}
+	get margin() {
+		return this._margin;
+	}
+	set margin(m) {
+		this._margin = Math.max(0, m);
+	}
+	get maxTimeStep() {
+		return this._maxTimeStep;
+	}
+	set maxTimeStep(ms) {
+		this._maxTimeStep = Math.max(0, ms);
+	}
+	get initialSpeed() {
+		return this._initialSpeed === void 0 ? this._maxSpeed * .5 : this._initialSpeed;
+	}
+	set initialSpeed(s) {
+		this._initialSpeed = s;
+	}
+	addBoid(pt, velocity) {
+		const isBoid = pt instanceof Boid;
+		const boid = isBoid ? pt : new Boid(pt);
+		if (velocity !== void 0) {
+			boid.velocity[0] = velocity[0];
+			boid.velocity[1] = velocity[1];
+		} else if (!isBoid) {
+			const a = Num.random() * Const.two_pi;
+			const s = this.initialSpeed;
+			boid.velocity[0] = Math.cos(a) * s;
+			boid.velocity[1] = Math.sin(a) * s;
+		}
+		this.push(boid);
+		return this;
+	}
+	step(ms) {
+		const n = this.length;
+		if (n === 0 || !(ms > 0)) return this;
+		const dt = Math.min(ms, this._maxTimeStep) / 1e3;
+		if (dt <= 0) return this;
+		this._ensureBuffers(n);
+		this._gather(n);
+		if (n > 1 && this._perception > 0) this._accumulate(n);
+		else {
+			this._sums.fill(0, 0, n * 6);
+			this._counts.fill(0, 0, n);
+		}
+		this._integrate(n, dt);
+		this._scatter(n);
+		return this;
+	}
+	_ensureBuffers(n) {
+		if (this._pos.length < n * 2) {
+			const size = n * 2 * 2;
+			this._pos = new Float32Array(size);
+			this._vel = new Float32Array(size);
+			this._sums = new Float32Array(size * 3);
+			this._counts = new Uint32Array(size);
+			this._hashKeys = new Uint32Array(size);
+			this._cellX = new Int32Array(size);
+			this._cellY = new Int32Array(size);
+			this._cellEntries = new Uint32Array(size);
+		}
+	}
+	_gather(n) {
+		const pos = this._pos;
+		const vel = this._vel;
+		for (let i = 0; i < n; i++) {
+			let b = this[i];
+			let v = b.velocity;
+			if (v === void 0) {
+				b = new Boid(b);
+				v = b.velocity;
+				this[i] = b;
+			}
+			const k = i * 2;
+			pos[k] = b[0];
+			pos[k + 1] = b[1];
+			vel[k] = v[0];
+			vel[k + 1] = v[1];
+		}
+	}
+	_scatter(n) {
+		const pos = this._pos;
+		const vel = this._vel;
+		for (let i = 0; i < n; i++) {
+			const b = this[i];
+			const v = b.velocity;
+			const k = i * 2;
+			b[0] = pos[k];
+			b[1] = pos[k + 1];
+			v[0] = vel[k];
+			v[1] = vel[k + 1];
+		}
+	}
+	_accumulate(n) {
+		const pos = this._pos;
+		const vel = this._vel;
+		const sums = this._sums;
+		const counts = this._counts;
+		sums.fill(0, 0, n * 6);
+		counts.fill(0, 0, n);
+		const r2 = this._perception * this._perception;
+		const sep = Math.min(this._separation, this._perception);
+		const sep2 = sep * sep;
+		const minSep = sep * __flock_minSepFraction;
+		const minSep2 = minSep * minSep;
+		const inv = 1 / this._perception;
+		let m = 16;
+		while (m < n * 2) m <<= 1;
+		const mask = m - 1;
+		if (this._cellStart.length < m + 1) this._cellStart = new Uint32Array(m + 1);
+		const keys = this._hashKeys;
+		const cellX = this._cellX;
+		const cellY = this._cellY;
+		const start = this._cellStart;
+		const entries = this._cellEntries;
+		start.fill(0, 0, m + 1);
+		for (let i = 0; i < n; i++) {
+			const cx = Math.floor(pos[i * 2] * inv);
+			const cy = Math.floor(pos[i * 2 + 1] * inv);
+			if (cx >= -2147483647 && cx <= __flock_maxCell && cy >= -2147483647 && cy <= __flock_maxCell) {
+				cellX[i] = cx;
+				cellY[i] = cy;
+			} else {
+				cellX[i] = __flock_noCell;
+				cellY[i] = __flock_noCell;
+			}
+			const key = (Math.imul(cellX[i], 2654435761) ^ Math.imul(cellY[i], 2246822519)) >>> 0 & mask;
+			keys[i] = key;
+			start[key]++;
+		}
+		let sum = 0;
+		for (let k = 0; k < m; k++) {
+			const c = start[k];
+			start[k] = sum;
+			sum += c;
+		}
+		start[m] = sum;
+		for (let i = 0; i < n; i++) entries[start[keys[i]]++] = i;
+		for (let i = 0; i < n; i++) {
+			const cx = cellX[i];
+			if (cx === __flock_noCell) continue;
+			const cy = cellY[i];
+			const ki = i * 2;
+			const ix = pos[ki];
+			const iy = pos[ki + 1];
+			const ivx = vel[ki];
+			const ivy = vel[ki + 1];
+			const si = i * 6;
+			for (let c = 0; c < 5; c++) {
+				const gx = c === 2 ? cx - 1 : c === 0 || c === 3 ? cx : cx + 1;
+				const gy = c < 2 ? cy : cy + 1;
+				const key = (Math.imul(gx, 2654435761) ^ Math.imul(gy, 2246822519)) >>> 0 & mask;
+				const end = start[key];
+				const begin = key > 0 ? start[key - 1] : 0;
+				for (let e = begin; e < end; e++) {
+					const j = entries[e];
+					if (cellX[j] !== gx || cellY[j] !== gy) continue;
+					if (c === 0 && j <= i) continue;
+					const kj = j * 2;
+					const jx = pos[kj];
+					const jy = pos[kj + 1];
+					const dx = jx - ix;
+					const dy = jy - iy;
+					const d2 = dx * dx + dy * dy;
+					if (!(d2 < r2)) continue;
+					const sj = j * 6;
+					sums[si] += jx;
+					sums[si + 1] += jy;
+					sums[sj] += ix;
+					sums[sj + 1] += iy;
+					sums[si + 2] += vel[kj];
+					sums[si + 3] += vel[kj + 1];
+					sums[sj + 2] += ivx;
+					sums[sj + 3] += ivy;
+					counts[i]++;
+					counts[j]++;
+					if (d2 < sep2) {
+						let ox = dx;
+						let oy = dy;
+						let dd = d2;
+						if (dd === 0) {
+							ox = __flock_tieBreak;
+							oy = 0;
+							dd = minSep2;
+						} else if (dd < minSep2) dd = minSep2;
+						const w = 1 / dd;
+						const wx = ox * w;
+						const wy = oy * w;
+						sums[si + 4] -= wx;
+						sums[si + 5] -= wy;
+						sums[sj + 4] += wx;
+						sums[sj + 5] += wy;
+					}
+				}
+			}
+		}
+	}
+	_integrate(n, dt) {
+		const pos = this._pos;
+		const vel = this._vel;
+		const sums = this._sums;
+		const counts = this._counts;
+		const out = this._steerOut;
+		const maxSpeed = this._maxSpeed;
+		const maxForce = this._maxForce;
+		const minSpeed = Math.min(this._minSpeed, maxSpeed);
+		const cw = this._cohesionWeight;
+		const aw = this._alignWeight;
+		const sw = this._separateWeight;
+		const bound = this._bound;
+		const boundary = bound ? this._boundary : "none";
+		const steer = boundary === "steer" && this._margin > 0;
+		const wrap = boundary === "wrap";
+		const bounce = boundary === "bounce";
+		let minX = 0;
+		let minY = 0;
+		let maxX = 0;
+		let maxY = 0;
+		if (bound && boundary !== "none") {
+			const b0 = bound[0];
+			const b1 = bound[1];
+			minX = Math.min(b0[0], b1[0]);
+			minY = Math.min(b0[1], b1[1]);
+			maxX = Math.max(b0[0], b1[0]);
+			maxY = Math.max(b0[1], b1[1]);
+		}
+		const margin = this._margin;
+		for (let i = 0; i < n; i++) {
+			const k = i * 2;
+			const s = i * 6;
+			let px = pos[k];
+			let py = pos[k + 1];
+			let vx = vel[k];
+			let vy = vel[k + 1];
+			out[0] = 0;
+			out[1] = 0;
+			const c = counts[i];
+			if (c > 0) {
+				if (cw !== 0) __flock_accumulateUnit(out, sums[s] / c - px, sums[s + 1] / c - py, cw);
+				if (aw !== 0) __flock_accumulateUnit(out, sums[s + 2], sums[s + 3], aw);
+				if (sw !== 0) __flock_accumulateUnit(out, sums[s + 4], sums[s + 5], sw);
+			}
+			let ax = 0;
+			let ay = 0;
+			const dm2 = out[0] * out[0] + out[1] * out[1];
+			if (dm2 > 0) {
+				const sc = maxSpeed / Math.sqrt(dm2);
+				ax = out[0] * sc - vx;
+				ay = out[1] * sc - vy;
+				const f2 = ax * ax + ay * ay;
+				if (f2 > maxForce * maxForce) {
+					const fs = maxForce / Math.sqrt(f2);
+					ax *= fs;
+					ay *= fs;
+				}
+			}
+			if (steer) {
+				const dl = px - minX;
+				const dr = maxX - px;
+				const dtp = py - minY;
+				const db = maxY - py;
+				if (dl < margin) ax += maxForce * (1 - Math.max(dl, 0) / margin);
+				else if (dr < margin) ax -= maxForce * (1 - Math.max(dr, 0) / margin);
+				if (dtp < margin) ay += maxForce * (1 - Math.max(dtp, 0) / margin);
+				else if (db < margin) ay -= maxForce * (1 - Math.max(db, 0) / margin);
+			}
+			vx += ax * dt;
+			vy += ay * dt;
+			const sp2 = vx * vx + vy * vy;
+			if (sp2 > maxSpeed * maxSpeed) {
+				const sc = maxSpeed / Math.sqrt(sp2);
+				vx *= sc;
+				vy *= sc;
+			} else if (minSpeed > 0 && sp2 < minSpeed * minSpeed) {
+				if (sp2 > 0) {
+					const sc = minSpeed / Math.sqrt(sp2);
+					vx *= sc;
+					vy *= sc;
+				} else {
+					vx = minSpeed;
+					vy = 0;
+				}
+			}
+			px += vx * dt;
+			py += vy * dt;
+			if (wrap) {
+				const w = maxX - minX;
+				const h = maxY - minY;
+				if (w > 0) {
+					if (px < minX) px = maxX - (minX - px) % w;
+					else if (px > maxX) px = minX + (px - maxX) % w;
+				}
+				if (h > 0) {
+					if (py < minY) py = maxY - (minY - py) % h;
+					else if (py > maxY) py = minY + (py - maxY) % h;
+				}
+			} else if (bounce) {
+				if (px <= minX) {
+					px = minX;
+					if (vx < 0) vx = -vx;
+				} else if (px >= maxX) {
+					px = maxX;
+					if (vx > 0) vx = -vx;
+				}
+				if (py <= minY) {
+					py = minY;
+					if (vy < 0) vy = -vy;
+				} else if (py >= maxY) {
+					py = maxY;
+					if (vy > 0) vy = -vy;
+				}
+			}
+			pos[k] = px;
+			pos[k + 1] = py;
+			vel[k] = vx;
+			vel[k + 1] = vy;
+		}
+	}
+};
+const __near = [
+	0,
+	-1,
+	1,
+	-2,
+	2
+];
+var PoissonDisk = class extends Group {
+	constructor(..._args4) {
+		super(..._args4);
+		this._radius = 0;
+		this._candidates = 8;
+		this._dist = 0;
+		this._cos = 1;
+		this._sin = 0;
+		this._narrowX = false;
+		this._narrowY = false;
+		this._x0 = 0;
+		this._y0 = 0;
+		this._x1 = 0;
+		this._y1 = 0;
+		this._cell = 1;
+		this._cols = 0;
+		this._rows = 0;
+		this._grid = /* @__PURE__ */ new Int32Array(0);
+		this._active = [];
+	}
+	setup(bound, radius, options = {}) {
+		var _bound$x, _bound$y, _options$candidates;
+		if (!(radius > 0) || !Number.isFinite(radius)) throw new Error("PoissonDisk radius must be a positive finite number");
+		const x0 = (_bound$x = bound.x) !== null && _bound$x !== void 0 ? _bound$x : NaN;
+		const y0 = (_bound$y = bound.y) !== null && _bound$y !== void 0 ? _bound$y : NaN;
+		const width = bound.width;
+		const height = bound.height;
+		const x1 = x0 + width;
+		const y1 = y0 + height;
+		if (![
+			x0,
+			y0,
+			x1,
+			y1
+		].every(Number.isFinite) || width < 0 || height < 0) throw new Error("PoissonDisk bound must have a finite position and size");
+		if (width > 0 && x1 <= x0 || height > 0 && y1 <= y0) throw new Error("PoissonDisk bound size must be representable at its position");
+		const k = (_options$candidates = options.candidates) !== null && _options$candidates !== void 0 ? _options$candidates : 8;
+		if (!(k >= 1) || !Number.isFinite(k)) throw new Error("PoissonDisk candidates must be a number of at least 1");
+		const cell = radius / Math.SQRT2;
+		const hasArea = width > 0 && height > 0;
+		const cols = hasArea ? Math.ceil(width / cell) : 0;
+		const rows = hasArea ? Math.ceil(height / cell) : 0;
+		if (cols * rows > 1 << 26) throw new Error("PoissonDisk radius is too small for this bound: the grid would exceed 2^26 cells");
+		this.length = 0;
+		this._active.length = 0;
+		this._radius = radius;
+		this._candidates = Math.floor(k);
+		this._x0 = x0;
+		this._y0 = y0;
+		this._x1 = x1;
+		this._y1 = y1;
+		this._cell = cell;
+		this._cols = cols;
+		this._rows = rows;
+		this._grid = new Int32Array(cols * rows).fill(-1);
+		this._dist = radius * 1.001;
+		this._cos = Math.cos(Const.two_pi / this._candidates);
+		this._sin = Math.sin(Const.two_pi / this._candidates);
+		this._narrowX = width < this._dist && width <= height;
+		this._narrowY = height < this._dist && !this._narrowX;
+		if (options.start !== void 0) {
+			const s = options.start;
+			if (!this._tryAdd(Math.fround(s[0]), Math.fround(s[1]))) throw new Error("PoissonDisk start point must lie on or after the bound's top-left edges and before its bottom-right edges");
+		} else if (cols * rows > 0) while (!this._tryAdd(Math.fround(x0 + Num.random() * width), Math.fround(y0 + Num.random() * height)));
+		return this;
+	}
+	get radius() {
+		return this._radius;
+	}
+	get candidates() {
+		return this._candidates;
+	}
+	get bound() {
+		return new Bound(new Pt(this._x0, this._y0), new Pt(this._x1, this._y1));
+	}
+	get done() {
+		return this._active.length === 0;
+	}
+	step() {
+		const active = this._active;
+		const k = this._candidates;
+		const dist = this._dist;
+		const cos = this._cos;
+		const sin = this._sin;
+		const width = this._x1 - this._x0;
+		const height = this._y1 - this._y0;
+		const narrowX = this._narrowX;
+		const narrowY = this._narrowY;
+		while (active.length > 0) {
+			const ai = Math.floor(Num.random() * active.length);
+			const p = this[active[ai]];
+			const a0 = Num.random() * Const.two_pi;
+			let dx = dist * Math.cos(a0);
+			let dy = dist * Math.sin(a0);
+			let along = a0 < Math.PI ? 1 : -1;
+			for (let j = 0; j < k; j++) {
+				if (narrowX) {
+					dx = this._x0 + Num.random() * width - p[0];
+					dy = along * Math.sqrt(Math.max(0, dist * dist - dx * dx));
+					along = -along;
+				} else if (narrowY) {
+					dy = this._y0 + Num.random() * height - p[1];
+					dx = along * Math.sqrt(Math.max(0, dist * dist - dy * dy));
+					along = -along;
+				} else if (j > 0) {
+					const x = dx * cos - dy * sin;
+					dy = dx * sin + dy * cos;
+					dx = x;
+				}
+				if (this._tryAdd(Math.fround(p[0] + dx), Math.fround(p[1] + dy))) return this[this.length - 1];
+			}
+			active[ai] = active[active.length - 1];
+			active.pop();
+		}
+	}
+	sample(count = Infinity) {
+		const limit = Math.floor(count);
+		for (let i = 0; i < limit; i++) if (this.step() === void 0) break;
+		return this;
+	}
+	_tryAdd(x, y) {
+		if (!(x >= this._x0 && x < this._x1 && y >= this._y0 && y < this._y1)) return false;
+		const cols = this._cols;
+		const rows = this._rows;
+		const cx = Math.min(cols - 1, Math.floor((x - this._x0) / this._cell));
+		const cy = Math.min(rows - 1, Math.floor((y - this._y0) / this._cell));
+		const grid = this._grid;
+		const r2 = this._radius * this._radius;
+		for (const dj of __near) {
+			const j = cy + dj;
+			if (j < 0 || j >= rows) continue;
+			const row = j * cols;
+			const reach = dj === -2 || dj === 2 ? 1 : 2;
+			for (const di of __near) {
+				const i = cx + di;
+				if (di > reach || di < -reach || i < 0 || i >= cols) continue;
+				const s = grid[row + i];
+				if (s >= 0) {
+					const q = this[s];
+					const dx = q[0] - x;
+					const dy = q[1] - y;
+					if (dx * dx + dy * dy < r2) return false;
+				}
+			}
+		}
+		grid[cy * cols + cx] = this.length;
+		this._active.push(this.length);
+		this.push(new Pt(x, y));
+		return true;
+	}
+};
+
+//#endregion
+//#region src/Color.ts
+const D65 = /* @__PURE__ */ new Pt(95.047, 100, 108.883, 1);
+const D50 = /* @__PURE__ */ new Pt(34.57 / .3585, 100, 100 * .2958 / .3585, 1);
+let _colorRanges = /* @__PURE__ */ colorRanges();
+function _hslChannel(p, q, t) {
+	t = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+	if (t * 6 < 1) return p + (q - p) * t * 6;
+	if (t * 2 < 1) return q;
+	if (t * 3 < 2) return p + (q - p) * (2 / 3 - t) * 6;
+	return p;
+}
+function colorRanges() {
+	return {
+		rgb: new Group(new Pt(0, 255), new Pt(0, 255), new Pt(0, 255)),
+		hsl: new Group(new Pt(0, 360), new Pt(0, 1), new Pt(0, 1)),
+		hsb: new Group(new Pt(0, 360), new Pt(0, 1), new Pt(0, 1)),
+		lab: new Group(new Pt(0, 100), new Pt(-128, 127), new Pt(-128, 127)),
+		lch: new Group(new Pt(0, 100), new Pt(0, 100), new Pt(0, 360)),
+		luv: new Group(new Pt(0, 100), new Pt(-134, 220), new Pt(-140, 122)),
+		xyz: new Group(new Pt(0, 100), new Pt(0, 100), new Pt(0, 100)),
+		oklab: new Group(new Pt(0, 1), new Pt(-.4, .4), new Pt(-.4, .4)),
+		oklch: new Group(new Pt(0, 1), new Pt(0, .4), new Pt(0, 360))
+	};
+}
+var Color = class Color extends Pt {
+	static get ranges() {
+		return _colorRanges;
+	}
+	static set ranges(value) {
+		if (this === Color) _colorRanges = value;
+		else Object.defineProperty(this, "ranges", {
+			value,
+			writable: true,
+			enumerable: true,
+			configurable: true
+		});
+	}
+	constructor(...args) {
+		super(...args);
+		this._mode = "rgb";
+		this._isNorm = false;
+	}
+	static from(...args) {
+		const p = [
+			1,
+			1,
+			1,
+			1
+		];
+		const c = Util.getArgs(args);
+		for (let i = 0, len = p.length; i < len; i++) if (i < c.length) p[i] = c[i];
+		return new Color(p);
+	}
+	static fromHex(hex) {
+		if (hex[0] == "#") hex = hex.substr(1);
+		if (hex.length <= 4) {
+			const fn = (i) => hex[i] || "F";
+			const shortAlpha = hex.length === 4 ? `${fn(3)}${fn(3)}` : "";
+			hex = `${fn(0)}${fn(0)}${fn(1)}${fn(1)}${fn(2)}${fn(2)}${shortAlpha}`;
+		}
+		let alpha = 1;
+		if (hex.length === 8) {
+			alpha = parseInt(hex.substr(6, 2), 16) / 255;
+			hex = hex.substring(0, 6);
+		}
+		const hexVal = parseInt(hex, 16);
+		return new Color(hexVal >> 16, hexVal >> 8 & 255, hexVal & 255, alpha);
+	}
+	static rgb(...args) {
+		return Color.from(...args).toMode("rgb");
+	}
+	static hsl(...args) {
+		return Color.from(...args).toMode("hsl");
+	}
+	static hsb(...args) {
+		return Color.from(...args).toMode("hsb");
+	}
+	static lab(...args) {
+		return Color.from(...args).toMode("lab");
+	}
+	static lch(...args) {
+		return Color.from(...args).toMode("lch");
+	}
+	static luv(...args) {
+		return Color.from(...args).toMode("luv");
+	}
+	static xyz(...args) {
+		return Color.from(...args).toMode("xyz");
+	}
+	static oklab(...args) {
+		return Color.from(...args).toMode("oklab");
+	}
+	static oklch(...args) {
+		return Color.from(...args).toMode("oklch");
+	}
+	static maxValues(mode) {
+		return Color.ranges[mode].zipSlice(1).$take([
+			0,
+			1,
+			2
+		]);
+	}
+	get hex() {
+		return this.toString("hex");
+	}
+	get rgb() {
+		return this.toString("rgb");
+	}
+	get rgba() {
+		return this.toString("rgba");
+	}
+	clone() {
+		const c = new Color(this);
+		c.toMode(this._mode);
+		c._isNorm = this._isNorm;
+		return c;
+	}
+	static _denorm(c) {
+		const cc = c.clone();
+		const ranges = Color.ranges[cc._mode];
+		for (let i = 0; i < 3; i++) {
+			const r = ranges[i];
+			cc[i] = r[0] + cc[i] * (r[1] - r[0]);
+		}
+		cc._isNorm = false;
+		return cc;
+	}
+	static _normOut(c) {
+		const ranges = Color.ranges[c._mode];
+		for (let i = 0; i < 3; i++) {
+			const r = ranges[i];
+			c[i] = (c[i] - r[0]) / (r[1] - r[0]);
+		}
+		c._isNorm = true;
+		return c;
+	}
+	toMode(mode, convert = false) {
+		if (convert && mode !== this._mode) {
+			const fname = this._mode.toUpperCase() + "to" + mode.toUpperCase();
+			if (Color[fname]) this.to(Color[fname](this, this._isNorm, this._isNorm));
+			else throw new Error("Cannot convert color with " + fname);
+		}
+		this._mode = mode;
+		return this;
+	}
+	get mode() {
+		return this._mode;
+	}
+	get r() {
+		return this[0];
+	}
+	set r(n) {
+		this[0] = n;
+	}
+	get g() {
+		return this[1];
+	}
+	set g(n) {
+		this[1] = n;
+	}
+	get b() {
+		return this[2];
+	}
+	set b(n) {
+		this[2] = n;
+	}
+	get h() {
+		return this._mode == "lch" || this._mode == "oklch" ? this[2] : this[0];
+	}
+	set h(n) {
+		const i = this._mode == "lch" || this._mode == "oklch" ? 2 : 0;
+		this[i] = n;
+	}
+	get s() {
+		return this[1];
+	}
+	set s(n) {
+		this[1] = n;
+	}
+	get l() {
+		return this._mode == "hsl" ? this[2] : this[0];
+	}
+	set l(n) {
+		const i = this._mode == "hsl" ? 2 : 0;
+		this[i] = n;
+	}
+	get a() {
+		return this[1];
+	}
+	set a(n) {
+		this[1] = n;
+	}
+	get c() {
+		return this[1];
+	}
+	set c(n) {
+		this[1] = n;
+	}
+	get u() {
+		return this[1];
+	}
+	set u(n) {
+		this[1] = n;
+	}
+	get v() {
+		return this[2];
+	}
+	set v(n) {
+		this[2] = n;
+	}
+	set alpha(n) {
+		if (this.length > 3) this[3] = n;
+	}
+	get alpha() {
+		return this.length > 3 ? this[3] : 1;
+	}
+	get normalized() {
+		return this._isNorm;
+	}
+	set normalized(b) {
+		this._isNorm = b;
+	}
+	normalize(toNorm = true) {
+		if (this._isNorm == toNorm) return this;
+		const ranges = Color.ranges[this._mode];
+		for (let i = 0; i < 3; i++) this[i] = !toNorm ? Num.mapToRange(this[i], 0, 1, ranges[i][0], ranges[i][1]) : Num.mapToRange(this[i], ranges[i][0], ranges[i][1], 0, 1);
+		this._isNorm = toNorm;
+		return this;
+	}
+	$normalize(toNorm = true) {
+		return this.clone().normalize(toNorm);
+	}
+	toString(format = "mode") {
+		const v = this._isNorm && format !== "mode" ? Color._denorm(this) : this;
+		if (format == "hex") {
+			const _hex = (n) => {
+				let b = Math.floor(n);
+				if (!(b >= 0 && b <= 255)) b = b > 255 ? 255 : 0;
+				const s = b.toString(16);
+				return s.length < 2 ? "0" + s : s;
+			};
+			return `#${_hex(v[0])}${_hex(v[1])}${_hex(v[2])}`;
+		} else if (format == "rgba") return `rgba(${Math.floor(v[0])},${Math.floor(v[1])},${Math.floor(v[2])},${this.alpha})`;
+		else if (format == "rgb") return `rgb(${Math.floor(v[0])},${Math.floor(v[1])},${Math.floor(v[2])})`;
+		else return `${this._mode}(${this[0]},${this[1]},${this[2]},${this.alpha})`;
+	}
+	static RGBtoHSL(rgb, normalizedInput = false, normalizedOutput = false) {
+		const [r, g, b] = !normalizedInput ? rgb.$normalize() : rgb;
+		const max = Math.max(r, g, b);
+		const min = Math.min(r, g, b);
+		let h = (max + min) / 2;
+		let s = h;
+		const l = h;
+		if (max == min) {
+			h = 0;
+			s = 0;
+		} else {
+			const d = max - min;
+			s = l > .5 ? d / (2 - max - min) : d / (max + min);
+			h = 0;
+			if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+			else if (max === g) h = (b - r) / d + 2;
+			else if (max === b) h = (r - g) / d + 4;
+		}
+		const cc = Color.hsl(normalizedOutput ? h / 6 : h * 60, s, l, rgb.alpha);
+		if (normalizedOutput) cc.normalized = true;
+		return cc;
+	}
+	static HSLtoRGB(hsl, normalizedInput = false, normalizedOutput = false) {
+		let h = hsl[0];
+		const s = hsl[1];
+		const l = hsl[2];
+		if (!normalizedInput) h = h / 360;
+		h = h - Math.floor(h);
+		let r = l;
+		let g = l;
+		let b = l;
+		if (s != 0) {
+			const q = l <= .5 ? l * (1 + s) : l + s - l * s;
+			const p = 2 * l - q;
+			r = _hslChannel(p, q, h + 1 / 3);
+			g = _hslChannel(p, q, h);
+			b = _hslChannel(p, q, h - 1 / 3);
+		}
+		if (normalizedOutput) {
+			const cc = Color.rgb(r, g, b, hsl.alpha);
+			cc.normalized = true;
+			return cc;
+		}
+		return Color.rgb(Math.round(255 * r), Math.round(255 * g), Math.round(255 * b), hsl.alpha);
+	}
+	static RGBtoHSB(rgb, normalizedInput = false, normalizedOutput = false) {
+		const [r, g, b] = !normalizedInput ? rgb.$normalize() : rgb;
+		const max = Math.max(r, g, b);
+		const min = Math.min(r, g, b);
+		const d = max - min;
+		let h = 0;
+		const s = max === 0 ? 0 : d / max;
+		const v = max;
+		if (max != min) {
+			if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+			else if (max === g) h = (b - r) / d + 2;
+			else if (max === b) h = (r - g) / d + 4;
+		}
+		const cc = Color.hsb(normalizedOutput ? h / 6 : h * 60, s, v, rgb.alpha);
+		if (normalizedOutput) cc.normalized = true;
+		return cc;
+	}
+	static HSBtoRGB(hsb, normalizedInput = false, normalizedOutput = false) {
+		let h = hsb[0];
+		const s = hsb[1];
+		const v = hsb[2];
+		if (!normalizedInput) h = h / 360;
+		h = h - Math.floor(h);
+		const i = Math.floor(h * 6);
+		const f = h * 6 - i;
+		const p = v * (1 - s);
+		const q = v * (1 - f * s);
+		const t = v * (1 - (1 - f) * s);
+		let r, g, b;
+		switch (i % 6) {
+			case 0:
+				r = v;
+				g = t;
+				b = p;
+				break;
+			case 1:
+				r = q;
+				g = v;
+				b = p;
+				break;
+			case 2:
+				r = p;
+				g = v;
+				b = t;
+				break;
+			case 3:
+				r = p;
+				g = q;
+				b = v;
+				break;
+			case 4:
+				r = t;
+				g = p;
+				b = v;
+				break;
+			default:
+				r = v;
+				g = p;
+				b = q;
+		}
+		if (normalizedOutput) {
+			const cc = Color.rgb(r, g, b, hsb.alpha);
+			cc.normalized = true;
+			return cc;
+		}
+		return Color.rgb(Math.round(255 * r), Math.round(255 * g), Math.round(255 * b), hsb.alpha);
+	}
+	static RGBtoLAB(rgb, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(rgb) : rgb;
+		return Color.XYZtoLAB(Color.RGBtoXYZ(c), false, normalizedOutput);
+	}
+	static LABtoRGB(lab, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(lab) : lab;
+		return Color.XYZtoRGB(Color.LABtoXYZ(c), false, normalizedOutput);
+	}
+	static RGBtoLCH(rgb, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(rgb) : rgb;
+		return Color.LABtoLCH(Color.RGBtoLAB(c), false, normalizedOutput);
+	}
+	static LCHtoRGB(lch, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(lch) : lch;
+		return Color.LABtoRGB(Color.LCHtoLAB(c), false, normalizedOutput);
+	}
+	static RGBtoLUV(rgb, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(rgb) : rgb;
+		return Color.XYZtoLUV(Color.RGBtoXYZ(c), false, normalizedOutput);
+	}
+	static LUVtoRGB(luv, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(luv) : luv;
+		return Color.XYZtoRGB(Color.LUVtoXYZ(c), false, normalizedOutput);
+	}
+	static RGBtoXYZ(rgb, normalizedInput = false, normalizedOutput = false) {
+		const c = !normalizedInput ? rgb.$normalize() : rgb.clone();
+		for (let i = 0; i < 3; i++) {
+			c[i] = c[i] > .04045 ? Math.pow((c[i] + .055) / 1.055, 2.4) : c[i] / 12.92;
+			c[i] = c[i] * 100;
+		}
+		const cc = Color.xyz(c[0] * .4124564 + c[1] * .3575761 + c[2] * .1804375, c[0] * .2126729 + c[1] * .7151522 + c[2] * .072175, c[0] * .0193339 + c[1] * .119192 + c[2] * .9503041, rgb.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static XYZtoRGB(xyz, normalizedInput = false, normalizedOutput = false) {
+		const [x, y, z] = !normalizedInput ? xyz.$normalize() : xyz;
+		const rgb = [
+			x * 3.2406254773200533 + y * -1.5372079722103187 + z * -.4986285986982479,
+			x * -.9689307147293197 + y * 1.8757560608852415 + z * .041517523842953964,
+			x * .055710120445510616 + y * -.2040210505984867 + z * 1.0569959422543882
+		];
+		for (let i = 0; i < 3; i++) {
+			rgb[i] = rgb[i] > .0031308 ? 1.055 * Math.pow(rgb[i], 1 / 2.4) - .055 : 12.92 * rgb[i];
+			rgb[i] = Math.max(0, Math.min(1, rgb[i]));
+			if (!normalizedOutput) rgb[i] = Math.round(rgb[i] * 255);
+		}
+		const cc = Color.rgb(rgb[0], rgb[1], rgb[2], xyz.alpha);
+		if (normalizedOutput) cc.normalized = true;
+		return cc;
+	}
+	static XYZtoLAB(xyz, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(xyz) : xyz.clone();
+		const eps = 216 / 24389;
+		const kap = 24389 / 27;
+		const [x, y, z] = c;
+		const adaptedX = (1.047883741175648 * x + .022926020580292167 * y - .050156960798235464 * z) / D50[0];
+		const adaptedY = (.029599712470291525 * x + .9904433289480559 * y - .01706140321234148 * z) / D50[1];
+		const adaptedZ = (-.009237076612309065 * x + .015045841479768444 * y + .7520350516043767 * z) / D50[2];
+		const fn = (n) => n > eps ? Math.cbrt(n) : (kap * n + 16) / 116;
+		const cy = fn(adaptedY);
+		const cc = Color.lab(116 * cy - 16, 500 * (fn(adaptedX) - cy), 200 * (cy - fn(adaptedZ)), xyz.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static LABtoXYZ(lab, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(lab) : lab;
+		const y = (c[0] + 16) / 116;
+		const x = c[1] / 500 + y;
+		const z = y - c[2] / 200;
+		const eps = 216 / 24389;
+		const kap = 24389 / 27;
+		const d = D50;
+		const xxx = Math.pow(x, 3);
+		const zzz = Math.pow(z, 3);
+		const ax = d[0] * (xxx > eps ? xxx : (116 * x - 16) / kap);
+		const ay = d[1] * (c[0] > kap * eps ? Math.pow((c[0] + 16) / 116, 3) : c[0] / kap);
+		const az = d[2] * (zzz > eps ? zzz : (116 * z - 16) / kap);
+		const cc = Color.xyz(.9555133603984794 * ax - .023077627346345685 * ay + .06320438037157042 * az, -.028343880155626656 * ax + 1.0099856019019258 * ay + .02102312741027628 * az, .012303426046551184 * ax - .020490072958726607 * ay + 1.3300809728580483 * az, lab.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static XYZtoLUV(xyz, normalizedInput = false, normalizedOutput = false) {
+		let [x, y, z] = normalizedInput ? Color._denorm(xyz) : xyz;
+		const den = x + 15 * y + 3 * z;
+		const u = den === 0 ? 0 : 4 * x / den;
+		const v = den === 0 ? 0 : 9 * y / den;
+		const eps = 216 / 24389;
+		const kap = 24389 / 27;
+		y = y / 100;
+		const L = y > eps ? 116 * Math.cbrt(y) - 16 : kap * y;
+		const refU = 4 * D65[0] / (D65[0] + 15 * D65[1] + 3 * D65[2]);
+		const refV = 9 * D65[1] / (D65[0] + 15 * D65[1] + 3 * D65[2]);
+		const cc = Color.luv(L, 13 * L * (u - refU), 13 * L * (v - refV), xyz.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static LUVtoXYZ(luv, normalizedInput = false, normalizedOutput = false) {
+		let [l, u, v] = normalizedInput ? Color._denorm(luv) : luv;
+		const eps = 216 / 24389;
+		const kap = 24389 / 27;
+		if (l === 0) {
+			const black = Color.xyz(0, 0, 0, luv.alpha);
+			return normalizedOutput ? Color._normOut(black) : black;
+		}
+		const fy = (l + 16) / 116;
+		let y = l > kap * eps ? fy * fy * fy : l / kap;
+		const refU = 4 * D65[0] / (D65[0] + 15 * D65[1] + 3 * D65[2]);
+		const refV = 9 * D65[1] / (D65[0] + 15 * D65[1] + 3 * D65[2]);
+		u = u / (13 * l) + refU;
+		v = v / (13 * l) + refV;
+		y = y * 100;
+		const x = -1 * (9 * y * u) / ((u - 4) * v - u * v);
+		const z = (9 * y - 15 * v * y - v * x) / (3 * v);
+		const cc = Color.xyz(x, y, z, luv.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static LABtoLCH(lab, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(lab) : lab;
+		const h = Geom.toDegree(Geom.boundRadian(Math.atan2(c[2], c[1])));
+		const cc = Color.lch(c[0], Math.sqrt(c[1] * c[1] + c[2] * c[2]), h, lab.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static LCHtoLAB(lch, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(lch) : lch;
+		const rad = Geom.toRadian(c[2]);
+		const cc = Color.lab(c[0], Math.cos(rad) * c[1], Math.sin(rad) * c[1], lch.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static RGBtoOKLAB(rgb, normalizedInput = false, normalizedOutput = false) {
+		const c = !normalizedInput ? rgb.$normalize() : rgb;
+		const lin = (v) => v > .04045 ? Math.pow((v + .055) / 1.055, 2.4) : v / 12.92;
+		const r = lin(c[0]);
+		const g = lin(c[1]);
+		const b = lin(c[2]);
+		const l = Math.cbrt(.4122214708 * r + .5363325363 * g + .0514459929 * b);
+		const m = Math.cbrt(.2119034982 * r + .6806995451 * g + .1073969566 * b);
+		const s = Math.cbrt(.0883024619 * r + .2817188376 * g + .6299787005 * b);
+		const cc = Color.oklab(.2104542553 * l + .793617785 * m - .0040720468 * s, 1.9779984951 * l - 2.428592205 * m + .4505937099 * s, .0259040371 * l + .7827717662 * m - .808675766 * s, rgb.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static OKLABtoRGB(oklab, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(oklab) : oklab;
+		const l_ = c[0] + .3963377774 * c[1] + .2158037573 * c[2];
+		const m_ = c[0] - .1055613458 * c[1] - .0638541728 * c[2];
+		const s_ = c[0] - .0894841775 * c[1] - 1.291485548 * c[2];
+		const l = l_ * l_ * l_;
+		const m = m_ * m_ * m_;
+		const s = s_ * s_ * s_;
+		const rgb = [
+			4.0767416621 * l - 3.3077115913 * m + .2309699292 * s,
+			-1.2684380046 * l + 2.6097574011 * m - .3413193965 * s,
+			-.0041960863 * l - .7034186147 * m + 1.707614701 * s
+		];
+		for (let i = 0; i < 3; i++) {
+			rgb[i] = rgb[i] > .0031308 ? 1.055 * Math.pow(rgb[i], 1 / 2.4) - .055 : 12.92 * rgb[i];
+			rgb[i] = Math.max(0, Math.min(1, rgb[i]));
+			if (!normalizedOutput) rgb[i] = Math.round(rgb[i] * 255);
+		}
+		const cc = Color.rgb(rgb[0], rgb[1], rgb[2], oklab.alpha);
+		if (normalizedOutput) cc.normalized = true;
+		return cc;
+	}
+	static RGBtoOKLCH(rgb, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(rgb) : rgb;
+		return Color.OKLABtoOKLCH(Color.RGBtoOKLAB(c), false, normalizedOutput);
+	}
+	static OKLCHtoRGB(oklch, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(oklch) : oklch;
+		return Color.OKLABtoRGB(Color.OKLCHtoOKLAB(c), false, normalizedOutput);
+	}
+	static OKLABtoOKLCH(oklab, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(oklab) : oklab;
+		const h = Geom.toDegree(Geom.boundRadian(Math.atan2(c[2], c[1])));
+		const cc = Color.oklch(c[0], Math.sqrt(c[1] * c[1] + c[2] * c[2]), h, oklab.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+	static OKLCHtoOKLAB(oklch, normalizedInput = false, normalizedOutput = false) {
+		const c = normalizedInput ? Color._denorm(oklch) : oklch;
+		const rad = Geom.toRadian(c[2]);
+		const cc = Color.oklab(c[0], Math.cos(rad) * c[1], Math.sin(rad) * c[1], oklch.alpha);
+		return normalizedOutput ? Color._normOut(cc) : cc;
+	}
+};
+
+//#endregion
+//#region src/Dom.ts
+var DOMSpace = class DOMSpace extends MultiTouchSpace {
+	constructor(elem = "pt", callback) {
+		super();
+		this.id = "domspace";
+		this._autoResize = true;
+		this._bgcolor = "#e1e9f0";
+		this._css = {};
+		this._domDisposed = false;
+		this._ownsContainer = false;
+		this._resizeHandlerBound = this._resizeHandler.bind(this);
+		this.refresh(false);
+		let _selector = null;
+		this.id = "pts";
+		if (elem instanceof Element) {
+			_selector = elem;
+			this.id = "pts_existing_space";
+		} else {
+			const target = elem || "pt";
+			const id = target[0] === "#" || target[0] === "." ? target : "#" + target;
+			_selector = document.querySelector(id);
+			this.id = id.substr(1);
+		}
+		if (!_selector) {
+			this._container = DOMSpace.createElement("div", this.id + "_container");
+			this._canvas = this._createDefaultElement(this._container, this.id);
+			document.body.appendChild(this._container);
+			this._ownsContainer = true;
+		} else {
+			this._canvas = _selector;
+			this._container = _selector.parentElement;
+		}
+		this._readyTimer = setTimeout(this._ready.bind(this, callback), 50);
+	}
+	_createDefaultElement(container, id) {
+		return DOMSpace.createElement("div", id, container);
+	}
+	static createElement(elem = "div", id, appendTo) {
+		let d = document.createElement(elem);
+		if (id) d.setAttribute("id", id);
+		if (appendTo && appendTo.appendChild) appendTo.appendChild(d);
+		return d;
+	}
+	_ready(callback) {
+		if (this._domDisposed) return;
+		if (!this._container) throw new Error(`Cannot initiate #${this.id} element`);
+		this._isReady = true;
+		this._resizeHandler(null);
+		this.clear(this._bgcolor);
+		this._canvas.dispatchEvent(new Event("ready"));
+		for (let k in this.players) if (this.players.hasOwnProperty(k)) {
+			if (this.players[k].start) this.players[k].start(this.bound.clone(), this);
+		}
+		this._pointer = this.center;
+		if (callback) callback(this.bound, this._canvas);
+	}
+	setup(opt) {
+		if (opt.bgcolor) this._bgcolor = opt.bgcolor;
+		this.autoResize = opt.resize != void 0 ? opt.resize : false;
+		return this;
+	}
+	getForm() {
+		return null;
+	}
+	set autoResize(auto) {
+		this._autoResize = auto;
+		if (auto) window.addEventListener("resize", this._resizeHandlerBound);
+		else {
+			delete this._css["width"];
+			delete this._css["height"];
+			window.removeEventListener("resize", this._resizeHandlerBound);
+		}
+	}
+	get autoResize() {
+		return this._autoResize;
+	}
+	resize(b, evt) {
+		this.bound = b;
+		this.styles({
+			width: `${b.width}px`,
+			height: `${b.height}px`
+		}, true);
+		for (let k in this.players) if (this.players.hasOwnProperty(k)) {
+			let p = this.players[k];
+			if (p.resize) p.resize(this.bound, evt);
+		}
+		return this;
+	}
+	_resizeHandler(evt) {
+		let b = Bound.fromBoundingRect(this._container.getBoundingClientRect());
+		if (this._autoResize) this.styles({
+			width: "100%",
+			height: "100%"
+		}, true);
+		else this.styles({
+			width: `${b.width}px`,
+			height: `${b.height}px`
+		}, true);
+		this.resize(b, evt);
+	}
+	get element() {
+		return this._canvas;
+	}
+	get parent() {
+		return this._container;
+	}
+	get ready() {
+		return this._isReady;
+	}
+	clear(bg) {
+		if (bg) this.background = bg;
+		this._canvas.innerHTML = "";
+		return this;
+	}
+	set background(bg) {
+		this._bgcolor = bg;
+		this._container.style.backgroundColor = this._bgcolor;
+	}
+	get background() {
+		return this._bgcolor;
+	}
+	style(key, val, update = false) {
+		this._css[key] = val;
+		if (update) this._canvas.style[key] = val;
+		return this;
+	}
+	styles(styles, update = false) {
+		for (let k in styles) if (styles.hasOwnProperty(k)) this.style(k, styles[k], update);
+		return this;
+	}
+	static setAttr(elem, data) {
+		for (let k in data) if (data.hasOwnProperty(k)) elem.setAttribute(k, data[k]);
+		return elem;
+	}
+	static getInlineStyles(data) {
+		let str = "";
+		for (let k in data) if (data.hasOwnProperty(k)) {
+			if (data[k]) str += `${k}: ${data[k]}; `;
+		}
+		return str;
+	}
+	dispose() {
+		if (this._domDisposed) return this;
+		this._domDisposed = true;
+		clearTimeout(this._readyTimer);
+		this.autoResize = false;
+		this._unbindAll();
+		this._cancelAnimation();
+		MultiTouchSpace.prototype.removeAll.call(this);
+		this._isReady = false;
+		if (this._ownsContainer) this._container.remove();
+		return this;
+	}
+};
+var HTMLSpace = class extends DOMSpace {
+	getForm() {
+		return new HTMLForm(this);
+	}
+	static htmlElement(parent, name, id, autoClass = true) {
+		if (!parent || !parent.appendChild) throw new Error("parent is not a valid DOM element");
+		let elem = document.getElementById(id);
+		if (elem && !parent.contains(elem)) elem = null;
+		if (!elem) {
+			elem = document.createElement(name);
+			elem.setAttribute("id", id);
+			if (autoClass) elem.setAttribute("class", id.substring(0, id.indexOf("-")));
+			parent.appendChild(elem);
+		}
+		return elem;
+	}
+	remove(player) {
+		this._container.querySelectorAll("." + HTMLForm.scopeID(player)).forEach((el) => {
+			el.parentNode.removeChild(el);
+		});
+		return super.remove(player);
+	}
+	removeAll() {
+		this._canvas.innerHTML = "";
+		return super.removeAll();
+	}
+};
+let _htmlFormGroupID = 0;
+let _htmlFormDomID = 0;
+var HTMLForm = class HTMLForm extends VisualForm {
+	static get groupID() {
+		return _htmlFormGroupID;
+	}
+	static set groupID(n) {
+		_htmlFormGroupID = n;
+	}
+	static get domID() {
+		return _htmlFormDomID;
+	}
+	static set domID(n) {
+		_htmlFormDomID = n;
+	}
+	constructor(space) {
+		super();
+		this._style = {
+			filled: true,
+			stroked: true,
+			background: "#f03",
+			"border-color": "#fff",
+			color: "#000",
+			"border-width": "1px",
+			"border-radius": "0",
+			"border-style": "solid",
+			opacity: 1,
+			position: "absolute",
+			top: 0,
+			left: 0,
+			width: 0,
+			height: 0
+		};
+		this._ctx = {
+			group: null,
+			groupID: "pts",
+			groupCount: 0,
+			currentID: "pts0",
+			currentClass: "",
+			style: {}
+		};
+		this._ready = false;
+		this._formID = 0;
+		this._space = space;
+		this._formID = HTMLForm.groupID++;
+		const init = () => {
+			this._ctx.group = this._space.element;
+			this._ctx.groupID = `pts_dom_${this._formID}`;
+			this._ctx.style = Object.assign({}, this._style);
+			this._ready = true;
+		};
+		if (this._space.ready) init();
+		else this._space.add({ start: init });
+	}
+	get space() {
+		return this._space;
+	}
+	styleTo(k, v, unit = "") {
+		if (this._ctx.style[k] === void 0) throw new Error(`${k} style property doesn't exist`);
+		this._ctx.style[k] = `${v}${unit}`;
+	}
+	alpha(a) {
+		this.styleTo("opacity", a);
+		return this;
+	}
+	fill(c) {
+		if (typeof c == "boolean") {
+			this.styleTo("filled", c);
+			if (!c) this.styleTo("background", "transparent");
+		} else {
+			this.styleTo("filled", true);
+			this.styleTo("background", c);
+		}
+		return this;
+	}
+	stroke(c, width, linejoin, linecap) {
+		if (typeof c == "boolean") {
+			this.styleTo("stroked", c);
+			if (!c) this.styleTo("border-width", 0);
+		} else {
+			this.styleTo("stroked", true);
+			this.styleTo("border-color", c);
+			this.styleTo("border-width", (width || 1) + "px");
+		}
+		return this;
+	}
+	fillText(c) {
+		this.styleTo("color", c);
+		return this;
+	}
+	cls(c) {
+		if (typeof c == "boolean") this._ctx.currentClass = "";
+		else this._ctx.currentClass = c;
+		return this;
+	}
+	font(sizeOrFont, weight, style, lineHeight, family) {
+		if (typeof sizeOrFont == "number") {
+			this._font.size = sizeOrFont;
+			if (family) this._font.face = family;
+			if (weight) this._font.weight = weight;
+			if (style) this._font.style = style;
+			if (lineHeight) this._font.lineHeight = lineHeight;
+		} else this._font = sizeOrFont;
+		this._ctx.style["font"] = this._font.value;
+		return this;
+	}
+	reset() {
+		this._ctx.style = Object.assign({}, this._style);
+		this._font = new Font(10, "sans-serif");
+		this._ctx.style["font"] = this._font.value;
+		return this;
+	}
+	updateScope(group_id, group) {
+		this._ctx.group = group;
+		this._ctx.groupID = group_id;
+		this._ctx.groupCount = 0;
+		this.nextID();
+		return this._ctx;
+	}
+	scope(item) {
+		if (!item || item.animateID == null) throw new Error("item not defined or not yet added to Space");
+		return this.updateScope(`${HTMLForm.scopeID(item)}-f${this._formID}`, this.space.element);
+	}
+	nextID() {
+		this._ctx.groupCount++;
+		this._ctx.currentID = `${this._ctx.groupID}-${this._ctx.groupCount}`;
+		return this._ctx.currentID;
+	}
+	static getID(ctx) {
+		return ctx.currentID || `p-${HTMLForm.domID++}`;
+	}
+	static scopeID(item) {
+		return `item-${item.animateID}`;
+	}
+	static style(elem, styles) {
+		let st = [];
+		if (!styles["filled"]) st.push("background: none");
+		if (!styles["stroked"]) st.push("border: none");
+		for (let k in styles) if (styles.hasOwnProperty(k) && k != "filled" && k != "stroked") {
+			let v = styles[k];
+			if (v) {
+				if (!styles["filled"] && k.indexOf("background") === 0) continue;
+				else if (!styles["stroked"] && k.indexOf("border-width") === 0) continue;
+				else st.push(`${k}: ${v}`);
+			}
+		}
+		return HTMLSpace.setAttr(elem, { style: st.join(";") });
+	}
+	static rectStyle(ctx, pt, size) {
+		ctx.style["left"] = pt[0] + "px";
+		ctx.style["top"] = pt[1] + "px";
+		ctx.style["width"] = size[0] + "px";
+		ctx.style["height"] = size[1] + "px";
+		return ctx;
+	}
+	static textStyle(ctx, pt) {
+		ctx.style["left"] = pt[0] + "px";
+		ctx.style["top"] = pt[1] + "px";
+		return ctx;
+	}
+	static point(ctx, pt, radius = 5, shape = "square") {
+		if (shape === "circle") return HTMLForm.circle(ctx, pt, radius);
+		else return HTMLForm.square(ctx, pt, radius);
+	}
+	point(pt, radius = 5, shape = "square") {
+		this.nextID();
+		this.styleTo("border-radius", shape == "circle" ? "100%" : "0");
+		HTMLForm.point(this._ctx, pt, radius, shape);
+		return this;
+	}
+	static circle(ctx, pt, radius = 10) {
+		let elem = HTMLSpace.htmlElement(ctx.group, "div", HTMLForm.getID(ctx));
+		HTMLSpace.setAttr(elem, { class: `pts-form pts-circle ${ctx.currentClass}` });
+		HTMLForm.rectStyle(ctx, new Pt(pt).$subtract(radius), new Pt(radius * 2, radius * 2));
+		HTMLForm.style(elem, ctx.style);
+		return elem;
+	}
+	circle(pts) {
+		this.nextID();
+		this.styleTo("border-radius", "100%");
+		HTMLForm.circle(this._ctx, pts[0], pts[1][0]);
+		return this;
+	}
+	static square(ctx, pt, halfsize) {
+		let elem = HTMLSpace.htmlElement(ctx.group, "div", HTMLForm.getID(ctx));
+		HTMLSpace.setAttr(elem, { class: `pts-form pts-square ${ctx.currentClass}` });
+		HTMLForm.rectStyle(ctx, new Pt(pt).$subtract(halfsize), new Pt(halfsize * 2, halfsize * 2));
+		HTMLForm.style(elem, ctx.style);
+		return elem;
+	}
+	square(pt, halfsize) {
+		this.nextID();
+		this.styleTo("border-radius", "0");
+		HTMLForm.square(this._ctx, pt, halfsize);
+		return this;
+	}
+	static rect(ctx, pts) {
+		let p = Util.iterToArray(pts);
+		if (!Util.arrayCheck(p)) return;
+		let elem = HTMLSpace.htmlElement(ctx.group, "div", HTMLForm.getID(ctx));
+		HTMLSpace.setAttr(elem, { class: `pts-form pts-rect ${ctx.currentClass}` });
+		HTMLForm.rectStyle(ctx, p[0], p[1]);
+		HTMLForm.style(elem, ctx.style);
+		return elem;
+	}
+	rect(pts) {
+		this.nextID();
+		this.styleTo("border-radius", "0");
+		HTMLForm.rect(this._ctx, pts);
+		return this;
+	}
+	static text(ctx, pt, txt) {
+		let elem = HTMLSpace.htmlElement(ctx.group, "div", HTMLForm.getID(ctx));
+		HTMLSpace.setAttr(elem, { class: `pts-form pts-text ${ctx.currentClass}` });
+		elem.textContent = txt;
+		HTMLForm.textStyle(ctx, pt);
+		HTMLForm.style(elem, ctx.style);
+		return elem;
+	}
+	text(pt, txt) {
+		this.nextID();
+		HTMLForm.text(this._ctx, pt, txt);
+		return this;
+	}
+	log(txt) {
+		this.fill("#000").stroke("#fff", .5).text([10, 14], txt);
+		return this;
+	}
+	arc(pt, radius, startAngle, endAngle, cc) {
+		Util.warn("arc is not implemented in HTMLForm");
+		return this;
+	}
+	line(pts) {
+		Util.warn("line is not implemented in HTMLForm");
+		return this;
+	}
+	polygon(pts) {
+		Util.warn("polygon is not implemented in HTMLForm");
+		return this;
+	}
+};
+
+//#endregion
+//#region src/Svg.ts
+const SVG_NS = "http://www.w3.org/2000/svg";
+const BLEND_MODES = /* @__PURE__ */ new Set([
+	"multiply",
+	"screen",
+	"overlay",
+	"darken",
+	"lighten",
+	"color-dodge",
+	"color-burn",
+	"hard-light",
+	"soft-light",
+	"difference",
+	"exclusion",
+	"hue",
+	"saturation",
+	"color",
+	"luminosity"
+]);
+let _gradientCount = 0;
+var SVGGradient = class {
+	constructor(kind, coords) {
+		this.stops = [];
+		this._elem = null;
+		this.kind = kind;
+		this.coords = coords;
+		this.id = `pts_grad_${_gradientCount++}`;
+	}
+	addColorStop(offset, color) {
+		this.stops.push([offset, color]);
+		if (this._elem) this._render(this._elem);
+	}
+	materialize(defs) {
+		if (!this._elem) {
+			this._elem = document.createElementNS(SVG_NS, this.kind === "linear" ? "linearGradient" : "radialGradient");
+			this._elem.setAttribute("id", this.id);
+			this._elem.setAttribute("gradientUnits", "userSpaceOnUse");
+			if (this.kind === "linear") {
+				const [x1, y1, x2, y2] = this.coords;
+				DOMSpace.setAttr(this._elem, {
+					x1,
+					y1,
+					x2,
+					y2
+				});
+			} else {
+				const [x0, y0, r0, x1, y1, r1] = this.coords;
+				DOMSpace.setAttr(this._elem, {
+					cx: x1,
+					cy: y1,
+					r: r1,
+					fx: x0,
+					fy: y0
+				});
+				if (r0) this._elem.setAttribute("fr", `${r0}`);
+			}
+			this._render(this._elem);
+		}
+		if (this._elem.parentNode !== defs) defs.appendChild(this._elem);
+		return `url(#${this.id})`;
+	}
+	_render(elem) {
+		elem.textContent = "";
+		for (const [offset, color] of this.stops) {
+			const stop = document.createElementNS(SVG_NS, "stop");
+			stop.setAttribute("offset", `${offset}`);
+			stop.setAttribute("stop-color", color);
+			elem.appendChild(stop);
+		}
+	}
+};
+const RUN_BOXES = 32;
+const _opaquePaint = /* @__PURE__ */ new Map();
+let _lastPaint = "";
+let _lastOpaque = false;
+function isOpaquePaint(paint) {
+	if (paint === _lastPaint) return _lastOpaque;
+	let known = _opaquePaint.get(paint);
+	if (known === void 0) {
+		known = _parseOpaque(paint);
+		if (_opaquePaint.size < 512) _opaquePaint.set(paint, known);
+	}
+	_lastPaint = paint;
+	_lastOpaque = known;
+	return known;
+}
+function _parseOpaque(paint) {
+	const p = paint.trim().toLowerCase();
+	if (p[0] === "#") {
+		if (p.length === 4 || p.length === 7) return true;
+		if (p.length === 5) return p[4] === "f";
+		if (p.length === 9) return p.slice(7) === "ff";
+		return false;
+	}
+	const fn = /^(rgba?|hsla?|hwb|lab|lch|oklab|oklch)\((.*)\)$/.exec(p);
+	if (fn) {
+		const args = fn[2];
+		if (/var\(|calc\(|from /.test(args)) return false;
+		const slash = args.indexOf("/");
+		let alpha;
+		if (slash >= 0) alpha = args.slice(slash + 1);
+		else {
+			const parts = args.split(",");
+			if (parts.length === 4) alpha = parts[3];
+			else if (parts.length !== 1 && parts.length !== 3) return false;
+		}
+		if (alpha === void 0) return true;
+		const a = alpha.trim();
+		return a === "1" || a === "100%" || parseFloat(a) >= (a.endsWith("%") ? 100 : 1);
+	}
+	return /^[a-z]+$/.test(p) && !/^(?:transparent|currentcolor|none|inherit|initial|unset|revert)$/.test(p) && (typeof CSS === "undefined" || !CSS.supports || CSS.supports("color", p));
+}
+function convexOrientation(p, start, end) {
+	let ex0 = p[start] - p[end - 2];
+	let ey0 = p[start + 1] - p[end - 1];
+	let sign = 0;
+	let flips = 0;
+	let lastDx = ex0 > 0 ? 1 : ex0 < 0 ? -1 : 0;
+	let firstDx = lastDx;
+	for (let i = start; i < end; i += 2) {
+		const j = i + 2 < end ? i + 2 : start;
+		const ex = p[j] - p[i];
+		const ey = p[j + 1] - p[i + 1];
+		const cross = ex0 * ey - ey0 * ex;
+		if (cross !== 0) {
+			const s = cross > 0 ? 1 : -1;
+			if (!sign) sign = s;
+			else if (s !== sign) return NaN;
+		}
+		if (ex !== 0) {
+			const d = ex > 0 ? 1 : -1;
+			if (!firstDx) firstDx = d;
+			else if (d !== lastDx) flips++;
+			lastDx = d;
+		}
+		ex0 = ex;
+		ey0 = ey;
+	}
+	if (firstDx && lastDx !== firstDx) flips++;
+	return sign && flips === 2 ? sign : NaN;
+}
+let _svgMeasurer = null;
+const _svgWarned = {};
+var SVGContext2D = class SVGContext2D {
+	get fillStyle() {
+		return this._fillStyle;
+	}
+	set fillStyle(v) {
+		this._fillStyle = v;
+	}
+	get strokeStyle() {
+		return this._strokeStyle;
+	}
+	set strokeStyle(v) {
+		this._strokeStyle = v;
+	}
+	get lineWidth() {
+		return this._lineWidth;
+	}
+	set lineWidth(v) {
+		this._lineWidth = v;
+	}
+	get lineJoin() {
+		return this._lineJoin;
+	}
+	set lineJoin(v) {
+		this._lineJoin = v;
+	}
+	get lineCap() {
+		return this._lineCap;
+	}
+	set lineCap(v) {
+		this._lineCap = v;
+	}
+	get globalAlpha() {
+		return this._globalAlpha;
+	}
+	set globalAlpha(v) {
+		this._globalAlpha = v;
+	}
+	get globalCompositeOperation() {
+		return this._globalCompositeOperation;
+	}
+	set globalCompositeOperation(v) {
+		this._globalCompositeOperation = v;
+	}
+	get font() {
+		return this._font;
+	}
+	set font(v) {
+		this._font = v;
+	}
+	get lineDashOffset() {
+		return this._lineDashOffset;
+	}
+	set lineDashOffset(v) {
+		this._lineDashOffset = v;
+	}
+	constructor(host) {
+		this._fillStyle = "#f03";
+		this._strokeStyle = "#fff";
+		this._lineWidth = 1;
+		this._lineJoin = "bevel";
+		this._lineCap = "butt";
+		this._globalAlpha = 1;
+		this._globalCompositeOperation = "source-over";
+		this._font = "10px sans-serif";
+		this._lineDashOffset = 0;
+		this.textAlign = "start";
+		this.textBaseline = "alphabetic";
+		this._dash = [];
+		this._stateStack = [];
+		this.className = "";
+		this._d = "";
+		this._shapeFill = null;
+		this._shapeStroke = null;
+		this._shapeStrokeStyle = {};
+		this._shapePainted = false;
+		this._shapeClass = "";
+		this._shapeAlpha = 1;
+		this._shapeBlend = "source-over";
+		this._pts = [];
+		this._ptsLength = 0;
+		this._rings = [];
+		this._ringsLength = 0;
+		this._ringStart = -1;
+		this._wind = 0;
+		this._windDone = false;
+		this._x0 = 0;
+		this._y0 = 0;
+		this._x1 = 0;
+		this._y1 = 0;
+		this._boxDone = false;
+		this._runs = [];
+		this._drawCount = 0;
+		this._group = null;
+		this._defs = null;
+		this._pool = [];
+		this._attrCache = [];
+		this._host = host;
+	}
+	static _warnOnce(key, msg) {
+		if (!_svgWarned[key]) {
+			_svgWarned[key] = true;
+			Util.warn(msg);
+		}
+	}
+	beginFrame() {
+		this._runs = [];
+		this._d = "";
+		this._resetShape();
+		this._shapeFill = null;
+		this._shapeStroke = null;
+		this._shapePainted = false;
+		this._drawCount = 0;
+	}
+	get drawCount() {
+		return this._drawCount;
+	}
+	get group() {
+		return this._group;
+	}
+	commitFrame() {
+		this._flushShape();
+		if (!this._group) {
+			this._group = document.createElementNS(SVG_NS, "g");
+			this._group.setAttribute("class", "pts-svgform");
+			this._host.appendChild(this._group);
+		}
+		const runs = this._runs;
+		for (let i = 0; i < runs.length; i++) {
+			const run = runs[i];
+			let elem = this._pool[i];
+			if (!elem || elem.nodeName !== run.tag) {
+				const fresh = document.createElementNS(SVG_NS, run.tag);
+				if (elem) this._group.replaceChild(fresh, elem);
+				else this._group.appendChild(fresh);
+				elem = fresh;
+				this._pool[i] = elem;
+				this._attrCache[i] = {};
+			}
+			const cache = this._attrCache[i];
+			for (const k in cache) if (!(k in run.attrs)) {
+				elem.removeAttribute(k);
+				delete cache[k];
+			}
+			for (const k in run.attrs) {
+				const v = `${run.attrs[k]}`;
+				if (cache[k] !== v) {
+					elem.setAttribute(k, v);
+					cache[k] = v;
+				}
+			}
+			if (run.tag === "text" && elem.textContent !== run.text) elem.textContent = run.text;
+		}
+		for (let i = this._pool.length - 1; i >= runs.length; i--) {
+			this._group.removeChild(this._pool[i]);
+			this._pool.pop();
+			this._attrCache.pop();
+		}
+		if (this._defs) {
+			const paints = /* @__PURE__ */ new Set();
+			for (const run of runs) {
+				paints.add(run.attrs.fill);
+				paints.add(run.attrs.stroke);
+			}
+			for (const elem of Array.from(this._defs.children)) if (!paints.has(`url(#${elem.id})`)) elem.remove();
+		}
+	}
+	get runs() {
+		return this._runs;
+	}
+	resetDom() {
+		this._group = null;
+		this._defs = null;
+		this._pool = [];
+		this._attrCache = [];
+	}
+	disposeDom() {
+		if (this._group && this._group.parentNode) this._group.parentNode.removeChild(this._group);
+		if (this._defs && this._defs.parentNode) this._defs.parentNode.removeChild(this._defs);
+		this.resetDom();
+	}
+	beginPath() {
+		this._flushShape();
+		this._d = "";
+	}
+	closePath() {
+		this._endRing();
+		this._d += "Z";
+	}
+	moveTo(x, y) {
+		this._endRing();
+		this._ringStart = this._ptsLength;
+		this._point(x, y);
+		this._d += `M${round2(x)} ${round2(y)}`;
+	}
+	lineTo(x, y) {
+		if (this._ringStart < 0) this._wind = NaN;
+		this._point(x, y);
+		this._d += `L${round2(x)} ${round2(y)}`;
+	}
+	quadraticCurveTo(cpx, cpy, x, y) {
+		this._curve();
+		this._point(cpx, cpy);
+		this._point(x, y);
+		this._d += `Q${round2(cpx)} ${round2(cpy)} ${round2(x)} ${round2(y)}`;
+	}
+	bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y) {
+		this._curve();
+		this._point(cp1x, cp1y);
+		this._point(cp2x, cp2y);
+		this._point(x, y);
+		this._d += `C${round2(cp1x)} ${round2(cp1y)} ${round2(cp2x)} ${round2(cp2y)} ${round2(x)} ${round2(y)}`;
+	}
+	rect(x, y, w, h) {
+		this._endRing();
+		this._orient(w * h > 0 ? 1 : w * h < 0 ? -1 : NaN);
+		this._point(x, y);
+		this._point(x + w, y + h);
+		this._d += `M${round2(x)} ${round2(y)}h${round2(w)}v${round2(h)}h${round2(-w)}Z`;
+	}
+	arc(x, y, radius, startAngle, endAngle, ccw = false) {
+		this.ellipse(x, y, radius, radius, 0, startAngle, endAngle, ccw);
+	}
+	ellipse(x, y, rx, ry, rotation, startAngle, endAngle, ccw = false) {
+		let delta = ccw ? startAngle - endAngle : endAngle - startAngle;
+		const full = delta >= Const.two_pi;
+		if (!full) delta = (delta % Const.two_pi + Const.two_pi) % Const.two_pi;
+		const cosR = Math.cos(rotation);
+		const sinR = Math.sin(rotation);
+		const ptAt = (angle) => {
+			const px = rx * Math.cos(angle);
+			const py = ry * Math.sin(angle);
+			return [x + px * cosR - py * sinR, y + px * sinR + py * cosR];
+		};
+		const dir = ccw ? -1 : 1;
+		const sweepFlag = ccw ? 0 : 1;
+		const rotDeg = round2(rotation * 180 / Math.PI);
+		const [sx, sy] = ptAt(startAngle);
+		const r = Math.max(Math.abs(rx), Math.abs(ry));
+		if (full && this._d.length === 0) this._orient(rx && ry ? ccw ? -1 : 1 : NaN);
+		else this._curve();
+		this._point(x - r, y - r);
+		this._point(x + r, y + r);
+		this._d += this._d.length > 0 ? `L${round2(sx)} ${round2(sy)}` : `M${round2(sx)} ${round2(sy)}`;
+		const sweep = full ? Const.two_pi : delta;
+		const segments = Math.max(1, Math.ceil(sweep / Const.pi - 1e-6));
+		let angle = startAngle;
+		for (let s = 1; s <= segments; s++) {
+			const target = s === segments ? startAngle + dir * sweep : angle + dir * Const.pi;
+			const [ex, ey] = ptAt(target);
+			this._d += `A${round2(rx)} ${round2(ry)} ${rotDeg} 0 ${sweepFlag} ${round2(ex)} ${round2(ey)}`;
+			angle = target;
+		}
+		if (full) this._d += "Z";
+	}
+	fill() {
+		this._shapeFill = this._resolvePaint(this._fillStyle);
+		this._capturePaintState();
+	}
+	stroke() {
+		this._shapeStroke = this._resolvePaint(this._strokeStyle);
+		this._shapeStrokeStyle = {
+			"stroke-width": this._lineWidth,
+			"stroke-linejoin": this._lineJoin,
+			"stroke-linecap": this._lineCap
+		};
+		if (this._dash.length > 0) {
+			this._shapeStrokeStyle["stroke-dasharray"] = this._dash.join(" ");
+			if (this._lineDashOffset) this._shapeStrokeStyle["stroke-dashoffset"] = this._lineDashOffset;
+		}
+		this._capturePaintState();
+	}
+	_capturePaintState() {
+		this._shapePainted = true;
+		this._shapeClass = this.className;
+		this._shapeAlpha = this._globalAlpha;
+		this._shapeBlend = this._globalCompositeOperation;
+		this._drawCount++;
+	}
+	fillRect(x, y, w, h) {
+		this.beginPath();
+		this.rect(x, y, w, h);
+		this.fill();
+	}
+	clearRect() {}
+	fillText(txt, x, y, maxWidth) {
+		this._flushShape();
+		const anchor = this.textAlign === "center" ? "middle" : this.textAlign === "right" || this.textAlign === "end" ? "end" : "start";
+		const baseline = this.textBaseline === "top" ? "text-before-edge" : this.textBaseline === "middle" ? "central" : this.textBaseline === "bottom" ? "text-after-edge" : this.textBaseline;
+		const attrs = {
+			x: round2(x),
+			y: round2(y),
+			fill: this._resolvePaint(this._fillStyle),
+			"text-anchor": anchor,
+			"dominant-baseline": baseline,
+			style: `font: ${this._font}`,
+			"pointer-events": "none"
+		};
+		if (maxWidth > 0 && this.measureText(txt).width > maxWidth) {
+			attrs.textLength = round2(maxWidth);
+			attrs.lengthAdjust = "spacingAndGlyphs";
+		}
+		this._applyCommon(attrs);
+		this._runs.push({
+			tag: "text",
+			attrs,
+			text: txt
+		});
+		this._drawCount++;
+	}
+	measureText(txt) {
+		if (!_svgMeasurer) _svgMeasurer = document.createElement("canvas").getContext("2d");
+		_svgMeasurer.font = this._font;
+		return _svgMeasurer.measureText(txt);
+	}
+	drawImage(img, x, y, w, h, ...rest) {
+		var _src;
+		if (rest.length > 0) {
+			SVGContext2D._warnOnce("drawImage9", "SVG output does not support the 9-argument (source-cropped) drawImage");
+			return;
+		}
+		this._flushShape();
+		const src = (_src = img.src) !== null && _src !== void 0 ? _src : img.toDataURL ? img.toDataURL() : null;
+		if (!src) {
+			SVGContext2D._warnOnce("drawImageSrc", "SVG output supports images from <img> elements or canvases only");
+			return;
+		}
+		const attrs = {
+			href: src,
+			x: round2(x),
+			y: round2(y)
+		};
+		const iw = w !== null && w !== void 0 ? w : img.width;
+		const ih = h !== null && h !== void 0 ? h : img.height;
+		if (iw != null) attrs.width = round2(iw);
+		if (ih != null) attrs.height = round2(ih);
+		this._applyCommon(attrs);
+		this._runs.push({
+			tag: "image",
+			attrs
+		});
+		this._drawCount++;
+	}
+	putImageData() {
+		SVGContext2D._warnOnce("putImageData", "putImageData is not supported in SVG output");
+	}
+	save() {
+		this._stateStack.push({
+			fillStyle: this._fillStyle,
+			strokeStyle: this._strokeStyle,
+			lineWidth: this._lineWidth,
+			lineJoin: this._lineJoin,
+			lineCap: this._lineCap,
+			globalAlpha: this._globalAlpha,
+			globalCompositeOperation: this._globalCompositeOperation,
+			font: this._font,
+			textAlign: this.textAlign,
+			textBaseline: this.textBaseline,
+			lineDashOffset: this._lineDashOffset,
+			_dash: this._dash.slice()
+		});
+	}
+	restore() {
+		const s = this._stateStack.pop();
+		if (s) Object.assign(this, s);
+	}
+	scale() {}
+	clip() {
+		SVGContext2D._warnOnce("clip", "clip is not yet supported in SVG output");
+	}
+	setLineDash(segments) {
+		this._dash = segments;
+	}
+	getLineDash() {
+		return this._dash;
+	}
+	createLinearGradient(x1, y1, x2, y2) {
+		return new SVGGradient("linear", [
+			x1,
+			y1,
+			x2,
+			y2
+		]);
+	}
+	createRadialGradient(x0, y0, r0, x1, y1, r1) {
+		return new SVGGradient("radial", [
+			x0,
+			y0,
+			r0,
+			x1,
+			y1,
+			r1
+		]);
+	}
+	_resolvePaint(style) {
+		if (style instanceof SVGGradient) {
+			if (!this._defs) {
+				this._defs = document.createElementNS(SVG_NS, "defs");
+				this._host.insertBefore(this._defs, this._host.firstChild);
+			}
+			return style.materialize(this._defs);
+		}
+		if (typeof style !== "string") {
+			SVGContext2D._warnOnce("pattern", "canvas patterns are not supported in SVG output; use CanvasSpace");
+			return "none";
+		}
+		return style;
+	}
+	_applyCommon(attrs) {
+		attrs.class = this.className ? `pts-svgform ${this.className}` : "pts-svgform";
+		if (this._globalAlpha !== 1) attrs.opacity = this._globalAlpha;
+		else attrs.opacity = 1;
+		const op = this._globalCompositeOperation;
+		if (op !== "source-over") {
+			if (BLEND_MODES.has(op)) {
+				const blend = `mix-blend-mode: ${op}`;
+				attrs.style = attrs.style ? `${attrs.style}; ${blend}` : blend;
+			} else SVGContext2D._warnOnce(`composite-${op}`, `composite operation "${op}" has no SVG equivalent`);
+		}
+	}
+	_flushShape() {
+		var _this$_shapeFill, _this$_shapeStroke;
+		if (!this._shapePainted || this._d.length === 0) {
+			this._shapePainted = false;
+			this._resetShape();
+			return;
+		}
+		this._endRing();
+		const attrs = {
+			d: this._d,
+			fill: (_this$_shapeFill = this._shapeFill) !== null && _this$_shapeFill !== void 0 ? _this$_shapeFill : "none",
+			stroke: (_this$_shapeStroke = this._shapeStroke) !== null && _this$_shapeStroke !== void 0 ? _this$_shapeStroke : "none"
+		};
+		if (this._shapeStroke) Object.assign(attrs, this._shapeStrokeStyle);
+		attrs.class = this._shapeClass ? `pts-svgform ${this._shapeClass}` : "pts-svgform";
+		attrs.opacity = this._shapeAlpha;
+		if (this._shapeBlend !== "source-over") {
+			if (BLEND_MODES.has(this._shapeBlend)) attrs.style = `mix-blend-mode: ${this._shapeBlend}`;
+			else SVGContext2D._warnOnce(`composite-${this._shapeBlend}`, `composite operation "${this._shapeBlend}" has no SVG equivalent`);
+		}
+		const prev = this._runs[this._runs.length - 1];
+		const join = prev && prev.tag === "path" && !this._shapeClass && sameRunStyle(prev.attrs, attrs) ? this._joinable(prev) : 0;
+		if (join) {
+			const ends = prev.shapeEnds;
+			ends.push(prev.attrs.d.length);
+			prev.attrs.d = prev.attrs.d + this._d;
+			if (join === 2 && this._shapeFill !== null && this._shapeWind() !== prev.wind) prev.wind = NaN;
+			if (ends.length < RUN_BOXES) {
+				this._shapeBox();
+				prev.boxes.push(this._x0, this._y0, this._x1, this._y1);
+			}
+		} else {
+			this._shapeBox();
+			const fill = this._shapeFill;
+			const stroke = this._shapeStroke;
+			this._runs.push({
+				tag: "path",
+				attrs,
+				shapeEnds: [],
+				free: this._shapeAlpha === 1 && this._shapeBlend === "source-over" && (fill === null || isOpaquePaint(fill)) && (stroke === null || isOpaquePaint(stroke)) && (fill === null || stroke === null || fill === stroke),
+				wind: this._shapeFill !== null ? this._shapeWind() : NaN,
+				boxes: [
+					this._x0,
+					this._y0,
+					this._x1,
+					this._y1
+				]
+			});
+		}
+		this._d = "";
+		this._shapeFill = null;
+		this._shapeStroke = null;
+		this._shapePainted = false;
+		this._resetShape();
+	}
+	_joinable(run) {
+		if (run.free && (this._shapeFill === null || (run.wind === 1 || run.wind === -1) && this._shapeWind() === run.wind)) return 1;
+		const stroke = this._shapeStroke;
+		const boxes = run.boxes;
+		if (run.shapeEnds.length >= RUN_BOXES) return 0;
+		this._shapeBox();
+		const gap = 2 * (1 + (stroke ? Number(this._shapeStrokeStyle["stroke-width"]) : 0) * (this._shapeStrokeStyle["stroke-linejoin"] === "miter" ? 5 : 1));
+		for (let i = 0; i < boxes.length; i += 4) if (this._x0 <= boxes[i + 2] + gap && boxes[i] <= this._x1 + gap && this._y0 <= boxes[i + 3] + gap && boxes[i + 1] <= this._y1 + gap) return 0;
+		return 2;
+	}
+	_resetShape() {
+		this._ptsLength = 0;
+		this._ringsLength = 0;
+		this._ringStart = -1;
+		this._wind = 0;
+		this._windDone = false;
+		this._boxDone = false;
+	}
+	_point(x, y) {
+		this._pts[this._ptsLength++] = x;
+		this._pts[this._ptsLength++] = y;
+	}
+	_orient(o) {
+		if (this._wind === 0) this._wind = o;
+		else if (this._wind !== o) this._wind = NaN;
+	}
+	_endRing() {
+		const start = this._ringStart;
+		if (start < 0) return;
+		this._ringStart = -1;
+		if (this._ptsLength - start >= 6) {
+			this._rings[this._ringsLength++] = start;
+			this._rings[this._ringsLength++] = this._ptsLength;
+		}
+	}
+	_shapeWind() {
+		if (!this._windDone) {
+			this._windDone = true;
+			for (let i = 0; i < this._ringsLength; i += 2) this._orient(convexOrientation(this._pts, this._rings[i], this._rings[i + 1]));
+		}
+		return this._wind;
+	}
+	_shapeBox() {
+		if (this._boxDone) return;
+		this._boxDone = true;
+		const p = this._pts;
+		let x0 = Infinity;
+		let y0 = Infinity;
+		let x1 = -Infinity;
+		let y1 = -Infinity;
+		for (let i = 0, n = this._ptsLength; i < n; i += 2) {
+			const x = p[i];
+			const y = p[i + 1];
+			if (x < x0) x0 = x;
+			if (x > x1) x1 = x;
+			if (y < y0) y0 = y;
+			if (y > y1) y1 = y;
+		}
+		this._x0 = x0;
+		this._y0 = y0;
+		this._x1 = x1;
+		this._y1 = y1;
+	}
+	_curve() {
+		this._ringStart = -1;
+		this._wind = NaN;
+	}
+};
+function round2(n) {
+	return Math.round(n * 100) / 100;
+}
+function sameRunStyle(a, b) {
+	let count = 0;
+	for (const k in a) {
+		if (k !== "d" && a[k] !== b[k]) return false;
+		count++;
+	}
+	for (const k in b) count--;
+	return count === 0;
+}
+var SVGSpace = class SVGSpace extends DOMSpace {
+	constructor(elem = "pt", callback) {
+		super(elem, callback);
+		this._bgcolor = "#999";
+		this._svgContexts = [];
+		this._bgElem = null;
+		this._svgRefresh = true;
+		if (this._canvas.nodeName.toLowerCase() != "svg") {
+			let s = SVGSpace.svgElement(this._canvas, "svg", `${this.id}_svg`);
+			this._container = this._canvas;
+			this._canvas = s;
+		}
+		this.refresh(true);
+	}
+	_createDefaultElement(container, id) {
+		return SVGSpace.svgElement(container, "svg", id);
+	}
+	getForm() {
+		return new SVGForm(this);
+	}
+	get element() {
+		return this._canvas;
+	}
+	registerContext(ctx) {
+		this._svgContexts.push(ctx);
+	}
+	resize(b, evt) {
+		super.resize(b, evt);
+		SVGSpace.setAttr(this.element, {
+			viewBox: `0 0 ${this.bound.width} ${this.bound.height}`,
+			width: `${this.bound.width}`,
+			height: `${this.bound.height}`,
+			xmlns: SVG_NS,
+			version: "1.1"
+		});
+		this._updateBackground();
+		return this;
+	}
+	clear(bg) {
+		if (bg) this._bgcolor = bg;
+		this._updateBackground();
+		return this;
+	}
+	_updateBackground() {
+		const svg = this._canvas;
+		if (!this._bgElem) {
+			this._bgElem = document.createElementNS(SVG_NS, "rect");
+			this._bgElem.setAttribute("class", "pts-svg-bg");
+			svg.insertBefore(this._bgElem, svg.firstChild);
+		}
+		DOMSpace.setAttr(this._bgElem, {
+			x: 0,
+			y: 0,
+			width: this.bound.width,
+			height: this.bound.height,
+			fill: !this._bgcolor || this._bgcolor === "transparent" ? "none" : this._bgcolor
+		});
+	}
+	playItems(time) {
+		const ctxs = this._svgContexts;
+		for (let i = 0, len = ctxs.length; i < len; i++) ctxs[i].beginFrame();
+		super.playItems(time);
+		for (let i = 0, len = ctxs.length; i < len; i++) if (this._svgRefresh || ctxs[i].drawCount > 0) ctxs[i].commitFrame();
+	}
+	refresh(b) {
+		this._svgRefresh = b;
+		return super.refresh(b);
+	}
+	toSVG(expand = false) {
+		const svg = this._canvas;
+		if (!expand) return svg.outerHTML;
+		const clone = svg.cloneNode(true);
+		const groups = clone.querySelectorAll("g.pts-svgform");
+		let gi = 0;
+		for (const ctx of this._svgContexts) {
+			const group = groups[gi++];
+			if (!group) continue;
+			group.textContent = "";
+			for (const run of ctx.runs) {
+				if (run.tag !== "path") {
+					const elem = document.createElementNS(SVG_NS, run.tag);
+					DOMSpace.setAttr(elem, run.attrs);
+					if (run.text) elem.textContent = run.text;
+					group.appendChild(elem);
+					continue;
+				}
+				const d = run.attrs.d;
+				const bounds = [...run.shapeEnds, d.length];
+				let begin = 0;
+				for (const end of bounds) {
+					const elem = document.createElementNS(SVG_NS, "path");
+					DOMSpace.setAttr(elem, _objectSpread2(_objectSpread2({}, run.attrs), {}, { d: d.slice(begin, end) }));
+					group.appendChild(elem);
+					begin = end;
+				}
+			}
+		}
+		return clone.outerHTML;
+	}
+	static svgElement(parent, name, id) {
+		if (!parent || !parent.appendChild) throw new Error("parent is not a valid DOM element");
+		let elem = document.getElementById(id);
+		if (elem && !parent.contains(elem)) elem = null;
+		if (!elem) {
+			elem = document.createElementNS(SVG_NS, name);
+			elem.setAttribute("id", id);
+			parent.appendChild(elem);
+		}
+		return elem;
+	}
+	remove(player) {
+		this._container.querySelectorAll("." + SVGForm.scopeID(player)).forEach((el) => {
+			el.parentNode.removeChild(el);
+		});
+		return super.remove(player);
+	}
+	removeAll() {
+		this._canvas.innerHTML = "";
+		this._bgElem = null;
+		for (const ctx of this._svgContexts) ctx.resetDom();
+		return super.removeAll();
+	}
+	dispose() {
+		super.dispose();
+		for (const ctx of this._svgContexts) ctx.disposeDom();
+		this._svgContexts = [];
+		if (this._bgElem && this._bgElem.parentNode) this._bgElem.parentNode.removeChild(this._bgElem);
+		this._bgElem = null;
+		return this;
+	}
+};
+let _svgFormGroupID = 0;
+let _svgFormDomID = 0;
+let _svgFormOffscreenWarned = false;
+const _legacyStyleKeys = {
+	fillStyle: "fill",
+	strokeStyle: "stroke",
+	lineWidth: "stroke-width",
+	lineJoin: "stroke-linejoin",
+	lineCap: "stroke-linecap",
+	globalAlpha: "opacity",
+	font: "font"
+};
+var SVGForm = class SVGForm extends CanvasForm {
+	static get groupID() {
+		return _svgFormGroupID;
+	}
+	static set groupID(n) {
+		_svgFormGroupID = n;
+	}
+	static get domID() {
+		return _svgFormDomID;
+	}
+	static set domID(n) {
+		_svgFormDomID = n;
+	}
+	constructor(space) {
+		super();
+		this._formID = _svgFormGroupID++;
+		this._legacyCtx = {
+			group: null,
+			groupID: "pts",
+			groupCount: 0,
+			currentID: "pts0",
+			currentClass: "",
+			style: {}
+		};
+		this._svgSpace = space;
+		this._svgCtx = new SVGContext2D(space.element);
+		space.registerContext(this._svgCtx);
+		this._ctx = this._svgCtx;
+		this._set("fillStyle", this._style.fillStyle);
+		this._set("strokeStyle", this._style.strokeStyle);
+		this._set("lineJoin", "bevel");
+		this._set("font", this._font.value);
+		this._ready = true;
+		this._legacyCtx.group = space.element;
+	}
+	_set(key, value) {
+		const legacy = _legacyStyleKeys[key];
+		if (legacy) {
+			if (typeof value === "string" || typeof value === "number") this._legacyCtx.style[legacy] = value;
+		}
+		super._set(key, value);
+	}
+	get filled() {
+		return this._filled;
+	}
+	set filled(b) {
+		this._filled = b;
+		this._legacyCtx.style.filled = b;
+	}
+	get stroked() {
+		return this._stroked;
+	}
+	set stroked(b) {
+		this._stroked = b;
+		this._legacyCtx.style.stroked = b;
+	}
+	useOffscreen(_off = true, _clear = false) {
+		SVGForm._warnOffscreen();
+		return this;
+	}
+	renderOffscreen(_offset = [0, 0]) {
+		SVGForm._warnOffscreen();
+	}
+	static _warnOffscreen() {
+		if (_svgFormOffscreenWarned) return;
+		_svgFormOffscreenWarned = true;
+		Util.warn("offscreen canvases are not supported in SVG output; use CanvasSpace");
+	}
+	get space() {
+		return this._svgSpace;
+	}
+	get svgContext() {
+		return this._svgCtx;
+	}
+	cls(c) {
+		const cls = typeof c == "boolean" ? "" : c;
+		this._legacyCtx.currentClass = cls;
+		this._svgCtx.className = cls;
+		return this;
+	}
+	updateScope(group_id, group) {
+		this._legacyCtx.group = group;
+		this._legacyCtx.groupID = group_id;
+		this._legacyCtx.groupCount = 0;
+		this.nextID();
+		return this._legacyCtx;
+	}
+	scope(item) {
+		if (!item || item.animateID == null) throw new Error("item not defined or not yet added to Space");
+		return this.updateScope(`${SVGForm.scopeID(item)}-f${this._formID}`, this._svgSpace.element);
+	}
+	nextID() {
+		this._legacyCtx.groupCount++;
+		this._legacyCtx.currentID = `${this._legacyCtx.groupID}-${this._legacyCtx.groupCount}`;
+		return this._legacyCtx.currentID;
+	}
+	static getID(ctx) {
+		return ctx.currentID || `p-${SVGForm.domID++}`;
+	}
+	static scopeID(item) {
+		return `item-${item.animateID}`;
+	}
+	static style(elem, styles) {
+		let st = [];
+		if (!styles["filled"]) st.push("fill: none");
+		if (!styles["stroked"]) st.push("stroke: none");
+		for (let k in styles) if (styles.hasOwnProperty(k) && k != "filled" && k != "stroked") {
+			let v = styles[k];
+			if (v) {
+				if (!styles["filled"] && k.indexOf("fill") === 0) continue;
+				else if (!styles["stroked"] && k.indexOf("stroke") === 0) continue;
+				else st.push(`${k}: ${v}`);
+			}
+		}
+		return DOMSpace.setAttr(elem, { style: st.join(";") });
+	}
+	static point(ctx, pt, radius = 5, shape = "square") {
+		return "style" in ctx ? SVGForm.pointElement(ctx, pt, radius, shape) : CanvasForm.point(ctx, pt, radius, shape);
+	}
+	static circle(ctx, pt, radius = 10) {
+		return "style" in ctx ? SVGForm.circleElement(ctx, pt, radius) : CanvasForm.circle(ctx, pt, radius);
+	}
+	static arc(ctx, pt, radius, startAngle, endAngle, cc) {
+		return "style" in ctx ? SVGForm.arcElement(ctx, pt, radius, startAngle, endAngle, cc) : CanvasForm.arc(ctx, pt, radius, startAngle, endAngle, cc);
+	}
+	static square(ctx, pt, halfsize) {
+		return "style" in ctx ? SVGForm.squareElement(ctx, pt, halfsize) : CanvasForm.square(ctx, pt, halfsize);
+	}
+	static line(ctx, pts) {
+		return "style" in ctx ? SVGForm.lineElement(ctx, pts) : CanvasForm.line(ctx, pts);
+	}
+	static polygon(ctx, pts) {
+		return "style" in ctx ? SVGForm.polygonElement(ctx, pts) : CanvasForm.polygon(ctx, pts);
+	}
+	static rect(ctx, pts) {
+		return "style" in ctx ? SVGForm.rectElement(ctx, pts) : CanvasForm.rect(ctx, pts);
+	}
+	static bezier(ctx, pts) {
+		return "style" in ctx ? SVGForm.bezierElement(ctx, pts) : CanvasForm.bezier(ctx, pts);
+	}
+	static compound(ctx, rings) {
+		return "style" in ctx ? SVGForm.compoundElement(ctx, rings) : CanvasForm.compound(ctx, rings);
+	}
+	static text(ctx, pt, txt, maxWidth) {
+		return "style" in ctx ? SVGForm.textElement(ctx, pt, txt) : CanvasForm.text(ctx, pt, txt, maxWidth);
+	}
+	static pointElement(ctx, pt, radius = 5, shape = "square") {
+		if (shape === "circle") return SVGForm.circleElement(ctx, pt, radius);
+		else return SVGForm.squareElement(ctx, pt, radius);
+	}
+	static circleElement(ctx, pt, radius = 10) {
+		let elem = SVGSpace.svgElement(ctx.group, "circle", SVGForm.getID(ctx));
+		DOMSpace.setAttr(elem, {
+			cx: pt[0],
+			cy: pt[1],
+			r: radius,
+			class: `pts-svgform pts-circle ${ctx.currentClass}`
+		});
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+	static arcElement(ctx, pt, radius, startAngle, endAngle, cc) {
+		let elem = SVGSpace.svgElement(ctx.group, "path", SVGForm.getID(ctx));
+		const start = new Pt(pt).toAngle(startAngle, radius, true);
+		const end = new Pt(pt).toAngle(endAngle, radius, true);
+		let largeArc = Geom.boundAngle(endAngle) - Geom.boundAngle(startAngle) > Const.pi ? true : false;
+		if (cc) largeArc = !largeArc;
+		const sweep = cc ? "0" : "1";
+		const d = `M ${start[0]} ${start[1]} A ${radius} ${radius} 0 ${largeArc ? "1" : "0"} ${sweep} ${end[0]} ${end[1]}`;
+		DOMSpace.setAttr(elem, {
+			d,
+			class: `pts-svgform pts-arc ${ctx.currentClass}`
+		});
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+	static squareElement(ctx, pt, halfsize) {
+		let elem = SVGSpace.svgElement(ctx.group, "rect", SVGForm.getID(ctx));
+		DOMSpace.setAttr(elem, {
+			x: pt[0] - halfsize,
+			y: pt[1] - halfsize,
+			width: halfsize * 2,
+			height: halfsize * 2,
+			class: `pts-svgform pts-square ${ctx.currentClass}`
+		});
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+	static lineElement(ctx, pts) {
+		let points = SVGForm.pointsString(pts);
+		if (points.count < 2) return;
+		if (points.count > 2) return SVGForm._poly(ctx, points.string, false);
+		let elem = SVGSpace.svgElement(ctx.group, "line", SVGForm.getID(ctx));
+		let p = Util.iterToArray(pts);
+		DOMSpace.setAttr(elem, {
+			x1: p[0][0],
+			y1: p[0][1],
+			x2: p[1][0],
+			y2: p[1][1],
+			class: `pts-svgform pts-line ${ctx.currentClass}`
+		});
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+	static _poly(ctx, points, closePath = true) {
+		let elem = SVGSpace.svgElement(ctx.group, closePath ? "polygon" : "polyline", SVGForm.getID(ctx));
+		DOMSpace.setAttr(elem, {
+			points,
+			class: `pts-svgform pts-polygon ${ctx.currentClass}`
+		});
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+	static pointsString(pts) {
+		let points = "";
+		let count = 0;
+		for (let p of pts) {
+			points += `${p[0]},${p[1]} `;
+			count++;
+		}
+		return {
+			string: points,
+			count
+		};
+	}
+	static polygonElement(ctx, pts) {
+		let points = SVGForm.pointsString(pts);
+		return SVGForm._poly(ctx, points.string, true);
+	}
+	static bezierElement(ctx, pts) {
+		const p = Util.iterToArray(pts);
+		if (p.length < 4) return;
+		let d = `M${p[0][0]} ${p[0][1]}`;
+		for (let i = 3; i < p.length; i += 3) d += `C${p[i - 2][0]} ${p[i - 2][1]} ${p[i - 1][0]} ${p[i - 1][1]} ${p[i][0]} ${p[i][1]}`;
+		return SVGForm._pathElement(ctx, d);
+	}
+	static compoundElement(ctx, rings) {
+		let d = "";
+		for (const ring of rings) {
+			const p = Util.iterToArray(ring);
+			if (p.length < 2 || typeof p[0][0] !== "number") continue;
+			d += `M${p[0][0]} ${p[0][1]}`;
+			for (let i = 1; i < p.length; i++) d += `L${p[i][0]} ${p[i][1]}`;
+			d += "Z";
+		}
+		if (d === "") return;
+		return SVGForm._pathElement(ctx, d);
+	}
+	static _pathElement(ctx, d) {
+		const elem = SVGSpace.svgElement(ctx.group, "path", SVGForm.getID(ctx));
+		DOMSpace.setAttr(elem, {
+			d,
+			class: `pts-svgform pts-path ${ctx.currentClass}`
+		});
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+	static rectElement(ctx, pts) {
+		if (!Util.arrayCheck(pts)) return;
+		let elem = SVGSpace.svgElement(ctx.group, "rect", SVGForm.getID(ctx));
+		let bound = Group.fromArray(pts).boundingBox();
+		let size = Rectangle.size(bound);
+		DOMSpace.setAttr(elem, {
+			x: bound[0][0],
+			y: bound[0][1],
+			width: size[0],
+			height: size[1],
+			class: `pts-svgform pts-rect ${ctx.currentClass}`
+		});
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+	static textElement(ctx, pt, txt) {
+		let elem = SVGSpace.svgElement(ctx.group, "text", SVGForm.getID(ctx));
+		DOMSpace.setAttr(elem, {
+			"pointer-events": "none",
+			x: pt[0],
+			y: pt[1],
+			dx: 0,
+			dy: 0,
+			class: `pts-svgform pts-text ${ctx.currentClass}`
+		});
+		elem.textContent = txt;
+		SVGForm.style(elem, ctx.style);
+		return elem;
+	}
+};
+
+//#endregion
+//#region src/Physics.ts
+const FRAME = 1 / 60;
+const FRAME_MS = 1e3 / 60;
+const MIN_STEP_MS = 2;
+var World = class World {
+	constructor(bound, friction = 1, gravity = 0) {
+		this._gravity = new Pt();
+		this._friction = 1;
+		this._damping = .75;
+		this._iterations = 1;
+		this._substeps = 4;
+		this._maxTimeStep = 50;
+		this._particles = [];
+		this._bodies = [];
+		this._pnames = [];
+		this._bnames = [];
+		this._frictionStep = 1;
+		this._carry = 0;
+		this._hashKeys = /* @__PURE__ */ new Uint32Array(0);
+		this._cellStart = /* @__PURE__ */ new Uint32Array(0);
+		this._cellEntries = /* @__PURE__ */ new Uint32Array(0);
+		this._neighborKeys = /* @__PURE__ */ new Uint32Array(9);
+		this._bodyBounds = /* @__PURE__ */ new Float32Array(0);
+		this._bound = Bound.fromGroup(bound);
+		this._friction = friction;
+		this._gravity = typeof gravity === "number" ? new Pt(0, gravity) : new Pt(gravity);
+		return this;
+	}
+	get bound() {
+		return this._bound;
+	}
+	set bound(bound) {
+		this._bound = bound;
+	}
+	get gravity() {
+		return this._gravity;
+	}
+	set gravity(g) {
+		this._gravity = g;
+	}
+	get friction() {
+		return this._friction;
+	}
+	set friction(f) {
+		this._friction = f;
+	}
+	get damping() {
+		return this._damping;
+	}
+	set damping(f) {
+		this._damping = f;
+	}
+	get iterations() {
+		return this._iterations;
+	}
+	set iterations(f) {
+		this._iterations = f;
+	}
+	get substeps() {
+		return this._substeps;
+	}
+	set substeps(n) {
+		this._substeps = Math.max(1, Math.round(n));
+	}
+	get maxTimeStep() {
+		return this._maxTimeStep;
+	}
+	set maxTimeStep(ms) {
+		this._maxTimeStep = Math.max(0, ms);
+	}
+	get bodyCount() {
+		return this._bodies.length;
+	}
+	get particleCount() {
+		return this._particles.length;
+	}
+	body(id) {
+		if (typeof id === "string" && id.length > 0) return this._bodies[this._bnames.indexOf(id)];
+		return typeof id === "number" && id >= 0 ? this._bodies[id] : void 0;
+	}
+	particle(id) {
+		if (typeof id === "string" && id.length > 0) return this._particles[this._pnames.indexOf(id)];
+		return typeof id === "number" && id >= 0 ? this._particles[id] : void 0;
+	}
+	bodyIndex(name) {
+		return this._bnames.indexOf(name);
+	}
+	particleIndex(name) {
+		return this._pnames.indexOf(name);
+	}
+	update(ms) {
+		const elapsed = Math.min(ms, this._maxTimeStep) + this._carry;
+		this._carry = 0;
+		if (elapsed >= MIN_STEP_MS) {
+			const k = Math.max(1, Math.round(elapsed * this._substeps / FRAME_MS));
+			const h = elapsed / 1e3 / k;
+			this._frictionStep = Math.pow(this._friction, h / FRAME);
+			for (let s = 0; s < k; s++) {
+				this._updateParticles(h);
+				this._updateBodies(h);
+			}
+			this._clearForces();
+		} else if (elapsed > 0) this._carry = elapsed;
+		if (this._drawParticles) for (let i = 0, len = this._particles.length; i < len; i++) this._drawParticles(this._particles[i], i);
+		if (this._drawBodies) for (let i = 0, len = this._bodies.length; i < len; i++) this._drawBodies(this._bodies[i], i);
+	}
+	drawParticles(fn) {
+		this._drawParticles = fn;
+	}
+	drawBodies(fn) {
+		this._drawBodies = fn;
+	}
+	add(p, name = "") {
+		if (p instanceof Body) {
+			this._bodies.push(p);
+			this._bnames.push(name);
+		} else {
+			this._particles.push(p);
+			this._pnames.push(name);
+		}
+		return this;
+	}
+	_index(fn, id) {
+		let index = 0;
+		if (typeof id === "string") {
+			index = fn(id);
+			if (index < 0) throw new Error(`Cannot find index of ${id}. You can use particleIndex() or bodyIndex() function to check existence by name.`);
+		} else index = id;
+		return index;
+	}
+	removeBody(from, count = 1) {
+		const index = this._index(this.bodyIndex.bind(this), from);
+		const param = index < 0 ? [index * -1 - 1, count] : [index, count];
+		this._bodies.splice(param[0], param[1]);
+		this._bnames.splice(param[0], param[1]);
+		return this;
+	}
+	removeParticle(from, count = 1) {
+		const index = this._index(this.particleIndex.bind(this), from);
+		const param = index < 0 ? [index * -1 - 1, count] : [index, count];
+		this._particles.splice(param[0], param[1]);
+		this._pnames.splice(param[0], param[1]);
+		return this;
+	}
+	static edgeConstraint(p1, p2, dist, stiff = 1, precise = false) {
+		const m1 = 1 / (p1.mass || 1);
+		const m2 = 1 / (p2.mass || 1);
+		const mm = m1 + m2;
+		let delta = p2.$subtract(p1);
+		let distSq = dist * dist;
+		let d = precise ? dist / delta.magnitude() - 1 : distSq / (delta.dot(delta) + distSq) - .5;
+		let f = delta.$multiply(d * stiff);
+		p1.subtract(f.$multiply(m1 / mm));
+		p2.add(f.$multiply(m2 / mm));
+		return p1;
+	}
+	static boundConstraint(p, rect, damping = .75) {
+		const bound = Geom.boundingBox(rect);
+		World._boundParticle(p, bound[0][0], bound[0][1], bound[1][0], bound[1][1], damping);
+	}
+	static _boundParticle(p, minX, minY, maxX, maxY, damping) {
+		const px = p[0];
+		const py = p[1];
+		const nx = Math.min(Math.max(px, minX + p.radius), maxX - p.radius);
+		const ny = Math.min(Math.max(py, minY + p.radius), maxY - p.radius);
+		if (nx !== px || ny !== py) {
+			const prev = p.previous;
+			const cx = (px - prev[0]) * damping;
+			const cy = (py - prev[1]) * damping;
+			prev[0] = nx !== px ? nx + cx : nx - cx;
+			prev[1] = ny !== py ? ny + cy : ny - cy;
+			p[0] = nx;
+			p[1] = ny;
+		}
+	}
+	integrate(p, dt, prevDt = p.timeStep || FRAME) {
+		const prev = p.previous;
+		const ratio = prevDt > 0 ? dt / prevDt : 1;
+		if (p.lock) {
+			if (ratio !== 1) {
+				prev[0] = p[0] - (p[0] - prev[0]) * ratio;
+				prev[1] = p[1] - (p[1] - prev[1]) * ratio;
+			}
+			p.timeStep = dt;
+			p.verlet(dt, this._frictionStep, dt);
+			return p;
+		}
+		const force = p.force;
+		const f = this._frictionStep * ratio;
+		const dtSq = dt * dt;
+		const px = p[0];
+		const py = p[1];
+		const nx = px + (px - prev[0]) * f + (force[0] + this._gravity[0]) * dtSq;
+		const ny = py + (py - prev[1]) * f + (force[1] + this._gravity[1]) * dtSq;
+		prev[0] = px;
+		prev[1] = py;
+		p[0] = nx;
+		p[1] = ny;
+		p.timeStep = dt;
+		return p;
+	}
+	_updateParticles(dt) {
+		const ps = this._particles;
+		const len = ps.length;
+		if (len === 0) return;
+		const b0 = this._bound[0];
+		const b1 = this._bound[1];
+		const minX = Math.min(b0[0], b1[0]);
+		const minY = Math.min(b0[1], b1[1]);
+		const maxX = Math.max(b0[0], b1[0]);
+		const maxY = Math.max(b0[1], b1[1]);
+		for (let i = 0; i < len; i++) {
+			const p = ps[i];
+			this.integrate(p, dt);
+			World._boundParticle(p, minX, minY, maxX, maxY, this._damping);
+		}
+		this._collideParticles();
+	}
+	_collideParticles() {
+		const ps = this._particles;
+		const n = ps.length;
+		if (n < 2) return;
+		let rmax = 0;
+		for (let i = 0; i < n; i++) if (ps[i].radius > rmax) rmax = ps[i].radius;
+		if (rmax <= 0) return;
+		const inv = 1 / (rmax * 2);
+		let m = 16;
+		while (m < n * 2) m <<= 1;
+		const mask = m - 1;
+		if (this._cellStart.length < m + 1) this._cellStart = new Uint32Array(m + 1);
+		if (this._hashKeys.length < n) {
+			this._hashKeys = new Uint32Array(n * 2);
+			this._cellEntries = new Uint32Array(n * 2);
+		}
+		const keys = this._hashKeys;
+		const start = this._cellStart;
+		const entries = this._cellEntries;
+		start.fill(0, 0, m + 1);
+		for (let i = 0; i < n; i++) {
+			const p = ps[i];
+			const key = (Math.imul(Math.floor(p[0] * inv), 2654435761) ^ Math.imul(Math.floor(p[1] * inv), 2246822519)) >>> 0 & mask;
+			keys[i] = key;
+			start[key]++;
+		}
+		let sum = 0;
+		for (let k = 0; k < m; k++) {
+			const c = start[k];
+			start[k] = sum;
+			sum += c;
+		}
+		start[m] = sum;
+		for (let i = 0; i < n; i++) entries[start[keys[i]]++] = i;
+		const damping = this._damping;
+		const visited = this._neighborKeys;
+		for (let i = 0; i < n; i++) {
+			const p = ps[i];
+			const cx = Math.floor(p[0] * inv);
+			const cy = Math.floor(p[1] * inv);
+			let visitedCount = 0;
+			for (let gy = cy - 1; gy <= cy + 1; gy++) {
+				const hy = Math.imul(gy, 2246822519);
+				for (let gx = cx - 1; gx <= cx + 1; gx++) {
+					const key = (Math.imul(gx, 2654435761) ^ hy) >>> 0 & mask;
+					let seen = false;
+					for (let v = 0; v < visitedCount; v++) if (visited[v] === key) {
+						seen = true;
+						break;
+					}
+					if (seen) continue;
+					visited[visitedCount++] = key;
+					const end = start[key];
+					const begin = key > 0 ? start[key - 1] : 0;
+					for (let e = begin; e < end; e++) {
+						const j = entries[e];
+						if (j > i) p.collide(ps[j], damping);
+					}
+				}
+			}
+		}
+	}
+	_clearForces() {
+		for (let i = 0, len = this._particles.length; i < len; i++) this._particles[i].force.fill(0);
+		for (let i = 0, len = this._bodies.length; i < len; i++) {
+			const bd = this._bodies[i];
+			for (let k = 0, klen = bd.length; k < klen; k++) bd[k].force.fill(0);
+		}
+	}
+	_updateBodies(dt) {
+		const bs = this._bodies;
+		const blen = bs.length;
+		if (blen === 0) return;
+		const b0 = this._bound[0];
+		const b1 = this._bound[1];
+		const minX = Math.min(b0[0], b1[0]);
+		const minY = Math.min(b0[1], b1[1]);
+		const maxX = Math.max(b0[0], b1[0]);
+		const maxY = Math.max(b0[1], b1[1]);
+		for (let i = 0; i < blen; i++) {
+			const bd = bs[i];
+			if (!bd) continue;
+			for (let k = 0, klen = bd.length; k < klen; k++) {
+				const bk = bd[k];
+				this.integrate(bk, dt);
+				World._boundParticle(bk, minX, minY, maxX, maxY, this._damping);
+			}
+		}
+		this._collideBodies(blen);
+		for (let i = 0; i < blen; i++) if (bs[i]) bs[i].solveEdges(dt, this._iterations, this._substeps);
+	}
+	_collideBodies(blen) {
+		const bs = this._bodies;
+		if (this._bodyBounds.length < blen * 4) this._bodyBounds = new Float32Array(blen * 8);
+		const aabb = this._bodyBounds;
+		for (let i = 0; i < blen; i++) {
+			const bd = bs[i];
+			let bx0 = Infinity;
+			let by0 = Infinity;
+			let bx1 = -Infinity;
+			let by1 = -Infinity;
+			if (bd) for (let k = 0, klen = bd.length; k < klen; k++) {
+				const v = bd[k];
+				if (v[0] < bx0) bx0 = v[0];
+				if (v[0] > bx1) bx1 = v[0];
+				if (v[1] < by0) by0 = v[1];
+				if (v[1] > by1) by1 = v[1];
+			}
+			aabb[i * 4] = bx0;
+			aabb[i * 4 + 1] = by0;
+			aabb[i * 4 + 2] = bx1;
+			aabb[i * 4 + 3] = by1;
+		}
+		const ps = this._particles;
+		const plen = ps.length;
+		for (let i = 0; i < blen; i++) {
+			const bd = bs[i];
+			if (!bd) continue;
+			const ax0 = aabb[i * 4];
+			const ay0 = aabb[i * 4 + 1];
+			const ax1 = aabb[i * 4 + 2];
+			const ay1 = aabb[i * 4 + 3];
+			for (let k = i + 1; k < blen; k++) if (bs[k] && ax0 <= aabb[k * 4 + 2] && ax1 >= aabb[k * 4] && ay0 <= aabb[k * 4 + 3] && ay1 >= aabb[k * 4 + 1]) bd.processBody(bs[k]);
+			for (let mIdx = 0; mIdx < plen; mIdx++) {
+				const p = ps[mIdx];
+				const r = p.radius;
+				if (p[0] >= ax0 - r && p[0] <= ax1 + r && p[1] >= ay0 - r && p[1] <= ay1 + r) bd.processParticle(p);
+			}
+		}
+	}
+};
+var Particle = class extends Pt {
+	constructor(...args) {
+		super(...args);
+		this._mass = 1;
+		this._radius = 0;
+		this._force = new Pt();
+		this._prev = new Pt();
+		this._prevDt = 0;
+		this._lock = false;
+		this._prev = this.clone();
+	}
+	get mass() {
+		return this._mass;
+	}
+	set mass(m) {
+		this._mass = m;
+	}
+	get radius() {
+		return this._radius;
+	}
+	set radius(f) {
+		this._radius = f;
+	}
+	get previous() {
+		return this._prev;
+	}
+	set previous(p) {
+		this._prev = p;
+	}
+	get force() {
+		return this._force;
+	}
+	set force(g) {
+		this._force = g;
+	}
+	get body() {
+		return this._body;
+	}
+	set body(b) {
+		this._body = b;
+	}
+	get lock() {
+		return this._lock;
+	}
+	set lock(b) {
+		if (this._lock && !b) this._prev.to(this);
+		this._lock = b;
+		this._lockPt = new Pt(this);
+	}
+	get changed() {
+		const d = this.$subtract(this._prev);
+		return this._prevDt > 0 && this._prevDt !== FRAME ? d.multiply(FRAME / this._prevDt) : d;
+	}
+	get timeStep() {
+		return this._prevDt;
+	}
+	set timeStep(t) {
+		this._prevDt = t;
+	}
+	set position(p) {
+		this.previous.to(this);
+		this._prevDt = FRAME;
+		if (this._lock) this._lockPt = p;
+		this.to(p);
+	}
+	size(r) {
+		this._mass = r;
+		this._radius = r;
+		return this;
+	}
+	addForce(...args) {
+		this._force.add(...args);
+		return this._force;
+	}
+	verlet(dt, friction, lastDt) {
+		if (this._lock) this.to(this._lockPt);
+		else {
+			const lt = lastDt ? lastDt : this._prevDt || dt;
+			const adt = dt * (dt + lt) / 2;
+			const f = friction * dt / lt;
+			const force = this._force;
+			const prev = this._prev;
+			for (let i = 0, len = this.length; i < len; i++) {
+				const cur = this[i];
+				const v = (cur - prev[i]) * f + (force[i] || 0) * adt;
+				prev[i] = cur;
+				this[i] = cur + v;
+			}
+			force.fill(0);
+			this._prevDt = dt;
+		}
+		return this;
+	}
+	hit(...args) {
+		const prev = this._prev;
+		if (this._prevDt > 0 && this._prevDt !== FRAME) {
+			const r = FRAME / this._prevDt;
+			for (let i = 0, len = this.length; i < len; i++) prev[i] = this[i] - (this[i] - prev[i]) * r;
+		}
+		this._prevDt = FRAME;
+		prev.subtract(new Pt(...args).$divide(Math.sqrt(this._mass)));
+		return this;
+	}
+	collide(p2, damp = 1) {
+		const p1 = this;
+		let dx = p1[0] - p2[0];
+		let dy = p1[1] - p2[1];
+		let distSq = dx * dx + dy * dy;
+		const dr = p1.radius + p2.radius;
+		if (distSq >= dr * dr) return;
+		const prev1 = p1.previous;
+		const prev2 = p2.previous;
+		let c1x = p1[0] - prev1[0];
+		let c1y = p1[1] - prev1[1];
+		let c2x = p2[0] - prev2[0];
+		let c2y = p2[1] - prev2[1];
+		let dist = Math.sqrt(distSq);
+		let k;
+		if (dist < 1e-6) {
+			dx = 1;
+			dy = 0;
+			dist = 1;
+			distSq = 1;
+			k = -dr / 2;
+		} else k = (dist - dr) / dist / 2;
+		const np1x = p1[0] - dx * k;
+		const np1y = p1[1] - dy * k;
+		const np2x = p2[0] + dx * k;
+		const np2y = p2[1] + dy * k;
+		const f1 = damp * (dx * c1x + dy * c1y) / distSq;
+		const f2 = damp * (dx * c2x + dy * c2y) / distSq;
+		const dm1 = p1.mass / (p1.mass + p2.mass);
+		const dm2 = p2.mass / (p1.mass + p2.mass);
+		c1x += (f2 - f1) * dx * dm2;
+		c1y += (f2 - f1) * dy * dm2;
+		c2x += (f1 - f2) * dx * dm1;
+		c2y += (f1 - f2) * dy * dm1;
+		p1[0] = np1x;
+		p1[1] = np1y;
+		p2[0] = np2x;
+		p2[1] = np2y;
+		prev1[0] = np1x - c1x;
+		prev1[1] = np1y - c1y;
+		prev2[0] = np2x - c2x;
+		prev2[1] = np2y - c2y;
+	}
+	toString() {
+		return `Particle: ${this[0]} ${this[1]} | previous ${this._prev[0]} ${this._prev[1]} | mass ${this._mass}`;
+	}
+};
+var Body = class Body extends Group {
+	constructor() {
+		super();
+		this._cs = [];
+		this._stiff = 1;
+		this._locks = {};
+		this._mass = 1;
+	}
+	static fromGroup(body, stiff = 1, autoLink = true, autoMass = true) {
+		let b = new Body().init(body);
+		if (autoLink) b.linkAll(stiff);
+		if (autoMass) b.autoMass();
+		return b;
+	}
+	init(body, stiff = 1) {
+		for (let li of body) {
+			let p = new Particle(li);
+			p.body = this;
+			this.push(p);
+		}
+		this._stiff = stiff;
+		return this;
+	}
+	get mass() {
+		return this._mass;
+	}
+	set mass(m) {
+		this._mass = m;
+		for (let i = 0, len = this.length; i < len; i++) this[i].mass = this._mass;
+	}
+	autoMass() {
+		this.mass = Math.sqrt(Polygon.area(this)) / 10;
+		return this;
+	}
+	link(index1, index2, stiff) {
+		if (index1 < 0 || index1 >= this.length) throw new Error("index1 is not in the Group's indices");
+		if (index2 < 0 || index2 >= this.length) throw new Error("index1 is not in the Group's indices");
+		let d = this[index1].$subtract(this[index2]).magnitude();
+		this._cs.push([
+			index1,
+			index2,
+			d,
+			stiff || this._stiff
+		]);
+		return this;
+	}
+	linkAll(stiff) {
+		const half = this.length / 2;
+		const tryLink = (a, b, s) => {
+			if (a === b) return;
+			const cs = this._cs;
+			for (let k = 0, klen = cs.length; k < klen; k++) {
+				const c = cs[k];
+				if (c[0] === a && c[1] === b || c[0] === b && c[1] === a) return;
+			}
+			this.link(a, b, s);
+		};
+		for (let i = 0, len = this.length; i < len; i++) {
+			const n = i >= len - 1 ? 0 : i + 1;
+			tryLink(i, n, stiff);
+			if (len > 4) {
+				const nd = Math.floor(half / 2) + 1;
+				const n2 = i >= len - nd ? i % len : i + nd;
+				tryLink(i, n2, stiff);
+			}
+			if (i <= half - 1) tryLink(i, Math.min(this.length - 1, i + Math.floor(half)));
+		}
+	}
+	linksToLines() {
+		let gs = [];
+		for (let i = 0, len = this._cs.length; i < len; i++) {
+			let ln = this._cs[i];
+			gs.push(new Group(this[ln[0]], this[ln[1]]));
+		}
+		return gs;
+	}
+	processEdges() {
+		for (let i = 0, len = this._cs.length; i < len; i++) {
+			let [m, n, d, s] = this._cs[i];
+			World.edgeConstraint(this[m], this[n], d, s);
+		}
+	}
+	solveEdges(dt, iterations = 1, substeps = 1) {
+		const cs = this._cs;
+		const clen = cs.length;
+		if (clen === 0) return this;
+		const invPasses = 1 / Math.max(1, iterations * substeps);
+		for (let iter = 0; iter < iterations; iter++) for (let ci = 0; ci < clen; ci++) {
+			const c = cs[ci];
+			const p1 = this[c[0]];
+			const p2 = this[c[1]];
+			const stiff = c[3];
+			const w1 = p1.lock ? 0 : 1 / (p1.mass || 1);
+			const w2 = p2.lock ? 0 : 1 / (p2.mass || 1);
+			const w = w1 + w2;
+			if (w === 0) continue;
+			const dx = p2[0] - p1[0];
+			const dy = p2[1] - p1[1];
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (dist < 1e-6) continue;
+			let alpha = 0;
+			if (stiff < 1) {
+				const sEff = 1 - Math.pow(1 - stiff, invPasses);
+				alpha = sEff > 1e-6 ? w * (1 - sEff) / sEff : w * 1e6;
+			}
+			const s = -(dist - c[2]) / (w + alpha) / dist;
+			const fx = dx * s;
+			const fy = dy * s;
+			p1[0] -= fx * w1;
+			p1[1] -= fy * w1;
+			p2[0] += fx * w2;
+			p2[1] += fy * w2;
+		}
+		return this;
+	}
+	processBody(b) {
+		let b1 = this;
+		let b2 = b;
+		let hit = Polygon.hasIntersectPolygon(b1, b2);
+		if (hit) {
+			let cv = hit.normal.$multiply(hit.dist);
+			let t;
+			let eg = hit.edge;
+			if (Math.abs(eg[0][0] - eg[1][0]) > Math.abs(eg[0][1] - eg[1][1])) t = (hit.vertex[0] - cv[0] - eg[0][0]) / (eg[1][0] - eg[0][0]);
+			else t = (hit.vertex[1] - cv[1] - eg[0][1]) / (eg[1][1] - eg[0][1]);
+			let lambda = 1 / (t * t + (1 - t) * (1 - t));
+			let m0 = hit.vertex.body.mass || 1;
+			let m1 = hit.edge[0].body.mass || 1;
+			let mr0 = m0 / (m0 + m1);
+			let mr1 = m1 / (m0 + m1);
+			eg[0].subtract(cv.$multiply(mr0 * (1 - t) * lambda / 2));
+			eg[1].subtract(cv.$multiply(mr0 * t * lambda / 2));
+			hit.vertex.add(cv.$multiply(mr1));
+		}
+	}
+	processParticle(b) {
+		let b1 = this;
+		let b2 = b;
+		let hit = Polygon.hasIntersectCircle(b1, Circle.fromCenter(b, b.radius));
+		if (hit) {
+			let cv = hit.normal.$multiply(hit.dist);
+			let t;
+			let eg = hit.edge;
+			if (Math.abs(eg[0][0] - eg[1][0]) > Math.abs(eg[0][1] - eg[1][1])) t = (hit.vertex[0] - cv[0] - eg[0][0]) / (eg[1][0] - eg[0][0]);
+			else t = (hit.vertex[1] - cv[1] - eg[0][1]) / (eg[1][1] - eg[0][1]);
+			let lambda = 1 / (t * t + (1 - t) * (1 - t));
+			let m0 = b2.mass || 1;
+			let m1 = hit.edge[0].body.mass || 1;
+			let mr0 = m0 / (m0 + m1);
+			let mr1 = m1 / (m0 + m1);
+			eg[0].subtract(cv.$multiply(mr0 * (1 - t) * lambda / 2));
+			eg[1].subtract(cv.$multiply(mr0 * t * lambda / 2));
+			let c1 = b.$subtract(b.previous).add(cv.$multiply(mr1));
+			b.previous = b.$subtract(c1);
+		}
+	}
+};
+
+//#endregion
+//#region src/Play.ts
+var Tempo = class Tempo {
+	constructor(bpm) {
+		this._listeners = {};
+		this._listenerInc = 0;
+		this.bpm = bpm;
+	}
+	static fromBeat(ms) {
+		return new Tempo(6e4 / ms);
+	}
+	get bpm() {
+		return this._bpm;
+	}
+	set bpm(n) {
+		this._bpm = n;
+		this._ms = 6e4 / this._bpm;
+	}
+	get ms() {
+		return this._ms;
+	}
+	set ms(n) {
+		this._bpm = 6e4 / n;
+		this._ms = n;
+	}
+	_createID() {
+		return "_b" + this._listenerInc++;
+	}
+	every(beats) {
+		const self = this;
+		const p = Array.isArray(beats) ? beats[0] : beats;
+		return {
+			start: function(fn, offset = 0, name) {
+				const id = name || self._createID();
+				self._listeners[id] = {
+					name: id,
+					beats,
+					period: p,
+					index: 0,
+					offset,
+					duration: -1,
+					count: 0,
+					continuous: false,
+					fn
+				};
+				return this;
+			},
+			progress: function(fn, offset = 0, name) {
+				const id = name || self._createID();
+				self._listeners[id] = {
+					name: id,
+					beats,
+					period: p,
+					index: 0,
+					offset,
+					duration: -1,
+					count: 0,
+					continuous: true,
+					fn
+				};
+				return this;
+			}
+		};
+	}
+	track(time) {
+		for (const k in this._listeners) if (this._listeners.hasOwnProperty(k)) {
+			const li = this._listeners[k];
+			const _t = li.offset ? time + li.offset : time;
+			let ms = li.period * this._ms;
+			let isStart = false;
+			if (li.duration < 0) {
+				li.duration = _t - _t % this._ms;
+				li.count = li.count || 0;
+				isStart = true;
+			} else if (ms > 0 && _t > li.duration + ms) {
+				if (Array.isArray(li.beats)) {
+					const cycle = li.beats.reduce((sum, beat) => sum + beat, 0) * this._ms;
+					const cycles = cycle > 0 ? Math.max(0, Math.ceil((_t - li.duration) / cycle) - 1) : 0;
+					li.duration += cycles * cycle;
+					li.count = (li.count || 0) + cycles * li.beats.length;
+					while (ms > 0 && _t > li.duration + ms) {
+						li.duration += ms;
+						li.index = ((li.index || 0) + 1) % li.beats.length;
+						li.period = li.beats[li.index];
+						ms = li.period * this._ms;
+						li.count++;
+					}
+				} else {
+					const passed = Math.ceil((_t - li.duration) / ms) - 1;
+					li.duration += passed * ms;
+					li.count = (li.count || 0) + passed;
+				}
+				isStart = true;
+			}
+			let done;
+			if (li.continuous) {
+				const t = Num.clamp((_t - li.duration) / ms, 0, 1);
+				done = li.fn.call(li, li.count, t, _t, isStart);
+			} else if (isStart) done = li.fn.call(li, li.count);
+			if (done) delete this._listeners[li.name];
+		}
+	}
+	stop(name) {
+		if (this._listeners[name]) delete this._listeners[name];
+	}
+	animate(time, ftime) {
+		this.track(time);
+	}
+	resize(bound, evt) {}
+	action(type, px, py, evt) {}
+};
+var Sound = class Sound {
+	constructor(type, ctx) {
+		this._playing = false;
+		this._volume = 1;
+		this._connected = [];
+		this._bufferPlayed = false;
+		this._generated = false;
+		this._inputStopped = false;
+		this._fadeEnd = 0;
+		this._retiring = /* @__PURE__ */ new Set();
+		this._type = type;
+		this._ctx = ctx || Sound._getContext();
+	}
+	static _getContext() {
+		if (!Sound._sharedContext) {
+			const _ctx = typeof window !== "undefined" ? window.AudioContext : void 0;
+			if (!_ctx) throw new Error("Your browser doesn't support Web Audio. (No AudioContext)");
+			Sound._sharedContext = new _ctx();
+		}
+		return Sound._sharedContext;
+	}
+	static from(node, ctx, type = "gen", stream) {
+		const s = new Sound(type, ctx);
+		s._node = node;
+		if (stream) s._stream = stream;
+		return s;
+	}
+	static load(source, crossOrigin = "anonymous") {
+		return new Promise((resolve, reject) => {
+			const s = new Sound("file");
+			if (typeof source === "string") {
+				s._source = new Audio();
+				s._source.crossOrigin = crossOrigin;
+				s._source.src = source;
+			} else {
+				s._source = source;
+				s._source.crossOrigin = crossOrigin;
+			}
+			s._source.autoplay = false;
+			const onError = () => {
+				s._source.removeEventListener("canplaythrough", ready);
+				reject(/* @__PURE__ */ new Error(`Error loading sound: ${s._source.src || "media element"}`));
+			};
+			const ready = () => {
+				s._source.removeEventListener("error", onError);
+				s._source.addEventListener("ended", function() {
+					s._playing = false;
+				});
+				s._node = s._ctx.createMediaElementSource(s._source);
+				resolve(s);
+			};
+			if (s._source.readyState >= 4) ready();
+			else {
+				s._source.addEventListener("error", onError, { once: true });
+				s._source.addEventListener("canplaythrough", ready, { once: true });
+				if (s._source.readyState === 0) s._source.load();
+			}
+		});
+	}
+	static loadAsBuffer(url) {
+		return _asyncToGenerator(function* () {
+			const s = new Sound("file");
+			const res = yield fetch(url);
+			if (!res.ok) throw new Error(`Error loading sound: ${url} (status ${res.status})`);
+			try {
+				s.createBuffer(yield s._ctx.decodeAudioData(yield res.arrayBuffer()));
+			} catch (err) {
+				throw Object.assign(/* @__PURE__ */ new Error("Error decoding audio"), { cause: err });
+			}
+			return s;
+		})();
+	}
+	createBuffer(buf) {
+		if (this._node && !this._retiring.has(this._node)) {
+			this._node.onended = null;
+			this._node.disconnect();
+		}
+		this._node = this._ctx.createBufferSource();
+		if (buf !== void 0) this._buffer = buf;
+		this._node.buffer = this._buffer;
+		this._node.onended = () => {
+			this._playing = false;
+		};
+		this._bufferPlayed = false;
+		if (this.analyzer) this._node.connect(this.analyzer.node);
+		for (const n of this._connected) this._node.connect(n);
+		return this;
+	}
+	static generate(type, val) {
+		return new Sound("gen")._gen(type, val);
+	}
+	_gen(type, val) {
+		if (this._node && !this._retiring.has(this._node)) this._node.disconnect();
+		this._node = this._ctx.createOscillator();
+		this._generated = true;
+		const osc = this._node;
+		if (type === "custom") {
+			this._wave = val;
+			osc.setPeriodicWave(this._wave);
+		} else {
+			osc.type = type;
+			osc.frequency.value = val;
+		}
+		return this;
+	}
+	static input(constraint) {
+		return _asyncToGenerator(function* () {
+			const s = new Sound("input");
+			const c = constraint ? constraint : {
+				audio: true,
+				video: false
+			};
+			s._stream = yield navigator.mediaDevices.getUserMedia(c);
+			s._node = s._ctx.createMediaStreamSource(s._stream);
+			return s;
+		})();
+	}
+	get ctx() {
+		return this._ctx;
+	}
+	get node() {
+		return this._node;
+	}
+	get outputNode() {
+		return this._outputNode;
+	}
+	get stream() {
+		return this._stream;
+	}
+	get source() {
+		return this._source;
+	}
+	get buffer() {
+		return this._buffer;
+	}
+	set buffer(b) {
+		this._buffer = b;
+	}
+	get type() {
+		return this._type;
+	}
+	get playing() {
+		return this._playing;
+	}
+	get progress() {
+		let dur = 0;
+		let curr = 0;
+		if (this._buffer) {
+			dur = this._buffer.duration;
+			curr = this._timestamp !== void 0 ? this._ctx.currentTime - this._timestamp : 0;
+		} else if (this._source) {
+			dur = this._source.duration;
+			curr = this._source.currentTime;
+		}
+		return dur > 0 ? Num.clamp(curr / dur, 0, 1) : 0;
+	}
+	get playable() {
+		if (this._type === "input" || this._type === "gen") return this._node !== void 0;
+		return !!this._buffer || this._source !== void 0 && this._source.readyState === 4;
+	}
+	get binSize() {
+		return this.analyzer ? this.analyzer.size : 0;
+	}
+	get sampleRate() {
+		return this._ctx.sampleRate;
+	}
+	get frequency() {
+		const osc = this._node;
+		return this._type === "gen" && osc && osc.frequency ? osc.frequency.value : 0;
+	}
+	set frequency(f) {
+		const osc = this._node;
+		if (this._type === "gen" && osc && osc.frequency) osc.frequency.value = f;
+	}
+	get volume() {
+		return this._volume;
+	}
+	set volume(v) {
+		this._volume = Math.max(0, v || 0);
+		if (this._gain && this._playing) this._rampVolume(this._volume, Math.max(this._ctx.currentTime, this._fadeEnd));
+	}
+	connect(node) {
+		this._connected.push(node);
+		this._node.connect(node);
+		return this;
+	}
+	setOutputNode(outputNode) {
+		this._outputNode = outputNode;
+		return this;
+	}
+	removeOutputNode() {
+		this._outputNode = null;
+		return this;
+	}
+	analyze(size = 256, minDb = -100, maxDb = -30, smooth = .8) {
+		if (this.analyzer && this._node) try {
+			this._node.disconnect(this.analyzer.node);
+		} catch (_unused) {}
+		const a = this._ctx.createAnalyser();
+		a.fftSize = size * 2;
+		a.minDecibels = minDb;
+		a.maxDecibels = maxDb;
+		a.smoothingTimeConstant = smooth;
+		this.analyzer = {
+			node: a,
+			size: a.frequencyBinCount,
+			data: new Uint8Array(a.frequencyBinCount)
+		};
+		this._node.connect(this.analyzer.node);
+		return this;
+	}
+	_domain(time) {
+		if (this.analyzer) {
+			if (time) this.analyzer.node.getByteTimeDomainData(this.analyzer.data);
+			else this.analyzer.node.getByteFrequencyData(this.analyzer.data);
+			return this.analyzer.data;
+		}
+		return /* @__PURE__ */ new Uint8Array(0);
+	}
+	_domainTo(time, size, position = [0, 0], trim = [0, 0], out) {
+		const data = time ? this.timeDomain() : this.freqDomain();
+		const g = out || new Group();
+		const len = data.length - trim[1];
+		const count = Math.max(0, len - trim[0]);
+		if (g.length > count) g.length = count;
+		for (let i = trim[0], j = 0; i < len; i++, j++) {
+			const x = position[0] + size[0] * i / len;
+			const y = position[1] + size[1] * data[i] / 255;
+			const p = g[j];
+			if (p && p.length >= 2) {
+				p[0] = x;
+				p[1] = y;
+			} else g[j] = new Pt(x, y);
+		}
+		return g;
+	}
+	timeDomain() {
+		return this._domain(true);
+	}
+	timeDomainTo(size, position = [0, 0], trim = [0, 0], out) {
+		return this._domainTo(true, size, position, trim, out);
+	}
+	freqDomain() {
+		return this._domain(false);
+	}
+	freqDomainTo(size, position = [0, 0], trim = [0, 0], out) {
+		return this._domainTo(false, size, position, trim, out);
+	}
+	reset() {
+		this.stop();
+		this._cancelAudioTimer(true);
+		for (const node of this._retiring) {
+			node.onended = null;
+			try {
+				node.stop();
+			} catch (_unused2) {}
+			node.disconnect();
+		}
+		this._retiring.clear();
+		this._fadeEnd = 0;
+		if (this._node) this._node.disconnect();
+		if (this._outputNode) this._outputNode.disconnect();
+		return this;
+	}
+	_getGain() {
+		if (!this._gain) {
+			this._gain = this._ctx.createGain();
+			this._gain.gain.value = this._volume;
+			this._gain.connect(this._ctx.destination);
+		}
+		return this._gain;
+	}
+	_rampVolume(value, when = this._ctx.currentTime) {
+		const gain = this._getGain().gain;
+		const current = when > this._ctx.currentTime ? 0 : gain.value;
+		if (typeof gain.cancelAndHoldAtTime === "function") gain.cancelAndHoldAtTime(when);
+		else {
+			gain.cancelScheduledValues(when);
+			if (when > this._ctx.currentTime) gain.linearRampToValueAtTime(0, when);
+		}
+		gain.setValueAtTime(current, when);
+		gain.linearRampToValueAtTime(value, when + .01);
+	}
+	_cancelAudioTimer(finish = false) {
+		if (this._audioTimer !== void 0) clearTimeout(this._audioTimer);
+		this._audioTimer = void 0;
+		const callback = this._finishAudio;
+		this._finishAudio = void 0;
+		if (finish) callback === null || callback === void 0 || callback();
+	}
+	_afterFade(callback) {
+		this._cancelAudioTimer();
+		if (this._ctx.state !== "running") {
+			callback();
+			return;
+		}
+		this._finishAudio = callback;
+		const end = this._ctx.currentTime + .01;
+		const finish = () => {
+			const remaining = end - this._ctx.currentTime;
+			if (remaining > 0 && this._ctx.state === "running") this._audioTimer = setTimeout(finish, Math.max(10, remaining * 1e3));
+			else this._cancelAudioTimer(true);
+		};
+		this._audioTimer = setTimeout(finish, 10);
+	}
+	_retireSource(when) {
+		const node = this._node;
+		this._retiring.add(node);
+		node.onended = () => {
+			node.disconnect();
+			this._retiring.delete(node);
+			if (this._node === node) this._playing = false;
+		};
+		node.stop(when);
+	}
+	start(timeAt = 0) {
+		if (this._type === "input" && this._stream && (this._inputStopped || this._stream.getAudioTracks().every((track) => track.readyState === "ended"))) {
+			this._playing = false;
+			Util.warn("Cannot restart a stopped input stream; use Sound.input() to acquire a new stream");
+			return this;
+		}
+		if (this._ctx.state === "suspended" && !("startRendering" in this._ctx)) this._ctx.resume();
+		this._cancelAudioTimer();
+		let when = 0;
+		if (this._type === "file") {
+			if (this._buffer) {
+				if (this._playing || this._bufferPlayed || !this._node) {
+					if (this._playing && this.progress < 1) this.stop();
+					if (this._retiring.has(this._node)) when = Math.max(this._ctx.currentTime, this._fadeEnd);
+					this.createBuffer();
+				}
+				this._node.start(when, timeAt);
+				this._bufferPlayed = true;
+				this._timestamp = (when || this._ctx.currentTime) - timeAt;
+			} else {
+				if (this._playing && timeAt > 0) {
+					this._rampVolume(0);
+					this._fadeEnd = this._ctx.currentTime + .01;
+					this._afterFade(() => {
+						this._source.currentTime = timeAt;
+						this._rampVolume(this._volume);
+					});
+					return this;
+				}
+				if (timeAt > 0) this._source.currentTime = timeAt;
+				const played = this._source.play();
+				if (played && played.catch) played.catch(() => {
+					if (this._source.paused) this._playing = false;
+				});
+			}
+		} else if (this._type === "gen" && this._generated) {
+			if (this._playing) return this;
+			const osc = this._node;
+			if (this._retiring.has(osc)) when = Math.max(this._ctx.currentTime, this._fadeEnd);
+			this._gen(osc.type, osc.type === "custom" ? this._wave : osc.frequency.value);
+			this._node.start(when);
+		}
+		if (this.analyzer) this._node.connect(this.analyzer.node);
+		for (const n of this._connected) this._node.connect(n);
+		(this._outputNode || this._node).connect(this._getGain());
+		if (when) this._rampVolume(this._volume, when);
+		else this._rampVolume(this._volume);
+		this._playing = true;
+		return this;
+	}
+	stop() {
+		if (!this._playing) return this;
+		this._cancelAudioTimer();
+		this._rampVolume(0);
+		this._fadeEnd = this._ctx.currentTime + .01;
+		if (this._type === "file") {
+			if (this._buffer) {
+				if (this.progress < 1) this._retireSource(this._fadeEnd);
+			} else this._afterFade(() => {
+				this._source.pause();
+				(this._outputNode || this._node).disconnect(this._gain);
+			});
+		} else if (this._type === "gen") {
+			if (this._generated) this._retireSource(this._fadeEnd);
+			else this._afterFade(() => (this._outputNode || this._node).disconnect(this._gain));
+		} else if (this._type === "input" && this._stream) {
+			this._inputStopped = true;
+			this._afterFade(() => {
+				this._stream.getAudioTracks().forEach((track) => track.stop());
+				(this._outputNode || this._node).disconnect(this._gain);
+			});
+		} else this._afterFade(() => (this._outputNode || this._node).disconnect(this._gain));
+		this._playing = false;
+		return this;
+	}
+	toggle() {
+		if (this._playing) this.stop();
+		else this.start();
+		return this;
+	}
+	dispose() {
+		if (!this._playing && this._stream) this._stream.getAudioTracks().forEach((track) => track.stop());
+		this.reset();
+		if (this.analyzer) {
+			this.analyzer.node.disconnect();
+			this.analyzer = void 0;
+		}
+		if (this._gain) {
+			this._gain.disconnect();
+			this._gain = void 0;
+		}
+		this._connected = [];
+		this._stream = void 0;
+		this._source = void 0;
+		this._buffer = void 0;
+		return this;
+	}
+};
+
+//#endregion
+export { Body, Boid, Bound, CanvasForm, CanvasSpace, Circle, Color, Const, Create, Curve, DOMSpace, Delaunay, Flock, Font, Form, Geom, Group, HTMLForm, HTMLSpace, Img, Line, Mat, MultiTouchSpace, Noise, Num, Particle, Path, PoissonDisk, Polygon, Pt, Range, Rectangle, SVGContext2D, SVGForm, SVGSpace, Shaping, Sound, Space, Tempo, Triangle, Typography, UI, UIButton, UIDragger, UIPointerActions, UIShape, Util, Vec, VisualForm, World };
+//# sourceMappingURL=index.mjs.map

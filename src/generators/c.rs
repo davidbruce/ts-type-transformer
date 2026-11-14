@@ -141,6 +141,25 @@ fn union_type(u: &NamedUnion, m: &Model) -> (String, String) {
          static inline uint32_t {n}_to_handle({n} u) {{ switch (u.tag) {{{to} }} return 0; }}\n\
          static inline {n} {n}_from_handle(uint32_t h) {{ {n} u; u.tag = ts_raw_{n}_tag(h, 0); switch (u.tag) {{{from} }} return u; }}\n"
     );
+    // Made from a member: `Value_of_number(42)`, or by its type, `Value_of(widget)`.
+    let field_type = |p: &Ty| if *p == Ty::Str { "JsString".to_string() } else { typed(p, false) };
+    let mut functions = functions;
+    for p in &u.parts {
+        let f = union_field(p);
+        functions += &format!("static inline {n} {n}_of_{f}({} v) {{ return ({n}){{ .tag = {n}_{f}, .as.{f} = v }}; }}\n", field_type(p));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    let choices: Option<Vec<String>> = u
+        .parts
+        .iter()
+        .map(|p| {
+            let types = if *p == Ty::Str { Some(vec!["JsString".to_string()]) } else { generic_types(p) }?;
+            types.iter().all(|t| seen.insert(t.clone())).then(|| types.iter().map(|t| format!("{t}: {n}_of_{}", union_field(p))).collect::<Vec<_>>().join(", "))
+        })
+        .collect();
+    if let Some(choices) = choices {
+        functions += &format!("#define {n}_of(x) _Generic((x), {})(x)\n", choices.join(", "));
+    }
     (decl, functions)
 }
 

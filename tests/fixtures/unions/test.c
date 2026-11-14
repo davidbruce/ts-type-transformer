@@ -22,8 +22,9 @@ __attribute__((export_name("run"))) void run(void) {
 
     // Any member goes in.
     Value text = { .tag = Value_string, .as.string = JsString_from("text") };
-    Value number = { .tag = Value_number, .as.number = 42 };
-    Value w = { .tag = Value_Widget, .as.Widget = widget };
+    // Or made from a member, by name or by its type.
+    Value number = Value_of_number(42);
+    Value w = Value_of(widget);
     Value o = { .tag = Value_Options, .as.Options = options };
     CHECK(str_eq(describe(text), "string text"));
     CHECK(str_eq(describe(number), "number 42"));

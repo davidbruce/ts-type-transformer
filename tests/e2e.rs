@@ -300,7 +300,8 @@ macro_rules! fixtures {
     })* };
 }
 
-fixtures!(shapes, callbacks, data, globals, unions);
+// `pts` is a real library: Pts, from its own declarations.
+fixtures!(shapes, callbacks, data, globals, unions, pts);
 
 // The generators must refuse what their target cannot express; otherwise a
 // config that lowers too little would go unnoticed.
@@ -334,8 +335,8 @@ fn xml_follows_the_schema() {
     let Some([xmllint]) = tools(["xmllint"]) else { return };
     let out = root().join("target/e2e/schema");
     fs::create_dir_all(&out).unwrap();
-    let mut inputs: Vec<PathBuf> = ["shapes", "callbacks", "data", "globals", "unions"].iter().map(|f| root().join("tests/fixtures").join(f).join("api.d.ts")).collect();
-    inputs.extend(["tests/pts/pts.d.ts", "tests/bench/api.d.ts", "examples/lowering.d.ts", "examples/features.d.ts"].map(|p| root().join(p)));
+    let mut inputs: Vec<PathBuf> = ["shapes", "callbacks", "data", "globals", "unions", "pts"].iter().map(|f| root().join("tests/fixtures").join(f).join("api.d.ts")).collect();
+    inputs.extend(["tests/bench/api.d.ts", "examples/lowering.d.ts", "examples/features.d.ts"].map(|p| root().join(p)));
     inputs.push(PathBuf::from("lib.es5.d.ts"));
     // Text that XML cannot hold as it is: a control character, a line break, an empty name.
     let odd = out.join("odd.d.ts");
