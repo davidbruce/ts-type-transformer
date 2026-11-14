@@ -46,6 +46,8 @@ type Id = number | string;
 declare function ids(): Id[];
 declare function boxedId(): Box<Id>;
 declare function largest<T extends Item>(values: T[]): T;
+interface Holder<T extends Item> { held: T }
+declare function hold(item: Item): Holder<Item>;
 
 // Generic bases with a member of the same name.
 interface Source<T> { label: string; take(): T }

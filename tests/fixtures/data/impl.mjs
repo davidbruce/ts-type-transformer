@@ -32,6 +32,7 @@ globalThis.unbox = v => (v instanceof Box ? v.value : v);
 globalThis.either = (value, boxed) => (boxed ? new Box(value) : value);
 globalThis.ids = () => [1, "two"];
 globalThis.boxedId = () => new Box("three");
+globalThis.hold = item => ({ held: item });
 globalThis.largest = values => values.reduce((a, b) => (b.id > a.id ? b : a));
 globalThis.pipe = () => {
     const queue = [];

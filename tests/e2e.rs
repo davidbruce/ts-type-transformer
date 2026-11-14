@@ -275,7 +275,7 @@ fn fsharp_checks_constraints() {
     let Some([fable]) = tools(["fable"]) else { return };
     let c = case_in("data", "fsharp", "data-fsharp-wrong");
     write_fsharp(&c, &generators::fsharp::module(&c.xml));
-    fs::write(c.out.join("Test.fs"), "module Test\nopen type Bindings.Globals\nlet wrong = largest (ResizeArray<float>())\n").unwrap();
+    fs::write(c.out.join("Test.fs"), "module Test\nopen Bindings\nopen type Bindings.Globals\nlet wrong = largest (ResizeArray<float>())\nlet held: Holder<float> = null\n").unwrap();
     let out = Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]).output().unwrap();
     let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(!out.status.success() && text.contains("Test.fs") && text.contains("Item"), "a float array should not satisfy T :> Item:\n{text}");

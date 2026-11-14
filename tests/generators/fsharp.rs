@@ -42,6 +42,65 @@ struct Gen {
     // Interfaces with `[Symbol.iterator]`, and what each interface extends.
     iterable: HashSet<String>,
     bases: HashMap<String, Vec<String>>,
+    // Interfaces that keep their constraints: `<'TNode when 'TNode :> Node>`,
+    // by name; and the same, by how a type extension names the interface.
+    constrained: HashMap<String, Vec<Option<String>>>,
+    constrained_owner: HashMap<String, String>,
+}
+
+// The constraints each generic interface can keep, by position: those every
+// reference to it satisfies, with a declared type that extends the
+// constraint or a type parameter constrained to one. F# checks an
+// interface's constraints wherever it is named.
+fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> HashMap<String, Vec<Option<String>>> {
+    let extends = |t: &str, c: &str| {
+        let mut todo = vec![t.to_string()];
+        let mut seen = HashSet::new();
+        while let Some(x) = todo.pop() {
+            if x == c {
+                return true;
+            }
+            if seen.insert(x.clone()) {
+                todo.extend(bases.get(&x).cloned().unwrap_or_default());
+            }
+        }
+        false
+    };
+    let constraint_of = |p: Node| elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|c| c.has_tag_name("ref") && matches!(attr(*c, "kind"), "interface" | "class") && elements(*c).next().is_none()).map(|c| attr(c, "name").to_string());
+    let mut out: HashMap<String, Vec<Option<String>>> = HashMap::new();
+    for d in elements(root).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
+        let cs: Vec<Option<String>> = named(d, "typeParameter").map(constraint_of).collect();
+        if cs.iter().any(Option::is_some) {
+            out.insert(attr(d, "name").to_string(), cs);
+        }
+    }
+    // A type parameter in scope at a reference: its constraint.
+    let param_constraint = |r: Node, name: &str| r.ancestors().find_map(|a| named(a, "typeParameter").find(|p| attr(*p, "name") == name)).and_then(constraint_of);
+    let mut broken: HashSet<(String, usize)> = HashSet::new();
+    for r in root.descendants().filter(|r| r.has_tag_name("ref")) {
+        let Some(cs) = out.get(attr(r, "name")) else { continue };
+        for (i, arg) in elements(r).enumerate() {
+            let Some(Some(c)) = cs.get(i) else { continue };
+            let ok = arg.has_tag_name("ref")
+                && match attr(arg, "kind") {
+                    "interface" | "class" => extends(attr(arg, "name"), c),
+                    "typeParameter" => param_constraint(r, attr(arg, "name")).is_some_and(|pc| extends(&pc, c)),
+                    _ => false,
+                };
+            if !ok {
+                broken.insert((attr(r, "name").to_string(), i));
+            }
+        }
+    }
+    for (name, cs) in out.iter_mut() {
+        for (i, c) in cs.iter_mut().enumerate() {
+            if broken.contains(&(name.clone(), i)) {
+                *c = None;
+            }
+        }
+    }
+    out.retain(|_, cs| cs.iter().any(Option::is_some));
+    out
 }
 
 fn ident(name: &str) -> String {
@@ -79,6 +138,8 @@ pub fn module(xml: &str) -> Output {
         extensions: BTreeMap::new(),
         iterable: HashSet::new(),
         bases: HashMap::new(),
+        constrained: HashMap::new(),
+        constrained_owner: HashMap::new(),
     };
     for d in elements(doc.root_element()).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
         let name = attr(d, "name").to_string();
@@ -88,6 +149,7 @@ pub fn module(xml: &str) -> Output {
         let bases = named(d, "extends").filter_map(|e| elements(e).next()).map(|r| attr(r, "name").to_string()).collect();
         g.bases.entry(name).or_insert_with(Vec::new).extend::<Vec<String>>(bases);
     }
+    g.constrained = constrained_interfaces(doc.root_element(), &g.bases);
     let (plan, units) = file_plan(doc.root_element());
     for (i, group) in plan.iter().enumerate() {
         for m in group {
@@ -120,6 +182,7 @@ pub fn module(xml: &str) -> Output {
         if let Some(ext) = g.extensions.get(&i) {
             body += &format!("/// Members of earlier types that refer to types of this file.\n[<AutoOpen>]\nmodule Extensions{:02} =\n", i + 1);
             for (owner, lines) in ext {
+                let owner = g.constrained_owner.get(owner).unwrap_or(owner);
                 body += &format!("    type {owner} with\n{}\n", lines.concat());
             }
         }
@@ -693,10 +756,19 @@ impl Gen {
         let path = js_path(prefix, attr(d, "name"));
         let params = self.type_params(d);
         let owner = format!("{name}{params}");
+        // The declaration, and its extensions, state the constraints it keeps.
+        let header = match self.constrained.get(attr(d, "name")) {
+            Some(cs) => {
+                let ps: Vec<String> = named(d, "typeParameter").map(|p| format!("'{}", attr(p, "name"))).collect();
+                let when: Vec<String> = ps.iter().zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("{p} :> {c}"))).collect();
+                format!("{name}<{} when {} >", ps.join(", "), when.join(" and "))
+            }
+            None => owner.clone(),
+        };
         let is_member = |m: &Node| matches!(m.tag_name().name(), "property" | "method" | "call" | "construct" | "index" | "get" | "set");
         let instance: Vec<Node> = elements(d).filter(|m| is_member(m) && !flag(*m, "static")).collect();
         let statics: Vec<Node> = elements(d).filter(|m| m.has_tag_name("constructor") || is_member(m) && flag(*m, "static")).collect();
-        self.out += &format!("{indent}[<AllowNullLiteral>]\n{indent}type {owner} =\n");
+        self.out += &format!("{indent}[<AllowNullLiteral>]\n{indent}type {header} =\n");
         let mut body = Vec::new();
         for e in named(d, "extends") {
             let base = self.ty(only_child(e), &owner);
@@ -726,6 +798,10 @@ impl Gen {
             }
         }
         let extend = if prefix.is_empty() { owner.clone() } else { format!("{}.{owner}", prefix.split('.').map(ident).collect::<Vec<_>>().join(".")) };
+        if header != owner {
+            let qualified = if prefix.is_empty() { header.clone() } else { format!("{}.{header}", prefix.split('.').map(ident).collect::<Vec<_>>().join(".")) };
+            self.constrained_owner.insert(extend.clone(), qualified);
+        }
         body.extend(self.members(&instance, &owner, &extend, indent));
         if body.is_empty() {
             body.push(format!("{indent}    interface end\n"));
