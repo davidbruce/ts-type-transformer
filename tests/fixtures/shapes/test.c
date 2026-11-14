@@ -39,15 +39,16 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Shape_get_size(big) == 8);
     CHECK(str_eq(Named_get_name(Shape_scale_with_name(s, 2, "big")), "big"));
 
-    // Optional parameter.
-    Shape_resize(s, 2.6, js_none_bool());
+    // Optional parameter: left out, or given.
+    Shape_resize(s, 2.6);
     CHECK(Shape_get_size(s) == 2.6);
     Shape_resize(s, 2.6, js_some_bool(true));
     CHECK(Shape_get_size(s) == 3);
 
-    // Union parameter.
+    // Union parameter: an overload per member, chosen by the argument's type.
     CHECK(str_eq(Shape_label(s, "a"), "string:a"));
-    CHECK(str_eq(Shape_label_with_number(s, 7), "number:7"));
+    CHECK(str_eq(Shape_label(s, 7), "number:7"));
+    CHECK(str_eq(Shape_label_with_number(s, 7.5), "number:7.5"));
 
     // Nullable.
     CHECK(Shape_get_parent(s).h == 0);

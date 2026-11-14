@@ -44,7 +44,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // A union parameter of a function becomes overloads.
     CHECK(str_eq(setup(true), "bool true"));
-    CHECK(str_eq(setup_with_Options(options), "options verbose=true"));
+    CHECK(str_eq(setup(options), "options verbose=true"));
     number_or_Widget found = lookup("abc");
     CHECK(found.tag == number_or_Widget_number && found.as.number == 3);
 }

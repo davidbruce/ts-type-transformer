@@ -55,7 +55,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // Create an element and put it in the page.
     // One method per tag, returning the tag's own element type.
-    HTMLDivElement div = Document_createElement_div(doc, (ElementCreationOptions){ 0 });
+    HTMLDivElement div = Document_createElement_div(doc);
     HTMLElement box = HTMLDivElement_as_HTMLElement(div);
     Element_set_id(box, "made-by-c");
     Node_set_textContent(box, "hello from c");
@@ -78,22 +78,22 @@ __attribute__((export_name("run"))) void run(void) {
     // What does not fit is cut, and the copy still ends in NUL.
     char short_text[5];
     CHECK(JsString_copy(seed_text, short_text, sizeof short_text) == 9 && short_text[3] == 'd' && short_text[4] == 0);
-    HTMLElement copy = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc, (ElementCreationOptions){ 0 }));
+    HTMLElement copy = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc));
     Node_set_textContent(copy, text);
     Node_appendChild(box, copy);
 
     // A listener called by real clicks, then removed.
-    HTMLElement button = HTMLButtonElement_as_HTMLElement(Document_createElement_button(doc, (ElementCreationOptions){ 0 }));
+    HTMLElement button = HTMLButtonElement_as_HTMLElement(Document_createElement_button(doc));
     Node_set_textContent(button, "press");
     Node_appendChild(box, button);
     clicks = (Counter){ box, "data-count", 0 };
     // One method per event, with the event's own type.
     HTMLElement_PointerEvent_fn listener = HTMLElement_PointerEvent_fn_from(on_click, &clicks);
-    HTMLElement_addEventListener_click(button, listener, js_none_bool());
+    HTMLElement_addEventListener_click(button, listener);
     HTMLElement_click(button);
     HTMLElement_click(button);
     CHECK(clicks.count == 2);
-    HTMLElement_removeEventListener_click(button, listener, js_none_bool());
+    HTMLElement_removeEventListener_click(button, listener);
     HTMLElement_click(button);
     CHECK(clicks.count == 2);
 
@@ -106,13 +106,13 @@ __attribute__((export_name("run"))) void run(void) {
         .as.EventListener = EventListener_from(on_ping, &pings),
     };
     Element_addEventListener_with_AddEventListenerOptions(box, "ping", ping_listener, once);
-    EventTarget_dispatchEvent(box, Event_new("ping", (EventInit){ 0 }));
-    EventTarget_dispatchEvent(box, Event_new("ping", (EventInit){ 0 }));
+    EventTarget_dispatchEvent(box, Event_new("ping"));
+    EventTarget_dispatchEvent(box, Event_new("ping"));
     CHECK(pings.count == 1);
 
     // Style, layout and the window.
     CSSStyleDeclaration style = ElementCSSInlineStyle_get_style(box);
-    CSSStyleDeclarationBase_setProperty(style, "color", "red", NULL);
+    CSSStyleDeclarationBase_setProperty(style, "color", "red");
     CHECK(JsString_equals(CSSStyleProperties_get_color(style), "red"));
     CHECK(DOMRect_get_width(Element_getBoundingClientRect(box)) > 0);
     CHECK(HTMLCollectionBase_get_length(ParentNode_get_children(box)) == 2);

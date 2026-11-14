@@ -1,7 +1,7 @@
 // XML -> C header for a wasm32 module. No inheritance, generics, overloads,
 // optional parameters or unions: the config must have lowered them all.
 
-use super::wasm::{Class, Func, Model, NamedUnion, Ty};
+use super::wasm::{Call, Class, Func, Model, NamedUnion, Ty};
 
 thread_local! {
     // The unions of the model being generated that values can be decoded to.
@@ -330,6 +330,13 @@ const RUNTIME: &str = "// Generated.
 #include <stdint.h>
 #define TS_IMPORT(name) __attribute__((import_module(\"env\"), import_name(#name)))
 
+// `name__N`, by the number of arguments: how trailing optional arguments are left out.
+#define TS_COUNT(...) TS_COUNT_(__VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define TS_COUNT_(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, n, ...) n
+#define TS_PASTE(name, n) TS_PASTE_(name, n)
+#define TS_PASTE_(name, n) name##__##n
+#define TS_BY_COUNT(name, ...) TS_PASTE(name, TS_COUNT(__VA_ARGS__))
+
 // Handles to JavaScript values. Zero is null.
 typedef struct { uint32_t h; } JsValue;
 typedef struct { uint32_t h; } JsString;
@@ -423,11 +430,61 @@ static inline void JsArray_push(JsArray a, JsValue v) { ts_raw_js_array_push(a.h
 
 ";
 
-// The function's own name as a macro that upcasts `self` and any argument
-// whose type has subtypes, so those can be passed as they are:
-// `Element_setAttribute(div, ...)`, `Node_appendChild(body, div)`. Inside the
-// macro, the name is the function. Empty when nothing needs upcasting.
-fn upcasting_macro(name: &str, owner: Option<&str>, f: &Func, descendants: &std::collections::BTreeMap<String, Vec<String>>) -> String {
+// What an argument left out is: `undefined`, as each type says it.
+fn absent(t: &Ty) -> Option<String> {
+    let Ty::Nullable(inner, true) = t else { return None };
+    Some(match &**inner {
+        Ty::Num | Ty::NumEnum(_) => "js_none_double()".into(),
+        Ty::Bool => "js_none_bool()".into(),
+        Ty::Enum(e) => format!("{e}_absent"),
+        Ty::Str => "(const char*)0".into(),
+        Ty::NamedUnion(n) if decodable(n) => format!("({n}){{ .tag = -1 }}"),
+        _ => format!("({}){{ 0 }}", typed(t, true)),
+    })
+}
+
+// The C types `_Generic` takes for a parameter of this type, where it can
+// tell: an enumerator is an int, so an enum cannot be told from a number.
+fn generic_types(t: &Ty) -> Option<Vec<String>> {
+    let list = |names: &[&str]| Some(names.iter().map(|n| n.to_string()).collect());
+    match t {
+        Ty::Str => list(&["const char*", "char*"]),
+        Ty::Num => list(&["double", "float", "int", "unsigned int", "long", "unsigned long"]),
+        // `true` is an int.
+        Ty::Bool => list(&["bool", "int"]),
+        Ty::Enum(_) | Ty::NumEnum(_) | Ty::Nullable(..) | Ty::Void => None,
+        t => Some(vec![typed(t, true)]),
+    }
+}
+
+// The overloads `f` is the first of, where the C type of one parameter tells
+// them apart: `Shape_label(s, "a")` and `Shape_label(s, 7)`.
+fn family<'a>(f: &'a Func, all: &'a [Func]) -> Option<(usize, Vec<&'a Func>)> {
+    let key = |f: &Func| match &f.call {
+        Call::Method(n) => Some((0, n.clone(), f.fixed.clone())),
+        Call::Static(n) => Some((1, n.clone(), f.fixed.clone())),
+        _ => None,
+    };
+    let k = key(f)?;
+    let members: Vec<&Func> = all.iter().filter(|o| key(o).as_ref() == Some(&k)).collect();
+    if members.len() < 2 || !std::ptr::eq(members[0], f) || members.iter().any(|o| o.params.len() != f.params.len()) {
+        return None;
+    }
+    let differing: Vec<usize> = (0..f.params.len()).filter(|&i| members.iter().any(|o| o.params[i].1 != f.params[i].1)).collect();
+    let [at] = differing[..] else { return None };
+    let mut seen = std::collections::BTreeSet::new();
+    for o in &members {
+        if !generic_types(&o.params[at].1)?.into_iter().all(|t| seen.insert(t)) {
+            return None;
+        }
+    }
+    Some((at, members))
+}
+
+// A function's name as a macro, so a call may: pass any subtype
+// (`AS_Element(x)` is applied), leave out trailing optional arguments, and
+// for the first of a family of overloads, have `_Generic` choose among them.
+fn call_macros(name: &str, owner: Option<&str>, f: &Func, family: Option<(usize, Vec<String>, Vec<&Func>)>, descendants: &std::collections::BTreeMap<String, Vec<String>>) -> String {
     let upcast = |t: &Ty| match t {
         Ty::Obj(n) if descendants.contains_key(n) => Some(n.clone()),
         Ty::Nullable(inner, _) => match &**inner {
@@ -445,10 +502,11 @@ fn upcasting_macro(name: &str, owner: Option<&str>, f: &Func, descendants: &std:
         any |= upcast_self;
         args.push(if upcast_self { format!("AS_{o}(self)") } else { "(self)".into() });
     }
+    let chosen = family.as_ref().map(|f| f.0);
     for (i, (_, t)) in f.params.iter().enumerate() {
         let a = format!("a{}", i + 1);
         params.push(a.clone());
-        match upcast(t) {
+        match upcast(t).filter(|_| chosen != Some(i)) {
             Some(n) => {
                 any = true;
                 args.push(format!("AS_{n}({a})"));
@@ -456,10 +514,29 @@ fn upcasting_macro(name: &str, owner: Option<&str>, f: &Func, descendants: &std:
             None => args.push(format!("({a})")),
         }
     }
-    if !any {
-        return String::new();
+    let callee = match &family {
+        Some((at, names, members)) => {
+            let choices: Vec<String> = names.iter().zip(members).flat_map(|(n, o)| generic_types(&o.params[*at].1).unwrap_or_default().into_iter().map(move |t| format!("{t}: {n}"))).collect();
+            format!("_Generic((a{}), {})", at + 1, choices.join(", "))
+        }
+        None => name.to_string(),
+    };
+    let optional = f.params.iter().rev().take_while(|p| absent(&p.1).is_some()).count();
+    // A call without arguments cannot be told from one with an empty argument.
+    if optional == 0 || params.len() > 15 || params.len() == 1 {
+        if !any && family.is_none() {
+            return String::new();
+        }
+        return format!("#define {name}({}) {callee}({})\n", params.join(", "), args.join(", "));
     }
-    format!("#define {name}({}) {name}({})\n", params.join(", "), args.join(", "))
+    // By the number of arguments: what is left out is absent.
+    let mut out = format!("#define {name}(...) TS_BY_COUNT({name}, __VA_ARGS__)(__VA_ARGS__)\n");
+    let own = usize::from(owner.is_some());
+    for given in (params.len() - optional).max(1)..=params.len() {
+        let filled: Vec<String> = args[..given].iter().cloned().chain(f.params[given - own..].iter().filter_map(|p| absent(&p.1))).collect();
+        out += &format!("#define {name}__{given}({}) {callee}({})\n", params[..given].join(", "), filled.join(", "));
+    }
+    out
 }
 
 // Direct and indirect bases, nearest first.
@@ -660,7 +737,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
         for f in &c.funcs {
             func(&mut body, Some(&c.name), f);
-            body += &upcasting_macro(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &descendants);
+        }
+        // After every function: a macro may choose a later one.
+        for f in &c.funcs {
+            let overloads = family(f, &c.funcs).map(|(at, members)| (at, members.iter().map(|o| format!("{}_{}", c.name, o.name)).collect(), members));
+            body += &call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, overloads, &descendants);
         }
         let path = format!("{}.h", super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
         modules.entry(c.module.clone()).or_default().push(path.clone());
@@ -668,9 +749,12 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     let mut functions: std::collections::BTreeMap<String, String> = Default::default();
     for f in &m.funcs {
-        let out = functions.entry(f.module.clone()).or_default();
-        func(out, None, f);
-        *out += &upcasting_macro(&f.name, None, f, &descendants);
+        func(functions.entry(f.module.clone()).or_default(), None, f);
+    }
+    for f in &m.funcs {
+        // Overloads in one module: in one header.
+        let overloads = family(f, &m.funcs).filter(|(_, members)| members.iter().all(|o| o.module == f.module)).map(|(at, members)| (at, members.iter().map(|o| o.name.clone()).collect(), members));
+        *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, overloads, &descendants);
     }
     for (module, body) in functions {
         let path = format!("{}.h", super::wasm::file_name(&format!("{module}/functions"), &mut taken));
