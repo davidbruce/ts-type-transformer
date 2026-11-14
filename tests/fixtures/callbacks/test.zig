@@ -91,6 +91,13 @@ export fn run() void {
     const m = b.jsErrorMessage(e);
     defer b.jsRelease(m);
     expect(m.len() == 4 and b.jsTakeError() == null, @src());
+    // Or as a Zig error: the value, or error.JsException.
+    if (b.jsTry(b.explode("again"))) |_| expect(false, @src()) else |err| {
+        const again = b.jsTakeError().?;
+        defer b.jsRelease(again);
+        expect(err == error.JsException, @src());
+    }
+    expect((b.jsTry(b.flush()) catch 1) == 0, @src());
 
     const c = b.Counter.new();
     var last: f64 = 0;

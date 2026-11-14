@@ -88,7 +88,10 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(e.h != 0 && str_eq(m, "boom"));
     js_release(m);
     js_release(e);
-    CHECK(js_take_error().h == 0);
+    CHECK(js_take_error().h == 0 && !js_failed());
+    explode("again");
+    CHECK(js_failed());
+    js_release(js_take_error());
 
     Counter c = Counter_new();
     double last = 0;

@@ -61,6 +61,9 @@ pub extern "C" fn run() {
     check!(explode("boom") == 0.0);
     check!(take_error().map(|e| e.message()) == Some("boom".to_string()));
     check!(take_error().is_none());
+    // Or run the call for a Result: its value, or the exception.
+    check!(attempt(|| explode("again")).is_err_and(|e| e.message() == "again"));
+    check!(attempt(flush).is_ok());
 
     let c = Counter::new();
     let last = Rc::new(Cell::new(0.0));

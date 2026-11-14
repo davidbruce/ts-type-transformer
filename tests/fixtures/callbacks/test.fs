@@ -68,7 +68,25 @@ check (s.Invoke 5.0 = 10.0 && s.factor = 2.0 && (s.Create 3.0).Invoke 5.0 = 15.0
 // Exceptions are F# exceptions; promises are Fable's JS.Promise.
 let message = try explode "boom" |> ignore; "" with e -> e.Message
 check (message = "boom") "exception"
-let pending: JS.Promise<float> = delayed 21.0
-check (not (isNull (box pending))) "promise"
 
-printfn "%d checks passed" passed
+// Promises are awaited in an async block; a rejection is an exception.
+async {
+    let! doubled = Async.AwaitPromise (delayed 21.0)
+    check (doubled = 42.0) "a promise resolves"
+    let! failed = Async.AwaitPromise (rejected "nope") |> Async.Catch
+    check (match failed with Choice2Of2 e -> e.Message = "nope" | _ -> false) "a promise rejects"
+    do! Async.AwaitPromise (settled ())
+
+    // An async iterator: `next ()` is a promise of the next value, or of None.
+    let ticks = (ticker 3.0).asyncIterator ()
+    let mutable sum = 0.0
+    let mutable more = true
+    while more do
+        let! tick = Async.AwaitPromise (ticks.next ())
+        match tick with
+        | Some t -> sum <- sum + t
+        | None -> more <- false
+    check (sum = 6.0) "an async iterator"
+    printfn "%d checks passed" passed
+}
+|> Async.StartImmediate

@@ -165,7 +165,10 @@ pub fn module(xml: &str) -> Output {
     let mut prelude = String::from(
         "// Generated.\nnamespace Bindings\n\nopen Fable.Core\n\n\
          /// A key of the map 'Map whose value has type 'V: `el.addEventListener (HTMLElementEventMapKeys.click, fun e -> ...)`.\n\
-         [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n",
+         [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n\
+         /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
+         [<AllowNullLiteral>]\ntype JsAsyncIterator<'T> =\n    \
+         [<Emit(\"$0.next().then(r => r.done ? undefined : r.value)\")>] abstract next: unit -> JS.Promise<'T option>\n\n",
     );
     // Types from other files are opaque.
     for (name, arity) in &g.external {
@@ -665,14 +668,23 @@ impl Gen {
         let setters: HashSet<&str> = members.iter().filter(|m| m.has_tag_name("set")).map(|m| attr(*m, "name")).collect();
         for &m in members {
             let raw = m.attribute("name").unwrap_or_default();
-            if raw.starts_with('[') {
+            // `[Symbol.iterator]` makes the type a seq: see `interface`.
+            if raw == "[Symbol.iterator]" || m.has_tag_name("set") {
+                continue;
+            }
+            let pair = if raw == "[Symbol.asyncIterator]" {
+                // `x.asyncIterator ()`, whose `next ()` is a promise of the next value.
+                let elem = named(m, "returns").next().and_then(|r| elements(r).next()).and_then(|it| elements(it).next());
+                let t = elem.map_or("obj".to_string(), |e| self.ty(e, owner));
+                let emit = "[<Emit(\"$0[Symbol.asyncIterator]()\")>]";
+                Some((format!("{emit} abstract asyncIterator: unit -> JsAsyncIterator<{t}>"), format!("{emit} member this.asyncIterator(): JsAsyncIterator<{t}> = jsNative")))
+            } else if raw.starts_with('[') {
                 self.skip("symbol-named member");
-                continue;
-            }
-            if m.has_tag_name("set") {
-                continue;
-            }
-            let Some((line, ext)) = self.member(m, owner, setters.contains(raw)) else { continue };
+                None
+            } else {
+                self.member(m, owner, setters.contains(raw))
+            };
+            let Some((line, ext)) = pair else { continue };
             // The latest file a type in the member is declared in.
             let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
             if latest > self.current_file && indent.is_empty() {

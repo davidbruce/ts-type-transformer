@@ -55,6 +55,10 @@ extern "C" __attribute__((export_name("run"))) void run() {
     std::optional<ts::Error> e = ts::take_error();
     CHECK(e && e->message() == "boom");
     CHECK(!ts::take_error());
+    // Or run the call for a Result: its value, or the exception.
+    ts::Result<double> tried = ts::attempt([] { return explode("again"); });
+    CHECK(!tried && tried.error().message() == "again");
+    CHECK(bool(ts::attempt([] { return flush(); })));
 
     Counter c = Counter::create();
     double last = 0;
