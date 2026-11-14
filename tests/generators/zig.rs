@@ -396,7 +396,20 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         types.1 += &format!("    extern \"env\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
         types.2.push(u.name.clone());
     }
-    for name in &m.opaque {
+    let iterates_async = m.classes.iter().any(|c| c.iterates_async.is_some());
+    let mut opaque = m.opaque.clone();
+    if iterates_async && !opaque.iter().any(|n| n == "Promise") {
+        opaque.push("Promise".into());
+    }
+    if iterates_async {
+        types.0 += "// A JavaScript async iterator: `next()` is a promise of the next value, or of a null handle at the end.\n\
+                    pub const JsAsyncIterator = extern struct {\n    h: u32,\n    \
+                    pub fn over(h: u32) JsAsyncIterator { return .{ .h = raw.js_async_iterate(h) }; }\n    \
+                    pub fn next(self: JsAsyncIterator) Promise { return .{ .h = raw.js_async_iterator_next(self.h) }; }\n};\n";
+        types.1 += "    extern \"env\" fn js_async_iterate(h: u32) u32;\n    extern \"env\" fn js_async_iterator_next(it: u32) u32;\n";
+        types.2.push("JsAsyncIterator".into());
+    }
+    for name in &opaque {
         if name == "Promise" {
             // Calls f(ctx, ok, value) once it settles, ok with its value or not with its reason; the value is lent.
             types.0 += "pub const Promise = extern struct {\n    h: u32,\n    \
@@ -447,6 +460,10 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         *out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
         for (name, value) in &c.consts {
             *out += &format!("    pub const {} = {value};\n", ident(name));
+        }
+        // Asynchronous iteration: `it.next()` is a promise of the next value, or of a null handle at the end.
+        if c.iterates_async.is_some() && !c.funcs.iter().any(|f| f.name == "iterateAsync") {
+            *out += &format!("    pub fn iterateAsync(self: {}) JsAsyncIterator {{ return JsAsyncIterator.over(self.h); }}\n", c.name);
         }
         // Iteration: `var it = list.iterate(); while (it.next()) |n| ...`.
         if let Some(elem) = &c.iterates

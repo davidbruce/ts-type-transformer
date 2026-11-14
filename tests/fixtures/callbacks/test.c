@@ -31,7 +31,22 @@ static void on_rejected(void* ctx, bool ok, JsValue v) {
     js_release(m);
 }
 
+// Sums what an async iterator yields, asking for each value when the last arrives.
+static double ticks;
+static JsIterator tick_it;
+static void on_tick(void* ctx, bool ok, JsValue v) {
+    if (!ok || v.h == 0) {
+        js_release(tick_it);
+        return;
+    }
+    ticks += js_to_number(v);
+    Promise p = JsIterator_next_async(tick_it);
+    Promise_then(p, on_tick, 0);
+    js_release(p);
+}
+
 __attribute__((export_name("finish"))) void finish(void) {
+    CHECK(ticks == 6);
     CHECK(awaited == 42);
     CHECK(reason_ok);
 }
@@ -45,6 +60,12 @@ __attribute__((export_name("run"))) void run(void) {
     Promise_then(q, on_rejected, 0);
     js_release(q);
     CHECK(awaited == 0);
+    Ticker tk = ticker(3);
+    tick_it = Ticker_iterate_async(tk);
+    js_release(tk);
+    Promise first = JsIterator_next_async(tick_it);
+    Promise_then(first, on_tick, 0);
+    js_release(first);
 
     // An object that is also a function, and can be constructed.
     Scaler s = scaler(2);

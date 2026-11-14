@@ -228,6 +228,8 @@ static inline JsString js_error_message(JsValue e) { return (JsString){ ts_raw_j
 typedef struct { uint32_t h; } JsIterator;
 TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
 TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
+TS_IMPORT(js_async_iterate) uint32_t ts_raw_js_async_iterate(uint32_t);
+TS_IMPORT(js_async_iterator_next) uint32_t ts_raw_js_async_iterator_next(uint32_t);
 // How many JavaScript values wasm holds handles to.
 static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
 // Forgets a callback made with `X_from`, and returns its context. Its handle is released as any other.
@@ -353,7 +355,14 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
     }
     // A promise: `Promise_then(p, fn, ctx)` calls fn(ctx, ok, value) once it
     // settles, ok with its value or not with its reason; the value is lent.
-    if m.opaque.iter().any(|n| n == "Promise") {
+    let iterates_async = m.classes.iter().any(|c| c.iterates_async.is_some());
+    if iterates_async && !m.opaque.iter().any(|n| n == "Promise") {
+        types += "typedef struct { uint32_t h; } Promise;\n";
+    }
+    if iterates_async {
+        types += "static inline Promise JsIterator_next_async(JsIterator it) { return (Promise){ ts_raw_js_async_iterator_next(it.h) }; }\n";
+    }
+    if m.opaque.iter().any(|n| n == "Promise") || iterates_async {
         types += "typedef void (*Promise_fn)(void* ctx, bool ok, JsValue value);\n\
                   TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, Promise_fn, void*);\n\
                   static inline void Promise_then(Promise p, Promise_fn fn, void* ctx) { ts_raw_js_promise_then(p.h, fn, ctx); }\n";
@@ -396,6 +405,12 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         let mut body = String::new();
         for (name, value) in &c.consts {
             body += &format!("#define {}_{name} {value}\n", c.name);
+        }
+        // Asynchronous iteration: `X_iterate_async(x)`, then `JsIterator_next_async(it)`, a
+        // promise of the next value, or of a null handle at the end.
+        if c.iterates_async.is_some() {
+            let n = &c.name;
+            body += &format!("static inline JsIterator {n}_iterate_async({n} self) {{ return (JsIterator){{ ts_raw_js_async_iterate(self.h) }}; }}\n");
         }
         // Iteration: `X_iterate(x)`, then `X_iterate_next(it, &value)` until false; each value is the caller's.
         if let Some(elem) = &c.iterates {

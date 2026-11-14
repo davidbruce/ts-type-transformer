@@ -42,7 +42,18 @@ fn onRejected(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
     defer b.jsRelease(m);
     reason_len = m.len();
 }
+// Sums what an async iterator yields, asking for each value when the last arrives.
+var ticks: f64 = 0;
+var tick_it: b.JsAsyncIterator = undefined;
+fn onTick(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
+    if (!ok or v.isNull()) return b.jsRelease(tick_it);
+    ticks += v.toNumber();
+    const p = tick_it.next();
+    defer b.jsRelease(p);
+    p.then(onTick, null);
+}
 export fn finish() void {
+    expect(ticks == 6, @src());
     expect(awaited == 42 and reason_len == 4, @src());
 }
 fn bump(ctx: ?*anyopaque) callconv(.c) void {
@@ -59,6 +70,12 @@ export fn run() void {
     defer b.jsRelease(q);
     q.then(onRejected, null);
     expect(awaited == 0, @src());
+    const tk = b.ticker(3);
+    defer b.jsRelease(tk);
+    tick_it = tk.iterateAsync();
+    const first = tick_it.next();
+    defer b.jsRelease(first);
+    first.then(onTick, null);
 
     // An object that is also a function, and can be constructed.
     const s = b.scaler(2);

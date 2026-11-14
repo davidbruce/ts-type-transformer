@@ -99,8 +99,9 @@ pub struct Class {
     pub funcs: Vec<Func>,
     // Name, value as source text.
     pub consts: Vec<(String, String)>,
-    // What iterating it yields, from `[Symbol.iterator]()`.
+    // What iterating it yields, from `[Symbol.iterator]()`, and asynchronously, from `[Symbol.asyncIterator]()`.
     pub iterates: Option<Ty>,
+    pub iterates_async: Option<Ty>,
 }
 
 pub struct NamedUnion {
@@ -442,7 +443,7 @@ impl<'a> Builder<'a> {
 
     fn class(&mut self, d: Node<'a, 'a>, path: &str) -> Class {
         let owner = ident(path);
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None };
         let mut names = HashSet::new();
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
@@ -456,7 +457,7 @@ impl<'a> Builder<'a> {
     }
 
     fn statics(&mut self, body: Node<'a, 'a>, path: &str, name: String) -> Class {
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None };
         let mut names = HashSet::new();
         for m in elements(body) {
             self.member(&mut c, &mut names, m, path, true);
@@ -563,8 +564,14 @@ impl<'a> Builder<'a> {
             self.bad = None;
             return;
         }
-        if raw_name == "[Symbol.asyncIterator]" {
-            return self.skip("async iterator");
+        if raw_name == "[Symbol.asyncIterator]" && !is_static {
+            let elem = named(m, "returns").next().and_then(|r| elements(r).next()).and_then(|it| elements(it).next());
+            c.iterates_async = Some(match elem {
+                Some(e) => self.ty(e, &owner),
+                None => Ty::Any,
+            });
+            self.bad = None;
+            return;
         }
         if raw_name.starts_with('[') {
             return self.skip("symbol-named member");
@@ -1249,6 +1256,9 @@ export function makeEnv(getInstance) {
     // Iteration: an iterator over a value, and its next value, or -1 at the end.
     js_iterate: h => put(get(h)[Symbol.iterator]()),
     js_iterator_next: it => { const r = get(it).next(); return r.done ? -1 : put(r.value); },
+    // Asynchronous iteration: a promise of the next value, or of nothing at the end.
+    js_async_iterate: h => put(get(h)[Symbol.asyncIterator]()),
+    js_async_iterator_next: it => put(Promise.resolve(get(it).next()).then(r => (r.done ? undefined : r.value))),
     // The pending exception, which wasm now holds, or 0.
     js_take_error: () => { const e = error; error = 0; return e; },
     js_error_message: h => { const e = get(h); return put(String(e instanceof Error ? e.message : e)); },

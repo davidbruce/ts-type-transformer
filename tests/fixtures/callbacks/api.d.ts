@@ -28,3 +28,9 @@ interface Scaler {
     factor: number;
 }
 declare function scaler(factor: number): Scaler;
+
+// Values that arrive one at a time.
+interface Ticker {
+    [Symbol.asyncIterator](): AsyncIterator<number>;
+}
+declare function ticker(n: number): Ticker;

@@ -37,3 +37,8 @@ globalThis.scaler = factor => {
     s.factor = factor;
     return s;
 };
+globalThis.ticker = n => ({
+    async *[Symbol.asyncIterator]() {
+        for (let i = 1; i <= n; i++) yield i;
+    },
+});

@@ -19,7 +19,19 @@ static ts::Task wait() {
     settled_ok = bool(co_await settled());
 }
 
+// Sums what an async iterator yields.
+static double ticks = 0;
+static ts::Task count_ticks() {
+    ts::AsyncIterator<double> it = ticker(3).iterate_async();
+    for (;;) {
+        ts::Result<std::optional<double>> r = co_await it.next();
+        if (!r || !*r) break;
+        ticks += **r;
+    }
+}
+
 extern "C" __attribute__((export_name("finish"))) void finish() {
+    CHECK(ticks == 6);
     CHECK(awaited == 42);
     CHECK(reason == "nope");
     CHECK(settled_ok);
@@ -29,6 +41,7 @@ extern "C" __attribute__((export_name("finish"))) void finish() {
 extern "C" __attribute__((export_name("run"))) void run() {
     // Promises: awaited in a coroutine, or given a function to call.
     wait();
+    count_ticks();
     CHECK(awaited == 0);
     delayed(1).then([](ts::Result<double> r) { then_value = *r; });
 
