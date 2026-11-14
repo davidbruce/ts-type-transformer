@@ -4,7 +4,7 @@ const b = @import("bindings.zig");
 export fn calls(n: i32) f64 {
     var s: f64 = 0;
     var i: i32 = 0;
-    while (i < n) : (i += 1) s = b.add(s, @floatFromInt(i));
+    while (i < n) : (i += 1) s = b.add(s, @as(f64, @floatFromInt(i)) + 0.5);
     return s;
 }
 

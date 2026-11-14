@@ -258,16 +258,19 @@ Nanoseconds per iteration on an Apple M4 Max:
 
 | | TypeScript | F# | C | C++ | Zig | Rust |
 |---|---|---|---|---|---|---|
-| call a function | 1.3 | 5.3 | 6.4 | 6.2 | 7.0 | 6.6 |
-| make an object, call a method | 0.8 | 0.9 | 23 | 24 | 23 | 24 |
-| set and get a property | 0.6 | 0.6 | 8.1 | 8.5 | 8.1 | 8.0 |
-| pass a string (same bytes) | 0.3 | 0.3 | 22 | 19 | 22 | 24 |
-| pass a string (new each time) | 0.5 | 0.5 | 61 | 61 | 60 | 62 |
-| receive a string | 0.3 | 0.5 | 45 | 43 | 49 | 56 |
-| be called back | 6.3 | 6.2 | 5.1 | 5.1 | 5.1 | 6.6 |
+| call a function | 0.7 | 0.7 | 6.9 | 6.8 | 6.9 | 6.9 |
+| make an object, call a method | 0.8 | 0.8 | 23 | 24 | 23 | 24 |
+| set and get a property | 0.6 | 0.6 | 7.1 | 7.8 | 7.1 | 7.2 |
+| pass a string (same bytes) | 0.4 | 0.3 | 22 | 19 | 23 | 24 |
+| pass a string (new each time) | 0.5 | 0.5 | 59 | 60 | 61 | 61 |
+| receive a string | 0.3 | 0.5 | 44 | 42 | 46 | 56 |
+| be called back | 6.0 | 6.2 | 5.0 | 5.0 | 5.0 | 6.4 |
 | compute without crossing | 1.1 | 1.1 | 0.6 | 1.0 | 0.6 | 0.6 |
 
-F# compiles to JavaScript and costs what TypeScript does. A wasm target
+F# compiles to JavaScript and costs what TypeScript does: Fable's loops are
+the same JavaScript, and V8 inlines the call. (The workloads keep their
+numbers off V8's small-integer path: a sum that outgrows it is boxed on every
+iteration, and once made a call cost 5 ns in both.) A wasm target
 pays 5 to 8 ns to cross the boundary, a handle-table slot per object, and a
 decode or encode per string (a string at the same address with the same
 bytes is decoded once). Code that stays inside wasm is as fast or faster.

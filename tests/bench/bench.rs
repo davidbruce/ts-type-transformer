@@ -8,7 +8,7 @@ use std::rc::Rc;
 pub extern "C" fn calls(n: i32) -> f64 {
     let mut s = 0.0;
     for i in 0..n {
-        s = add(s, i as f64);
+        s = add(s, i as f64 + 0.5);
     }
     s
 }

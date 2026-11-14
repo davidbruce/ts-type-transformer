@@ -7,7 +7,7 @@ open type Bindings.Globals
 let calls (n: int) : float =
     let mutable s = 0.0
     for i in 0 .. n - 1 do
-        s <- add (s, float i)
+        s <- add (s, float i + 0.5)
     s
 
 let objects (n: int) : float =

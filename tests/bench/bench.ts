@@ -4,9 +4,11 @@
 /// <reference path="./api.d.ts" />
 
 // Numbers in, a number out: the cost of a call.
+// The argument is never a whole number: a sum of integers outgrows V8's
+// small integers, and would measure the boxing of numbers, not the call.
 export function calls(n: number): number {
     let s = 0;
-    for (let i = 0; i < n; i++) s = add(s, i);
+    for (let i = 0; i < n; i++) s = add(s, i + 0.5);
     return s;
 }
 

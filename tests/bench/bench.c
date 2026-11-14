@@ -5,7 +5,7 @@
 
 BENCH(calls) {
     double s = 0;
-    for (int i = 0; i < n; i++) s = add(s, i);
+    for (int i = 0; i < n; i++) s = add(s, i + 0.5);
     return s;
 }
 
