@@ -1,52 +1,118 @@
-// XML -> Rust bindings for wasm32-unknown-unknown, in one module.
+// XML -> a Rust crate of bindings for wasm32-unknown-unknown.
 //
 // Every JavaScript object is a value holding a counted handle: `Clone`
 // retains it and `Drop` releases it. Inheritance is traits: each type's own
 // members are default methods of `XMethods`, implemented for the type and
-// each of its subtypes, so `div.setAttribute(..)` works on an
+// each of its subtypes, so `div.set_attribute(..)` works on an
 // HTMLDivElement. Where two of a type's traits share a name, the type has an
-// inherent method of that name, which Rust prefers. Nullables are `Option`,
-// unions enums, arrays `JsArray<T>`, callbacks closures, generic types
-// generic structs, keyed methods generic over typed keys:
-// `el.addEventListener(HTMLElementEventMapKeys::click, Listener::new(|e: PointerEvent| ..), None)`.
+// inherent method of that name, which Rust prefers.
+//
+// Names are Rust's: methods and functions in snake_case, a property `x` as
+// `x()` and `set_x(..)`, generated type names and enum variants in
+// CamelCase, a map's keys as constants of the map
+// (`HTMLElementEventMap::CLICK`). Arguments are borrowed: an object is
+// `&impl AsRef<T>`, so any subtype goes in; an array or a union is
+// `impl Into<..>`, so `["a", "b"]` or `42.0` do; a value of a type parameter
+// goes by value. Nullables are `Option`,
+// unions enums, callbacks closures, promises futures.
+//
+// The crate: `Cargo.toml`, `src/lib.rs`, `src/runtime.rs`, `src/types.rs`
+// (enums, unions, callbacks), a file per module, and `src/raw.rs` (the
+// imports).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::wasm::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
 
+const KEYWORDS: &[&str] = &[
+    "as", "break", "const", "continue", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+    "ref", "return", "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while", "async", "await", "dyn", "abstract", "become", "box",
+    "do", "final", "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "try", "gen", "self", "Self", "super", "crate", "_",
+];
+
+// Method names a handle type already has, from the traits every one implements.
+const TAKEN: &[&str] = &["clone", "as_ref", "eq", "ne", "into", "lend", "release", "iter", "iterate_async", "as_array"];
+
+// A value's name: a keyword gets a trailing underscore.
 fn ident(name: &str) -> String {
-    const KEYWORDS: &[&str] = &[
-        "as", "break", "const", "continue", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut",
-        "pub", "ref", "return", "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while", "async", "await", "dyn", "abstract", "become",
-        "box", "do", "final", "macro", "override", "priv", "typeof", "unsized", "virtual", "yield", "try", "gen",
-    ];
     let s = super::wasm::ident(name);
-    match s.as_str() {
-        "self" | "Self" | "super" | "crate" | "_" => format!("{s}_"),
-        s if KEYWORDS.contains(&s) => format!("r#{s}"),
-        _ => s,
+    if KEYWORDS.contains(&s.as_str()) { format!("{s}_") } else { s }
+}
+
+// `getElementById` -> `get_element_by_id`, `innerHTML` -> `inner_html`.
+fn snake(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let mut out = String::new();
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_uppercase() {
+            let prev = i.checked_sub(1).map(|j| chars[j]);
+            let next = chars.get(i + 1);
+            let after_word = prev.is_some_and(|p| p.is_lowercase() || p.is_ascii_digit());
+            let ends_acronym = prev.is_some_and(|p| p.is_uppercase()) && next.is_some_and(|n| n.is_lowercase());
+            if (after_word || ends_acronym) && !out.is_empty() && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.extend(c.to_lowercase());
+        } else {
+            out.push(c);
+        }
     }
+    out
+}
+
+// `Options_mode` -> `OptionsMode`, `fill` -> `Fill`: for generated type names and variants.
+fn camel(name: &str) -> String {
+    let out: String = name
+        .split('_')
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let mut cs = s.chars();
+            cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
+        })
+        .collect();
+    if out.chars().next().is_none_or(|c| c.is_ascii_digit()) { format!("_{out}") } else { out }
+}
+
+#[derive(Default)]
+struct Context {
+    // Unions values can be decoded to, and all unions.
+    decodable: BTreeSet<String>,
+    unions: BTreeSet<String>,
+    // Types declared without type parameters: `Is` is implemented for them.
+    classes: BTreeSet<String>,
+    // The Rust name of each type the model names.
+    types: HashMap<String, String>,
 }
 
 thread_local! {
-    // The unions of the model being generated that values can be decoded to.
-    static DECODABLE: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
-    static UNIONS: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
-    static CLASSES: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
+    // The model being generated.
+    static CX: RefCell<Context> = RefCell::new(Context::default());
 }
 
 fn decodable(n: &str) -> bool {
-    DECODABLE.with(|d| d.borrow().contains(n))
+    CX.with(|c| c.borrow().decodable.contains(n))
 }
 
 fn is_union(n: &str) -> bool {
-    UNIONS.with(|d| d.borrow().contains(n))
+    CX.with(|c| c.borrow().unions.contains(n))
 }
 
-// A type the bindings declare without type parameters: one `Is` is implemented for.
 fn is_class(n: &str) -> bool {
-    CLASSES.with(|d| d.borrow().contains(n))
+    CX.with(|c| c.borrow().classes.contains(n))
 }
+
+// `Option`, in full where the API declares a type of that name.
+fn option() -> &'static str {
+    if CX.with(|c| c.borrow().classes.contains("Option") || c.borrow().types.contains_key("Option")) { "::core::option::Option" } else { "Option" }
+}
+
+// A type's name in Rust.
+fn tn(n: &str) -> String {
+    CX.with(|c| c.borrow().types.get(n).cloned().unwrap_or_else(|| n.to_string()))
+}
+
+const VALUE: &str = "JsValue";
 
 // The Rust type of a value: owned, as it comes back or as a type argument.
 fn ty(t: &Ty) -> String {
@@ -55,39 +121,60 @@ fn ty(t: &Ty) -> String {
         Ty::Num => "f64".into(),
         Ty::Bool => "bool".into(),
         Ty::Str => "String".into(),
-        Ty::Any | Ty::Union(_) => "runtime::JsValue".into(),
-        Ty::Array => "runtime::JsArray".into(),
-        Ty::ArrayOf(e) => format!("runtime::JsArray<{}>", ty(e)),
-        Ty::Tuple(es) if (2..=4).contains(&es.len()) => format!("Tuple{}<{}>", es.len(), es.iter().map(ty).collect::<Vec<_>>().join(", ")),
+        Ty::Any | Ty::Union(_) => VALUE.into(),
+        Ty::Array => "JsArray".into(),
+        Ty::ArrayOf(e) => format!("JsArray<{}>", ty(e)),
+        Ty::Tuple(es) if (2..=4).contains(&es.len()) => format!("JsTuple{}<{}>", es.len(), es.iter().map(ty).collect::<Vec<_>>().join(", ")),
         Ty::Tuple(_) => "JsArray".into(),
-        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
-        // In full: a DOM type is named Option.
-        Ty::Nullable(inner, _) => format!("::core::option::Option<{}>", ty(inner)),
-        Ty::NamedUnion(n) if decodable(n) => n.clone(),
-        Ty::NamedUnion(_) => "JsValue".into(),
-        // The runtime's, by path: an API may declare its own Listener.
-        Ty::Key(m) => format!("runtime::Key<{m}, V>"),
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => tn(n),
+        Ty::Nullable(inner, _) => format!("{}<{}>", option(), ty(inner)),
+        Ty::NamedUnion(n) if decodable(n) => tn(n),
+        Ty::NamedUnion(_) => VALUE.into(),
+        Ty::Key(m) => format!("JsKey<{}, V>", tn(m)),
         Ty::Mapped(_) => "V".into(),
-        Ty::Listener(ev) => format!("runtime::Listener<{}>", ty(ev)),
+        Ty::Listener(ev) => format!("JsListener<{}>", ty(ev)),
         Ty::Param(n) => n.clone(),
-        Ty::Generic(n, _) if is_union(n) && !decodable(n) => "JsValue".into(),
-        Ty::Generic(n, args) if !args.is_empty() => format!("{n}<{}>", args.iter().map(ty).collect::<Vec<_>>().join(", ")),
-        Ty::Generic(n, _) => n.clone(),
+        Ty::Generic(n, _) if is_union(n) && !decodable(n) => VALUE.into(),
+        Ty::Generic(n, args) if !args.is_empty() => format!("{}<{}>", tn(n), args.iter().map(ty).collect::<Vec<_>>().join(", ")),
+        Ty::Generic(n, _) => tn(n),
     }
 }
 
-// The Rust type of a parameter: strings are borrowed, and an object is any
-// value that is one: `nameOf(&shape)` where a Named is wanted.
-fn ty_in(t: &Ty) -> String {
+// A parameter: its type as written, and the expressions that lower it. What
+// is lent lives until the end of the statement that makes the call.
+fn param(t: &Ty, x: &str) -> (String, Vec<String>) {
+    let lend = |e: &str| vec![format!("{e}.lend().h")];
+    let into = |target: String| (format!("impl Into<{target}>"), vec![format!("Into::<{target}>::into({x}).lend().h")]);
+    let option = |inner: String| format!("{}<{inner}>", option());
     match t {
-        Ty::Str => "&str".into(),
-        Ty::Obj(n) => format!("&impl AsRef<{n}>"),
-        Ty::Nullable(inner, _) if **inner == Ty::Str => "::core::option::Option<&str>".into(),
-        t => ty(t),
+        Ty::Num => ("f64".into(), vec![x.into()]),
+        Ty::NumEnum(_) => (ty(t), vec![format!("{x} as i32 as f64")]),
+        Ty::Bool | Ty::Enum(_) => (ty(t), vec![format!("{x} as i32")]),
+        Ty::Key(_) => (ty(t), vec![format!("{x}.index")]),
+        Ty::Str => ("&str".into(), vec![format!("{x}.as_ptr()"), format!("{x}.len()")]),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::Str => (option("&str".into()), vec![format!("{x}.map_or(core::ptr::null(), |s| s.as_ptr())"), format!("{x}.map_or(0, |s| s.len())")]),
+            Ty::Num => (ty(t), vec![format!("{x}.is_some() as i32"), format!("{x}.unwrap_or(0.0)")]),
+            Ty::NumEnum(_) => (ty(t), vec![format!("{x}.is_some() as i32"), format!("{x}.map_or(0.0, |v| v as i32 as f64)")]),
+            Ty::Bool | Ty::Enum(_) => (ty(t), vec![format!("{x}.map_or(-1, |v| v as i32)")]),
+            // A union is made where it is passed: by value.
+            Ty::NamedUnion(n) | Ty::Generic(n, _) if is_union(n) && decodable(n) => (ty(t), lend(x)),
+            Ty::Param(_) => (ty(t), lend(x)),
+            inner => (option(format!("&{}", ty(inner))), lend(x)),
+        },
+        // Any value that is one: `name_of(&shape)` where a Named is wanted.
+        Ty::Obj(n) => (format!("&impl AsRef<{}>", tn(n)), vec![format!("AsRef::<{}>::as_ref({x}).lend().h", tn(n))]),
+        Ty::Array | Ty::ArrayOf(_) => into(ty(t)),
+        Ty::Tuple(es) if !(2..=4).contains(&es.len()) => into(ty(t)),
+        Ty::NamedUnion(n) | Ty::Generic(n, _) if is_union(n) => into(ty(t)),
+        Ty::Any | Ty::Union(_) | Ty::NamedUnion(_) => into(VALUE.into()),
+        // A value of a type parameter is passed as into a collection: by value.
+        Ty::Param(_) => (ty(t), lend(x)),
+        _ => (format!("&{}", ty(t)), lend(x)),
     }
 }
 
-// What a value crosses the boundary as.
+// What a value crosses the boundary as, going in.
 fn raw(t: &Ty) -> Vec<&'static str> {
     match t {
         Ty::Void => vec![],
@@ -101,6 +188,7 @@ fn raw(t: &Ty) -> Vec<&'static str> {
     }
 }
 
+// What a value crosses as coming back, and what a callback's arguments and result cross as.
 fn raw_ret(t: &Ty) -> &'static str {
     match t {
         Ty::Void => "()",
@@ -111,42 +199,19 @@ fn raw_ret(t: &Ty) -> &'static str {
     }
 }
 
-// Expressions turning a Rust value into what crosses. A lent handle lives
-// until the end of the statement that makes the call.
-fn lower(t: &Ty, x: &str) -> Vec<String> {
-    match t {
-        Ty::Num => vec![x.into()],
-        Ty::NumEnum(_) => vec![format!("{x} as i32 as f64")],
-        Ty::Bool | Ty::Enum(_) => vec![format!("{x} as i32")],
-        Ty::Key(_) => vec![format!("{x}.index")],
-        Ty::Str => vec![format!("{x}.as_ptr()"), format!("{x}.len()")],
-        Ty::Nullable(inner, _) if **inner == Ty::Str => vec![format!("{x}.map_or(core::ptr::null(), |s| s.as_ptr())"), format!("{x}.map_or(0, |s| s.len())")],
-        Ty::Nullable(inner, _) if **inner == Ty::Num => vec![format!("{x}.is_some() as i32"), format!("{x}.unwrap_or(0.0)")],
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::NumEnum(_)) => vec![format!("{x}.is_some() as i32"), format!("{x}.map_or(0.0, |v| v as i32 as f64)")],
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => vec![format!("{x}.map_or(-1, |v| v as i32)")],
-        Ty::Obj(n) => vec![format!("AsRef::<{n}>::as_ref({x}).lend().h")],
-        _ => vec![format!("{x}.lend().h")],
-    }
-}
-
 // Expression turning what came back, `r`, into a Rust value.
 fn raise(t: &Ty, r: &str) -> String {
     match t {
         Ty::Void => "()".into(),
         Ty::Num => r.into(),
-        Ty::NumEnum(e) => format!("{e}::from_value({r} as i32)"),
+        Ty::NumEnum(e) => format!("{}::from_value({r} as i32)", tn(e)),
         Ty::Bool => format!("{r} != 0"),
-        Ty::Enum(e) => format!("{e}::from_index({r})"),
+        Ty::Enum(e) => format!("{}::from_index({r})", tn(e)),
         Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("if {r} < 0 {{ None }} else {{ Some({r} != 0) }}"),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("if {r} < 0 {{ None }} else {{ Some({}::from_index({r})) }}", ty(inner)),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::NumEnum(_)) => format!("::core::option::Option::<f64>::from_handle({r}).map(|v| {}::from_value(v as i32))", ty(inner)),
         t => format!("<{}>::from_handle({r})", ty(t)),
     }
-}
-
-// What a callback argument or result crosses as.
-fn raw_callback(t: &Ty) -> &'static str {
-    raw_ret(t)
 }
 
 // What a callback returns, given to JavaScript.
@@ -157,7 +222,7 @@ fn lower_callback(t: &Ty, x: &str) -> String {
         Ty::NumEnum(_) => format!("{x} as i32 as f64"),
         Ty::Bool | Ty::Enum(_) => format!("{x} as i32"),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => format!("{x}.map_or(-1, |v| v as i32)"),
-        _ => format!("give(&{x})"),
+        _ => format!("crate::runtime::give(&{x})"),
     }
 }
 
@@ -165,7 +230,7 @@ fn lower_callback(t: &Ty, x: &str) -> String {
 // `T: JsType + Is<Node>`.
 fn bound(p: &TParam) -> String {
     match &p.constraint {
-        Some(Ty::Obj(n)) if is_class(n) => format!("{}: JsType + Is<{n}>", p.name),
+        Some(Ty::Obj(n)) if is_class(n) => format!("{}: JsType + Is<{}>", p.name, tn(n)),
         _ => format!("{}: JsType", p.name),
     }
 }
@@ -180,28 +245,81 @@ fn args_of(params: &[TParam]) -> String {
     if params.is_empty() { String::new() } else { format!("<{}>", params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) }
 }
 
-// `PhantomData<(T, U)>` for a generic struct.
-fn phantom(params: &[String]) -> String {
-    if params.is_empty() { String::new() } else { format!(", PhantomData<fn() -> ({},)>", params.join(", ")) }
+fn mentions(t: &Ty, param: &str) -> bool {
+    match t {
+        Ty::Param(n) => n == param,
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => mentions(inner, param),
+        Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().any(|a| mentions(a, param)),
+        _ => false,
+    }
 }
 
-// One method or function: its signature and body. `this` is the handle of
-// the object it is called on, for members.
-fn function(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> (String, String) {
+// A function's name: a property `x` reads as `x()` and writes as `set_x(..)`.
+fn function_name(f: &Func) -> String {
+    let base = match &f.call {
+        Call::Get(_) | Call::StaticGet(_) | Call::IndexGet => f.name.strip_prefix("get_").unwrap_or(&f.name),
+        _ => &f.name,
+    };
+    ident(&snake(base))
+}
+
+// Names for a set of functions, each once: by the model's name.
+fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>, taken: &mut HashSet<String>) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for f in funcs {
+        let base = function_name(f);
+        let mut name = if TAKEN.contains(&base.as_str()) { format!("js_{base}") } else { base.clone() };
+        let mut n = 2;
+        while !taken.insert(name.clone()) {
+            name = format!("{base}_{n}");
+            n += 1;
+        }
+        out.insert(f.name.clone(), name);
+    }
+    out
+}
+
+// One function as source: `vis fn name<..>(..) -> R { .. }`. `this` is the
+// handle of the object it is called on, for members. A type parameter that
+// has a default and cannot be inferred from the arguments is two functions:
+// `name`, with the default, and `name_as::<T>`.
+fn function(f: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> Vec<String> {
+    if hidden(f).is_empty() {
+        return vec![one_function(f, name, vis, imports, this)];
+    }
+    vec![one_function(&defaulted(f), name, vis, imports, this), one_function(f, &format!("{name}_as"), vis, imports, this)]
+}
+
+fn one_function(f: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> String {
+    let p = parts(f, imports, this);
+    let generics = if p.generics.is_empty() { String::new() } else { format!("<{}>", p.generics.join(", ")) };
+    let ret = if f.ret == Ty::Void { String::new() } else { format!(" -> {}", p.ret) };
+    format!("{vis}fn {name}{generics}({}){ret} {{ {} }}", p.params.join(", "), p.body)
+}
+
+// A function's pieces: its bounds, its parameters as written (`&self`
+// first, for a member), its result and its body.
+struct Parts {
+    generics: Vec<String>,
+    params: Vec<String>,
+    ret: String,
+    body: String,
+}
+
+fn parts(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> Parts {
     let mut raw_params: Vec<String> = Vec::new();
     let mut args: Vec<String> = Vec::new();
     if let Some(this) = this {
         raw_params.push("this: u32".into());
         args.push(this.into());
     }
-    let mut params = Vec::new();
-    for (name, t) in &f.params {
-        let name = format!("{}_", super::wasm::ident(name));
-        params.push(format!("{name}: {}", ty_in(t)));
-        for (i, r) in raw(t).into_iter().enumerate() {
-            raw_params.push(format!("{name}{i}: {r}"));
-        }
-        args.extend(lower(t, &name));
+    let mut params: Vec<String> = if this.is_some() { vec!["&self".into()] } else { Vec::new() };
+    for (i, (p, t)) in f.params.iter().enumerate() {
+        let p = ident(&snake(p));
+        let (written, lowered) = param(t, &p);
+        params.push(format!("{p}: {written}"));
+        raw_params.extend(raw(t).into_iter().enumerate().map(|(j, r)| format!("a{i}_{j}: {r}")));
+        args.extend(lowered);
     }
     let import = match &f.shared {
         Some((shared, k)) => {
@@ -212,26 +330,133 @@ fn function(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>
         }
         None => f.import.clone(),
     };
-    imports.entry(import.clone()).or_insert_with(|| format!("        pub fn {import}({}) -> {};\n", raw_params.join(", "), raw_ret(&f.ret)));
+    imports.entry(import.clone()).or_insert_with(|| format!("    pub fn {import}({}) -> {};\n", raw_params.join(", "), raw_ret(&f.ret)));
     let mut type_params: Vec<String> = f.type_params.iter().map(bound).collect();
     if f.params.iter().any(|p| matches!(p.1, Ty::Key(_))) {
         type_params.insert(0, "V: JsType".into());
     }
-    let generics = if type_params.is_empty() { String::new() } else { format!("<{}>", type_params.join(", ")) };
-    let self_param = if this.is_some() { "&self".to_string() } else { String::new() };
-    let all_params: Vec<String> = std::iter::once(self_param).filter(|s| !s.is_empty()).chain(params).collect();
-    let ret = ty(&f.ret);
-    let sig = format!("fn {}{generics}({}) -> {ret}", ident(&f.name), all_params.join(", "));
-    let body = format!("{{ let r = unsafe {{ raw::{import}({}) }}; {} }}", args.join(", "), raise(&f.ret, "r"));
-    (sig, body)
+    let body = match &f.ret {
+        Ty::Void => format!("unsafe {{ raw::{import}({}) }};", args.join(", ")),
+        t => format!("let r = unsafe {{ raw::{import}({}) }}; {}", args.join(", "), raise(t, "r")),
+    };
+    Parts { generics: type_params, params, ret: ty(&f.ret), body }
+}
+
+// Overloads of one method that differ in one parameter, which is a key of
+// one map or another, or a string: one method, generic in that parameter.
+// `el.query_selector(HTMLElementTagNameMap::P)` is an HTMLParagraphElement,
+// `el.query_selector("p.intro")` an Element.
+struct Family {
+    name: String,
+    trait_name: String,
+    at: usize,
+    members: Vec<Func>,
+}
+
+fn uses_key(t: &Ty) -> bool {
+    match t {
+        Ty::Key(_) | Ty::Mapped(_) => true,
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => uses_key(inner),
+        Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().any(uses_key),
+        _ => false,
+    }
+}
+
+fn families(c: &Class, names: &HashMap<String, String>, types: &HashSet<String>) -> Vec<Family> {
+    if !c.type_params.is_empty() {
+        return Vec::new();
+    }
+    let mut groups: Vec<(String, Vec<&Func>)> = Vec::new();
+    for f in &c.funcs {
+        let Call::Method(js) = &f.call else { continue };
+        let key = format!("{js} {:?}", f.fixed);
+        match groups.iter_mut().find(|g| g.0 == key) {
+            Some(g) => g.1.push(f),
+            None => groups.push((key, vec![f])),
+        }
+    }
+    let mut out = Vec::new();
+    for (_, fs) in groups.into_iter().filter(|g| g.1.len() > 1) {
+        let first = fs[0];
+        if fs.iter().any(|f| f.rest || f.params.len() != first.params.len()) {
+            continue;
+        }
+        let differing: Vec<usize> = (0..first.params.len()).filter(|&i| fs.iter().any(|f| f.params[i].1 != first.params[i].1)).collect();
+        let [at] = differing[..] else { continue };
+        let mut seen = HashSet::new();
+        let dispatchable = fs.iter().all(|f| matches!(f.params[at].1, Ty::Key(_) | Ty::Str) && seen.insert(format!("{:?}", f.params[at].1)));
+        // The other parameters are written once, for every overload.
+        let plain = fs.iter().all(|f| f.params.iter().enumerate().all(|(i, (_, t))| i == at || !(uses_key(t) || f.type_params.iter().any(|p| mentions(t, &p.name)))));
+        let name = names[&first.name].clone();
+        let trait_name = format!("{}{}Arg", tn(&c.name), camel(&name));
+        if dispatchable && plain && !types.contains(&trait_name) {
+            out.push(Family { name, trait_name, at, members: fs.into_iter().map(|f| with_self_args(f, c)).collect() });
+        }
+    }
+    out
+}
+
+impl Family {
+    // The method: `fn query_selector<A_: ..Arg>(&self, selectors: A_) -> A_::Output`,
+    // and for an overload with a type argument to state, `query_selector_as::<T>`.
+    fn methods(&self, vis: &str, imports: &mut BTreeMap<String, String>, this: &str) -> Vec<String> {
+        let first = &self.members[0];
+        let names: Vec<String> = first.params.iter().map(|(p, _)| ident(&snake(p))).collect();
+        let params: Vec<String> = first.params.iter().zip(&names).enumerate().map(|(i, ((_, t), p))| if i == self.at { format!("{p}: A_") } else { format!("{p}: {}", param(t, p).0) }).collect();
+        let others: String = names.iter().enumerate().filter(|(i, _)| *i != self.at).map(|(_, p)| format!(", {p}")).collect();
+        let mut out = vec![format!("{vis}fn {}<A_: {}>(&self, {}) -> A_::Output {{ A_::call({}, {this}{others}) }}", self.name, self.trait_name, params.join(", "), names[self.at])];
+        if let Some(f) = self.members.iter().find(|f| f.params[self.at].1 == Ty::Str && !hidden(f).is_empty()) {
+            out.push(one_function(f, &format!("{}_as", self.name), vis, imports, Some(this)));
+        }
+        out
+    }
+
+    // The trait of what the parameter may be, and each overload as one of them.
+    fn dispatch(&self, imports: &mut BTreeMap<String, String>) -> String {
+        let others = |p: &Parts| -> String { p.params.iter().skip(1).enumerate().filter(|(i, _)| *i != self.at).map(|(_, p)| format!(", {p}")).collect() };
+        let first = &self.members[0];
+        let p = parts(first, &mut BTreeMap::new(), Some("this"));
+        let mut out = format!("pub trait {} {{\n    type Output;\n    #[doc(hidden)]\n    fn call(self, this: u32{}) -> Self::Output;\n}}\n", self.trait_name, others(&p));
+        for f in &self.members {
+            let f = &defaulted(f);
+            let p = parts(f, imports, Some("this"));
+            let key = ident(&snake(&f.params[self.at].0));
+            let generics = if p.generics.is_empty() { String::new() } else { format!("<{}>", p.generics.join(", ")) };
+            out += &format!(
+                "impl{generics} {} for {} {{\n    type Output = {};\n    fn call(self, this: u32{}) -> Self::Output {{ let {key} = self; {} }}\n}}\n",
+                self.trait_name,
+                param(&f.params[self.at].1, &key).0,
+                p.ret,
+                others(&p),
+                p.body
+            );
+        }
+        out
+    }
+}
+
+// Type parameters with a default that the arguments cannot infer.
+fn hidden(f: &Func) -> Vec<TParam> {
+    f.type_params.iter().filter(|p| p.default.is_some() && !f.params.iter().any(|(_, t)| mentions(t, &p.name))).cloned().collect()
+}
+
+// The function with those parameters at their defaults.
+fn defaulted(f: &Func) -> Func {
+    let hidden = hidden(f);
+    let mut out = map_types(f, &|t| subst(t, &hidden, &[]));
+    out.type_params.retain(|p| !hidden.iter().any(|h| h.name == p.name));
+    out
 }
 
 const RUNTIME: &str = r#"// Generated. The runtime: handles, conversions, arrays, callbacks, promises.
-#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, dead_code, unused_imports, unused_unsafe, clippy::all)]
-
 use core::ffi::c_void;
 use core::marker::PhantomData;
 use std::any::Any;
+use std::cell::RefCell;
+use std::future::{Future, IntoFuture};
+use std::pin::Pin;
+use std::rc::Rc;
+use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 mod rt {
     use core::ffi::c_void;
@@ -266,31 +491,21 @@ mod rt {
 }
 
 // A JavaScript value, counted: `Clone` retains it, `Drop` releases it. Zero is null.
-pub struct Handle(pub u32);
-impl Clone for Handle {
+pub struct JsHandle(pub u32);
+impl Clone for JsHandle {
     fn clone(&self) -> Self {
         if self.0 != 0 {
             unsafe { rt::js_retain(self.0) }
         }
-        Handle(self.0)
+        JsHandle(self.0)
     }
 }
-impl Drop for Handle {
+impl Drop for JsHandle {
     fn drop(&mut self) {
         if self.0 != 0 {
             unsafe { rt::js_release(self.0) }
         }
     }
-}
-
-// How many references to JavaScript values wasm holds.
-pub fn live_handles() -> u32 {
-    unsafe { rt::js_live() }
-}
-
-// Whether two handles are one JavaScript value: what `==` means for every handle type.
-pub fn same(a: &Handle, b: &Handle) -> bool {
-    a.0 == b.0 || unsafe { rt::js_equals(a.0, b.0) != 0 }
 }
 
 // A value lent to JavaScript for one call: an object's own handle, or a new
@@ -327,7 +542,13 @@ pub trait FromJs: Sized {
 pub trait JsType: FromJs + ToJs + Clone + 'static {}
 impl<T: FromJs + ToJs + Clone + 'static> JsType for T {}
 
+// `T: Is<B>` says a T is a B: itself, a subtype of it, a union of such, or
+// any value. It is what a type parameter's `extends` becomes.
+pub trait Is<B> {}
+impl<B> Is<B> for JsValue {}
+
 // A handle JavaScript keeps: what a callback returns.
+#[doc(hidden)]
 pub fn give<T: ToJs + ?Sized>(v: &T) -> u32 {
     let l = v.lend();
     let h = l.h;
@@ -345,6 +566,11 @@ fn read_string(h: u32) -> String {
     String::from_utf8(v).unwrap_or_default()
 }
 
+impl<T: ToJs + ?Sized> ToJs for &T {
+    fn lend(&self) -> Lent {
+        (**self).lend()
+    }
+}
 impl ToJs for f64 {
     fn lend(&self) -> Lent {
         Lent::owned(unsafe { rt::js_from_number(*self) })
@@ -374,11 +600,6 @@ impl FromJs for bool {
 impl ToJs for str {
     fn lend(&self) -> Lent {
         Lent::owned(unsafe { rt::js_from_string(self.as_ptr(), self.len()) })
-    }
-}
-impl ToJs for &str {
-    fn lend(&self) -> Lent {
-        (**self).lend()
     }
 }
 impl ToJs for String {
@@ -426,11 +647,12 @@ impl<T: FromJs> FromJs for Option<T> {
     }
 }
 
-// Declares a handle type, generic or not.
+// Declares a handle type, generic or not. `==` is whether two handles are
+// one JavaScript value.
 macro_rules! handle {
     ($name:ident $(<$($p:ident),*>)?) => {
         #[repr(transparent)]
-        pub struct $name $(<$($p),*>)? (pub Handle $(, PhantomData<fn() -> ($($p,)*)>)?);
+        pub struct $name $(<$($p),*>)? (pub $crate::runtime::JsHandle $(, core::marker::PhantomData<fn() -> ($($p,)*)>)?);
         impl $(<$($p),*>)? AsRef<$name $(<$($p),*>)?> for $name $(<$($p),*>)? {
             fn as_ref(&self) -> &Self {
                 self
@@ -438,50 +660,37 @@ macro_rules! handle {
         }
         impl $(<$($p),*>)? Clone for $name $(<$($p),*>)? {
             fn clone(&self) -> Self {
-                $name(self.0.clone() $(, PhantomData::<fn() -> ($($p,)*)>)?)
+                $name(self.0.clone() $(, core::marker::PhantomData::<fn() -> ($($p,)*)>)?)
             }
         }
-        impl $(<$($p),*>)? AsRef<Handle> for $name $(<$($p),*>)? {
-            fn as_ref(&self) -> &Handle {
+        impl $(<$($p),*>)? AsRef<$crate::runtime::JsHandle> for $name $(<$($p),*>)? {
+            fn as_ref(&self) -> &$crate::runtime::JsHandle {
                 &self.0
             }
         }
         impl $(<$($p),*>)? PartialEq for $name $(<$($p),*>)? {
             fn eq(&self, o: &Self) -> bool {
-                same(&self.0, &o.0)
+                $crate::runtime::js::same(&self.0, &o.0)
             }
         }
-        impl $(<$($p),*>)? ToJs for $name $(<$($p),*>)? {
-            fn lend(&self) -> Lent {
-                Lent::borrow(self.0 .0)
+        impl $(<$($p),*>)? $crate::runtime::ToJs for $name $(<$($p),*>)? {
+            fn lend(&self) -> $crate::runtime::Lent {
+                $crate::runtime::Lent::borrow(self.0 .0)
             }
         }
-        impl $(<$($p),*>)? FromJs for $name $(<$($p),*>)? {
+        impl $(<$($p),*>)? $crate::runtime::FromJs for $name $(<$($p),*>)? {
             fn from_handle(h: u32) -> Self {
-                $name(Handle(h) $(, PhantomData::<fn() -> ($($p,)*)>)?)
+                $name($crate::runtime::JsHandle(h) $(, core::marker::PhantomData::<fn() -> ($($p,)*)>)?)
             }
         }
     };
 }
 pub(crate) use handle;
 
-// `T: Is<B>` says a T is a B: itself, a subtype of it, a union of such, or
-// any value. It is what a type parameter's `extends` becomes.
-pub trait Is<B> {}
-impl<B> Is<B> for JsValue {}
-
-// A JavaScript value of no particular type.
+// A JavaScript value of no particular type, made from a number, a flag, a
+// string, or any object: `f(42.0)`, `f("text")`, `f(&element)`.
 handle!(JsValue);
 impl JsValue {
-    pub fn number(x: f64) -> Self {
-        JsValue(Handle(unsafe { rt::js_from_number(x) }))
-    }
-    pub fn boolean(x: bool) -> Self {
-        JsValue(Handle(unsafe { rt::js_from_bool(x as i32) }))
-    }
-    pub fn string(s: &str) -> Self {
-        JsValue(Handle(unsafe { rt::js_from_string(s.as_ptr(), s.len()) }))
-    }
     pub fn as_f64(&self) -> f64 {
         unsafe { rt::js_to_number(self.0 .0) }
     }
@@ -495,9 +704,35 @@ impl JsValue {
         self.0 .0 == 0
     }
 }
+impl From<f64> for JsValue {
+    fn from(x: f64) -> Self {
+        JsValue(JsHandle(unsafe { rt::js_from_number(x) }))
+    }
+}
+impl From<bool> for JsValue {
+    fn from(x: bool) -> Self {
+        JsValue(JsHandle(unsafe { rt::js_from_bool(x as i32) }))
+    }
+}
+impl From<&str> for JsValue {
+    fn from(s: &str) -> Self {
+        JsValue(JsHandle(unsafe { rt::js_from_string(s.as_ptr(), s.len()) }))
+    }
+}
+impl From<String> for JsValue {
+    fn from(s: String) -> Self {
+        s.as_str().into()
+    }
+}
+impl<T: AsRef<JsHandle>> From<&T> for JsValue {
+    fn from(x: &T) -> Self {
+        JsValue(x.as_ref().clone())
+    }
+}
 
-// A JavaScript array of T; `JsArray` of any values.
-pub struct JsArray<T = JsValue>(pub Handle, PhantomData<fn() -> T>);
+// A JavaScript array of T; `JsArray` of any values. Made from an array, a
+// slice, a Vec or an iterator of what T is made from: `["a", "b"]`.
+pub struct JsArray<T = JsValue>(pub JsHandle, PhantomData<fn() -> T>);
 impl<T> Clone for JsArray<T> {
     fn clone(&self) -> Self {
         JsArray(self.0.clone(), PhantomData)
@@ -510,15 +745,18 @@ impl<T> ToJs for JsArray<T> {
 }
 impl<T> FromJs for JsArray<T> {
     fn from_handle(h: u32) -> Self {
-        JsArray(Handle(h), PhantomData)
+        JsArray(JsHandle(h), PhantomData)
     }
 }
 impl<T: JsType> JsArray<T> {
     pub fn new() -> Self {
-        JsArray(Handle(unsafe { rt::js_array_new() }), PhantomData)
+        JsArray(JsHandle(unsafe { rt::js_array_new() }), PhantomData)
     }
     pub fn len(&self) -> usize {
         unsafe { rt::js_array_length(self.0 .0) as usize }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
     pub fn get(&self, i: usize) -> T {
         T::from_handle(unsafe { rt::js_array_get(self.0 .0, i as u32) })
@@ -527,9 +765,18 @@ impl<T: JsType> JsArray<T> {
         let v: T = v.into();
         unsafe { rt::js_array_push(self.0 .0, v.lend().h) }
     }
+    // Each element in turn.
+    pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
+        (0..self.len()).map(|i| self.get(i))
+    }
     // The same array, untyped.
     pub fn any(&self) -> JsArray {
         JsArray(self.0.clone(), PhantomData)
+    }
+}
+impl<T: JsType> Default for JsArray<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 impl<T: JsType, A: Into<T>> FromIterator<A> for JsArray<T> {
@@ -541,11 +788,31 @@ impl<T: JsType, A: Into<T>> FromIterator<A> for JsArray<T> {
         a
     }
 }
+impl<T: JsType, A: Into<T>, const N: usize> From<[A; N]> for JsArray<T> {
+    fn from(items: [A; N]) -> Self {
+        items.into_iter().collect()
+    }
+}
+impl<T: JsType, A: Into<T>> From<Vec<A>> for JsArray<T> {
+    fn from(items: Vec<A>) -> Self {
+        items.into_iter().collect()
+    }
+}
+impl<T: JsType, A: Into<T> + Clone> From<&[A]> for JsArray<T> {
+    fn from(items: &[A]) -> Self {
+        items.iter().cloned().collect()
+    }
+}
+impl<T> From<&JsArray<T>> for JsArray<T> {
+    fn from(a: &JsArray<T>) -> Self {
+        a.clone()
+    }
+}
 
-// Arrays of fixed length and element types: `[number, string]` is `Tuple2<f64, String>`.
+// Arrays of fixed length and element types: `[number, string]` is `JsTuple2<f64, String>`.
 macro_rules! tuple {
     ($name:ident; $($t:ident $get:ident $i:literal),*) => {
-        pub struct $name<$($t),*>(pub Handle, PhantomData<fn() -> ($($t,)*)>);
+        pub struct $name<$($t),*>(pub JsHandle, PhantomData<fn() -> ($($t,)*)>);
         impl<$($t),*> Clone for $name<$($t),*> {
             fn clone(&self) -> Self {
                 $name(self.0.clone(), PhantomData)
@@ -558,14 +825,14 @@ macro_rules! tuple {
         }
         impl<$($t),*> FromJs for $name<$($t),*> {
             fn from_handle(h: u32) -> Self {
-                $name(Handle(h), PhantomData)
+                $name(JsHandle(h), PhantomData)
             }
         }
         impl<$($t: JsType),*> $name<$($t),*> {
             pub fn new($($get: impl Into<$t>),*) -> Self {
                 let a = unsafe { rt::js_array_new() };
                 $(unsafe { rt::js_array_push(a, Into::<$t>::into($get).lend().h) };)*
-                $name(Handle(a), PhantomData)
+                $name(JsHandle(a), PhantomData)
             }
             $(pub fn $get(&self) -> $t {
                 $t::from_handle(unsafe { rt::js_array_get(self.0 .0, $i) })
@@ -573,138 +840,256 @@ macro_rules! tuple {
         }
     };
 }
-tuple!(Tuple2; A get0 0, B get1 1);
-tuple!(Tuple3; A get0 0, B get1 1, C get2 2);
-tuple!(Tuple4; A get0 0, B get1 1, C get2 2, D get3 3);
+tuple!(JsTuple2; A get0 0, B get1 1);
+tuple!(JsTuple3; A get0 0, B get1 1, C get2 2);
+tuple!(JsTuple4; A get0 0, B get1 1, C get2 2, D get3 3);
 
-// A key of a map whose value has type V: `HTMLElementEventMapKeys::click`.
-pub struct Key<M, V> {
+// A key of a map whose value has type V: `HTMLElementEventMap::CLICK`.
+pub struct JsKey<M, V> {
     pub index: i32,
     _p: PhantomData<fn() -> (M, V)>,
 }
-impl<M, V> Key<M, V> {
+impl<M, V> JsKey<M, V> {
     pub const fn new(index: i32) -> Self {
-        Key { index, _p: PhantomData }
+        JsKey { index, _p: PhantomData }
     }
 }
-impl<M, V> Clone for Key<M, V> {
+impl<M, V> Clone for JsKey<M, V> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<M, V> Copy for Key<M, V> {}
+impl<M, V> Copy for JsKey<M, V> {}
 
 // A closure kept for JavaScript to call, until released.
-pub fn closure<F: 'static>(f: F) -> *mut c_void {
+pub(crate) fn closure<F: 'static>(f: F) -> *mut c_void {
     Box::into_raw(Box::new(Box::new(f) as Box<dyn Any>)) as *mut c_void
 }
-pub unsafe fn closure_fn<'a, F: 'static>(ctx: *mut c_void) -> &'a mut F {
+pub(crate) unsafe fn closure_fn<'a, F: 'static>(ctx: *mut c_void) -> &'a mut F {
     unsafe { (*(ctx as *mut Box<dyn Any>)).downcast_mut::<F>().unwrap() }
 }
 
-// A JavaScript function made from a closure. It lives until `release`, which
-// frees the closure; JavaScript must not call it after that.
-pub trait Callback: AsRef<Handle> + Sized {
+// Forgets a callback when dropped: JavaScript calling it afterwards is an
+// error there, never a call into a closure that is gone.
+pub(crate) struct Forget(pub u32);
+impl Drop for Forget {
+    fn drop(&mut self) {
+        unsafe { rt::js_callback_release(self.0) };
+    }
+}
+
+// A JavaScript function made from a closure. One made with `new` lives until
+// `release`, which frees the closure; one made with `scoped` lives for the
+// length of a call, and its closure may borrow.
+pub trait JsCallback: AsRef<JsHandle> + Sized {
     fn release(self) {
-        let ctx = unsafe { rt::js_callback_release(AsRef::<Handle>::as_ref(&self).0) };
+        let ctx = unsafe { rt::js_callback_release(AsRef::<JsHandle>::as_ref(&self).0) };
         if ctx != 0 {
             drop(unsafe { Box::from_raw(ctx as usize as *mut Box<dyn Any>) });
         }
     }
 }
 
-// A callback taking one object of type E: `Listener::new(|e: PointerEvent| ..)`.
-pub struct Listener<E>(pub Handle, PhantomData<fn() -> E>);
-impl<E> Clone for Listener<E> {
+// A callback taking one object of type E: `JsListener::new(|e: PointerEvent| ..)`.
+pub struct JsListener<E>(pub JsHandle, PhantomData<fn() -> E>);
+impl<E> Clone for JsListener<E> {
     fn clone(&self) -> Self {
-        Listener(self.0.clone(), PhantomData)
+        JsListener(self.0.clone(), PhantomData)
     }
 }
-impl<E> AsRef<Handle> for Listener<E> {
-    fn as_ref(&self) -> &Handle {
+impl<E> AsRef<JsHandle> for JsListener<E> {
+    fn as_ref(&self) -> &JsHandle {
         &self.0
     }
 }
-impl<E> ToJs for Listener<E> {
+impl<E> ToJs for JsListener<E> {
     fn lend(&self) -> Lent {
         Lent::borrow(self.0 .0)
     }
 }
-impl<E> FromJs for Listener<E> {
+impl<E> FromJs for JsListener<E> {
     fn from_handle(h: u32) -> Self {
-        Listener(Handle(h), PhantomData)
+        JsListener(JsHandle(h), PhantomData)
     }
 }
-impl<E> Callback for Listener<E> {}
-impl<E: JsType> Listener<E> {
+impl<E> JsCallback for JsListener<E> {}
+impl<E: JsType> JsListener<E> {
     pub fn new<F: FnMut(E) + 'static>(f: F) -> Self {
         extern "C" fn call<E: JsType, F: FnMut(E) + 'static>(ctx: *mut c_void, ev: u32) {
             (unsafe { closure_fn::<F>(ctx) })(E::from_handle(ev))
         }
-        Listener(Handle(unsafe { rt::js_listener_from(call::<E, F> as *const () as usize, closure(f)) }), PhantomData)
+        JsListener(JsHandle(unsafe { rt::js_listener_from(call::<E, F> as *const () as usize, closure(f)) }), PhantomData)
+    }
+    // A listener for the length of `body`: its closure may borrow.
+    pub fn scoped<F: FnMut(E), R>(mut f: F, body: impl FnOnce(&Self) -> R) -> R {
+        extern "C" fn call<E: JsType, F: FnMut(E)>(ctx: *mut c_void, ev: u32) {
+            (unsafe { &mut *(ctx as *mut F) })(E::from_handle(ev))
+        }
+        let l = JsListener(JsHandle(unsafe { rt::js_listener_from(call::<E, F> as *const () as usize, &mut f as *mut F as *mut c_void) }), PhantomData);
+        let _forget = Forget(l.0 .0);
+        body(&l)
     }
 }
 
 // A JavaScript exception, or the reason a promise was rejected.
-handle!(Error);
-impl Error {
+handle!(JsError);
+impl JsError {
     pub fn message(&self) -> String {
         String::from_handle(unsafe { rt::js_error_message(self.0 .0) })
     }
 }
-
-// The exception a call threw, taken. A call that throws returns a zero
-// value, and an exception not taken by the time control returns to
-// JavaScript is reported there: see `attempt`.
-pub fn take_error() -> Option<Error> {
-    let e = unsafe { rt::js_take_error() };
-    if e == 0 { None } else { Some(Error(Handle(e))) }
-}
-
-// Runs f and gives what it returned, or the exception a call in it threw:
-// `let found = attempt(|| el.querySelector(text))?;`.
-pub fn attempt<T>(f: impl FnOnce() -> T) -> Result<T, Error> {
-    let x = f();
-    match take_error() {
-        Some(e) => Err(e),
-        None => Ok(x),
+impl core::fmt::Debug for JsError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "JsError({:?})", self.message())
     }
 }
 
-// A JavaScript promise: `then` calls a closure with its result once it settles.
-pub struct Promise<T = ()>(pub Handle, PhantomData<fn() -> T>);
-pub type PromiseLike<T = ()> = Promise<T>;
-impl<T> Clone for Promise<T> {
+// What is not a type's: errors, handles, tasks.
+pub mod js {
+    use super::*;
+
+    // The exception a call threw, taken. A call that throws returns a zero
+    // value, and an exception not taken by the time control returns to
+    // JavaScript is reported there: see `attempt`.
+    pub fn take_error() -> Option<JsError> {
+        let e = unsafe { rt::js_take_error() };
+        if e == 0 { None } else { Some(JsError(JsHandle(e))) }
+    }
+
+    // Runs f and gives what it returned, or the exception a call in it threw:
+    // `let found = js::attempt(|| el.query_selector(text))?;`.
+    pub fn attempt<T>(f: impl FnOnce() -> T) -> Result<T, JsError> {
+        let x = f();
+        match take_error() {
+            Some(e) => Err(e),
+            None => Ok(x),
+        }
+    }
+
+    // How many references to JavaScript values wasm holds.
+    pub fn live_handles() -> u32 {
+        unsafe { rt::js_live() }
+    }
+
+    // Whether two handles are one JavaScript value: what `==` means for every handle type.
+    pub fn same(a: &JsHandle, b: &JsHandle) -> bool {
+        a.0 == b.0 || unsafe { rt::js_equals(a.0, b.0) != 0 }
+    }
+
+    // Runs a future to its end, across the promises it awaits:
+    // `js::spawn(async move { let r = fetch(url, None).await; .. })`.
+    pub fn spawn(f: impl Future<Output = ()> + 'static) {
+        poll(&Rc::new(Task { future: RefCell::new(Some(Box::pin(f))) }));
+    }
+
+    struct Task {
+        future: RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
+    }
+
+    fn poll(task: &Rc<Task>) {
+        let waker = waker(task.clone());
+        // A wake during its own poll would find the future borrowed: a promise never does that.
+        let Ok(mut slot) = task.future.try_borrow_mut() else { return };
+        if let Some(f) = slot.as_mut() {
+            if f.as_mut().poll(&mut Context::from_waker(&waker)).is_ready() {
+                *slot = None;
+            }
+        }
+    }
+
+    // One thread, so a waker is a counted pointer to its task.
+    fn waker(task: Rc<Task>) -> Waker {
+        unsafe fn clone(p: *const ()) -> RawWaker {
+            unsafe { Rc::increment_strong_count(p as *const Task) };
+            RawWaker::new(p, &VTABLE)
+        }
+        unsafe fn wake(p: *const ()) {
+            poll(&unsafe { Rc::from_raw(p as *const Task) });
+        }
+        unsafe fn wake_by_ref(p: *const ()) {
+            let task = unsafe { Rc::from_raw(p as *const Task) };
+            poll(&task);
+            core::mem::forget(task);
+        }
+        unsafe fn forget(p: *const ()) {
+            drop(unsafe { Rc::from_raw(p as *const Task) });
+        }
+        static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, forget);
+        unsafe { Waker::from_raw(RawWaker::new(Rc::into_raw(task) as *const (), &VTABLE)) }
+    }
+}
+
+// A JavaScript promise. `then` calls a closure with its result once it
+// settles; in an async block, `.await` waits for it.
+pub struct JsPromise<T = ()>(pub JsHandle, PhantomData<fn() -> T>);
+impl<T> Clone for JsPromise<T> {
     fn clone(&self) -> Self {
-        Promise(self.0.clone(), PhantomData)
+        JsPromise(self.0.clone(), PhantomData)
     }
 }
-impl<T> ToJs for Promise<T> {
+impl<T> ToJs for JsPromise<T> {
     fn lend(&self) -> Lent {
         Lent::borrow(self.0 .0)
     }
 }
-impl<T> FromJs for Promise<T> {
+impl<T> FromJs for JsPromise<T> {
     fn from_handle(h: u32) -> Self {
-        Promise(Handle(h), PhantomData)
+        JsPromise(JsHandle(h), PhantomData)
     }
 }
-impl<T: JsType> Promise<T> {
-    pub fn then<F: FnOnce(Result<T, Error>) + 'static>(&self, f: F) {
-        extern "C" fn settle<T: JsType, F: FnOnce(Result<T, Error>) + 'static>(ctx: *mut c_void, ok: i32, v: u32) {
+impl<T: JsType> JsPromise<T> {
+    pub fn then<F: FnOnce(Result<T, JsError>) + 'static>(&self, f: F) {
+        extern "C" fn settle<T: JsType, F: FnOnce(Result<T, JsError>) + 'static>(ctx: *mut c_void, ok: i32, v: u32) {
             let mut b = unsafe { Box::from_raw(ctx as *mut Box<dyn Any>) };
             let f = b.downcast_mut::<Option<F>>().unwrap().take().unwrap();
-            f(if ok != 0 { Ok(T::from_handle(v)) } else { Err(Error(Handle(v))) })
+            f(if ok != 0 { Ok(T::from_handle(v)) } else { Err(JsError(JsHandle(v))) })
         }
         unsafe { rt::js_promise_then(self.0 .0, settle::<T, F> as *const () as usize, closure(Some(f))) }
     }
 }
 
+// What awaiting a promise polls: its result, once the promise has settled.
+pub struct JsFuture<T> {
+    state: Rc<RefCell<(Option<Result<T, JsError>>, Option<Waker>)>>,
+}
+impl<T> Future for JsFuture<T> {
+    type Output = Result<T, JsError>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut state = self.state.borrow_mut();
+        match state.0.take() {
+            Some(r) => Poll::Ready(r),
+            None => {
+                state.1 = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+}
+impl<T: JsType> IntoFuture for JsPromise<T> {
+    type Output = Result<T, JsError>;
+    type IntoFuture = JsFuture<T>;
+    fn into_future(self) -> JsFuture<T> {
+        let state: Rc<RefCell<(Option<Result<T, JsError>>, Option<Waker>)>> = Rc::new(RefCell::new((None, None)));
+        let settled = state.clone();
+        self.then(move |r| {
+            let waker = {
+                let mut state = settled.borrow_mut();
+                state.0 = Some(r);
+                state.1.take()
+            };
+            if let Some(w) = waker {
+                w.wake();
+            }
+        });
+        JsFuture { state }
+    }
+}
+
 // Walks a JavaScript iterator: `for n in list.iter()`. Each value is the loop's.
-pub struct JsIterator<T>(Handle, PhantomData<fn() -> T>);
+pub struct JsIterator<T>(JsHandle, PhantomData<fn() -> T>);
 impl<T: JsType> JsIterator<T> {
     pub fn over(h: u32) -> Self {
-        JsIterator(Handle(unsafe { rt::js_iterate(h) }), PhantomData)
+        JsIterator(JsHandle(unsafe { rt::js_iterate(h) }), PhantomData)
     }
 }
 impl<T: JsType> Iterator for JsIterator<T> {
@@ -716,55 +1101,80 @@ impl<T: JsType> Iterator for JsIterator<T> {
 }
 
 // A JavaScript async iterator: `next()` is a promise of the next value, or of None at the end.
-pub struct AsyncIterator<T>(Handle, PhantomData<fn() -> T>);
-impl<T: JsType> AsyncIterator<T> {
+pub struct JsAsyncIterator<T>(JsHandle, PhantomData<fn() -> T>);
+impl<T: JsType> JsAsyncIterator<T> {
     pub fn over(h: u32) -> Self {
-        AsyncIterator(Handle(unsafe { rt::js_async_iterate(h) }), PhantomData)
+        JsAsyncIterator(JsHandle(unsafe { rt::js_async_iterate(h) }), PhantomData)
     }
-    pub fn next(&self) -> Promise<Option<T>> {
-        Promise::from_handle(unsafe { rt::js_async_iterator_next(self.0 .0) })
+    pub fn next(&self) -> JsPromise<Option<T>> {
+        JsPromise::from_handle(unsafe { rt::js_async_iterator_next(self.0 .0) })
     }
 }
 "#;
 
-// Types the runtime declares, which the bindings do not again.
-const RUNTIME_TYPES: &[&str] = &["Promise", "PromiseLike", "Error", "JsValue", "JsArray", "Key", "Listener", "Handle", "Lent", "Callback", "JsIterator", "AsyncIterator"];
+// What the model names that the runtime declares under another name.
+const RUNTIME_TYPES: &[(&str, &str)] = &[("Promise", "JsPromise"), ("PromiseLike", "JsPromise")];
 
-// A union's variant name: `number`, `string`, `Element`, `array`, or a type parameter's.
+// What every file of the crate starts with.
+const PRELUDE: &str = "// Generated.\n#![allow(unused_imports)]\nuse crate::raw;\nuse crate::runtime::handle;\nuse crate::*;\nuse core::marker::PhantomData;\n\n";
+
+// A union's variant: `Number`, `String`, `Element`, `Array`, or a type parameter.
 fn variant(t: &Ty) -> String {
     match t {
-        Ty::Num => "number".into(),
-        Ty::Str => "string".into(),
-        Ty::Bool => "boolean".into(),
-        Ty::Obj(n) | Ty::Param(n) | Ty::Generic(n, _) | Ty::Enum(n) => n.clone(),
-        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
+        Ty::Num => "Number".into(),
+        Ty::Str => "String".into(),
+        Ty::Bool => "Boolean".into(),
+        Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) => tn(n),
+        Ty::Param(n) => n.clone(),
+        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "Array".into(),
         t => panic!("Rust generator: a union member it cannot hold: {t:?}"),
     }
 }
 
-// The bindings: `runtime.rs`, and `bindings.rs` with every type, trait and
-// function, which includes the runtime.
+// A module's file: `areas/core` is `src/areas_core.rs`.
+fn module_file(module: &str) -> String {
+    let name: String = snake(&module.replace('/', "_")).chars().map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' }).collect();
+    if name.is_empty() { "main".into() } else { name }
+}
+
+// The crate: see the top of this file.
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
-    DECODABLE.with(|d| *d.borrow_mut() = m.unions.iter().filter(|u| u.decodable()).map(|u| u.name.clone()).collect());
-    UNIONS.with(|d| *d.borrow_mut() = m.unions.iter().map(|u| u.name.clone()).collect());
-    CLASSES.with(|d| *d.borrow_mut() = m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).cloned()).collect());
-    let mut out = String::from("// Generated.\n#![allow(non_snake_case, non_camel_case_types, non_upper_case_globals, dead_code, unused_imports, unused_unsafe, unused_parens, unused_variables, clippy::all)]\n\n#[path = \"runtime.rs\"]\nmod runtime;\npub use runtime::*;\nuse runtime::handle;\nuse core::marker::PhantomData;\n\n");
+    // Generated type names, in CamelCase where that is free.
+    let declared: Vec<&String> = m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)).chain(m.classes.iter().map(|c| &c.name)).chain(m.callbacks.iter().map(|c| &c.name)).chain(m.unions.iter().map(|u| &u.name)).chain(&m.opaque).collect();
+    let mut taken: HashSet<String> = declared.iter().map(|n| n.to_string()).collect();
+    let mut types: HashMap<String, String> = RUNTIME_TYPES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+    for n in &declared {
+        let name = camel(n);
+        if name != **n && !types.contains_key(*n) && taken.insert(name.clone()) {
+            types.insert(n.to_string(), name);
+        }
+    }
+    CX.with(|c| {
+        *c.borrow_mut() = Context {
+            decodable: m.unions.iter().filter(|u| u.decodable()).map(|u| u.name.clone()).collect(),
+            unions: m.unions.iter().map(|u| u.name.clone()).collect(),
+            classes: m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).cloned()).collect(),
+            types,
+        }
+    });
     let mut imports: BTreeMap<String, String> = BTreeMap::new();
+    let mut types_file = String::from(PRELUDE);
 
     for (name, values) in &m.enums {
-        let mut seen = std::collections::HashSet::new();
+        let name = tn(name);
+        let mut seen = HashSet::new();
         let variants: Vec<(String, String)> = values
             .iter()
             .map(|v| {
-                let id = ident(if v.is_empty() { "empty" } else { v });
-                let id = if seen.insert(id.clone()) { id } else { format!("{id}_{}", seen.len()) };
+                let id = camel(&super::wasm::ident(if v.is_empty() { "empty" } else { v }));
+                let id = if seen.insert(id.clone()) { id } else { format!("{id}{}", seen.len()) };
                 (id, v.clone())
             })
             .collect();
         let index: String = variants.iter().enumerate().map(|(i, (v, _))| format!("{i} => {name}::{v}, ")).collect();
         let from: String = variants.iter().map(|(v, s)| format!("{s:?} => {name}::{v}, ")).collect();
         let to: String = variants.iter().map(|(v, s)| format!("{name}::{v} => {s:?}, ")).collect();
-        out += &format!(
+        types_file += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
              impl {name} {{\n    pub fn from_index(i: i32) -> Self {{ match i {{ {index}_ => panic!(\"{name}: no value {{i}}\") }} }}\n    pub fn as_str(self) -> &'static str {{ match self {{ {to}}} }}\n}}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ self.as_str().lend() }} }}\n\
@@ -773,36 +1183,33 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         );
     }
     for (name, members) in &m.num_enums {
-        let variants: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
-        let from: String = members.iter().map(|(member, value)| format!("{value} => {name}::{}, ", ident(member))).collect();
-        out += &format!(
+        let name = tn(name);
+        let variants: Vec<(String, &String)> = members.iter().map(|(member, value)| (camel(&super::wasm::ident(member)), value)).collect();
+        let from: String = variants.iter().map(|(v, value)| format!("{value} => {name}::{v}, ")).collect();
+        types_file += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
              impl {name} {{ pub fn from_value(v: i32) -> Self {{ match v {{ {from}_ => panic!(\"{name}: no value {{v}}\") }} }} }}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ (*self as i32 as f64).lend() }} }}\n\
              impl FromJs for {name} {{ fn from_handle(h: u32) -> Self {{ Self::from_value(f64::from_handle(h) as i32) }} }}\n",
-            variants.join(", ")
+            variants.iter().map(|(v, value)| format!("{v} = {value}")).collect::<Vec<_>>().join(", ")
         );
     }
-    // Types declared elsewhere: handles, generic or not. Promises are the runtime's.
-    for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.contains(&n.as_str())) {
+    // Types declared elsewhere: handles, generic or not.
+    for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.iter().any(|r| r.0 == n.as_str())) {
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
         let params: Vec<String> = (1..=arity).map(|i| format!("T{i}")).collect();
-        out += &format!("handle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
+        let name = tn(name);
+        types_file += &format!("handle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
         if params.is_empty() {
-            out += &format!("impl Is<{name}> for {name} {{}}\n");
+            types_file += &format!("impl Is<{name}> for {name} {{}}\n");
         }
     }
     // Unions that can be decoded: enums.
     for u in m.unions.iter().filter(|u| u.decodable()) {
-        out += &union_enum(u, &mut imports);
-    }
-    // A map's keys, each typed by the value it selects.
-    for k in &m.maps {
-        let keys: Vec<String> = k.keys.iter().zip(&k.values).enumerate().map(|(i, (key, v))| format!("    pub const {}: Key<super::{}, {}> = Key::new({i});\n", ident(key), k.name, ty(v))).collect();
-        out += &format!("pub mod {}Keys {{\n    use super::*;\n{}}}\n", k.name, keys.concat());
+        types_file += &union_enum(u, &mut imports);
     }
     for c in &m.callbacks {
-        out += &callback(c.name.as_str(), &c.type_params, &c.params, &c.ret, &mut imports);
+        types_file += &callback(&c.name, &c.type_params, &c.params, &c.ret, &mut imports);
     }
 
     // Each class: a struct, a trait of its members, and that trait for each subtype.
@@ -820,44 +1227,69 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
         out
     };
-    let member_names = |c: &Class| -> BTreeSet<String> { c.funcs.iter().filter(|f| Class::has_self(f)).map(|f| f.name.clone()).collect() };
+    // The Rust name of each class's functions, by the model's.
+    let names: HashMap<&str, HashMap<String, String>> = m.classes.iter().map(|c| (c.name.as_str(), names_of(c.funcs.iter(), &mut HashSet::new()))).collect();
+    let type_names: HashSet<String> = declared.iter().map(|n| tn(n)).collect();
+    let grouped: HashMap<&str, Vec<Family>> = m.classes.iter().map(|c| (c.name.as_str(), families(c, &names[c.name.as_str()], &type_names))).collect();
+    // The family a member is one overload of.
+    let family_of = |c: &Class, f: &Func| grouped[c.name.as_str()].iter().find(|g| g.members.iter().any(|o| o.name == f.name));
+    let member_names = |c: &Class| -> BTreeSet<String> { c.funcs.iter().filter(|f| Class::has_self(f)).map(|f| family_of(c, f).map_or_else(|| names[c.name.as_str()][&f.name].clone(), |g| g.name.clone())).collect() };
+    let this = "AsRef::<JsHandle>::as_ref(self).0";
+    let mut modules: BTreeMap<String, String> = BTreeMap::new();
     for c in &m.classes {
+        let out = modules.entry(module_file(&c.module)).or_insert_with(|| PRELUDE.to_string());
         let params: Vec<String> = c.type_params.iter().map(|p| p.name.clone()).collect();
         let (bounds, args) = (generics(&c.type_params), args_of(&c.type_params));
-        let me = format!("{}{args}", c.name);
-        out += &format!("\nhandle!({}{});\n", c.name, if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
+        let name = tn(&c.name);
+        let me = format!("{name}{args}");
+        let own = &names[c.name.as_str()];
+        *out += &format!("\nhandle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
         if params.is_empty() {
-            out += &format!("impl Is<{0}> for {0} {{}}\n", c.name);
+            *out += &format!("impl Is<{name}> for {name} {{}}\n");
         }
-        let _ = phantom(&params);
         // The trait of its own members.
         let mut trait_body = String::new();
-        for f in c.funcs.iter().filter(|f| Class::has_self(f)) {
-            let f = with_self_args(f, c);
-            let (sig, body) = function(&f, &mut imports, Some("AsRef::<Handle>::as_ref(self).0"));
-            trait_body += &format!("    {sig} {body}\n");
+        for f in c.funcs.iter().filter(|f| Class::has_self(f) && family_of(c, f).is_none()) {
+            for item in function(&with_self_args(f, c), &own[&f.name], "", &mut imports, Some(this)) {
+                trait_body += &format!("    {item}\n");
+            }
+        }
+        let mut dispatch = String::new();
+        for g in &grouped[c.name.as_str()] {
+            for item in g.methods("", &mut imports, this) {
+                trait_body += &format!("    {item}\n");
+            }
+            dispatch += &g.dispatch(&mut imports);
         }
         if let Some(elem) = &c.iterates {
             let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
-            trait_body += &format!("    fn iter(&self) -> JsIterator<{}> {{ JsIterator::over(AsRef::<Handle>::as_ref(self).0) }}\n", ty(&elem));
+            trait_body += &format!("    fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem));
         }
         if let Some(elem) = &c.iterates_async {
-            trait_body += &format!("    fn iterate_async(&self) -> AsyncIterator<{}> {{ AsyncIterator::over(AsRef::<Handle>::as_ref(self).0) }}\n", ty(elem));
+            trait_body += &format!("    fn iterate_async(&self) -> JsAsyncIterator<{}> {{ JsAsyncIterator::over({this}) }}\n", ty(elem));
         }
-        out += &format!("pub trait {}Methods{bounds}: AsRef<Handle> {{\n{trait_body}}}\n", c.name);
-        out += &format!("impl{bounds} {}Methods{args} for {me} {{}}\n", c.name);
-        // Statics, constants, and where two traits share a name, the one this type means.
+        *out += &format!("pub trait {name}Methods{bounds}: AsRef<JsHandle> {{\n{trait_body}}}\n");
+        *out += &format!("impl{bounds} {name}Methods{args} for {me} {{}}\n{dispatch}");
+        // Statics, constants, a map's keys, and where two traits share a name, the one this type means.
         let mut inherent = String::new();
         for f in c.funcs.iter().filter(|f| !Class::has_self(f)) {
-            let f = with_self_args(f, c);
-            let (sig, body) = function(&f, &mut imports, None);
-            inherent += &format!("    pub {sig} {body}\n");
+            for item in function(&with_self_args(f, c), &own[&f.name], "pub ", &mut imports, None) {
+                inherent += &format!("    {item}\n");
+            }
         }
-        for (name, value) in &c.consts {
+        for (constant, value) in &c.consts {
             let t = if value.starts_with('"') { "&'static str" } else if value == "true" || value == "false" { "bool" } else { "f64" };
             // A whole number, decimal or hexadecimal, as an f64.
             let value = if t == "f64" && (value.starts_with("0x") || value.starts_with("0X")) { format!("{value}i64 as f64") } else if t == "f64" && !value.contains('.') && !value.contains('e') { format!("{value}.0") } else { value.clone() };
-            inherent += &format!("    pub const {}: {t} = {value};\n", ident(name));
+            inherent += &format!("    pub const {}: {t} = {value};\n", snake(&super::wasm::ident(constant)).to_uppercase());
+        }
+        if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
+            let mut seen = HashSet::new();
+            for (i, (key, v)) in map.keys.iter().zip(&map.values).enumerate() {
+                let constant = snake(&super::wasm::ident(key)).to_uppercase();
+                let constant = if seen.insert(constant.clone()) { constant } else { format!("{constant}_{i}") };
+                inherent += &format!("    pub const {constant}: JsKey<{name}, {}> = JsKey::new({i});\n", ty(v));
+            }
         }
         let all = ancestors(&c.name);
         let mut holders: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -868,49 +1300,68 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                 }
             }
         }
-        for (name, hs) in holders.iter().filter(|(_, hs)| hs.len() > 1) {
+        for (method, hs) in holders.iter().filter(|(_, hs)| hs.len() > 1) {
             // The nearest holder: the type itself, then its nearest ancestor.
             let h = &hs[0];
             let k = class_of(h).unwrap();
             let args = if *h == c.name { k.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect() } else { base_args(m, c, h).unwrap_or_default() };
-            for f in k.funcs.iter().filter(|f| Class::has_self(f) && f.name == *name) {
-                let f = with_self_args(f, k);
-                let f = map_types(&f, &|t| subst(t, &k.type_params, &args));
-                let (sig, body) = function(&f, &mut imports, Some("AsRef::<Handle>::as_ref(self).0"));
-                inherent += &format!("    pub {sig} {body}\n");
+            if let Some(g) = grouped[k.name.as_str()].iter().find(|g| g.name == *method) {
+                for item in g.methods("pub ", &mut imports, this) {
+                    inherent += &format!("    {item}\n");
+                }
+                continue;
+            }
+            for f in k.funcs.iter().filter(|f| Class::has_self(f) && names[k.name.as_str()][&f.name] == *method) {
+                let f = map_types(&with_self_args(f, k), &|t| subst(t, &k.type_params, &args));
+                for item in function(&f, method, "pub ", &mut imports, Some(this)) {
+                    inherent += &format!("    {item}\n");
+                }
             }
         }
         // A subclass of Array, as the array it is.
         if let Some(elem) = &c.elements {
-            inherent += &format!("    pub fn as_array(&self) -> runtime::JsArray<{}> {{ runtime::JsArray::from_handle(give(self)) }}\n", ty(elem));
+            inherent += &format!("    pub fn as_array(&self) -> JsArray<{}> {{ JsArray::from_handle(crate::runtime::give(self)) }}\n", ty(elem));
         }
         if !inherent.is_empty() {
-            out += &format!("impl{bounds} {me} {{\n{inherent}}}\n");
+            *out += &format!("impl{bounds} {me} {{\n{inherent}}}\n");
         }
         // The traits of its ancestors, and conversions to them.
         for a in &all {
             let Some(k) = class_of(a) else {
-                if params.is_empty() && !m.opaque_arity.contains_key(a) {
-                    out += &upcast(&me, a);
+                if params.is_empty() && !m.opaque_arity.contains_key(a) && !RUNTIME_TYPES.iter().any(|r| r.0 == a.as_str()) {
+                    *out += &upcast(&me, &tn(a));
                 }
                 continue;
             };
             let base: Vec<Ty> = base_args(m, c, a).unwrap_or_default();
-            let base_args = if k.type_params.is_empty() { String::new() } else { format!("<{}>", (0..k.type_params.len()).map(|i| base.get(i).map(ty).unwrap_or_else(|| "JsValue".into())).collect::<Vec<_>>().join(", ")) };
-            out += &format!("impl{bounds} {a}Methods{base_args} for {me} {{}}\n");
+            let base_args = if k.type_params.is_empty() { String::new() } else { format!("<{}>", (0..k.type_params.len()).map(|i| base.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", ")) };
+            *out += &format!("impl{bounds} {}Methods{base_args} for {me} {{}}\n", tn(a));
             if params.is_empty() && k.type_params.is_empty() {
-                out += &upcast(&me, a);
+                *out += &upcast(&me, &tn(a));
             }
         }
     }
+    let function_names = names_of(m.funcs.iter(), &mut HashSet::new());
     for f in &m.funcs {
-        let (sig, body) = function(f, &mut imports, None);
-        out += &format!("pub {sig} {body}\n");
+        let out = modules.entry(module_file(&f.module)).or_insert_with(|| PRELUDE.to_string());
+        for item in function(f, &function_names[&f.name], "pub ", &mut imports, None) {
+            *out += &format!("{item}\n");
+        }
     }
-    out += "\nmod raw {\n    use core::ffi::c_void;\n    #[link(wasm_import_module = \"env\")]\n    unsafe extern \"C\" {\n";
-    out += &imports.into_values().collect::<String>();
-    out += "    }\n}\n";
-    Ok(vec![("runtime.rs".into(), RUNTIME.into()), ("bindings.rs".into(), out)])
+
+    let mut lib = String::from(
+        "// Generated. Bindings: `use bindings::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\nmod runtime;\npub use runtime::*;\nmod types;\npub use types::*;\n",
+    );
+    let mut out = vec![("Cargo.toml".to_string(), "# Generated.\n[package]\nname = \"bindings\"\nversion = \"0.1.0\"\nedition = \"2024\"\n".to_string()), ("src/runtime.rs".to_string(), RUNTIME.to_string()), ("src/types.rs".to_string(), types_file)];
+    for (module, text) in modules {
+        // A module named as one of the crate's own files gets another name.
+        let module = if matches!(module.as_str(), "raw" | "runtime" | "types" | "lib") { format!("{module}_") } else { module };
+        lib += &format!("mod {module};\npub use {module}::*;\n");
+        out.push((format!("src/{module}.rs"), text));
+    }
+    out.push(("src/raw.rs".into(), format!("// Generated. The imports.\n#![allow(dead_code, unused_imports)]\nuse core::ffi::c_void;\n\n#[link(wasm_import_module = \"env\")]\nunsafe extern \"C\" {{\n{}}}\n", imports.into_values().collect::<String>())));
+    out.push(("src/lib.rs".into(), lib));
+    Ok(out)
 }
 
 // A subtype as its ancestor: by value with `into()`, by reference with
@@ -923,53 +1374,76 @@ fn upcast(sub: &str, base: &str) -> String {
     )
 }
 
-// A union as an enum, decoded from a handle by its tag, lent as its member.
+// A union as an enum: decoded from a handle by its tag, lent as its member,
+// and made from any member: `describe(42.0)`.
 fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String {
-    let n = &u.name;
+    let n = tn(&u.name);
+    let import = &u.name;
     let (bounds, args) = (generics(&u.type_params), args_of(&u.type_params));
     let variants: Vec<String> = u.parts.iter().map(|p| format!("{}({})", variant(p), ty(p))).collect();
     // A bare type parameter is told apart by what its argument is.
     let kind = u.parts.iter().find_map(|p| if let Ty::Param(t) = p { Some(format!("{t}::KIND")) } else { None }).unwrap_or("0".into());
     let decode: String = u.parts.iter().enumerate().map(|(i, p)| format!("{i} => {n}::{}(<{}>::from_handle(h)), ", variant(p), ty(p))).collect();
     let lend: String = u.parts.iter().map(|p| format!("{n}::{}(x) => x.lend(), ", variant(p))).collect();
-    imports.insert(format!("{n}_tag"), format!("        pub fn {n}_tag(h: u32, k: i32) -> i32;\n"));
+    let clone: String = u.parts.iter().map(|p| format!("{n}::{0}(x) => {n}::{0}(Clone::clone(x)), ", variant(p))).collect();
+    imports.insert(format!("{import}_tag"), format!("    pub fn {import}_tag(h: u32, k: i32) -> i32;\n"));
     // A union is what each of its members is.
     let is_bounds: Vec<String> = u.parts.iter().map(|p| format!("{}: Is<B_>", ty(p))).collect();
     let is_params = std::iter::once("B_".to_string()).chain(u.type_params.iter().map(bound)).collect::<Vec<_>>().join(", ");
-    let is = format!("impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n", is_bounds.join(", "));
-    is + &format!(
+    let mut out = format!(
         "pub enum {n}{bounds} {{ {} }}\n\
-         impl{bounds} Clone for {n}{args} {{ fn clone(&self) -> Self {{ match self {{ {} }} }} }}\n\
+         impl{bounds} Clone for {n}{args} {{ fn clone(&self) -> Self {{ match self {{ {clone}}} }} }}\n\
          impl{bounds} ToJs for {n}{args} {{ fn lend(&self) -> Lent {{ match self {{ {lend}}} }} }}\n\
-         impl{bounds} FromJs for {n}{args} {{ fn from_handle(h: u32) -> Self {{ match unsafe {{ raw::{n}_tag(h, {kind}) }} {{ {decode}_ => unreachable!() }} }} }}\n",
+         impl{bounds} FromJs for {n}{args} {{ fn from_handle(h: u32) -> Self {{ match unsafe {{ raw::{import}_tag(h, {kind}) }} {{ {decode}_ => unreachable!() }} }} }}\n\
+         impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n",
         variants.join(", "),
-        u.parts.iter().map(|p| format!("{n}::{0}(x) => {n}::{0}(Clone::clone(x)), ", variant(p))).collect::<String>()
-    )
+        is_bounds.join(", ")
+    );
+    // Made from a member. A bare type parameter cannot be: it could be the union itself.
+    for p in u.parts.iter().filter(|p| !matches!(p, Ty::Param(_))) {
+        let (v, t) = (variant(p), ty(p));
+        out += &format!("impl{bounds} From<{t}> for {n}{args} {{ fn from(x: {t}) -> Self {{ {n}::{v}(x) }} }}\n");
+        match p {
+            Ty::Str => out += &format!("impl{bounds} From<&str> for {n}{args} {{ fn from(x: &str) -> Self {{ {n}::{v}(x.to_string()) }} }}\n"),
+            Ty::Num | Ty::Bool | Ty::Enum(_) => {}
+            _ => out += &format!("impl{bounds} From<&{t}> for {n}{args} {{ fn from(x: &{t}) -> Self {{ {n}::{v}(Clone::clone(x)) }} }}\n"),
+        }
+    }
+    out
 }
 
-// A callback type, made from a closure: `Counter_visit_f::new(|c: Counter| ..)`.
+// A callback type, made from a closure: `CounterVisitF::new(|c: Counter| ..)`,
+// or for the length of a call, `CounterVisitF::scoped(|c| .., |f| counter.visit(f))`.
 fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &Ty, imports: &mut BTreeMap<String, String>) -> String {
+    let import = name;
+    let name = tn(name);
     let (bounds, args) = (generics(type_params), args_of(type_params));
     let tps: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
     let arg_types: Vec<String> = params.iter().map(|(_, t)| ty(t)).collect();
-    let fn_bound = format!("FnMut({}) -> {}", arg_types.join(", "), ty(ret));
-    let raw_args: String = params.iter().enumerate().map(|(i, (_, t))| format!(", a{i}: {}", raw_callback(t))).collect();
+    let fn_bound = if *ret == Ty::Void { format!("FnMut({})", arg_types.join(", ")) } else { format!("FnMut({}) -> {}", arg_types.join(", "), ty(ret)) };
+    let raw_args: String = params.iter().enumerate().map(|(i, (_, t))| format!(", a{i}: {}", raw_ret(t))).collect();
     let call_args: Vec<String> = params.iter().enumerate().map(|(i, (_, t))| raise(t, &format!("a{i}"))).collect();
-    let call = format!("(unsafe {{ closure_fn::<F>(ctx) }})({})", call_args.join(", "));
-    let body = lower_callback(ret, &call);
-    let mut tramp_params = tps.iter().map(|p| format!("{p}: JsType")).collect::<Vec<_>>();
-    tramp_params.push(format!("F: {fn_bound} + 'static"));
-    let tramp_args: Vec<String> = tps.iter().cloned().chain(std::iter::once("F".to_string())).collect();
-    imports.insert(format!("{name}_from"), format!("        pub fn {name}_from(f: usize, ctx: *mut c_void) -> u32;\n"));
+    let raw_result = if *ret == Ty::Void { String::new() } else { format!(" -> {}", raw_ret(ret)) };
+    // The same trampoline twice: for a closure that is kept, and for one that is borrowed.
+    let trampoline = |f: &str, lifetime: &str| {
+        let mut generic: Vec<String> = type_params.iter().map(bound).collect();
+        generic.push(format!("F: {fn_bound}{lifetime}"));
+        format!("extern \"C\" fn call<{}>(ctx: *mut core::ffi::c_void{raw_args}){raw_result} {{ {} }}", generic.join(", "), lower_callback(ret, &format!("({f})({})", call_args.join(", "))))
+    };
+    let turbofish: Vec<String> = tps.iter().cloned().chain(std::iter::once("F".to_string())).collect();
+    imports.insert(format!("{import}_from"), format!("    pub fn {import}_from(f: usize, ctx: *mut c_void) -> u32;\n"));
     let handle_params = if tps.is_empty() { String::new() } else { format!("<{}>", tps.join(", ")) };
     format!(
-        "handle!({name}{handle_params});\nimpl{bounds} Callback for {name}{args} {{}}\n\
-         impl{bounds} {name}{args} {{\n    pub fn new<F: {fn_bound} + 'static>(f: F) -> Self {{\n        \
-         extern \"C\" fn call<{}>(ctx: *mut core::ffi::c_void{raw_args}) -> {} {{ {body} }}\n        \
-         Self::from_handle(unsafe {{ raw::{name}_from(call::<{}> as *const () as usize, closure(f)) }})\n    }}\n}}\n",
-        tramp_params.join(", "),
-        raw_callback(ret),
-        tramp_args.join(", ")
+        "handle!({name}{handle_params});\nimpl{bounds} JsCallback for {name}{args} {{}}\n\
+         impl{bounds} {name}{args} {{\n    \
+         pub fn new<F: {fn_bound} + 'static>(f: F) -> Self {{\n        {}\n        \
+         Self::from_handle(unsafe {{ raw::{import}_from(call::<{2}> as *const () as usize, crate::runtime::closure(f)) }})\n    }}\n    \
+         // For the length of `body`: its closure may borrow.\n    \
+         pub fn scoped<F: {fn_bound}, R_>(mut f: F, body: impl FnOnce(&Self) -> R_) -> R_ {{\n        {}\n        \
+         let made = Self::from_handle(unsafe {{ raw::{import}_from(call::<{2}> as *const () as usize, &mut f as *mut F as *mut core::ffi::c_void) }});\n        \
+         let _forget = crate::runtime::Forget(made.0 .0);\n        body(&made)\n    }}\n}}\n",
+        trampoline("unsafe { crate::runtime::closure_fn::<F>(ctx) }", " + 'static"),
+        trampoline("unsafe { &mut *(ctx as *mut F) }", ""),
+        turbofish.join(", ")
     )
 }
-

@@ -1,6 +1,5 @@
 // The benchmark through the Rust bindings.
 #![no_main]
-mod bindings;
 use bindings::*;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -29,7 +28,7 @@ pub extern "C" fn properties(n: i32) -> f64 {
     let mut s = 0.0;
     for i in 0..n {
         v.set_x(i as f64);
-        s += v.get_x();
+        s += v.x();
     }
     s
 }
@@ -67,7 +66,7 @@ pub extern "C" fn strings_out(n: i32) -> f64 {
 #[unsafe(no_mangle)]
 pub extern "C" fn callbacks(n: i32) -> f64 {
     let s = Rc::new(Cell::new(0.0));
-    let f = each_f::new({
+    let f = EachF::new({
         let s = s.clone();
         move |i: f64| s.set(s.get() + i)
     });

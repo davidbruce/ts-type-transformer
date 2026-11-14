@@ -1,6 +1,5 @@
 // Drives a real page through the generated DOM bindings; every check! must hold.
 #![no_main]
-mod bindings;
 use bindings::*;
 use std::cell::Cell;
 use std::rc::Rc;
@@ -28,57 +27,62 @@ pub extern "C" fn finish() {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
-    let doc = get_document();
-    let body = doc.get_body();
+    let doc = document();
+    let body = doc.body();
 
     // A typed key selects the element type: createElement("div") is an HTMLDivElement.
-    let div: HTMLDivElement = doc.createElement(HTMLElementTagNameMapKeys::div, None);
+    let div: HTMLDivElement = doc.create_element(HTMLElementTagNameMap::DIV, None);
     let el: HTMLElement = div.into();
     el.set_id("made-by-rust");
-    el.set_textContent(Some("hello from rust"));
-    el.get_classList().add(["box", "made"].into_iter().collect());
-    body.appendChild(el.clone());
-    check!(doc.getElementById("made-by-rust") == Some(el.clone()));
-    check!(el.get_classList().contains("box") && el.get_classList().contains("made"));
+    el.set_text_content(Some("hello from rust"));
+    el.class_list().add(["box", "made"]);
+    body.append_child(el.clone());
+    check!(doc.get_element_by_id("made-by-rust") == Some(el.clone()));
+    check!(el.class_list().contains("box") && el.class_list().contains("made"));
 
     // Read an element that was already in the page, and copy its text.
-    let seed = doc.getElementById("seed").unwrap();
-    check!(seed.get_textContent() == "seed text");
-    check!(seed.getAttribute("data-x").as_deref() == Some("42"));
-    check!(seed.getAttribute("data-missing").is_none());
-    let copy: HTMLParagraphElement = doc.createElement(HTMLElementTagNameMapKeys::p, None);
-    copy.set_textContent(Some(&seed.get_textContent()));
-    el.appendChild(copy.clone());
+    let seed = doc.get_element_by_id("seed").unwrap();
+    check!(seed.text_content() == "seed text");
+    check!(seed.get_attribute("data-x").as_deref() == Some("42"));
+    check!(seed.get_attribute("data-missing").is_none());
+    let copy: HTMLParagraphElement = doc.create_element(HTMLElementTagNameMap::P, None);
+    copy.set_text_content(Some(&seed.text_content()));
+    el.append_child(copy.clone());
 
     // A subtype where its ancestor is wanted: into() moves, as_ref() borrows.
-    let extra: HTMLParagraphElement = doc.createElement(HTMLElementTagNameMapKeys::p, None);
-    el.insertBefore(extra.clone(), Some(copy.clone().into()));
-    check!(el.get_children().get_length() == 2.0);
+    let extra = doc.create_element(HTMLElementTagNameMap::P, None);
+    el.insert_before(extra.clone(), Some(copy.as_ref()));
+    check!(el.children().length() == 2.0);
     extra.remove();
-    check!(el.get_children().get_length() == 1.0);
+    check!(el.children().length() == 1.0);
 
     // Generic types are generic: querySelectorAll("p") is a NodeListOf<HTMLParagraphElement>.
-    let paragraphs = el.querySelectorAll(HTMLElementTagNameMapKeys::p);
-    check!(paragraphs.get_length() == 1.0);
-    check!(paragraphs.item(0.0).get_textContent() == "seed text");
+    let paragraphs = el.query_selector_all(HTMLElementTagNameMap::P);
+    check!(paragraphs.length() == 1.0);
+    check!(paragraphs.item(0.0).text_content() == "seed text");
+
+    // The same method takes a selector: an Element, or the type it is said to find.
+    check!(el.query_selector("p") == Some(copy.clone().into()));
+    check!(el.query_selector_as::<HTMLParagraphElement>("p") == Some(copy.clone()));
+    check!(el.query_selector_all("p, span").length() == 1.0);
 
     // A typed key selects the event type: the listener of "click" takes a PointerEvent.
-    let button: HTMLElement = doc.createElement(HTMLElementTagNameMapKeys::button, None).into();
-    button.set_textContent(Some("press"));
-    el.appendChild(button.clone());
+    let button: HTMLElement = doc.create_element(HTMLElementTagNameMap::BUTTON, None).into();
+    button.set_text_content(Some("press"));
+    el.append_child(button.clone());
     let clicks = Rc::new(Cell::new(0));
-    let on_click = Listener::new({
+    let on_click = JsListener::new({
         let (clicks, el) = (clicks.clone(), el.clone());
         move |_: PointerEvent| {
             clicks.set(clicks.get() + 1);
-            el.setAttribute("data-count", &clicks.get().to_string());
+            el.set_attribute("data-count", &clicks.get().to_string());
         }
     });
-    button.addEventListener(HTMLElementEventMapKeys::click, on_click.clone(), None);
+    button.add_event_listener(HTMLElementEventMap::CLICK, &on_click, None);
     button.click();
     button.click();
     check!(clicks.get() == 2);
-    button.removeEventListener(HTMLElementEventMapKeys::click, on_click.clone(), None);
+    button.remove_event_listener(HTMLElementEventMap::CLICK, &on_click, None);
     button.click();
     check!(clicks.get() == 2);
     // Frees the closure.
@@ -92,43 +96,42 @@ pub extern "C" fn run() {
         let (pings, el) = (pings.clone(), el.clone());
         move |_: Event| {
             pings.set(pings.get() + 1);
-            el.setAttribute("data-pings", &pings.get().to_string());
+            el.set_attribute("data-pings", &pings.get().to_string());
         }
     });
-    el.addEventListener_with_string("ping", EventListenerOrEventListenerObject::EventListener(on_ping), Some(boolean_or_AddEventListenerOptions::AddEventListenerOptions(once)));
-    el.dispatchEvent(&Event::new("ping", None));
-    el.dispatchEvent(&Event::new("ping", None));
+    el.add_event_listener_with_string("ping", on_ping, Some(once.into()));
+    el.dispatch_event(&Event::new("ping", None));
+    el.dispatch_event(&Event::new("ping", None));
     check!(pings.get() == 1);
 
     // Style, layout and the window.
-    el.get_style().setProperty("color", Some("red"), None);
-    check!(el.get_style().get_color() == "red");
-    check!(el.getBoundingClientRect().get_width() > 0.0);
-    check!(el.get_children().get_length() == 2.0);
-    check!(get_innerWidth() > 0.0);
+    el.style().set_property("color", Some("red"), None);
+    check!(el.style().color() == "red");
+    check!(el.get_bounding_client_rect().width() > 0.0);
+    check!(el.children().length() == 2.0);
+    check!(inner_width() > 0.0);
 
     // Collections are iterators.
-    let tags: Vec<String> = el.get_children().iter().map(|child| child.get_tagName()).collect();
+    let tags: Vec<String> = el.children().iter().map(|child| child.tag_name()).collect();
     check!(tags == ["P", "BUTTON"]);
     doc.set_title("driven by rust");
 
     // An invalid selector throws: the call returns None, and the exception is kept.
-    check!(el.querySelector_with_string::<Element>("<bad").is_none());
-    check!(take_error().is_some_and(|e| e.message().contains("not a valid selector")));
+    check!(el.query_selector("<bad").is_none());
+    check!(js::take_error().is_some_and(|e| e.message().contains("not a valid selector")));
 
-    // A real request: a promise of a Response, then of its text.
-    fetch(Request_or_string_or_URL::string("./verify.mjs".into()), None).then(|r| {
-        if let Ok(response) = r {
-            let ok = response.get_status() == 200.0;
-            response.text().then(move |t| FETCHED.with(|f| f.set(ok && t.is_ok_and(|t| t.contains("verify")))));
-        }
+    // A real request: a promise of a Response, then of its text, each awaited.
+    js::spawn(async {
+        let Ok(response) = fetch("./verify.mjs", None).await else { return };
+        let text = response.text().await;
+        FETCHED.with(|f| f.set(response.status() == 200.0 && text.is_ok_and(|t| t.contains("verify"))));
     });
 
     // Handles are counted: what goes out of scope is freed.
-    let live = live_handles();
+    let live = js::live_handles();
     for _ in 0..500 {
-        let found = doc.getElementById("made-by-rust").unwrap();
-        check!(found.get_classList().contains("box") && found.get_id() == "made-by-rust");
+        let found = doc.get_element_by_id("made-by-rust").unwrap();
+        check!(found.class_list().contains("box") && found.id() == "made-by-rust");
     }
-    check!(live_handles() == live);
+    check!(js::live_handles() == live);
 }

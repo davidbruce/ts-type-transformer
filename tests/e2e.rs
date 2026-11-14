@@ -236,13 +236,36 @@ fn rustc_wasm() -> Option<PathBuf> {
     Some(rustc)
 }
 
-const RUSTC_WASM: &[&str] = &["--edition", "2024", "--target", "wasm32-unknown-unknown", "--crate-type", "cdylib", "-O", "-C", "link-arg=--export-table", "-D", "warnings"];
+const RUSTC_WASM: &[&str] = &["--edition", "2024", "--target", "wasm32-unknown-unknown", "-O", "-D", "warnings"];
+// A program, linked against the bindings.
+const RUSTC_PROGRAM: &[&str] = &["--crate-type", "cdylib", "-C", "link-arg=--export-table", "--extern", "bindings=libbindings.rlib"];
 
-// Writes the Rust bindings next to the program and compiles them together.
+// Writes the bindings crate in `bindings/` and compiles it to a library. The
+// library is kept in `target/e2e-cache`, and compiled again only when what
+// was generated has changed: a second run of the DOM takes a second, not seven.
+fn rust_bindings(rustc: &Path, out: &Path, model: &generators::wasm::Model) {
+    use std::hash::{Hash, Hasher};
+    let files = generators::rust::files(model).unwrap();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (&files, RUSTC_WASM).hash(&mut hasher);
+    let stamp = format!("{:x}", hasher.finish());
+    let cache = root().join("target/e2e-cache");
+    let name = out.file_name().unwrap().to_string_lossy().to_string();
+    let (lib, stamp_file) = (cache.join(format!("{name}.rlib")), cache.join(format!("{name}.stamp")));
+    write_files(&out.join("bindings"), files);
+    if !(lib.exists() && fs::read_to_string(&stamp_file).is_ok_and(|s| s == stamp)) {
+        fs::create_dir_all(&cache).unwrap();
+        run(Command::new(rustc).current_dir(out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "bindings", "-o"]).arg(&lib).arg("bindings/src/lib.rs"));
+        fs::write(stamp_file, stamp).unwrap();
+    }
+    fs::copy(lib, out.join("libbindings.rlib")).unwrap();
+}
+
+// Compiles the bindings, then the program against them.
 fn build_rust(rustc: &Path, c: &Case, model: &generators::wasm::Model) {
-    write_files(&c.out, generators::rust::files(model).unwrap());
+    rust_bindings(rustc, &c.out, model);
     fs::copy(c.fixture.join("test.rs"), c.out.join("test.rs")).unwrap();
-    run(Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(["-o", "test.wasm", "test.rs"]));
+    run(Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
 }
 
 fn rust(fixture: &str) {
@@ -424,9 +447,9 @@ fn bench() {
     if let Some(rustc) = rustc_wasm() {
         let o = out.join("rust");
         let model = model(&xml("rust"), "Rust");
-        write_files(&o, generators::rust::files(&model).unwrap());
+        rust_bindings(&rustc, &o, &model);
         fs::copy(dir.join("bench.rs"), o.join("bench.rs")).unwrap();
-        run(Command::new(rustc).current_dir(&o).args(RUSTC_WASM).args(["-C", "opt-level=3", "-o", "bench.wasm", "bench.rs"]));
+        run(Command::new(rustc).current_dir(&o).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-C", "opt-level=3", "-C", "lto", "-o", "bench.wasm", "bench.rs"]));
         glue(&o, &model);
         names.push("rust");
     }
@@ -492,9 +515,9 @@ fn fsharp_rejects_literal_types() {
 fn rust_checks_constraints() {
     let Some(rustc) = rustc_wasm() else { return };
     let c = case_in("data", "rust", "data-rust-wrong");
-    write_files(&c.out, generators::rust::files(&model(&c.xml, "Rust")).unwrap());
-    fs::write(c.out.join("test.rs"), "#![no_main]\nmod bindings;\nuse bindings::*;\npub fn wrong() { largest(JsArray::<f64>::new()); }\n").unwrap();
-    let out = Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(["-o", "test.wasm", "test.rs"]).output().unwrap();
+    rust_bindings(&rustc, &c.out, &model(&c.xml, "Rust"));
+    fs::write(c.out.join("test.rs"), "#![no_main]\nuse bindings::*;\npub fn wrong() { largest(JsArray::<f64>::new()); }\n").unwrap();
+    let out = Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]).output().unwrap();
     let errors = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success() && errors.contains("Is<Item>"), "an array of numbers should not satisfy T: Is<Item>:\n{errors}");
 }

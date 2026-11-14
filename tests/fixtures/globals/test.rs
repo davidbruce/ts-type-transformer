@@ -1,6 +1,5 @@
 // Calls the generated Rust bindings; every check! must hold.
 #![no_main]
-mod bindings;
 use bindings::*;
 
 #[link(wasm_import_module = "env")]
@@ -17,26 +16,27 @@ macro_rules! check {
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
     // Global values.
-    let s = get_settings();
-    check!(s.get_level() == 2.0 && !s.get_debug());
+    let s = settings();
+    check!(s.level() == 2.0 && !s.debug());
     s.set_debug(true);
-    check!(get_settings().get_debug());
-    check!(get_VERSION() == "1.2.3");
+    check!(settings().debug());
+    check!(version() == "1.2.3");
 
     // A global with members of its own.
     check!(Clock::now() == 1000.0);
     check!(Clock::ZERO == 0.0);
 
     // Namespaces, nested ones included.
-    let a = Geometry_point(0.0, 0.0);
-    let b = Geometry_point(3.0, 4.0);
-    check!(Geometry_distance(&a, &b) == 5.0);
-    check!(b.get_x() == 3.0);
-    check!(get_Geometry_UNIT() == 1.0);
-    check!(Geometry_Deep_twice(4.0) == 8.0);
+    let a = geometry_point(0.0, 0.0);
+    let b = geometry_point(3.0, 4.0);
+    check!(geometry_distance(&a, &b) == 5.0);
+    check!(b.x() == 3.0);
+    check!(geometry_unit() == 1.0);
+    check!(geometry_deep_twice(4.0) == 8.0);
 
-    // Rest parameters take an array.
-    check!(join("-", ["a", "b", "c"].into_iter().collect()) == "a-b-c");
+    // Rest parameters take an array: a Rust array, a Vec, a slice or a JsArray.
+    check!(join("-", ["a", "b", "c"]) == "a-b-c");
+    check!(join("-", vec!["a".to_string(), "b".to_string()]) == "a-b");
     check!(join("-", JsArray::new()) == "");
 
     // Numeric enums.

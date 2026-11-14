@@ -1,6 +1,5 @@
 // Calls the generated Rust bindings; every check! must hold.
 #![no_main]
-mod bindings;
 use bindings::*;
 
 #[link(wasm_import_module = "env")]
@@ -21,23 +20,23 @@ pub extern "C" fn run() {
     options.set_verbose(true);
 
     // A union is an enum: any member goes in.
-    check!(describe(Value::string("text".into())) == "string text");
-    check!(describe(Value::number(42.0)) == "number 42");
-    check!(describe(Value::Widget(widget.clone())) == "widget w");
+    check!(describe("text") == "string text");
+    check!(describe(42.0) == "number 42");
+    check!(describe(&widget) == "widget w");
     check!(describe(Value::Options(options.clone())) == "options verbose=true");
 
     // What comes back says which member it is.
-    check!(matches!(pick(0.0), Value::string(s) if s == "text"));
-    check!(matches!(pick(1.0), Value::number(n) if n == 42.0));
-    check!(matches!(pick(2.0), Value::Widget(w) if w.get_name() == "w"));
+    check!(matches!(pick(0.0), Value::String(s) if s == "text"));
+    check!(matches!(pick(1.0), Value::Number(n) if n == 42.0));
+    check!(matches!(pick(2.0), Value::Widget(w) if w.name() == "w"));
 
     // A tagged union, told apart by its `kind`.
-    let square = makeShape("square", 3.0);
-    check!(matches!(&square, Shape::Square(s) if s.get_side() == 3.0));
+    let square = make_shape("square", 3.0);
+    check!(matches!(&square, Shape::Square(s) if s.side() == 3.0));
     check!(area(square) == 9.0);
 
     // An inline union.
-    check!(setup(boolean_or_Options::boolean(true)) == "bool true");
-    check!(setup(boolean_or_Options::Options(options.clone())) == "options verbose=true");
-    check!(matches!(lookup("abc"), number_or_Widget::number(n) if n == 3.0));
+    check!(setup(true) == "bool true");
+    check!(setup(&options) == "options verbose=true");
+    check!(matches!(lookup("abc"), NumberOrWidget::Number(n) if n == 3.0));
 }
