@@ -71,3 +71,9 @@ match = ["Payment*"]
 [[modules.area]]
 name = "events"
 match = ["*Event", "*EventInit", "*EventMap", "*EventHandler*"]
+
+# Names for what lowering generated, where the place it came from reads badly.
+[rename]
+SVGSVGElement_getEnclosureList_result = "SVGShapeElement"
+SubtleCrypto_generateKey_keyUsages = "KeyUsages"
+PropertyIndexedKeyframes_index_result = "KeyframeValue"

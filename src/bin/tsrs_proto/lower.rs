@@ -583,6 +583,88 @@ fn each_member_list(decls: &mut [Decl], f: &mut dyn FnMut(&mut Vec<Member>)) {
     });
 }
 
+// ---- names ----
+
+// Gives generated declarations the names a config chose: `[rename]`. Only
+// generated ones: a declared name is the library's, and JavaScript's. A name
+// this target did not generate is skipped and returned: a library's table
+// serves every target, and they generate different names.
+pub fn rename(decls: &mut [Decl], renames: &[(String, String)]) -> Result<Vec<String>, String> {
+    fn names(decls: &[Decl], out: &mut Vec<(String, bool)>) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) => out.push((i.name.clone(), i.synthetic)),
+                Decl::Alias(a) => out.push((a.name.clone(), a.synthetic)),
+                Decl::Enum(e) => out.push((e.name.clone(), e.synthetic)),
+                Decl::Function(f) => out.push((f.name.clone(), false)),
+                Decl::Var(v) => out.push((v.name.clone(), false)),
+                Decl::Namespace(n) => {
+                    out.push((n.name.clone(), false));
+                    names(&n.decls, out);
+                }
+            }
+        }
+    }
+    fn apply(decls: &mut [Decl], to: &dyn Fn(&str) -> Option<String>) {
+        let set = |name: &mut String| {
+            if let Some(new) = to(name) {
+                *name = new;
+            }
+        };
+        for d in decls {
+            match d {
+                Decl::Interface(i) => {
+                    set(&mut i.name);
+                    i.ancestors.iter_mut().for_each(set);
+                }
+                Decl::Alias(a) => set(&mut a.name),
+                Decl::Enum(e) => set(&mut e.name),
+                Decl::Namespace(n) => apply(&mut n.decls, to),
+                Decl::Function(_) | Decl::Var(_) => {}
+            }
+        }
+    }
+    if renames.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut declared = Vec::new();
+    names(decls, &mut declared);
+    let mut unused = Vec::new();
+    for (i, (old, new)) in renames.iter().enumerate() {
+        match declared.iter().find(|d| d.0 == *old) {
+            None => unused.push(old.clone()),
+            Some((_, false)) => return Err(format!("rename.{old}: only generated names can be renamed, and the library declares this one")),
+            Some(_) => {}
+        }
+        if new.is_empty() || !new.chars().all(|c| c.is_alphanumeric() || c == '_') || new.chars().next().is_some_and(|c| c.is_numeric()) {
+            return Err(format!("rename.{old} = \"{new}\": not a name"));
+        }
+        if declared.iter().any(|d| d.0 == *new) || renames[..i].iter().any(|r| r.1 == *new) {
+            return Err(format!("rename.{old} = \"{new}\": that name is taken"));
+        }
+    }
+    let to = |name: &str| renames.iter().find(|r| r.0 == name).map(|r| r.1.clone());
+    apply(decls, &to);
+    each_member_list(decls, &mut |members| {
+        for m in members {
+            if let Some(new) = m.from.as_deref().and_then(to) {
+                m.from = Some(new);
+            }
+        }
+    });
+    walk(decls, &mut |t, _| {
+        if let Type::Ref(r) = t
+            && r.kind != "typeParameter"
+            && let Some(new) = to(&r.name)
+        {
+            r.qualified = None;
+            r.name = new;
+        }
+        true
+    });
+    Ok(unused)
+}
+
 // ---- classes ----
 
 // `interface X` + `var X: { prototype: X; new(): X; statics }` is a class.

@@ -98,7 +98,10 @@ fn merge(into: &mut Table, from: Table) {
     }
 }
 
-pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules), String> {
+// New names for generated declarations: `[rename]`, old = "new".
+pub type Renames = Vec<(String, String)>;
+
+pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules, Renames), String> {
     let mut table = Table::new();
     for p in paths {
         let t = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?;
@@ -115,6 +118,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules)
     }
 
     let mut o = Options::default();
+    let mut renames = Renames::new();
     for (section, value) in &table {
         let entries = value.as_table().ok_or_else(|| format!("[{section}] is not a table"))?;
         for (key, value) in entries {
@@ -140,6 +144,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules)
                 ("limits", "keyed_overloads") => o.keyed_limit = count(&at, value)?,
                 ("naming", "separator") => o.separator = Box::leak(string(&at, value)?.to_string().into_boxed_str()),
                 ("naming", "overloads") => o.numbered_overloads = one_of(&at, value, OVERLOAD_NAMES)? == "numbered",
+                ("rename", old) => renames.push((old.to_string(), string(&at, value)?.to_string())),
                 ("modules", "default") => modules.default = string(&at, value)?.to_string(),
                 // [[modules.area]] name = "svg", match = ["SVG*"]
                 ("modules", "area") => {
@@ -168,7 +173,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules)
         return Err("inheritance = \"flatten\" requires type_ops = \"evaluate\"".into());
     }
     check_module_names(&modules)?;
-    Ok((o, modules))
+    Ok((o, modules, renames))
 }
 
 fn string<'a>(at: &str, v: &'a Value) -> Result<&'a str, String> {
@@ -217,7 +222,8 @@ pub fn template() -> String {
          # Largest merged intersection that is written out inline.\nintersection_members = {}\n\
          # Most keys a keyed signature is expanded over.\nkeyed_overloads = {}\n\
          \n[naming]\n# Joins the parts of generated names.\nseparator = \"{}\"\n\
-         # \"with_params\": f_with_x. \"numbered\": f_2.\noverloads = \"with_params\"\n",
+         # \"with_params\": f_with_x. \"numbered\": f_2.\noverloads = \"with_params\"\n\
+         \n# Names for declarations a pass generated, which are named after where they came from.\n[rename]\n# SVGSVGElement_getEnclosureList_result = \"EnclosureList\"\n",
         d.union_param_limit, d.intersection_limit, d.keyed_limit, d.separator
     );
     out

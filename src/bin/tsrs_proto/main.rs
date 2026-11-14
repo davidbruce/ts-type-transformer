@@ -53,7 +53,7 @@ fn main() {
             _ => input = a,
         }
     }
-    let (opts, modules) = config::load(&config_paths, &overrides).unwrap_or_else(|e| {
+    let (opts, modules, renames) = config::load(&config_paths, &overrides).unwrap_or_else(|e| {
         eprintln!("config error: {e}");
         std::process::exit(2);
     });
@@ -80,6 +80,14 @@ fn main() {
     let mut front = front::Front::new(&mut checker, name);
     let mut decls = front.statements(file.statements().nodes());
     lower::lower(&mut front, &mut decls, opts);
+    match lower::rename(&mut decls, &renames) {
+        Ok(unused) if census => unused.iter().for_each(|n| eprintln!("# rename.{n}: not generated for this target")),
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("config error: {e}");
+            std::process::exit(2);
+        }
+    }
 
     let mut x = xml::Xml::default();
     x.top(&decls, &modules);

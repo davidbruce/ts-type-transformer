@@ -457,6 +457,25 @@ fn bench() {
     print!("{report}");
 }
 
+// `[rename]` names what a pass generated, wherever it is referred to; a
+// declared name is the library's to choose.
+#[test]
+fn generated_names_can_be_chosen() {
+    let api = root().join("tests/fixtures/data/api.d.ts");
+    let xml = lower(&api, Some("rust"), &["rename.Options_mode=Mode", "rename.norm_point=Point"]);
+    assert!(xml.contains("name=\"Mode\" synthetic=\"true\"") && xml.contains("<ref name=\"Mode\" kind=\"enum\"/>") && !xml.contains("Options_mode"), "the enum and every reference to it are renamed");
+    assert!(xml.contains("name=\"Point\"") && !xml.contains("norm_point"));
+    let fails = |setting: &str, why: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&api).arg("--config").arg(config("rust")).args(["--set", setting]).output().unwrap();
+        let said = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success() && said.contains(why), "{setting} should fail with `{why}`: {said}");
+    };
+    fails("rename.Options=Settings", "only generated names can be renamed");
+    fails("rename.Options_mode=Item", "that name is taken");
+    // A name this target did not generate is skipped: other targets may.
+    assert!(lower(&api, Some("rust"), &["rename.Nothing=Something"]).contains("Options_mode"));
+}
+
 // `--emit` writes bindings with their glue; what a generator cannot express is an error.
 #[test]
 fn emit_writes_bindings_or_says_why_not() {
