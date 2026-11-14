@@ -253,14 +253,14 @@ pub fn model(xml: &str, target: &str) -> Model {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust" },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
         keyed: HashMap::new(),
         bad: None,
         module: String::new(),
-        generics: target == "C++",
+        generics: target == "C++" || target == "Rust",
         last_type_params: Vec::new(),
         folders: HashMap::new(),
         folder_names: HashMap::new(),
@@ -1377,4 +1377,74 @@ export function makeEnv(getInstance) {
   return env;
 }
 "
+}
+
+// A function with its types rewritten.
+pub fn map_types(f: &Func, fix: &dyn Fn(&Ty) -> Ty) -> Func {
+    Func {
+        type_params: f.type_params.clone(),
+        module: f.module.clone(),
+        import: f.import.clone(),
+        name: f.name.clone(),
+        call: f.call.clone(),
+        params: f.params.iter().map(|(n, t)| (n.clone(), fix(t))).collect(),
+        rest: f.rest,
+        fixed: f.fixed.clone(),
+        shared: f.shared.clone(),
+        ret: fix(&f.ret),
+    }
+}
+
+// Rewrites a type and every type inside it.
+pub fn walk(t: &Ty, f: &dyn Fn(&Ty) -> Option<Ty>) -> Ty {
+    if let Some(t) = f(t) {
+        return t;
+    }
+    match t {
+        Ty::Nullable(inner, u) => Ty::Nullable(Box::new(walk(inner, f)), *u),
+        Ty::Listener(inner) => Ty::Listener(Box::new(walk(inner, f))),
+        Ty::ArrayOf(inner) => Ty::ArrayOf(Box::new(walk(inner, f))),
+        Ty::Tuple(es) => Ty::Tuple(es.iter().map(|e| walk(e, f)).collect()),
+        Ty::Generic(n, args) => Ty::Generic(n.clone(), args.iter().map(|a| walk(a, f)).collect()),
+        t => t.clone(),
+    }
+}
+
+// A function of a class template, where the class's own name means the
+// class with its own parameters: `Box` is `Box<T>`.
+pub fn with_self_args(f: &Func, c: &Class) -> Func {
+    if c.type_params.is_empty() {
+        return map_types(f, &|t| t.clone());
+    }
+    let own = Ty::Generic(c.name.clone(), c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect());
+    map_types(f, &|t| walk(t, &|t| matches!(t, Ty::Obj(n) if *n == c.name).then(|| own.clone())))
+}
+
+// A type with type parameters replaced by arguments, or their defaults.
+pub fn subst(t: &Ty, params: &[TParam], args: &[Ty]) -> Ty {
+    walk(t, &|t| match t {
+        Ty::Param(n) => params.iter().position(|p| p.name == *n).map(|i| args.get(i).cloned().or_else(|| params[i].default.clone()).unwrap_or(Ty::Any)),
+        _ => None,
+    })
+}
+
+// The type arguments `c` gives an ancestor, in terms of its own parameters:
+// for `Pipe extends Source<number>`, Source's are `[number]`.
+pub fn base_args(m: &Model, c: &Class, ancestor: &str) -> Option<Vec<Ty>> {
+    for b in &c.bases {
+        let (name, args) = match b {
+            Ty::Obj(n) => (n, Vec::new()),
+            Ty::Generic(n, args) => (n, args.clone()),
+            _ => continue,
+        };
+        if name == ancestor {
+            return Some(args);
+        }
+        if let Some(k) = m.classes.iter().find(|k| k.name == *name)
+            && let Some(inner) = base_args(m, k, ancestor)
+        {
+            return Some(inner.iter().map(|t| subst(t, &k.type_params, &args)).collect());
+        }
+    }
+    None
 }

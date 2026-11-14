@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use super::wasm::{Call, Class, Func, Model, NamedUnion, TParam, Ty};
+use super::wasm::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
 
 fn ident(name: &str) -> String {
     const KEYWORDS: &[&str] = &[
@@ -317,76 +317,6 @@ fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place,
     };
     let key = format!("{}{name}({})", if place == Place::Static { "static " } else { "" }, f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
     Function { import: import_decl, decl, def, templated, key, refs }
-}
-
-// A function with its types rewritten.
-fn map_types(f: &Func, fix: &dyn Fn(&Ty) -> Ty) -> Func {
-    Func {
-        type_params: f.type_params.clone(),
-        module: f.module.clone(),
-        import: f.import.clone(),
-        name: f.name.clone(),
-        call: f.call.clone(),
-        params: f.params.iter().map(|(n, t)| (n.clone(), fix(t))).collect(),
-        rest: f.rest,
-        fixed: f.fixed.clone(),
-        shared: f.shared.clone(),
-        ret: fix(&f.ret),
-    }
-}
-
-// Rewrites a type and every type inside it.
-fn walk(t: &Ty, f: &dyn Fn(&Ty) -> Option<Ty>) -> Ty {
-    if let Some(t) = f(t) {
-        return t;
-    }
-    match t {
-        Ty::Nullable(inner, u) => Ty::Nullable(Box::new(walk(inner, f)), *u),
-        Ty::Listener(inner) => Ty::Listener(Box::new(walk(inner, f))),
-        Ty::ArrayOf(inner) => Ty::ArrayOf(Box::new(walk(inner, f))),
-        Ty::Tuple(es) => Ty::Tuple(es.iter().map(|e| walk(e, f)).collect()),
-        Ty::Generic(n, args) => Ty::Generic(n.clone(), args.iter().map(|a| walk(a, f)).collect()),
-        t => t.clone(),
-    }
-}
-
-// A function of a class template, where the class's own name means the
-// class with its own parameters: `Box` is `Box<T>`.
-fn with_self_args(f: &Func, c: &Class) -> Func {
-    if c.type_params.is_empty() {
-        return map_types(f, &|t| t.clone());
-    }
-    let own = Ty::Generic(c.name.clone(), c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect());
-    map_types(f, &|t| walk(t, &|t| matches!(t, Ty::Obj(n) if *n == c.name).then(|| own.clone())))
-}
-
-// A type with type parameters replaced by arguments, or their defaults.
-fn subst(t: &Ty, params: &[TParam], args: &[Ty]) -> Ty {
-    walk(t, &|t| match t {
-        Ty::Param(n) => params.iter().position(|p| p.name == *n).map(|i| args.get(i).cloned().or_else(|| params[i].default.clone()).unwrap_or(Ty::Any)),
-        _ => None,
-    })
-}
-
-// The type arguments `c` gives an ancestor, in terms of its own parameters:
-// for `Pipe extends Source<number>`, Source's are `[number]`.
-fn base_args(m: &Model, c: &Class, ancestor: &str) -> Option<Vec<Ty>> {
-    for b in &c.bases {
-        let (name, args) = match b {
-            Ty::Obj(n) => (n, Vec::new()),
-            Ty::Generic(n, args) => (n, args.clone()),
-            _ => continue,
-        };
-        if name == ancestor {
-            return Some(args);
-        }
-        if let Some(k) = m.classes.iter().find(|k| k.name == *name)
-            && let Some(inner) = base_args(m, k, ancestor)
-        {
-            return Some(inner.iter().map(|t| subst(t, &k.type_params, &args)).collect());
-        }
-    }
-    None
 }
 
 // The declared types a type names: classes, callbacks, unions and maps.

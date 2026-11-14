@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use ts_type_transformer::generators::{c, cpp, fsharp, wasm, zig};
+use ts_type_transformer::generators::{c, cpp, fsharp, rust, wasm, zig};
 
 // What each target needs lowered, for an error that says what to change.
 const HINT: &str = "the generator cannot express a construct the config left in; lower it in the target's config (see `--default-config`)";
@@ -40,6 +40,7 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>) -> Result<Vec<(Str
             "c" => wasm_files("C", c::files),
             "cpp" | "c++" => wasm_files("C++", cpp::files),
             "zig" => wasm_files("Zig", zig::files),
+            "rust" => wasm_files("Rust", rust::files),
             "fsharp" | "f#" => {
                 let m = fsharp::module(xml);
                 for (why, n) in &m.skipped {
@@ -51,7 +52,7 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>) -> Result<Vec<(Str
                 files.push(("compile-order.txt".into(), order));
                 files
             }
-            other => return Err(format!("unknown target `{other}`: c, cpp, zig or fsharp")),
+            other => return Err(format!("unknown target `{other}`: c, cpp, zig, rust or fsharp")),
         })
     });
     let _ = std::panic::take_hook();

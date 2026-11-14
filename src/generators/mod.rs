@@ -5,6 +5,7 @@
 pub mod c;
 pub mod cpp;
 pub mod fsharp;
+pub mod rust;
 pub mod wasm;
 pub mod zig;
 

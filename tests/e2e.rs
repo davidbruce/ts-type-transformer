@@ -225,6 +225,37 @@ fn cpp(fixture: &str) {
     print!("{}", skipped(&model.skipped));
 }
 
+// rustc, where the wasm32 target is installed.
+fn rustc_wasm() -> Option<PathBuf> {
+    let rustc = find("rustc")?;
+    let out = Command::new(&rustc).args(["--print", "target-libdir", "--target", "wasm32-unknown-unknown"]).output().ok()?;
+    if !Path::new(String::from_utf8_lossy(&out.stdout).trim()).is_dir() {
+        eprintln!("SKIPPED: no wasm32-unknown-unknown target (rustup target add wasm32-unknown-unknown)");
+        return None;
+    }
+    Some(rustc)
+}
+
+const RUSTC_WASM: &[&str] = &["--edition", "2024", "--target", "wasm32-unknown-unknown", "--crate-type", "cdylib", "-O", "-C", "link-arg=--export-table", "-D", "warnings"];
+
+// Writes the Rust bindings next to the program and compiles them together.
+fn build_rust(rustc: &Path, c: &Case, model: &generators::wasm::Model) {
+    write_files(&c.out, generators::rust::files(model));
+    fs::copy(c.fixture.join("test.rs"), c.out.join("test.rs")).unwrap();
+    run(Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(["-o", "test.wasm", "test.rs"]));
+}
+
+fn rust(fixture: &str) {
+    let Some(rustc) = rustc_wasm() else { return };
+    let Some([node]) = tools(["node"]) else { return };
+    let c = case(fixture, "rust");
+    let model = generators::wasm::model(&c.xml, "Rust");
+    build_rust(&rustc, &c, &model);
+    write_glue(&c, &model);
+    run_wasm(&c, &node);
+    print!("{}", skipped(&model.skipped));
+}
+
 // What a generator left unbound, for the test log.
 fn skipped(counts: &std::collections::BTreeMap<String, usize>) -> String {
     counts.iter().map(|(why, n)| format!("  not bound: {n} x {why}\n")).collect()
@@ -237,6 +268,7 @@ macro_rules! fixtures {
         #[test] fn c() { super::c(stringify!($fixture)); }
         #[test] fn zig() { super::zig(stringify!($fixture)); }
         #[test] fn cpp() { super::cpp(stringify!($fixture)); }
+        #[test] fn rust() { super::rust(stringify!($fixture)); }
     })* };
 }
 
@@ -482,6 +514,18 @@ mod dom {
         let errors = String::from_utf8_lossy(&out.stderr);
         let expected = ["no matching member function for call to 'addEventListener'", "constraints not satisfied"];
         assert!(!out.status.success() && expected.iter().all(|e| errors.contains(e)), "wrong.cpp should not compile, for both reasons:\n{errors}");
+    }
+
+    #[test]
+    fn rust() {
+        let Some(rustc) = super::rustc_wasm() else { return };
+        let c = dom_case("rust");
+        let model = generators::wasm::model(&c.xml, "Rust");
+        fs::write(c.out.join("index.html"), wasm_page("rust")).unwrap();
+        print!("{}", skipped(&model.skipped));
+        super::build_rust(&rustc, &c, &model);
+        write_glue(&c, &model);
+        run_browser(&c);
     }
 
     #[test]
