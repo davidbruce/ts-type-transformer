@@ -224,6 +224,10 @@ TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
 static inline JsValue js_take_error(void) { return (JsValue){ ts_raw_js_take_error() }; }
 // An exception's message, the caller's to release.
 static inline JsString js_error_message(JsValue e) { return (JsString){ ts_raw_js_error_message(e.h) }; }
+// A JavaScript iterator: see `X_iterate`.
+typedef struct { uint32_t h; } JsIterator;
+TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
+TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
 // How many JavaScript values wasm holds handles to.
 static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
 // Forgets a callback made with `X_from`, and returns its context. Its handle is released as any other.
@@ -392,6 +396,21 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         let mut body = String::new();
         for (name, value) in &c.consts {
             body += &format!("#define {}_{name} {value}\n", c.name);
+        }
+        // Iteration: `X_iterate(x)`, then `X_iterate_next(it, &value)` until false; each value is the caller's.
+        if let Some(elem) = &c.iterates {
+            let (ty, value) = match elem {
+                Ty::Num => ("double".to_string(), "ts_raw_js_to_number(v); ts_raw_js_release(v)".to_string()),
+                Ty::Obj(_) | Ty::Str | Ty::Array | Ty::ArrayOf(_) => (typed(elem, false), format!("({}){{ v }}", typed(elem, false))),
+                _ => ("JsValue".to_string(), "(JsValue){ v }".to_string()),
+            };
+            let n = &c.name;
+            body += &format!("static inline JsIterator {n}_iterate({n} self) {{ return (JsIterator){{ ts_raw_js_iterate(self.h) }}; }}\n");
+            body += &format!("static inline bool {n}_iterate_next(JsIterator it, {ty}* out) {{ uint32_t v = ts_raw_js_iterator_next(it.h); if (v == 0xFFFFFFFFu) return false; *out = {value}; return true; }}\n");
+            // Any subtype iterates: `HTMLCollectionBase_iterate(children)`.
+            if descendants.contains_key(n) {
+                body += &format!("#define {n}_iterate(self) {n}_iterate(AS_{n}(self))\n");
+            }
         }
         // A cast to every ancestor: an inherited member is called on the type that declares it.
         for a in all_ancestors(m, &c.name) {

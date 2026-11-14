@@ -100,6 +100,16 @@ export fn run() void {
     expect(strEq(box.get_style().get_color(), "red"), @src());
     expect(box.getBoundingClientRect().get_width() > 0, @src());
     expect(box.get_children().get_length() == 2, @src());
+
+    // Collections iterate.
+    const it = box.get_children().iterate();
+    defer b.jsRelease(it);
+    var children: usize = 0;
+    while (it.next()) |child| {
+        defer b.jsRelease(child);
+        children += 1;
+    }
+    expect(children == 2, @src());
     expect(b.get_innerWidth() > 0, @src());
     doc.set_title("driven by zig");
 

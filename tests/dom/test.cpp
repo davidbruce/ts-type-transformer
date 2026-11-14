@@ -104,6 +104,15 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(box.getBoundingClientRect().width() > 0);
     CHECK(box.children().length() == 2);
     CHECK(get_innerWidth() > 0);
+
+    // Collections iterate.
+    int children = 0;
+    std::string tags;
+    for (Element child : box.children()) {
+        children++;
+        tags += child.tagName() + " ";
+    }
+    CHECK(children == 2 && tags == "P BUTTON ");
     doc.title("driven by cpp");
 
     // An invalid selector throws: the call returns nothing, and the exception is kept.

@@ -39,6 +39,9 @@ struct Gen {
     alias_types: BTreeMap<usize, String>,
     // Members moved to a later file, as extensions: file -> type -> member lines.
     extensions: BTreeMap<usize, BTreeMap<String, Vec<String>>>,
+    // Interfaces with `[Symbol.iterator]`, and what each interface extends.
+    iterable: HashSet<String>,
+    bases: HashMap<String, Vec<String>>,
 }
 
 fn ident(name: &str) -> String {
@@ -74,7 +77,17 @@ pub fn module(xml: &str) -> Output {
         units: HashMap::new(),
         current_file: 0,
         extensions: BTreeMap::new(),
+        iterable: HashSet::new(),
+        bases: HashMap::new(),
     };
+    for d in elements(doc.root_element()).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
+        let name = attr(d, "name").to_string();
+        if elements(d).any(|m| m.attribute("name") == Some("[Symbol.iterator]")) {
+            g.iterable.insert(name.clone());
+        }
+        let bases = named(d, "extends").filter_map(|e| elements(e).next()).map(|r| attr(r, "name").to_string()).collect();
+        g.bases.entry(name).or_insert_with(Vec::new).extend::<Vec<String>>(bases);
+    }
     let (plan, units) = file_plan(doc.root_element());
     for (i, group) in plan.iter().enumerate() {
         for m in group {
@@ -688,6 +701,29 @@ impl Gen {
         for e in named(d, "extends") {
             let base = self.ty(only_child(e), &owner);
             body.push(format!("{indent}    inherit {base}\n"));
+        }
+        // `[Symbol.iterator](): ArrayIterator<Node>`: a seq of Nodes, which Fable iterates by that method.
+        let iterator = elements(d).find(|m| m.attribute("name") == Some("[Symbol.iterator]") && !flag(*m, "static"));
+        // A type iterates as its ancestor does when that one is a seq already:
+        // F# allows one seq per type (`HTMLCollectionOf<'T>` stays a seq of Elements).
+        let mut todo: Vec<String> = self.bases.get(attr(d, "name")).cloned().unwrap_or_default();
+        let mut seen = HashSet::new();
+        let mut inherited = false;
+        while let Some(b) = todo.pop() {
+            if seen.insert(b.clone()) {
+                inherited |= self.iterable.contains(&b);
+                todo.extend(self.bases.get(&b).cloned().unwrap_or_default());
+            }
+        }
+        if let Some(elem) = iterator.filter(|_| !inherited).and_then(|m| named(m, "returns").next()).and_then(|r| elements(r).next()).and_then(|it| elements(it).next()) {
+            let line = format!("inherit seq<{}>", self.ty(elem, &owner));
+            // F# files cannot refer forward, and an inherited interface cannot be an extension.
+            let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
+            if latest > self.current_file && indent.is_empty() {
+                self.skip("iterable over a type of a later file");
+            } else {
+                body.push(format!("{indent}    {line}\n"));
+            }
         }
         let extend = if prefix.is_empty() { owner.clone() } else { format!("{}.{owner}", prefix.split('.').map(ident).collect::<Vec<_>>().join(".")) };
         body.extend(self.members(&instance, &owner, &extend, indent));

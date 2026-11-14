@@ -120,6 +120,19 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(str_eq(CSSStyleProperties_get_color(style), "red"));
     CHECK(DOMRect_get_width(Element_getBoundingClientRect(box)) > 0);
     CHECK(HTMLCollectionBase_get_length(ParentNode_get_children(box)) == 2);
+
+    // Collections iterate.
+    HTMLCollection kids = ParentNode_get_children(box);
+    JsIterator it = HTMLCollectionBase_iterate(kids);
+    Element child;
+    int children = 0;
+    while (HTMLCollectionBase_iterate_next(it, &child)) {
+        children++;
+        js_release(child);
+    }
+    js_release(it);
+    js_release(kids);
+    CHECK(children == 2);
     CHECK(get_innerWidth() > 0);
     Document_set_title(doc, "driven by c");
 

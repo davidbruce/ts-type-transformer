@@ -311,6 +311,16 @@ pub fn jsTake(comptime T: type, h: u32) T {
     return .{ .h = h };
 }
 
+// A JavaScript iterator yielding T. Each value is the caller's; so is the iterator.
+pub fn JsIteratorOf(comptime T: type) type {
+    return extern struct {
+        h: u32,
+        pub fn over(h: u32) @This() { return .{ .h = raw.js_iterate(h) }; }
+        // The next value, or null at the end.
+        pub fn next(self: @This()) ?T { const v = raw.js_iterator_next(self.h); return if (v == 0xFFFFFFFF) null else jsTake(T, v); }
+    };
+}
+
 // A JavaScript array of T: f64, bool, JsString, a handle, or a union.
 pub fn JsArrayOf(comptime T: type) type {
     return extern struct {
@@ -354,6 +364,8 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_release(h: u32) void;
     extern \"env\" fn js_live() u32;
     extern \"env\" fn js_take_error() u32;
+    extern \"env\" fn js_iterate(h: u32) u32;
+    extern \"env\" fn js_iterator_next(it: u32) u32;
     extern \"env\" fn js_error_message(h: u32) u32;
     extern \"env\" fn js_callback_release(h: u32) usize;
 ";
@@ -366,7 +378,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 pub fn files(m: &Model) -> Vec<(String, String)> {
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsTake"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
@@ -435,6 +447,12 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         *out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
         for (name, value) in &c.consts {
             *out += &format!("    pub const {} = {value};\n", ident(name));
+        }
+        // Iteration: `var it = list.iterate(); while (it.next()) |n| ...`.
+        if let Some(elem) = &c.iterates
+            && !c.funcs.iter().any(|f| f.name == "iterate")
+        {
+            *out += &format!("    pub fn iterate(self: {}) JsIteratorOf({}) {{ return JsIteratorOf({1}).over(self.h); }}\n", c.name, typed(elem, false));
         }
         // A map's keys, and the type each selects, known at compile time.
         if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {

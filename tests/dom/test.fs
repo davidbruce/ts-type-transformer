@@ -80,6 +80,9 @@ box.style.setProperty ("color", "red")
 check (box.style.color = "red") "style"
 check (box.getBoundingClientRect().width > 0.0) "layout"
 check (box.children.length = 2.0) "children"
+// Collections are seqs.
+let tags = [ for child in box.children -> child.tagName ]
+check (tags.Length = 2) "children iterate"
 check (innerWidth > 0.0) "window"
 document.title <- "driven by fsharp"
 

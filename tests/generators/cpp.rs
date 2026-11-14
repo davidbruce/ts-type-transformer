@@ -445,6 +445,8 @@ TS_IMPORT(js_live) uint32_t ts_raw_js_live();
 TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error();
 TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
 TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, uintptr_t, void*);
+TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
+TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
 }
 
 namespace ts {
@@ -695,6 +697,27 @@ struct Task {
     };
 };
 
+// The end of an iteration.
+struct IterationEnd {};
+
+// Walks a JavaScript iterator, for a range-for: `for (Node n : list)`.
+template <class T>
+struct Iterator {
+    explicit Iterator(uint32_t it) : it(handle, it) { ++*this; }
+    T operator*() const { return *cur; }
+    Iterator& operator++() {
+        uint32_t v = ts_raw_js_iterator_next(it.h);
+        if (v == 0xFFFFFFFFu) cur.reset();
+        else cur.emplace(from_handle<T>(v));
+        return *this;
+    }
+    bool operator==(IterationEnd) const { return !cur; }
+
+  private:
+    Handle it;
+    std::optional<T> cur;
+};
+
 // A key of a map whose value has type V: `HTMLElementEventMapKeys::click`.
 template <class Map, class V>
 struct Key {
@@ -937,6 +960,18 @@ pub fn files(m: &Model) -> Vec<(String, String)> {
         for (name, value) in &c.consts {
             let ty = if value.starts_with('"') { "std::string_view" } else { "double" };
             members += &format!("    static constexpr {ty} {} = {value};\n", ident(name));
+        }
+        // Iterable: `for (Node n : list)`.
+        if let Some(elem) = &c.iterates
+            && !own.contains("begin")
+            && !own.contains("end")
+        {
+            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret));
+            members += &format!("    {it} begin() const;\n    ts::IterationEnd end() const {{ return {{}}; }}\n");
+            let templated = !class_head.is_empty();
+            let def = format!("{class_head}{}{it} {owner}::begin() const {{ return {it}(ts_raw_js_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
+            named_types(elem, &mut used);
+            if templated { header_defs += &def } else { lib.1 += &def }
         }
         let bases: Vec<String> = if c.bases.is_empty() { vec!["virtual ts::Handle".into()] } else { c.bases.iter().map(|b| format!("virtual {}", ty_in(b))).collect() };
         let mut decl = format!("// Generated.\n#pragma once\n{}", include(&decl_path, "ts_types.hpp"));
