@@ -36,6 +36,9 @@ struct Gen {
     keyed: HashMap<String, String>,
     // A function value's own type parameters, which F# has not: `obj`.
     fn_params: Vec<String>,
+    // Abbreviations without type parameters, by name: what F# sees through
+    // when it tells members apart (`type ArrayLike_or_x = obj`).
+    abbrevs: HashMap<String, String>,
     // Maps whose keys are used: a `<Map>Keys` module is written for each.
     maps: BTreeSet<String>,
     // Top-level types by module. Top-level values go in a file of their own.
@@ -139,6 +142,23 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
 }
 
 impl Gen {
+    // The unions F# cannot tell apart, bound as `obj`: known before any
+    // member that takes one is written, to tell such members apart.
+    fn union_abbrevs(&mut self, root: Node) {
+        for d in root.descendants().filter(|d| d.has_tag_name("typeAlias") && named(*d, "typeParameter").next().is_none()) {
+            let body = only_child_type(d);
+            if !body.has_tag_name("union") {
+                continue;
+            }
+            let (out, skipped) = (std::mem::take(&mut self.out), self.skipped.clone());
+            let told_apart = self.named_union("probe", body, "");
+            (self.out, self.skipped) = (out, skipped);
+            if !told_apart {
+                self.abbrevs.insert(type_ident(attr(d, "name")), "obj".into());
+            }
+        }
+    }
+
     // The F# name of a type declared elsewhere: its path flattened
     // (`NodeJS_Dict`), in module `External` where a type declared here has
     // the name (GeoJSON's `Point` beside leaflet's).
@@ -190,6 +210,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         external: BTreeMap::new(),
         keyed: HashMap::new(),
         fn_params: Vec::new(),
+        abbrevs: HashMap::new(),
         maps: BTreeSet::new(),
         types: BTreeMap::new(),
         values: String::new(),
@@ -246,6 +267,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     g.file_of.extend(declared_files(doc.root_element(), &plan, &units));
     g.units = units;
     g.index(doc.root_element(), "");
+    g.union_abbrevs(doc.root_element());
     g.decls(doc.root_element(), "", "");
     g.key_modules(doc.root_element());
 
@@ -1021,7 +1043,7 @@ impl Gen {
                     continue;
                 }
                 // Distinct TypeScript overloads can map to the same F# signature.
-                push_member(&mut lines, format!("{indent}    {line}\n"));
+                push_member(&mut lines, format!("{indent}    {line}\n"), &self.abbrevs);
             }
         }
         lines
@@ -1205,10 +1227,10 @@ impl Gen {
                     }
                     continue;
                 }
-                push_member(&mut lines, format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n"));
+                push_member(&mut lines, format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n"), &self.abbrevs);
             } else {
                 for line in self.members(&[m], "obj", &static_name, indent) {
-                    push_member(&mut lines, line);
+                    push_member(&mut lines, line, &self.abbrevs);
                 }
             }
         }
@@ -1323,12 +1345,13 @@ impl Gen {
                         None => (name, "$0...".to_string()),
                     };
                     let tps = self.constrained_type_params(d);
-                    push_member(functions, format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", ")));
+                    push_member(functions, format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", ")), &self.abbrevs);
                 }
                 "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
                     let body = only_child_type(d);
                     if !self.named_union(&name, body, indent) {
                         self.skip("union whose members cannot be told apart, bound as obj");
+                        self.abbrevs.insert(name.to_string(), "obj".into());
                         self.out += &format!("{indent}type {name} = obj\n\n");
                     }
                 }
@@ -1342,6 +1365,7 @@ impl Gen {
                     }
                     if recursive && !(body.has_tag_name("functionType") && indent.is_empty()) {
                         self.skip("recursive type alias, bound as obj");
+                        self.abbrevs.insert(name.to_string(), "obj".into());
                         self.out += &format!("{indent}type {name} = obj\n\n");
                         return;
                     }
@@ -1365,6 +1389,9 @@ impl Gen {
                         if shown.iter().any(|p| !words.contains(&p.trim_start_matches('\''))) {
                             self.skip("alias that does not show its type parameters, bound as opaque");
                             t = format!("Opaque<{}>", shown.join(" * "));
+                        }
+                        if params.is_empty() {
+                            self.abbrevs.insert(name.to_string(), t.clone());
                         }
                         self.out += &format!("{indent}type {name}{params} = {t}\n\n");
                     }
@@ -1628,16 +1655,41 @@ fn alias_kept(root: Node) -> HashMap<String, Vec<usize>> {
 
 // Adds a member unless one F# would call the same is there: the first
 // stays, as TypeScript picks the first overload that matches a call.
-fn push_member(lines: &mut Vec<String>, line: String) {
-    let key = member_key(&line);
-    if !lines.iter().any(|l| member_key(l) == key) {
+fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, String>) {
+    let key = expand(&member_key(&line), abbrevs);
+    if !lines.iter().any(|l| expand(&member_key(l), abbrevs) == key) {
         lines.push(line);
     }
 }
 
-// What F# tells members apart by: name and parameters, not attributes or
-// return type. Overloads that differ only in a literal (`async: true` or
-// `false`, each a `bool`) are one F# member.
+// `text` with each abbreviation's name replaced by what it stands for.
+fn expand(text: &str, abbrevs: &HashMap<String, String>) -> String {
+    let mut out = text.to_string();
+    for _ in 0..4 {
+        let mut next = String::new();
+        let mut word = String::new();
+        for c in out.chars().chain(['\0']) {
+            if c.is_alphanumeric() || c == '_' || c == '\'' {
+                word.push(c);
+                continue;
+            }
+            next += abbrevs.get(&word).map_or(word.as_str(), String::as_str);
+            word.clear();
+            if c != '\0' {
+                next.push(c);
+            }
+        }
+        if next == out {
+            break;
+        }
+        out = next;
+    }
+    out
+}
+
+// What F# tells members apart by: name and parameter types, not attributes,
+// parameter names or return type. Overloads that differ only in a literal
+// (`async: true` or `false`, each a `bool`) are one F# member.
 fn member_key(line: &str) -> String {
     let mut s = line.trim();
     while let Some(rest) = s.strip_prefix("[<") {
@@ -1646,34 +1698,70 @@ fn member_key(line: &str) -> String {
             None => break,
         }
     }
-    let b = s.as_bytes();
-    let mut depth = 0i32;
-    let mut i = 0;
-    let mut arrow = None;
-    let is_static = s.starts_with("static member ");
-    while i < b.len() {
-        match b[i] {
-            b'-' if b.get(i + 1) == Some(&b'>') => {
-                if depth == 0 {
-                    arrow = Some(i);
+    // Splits `text` at `sep` outside brackets.
+    fn split_top<'a>(text: &'a str, sep: &str) -> Vec<&'a str> {
+        let b = text.as_bytes();
+        let (mut depth, mut start, mut out, mut i) = (0i32, 0, Vec::new(), 0);
+        while i < b.len() {
+            match b[i] {
+                b'-' if b.get(i + 1) == Some(&b'>') => i += 1,
+                b'(' | b'<' | b'[' | b'{' => depth += 1,
+                b')' | b'>' | b']' | b'}' => depth -= 1,
+                _ if depth == 0 && text[i..].starts_with(sep) => {
+                    out.push(&text[start..i]);
+                    i += sep.len();
+                    start = i;
+                    continue;
                 }
-                i += 1;
+                _ => {}
             }
-            b'(' | b'<' | b'[' | b'{' => depth += 1,
-            b')' | b'>' | b']' | b'}' => {
-                depth -= 1;
-                // `static member f (a: T): R`: up to its parameters' close.
-                if is_static && depth == 0 && b[i] == b')' {
-                    return s[..=i].to_string();
-                }
-            }
-            _ => {}
+            i += 1;
         }
-        i += 1;
+        out.push(&text[start..]);
+        out
     }
-    // `abstract f: A * B -> R`: before its last arrow outside brackets.
-    match arrow {
-        Some(at) if !is_static => s[..at].trim_end().to_string(),
-        _ => s.to_string(),
+    // `name: T` or `?name: T` is its type, with the `?`.
+    let type_of = |p: &str| -> String {
+        let p = p.trim();
+        let optional = p.starts_with('?');
+        let parts = split_top(p, ": ");
+        let t = if parts.len() > 1 { parts[1..].join(": ").trim().to_string() } else { p.to_string() };
+        if optional { format!("?{t}") } else { t }
+    };
+    if let Some(rest) = s.strip_prefix("static member ") {
+        // `static member f<'T> (a: T, b: U): R = jsNative`.
+        let Some(open) = rest.find(" (") else { return s.to_string() };
+        let name = &rest[..open];
+        let inner = &rest[open + 2..];
+        let close = {
+            let (mut depth, mut at) = (1i32, inner.len());
+            for (i, c) in inner.char_indices() {
+                match c {
+                    '(' | '<' | '[' | '{' => depth += 1,
+                    ')' | ']' | '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            at = i;
+                            break;
+                        }
+                    }
+                    '>' if !inner[..i].ends_with('-') => depth -= 1,
+                    _ => {}
+                }
+            }
+            at
+        };
+        let params: Vec<String> = split_top(&inner[..close], ", ").into_iter().filter(|p| !p.trim().is_empty()).map(type_of).collect();
+        return format!("static {name}({})", params.join(", "));
     }
+    // `abstract f: a: A * b: B -> R`: the types before its last arrow outside brackets.
+    let Some(rest) = s.strip_prefix("abstract ") else { return s.to_string() };
+    let Some((name, sig)) = rest.split_once(": ") else { return s.to_string() };
+    let parts = split_top(sig, " -> ");
+    if parts.len() < 2 {
+        return s.to_string();
+    }
+    let params = parts[..parts.len() - 1].join(" -> ");
+    let types: Vec<String> = split_top(&params, " * ").into_iter().map(type_of).collect();
+    format!("abstract {name}({})", types.join(" * "))
 }
