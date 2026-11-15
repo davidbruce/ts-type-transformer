@@ -20,7 +20,9 @@ struct Gen {
     // The module the library is imported from, if it is not globals.
     import: Option<String>,
     // Classes a union tells apart by `instanceof`: imported types, which Fable tests itself.
-    tested_classes: HashSet<String>,
+    tested_classes: HashMap<String, String>,
+    // The module of the whole library, when there is one.
+    root_import: Option<String>,
     // For a method with optional parameters and then a rest parameter, which
     // of its two overloads is being written: true, the one with the rest.
     split_rest: Option<bool>,
@@ -175,7 +177,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         constrained: HashMap::new(),
         constrained_owner: HashMap::new(),
         import: doc.root_element().attribute("import").map(str::to_string),
-        tested_classes: HashSet::new(),
+        tested_classes: HashMap::new(),
+        root_import: doc.root_element().attribute("import").map(str::to_string),
         split_rest: None,
         delegates: HashMap::new(),
         delegate_counter: 0,
@@ -185,8 +188,15 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         cur_indent: String::new(),
         cur_prefix: String::new(),
     };
-    if g.import.is_some() {
-        g.tested_classes = doc.root_element().descendants().filter_map(|n| n.attribute("test")?.strip_prefix("instanceof:").filter(|c| !c.contains('.')).map(str::to_string)).collect();
+    // Classes unions tell apart by instanceof, with the module each is imported from.
+    let tested: HashSet<&str> = doc.root_element().descendants().filter_map(|n| n.attribute("test")?.strip_prefix("instanceof:").filter(|c| !c.contains('.'))).collect();
+    for d in elements(doc.root_element()) {
+        let js = d.attribute("jsName").or(d.attribute("name")).unwrap_or_default();
+        if let Some(module) = d.attribute("import").or(g.root_import.as_deref())
+            && tested.contains(js)
+        {
+            g.tested_classes.insert(js.to_string(), module.to_string());
+        }
     }
     for d in elements(doc.root_element()).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
         let name = attr(d, "name").to_string();
@@ -468,6 +478,23 @@ impl Gen {
                 }
             }
         }
+    }
+
+    // Whether a class extends another, through its bases.
+    fn extends_class(&self, class: &str, base: &str) -> bool {
+        let mut todo = vec![class.to_string()];
+        let mut seen = HashSet::new();
+        while let Some(c) = todo.pop() {
+            for b in self.bases.get(&c).into_iter().flatten() {
+                if b == base {
+                    return true;
+                }
+                if seen.insert(b.clone()) {
+                    todo.push(b.clone());
+                }
+            }
+        }
+        false
     }
 
     fn skip(&mut self, why: &str) {
@@ -1057,8 +1084,8 @@ impl Gen {
         let instance: Vec<Node> = elements(src).filter(|m| is_member(m) && !flag(*m, "static")).collect();
         let statics: Vec<Node> = elements(src).filter(|m| m.has_tag_name("constructor") || is_member(m) && flag(*m, "static")).collect();
         // A class of an imported library that unions tell apart: Fable tests it with instanceof.
-        let origin = match &self.import {
-            Some(module) if prefix.is_empty() && self.tested_classes.contains(js_name) => format!("{indent}[<Import({js_name:?}, {module:?})>]\n"),
+        let origin = match self.tested_classes.get(js_name) {
+            Some(module) if prefix.is_empty() => format!("{indent}[<Import({js_name:?}, {module:?})>]\n"),
             _ => String::new(),
         };
         self.out += &format!("{origin}{indent}[<AllowNullLiteral>]\n{indent}type {header} =\n");
@@ -1163,6 +1190,10 @@ impl Gen {
         // members can do in F#: they become static members of one erased type.
         let mut functions: Vec<String> = Vec::new();
         for d in elements(scope) {
+            // Each top-level declaration is imported from its package; a namespace's members from its.
+            if prefix.is_empty() {
+                self.import = d.attribute("import").map(str::to_string).or_else(|| self.root_import.clone());
+            }
             let raw = d.attribute("name").unwrap_or_default();
             let name = ident(raw);
             let path = js_path(prefix, d.attribute("jsName").unwrap_or(raw));
@@ -1339,10 +1370,17 @@ impl Gen {
             self.out += &format!("{indent}[<Erase; RequireQualifiedAccess>]\n{indent}type {name} =\n");
             for (case, payload, test) in &cases {
                 let native = matches!(payload.as_str(), "string" | "float" | "bool");
-                let imported = test.as_deref().and_then(|t| t.strip_prefix("instanceof:")).is_some_and(|c| self.tested_classes.contains(c));
-                let attr = match test.as_deref().and_then(case_test) {
+                let class = test.as_deref().and_then(|t| t.strip_prefix("instanceof:"));
+                let imported = class.is_some_and(|c| self.tested_classes.contains_key(c));
+                // Where another case's class extends this one's (`Pt extends
+                // Float32Array`), this case is only an instance of exactly this class.
+                let exact = class.filter(|c| !c.contains('.')).filter(|c| cases.iter().any(|(_, payload, _)| payload != c && self.extends_class(payload, c)));
+                let attr = match exact {
+                    Some(c) if !native && !imported => format!("[<CaseTest(\"$0 != null && Object.getPrototypeOf($0) === globalThis.{c}.prototype\")>] "),
+                    _ => match test.as_deref().and_then(case_test) {
                     Some(js) if !native && !imported => format!("[<CaseTest(\"{}\")>] ", js.replace('"', "\\\"")),
                     _ => String::new(),
+                    },
                 };
                 self.out += &format!("{indent}    | {attr}{case} of {payload}\n");
             }

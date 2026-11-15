@@ -137,6 +137,10 @@ fn main() {
     let mut libs_arg: Option<String> = None;
     // Lib namespaces to bind as well: `--include Intl`.
     let mut include: Vec<String> = Vec::new();
+    // Packages, by the name they are imported by (`--package date-fns`),
+    // resolved as TypeScript would from `--from` (default: the current directory).
+    let mut packages: Vec<String> = Vec::new();
+    let mut from: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -149,6 +153,8 @@ fn main() {
             "--glue-for" => glue_for = Some(args.next().expect("compiled module")),
             "--lib" => libs_arg = Some(args.next().expect("comma-separated lib list")),
             "--include" => include.push(args.next().expect("a namespace of the lib files, such as Intl")),
+            "--package" => packages.push(args.next().expect("a package name, such as date-fns")),
+            "--from" => from = Some(args.next().expect("the directory packages are resolved from")),
             _ => input = a,
         }
     }
@@ -158,7 +164,7 @@ fn main() {
     });
 
     // Bare `lib.*.d.ts` names select a bundled lib file.
-    let is_lib = input.starts_with("lib.") && !Path::new(&input).exists();
+    let is_lib = packages.is_empty() && input.starts_with("lib.") && !Path::new(&input).exists();
     let default_libs = |for_webworker: bool| -> Vec<String> {
         if for_webworker {
             ["es2020", "webworker", "webworker.iterable", "webworker.asynciterable", "webworker.importscripts"]
@@ -173,7 +179,39 @@ fn main() {
         libs.iter().map(|l| json_string(l)).collect::<Vec<_>>().join(", ")
     };
     let explicit_libs = libs_arg.map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect::<Vec<_>>());
-    let (fs, cwd, tsconfig_path, name, entry_path): (Arc<dyn FS>, String, String, String, Option<std::path::PathBuf>) = if is_lib {
+    let (fs, cwd, tsconfig_path, name, entry_path): (Arc<dyn FS>, String, String, String, Option<std::path::PathBuf>) = if !packages.is_empty() {
+        // An entry that imports each package: TypeScript resolves them, by
+        // `exports`, `types`, `typesVersions` or `@types`, as for a user of them.
+        let base = std::fs::canonicalize(from.as_deref().unwrap_or(".")).expect("the directory to resolve packages from");
+        let dir = tspath::normalize_path(&base.to_string_lossy());
+        let at = |file: &str| if dir.ends_with('/') { format!("{dir}{file}") } else { format!("{dir}/{file}") };
+        let (entry, tsconfig_path) = (at("__tsrs_entry__.ts"), at("__tsrs_tsconfig.json"));
+        let source: String = packages.iter().enumerate().map(|(i, p)| format!("import * as __package{i} from {};\n", json_string(p))).collect();
+        let libs = explicit_libs.unwrap_or_else(|| default_libs(false));
+        // Every @types package installed, as TypeScript loads them by default:
+        // `@types/node` declares `fs`, which is then a module to bind.
+        let mut types: Vec<String> = std::fs::read_dir(base.join("node_modules/@types"))
+            .map(|dir| dir.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().to_string()).collect())
+            .unwrap_or_default();
+        types.sort();
+        let tsconfig = format!(
+            r#"{{ "compilerOptions": {{ "lib": [{}], "module": "esnext", "moduleResolution": "bundler", "types": [{}], "noEmit": true }}, "files": [{}] }}"#,
+            libs_json(&libs),
+            libs_json(&types),
+            json_string(&entry)
+        );
+        let virtual_files: Vec<(String, String)> = vec![(tsconfig_path.clone(), tsconfig), (entry.clone(), source)];
+        let (exists, read) = (virtual_files.clone(), virtual_files);
+        let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(wrapvfs::wrap(
+            osvfs::fs(),
+            wrapvfs::Replacements {
+                file_exists: Some(Box::new(move |p| exists.iter().any(|f| f.0 == p) || osvfs::fs().file_exists(p))),
+                read_file: Some(Box::new(move |p| read.iter().find(|f| f.0 == p).map(|f| f.1.clone()).or_else(|| osvfs::fs().read_file(p)))),
+                ..Default::default()
+            },
+        )));
+        (fs, dir, tsconfig_path, entry, None)
+    } else if is_lib {
         let libs = explicit_libs.unwrap_or_else(|| {
             let mut list = default_libs(input.starts_with("lib.webworker"));
             if let Some(lib_name) = input.strip_prefix("lib.").and_then(|s| s.strip_suffix(".d.ts"))
@@ -234,13 +272,47 @@ fn main() {
         }
     }
     let mut checker = program.get_type_checker_for_file(&Context::default(), file);
+    // Each package's entry file, as the virtual entry's imports resolved.
+    let mut entries = Vec::new();
+    for (statement, package) in file.statements().nodes().iter().zip(&packages) {
+        let resolved = checker.resolve_external_module_name_exported(statement.as_import_declaration().module_specifier(), None);
+        let found = resolved.and_then(|m| m.declarations().first().and_then(|d| tsrs_ast::get_source_file_of_node(*d)).map(|f| (m, f)));
+        let Some((module, source)) = found else {
+            eprintln!("error: cannot find the types of {package} from {cwd}: is it installed?");
+            std::process::exit(2);
+        };
+        // A file, or an ambient module declared in one (`declare module "fs"`).
+        let ambient = module.declarations().first().is_some_and(|d| d.kind() == tsrs_ast::Kind::ModuleDeclaration);
+        entries.push((package.clone(), source, ambient.then_some(module)));
+    }
 
     let mut front = front::Front::new(&mut checker, name, bundled::lib_path());
+    for (package, source, _) in &entries {
+        front.add_package(package, source.file_name());
+    }
     // A lib file's namespaces gather their declarations from the other lib files.
     if is_lib {
         front.included.extend(file.statements().nodes().iter().filter(|s| s.kind() == tsrs_ast::Kind::ModuleDeclaration).filter_map(|s| s.name()).map(|n| n.text().to_string()));
     }
-    let mut decls = front.collect(file);
+    let mut decls = if entries.is_empty() {
+        front.collect(file)
+    } else {
+        // One front end for all: references between packages are to one declaration.
+        let mut all = Vec::new();
+        for (_, source, ambient) in &entries {
+            front.root_file = source.file_name().to_string();
+            all.extend(match ambient {
+                Some(module) => front.collect_module(*module),
+                None => front.collect(*source),
+            });
+        }
+        all
+    };
+    match entries.as_slice() {
+        [] => {}
+        [(package, _, _)] => modules.import = modules.import.take().or_else(|| Some(package.clone())),
+        _ => modules.packages = front.package_of_name.clone(),
+    }
     if !include.is_empty() {
         let libs: Vec<_> = program.get_source_files().iter().copied().filter(|f| f.file_name().starts_with(&bundled::lib_path())).collect();
         front.collect_included(&libs, &include, &mut decls);

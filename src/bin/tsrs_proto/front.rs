@@ -15,6 +15,12 @@ use crate::ir::*;
 pub struct Front<'c> {
     pub c: &'c mut Checker,
     pub root_file: String,
+    // Packages being bound, by the directory they are installed in and the
+    // name they are imported by. None: the input file and what it imports
+    // outside node_modules.
+    packages: Vec<(String, String)>,
+    // The package each top-level declaration comes from, by its output name.
+    pub package_of_name: HashMap<String, String>,
     lib_path: String,
     // Merged symbols already converted, by kind and fully qualified name.
     seen: HashSet<String>,
@@ -63,6 +69,8 @@ impl<'c> Front<'c> {
         Front {
             c,
             root_file,
+            packages: Vec::new(),
+            package_of_name: HashMap::new(),
             lib_path,
             seen: HashSet::new(),
             exported_as: HashMap::new(),
@@ -122,7 +130,10 @@ impl<'c> Front<'c> {
                 self.reserve(sym);
             }
         }
-        let mut out = self.statements(file.statements().nodes());
+        let mut out = Vec::new();
+        for &s in file.statements().nodes() {
+            self.emit_top(s, &mut out);
+        }
         while let Some(sym) = self.pending.pop_front() {
             self.emit_symbol(sym, &mut out);
         }
@@ -156,11 +167,36 @@ impl<'c> Front<'c> {
                     _ => {}
                 }
                 tests.push((name.clone(), exported));
-            } else if exported != name && !declared.contains(&exported) {
+            // A namespace is reached by what contains it: `path.posix` is `path` by
+            // another name, not a rename of it.
+            } else if exported != name && !declared.contains(&exported) && !matches!(d, Decl::Namespace(_)) {
                 renames.push((name, exported));
             }
         }
         crate::lower::rename_everywhere(out, &renames, &tests);
+        for (old, new) in &renames {
+            if let Some(package) = self.package_of_name.remove(old) {
+                self.package_of_name.insert(new.clone(), package);
+            }
+        }
+    }
+
+    // A package that is an ambient module, `declare module "fs" { }`: what it exports.
+    pub fn collect_module(&mut self, module: P<Symbol>) -> Vec<Decl> {
+        let module = self.c.get_merged_symbol_exported(module);
+        let exports = self.c.get_exports_of_module_exported(module);
+        for &sym in &exports {
+            self.reserve(sym);
+        }
+        for sym in exports {
+            self.enqueue_symbol(sym);
+        }
+        let mut out = Vec::new();
+        while let Some(sym) = self.pending.pop_front() {
+            self.emit_symbol(sym, &mut out);
+        }
+        self.exports(&mut out);
+        out
     }
 
     // The lib namespaces `names` (`--include Intl`), from whichever lib files declare them.
@@ -183,10 +219,38 @@ impl<'c> Front<'c> {
         self.included.contains(fqn.split('.').next().unwrap_or(fqn))
     }
 
+    // The directory a package is installed in: `.../node_modules/@scope/name`.
+    fn package_dir(file: &str) -> Option<String> {
+        let (before, after) = file.rsplit_once("/node_modules/")?;
+        let mut segs = after.split('/');
+        let len = match segs.next()? {
+            s if s.starts_with('@') => s.len() + 1 + segs.next()?.len(),
+            s => s.len(),
+        };
+        Some(file[..before.len() + "/node_modules/".len() + len].to_string())
+    }
+
+    // Binds `name`, whose entry file is `entry`, with the packages before it.
+    pub fn add_package(&mut self, name: &str, entry: &str) {
+        let dir = Self::package_dir(entry).unwrap_or_else(|| entry.rsplit_once('/').map_or(entry, |p| p.0).to_string());
+        self.packages.push((dir, name.to_string()));
+    }
+
+    // The package a file belongs to, of those being bound.
+    fn package_of(&self, file: &str) -> Option<&str> {
+        self.packages
+            .iter()
+            .find(|(dir, _)| file.starts_with(dir.as_str()) && matches!(file.as_bytes().get(dir.len()), None | Some(b'/')) && !file[dir.len()..].contains("/node_modules/"))
+            .map(|p| p.1.as_str())
+    }
+
     fn is_package_file(&self, sf: &SourceFile) -> bool {
         let name = sf.file_name();
         if self.root_file.starts_with(&self.lib_path) || name.starts_with(&self.lib_path) {
             return false;
+        }
+        if !self.packages.is_empty() {
+            return self.package_of(name).is_some();
         }
         if let Some((before, after)) = self.root_file.rsplit_once("/node_modules/") {
             let mut segs = after.split('/');
@@ -277,9 +341,10 @@ impl<'c> Front<'c> {
         if sym.flags().intersects(SymbolFlags::TypeParameter) {
             return;
         }
+        // The outermost namespace it is in; a module block (`declare module "fs"`) is not one.
         let mut top = sym;
         while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
-            if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration) {
+            if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral)) {
                 top = parent;
             } else {
                 break;
@@ -296,7 +361,25 @@ impl<'c> Front<'c> {
         let decls: Vec<P<Node>> = sym.declarations().to_vec();
         for d in decls {
             if ast::get_source_file_of_node(d).is_some_and(|f| self.is_package_file(&f)) {
-                self.emit_decl_node(d, out);
+                self.emit_top(d, out);
+            }
+        }
+    }
+
+    // A top-level declaration, noting the package it comes from: the ambient
+    // module it is declared in (`declare module "fs"`), else its file's.
+    fn emit_top(&mut self, node: P<Node>, out: &mut Vec<Decl>) {
+        let before = out.len();
+        self.emit_decl_node(node, out);
+        let ambient = std::iter::successors(node.parent(), |n| n.parent())
+            .find(|n| n.kind() == Kind::ModuleDeclaration && n.name().is_some_and(|m| m.kind() == Kind::StringLiteral))
+            .and_then(|m| m.name().map(|n| text(n).trim_matches(|c| c == '"' || c == '\'').to_string()))
+            // `node:events` is `events`: one module by two names.
+            .and_then(|m| self.packages.iter().find(|p| p.1.trim_start_matches("node:") == m.trim_start_matches("node:")).map(|p| p.1.clone()));
+        let package = ambient.or_else(|| ast::get_source_file_of_node(node).and_then(|f| self.package_of(f.file_name()).map(str::to_string)));
+        if let Some(package) = package {
+            for d in &out[before..] {
+                self.package_of_name.insert(decl_name(d).to_string(), package.clone());
             }
         }
     }
@@ -324,6 +407,10 @@ impl<'c> Front<'c> {
                 }
             }
             Kind::EnumDeclaration => out.extend(self.enumeration(s).map(Decl::Enum)),
+            // `declare module "fs" { }` or an augmentation, `declare module "./Node.js"
+            // { }`: not a namespace. A module is bound as a package; what an
+            // augmentation declares the checker has merged into what it augments.
+            Kind::ModuleDeclaration if s.name().is_some_and(|n| n.kind() == Kind::StringLiteral) => {}
             Kind::ModuleDeclaration => {
                 if let Some(ns) = self.namespace(s) {
                     out.push(Decl::Namespace(ns));
@@ -1464,4 +1551,15 @@ fn anonymous_name(node: P<Node>) -> String {
     let stem = if stem == "index" { parts.next().unwrap_or(stem) } else { stem };
     let name: String = stem.chars().map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' }).collect();
     if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) { format!("_{name}") } else { name }
+}
+
+fn decl_name(d: &Decl) -> &str {
+    match d {
+        Decl::Interface(i) => &i.name,
+        Decl::Alias(a) => &a.name,
+        Decl::Function(f) => &f.name,
+        Decl::Var(v) => &v.name,
+        Decl::Enum(e) => &e.name,
+        Decl::Namespace(n) => &n.name,
+    }
 }

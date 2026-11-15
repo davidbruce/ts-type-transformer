@@ -79,9 +79,15 @@
   <define name="module">
     <attribute name="module">
       <a:documentation>The module (output file) the declaration belongs to: the first
-        [[modules.area]] whose pattern matches its JavaScript name, else [modules] default
-        ("main"). For a namespace, its own name.</a:documentation>
+        [[modules.area]] whose pattern matches its JavaScript name, else its package,
+        else [modules] default ("main"). For a namespace, its own name.</a:documentation>
     </attribute>
+    <optional>
+      <attribute name="import">
+        <a:documentation>With several packages bound together, the package it is imported
+          from: on the declaration, not on &lt;declarations&gt;.</a:documentation>
+      </attribute>
+    </optional>
   </define>
 
   <define name="synthetic">

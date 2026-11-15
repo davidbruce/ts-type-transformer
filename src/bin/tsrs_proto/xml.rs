@@ -68,6 +68,10 @@ impl Xml {
                 Decl::Enum(e) => modules.module_of(&e.name).to_string(),
             };
             self.pending.push(("module", module));
+            // With several packages, the one it is imported from.
+            if let Some(package) = modules.packages.get(decl_key(d)) {
+                self.pending.push(("import", package.clone()));
+            }
             // A namespace comes from the library, an area from the config: kept apart in file layouts.
             if matches!(d, Decl::Namespace(_)) {
                 self.pending.push(("moduleKind", "namespace".into()));
@@ -461,4 +465,15 @@ pub fn escape(s: &str) -> String {
         }
     }
     out
+}
+
+fn decl_key(d: &Decl) -> &str {
+    match d {
+        Decl::Interface(i) => &i.name,
+        Decl::Alias(a) => &a.name,
+        Decl::Function(f) => &f.name,
+        Decl::Var(v) => &v.name,
+        Decl::Enum(e) => &e.name,
+        Decl::Namespace(n) => &n.name,
+    }
 }

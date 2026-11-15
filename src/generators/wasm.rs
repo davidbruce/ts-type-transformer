@@ -253,6 +253,8 @@ pub struct Model {
     // Handles are counted references: wasm retains and releases them, and
     // owns what a callback returns. Else a handle lives as long as the page.
     pub counted: bool,
+    // With several packages bound together, each top-level JavaScript name's package.
+    pub packages: BTreeMap<String, String>,
 }
 
 impl Class {
@@ -330,6 +332,8 @@ struct Builder<'a> {
     // Module folders given out, by lowercased path: names that differ only in case get a suffix.
     folders: HashMap<String, String>,
     folder_names: HashMap<(String, String), String>,
+    // The package of the top-level declaration being read, when several are bound.
+    package: Option<String>,
 }
 
 // The model of the XML for a target, or what the target cannot express.
@@ -338,7 +342,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust" },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -350,6 +354,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         last_type_params: Vec::new(),
         folders: HashMap::new(),
         folder_names: HashMap::new(),
+        package: None,
     };
     b.index(doc.root_element(), "");
     b.decls_of(doc.root_element(), "");
@@ -469,6 +474,13 @@ impl<'a> Builder<'a> {
             }
             let name = d.attribute("name").unwrap_or_default();
             let path = join(prefix, name);
+            // A namespace's members are in its package.
+            if prefix.is_empty() {
+                self.package = d.attribute("import").map(str::to_string);
+                if let Some(package) = &self.package {
+                    self.model.packages.insert(js_of(d, &path), package.clone());
+                }
+            }
             match d.tag_name().name() {
                 "lowering" => {}
                 "namespace" => self.decls_of(d, &path),
@@ -488,7 +500,7 @@ impl<'a> Builder<'a> {
                     self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
                 }
                 "interface" | "class" => {
-                    let c = self.class_at(d, &path, &js_of(d, &path));
+                    let c = self.class_at(d, &path, &self.js(d, &path));
                     self.model.classes.push(c);
                 }
                 "typeAlias" => {
@@ -510,7 +522,7 @@ impl<'a> Builder<'a> {
                 }
                 "function" => {
                     let (params, rest, fixed, ret) = self.signature(d, "");
-                    let js = join(prefix, d.attribute("jsName").unwrap_or(name));
+                    let js = self.js(d, &path);
                     let name = ident(&join(prefix, name));
                     let import = self.import(name.clone());
                     let type_params = std::mem::take(&mut self.last_type_params);
@@ -522,14 +534,14 @@ impl<'a> Builder<'a> {
                         // A value with members of its own: bound like a class with only statics.
                         // A type may have the same name (`type NodeFilter` and `var NodeFilter`).
                         let name = if self.decls.contains_key(&path) { format!("{}_statics", ident(&path)) } else { ident(&path) };
-                        let c = self.statics(body, &js_of(d, &path), name);
+                        let c = self.statics(body, &self.js(d, &path), name);
                         self.model.classes.push(c);
                         continue;
                     }
                     let ret = self.ty(body, "");
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
-                    let js = js_of(d, &path);
+                    let js = self.js(d, &path);
                     self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(js.clone()), params: vec![], rest: false, fixed: vec![], shared: None, ret: ret.clone() });
                     // A `const`, or a module's export, cannot be assigned.
                     if flag(d, "readonly") {
@@ -542,6 +554,15 @@ impl<'a> Builder<'a> {
                 }
                 _ => self.unsupported(d),
             }
+        }
+    }
+
+    // Where a declaration is reached: its path, in its package when several
+    // are bound (`prosemirror-model::Node`).
+    fn js(&self, d: Node, path: &str) -> String {
+        match &self.package {
+            Some(package) => format!("{package}::{}", js_of(d, path)),
+            None => js_of(d, path),
         }
     }
 
@@ -1181,12 +1202,16 @@ fn to_wasm(x: &str, t: &Ty) -> String {
 }
 
 // A union member's runtime test as a JavaScript condition on `v`.
-fn js_test(test: &str, discriminant: Option<&str>) -> String {
+// `packages` says which package a class is in, when several are bound.
+fn js_test(test: &str, discriminant: Option<&str>, packages: &BTreeMap<String, String>) -> String {
     let (kind, arg) = test.split_once(':').unwrap_or((test, ""));
     match kind {
         "typeof" => format!("typeof v === {arg:?}"),
         "array" => "Array.isArray(v)".into(),
-        "instanceof" => format!("v instanceof {}", global(arg)),
+        "instanceof" => match packages.get(arg) {
+            Some(package) => format!("v instanceof {}", global(&format!("{package}::{arg}"))),
+            None => format!("v instanceof {}", global(arg)),
+        },
         "has" => format!("typeof v === 'object' && v !== null && {arg:?} in v"),
         "tag" => format!("v != null && String(v[{:?}]) === {arg:?}", discriminant.unwrap_or_default()),
         _ => "false".into(),
@@ -1264,9 +1289,15 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
 
 // A name the API declares at its top level: in `options.root`, the library's
 // module, if it is there, else a global. `Pt.make` is `(G.Pt ?? globalThis.Pt).make`.
+// With several packages, in its own: `prosemirror-model::Node` is in
+// `options.modules["prosemirror-model"]`.
 fn global(path: &str) -> String {
+    let (root, path) = match path.split_once("::") {
+        Some((package, path)) => (format!("(M[{package:?}] ?? G)"), path),
+        None => ("G".to_string(), path),
+    };
     let (first, rest) = path.split_once('.').map_or((path, String::new()), |(f, r)| (f, access_path(r)));
-    format!("(G{0} ?? globalThis{0}){rest}", access(first))
+    format!("({root}{0} ?? globalThis{0}){rest}", access(first))
 }
 
 // `.name`, or `["some-name"]` where the name is not an identifier.
@@ -1389,12 +1420,15 @@ pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
         "// Generated. Implements the wasm imports by calling the JavaScript API.
 //
 // makeEnv(getInstance, options): `options.root` is where the API's names
-// are, when not all are globals: a library's module, say. `options.check`
+// are, when not all are globals: a library's module, say; `options.modules`,
+// with several packages, each one's module by its name. `options.check`
 // reports mistakes with handles (one used after its release, or released
 // twice), at some cost in speed; `options.unchecked(e)` is called with an
 // exception no one took, and by default writes it to the console.
 export function makeEnv(getInstance, options = {}) {
   const G = options.root ?? globalThis;
+  // With several packages bound together, each one's module by its name.
+  const M = options.modules ?? {};
   const CHECK = !!options.check;
   const RELEASED = Symbol('released');
   // Values by handle. Each `ref` is a reference wasm owns, in a slot of its
@@ -1707,7 +1741,7 @@ export function makeEnv(getInstance, options = {}) {
                     arms.insert(0, format!("if (typeof v === [, 'number', 'string', 'boolean'][k]) return {i};"));
                     param = Some(i);
                 }
-                Some(t) => arms.push(format!("if ({}) return {i};", js_test(t, u.discriminant.as_deref()))),
+                Some(t) => arms.push(format!("if ({}) return {i};", js_test(t, u.discriminant.as_deref(), &m.packages))),
                 None => default = Some(i),
             }
         }

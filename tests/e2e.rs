@@ -202,13 +202,21 @@ const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor"
 // Writes the C++ bindings, compiles their definitions once, each module in
 // parallel, and links them with the program.
 fn build_cpp(clang: &Path, c: &Case, model: &generators::wasm::Model) {
+    let objects = compile_cpp_bindings(clang, &c.out, model);
     let bindings = c.out.join("bindings");
+    run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(&bindings).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")).args(&objects));
+}
+
+// Writes the C++ bindings in `out/bindings` and compiles their definitions,
+// each module in parallel; gives the objects.
+fn compile_cpp_bindings(clang: &Path, out: &Path, model: &generators::wasm::Model) -> Vec<PathBuf> {
+    let bindings = out.join("bindings");
     let files = generators::cpp::files(model).unwrap();
     let sources: Vec<String> = files.iter().map(|f| f.0.clone()).filter(|p| p.ends_with(".cpp")).collect();
     write_files(&bindings, files);
     let flags: Vec<&str> = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model")).copied().collect();
-    let objects: Vec<PathBuf> = sources.iter().map(|s| c.out.join("obj").join(s.replace('/', "_")).with_extension("o")).collect();
-    fs::create_dir_all(c.out.join("obj")).unwrap();
+    let objects: Vec<PathBuf> = sources.iter().map(|s| out.join("obj").join(s.replace('/', "_")).with_extension("o")).collect();
+    fs::create_dir_all(out.join("obj")).unwrap();
     let next = std::sync::atomic::AtomicUsize::new(0);
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
     std::thread::scope(|scope| {
@@ -220,7 +228,7 @@ fn build_cpp(clang: &Path, c: &Case, model: &generators::wasm::Model) {
             });
         }
     });
-    run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(&bindings).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")).args(&objects));
+    objects
 }
 
 fn cpp(fixture: &str) {
@@ -1313,5 +1321,107 @@ fn webworker_bindings_and_worker() {
         fs::write(cppdir.join("all.cpp"), "#include \"bindings.hpp\"\nint main() { return (int)ts::live_handles(); }\n").unwrap();
         let flags: Vec<&str> = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model")).copied().collect();
         run(Command::new(clangxx).args(&flags).arg("-fsyntax-only").arg("-I").arg(cppdir.join("bindings")).arg(cppdir.join("all.cpp")));
+    }
+}
+
+// ---- real libraries ----
+//
+// The libraries in tests/libraries/package.json, installed by
+// tests/libraries/install.sh into target/libraries. For each library and
+// target: its declarations lower and follow the schema, and its bindings
+// compile. Slow, so not run by default:
+//
+//     cargo test --test e2e libraries -- --ignored
+
+mod libraries {
+    use super::*;
+
+    // Lowers the packages for a target, checks the XML, and compiles the bindings.
+    fn check(name: &str, packages: &[&str], target: &str) {
+        let from = root().join("target/libraries");
+        if !from.join("node_modules").is_dir() {
+            eprintln!("SKIPPED: libraries are not installed (tests/libraries/install.sh)");
+            return;
+        }
+        let out = root().join("target/e2e/libraries").join(format!("{name}-{target}"));
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"));
+        for p in packages {
+            cmd.args(["--package", p]);
+        }
+        cmd.arg("--from").arg(&from).arg("--config").arg(config(target));
+        let xml = run(&mut cmd);
+        fs::write(out.join("api.xml"), &xml).unwrap();
+        if let Some([xmllint]) = tools(["xmllint"]) {
+            run(Command::new(xmllint).args(["--noout", "--relaxng"]).arg(root().join("schema/declarations.rng")).arg(out.join("api.xml")));
+        }
+        match target {
+            "fsharp" => {
+                let Some([fable]) = tools(["fable"]) else { return };
+                let bindings = generators::fsharp::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+                let mut compile = String::new();
+                for (file, content) in &bindings.files {
+                    fs::write(out.join(file), content).unwrap();
+                    compile += &format!("    <Compile Include=\"{file}\" />\n");
+                }
+                fs::write(out.join("Test.fs"), "module Test\n").unwrap();
+                fs::write(out.join("Test.fsproj"), format!("<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n  <ItemGroup>\n{compile}    <Compile Include=\"Test.fs\" />\n  </ItemGroup>\n  <ItemGroup><PackageReference Include=\"Fable.Core\" Version=\"5.6.1\" /></ItemGroup>\n</Project>\n")).unwrap();
+                run(Command::new(fable).current_dir(&out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+            }
+            "c" => {
+                let Some([clang]) = tools(["clang"]) else { return };
+                write_files(&out.join("bindings"), generators::c::files(&model(&xml, "C")).unwrap_or_else(|p| panic!("{}", p.join("\n"))));
+                fs::write(out.join("all.c"), "#include \"bindings.h\"\n").unwrap();
+                run(Command::new(clang).args(CLANG_WASM).args(["-fsyntax-only", "-ferror-limit=0"]).arg("-I").arg(out.join("bindings")).arg(out.join("all.c")));
+            }
+            "cpp" => {
+                let Some(clang) = wasi_clang() else { return };
+                compile_cpp_bindings(&clang, &out, &model(&xml, "C++"));
+            }
+            "zig" => {
+                let Some([zig]) = tools(["zig"]) else { return };
+                write_files(&out, generators::zig::files(&model(&xml, "Zig")).unwrap_or_else(|p| panic!("{}", p.join("\n"))));
+                // Zig compiles what is used: use every declaration and member.
+                fs::write(
+                    out.join("test.zig"),
+                    "const std = @import(\"std\");\nconst b = @import(\"bindings.zig\");\nexport fn run() void {}\ncomptime {\n    @setEvalBranchQuota(100_000_000);\n    for (std.meta.declarations(b)) |name| {\n        const v = @field(b, name);\n        if (@TypeOf(v) == type and @typeInfo(v) == .@\"struct\") {\n            for (std.meta.declarations(v)) |member| _ = &@field(v, member);\n        } else _ = &v;\n    }\n}\n",
+                )
+                .unwrap();
+                run(Command::new(zig).current_dir(&out).args(ZIG_WASM));
+            }
+            "rust" => {
+                let Some(rustc) = rustc_wasm() else { return };
+                rust_bindings(&rustc, &out, &model(&xml, "Rust"));
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    macro_rules! library {
+        ($($name:ident: [$($package:literal),+];)*) => { $(mod $name {
+            const PACKAGES: &[&str] = &[$($package),+];
+            #[test] #[ignore] fn fsharp() { super::check(stringify!($name), PACKAGES, "fsharp"); }
+            #[test] #[ignore] fn c() { super::check(stringify!($name), PACKAGES, "c"); }
+            #[test] #[ignore] fn cpp() { super::check(stringify!($name), PACKAGES, "cpp"); }
+            #[test] #[ignore] fn zig() { super::check(stringify!($name), PACKAGES, "zig"); }
+            #[test] #[ignore] fn rust() { super::check(stringify!($name), PACKAGES, "rust"); }
+        })* };
+    }
+
+    library! {
+        katex: ["katex"];
+        marked: ["marked"];
+        date_fns: ["date-fns"];
+        // @types/node's ambient modules, `declare module "fs"`, as packages.
+        node: ["fs", "path", "events"];
+        leaflet: ["leaflet"];
+        pixi: ["pixi.js"];
+        echarts: ["echarts"];
+        konva: ["konva"];
+        three: ["three"];
+        rapier: ["@dimforge/rapier3d-compat"];
+        tanstack_table: ["@tanstack/table-core"];
+        prosemirror: ["prosemirror-model", "prosemirror-transform", "prosemirror-state", "prosemirror-view"];
     }
 }

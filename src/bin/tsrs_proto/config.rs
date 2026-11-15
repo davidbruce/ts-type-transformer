@@ -37,11 +37,20 @@ pub struct Modules {
     // The ES module the library is imported from (`[library] module = "pts"`),
     // where it is not globals.
     pub import: Option<String>,
+    // With several packages bound together, the one each top-level
+    // declaration is imported from, by name: written `import="..."` on it.
+    pub packages: std::collections::HashMap<String, String>,
 }
 
 impl Modules {
+    // Its area, else its package's (`prosemirror-model`), else the default.
     pub fn module_of(&self, name: &str) -> &str {
-        self.areas.iter().find(|(_, patterns)| patterns.iter().any(|p| glob(p, name))).map(|(n, _)| n.as_str()).unwrap_or(&self.default)
+        self.areas
+            .iter()
+            .find(|(_, patterns)| patterns.iter().any(|p| glob(p, name)))
+            .map(|(n, _)| n.as_str())
+            .or_else(|| self.packages.get(name).map(String::as_str))
+            .unwrap_or(&self.default)
     }
 }
 
@@ -110,7 +119,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
         let t = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?;
         merge(&mut table, t);
     }
-    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None };
+    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None, packages: Default::default() };
     // `--set generics=erase`, `--set limits.union_param_overloads=4`.
     for o in overrides {
         let (key, value) = o.split_once('=').ok_or_else(|| format!("--set {o}: expected key=value"))?;
