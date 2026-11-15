@@ -1,7 +1,7 @@
 // XML -> C header for a wasm32 module. No inheritance, generics, overloads,
 // optional parameters or unions: the config must have lowered them all.
 
-use super::wasm::{Call, Class, Func, Model, NamedUnion, Ty};
+use super::model::{Call, Class, Func, Model, NamedUnion, Ty};
 
 thread_local! {
     // The unions of the model being generated that values can be decoded to.
@@ -616,7 +616,7 @@ fn all_ancestors(m: &Model, class: &str) -> Vec<String> {
 // What C cannot express of a model: inline unions, generics, keyed signatures.
 fn check(m: &Model) -> super::Problems {
     let mut problems = super::Problems::default();
-    super::wasm::each_type(m, &mut |at, t| {
+    super::model::each_type(m, &mut |at, t| {
         let what = match t {
             Ty::Union(_) => "a union: set unions = \"name\" or \"erase\"",
             Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => "a keyed signature: set keyed_params = \"expand\"",
@@ -643,7 +643,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let members: Vec<String> = values
             .iter()
             .map(|v| {
-                let base = format!("{name}_{}", super::wasm::ident(v));
+                let base = format!("{name}_{}", super::model::ident(v));
                 let mut id = base.clone();
                 let mut n = 2;
                 while !seen.insert(id.clone()) {
@@ -675,7 +675,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                       static inline double Date_now(void) { return ts_raw_js_date_now(); }\n\
                       static inline double Date_time(Date d) { return ts_raw_js_date_time(d.h); }\n\
                       static inline JsString Date_toISOString(Date d) { return (JsString){ ts_raw_js_date_to_iso_string(d.h) }; }\n";
-        } else if let Some(s) = super::wasm::buffer_spec(name) {
+        } else if let Some(s) = super::model::buffer_spec(name) {
             types += &format!("static inline uint32_t {name}_byteLength({name} x) {{ return ts_raw_js_bytes_len(x.h); }}\n");
             types += &format!("static inline uint32_t {name}_readBytes({name} x, uint32_t offset, void* dst, uint32_t len) {{ return ts_raw_js_bytes_read(x.h, offset, dst, len); }}\n");
             types += &format!("static inline uint32_t {name}_writeBytes({name} x, uint32_t offset, const void* src, uint32_t len) {{ return ts_raw_js_bytes_write(x.h, offset, src, len); }}\n");
@@ -846,7 +846,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             let earlier: Vec<&Func> = c.funcs[..i].iter().collect();
             body += &call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants);
         }
-        let path = format!("{}.h", super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
+        let path = format!("{}.h", super::model::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
         modules.entry(c.module.clone()).or_default().push(path.clone());
         out.push((path, header(&c.module, body)));
     }
@@ -861,7 +861,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, &earlier, overloads, &descendants);
     }
     for (module, body) in functions {
-        let path = format!("{}.h", super::wasm::file_name(&format!("{module}/functions"), &mut taken));
+        let path = format!("{}.h", super::model::file_name(&format!("{module}/functions"), &mut taken));
         out.push((path.clone(), header(&module, body)));
         modules.entry(module).or_default().push(path);
     }
@@ -878,8 +878,8 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
 }
 
 // A buffer element as a C type; C++ uses the same.
-pub(super) fn c_elem(e: super::wasm::Elem) -> &'static str {
-    use super::wasm::Elem::*;
+pub(super) fn c_elem(e: super::model::Elem) -> &'static str {
+    use super::model::Elem::*;
     match e {
         I8 => "int8_t",
         U8 => "uint8_t",

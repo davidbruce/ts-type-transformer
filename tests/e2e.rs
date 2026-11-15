@@ -117,7 +117,7 @@ fn write_files(dir: &Path, files: Vec<(String, String)>) {
 }
 
 // The glue for what the compiled module imports, and nothing else.
-fn write_glue(c: &Case, model: &generators::wasm::Model) {
+fn write_glue(c: &Case, model: &generators::model::Model) {
     let used = generators::wasm::imports(&fs::read(c.out.join("test.wasm")).unwrap());
     fs::write(c.out.join("glue.mjs"), generators::wasm::glue(model, Some(&used))).unwrap();
 }
@@ -263,7 +263,7 @@ const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor"
 
 // Writes the C++ bindings, compiles their definitions once, each module in
 // parallel, and links them with the program.
-fn build_cpp(clang: &Path, c: &Case, model: &generators::wasm::Model) {
+fn build_cpp(clang: &Path, c: &Case, model: &generators::model::Model) {
     let objects = compile_cpp_bindings(clang, &c.out, model);
     let bindings = c.out.join("bindings");
     run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(&bindings).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.cpp")).args(&objects));
@@ -271,7 +271,7 @@ fn build_cpp(clang: &Path, c: &Case, model: &generators::wasm::Model) {
 
 // Writes the C++ bindings in `out/bindings` and compiles their definitions,
 // each module in parallel; gives the objects.
-fn compile_cpp_bindings(clang: &Path, out: &Path, model: &generators::wasm::Model) -> Vec<PathBuf> {
+fn compile_cpp_bindings(clang: &Path, out: &Path, model: &generators::model::Model) -> Vec<PathBuf> {
     let bindings = out.join("bindings");
     let files = generators::cpp::files(model).unwrap();
     let sources: Vec<String> = files.iter().map(|f| f.0.clone()).filter(|p| p.ends_with(".cpp")).collect();
@@ -323,7 +323,7 @@ const RUSTC_PROGRAM: &[&str] = &["--crate-type", "cdylib", "-C", "link-arg=--exp
 // Writes the bindings crate in `bindings/` and compiles it to a library. The
 // library is kept in `target/e2e-cache`, and compiled again only when what
 // was generated has changed: a second run of the DOM takes a second, not seven.
-fn rust_bindings(rustc: &Path, out: &Path, model: &generators::wasm::Model) {
+fn rust_bindings(rustc: &Path, out: &Path, model: &generators::model::Model) {
     use std::hash::{Hash, Hasher};
     let files = generators::rust::files(model).unwrap();
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -342,7 +342,7 @@ fn rust_bindings(rustc: &Path, out: &Path, model: &generators::wasm::Model) {
 }
 
 // Compiles the bindings, then the program against them.
-fn build_rust(rustc: &Path, c: &Case, model: &generators::wasm::Model) {
+fn build_rust(rustc: &Path, c: &Case, model: &generators::model::Model) {
     rust_bindings(rustc, &c.out, model);
     fs::copy(c.fixture.join("test.rs"), c.out.join("test.rs")).unwrap();
     run(Command::new(rustc).current_dir(&c.out).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
@@ -360,7 +360,7 @@ fn rust(fixture: &str) {
 }
 
 // The model of a target, which its config must have made expressible.
-fn model(xml: &str, target: &str) -> generators::wasm::Model {
+fn model(xml: &str, target: &str) -> generators::model::Model {
     generators::wasm::model(xml, target).unwrap_or_else(|problems| panic!("{}", problems.join("\n")))
 }
 
@@ -527,7 +527,7 @@ fn bench() {
     let out = root().join("target/e2e/bench");
     let _ = fs::remove_dir_all(&out);
     let xml = |target: &str| lower(&dir.join("api.d.ts"), Some(target), &[]);
-    let glue = |o: &Path, model: &generators::wasm::Model| {
+    let glue = |o: &Path, model: &generators::model::Model| {
         let used = generators::wasm::imports(&fs::read(o.join("bench.wasm")).unwrap());
         fs::write(o.join("glue.mjs"), generators::wasm::glue(model, Some(&used))).unwrap();
     };
@@ -696,7 +696,7 @@ fn generated_names_do_not_depend_on_order() {
 #[test]
 fn optional_parameters_are_optional_values() {
     let m = model(&shapes_xml("zig", &[]), "Zig");
-    assert!(m.all_funcs().any(|f| f.params.iter().any(|p| matches!(p.1, generators::wasm::Ty::Nullable(..)))));
+    assert!(m.all_funcs().any(|f| f.params.iter().any(|p| matches!(p.1, generators::model::Ty::Nullable(..)))));
 }
 
 #[test]

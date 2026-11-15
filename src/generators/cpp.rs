@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use super::wasm::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
+use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
 
 fn ident(name: &str) -> String {
     const KEYWORDS: &[&str] = &[
@@ -33,7 +33,7 @@ fn ident(name: &str) -> String {
         // The handle every type holds.
         "h",
     ];
-    let s = super::wasm::ident(name);
+    let s = super::model::ident(name);
     if KEYWORDS.contains(&s.as_str()) { format!("{s}_") } else { s }
 }
 
@@ -819,10 +819,10 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     // Where each declared type is defined, without the extension.
     let mut home: HashMap<String, String> = HashMap::new();
     for c in &m.classes {
-        home.insert(c.name.clone(), super::wasm::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
+        home.insert(c.name.clone(), super::model::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
     }
     for name in m.callbacks.iter().map(|c| &c.name).chain(m.unions.iter().map(|u| &u.name)) {
-        home.insert(name.clone(), super::wasm::file_name(&format!("types/{name}"), &mut taken));
+        home.insert(name.clone(), super::model::file_name(&format!("types/{name}"), &mut taken));
     }
     // `#include` from one generated file to another.
     let include = |from: &str, to: &str| format!("#include \"{}{to}\"\n", "../".repeat(from.matches('/').count()));
@@ -1082,7 +1082,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
     }
     for (module, (imports, used, decls, defs)) in functions {
-        let path = format!("{}.hpp", super::wasm::file_name(&format!("{module}/functions"), &mut taken));
+        let path = format!("{}.hpp", super::model::file_name(&format!("{module}/functions"), &mut taken));
         let text = format!("// Generated.\n#pragma once\n{}{}\n{}\n{decls}\n{defs}", include(&path, "ts_types.hpp"), includes(&path, &used), imports.into_iter().collect::<String>());
         out.push((path.clone(), text));
         modules.entry(module).or_default().push(path);
@@ -1145,7 +1145,7 @@ fn declarations(m: &Model) -> String {
                      static double now() { return ts_raw_js_date_now(); }\n\
                      double time() const { return ts_raw_js_date_time(this->h); }\n\
                      std::string to_iso_string() const { return ts::from_handle<std::string>(ts_raw_js_date_to_iso_string(this->h)); }\n";
-        } else if let Some(s) = super::wasm::buffer_spec(name) {
+        } else if let Some(s) = super::model::buffer_spec(name) {
             body += "    uint32_t byte_length() const { return ts_raw_js_bytes_len(this->h); }\n\
                      uint32_t read_bytes(void* dst, uint32_t len, uint32_t offset = 0) const { return ts_raw_js_bytes_read(this->h, offset, dst, len); }\n\
                      uint32_t write_bytes(const void* src, uint32_t len, uint32_t offset = 0) const { return ts_raw_js_bytes_write(this->h, offset, src, len); }\n";

@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::wasm::{Call, Class, Func, Model, NamedUnion, Ty};
+use super::model::{Call, Class, Func, Model, NamedUnion, Ty};
 
 // Quoted identifiers accept any name, keywords included.
 fn ident(name: &str) -> String {
@@ -550,7 +550,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
 // What Zig cannot express of a model: generics.
 fn check(m: &Model) -> super::Problems {
     let mut problems = super::Problems::default();
-    super::wasm::each_type(m, &mut |at, t| {
+    super::model::each_type(m, &mut |at, t| {
         if matches!(t, Ty::Param(_) | Ty::Generic(..)) {
             problems.add("Zig generator cannot express generics: set generics = \"erase\"".into(), at.to_string());
         }
@@ -634,7 +634,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                         pub fn now() f64 { return raw.js_date_now(); }\n    \
                         pub fn time(self: Date) f64 { return raw.js_date_time(self.h); }\n    \
                         pub fn toIsoString(self: Date) JsString { return .{ .h = raw.js_date_to_iso_string(self.h) }; }\n};\n";
-        } else if let Some(s) = super::wasm::buffer_spec(name) {
+        } else if let Some(s) = super::model::buffer_spec(name) {
             need_bytes_externs = true;
             types.0 += &format!(
                 "pub const {name} = extern struct {{\n    h: u32,\n    \
@@ -898,8 +898,8 @@ fn identifiers(src: &str) -> HashSet<&str> {
 }
 
 // A buffer element as a Zig type.
-fn zig_elem(e: super::wasm::Elem) -> &'static str {
-    use super::wasm::Elem::*;
+fn zig_elem(e: super::model::Elem) -> &'static str {
+    use super::model::Elem::*;
     match e {
         I8 => "i8",
         U8 => "u8",

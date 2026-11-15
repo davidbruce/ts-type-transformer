@@ -15,7 +15,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use roxmltree::Document;
 
-use super::wasm::{Call, Class, Func, Model, NamedUnion, TParam, Ty, access, base_args, global, js_test, model, with_self_args};
+use super::js::{access, global, js_test};
+use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, model, with_self_args};
 
 const KEYWORDS: &[&str] = &[
     "as", "assert", "auto", "case", "const", "delegate", "derive", "echo", "else", "fn", "if", "implement", "import", "let", "macro", "opaque", "panic", "pub", "test", "todo", "type", "use",

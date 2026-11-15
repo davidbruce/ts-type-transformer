@@ -160,6 +160,12 @@ trims the glue to what a compiled module imports. The generators
 that a target cannot express, each kind once, with how often, where first,
 and the setting that lowers it.
 
+C, C++, Zig, Rust and Gleam write from one binding model (`model.rs`):
+functions for properties, option bags and overloads, each saying how
+JavaScript is called. `wasm.rs` is the wasm boundary and its glue; `js.rs`
+the JavaScript that reaches the API, which Gleam's FFI uses too. F# reads
+the XML itself: it has methods, overloads and subtyping.
+
 ```
 C generator cannot express <literal>: set literals = "enum" (8 places, first at declarations/typeAlias[x_or_x]/union/literal)
 ```

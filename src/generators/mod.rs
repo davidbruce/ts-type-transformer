@@ -6,6 +6,8 @@ pub mod c;
 pub mod cpp;
 pub mod fsharp;
 pub mod gleam;
+pub mod js;
+pub mod model;
 pub mod rust;
 pub mod wasm;
 pub mod zig;

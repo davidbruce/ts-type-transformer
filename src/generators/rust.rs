@@ -23,7 +23,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use super::wasm::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
+use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
 
 const KEYWORDS: &[&str] = &[
     "as", "break", "const", "continue", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
@@ -36,7 +36,7 @@ const TAKEN: &[&str] = &["clone", "as_ref", "eq", "ne", "into", "lend", "release
 
 // A value's name: a keyword gets a trailing underscore.
 fn ident(name: &str) -> String {
-    let s = super::wasm::ident(name);
+    let s = super::model::ident(name);
     if KEYWORDS.contains(&s.as_str()) { format!("{s}_") } else { s }
 }
 
@@ -1291,7 +1291,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let variants: Vec<(String, String)> = values
             .iter()
             .map(|v| {
-                let id = camel(&super::wasm::ident(if v.is_empty() { "empty" } else { v }));
+                let id = camel(&super::model::ident(if v.is_empty() { "empty" } else { v }));
                 // Nothing of it is a name (`"\\"`, `"/"`).
                 let id = if id.trim_matches('_').is_empty() { "Value".to_string() } else { id };
                 let id = if seen.insert(id.clone()) { id } else { format!("{id}{}", seen.len()) };
@@ -1311,7 +1311,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     for (name, members) in &m.num_enums {
         let name = tn(name);
-        let variants: Vec<(String, &String)> = members.iter().map(|(member, value)| (camel(&super::wasm::ident(member)), value)).collect();
+        let variants: Vec<(String, &String)> = members.iter().map(|(member, value)| (camel(&super::model::ident(member)), value)).collect();
         let from: String = variants.iter().map(|(v, value)| format!("{value} => {name}::{v}, ")).collect();
         types_file += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
@@ -1349,7 +1349,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                            pub fn time(&self) -> f64 { unsafe { crate::runtime::rt::js_date_time(self.0 .0) } }\n\
                            pub fn to_iso_string(&self) -> ::std::string::String { <::std::string::String>::from_handle(unsafe { crate::runtime::rt::js_date_to_iso_string(self.0 .0) }) }\n\
                            }\n";
-        } else if let Some(s) = super::wasm::buffer_spec(raw_name) {
+        } else if let Some(s) = super::model::buffer_spec(raw_name) {
             types_file += &format!(
                 "impl{targs} {name}{targs} {{\n\
                  pub fn byte_len(&self) -> usize {{ unsafe {{ crate::runtime::rt::js_bytes_len(self.0 .0) as usize }} }}\n\
@@ -1464,12 +1464,12 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             let t = if value.starts_with('"') { "&'static str" } else if value == "true" || value == "false" { "bool" } else { "f64" };
             // A whole number, decimal or hexadecimal, as an f64.
             let value = if t == "f64" && (value.starts_with("0x") || value.starts_with("0X")) { format!("{value}i64 as f64") } else if t == "f64" && !value.contains('.') && !value.contains('e') { format!("{value}.0") } else { value.clone() };
-            inherent += &format!("    pub const {}: {t} = {value};\n", snake(&super::wasm::ident(constant)).to_uppercase());
+            inherent += &format!("    pub const {}: {t} = {value};\n", snake(&super::model::ident(constant)).to_uppercase());
         }
         if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
             let mut seen = HashSet::new();
             for (i, (key, v)) in map.keys.iter().zip(&map.values).enumerate() {
-                let constant = snake(&super::wasm::ident(key)).to_uppercase();
+                let constant = snake(&super::model::ident(key)).to_uppercase();
                 let constant = if seen.insert(constant.clone()) { constant } else { format!("{constant}_{i}") };
                 inherent += &format!("    pub const {constant}: JsKey<{name}, {}> = JsKey::new({i});\n", ty(v));
             }
@@ -1634,8 +1634,8 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
 }
 
 // A buffer element as a Rust type.
-fn rust_elem(e: super::wasm::Elem) -> &'static str {
-    use super::wasm::Elem::*;
+fn rust_elem(e: super::model::Elem) -> &'static str {
+    use super::model::Elem::*;
     match e {
         I8 => "i8",
         U8 => "u8",
