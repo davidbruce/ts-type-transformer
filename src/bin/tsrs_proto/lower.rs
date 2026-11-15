@@ -1077,15 +1077,23 @@ fn splice_union_aliases(decls: &mut [Decl]) {
 fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
     // A base that is an alias, by what the alias lowered to: an object, a
     // class or interface (`type _Worker = Worker`), or nothing.
-    let mut aliases: HashMap<String, (Vec<TypeParam>, Type)> = HashMap::new();
-    for d in decls.iter() {
-        if let Decl::Alias(a) = d
-            && (a.type_params.is_empty() && matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
-                || matches!(&a.ty, Type::Ref(r) if matches!(r.kind, "class" | "interface")))
-        {
-            aliases.insert(a.name.clone(), (a.type_params.clone(), a.ty.clone()));
+    // Those in namespaces by their path: `NS.Options`.
+    fn collect(decls: &[Decl], prefix: &str, out: &mut HashMap<String, (Vec<TypeParam>, Type)>) {
+        for d in decls {
+            match d {
+                Decl::Alias(a)
+                    if a.type_params.is_empty() && matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
+                        || matches!(&a.ty, Type::Ref(r) if matches!(r.kind, "class" | "interface")) =>
+                {
+                    out.insert(format!("{prefix}{}", a.name), (a.type_params.clone(), a.ty.clone()));
+                }
+                Decl::Namespace(n) => collect(&n.decls, &format!("{prefix}{}.", n.name), out),
+                _ => {}
+            }
         }
     }
+    let mut aliases = HashMap::new();
+    collect(decls, "", &mut aliases);
     inline_object_bases_with(front, decls, &aliases);
 }
 
@@ -1328,7 +1336,7 @@ fn inline_object_bases_with(front: &mut Front, decls: &mut [Decl], aliases: &Has
                 let mut kept = Vec::new();
                 for base in std::mem::take(&mut i.extends) {
                     let base = match &base {
-                        Type::Ref(r) if r.kind == "typeAlias" && r.qualified.is_none() => match aliases.get(&r.name) {
+                        Type::Ref(r) if r.kind == "typeAlias" => match aliases.get(r.qualified.as_ref().unwrap_or(&r.name)) {
                             Some((params, body)) => instantiate(params, body, &r.args),
                             None => base,
                         },
