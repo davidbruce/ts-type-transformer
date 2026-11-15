@@ -397,7 +397,7 @@ impl<'c> Front<'c> {
         // The outermost namespace it is in; a module block (`declare module "fs"`) is not one.
         let mut top = sym;
         while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
-            if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral)) {
+            if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral) && !ast::is_global_scope_augmentation(*d)) {
                 top = parent;
             } else {
                 break;
@@ -581,7 +581,7 @@ impl<'c> Front<'c> {
         Some(Interface {
             name: self.output_name(sym),
             sym: Some(sym),
-            type_params: self.type_params(node.type_parameters()),
+            type_params: self.type_params(declared_type_params(sym, node)),
             extends,
             ancestors: Vec::new(),
             ancestor_syms: Vec::new(),
@@ -686,7 +686,7 @@ impl<'c> Front<'c> {
         Some(Interface {
             name: self.output_name(sym),
             sym: Some(sym),
-            type_params: self.type_params(node.type_parameters()),
+            type_params: self.type_params(declared_type_params(sym, node)),
             extends,
             ancestors: Vec::new(),
             ancestor_syms: Vec::new(),
@@ -944,24 +944,7 @@ impl<'c> Front<'c> {
         let was_alias = raw_sym.is_some_and(|s| s.flags().intersects(SymbolFlags::Alias));
         let sym = raw_sym.map(|s| self.resolve_alias(s));
         let args = args.map(|l| l.nodes()).unwrap_or(&[]);
-        let mut args = self.types(args);
-        // `Float32Array` means `Float32Array<ArrayBufferLike>`: spell out the
-        // defaults, so every reference has all its type arguments.
-        if let Some(s) = sym {
-            let params = s
-                .declarations()
-                .iter()
-                .filter(|d| matches!(d.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::TypeAliasDeclaration))
-                .map(|d| d.type_parameters())
-                .find(|p| !p.is_empty())
-                .unwrap_or(&[]);
-            for p in params.iter().skip(args.len()) {
-                let default = p.as_type_parameter_declaration().default_type().map(|d| self.ty(d));
-                // A default may name an earlier parameter, which means nothing here.
-                let usable = default.filter(|d| !mentions_type_param(d));
-                args.push(usable.unwrap_or_else(|| Type::prim("any")));
-            }
-        }
+        let args = self.types(args);
         let mut r = self.make_ref(sym, args);
         // Written qualified (`Geometry.Point`): its name as written. Not one the
         // output renamed so that it does not collide with another's.
@@ -974,11 +957,29 @@ impl<'c> Front<'c> {
         Type::Ref(r)
     }
 
-    fn make_ref(&mut self, sym: Option<P<Symbol>>, args: Vec<Type>) -> Ref {
+    fn make_ref(&mut self, sym: Option<P<Symbol>>, mut args: Vec<Type>) -> Ref {
         let Some(s) = sym else {
             return Ref { name: String::new(), kind: "unresolved", sym: None, args, tid: None, qualified: None, file: None, computed: false, node: None };
         };
         let s = self.resolve_alias(s);
+        // `Float32Array` means `Float32Array<ArrayBufferLike>`: spell out the
+        // defaults, so every reference has all its type arguments, written or
+        // made by the checker.
+        let params = s
+            .declarations()
+            .iter()
+            .filter(|d| matches!(d.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::TypeAliasDeclaration))
+            .map(|d| d.type_parameters())
+            .find(|p| !p.is_empty())
+            .unwrap_or(&[]);
+        if !s.flags().intersects(SymbolFlags::TypeParameter) {
+            for p in params.iter().skip(args.len()) {
+                let default = p.as_type_parameter_declaration().default_type().map(|d| self.ty(d));
+                // A default may name an earlier parameter, which means nothing here.
+                let usable = default.filter(|d| !mentions_type_param(d));
+                args.push(usable.unwrap_or_else(|| Type::prim("any")));
+            }
+        }
         let name = self.output_name(s);
         let raw_fqn = self.c.get_fully_qualified_name_exported(s);
         let fqn = if raw_fqn.starts_with('"') {
@@ -993,7 +994,7 @@ impl<'c> Front<'c> {
             let mut top = s;
             let mut hops = 0;
             while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
-                if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral)) {
+                if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral) && !ast::is_global_scope_augmentation(*d)) {
                     top = parent;
                     hops += 1;
                 } else {
@@ -1369,9 +1370,18 @@ impl<'c> Front<'c> {
 
     // `on<K extends "a" | "b">(type: K, f: (ev: Map[K]) => void)`: one signature
     // per key, the key a fixed argument and `Map[K]` its property's type.
+    // Where keyed signatures are kept with their map (`keyed_params = "map"`),
+    // one over a map these bindings do not declare (the DOM's
+    // `HTMLElementTagNameMap`, for a library) is expanded: nothing here says
+    // its keys.
     fn keyed_variants(&mut self, sig: P<CSignature>) -> Vec<Signature> {
-        if self.expand_keyed
-            && let Some((tp, keys)) = self.keyed_parameter(sig)
+        let keyed = self.keyed_parameter(sig);
+        let map_elsewhere = |this: &mut Self, tp: TypeId| {
+            let Some(t) = sig.type_parameters().iter().copied().find(|t| t.id() == tp) else { return false };
+            this.declared_key_map(t).is_some_and(|map| !this.declared_here(map))
+        };
+        if let Some((tp, keys)) = keyed
+            && (self.expand_keyed || self.map_keyed && map_elsewhere(self, tp))
         {
             self.count("expanded: keyed signature");
             return keys
@@ -1498,6 +1508,16 @@ impl<'c> Front<'c> {
     }
 
     // `K extends keyof M` as declared, for a map `M` that is not generic: `M`.
+    // Whether these bindings declare a symbol: of the package, or a library
+    // file they include.
+    fn declared_here(&mut self, sym: P<Symbol>) -> bool {
+        let fqn = self.c.get_fully_qualified_name_exported(sym);
+        let included = self.is_included(&fqn);
+        sym.declarations().iter().any(|d| {
+            ast::get_source_file_of_node(*d).is_some_and(|f| self.is_package_file(&f) || f.file_name() == self.root_file || included && f.file_name().starts_with(&self.lib_path))
+        })
+    }
+
     fn declared_key_map(&mut self, tp: P<CType>) -> Option<P<Symbol>> {
         let decl = tp.symbol()?.declarations().iter().copied().find(|d| d.kind() == Kind::TypeParameter)?;
         let constraint = decl.as_type_parameter_declaration().constraint()?;
@@ -1712,4 +1732,15 @@ fn mentions_type_param(t: &Type) -> bool {
         !found
     });
     found
+}
+
+// A merged declaration's type parameters: the first of its declarations
+// that has any (pixi's `interface Container` five times, `<C>` once).
+fn declared_type_params(sym: P<Symbol>, node: P<Node>) -> &'static [P<Node>] {
+    sym.declarations()
+        .iter()
+        .filter(|d| matches!(d.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration))
+        .map(|d| d.type_parameters())
+        .find(|p| !p.is_empty())
+        .unwrap_or(node.type_parameters())
 }

@@ -98,7 +98,7 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
     for d in elements(root).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
         let cs: Vec<Option<String>> = named(d, "typeParameter").map(constraint_of).collect();
         if cs.iter().any(Option::is_some) {
-            out.insert(attr(d, "name").to_string(), cs);
+            out.insert(d.attribute("id").unwrap_or(attr(d, "name")).to_string(), cs);
         }
     }
     // A type parameter in scope at a reference: its constraint.
@@ -144,7 +144,7 @@ impl Gen {
     // the name (GeoJSON's `Point` beside leaflet's).
     fn external_name(&self, name: &str) -> String {
         let flat = name.replace('.', "_");
-        if self.declared.contains(name) || self.declared.contains(&flat) { format!("External.{}", ident(&flat)) } else { ident(&flat) }
+        if self.declared.contains(name) || self.declared.contains(&flat) { format!("External.{}", type_ident(&flat)) } else { type_ident(&flat) }
     }
 }
 
@@ -166,6 +166,13 @@ fn ident(name: &str) -> String {
     ];
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') && !name.as_bytes()[0].is_ascii_digit();
     if KEYWORDS.contains(&name) || !plain { format!("``{name}``") } else { name.to_string() }
+}
+
+// A type's or module's name: `$` is no part of one, even in backticks
+// (`AnimationOption$1`, as a bundler names a second declaration). A member
+// may have it: ``$add``.
+fn type_ident(name: &str) -> String {
+    ident(&name.replace('$', "__"))
 }
 
 // The bindings as files, in the order F# compiles them: a prelude; the types
@@ -567,7 +574,7 @@ impl Gen {
                 if let Some(kept) = to.and_then(|t| self.alias_kept.get(t)).cloned() {
                     let args: Vec<Node> = elements(n).collect();
                     let args: Vec<String> = kept.iter().filter_map(|&i| args.get(i)).map(|a| self.ty(*a, owner)).collect();
-                    let name = name.split('.').map(ident).collect::<Vec<_>>().join(".");
+                    let name = name.split('.').map(type_ident).collect::<Vec<_>>().join(".");
                     return if args.is_empty() { name } else { format!("{name}<{}>", args.join(", ")) };
                 }
                 // Where the interface keeps a constraint, a union of subtypes is named as the constraint: F# has no union that is one.
@@ -575,12 +582,12 @@ impl Gen {
                 let args: Vec<String> = elements(n)
                     .enumerate()
                     .map(|(i, a)| match kept.get(i) {
-                        Some(Some(c)) if a.has_tag_name("ref") && a.attribute("kind") == Some("typeAlias") => ident(c),
+                        Some(Some(c)) if a.has_tag_name("ref") && a.attribute("kind") == Some("typeAlias") => type_path(c),
                         _ => self.ty(a, owner),
                     })
                     .collect();
                 let name = if to.is_some() {
-                    name.split('.').map(ident).collect::<Vec<_>>().join(".")
+                    name.split('.').map(type_ident).collect::<Vec<_>>().join(".")
                 } else {
                     match (name, args.len()) {
                         ("Array" | "ReadonlyArray", 1) => "ResizeArray".into(),
@@ -818,7 +825,7 @@ impl Gen {
             if let Some(map) = map {
                 let Some(name) = map.attribute("to").map(str::to_string) else { continue };
                 self.maps.insert(name.clone());
-                self.keyed.insert(attr(p, "name").to_string(), name.split('.').map(ident).collect::<Vec<_>>().join("."));
+                self.keyed.insert(attr(p, "name").to_string(), name.split('.').map(type_ident).collect::<Vec<_>>().join("."));
             }
         }
     }
@@ -830,7 +837,7 @@ impl Gen {
                 self.skip("map declared elsewhere, no keys");
                 continue;
             };
-            let map_type = map.split('.').map(ident).collect::<Vec<_>>().join(".");
+            let map_type = map.split('.').map(type_ident).collect::<Vec<_>>().join(".");
             let module = ident(&format!("{}Keys", map.rsplit('.').next().unwrap()));
             self.out += &format!("/// The keys of {map}.\nmodule {module} =\n");
             let mut seen = HashSet::new();
@@ -863,13 +870,13 @@ impl Gen {
             // `K extends keyof M`: 'K is the value the key selects. Where the
             // signature passes `M[K]` to a constrained interface, 'K has that constraint.
             for r in n.descendants().filter(|r| r.has_tag_name("ref")) {
-                let Some(kept) = self.constrained.get(attr(r, "name")) else { continue };
+                let Some(kept) = r.attribute("to").and_then(|t| self.constrained.get(t)) else { continue };
                 for (i, arg) in elements(r).enumerate() {
                     let index = elements(arg).nth(1).filter(|_| arg.has_tag_name("indexedAccess"));
                     if let (Some(Some(c)), Some(k)) = (kept.get(i), index)
                         && k.attribute("name") == p.attribute("name")
                     {
-                        let bound = format!("{name} :> {}", ident(c));
+                        let bound = format!("{name} :> {}", type_path(c));
                         if !constraints.contains(&bound) {
                             constraints.push(bound);
                         }
@@ -1097,18 +1104,18 @@ impl Gen {
     }
 
     fn interface(&mut self, d: Node, prefix: &str, indent: &str) {
-        let name = ident(attr(d, "name"));
+        let name = type_ident(attr(d, "name"));
         // Reached in JavaScript by what it is exported as: `default`.
         let js_name = d.attribute("jsName").unwrap_or(attr(d, "name"));
         let path = js_path(&self.js_prefix, js_name);
         let params = self.type_params(d);
         let owner = format!("{name}{params}");
         // The declaration, and its extensions, state the constraints it keeps.
-        let header = match self.constrained.get(attr(d, "name")) {
+        let header = match d.attribute("id").and_then(|id| self.constrained.get(id)) {
             Some(cs) => {
                 let ps: Vec<String> = named(d, "typeParameter").map(|p| format!("'{}", attr(p, "name"))).collect();
                 // The constraint as F# names it: a built-in Fable has is its type (`JS.Date`).
-                let when: Vec<String> = ps.iter().zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("{p} :> {}", fable_builtin(c).unwrap_or_else(|| c.clone())))).collect();
+                let when: Vec<String> = ps.iter().zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("{p} :> {}", fable_builtin(c).unwrap_or_else(|| type_path(c))))).collect();
                 format!("{name}<{} when {} >", ps.join(", "), when.join(" and "))
             }
             None => owner.clone(),
@@ -1163,9 +1170,9 @@ impl Gen {
                 body.push(format!("{indent}    {line}\n"));
             }
         }
-        let extend = if prefix.is_empty() { owner.clone() } else { format!("{}.{owner}", prefix.split('.').map(ident).collect::<Vec<_>>().join(".")) };
+        let extend = if prefix.is_empty() { owner.clone() } else { format!("{}.{owner}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
         if header != owner {
-            let qualified = if prefix.is_empty() { header.clone() } else { format!("{}.{header}", prefix.split('.').map(ident).collect::<Vec<_>>().join(".")) };
+            let qualified = if prefix.is_empty() { header.clone() } else { format!("{}.{header}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
             self.constrained_owner.insert(extend.clone(), qualified);
         }
         body.extend(self.members(&instance, &owner, &extend, indent));
@@ -1181,7 +1188,7 @@ impl Gen {
 
     // A value with constructors and static members: a type for its shape and a global of that type.
     fn static_side(&mut self, name: &str, path: &str, members: &[Node], instance: Option<&str>, indent: &str) {
-        let static_name = ident(&format!("{}Static", name.trim_matches('`')));
+        let static_name = type_ident(&format!("{}Static", name.trim_matches('`')));
         self.out += &format!("{indent}[<AllowNullLiteral>]\n{indent}type {static_name} =\n");
         let mut lines = Vec::new();
         for &m in members {
@@ -1230,7 +1237,7 @@ impl Gen {
                 self.import = d.attribute("import").map(str::to_string).or_else(|| self.root_import.clone());
             }
             let raw = d.attribute("name").unwrap_or_default();
-            let name = ident(raw);
+            let name = if matches!(d.tag_name().name(), "interface" | "class" | "typeAlias" | "enum" | "namespace") { type_ident(raw) } else { ident(raw) };
             let path = js_path(&self.js_prefix, d.attribute("jsName").unwrap_or(raw));
             // A top-level declaration's types go in its module's file; an alias where its parts are.
             if indent.is_empty()
@@ -1313,7 +1320,8 @@ impl Gen {
                     let params = self.params(d, "");
                     let ret = self.returns(d, "");
                     let (name, args) = match self.fixed(d, 0) {
-                        Some((suffix, args)) => (ident(&format!("{raw}_{suffix}")), args.replace('"', "\\\"")),
+                        // Escaped where it is written, by `at`.
+                        Some((suffix, args)) => (ident(&format!("{raw}_{suffix}")), args),
                         None => (name, "$0...".to_string()),
                     };
                     let tps = self.constrained_type_params(d);
@@ -1406,7 +1414,9 @@ impl Gen {
         if untested > 1 || cases.iter().any(|c| c.1 == "obj" || c.1 == "unit") {
             return false;
         }
-        if let Some(d) = union.attribute("discriminant") {
+        // Fable tags a case by its interface's member: each must be declared here.
+        let declared = members.iter().all(|m| m.has_tag_name("ref") && m.has_attribute("to"));
+        if let Some(d) = union.attribute("discriminant").filter(|_| declared) {
             self.out += &format!("{indent}[<TypeScriptTaggedUnion({d:?})>]\n{indent}type {name} =\n");
             for (case, payload, test) in &cases {
                 let value = test.as_deref().and_then(|t| t.strip_prefix("tag:")).unwrap_or_default();
@@ -1423,7 +1433,7 @@ impl Gen {
                 let exact = class.filter(|c| !c.contains('.')).filter(|c| cases.iter().any(|(_, payload, _)| payload != c && self.extends_class(payload, c)));
                 let attr = match exact {
                     Some(c) if !native && !imported => format!("[<CaseTest(\"$0 != null && Object.getPrototypeOf($0) === globalThis.{c}.prototype\")>] "),
-                    _ => match test.as_deref().and_then(case_test) {
+                    _ => match test.as_deref().and_then(|t| case_test(t, union.attribute("discriminant"))) {
                     Some(js) if !native && !imported => format!("[<CaseTest(\"{}\")>] ", js.replace('"', "\\\"")),
                     _ => String::new(),
                     },
@@ -1485,9 +1495,10 @@ fn shift(args: &str) -> String {
 }
 
 // The JavaScript test of a union member, from its `test` attribute; `$0` is the value.
-fn case_test(test: &str) -> Option<String> {
+fn case_test(test: &str, discriminant: Option<&str>) -> Option<String> {
     let (kind, arg) = test.split_once(':').unwrap_or((test, ""));
     Some(match kind {
+        "tag" => format!("$0 != null && String($0[{:?}]) === {arg:?}", discriminant?),
         "typeof" => format!("typeof $0 === '{arg}'"),
         "array" => "Array.isArray($0)".into(),
         "instanceof" => format!("$0 instanceof globalThis{}", arg.split('.').map(js_access).collect::<String>()),
@@ -1540,6 +1551,11 @@ fn map_properties<'a>(root: Node<'a, 'a>, decl: Node<'a, 'a>) -> Vec<(String, No
         }
     }
     out
+}
+
+// A declaration's path (`Konva.Shape`) as F# names it.
+fn type_path(path: &str) -> String {
+    path.split('.').map(type_ident).collect::<Vec<_>>().join(".")
 }
 
 fn js_path(prefix: &str, name: &str) -> String {

@@ -94,7 +94,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         let dropped = drop_redeclared(decls);
         *front.stats.entry("dropped: member redeclared as inherited".into()).or_default() += dropped;
     }
-    if o.keyed {
+    // `keyed_params = "map"` keeps a map these bindings declare; one they do
+    // not (the DOM's tag map, for a library) has no keys here: expanded.
+    if o.keyed || o.map_keyed {
         expand_keyed(front, decls, o);
     }
     if o.classes {
@@ -103,7 +105,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     if o.inheritance {
         flatten(front, decls);
     }
-    if o.keyed {
+    if o.keyed || o.map_keyed {
         drop_unreachable_overloads(decls);
     }
     if o.typeops || o.intersections {
@@ -897,10 +899,26 @@ fn drop_type_functions(decls: &mut Vec<Decl>) {
 // checker builds are expanded as they are built (`Front::keyed_variants`).
 fn expand_keyed(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     let mut expanded = 0;
+    // With `map`, the maps that are kept: those declared here.
+    let kept: Option<HashSet<P<Symbol>>> = (!o.keyed).then(|| {
+        let mut syms = HashSet::new();
+        fn collect(decls: &[Decl], out: &mut HashSet<P<Symbol>>) {
+            for d in decls {
+                match d {
+                    Decl::Interface(i) => out.extend(i.sym),
+                    Decl::Namespace(n) => collect(&n.decls, out),
+                    _ => {}
+                }
+            }
+        }
+        collect(decls, &mut syms);
+        syms
+    });
+    let kept = kept.as_ref();
     each_member_list(decls, &mut |members| {
         let mut out = Vec::new();
         for m in members.drain(..) {
-            match m.sig.as_ref().and_then(|s| keyed_variants(front, s, o.keyed_limit)) {
+            match m.sig.as_ref().and_then(|s| keyed_variants(front, s, o.keyed_limit, kept)) {
                 Some(variants) => {
                     expanded += 1;
                     out.extend(variants.into_iter().map(|s| Member { sig: Some(s), ..m.clone() }));
@@ -910,15 +928,15 @@ fn expand_keyed(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         }
         *members = out;
     });
-    expand_keyed_functions(front, decls, o.keyed_limit, &mut expanded);
+    expand_keyed_functions(front, decls, o.keyed_limit, kept, &mut expanded);
     *front.stats.entry("expanded: keyed signature".into()).or_default() += expanded;
 }
 
-fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize, expanded: &mut usize) {
+fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize, kept: Option<&HashSet<P<Symbol>>>, expanded: &mut usize) {
     let mut out = Vec::new();
     for d in decls.drain(..) {
         match d {
-            Decl::Function(f) => match keyed_variants(front, &f.sig, limit) {
+            Decl::Function(f) => match keyed_variants(front, &f.sig, limit, kept) {
                 Some(variants) => {
                     *expanded += 1;
                     out.extend(variants.into_iter().map(|sig| Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig })));
@@ -926,7 +944,7 @@ fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize
                 None => out.push(Decl::Function(f)),
             },
             Decl::Namespace(mut n) => {
-                expand_keyed_functions(front, &mut n.decls, limit, expanded);
+                expand_keyed_functions(front, &mut n.decls, limit, kept, expanded);
                 out.push(Decl::Namespace(n));
             }
             d => out.push(d),
@@ -961,7 +979,9 @@ fn drop_unreachable_overloads(decls: &mut Vec<Decl>) {
     functions(decls, &call_key);
 }
 
-fn keyed_variants(front: &mut Front, sig: &Signature, limit: usize) -> Option<Vec<Signature>> {
+// `kept`: with `keyed_params = "map"`, the maps that stay; only a signature
+// over another map is expanded.
+fn keyed_variants(front: &mut Front, sig: &Signature, limit: usize, kept: Option<&HashSet<P<Symbol>>>) -> Option<Vec<Signature>> {
     for (i, tp) in sig.type_params.iter().enumerate() {
         let Some(sym) = tp.sym else { continue };
         let is_tp = |t: &Type| matches!(t, Type::Ref(r) if r.kind == "typeParameter" && r.sym == Some(sym));
@@ -972,11 +992,14 @@ fn keyed_variants(front: &mut Front, sig: &Signature, limit: usize) -> Option<Ve
             // `keyof Map`, for a map that is not generic.
             Some(Type::Op(op, _)) => match &**op {
                 Op::KeyOf(Type::Ref(m)) if m.args.is_empty() && m.kind != "typeParameter" => match m.sym {
+                    Some(s) if kept.is_some_and(|k| k.contains(&s)) => continue,
                     Some(s) => front.keys_of(s),
                     None => continue,
                 },
                 _ => continue,
             },
+            // With `map`, keys written out stay as they are.
+            Some(_) if kept.is_some() => continue,
             Some(t) => match t {
                 Type::Literal { kind: "string", value } => vec![value.clone()],
                 Type::Union(parts) => match parts.iter().map(|p| if let Type::Literal { kind: "string", value } = p { Some(value.clone()) } else { None }).collect() {
