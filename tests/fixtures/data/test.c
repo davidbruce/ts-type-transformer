@@ -91,6 +91,14 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(str_eq(JsTuple_JsString_double_get_0(swapped), "two"));
     CHECK(JsTuple_JsString_double_get_1(swapped) == 2);
 
+    // Generic aliases are the types they stand for: List<number> is
+    // JsArray_double, Pair<string, number> JsTuple_JsString_double.
+    CHECK(total(mine) == 15);
+    JsTuple_double_JsString flipped = flip(JsTuple_JsString_double_new("x", 7));
+    CHECK(JsTuple_double_JsString_get_0(flipped) == 7 && str_eq(JsTuple_double_JsString_get_1(flipped), "x"));
+    Box named = boxedName();
+    CHECK(named.h != 0);
+
     // Arrays of objects.
     JsArray_Item all = items();
     CHECK(JsArray_Item_length(all) == 2);

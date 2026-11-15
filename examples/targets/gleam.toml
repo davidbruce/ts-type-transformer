@@ -4,6 +4,7 @@
 [constructs]
 classes = "pair"
 type_ops = "evaluate"
+aliases = "expand"
 intersections = "merge"
 inheritance = "flatten"
 nullable = "wrap"

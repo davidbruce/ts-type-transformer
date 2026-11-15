@@ -54,6 +54,9 @@ pub fn main() {
   check(b.words("a bc") == ["a", "bc"], "array of strings")
   check(b.pair(1.0, "one") == #(1.0, "one"), "tuple")
   check(b.swap(#(2.0, "two")) == #("two", 2.0), "tuple argument")
+  // Generic aliases are the types they stand for.
+  check(b.total([1.0, 2.0]) == 3.0, "List(Float)")
+  check(b.flip(#("x", 7.0)) == #(7.0, "x"), "Pair(String, Float)")
   let assert [first, ..] = b.items()
   check(b.item_get_id(first) == 1.0 && b.item_get_tags(first) == ["a", "b"], "array of objects")
 

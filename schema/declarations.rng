@@ -27,6 +27,7 @@
       <attribute name="type_ops"><choice><value>keep</value><value>evaluate</value></choice></attribute>
       <attribute name="intersections"><choice><value>keep</value><value>merge</value></choice></attribute>
       <attribute name="inheritance"><choice><value>keep</value><value>flatten</value></choice></attribute>
+      <attribute name="aliases"><choice><value>keep</value><value>expand</value></choice></attribute>
       <attribute name="generics"><choice><value>keep</value><value>erase</value></choice></attribute>
       <attribute name="nullable"><choice><value>keep</value><value>wrap</value></choice></attribute>
       <attribute name="literals"><choice><value>keep</value><value>enum</value></choice></attribute>

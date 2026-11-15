@@ -14,6 +14,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("type_ops", "evaluate", "keyof, T[K], conditional, mapped, template and typeof types", "the type they evaluate to"),
     ("intersections", "merge", "A & B", "one object type with the members of both"),
     ("inheritance", "flatten", "<extends>", "inherited members copied into each type"),
+    ("aliases", "expand", "generic aliases of other than an object, a function or a union (`type List<T> = T[]`)", "each use is the alias's type with its arguments: `number[]`"),
     ("generics", "erase", "type parameters", "their constraint, or any"),
     ("nullable", "wrap", "T | null | undefined", "<nullable> around T"),
     ("literals", "enum", "literal types", "enums for string unions, const= for constants"),

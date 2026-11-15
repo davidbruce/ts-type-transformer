@@ -52,6 +52,7 @@ are errors. Example targets are in `examples/targets/`.
 | `type_ops` | `evaluate` | `keyof`, `T[K]`, conditional, mapped, template, `typeof`, predicates, `Partial<T>`-style aliases | their evaluated type | yes |
 | `intersections` | `merge` | `A & B` | one merged object type | yes |
 | `inheritance` | `flatten` | `<extends>` | inherited members copied in, base type arguments applied; `<ancestor>` list kept | yes |
+| `aliases` | `expand` | generic aliases of other than an object, function or union: `type List<T> = T[]` | each use is the type with its arguments: `number[]` | no |
 | `generics` | `erase` | type parameters | their constraint, or `any` | no |
 | `nullable` | `wrap` | `T \| null \| undefined` | `<nullable absent="null\|undefined\|either">` | no |
 | `literals` | `enum` | literal types | string unions -> `<enum>`, constants -> `const=`, others widened | no |

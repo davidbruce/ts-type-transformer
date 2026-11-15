@@ -34,6 +34,9 @@ globalThis.ids = () => [1, "two"];
 globalThis.boxedId = () => new Box("three");
 globalThis.hold = item => ({ held: item });
 globalThis.largest = values => values.reduce((a, b) => (b.id > a.id ? b : a));
+globalThis.total = values => values.reduce((a, b) => a + b, 0);
+globalThis.flip = ([a, b]) => [b, a];
+globalThis.boxedName = () => new Box("name");
 globalThis.pipe = () => {
     const queue = [];
     return { label: "pipe", take: () => queue.shift(), put: v => { queue.push(v); } };

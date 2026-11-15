@@ -1105,8 +1105,10 @@ impl<'a> Builder<'a> {
                 }
                 // A generic union alias, where generics are kept, is a generic union.
                 let generic_union = self.generics && body.has_tag_name("union") && named(d, "typeParameter").next().is_some();
-                // Another generic alias would need its arguments substituted.
+                // Another generic alias would need its arguments substituted
+                // (`aliases = "expand"` does, but for one that refers to itself).
                 if named(d, "typeParameter").next().is_some() && !generic_union {
+                    self.skip("generic alias, bound as any");
                     return Ty::Any;
                 }
                 if self.resolving.contains(&key) || self.resolving.len() > 8 {

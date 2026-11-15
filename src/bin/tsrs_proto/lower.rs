@@ -19,6 +19,7 @@ pub struct Options {
     pub intersections: bool,
     pub inheritance: bool,
     pub generics: bool,
+    pub aliases: bool,
     pub nullable: bool,
     pub literals: bool,
     pub anonymous: bool,
@@ -47,7 +48,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Options {
-            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, nullable: false,
+            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, aliases: false, nullable: false,
             literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
         }
@@ -63,6 +64,7 @@ impl Options {
             "intersections" => &mut self.intersections,
             "inheritance" => &mut self.inheritance,
             "generics" => &mut self.generics,
+            "aliases" => &mut self.aliases,
             "nullable" => &mut self.nullable,
             "literals" => &mut self.literals,
             "anonymous" => &mut self.anonymous,
@@ -104,6 +106,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         evaluate(front, decls, o);
         flatten_unions(decls);
         inline_object_bases(front, decls);
+    }
+    if o.aliases {
+        expand_aliases(front, decls);
     }
     if o.generics {
         erase_generics(decls, o.map_keyed);
@@ -1075,6 +1080,66 @@ fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
         }
     }
     inline_object_bases_with(front, decls, &aliases);
+}
+
+// `aliases = "expand"`: `List<number>`, where `type List<T> = T[]`, is
+// `number[]`. Not an alias of an object, a function or a union, which are
+// declarations generators keep generic; nor one that refers to itself. The
+// aliases expanded are gone.
+fn expand_aliases(front: &mut Front, decls: &mut Vec<Decl>) {
+    fn collect(decls: &[Decl], prefix: &str, out: &mut HashMap<String, (Vec<TypeParam>, Type)>) {
+        for d in decls {
+            match d {
+                Decl::Alias(a) if !a.type_params.is_empty() && !matches!(a.ty, Type::Object(_) | Type::Function(_) | Type::Constructor(_) | Type::Union(_)) => {
+                    let mut own = false;
+                    let mut ty = a.ty.clone();
+                    walk_type(&mut ty, &mut Vec::new(), &mut |t, _| {
+                        own |= matches!(t, Type::Ref(r) if r.name == a.name);
+                        true
+                    });
+                    if !own {
+                        out.insert(format!("{prefix}{}", a.name), (a.type_params.clone(), a.ty.clone()));
+                    }
+                }
+                Decl::Namespace(n) => collect(&n.decls, &format!("{prefix}{}.", n.name), out),
+                _ => {}
+            }
+        }
+    }
+    fn expand(t: &mut Type, aliases: &HashMap<String, (Vec<TypeParam>, Type)>, depth: usize, count: &mut usize) {
+        walk_type(t, &mut Vec::new(), &mut |t, _| {
+            let Type::Ref(r) = t else { return true };
+            let key = r.qualified.as_ref().unwrap_or(&r.name);
+            let Some((params, body)) = aliases.get(key).filter(|_| r.kind == "typeAlias" && depth < 16) else { return true };
+            let mut body = instantiate(params, body, &r.args);
+            expand(&mut body, aliases, depth + 1, count);
+            *t = body;
+            *count += 1;
+            false
+        });
+    }
+    let mut aliases = HashMap::new();
+    collect(decls, "", &mut aliases);
+    if aliases.is_empty() {
+        return;
+    }
+    let mut count = 0;
+    walk(decls, &mut |t, _| {
+        expand(t, &aliases, 0, &mut count);
+        false
+    });
+    *front.stats.entry("expanded: generic alias".into()).or_default() += count;
+    fn drop(decls: &mut Vec<Decl>, prefix: &str, aliases: &HashMap<String, (Vec<TypeParam>, Type)>) {
+        decls.retain_mut(|d| match d {
+            Decl::Alias(a) => !aliases.contains_key(&format!("{prefix}{}", a.name)),
+            Decl::Namespace(n) => {
+                drop(&mut n.decls, &format!("{prefix}{}.", n.name), aliases);
+                true
+            }
+            _ => true,
+        });
+    }
+    drop(decls, "", &aliases);
 }
 
 // An alias's body, its type parameters replaced by `args` (missing ones by `any`).

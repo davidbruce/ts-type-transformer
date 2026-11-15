@@ -81,6 +81,13 @@ pub extern "C" fn run() {
     let swapped = swap(&JsTuple2::new(2.0, "two"));
     check!(swapped.get0() == "two" && swapped.get1() == 2.0);
 
+    // Generic aliases are the types they stand for: List<number> is
+    // JsArray<f64>, Pair<string, number> JsTuple2<String, f64>, Boxed<string> Box<String>.
+    check!(total([1.0, 2.0]) == 3.0);
+    let flipped = flip(&JsTuple2::new("x", 7.0));
+    check!(flipped.get0() == 7.0 && flipped.get1() == "x");
+    check!(boxed_name().value() == "name");
+
     // Arrays of objects.
     let all = items();
     check!(all.len() == 2 && all.get(0).id() == 1.0 && all.get(0).tags().get(1) == "b");

@@ -49,6 +49,15 @@ declare function largest<T extends Item>(values: T[]): T;
 interface Holder<T extends Item> { held: T }
 declare function hold(item: Item): Holder<Item>;
 
+// Generic aliases of an array, a tuple and an interface: each use is the type
+// with its arguments (aliases = "expand").
+type List<T> = T[];
+type Pair<A, B> = [A, B];
+type Boxed<T> = Box<T>;
+declare function total(values: List<number>): number;
+declare function flip(pair: Pair<string, number>): Pair<number, string>;
+declare function boxedName(): Boxed<string>;
+
 // Generic bases with a member of the same name.
 interface Source<T> { label: string; take(): T }
 interface Sink<T> { label: string; put(value: T): void }
