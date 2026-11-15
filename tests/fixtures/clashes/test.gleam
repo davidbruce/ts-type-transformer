@@ -1,5 +1,6 @@
 // Names that would be one Gleam identifier, each given its own. Every check must hold.
-import bindings as b
+import bindings/areas/main as b
+import bindings/namespaces/ns
 import gleam/io
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -25,7 +26,7 @@ pub fn main() {
   let _ = b.point_get_create(p)
 
   check(b.ns_node_id(b.ns_node_new()) == 2.0, "class")
-  check(b.ns_node2_id(b.ns_node2_new()) == 1.0, "namespace's class")
+  check(ns.ns_node2_id(ns.ns_node2_new()) == 1.0, "namespace's class")
 
   io.println("checks passed")
 }

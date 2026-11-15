@@ -1,5 +1,6 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings as b
+import bindings/areas/main as b
+import bindings/types as t
 import gleam/io
 
 
@@ -16,26 +17,26 @@ pub fn main() {
   b.options_set_verbose(options, True)
 
   // A union is a custom type: any member goes in.
-  check(b.describe(b.ValueString("text")) == "string text", "string case")
-  check(b.describe(b.ValueNumber(42.0)) == "number 42", "number case")
-  check(b.describe(b.ValueWidget(widget)) == "widget w", "class case")
-  check(b.describe(b.ValueOptions(options)) == "options verbose=true", "option bag case")
+  check(b.describe(t.ValueString("text")) == "string text", "string case")
+  check(b.describe(t.ValueNumber(42.0)) == "number 42", "number case")
+  check(b.describe(t.ValueWidget(widget)) == "widget w", "class case")
+  check(b.describe(t.ValueOptions(options)) == "options verbose=true", "option bag case")
 
   // What comes back says which member it is.
-  check(b.pick(0.0) == b.ValueString("text"), "string out")
-  check(b.pick(1.0) == b.ValueNumber(42.0), "number out")
-  let assert b.ValueWidget(w) = b.pick(2.0)
+  check(b.pick(0.0) == t.ValueString("text"), "string out")
+  check(b.pick(1.0) == t.ValueNumber(42.0), "number out")
+  let assert t.ValueWidget(w) = b.pick(2.0)
   check(b.widget_get_name(w) == "w", "instanceof out")
 
   // A tagged union, told apart by its `kind`.
   let square = b.make_shape("square", 3.0)
-  let assert b.ShapeSquare(sq) = square
+  let assert t.ShapeSquare(sq) = square
   check(b.square_get_side(sq) == 3.0 && b.area(square) == 9.0, "tagged union")
 
   // An inline union.
-  check(b.setup(b.BooleanOrOptionsBoolean(True)) == "bool true", "inline union")
-  check(b.setup(b.BooleanOrOptionsOptions(options)) == "options verbose=true", "inline union object")
-  check(b.lookup("abc") == b.NumberOrWidgetNumber(3.0), "inline union out")
+  check(b.setup(t.BooleanOrOptionsBoolean(True)) == "bool true", "inline union")
+  check(b.setup(t.BooleanOrOptionsOptions(options)) == "options verbose=true", "inline union object")
+  check(b.lookup("abc") == t.NumberOrWidgetNumber(3.0), "inline union out")
 
   io.println("checks passed")
 }

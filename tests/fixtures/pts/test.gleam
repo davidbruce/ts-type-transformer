@@ -1,5 +1,8 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings as b
+import bindings/areas/main as b
+import bindings/runtime as r
+import bindings/types as t
+import bindings/types/areas_main
 import gleam/io
 import gleam/option.{None, Some}
 
@@ -10,8 +13,8 @@ fn check(ok: Bool, what: String) -> Nil {
   }
 }
 
-fn pt(x: Float, y: Float) -> b.Pt {
-  b.pt_new([b.dynamic(x), b.dynamic(y)])
+fn pt(x: Float, y: Float) -> areas_main.Pt {
+  b.pt_new([r.dynamic(x), r.dynamic(y)])
 }
 
 pub fn main() {
@@ -24,12 +27,12 @@ pub fn main() {
   check(b.pt_get_id(p) == "corner", "property")
 
   // A method that changes a Pt returns it; its `$` twin returns another.
-  let moved = b.pt_add_new(p, [b.dynamic(1.0), b.dynamic(1.0)])
+  let moved = b.pt_add_new(p, [r.dynamic(1.0), r.dynamic(1.0)])
   check(b.pt_get_x(moved) == 4.0 && b.pt_get_x(p) == 3.0, "$add returns another")
-  let _ = b.pt_add(p, [b.dynamic(1.0), b.dynamic(1.0)])
+  let _ = b.pt_add(p, [r.dynamic(1.0), r.dynamic(1.0)])
   check(b.pt_get_x(p) == 4.0, "add changes it")
-  check(b.pt_equals(p, b.PtLikePt(moved), None), "union argument")
-  check(b.pt_equals(b.pt_clone(p), b.PtLikePt(p), Some(0.001)), "optional argument")
+  check(b.pt_equals(p, t.PtLikePt(moved), None), "union argument")
+  check(b.pt_equals(b.pt_clone(p), t.PtLikePt(p), Some(0.001)), "optional argument")
 
   // Statics.
   check(b.num_lerp(0.0, 10.0, 0.5) == 5.0 && b.num_clamp(12.0, 0.0, 10.0) == 10.0, "statics")
@@ -46,9 +49,9 @@ pub fn main() {
   check(b.pt_get_x(b.group_get_p2(b.group_bounding_box(square))) == 4.0, "bounding box")
 
   // A union parameter takes any of its members: a Group where points are wanted.
-  check(b.pt_get_x(b.geom_centroid(b.PtLikeIterableGroup(square))) == 2.0, "a Group as points")
-  check(b.line_magnitude(b.PtIterableGroup(b.group_new([pt(0.0, 0.0), pt(3.0, 4.0)]))) == 5.0, "line")
-  let ray = b.line_from_angle(b.PtLikePt(pt(1.0, 1.0)), 0.0, 5.0)
+  check(b.pt_get_x(b.geom_centroid(t.PtLikeIterableGroup(square))) == 2.0, "a Group as points")
+  check(b.line_magnitude(t.PtIterableGroup(b.group_new([pt(0.0, 0.0), pt(3.0, 4.0)]))) == 5.0, "line")
+  let ray = b.line_from_angle(t.PtLikePt(pt(1.0, 1.0)), 0.0, 5.0)
   check(b.pt_get_x(b.group_get_p2(ray)) == 6.0 && b.pt_get_y(b.group_get_p2(ray)) == 1.0, "from angle")
 
   io.println("checks passed")

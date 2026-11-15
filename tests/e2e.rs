@@ -809,7 +809,7 @@ fn dom_gleam_compiles() {
     let xml = lower_with(Path::new("lib.dom.d.ts"), Some("gleam"), &[root().join("examples/modules/dom.toml")], &[]);
     let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
     write_gleam_project(&out, &bindings);
-    fs::write(out.join("src/check.gleam"), "import bindings as _\n\npub fn main() {\n  Nil\n}\n").unwrap();
+    fs::write(out.join("src/check.gleam"), "// Every module in src is compiled.\npub fn main() {\n  Nil\n}\n").unwrap();
     run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
 }
 
@@ -1530,7 +1530,7 @@ mod libraries {
                 let Some([gleam]) = tools(["gleam"]) else { return };
                 let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
                 write_gleam_project(&out, &bindings);
-                fs::write(out.join("src/check.gleam"), "import bindings as _\n\npub fn main() {\n  Nil\n}\n").unwrap();
+                fs::write(out.join("src/check.gleam"), "// Every module in src is compiled.\npub fn main() {\n  Nil\n}\n").unwrap();
                 run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
             }
             _ => unreachable!(),

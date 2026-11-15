@@ -1,5 +1,7 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings as b
+import bindings/areas/main as b
+import bindings/runtime as r
+import bindings/types as t
 import gleam/io
 import gleam/option.{None, Some}
 
@@ -14,7 +16,7 @@ pub fn main() {
   // Option objects: built here, read by JavaScript.
   let o = b.options_create()
   b.options_set_width(o, 3.0)
-  b.options_set_mode(o, b.OptionsModeFill)
+  b.options_set_mode(o, t.OptionsModeFill)
   check(b.describe(o) == "3x? fill", "option object")
   b.options_set_height(o, Some(2.0))
   b.options_set_title(o, Some("hi"))
@@ -22,7 +24,7 @@ pub fn main() {
 
   // Built by JavaScript, read here. A missing optional property is None.
   let d = b.defaults()
-  check(b.options_get_width(d) == 4.0 && b.options_get_mode(d) == b.OptionsModeFit, "read")
+  check(b.options_get_width(d) == 4.0 && b.options_get_mode(d) == t.OptionsModeFit, "read")
   check(b.options_get_height(d) == None && b.options_get_title(d) == None, "missing")
 
   // Partial<Options>, Pick<Options, ...>, keyof Options.
@@ -33,7 +35,7 @@ pub fn main() {
   let size = b.area_size_create()
   b.area_size_set_width(size, 3.0)
   check(b.area(size) == 9.0, "Pick")
-  check(b.field() == b.FieldResultTitle, "keyof")
+  check(b.field() == t.FieldResultTitle, "keyof")
 
   // Record<string, number>: an index.
   let table = b.lookup_table_create()
@@ -62,21 +64,21 @@ pub fn main() {
 
   // Generics are Gleam's. A value of T crosses by the codec of T: a handle
   // (`Box(t)`) as it is, so it needs none.
-  let float = b.codec_float()
+  let float = r.codec_float()
   let bx = b.wrap(21.0, float)
   check(b.box_get_value(bx, float) == 21.0, "generic")
   check(b.box_get_value(b.box_map(bx, fn(v) { v *. 2.0 }, float, float), float) == 42.0, "generic callback")
   check(b.first(b.range(4.0), float) == Some(0.0) && b.first([], float) == None, "generic function")
   // What a Box holds is converted as T is: an Id, a variant, not JavaScript's string.
-  let assert b.IdString(three) = b.box_get_value(b.boxed_id(), b.id_codec())
+  let assert t.IdString(three) = b.box_get_value(b.boxed_id(), t.id_codec())
   check(three == "three", "Box(Id)")
-  let assert [b.IdNumber(1.0), ..] = b.box_get_value(b.wrap([b.IdNumber(1.0)], b.codec_list(b.id_codec())), b.codec_list(b.id_codec()))
-  check(b.box_get_value(b.wrap(Some("x"), b.codec_option(b.codec_string())), b.codec_option(b.codec_string())) == Some("x"), "Box(Option(String))")
+  let assert [t.IdNumber(1.0), ..] = b.box_get_value(b.wrap([t.IdNumber(1.0)], r.codec_list(t.id_codec())), r.codec_list(t.id_codec()))
+  check(b.box_get_value(b.wrap(Some("x"), r.codec_option(r.codec_string())), r.codec_option(r.codec_string())) == Some("x"), "Box(Option(String))")
 
   // A generic union, and a union in an array.
-  check(b.unbox(b.EitherT(5.0), float) == 5.0, "union of T")
-  check(b.unbox(b.EitherBox(bx), float) == 21.0, "union of Box(T)")
-  check(b.ids() == [b.IdNumber(1.0), b.IdString("two")], "array of unions")
+  check(b.unbox(t.EitherT(5.0), float) == 5.0, "union of T")
+  check(b.unbox(t.EitherBox(bx), float) == 21.0, "union of Box(T)")
+  check(b.ids() == [t.IdNumber(1.0), t.IdString("two")], "array of unions")
 
   // A name both generic bases have is the type's own.
   let pp = b.pipe()

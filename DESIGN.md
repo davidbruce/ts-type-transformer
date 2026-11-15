@@ -273,9 +273,15 @@ the time control returns to JavaScript is reported, not lost.
   borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
 - Gleam (JavaScript target): no wasm and no glue, as F#; from the shared
   model, as the wasm targets, since Gleam has no methods, subtypes, overloads
-  or optional arguments. `bindings.gleam` declares opaque types and external
-  functions named for their type (`shape_get_size(s)`, `shape_as_named(s)`);
-  `bindings_ffi.mjs` calls the API and converts what Gleam holds otherwise:
+  or optional arguments. Gleam modules may not import each other in a cycle,
+  as the API's areas would (`Element.ownerDocument`, `Document.body`). A
+  class is an opaque type, which names nothing: each area's are in
+  `bindings/types/<area>`; enums, unions and callbacks, which may name each
+  other, in `bindings/types`; `Promise`, `JsError`, `Codec` in
+  `bindings/runtime`. An area's functions, named for their type
+  (`shape_get_size(s)`, `shape_as_named(s)`), are in `bindings/<area>`,
+  which imports types only. Each has an FFI module that calls the API and
+  converts what Gleam holds otherwise:
   an `Option(a)` for a nullable value or optional argument, a `List(a)` for an
   array, custom types for unions and string enums, a Gleam function for a
   callback (the same JavaScript function each time), `Promise(a)` to

@@ -1,5 +1,7 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings as b
+import bindings/areas/main as b
+import bindings/runtime as r
+import bindings/types as t
 import cell
 import gleam/int
 import gleam/io
@@ -21,8 +23,8 @@ pub fn main() {
   check(b.scaler_invoke(b.scaler_construct(s, 3.0), 5.0) == 15.0, "construct")
 
   // A call that throws: `attempt` gives the exception.
-  check(b.attempt(fn() { b.explode("boom") }) |> result_message == Error("boom"), "exception")
-  check(b.attempt(fn() { b.flush() }) == Ok(0.0), "no exception")
+  check(r.attempt(fn() { b.explode("boom") }) |> result_message == Error("boom"), "exception")
+  check(r.attempt(fn() { b.flush() }) == Ok(0.0), "no exception")
 
   let c = b.counter_new()
   let last = cell.new(0.0)
@@ -72,14 +74,14 @@ pub fn main() {
   // A union argument arrives as the custom type.
   let seen = cell.new([])
   check(b.each_id(fn(id) { cell.set(seen, [id, ..cell.get(seen)]) }) == 2.0, "union callback")
-  check(cell.get(seen) == [b.IdString("two"), b.IdNumber(1.0)], "union argument")
+  check(cell.get(seen) == [t.IdString("two"), t.IdNumber(1.0)], "union argument")
 
   // Promises: a function is given the result once one settles.
-  b.promise_then(b.delayed(21.0), fn(r) {
+  r.promise_then(b.delayed(21.0), fn(r) {
     check(r == Ok(42.0), "resolved")
-    b.promise_then(b.rejected("nope"), fn(r) {
+    r.promise_then(b.rejected("nope"), fn(r) {
       check(result_message(r) == Error("nope"), "rejected")
-      b.promise_then(b.settled(), fn(r) {
+      r.promise_then(b.settled(), fn(r) {
         check(r == Ok(Nil), "settled")
         io.println("checks passed")
       })
@@ -87,9 +89,9 @@ pub fn main() {
   })
 }
 
-fn result_message(r: Result(a, b.JsError)) -> Result(a, String) {
+fn result_message(r: Result(a, r.JsError)) -> Result(a, String) {
   case r {
     Ok(v) -> Ok(v)
-    Error(e) -> Error(b.js_error_message(e))
+    Error(e) -> Error(r.js_error_message(e))
   }
 }

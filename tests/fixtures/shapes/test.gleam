@@ -1,5 +1,6 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings as b
+import bindings/areas/main as b
+import bindings/types as t
 import gleam/io
 import gleam/option.{None, Some}
 
@@ -12,14 +13,14 @@ fn check(ok: Bool, what: String) -> Nil {
 
 pub fn main() {
   // Class pairing: a constructor, a static function, a constant.
-  let s = b.shape_new(b.ShapeKindSquare, 3.0)
+  let s = b.shape_new(t.ShapeKindSquare, 3.0)
   check(b.shape_area(s) == 9.0, "constructor")
   check(b.shape_area(b.shape_unit()) == 1.0, "static")
   check(b.shape_sides == 4.0, "constant")
 
   // A string enum is a custom type, in both directions.
-  check(b.shape_get_kind(s) == b.ShapeKindSquare, "enum out")
-  check(b.shape_get_kind(b.shape_new(b.ShapeKindCircle, 1.0)) == b.ShapeKindCircle, "enum in")
+  check(b.shape_get_kind(s) == t.ShapeKindSquare, "enum out")
+  check(b.shape_get_kind(b.shape_new(t.ShapeKindCircle, 1.0)) == t.ShapeKindCircle, "enum in")
 
   // Properties.
   b.shape_set_size(s, 4.0)
@@ -42,8 +43,8 @@ pub fn main() {
   check(b.shape_get_size(s) == 3.0, "given argument")
 
   // A union is a custom type.
-  check(b.shape_label(s, b.StringOrNumberString("a")) == "string:a", "union string")
-  check(b.shape_label(s, b.StringOrNumberNumber(7.0)) == "number:7", "union number")
+  check(b.shape_label(s, t.StringOrNumberString("a")) == "string:a", "union string")
+  check(b.shape_label(s, t.StringOrNumberNumber(7.0)) == "number:7", "union number")
 
   // A nullable value is an Option.
   check(b.shape_get_parent(s) == None, "null")

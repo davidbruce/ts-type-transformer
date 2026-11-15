@@ -1,5 +1,6 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings as b
+import bindings/areas/main as b
+import bindings/types as t
 import gleam/io
 
 
@@ -25,9 +26,9 @@ pub fn main() {
   check(b.get_counter() == 0.0 && b.bump() == 1.0 && b.get_counter() == 1.0, "a variable read live")
 
   // A union told apart by the classes as exported.
-  let assert b.FigureOrBadgeFigure(fig) = b.pick(0.0)
+  let assert t.FigureOrBadgeFigure(fig) = b.pick(0.0)
   check(b.figure_get_size(fig) == 2.0, "instanceof Figure")
-  let assert b.FigureOrBadgeBadge(_) = b.pick(1.0)
+  let assert t.FigureOrBadgeBadge(_) = b.pick(1.0)
 
   io.println("checks passed")
 }
