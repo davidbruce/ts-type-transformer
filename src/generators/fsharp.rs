@@ -255,6 +255,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n\
          /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
          /// A JavaScript object used as a map: `{ [key: string]: T }` is `JsRecord<string, T>`.\n\
+         /// A value whose type F# cannot write, of type arguments it still takes.\n\
+         [<AllowNullLiteral>]\ntype Opaque<'T> = interface end\n\n\
          [<AllowNullLiteral>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n\n\
          /// A JavaScript Error, where an API takes one: an F# exception is not an Error in JavaScript.\n\
          [<AutoOpen>]\nmodule JsErrors =\n    [<Emit(\"new Error($0)\")>]\n    let jsError (message: string) : exn = jsNative\n\n\
@@ -1019,10 +1021,7 @@ impl Gen {
                     continue;
                 }
                 // Distinct TypeScript overloads can map to the same F# signature.
-                let line = format!("{indent}    {line}\n");
-                if !lines.contains(&line) {
-                    lines.push(line);
-                }
+                push_member(&mut lines, format!("{indent}    {line}\n"));
             }
         }
         lines
@@ -1206,12 +1205,11 @@ impl Gen {
                     }
                     continue;
                 }
-                let line = format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n");
-                if !lines.contains(&line) {
-                    lines.push(line);
-                }
+                push_member(&mut lines, format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n"));
             } else {
-                lines.extend(self.members(&[m], "obj", &static_name, indent));
+                for line in self.members(&[m], "obj", &static_name, indent) {
+                    push_member(&mut lines, line);
+                }
             }
         }
         if lines.is_empty() {
@@ -1325,10 +1323,7 @@ impl Gen {
                         None => (name, "$0...".to_string()),
                     };
                     let tps = self.constrained_type_params(d);
-                    let line = format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", "));
-                    if !functions.contains(&line) {
-                        functions.push(line);
-                    }
+                    push_member(functions, format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", ")));
                 }
                 "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
                     let body = only_child_type(d);
@@ -1362,7 +1357,15 @@ impl Gen {
                         let sig_str = self.delegate_sig(body, "");
                         self.out += &format!("{indent}type {name}{params} = delegate of {sig_str}\n\n");
                     } else {
-                        let t = self.ty(body, "");
+                        let mut t = self.ty(body, "");
+                        // An abbreviation must show its type parameters: one whose type
+                        // shows none of some (a union bound as `obj`) is opaque, of them.
+                        let shown: Vec<&str> = params.trim_start_matches('<').trim_end_matches('>').split(", ").filter(|p| !p.is_empty()).collect();
+                        let words = words(&t);
+                        if shown.iter().any(|p| !words.contains(&p.trim_start_matches('\''))) {
+                            self.skip("alias that does not show its type parameters, bound as opaque");
+                            t = format!("Opaque<{}>", shown.join(" * "));
+                        }
                         self.out += &format!("{indent}type {name}{params} = {t}\n\n");
                     }
                 }
@@ -1587,7 +1590,7 @@ fn alias_kept(root: Node) -> HashMap<String, Vec<usize>> {
     }
     collect(root, "", &mut aliases);
     fn shown(n: Node, kept: &HashMap<String, Vec<usize>>, shadow: &mut Vec<String>, out: &mut HashSet<String>) {
-        if n.has_tag_name("this") || n.has_tag_name("typeParameter") {
+        if n.has_tag_name("this") || n.has_tag_name("thisParameter") || n.has_tag_name("typeParameter") {
             return;
         }
         let depth = shadow.len();
@@ -1620,5 +1623,57 @@ fn alias_kept(root: Node) -> HashMap<String, Vec<usize>> {
         if !changed {
             return kept;
         }
+    }
+}
+
+// Adds a member unless one F# would call the same is there: the first
+// stays, as TypeScript picks the first overload that matches a call.
+fn push_member(lines: &mut Vec<String>, line: String) {
+    let key = member_key(&line);
+    if !lines.iter().any(|l| member_key(l) == key) {
+        lines.push(line);
+    }
+}
+
+// What F# tells members apart by: name and parameters, not attributes or
+// return type. Overloads that differ only in a literal (`async: true` or
+// `false`, each a `bool`) are one F# member.
+fn member_key(line: &str) -> String {
+    let mut s = line.trim();
+    while let Some(rest) = s.strip_prefix("[<") {
+        match rest.find(">]") {
+            Some(i) => s = rest[i + 2..].trim_start(),
+            None => break,
+        }
+    }
+    let b = s.as_bytes();
+    let mut depth = 0i32;
+    let mut i = 0;
+    let mut arrow = None;
+    let is_static = s.starts_with("static member ");
+    while i < b.len() {
+        match b[i] {
+            b'-' if b.get(i + 1) == Some(&b'>') => {
+                if depth == 0 {
+                    arrow = Some(i);
+                }
+                i += 1;
+            }
+            b'(' | b'<' | b'[' | b'{' => depth += 1,
+            b')' | b'>' | b']' | b'}' => {
+                depth -= 1;
+                // `static member f (a: T): R`: up to its parameters' close.
+                if is_static && depth == 0 && b[i] == b')' {
+                    return s[..=i].to_string();
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    // `abstract f: A * B -> R`: before its last arrow outside brackets.
+    match arrow {
+        Some(at) if !is_static => s[..at].trim_end().to_string(),
+        _ => s.to_string(),
     }
 }
