@@ -411,5 +411,11 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
   `import` yet.
 - Rust and Zig callbacks with a union argument receive it decoded; C's
   receive a handle.
+- Of the real libraries, katex and rapier compile in every language; marked
+  in four; prosemirror, date-fns, leaflet and TanStack in two or three;
+  konva in one; node, ECharts, pixi.js and three.js in none. What is left is
+  per library: names a generated union refers to before declaring, global
+  augmentations in C, intersections left in `@types/node`, duplicate members
+  in Zig. A type that expands without end converts to a budget, then `any`.
 - Each construct has one lowering strategy so far. Values are strings so more
   can be added (`generics = "monomorphize"`).

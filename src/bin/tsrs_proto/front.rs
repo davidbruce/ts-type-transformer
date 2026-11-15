@@ -430,6 +430,8 @@ impl<'c> Front<'c> {
             // { }`: not a namespace. A module is bound as a package; what an
             // augmentation declares the checker has merged into what it augments.
             Kind::ModuleDeclaration if s.name().is_some_and(|n| n.kind() == Kind::StringLiteral) => {}
+            // `declare global { }` adds to the global scope's declarations: the library's, not the package's.
+            Kind::ModuleDeclaration if ast::is_global_scope_augmentation(s) => {}
             Kind::ModuleDeclaration => {
                 if let Some(ns) = self.namespace(s) {
                     out.push(Decl::Namespace(ns));
