@@ -1207,6 +1207,25 @@ fn declarations(m: &Model) -> String {
         let params: Vec<TParam> = (1..=arity).map(|i| TParam { name: format!("T{i}"), default: None, constraint: None }).collect();
         if params.is_empty() { types += &opaque(name, &params) } else { template(name, &params, opaque(name, &params)) }
     }
+    // Unions, with the templates: either may name the other, in a default
+    // argument (`Interval<StartType = DateArg<Date>>`) or a member (`Box<T>`).
+    for u in unions {
+        let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions)).collect();
+        let mut text = format!("{}using {} = std::variant<{}>;\n", head(&u.type_params, false), u.name, parts.join(", "));
+        // Defined with the union, used wherever one comes back.
+        if u.decodable() {
+            text += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false), union_type(u), u.name);
+            // Unions with the same members are the same variant: one decoder.
+            if decoder_owner(u, unions) {
+                text += &format!("template <>\nstruct ts::decoder<::{0}> {{\n    static ::{0} from(uint32_t h);\n}};\n", u.name);
+            }
+        }
+        let mut needs = BTreeSet::new();
+        u.parts.iter().for_each(|p| named_types(p, &mut needs));
+        param_types(&u.type_params, &mut needs);
+        needs.remove(&u.name);
+        templates.push((u.name.clone(), text, needs));
+    }
     let names: BTreeSet<String> = templates.iter().map(|t| t.0.clone()).collect();
     let mut done = BTreeSet::new();
     while !templates.is_empty() {
@@ -1240,18 +1259,6 @@ fn declarations(m: &Model) -> String {
         let args = if c.type_params.is_empty() { String::new() } else { format!("<{}>", c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
         let header = if c.type_params.is_empty() { "template <>\n".to_string() } else { head(&c.type_params, false) };
         types += &format!("{header}struct ts::bases<{}{args}> {{\n    using type = ts::list<{}>;\n}};\n", c.name, c.bases.iter().map(ty_in).collect::<Vec<_>>().join(", "));
-    }
-    for u in unions {
-        let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions)).collect();
-        types += &format!("{}using {} = std::variant<{}>;\n", head(&u.type_params, false), u.name, parts.join(", "));
-        // Defined with the union, used wherever one comes back.
-        if u.decodable() {
-            types += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false), union_type(u), u.name);
-            // Unions with the same members are the same variant: one decoder.
-            if decoder_owner(u, unions) {
-                types += &format!("template <>\nstruct ts::decoder<::{0}> {{\n    static ::{0} from(uint32_t h);\n}};\n", u.name);
-            }
-        }
     }
     // A map's keys, each typed by the value it selects.
     for k in &m.maps {

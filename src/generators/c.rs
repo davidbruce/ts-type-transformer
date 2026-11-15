@@ -787,7 +787,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             Ty::NamedUnion(_) | Ty::Nullable(..) if matches!(t, Ty::NamedUnion(_)) || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_))) => "JsValue".to_string(),
             t => typed(t, false),
         };
-        params.extend(c.params.iter().map(|(n, t)| format!("{} {}", plain(t), ident(n))));
+        // `ctx` is the callback's own: a parameter of that name is `ctx_`.
+        params.extend(c.params.iter().map(|(n, t)| {
+            let n = ident(n);
+            format!("{} {}", plain(t), if n == "ctx" { "ctx_".to_string() } else { n })
+        }));
         types += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
         types += &format!("TS_IMPORT({0}_from) uint32_t ts_raw_{0}_from({0}_fn, void*);\n", c.name);
         types += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ ts_raw_{0}_from(fn, ctx) }}; }}\n", c.name);

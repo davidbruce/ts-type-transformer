@@ -293,7 +293,8 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
         }
         None => f.import.as_str(),
     };
-    let call = format!("raw.{import}({})", args.join(", "));
+    // Quoted: an import may be named as a keyword (`error`).
+    let call = format!("raw.@\"{import}\"({})", args.join(", "));
     // A union result that cannot be told apart is an untyped value.
     let union = match &f.ret {
         Ty::NamedUnion(n) => unions.iter().find(|u| u.name == *n),
@@ -323,7 +324,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
         Ty::Nullable(..) => format!("const h = {call}; return if (h == 0) null else .{{ .h = h }};"),
         _ => format!("return .{{ .h = {call} }};"),
     };
-    let decl = format!("    extern \"env\" fn {import}({}) {};\n", raw_params.join(", "), raw(&f.ret));
+    let decl = format!("    extern \"env\" fn @\"{import}\"({}) {};\n", raw_params.join(", "), raw(&f.ret));
     // Declared once per file, though several functions use it.
     // Only a shared import can repeat; checking others would be quadratic.
     if f.shared.is_none() || !externs.contains(&decl) {

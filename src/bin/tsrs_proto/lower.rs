@@ -291,6 +291,14 @@ fn collect_declared_names(decls: &[Decl], prefix: &str, sep: &str, out: &mut Has
             let next = if prefix.is_empty() { ns.name.clone() } else { format!("{prefix}_{}", ns.name) };
             collect_declared_names(&ns.decls, &next, sep, out);
         }
+        // A method's function (`Transformer_isTransforming`) is not a type's name.
+        if let Decl::Interface(i) = d {
+            let statics = i.class.iter().flat_map(|c| &c.statics);
+            for m in i.members.iter().chain(statics).filter(|m| matches!(m.kind, MemberKind::Method)) {
+                out.insert(format!("{}{sep}{}", i.name, m.name));
+                out.insert(format!("{}_{}", i.name, m.name));
+            }
+        }
     }
 }
 
@@ -793,7 +801,9 @@ fn evaluate(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     for_each_alias(decls, &mut |a| {
         let node = match &a.ty {
             Type::Op(_, node) if o.typeops => *node,
-            Type::Ref(r) if o.typeops && r.computed => r.node,
+            // Not a reference by name to an alias the output declares, which is
+            // evaluated where it is declared: `type ShapeConfig = Shape.ShapeConfig`.
+            Type::Ref(r) if o.typeops && r.computed && !(r.args.is_empty() && r.file.is_none()) => r.node,
             Type::Intersection(_, node) if o.intersections => *node,
             _ => None,
         };
@@ -1053,12 +1063,30 @@ fn splice_union_aliases(decls: &mut [Decl]) {
 // evaluated to (`extends Partial<X>`) gives its members to the interface,
 // and `any`, which says nothing, is dropped.
 fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
+    // A base that is an alias, by what the alias lowered to: an object, or nothing.
+    let mut aliases: HashMap<String, Type> = HashMap::new();
+    for d in decls.iter() {
+        if let Decl::Alias(a) = d
+            && a.type_params.is_empty()
+            && matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
+        {
+            aliases.insert(a.name.clone(), a.ty.clone());
+        }
+    }
+    inline_object_bases_with(front, decls, &aliases);
+}
+
+fn inline_object_bases_with(front: &mut Front, decls: &mut [Decl], aliases: &HashMap<String, Type>) {
     for d in decls {
         match d {
             Decl::Interface(i) => {
                 let own: HashSet<String> = i.members.iter().map(|m| m.name.clone()).collect();
                 let mut kept = Vec::new();
                 for base in std::mem::take(&mut i.extends) {
+                    let base = match &base {
+                        Type::Ref(r) if r.kind == "typeAlias" && r.args.is_empty() && r.qualified.is_none() => aliases.get(&r.name).cloned().unwrap_or(base),
+                        _ => base,
+                    };
                     match base {
                         Type::Object(members) => {
                             front.count("merged: object base");
@@ -1070,7 +1098,7 @@ fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
                 }
                 i.extends = kept;
             }
-            Decl::Namespace(n) => inline_object_bases(front, &mut n.decls),
+            Decl::Namespace(n) => inline_object_bases_with(front, &mut n.decls, aliases),
             _ => {}
         }
     }

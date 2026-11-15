@@ -880,6 +880,11 @@ impl<'c> Front<'c> {
                 self.op(op, t)
             }
             // `import("./shapes").Circle<T>`: what it refers to, resolved by the checker.
+            // Named (`import("./Shape").ShapeConfig`), as a reference written there:
+            // the checker's type of it may carry the alias being declared.
+            Kind::ImportType if !t.as_import_type_node().is_type_of() && t.as_import_type_node().qualifier().is_some() => {
+                self.reference(t.as_import_type_node().qualifier().unwrap(), t.type_argument_list(), Some(t))
+            }
             Kind::ImportType => {
                 let resolved = self.c.get_type_from_type_node_exported(t);
                 self.from_type(resolved)
@@ -940,6 +945,22 @@ impl<'c> Front<'c> {
             raw_fqn.find("\".").map(|i| raw_fqn[i + 2..].to_string()).unwrap_or(raw_fqn)
         } else {
             raw_fqn
+        };
+        // A path from the outermost namespace, by that namespace's name in the
+        // output: two files may each declare a `Konva`.
+        let fqn = match fqn.split_once('.') {
+            Some((_, rest)) => {
+                let mut top = s;
+                while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
+                    if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral)) {
+                        top = parent;
+                    } else {
+                        break;
+                    }
+                }
+                if top == s { fqn } else { format!("{}.{rest}", self.output_name(top)) }
+            }
+            None => fqn,
         };
         let decl_file = s.declarations().first().and_then(|d| ast::get_source_file_of_node(*d));
         let in_pkg = decl_file.as_ref().is_some_and(|f| self.is_package_file(f));
@@ -1164,7 +1185,8 @@ impl<'c> Front<'c> {
                 return self.from_type(*p);
             }
             let mergeable = t.types().iter().all(|p| p.flags().intersects(TypeFlags::Object));
-            if mergeable && self.c.get_properties_of_type_exported(t).len() <= self.intersection_limit {
+            // An alias's own body is written once, under its name, whatever its size.
+            if mergeable && (skip.is_some() || self.c.get_properties_of_type_exported(t).len() <= self.intersection_limit) {
                 return Type::Object(self.members_of_type(t, None));
             }
             // Too large to inline (`Window & typeof globalThis`): keep the named part.

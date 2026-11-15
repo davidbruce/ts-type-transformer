@@ -195,7 +195,7 @@ fn main() {
             .unwrap_or_default();
         types.sort();
         let tsconfig = format!(
-            r#"{{ "compilerOptions": {{ "lib": [{}], "module": "esnext", "moduleResolution": "bundler", "types": [{}], "noEmit": true }}, "files": [{}] }}"#,
+            r#"{{ "compilerOptions": {{ "lib": [{}], "module": "esnext", "moduleResolution": "bundler", "allowImportingTsExtensions": true, "types": [{}], "noEmit": true }}, "files": [{}] }}"#,
             libs_json(&libs),
             libs_json(&types),
             json_string(&entry)
