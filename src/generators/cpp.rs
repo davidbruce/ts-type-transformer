@@ -857,8 +857,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     for name in m.callbacks.iter().map(|c| &c.name).chain(m.unions.iter().map(|u| &u.name)) {
         home.insert(name.clone(), super::model::file_name(&format!("types/{name}"), &mut taken));
     }
-    // `#include` from one generated file to another.
-    let include = |from: &str, to: &str| format!("#include \"{}{to}\"\n", "../".repeat(from.matches('/').count()));
+    // `#include` from one generated file to another, by its path from the
+    // bindings' root (compiled with `-I` on it): relative to the including
+    // file, a long chain of includes makes paths too long for the system,
+    // as the compiler joins them without resolving `..`.
+    let include = |_from: &str, to: &str| format!("#include \"{to}\"\n");
     // The headers of the given types.
     let includes = |from: &str, types: &BTreeSet<String>| -> String {
         types.iter().filter_map(|t| home.get(t)).map(|h| format!("{h}.hpp")).filter(|h| h != from).map(|h| include(from, &h)).collect()

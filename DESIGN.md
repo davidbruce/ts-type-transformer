@@ -233,7 +233,8 @@ the time control returns to JavaScript is reported, not lost.
   tuples typed (`JsArray_double`, `JsTuple_double_JsString`). Handles are
   released one by one or by scope (`js_scope_open()`/`js_scope_close()`).
   The DOM: 10 MB.
-- C++ (C++20, WASI SDK): a value type per JavaScript type, inheriting
+- C++ (C++20, WASI SDK): headers include each other by their path from the
+  bindings' root, so they are compiled with `-I` on it. A value type per JavaScript type, inheriting
   virtually from `ts::Handle`; copies retain, destructors release. Overloads,
   `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`, lambdas
   (`release()`, `ts::Scoped`), class templates with defaults and

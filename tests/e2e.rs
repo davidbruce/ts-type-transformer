@@ -401,7 +401,8 @@ mod packages {
 #[test]
 fn packages_need_their_modules() {
     let Some([node]) = tools(["node"]) else { return };
-    let c = case("packages", "c");
+    // Its own directory: `packages::c` runs beside it.
+    let c = case_in("packages", "c", "packages-c-modules");
     fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model(&c.xml, "C"), None)).unwrap();
     let script = "import { makeEnv } from './glue.mjs';\n\
                   try { makeEnv(() => null, { modules: { pa: {} } }); console.log('no error'); } catch (e) { console.log(e.message); }\n";
