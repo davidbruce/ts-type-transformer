@@ -113,8 +113,17 @@ fn package_json_name(path: &Path) -> Option<String> {
 
 // The package an entry file belongs to: the nearest package.json above it
 // that has a name. Not a guess from file names: a wrong one would be imported.
+// A types package describes another: `@types/three` is `three`, and
+// `@types/babel__core` is `@babel/core`.
 fn infer_module_name(entry: &Path) -> Option<String> {
-    entry.ancestors().skip(1).find_map(|dir| package_json_name(&dir.join("package.json")))
+    let name = entry.ancestors().skip(1).find_map(|dir| package_json_name(&dir.join("package.json")))?;
+    Some(match name.strip_prefix("@types/") {
+        Some(described) => match described.split_once("__") {
+            Some((scope, name)) => format!("@{scope}/{name}"),
+            None => described.to_string(),
+        },
+        None => name,
+    })
 }
 
 fn main() {

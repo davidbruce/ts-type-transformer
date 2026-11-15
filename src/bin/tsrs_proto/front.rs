@@ -20,6 +20,10 @@ pub struct Front<'c> {
     seen: HashSet<String>,
     // Declarations exported under another name than their own, by their own.
     exported_as: HashMap<String, String>,
+    // A package's top-level symbols by the name they have in the output, and
+    // the reverse: two files may each declare their own `Options`.
+    output_names: HashMap<P<Symbol>, String>,
+    named: HashMap<String, P<Symbol>>,
     emitted_nodes: HashSet<P<Node>>,
     queued: HashSet<P<Symbol>>,
     pending: VecDeque<P<Symbol>>,
@@ -62,6 +66,8 @@ impl<'c> Front<'c> {
             lib_path,
             seen: HashSet::new(),
             exported_as: HashMap::new(),
+            output_names: HashMap::new(),
+            named: HashMap::new(),
             emitted_nodes: HashSet::new(),
             queued: HashSet::new(),
             pending: VecDeque::new(),
@@ -108,6 +114,12 @@ impl<'c> Front<'c> {
         for &s in file.statements().nodes() {
             if matches!(s.kind(), Kind::FunctionDeclaration | Kind::ClassDeclaration) && has_syntactic_modifier(s, ModifierFlags::Default) {
                 self.exported_as.insert(s.name().map(text).unwrap_or_else(|| anonymous_name(s)), "default".into());
+            }
+        }
+        if let Some(module) = file.symbol() {
+            let module = self.c.get_merged_symbol_exported(module);
+            for sym in self.c.get_exports_of_module_exported(module) {
+                self.reserve(sym);
             }
         }
         let mut out = self.statements(file.statements().nodes());
@@ -213,6 +225,47 @@ impl<'c> Front<'c> {
         }
     }
 
+    // A package's top-level symbol: one of a package file, not in a namespace.
+    fn package_top(&self, sym: P<Symbol>) -> bool {
+        sym.declarations().iter().any(|d| {
+            ast::get_source_file_of_node(*d).is_some_and(|f| self.is_package_file(&f))
+                && d.parent().is_some_and(|p| matches!(p.kind(), Kind::SourceFile | Kind::VariableDeclarationList) && (p.kind() == Kind::SourceFile || p.parent().and_then(|st| st.parent()).is_some_and(|f| f.kind() == Kind::SourceFile)))
+        })
+    }
+
+    // The name a symbol has in the output: its own, unless another of the
+    // package's symbols has it, then its file's before it (`RenderList_RenderItem`).
+    fn output_name(&mut self, sym: P<Symbol>) -> String {
+        if let Some(name) = self.output_names.get(&sym) {
+            return name.clone();
+        }
+        let own = self.own_name(sym);
+        if !self.package_top(sym) {
+            return own;
+        }
+        let mut name = own.clone();
+        if self.named.get(&name).is_some_and(|s| *s != sym) {
+            let file = sym.declarations().first().map(|d| anonymous_name(*d)).unwrap_or_default();
+            name = format!("{file}_{own}");
+            let mut n = 2;
+            while self.named.contains_key(&name) {
+                name = format!("{file}_{own}_{n}");
+                n += 1;
+            }
+        }
+        self.named.insert(name.clone(), sym);
+        self.output_names.insert(sym, name.clone());
+        name
+    }
+
+    // What the package exports keeps its own name: named before anything
+    // else, from the entry module's exports, where its own declarations hide
+    // what `export *` brings of the same name.
+    fn reserve(&mut self, sym: P<Symbol>) {
+        let sym = self.resolve_alias(sym);
+        self.output_name(sym);
+    }
+
     fn enqueue_symbol(&mut self, sym: P<Symbol>) {
         // `export { local as exported }`: the alias has the name it is exported as.
         let exported = sym.name();
@@ -255,7 +308,7 @@ impl<'c> Front<'c> {
             Kind::TypeAliasDeclaration => {
                 if let Some((sym, _)) = self.first_time(s) {
                     out.push(Decl::Alias(Alias {
-                        name: text(name_of(s)),
+                        name: self.output_name(sym),
                         sym: Some(sym),
                         type_params: self.type_params(s.type_parameters()),
                         ty: self.opt_type(s.type_node()),
@@ -351,6 +404,10 @@ impl<'c> Front<'c> {
 
     fn interface(&mut self, node: P<Node>) -> Option<Interface> {
         let (sym, decls) = self.first_time(node)?;
+        // `class X` and `interface X` merge: the class has the interface's members.
+        if sym.declarations().iter().any(|d| d.kind() == Kind::ClassDeclaration) {
+            return None;
+        }
         let mut extends = Vec::new();
         let mut members: Vec<Member> = Vec::new();
         let mut keys = HashSet::new();
@@ -375,7 +432,7 @@ impl<'c> Front<'c> {
             }
         }
         Some(Interface {
-            name: node.name().map(text).unwrap_or_else(|| anonymous_name(node)),
+            name: self.output_name(sym),
             sym: Some(sym),
             type_params: self.type_params(node.type_parameters()),
             extends,
@@ -448,6 +505,23 @@ impl<'c> Front<'c> {
                 if is_static { class.statics.push(member) } else { members.push(member) }
             }
         }
+        // An interface of the same name adds to the class: its bases and members.
+        let merged: Vec<P<Node>> = sym.declarations().iter().copied().filter(|d| d.kind() == Kind::InterfaceDeclaration).collect();
+        for d in merged {
+            for clause in d.as_interface_declaration().heritage_clauses().iter().flat_map(|l| l.nodes()) {
+                for t in clause.as_heritage_clause().types().nodes() {
+                    let base = if t.kind() == Kind::ExpressionWithTypeArguments { self.reference(t.expression().unwrap(), t.type_argument_list(), None) } else { self.ty(*t) };
+                    if keys.insert(format!("extends {}", crate::xml::type_key(&base))) {
+                        extends.push(base);
+                    }
+                }
+            }
+            for m in self.members(d.members()) {
+                if keys.insert(format!("false{}", crate::xml::member_key(&m))) {
+                    members.push(m);
+                }
+            }
+        }
         // A class that declares no constructor has its base's, or one without
         // arguments: the checker knows which. An abstract class has none to call.
         if !declares_constructor && !has_syntactic_modifier(node, ModifierFlags::Abstract) {
@@ -462,7 +536,7 @@ impl<'c> Front<'c> {
             class.constructors.clear();
         }
         Some(Interface {
-            name: node.name().map(text).unwrap_or_else(|| anonymous_name(node)),
+            name: self.output_name(sym),
             sym: Some(sym),
             type_params: self.type_params(node.type_parameters()),
             extends,
@@ -490,7 +564,7 @@ impl<'c> Front<'c> {
                 members.push(EnumMember { name: member_name(name_of(*m)), kind, value });
             }
         }
-        Some(Enum { name: text(name_of(node)), members, synthetic: false })
+        Some(Enum { name: self.output_name(sym), members, synthetic: false })
     }
 
     fn namespace(&mut self, node: P<Node>) -> Option<Namespace> {
@@ -732,7 +806,10 @@ impl<'c> Front<'c> {
             }
         }
         let mut r = self.make_ref(sym, args);
-        if !was_alias && !r.name.is_empty() && r.qualified.as_deref() == Some(written.as_str()) {
+        // Written qualified (`Geometry.Point`): its name as written. Not one the
+        // output renamed so that it does not collide with another's.
+        let renamed = r.sym.is_some_and(|s| self.output_names.get(&s).is_some_and(|n| *n != self.own_name(s)));
+        if !was_alias && !renamed && !r.name.is_empty() && r.qualified.as_deref() == Some(written.as_str()) {
             r.name = written;
         }
         r.qualified = r.qualified.filter(|q| *q != r.name);
@@ -745,7 +822,7 @@ impl<'c> Front<'c> {
             return Ref { name: String::new(), kind: "unresolved", sym: None, args, tid: None, qualified: None, file: None, computed: false, node: None };
         };
         let s = self.resolve_alias(s);
-        let name = self.own_name(s);
+        let name = self.output_name(s);
         let raw_fqn = self.c.get_fully_qualified_name_exported(s);
         let fqn = if raw_fqn.starts_with('"') {
             raw_fqn.find("\".").map(|i| raw_fqn[i + 2..].to_string()).unwrap_or(raw_fqn)
@@ -766,7 +843,8 @@ impl<'c> Front<'c> {
         Ref {
             kind: symbol_kind(s.flags()),
             computed: s.flags().intersects(SymbolFlags::TypeAlias) && self.is_computed_alias(s),
-            qualified: Some(fqn).filter(|q| *q != name),
+            // A path in a namespace (`Geometry.Point`); a top-level name has none.
+            qualified: Some(fqn).filter(|q| *q != name && q.contains('.')),
             name,
             sym: Some(s),
             args,

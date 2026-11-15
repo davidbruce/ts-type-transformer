@@ -103,6 +103,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     if o.typeops || o.intersections {
         evaluate(front, decls, o);
         flatten_unions(decls);
+        inline_object_bases(front, decls);
     }
     if o.generics {
         erase_generics(decls, o.map_keyed);
@@ -1045,6 +1046,33 @@ fn splice_union_aliases(decls: &mut [Decl]) {
             splice(t);
             true
         });
+    }
+}
+
+// Bases that are not named types: an object a type-level expression
+// evaluated to (`extends Partial<X>`) gives its members to the interface,
+// and `any`, which says nothing, is dropped.
+fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
+    for d in decls {
+        match d {
+            Decl::Interface(i) => {
+                let own: HashSet<String> = i.members.iter().map(|m| m.name.clone()).collect();
+                let mut kept = Vec::new();
+                for base in std::mem::take(&mut i.extends) {
+                    match base {
+                        Type::Object(members) => {
+                            front.count("merged: object base");
+                            i.members.extend(members.into_iter().filter(|m| !own.contains(&m.name)));
+                        }
+                        Type::Erased(_) | Type::Primitive(_) => front.count("dropped: base that is not a type"),
+                        t => kept.push(t),
+                    }
+                }
+                i.extends = kept;
+            }
+            Decl::Namespace(n) => inline_object_bases(front, &mut n.decls),
+            _ => {}
+        }
     }
 }
 

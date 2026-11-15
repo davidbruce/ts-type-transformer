@@ -905,6 +905,11 @@ impl<'a> Builder<'a> {
                     }
                 }
             }
+            // `new () => Material`: a class itself, which only JavaScript has to give.
+            "constructorType" => {
+                self.skip("constructor type, bound as an untyped value");
+                Ty::Any
+            }
             // A callback written inline: kept so only when it takes `M[K]`.
             "functionType" if self.keyed.is_empty() => {
                 self.bad = Some("callback written inline".into());

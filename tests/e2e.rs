@@ -488,6 +488,42 @@ fn c_calls_may_be_empty() {
     run(Command::new(clang).current_dir(&c.out).args(["--target=wasm32", "-std=c2x", "-pedantic", "-Werror", "-nostdlib", "-ffreestanding", "-fsyntax-only", "-I", "bindings", "t.c"]));
 }
 
+// What a package across files declares has one name each in the output:
+// a class merged with an interface is one class; two files' own `Item`s are
+// two types; an object base gives its members; a class given as a value is a value.
+#[test]
+fn package_declarations_keep_apart() {
+    let dir = root().join("target/e2e/package-names");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("package.json"), r#"{"name": "names-pkg"}"#).unwrap();
+    fs::write(dir.join("a.d.ts"), "interface Item { a: number }\nexport declare function makeA(): Item;\n").unwrap();
+    fs::write(dir.join("b.d.ts"), "interface Item { b: string }\nexport declare function makeB(): Item;\n").unwrap();
+    fs::write(
+        dir.join("index.d.ts"),
+        "export * from \"./a\";\nexport * from \"./b\";\n\
+         export interface Item { c: boolean }\n\
+         export declare class Material { opacity: number }\n\
+         export interface Material { transparent: boolean }\n\
+         interface Props { width: number }\n\
+         export interface Options extends Partial<Props> { height: number }\n\
+         export declare function register(kind: new () => Material): void;\n",
+    )
+    .unwrap();
+    let xml = lower(&dir.join("index.d.ts"), Some("rust"), &[]);
+    // The exported Item keeps its name; the others are named by their files.
+    for name in ["Item", "a_Item", "b_Item"] {
+        assert!(xml.contains(&format!("name=\"{name}\"")), "missing {name}:\n{xml}");
+    }
+    assert!(xml.matches("<class module=\"main\" name=\"Material\"").count() == 1 && !xml.contains("<interface module=\"main\" name=\"Material\"") && xml.contains("name=\"transparent\""), "one Material with both declarations' members:\n{xml}");
+    // References follow: makeA returns a's own Item.
+    assert!(xml.contains("<ref name=\"a_Item\" kind=\"interface\"/>") && xml.contains("<ref name=\"b_Item\" kind=\"interface\"/>"), "references to renamed types:\n{xml}");
+    assert!(xml.contains("name=\"width\"") && !xml.contains("<extends>\n      <object>"), "an object base gives its members:\n{xml}");
+    let model = model(&xml, "Rust");
+    assert!(model.skipped.keys().any(|k| k.contains("constructor type")), "a constructor type is a value: {:?}", model.skipped);
+    generators::rust::files(&model).unwrap();
+}
+
 // `[rename]` names what a pass generated, wherever it is referred to; a
 // declared name is the library's to choose.
 #[test]
@@ -904,6 +940,16 @@ fn module_library_is_inferred() {
     fs::write(dir.join("index.d.ts"), "export declare function ping(): number;\n").unwrap();
     let pkg_xml = lower(&dir.join("index.d.ts"), None, &[]);
     assert!(pkg_xml.contains("<declarations import=\"@scope/widget\""), "should infer package.json name:\n{pkg_xml}");
+
+    // A types package names the module it describes.
+    for (types, module) in [("@types/three", "three"), ("@types/babel__core", "@babel/core")] {
+        let typed = root().join("target/e2e/infer-types").join(types.replace('/', "_"));
+        let _ = fs::remove_dir_all(&typed);
+        fs::create_dir_all(&typed).unwrap();
+        fs::write(typed.join("package.json"), format!("{{\"name\": \"{types}\"}}")).unwrap();
+        fs::write(typed.join("index.d.ts"), "export declare function ping(): number;\n").unwrap();
+        assert!(lower(&typed.join("index.d.ts"), None, &[]).contains(&format!("<declarations import=\"{module}\"")), "{types} describes {module}");
+    }
 
     // The nearest package.json above the file, however deep.
     fs::create_dir_all(dir.join("dist/types")).unwrap();
