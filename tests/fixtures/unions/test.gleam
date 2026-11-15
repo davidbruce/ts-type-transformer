@@ -1,0 +1,41 @@
+// Calls the generated Gleam bindings; every check must hold.
+import bindings as b
+import gleam/io
+
+
+fn check(ok: Bool, what: String) -> Nil {
+  case ok {
+    True -> Nil
+    False -> panic as what
+  }
+}
+
+pub fn main() {
+  let widget = b.widget_new("w")
+  let options = b.options_create()
+  b.options_set_verbose(options, True)
+
+  // A union is a custom type: any member goes in.
+  check(b.describe(b.ValueString("text")) == "string text", "string case")
+  check(b.describe(b.ValueNumber(42.0)) == "number 42", "number case")
+  check(b.describe(b.ValueWidget(widget)) == "widget w", "class case")
+  check(b.describe(b.ValueOptions(options)) == "options verbose=true", "option bag case")
+
+  // What comes back says which member it is.
+  check(b.pick(0.0) == b.ValueString("text"), "string out")
+  check(b.pick(1.0) == b.ValueNumber(42.0), "number out")
+  let assert b.ValueWidget(w) = b.pick(2.0)
+  check(b.widget_get_name(w) == "w", "instanceof out")
+
+  // A tagged union, told apart by its `kind`.
+  let square = b.make_shape("square", 3.0)
+  let assert b.ShapeSquare(sq) = square
+  check(b.square_get_side(sq) == 3.0 && b.area(square) == 9.0, "tagged union")
+
+  // An inline union.
+  check(b.setup(b.BooleanOrOptionsBoolean(True)) == "bool true", "inline union")
+  check(b.setup(b.BooleanOrOptionsOptions(options)) == "options verbose=true", "inline union object")
+  check(b.lookup("abc") == b.NumberOrWidgetNumber(3.0), "inline union out")
+
+  io.println("checks passed")
+}

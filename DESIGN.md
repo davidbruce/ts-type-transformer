@@ -237,6 +237,16 @@ the time control returns to JavaScript is reported, not lost.
   `query_selector_as::<T>`. `T extends Node` is `T: Is<Node>`. Callbacks are
   closures, kept (`new`, `release`) or for the length of a call and free to
   borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
+- Gleam (JavaScript target): no wasm and no glue, as F#; from the shared
+  model, as the wasm targets, since Gleam has no methods, subtypes, overloads
+  or optional arguments. `bindings.gleam` declares opaque types and external
+  functions named for their type (`shape_get_size(s)`, `shape_as_named(s)`);
+  `bindings_ffi.mjs` calls the API and converts what Gleam holds otherwise:
+  an `Option(a)` for a nullable value or optional argument, a `List(a)` for an
+  array, custom types for unions and string enums, a Gleam function for a
+  callback (the same JavaScript function each time), `Promise(a)` to
+  `promise_then`, `attempt` for an exception. Generics are Gleam's, without
+  constraints. A `$` method is `add_new`. The DOM compiles.
 - F#: files must not refer to each other in cycles: they are ordered by what
   F# cannot refer to forward, and a member that mentions a later file's type
   becomes an extension there. Iterables are `seq<T>`, async iterables
@@ -348,12 +358,14 @@ So: bind coarse operations, not inner loops; keep strings out of hot paths.
 ## Tests
 
 `cargo test` runs `tests/e2e.rs`: 65 tests in about 30 seconds, or 10 with
-`-- --skip dom::`. Targets: F# (Fable), C and Zig (wasm32), C++ (WASI SDK),
-Rust (`rustup target add wasm32-unknown-unknown`). A missing toolchain or
+`-- --skip dom::`. Targets: F# (Fable), Gleam, C and Zig (wasm32), C++ (WASI
+SDK), Rust (`rustup target add wasm32-unknown-unknown`); `mise.toml` pins the
+versions. A missing toolchain or
 Chrome skips its tests with a message.
 
 **Fixtures in Node.** For each of `shapes`, `callbacks`, `data`, `globals`,
-`unions`, `pts`, `exports` and `builtins` in `tests/fixtures/`, and each target: lower `api.d.ts`
+`unions`, `pts`, `exports` and `builtins` in `tests/fixtures/`, and each target
+(Gleam's in a project from `tests/gleam`, with a `cell` module for what callbacks did): lower `api.d.ts`
 with `examples/targets/<target>.toml`, generate bindings, compile them with
 the real toolchain, and run `test.*` against `impl.mjs` in Node, with handle
 checks on. A program may export `finish`, called once asynchronous work has
@@ -411,6 +423,8 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
   `import` yet.
 - Rust and Zig callbacks with a union argument receive it decoded; C's
   receive a handle.
+- Gleam: a generic container of a converted type (`Box(Id)`) holds
+  JavaScript's value, unconverted; no async iteration; builtins are opaque.
 - Of the real libraries, katex and rapier compile in every language; marked
   in four; prosemirror, date-fns, leaflet and TanStack in two or three;
   konva in one; node, ECharts, pixi.js and three.js in none. What is left is

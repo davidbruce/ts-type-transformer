@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use ts_type_transformer::generators::{c, cpp, fsharp, rust, wasm, zig};
+use ts_type_transformer::generators::{c, cpp, fsharp, gleam, rust, wasm, zig};
 
 pub fn bindings(target: &str, xml: &str, out: &Path, glue_for: Option<&Path>) -> Result<(), String> {
     let files = generate(target, xml, glue_for).map_err(|problems| problems.join("\n"))?;
@@ -49,6 +49,13 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>) -> Result<Files, V
             files.push(("compile-order.txt".into(), order));
             Ok(files)
         }
-        other => Err(vec![format!("unknown target `{other}`: c, cpp, zig, rust or fsharp")]),
+        "gleam" => {
+            let m = gleam::module(xml)?;
+            for (why, n) in &m.skipped {
+                eprintln!("not bound: {n} x {why}");
+            }
+            Ok(m.files)
+        }
+        other => Err(vec![format!("unknown target `{other}`: c, cpp, zig, rust, fsharp or gleam")]),
     }
 }

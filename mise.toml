@@ -1,0 +1,9 @@
+# The toolchains the tests compile and run bindings with. clang (Xcode), the
+# WASI SDK (~/.wasi-sdk), Fable (a dotnet tool), Chrome and xmllint are
+# found where they are installed.
+[tools]
+dotnet = "11.0.100"
+gleam = "1.19.2"
+node = "26.12.0"
+rust = "1.99.1"
+zig = "0.18.0-dev.253+16d31ceed"

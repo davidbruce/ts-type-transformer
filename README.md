@@ -22,7 +22,7 @@ Examples:
 
 ## Usage
 
-`tsrs_proto` lowers a `.d.ts` entry file, and the files it imports, to XML by a target's config, and can emit bindings for F#, C, C++, Zig or Rust with their JavaScript glue:
+`tsrs_proto` lowers a `.d.ts` entry file, and the files it imports, to XML by a target's config, and can emit bindings for F#, Gleam, C, C++, Zig or Rust with their JavaScript glue:
 
 ```sh
 cargo run --bin tsrs_proto -- path/to/index.d.ts --config examples/targets/rust.toml
@@ -34,7 +34,7 @@ A bare `lib.*.d.ts` name is one of TypeScript's own lib files. `--lib es2020,dom
 
 ## Tests
 
-`cargo test` compiles the generated bindings with each language's toolchain and runs them in Node, and the DOM bindings in headless Chrome. A missing toolchain (`fable`, `clang`, `zig`, the WASI SDK, `rustc` with `wasm32-unknown-unknown`, `node`, Chrome, `xmllint`) skips its tests.
+`cargo test` compiles the generated bindings with each language's toolchain and runs them in Node, and the DOM bindings in headless Chrome. A missing toolchain (`fable`, `gleam`, `clang`, `zig`, the WASI SDK, `rustc` with `wasm32-unknown-unknown`, `node`, Chrome, `xmllint`) skips its tests; `mise.toml` pins the versions used.
 
 ## Notes
 If things are going well, it would be interesting to go further and test some server side APIs, such as Deno and Playwright.

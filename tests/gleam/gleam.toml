@@ -1,0 +1,7 @@
+# The project each Gleam test compiles in: the bindings, and the test as `check`.
+name = "check"
+version = "1.0.0"
+target = "javascript"
+
+[dependencies]
+gleam_stdlib = "1.0.5"

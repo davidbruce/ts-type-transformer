@@ -355,7 +355,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         bad: None,
         problems: Default::default(),
         module: String::new(),
-        generics: target == "C++" || target == "Rust",
+        generics: matches!(target, "C++" | "Rust" | "Gleam"),
         last_type_params: Vec::new(),
         folders: HashMap::new(),
         folder_names: HashMap::new(),
@@ -1233,7 +1233,7 @@ fn to_wasm(x: &str, t: &Ty) -> String {
 
 // A union member's runtime test as a JavaScript condition on `v`.
 // `packages` says which package a class is in, when several are bound.
-fn js_test(test: &str, discriminant: Option<&str>, packages: &BTreeMap<String, String>) -> String {
+pub(crate) fn js_test(test: &str, discriminant: Option<&str>, packages: &BTreeMap<String, String>) -> String {
     let (kind, arg) = test.split_once(':').unwrap_or((test, ""));
     match kind {
         "typeof" => format!("typeof v === {arg:?}"),
@@ -1321,7 +1321,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
 // module, if it is there, else a global. `Pt.make` is `(G.Pt ?? globalThis.Pt).make`.
 // With several packages, in its own: `prosemirror-model::Node` is in
 // `options.modules["prosemirror-model"]`.
-fn global(path: &str) -> String {
+pub(crate) fn global(path: &str) -> String {
     let (root, path) = match path.split_once("::") {
         Some((package, path)) => (format!("(M[{package:?}] ?? G)"), path),
         None => ("G".to_string(), path),
@@ -1331,7 +1331,7 @@ fn global(path: &str) -> String {
 }
 
 // `.name`, or `["some-name"]` where the name is not an identifier.
-fn access(name: &str) -> String {
+pub(crate) fn access(name: &str) -> String {
     // A symbol's key is written as it is: `[Symbol.toStringTag]`.
     if name.starts_with("[Symbol.") {
         return name.to_string();
@@ -1340,7 +1340,7 @@ fn access(name: &str) -> String {
     if plain { format!(".{name}") } else { format!("[{name:?}]") }
 }
 
-fn access_path(path: &str) -> String {
+pub(crate) fn access_path(path: &str) -> String {
     path.split('.').map(access).collect()
 }
 

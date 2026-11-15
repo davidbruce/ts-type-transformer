@@ -118,16 +118,47 @@ fn fsharp(fixture: &str) {
     let c = case(fixture, "fsharp");
     let bindings = generators::fsharp::module(&c.xml).unwrap();
     write_fsharp(&c, &bindings);
-    // A library that is a module, `<module>.mjs` in the fixture, installed where the compiled test imports it.
+    install_library(&c);
+    run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+    let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("js/Test.mjs")));
+    print!("{report}{}", skipped(&bindings.skipped));
+}
+
+// A library that is a module, `<module>.mjs` in the fixture, installed where
+// bindings that import it find it: in `node_modules` of the test's directory.
+fn install_library(c: &Case) {
     if let Some(module) = c.xml.lines().next().and_then(|l| l.split("import=\"").nth(1)).and_then(|r| r.split('"').next()) {
         let dir = c.out.join("node_modules").join(module);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("package.json"), format!("{{ \"name\": \"{module}\", \"type\": \"module\", \"exports\": \"./index.mjs\" }}\n")).unwrap();
         fs::copy(c.fixture.join(format!("{module}.mjs")), dir.join("index.mjs")).unwrap();
     }
-    run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
-    let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("js/Test.mjs")));
+}
+
+// The bindings in a Gleam project (tests/gleam), with the fixture's test.gleam
+// as `check`; compiled, then run in Node.
+fn gleam(fixture: &str) {
+    let Some([gleam, node]) = tools(["gleam", "node"]) else { return };
+    let c = case(fixture, "gleam");
+    let bindings = generators::gleam::module(&c.xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+    write_gleam_project(&c.out, &bindings);
+    fs::copy(c.fixture.join("test.gleam"), c.out.join("src/check.gleam")).unwrap();
+    install_library(&c);
+    run(Command::new(&gleam).current_dir(&c.out).args(["build", "--warnings-as-errors"]));
+    let report = run(Command::new(node).arg(root().join("tests/run_gleam.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("build/dev/javascript/check/check.mjs")));
     print!("{report}{}", skipped(&bindings.skipped));
+}
+
+// A Gleam project in `out`: tests/gleam's, with the bindings in `src`.
+fn write_gleam_project(out: &Path, bindings: &generators::gleam::Output) {
+    for file in ["gleam.toml", "manifest.toml"] {
+        fs::copy(root().join("tests/gleam").join(file), out.join(file)).unwrap();
+    }
+    write_files(&out.join("src"), bindings.files.clone());
+    // A mutable cell, for tests to see what callbacks did.
+    for file in ["cell.gleam", "cell_ffi.mjs"] {
+        fs::copy(root().join("tests/gleam").join(file), out.join("src").join(file)).unwrap();
+    }
 }
 
 // The bindings, the test, and a project that compiles them in order.
@@ -315,6 +346,7 @@ macro_rules! fixtures {
         #[test] fn zig() { super::zig(stringify!($fixture)); }
         #[test] fn cpp() { super::cpp(stringify!($fixture)); }
         #[test] fn rust() { super::rust(stringify!($fixture)); }
+        #[test] fn gleam() { super::gleam(stringify!($fixture)); }
     })* };
 }
 
@@ -681,6 +713,20 @@ fn lowered_constructs_are_absent() {
             assert!(problems.is_empty(), "{target} config, {input}: {} constructs should have been lowered, e.g.\n  {}", problems.len(), problems[..problems.len().min(5)].join("\n  "));
         }
     }
+}
+
+// The whole DOM's Gleam bindings compile.
+#[test]
+fn dom_gleam_compiles() {
+    let Some([gleam]) = tools(["gleam"]) else { return };
+    let out = root().join("target/e2e/dom-gleam");
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(&out).unwrap();
+    let xml = lower_with(Path::new("lib.dom.d.ts"), Some("gleam"), &[root().join("examples/modules/dom.toml")], &[]);
+    let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+    write_gleam_project(&out, &bindings);
+    fs::write(out.join("src/check.gleam"), "import bindings as _\n\npub fn main() {\n  Nil\n}\n").unwrap();
+    run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
 }
 
 // ---- the whole DOM ----
@@ -1396,6 +1442,13 @@ mod libraries {
                 let Some(rustc) = rustc_wasm() else { return };
                 rust_bindings(&rustc, &out, &model(&xml, "Rust"));
             }
+            "gleam" => {
+                let Some([gleam]) = tools(["gleam"]) else { return };
+                let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+                write_gleam_project(&out, &bindings);
+                fs::write(out.join("src/check.gleam"), "import bindings as _\n\npub fn main() {\n  Nil\n}\n").unwrap();
+                run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
+            }
             _ => unreachable!(),
         }
     }
@@ -1408,6 +1461,7 @@ mod libraries {
             #[test] #[ignore] fn cpp() { super::check(stringify!($name), PACKAGES, "cpp"); }
             #[test] #[ignore] fn zig() { super::check(stringify!($name), PACKAGES, "zig"); }
             #[test] #[ignore] fn rust() { super::check(stringify!($name), PACKAGES, "rust"); }
+            #[test] #[ignore] fn gleam() { super::check(stringify!($name), PACKAGES, "gleam"); }
         })* };
     }
 
