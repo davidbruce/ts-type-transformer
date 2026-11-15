@@ -280,7 +280,13 @@ the time control returns to JavaScript is reported, not lost.
   array, custom types for unions and string enums, a Gleam function for a
   callback (the same JavaScript function each time), `Promise(a)` to
   `promise_then`, `attempt` for an exception. Generics are Gleam's, without
-  constraints. A `$` method is `add_new`. The DOM compiles.
+  constraints. Gleam's values of a type parameter are not JavaScript's when
+  they convert (a `Box(Mode)` holds a string, Gleam a variant), and Gleam
+  erases types: so a function whose type parameter crosses takes a codec for
+  it, `box_get_value(b, mode_codec())`, which the type checker ties to the
+  `t` of `Box(t)`. Each type has one (`shape_codec()`), with `codec_float()`,
+  `codec_option(c)`, `codec_list(c)`; a handle crosses as it is (`Box(t)` as
+  an argument needs none). A `$` method is `add_new`. The DOM compiles.
 - F#: files must not refer to each other in cycles: they are ordered by what
   F# cannot refer to forward, and a member that mentions a later file's type
   becomes an extension there. Iterables are `seq<T>`, async iterables
@@ -457,8 +463,7 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
   `import` yet.
 - Rust and Zig callbacks with a union argument receive it decoded; C's
   receive a handle.
-- Gleam: a generic container of a converted type (`Box(Id)`) holds
-  JavaScript's value, unconverted; no async iteration; builtins are opaque.
+- Gleam: no async iteration; builtins are opaque.
 - Of the real libraries, all twelve compile in C and Gleam, ten in Zig, seven
   in C++, six in Rust, three in F# (katex, rapier and prosemirror in all).
   What is left is per library: F# abbreviations of constrained or union types,

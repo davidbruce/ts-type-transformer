@@ -25,10 +25,12 @@ const KEYWORDS: &[&str] = &[
 
 // Types the bindings declare whatever the API: what a module of Gleam can
 // name of JavaScript's values. Not opaque types of the API.
-const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray"];
+const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray", "Codec"];
 
 // The fixed values of every module of bindings.
-const OWN_VALUES: &[&str] = &["promise_then", "attempt", "js_error_message", "dynamic"];
+const OWN_VALUES: &[&str] = &[
+    "promise_then", "attempt", "js_error_message", "dynamic", "codec_float", "codec_string", "codec_bool", "codec_dynamic", "codec_option", "codec_list",
+];
 
 // Types (and variants) and values are apart; a type's functions, constants,
 // upcasts and `to_list` are values named for it: `shape_area`.
@@ -38,9 +40,12 @@ pub const NAMING: Naming = Naming {
     // `Option` is not, and gives way.
     type_names: |candidate, _, kind, _| if kind == Kind::Opaque && (OWN.contains(&candidate) || candidate == "PromiseLike") { Vec::new() } else { vec![upper(candidate)] },
     values_of: |own, name, kind, m| {
-        let Some(c) = m.classes.iter().find(|c| c.name == name).filter(|_| kind == Kind::Class) else { return Vec::new() };
         let prefix = snake(own);
+        // Every type has a codec: `shape_codec`.
+        let codec = lower(&format!("{prefix}_codec"));
+        let Some(c) = m.classes.iter().find(|c| c.name == name).filter(|_| kind == Kind::Class) else { return vec![codec] };
         let mut out: Vec<String> = c.consts.iter().map(|(k, _)| lower(&format!("{prefix}_{k}"))).collect();
+        out.push(codec);
         if c.iterates.is_some() || c.elements.is_some() {
             out.push(lower(&format!("{prefix}_to_list")));
         }
@@ -207,6 +212,8 @@ impl<'m> Gen<'m> {
     // A JavaScript expression that is `x`, JavaScript's value, as Gleam has it.
     fn to_gleam(&self, t: &Ty, x: &str) -> String {
         match t {
+            // A type parameter's values cross by the codec the function was given.
+            Ty::Param(n) => format!("{}.to({x})", codec_var(n)),
             Ty::Void => format!("({x}, undefined)"),
             Ty::Nullable(inner, _) => format!("((v) => v == null ? new None() : new Some({}))({x})", self.to_gleam(inner, "v")),
             Ty::Array => format!("toList(Array.from({x} ?? []))"),
@@ -214,8 +221,8 @@ impl<'m> Gen<'m> {
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.to_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
             Ty::Enum(n) | Ty::NumEnum(n) => format!("{}_to({x})", self.tname(n)),
             Ty::NamedUnion(n) if self.decodable(n) => format!("{}_to({x})", self.tname(n)),
-            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("{}_to({x})", self.tname(n)),
-            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("{}_to({x})", self.tname(n)),
+            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("{}_to({x}{})", self.tname(n), self.codec_args(n, args)),
+            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("{}_to({x}{})", self.tname(n), self.codec_args(n, generic_args(t))),
             Ty::Generic(n, args) if (n == "Promise" || n == "PromiseLike") && args.len() == 1 => {
                 format!("Promise.resolve({x}).then((v) => {})", self.to_gleam(&args[0], "v"))
             }
@@ -223,17 +230,51 @@ impl<'m> Gen<'m> {
         }
     }
 
+    // The codecs a generic union's or callback's conversions take, for the
+    // type parameters they use: `, $same, $c_T`.
+    fn codec_args(&self, n: &str, args: &[Ty]) -> String {
+        let used: Vec<usize> = match self.callbacks.get(n) {
+            Some(used) => used.clone(),
+            None => (0..args.len()).collect(),
+        };
+        // Named without its arguments, it is of `Dynamic`: values as they are.
+        used.iter().map(|&i| format!(", {}", args.get(i).map_or("$same".to_string(), |a| self.codec_expr(a)))).collect()
+    }
+
+    // A JavaScript codec for values of `t`: how they cross each way.
+    fn codec_expr(&self, t: &Ty) -> String {
+        match t {
+            Ty::Param(n) => codec_var(n),
+            t if self.to_gleam(t, "v") == "v" && self.from_gleam(t, "v") == "v" => "$same".into(),
+            t => format!("{{ to: (v) => {}, from: (v) => {} }}", self.to_gleam(t, "v"), self.from_gleam(t, "v")),
+        }
+    }
+
+    // Whether a type parameter's values cross where `t` is: bare, in an
+    // option, list, tuple or promise, through a callback or a union. Not
+    // inside a handle (`Box(t)`), which crosses as it is.
+    fn crosses(&self, t: &Ty, p: &str) -> bool {
+        match t {
+            Ty::Param(n) => n == p,
+            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => self.crosses(inner, p),
+            Ty::Tuple(es) | Ty::Union(es) => es.iter().any(|e| self.crosses(e, p)),
+            Ty::Generic(n, args) if self.is_callback(n) || self.decodable(n) || n == "Promise" || n == "PromiseLike" => args.iter().any(|a| mentions(a, p)),
+            _ => false,
+        }
+    }
+
     // A JavaScript expression that is `x`, Gleam's value, as JavaScript has it.
     fn from_gleam(&self, t: &Ty, x: &str) -> String {
         match t {
+            Ty::Param(n) => format!("{}.from({x})", codec_var(n)),
             Ty::Nullable(inner, undefined) => format!("((v) => v instanceof Some ? {} : {})({x})", self.from_gleam(inner, "v[0]"), if *undefined { "undefined" } else { "null" }),
             Ty::Array => format!("{x}.toArray()"),
             Ty::ArrayOf(e) => format!("{x}.toArray().map((v) => {})", self.from_gleam(e, "v")),
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.from_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
             Ty::Enum(n) | Ty::NumEnum(n) => format!("{}_from({x})", self.tname(n)),
             Ty::NamedUnion(n) if self.decodable(n) => format!("{}_from({x})", self.tname(n)),
-            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("{}_from({x})", self.tname(n)),
-            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("{}_from({x})", self.tname(n)),
+            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("{}_from({x}{})", self.tname(n), self.codec_args(n, args)),
+            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("{}_from({x}{})", self.tname(n), self.codec_args(n, generic_args(t))),
             Ty::Generic(n, args) if (n == "Promise" || n == "PromiseLike") && args.len() == 1 => {
                 format!("Promise.resolve({x}).then((v) => {})", self.from_gleam(&args[0], "v"))
             }
@@ -265,6 +306,15 @@ impl<'m> Gen<'m> {
             js_params.push(id.clone());
             let value = self.from_gleam(t, &id);
             args.push(if last_rest { format!("...({value} ?? [])") } else { value });
+        }
+        // A codec for each type parameter whose values cross: the class's, then the function's own.
+        let class_params: &[TParam] = owner.map_or(&[], |o| o.1);
+        let mut seen = HashSet::new();
+        for p in class_params.iter().chain(&f.type_params).filter(|p| seen.insert(p.name.clone())) {
+            if f.params.iter().map(|x| &x.1).chain([&f.ret]).any(|t| self.crosses(t, &p.name)) {
+                params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
+                js_params.push(codec_var(&p.name));
+            }
         }
         for (position, literal) in &f.fixed {
             args.insert((*position).min(args.len()), literal.clone());
@@ -312,7 +362,8 @@ impl<'m> Gen<'m> {
         }
         to += &fallback.unwrap_or_else(|| format!("  throw new TypeError(\"not a {name}: \" + v);\n"));
         let from: String = u.parts.iter().zip(&variants).map(|(p, v)| format!("  if (u instanceof B.{v}) return {};\n", self.from_gleam(p, "u[0]"))).collect();
-        self.ffi += &format!("function {name}_to(v) {{\n{to}}}\nfunction {name}_from(u) {{\n{from}}}\n");
+        let codecs: String = u.type_params.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
+        self.ffi += &format!("function {name}_to(v{codecs}) {{\n{to}}}\nfunction {name}_from(u{codecs}) {{\n{from}}}\n");
     }
 }
 
@@ -416,7 +467,17 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
               @external(javascript, \"./bindings_ffi.mjs\", \"attempt\")\npub fn attempt(f: fn() -> a) -> Result(a, JsError)\n\n\
               @external(javascript, \"./bindings_ffi.mjs\", \"js_error_message\")\npub fn js_error_message(error: JsError) -> String\n\n\
               /// Any value, untyped: what a value of no particular type is made from.\n\
-              @external(javascript, \"./bindings_ffi.mjs\", \"dynamic\")\npub fn dynamic(value: a) -> Dynamic\n\n";
+              @external(javascript, \"./bindings_ffi.mjs\", \"dynamic\")\npub fn dynamic(value: a) -> Dynamic\n\n\
+              /// How a type's values cross between Gleam and JavaScript: what a generic\n\
+              /// function takes for each type parameter whose values cross (`box_value(b,\n\
+              /// codec_float())`). Each type has one: `shape_codec()`, `mode_codec()`.\n\
+              pub type Codec(a)\n\n\
+              @external(javascript, \"./bindings_ffi.mjs\", \"codec_same\")\npub fn codec_float() -> Codec(Float)\n\n\
+              @external(javascript, \"./bindings_ffi.mjs\", \"codec_same\")\npub fn codec_string() -> Codec(String)\n\n\
+              @external(javascript, \"./bindings_ffi.mjs\", \"codec_same\")\npub fn codec_bool() -> Codec(Bool)\n\n\
+              @external(javascript, \"./bindings_ffi.mjs\", \"codec_same\")\npub fn codec_dynamic() -> Codec(Dynamic)\n\n\
+              @external(javascript, \"./bindings_ffi.mjs\", \"codec_option\")\npub fn codec_option(of: Codec(a)) -> Codec(Option(a))\n\n\
+              @external(javascript, \"./bindings_ffi.mjs\", \"codec_list\")\npub fn codec_list(of: Codec(a)) -> Codec(List(a))\n\n";
     let mut packages: Vec<&String> = m.packages.values().collect();
     packages.sort();
     packages.dedup();
@@ -441,6 +502,11 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          export function attempt(f) {{\n  try {{\n    return new Ok(f());\n  }} catch (e) {{\n    return new GleamError(e);\n  }}\n}}\n\
          export function js_error_message(e) {{\n  return String(e instanceof Error ? e.message : e?.message ?? e);\n}}\n\
          export function dynamic(v) {{\n  return v;\n}}\n\
+         // Codecs: how a type parameter's values cross, each way.\n\
+         const $same = {{ to: (v) => v, from: (v) => v }};\n\
+         export function codec_same() {{\n  return $same;\n}}\n\
+         export function codec_option(c) {{\n  return {{ to: (v) => (v == null ? new None() : new Some(c.to(v))), from: (v) => (v instanceof Some ? c.from(v[0]) : undefined) }};\n}}\n\
+         export function codec_list(c) {{\n  return {{ to: (v) => toList(Array.from(v ?? [], (x) => c.to(x))), from: (v) => v.toArray().map((x) => c.from(x)) }};\n}}\n\
          // A Gleam function made a JavaScript function, the same one each time: one\n\
          // listener added and removed is one function.\n\
          const $wrapped = new WeakMap();\n\
@@ -490,9 +556,10 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let into_gleam: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| g.to_gleam(t, a)).collect();
         let into_js: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| g.from_gleam(t, a)).collect();
+        let codecs: String = used.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
         g.ffi += &format!(
-            "function {name}_from(f) {{\n  return $wrap(f, (f) => ({}) => {});\n}}\n\
-             function {name}_to(f) {{\n  return typeof f === \"function\" ? ({}) => {} : f;\n}}\n",
+            "function {name}_from(f{codecs}) {{\n  return $wrap(f, (f) => ({}) => {});\n}}\n\
+             function {name}_to(f{codecs}) {{\n  return typeof f === \"function\" ? ({}) => {} : f;\n}}\n",
             names.join(", "),
             g.from_gleam(&c.ret, &format!("f({})", into_gleam.join(", "))),
             names.join(", "),
@@ -501,6 +568,34 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     }
     for u in m.unions.iter().filter(|u| u.decodable()) {
         g.union(u);
+    }
+    // Each type's codec. A handle crosses as it is; an enum, a union or a
+    // callback converts, a generic one by its type parameters' codecs.
+    let mut codecs: Vec<(String, Vec<TParam>, bool)> = Vec::new();
+    codecs.extend(m.enums.iter().map(|e| (e.0.clone(), Vec::new(), true)));
+    codecs.extend(m.num_enums.iter().map(|e| (e.0.clone(), Vec::new(), true)));
+    codecs.extend(m.unions.iter().filter(|u| u.decodable()).map(|u| (u.name.clone(), u.type_params.clone(), true)));
+    codecs.extend(m.callbacks.iter().map(|c| (c.name.clone(), g.callbacks[&c.name].iter().map(|&i| c.type_params[i].clone()).collect(), true)));
+    codecs.extend(m.classes.iter().map(|c| (c.name.clone(), c.type_params.clone(), false)));
+    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike") {
+        let arity = m.opaque_arity.get(o).copied().unwrap_or(0);
+        codecs.push((o.clone(), (1..=arity).map(|i| TParam { name: format!("t{i}"), default: None, constraint: None }).collect(), false));
+    }
+    for (n, params, converts) in codecs {
+        let name = g.tname(&n);
+        let id = g.value_name(&format!("{}_codec", snake(&name)));
+        let vars = Gen::type_params(&params);
+        if !converts {
+            g.out += &format!("@external(javascript, \"./bindings_ffi.mjs\", \"codec_same\")\npub fn {id}() -> Codec({name}{vars})\n\n");
+            continue;
+        }
+        let gleam_params: Vec<String> = params.iter().map(|p| format!("{}_codec: Codec({})", lower(&p.name), Gen::tvar(&p.name))).collect();
+        let js: String = params.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
+        g.out += &format!("@external(javascript, \"./bindings_ffi.mjs\", \"{id}\")\npub fn {id}({}) -> Codec({name}{vars})\n\n", gleam_params.join(", "));
+        g.ffi += &format!(
+            "export function {id}({}) {{\n  return {{ to: (v) => {name}_to(v{js}), from: (u) => {name}_from(u{js}) }};\n}}\n",
+            js.trim_start_matches(", ")
+        );
     }
     // Classes: an opaque type, and functions named for it.
     for c in &m.classes {
@@ -637,5 +732,27 @@ fn break_cycles(m: &mut Model) {
             c.params.iter_mut().for_each(|p| cut(&mut p.1, &cycle));
             cut(&mut c.ret, &cycle);
         }
+    }
+}
+
+// The JavaScript name of the codec of type parameter `n`.
+fn codec_var(n: &str) -> String {
+    format!("$c_{}", n.replace(|c: char| !c.is_alphanumeric() && c != '_', "_"))
+}
+
+fn generic_args(t: &Ty) -> &[Ty] {
+    match t {
+        Ty::Generic(_, args) => args,
+        _ => &[],
+    }
+}
+
+// Whether `t` names type parameter `p` anywhere.
+fn mentions(t: &Ty, p: &str) -> bool {
+    match t {
+        Ty::Param(n) => n == p,
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => mentions(inner, p),
+        Ty::Tuple(es) | Ty::Union(es) | Ty::Generic(_, es) => es.iter().any(|e| mentions(e, p)),
+        _ => false,
     }
 }

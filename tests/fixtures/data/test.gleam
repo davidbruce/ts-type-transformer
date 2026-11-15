@@ -60,15 +60,22 @@ pub fn main() {
   let assert [first, ..] = b.items()
   check(b.item_get_id(first) == 1.0 && b.item_get_tags(first) == ["a", "b"], "array of objects")
 
-  // Generics are Gleam's: a value of T crosses as it is.
-  let bx = b.wrap(21.0)
-  check(b.box_get_value(bx) == 21.0, "generic")
-  check(b.box_get_value(b.box_map(bx, fn(v) { v *. 2.0 })) == 42.0, "generic callback")
-  check(b.first(b.range(4.0)) == Some(0.0) && b.first([]) == None, "generic function")
+  // Generics are Gleam's. A value of T crosses by the codec of T: a handle
+  // (`Box(t)`) as it is, so it needs none.
+  let float = b.codec_float()
+  let bx = b.wrap(21.0, float)
+  check(b.box_get_value(bx, float) == 21.0, "generic")
+  check(b.box_get_value(b.box_map(bx, fn(v) { v *. 2.0 }, float, float), float) == 42.0, "generic callback")
+  check(b.first(b.range(4.0), float) == Some(0.0) && b.first([], float) == None, "generic function")
+  // What a Box holds is converted as T is: an Id, a variant, not JavaScript's string.
+  let assert b.IdString(three) = b.box_get_value(b.boxed_id(), b.id_codec())
+  check(three == "three", "Box(Id)")
+  let assert [b.IdNumber(1.0), ..] = b.box_get_value(b.wrap([b.IdNumber(1.0)], b.codec_list(b.id_codec())), b.codec_list(b.id_codec()))
+  check(b.box_get_value(b.wrap(Some("x"), b.codec_option(b.codec_string())), b.codec_option(b.codec_string())) == Some("x"), "Box(Option(String))")
 
   // A generic union, and a union in an array.
-  check(b.unbox(b.EitherT(5.0)) == 5.0, "union of T")
-  check(b.unbox(b.EitherBox(bx)) == 21.0, "union of Box(T)")
+  check(b.unbox(b.EitherT(5.0), float) == 5.0, "union of T")
+  check(b.unbox(b.EitherBox(bx), float) == 21.0, "union of Box(T)")
   check(b.ids() == [b.IdNumber(1.0), b.IdString("two")], "array of unions")
 
   // A name both generic bases have is the type's own.
