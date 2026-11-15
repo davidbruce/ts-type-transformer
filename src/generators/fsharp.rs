@@ -43,6 +43,9 @@ struct Gen {
     // Abbreviations without type parameters, by name: what F# sees through
     // when it tells members apart (`type ArrayLike_or_x = obj`).
     abbrevs: HashMap<String, String>,
+    // What tells each member line's TypeScript overload apart, by the line:
+    // see `overload_marks`.
+    marks: HashMap<String, Vec<String>>,
     // Maps whose keys are used: a `<Map>Keys` module is written for each.
     maps: BTreeSet<String>,
     // Top-level types by module. Top-level values go in a file of their own.
@@ -264,6 +267,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         keyed: HashMap::new(),
         fn_params: Vec::new(),
         abbrevs: HashMap::new(),
+        marks: HashMap::new(),
         inherited: HashSet::new(),
         ctor_arities: BTreeSet::new(),
         maps: BTreeSet::new(),
@@ -1242,7 +1246,8 @@ impl Gen {
                     continue;
                 }
                 // Distinct TypeScript overloads can map to the same F# signature.
-                push_member(&mut lines, format!("{indent}    {line}\n"), &self.abbrevs);
+                self.marks.insert(line.trim().to_string(), overload_marks(m));
+                push_member(&mut lines, format!("{indent}    {line}\n"), &self.abbrevs, &self.marks);
             }
         }
         lines
@@ -1443,10 +1448,12 @@ impl Gen {
                     }
                     continue;
                 }
-                push_member(&mut lines, format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n"), &self.abbrevs);
+                let line = format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n");
+                self.marks.insert(line.trim().to_string(), overload_marks(m));
+                push_member(&mut lines, line, &self.abbrevs, &self.marks);
             } else {
                 for line in self.members(&[m], "obj", &static_name, indent) {
-                    push_member(&mut lines, line, &self.abbrevs);
+                    push_member(&mut lines, line, &self.abbrevs, &self.marks);
                 }
             }
         }
@@ -1561,7 +1568,9 @@ impl Gen {
                         None => (name, "$0...".to_string()),
                     };
                     let tps = self.constrained_type_params(d);
-                    push_member(functions, format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", ")), &self.abbrevs);
+                    let line = format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", "));
+                    self.marks.insert(line.trim().to_string(), overload_marks(d));
+                    push_member(functions, line, &self.abbrevs, &self.marks);
                 }
                 "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
                     let body = only_child_type(d);
@@ -1822,28 +1831,54 @@ fn only_child_type<'a>(d: Node<'a, 'a>) -> Node<'a, 'a> {
 }
 
 // Adds a member. One F# would call as another is there (TypeScript
-// overloads apart only in what they return, `marked(src, {async: true})`):
-// the same line is left out; else it is the next free `name_2`, `name_3`,
-// calling the same JavaScript.
-fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, String>) {
+// overloads apart only in what F# leaves out: a literal option, a
+// constraint): the same line is left out. Else each is named for what it
+// has that the other has not, `merge` and `mergeDictionary`, `marked` and
+// `markedAsync`, the one with nothing of its own keeping the name; where
+// neither has, the next free `name_2`. Both call the same JavaScript.
+fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, String>, marks: &HashMap<String, Vec<String>>) {
     let (head, types) = member_key(&line);
     let types = types.map(|t| expand(&t, abbrevs));
     let same = |l: &String| {
         let (h, t) = member_key(l);
         h == head && t.map(|t| expand(&t, abbrevs)) == types
     };
-    let Some(other) = lines.iter().find(|l| same(l)) else {
+    let Some(at) = lines.iter().position(|l| same(l)) else {
         lines.push(line);
         return;
     };
+    let other = lines[at].clone();
     if types.is_none() || expand(other.trim(), abbrevs) == expand(line.trim(), abbrevs) {
         return;
     }
-    let Some((at, name)) = member_name(&line) else { return };
-    let taken: HashSet<String> = lines.iter().filter_map(|l| member_name(l)).map(|(_, n)| n.to_string()).collect();
+    let Some((_, name)) = member_name(&line) else { return };
+    let bare = name.trim_matches('`').to_string();
+    let mark = |l: &str| marks.get(l.trim()).cloned().unwrap_or_default();
+    let (mine, theirs) = (mark(&line), mark(&other));
+    let own = |a: &[String], b: &[String]| a.iter().filter(|m| !b.contains(m)).map(|m| pascal(m)).collect::<String>();
+    let (new_own, old_own) = (own(&mine, &theirs), own(&theirs, &mine));
+    let mut taken: HashSet<String> = lines.iter().filter_map(|l| member_name(l)).map(|(_, n)| n.to_string()).collect();
+    let mut free = |suffix: &str| -> String {
+        let base = format!("{bare}{suffix}");
+        let n = std::iter::once(ident(&base)).chain((2..).map(|n| ident(&format!("{base}_{n}")))).find(|n| !taken.contains(n)).unwrap();
+        taken.insert(n.clone());
+        n
+    };
+    if !old_own.is_empty() && new_own.is_empty() {
+        // The one there has what this has not: it is renamed, this takes the name.
+        let renamed = free(&old_own);
+        lines[at] = rename_member(&other, &renamed);
+        lines.push(line);
+    } else {
+        let renamed = free(&new_own);
+        lines.push(rename_member(&line, &renamed));
+    }
+}
+
+// A member line under another F# name, calling the same JavaScript.
+fn rename_member(line: &str, to: &str) -> String {
+    let Some((at, name)) = member_name(line) else { return line.to_string() };
     let bare = name.trim_matches('`');
-    let free = (2..).map(|n| format!("{bare}_{n}")).map(|n| ident(&n)).find(|n| !taken.contains(n)).unwrap();
-    // Its JavaScript, where the name was it.
     let emit = if line.contains("Emit") {
         String::new()
     } else if ident(bare) == bare {
@@ -1852,7 +1887,51 @@ fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, 
         format!("[<Emit(\"$0[\\\"{bare}\\\"]($1...)\")>] ")
     };
     let start = line.len() - line.trim_start().len();
-    lines.push(format!("{}{emit}{}{free}{}", &line[..start], &line[start..at], &line[at + name.len()..]));
+    format!("{}{emit}{}{to}{}", &line[..start], &line[start..at], &line[at + name.len()..])
+}
+
+// What a TypeScript signature has that F# leaves out, as words to name it
+// by: its type parameters' constraints (`Dictionary`), the literal values
+// of its parameters and their options (`async: true` is `async`, a string
+// its value; `false` is the default, nothing).
+fn overload_marks(m: Node) -> Vec<String> {
+    let sig = if m.has_tag_name("property") { only_child(m) } else { m };
+    let mut out: Vec<String> = Vec::new();
+    for p in named(sig, "typeParameter") {
+        let c = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child);
+        if let Some(c) = c.filter(|c| c.has_tag_name("ref")) {
+            out.push(attr(c, "name").rsplit('.').next().unwrap_or_default().to_string());
+        }
+    }
+    for p in named(sig, "parameter") {
+        let consts = std::iter::once(p).chain(p.descendants().filter(|d| d.has_tag_name("property")));
+        for c in consts {
+            match c.attribute("const") {
+                Some("true") => out.push(attr(c, "name").to_string()),
+                Some("false") | None => {}
+                Some(v) if v.parse::<f64>().is_err() => out.push(v.to_string()),
+                Some(_) => {}
+            }
+        }
+    }
+    let mut seen = HashSet::new();
+    out.retain(|w| !w.is_empty() && seen.insert(w.clone()));
+    out
+}
+
+// `async` as `Async`, `no-cache` as `NoCache`.
+fn pascal(word: &str) -> String {
+    let mut out = String::new();
+    let mut up = true;
+    for c in word.chars() {
+        if c.is_alphanumeric() {
+            if up { out.extend(c.to_uppercase()) } else { out.push(c) }
+            up = false;
+        } else {
+            up = true;
+        }
+    }
+    out
 }
 
 // Where in a member line its name is, and the name.

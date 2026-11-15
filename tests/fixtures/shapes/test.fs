@@ -44,10 +44,10 @@ check (s.size = 3.0) "optional given"
 check (s.label (string_or_number.String "a") = "string:a") "union string"
 check (s.label (string_or_number.Number 7.0) = "number:7") "union number"
 
-// Overloads F# cannot tell apart, apart only in what they return: the
-// second is renamed, and calls the same JavaScript.
-check (s.measure {| exact = true |} = 9.0) "first of overloads apart in their result"
-check (s.measure_2 {| exact = false |} = "9") "renamed overload"
+// Overloads F# cannot tell apart, apart only in a literal option: the one
+// with `exact: true` is named for it; both call the same JavaScript.
+check (s.measureExact {| exact = true |} = 9.0) "overload named for its literal"
+check (s.measure {| exact = false |} = "9") "overload keeping the name"
 
 // Nullable with `null`: the type's own null.
 check (isNull s.parent) "null"

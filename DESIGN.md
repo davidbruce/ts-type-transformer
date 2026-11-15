@@ -321,8 +321,10 @@ the time control returns to JavaScript is reported, not lost.
   types (`JS.Uint8Array`, `JS.DataView`, `JS.Date`); an `Error` is an `exn`,
   as Fable catches it, and `jsError "..."` makes one JavaScript recognises:
   an F# exception is not an `Error` there. Overloads F# calls alike, apart
-  only in what they return (`marked(src, {async: true})`), are `marked` and
-  `marked_2`, calling the same function. An abbreviation shows the type
+  in what it leaves out, are named for what each has the other has not: a
+  constraint (`merge`, `mergeDictionary`), a literal option (`marked`,
+  `markedAsync` for `{async: true}`); else `name_2`. Both call the same
+  function. An abbreviation shows the type
   parameters its F# type does, the others dropped where it is named. A
   generic base reached twice at other arguments is inherited once, and its
   members declared again at the arguments given (F# allows one
