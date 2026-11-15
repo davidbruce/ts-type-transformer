@@ -108,6 +108,17 @@ impl<'m> Gen<'m> {
         self.types.get(n).cloned().unwrap_or_else(|| upper(n))
     }
 
+    // A generic type named without its arguments: `Polygon(Dynamic)`.
+    fn bare(&self, n: &str) -> String {
+        let arity = self.m.classes.iter().find(|c| c.name == n).map(|c| c.type_params.len())
+            .or_else(|| self.m.opaque_arity.get(n).copied())
+            .or_else(|| self.m.unions.iter().find(|u| u.name == n).map(|u| u.type_params.len()))
+            .or_else(|| self.callbacks.get(n).map(Vec::len))
+            .unwrap_or(0);
+        let name = self.tname(n);
+        if arity == 0 { name } else { format!("{name}({})", vec!["Dynamic"; arity].join(", ")) }
+    }
+
     fn tvar(n: &str) -> String {
         lower(n)
     }
@@ -146,9 +157,10 @@ impl<'m> Gen<'m> {
             Ty::Tuple(es) => format!("#({})", es.iter().map(|e| self.ty(e)).collect::<Vec<_>>().join(", ")),
             // A promise of what the model does not say.
             Ty::Obj(n) if n == "Promise" || n == "PromiseLike" => "Promise(Dynamic)".into(),
-            Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => self.tname(n),
+            Ty::Obj(n) => self.bare(n),
+            Ty::Enum(n) | Ty::NumEnum(n) => self.tname(n),
             Ty::Nullable(inner, _) => format!("Option({})", self.ty(inner)),
-            Ty::NamedUnion(n) if self.decodable(n) => self.tname(n),
+            Ty::NamedUnion(n) if self.decodable(n) => self.bare(n),
             Ty::NamedUnion(_) => "Dynamic".into(),
             Ty::Param(n) => Self::tvar(n),
             Ty::Generic(n, _) if self.m.unions.iter().any(|u| u.name == *n) && !self.decodable(n) => "Dynamic".into(),
@@ -157,7 +169,7 @@ impl<'m> Gen<'m> {
                 let args: Vec<String> = self.callbacks[n].iter().filter_map(|&i| args.get(i)).map(|a| self.ty(a)).collect();
                 if args.is_empty() { self.tname(n) } else { format!("{}({})", self.tname(n), args.join(", ")) }
             }
-            Ty::Generic(n, args) if args.is_empty() => self.tname(n),
+            Ty::Generic(n, args) if args.is_empty() => self.bare(n),
             Ty::Generic(n, args) => format!("{}({})", self.tname(n), args.iter().map(|a| self.ty(a)).collect::<Vec<_>>().join(", ")),
         }
     }
@@ -278,7 +290,8 @@ impl<'m> Gen<'m> {
 pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let root_import = doc.root_element().attribute("import").map(str::to_string);
-    let m = model(xml, "Gleam")?;
+    let mut m = model(xml, "Gleam")?;
+    break_cycles(&mut m);
     let mut g = Gen { m: &m, types: HashMap::new(), variants: HashMap::new(), callbacks: HashMap::new(), values: HashSet::new(), out: String::new(), ffi: String::new(), skipped: m.skipped.clone() };
 
     // Names: every type, and every variant of a union or enum, apart.
@@ -537,5 +550,64 @@ fn function_name(f: &Func) -> String {
     match stem.strip_prefix("set_") {
         Some(rest) => format!("set_{}_new", rest.trim_start_matches('_')),
         None => format!("{}_new", if stem.is_empty() { "dollar" } else { stem }),
+    }
+}
+
+// A callback holding itself, through its own types or another's: a Gleam
+// alias may not, so within such a cycle a callback is `Dynamic`.
+fn break_cycles(m: &mut Model) {
+    fn refs(t: &Ty, names: &HashSet<String>, out: &mut HashSet<String>) {
+        match t {
+            Ty::Obj(n) if names.contains(n) => {
+                out.insert(n.clone());
+            }
+            Ty::Generic(n, args) => {
+                if names.contains(n) {
+                    out.insert(n.clone());
+                }
+                args.iter().for_each(|a| refs(a, names, out));
+            }
+            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => refs(inner, names, out),
+            Ty::Tuple(es) | Ty::Union(es) => es.iter().for_each(|e| refs(e, names, out)),
+            _ => {}
+        }
+    }
+    fn cut(t: &mut Ty, cyclic: &HashSet<String>) {
+        match t {
+            Ty::Obj(n) | Ty::Generic(n, _) if cyclic.contains(n) => *t = Ty::Any,
+            Ty::Generic(_, args) => args.iter_mut().for_each(|a| cut(a, cyclic)),
+            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => cut(inner, cyclic),
+            Ty::Tuple(es) | Ty::Union(es) => es.iter_mut().for_each(|e| cut(e, cyclic)),
+            _ => {}
+        }
+    }
+    let names: HashSet<String> = m.callbacks.iter().map(|c| c.name.clone()).collect();
+    let edges: HashMap<String, HashSet<String>> = m
+        .callbacks
+        .iter()
+        .map(|c| {
+            let mut out = HashSet::new();
+            c.params.iter().map(|p| &p.1).chain([&c.ret]).for_each(|t| refs(t, &names, &mut out));
+            (c.name.clone(), out)
+        })
+        .collect();
+    let reach = |from: &str| {
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut todo: Vec<&str> = edges[from].iter().map(String::as_str).collect();
+        while let Some(n) = todo.pop() {
+            if seen.insert(n) {
+                todo.extend(edges[n].iter().map(String::as_str));
+            }
+        }
+        seen.into_iter().map(str::to_string).collect::<HashSet<String>>()
+    };
+    let reaches: HashMap<String, HashSet<String>> = names.iter().map(|n| (n.clone(), reach(n))).collect();
+    for c in &mut m.callbacks {
+        // Those it reaches that reach it back.
+        let cycle: HashSet<String> = reaches[&c.name].iter().filter(|d| reaches[*d].contains(&c.name)).cloned().collect();
+        if !cycle.is_empty() {
+            c.params.iter_mut().for_each(|p| cut(&mut p.1, &cycle));
+            cut(&mut c.ret, &cycle);
+        }
     }
 }
