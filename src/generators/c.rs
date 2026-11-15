@@ -2,6 +2,7 @@
 // optional parameters or unions: the config must have lowered them all.
 
 use super::model::{Call, Class, Func, Model, NamedUnion, Ty};
+use super::names::{Kind, Naming, identifiers};
 
 thread_local! {
     // The unions of the model being generated that values can be decoded to.
@@ -14,14 +15,69 @@ fn decodable(n: &str) -> bool {
 
 const T: &str = "C";
 
+const KEYWORDS: &[&str] = &[
+    "auto", "bool", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "false", "float", "for",
+    "goto", "if", "inline", "int", "long", "register", "restrict", "return", "self", "short", "signed", "sizeof", "static", "struct", "switch",
+    "true", "typedef", "union", "unsigned", "void", "volatile", "while",
+];
+
 fn ident(name: &str) -> String {
-    const KEYWORDS: &[&str] = &[
-        "auto", "bool", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "false", "float", "for",
-        "goto", "if", "inline", "int", "long", "register", "restrict", "return", "self", "short", "signed", "sizeof", "static", "struct", "switch",
-        "true", "typedef", "union", "unsigned", "void", "volatile", "while",
-    ];
     if KEYWORDS.contains(&name) { format!("{name}_") } else { name.to_string() }
 }
+
+// C has one namespace: a type, its helpers (`AS_Shape`, `Id_from_handle`,
+// `Mode_fill`) and every function (`Shape_area`) are identifiers in it.
+pub const NAMING: Naming = Naming {
+    reserved: || KEYWORDS.iter().map(|k| k.to_string()).chain(identifiers(RUNTIME)).collect(),
+    type_names: |candidate, name, kind, m| {
+        let mut ids = vec![candidate.to_string(), format!("AS_{candidate}")];
+        match kind {
+            Kind::Class => {
+                if let Some(c) = m.classes.iter().find(|c| c.name == name) {
+                    ids.extend(c.ancestors.iter().map(|a| format!("{candidate}_as_{a}")));
+                    if c.iterates.is_some() || c.iterates_async.is_some() {
+                        ids.extend(["iterate", "iterate_async", "iterate_next"].map(|s| format!("{candidate}_{s}")));
+                    }
+                }
+            }
+            Kind::Callback => ids.extend(["fn", "from"].map(|s| format!("{candidate}_{s}"))),
+            Kind::Union => {
+                ids.extend(["from_handle", "to_handle", "of"].map(|s| format!("{candidate}_{s}")));
+                if let Some(u) = m.unions.iter().find(|u| u.name == name) {
+                    for p in u.parts.iter().filter(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))) {
+                        let f = union_field(p);
+                        ids.extend([format!("{candidate}_{f}"), format!("{candidate}_of_{f}")]);
+                    }
+                }
+            }
+            Kind::Enum => {
+                ids.push(format!("{candidate}_absent"));
+                if let Some(e) = m.enums.iter().find(|e| e.0 == name) {
+                    ids.extend(e.1.iter().map(|v| format!("{candidate}_{}", super::model::ident(if v.is_empty() { "empty" } else { v }))));
+                }
+            }
+            Kind::NumEnum => {
+                if let Some(e) = m.num_enums.iter().find(|e| e.0 == name) {
+                    ids.extend(e.1.iter().map(|(member, _)| format!("{candidate}_{member}")));
+                }
+            }
+            Kind::Opaque => {}
+        }
+        // An enum's members may share a name: the enum numbers them itself.
+        ids.sort();
+        ids.dedup();
+        let own = ids.iter().position(|i| i == candidate).unwrap();
+        ids.swap(0, own);
+        ids
+    },
+    types_apart: false,
+    func_name: |owner, name, _| match owner {
+        Some(o) => format!("{o}_{name}"),
+        None => name.to_string(),
+    },
+    funcs_flat: true,
+    members: |_| Vec::new(),
+};
 
 fn raw(t: &Ty) -> &'static str {
     match t {

@@ -14,6 +14,13 @@ use super::model::{Call, Class, Func, Model, Shared, Ty, ident};
 // in their fixed arguments made one.
 pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut m = super::model::model(xml, target)?;
+    let naming = match target {
+        "C" => Some(&super::c::NAMING),
+        _ => None,
+    };
+    if let Some(n) = naming {
+        super::names::settle(&mut m, n);
+    }
     share_imports(&mut m);
     Ok(m)
 }

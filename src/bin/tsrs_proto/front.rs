@@ -349,9 +349,8 @@ impl<'c> Front<'c> {
         if self.named.get(&name).is_some_and(|s| *s != sym) {
             let file = sym.declarations().first().map(|d| anonymous_name(*d)).unwrap_or_default();
             name = format!("{file}_{own}");
-            let flattened = sym.declarations().iter().any(|d| beside_in_namespace(*d, &file, &own));
             let mut n = 2;
-            while self.named.contains_key(&name) || flattened && n == 2 {
+            while self.named.contains_key(&name) {
                 name = format!("{file}_{own}_{n}");
                 n += 1;
             }
@@ -1706,18 +1705,3 @@ fn destructured_name(ty: &Type, index: usize) -> String {
     }
 }
 
-// Whether a namespace `ns` declared beside `d` has a `name`: flattened, it
-// would be `{ns}_{name}`.
-fn beside_in_namespace(d: P<Node>, ns: &str, name: &str) -> bool {
-    let mut block = d.parent();
-    while let Some(b) = block.filter(|b| !matches!(b.kind(), Kind::SourceFile | Kind::ModuleBlock)) {
-        block = b.parent();
-    }
-    block.is_some_and(|b| {
-        b.statements().iter().any(|s| {
-            s.kind() == Kind::ModuleDeclaration
-                && s.name().is_some_and(|n| text(n) == ns)
-                && s.body().is_some_and(|body| body.kind() == Kind::ModuleBlock && body.statements().iter().any(|m| m.name().is_some_and(|n| text(n) == name)))
-        })
-    })
-}

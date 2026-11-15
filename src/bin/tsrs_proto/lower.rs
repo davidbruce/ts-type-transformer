@@ -303,16 +303,6 @@ fn collect_declared_names(decls: &[Decl], prefix: &str, sep: &str, out: &mut Has
             let next = if prefix.is_empty() { ns.name.clone() } else { format!("{prefix}_{}", ns.name) };
             collect_declared_names(&ns.decls, &next, sep, out);
         }
-        // A method's function (`Transformer_isTransforming`) is not a type's
-        // name, nor is an interface's constructor (`Point_create`).
-        if let Decl::Interface(i) = d {
-            let statics = i.class.iter().flat_map(|c| &c.statics);
-            let methods = i.members.iter().chain(statics).filter(|m| matches!(m.kind, MemberKind::Method)).map(|m| m.name.as_str());
-            for m in methods.chain(["create"]) {
-                out.insert(format!("{}{sep}{m}", i.name));
-                out.insert(format!("{}_{m}", i.name));
-            }
-        }
     }
 }
 
@@ -1823,13 +1813,6 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
                     let args = free.into_iter().map(Type::Ref).collect();
                     let body = std::mem::replace(t, Type::This);
-                    // Its methods' functions are not types' names, nor its constructor.
-                    if let Type::Object(members) = &body {
-                        for m in members.iter().filter(|m| m.kind == MemberKind::Method).map(|m| m.name.as_str()).chain(["create"]) {
-                            names.insert(format!("{name}{sep}{m}"));
-                            names.insert(format!("{name}_{m}"));
-                        }
-                    }
                     added.push(match body {
                         Type::Object(members) => Decl::Interface(Interface {
                             name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], members, class: None, synthetic: true, js_name: None,

@@ -258,6 +258,9 @@ pub struct Model {
     // Where each declaration is reached, by its name in the output:
     // `pb::Node` for `pb_Node`, `Konva.Shape` for one in a namespace.
     pub js_refs: BTreeMap<String, String>,
+    // Types lowering made up (`synthetic` in the XML): they give way when
+    // a name is wanted twice.
+    pub synthetic: HashSet<String>,
 }
 
 impl Class {
@@ -265,9 +268,6 @@ impl Class {
         matches!(f.call, Call::Method(_) | Call::Get(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::Invoke | Call::Construct)
     }
 }
-
-// Where a declaration is reached in JavaScript: its path, with the name it
-// is exported as (`jsName`) in place of its own.
 
 // A file or folder name that no other one in `taken` equals ignoring letter
 // case, and that is not reserved on Windows: `foo` after `Foo` is `foo_2`.
@@ -333,6 +333,10 @@ struct Builder<'a> {
     // The JavaScript path of the namespaces being read: `Konva`, or `util`
     // for the namespace the output calls `pb_util`.
     js_prefix: String,
+    // See `type_ident`.
+    declared: Vec<String>,
+    idents: std::cell::RefCell<HashMap<String, String>>,
+    ident_taken: std::cell::RefCell<HashSet<String>>,
     // A generic callback's own type parameters, bound as untyped values: a
     // closure cannot be generic.
     erased: HashSet<String>,
@@ -346,7 +350,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -361,26 +365,23 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         package: None,
         root_import: doc.root_element().attribute("import").map(str::to_string),
         js_prefix: String::new(),
+        declared: Vec::new(),
+        idents: Default::default(),
+        ident_taken: Default::default(),
         erased: HashSet::new(),
         key_strings: HashSet::new(),
     };
     b.index(doc.root_element(), "");
+    for nested in [false, true] {
+        for path in b.declared.iter().filter(|p| p.contains('.') == nested) {
+            b.type_ident(path);
+        }
+    }
     b.decls_of(doc.root_element(), "");
     let mut opaque: Vec<String> = b.opaque.into_iter().collect();
     opaque.sort();
     b.model.opaque = opaque;
-    // A function named as a type (`function WebGLShader(): WebGLShader`) is `WebGLShader_fn`.
     let m = &mut b.model;
-    let types: HashSet<String> = m.classes.iter().map(|c| c.name.clone())
-        .chain(m.enums.iter().map(|e| e.0.clone()))
-        .chain(m.num_enums.iter().map(|e| e.0.clone()))
-        .chain(m.unions.iter().map(|u| u.name.clone()))
-        .chain(m.callbacks.iter().map(|c| c.name.clone()))
-        .chain(m.opaque.iter().cloned())
-        .collect();
-    for f in m.funcs.iter_mut().filter(|f| types.contains(&f.name)) {
-        f.name += "_fn";
-    }
     // A constraint that is an opaque type nothing is known to extend
     // (`T extends ArrayBufferLike`) holds for no type: none.
     let opaque: HashSet<String> = m.opaque.iter().cloned().collect();
@@ -413,10 +414,30 @@ impl<'a> Builder<'a> {
                 // A paired class also has a `var`; the type wins.
                 "var" | "function" => {}
                 _ => {
+                    self.declared.push(key.clone());
                     self.decls.insert(key, d);
                 }
             }
         }
+    }
+
+    // A type's identifier, by its path in the XML: the path flattened
+    // (`cluster_Worker` for `cluster.Worker`), numbered where another path
+    // flattens alike. Declared types have theirs first: a top-level one its
+    // own name, before a namespace's flattened.
+    fn type_ident(&self, path: &str) -> String {
+        if let Some(i) = self.idents.borrow().get(path) {
+            return i.clone();
+        }
+        let base = ident(path);
+        let mut name = base.clone();
+        let mut n = 2;
+        while !self.ident_taken.borrow_mut().insert(name.clone()) {
+            name = format!("{base}_{n}");
+            n += 1;
+        }
+        self.idents.borrow_mut().insert(path.to_string(), name.clone());
+        name
     }
 
     fn import(&mut self, base: String) -> String {
@@ -484,6 +505,9 @@ impl<'a> Builder<'a> {
                 let js = self.js(d, &path);
                 self.model.js_refs.insert(path.clone(), js);
             }
+            if flag(d, "synthetic") {
+                self.model.synthetic.insert(self.type_ident(&path));
+            }
             match d.tag_name().name() {
                 "lowering" => {}
                 "namespace" => {
@@ -495,15 +519,15 @@ impl<'a> Builder<'a> {
                 "enum" => {
                     // Only string enums cross as an index; numeric ones are numbers.
                     if named(d, "member").all(|m| attr(m, "type") == "string") {
-                        self.model.enums.push((ident(&path), named(d, "member").map(|v| attr(v, "value").to_string()).collect()));
+                        self.model.enums.push((self.type_ident(&path), named(d, "member").map(|v| attr(v, "value").to_string()).collect()));
                     } else if named(d, "member").all(|m| attr(m, "type") == "number") {
                         let members = named(d, "member").map(|v| (ident(attr(v, "name")), attr(v, "value").to_string())).collect();
-                        self.model.num_enums.push((ident(&path), members));
+                        self.model.num_enums.push((self.type_ident(&path), members));
                     }
                 }
                 // An interface that is only a call signature is a function type.
                 "interface" if is_function_interface(d) => {
-                    let owner = ident(&path);
+                    let owner = self.type_ident(&path);
                     let (params, _, _, ret) = self.callback_signature(only_child(d), &owner);
                     self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
                 }
@@ -515,7 +539,7 @@ impl<'a> Builder<'a> {
                     let body = self.alias_body(d);
                     let alias_params: Vec<TParam> = named(d, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
                     if body.has_tag_name("functionType") {
-                        let owner = ident(&path);
+                        let owner = self.type_ident(&path);
                         let (params, _, _, ret) = self.callback_signature(body, &owner);
                         self.last_type_params = alias_params.clone();
                         self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
@@ -541,7 +565,7 @@ impl<'a> Builder<'a> {
                     if body.has_tag_name("object") {
                         // A value with members of its own: bound like a class with only statics.
                         // A type may have the same name (`type NodeFilter` and `var NodeFilter`).
-                        let name = if self.decls.contains_key(&path) { format!("{}_statics", ident(&path)) } else { ident(&path) };
+                        let name = if self.decls.contains_key(&path) { format!("{}_statics", self.type_ident(&path)) } else { self.type_ident(&path) };
                         let c = self.statics(body, &self.js(d, &path), name);
                         self.model.classes.push(c);
                         continue;
@@ -583,7 +607,7 @@ impl<'a> Builder<'a> {
     // A class named for `path`, its constructor and statics reached at `js`.
     fn class_at(&mut self, d: Node<'a, 'a>, path: &str, js: &str) -> Class {
         let path_js = js;
-        let owner = ident(path);
+        let owner = self.type_ident(path);
         let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None };
         let mut names = HashSet::new();
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
@@ -613,9 +637,9 @@ impl<'a> Builder<'a> {
         if matches!(tag, "ancestor") {
             // A base from another file is still a type to convert to.
             if !self.decls.contains_key(raw_name) {
-                self.opaque.insert(ident(raw_name));
+                self.opaque.insert(self.type_ident(raw_name));
             }
-            return c.ancestors.push(ident(raw_name));
+            return c.ancestors.push(self.type_ident(raw_name));
         }
         // A direct base, when inheritance is kept: members stay on the type that declares them.
         if tag == "extends" {
@@ -637,12 +661,12 @@ impl<'a> Builder<'a> {
                     return;
                 }
                 // Where generics are erased, a generic base is the base without its arguments.
-                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(ident(name)) } else { self.reference(base) };
+                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(self.type_ident(name)) } else { self.reference(base) };
                 if !self.decls.contains_key(name) {
-                    self.opaque.insert(ident(name));
+                    self.opaque.insert(self.type_ident(name));
                 }
                 c.bases.push(t);
-                return c.ancestors.push(ident(name));
+                return c.ancestors.push(self.type_ident(name));
             }
             return self.skip("generic base");
         }
@@ -833,7 +857,7 @@ impl<'a> Builder<'a> {
                 Some(m) => {
                     let name = m.attribute("qualified").unwrap_or(attr(m, "name")).to_string();
                     if self.key_map(&name) {
-                        self.keyed.insert(attr(p, "name").to_string(), ident(&name));
+                        self.keyed.insert(attr(p, "name").to_string(), self.type_ident(&name));
                     } else {
                         // A key of a type that is not a map of keys: a string.
                         self.key_strings.insert(attr(p, "name").to_string());
@@ -883,7 +907,7 @@ impl<'a> Builder<'a> {
 
     // Registers a map whose values are all handles; false, with a reason, if it is not one.
     fn key_map(&mut self, name: &str) -> bool {
-        let id = ident(name);
+        let id = self.type_ident(name);
         if self.model.maps.iter().any(|m| m.name == id) {
             return true;
         }
@@ -1058,17 +1082,17 @@ impl<'a> Builder<'a> {
                 Ty::Any
             }
             // By what is declared: an alias of string literals has become an enum.
-            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "string") => Ty::Enum(ident(&key)),
-            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "number") => Ty::NumEnum(ident(&key)),
+            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "string") => Ty::Enum(self.type_ident(&key)),
+            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "number") => Ty::NumEnum(self.type_ident(&key)),
             ("enum", _) => Ty::Num,
             (_, Some(d)) if d.has_tag_name("typeAlias") => {
                 let body = self.alias_body(d);
                 if body.has_tag_name("functionType") || body.has_tag_name("object") {
                     if self.generics && elements(n).next().is_some() {
                         let args: Vec<Ty> = elements(n).map(|a| self.ty(a, "")).collect();
-                        return Ty::Generic(ident(&key), args);
+                        return Ty::Generic(self.type_ident(&key), args);
                     }
-                    return Ty::Obj(ident(&key));
+                    return Ty::Obj(self.type_ident(&key));
                 }
                 // A generic union alias, where generics are kept, is a generic union.
                 let generic_union = self.generics && body.has_tag_name("union") && named(d, "typeParameter").next().is_some();
@@ -1083,7 +1107,7 @@ impl<'a> Builder<'a> {
                 }
                 // A union with a name of its own is declared once.
                 if body.has_tag_name("union") {
-                    let name = ident(&key);
+                    let name = self.type_ident(&key);
                     let args: Vec<Ty> = if generic_union { elements(n).map(|a| self.ty(a, "")).collect() } else { Vec::new() };
                     // `void` in a union is a value that may be absent: `void | Promise<void>`.
                     // So is a member that may itself be absent: `string | (number | null)`.
@@ -1139,17 +1163,17 @@ impl<'a> Builder<'a> {
             ("class" | "interface", declared) if self.generics && elements(n).next().is_some() => {
                 let args: Vec<Ty> = elements(n).map(|a| self.ty(a, "")).collect();
                 if declared.is_none() {
-                    self.opaque.insert(ident(&key));
-                    let arity = self.model.opaque_arity.entry(ident(&key)).or_default();
+                    self.opaque.insert(self.type_ident(&key));
+                    let arity = self.model.opaque_arity.entry(self.type_ident(&key)).or_default();
                     *arity = (*arity).max(args.len());
                 }
-                Ty::Generic(ident(&key), args)
+                Ty::Generic(self.type_ident(&key), args)
             }
-            ("class" | "interface", Some(_)) => Ty::Obj(ident(&key)),
+            ("class" | "interface", Some(_)) => Ty::Obj(self.type_ident(&key)),
             // Declared in another library: a handle, by name. An alias may be of anything, and a handle can hold anything.
             ("class" | "interface" | "typeAlias", None) => {
-                self.opaque.insert(ident(&key));
-                Ty::Obj(ident(&key))
+                self.opaque.insert(self.type_ident(&key));
+                Ty::Obj(self.type_ident(&key))
             }
             _ => Ty::Any,
         }

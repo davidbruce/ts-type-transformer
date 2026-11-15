@@ -424,6 +424,11 @@ fn constraints_are_kept_where_met_by_name() {
     assert!(!constrained(&exact, "Options") && constrained(&exact, "ReadableOptions"));
 }
 
+// Names apart in TypeScript that a target would make one identifier of.
+mod clashes {
+    #[test] fn c() { super::c("clashes"); }
+}
+
 mod builtins {
     #[test] fn fsharp() { super::fsharp("builtins"); }
     #[test] fn c() { super::c("builtins"); }
