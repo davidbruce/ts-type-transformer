@@ -100,7 +100,14 @@ impl Xml {
                     self.close("function");
                 }
                 Decl::Var(v) => {
-                    self.open("var", &vec![("name", v.name.as_str())]);
+                    let mut attrs = vec![("name", v.name.as_str())];
+                    if let Some(js) = &v.js_name {
+                        attrs.push(("jsName", js));
+                    }
+                    if v.readonly {
+                        attrs.push(("readonly", "true"));
+                    }
+                    self.open("var", &attrs);
                     self.ty(&v.ty);
                     self.close("var");
                 }
@@ -127,6 +134,9 @@ impl Xml {
     fn interface(&mut self, i: &Interface) {
         let tag = if i.class.is_some() { "class" } else { "interface" };
         let mut attrs = vec![("name", i.name.as_str())];
+        if let Some(js) = &i.js_name {
+            attrs.push(("jsName", js));
+        }
         if i.synthetic {
             attrs.push(("synthetic", "true"));
         }

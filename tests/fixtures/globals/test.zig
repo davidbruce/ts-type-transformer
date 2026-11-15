@@ -16,24 +16,24 @@ fn strEq(s: b.JsString, expected: []const u8) bool {
 
 export fn run() void {
     // Global values.
-    const s = b.get_settings();
-    expect(s.get_level() == 2, @src());
-    expect(!s.get_debug(), @src());
-    s.set_debug(true);
-    expect(b.get_settings().get_debug(), @src());
-    expect(strEq(b.get_VERSION(), "1.2.3"), @src());
+    const s = b.getSettings();
+    expect(s.getLevel() == 2, @src());
+    expect(!s.getDebug(), @src());
+    s.setDebug(true);
+    expect(b.getSettings().getDebug(), @src());
+    expect(strEq(b.getVERSION(), "1.2.3"), @src());
 
     // A global with members of its own.
     expect(b.Clock.now() == 1000, @src());
     expect(b.Clock.ZERO == 0, @src());
 
     // Namespaces, nested ones included.
-    const p = b.Geometry_point(0, 0);
-    const q = b.Geometry_point(3, 4);
-    expect(b.Geometry_distance(p, q) == 5, @src());
-    expect(q.get_x() == 3, @src());
-    expect(b.get_Geometry_UNIT() == 1, @src());
-    expect(b.Geometry_Deep_twice(4) == 8, @src());
+    const p = b.GeometryPoint(0, 0);
+    const q = b.GeometryPoint(3, 4);
+    expect(b.GeometryDistance(p, q) == 5, @src());
+    expect(q.getX() == 3, @src());
+    expect(b.getGeometryUNIT() == 1, @src());
+    expect(b.GeometryDeepTwice(4) == 8, @src());
 
     // Rest parameters take an array.
     const parts = b.JsArrayOf(b.JsString).new();

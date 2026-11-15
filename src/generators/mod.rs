@@ -23,6 +23,22 @@ pub fn attr<'a>(n: Node<'a, 'a>, name: &str) -> &'a str {
     n.attribute(name).unwrap_or_else(|| panic!("<{}> has no `{name}`", n.tag_name().name()))
 }
 
+// A fixed argument's value as part of a name, as the lowering names it:
+// `2d`, `image_png`, and a URL by its last part, `svg`. No runs of `_`.
+pub fn value_name(value: &str) -> String {
+    let value = value.trim_matches('"');
+    let value = if value.contains("://") { value.trim_end_matches('/').rsplit('/').next().unwrap_or(value) } else { value };
+    let mut out = String::new();
+    for c in value.chars() {
+        let c = if c.is_ascii_alphanumeric() { c } else { '_' };
+        if c != '_' || !out.ends_with('_') {
+            out.push(c);
+        }
+    }
+    let out = out.trim_matches('_').to_string();
+    if out.is_empty() { "empty".into() } else { out }
+}
+
 pub fn flag(n: Node, name: &str) -> bool {
     n.attribute(name) == Some("true")
 }

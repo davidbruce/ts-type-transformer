@@ -25,8 +25,8 @@ export fn properties(n: i32) f64 {
     var s: f64 = 0;
     var i: i32 = 0;
     while (i < n) : (i += 1) {
-        v.set_x(@floatFromInt(i));
-        s += v.get_x();
+        v.setX(@floatFromInt(i));
+        s += v.getX();
     }
     return s;
 }

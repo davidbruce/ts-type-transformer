@@ -256,12 +256,26 @@ fn mentions(t: &Ty, param: &str) -> bool {
 }
 
 // A function's name: a property `x` reads as `x()` and writes as `set_x(..)`.
+// A `$` method (`$add`) reads as `add_new()` rather than `_add()`.
 fn function_name(f: &Func) -> String {
     let base = match &f.call {
         Call::Get(_) | Call::StaticGet(_) | Call::IndexGet => f.name.strip_prefix("get_").unwrap_or(&f.name),
         _ => &f.name,
     };
-    ident(&snake(base))
+    let dollar = match &f.call {
+        Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => {
+            js.rsplit('.').next().is_some_and(|n| n.starts_with('$'))
+        }
+        _ => false,
+    };
+    let s = snake(base);
+    if !dollar {
+        return ident(&s);
+    }
+    let is_set = matches!(&f.call, Call::Set(_) | Call::StaticSet(_));
+    let stem = if is_set { s.strip_prefix("set_").unwrap_or(&s) } else { &s }.trim_start_matches('_');
+    let stem = if stem.is_empty() { "dollar" } else { stem };
+    ident(&if is_set { format!("set_{stem}_new") } else { format!("{stem}_new") })
 }
 
 // Names for a set of functions, each once: by the model's name.
@@ -516,7 +530,8 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
-mod rt {
+#[allow(dead_code)]
+pub(crate) mod rt {
     use core::ffi::c_void;
     #[link(wasm_import_module = "env")]
     unsafe extern "C" {
@@ -540,6 +555,19 @@ mod rt {
         pub fn js_live() -> u32;
         pub fn js_take_error() -> u32;
         pub fn js_error_message(h: u32) -> u32;
+        pub fn js_error_name(h: u32) -> u32;
+        pub fn js_error_stack(h: u32) -> u32;
+        pub fn js_error_new(p: *const u8, n: usize) -> u32;
+        pub fn js_date_new(ms: f64) -> u32;
+        pub fn js_date_now() -> f64;
+        pub fn js_date_time(h: u32) -> f64;
+        pub fn js_date_to_iso_string(h: u32) -> u32;
+        pub fn js_bytes_len(h: u32) -> u32;
+        pub fn js_bytes_read(h: u32, off: usize, dst: *mut u8, len: usize) -> u32;
+        pub fn js_bytes_write(h: u32, off: usize, src: *const u8, len: usize) -> u32;
+        pub fn js_bytes_new(kind: u32, src: *const u8, byte_len: usize) -> u32;
+        pub fn js_bytes_buffer(h: u32) -> u32;
+        pub fn js_bytes_offset(h: u32) -> u32;
         pub fn js_promise_then(p: u32, f: usize, ctx: *mut c_void);
         pub fn js_iterate(h: u32) -> u32;
         pub fn js_iterator_next(it: u32) -> u32;
@@ -1003,19 +1031,32 @@ impl<E: JsType> JsListener<E> {
 // A JavaScript exception, or the reason a promise was rejected.
 handle!(JsError);
 impl JsError {
+    pub fn new(msg: &str) -> Self {
+        JsError(JsHandle(unsafe { rt::js_error_new(msg.as_ptr(), msg.len()) }))
+    }
+    pub fn name(&self) -> String {
+        String::from_handle(unsafe { rt::js_error_name(self.0 .0) })
+    }
     pub fn message(&self) -> String {
         String::from_handle(unsafe { rt::js_error_message(self.0 .0) })
+    }
+    pub fn stack(&self) -> String {
+        String::from_handle(unsafe { rt::js_error_stack(self.0 .0) })
     }
 }
 impl core::fmt::Debug for JsError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "JsError({:?})", self.message())
+        write!(f, "JsError({}: {:?})", self.name(), self.message())
     }
 }
 
 // What is not a type's: errors, handles, tasks.
 pub mod js {
     use super::*;
+
+    pub fn date_now() -> f64 {
+        unsafe { rt::js_date_now() }
+    }
 
     // The exception a call threw, taken. A call that throws returns a zero
     // value, and an exception not taken by the time control returns to
@@ -1267,10 +1308,66 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.iter().any(|r| r.0 == n.as_str())) {
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
         let params: Vec<String> = (1..=arity).map(|i| format!("T{i}")).collect();
+        let raw_name = name.as_str();
         let name = tn(name);
-        types_file += &format!("handle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
+        let targs = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
+        let phantom = if params.is_empty() { "" } else { ", PhantomData" };
+        types_file += &format!("handle!({name}{targs});\n");
         if params.is_empty() {
             types_file += &format!("impl Is<{name}> for {name} {{}}\n");
+        }
+        if raw_name == "Error" && params.is_empty() {
+            types_file += "impl Error {\n\
+                           pub fn new(msg: &str) -> Self { Self(JsHandle(unsafe { crate::runtime::rt::js_error_new(msg.as_ptr(), msg.len()) })) }\n\
+                           pub fn name(&self) -> ::std::string::String { <::std::string::String>::from_handle(unsafe { crate::runtime::rt::js_error_name(self.0 .0) }) }\n\
+                           pub fn message(&self) -> ::std::string::String { <::std::string::String>::from_handle(unsafe { crate::runtime::rt::js_error_message(self.0 .0) }) }\n\
+                           pub fn stack(&self) -> ::std::string::String { <::std::string::String>::from_handle(unsafe { crate::runtime::rt::js_error_stack(self.0 .0) }) }\n\
+                           }\n\
+                           impl From<JsError> for Error { fn from(e: JsError) -> Self { Self(e.0) } }\n\
+                           impl From<Error> for JsError { fn from(e: Error) -> Self { Self(e.0) } }\n";
+        } else if raw_name == "Date" && params.is_empty() {
+            types_file += "impl Date {\n\
+                           pub fn from_time(ms: f64) -> Self { Self(JsHandle(unsafe { crate::runtime::rt::js_date_new(ms) })) }\n\
+                           pub fn now() -> f64 { unsafe { crate::runtime::rt::js_date_now() } }\n\
+                           pub fn time(&self) -> f64 { unsafe { crate::runtime::rt::js_date_time(self.0 .0) } }\n\
+                           pub fn to_iso_string(&self) -> ::std::string::String { <::std::string::String>::from_handle(unsafe { crate::runtime::rt::js_date_to_iso_string(self.0 .0) }) }\n\
+                           }\n";
+        } else if let Some(s) = super::wasm::buffer_spec(raw_name) {
+            types_file += &format!(
+                "impl{targs} {name}{targs} {{\n\
+                 pub fn byte_len(&self) -> usize {{ unsafe {{ crate::runtime::rt::js_bytes_len(self.0 .0) as usize }} }}\n\
+                 pub fn read_bytes(&self, offset: usize, dst: &mut [u8]) -> usize {{ unsafe {{ crate::runtime::rt::js_bytes_read(self.0 .0, offset, dst.as_mut_ptr(), dst.len()) as usize }} }}\n\
+                 pub fn write_bytes(&self, offset: usize, src: &[u8]) -> usize {{ unsafe {{ crate::runtime::rt::js_bytes_write(self.0 .0, offset, src.as_ptr(), src.len()) as usize }} }}\n"
+            );
+            if s.has_buffer() {
+                types_file += "pub fn byte_offset(&self) -> usize { unsafe { crate::runtime::rt::js_bytes_offset(self.0 .0) as usize } }\n\
+                               pub fn buffer(&self) -> JsValue { JsValue(JsHandle(unsafe { crate::runtime::rt::js_bytes_buffer(self.0 .0) })) }\n";
+            }
+            if s.is_typed_array() {
+                let kind = s.kind.unwrap();
+                let elem = rust_elem(s.elem);
+                let eb = s.elem.bytes();
+                types_file += &format!(
+                    "pub fn new(len: usize) -> Self {{ Self(JsHandle(unsafe {{ crate::runtime::rt::js_bytes_new({kind}, core::ptr::null(), len.saturating_mul({eb})) }}){phantom}) }}\n\
+                     pub fn from_slice(data: &[{elem}]) -> Self {{ Self(JsHandle(unsafe {{ crate::runtime::rt::js_bytes_new({kind}, data.as_ptr() as *const u8, data.len().saturating_mul({eb})) }}){phantom}) }}\n\
+                     pub fn len(&self) -> usize {{ self.byte_len() / {eb} }}\n\
+                     pub fn is_empty(&self) -> bool {{ self.len() == 0 }}\n\
+                     pub fn read(&self, elem_offset: usize, dst: &mut [{elem}]) -> usize {{ let Some(off) = elem_offset.checked_mul({eb}) else {{ return 0; }}; unsafe {{ crate::runtime::rt::js_bytes_read(self.0 .0, off, dst.as_mut_ptr() as *mut u8, dst.len().saturating_mul({eb})) as usize / {eb} }} }}\n\
+                     pub fn write(&self, elem_offset: usize, src: &[{elem}]) -> usize {{ let Some(off) = elem_offset.checked_mul({eb}) else {{ return 0; }}; unsafe {{ crate::runtime::rt::js_bytes_write(self.0 .0, off, src.as_ptr() as *const u8, src.len().saturating_mul({eb})) as usize / {eb} }} }}\n\
+                     pub fn to_vec(&self) -> ::std::vec::Vec<{elem}> {{ let mut out = vec![Default::default(); self.len()]; self.read(0, &mut out); out }}\n"
+                );
+            } else {
+                if let Some(kind) = s.kind {
+                    types_file += &format!(
+                        "pub fn new(byte_len: usize) -> Self {{ Self(JsHandle(unsafe {{ crate::runtime::rt::js_bytes_new({kind}, core::ptr::null(), byte_len) }}){phantom}) }}\n\
+                         pub fn from_bytes(data: &[u8]) -> Self {{ Self(JsHandle(unsafe {{ crate::runtime::rt::js_bytes_new({kind}, data.as_ptr(), data.len()) }}){phantom}) }}\n"
+                    );
+                }
+                types_file += "pub fn read(&self, offset: usize, dst: &mut [u8]) -> usize { self.read_bytes(offset, dst) }\n\
+                               pub fn write(&self, offset: usize, src: &[u8]) -> usize { self.write_bytes(offset, src) }\n\
+                               pub fn to_vec(&self) -> ::std::vec::Vec<u8> { let mut out = vec![0u8; self.byte_len()]; self.read_bytes(0, &mut out); out }\n";
+            }
+            types_file += "}\n";
         }
     }
     // Unions that can be decoded: enums.
@@ -1517,4 +1614,21 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
         trampoline("unsafe { &mut *(ctx as *mut F) }", ""),
         turbofish.join(", ")
     )
+}
+
+// A buffer element as a Rust type.
+fn rust_elem(e: super::wasm::Elem) -> &'static str {
+    use super::wasm::Elem::*;
+    match e {
+        I8 => "i8",
+        U8 => "u8",
+        I16 => "i16",
+        U16 => "u16",
+        I32 => "i32",
+        U32 => "u32",
+        I64 => "i64",
+        U64 => "u64",
+        F32 => "f32",
+        F64 => "f64",
+    }
 }

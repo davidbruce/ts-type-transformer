@@ -20,15 +20,21 @@ Examples:
 * Haxe: https://github.com/haxiomic/dts2hx
 * Gleam: One will probably show up soon
 
-## The Plan 
+## Usage
 
-Use oxc.rs to convert the following projects into XML so that they may be consumed by other languages:
+`tsrs_proto` lowers a `.d.ts` entry file, and the files it imports, to XML by a target's config, and can emit bindings for F#, C, C++, Zig or Rust with their JavaScript glue:
 
-* @types/web https://github.com/microsoft/TypeScript-DOM-Lib-Generator: TypeScripts definitions for the Web API. For testing .d.ts files 
-* Pts https://github.com/williamngan/pts: A relatively small drawing library. For testing .ts files 
+```sh
+cargo run --bin tsrs_proto -- path/to/index.d.ts --config examples/targets/rust.toml
+cargo run --bin tsrs_proto -- path/to/index.d.ts --config examples/targets/zig.toml --emit zig --out bindings
+cargo run --bin tsrs_proto -- lib.dom.d.ts --config examples/targets/c.toml --config examples/modules/dom.toml
+```
 
-Use the output and attempt to produce F# bindings or Rust bindings from them. 
+A bare `lib.*.d.ts` name is one of TypeScript's own lib files. `--lib es2020,dom` chooses the lib files a package is checked with, and `--include Intl` adds a lib namespace to the output. Target configs are in `examples/targets/`, the XML schema in `schema/`, and the design, benchmarks and tests are in [DESIGN.md](DESIGN.md).
 
+## Tests
+
+`cargo test` compiles the generated bindings with each language's toolchain and runs them in Node, and the DOM bindings in headless Chrome. A missing toolchain (`fable`, `clang`, `zig`, the WASI SDK, `rustc` with `wasm32-unknown-unknown`, `node`, Chrome, `xmllint`) skips its tests.
 
 ## Notes
 If things are going well, it would be interesting to go further and test some server side APIs, such as Deno and Playwright.

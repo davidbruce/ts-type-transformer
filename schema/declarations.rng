@@ -97,12 +97,14 @@
   <define name="jsName">
     <attribute name="jsName">
       <a:documentation>The real JavaScript name, when overloads=rename gave this overload a
-        unique name. Absent: name is the JavaScript name.</a:documentation>
+        unique name, or what a top-level declaration is exported as when not its own
+        name (`default`). Absent: name is the JavaScript name.</a:documentation>
     </attribute>
   </define>
 
   <define name="interface.body">
     <attribute name="name"/>
+    <optional><ref name="jsName"/></optional>
     <ref name="synthetic"/>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <ref name="bases"/>
@@ -112,6 +114,7 @@
   <!-- classes=pair: an interface and its `var X: { prototype: X; new(); statics }`. -->
   <define name="class.body">
     <attribute name="name"/>
+    <optional><ref name="jsName"/></optional>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <ref name="bases"/>
     <zeroOrMore>
@@ -162,6 +165,9 @@
 
   <define name="var.body">
     <attribute name="name"/>
+    <optional><ref name="jsName"/></optional>
+    <!-- `const`, or a module's export: it cannot be assigned. -->
+    <optional><attribute name="readonly"><value>true</value></attribute></optional>
     <ref name="type"/>
   </define>
 

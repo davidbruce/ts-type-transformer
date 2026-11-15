@@ -21,31 +21,31 @@ fn doubled(_: ?*anyopaque, value: b.JsValue) b.JsValue {
 export fn run() void {
     // Option objects: built here, read by JavaScript.
     const o = b.Options.create();
-    o.set_width(3);
-    o.set_mode(.fill);
+    o.setWidth(3);
+    o.setMode(.fill);
     expect(strEq(b.describe(o), "3x? fill"), @src());
-    o.set_height(2);
-    o.set_title("hi");
+    o.setHeight(2);
+    o.setTitle("hi");
     expect(strEq(b.describe(o), "3x2 fill \"hi\""), @src());
 
     // Built by JavaScript, read here. A missing optional property is null.
     const d = b.defaults();
-    expect(d.get_width() == 4, @src());
-    expect(d.get_mode() == .fit, @src());
-    expect(d.get_height() == null, @src());
+    expect(d.getWidth() == 4, @src());
+    expect(d.getMode() == .fit, @src());
+    expect(d.getHeight() == null, @src());
 
     // Partial<Options>.
     const changes = b.patch_changes.create();
-    changes.set_width(9);
+    changes.setWidth(9);
     const patched = b.patch(d, changes);
-    expect(patched.get_width() == 9, @src());
-    expect(patched.get_mode() == .fit, @src());
+    expect(patched.getWidth() == 9, @src());
+    expect(patched.getMode() == .fit, @src());
 
     // Pick<Options, "width" | "height">.
     const size = b.area_size.create();
-    size.set_width(3);
+    size.setWidth(3);
     expect(b.area(size) == 9, @src());
-    size.set_height(5);
+    size.setHeight(5);
     expect(b.area(size) == 15, @src());
 
     // keyof Options.
@@ -53,24 +53,24 @@ export fn run() void {
 
     // Record<string, number>.
     const table = b.lookup_table.create();
-    table.set_at("a", 7);
+    table.setAt("a", 7);
     expect(b.lookup(table, "a") == 7, @src());
     expect(b.lookup(table, "b") == -1, @src());
-    expect(table.get_at("a") == 7, @src());
-    expect(table.get_at("b") == null, @src());
+    expect(table.getAt("a") == 7, @src());
+    expect(table.getAt("b") == null, @src());
 
     // An intersection of object types.
     const tagged = b.Tagged.create();
-    tagged.set_name("x");
-    tagged.set_id(5);
+    tagged.setName("x");
+    tagged.setId(5);
     expect(strEq(b.show(tagged), "x#5"), @src());
 
     // Inline object types.
     const point = b.norm_point.create();
-    point.set_x(3);
-    point.set_y(4);
+    point.setX(3);
+    point.setY(4);
     expect(b.norm(point) == 5, @src());
-    expect(b.origin().get_x() == 0, @src());
+    expect(b.origin().getX() == 0, @src());
 
     // Arrays are typed: number[] is JsArrayOf(f64).
     const r = b.range(4);
@@ -93,13 +93,13 @@ export fn run() void {
     const all = b.items();
     expect(all.len() == 2, @src());
     const item = all.get(0);
-    expect(item.get_id() == 1, @src());
-    expect(item.get_tags().len() == 2, @src());
+    expect(item.getId() == 1, @src());
+    expect(item.getTags().len() == 2, @src());
 
     // Generics are erased: values are untyped.
     const bx = b.wrap(b.JsValue.number(21));
-    expect(bx.get_value().toNumber() == 21, @src());
-    expect(bx.map(b.Box_map_f.from(doubled, null)).get_value().toNumber() == 42, @src());
+    expect(bx.getValue().toNumber() == 21, @src());
+    expect(bx.map(b.Box_map_f.from(doubled, null)).getValue().toNumber() == 42, @src());
     expect(b.first(r.any()).toNumber() == 0, @src());
     expect(b.first(b.JsArray.new()).isNull(), @src());
 
@@ -116,7 +116,7 @@ export fn run() void {
         defer b.jsRelease(n);
         const t = b.wrap(n);
         defer b.jsRelease(t);
-        const v = t.get_value();
+        const v = t.getValue();
         defer b.jsRelease(v);
         const parts = b.words("a b");
         defer b.jsRelease(parts);

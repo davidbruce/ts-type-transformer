@@ -124,15 +124,6 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         each_member_list(decls, &mut |members| expand_members(members, o));
         expand_functions(decls, o);
     }
-    if o.optionals {
-        // Callback types cannot be overloaded: they receive every argument.
-        walk(decls, &mut |t, _| {
-            if let Type::Function(s) | Type::Constructor(s) = t {
-                s.params.iter_mut().for_each(|p| p.optional = false);
-            }
-            true
-        });
-    }
     if o.unions {
         walk(decls, &mut |t, _| {
             match t {
@@ -284,8 +275,27 @@ fn absorb_enums(decls: &mut [Decl]) {
     });
 }
 
+fn collect_declared_names(decls: &[Decl], prefix: &str, sep: &str, out: &mut HashSet<String>) {
+    for d in decls {
+        if let Some(name) = decl_name(d) {
+            out.insert(name.to_string());
+            if !prefix.is_empty() {
+                out.insert(format!("{prefix}_{name}"));
+                if sep != "_" {
+                    out.insert(format!("{prefix}{sep}{name}"));
+                }
+            }
+        }
+        if let Decl::Namespace(ns) = d {
+            let next = if prefix.is_empty() { ns.name.clone() } else { format!("{prefix}_{}", ns.name) };
+            collect_declared_names(&ns.decls, &next, sep, out);
+        }
+    }
+}
+
 fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
-    let mut names: HashSet<String> = decls.iter().filter_map(decl_name).map(str::to_string).collect();
+    let mut names: HashSet<String> = HashSet::new();
+    collect_declared_names(decls, "", sep, &mut names);
     // A union written inline that a declared alias already names uses that name.
     let mut by_key: HashMap<String, String> = HashMap::new();
     for d in decls.iter() {
@@ -605,25 +615,6 @@ pub fn rename(decls: &mut [Decl], renames: &[(String, String)]) -> Result<Vec<St
             }
         }
     }
-    fn apply(decls: &mut [Decl], to: &dyn Fn(&str) -> Option<String>) {
-        let set = |name: &mut String| {
-            if let Some(new) = to(name) {
-                *name = new;
-            }
-        };
-        for d in decls {
-            match d {
-                Decl::Interface(i) => {
-                    set(&mut i.name);
-                    i.ancestors.iter_mut().for_each(set);
-                }
-                Decl::Alias(a) => set(&mut a.name),
-                Decl::Enum(e) => set(&mut e.name),
-                Decl::Namespace(n) => apply(&mut n.decls, to),
-                Decl::Function(_) | Decl::Var(_) => {}
-            }
-        }
-    }
     if renames.is_empty() {
         return Ok(Vec::new());
     }
@@ -643,7 +634,39 @@ pub fn rename(decls: &mut [Decl], renames: &[(String, String)]) -> Result<Vec<St
             return Err(format!("rename.{old} = \"{new}\": that name is taken"));
         }
     }
+    rename_everywhere(decls, renames, &[]);
+    Ok(unused)
+}
+
+// Renames declarations, and what refers to them: references, inherited
+// members, and the classes union members are tested to be instances of,
+// which `tests` may also give another JavaScript name (`default`).
+pub fn rename_everywhere(decls: &mut [Decl], renames: &[(String, String)], tests: &[(String, String)]) {
+    fn apply(decls: &mut [Decl], to: &dyn Fn(&str) -> Option<String>) {
+        let set = |name: &mut String| {
+            if let Some(new) = to(name) {
+                *name = new;
+            }
+        };
+        for d in decls {
+            match d {
+                Decl::Interface(i) => {
+                    set(&mut i.name);
+                    i.ancestors.iter_mut().for_each(set);
+                }
+                Decl::Alias(a) => set(&mut a.name),
+                Decl::Enum(e) => set(&mut e.name),
+                Decl::Namespace(n) => apply(&mut n.decls, to),
+                Decl::Function(f) => set(&mut f.name),
+                Decl::Var(v) => set(&mut v.name),
+            }
+        }
+    }
+    if renames.is_empty() && tests.is_empty() {
+        return;
+    }
     let to = |name: &str| renames.iter().find(|r| r.0 == name).map(|r| r.1.clone());
+    let test = |name: &str| tests.iter().chain(renames).find(|r| r.0 == name).map(|r| r.1.clone());
     apply(decls, &to);
     each_member_list(decls, &mut |members| {
         for m in members {
@@ -660,16 +683,21 @@ pub fn rename(decls: &mut [Decl], renames: &[(String, String)]) -> Result<Vec<St
             r.qualified = None;
             r.name = new;
         }
+        if let Type::Tested(_, Test::InstanceOf(c)) = t
+            && let Some(new) = test(c)
+        {
+            *c = new;
+        }
         true
     });
-    Ok(unused)
 }
 
 // ---- classes ----
 
 // `interface X` + `var X: { prototype: X; new(): X; statics }` is a class.
 fn pair_classes(decls: &mut Vec<Decl>) {
-    let mut classes: HashMap<String, Class> = HashMap::new();
+    // The class, and what its constructor is exported as.
+    let mut classes: HashMap<String, (Class, Option<String>)> = HashMap::new();
     let interfaces: HashSet<String> = decls.iter().filter_map(|d| if let Decl::Interface(i) = d { Some(i.name.clone()) } else { None }).collect();
     decls.retain_mut(|d| {
         let Decl::Var(v) = d else { return true };
@@ -692,15 +720,16 @@ fn pair_classes(decls: &mut Vec<Decl>) {
                 class.statics.push(m);
             }
         }
-        classes.insert(v.name.clone(), class);
+        classes.insert(v.name.clone(), (class, v.js_name.clone()));
         false
     });
     for d in decls.iter_mut() {
         match d {
             // A declared class keeps its own constructors and statics.
             Decl::Interface(i) => {
-                if let Some(class) = classes.remove(&i.name) {
+                if let Some((class, js_name)) = classes.remove(&i.name) {
                     i.class = Some(class);
+                    i.js_name = js_name.or(i.js_name.take());
                 }
             }
             Decl::Namespace(n) => pair_classes(&mut n.decls),
@@ -873,7 +902,7 @@ fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize
             Decl::Function(f) => match keyed_variants(front, &f.sig, limit) {
                 Some(variants) => {
                     *expanded += 1;
-                    out.extend(variants.into_iter().map(|sig| Decl::Function(Function { name: f.name.clone(), js_name: None, sig })));
+                    out.extend(variants.into_iter().map(|sig| Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig })));
                 }
                 None => out.push(Decl::Function(f)),
             },
@@ -1359,11 +1388,10 @@ fn unique(base: String, taken: &mut HashSet<String>) -> String {
 // Inline object and function types become named declarations.
 fn hoist(decls: &mut Vec<Decl>, sep: &str) {
     let mut names: HashSet<String> = HashSet::new();
+    collect_declared_names(decls, "", sep, &mut names);
     let mut by_key: HashMap<String, (String, Vec<Type>)> = HashMap::new();
     // An inline type that already has a name (`type Listener = (e: Event) => void`) uses it.
     for d in decls.iter() {
-        // Generated names must not collide with declared ones.
-        names.extend(decl_name(d).map(str::to_string));
         if let Decl::Alias(a) = d
             && a.type_params.is_empty()
             && matches!(a.ty, Type::Function(_) | Type::Constructor(_))
@@ -1424,7 +1452,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let body = std::mem::replace(t, Type::This);
                     added.push(match body {
                         Type::Object(members) => Decl::Interface(Interface {
-                            name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], members, class: None, synthetic: true,
+                            name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], members, class: None, synthetic: true, js_name: None,
                         }),
                         ty => Decl::Alias(Alias { name: name.clone(), sym: None, type_params, ty, computed: false, synthetic: true }),
                     });
@@ -1583,7 +1611,7 @@ fn expand_functions(decls: &mut Vec<Decl>, o: Options) {
             Decl::Function(f) => {
                 for sig in expand_signature(&f.sig, o) {
                     if seen.insert(format!("{} {}", f.name, signature_key(&sig))) {
-                        out.push(Decl::Function(Function { name: f.name.clone(), js_name: None, sig }));
+                        out.push(Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig }));
                     }
                 }
             }
@@ -1764,7 +1792,8 @@ fn rename_functions(decls: &mut [Decl], o: Options) {
             if let Decl::Function(f) = &mut decls[i]
                 && name != base
             {
-                f.js_name = Some(base.clone());
+                // What it is exported as (`default`), else the name it shares.
+                f.js_name = Some(f.js_name.take().unwrap_or_else(|| base.clone()));
                 f.name = name;
             }
         }

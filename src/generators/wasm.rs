@@ -12,6 +12,71 @@ use roxmltree::{Document, Node};
 
 use super::{Problems, attr, elements, flag, named, only_child};
 
+// The element of a typed array, a view's bytes, or a buffer's: each
+// generator names it in its own language.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Elem {
+    I8,
+    U8,
+    I16,
+    U16,
+    I32,
+    U32,
+    I64,
+    U64,
+    F32,
+    F64,
+}
+
+impl Elem {
+    pub fn bytes(self) -> usize {
+        match self {
+            Elem::I8 | Elem::U8 => 1,
+            Elem::I16 | Elem::U16 => 2,
+            Elem::I32 | Elem::U32 | Elem::F32 => 4,
+            Elem::I64 | Elem::U64 | Elem::F64 => 8,
+        }
+    }
+}
+
+pub struct BufferSpec {
+    pub name: &'static str,
+    pub kind: Option<u32>,
+    pub elem: Elem,
+}
+
+impl BufferSpec {
+    pub fn is_typed_array(&self) -> bool {
+        self.kind.is_some_and(|k| (2..=12).contains(&k))
+    }
+    pub fn has_buffer(&self) -> bool {
+        self.kind != Some(0) && self.kind != Some(1) && self.name != "ArrayBufferLike"
+    }
+}
+
+pub const BUFFER_SPECS: &[BufferSpec] = &[
+    BufferSpec { name: "ArrayBuffer", kind: Some(0), elem: Elem::U8 },
+    BufferSpec { name: "SharedArrayBuffer", kind: Some(1), elem: Elem::U8 },
+    BufferSpec { name: "ArrayBufferLike", kind: None, elem: Elem::U8 },
+    BufferSpec { name: "ArrayBufferView", kind: None, elem: Elem::U8 },
+    BufferSpec { name: "DataView", kind: Some(13), elem: Elem::U8 },
+    BufferSpec { name: "Int8Array", kind: Some(2), elem: Elem::I8 },
+    BufferSpec { name: "Uint8Array", kind: Some(3), elem: Elem::U8 },
+    BufferSpec { name: "Uint8ClampedArray", kind: Some(4), elem: Elem::U8 },
+    BufferSpec { name: "Int16Array", kind: Some(5), elem: Elem::I16 },
+    BufferSpec { name: "Uint16Array", kind: Some(6), elem: Elem::U16 },
+    BufferSpec { name: "Int32Array", kind: Some(7), elem: Elem::I32 },
+    BufferSpec { name: "Uint32Array", kind: Some(8), elem: Elem::U32 },
+    BufferSpec { name: "Float32Array", kind: Some(9), elem: Elem::F32 },
+    BufferSpec { name: "Float64Array", kind: Some(10), elem: Elem::F64 },
+    BufferSpec { name: "BigInt64Array", kind: Some(11), elem: Elem::I64 },
+    BufferSpec { name: "BigUint64Array", kind: Some(12), elem: Elem::U64 },
+];
+
+pub fn buffer_spec(name: &str) -> Option<&'static BufferSpec> {
+    BUFFER_SPECS.iter().find(|s| s.name == name)
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Ty {
     Void,
@@ -193,6 +258,18 @@ pub struct Model {
 impl Class {
     pub fn has_self(f: &Func) -> bool {
         matches!(f.call, Call::Method(_) | Call::Get(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::Invoke | Call::Construct)
+    }
+}
+
+// Where a declaration is reached in JavaScript: its path, with the name it
+// is exported as (`jsName`) in place of its own.
+fn js_of(d: Node, path: &str) -> String {
+    match d.attribute("jsName") {
+        Some(js) => match path.rsplit_once('.') {
+            Some((prefix, _)) => format!("{prefix}.{js}"),
+            None => js.to_string(),
+        },
+        None => path.to_string(),
     }
 }
 
@@ -411,7 +488,7 @@ impl<'a> Builder<'a> {
                     self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
                 }
                 "interface" | "class" => {
-                    let c = self.class(d, &path);
+                    let c = self.class_at(d, &path, &js_of(d, &path));
                     self.model.classes.push(c);
                 }
                 "typeAlias" => {
@@ -445,14 +522,23 @@ impl<'a> Builder<'a> {
                         // A value with members of its own: bound like a class with only statics.
                         // A type may have the same name (`type NodeFilter` and `var NodeFilter`).
                         let name = if self.decls.contains_key(&path) { format!("{}_statics", ident(&path)) } else { ident(&path) };
-                        let c = self.statics(body, &path, name);
+                        let c = self.statics(body, &js_of(d, &path), name);
                         self.model.classes.push(c);
                         continue;
                     }
                     let ret = self.ty(body, "");
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
-                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(path), params: vec![], rest: false, fixed: vec![], shared: None, ret });
+                    let js = js_of(d, &path);
+                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(js.clone()), params: vec![], rest: false, fixed: vec![], shared: None, ret: ret.clone() });
+                    // A `const`, or a module's export, cannot be assigned.
+                    if flag(d, "readonly") {
+                        continue;
+                    }
+                    let path = js;
+                    let set_name = format!("set_{}", ident(&path));
+                    let set_import = self.import(set_name.clone());
+                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import: set_import, name: set_name, call: Call::StaticSet(path), params: vec![("value".into(), value(ret))], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
                 }
                 _ => self.unsupported(d),
             }
@@ -460,6 +546,12 @@ impl<'a> Builder<'a> {
     }
 
     fn class(&mut self, d: Node<'a, 'a>, path: &str) -> Class {
+        self.class_at(d, path, path)
+    }
+
+    // A class named for `path`, its constructor and statics reached at `js`.
+    fn class_at(&mut self, d: Node<'a, 'a>, path: &str, js: &str) -> Class {
+        let path_js = js;
         let owner = ident(path);
         let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None };
         let mut names = HashSet::new();
@@ -469,7 +561,7 @@ impl<'a> Builder<'a> {
             c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()) });
         }
         for m in elements(d) {
-            self.member(&mut c, &mut names, m, path, m.has_tag_name("constructor") || flag(m, "static"));
+            self.member(&mut c, &mut names, m, path_js, m.has_tag_name("constructor") || flag(m, "static"));
         }
         c
     }
@@ -629,10 +721,11 @@ impl<'a> Builder<'a> {
         let js = m.attribute("jsName").unwrap_or(key).to_string();
         match tag {
             "constructor" | "construct" => {
-                let (params, rest, fixed, _) = self.signature(m, &owner);
+                let (params, rest, fixed, sig_ret) = self.signature(m, &owner);
+                let ret = if tag == "construct" && sig_ret != Ty::Void { sig_ret } else { Ty::Obj(owner.clone()) };
                 let name = unique(if raw_name.is_empty() { "new".into() } else { ident(raw_name) }, names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret: Ty::Obj(owner) });
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret });
             }
             "method" => {
                 let (params, rest, fixed, ret) = self.signature(m, &owner);
@@ -1438,6 +1531,32 @@ export function makeEnv(getInstance, options = {}) {
     return r.read === n ? r.written : utf8Length(s);
   };
   const text = h => String(get(h) ?? '');
+  const viewOf = (h, off, len) => {
+    const v = get(h);
+    if (v == null) return new Uint8Array(0);
+    const buf = ArrayBuffer.isView(v) ? v.buffer : v;
+    const base = ArrayBuffer.isView(v) ? v.byteOffset : 0;
+    const total = v.byteLength >>> 0;
+    const start = Math.min(off >>> 0, total);
+    const count = len === undefined ? total - start : Math.min(len >>> 0, total - start);
+    return new Uint8Array(buf, base + start, count);
+  };
+  const bufferCtors = [
+    null,
+    typeof SharedArrayBuffer !== 'undefined' ? SharedArrayBuffer : null,
+    Int8Array,
+    Uint8Array,
+    Uint8ClampedArray,
+    Int16Array,
+    Uint16Array,
+    Int32Array,
+    Uint32Array,
+    Float32Array,
+    Float64Array,
+    typeof BigInt64Array !== 'undefined' ? BigInt64Array : null,
+    typeof BigUint64Array !== 'undefined' ? BigUint64Array : null,
+    DataView,
+  ];
   // One JavaScript function per wasm function and context, so that a
   // callback passed twice is the same function (removeEventListener).
   const callbacks = new Map();
@@ -1524,7 +1643,46 @@ export function makeEnv(getInstance, options = {}) {
     // Whether an exception waits to be taken; the exception, which wasm now holds, or 0.
     js_has_error: () => (error !== 0 ? 1 : 0),
     js_take_error: () => {{ const e = error; error = 0; if (e !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(e); return e; }},
-    js_error_message: guard(h => {{ const e = get(h); return put(String(e instanceof Error ? e.message : e)); }}),
+    js_error_message: guard(h => {{ const e = get(h); return put(String(e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e ? e.message : e))); }}),
+    js_error_name: guard(h => {{ const e = get(h); return put(String(e instanceof Error ? e.name : (e && typeof e === 'object' && 'name' in e ? e.name : typeof e))); }}),
+    js_error_stack: guard(h => {{ const e = get(h); return put(String(e && typeof e === 'object' && e.stack != null ? e.stack : '')); }}),
+    js_error_new: guard((ptr, len) => put(new Error(str(ptr, len)))),
+    js_date_new: ms => put(new Date(ms)),
+    js_date_now: () => Date.now(),
+    js_date_time: guard(h => {{ const d = get(h); return d instanceof Date ? d.getTime() : Number(d); }}),
+    js_date_to_iso_string: guard(h => put(get(h).toISOString())),
+    js_bytes_len: guard(h => {{ const v = get(h); return v == null ? 0 : (v.byteLength >>> 0); }}),
+    js_bytes_read: guard((h, srcOff, dstPtr, len) => {{ const s = viewOf(h, srcOff, len); if (s.byteLength) mem().set(s, dstPtr >>> 0); return s.byteLength; }}),
+    js_bytes_write: guard((h, dstOff, srcPtr, len) => {{ const d = viewOf(h, dstOff, len); const p = srcPtr >>> 0; if (d.byteLength) d.set(mem().subarray(p, p + d.byteLength)); return d.byteLength; }}),
+    js_bytes_new: guard((kind, srcPtr, byteLen) => {{
+      const n = byteLen >>> 0;
+      const p = srcPtr >>> 0;
+      if (kind === 0) {{
+        const ab = new ArrayBuffer(n);
+        if (p !== 0 && n > 0) new Uint8Array(ab).set(mem().subarray(p, p + n));
+        return put(ab);
+      }}
+      if (kind === 1) {{
+        const Ctor = bufferCtors[1];
+        if (!Ctor) throw new TypeError('SharedArrayBuffer is not available');
+        const sab = new Ctor(n);
+        if (p !== 0 && n > 0) new Uint8Array(sab).set(mem().subarray(p, p + n));
+        return put(sab);
+      }}
+      const Ctor = bufferCtors[kind];
+      if (!Ctor) throw new TypeError(`unsupported buffer kind ${{kind}}`);
+      if (kind === 13) {{
+        const ab = new ArrayBuffer(n);
+        if (p !== 0 && n > 0) new Uint8Array(ab).set(mem().subarray(p, p + n));
+        return put(new DataView(ab));
+      }}
+      const count = (n / Ctor.BYTES_PER_ELEMENT) >>> 0;
+      const ta = new Ctor(count);
+      if (p !== 0 && count > 0) new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength).set(mem().subarray(p, p + ta.byteLength));
+      return put(ta);
+    }}),
+    js_bytes_buffer: guard(h => {{ const v = get(h); return put(ArrayBuffer.isView(v) ? v.buffer : v); }}),
+    js_bytes_offset: guard(h => {{ const v = get(h); return ArrayBuffer.isView(v) ? (v.byteOffset >>> 0) : 0; }}),
     // Calls fn(ctx, ok, value) once the promise settles: ok 1 with its value, 0 with its reason.
     js_promise_then: guard((p, fn, ctx) => {{
       const settle = ok => v => {{ {settle} }};

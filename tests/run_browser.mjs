@@ -42,7 +42,10 @@ const url = `http://127.0.0.1:${server.address().port}/index.html`;
 
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-dom-test-'));
 const chrome = spawn(chromePath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank']);
+let finished = false;
 const finish = code => {
+    if (finished) return;
+    finished = true;
     chrome.kill();
     server.close();
     setTimeout(() => {
@@ -50,21 +53,36 @@ const finish = code => {
         process.exit(code);
     }, 200);
 };
+const abort = msg => {
+    if (!finished) {
+        console.error(msg);
+        finish(1);
+    }
+    return new Promise(() => {});
+};
 
 // Chrome prints the address of its DevTools endpoint on stderr.
+let stderrText = '';
 const endpoint = await new Promise((found, failed) => {
-    let text = '';
     chrome.stderr.on('data', chunk => {
-        text += chunk;
-        const m = text.match(/DevTools listening on (ws:\/\/\S+)/);
+        stderrText += chunk;
+        const m = stderrText.match(/DevTools listening on (ws:\/\/\S+)/);
         if (m) found(m[1]);
     });
-    chrome.on('exit', () => failed(new Error(`Chrome exited early:\n${text}`)));
+    chrome.on('error', err => failed(err));
+    chrome.on('exit', (code, sig) => failed(new Error(`Chrome exited early (${code ?? sig}):\n${stderrText}`)));
     setTimeout(() => failed(new Error('Chrome did not start')), 20000);
-});
+}).catch(err => abort(err.message));
+
+chrome.on('exit', (code, sig) => abort(`Chrome exited unexpectedly (${code ?? sig}):\n${stderrText}`));
 
 const socket = new WebSocket(endpoint);
-await new Promise(open => (socket.onopen = open));
+await new Promise((open, failed) => {
+    socket.onopen = open;
+    socket.onerror = () => failed(new Error('DevTools WebSocket error'));
+    socket.onclose = () => failed(new Error('DevTools WebSocket closed'));
+    setTimeout(() => failed(new Error('DevTools WebSocket timed out')), 10000);
+}).catch(err => abort(err.message));
 let nextId = 0;
 const pending = new Map();
 const errors = [];
@@ -74,10 +92,19 @@ socket.onmessage = ({ data }) => {
     if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text);
     if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') errors.push(msg.params.args.map(a => a.value ?? a.description).join(' '));
 };
+socket.onclose = () => abort('DevTools WebSocket closed');
 const send = (method, params = {}, sessionId) =>
     new Promise((ok, fail) => {
         const id = ++nextId;
-        pending.set(id, msg => (msg.error ? fail(new Error(`${method}: ${msg.error.message}`)) : ok(msg.result)));
+        const timer = setTimeout(() => {
+            pending.delete(id);
+            fail(new Error(`${method} timed out`));
+        }, 15000);
+        pending.set(id, msg => {
+            clearTimeout(timer);
+            pending.delete(id);
+            msg.error ? fail(new Error(`${method}: ${msg.error.message}`)) : ok(msg.result);
+        });
         socket.send(JSON.stringify({ id, method, params, sessionId }));
     });
 

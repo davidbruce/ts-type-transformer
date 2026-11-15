@@ -394,6 +394,19 @@ static inline JsOptionalBool js_none_bool(void) { return (JsOptionalBool){ false
 #define js_retain(x) ts_raw_js_retain((x).h)
 TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error(void);
 TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
+TS_IMPORT(js_error_name) uint32_t ts_raw_js_error_name(uint32_t);
+TS_IMPORT(js_error_stack) uint32_t ts_raw_js_error_stack(uint32_t);
+TS_IMPORT(js_error_new) uint32_t ts_raw_js_error_new(const char*, uint32_t);
+TS_IMPORT(js_date_new) uint32_t ts_raw_js_date_new(double);
+TS_IMPORT(js_date_now) double ts_raw_js_date_now(void);
+TS_IMPORT(js_date_time) double ts_raw_js_date_time(uint32_t);
+TS_IMPORT(js_date_to_iso_string) uint32_t ts_raw_js_date_to_iso_string(uint32_t);
+TS_IMPORT(js_bytes_len) uint32_t ts_raw_js_bytes_len(uint32_t);
+TS_IMPORT(js_bytes_read) uint32_t ts_raw_js_bytes_read(uint32_t, uint32_t, void*, uint32_t);
+TS_IMPORT(js_bytes_write) uint32_t ts_raw_js_bytes_write(uint32_t, uint32_t, const void*, uint32_t);
+TS_IMPORT(js_bytes_new) uint32_t ts_raw_js_bytes_new(uint32_t, const void*, uint32_t);
+TS_IMPORT(js_bytes_buffer) uint32_t ts_raw_js_bytes_buffer(uint32_t);
+TS_IMPORT(js_bytes_offset) uint32_t ts_raw_js_bytes_offset(uint32_t);
 TS_IMPORT(js_has_error) int32_t ts_raw_js_has_error(void);
 // Whether two handles are one JavaScript value.
 static inline bool ts_same(uint32_t a, uint32_t b) { return a == b || ts_raw_js_equals(a, b) != 0; }
@@ -404,8 +417,12 @@ static inline bool js_failed(void) { return ts_raw_js_has_error() != 0; }
 // returns a zero value, and an exception not taken by the time control
 // returns to JavaScript is reported there.
 static inline JsValue js_take_error(void) { return (JsValue){ ts_raw_js_take_error() }; }
-// An exception's message, the caller's to release.
+// An exception's message, name or stack, the caller's to release.
 static inline JsString js_error_message(JsValue e) { return (JsString){ ts_raw_js_error_message(e.h) }; }
+static inline JsString js_error_name(JsValue e) { return (JsString){ ts_raw_js_error_name(e.h) }; }
+static inline JsString js_error_stack(JsValue e) { return (JsString){ ts_raw_js_error_stack(e.h) }; }
+static inline JsValue js_error_new(const char* message) { return (JsValue){ ts_raw_js_error_new(message, ts_strlen(message)) }; }
+static inline double js_date_now(void) { return ts_raw_js_date_now(); }
 // A JavaScript iterator: see `X_iterate`.
 typedef struct { uint32_t h; } JsIterator;
 TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
@@ -644,6 +661,50 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     for name in handles {
         types += &format!("typedef struct {{ uint32_t h; }} {name};\n");
     }
+    for name in &m.opaque {
+        if name == "Error" {
+            types += "static inline Error Error_new(const char* message) { return (Error){ ts_raw_js_error_new(message, ts_strlen(message)) }; }\n\
+                      static inline JsString Error_name(Error e) { return (JsString){ ts_raw_js_error_name(e.h) }; }\n\
+                      static inline JsString Error_message(Error e) { return (JsString){ ts_raw_js_error_message(e.h) }; }\n\
+                      static inline JsString Error_stack(Error e) { return (JsString){ ts_raw_js_error_stack(e.h) }; }\n";
+        } else if name == "Date" {
+            types += "static inline Date Date_fromTime(double ms) { return (Date){ ts_raw_js_date_new(ms) }; }\n\
+                      static inline double Date_now(void) { return ts_raw_js_date_now(); }\n\
+                      static inline double Date_time(Date d) { return ts_raw_js_date_time(d.h); }\n\
+                      static inline JsString Date_toISOString(Date d) { return (JsString){ ts_raw_js_date_to_iso_string(d.h) }; }\n";
+        } else if let Some(s) = super::wasm::buffer_spec(name) {
+            types += &format!("static inline uint32_t {name}_byteLength({name} x) {{ return ts_raw_js_bytes_len(x.h); }}\n");
+            types += &format!("static inline uint32_t {name}_readBytes({name} x, uint32_t offset, void* dst, uint32_t len) {{ return ts_raw_js_bytes_read(x.h, offset, dst, len); }}\n");
+            types += &format!("static inline uint32_t {name}_writeBytes({name} x, uint32_t offset, const void* src, uint32_t len) {{ return ts_raw_js_bytes_write(x.h, offset, src, len); }}\n");
+            if s.has_buffer() {
+                types += &format!("static inline uint32_t {name}_byteOffset({name} x) {{ return ts_raw_js_bytes_offset(x.h); }}\n");
+                types += &format!("static inline JsValue {name}_buffer({name} x) {{ return (JsValue){{ ts_raw_js_bytes_buffer(x.h) }}; }}\n");
+            }
+            if s.is_typed_array() {
+                let kind = s.kind.unwrap();
+                let elem = c_elem(s.elem);
+                let eb = s.elem.bytes();
+                types += &format!(
+                    "static inline {name} {name}_new(uint32_t len) {{ uint32_t n = len > UINT32_MAX / {eb}u ? UINT32_MAX : len * {eb}u; return ({name}){{ ts_raw_js_bytes_new({kind}, (const void*)0, n) }}; }}\n\
+                     static inline {name} {name}_from(const {elem}* data, uint32_t len) {{ uint32_t n = len > UINT32_MAX / {eb}u ? UINT32_MAX : len * {eb}u; return ({name}){{ ts_raw_js_bytes_new({kind}, data, n) }}; }}\n\
+                     static inline uint32_t {name}_length({name} x) {{ return ts_raw_js_bytes_len(x.h) / {eb}; }}\n\
+                     static inline uint32_t {name}_read({name} x, uint32_t elem_offset, {elem}* dst, uint32_t count) {{ if (elem_offset > UINT32_MAX / {eb}u) return 0; uint32_t n = count > UINT32_MAX / {eb}u ? UINT32_MAX : count * {eb}u; return ts_raw_js_bytes_read(x.h, elem_offset * {eb}u, dst, n) / {eb}; }}\n\
+                     static inline uint32_t {name}_write({name} x, uint32_t elem_offset, const {elem}* src, uint32_t count) {{ if (elem_offset > UINT32_MAX / {eb}u) return 0; uint32_t n = count > UINT32_MAX / {eb}u ? UINT32_MAX : count * {eb}u; return ts_raw_js_bytes_write(x.h, elem_offset * {eb}u, src, n) / {eb}; }}\n"
+                );
+            } else {
+                if let Some(kind) = s.kind {
+                    types += &format!(
+                        "static inline {name} {name}_new(uint32_t byte_len) {{ return ({name}){{ ts_raw_js_bytes_new({kind}, (const void*)0, byte_len) }}; }}\n\
+                         static inline {name} {name}_from(const void* data, uint32_t byte_len) {{ return ({name}){{ ts_raw_js_bytes_new({kind}, data, byte_len) }}; }}\n"
+                    );
+                }
+                types += &format!(
+                    "static inline uint32_t {name}_read({name} x, uint32_t offset, void* dst, uint32_t len) {{ return ts_raw_js_bytes_read(x.h, offset, dst, len); }}\n\
+                     static inline uint32_t {name}_write({name} x, uint32_t offset, const void* src, uint32_t len) {{ return ts_raw_js_bytes_write(x.h, offset, src, len); }}\n"
+                );
+            }
+        }
+    }
     // A callback is made from a function and a context pointer passed back to it.
     // C11: one upcast per type with descendants. `AS_Element(div)` is `div` as
     // an Element, and a compile error for anything that is not one.
@@ -718,7 +779,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let plain = |t: &Ty| match t {
             Ty::NumEnum(_) => "double".to_string(),
             Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsValue".to_string(),
-            Ty::Nullable(inner, _) if **inner == Ty::Bool => "int32_t".to_string(),
+            Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "int32_t".to_string(),
             // A union arrives as a lent handle.
             Ty::NamedUnion(_) | Ty::Nullable(..) if matches!(t, Ty::NamedUnion(_)) || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_))) => "JsValue".to_string(),
             t => typed(t, false),
@@ -807,4 +868,21 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     out.push(("bindings.h".into(), all));
     Ok(out)
+}
+
+// A buffer element as a C type; C++ uses the same.
+pub(super) fn c_elem(e: super::wasm::Elem) -> &'static str {
+    use super::wasm::Elem::*;
+    match e {
+        I8 => "int8_t",
+        U8 => "uint8_t",
+        I16 => "int16_t",
+        U16 => "uint16_t",
+        I32 => "int32_t",
+        U32 => "uint32_t",
+        I64 => "int64_t",
+        U64 => "uint64_t",
+        F32 => "float",
+        F64 => "double",
+    }
 }

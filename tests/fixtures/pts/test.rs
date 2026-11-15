@@ -25,7 +25,7 @@ pub extern "C" fn run() {
     check!(p.id() == "corner");
 
     // A method that changes a Pt returns it; its `$` twin returns another.
-    let moved = p._add([1.0, 1.0]);
+    let moved = p.add_new([1.0, 1.0]);
     check!(moved != p && moved.x() == 4.0 && p.x() == 3.0);
     check!(p.add([1.0, 1.0]) == p && p.x() == 4.0);
     check!(p.equals(&moved, None));
@@ -54,7 +54,7 @@ pub extern "C" fn run() {
     let live = js::live_handles();
     for i in 0..200 {
         let q = Pt::new([i as f64, 1.0]);
-        check!(q._add([1.0, 0.0]).x() == i as f64 + 1.0);
+        check!(q.add_new([1.0, 0.0]).x() == i as f64 + 1.0);
     }
     check!(js::live_handles() == live);
 }

@@ -228,7 +228,7 @@ fn cpp_name(f: &Func, ctor: &str) -> String {
     if f.fixed.is_empty() {
         base
     } else {
-        let values: Vec<String> = f.fixed.iter().map(|(_, v)| super::wasm::ident(v.trim_matches('"'))).collect();
+        let values: Vec<String> = f.fixed.iter().map(|(_, v)| super::value_name(v)).collect();
         format!("{base}_{}", values.join("_"))
     }
 }
@@ -262,7 +262,9 @@ fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place,
     let mut params = Vec::new();
     let mut refs = BTreeSet::new();
     for (name, t) in &f.params {
-        let name = format!("{}_", ident(name));
+        // `w_`; `h`, reserved, is already `h_`: two underscores are the implementation's.
+        let base = ident(name);
+        let name = if base.ends_with('_') { base } else { format!("{base}_") };
         params.push(format!("{} {name}", ty_in(t)));
         raw_params.extend(raw(t));
         args.extend(lower(t, &name));
@@ -340,6 +342,7 @@ const RUNTIME: &str = r#"// Generated.
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #define TS_IMPORT(name) __attribute__((import_module("env"), import_name(#name)))
 
@@ -364,6 +367,19 @@ TS_IMPORT(js_live) uint32_t ts_raw_js_live();
 TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error();
 TS_IMPORT(js_string_take) uint32_t ts_raw_js_string_take(uint32_t, char*, size_t);
 TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
+TS_IMPORT(js_error_name) uint32_t ts_raw_js_error_name(uint32_t);
+TS_IMPORT(js_error_stack) uint32_t ts_raw_js_error_stack(uint32_t);
+TS_IMPORT(js_error_new) uint32_t ts_raw_js_error_new(const char*, size_t);
+TS_IMPORT(js_date_new) uint32_t ts_raw_js_date_new(double);
+TS_IMPORT(js_date_now) double ts_raw_js_date_now();
+TS_IMPORT(js_date_time) double ts_raw_js_date_time(uint32_t);
+TS_IMPORT(js_date_to_iso_string) uint32_t ts_raw_js_date_to_iso_string(uint32_t);
+TS_IMPORT(js_bytes_len) uint32_t ts_raw_js_bytes_len(uint32_t);
+TS_IMPORT(js_bytes_read) uint32_t ts_raw_js_bytes_read(uint32_t, uint32_t, void*, uint32_t);
+TS_IMPORT(js_bytes_write) uint32_t ts_raw_js_bytes_write(uint32_t, uint32_t, const void*, uint32_t);
+TS_IMPORT(js_bytes_new) uint32_t ts_raw_js_bytes_new(uint32_t, const void*, uint32_t);
+TS_IMPORT(js_bytes_buffer) uint32_t ts_raw_js_bytes_buffer(uint32_t);
+TS_IMPORT(js_bytes_offset) uint32_t ts_raw_js_bytes_offset(uint32_t);
 TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, uintptr_t, void*);
 TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
 TS_IMPORT(js_enum_value) uint32_t ts_raw_js_enum_value(int32_t, int32_t);
@@ -585,7 +601,10 @@ struct Array : virtual Handle {
 // A JavaScript exception, or the reason a promise was rejected.
 struct Error : Handle {
     using Handle::Handle;
+    static Error create(std::string_view msg) { return Error(handle, ts_raw_js_error_new(msg.data(), msg.size())); }
+    std::string name() const { return from_handle<std::string>(ts_raw_js_error_name(h)); }
     std::string message() const { return from_handle<std::string>(ts_raw_js_error_message(h)); }
+    std::string stack() const { return from_handle<std::string>(ts_raw_js_error_stack(h)); }
 };
 
 // The exception a call threw, taken. A call that throws returns a zero
@@ -1106,7 +1125,56 @@ fn declarations(m: &Model) -> String {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
         types += &format!("enum class {name} : int32_t {{ {} }};\n", members.join(", "));
     }
-    let opaque = |name: &str, params: &[TParam]| format!("{}struct {name} : virtual ts::Handle {{\n    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n}};\n", head(params, false));
+    let opaque = |name: &str, params: &[TParam]| {
+        let mut body = String::from("    ");
+        body += &format!("{name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n");
+        if name == "Error" {
+            body += "    Error(const ts::Error& e) : ts::Handle(e) {}\n\
+                     static Error create(std::string_view msg) { return Error(ts::handle, ts_raw_js_error_new(msg.data(), msg.size())); }\n\
+                     std::string name() const { return ts::from_handle<std::string>(ts_raw_js_error_name(this->h)); }\n\
+                     std::string message() const { return ts::from_handle<std::string>(ts_raw_js_error_message(this->h)); }\n\
+                     std::string stack() const { return ts::from_handle<std::string>(ts_raw_js_error_stack(this->h)); }\n";
+        } else if name == "Date" {
+            body += "    static Date from_time(double ms) { return Date(ts::handle, ts_raw_js_date_new(ms)); }\n\
+                     static double now() { return ts_raw_js_date_now(); }\n\
+                     double time() const { return ts_raw_js_date_time(this->h); }\n\
+                     std::string to_iso_string() const { return ts::from_handle<std::string>(ts_raw_js_date_to_iso_string(this->h)); }\n";
+        } else if let Some(s) = super::wasm::buffer_spec(name) {
+            body += "    uint32_t byte_length() const { return ts_raw_js_bytes_len(this->h); }\n\
+                     uint32_t read_bytes(void* dst, uint32_t len, uint32_t offset = 0) const { return ts_raw_js_bytes_read(this->h, offset, dst, len); }\n\
+                     uint32_t write_bytes(const void* src, uint32_t len, uint32_t offset = 0) const { return ts_raw_js_bytes_write(this->h, offset, src, len); }\n";
+            if s.has_buffer() {
+                body += "    uint32_t byte_offset() const { return ts_raw_js_bytes_offset(this->h); }\n\
+                         ts::Value buffer() const { return ts::Value(ts::handle, ts_raw_js_bytes_buffer(this->h)); }\n";
+            }
+            if s.is_typed_array() {
+                let kind = s.kind.unwrap();
+                let elem = super::c::c_elem(s.elem);
+                let eb = s.elem.bytes();
+                body += &format!(
+                    "    static {name} create(size_t count) {{ uint32_t n = count > (UINT32_MAX / {eb}u) ? UINT32_MAX : uint32_t(count * {eb}u); return {name}(ts::handle, ts_raw_js_bytes_new({kind}, nullptr, n)); }}\n\
+                     static {name} from(const {elem}* data, size_t count) {{ uint32_t n = count > (UINT32_MAX / {eb}u) ? UINT32_MAX : uint32_t(count * {eb}u); return {name}(ts::handle, ts_raw_js_bytes_new({kind}, data, n)); }}\n\
+                     static {name} from(const std::vector<{elem}>& data) {{ return from(data.data(), data.size()); }}\n\
+                     size_t size() const {{ return size_t(byte_length()) / {eb}; }}\n\
+                     size_t read({elem}* dst, size_t count, size_t elem_offset = 0) const {{ if (elem_offset > (UINT32_MAX / {eb}u)) return 0; uint32_t n = count > (UINT32_MAX / {eb}u) ? UINT32_MAX : uint32_t(count * {eb}u); return size_t(ts_raw_js_bytes_read(this->h, uint32_t(elem_offset * {eb}u), dst, n)) / {eb}; }}\n\
+                     size_t write(const {elem}* src, size_t count, size_t elem_offset = 0) const {{ if (elem_offset > (UINT32_MAX / {eb}u)) return 0; uint32_t n = count > (UINT32_MAX / {eb}u) ? UINT32_MAX : uint32_t(count * {eb}u); return size_t(ts_raw_js_bytes_write(this->h, uint32_t(elem_offset * {eb}u), src, n)) / {eb}; }}\n\
+                     std::vector<{elem}> to_vector() const {{ std::vector<{elem}> out(size()); if (!out.empty()) read(out.data(), out.size()); return out; }}\n"
+                );
+            } else {
+                if let Some(kind) = s.kind {
+                    body += &format!(
+                        "    static {name} create(uint32_t byte_len) {{ return {name}(ts::handle, ts_raw_js_bytes_new({kind}, nullptr, byte_len)); }}\n\
+                         static {name} from(const void* data, uint32_t byte_len) {{ return {name}(ts::handle, ts_raw_js_bytes_new({kind}, data, byte_len)); }}\n\
+                         static {name} from(const std::vector<uint8_t>& data) {{ return from(data.data(), uint32_t(data.size())); }}\n"
+                    );
+                }
+                body += "    uint32_t read(void* dst, uint32_t len, uint32_t offset = 0) const { return read_bytes(dst, len, offset); }\n\
+                         uint32_t write(const void* src, uint32_t len, uint32_t offset = 0) const { return write_bytes(src, len, offset); }\n\
+                         std::vector<uint8_t> to_vector() const { std::vector<uint8_t> out(byte_length()); if (!out.empty()) read_bytes(out.data(), uint32_t(out.size())); return out; }\n";
+            }
+        }
+        format!("{}struct {name} : virtual ts::Handle {{\n{body}}};\n", head(params, false))
+    };
     // (name, declaration, what it needs declared first)
     let mut templates: Vec<(String, String, BTreeSet<String>)> = Vec::new();
     let mut template = |name: &str, params: &[TParam], text: String| {

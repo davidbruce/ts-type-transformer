@@ -108,6 +108,32 @@ that are equal ignoring letter case, or reserved on Windows (`CON`, `NUL`,
 from the library and cannot be renamed, so layouts keep them in a folder of
 their own, apart from areas (`areas/css/`, `namespaces/CSS/`).
 
+## Packages
+
+The input is an entry file. The checker reads what it imports from the disk,
+and the output is what the package declares and the entry file exports,
+followed through `export *`, `export { a as b }`, `export * as ns` and
+import types (`import("./x").Y`), and what those refer to in the same
+package. Another package's types are referred to, not copied.
+
+A file with top-level exports is an ES module, and bindings import it by its
+package's name: `[library] module`, else the `name` of the nearest
+package.json above the file, written as `<declarations import="...">`. With
+neither, the tool warns and the bindings treat it as globals: a name made up
+from the file's would be imported and not found.
+
+What a module exports under another name is known by that name
+(`export { Shape as Figure }` is `Figure`, in references and `instanceof`
+tests too). A default export keeps its own name and says what it is
+exported as, `jsName="default"`; an unnamed one is named for its file
+(`anon_default`, or for `index.d.ts` its directory). A `const`, and every
+variable a module exports, is `readonly="true"` and has no setter.
+
+A bare `lib.*.d.ts` input is one of TypeScript's lib files, checked with
+`--lib` (by default es2020 and the DOM's). A namespace it declares keeps its
+declarations from the other lib files (`Intl` in lib.es2020.intl.d.ts has
+lib.es5.d.ts's too), and `--include Intl` adds a lib namespace to any input.
+
 ## Generators
 
 `--emit c|cpp|zig|rust|fsharp --out <dir>` writes bindings for the lowered
@@ -134,6 +160,13 @@ The glue is `makeEnv(getInstance, options)`:
 - `check`: handle mistakes are reported: `handle 7 used after its release`,
   `released twice`. Off by default: slots are reused.
 - `unchecked(e)`: called with an exception nobody took (default `console.error`).
+
+JavaScript's built-ins have types of their own in every wasm target:
+`ArrayBuffer`, `SharedArrayBuffer`, `DataView`, the typed arrays and views
+copy to and from linear memory (`ArrayBuffer_from(bytes, n)`,
+`Uint8Array::to_vec()`); `Error` has its `name`, `message` and `stack`, and
+can be made (`Error::new`); `Date` its time and ISO string. Element types
+are the shared model's (`Elem::U8`), named by each generator.
 
 A call that throws returns a zero value and keeps the exception to take
 (`js_take_error`, `ts::attempt`, `jsTry`, `js::attempt`); one not taken by
@@ -168,7 +201,9 @@ the time control returns to JavaScript is reported, not lost.
   are comptime functions with Zig types, behind a C-convention trampoline;
   `defer jsRelease(x)` or `JsScope`. Trailing optional parameters are one
   struct whose fields default to null (`s.resize(2.6, .{})`,
-  `s.resize(2.6, .{ .round = true })`); a lone one stays a `?T`. Inheritance is flattened, and an
+  `s.resize(2.6, .{ .round = true })`); a lone one stays a `?T`. Names are
+  Zig's, camelCase: `getTextContent()`, `setTextContent(..)`,
+  `addEventListenerWithString`. Inheritance is flattened, and an
   inherited member is written once: the furthest ancestor that declares it
   writes it in `X.Methods(Self)`, and each subtype's member is an alias. 12 MB.
 - Rust (wasm32-unknown-unknown): a crate (`Cargo.toml`, `src/`), compiled
@@ -198,7 +233,10 @@ the time control returns to JavaScript is reported, not lost.
   index signature is `JsRecord<string, T>`; `f(a, b?, ...rest)` is two
   overloads. A library that is a module is imported (`[<Import("Pt",
   "pts")>]`): values, functions and classes, and a union case of a class is
-  tested by `instanceof` on the import.
+  tested by `instanceof` on the import. The built-ins Fable has are its
+  types (`JS.Uint8Array`, `JS.DataView`, `JS.Date`); an `Error` is an `exn`,
+  as Fable catches it, and `jsError "..."` makes one JavaScript recognises:
+  an F# exception is not an `Error` there.
 
 ## Unions
 
@@ -284,7 +322,11 @@ Nanoseconds per iteration on an Apple M4 Max:
 F# compiles to JavaScript and costs what TypeScript does: Fable's loops are
 the same JavaScript, and V8 inlines the call. (The workloads keep their
 numbers off V8's small-integer path: a sum that outgrows it is boxed on every
-iteration, and once made a call cost 5 ns in both.) A wasm target
+iteration, and once made a call cost 5 ns in both. In the `be called back`
+row, TypeScript's 6.0 ns is slightly slower than wasm's 5.0 ns only because all
+six programs share one `each` helper whose call site sees six different
+callbacks; alone, TypeScript takes about 4 ns, and adding 0.5 changed nothing,
+so it is not the small-integer boxing effect.) A wasm target
 pays 5 to 8 ns to cross the boundary, a handle-table slot per object, and a
 decode or encode per string (a string at the same address with the same
 bytes is decoded once). Code that stays inside wasm is as fast or faster.
@@ -292,13 +334,13 @@ So: bind coarse operations, not inner loops; keep strings out of hot paths.
 
 ## Tests
 
-`cargo test` runs `tests/e2e.rs`: 49 tests in about 25 seconds, or 10 with
+`cargo test` runs `tests/e2e.rs`: 65 tests in about 30 seconds, or 10 with
 `-- --skip dom::`. Targets: F# (Fable), C and Zig (wasm32), C++ (WASI SDK),
 Rust (`rustup target add wasm32-unknown-unknown`). A missing toolchain or
 Chrome skips its tests with a message.
 
 **Fixtures in Node.** For each of `shapes`, `callbacks`, `data`, `globals`,
-`unions` and `pts` in `tests/fixtures/`, and each target: lower `api.d.ts`
+`unions`, `pts`, `exports` and `builtins` in `tests/fixtures/`, and each target: lower `api.d.ts`
 with `examples/targets/<target>.toml`, generate bindings, compile them with
 the real toolchain, and run `test.*` against `impl.mjs` in Node, with handle
 checks on. A program may export `finish`, called once asynchronous work has
@@ -309,6 +351,11 @@ settled.
 runs the same program: constructors with rest arguments, accessors, methods
 that return `this`, statics, unions as arguments, a subclass of Array
 indexed and iterated.
+
+**A module across files.** `exports` is a package of three files: a default
+export, functions and classes exported and re-exported under other names, a
+constant and a variable, and a union told apart by the classes as exported.
+`builtins` passes buffers, typed arrays, errors and dates both ways.
 
 **The whole DOM in Chrome.** `dom::{fsharp,c,zig,cpp,rust}` generate bindings
 for all of `lib.dom.d.ts`, compile them, and run `tests/dom/test.*` in
@@ -331,6 +378,9 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
   an `any` member is `any`.
 - F# on Pts skips 7 unions whose members no test tells apart. Namespaced
   classes of a module library are still tested through `globalThis`.
+- F# has no `SharedArrayBuffer` or `BigUint64Array` of Fable's: they are
+  opaque. A built-in as a base type stays opaque too (`Pt` extends an opaque
+  `Float32Array`): an F# interface cannot inherit Fable's.
 - C: an empty call (`orUnit()`) is C23; under C11 `-pedantic` warns of it. A
   compound literal with a comma needs parentheses to pass through a macro:
   unions have `U_of` so it is seldom written. `_Generic` takes exact types,

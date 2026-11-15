@@ -10,6 +10,46 @@ fn ident(name: &str) -> String {
     format!("@\"{name}\"")
 }
 
+// `get_x` -> `getX`, `addEventListener_with_string` -> `addEventListenerWithString`.
+// Leading underscores (such as `$add` -> `_add`) stay so they do not clash with `add`.
+fn method_name(name: &str) -> String {
+    let lead_len = name.bytes().take_while(|&b| b == b'_').count();
+    let rest = &name[lead_len..];
+    if rest.is_empty() {
+        return name.to_string();
+    }
+    let mut parts = rest.split('_');
+    let mut out = format!("{}{}", &name[..lead_len], parts.next().unwrap_or_default());
+    for part in parts {
+        if part.is_empty() {
+            out.push('_');
+        } else {
+            let mut cs = part.chars();
+            if let Some(c) = cs.next() {
+                out.extend(c.to_uppercase());
+                out.push_str(cs.as_str());
+            }
+        }
+    }
+    out
+}
+
+// Unique Zig names for a set of functions in one scope, keyed by the model's name.
+fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>, taken: &mut HashSet<String>) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for f in funcs {
+        let base = method_name(&f.name);
+        let mut name = base.clone();
+        let mut n = 2;
+        while !taken.insert(name.clone()) {
+            name = format!("{base}_{n}");
+            n += 1;
+        }
+        out.insert(f.name.clone(), name);
+    }
+    out
+}
+
 // Parameters get a suffix: Zig forbids shadowing a declaration in scope.
 fn param(name: &str) -> String {
     format!("{name}_")
@@ -144,6 +184,7 @@ fn callback_arg(t: &Ty, a: &str, unions: &[NamedUnion]) -> String {
                 Ty::Bool => return format!("if ({a} < 0) null else {a} != 0"),
                 Ty::Enum(e) => return format!("if ({a} < 0) null else @as({e}, @enumFromInt({a}))"),
                 Ty::Num => format!("(JsValue{{ .h = {a} }}).toNumber()"),
+                Ty::NumEnum(e) => format!("@as({e}, @enumFromInt(@as(i32, @intFromFloat((JsValue{{ .h = {a} }}).toNumber()))))"),
                 Ty::NamedUnion(n) if decodable(n) => format!("{n}.lent({a})"),
                 inner => format!("{}{{ .h = {a} }}", typed(inner, false)),
             };
@@ -187,7 +228,7 @@ fn lower_arg(name: &str, t: &Ty) -> String {
     }
 }
 
-fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, indent: &str, unions: &[NamedUnion]) {
+fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion]) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
@@ -291,7 +332,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, i
     if !fields.is_empty() {
         params.push(format!("options: struct {{ {} }}", fields.join(", ")));
     }
-    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {unpack}{pre}{body} }}\n", ident(&f.name), params.join(", "));
+    *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {unpack}{pre}{body} }}\n", ident(zig_name), params.join(", "));
 }
 
 const RUNTIME: &str = "// Generated.
@@ -358,8 +399,12 @@ pub fn jsTry(value: anytype) error{JsException}!@TypeOf(value) { return if (raw.
 // and an exception not taken by the time control returns to JavaScript is
 // reported there.
 pub fn jsTakeError() ?JsValue { const e = raw.js_take_error(); return if (e == 0) null else .{ .h = e }; }
-// An exception's message, the caller's to release.
+// An exception's message, name or stack, the caller's to release.
 pub fn jsErrorMessage(e: JsValue) JsString { return .{ .h = raw.js_error_message(e.h) }; }
+pub fn jsErrorName(e: JsValue) JsString { return .{ .h = raw.js_error_name(e.h) }; }
+pub fn jsErrorStack(e: JsValue) JsString { return .{ .h = raw.js_error_stack(e.h) }; }
+pub fn jsErrorNew(msg: []const u8) JsValue { return .{ .h = raw.js_error_new(msg.ptr, msg.len) }; }
+pub fn jsDateNow() f64 { return raw.js_date_now(); }
 // A scope: every handle a function returns while it is the innermost open
 // scope is released when it closes. `jsRetain` one to keep it.
 pub const JsScope = struct {
@@ -489,6 +534,10 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_iterate(h: u32) u32;
     extern \"env\" fn js_iterator_next(it: u32) u32;
     extern \"env\" fn js_error_message(h: u32) u32;
+    extern \"env\" fn js_error_name(h: u32) u32;
+    extern \"env\" fn js_error_stack(h: u32) u32;
+    extern \"env\" fn js_error_new(ptr: [*]const u8, len: usize) u32;
+    extern \"env\" fn js_date_now() f64;
     extern \"env\" fn js_callback_release(h: u32) usize;
 ";
 
@@ -515,7 +564,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsEnumOf", "jsSame", "jsTry", "JsScope", "jsTake"].map(String::from).to_vec()));
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsErrorName", "jsErrorStack", "jsErrorNew", "jsDateNow", "jsEnumOf", "jsSame", "jsTry", "JsScope", "jsTake"].map(String::from).to_vec()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (id, (name, values)) in m.enums.iter().enumerate() {
         let mut seen = std::collections::HashSet::new();
@@ -547,6 +596,9 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         types.1 += "    extern \"env\" fn js_async_iterate(h: u32) u32;\n    extern \"env\" fn js_async_iterator_next(it: u32) u32;\n";
         types.2.push("JsAsyncIterator".into());
     }
+    let mut need_error_externs = false;
+    let mut need_date_externs = false;
+    let mut need_bytes_externs = false;
     for name in &opaque {
         if name == "Promise" {
             // Calls f(ctx, ok, value) once it settles, ok with its value or not with its reason; the value is lent.
@@ -555,10 +607,82 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                         const T = struct {\n            fn call(c: ?*anyopaque, ok: i32, v: u32) callconv(.c) void { f(c, ok != 0, .{ .h = v }); }\n        };\n        \
                         raw.js_promise_then(self.h, @intFromPtr(&T.call), ctx);\n    }\n};\n";
             types.1 += "    extern \"env\" fn js_promise_then(p: u32, f: usize, ctx: ?*anyopaque) void;\n";
+        } else if name == "Error" {
+            need_error_externs = true;
+            types.0 += "pub const Error = extern struct {\n    h: u32,\n    \
+                        pub fn new(msg: []const u8) Error { return .{ .h = raw.js_error_new(msg.ptr, msg.len) }; }\n    \
+                        pub fn name(self: Error) JsString { return .{ .h = raw.js_error_name(self.h) }; }\n    \
+                        pub fn message(self: Error) JsString { return .{ .h = raw.js_error_message(self.h) }; }\n    \
+                        pub fn stack(self: Error) JsString { return .{ .h = raw.js_error_stack(self.h) }; }\n};\n";
+        } else if name == "Date" {
+            need_date_externs = true;
+            types.0 += "pub const Date = extern struct {\n    h: u32,\n    \
+                        pub fn fromTime(ms: f64) Date { return .{ .h = raw.js_date_new(ms) }; }\n    \
+                        pub fn now() f64 { return raw.js_date_now(); }\n    \
+                        pub fn time(self: Date) f64 { return raw.js_date_time(self.h); }\n    \
+                        pub fn toIsoString(self: Date) JsString { return .{ .h = raw.js_date_to_iso_string(self.h) }; }\n};\n";
+        } else if let Some(s) = super::wasm::buffer_spec(name) {
+            need_bytes_externs = true;
+            types.0 += &format!(
+                "pub const {name} = extern struct {{\n    h: u32,\n    \
+                 pub fn byteLength(self: {name}) usize {{ return raw.js_bytes_len(self.h); }}\n    \
+                 pub fn readBytes(self: {name}, offset: usize, dst: []u8) usize {{ return raw.js_bytes_read(self.h, offset, dst.ptr, dst.len); }}\n    \
+                 pub fn writeBytes(self: {name}, offset: usize, src: []const u8) usize {{ return raw.js_bytes_write(self.h, offset, src.ptr, src.len); }}\n"
+            );
+            if s.has_buffer() {
+                types.0 += &format!(
+                    "    pub fn byteOffset(self: {name}) usize {{ return raw.js_bytes_offset(self.h); }}\n    \
+                     pub fn buffer(self: {name}) JsValue {{ return .{{ .h = raw.js_bytes_buffer(self.h) }}; }}\n"
+                );
+            }
+            if s.is_typed_array() {
+                let kind = s.kind.unwrap();
+                let elem = zig_elem(s.elem);
+                let eb = s.elem.bytes();
+                types.0 += &format!(
+                    "    pub fn new(count: usize) {name} {{ const n = if (count > (~@as(usize, 0)) / {eb}) ~@as(usize, 0) else count * {eb}; return .{{ .h = raw.js_bytes_new({kind}, null, n) }}; }}\n    \
+                     pub fn from(data: []const {elem}) {name} {{ const n = if (data.len > (~@as(usize, 0)) / {eb}) ~@as(usize, 0) else data.len * {eb}; return .{{ .h = raw.js_bytes_new({kind}, @ptrCast(data.ptr), n) }}; }}\n    \
+                     pub fn len(self: {name}) usize {{ return raw.js_bytes_len(self.h) / {eb}; }}\n    \
+                     pub fn read(self: {name}, elem_offset: usize, dst: []{elem}) usize {{ if (elem_offset > (~@as(usize, 0)) / {eb}) return 0; const n = if (dst.len > (~@as(usize, 0)) / {eb}) ~@as(usize, 0) else dst.len * {eb}; return raw.js_bytes_read(self.h, elem_offset * {eb}, @ptrCast(dst.ptr), n) / {eb}; }}\n    \
+                     pub fn write(self: {name}, elem_offset: usize, src: []const {elem}) usize {{ if (elem_offset > (~@as(usize, 0)) / {eb}) return 0; const n = if (src.len > (~@as(usize, 0)) / {eb}) ~@as(usize, 0) else src.len * {eb}; return raw.js_bytes_write(self.h, elem_offset * {eb}, @ptrCast(src.ptr), n) / {eb}; }}\n"
+                );
+            } else {
+                if let Some(kind) = s.kind {
+                    types.0 += &format!(
+                        "    pub fn new(byte_len: usize) {name} {{ return .{{ .h = raw.js_bytes_new({kind}, null, byte_len) }}; }}\n    \
+                         pub fn from(data: []const u8) {name} {{ return .{{ .h = raw.js_bytes_new({kind}, data.ptr, data.len) }}; }}\n"
+                    );
+                }
+                types.0 += &format!(
+                    "    pub fn read(self: {name}, offset: usize, dst: []u8) usize {{ return raw.js_bytes_read(self.h, offset, dst.ptr, dst.len); }}\n    \
+                     pub fn write(self: {name}, offset: usize, src: []const u8) usize {{ return raw.js_bytes_write(self.h, offset, src.ptr, src.len); }}\n"
+                );
+            }
+            types.0 += "};\n";
         } else {
             types.0 += &format!("pub const {name} = extern struct {{ h: u32 }};\n");
         }
         types.2.push(name.clone());
+    }
+    if need_error_externs {
+        types.1 += "    extern \"env\" fn js_error_new(ptr: [*]const u8, len: usize) u32;\n    \
+                    extern \"env\" fn js_error_name(h: u32) u32;\n    \
+                    extern \"env\" fn js_error_message(h: u32) u32;\n    \
+                    extern \"env\" fn js_error_stack(h: u32) u32;\n";
+    }
+    if need_date_externs {
+        types.1 += "    extern \"env\" fn js_date_new(ms: f64) u32;\n    \
+                    extern \"env\" fn js_date_now() f64;\n    \
+                    extern \"env\" fn js_date_time(h: u32) f64;\n    \
+                    extern \"env\" fn js_date_to_iso_string(h: u32) u32;\n";
+    }
+    if need_bytes_externs {
+        types.1 += "    extern \"env\" fn js_bytes_len(h: u32) usize;\n    \
+                    extern \"env\" fn js_bytes_read(h: u32, off: usize, dst: [*]u8, len: usize) usize;\n    \
+                    extern \"env\" fn js_bytes_write(h: u32, off: usize, src: [*]const u8, len: usize) usize;\n    \
+                    extern \"env\" fn js_bytes_new(kind: u32, src: ?[*]const u8, byte_len: usize) u32;\n    \
+                    extern \"env\" fn js_bytes_buffer(h: u32) u32;\n    \
+                    extern \"env\" fn js_bytes_offset(h: u32) usize;\n";
     }
     // A callback is made from a function and a context pointer passed back to it.
     // A callback is a Zig function known at compile time, with Zig types: a
@@ -624,6 +748,28 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
     }
     let shares: HashSet<&str> = homes.values().map(|h| h.0).collect();
+    let class_names: HashMap<&str, HashMap<String, String>> = m
+        .classes
+        .iter()
+        .map(|c| {
+            let mut taken: HashSet<String> = HashSet::from(["h".to_string()]);
+            taken.extend(c.consts.iter().map(|(n, _)| n.clone()));
+            if c.iterates_async.is_some() {
+                taken.insert("iterateAsync".into());
+            }
+            if c.iterates.is_some() {
+                taken.insert("iterate".into());
+            }
+            if m.maps.iter().any(|k| k.name == c.name) {
+                taken.extend(["Key".into(), "Type".into()]);
+            }
+            taken.extend(c.ancestors.iter().map(|a| format!("as{a}")));
+            if shares.contains(c.name.as_str()) {
+                taken.insert("Methods".into());
+            }
+            (c.name.as_str(), names_of(c.funcs.iter(), &mut taken))
+        })
+        .collect();
     // Every object is an opaque handle; methods live in the struct's namespace.
     for c in &m.classes {
         let (out, externs, names) = files.entry(c.module.clone()).or_default();
@@ -654,26 +800,31 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
         let inherited = |f: &Func| if Class::has_self(f) { homes.get(&(c.name.as_str(), f.name.as_str())).copied() } else { None };
         let shared = |f: &Func| shares.contains(c.name.as_str()) && Class::has_self(f) && inherited(f).is_none();
+        let own_names = &class_names[c.name.as_str()];
         if c.funcs.iter().any(|f| shared(f)) {
             *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
             for f in c.funcs.iter().filter(|f| shared(f)) {
-                func(out, externs, Some("Self"), f, "            ", &m.unions);
+                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions);
             }
             *out += "        };\n    }\n";
         }
         for f in &c.funcs {
+            let own_name = &own_names[&f.name];
             match inherited(f) {
-                Some((from, name)) => *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(&f.name), ident(name)),
-                None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(&f.name)),
-                None => func(out, externs, Some(&c.name), f, "    ", &m.unions),
+                Some((from, name)) => *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(own_name), ident(&class_names[from][name])),
+                None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(own_name)),
+                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions),
             }
         }
         *out += "};\n";
     }
+    let mut top_taken: HashSet<String> = files.values().flat_map(|(_, _, ns)| ns.iter().cloned()).collect();
+    let top_names = names_of(m.funcs.iter(), &mut top_taken);
     for f in &m.funcs {
         let (out, externs, names) = files.entry(f.module.clone()).or_default();
-        names.push(f.name.clone());
-        func(out, externs, None, f, "", &m.unions);
+        let zig_name = &top_names[&f.name];
+        names.push(zig_name.clone());
+        func(out, externs, None, f, zig_name, "", &m.unions);
     }
 
     // Which file declares each name.
@@ -731,4 +882,21 @@ fn identifiers(src: &str) -> HashSet<&str> {
         }
     }
     out
+}
+
+// A buffer element as a Zig type.
+fn zig_elem(e: super::wasm::Elem) -> &'static str {
+    use super::wasm::Elem::*;
+    match e {
+        I8 => "i8",
+        U8 => "u8",
+        I16 => "i16",
+        U16 => "u16",
+        I32 => "i32",
+        U32 => "u32",
+        I64 => "i64",
+        U64 => "u64",
+        F32 => "f32",
+        F64 => "f64",
+    }
 }

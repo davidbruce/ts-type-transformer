@@ -19,7 +19,7 @@ fn fold(_: ?*anyopaque, total: f64, label: b.JsString) f64 {
     return total * 2 + @as(f64, @floatFromInt(label.len()));
 }
 fn isFive(_: ?*anyopaque, c: b.Counter) bool {
-    return c.get_count() == 5;
+    return c.getCount() == 5;
 }
 // A union argument arrives decoded; the function is known at compile time.
 var number: f64 = 0;
@@ -82,7 +82,7 @@ export fn run() void {
     defer b.jsRelease(s);
     const t = s.construct(3);
     defer b.jsRelease(t);
-    expect(s.invoke(5) == 10 and s.get_factor() == 2 and t.invoke(5) == 15, @src());
+    expect(s.invoke(5) == 10 and s.getFactor() == 2 and t.invoke(5) == 15, @src());
 
     // A call that throws returns zero; its exception is kept to take.
     expect(b.explode("boom") == 0, @src());
@@ -118,13 +118,13 @@ export fn run() void {
     expect(last == 5 and calls == 2, @src());
 
     // A nullable callback property.
-    expect(c.get_onchange() == null, @src());
+    expect(c.getOnchange() == null, @src());
     var prop: f64 = 0;
-    c.set_onchange(b.Listener.from(onValue, &prop));
-    expect(c.get_onchange() != null, @src());
+    c.setOnchange(b.Listener.from(onValue, &prop));
+    expect(c.getOnchange() != null, @src());
     _ = c.increment(null);
     expect(prop == 7, @src());
-    c.set_onchange(null);
+    c.setOnchange(null);
     _ = c.increment(null);
     expect(prop == 7, @src());
 

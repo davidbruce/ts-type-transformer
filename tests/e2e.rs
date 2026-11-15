@@ -197,7 +197,7 @@ fn wasi_clang() -> Option<PathBuf> {
 
 // No `--allow-undefined`: the imports are declared as such, and anything else
 // missing is a link error rather than an import that fails when the page loads.
-const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Werror", "-Wl,--export-table"];
+const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Werror", "-Wl,--export-table", "-Wl,--strip-debug"];
 
 // Writes the C++ bindings, compiles their definitions once, each module in
 // parallel, and links them with the program.
@@ -310,8 +310,17 @@ macro_rules! fixtures {
     })* };
 }
 
-// `pts` is a real library: Pts, from its own declarations.
-fixtures!(shapes, callbacks, data, globals, unions, pts);
+// `pts` is a real library: Pts, from its own declarations. `exports` is a
+// module library across files: default, renamed and re-exported declarations.
+fixtures!(shapes, callbacks, data, globals, unions, pts, exports);
+
+mod builtins {
+    #[test] fn fsharp() { super::fsharp("builtins"); }
+    #[test] fn c() { super::c("builtins"); }
+    #[test] fn zig() { super::zig("builtins"); }
+    #[test] fn cpp() { super::cpp("builtins"); }
+    #[test] fn rust() { super::rust("builtins"); }
+}
 
 // The generators must refuse what their target cannot express; otherwise a
 // config that lowers too little would go unnoticed.
@@ -345,7 +354,7 @@ fn xml_follows_the_schema() {
     let Some([xmllint]) = tools(["xmllint"]) else { return };
     let out = root().join("target/e2e/schema");
     fs::create_dir_all(&out).unwrap();
-    let mut inputs: Vec<PathBuf> = ["shapes", "callbacks", "data", "globals", "unions", "pts"].iter().map(|f| root().join("tests/fixtures").join(f).join("api.d.ts")).collect();
+    let mut inputs: Vec<PathBuf> = ["shapes", "callbacks", "data", "globals", "unions", "pts", "exports"].iter().map(|f| root().join("tests/fixtures").join(f).join("api.d.ts")).collect();
     inputs.extend(["tests/bench/api.d.ts", "examples/lowering.d.ts", "examples/features.d.ts"].map(|p| root().join(p)));
     inputs.push(PathBuf::from("lib.es5.d.ts"));
     // Text that XML cannot hold as it is: a control character, a line break, an empty name.
@@ -811,5 +820,452 @@ fn module_names_are_checked() {
         let out = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(root().join("tests/fixtures/names/api.d.ts")).arg("--config").arg(&path).output().unwrap();
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(!out.status.success() && stderr.contains(error), "expected `{error}`, got: {stderr}");
+    }
+}
+
+// Multi-file packages load their directory, follow imports and `export *`,
+// and emit referenced declarations instead of `kind="import"` stubs.
+#[test]
+fn multifile_packages_keep_their_types() {
+    let dir = root().join("target/e2e/multifile-pkg");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("sub")).unwrap();
+    fs::write(dir.join("package.json"), r#"{"name": "multi-pkg"}"#).unwrap();
+    fs::write(dir.join("sub/coord.d.ts"), "export interface Coord { v: number; }\n").unwrap();
+    fs::write(
+        dir.join("shapes.d.ts"),
+        "import { Coord } from \"./sub/coord\";\nexport interface Point { x: Coord; y: number; }\nexport interface Box { w: number; h: number; }\n",
+    )
+    .unwrap();
+    fs::write(dir.join("reexport.d.ts"), "export * from \"./shapes\";\n").unwrap();
+    fs::write(dir.join("aliased.d.ts"), "export interface AliasTarget { id: number; }\n").unwrap();
+    fs::write(dir.join("ns.d.ts"), "export interface NsType { tag: string; }\nexport declare function helper(): number;\n").unwrap();
+    fs::write(dir.join("anon_default.d.ts"), "export default class { value: number; }\n").unwrap();
+    fs::write(
+        dir.join("index.d.ts"),
+        "import { Point } from \"./shapes\";\nimport { AliasTarget as Renamed } from \"./aliased\";\nimport * as Ns from \"./ns\";\nimport AnonDefault from \"./anon_default\";\nexport { Box } from \"./reexport\";\nexport * from \"./reexport\";\nexport declare function origin(): Point;\nexport declare function makeRenamed(): Renamed;\nexport declare function useNs(h: typeof Ns.helper, t: Ns.NsType): Ns.NsType;\nexport declare function makeDefault(): AnonDefault;\n",
+    )
+    .unwrap();
+
+    let xml = lower(&dir.join("index.d.ts"), Some("rust"), &[]);
+    if let Some([xmllint]) = tools(["xmllint"]) {
+        let xml_path = dir.join("api.xml");
+        fs::write(&xml_path, &xml).unwrap();
+        run(Command::new(xmllint).args(["--noout", "--relaxng"]).arg(root().join("schema/declarations.rng")).arg(&xml_path));
+    }
+
+    assert!(!xml.contains("kind=\"import\""), "import stubs must be resolved:\n{xml}");
+    assert!(!xml.contains("name=\"Ns.NsType\""), "namespace-imported type must not keep import alias prefix:\n{xml}");
+    assert!(xml.contains("<declarations import=\"multi-pkg\""), "module name should be inferred from package.json:\n{xml}");
+    for name in ["Point", "Coord", "Box", "AliasTarget", "NsType"] {
+        assert!(xml.contains(&format!("<interface module=\"main\" name=\"{name}\"")), "missing {name}:\n{xml}");
+    }
+    // An unnamed default class is named for its file: `default` is a keyword in several targets.
+    assert!(xml.contains("<class module=\"main\" name=\"anon_default\""), "missing default class:\n{xml}");
+    assert!(xml.contains("<ref name=\"Point\" kind=\"interface\"/>"), "origin return should reference Point interface:\n{xml}");
+    assert!(xml.contains("<ref name=\"Coord\" kind=\"interface\"/>"), "Point.x should reference transitive Coord:\n{xml}");
+    assert!(xml.contains("<ref name=\"NsType\" kind=\"interface\"/>"), "Ns.NsType should reference NsType interface:\n{xml}");
+
+    // Verify generated Rust bindings actually compile against those multi-file types.
+    if let Some(rustc) = rustc_wasm() {
+        let model = model(&xml, "Rust");
+        let rust_out = dir.join("rust");
+        fs::create_dir_all(&rust_out).unwrap();
+        rust_bindings(&rustc, &rust_out, &model);
+    }
+
+    // Packages inside node_modules/ must still resolve their own multi-file declarations.
+    let nm_pkg = root().join("target/e2e/nm-host/node_modules/@scope/nm-pkg");
+    let _ = fs::remove_dir_all(root().join("target/e2e/nm-host"));
+    fs::create_dir_all(&nm_pkg).unwrap();
+    fs::write(nm_pkg.join("package.json"), r#"{"name": "@scope/nm-pkg"}"#).unwrap();
+    fs::write(nm_pkg.join("shapes.d.ts"), "export interface NodeModShape { n: number; }\n").unwrap();
+    fs::write(nm_pkg.join("index.d.ts"), "import { NodeModShape } from \"./shapes\";\nexport declare function mk(): NodeModShape;\n").unwrap();
+    let nm_xml = lower(&nm_pkg.join("index.d.ts"), Some("rust"), &[]);
+    assert!(!nm_xml.contains("kind=\"import\""), "node_modules package import must be resolved:\n{nm_xml}");
+    assert!(nm_xml.contains("<interface module=\"main\" name=\"NodeModShape\""), "node_modules package must emit NodeModShape:\n{nm_xml}");
+}
+
+// Top-level `export` files infer their JS module name automatically unless
+// overridden by `[library] module`.
+#[test]
+fn module_library_is_inferred() {
+    let pts_xml = lower(&root().join("tests/fixtures/pts/api.d.ts"), None, &[]);
+    assert!(pts_xml.contains("<declarations import=\"pts\""), "pts top-level export should infer import=\"pts\":\n{}", &pts_xml[..pts_xml.len().min(300)]);
+
+    let globals_xml = lower(&root().join("tests/fixtures/shapes/api.d.ts"), None, &[]);
+    assert!(globals_xml.starts_with("<declarations>") || globals_xml.starts_with("<?xml"), "globals should not infer import:\n{}", &globals_xml[..globals_xml.len().min(300)]);
+    assert!(!globals_xml.contains("<declarations import="), "globals must have no import attribute:\n{}", &globals_xml[..globals_xml.len().min(300)]);
+
+    let dir = root().join("target/e2e/infer-pkg");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("package.json"), r#"{"name": "@scope/widget"}"#).unwrap();
+    fs::write(dir.join("index.d.ts"), "export declare function ping(): number;\n").unwrap();
+    let pkg_xml = lower(&dir.join("index.d.ts"), None, &[]);
+    assert!(pkg_xml.contains("<declarations import=\"@scope/widget\""), "should infer package.json name:\n{pkg_xml}");
+
+    // The nearest package.json above the file, however deep.
+    fs::create_dir_all(dir.join("dist/types")).unwrap();
+    fs::write(dir.join("dist/types/index.d.ts"), "export declare function ping(): number;\n").unwrap();
+    assert!(lower(&dir.join("dist/types/index.d.ts"), None, &[]).contains("<declarations import=\"@scope/widget\""));
+
+    // None: no name is made up from the file's, which would be imported and not found.
+    let loose = root().join("target/e2e/infer-loose");
+    let _ = fs::remove_dir_all(&loose);
+    fs::create_dir_all(&loose).unwrap();
+    fs::write(loose.join("geometry.d.ts"), "export declare function area(w: number, h: number): number;\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(loose.join("geometry.d.ts")).output().unwrap();
+    let (xml, said) = (String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    assert!(!xml.contains("import="), "no package.json, no import:\n{xml}");
+    assert!(said.contains("set [library] module"), "a module with no package says how to name it: {said}");
+}
+
+// Function types keep optional parameters in both F# and Rust, and `None`
+// reaches JavaScript as `undefined`.
+#[test]
+fn function_types_keep_optional_parameters() {
+    let dir = root().join("target/e2e/opt-fn-params");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("api.d.ts"),
+        "export type StartFn = (count: number) => void;\n\
+         export type Responses = {\n\
+           start: (fn: StartFn, offset?: number, name?: string) => Responses;\n\
+         };\n\
+         export declare function invokeOpt(fn: (n: number, offset?: number, name?: string) => string): string;\n\
+         export declare function getOpt1(): (offset?: number) => string;\n\
+         export declare function getOpt2(): (n: number, offset?: number, name?: string) => string;\n\
+         export declare function getResponses(): Responses;\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("impl.mjs"),
+        "export function invokeOpt(fn) { return fn(1) + '|' + fn(2, 10, 'hi'); }\n\
+         export function getOpt1() { return offset => offset === undefined ? 'undef' : String(offset); }\n\
+         export function getOpt2() { return (n, offset, name) => `${n}:${offset === undefined ? 'undef' : offset}:${name === undefined ? 'undef' : name}`; }\n\
+         export function getResponses() {\n\
+           const calls = [];\n\
+           const api = {\n\
+             start(fn, offset, name) {\n\
+               calls.push(`${offset === undefined ? 'undef' : offset}:${name === undefined ? 'undef' : name}`);\n\
+               fn(calls.length);\n\
+               return api;\n\
+             },\n\
+             getCalls() { return calls.join('|'); }\n\
+           };\n\
+           return api;\n\
+         }\n",
+    )
+    .unwrap();
+
+    // Check F# signature and runtime execution via Fable + Node.
+    let fs_xml = lower(&dir.join("api.d.ts"), Some("fsharp"), &["library.module=opt-fn-pkg"]);
+    let fs_out = generators::fsharp::module(&fs_xml).unwrap();
+    let fs_all: String = fs_out.files.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join("\n");
+    assert!(fs_all.contains("delegate of n: float * ?offset: float * ?name: string -> string"), "F# function type must use delegate with optional params:\n{fs_all}");
+    assert!(fs_all.contains("abstract start: fn: StartFn * ?offset: float * ?name: string -> Responses"), "F# function-typed property must preserve optional params:\n{fs_all}");
+    if let Some([fable, node]) = tools(["fable", "node"]) {
+        fs::write(
+            dir.join("test.fs"),
+            "module Test\n\
+             open Bindings\n\
+             open type Bindings.Globals\n\
+             let a = invokeOpt (fun n offset name -> sprintf \"%g:%s:%s\" n (match offset with Some v -> string v | None -> \"none\") (defaultArg name \"none\"))\n\
+             if a <> \"1:none:none|2:10:hi\" then failwith (\"bad invokeOpt: \" + a)\n\
+             let cb1 = getOpt1 ()\n\
+             let b1 = cb1.Invoke() + \"|\" + cb1.Invoke(5.0)\n\
+             if b1 <> \"undef|5\" then failwith (\"bad getOpt1: \" + b1)\n\
+             let cb2 = getOpt2 ()\n\
+             let b2 = cb2.Invoke(1.0) + \"|\" + cb2.Invoke(2.0, 10.0) + \"|\" + cb2.Invoke(3.0, name = \"hi\")\n\
+             if b2 <> \"1:undef:undef|2:10:undef|3:undef:hi\" then failwith (\"bad getOpt2: \" + b2)\n\
+             let mutable seen = 0.0\n\
+             let r = getResponses ()\n\
+             r.start(fun c -> seen <- seen + c).start((fun c -> seen <- seen + c), 4.0).start((fun c -> seen <- seen + c), 5.0, \"go\") |> ignore\n\
+             if seen <> 6.0 then failwith (\"bad Responses.start callbacks\")\n",
+        )
+        .unwrap();
+        let fs_dir = dir.join("fsharp");
+        fs::create_dir_all(&fs_dir).unwrap();
+        let c = Case { fixture: dir.clone(), out: fs_dir.clone(), xml: fs_xml };
+        write_fsharp(&c, &fs_out);
+        let mod_dir = fs_dir.join("node_modules/opt-fn-pkg");
+        fs::create_dir_all(&mod_dir).unwrap();
+        fs::write(mod_dir.join("package.json"), r#"{ "name": "opt-fn-pkg", "type": "module", "exports": "./index.mjs" }"#).unwrap();
+        fs::copy(dir.join("impl.mjs"), mod_dir.join("index.mjs")).unwrap();
+        run(Command::new(fable).current_dir(&fs_dir).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+        run(Command::new(&node).arg(fs_dir.join("js/Test.mjs")));
+    }
+
+    // Check Rust signature and runtime execution via wasm + Node.
+    let rs_api = dir.join("rust_api.d.ts");
+    fs::write(&rs_api, "declare function invokeOpt(fn: (n: number, offset?: number, name?: string) => string): string;\n").unwrap();
+    let rs_xml = lower(&rs_api, Some("rust"), &[]);
+    let rs_model = model(&rs_xml, "Rust");
+    let rs_files = generators::rust::files(&rs_model).unwrap();
+    let rs_all: String = rs_files.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join("\n");
+    assert!(rs_all.contains("Option<f64>") && rs_all.contains("Option<String>"), "Rust callback must use Option for optional parameters:\n{rs_all}");
+    if let (Some(rustc), Some([node])) = (rustc_wasm(), tools(["node"])) {
+        let rs_dir = dir.join("rust");
+        fs::create_dir_all(&rs_dir).unwrap();
+        let c = Case { fixture: dir.clone(), out: rs_dir.clone(), xml: rs_xml };
+        rust_bindings(&rustc, &rs_dir, &rs_model);
+        fs::write(
+            rs_dir.join("test.rs"),
+            "#![no_main]\nuse bindings::*;\n#[link(wasm_import_module = \"env\")]\nunsafe extern \"C\" {\n    #[link_name = \"check\"]\n    fn check_at(ok: i32, line: u32);\n}\n#[unsafe(no_mangle)]\npub extern \"C\" fn run() {\n    let f = InvokeOptFn::new(|n: f64, offset: Option<f64>, name: Option<String>| {\n        let o = offset.map(|v| format!(\"{v}\")).unwrap_or_else(|| \"none\".into());\n        let s = name.unwrap_or_else(|| \"none\".into());\n        format!(\"{n}:{o}:{s}\")\n    });\n    let ok = invoke_opt(&f) == \"1:none:none|2:10:hi\";\n    unsafe { check_at(ok as i32, line!()) };\n}\n",
+        )
+        .unwrap();
+        run(Command::new(rustc).current_dir(&rs_dir).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
+        write_glue(&c, &rs_model);
+        fs::write(
+            rs_dir.join("impl.mjs"),
+            "globalThis.invokeOpt = fn => fn(1) + '|' + fn(2, 10, 'hi');\n",
+        )
+        .unwrap();
+        run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(rs_dir.join("impl.mjs")).arg(rs_dir.join("glue.mjs")).arg(rs_dir.join("test.wasm")));
+    }
+
+    // Also check real-world pts ITempoResponses keeps optionals in F# as an uncurried method.
+    let pts_xml = lower(&root().join("tests/fixtures/pts/api.d.ts"), Some("fsharp"), &[]);
+    let pts_fs = generators::fsharp::module(&pts_xml).unwrap();
+    let pts_all: String = pts_fs.files.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join("\n");
+    assert!(pts_all.contains("abstract start: fn: ITempoStartFn * ?offset: float * ?name: string -> ITempoResponses"), "pts ITempoResponses should have optional parameters:\n{pts_all}");
+}
+
+#[test]
+fn intl_locale_formatting() {
+    let dir = root().join("target/e2e/intl");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    // Lower lib.es2020.intl.d.ts (merging base Intl from lib.es5.d.ts + ES2020 Intl).
+    let xml = lower(Path::new("lib.es2020.intl.d.ts"), Some("rust"), &[]);
+    if let Some([xmllint]) = tools(["xmllint"]) {
+        let mut child = Command::new(xmllint)
+            .args(["--noout", "--relaxng"])
+            .arg(root().join("schema/declarations.rng"))
+            .arg("-")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        use std::io::Write;
+        child.stdin.take().unwrap().write_all(xml.as_bytes()).unwrap();
+        assert!(child.wait().unwrap().success(), "lib.es2020.intl.d.ts XML failed schema validation");
+    }
+
+    // `--include Intl` adds a lib namespace to another input: lib.dom.d.ts, or a
+    // file with the libs it names (`--lib es5,dom,es2020.intl`).
+    let dom_intl_out = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .args(["lib.dom.d.ts", "--include", "Intl", "--config"])
+        .arg(config("rust"))
+        .output()
+        .unwrap();
+    assert!(dom_intl_out.status.success(), "tsrs_proto lib.dom.d.ts --include Intl failed: {}", String::from_utf8_lossy(&dom_intl_out.stderr));
+    let dom_intl_xml = String::from_utf8(dom_intl_out.stdout).unwrap();
+    assert!(dom_intl_xml.contains("name=\"Intl\"") && dom_intl_xml.contains("name=\"DateTimeFormat\"") && dom_intl_xml.contains("name=\"NumberFormat\""));
+
+    let file_intl_out = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg(root().join("tests/fixtures/builtins/api.d.ts"))
+        .args(["--lib", "es5,dom,es2020.intl", "--include", "Intl", "--config"])
+        .arg(config("rust"))
+        .output()
+        .unwrap();
+    assert!(file_intl_out.status.success(), "tsrs_proto builtins/api.d.ts --lib es5,dom,es2020.intl --include Intl failed: {}", String::from_utf8_lossy(&file_intl_out.stderr));
+    let file_intl_xml = String::from_utf8(file_intl_out.stdout).unwrap();
+    assert!(file_intl_xml.contains("name=\"Intl\"") && file_intl_xml.contains("name=\"RelativeTimeFormat\"") && file_intl_xml.contains("name=\"Locale\""));
+
+    if let (Some(rustc), Some([node])) = (rustc_wasm(), tools(["node"])) {
+        let m = model(&xml, "Rust");
+        let c = Case { fixture: dir.clone(), out: dir.clone(), xml };
+        rust_bindings(&rustc, &dir, &m);
+        fs::write(
+            dir.join("test.rs"),
+            "#![no_main]\n\
+             use bindings::*;\n\
+             #[link(wasm_import_module = \"env\")]\n\
+             unsafe extern \"C\" {\n\
+                 #[link_name = \"check\"]\n\
+                 fn check_at(ok: i32, line: u32);\n\
+             }\n\
+             macro_rules! check { ($e:expr) => { unsafe { check_at($e as i32, line!()) } }; }\n\
+             #[unsafe(no_mangle)]\n\
+             pub extern \"C\" fn run() {\n\
+                 {\n\
+                     let d_opts = IntlDateTimeFormatOptions::create();\n\
+                     d_opts.set_time_zone(Some(\"UTC\"));\n\
+                     d_opts.set_year(Some(IntlDateTimeFormatOptionsDay::Numeric));\n\
+                     d_opts.set_month(Some(IntlDateTimeFormatOptionsMonth::Short));\n\
+                     d_opts.set_day(Some(IntlDateTimeFormatOptionsDay::_2Digit));\n\
+                     let dtf = intl_date_time_format().construct(\"en-US\", Some(&d_opts));\n\
+                     let formatted_date = dtf.format(&Date::from_time(1700000000000.0));\n\
+                     check!(formatted_date == \"Nov 14, 2023\");\n\
+                     let n_opts = IntlNumberFormatOptions::create();\n\
+                     n_opts.set_style(Some(IntlNumberFormatOptionsStyle::Currency));\n\
+                     n_opts.set_currency(Some(\"USD\"));\n\
+                     let nf = intl_number_format().construct(\"en-US\", Some(&n_opts));\n\
+                     check!(nf.format(1234.5) == \"$1,234.50\");\n\
+                     let rtf = IntlRelativeTimeFormatStatics::new(\"en-US\", None);\n\
+                     check!(rtf.format(-1.0, IntlRelativeTimeFormatUnit::Day) == \"1 day ago\");\n\
+                 }\n\
+                 check!(js::live_handles() == 0);\n\
+             }\n",
+        )
+        .unwrap();
+        run(Command::new(rustc).current_dir(&dir).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
+        write_glue(&c, &m);
+        fs::write(dir.join("impl.mjs"), "export const root = {};\n").unwrap();
+        run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("glue.mjs")).arg(dir.join("test.wasm")));
+    }
+
+    // Verify Zig Intl bindings (including qualified flattened ancestor `Intl_LocaleOptions`) compile and run in Node.
+    let zig_xml = lower(Path::new("lib.es2020.intl.d.ts"), Some("zig"), &[]);
+    let zig_model = model(&zig_xml, "Zig");
+    let zig_files = generators::zig::files(&zig_model).unwrap();
+    let intl_zig = zig_files.iter().find(|(p, _)| p == "namespaces/Intl.zig").map(|(_, s)| s.as_str()).unwrap();
+    assert!(intl_zig.contains("asIntl_LocaleOptions") && intl_zig.contains(") Intl_LocaleOptions {"), "Intl.Locale flattened ancestor must keep Intl_ namespace:\n{intl_zig}");
+    if let Some([zig, node]) = tools(["zig", "node"]) {
+        let zdir = dir.join("zig");
+        fs::create_dir_all(&zdir).unwrap();
+        write_files(&zdir, zig_files);
+        fs::write(
+            zdir.join("test.zig"),
+            "const b = @import(\"bindings.zig\");\n\
+             extern \"env\" fn check(ok: i32, line: u32) void;\n\
+             fn expect(ok: bool, src: anytype) void { check(@intFromBool(ok), src.line); }\n\
+             export fn run() void {\n\
+                 var scope = b.JsScope.open();\n\
+                 const loc = b.Intl_Locale_statics.new(.{ .string = b.JsString.from(\"en-US\") }, .{});\n\
+                 const opts = loc.asIntl_LocaleOptions();\n\
+                 expect(opts.getLanguage().?.eql(\"en\"), @src());\n\
+                 const n_opts = b.Intl_NumberFormatOptions.create();\n\
+                 n_opts.setStyle(.currency);\n\
+                 n_opts.setCurrency(\"USD\");\n\
+                 const nf = b.getIntlNumberFormat().construct(.{ .locales = .{ .string = b.JsString.from(\"en-US\") }, .options = n_opts });\n\
+                 expect(nf.format(1234.5).eql(\"$1,234.50\"), @src());\n\
+                 const rtf = b.Intl_RelativeTimeFormat_statics.new(.{ .locales = .{ .string = b.JsString.from(\"en-US\") } });\n\
+                 expect(rtf.format(-1.0, .day).eql(\"1 day ago\"), @src());\n\
+                 scope.close();\n\
+                 expect(b.jsLiveHandles() == 0, @src());\n\
+             }\n",
+        )
+        .unwrap();
+        run(Command::new(zig).current_dir(&zdir).args(ZIG_WASM));
+        let zcase = Case { fixture: zdir.clone(), out: zdir.clone(), xml: zig_xml };
+        write_glue(&zcase, &zig_model);
+        fs::write(zdir.join("impl.mjs"), "export const root = {};\n").unwrap();
+        run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(zdir.join("impl.mjs")).arg(zdir.join("glue.mjs")).arg(zdir.join("test.wasm")));
+    }
+}
+
+#[test]
+fn webworker_bindings_and_worker() {
+    let dir = root().join("target/e2e/webworker");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    // Lower lib.webworker.d.ts across targets and check schema + model generation.
+    let xml = lower_with(Path::new("lib.webworker.d.ts"), Some("rust"), &[root().join("examples/modules/dom.toml")], &[]);
+    if let Some([xmllint]) = tools(["xmllint"]) {
+        let mut child = Command::new(xmllint)
+            .args(["--noout", "--relaxng"])
+            .arg(root().join("schema/declarations.rng"))
+            .arg("-")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        use std::io::Write;
+        child.stdin.take().unwrap().write_all(xml.as_bytes()).unwrap();
+        assert!(child.wait().unwrap().success(), "lib.webworker.d.ts XML failed schema validation");
+    }
+
+    if let (Some(rustc), Some([node])) = (rustc_wasm(), tools(["node"])) {
+        let m = model(&xml, "Rust");
+        let c = Case { fixture: dir.clone(), out: dir.clone(), xml };
+        rust_bindings(&rustc, &dir, &m);
+        fs::write(
+            dir.join("test.rs"),
+            "#![no_main]\n\
+             use bindings::*;\n\
+             #[unsafe(no_mangle)]\n\
+             pub extern \"C\" fn run() {\n\
+                 let handler = DedicatedWorkerGlobalScopeMessageEventFn::new(|ev: MessageEvent<JsValue>| {\n\
+                     let data = ev.data();\n\
+                     let bytes = Uint8Array::<ArrayBufferLike>::from_handle(give(&data));\n\
+                     let mut v = bytes.to_vec();\n\
+                     for b in &mut v { *b = b.wrapping_mul(2); }\n\
+                     let reply = Uint8Array::<ArrayBufferLike>::from_slice(&v);\n\
+                     post_message(&reply, Vec::<Transferable>::new());\n\
+                     JsValue::from_handle(0)\n\
+                 });\n\
+                 set_onmessage(Some(&handler));\n\
+             }\n",
+        )
+        .unwrap();
+        run(Command::new(rustc).current_dir(&dir).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
+        write_glue(&c, &m);
+        fs::write(
+            dir.join("worker_test.mjs"),
+            "import fs from 'node:fs';\n\
+             import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';\n\
+             import { pathToFileURL } from 'node:url';\n\
+             if (isMainThread) {\n\
+               const w = new Worker(new URL(import.meta.url), { workerData: { dir: process.argv[2] } });\n\
+               const out = await new Promise((resolve, reject) => {\n\
+                 w.on('message', m => { if (m.ready) { w.postMessage(new Uint8Array([3, 7, 11])); } else resolve(m); });\n\
+                 w.on('error', reject);\n\
+               });\n\
+               await w.terminate();\n\
+               const got = Array.from(out);\n\
+               if (got.length !== 3 || got[0] !== 6 || got[1] !== 14 || got[2] !== 22) {\n\
+                 throw new Error('unexpected worker reply: ' + JSON.stringify(got));\n\
+               }\n\
+               console.log('worker round-trip OK:', got);\n\
+             } else {\n\
+               const dir = workerData.dir;\n\
+               const { makeEnv } = await import(pathToFileURL(dir + '/glue.mjs'));\n\
+               globalThis.self = globalThis;\n\
+               globalThis.postMessage = msg => parentPort.postMessage(msg);\n\
+               let instance;\n\
+               const env = makeEnv(() => instance, { check: true });\n\
+               ({ instance } = await WebAssembly.instantiate(fs.readFileSync(dir + '/test.wasm'), { env }));\n\
+               instance.exports.run();\n\
+               parentPort.on('message', data => globalThis.onmessage?.({ data }));\n\
+               parentPort.postMessage({ ready: true });\n\
+             }\n",
+        )
+        .unwrap();
+        run(Command::new(node).arg(dir.join("worker_test.mjs")).arg(&dir));
+    }
+
+    // Also verify lib.webworker.d.ts compiles cleanly across Zig, C, and C++.
+    if let Some([zig]) = tools(["zig"]) {
+        let zdir = dir.join("zig");
+        fs::create_dir_all(&zdir).unwrap();
+        let zxml = lower_with(Path::new("lib.webworker.d.ts"), Some("zig"), &[root().join("examples/modules/dom.toml")], &[]);
+        let zm = model(&zxml, "Zig");
+        write_files(&zdir, generators::zig::files(&zm).unwrap());
+        fs::write(zdir.join("test.zig"), "const b = @import(\"bindings.zig\"); comptime { @import(\"std\").testing.refAllDecls(b); }\nexport fn run() void {}\n").unwrap();
+        run(Command::new(zig).current_dir(&zdir).args(ZIG_WASM));
+    }
+    if let Some([clang]) = tools(["clang"]) {
+        let cdir = dir.join("c");
+        fs::create_dir_all(&cdir).unwrap();
+        let cxml = lower_with(Path::new("lib.webworker.d.ts"), Some("c"), &[root().join("examples/modules/dom.toml")], &[]);
+        let cm = model(&cxml, "C");
+        write_files(&cdir.join("bindings"), generators::c::files(&cm).unwrap());
+        fs::write(cdir.join("all.c"), "#include \"bindings.h\"\nvoid run(void) { (void)js_live_handles(); }\n").unwrap();
+        let flags: Vec<&str> = CLANG_WASM.iter().filter(|f| !f.starts_with("-Wl,")).copied().collect();
+        run(Command::new(clang).args(&flags).arg("-fsyntax-only").arg("-I").arg(cdir.join("bindings")).arg(cdir.join("all.c")));
+    }
+    if let Some(clangxx) = wasi_clang() {
+        let cppdir = dir.join("cpp");
+        fs::create_dir_all(&cppdir).unwrap();
+        let cppxml = lower_with(Path::new("lib.webworker.d.ts"), Some("cpp"), &[root().join("examples/modules/dom.toml")], &[]);
+        let cppm = model(&cppxml, "C++");
+        write_files(&cppdir.join("bindings"), generators::cpp::files(&cppm).unwrap());
+        fs::write(cppdir.join("all.cpp"), "#include \"bindings.hpp\"\nint main() { return (int)ts::live_handles(); }\n").unwrap();
+        let flags: Vec<&str> = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model")).copied().collect();
+        run(Command::new(clangxx).args(&flags).arg("-fsyntax-only").arg("-I").arg(cppdir.join("bindings")).arg(cppdir.join("all.cpp")));
     }
 }

@@ -1,8 +1,8 @@
 // Front end: tsrs AST -> IR (as written), and checker Type -> IR (resolved).
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
-use tsrs_ast::{self as ast, Kind, ModifierFlags, Node, NodeList, Symbol, SymbolFlags, has_syntactic_modifier};
+use tsrs_ast::{self as ast, Kind, ModifierFlags, Node, NodeList, SourceFile, Symbol, SymbolFlags, has_syntactic_modifier};
 use tsrs_checker::checker::Checker;
 use tsrs_checker::types::{
     ElementFlags, LiteralValue, ObjectFlags, Signature as CSignature, SignatureKind, Type as CType, TypeFlags, TypeId,
@@ -15,8 +15,14 @@ use crate::ir::*;
 pub struct Front<'c> {
     pub c: &'c mut Checker,
     pub root_file: String,
+    lib_path: String,
     // Merged symbols already converted, by kind and fully qualified name.
     seen: HashSet<String>,
+    // Declarations exported under another name than their own, by their own.
+    exported_as: HashMap<String, String>,
+    emitted_nodes: HashSet<P<Node>>,
+    queued: HashSet<P<Symbol>>,
+    pending: VecDeque<P<Symbol>>,
     // Counts of lossy conversions and unhandled syntax, by reason.
     pub stats: BTreeMap<String, usize>,
     computed_alias: HashMap<P<Symbol>, bool>,
@@ -34,6 +40,11 @@ pub struct Front<'c> {
     // During expansion: the type parameter being replaced, and its key.
     key_binding: Option<(TypeId, String)>,
     skip_alias: Option<P<Symbol>>,
+    // Namespaces of the bundled lib files that are part of the output, with
+    // their declarations from every lib file: those `--include` names, and
+    // when the input is a lib file, the ones it declares (`Intl` in
+    // lib.es2020.intl.d.ts gathers lib.es5.d.ts's `Intl` too).
+    pub included: HashSet<String>,
 }
 
 const DEFERRED: TypeFlags = TypeFlags::Index
@@ -44,8 +55,29 @@ const DEFERRED: TypeFlags = TypeFlags::Index
     .union(TypeFlags::StringMapping);
 
 impl<'c> Front<'c> {
-    pub fn new(c: &'c mut Checker, root_file: String) -> Self {
-        Front { c, root_file, seen: HashSet::new(), stats: BTreeMap::new(), computed_alias: HashMap::new(), in_progress: Vec::new(), merge_intersections: false, intersection_limit: 64, expand_keyed: false, map_keyed: false, kept_keyed: HashSet::new(), keyed_limit: 0, key_binding: None, skip_alias: None }
+    pub fn new(c: &'c mut Checker, root_file: String, lib_path: String) -> Self {
+        Front {
+            c,
+            root_file,
+            lib_path,
+            seen: HashSet::new(),
+            exported_as: HashMap::new(),
+            emitted_nodes: HashSet::new(),
+            queued: HashSet::new(),
+            pending: VecDeque::new(),
+            stats: BTreeMap::new(),
+            computed_alias: HashMap::new(),
+            in_progress: Vec::new(),
+            merge_intersections: false,
+            intersection_limit: 64,
+            expand_keyed: false,
+            map_keyed: false,
+            kept_keyed: HashSet::new(),
+            keyed_limit: 0,
+            key_binding: None,
+            skip_alias: None,
+            included: HashSet::new(),
+        }
     }
 
     pub fn count(&mut self, what: &str) {
@@ -71,35 +103,248 @@ impl<'c> Front<'c> {
         Some((sym, sym.declarations().iter().copied().filter(|d| d.kind() == kind).collect()))
     }
 
-    pub fn statements(&mut self, stmts: &[P<Node>]) -> Vec<Decl> {
-        let mut out = Vec::new();
-        for &s in stmts {
-            match s.kind() {
-                Kind::InterfaceDeclaration => out.extend(self.interface(s).map(Decl::Interface)),
-                Kind::ClassDeclaration => out.extend(self.class(s).map(Decl::Interface)),
-                Kind::TypeAliasDeclaration => {
-                    let sym = self.c.get_symbol_of_declaration_exported(s);
+    pub fn collect(&mut self, file: P<SourceFile>) -> Vec<Decl> {
+        // The entry file's `export default function f`, `export default class C`.
+        for &s in file.statements().nodes() {
+            if matches!(s.kind(), Kind::FunctionDeclaration | Kind::ClassDeclaration) && has_syntactic_modifier(s, ModifierFlags::Default) {
+                self.exported_as.insert(s.name().map(text).unwrap_or_else(|| anonymous_name(s)), "default".into());
+            }
+        }
+        let mut out = self.statements(file.statements().nodes());
+        while let Some(sym) = self.pending.pop_front() {
+            self.emit_symbol(sym, &mut out);
+        }
+        self.exports(&mut out);
+        out
+    }
+
+    // A declaration exported under another name is known by that name; one
+    // exported as `default` keeps its own and says so: `jsName="default"`.
+    fn exports(&mut self, out: &mut [Decl]) {
+        let name_of = |d: &Decl| -> Option<String> {
+            match d {
+                Decl::Interface(i) => Some(i.name.clone()),
+                Decl::Alias(a) => Some(a.name.clone()),
+                Decl::Function(f) => Some(f.name.clone()),
+                Decl::Var(v) => Some(v.name.clone()),
+                Decl::Enum(e) => Some(e.name.clone()),
+                Decl::Namespace(n) => Some(n.name.clone()),
+            }
+        };
+        let declared: HashSet<String> = out.iter().filter_map(name_of).collect();
+        let (mut renames, mut tests) = (Vec::new(), Vec::new());
+        for d in out.iter_mut() {
+            let Some(name) = name_of(d) else { continue };
+            let Some(exported) = self.exported_as.get(&name).cloned() else { continue };
+            if exported == "default" {
+                match d {
+                    Decl::Interface(i) => i.js_name = Some(exported.clone()),
+                    Decl::Function(f) => f.js_name = Some(exported.clone()),
+                    Decl::Var(v) => v.js_name = Some(exported.clone()),
+                    _ => {}
+                }
+                tests.push((name.clone(), exported));
+            } else if exported != name && !declared.contains(&exported) {
+                renames.push((name, exported));
+            }
+        }
+        crate::lower::rename_everywhere(out, &renames, &tests);
+    }
+
+    // The lib namespaces `names` (`--include Intl`), from whichever lib files declare them.
+    pub fn collect_included(&mut self, libs: &[P<SourceFile>], names: &[String], out: &mut Vec<Decl>) {
+        self.included.extend(names.iter().cloned());
+        for lib in libs {
+            for &s in lib.statements().nodes() {
+                if s.kind() == Kind::ModuleDeclaration && s.name().is_some_and(|n| names.contains(&text(n))) {
+                    self.emit_decl_node(s, out);
+                }
+            }
+        }
+        while let Some(sym) = self.pending.pop_front() {
+            self.emit_symbol(sym, out);
+        }
+    }
+
+    // Whether a qualified name is in a namespace of the lib files that is part of the output.
+    fn is_included(&self, fqn: &str) -> bool {
+        self.included.contains(fqn.split('.').next().unwrap_or(fqn))
+    }
+
+    fn is_package_file(&self, sf: &SourceFile) -> bool {
+        let name = sf.file_name();
+        if self.root_file.starts_with(&self.lib_path) || name.starts_with(&self.lib_path) {
+            return false;
+        }
+        if let Some((before, after)) = self.root_file.rsplit_once("/node_modules/") {
+            let mut segs = after.split('/');
+            let pkg_len = match segs.next() {
+                Some(s) if s.starts_with('@') => s.len() + 1 + segs.next().map_or(0, str::len),
+                Some(s) => s.len(),
+                None => 0,
+            };
+            let pkg_root = &self.root_file[..before.len() + "/node_modules/".len() + pkg_len];
+            return name.starts_with(pkg_root)
+                && matches!(name.as_bytes().get(pkg_root.len()), None | Some(b'/'))
+                && !name[pkg_root.len()..].contains("/node_modules/");
+        }
+        !name.contains("/node_modules/")
+    }
+
+    fn resolve_alias(&mut self, sym: P<Symbol>) -> P<Symbol> {
+        if sym.flags().intersects(SymbolFlags::Alias) {
+            let (resolved, ok) = self.c.resolve_alias_exported(Some(sym));
+            if ok && let Some(target) = resolved {
+                return target;
+            }
+        }
+        sym
+    }
+
+    // A symbol's own name: a default export's symbol is named `default` (or
+    // `export=`), its declaration by what it is called, if anything.
+    fn own_name(&self, s: P<Symbol>) -> String {
+        match s.name() {
+            "default" | "export=" => match s.declarations().first() {
+                Some(d) => d.name().map(text).unwrap_or_else(|| anonymous_name(*d)),
+                None => "default".into(),
+            },
+            name => name.to_string(),
+        }
+    }
+
+    fn enqueue_symbol(&mut self, sym: P<Symbol>) {
+        // `export { local as exported }`: the alias has the name it is exported as.
+        let exported = sym.name();
+        let sym = self.resolve_alias(sym);
+        let own = self.own_name(sym);
+        if exported != own && !matches!(exported, "export=" | "default") && !exported.is_empty() {
+            self.exported_as.entry(own).or_insert_with(|| exported.to_string());
+        }
+        if sym.flags().intersects(SymbolFlags::TypeParameter) {
+            return;
+        }
+        let mut top = sym;
+        while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
+            if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration) {
+                top = parent;
+            } else {
+                break;
+            }
+        }
+        if top.declarations().iter().any(|d| ast::get_source_file_of_node(*d).is_some_and(|f| self.is_package_file(&f)))
+            && self.queued.insert(top)
+        {
+            self.pending.push_back(top);
+        }
+    }
+
+    fn emit_symbol(&mut self, sym: P<Symbol>, out: &mut Vec<Decl>) {
+        let decls: Vec<P<Node>> = sym.declarations().to_vec();
+        for d in decls {
+            if ast::get_source_file_of_node(d).is_some_and(|f| self.is_package_file(&f)) {
+                self.emit_decl_node(d, out);
+            }
+        }
+    }
+
+    fn emit_decl_node(&mut self, s: P<Node>, out: &mut Vec<Decl>) {
+        match s.kind() {
+            Kind::InterfaceDeclaration => out.extend(self.interface(s).map(Decl::Interface)),
+            Kind::ClassDeclaration => out.extend(self.class(s).map(Decl::Interface)),
+            Kind::TypeAliasDeclaration => {
+                if let Some((sym, _)) = self.first_time(s) {
                     out.push(Decl::Alias(Alias {
                         name: text(name_of(s)),
-                        sym,
+                        sym: Some(sym),
                         type_params: self.type_params(s.type_parameters()),
                         ty: self.opt_type(s.type_node()),
-                        computed: sym.is_some_and(|sym| self.is_computed_alias(sym)),
+                        computed: self.is_computed_alias(sym),
                         synthetic: false,
                     }));
                 }
-                Kind::FunctionDeclaration => {
-                    out.push(Decl::Function(Function { name: text(name_of(s)), js_name: None, sig: self.signature(s) }))
-                }
-                Kind::EnumDeclaration => out.extend(self.enumeration(s).map(Decl::Enum)),
-                Kind::ModuleDeclaration => out.push(Decl::Namespace(self.namespace(s))),
-                Kind::VariableStatement => {
-                    for d in s.as_variable_statement().declaration_list().as_variable_declaration_list().declarations().nodes() {
-                        out.push(Decl::Var(Var { name: text(d.as_variable_declaration().name()), ty: self.opt_type(d.type_node()) }));
-                    }
-                }
-                _ => {}
             }
+            Kind::FunctionDeclaration => {
+                if self.emitted_nodes.insert(s) {
+                    let name = s.name().map(text).unwrap_or_else(|| anonymous_name(s));
+                    out.push(Decl::Function(Function { name, js_name: None, sig: self.signature(s) }));
+                }
+            }
+            Kind::EnumDeclaration => out.extend(self.enumeration(s).map(Decl::Enum)),
+            Kind::ModuleDeclaration => {
+                if let Some(ns) = self.namespace(s) {
+                    out.push(Decl::Namespace(ns));
+                }
+            }
+            Kind::VariableDeclaration => {
+                if self.first_time(s).is_some() {
+                    // A `const`, or any variable at the top of a module: a module's
+                    // exports cannot be assigned from outside it.
+                    let constant = ast::get_combined_node_flags(s).intersects(ast::NodeFlags::Constant);
+                    let statement = s.parent().and_then(|list| list.parent());
+                    let module_top = statement.and_then(|st| st.parent()).is_some_and(|f| f.kind() == Kind::SourceFile)
+                        && ast::get_source_file_of_node(s).is_some_and(|f| f.external_module_indicator().is_some());
+                    out.push(Decl::Var(Var { name: text(s.as_variable_declaration().name()), ty: self.opt_type(s.type_node()), js_name: None, readonly: constant || module_top }));
+                }
+            }
+            Kind::VariableStatement => {
+                for d in s.as_variable_statement().declaration_list().as_variable_declaration_list().declarations().nodes() {
+                    self.emit_decl_node(*d, out);
+                }
+            }
+            Kind::ExportDeclaration => {
+                let ed = s.as_export_declaration();
+                match ed.export_clause() {
+                    None => {
+                        if let Some(spec) = ed.module_specifier()
+                            && let Some(mod_sym) = self.c.resolve_external_module_name_exported(spec, None)
+                        {
+                            for sym in self.c.get_exports_of_module_exported(mod_sym) {
+                                self.enqueue_symbol(sym);
+                            }
+                        }
+                    }
+                    Some(clause) if clause.kind() == Kind::NamedExports => {
+                        for &spec in clause.as_named_exports().elements().nodes() {
+                            if let Some(sym) = self.c.get_symbol_of_declaration_exported(spec) {
+                                self.enqueue_symbol(sym);
+                            }
+                        }
+                    }
+                    Some(clause) if clause.kind() == Kind::NamespaceExport => {
+                        if let Some(spec) = ed.module_specifier()
+                            && let Some(mod_sym) = self.c.resolve_external_module_name_exported(spec, None)
+                        {
+                            let mut decls = Vec::new();
+                            for sym in self.c.get_exports_of_module_exported(mod_sym) {
+                                let target = self.resolve_alias(sym);
+                                if target.declarations().iter().any(|d| ast::get_source_file_of_node(*d).is_some_and(|f| self.is_package_file(&f))) {
+                                    self.emit_symbol(target, &mut decls);
+                                }
+                            }
+                            out.push(Decl::Namespace(Namespace { name: text(clause.as_namespace_export().name()), decls }));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // `export default X` and `export = X`: imported as `default`.
+            Kind::ExportAssignment => {
+                if let Some(sym) = self.c.get_symbol_at_location_exported(s.as_export_assignment().expression()) {
+                    let target = self.resolve_alias(sym);
+                    let own = self.own_name(target);
+                    self.exported_as.insert(own, "default".into());
+                    self.enqueue_symbol(sym);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn statements(&mut self, stmts: &[P<Node>]) -> Vec<Decl> {
+        let mut out = Vec::new();
+        for &s in stmts {
+            self.emit_decl_node(s, &mut out);
         }
         out
     }
@@ -130,7 +375,7 @@ impl<'c> Front<'c> {
             }
         }
         Some(Interface {
-            name: text(name_of(node)),
+            name: node.name().map(text).unwrap_or_else(|| anonymous_name(node)),
             sym: Some(sym),
             type_params: self.type_params(node.type_parameters()),
             extends,
@@ -138,6 +383,7 @@ impl<'c> Front<'c> {
             members,
             class: None,
             synthetic: false,
+            js_name: None,
         })
     }
 
@@ -216,7 +462,7 @@ impl<'c> Front<'c> {
             class.constructors.clear();
         }
         Some(Interface {
-            name: text(name_of(node)),
+            name: node.name().map(text).unwrap_or_else(|| anonymous_name(node)),
             sym: Some(sym),
             type_params: self.type_params(node.type_parameters()),
             extends,
@@ -224,6 +470,7 @@ impl<'c> Front<'c> {
             members,
             class: Some(class),
             synthetic: false,
+            js_name: None,
         })
     }
 
@@ -246,13 +493,30 @@ impl<'c> Front<'c> {
         Some(Enum { name: text(name_of(node)), members, synthetic: false })
     }
 
-    fn namespace(&mut self, node: P<Node>) -> Namespace {
-        let decls = match node.body() {
-            Some(b) if b.kind() == Kind::ModuleDeclaration => vec![Decl::Namespace(self.namespace(b))],
-            Some(b) => self.statements(b.statements()),
-            None => Vec::new(),
-        };
-        Namespace { name: text(name_of(node)), decls }
+    fn namespace(&mut self, node: P<Node>) -> Option<Namespace> {
+        let (sym, all_decls) = self.first_time(node)?;
+        let fqn = self.c.get_fully_qualified_name_exported(sym);
+        let included = self.is_included(&fqn);
+        let mut decls = Vec::new();
+        for d in all_decls {
+            let keep = ast::get_source_file_of_node(d).is_some_and(|sf| {
+                let name = sf.file_name();
+                name == self.root_file || self.is_package_file(&sf) || (included && name.starts_with(&self.lib_path))
+            });
+            if !keep {
+                continue;
+            }
+            match d.body() {
+                Some(b) if b.kind() == Kind::ModuleDeclaration => {
+                    if let Some(ns) = self.namespace(b) {
+                        decls.push(Decl::Namespace(ns));
+                    }
+                }
+                Some(b) => decls.extend(self.statements(b.statements())),
+                None => {}
+            }
+        }
+        Some(Namespace { name: text(name_of(node)), decls })
     }
 
     fn members(&mut self, nodes: &[P<Node>]) -> Vec<Member> {
@@ -429,8 +693,13 @@ impl<'c> Front<'c> {
                 };
                 self.op(op, t)
             }
+            // `import("./shapes").Circle<T>`: what it refers to, resolved by the checker.
+            Kind::ImportType => {
+                let resolved = self.c.get_type_from_type_node_exported(t);
+                self.from_type(resolved)
+            }
             k => {
-                // `intrinsic`, import types and anything else unhandled.
+                // `intrinsic` and anything else unhandled.
                 self.count(&format!("raw {k:?}"));
                 self.op(Op::Raw { kind: format!("{k:?}"), text: text(t) }, t)
             }
@@ -440,7 +709,9 @@ impl<'c> Front<'c> {
     // A named type, resolved by the checker to what it refers to.
     fn reference(&mut self, name: P<Node>, args: Option<P<NodeList>>, node: Option<P<Node>>) -> Type {
         let written = text(name);
-        let sym = self.c.get_symbol_at_location_exported(name);
+        let raw_sym = self.c.get_symbol_at_location_exported(name);
+        let was_alias = raw_sym.is_some_and(|s| s.flags().intersects(SymbolFlags::Alias));
+        let sym = raw_sym.map(|s| self.resolve_alias(s));
         let args = args.map(|l| l.nodes()).unwrap_or(&[]);
         let mut args = self.types(args);
         // `Float32Array` means `Float32Array<ArrayBufferLike>`: spell out the
@@ -461,7 +732,9 @@ impl<'c> Front<'c> {
             }
         }
         let mut r = self.make_ref(sym, args);
-        r.name = written;
+        if !was_alias && !r.name.is_empty() && r.qualified.as_deref() == Some(written.as_str()) {
+            r.name = written;
+        }
         r.qualified = r.qualified.filter(|q| *q != r.name);
         r.node = node;
         Type::Ref(r)
@@ -471,12 +744,22 @@ impl<'c> Front<'c> {
         let Some(s) = sym else {
             return Ref { name: String::new(), kind: "unresolved", sym: None, args, tid: None, qualified: None, file: None, computed: false, node: None };
         };
-        let name = s.name().to_string();
-        let fqn = self.c.get_fully_qualified_name_exported(s);
-        let file = s
-            .declarations()
-            .first()
-            .and_then(|d| ast::get_source_file_of_node(*d))
+        let s = self.resolve_alias(s);
+        let name = self.own_name(s);
+        let raw_fqn = self.c.get_fully_qualified_name_exported(s);
+        let fqn = if raw_fqn.starts_with('"') {
+            raw_fqn.find("\".").map(|i| raw_fqn[i + 2..].to_string()).unwrap_or(raw_fqn)
+        } else {
+            raw_fqn
+        };
+        let decl_file = s.declarations().first().and_then(|d| ast::get_source_file_of_node(*d));
+        let in_pkg = decl_file.as_ref().is_some_and(|f| self.is_package_file(f));
+        let included = self.is_included(&fqn) && decl_file.as_ref().is_some_and(|f| f.file_name().starts_with(&self.lib_path));
+        if in_pkg {
+            self.enqueue_symbol(s);
+        }
+        let file = decl_file
+            .filter(|_| !in_pkg && !included)
             .map(|f| f.file_name().to_string())
             .filter(|f| *f != self.root_file)
             .map(|f| f.rsplit('/').next().unwrap_or(&f).to_string());
@@ -485,7 +768,7 @@ impl<'c> Front<'c> {
             computed: s.flags().intersects(SymbolFlags::TypeAlias) && self.is_computed_alias(s),
             qualified: Some(fqn).filter(|q| *q != name),
             name,
-            sym,
+            sym: Some(s),
             args,
             tid: None,
             file,
@@ -860,7 +1143,11 @@ impl<'c> Front<'c> {
                     }
                     // A class, or an interface with a global constructor of the same name.
                     _ if s.flags().intersects(SymbolFlags::Class) || s.flags().intersects(SymbolFlags::Interface) && s.flags().intersects(SymbolFlags::Variable) => {
-                        let name = self.c.get_fully_qualified_name_exported(s);
+                        // A module's class is reached by what it is exported as: `Figure`, `default`.
+                        let fqn = self.c.get_fully_qualified_name_exported(s);
+                        let fqn = if fqn.starts_with('"') { fqn.find("\".").map(|i| fqn[i + 2..].to_string()).unwrap_or(fqn) } else { fqn };
+                        let fqn = if matches!(s.name(), "default" | "export=") { self.own_name(s) } else { fqn };
+                        let name = self.exported_as.get(&fqn).cloned().unwrap_or(fqn);
                         let constructible = s.flags().intersects(SymbolFlags::Class) || {
                             let v = self.c.get_type_of_symbol_exported(s);
                             !self.c.get_signatures_of_type_exported(v, SignatureKind::Construct).is_empty()
@@ -1018,7 +1305,15 @@ impl<'c> Front<'c> {
         let mut queue = vec![t];
         while let Some(t) = queue.pop() {
             for base in self.c.get_base_types_exported(t) {
-                let name = base.symbol().map(|s| s.name().to_string()).unwrap_or_default();
+                let name = base.symbol().map(|s| {
+                    let s = self.resolve_alias(s);
+                    let raw = self.c.get_fully_qualified_name_exported(s);
+                    if raw.starts_with('"') {
+                        raw.find("\".").map(|i| raw[i + 2..].to_string()).unwrap_or(raw)
+                    } else {
+                        raw
+                    }
+                }).unwrap_or_default();
                 if !name.is_empty() && !ancestors.contains(&name) {
                     ancestors.push(name);
                     queue.push(*base);
@@ -1079,4 +1374,16 @@ fn symbol_member_name(sym: P<Symbol>) -> String {
 
 fn text(node: P<Node>) -> String {
     get_text_of_node(node)
+}
+
+// The name of `export default class { }`: its file's, or for an `index`
+// file its directory's, as a JavaScript name: `anon_default`, `widget`.
+fn anonymous_name(node: P<Node>) -> String {
+    let file = ast::get_source_file_of_node(node).map(|f| f.file_name().to_string()).unwrap_or_default();
+    let mut parts = file.rsplit('/');
+    let base = parts.next().unwrap_or_default();
+    let stem = [".d.ts", ".d.mts", ".d.cts", ".mts", ".cts", ".ts"].iter().find_map(|e| base.strip_suffix(e)).unwrap_or(base);
+    let stem = if stem == "index" { parts.next().unwrap_or(stem) } else { stem };
+    let name: String = stem.chars().map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' }).collect();
+    if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) { format!("_{name}") } else { name }
 }

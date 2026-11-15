@@ -22,38 +22,38 @@ export fn run() void {
     expect(b.Shape.SIDES == 4, @src());
 
     // Literal union -> enum, in both directions.
-    expect(s.get_kind() == .square, @src());
-    expect(b.Shape.new(.circle, 1).get_kind() == .circle, @src());
+    expect(s.getKind() == .square, @src());
+    expect(b.Shape.new(.circle, 1).getKind() == .circle, @src());
 
     // Properties.
-    s.set_size(4);
-    expect(s.get_size() == 4, @src());
+    s.setSize(4);
+    expect(s.getSize() == 4, @src());
 
     // Flattened inheritance, and passing a Shape where a Named is wanted.
-    expect(strEq(s.get_name(), "square-3"), @src());
+    expect(strEq(s.getName(), "square-3"), @src());
     expect(strEq(s.describe(), "square-3 (16)"), @src());
     expect(strEq(b.nameOf(s.asNamed()), "square-3"), @src());
 
     // Overloads.
     const big = s.scale(2);
-    expect(big.get_size() == 8, @src());
-    expect(strEq(s.scale_with_name(2, "big").get_name(), "big"), @src());
+    expect(big.getSize() == 8, @src());
+    expect(strEq(s.scaleWithName(2, "big").getName(), "big"), @src());
 
     // Optional parameter.
     s.resize(2.6, .{});
-    expect(s.get_size() == 2.6, @src());
+    expect(s.getSize() == 2.6, @src());
     s.resize(2.6, .{ .round = true });
-    expect(s.get_size() == 3, @src());
+    expect(s.getSize() == 3, @src());
 
     // Union parameter: a tagged union.
     expect(strEq(s.label(.{ .string = b.JsString.from("a") }), "string:a"), @src());
     expect(strEq(s.label(.{ .number = 7 }), "number:7"), @src());
 
     // Nullable: an optional.
-    expect(s.get_parent() == null, @src());
-    expect(b.jsSame(big.get_parent().?, s), @src());
-    big.set_parent(null);
-    expect(big.get_parent() == null, @src());
+    expect(s.getParent() == null, @src());
+    expect(b.jsSame(big.getParent().?, s), @src());
+    big.setParent(null);
+    expect(big.getParent() == null, @src());
 
     // Global functions.
     expect(b.totalArea(s, b.Shape.unit()) == 10, @src());

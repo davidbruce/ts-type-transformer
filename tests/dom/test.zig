@@ -34,36 +34,36 @@ var clicks: Counter = undefined;
 var pings: Counter = undefined;
 
 export fn run() void {
-    const doc = b.get_document();
-    const body = doc.get_body();
+    const doc = b.getDocument();
+    const body = doc.getBody();
 
     // Create an element and put it in the page.
     // The key is known at compile time: createElement(.div) returns an HTMLDivElement.
     const div: b.HTMLDivElement = doc.createElement(.div, .{});
     const box = div.asHTMLElement();
-    box.set_id("made-by-zig");
-    box.set_textContent("hello from zig");
+    box.setId("made-by-zig");
+    box.setTextContent("hello from zig");
     const classes = b.JsArrayOf(b.JsString).new();
     defer b.jsRelease(classes);
     classes.pushString("box");
-    box.get_classList().add(classes);
+    box.getClassList().add(classes);
     _ = body.appendChild(box.asNode());
     expect(b.jsSame(doc.getElementById("made-by-zig").?, box), @src());
-    expect(box.get_classList().contains("box"), @src());
+    expect(box.getClassList().contains("box"), @src());
 
     // Read an element that was already in the page, and copy its text.
     const seed = doc.getElementById("seed").?;
-    expect(seed.get_textContent().eql("seed text"), @src());
+    expect(seed.getTextContent().eql("seed text"), @src());
     expect(seed.getAttribute("data-x").?.eql("42"), @src());
     expect(seed.getAttribute("data-missing") == null, @src());
     var text: [64]u8 = undefined;
     const copy = doc.createElement(.p, .{}).asHTMLElement();
-    copy.set_textContent(seed.get_textContent().read(&text));
+    copy.setTextContent(seed.getTextContent().read(&text));
     _ = box.appendChild(copy.asNode());
 
     // A listener called by real clicks, then removed.
     const button = doc.createElement(.button, .{}).asHTMLElement();
-    button.set_textContent("press");
+    button.setTextContent("press");
     _ = box.appendChild(button.asNode());
     clicks = .{ .box = box, .attribute = "data-count" };
     // The listener's event type is computed from the key: "click" takes a PointerEvent.
@@ -80,8 +80,8 @@ export fn run() void {
     // Both union-typed parameters are tagged unions.
     pings = .{ .box = box, .attribute = "data-pings" };
     const once = b.AddEventListenerOptions.create();
-    once.set_once(true);
-    box.addEventListener_with_string(
+    once.setOnce(true);
+    box.addEventListenerWithString(
         "ping",
         .{ .EventListener = b.EventListener.from(onPing, &pings) },
         .{ .options = .{ .AddEventListenerOptions = once } },
@@ -91,13 +91,13 @@ export fn run() void {
     expect(pings.count == 1, @src());
 
     // Style, layout and the window.
-    box.get_style().setProperty("color", "red", .{});
-    expect(box.get_style().get_color().eql("red"), @src());
-    expect(box.getBoundingClientRect().get_width() > 0, @src());
-    expect(box.get_children().get_length() == 2, @src());
+    box.getStyle().setProperty("color", "red", .{});
+    expect(box.getStyle().getColor().eql("red"), @src());
+    expect(box.getBoundingClientRect().getWidth() > 0, @src());
+    expect(box.getChildren().getLength() == 2, @src());
 
     // Collections iterate.
-    const it = box.get_children().iterate();
+    const it = box.getChildren().iterate();
     defer b.jsRelease(it);
     var children: usize = 0;
     while (it.next()) |child| {
@@ -105,19 +105,19 @@ export fn run() void {
         children += 1;
     }
     expect(children == 2, @src());
-    expect(b.get_innerWidth() > 0, @src());
-    doc.set_title("driven by zig");
+    expect(b.getInnerWidth() > 0, @src());
+    doc.setTitle("driven by zig");
 
     // Strings: compared in JavaScript, or copied.
     var short: [4]u8 = undefined;
-    const seed_text = doc.getElementById("seed").?.get_textContent();
+    const seed_text = doc.getElementById("seed").?.getTextContent();
     expect(std.mem.eql(u8, seed_text.copy(&short), "seed"), @src());
     var fba_buf: [64]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&fba_buf);
     expect(std.mem.eql(u8, seed_text.toOwned(fba.allocator()) catch "", "seed text"), @src());
 
     // An invalid selector throws: the call returns null, and the exception is kept.
-    expect(box.querySelector_with_string("<bad") == null, @src());
+    expect(box.querySelectorWithString("<bad") == null, @src());
     const bad = b.jsTakeError();
     expect(bad != null, @src());
     if (bad) |e| b.jsRelease(e);
@@ -129,7 +129,7 @@ export fn run() void {
         const scope = b.JsScope.open();
         defer scope.close();
         const found = doc.getElementById("made-by-zig").?;
-        expect(found.get_classList().contains("box") and found.get_id().eql("made-by-zig"), @src());
+        expect(found.getClassList().contains("box") and found.getId().eql("made-by-zig"), @src());
     }
     expect(b.jsLiveHandles() == live, @src());
 }

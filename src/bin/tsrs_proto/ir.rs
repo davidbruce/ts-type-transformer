@@ -164,6 +164,8 @@ pub struct Interface {
     // Set by class pairing.
     pub class: Option<Class>,
     pub synthetic: bool,
+    // What its constructor is exported as, where not its name: `default`.
+    pub js_name: Option<String>,
 }
 
 pub struct Class {
@@ -190,6 +192,10 @@ pub struct Function {
 pub struct Var {
     pub name: String,
     pub ty: Type,
+    // What it is exported as, where not its name: `default`.
+    pub js_name: Option<String>,
+    // `const`, or exported from a module: it cannot be assigned.
+    pub readonly: bool,
 }
 
 pub struct EnumMember {
