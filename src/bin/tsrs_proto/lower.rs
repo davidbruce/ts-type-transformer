@@ -291,12 +291,14 @@ fn collect_declared_names(decls: &[Decl], prefix: &str, sep: &str, out: &mut Has
             let next = if prefix.is_empty() { ns.name.clone() } else { format!("{prefix}_{}", ns.name) };
             collect_declared_names(&ns.decls, &next, sep, out);
         }
-        // A method's function (`Transformer_isTransforming`) is not a type's name.
+        // A method's function (`Transformer_isTransforming`) is not a type's
+        // name, nor is an interface's constructor (`Point_create`).
         if let Decl::Interface(i) = d {
             let statics = i.class.iter().flat_map(|c| &c.statics);
-            for m in i.members.iter().chain(statics).filter(|m| matches!(m.kind, MemberKind::Method)) {
-                out.insert(format!("{}{sep}{}", i.name, m.name));
-                out.insert(format!("{}_{}", i.name, m.name));
+            let methods = i.members.iter().chain(statics).filter(|m| matches!(m.kind, MemberKind::Method)).map(|m| m.name.as_str());
+            for m in methods.chain(["create"]) {
+                out.insert(format!("{}{sep}{m}", i.name));
+                out.insert(format!("{}_{m}", i.name));
             }
         }
     }
@@ -1065,20 +1067,34 @@ fn splice_union_aliases(decls: &mut [Decl]) {
 fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
     // A base that is an alias, by what the alias lowered to: an object, a
     // class or interface (`type _Worker = Worker`), or nothing.
-    let mut aliases: HashMap<String, Type> = HashMap::new();
+    let mut aliases: HashMap<String, (Vec<TypeParam>, Type)> = HashMap::new();
     for d in decls.iter() {
         if let Decl::Alias(a) = d
-            && a.type_params.is_empty()
-            && (matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
+            && (a.type_params.is_empty() && matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
                 || matches!(&a.ty, Type::Ref(r) if matches!(r.kind, "class" | "interface")))
         {
-            aliases.insert(a.name.clone(), a.ty.clone());
+            aliases.insert(a.name.clone(), (a.type_params.clone(), a.ty.clone()));
         }
     }
     inline_object_bases_with(front, decls, &aliases);
 }
 
-fn inline_object_bases_with(front: &mut Front, decls: &mut [Decl], aliases: &HashMap<String, Type>) {
+// An alias's body, its type parameters replaced by `args` (missing ones by `any`).
+fn instantiate(params: &[TypeParam], body: &Type, args: &[Type]) -> Type {
+    let mut t = body.clone();
+    walk_type(&mut t, &mut Vec::new(), &mut |t, _| {
+        let Type::Ref(r) = t else { return true };
+        if r.kind != "typeParameter" {
+            return true;
+        }
+        let Some(i) = params.iter().position(|p| if p.sym.is_some() && r.sym.is_some() { p.sym == r.sym } else { p.name == r.name }) else { return true };
+        *t = args.get(i).cloned().unwrap_or_else(|| Type::prim("any"));
+        false
+    });
+    t
+}
+
+fn inline_object_bases_with(front: &mut Front, decls: &mut [Decl], aliases: &HashMap<String, (Vec<TypeParam>, Type)>) {
     for d in decls {
         match d {
             Decl::Interface(i) => {
@@ -1086,7 +1102,10 @@ fn inline_object_bases_with(front: &mut Front, decls: &mut [Decl], aliases: &Has
                 let mut kept = Vec::new();
                 for base in std::mem::take(&mut i.extends) {
                     let base = match &base {
-                        Type::Ref(r) if r.kind == "typeAlias" && r.args.is_empty() && r.qualified.is_none() => aliases.get(&r.name).cloned().unwrap_or(base),
+                        Type::Ref(r) if r.kind == "typeAlias" && r.qualified.is_none() => match aliases.get(&r.name) {
+                            Some((params, body)) => instantiate(params, body, &r.args),
+                            None => base,
+                        },
                         _ => base,
                     };
                     match base {
@@ -1570,6 +1589,13 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
                     let args = free.into_iter().map(Type::Ref).collect();
                     let body = std::mem::replace(t, Type::This);
+                    // Its methods' functions are not types' names, nor its constructor.
+                    if let Type::Object(members) = &body {
+                        for m in members.iter().filter(|m| m.kind == MemberKind::Method).map(|m| m.name.as_str()).chain(["create"]) {
+                            names.insert(format!("{name}{sep}{m}"));
+                            names.insert(format!("{name}_{m}"));
+                        }
+                    }
                     added.push(match body {
                         Type::Object(members) => Decl::Interface(Interface {
                             name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], members, class: None, synthetic: true, js_name: None,

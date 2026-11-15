@@ -575,8 +575,20 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         types.2.push(name.clone());
     }
     for (name, members) in &m.num_enums {
-        let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
-        types.0 += &format!("pub const {name} = enum(i32) {{ {} }};\n", members.join(", "));
+        // A value named twice (`LEFT = 0`, `ROTATE = 0`): the second is a constant of the first.
+        let mut first: HashMap<&str, &str> = HashMap::new();
+        let mut fields = Vec::new();
+        let mut aliases = String::new();
+        for (member, value) in members {
+            match first.get(value.as_str()) {
+                Some(f) => aliases += &format!(" pub const {} = @This().{};", ident(member), ident(f)),
+                None => {
+                    first.insert(value, member);
+                    fields.push(format!("{} = {value}", ident(member)));
+                }
+            }
+        }
+        types.0 += &format!("pub const {name} = enum(i32) {{ {},{aliases} }};\n", fields.join(", "));
         types.2.push(name.clone());
     }
     for u in &m.unions {

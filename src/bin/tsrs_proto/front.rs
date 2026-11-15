@@ -355,9 +355,17 @@ impl<'c> Front<'c> {
     fn enqueue_symbol(&mut self, sym: P<Symbol>) {
         // `export { local as exported }`: the alias has the name it is exported as.
         let exported = sym.name();
+        // A module's export, not a namespace's (`namespace util { export { util_merge as merge } }`).
+        let in_namespace = sym.declarations().first().is_some_and(|d| {
+            let mut n = d.parent();
+            while let Some(p) = n.filter(|p| !matches!(p.kind(), Kind::SourceFile | Kind::ModuleBlock)) {
+                n = p.parent();
+            }
+            n.is_some_and(|b| b.kind() == Kind::ModuleBlock && b.parent().and_then(|m| m.name()).is_some_and(|x| x.kind() != Kind::StringLiteral))
+        });
         let sym = self.resolve_alias(sym);
         let own = self.own_name(sym);
-        if exported != own && !matches!(exported, "export=" | "default") && !exported.is_empty() {
+        if exported != own && !in_namespace && !matches!(exported, "export=" | "default") && !exported.is_empty() {
             self.exported_as.entry(own).or_insert_with(|| exported.to_string());
         }
         if sym.flags().intersects(SymbolFlags::TypeParameter) {

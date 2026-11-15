@@ -369,6 +369,18 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut opaque: Vec<String> = b.opaque.into_iter().collect();
     opaque.sort();
     b.model.opaque = opaque;
+    // A function named as a type (`function WebGLShader(): WebGLShader`) is `WebGLShader_fn`.
+    let m = &mut b.model;
+    let types: HashSet<String> = m.classes.iter().map(|c| c.name.clone())
+        .chain(m.enums.iter().map(|e| e.0.clone()))
+        .chain(m.num_enums.iter().map(|e| e.0.clone()))
+        .chain(m.unions.iter().map(|u| u.name.clone()))
+        .chain(m.callbacks.iter().map(|c| c.name.clone()))
+        .chain(m.opaque.iter().cloned())
+        .collect();
+    for f in m.funcs.iter_mut().filter(|f| types.contains(&f.name)) {
+        f.name += "_fn";
+    }
     b.problems.into_inner().result(b.model)
 }
 
