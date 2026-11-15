@@ -320,11 +320,8 @@ the time control returns to JavaScript is reported, not lost.
   tested by `instanceof` on the import. The built-ins Fable has are its
   types (`JS.Uint8Array`, `JS.DataView`, `JS.Date`); an `Error` is an `exn`,
   as Fable catches it, and `jsError "..."` makes one JavaScript recognises:
-  an F# exception is not an `Error` there. Overloads F# calls alike, apart
-  in what it leaves out, are named for what each has the other has not: a
-  constraint (`merge`, `mergeDictionary`), a literal option (`marked`,
-  `markedAsync` for `{async: true}`); else `name_2`. Both call the same
-  function. An abbreviation shows the type
+  an F# exception is not an `Error` there. Overloads F# calls alike are
+  named by their marks (see Overload names); else `name_2`. An abbreviation shows the type
   parameters its F# type does, the others dropped where it is named. A
   generic base reached twice at other arguments is inherited once, and its
   members declared again at the arguments given (F# allows one
@@ -356,11 +353,19 @@ glue into a tag function, so Zig can `switch` on a union a call returns.
 
 Overloads with fixed values (from `keyed_params` or literal parameters) are a
 family named after them: `addEventListener_click`,
-`addEventListener_click_with_options`. Within a family the first keeps the
-name, the others are named by the parameters they add (only the last, when
-they extend it), else by the types that differ among same-named overloads, else
-the one type that differs, else a number. An overload whose parameters repeat
-an earlier one's is dropped: TypeScript would never choose it. A callback type
+`addEventListener_click_with_options`. The lowering marks each overload with
+what a target may lose of it (`marks` in the XML): its type parameters'
+constraints (`Dictionary`), the literals of its options (`async` for
+`{async: true}`, a string its value; `false` is the default). Within a
+family the first without marks of its own keeps the name; the others are
+named by their marks (`marked_async`, `merge_Dictionary`, a call signature's
+`invoke_async`), else by the parameters they add (only the last, when they
+extend it), else by the types that differ among same-named overloads, else
+the one type that differs, else a number. F# and C++ keep overloads, so
+name them only where they collide: F# by the same marks (`markedAsync`), C++
+not at all, a `requires` clause choosing. An overload whose parameters and
+constraints repeat an earlier one's is dropped: TypeScript would never
+choose it. A callback type
 used in several places is named by what it takes: `HTMLElement_MouseEvent_fn`.
 
 ## Provenance
