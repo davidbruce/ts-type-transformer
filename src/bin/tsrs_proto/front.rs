@@ -958,7 +958,7 @@ impl<'c> Front<'c> {
             for p in params.iter().skip(args.len()) {
                 let default = p.as_type_parameter_declaration().default_type().map(|d| self.ty(d));
                 // A default may name an earlier parameter, which means nothing here.
-                let usable = default.filter(|d| !crate::xml::type_key(d).contains("kind=\"typeParameter\""));
+                let usable = default.filter(|d| !mentions_type_param(d));
                 args.push(usable.unwrap_or_else(|| Type::prim("any")));
             }
         }
@@ -1703,3 +1703,13 @@ fn destructured_name(ty: &Type, index: usize) -> String {
     }
 }
 
+// Whether a type names a type parameter anywhere in it.
+fn mentions_type_param(t: &Type) -> bool {
+    let mut found = false;
+    let mut t = t.clone();
+    crate::lower::visit(&mut t, &mut |t| {
+        found |= matches!(t, Type::Ref(r) if r.kind == "typeParameter");
+        !found
+    });
+    found
+}

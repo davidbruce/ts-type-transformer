@@ -1,6 +1,8 @@
 // IR -> XML, plus a census of the constructs that were emitted.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 
 use std::fmt::Write as _;
 
@@ -22,6 +24,8 @@ pub struct Xml {
     symless: HashSet<String>,
     // The path of the namespaces being written.
     prefix: String,
+    // Hashing what would be written, in place of writing it: see `key`.
+    hash: Option<[DefaultHasher; 2]>,
 }
 
 type Attrs<'a> = Vec<(&'a str, &'a str)>;
@@ -32,6 +36,20 @@ impl Xml {
     }
 
     fn line(&mut self, tag: &str, attrs: &Attrs, close: bool) {
+        if let Some(hs) = &mut self.hash {
+            for h in hs.iter_mut() {
+                (b'<', tag).hash(h);
+                for (k, v) in &self.pending {
+                    (k, v).hash(h);
+                }
+                for (k, v) in attrs {
+                    (k, v).hash(h);
+                }
+                close.hash(h);
+            }
+            self.pending.clear();
+            return;
+        }
         self.tally(tag);
         let _ = write!(self.out, "{:w$}<{tag}", "", w = self.depth * 2);
         for (k, v) in std::mem::take(&mut self.pending) {
@@ -52,6 +70,10 @@ impl Xml {
     }
     fn close(&mut self, tag: &str) {
         self.depth -= 1;
+        if let Some(hs) = &mut self.hash {
+            hs.iter_mut().for_each(|h| (b'>', tag).hash(h));
+            return;
+        }
         let _ = writeln!(self.out, "{:w$}</{tag}>", "", w = self.depth * 2);
     }
     fn leaf(&mut self, tag: &str, attrs: &Attrs) {
@@ -509,23 +531,27 @@ impl Xml {
     }
 }
 
-// Structural identity of a type or member: its XML rendering.
+// Structural identity of a type, member or signature: what its XML would
+// be, hashed (128 bits) as it is walked, not written out.
+fn key(write: impl FnOnce(&mut Xml)) -> String {
+    let mut second = DefaultHasher::new();
+    0x5au8.hash(&mut second);
+    let mut x = Xml { hash: Some([DefaultHasher::new(), second]), ..Xml::default() };
+    write(&mut x);
+    let [a, b] = x.hash.unwrap();
+    format!("{:016x}{:016x}", a.finish(), b.finish())
+}
+
 pub fn type_key(t: &Type) -> String {
-    let mut x = Xml::default();
-    x.ty(t);
-    x.out
+    key(|x| x.ty(t))
 }
 
 pub fn member_key(m: &Member) -> String {
-    let mut x = Xml::default();
-    x.member(m, false);
-    x.out
+    key(|x| x.member(m, false))
 }
 
 pub fn signature_key(s: &Signature) -> String {
-    let mut x = Xml::default();
-    x.signature(s);
-    x.out
+    key(|x| x.signature(s))
 }
 
 // `typeof:string`, `array`, `instanceof:HTMLElement`, `has:once`, `tag:circle`.

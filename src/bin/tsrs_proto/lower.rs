@@ -433,6 +433,11 @@ fn unique_property(shapes: &[Option<Vec<(String, bool, Option<String>)>>], i: us
 
 type TypeFn<'a> = dyn FnMut(&mut Type, &[String]) -> bool + 'a;
 
+// Visits every type in `t`, pre-order; returning false skips its children.
+pub fn visit(t: &mut Type, f: &mut dyn FnMut(&mut Type) -> bool) {
+    walk_type(t, &mut Vec::new(), &mut |t, _| f(t));
+}
+
 // Visits every type position, pre-order, with the naming path to it.
 // The callback may replace the type; returning false skips its children.
 fn walk(decls: &mut [Decl], f: &mut TypeFn) {
