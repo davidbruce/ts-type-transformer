@@ -110,7 +110,18 @@ their own, apart from areas (`areas/css/`, `namespaces/CSS/`).
 
 ## Packages
 
-The input is an entry file. The checker reads what it imports from the disk,
+`--package date-fns` names a package as a user imports it, resolved from
+`--from <dir>` as TypeScript resolves an import there: by `exports`,
+`types`, `typesVersions` or `@types` (every installed `@types` package is
+loaded, as TypeScript does). A package can be an ambient module that
+another declares (`--package fs`, `declare module "fs"` in `@types/node`;
+`node:fs` is the same module). Several `--package`s are bound together:
+one checker and one front end, so what one package refers to of another is
+the same declaration, and each top-level declaration says which package it
+is imported from, `import="prosemirror-model"`, and is in that package's
+module of the output.
+
+Or the input is an entry file. The checker reads what it imports from the disk,
 and the output is what the package declares and the entry file exports,
 followed through `export *`, `export { a as b }`, `export * as ns` and
 import types (`import("./x").Y`), and what those refer to in the same
@@ -157,6 +168,8 @@ The glue is `makeEnv(getInstance, options)`:
 
 - `root`: the object the API is found on, for a library that is a module
   rather than globals (`import * as pts from "pts"; makeEnv(.., { root: pts })`).
+- `modules`: with several packages bound together, each one's module by its
+  name (`{ "prosemirror-model": model, "prosemirror-state": state }`).
 - `check`: handle mistakes are reported: `handle 7 used after its release`,
   `released twice`. Off by default: slots are reused.
 - `unchecked(e)`: called with an exception nobody took (default `console.error`).
@@ -356,6 +369,14 @@ indexed and iterated.
 export, functions and classes exported and re-exported under other names, a
 constant and a variable, and a union told apart by the classes as exported.
 `builtins` passes buffers, typed arrays, errors and dates both ways.
+
+**Real libraries.** `tests/libraries/package.json` pins katex, marked,
+date-fns, node (`fs`, `path`, `events`), leaflet, pixi.js, ECharts, konva,
+three.js, rapier, TanStack Table and prosemirror (four packages bound
+together); `tests/libraries/install.sh` installs them into
+`target/libraries`. For each library and target, its declarations lower and
+follow the schema, and its bindings compile. Slow, so ignored by default:
+`cargo test --test e2e libraries -- --ignored`.
 
 **The whole DOM in Chrome.** `dom::{fsharp,c,zig,cpp,rust}` generate bindings
 for all of `lib.dom.d.ts`, compile them, and run `tests/dom/test.*` in

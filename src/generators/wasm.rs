@@ -334,6 +334,9 @@ struct Builder<'a> {
     folder_names: HashMap<(String, String), String>,
     // The package of the top-level declaration being read, when several are bound.
     package: Option<String>,
+    // A generic callback's own type parameters, bound as untyped values: a
+    // closure cannot be generic.
+    erased: HashSet<String>,
 }
 
 // The model of the XML for a target, or what the target cannot express.
@@ -355,6 +358,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         folders: HashMap::new(),
         folder_names: HashMap::new(),
         package: None,
+        erased: HashSet::new(),
     };
     b.index(doc.root_element(), "");
     b.decls_of(doc.root_element(), "");
@@ -496,7 +500,7 @@ impl<'a> Builder<'a> {
                 // An interface that is only a call signature is a function type.
                 "interface" if is_function_interface(d) => {
                     let owner = ident(&path);
-                    let (params, _, _, ret) = self.signature(only_child(d), &owner);
+                    let (params, _, _, ret) = self.callback_signature(only_child(d), &owner);
                     self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
                 }
                 "interface" | "class" => {
@@ -508,7 +512,7 @@ impl<'a> Builder<'a> {
                     let alias_params: Vec<TParam> = named(d, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
                     if body.has_tag_name("functionType") {
                         let owner = ident(&path);
-                        let (params, _, _, ret) = self.signature(body, &owner);
+                        let (params, _, _, ret) = self.callback_signature(body, &owner);
                         self.last_type_params = alias_params.clone();
                         self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
                     }
@@ -803,11 +807,20 @@ impl<'a> Builder<'a> {
         }
     }
 
+    // A callback's signature: its own type parameters (`<T>(x: T) => T`) are untyped values.
+    fn callback_signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
+        self.erased = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
+        let sig = self.signature(n, owner);
+        self.erased.clear();
+        sig
+    }
+
     fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
         // Type parameters left after `generics = "erase"` range over a map's keys.
         self.keyed.clear();
         self.last_type_params.clear();
-        for p in named(n, "typeParameter") {
+        let own: Vec<Node> = named(n, "typeParameter").filter(|p| !self.erased.contains(attr(*p, "name"))).collect();
+        for p in own {
             let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child);
             match map {
                 Some(m) => {
@@ -906,6 +919,10 @@ impl<'a> Builder<'a> {
                 _ => Ty::Any,
             },
             "this" => Ty::Obj(owner.to_string()),
+            "ref" if attr(n, "kind") == "typeParameter" && self.erased.contains(attr(n, "name")) => {
+                self.skip("type parameter of a generic callback, bound as an untyped value");
+                Ty::Any
+            }
             "ref" if attr(n, "kind") == "typeParameter" => match self.keyed.get(attr(n, "name")) {
                 Some(map) => Ty::Key(map.clone()),
                 None if self.generics => Ty::Param(attr(n, "name").to_string()),

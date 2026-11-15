@@ -38,6 +38,10 @@ pub struct Front<'c> {
     computed_alias: HashMap<P<Symbol>, bool>,
     // Anonymous types being converted; guards recursive types.
     in_progress: Vec<TypeId>,
+    // How deep `from_type` is, and how many types the declaration being
+    // converted may still convert.
+    depth: usize,
+    budget: usize,
     // Lowering: merge `A & B` into one object type.
     pub merge_intersections: bool,
     pub intersection_limit: usize,
@@ -56,6 +60,10 @@ pub struct Front<'c> {
     // lib.es2020.intl.d.ts gathers lib.es5.d.ts's `Intl` too).
     pub included: HashSet<String>,
 }
+
+// Checker types one conversion may make: what an ordinary type needs many
+// times over, and less than a type that expands without end.
+const BUDGET: usize = 20_000;
 
 const DEFERRED: TypeFlags = TypeFlags::Index
     .union(TypeFlags::IndexedAccess)
@@ -82,6 +90,8 @@ impl<'c> Front<'c> {
             stats: BTreeMap::new(),
             computed_alias: HashMap::new(),
             in_progress: Vec::new(),
+            depth: 0,
+            budget: BUDGET,
             merge_intersections: false,
             intersection_limit: 64,
             expand_keyed: false,
@@ -997,7 +1007,30 @@ impl<'c> Front<'c> {
         self.from_type(t)
     }
 
+    // A type the checker made, as the IR has it. Types that keep making new
+    // ones (`DeepKeys<T>` through every property of every property) stop, at
+    // a depth or once one conversion has made too many, as an `any` that
+    // says so.
     pub fn from_type(&mut self, t: P<CType>) -> Type {
+        if self.depth == 0 {
+            self.budget = BUDGET;
+        }
+        if self.depth > 48 {
+            self.count("erased: type too deep");
+            return Type::Erased("type too deep");
+        }
+        if self.budget == 0 {
+            self.count("erased: type too large");
+            return Type::Erased("type too large");
+        }
+        self.budget -= 1;
+        self.depth += 1;
+        let out = self.from_type_at(t);
+        self.depth -= 1;
+        out
+    }
+
+    fn from_type_at(&mut self, t: P<CType>) -> Type {
         let f = t.flags();
         let skip = self.skip_alias.take();
         // Named aliases are kept as references unless they are type functions.

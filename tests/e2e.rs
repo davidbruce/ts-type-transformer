@@ -1373,7 +1373,9 @@ mod libraries {
                 let Some([clang]) = tools(["clang"]) else { return };
                 write_files(&out.join("bindings"), generators::c::files(&model(&xml, "C")).unwrap_or_else(|p| panic!("{}", p.join("\n"))));
                 fs::write(out.join("all.c"), "#include \"bindings.h\"\n").unwrap();
-                run(Command::new(clang).args(CLANG_WASM).args(["-fsyntax-only", "-ferror-limit=0"]).arg("-I").arg(out.join("bindings")).arg(out.join("all.c")));
+                // Checked, not linked: the linker's flags would go unused.
+                let flags = CLANG_WASM.iter().filter(|f| !f.starts_with("-Wl,"));
+                run(Command::new(clang).args(flags).args(["-fsyntax-only", "-ferror-limit=0"]).arg("-I").arg(out.join("bindings")).arg(out.join("all.c")));
             }
             "cpp" => {
                 let Some(clang) = wasi_clang() else { return };

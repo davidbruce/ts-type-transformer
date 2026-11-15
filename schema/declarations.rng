@@ -477,6 +477,8 @@
             <value>missing key</value>
             <value>unknown type kind</value>
             <value>unresolved</value>
+            <value>type too deep</value>
+            <value>type too large</value>
           </choice>
         </attribute>
       </group>
