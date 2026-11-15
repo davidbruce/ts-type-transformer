@@ -253,8 +253,12 @@ pub struct Model {
     // Handles are counted references: wasm retains and releases them, and
     // owns what a callback returns. Else a handle lives as long as the page.
     pub counted: bool,
-    // With several packages bound together, each top-level JavaScript name's package.
+    // Each top-level declaration's package, by its name in the output, when it
+    // is in one (`pb_Node`: `pb`).
     pub packages: BTreeMap<String, String>,
+    // Where each declaration is reached, by its name in the output:
+    // `pb::Node` for `pb_Node`, `Konva.Shape` for one in a namespace.
+    pub js_refs: BTreeMap<String, String>,
 }
 
 impl Class {
@@ -265,15 +269,6 @@ impl Class {
 
 // Where a declaration is reached in JavaScript: its path, with the name it
 // is exported as (`jsName`) in place of its own.
-fn js_of(d: Node, path: &str) -> String {
-    match d.attribute("jsName") {
-        Some(js) => match path.rsplit_once('.') {
-            Some((prefix, _)) => format!("{prefix}.{js}"),
-            None => js.to_string(),
-        },
-        None => path.to_string(),
-    }
-}
 
 // A file or folder name that no other one in `taken` equals ignoring letter
 // case, and that is not reserved on Windows: `foo` after `Foo` is `foo_2`.
@@ -334,6 +329,11 @@ struct Builder<'a> {
     folder_names: HashMap<(String, String), String>,
     // The package of the top-level declaration being read, when several are bound.
     package: Option<String>,
+    // The package of declarations that do not name theirs: one bound alone.
+    root_import: Option<String>,
+    // The JavaScript path of the namespaces being read: `Konva`, or `util`
+    // for the namespace the output calls `pb_util`.
+    js_prefix: String,
     // A generic callback's own type parameters, bound as untyped values: a
     // closure cannot be generic.
     erased: HashSet<String>,
@@ -347,7 +347,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -360,6 +360,8 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         folders: HashMap::new(),
         folder_names: HashMap::new(),
         package: None,
+        root_import: doc.root_element().attribute("import").map(str::to_string),
+        js_prefix: String::new(),
         erased: HashSet::new(),
         key_strings: HashSet::new(),
     };
@@ -506,14 +508,23 @@ impl<'a> Builder<'a> {
             let path = join(prefix, name);
             // A namespace's members are in its package.
             if prefix.is_empty() {
-                self.package = d.attribute("import").map(str::to_string);
+                self.package = d.attribute("import").map(str::to_string).or_else(|| self.root_import.clone());
                 if let Some(package) = &self.package {
-                    self.model.packages.insert(js_of(d, &path), package.clone());
+                    self.model.packages.insert(path.clone(), package.clone());
                 }
+            }
+            if !d.has_tag_name("lowering") {
+                let js = self.js(d, &path);
+                self.model.js_refs.insert(path.clone(), js);
             }
             match d.tag_name().name() {
                 "lowering" => {}
-                "namespace" => self.decls_of(d, &path),
+                "namespace" => {
+                    let inner = join(&self.js_prefix, d.attribute("jsName").unwrap_or(name));
+                    let outer = std::mem::replace(&mut self.js_prefix, inner);
+                    self.decls_of(d, &path);
+                    self.js_prefix = outer;
+                }
                 "enum" => {
                     // Only string enums cross as an index; numeric ones are numbers.
                     if named(d, "member").all(|m| attr(m, "type") == "string") {
@@ -587,12 +598,14 @@ impl<'a> Builder<'a> {
         }
     }
 
-    // Where a declaration is reached: its path, in its package when several
-    // are bound (`prosemirror-model::Node`).
+    // Where a declaration is reached: its JavaScript path, in its package when
+    // it is in one (`prosemirror-model::Node`).
     fn js(&self, d: Node, path: &str) -> String {
+        let own = d.attribute("jsName").unwrap_or_else(|| path.rsplit('.').next().unwrap_or(path));
+        let js = join(&self.js_prefix, own);
         match &self.package {
-            Some(package) => format!("{package}::{}", js_of(d, path)),
-            None => js_of(d, path),
+            Some(package) => format!("{package}::{js}"),
+            None => js,
         }
     }
 
@@ -1255,16 +1268,13 @@ fn to_wasm(x: &str, t: &Ty) -> String {
 }
 
 // A union member's runtime test as a JavaScript condition on `v`.
-// `packages` says which package a class is in, when several are bound.
-pub(crate) fn js_test(test: &str, discriminant: Option<&str>, packages: &BTreeMap<String, String>) -> String {
+// `js_refs` says where a class the output declares is reached.
+pub(crate) fn js_test(test: &str, discriminant: Option<&str>, js_refs: &BTreeMap<String, String>) -> String {
     let (kind, arg) = test.split_once(':').unwrap_or((test, ""));
     match kind {
         "typeof" => format!("typeof v === {arg:?}"),
         "array" => "Array.isArray(v)".into(),
-        "instanceof" => match packages.get(arg) {
-            Some(package) => format!("v instanceof {}", global(&format!("{package}::{arg}"))),
-            None => format!("v instanceof {}", global(arg)),
-        },
+        "instanceof" => format!("v instanceof {}", global(js_refs.get(arg).map_or(arg, String::as_str))),
         "has" => format!("typeof v === 'object' && v !== null && {arg:?} in v"),
         "tag" => format!("v != null && String(v[{:?}]) === {arg:?}", discriminant.unwrap_or_default()),
         _ => "false".into(),
@@ -1340,17 +1350,16 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
     (wasm_params, body)
 }
 
-// A name the API declares at its top level: in `options.root`, the library's
-// module, if it is there, else a global. `Pt.make` is `(G.Pt ?? globalThis.Pt).make`.
-// With several packages, in its own: `prosemirror-model::Node` is in
-// `options.modules["prosemirror-model"]`.
+// A name the API declares at its top level. In a package, only in its module:
+// `prosemirror-model::Node` is `PK["prosemirror-model"].Node`, and not a
+// global `Node` should the module lack it. Else in `options.root` if there,
+// else a global: `Pt.make` is `(G.Pt ?? globalThis.Pt).make`.
 pub(crate) fn global(path: &str) -> String {
-    let (root, path) = match path.split_once("::") {
-        Some((package, path)) => (format!("(M[{package:?}] ?? G)"), path),
-        None => ("G".to_string(), path),
-    };
+    if let Some((package, path)) = path.split_once("::") {
+        return format!("PK[{package:?}]{}", access_path(path));
+    }
     let (first, rest) = path.split_once('.').map_or((path, String::new()), |(f, r)| (f, access_path(r)));
-    format!("({root}{0} ?? globalThis{0}){rest}", access(first))
+    format!("(G{0} ?? globalThis{0}){rest}", access(first))
 }
 
 // `.name`, or `["some-name"]` where the name is not an identifier.
@@ -1474,7 +1483,8 @@ pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
 //
 // makeEnv(getInstance, options): `options.root` is where the API's names
 // are, when not all are globals: a library's module, say; `options.modules`,
-// with several packages, each one's module by its name. `options.check`
+// with several packages, each one's module by its name. A package bound
+// must be given. `options.check`
 // reports mistakes with handles (one used after its release, or released
 // twice), at some cost in speed; `options.unchecked(e)` is called with an
 // exception no one took, and by default writes it to the console.
@@ -1671,6 +1681,17 @@ export function makeEnv(getInstance, options = {}) {
   const enums = {
 ",
     );
+    // Each package's module: given, or makeEnv fails here, not at a call.
+    let mut packages: Vec<&String> = m.packages.values().collect();
+    packages.sort();
+    packages.dedup();
+    let alone = packages.len() == 1;
+    let mut pk = String::from("  const PK = {};\n");
+    for p in packages {
+        let given = if alone { format!("M[{p:?}] ?? options.root") } else { format!("M[{p:?}]") };
+        pk += &format!("  PK[{p:?}] = {given};\n  if (PK[{p:?}] === undefined) throw new Error({:?});\n", format!("makeEnv: no module for the package {p:?}: give it in options.modules{}", if alone { " or options.root" } else { "" }));
+    }
+    out = out.replacen("  const CHECK = !!options.check;\n", &format!("{pk}  const CHECK = !!options.check;\n"), 1);
     for (name, values) in &m.enums {
         out += &format!("    {name}: {values:?},\n");
     }
@@ -1794,7 +1815,7 @@ export function makeEnv(getInstance, options = {}) {
                     arms.insert(0, format!("if (typeof v === [, 'number', 'string', 'boolean'][k]) return {i};"));
                     param = Some(i);
                 }
-                Some(t) => arms.push(format!("if ({}) return {i};", js_test(t, u.discriminant.as_deref(), &m.packages))),
+                Some(t) => arms.push(format!("if ({}) return {i};", js_test(t, u.discriminant.as_deref(), &m.js_refs))),
                 None => default = Some(i),
             }
         }

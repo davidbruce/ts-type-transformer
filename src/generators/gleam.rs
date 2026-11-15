@@ -276,7 +276,7 @@ impl<'m> Gen<'m> {
         let mut fallback = None;
         for ((p, test), v) in u.parts.iter().zip(&u.tests).zip(&variants) {
             match test {
-                Some(t) => to += &format!("  if ({}) return new B.{v}({});\n", js_test(t, u.discriminant.as_deref(), &self.m.packages), self.to_gleam(p, "v")),
+                Some(t) => to += &format!("  if ({}) return new B.{v}({});\n", js_test(t, u.discriminant.as_deref(), &self.m.js_refs), self.to_gleam(p, "v")),
                 None => fallback = Some(format!("  return new B.{v}({});\n", self.to_gleam(p, "v"))),
             }
         }
@@ -399,8 +399,9 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         imports += &format!("import * as P{i} from {p:?};\n");
         modules.push(format!("{p:?}: P{i}"));
     }
-    if let Some(root) = &root_import {
+    if let Some(root) = root_import.as_ref().filter(|r| !packages.contains(r)) {
         imports += &format!("import * as ROOT from {root:?};\n");
+        modules.push(format!("{root:?}: ROOT"));
     }
     g.ffi += &format!(
         "// Generated. Calls the API, and converts between JavaScript's values and Gleam's.\n\
@@ -408,7 +409,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          import {{ Some, None }} from \"../gleam_stdlib/gleam/option.mjs\";\n\
          import {{ Ok, Error as GleamError, toList }} from \"./gleam.mjs\";\n{imports}\n\
          // Where the API's names are: its module, or globals; with several packages, each one's.\n\
-         const G = {};\nconst M = {{ {} }};\n\n\
+         const PK = {{ {} }};\nconst G = {};\n\n\
          export function promise_then(p, f) {{\n  Promise.resolve(p).then((v) => f(new Ok(v)), (e) => f(new GleamError(e)));\n}}\n\
          export function attempt(f) {{\n  try {{\n    return new Ok(f());\n  }} catch (e) {{\n    return new GleamError(e);\n  }}\n}}\n\
          export function js_error_message(e) {{\n  return String(e instanceof Error ? e.message : e?.message ?? e);\n}}\n\
@@ -417,8 +418,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          // listener added and removed is one function.\n\
          const $wrapped = new WeakMap();\n\
          function $wrap(f, make) {{\n  if (typeof f !== \"function\") return f;\n  let w = $wrapped.get(f);\n  if (!w) $wrapped.set(f, (w = make(f)));\n  return w;\n}}\n\n",
-        if root_import.is_some() { "ROOT" } else { "globalThis" },
-        modules.join(", ")
+        modules.join(", "),
+        root_import.as_ref().map_or("globalThis".to_string(), |r| format!("PK[{r:?}]"))
     );
 
     // Types declared elsewhere: opaque.

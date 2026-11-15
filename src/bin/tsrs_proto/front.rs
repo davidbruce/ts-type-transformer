@@ -25,7 +25,8 @@ pub struct Front<'c> {
     // Merged symbols already converted, by kind and fully qualified name.
     seen: HashSet<String>,
     // Declarations exported under another name than their own, by their own.
-    exported_as: HashMap<String, String>,
+    // What a symbol is exported as, when not its own name.
+    exported_as: HashMap<P<Symbol>, String>,
     // A package's top-level symbols by the name they have in the output, and
     // the reverse: two files may each declare their own `Options`.
     output_names: HashMap<P<Symbol>, String>,
@@ -136,8 +137,12 @@ impl<'c> Front<'c> {
     pub fn collect(&mut self, file: P<SourceFile>) -> Vec<Decl> {
         // The entry file's `export default function f`, `export default class C`.
         for &s in file.statements().nodes() {
-            if matches!(s.kind(), Kind::FunctionDeclaration | Kind::ClassDeclaration) && has_syntactic_modifier(s, ModifierFlags::Default) {
-                self.exported_as.insert(s.name().map(text).unwrap_or_else(|| anonymous_name(s)), "default".into());
+            if matches!(s.kind(), Kind::FunctionDeclaration | Kind::ClassDeclaration)
+                && has_syntactic_modifier(s, ModifierFlags::Default)
+                && let Some(sym) = self.c.get_symbol_of_declaration_exported(s)
+            {
+                let sym = self.c.get_merged_symbol_exported(sym);
+                self.exported_as.insert(sym, "default".into());
             }
         }
         if let Some(module) = file.symbol() {
@@ -171,25 +176,37 @@ impl<'c> Front<'c> {
             }
         };
         let declared: HashSet<String> = out.iter().filter_map(name_of).collect();
-        let (mut renames, mut tests) = (Vec::new(), Vec::new());
+        // By the name each exported symbol has in the output.
+        let by_name: HashMap<String, String> = self
+            .exported_as
+            .iter()
+            .map(|(s, e)| (self.output_names.get(s).cloned().unwrap_or_else(|| self.own_name(*s)), e.clone()))
+            .collect();
+        let mut renames = Vec::new();
         for d in out.iter_mut() {
             let Some(name) = name_of(d) else { continue };
-            let Some(exported) = self.exported_as.get(&name).cloned() else { continue };
+            let Some(exported) = by_name.get(&name).cloned() else { continue };
             if exported == "default" {
                 match d {
                     Decl::Interface(i) => i.js_name = Some(exported.clone()),
                     Decl::Function(f) => f.js_name = Some(exported.clone()),
                     Decl::Var(v) => v.js_name = Some(exported.clone()),
+                    Decl::Namespace(n) => n.js_name = Some(exported.clone()),
                     _ => {}
                 }
-                tests.push((name.clone(), exported));
             // A namespace is reached by what contains it: `path.posix` is `path` by
             // another name, not a rename of it.
             } else if exported != name && !declared.contains(&exported) && !matches!(d, Decl::Namespace(_)) {
                 renames.push((name, exported));
             }
         }
-        crate::lower::rename_everywhere(out, &renames, &tests);
+        crate::lower::rename_everywhere(out, &renames);
+        // References made after this (union tests, in lowering) have the new names.
+        for name in self.output_names.values_mut() {
+            if let Some((_, new)) = renames.iter().find(|(old, _)| old == name) {
+                *name = new.clone();
+            }
+        }
         for (old, new) in &renames {
             if let Some(package) = self.package_of_name.remove(old) {
                 self.package_of_name.insert(new.clone(), package);
@@ -344,6 +361,13 @@ impl<'c> Front<'c> {
         name
     }
 
+    // Its JavaScript name, where the output renamed it apart from another's
+    // (`pb_Node` is pb's `Node`).
+    fn renamed_from(&self, sym: P<Symbol>) -> Option<String> {
+        let own = self.own_name(sym);
+        self.output_names.get(&sym).filter(|n| **n != own).map(|_| own)
+    }
+
     // What the package exports keeps its own name: named before anything
     // else, from the entry module's exports, where its own declarations hide
     // what `export *` brings of the same name.
@@ -366,7 +390,7 @@ impl<'c> Front<'c> {
         let sym = self.resolve_alias(sym);
         let own = self.own_name(sym);
         if exported != own && !in_namespace && !matches!(exported, "export=" | "default") && !exported.is_empty() {
-            self.exported_as.entry(own).or_insert_with(|| exported.to_string());
+            self.exported_as.entry(sym).or_insert_with(|| exported.to_string());
         }
         if sym.flags().intersects(SymbolFlags::TypeParameter) {
             return;
@@ -436,7 +460,8 @@ impl<'c> Front<'c> {
                         Some(sym) => self.output_name(sym),
                         None => s.name().map(text).unwrap_or_else(|| anonymous_name(s)),
                     };
-                    out.push(Decl::Function(Function { name, js_name: None, sig: self.signature(s) }));
+                    let js_name = self.c.get_symbol_of_declaration_exported(s).and_then(|sym| self.renamed_from(sym));
+                    out.push(Decl::Function(Function { name, js_name, sig: self.signature(s) }));
                 }
             }
             Kind::EnumDeclaration => out.extend(self.enumeration(s).map(Decl::Enum)),
@@ -460,7 +485,8 @@ impl<'c> Front<'c> {
                     let module_top = statement.and_then(|st| st.parent()).is_some_and(|f| f.kind() == Kind::SourceFile)
                         && ast::get_source_file_of_node(s).is_some_and(|f| f.external_module_indicator().is_some());
                     let name = self.output_name(sym);
-                    out.push(Decl::Var(Var { name, ty: self.opt_type(s.type_node()), js_name: None, readonly: constant || module_top }));
+                    let js_name = self.renamed_from(sym);
+                    out.push(Decl::Var(Var { name, ty: self.opt_type(s.type_node()), js_name, readonly: constant || module_top }));
                 }
             }
             Kind::VariableStatement => {
@@ -498,7 +524,7 @@ impl<'c> Front<'c> {
                                     self.emit_symbol(target, &mut decls);
                                 }
                             }
-                            out.push(Decl::Namespace(Namespace { name: text(clause.as_namespace_export().name()), decls }));
+                            out.push(Decl::Namespace(Namespace { name: text(clause.as_namespace_export().name()), js_name: None, decls }));
                         }
                     }
                     _ => {}
@@ -508,8 +534,7 @@ impl<'c> Front<'c> {
             Kind::ExportAssignment => {
                 if let Some(sym) = self.c.get_symbol_at_location_exported(s.as_export_assignment().expression()) {
                     let target = self.resolve_alias(sym);
-                    let own = self.own_name(target);
-                    self.exported_as.insert(own, "default".into());
+                    self.exported_as.insert(target, "default".into());
                     self.enqueue_symbol(sym);
                 }
             }
@@ -563,7 +588,7 @@ impl<'c> Front<'c> {
             members,
             class: None,
             synthetic: false,
-            js_name: None,
+            js_name: self.renamed_from(sym),
         })
     }
 
@@ -667,7 +692,7 @@ impl<'c> Front<'c> {
             members,
             class: Some(class),
             synthetic: false,
-            js_name: None,
+            js_name: self.renamed_from(sym),
         })
     }
 
@@ -713,7 +738,7 @@ impl<'c> Front<'c> {
                 None => {}
             }
         }
-        Some(Namespace { name: self.output_name(sym), decls })
+        Some(Namespace { name: self.output_name(sym), js_name: self.renamed_from(sym), decls })
     }
 
     fn members(&mut self, nodes: &[P<Node>]) -> Vec<Member> {
@@ -1412,11 +1437,10 @@ impl<'c> Front<'c> {
                     }
                     // A class, or an interface with a global constructor of the same name.
                     _ if s.flags().intersects(SymbolFlags::Class) || s.flags().intersects(SymbolFlags::Interface) && s.flags().intersects(SymbolFlags::Variable) => {
-                        // A module's class is reached by what it is exported as: `Figure`, `default`.
-                        let fqn = self.c.get_fully_qualified_name_exported(s);
-                        let fqn = if fqn.starts_with('"') { fqn.find("\".").map(|i| fqn[i + 2..].to_string()).unwrap_or(fqn) } else { fqn };
-                        let fqn = if matches!(s.name(), "default" | "export=") { self.own_name(s) } else { fqn };
-                        let name = self.exported_as.get(&fqn).cloned().unwrap_or(fqn);
+                        // By its name in the output, as a reference has it: generators
+                        // reach it as they reach the declaration (its package, its jsName).
+                        let r = self.make_ref(Some(s), vec![]);
+                        let name = r.qualified.unwrap_or(r.name);
                         let constructible = s.flags().intersects(SymbolFlags::Class) || {
                             let v = self.c.get_type_of_symbol_exported(s);
                             !self.c.get_signatures_of_type_exported(v, SignatureKind::Construct).is_empty()

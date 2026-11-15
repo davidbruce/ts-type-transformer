@@ -119,7 +119,10 @@ another declares (`--package fs`, `declare module "fs"` in `@types/node`;
 one checker and one front end, so what one package refers to of another is
 the same declaration, and each top-level declaration says which package it
 is imported from, `import="prosemirror-model"`, and is in that package's
-module of the output.
+module of the output. Names two packages share are apart in the output
+(`pb_Node`) and keep their JavaScript name (`jsName="Node"`); a union's
+`instanceof:pb_Node` names the declaration, which says where it is reached.
+The `packages` fixture runs this in C, F# and Gleam.
 
 Or the input is an entry file. The checker reads what it imports from the disk,
 and the output is what the package declares and the entry file exports,
@@ -170,6 +173,8 @@ The glue is `makeEnv(getInstance, options)`:
   rather than globals (`import * as pts from "pts"; makeEnv(.., { root: pts })`).
 - `modules`: with several packages bound together, each one's module by its
   name (`{ "prosemirror-model": model, "prosemirror-state": state }`).
+  A package's names are looked up only in its module, never as globals (a
+  missing `Node` is not the DOM's), and makeEnv throws if one is not given.
 - `check`: handle mistakes are reported: `handle 7 used after its release`,
   `released twice`. Off by default: slots are reused.
 - `unchecked(e)`: called with an exception nobody took (default `console.error`).

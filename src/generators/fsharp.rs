@@ -70,6 +70,9 @@ struct Gen {
     in_globals: bool,
     cur_indent: String,
     cur_prefix: String,
+    // The JavaScript path of the namespaces being written: `util` for the
+    // module `pb_util`.
+    js_prefix: String,
 }
 
 // The constraints each generic interface can keep, by position: those every
@@ -194,15 +197,17 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         in_globals: false,
         cur_indent: String::new(),
         cur_prefix: String::new(),
+        js_prefix: String::new(),
     };
-    // Classes unions tell apart by instanceof, with the module each is imported from.
+    // Classes unions tell apart by instanceof (named as the output names
+    // them), with the module each is imported from.
     let tested: HashSet<&str> = doc.root_element().descendants().filter_map(|n| n.attribute("test")?.strip_prefix("instanceof:").filter(|c| !c.contains('.'))).collect();
     for d in elements(doc.root_element()) {
-        let js = d.attribute("jsName").or(d.attribute("name")).unwrap_or_default();
+        let name = d.attribute("name").unwrap_or_default();
         if let Some(module) = d.attribute("import").or(g.root_import.as_deref())
-            && tested.contains(js)
+            && tested.contains(name)
         {
-            g.tested_classes.insert(js.to_string(), module.to_string());
+            g.tested_classes.insert(name.to_string(), module.to_string());
         }
     }
     for d in elements(doc.root_element()).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
@@ -1075,7 +1080,7 @@ impl Gen {
         let name = ident(attr(d, "name"));
         // Reached in JavaScript by what it is exported as: `default`.
         let js_name = d.attribute("jsName").unwrap_or(attr(d, "name"));
-        let path = js_path(prefix, js_name);
+        let path = js_path(&self.js_prefix, js_name);
         let params = self.type_params(d);
         let owner = format!("{name}{params}");
         // The declaration, and its extensions, state the constraints it keeps.
@@ -1094,7 +1099,7 @@ impl Gen {
         let instance: Vec<Node> = elements(src).filter(|m| is_member(m) && !flag(*m, "static")).collect();
         let statics: Vec<Node> = elements(src).filter(|m| m.has_tag_name("constructor") || is_member(m) && flag(*m, "static")).collect();
         // A class of an imported library that unions tell apart: Fable tests it with instanceof.
-        let origin = match self.tested_classes.get(js_name) {
+        let origin = match self.tested_classes.get(attr(d, "name")) {
             Some(module) if prefix.is_empty() => format!("{indent}[<Import({js_name:?}, {module:?})>]\n"),
             _ => String::new(),
         };
@@ -1206,7 +1211,7 @@ impl Gen {
             }
             let raw = d.attribute("name").unwrap_or_default();
             let name = ident(raw);
-            let path = js_path(prefix, d.attribute("jsName").unwrap_or(raw));
+            let path = js_path(&self.js_prefix, d.attribute("jsName").unwrap_or(raw));
             // A top-level declaration's types go in its module's file; an alias where its parts are.
             if indent.is_empty()
                 && let Some(module) = d.attribute("module")
@@ -1254,7 +1259,10 @@ impl Gen {
                 "namespace" => {
                     self.out += &format!("{indent}module {name} =\n");
                     let before = self.out.len();
+                    let inner = js_path(&self.js_prefix, d.attribute("jsName").unwrap_or(raw));
+                    let outer = std::mem::replace(&mut self.js_prefix, inner);
                     self.decls(d, &js_path(prefix, raw), &format!("{indent}    "));
+                    self.js_prefix = outer;
                     if self.out.len() == before {
                         self.out += &format!("{indent}    let private empty = ()\n\n");
                     }

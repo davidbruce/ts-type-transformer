@@ -212,6 +212,8 @@ pub struct Enum {
 
 pub struct Namespace {
     pub name: String,
+    // Its JavaScript name, when the output renamed it apart from another's.
+    pub js_name: Option<String>,
     pub decls: Vec<Decl>,
 }
 

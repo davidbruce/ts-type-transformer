@@ -645,14 +645,13 @@ pub fn rename(decls: &mut [Decl], renames: &[(String, String)]) -> Result<Vec<St
             return Err(format!("rename.{old} = \"{new}\": that name is taken"));
         }
     }
-    rename_everywhere(decls, renames, &[]);
+    rename_everywhere(decls, renames);
     Ok(unused)
 }
 
 // Renames declarations, and what refers to them: references, inherited
-// members, and the classes union members are tested to be instances of,
-// which `tests` may also give another JavaScript name (`default`).
-pub fn rename_everywhere(decls: &mut [Decl], renames: &[(String, String)], tests: &[(String, String)]) {
+// members, and the classes union members are tested to be instances of.
+pub fn rename_everywhere(decls: &mut [Decl], renames: &[(String, String)]) {
     fn apply(decls: &mut [Decl], to: &dyn Fn(&str) -> Option<String>) {
         let set = |name: &mut String| {
             if let Some(new) = to(name) {
@@ -673,11 +672,10 @@ pub fn rename_everywhere(decls: &mut [Decl], renames: &[(String, String)], tests
             }
         }
     }
-    if renames.is_empty() && tests.is_empty() {
+    if renames.is_empty() {
         return;
     }
     let to = |name: &str| renames.iter().find(|r| r.0 == name).map(|r| r.1.clone());
-    let test = |name: &str| tests.iter().chain(renames).find(|r| r.0 == name).map(|r| r.1.clone());
     apply(decls, &to);
     each_member_list(decls, &mut |members| {
         for m in members {
@@ -695,7 +693,7 @@ pub fn rename_everywhere(decls: &mut [Decl], renames: &[(String, String)], tests
             r.name = new;
         }
         if let Type::Tested(_, Test::InstanceOf(c)) = t
-            && let Some(new) = test(c)
+            && let Some(new) = to(c)
         {
             *c = new;
         }

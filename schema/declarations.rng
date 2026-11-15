@@ -103,8 +103,10 @@
   <define name="jsName">
     <attribute name="jsName">
       <a:documentation>The real JavaScript name, when overloads=rename gave this overload a
-        unique name, or what a top-level declaration is exported as when not its own
-        name (`default`). Absent: name is the JavaScript name.</a:documentation>
+        unique name, when the output renamed a declaration apart from another of the
+        same name (`pb_Node`, with several packages), or what a top-level declaration
+        is exported as when not its own name (`default`). Absent: name is the
+        JavaScript name.</a:documentation>
     </attribute>
   </define>
 
@@ -194,6 +196,7 @@
 
   <define name="namespace.body">
     <attribute name="name"/>
+    <optional><ref name="jsName"/></optional>
     <zeroOrMore><ref name="nestedDeclaration"/></zeroOrMore>
   </define>
 

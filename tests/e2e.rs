@@ -49,6 +49,20 @@ fn lower_with(input: &Path, target: Option<&str>, configs: &[PathBuf], overrides
     String::from_utf8(out.stdout).unwrap()
 }
 
+// The packages in `dir/node_modules`, bound together.
+fn lower_packages(dir: &Path, target: &str) -> String {
+    let mut names: Vec<String> = fs::read_dir(dir.join("node_modules")).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    names.sort();
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"));
+    cmd.arg("--from").arg(dir).arg("--config").arg(config(target));
+    for n in &names {
+        cmd.args(["--package", n]);
+    }
+    let out = cmd.output().expect("run tsrs_proto");
+    assert!(out.status.success(), "{cmd:?} failed:\n{}", String::from_utf8_lossy(&out.stderr));
+    String::from_utf8(out.stdout).unwrap()
+}
+
 fn find(tool: &str) -> Option<PathBuf> {
     let mut dirs: Vec<PathBuf> = env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();
     dirs.extend(env::var_os("HOME").map(|h| PathBuf::from(h).join(".dotnet/tools")));
@@ -88,7 +102,7 @@ fn case_in(fixture: &str, target: &str, name: &str) -> Case {
     fs::create_dir_all(&out).unwrap();
     // The library's own settings: the module it is, say.
     let library: Vec<PathBuf> = Some(dir.join("library.toml")).filter(|p| p.exists()).into_iter().collect();
-    let xml = lower_with(&dir.join("api.d.ts"), Some(target), &library, &[]);
+    let xml = if dir.join("node_modules").is_dir() { lower_packages(&dir, target) } else { lower_with(&dir.join("api.d.ts"), Some(target), &library, &[]) };
     fs::write(out.join("api.xml"), &xml).unwrap();
     Case { fixture: dir, out, xml }
 }
@@ -127,11 +141,28 @@ fn fsharp(fixture: &str) {
 // A library that is a module, `<module>.mjs` in the fixture, installed where
 // bindings that import it find it: in `node_modules` of the test's directory.
 fn install_library(c: &Case) {
+    // Packages: as they are in the fixture.
+    if c.fixture.join("node_modules").is_dir() {
+        copy_dir(&c.fixture.join("node_modules"), &c.out.join("node_modules"));
+        return;
+    }
     if let Some(module) = c.xml.lines().next().and_then(|l| l.split("import=\"").nth(1)).and_then(|r| r.split('"').next()) {
         let dir = c.out.join("node_modules").join(module);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("package.json"), format!("{{ \"name\": \"{module}\", \"type\": \"module\", \"exports\": \"./index.mjs\" }}\n")).unwrap();
         fs::copy(c.fixture.join(format!("{module}.mjs")), dir.join("index.mjs")).unwrap();
+    }
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for e in fs::read_dir(from).unwrap() {
+        let e = e.unwrap();
+        if e.file_type().unwrap().is_dir() {
+            copy_dir(&e.path(), &to.join(e.file_name()));
+        } else {
+            fs::copy(e.path(), to.join(e.file_name())).unwrap();
+        }
     }
 }
 
@@ -353,6 +384,27 @@ macro_rules! fixtures {
 // `pts` is a real library: Pts, from its own declarations. `exports` is a
 // module library across files: default, renamed and re-exported declarations.
 fixtures!(shapes, callbacks, data, globals, unions, pts, exports);
+
+// Two packages that export the same names, each reached in its own module.
+mod packages {
+    #[test] fn fsharp() { super::fsharp("packages"); }
+    #[test] fn c() { super::c("packages"); }
+    #[test] fn gleam() { super::gleam("packages"); }
+}
+
+// A package's names are only in its module: without one, makeEnv fails
+// rather than reaching globals of the same name (`Node`).
+#[test]
+fn packages_need_their_modules() {
+    let Some([node]) = tools(["node"]) else { return };
+    let c = case("packages", "c");
+    fs::write(c.out.join("glue.mjs"), generators::wasm::glue(&model(&c.xml, "C"), None)).unwrap();
+    let script = "import { makeEnv } from './glue.mjs';\n\
+                  try { makeEnv(() => null, { modules: { pa: {} } }); console.log('no error'); } catch (e) { console.log(e.message); }\n";
+    fs::write(c.out.join("check.mjs"), script).unwrap();
+    let said = run(Command::new(node).current_dir(&c.out).arg("check.mjs"));
+    assert!(said.contains("no module for the package \"pb\""), "{said}");
+}
 
 mod builtins {
     #[test] fn fsharp() { super::fsharp("builtins"); }

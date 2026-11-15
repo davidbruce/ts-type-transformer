@@ -61,11 +61,11 @@ impl Xml {
         for d in decls {
             let module = match d {
                 Decl::Namespace(n) => n.name.clone(),
-                Decl::Interface(i) => modules.module_of(&i.name).to_string(),
-                Decl::Alias(a) => modules.module_of(&a.name).to_string(),
-                Decl::Function(f) => modules.module_of(f.js_name.as_deref().unwrap_or(&f.name)).to_string(),
-                Decl::Var(v) => modules.module_of(&v.name).to_string(),
-                Decl::Enum(e) => modules.module_of(&e.name).to_string(),
+                Decl::Interface(i) => modules.module_of(&i.name, i.js_name.as_deref()).to_string(),
+                Decl::Alias(a) => modules.module_of(&a.name, None).to_string(),
+                Decl::Function(f) => modules.module_of(&f.name, f.js_name.as_deref()).to_string(),
+                Decl::Var(v) => modules.module_of(&v.name, v.js_name.as_deref()).to_string(),
+                Decl::Enum(e) => modules.module_of(&e.name, None).to_string(),
             };
             self.pending.push(("module", module));
             // With several packages, the one it is imported from.
@@ -127,7 +127,11 @@ impl Xml {
                     self.close("enum");
                 }
                 Decl::Namespace(n) => {
-                    self.open("namespace", &vec![("name", n.name.as_str())]);
+                    let mut attrs = vec![("name", n.name.as_str())];
+                    if let Some(js) = &n.js_name {
+                        attrs.push(("jsName", js));
+                    }
+                    self.open("namespace", &attrs);
                     self.decls(&n.decls);
                     self.close("namespace");
                 }

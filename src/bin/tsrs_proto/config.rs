@@ -44,10 +44,12 @@ pub struct Modules {
 
 impl Modules {
     // Its area, else its package's (`prosemirror-model`), else the default.
-    pub fn module_of(&self, name: &str) -> &str {
+    // Areas match the JavaScript name; the package is the output name's.
+    pub fn module_of(&self, name: &str, js: Option<&str>) -> &str {
+        let js = js.unwrap_or(name);
         self.areas
             .iter()
-            .find(|(_, patterns)| patterns.iter().any(|p| glob(p, name)))
+            .find(|(_, patterns)| patterns.iter().any(|p| glob(p, js)))
             .map(|(n, _)| n.as_str())
             .or_else(|| self.packages.get(name).map(String::as_str))
             .unwrap_or(&self.default)
