@@ -104,37 +104,58 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
             out.insert(d.attribute("id").unwrap_or(attr(d, "name")).to_string(), cs);
         }
     }
-    // A type parameter in scope at a reference: its constraint.
-    let param_constraint = |r: Node, name: &str| r.ancestors().find_map(|a| named(a, "typeParameter").find(|p| attr(*p, "name") == name)).and_then(constraint_of);
-    let mut broken: HashSet<(String, usize)> = HashSet::new();
-    for r in root.descendants().filter(|r| r.has_tag_name("ref")) {
-        let Some(cs) = r.attribute("to").and_then(|t| out.get(t)) else { continue };
-        for (i, arg) in elements(r).enumerate() {
-            let Some(Some(c)) = cs.get(i) else { continue };
-            let is = |t: Node| t.has_tag_name("ref") && matches!(attr(t, "kind"), "interface" | "class") && t.attribute("to").is_some_and(|to| extends(to, c));
-            let ok = match (arg.tag_name().name(), arg.attribute("kind")) {
-                ("ref", Some("interface" | "class")) => is(arg),
-                ("ref", Some("typeParameter")) => param_constraint(r, attr(arg, "name")).is_some_and(|pc| extends(&pc, c)),
-                // A union of such types: the reference names the constraint instead.
-                ("ref", Some("typeAlias")) => union_members(root, arg).is_some_and(|ms| ms.into_iter().all(is)),
-                // `M[K]`: one of a map's values, each of which must be one. The
-                // signature's type parameter then has the constraint.
-                ("indexedAccess", _) => {
-                    let map = elements(arg).next().filter(|m| m.has_tag_name("ref")).and_then(|m| find_decl(root, m.attribute("to")?));
-                    map.is_some_and(|m| map_properties(root, m).into_iter().all(|(_, t)| is(t)))
+    // A type parameter in scope at a reference: the constraint it keeps. An
+    // interface's is in `out`, once dropped there gone; a function's is its own.
+    let param_constraint = |out: &HashMap<String, Vec<Option<String>>>, r: Node, name: &str| -> Option<String> {
+        for a in r.ancestors() {
+            let ps: Vec<Node> = named(a, "typeParameter").collect();
+            let Some(i) = ps.iter().position(|p| attr(*p, "name") == name) else { continue };
+            if a.has_tag_name("interface") || a.has_tag_name("class") {
+                return out.get(a.attribute("id").unwrap_or(attr(a, "name"))).and_then(|cs| cs.get(i).cloned().flatten());
+            }
+            return constraint_of(ps[i]);
+        }
+        None
+    };
+    // A constraint dropped can break one a type parameter met through it:
+    // until nothing more is dropped.
+    loop {
+        let mut broken: HashSet<(String, usize)> = HashSet::new();
+        for r in root.descendants().filter(|r| r.has_tag_name("ref")) {
+            let Some(to) = r.attribute("to") else { continue };
+            let Some(cs) = out.get(to) else { continue };
+            for (i, arg) in elements(r).enumerate() {
+                let Some(Some(c)) = cs.get(i) else { continue };
+                let is = |t: Node| t.has_tag_name("ref") && matches!(attr(t, "kind"), "interface" | "class") && t.attribute("to").is_some_and(|to| extends(to, c));
+                let ok = match (arg.tag_name().name(), arg.attribute("kind")) {
+                    ("ref", Some("interface" | "class")) => is(arg),
+                    ("ref", Some("typeParameter")) => param_constraint(&out, r, attr(arg, "name")).is_some_and(|pc| extends(&pc, c)),
+                    // A union of such types: the reference names the constraint instead.
+                    ("ref", Some("typeAlias")) => union_members(root, arg).is_some_and(|ms| ms.into_iter().all(is)),
+                    // `M[K]`: one of a map's values, each of which must be one. The
+                    // signature's type parameter then has the constraint.
+                    ("indexedAccess", _) => {
+                        let map = elements(arg).next().filter(|m| m.has_tag_name("ref")).and_then(|m| find_decl(root, m.attribute("to")?));
+                        map.is_some_and(|m| map_properties(root, m).into_iter().all(|(_, t)| is(t)))
+                    }
+                    _ => false,
+                };
+                if !ok {
+                    broken.insert((to.to_string(), i));
                 }
-                _ => false,
-            };
-            if !ok {
-                broken.insert((attr(r, "name").to_string(), i));
             }
         }
-    }
-    for (name, cs) in out.iter_mut() {
-        for (i, c) in cs.iter_mut().enumerate() {
-            if broken.contains(&(name.clone(), i)) {
-                *c = None;
+        let mut dropped = false;
+        for (name, cs) in out.iter_mut() {
+            for (i, c) in cs.iter_mut().enumerate() {
+                if c.is_some() && broken.contains(&(name.clone(), i)) {
+                    *c = None;
+                    dropped = true;
+                }
             }
+        }
+        if !dropped {
+            break;
         }
     }
     out.retain(|_, cs| cs.iter().any(Option::is_some));
@@ -248,12 +269,14 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             g.tested_classes.insert(name.to_string(), module.to_string());
         }
     }
-    for d in elements(doc.root_element()).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
-        let name = attr(d, "name").to_string();
+    // By id: a namespace's `PixiMixins.ViewContainer` is not the `ViewContainer`.
+    for d in doc.root_element().descendants().filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
+        let name = d.attribute("id").unwrap_or(attr(d, "name")).to_string();
         if elements(d).any(|m| m.attribute("name") == Some("[Symbol.iterator]")) {
             g.iterable.insert(name.clone());
         }
-        let bases = named(d, "extends").filter_map(|e| elements(e).next()).map(|r| attr(r, "name").to_string()).collect();
+        // A base declared elsewhere by its name (`Pt extends Float32Array`).
+        let bases = named(d, "extends").filter_map(|e| elements(e).next()).map(|r| r.attribute("to").unwrap_or(attr(r, "name")).to_string()).collect();
         g.bases.entry(name).or_insert_with(Vec::new).extend::<Vec<String>>(bases);
     }
     g.constrained = constrained_interfaces(doc.root_element(), &g.bases);
@@ -540,6 +563,21 @@ impl Gen {
                 }
             }
         }
+    }
+
+    // Whether `from` extends `to`, through its bases, by id.
+    fn reaches(&self, from: &str, to: &str) -> bool {
+        let mut todo = vec![from.to_string()];
+        let mut seen = HashSet::new();
+        while let Some(c) = todo.pop() {
+            if c == to {
+                return true;
+            }
+            if seen.insert(c.clone()) {
+                todo.extend(self.bases.get(&c).cloned().unwrap_or_default());
+            }
+        }
+        false
     }
 
     // Whether a class extends another, through its bases.
@@ -1156,8 +1194,20 @@ impl Gen {
         // A subclass of Array is a seq with an indexer and a length: an F#
         // interface cannot inherit ResizeArray, which is a class.
         let mut is_array = false;
-        for e in named(d, "extends") {
-            let base = self.ty(only_child(e), &owner);
+        let direct: Vec<Option<&str>> = named(d, "extends").map(|e| only_child(e).attribute("to")).collect();
+        for (i, e) in named(d, "extends").enumerate() {
+            // A generic base another base reaches already, maybe with other
+            // arguments (`GPUDataOwner<'D>` beside a Container that is a
+            // `GPUDataOwner<obj>`): F# allows one instantiation; the other path has it.
+            let target = only_child(e);
+            if elements(target).next().is_some()
+                && let Some(to) = target.attribute("to")
+                && direct.iter().enumerate().any(|(j, other)| j != i && other.is_some_and(|o| self.reaches(o, to)))
+            {
+                self.skip("base reached through another base, left to that one");
+                continue;
+            }
+            let base = self.ty(target, &owner);
             match base.strip_prefix("ResizeArray<").and_then(|b| b.strip_suffix('>')) {
                 Some(elem) => {
                     is_array = true;
@@ -1172,7 +1222,7 @@ impl Gen {
         let iterator = elements(d).find(|m| m.attribute("name") == Some("[Symbol.iterator]") && !flag(*m, "static"));
         // A type iterates as its ancestor does when that one is a seq already:
         // F# allows one seq per type (`HTMLCollectionOf<'T>` stays a seq of Elements).
-        let mut todo: Vec<String> = self.bases.get(attr(d, "name")).cloned().unwrap_or_default();
+        let mut todo: Vec<String> = self.bases.get(d.attribute("id").unwrap_or(attr(d, "name"))).cloned().unwrap_or_default();
         let mut seen = HashSet::new();
         let mut inherited = false;
         while let Some(b) = todo.pop() {
@@ -1378,7 +1428,11 @@ impl Gen {
                         None => self.type_params(d),
                     };
                     if body.has_tag_name("functionType") && named(body, "parameter").any(|p| flag(p, "optional")) {
+                        // A function value's own type parameters are `obj`, as in `ty`.
+                        let depth = self.fn_params.len();
+                        self.fn_params.extend(named(body, "typeParameter").map(|p| attr(p, "name").to_string()));
                         let sig_str = self.delegate_sig(body, "");
+                        self.fn_params.truncate(depth);
                         self.out += &format!("{indent}type {name}{params} = delegate of {sig_str}\n\n");
                     } else {
                         let mut t = self.ty(body, "");
