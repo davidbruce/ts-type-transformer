@@ -1878,7 +1878,8 @@ fn param_mnemonic(s: &Signature, t: &Type) -> String {
 fn mnemonic(t: &Type) -> String {
     match t {
         Type::Primitive(n) => n.clone(),
-        Type::Ref(r) => r.name.clone(),
+        // Written qualified: `Tokens.HTML` is `Tokens_HTML`.
+        Type::Ref(r) => r.name.replace('.', "_"),
         Type::Array(inner) => format!("{}_array", mnemonic(inner)),
         Type::Nullable(inner, _) => format!("opt_{}", mnemonic(inner)),
         Type::Function(_) => "fn".into(),

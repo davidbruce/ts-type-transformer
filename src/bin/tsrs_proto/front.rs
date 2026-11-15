@@ -962,19 +962,20 @@ impl<'c> Front<'c> {
         };
         // A path from the outermost namespace, by that namespace's name in the
         // output: two files may each declare a `Konva`.
-        let fqn = match fqn.split_once('.') {
-            Some((_, rest)) => {
-                let mut top = s;
-                while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
-                    if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral)) {
-                        top = parent;
-                    } else {
-                        break;
-                    }
+        // (`global.NodeJS.Dict` in a `declare global`: `NodeJS.Dict`.)
+        let fqn = {
+            let mut top = s;
+            let mut hops = 0;
+            while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
+                if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral)) {
+                    top = parent;
+                    hops += 1;
+                } else {
+                    break;
                 }
-                if top == s { fqn } else { format!("{}.{rest}", self.output_name(top)) }
             }
-            None => fqn,
+            let segments: Vec<&str> = fqn.split('.').collect();
+            if hops == 0 || segments.len() <= hops { fqn } else { format!("{}.{}", self.output_name(top), segments[segments.len() - hops..].join(".")) }
         };
         let decl_file = s.declarations().first().and_then(|d| ast::get_source_file_of_node(*d));
         let in_pkg = decl_file.as_ref().is_some_and(|f| self.is_package_file(f));

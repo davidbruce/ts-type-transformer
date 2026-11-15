@@ -425,11 +425,11 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
   receive a handle.
 - Gleam: a generic container of a converted type (`Box(Id)`) holds
   JavaScript's value, unconverted; no async iteration; builtins are opaque.
-- Of the real libraries, katex and rapier compile in every language; marked
-  in four; prosemirror, date-fns, leaflet and TanStack in two or three;
-  konva in one; node, ECharts, pixi.js and three.js in none. What is left is
-  per library: names a generated union refers to before declaring, global
-  augmentations in C, intersections left in `@types/node`, duplicate members
-  in Zig. A type that expands without end converts to a budget, then `any`.
+- Of the real libraries, all twelve compile in C and Gleam, ten in Zig, seven
+  in C++, six in Rust, three in F# (katex, rapier and prosemirror in all).
+  What is left is per library: F# abbreviations of constrained or union types,
+  C++ and Rust constraints a generic base does not meet, Zig members two
+  overloads name alike. A type that expands without end converts to a
+  budget, then `any`.
 - Each construct has one lowering strategy so far. Values are strings so more
   can be added (`generics = "monomorphize"`).

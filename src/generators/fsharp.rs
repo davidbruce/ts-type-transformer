@@ -34,6 +34,8 @@ struct Gen {
     external: BTreeMap<String, usize>,
     // In the signature being written: type parameters over a map's keys, and their map.
     keyed: HashMap<String, String>,
+    // A function value's own type parameters, which F# has not: `obj`.
+    fn_params: Vec<String>,
     // Maps whose keys are used: a `<Map>Keys` module is written for each.
     maps: BTreeSet<String>,
     // Top-level types by module. Top-level values go in a file of their own.
@@ -54,6 +56,9 @@ struct Gen {
     // Interfaces that keep their constraints: `<'TNode when 'TNode :> Node>`,
     // by name; and the same, by how a type extension names the interface.
     constrained: HashMap<String, Vec<Option<String>>>,
+    // An abbreviation's type parameters that its F# type shows (not those
+    // only `this` used): F# abbreviations must show all theirs.
+    alias_kept: HashMap<String, Vec<usize>>,
     constrained_owner: HashMap<String, String>,
     // What F# cannot express at all.
     problems: Problems,
@@ -164,6 +169,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         declared: HashSet::new(),
         external: BTreeMap::new(),
         keyed: HashMap::new(),
+        fn_params: Vec::new(),
         maps: BTreeSet::new(),
         types: BTreeMap::new(),
         values: String::new(),
@@ -175,6 +181,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         iterable: HashSet::new(),
         bases: HashMap::new(),
         constrained: HashMap::new(),
+        alias_kept: HashMap::new(),
         constrained_owner: HashMap::new(),
         import: doc.root_element().attribute("import").map(str::to_string),
         tested_classes: HashMap::new(),
@@ -207,6 +214,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         g.bases.entry(name).or_insert_with(Vec::new).extend::<Vec<String>>(bases);
     }
     g.constrained = constrained_interfaces(doc.root_element(), &g.bases);
+    g.alias_kept = alias_kept(doc.root_element());
     let (plan, units) = file_plan(doc.root_element());
     for (i, group) in plan.iter().enumerate() {
         for m in group {
@@ -389,7 +397,8 @@ fn declared_files(root: Node, plan: &[Vec<String>], units: &HashMap<String, Stri
         let mut changed = false;
         for (name, refs) in &aliases {
             let own = out.get(name).copied().unwrap_or(0);
-            let needed = refs.iter().filter_map(|r| out.get(r)).copied().max().unwrap_or(0).max(own);
+            // `Tokens.Generic`: where `Tokens` is.
+            let needed = refs.iter().filter_map(|r| out.get(r).or_else(|| out.get(r.split('.').next().unwrap()))).copied().max().unwrap_or(0).max(own);
             if needed != own {
                 out.insert(name.clone(), needed);
                 changed = true;
@@ -527,9 +536,16 @@ impl Gen {
             }
             .into(),
             "this" => owner.to_string(),
+            "ref" if attr(n, "kind") == "typeParameter" && self.fn_params.iter().any(|p| p == attr(n, "name")) => "obj".into(),
             "ref" if attr(n, "kind") == "typeParameter" => format!("'{}", attr(n, "name")),
             "ref" => {
                 let name = n.attribute("qualified").unwrap_or(attr(n, "name"));
+                if let Some(kept) = self.alias_kept.get(name).cloned() {
+                    let args: Vec<Node> = elements(n).collect();
+                    let args: Vec<String> = kept.iter().filter_map(|&i| args.get(i)).map(|a| self.ty(*a, owner)).collect();
+                    let name = name.split('.').map(ident).collect::<Vec<_>>().join(".");
+                    return if args.is_empty() { name } else { format!("{name}<{}>", args.join(", ")) };
+                }
                 // Where the interface keeps a constraint, a union of subtypes is named as the constraint: F# has no union that is one.
                 let kept = self.constrained.get(name).cloned().unwrap_or_default();
                 let args: Vec<String> = elements(n)
@@ -617,16 +633,22 @@ impl Gen {
                 format!("({})", parts.join(" * "))
             }
             "functionType" => {
-                if named(n, "parameter").any(|p| flag(p, "optional")) {
-                    return self.function_delegate(n, owner);
-                }
-                let mut parts: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
-                if parts.is_empty() {
-                    parts.push("unit".into());
-                }
-                let ret = named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or("unit".into());
-                parts.push(ret);
-                format!("({})", parts.join(" -> "))
+                let own: Vec<String> = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
+                let depth = self.fn_params.len();
+                self.fn_params.extend(own);
+                let t = if named(n, "parameter").any(|p| flag(p, "optional")) {
+                    self.function_delegate(n, owner)
+                } else {
+                    let mut parts: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
+                    if parts.is_empty() {
+                        parts.push("unit".into());
+                    }
+                    let ret = named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or("unit".into());
+                    parts.push(ret);
+                    format!("({})", parts.join(" -> "))
+                };
+                self.fn_params.truncate(depth);
+                t
             }
             // An object with only properties is an anonymous record.
             "object" if elements(n).all(|m| m.has_tag_name("property")) && elements(n).next().is_some() => {
@@ -709,26 +731,17 @@ impl Gen {
     }
 
     fn function_delegate(&mut self, n: Node, owner: &str) -> String {
-        let mut tparams: Vec<String> = named(n, "typeParameter").map(|p| format!("'{}", attr(p, "name"))).collect();
-        for d in n.descendants() {
-            if d.has_tag_name("ref") && attr(d, "kind") == "typeParameter" {
-                let tp = format!("'{}", attr(d, "name"));
-                if !tparams.contains(&tp) {
-                    tparams.push(tp);
-                }
-            } else if d.has_tag_name("this") {
-                for w in words(owner) {
-                    if let Some(rest) = owner.find(w).filter(|&i| i > 0 && owner.as_bytes()[i - 1] == b'\'') {
-                        let _ = rest;
-                        let tp = format!("'{w}");
-                        if !tparams.contains(&tp) {
-                            tparams.push(tp);
-                        }
-                    }
-                }
+        let sig_str = self.delegate_sig(n, owner);
+        // The type parameters the signature shows, in order: erased ones it does not.
+        let mut tparams: Vec<String> = Vec::new();
+        let b = sig_str.as_bytes();
+        for (i, _) in sig_str.match_indices('\'') {
+            let end = b[i + 1..].iter().position(|c| !(c.is_ascii_alphanumeric() || *c == b'_')).map_or(b.len(), |p| i + 1 + p);
+            let tp = sig_str[i..end].to_string();
+            if end > i + 1 && !tparams.contains(&tp) {
+                tparams.push(tp);
             }
         }
-        let sig_str = self.delegate_sig(n, owner);
         let scope = if !self.cur_indent.is_empty() {
             format!("ns:{}", self.cur_prefix)
         } else if self.in_globals {
@@ -1301,12 +1314,20 @@ impl Gen {
                         self.out += &format!("{indent}type {name} = obj\n\n");
                         return;
                     }
+                    let params = match self.alias_kept.get(&js_path(prefix, raw)).or(self.alias_kept.get(raw)) {
+                        Some(kept) => {
+                            let all: Vec<Node> = named(d, "typeParameter").collect();
+                            let shown: Vec<String> = kept.iter().map(|&i| format!("'{}", attr(all[i], "name"))).collect();
+                            if shown.is_empty() { String::new() } else { format!("<{}>", shown.join(", ")) }
+                        }
+                        None => self.type_params(d),
+                    };
                     if body.has_tag_name("functionType") && named(body, "parameter").any(|p| flag(p, "optional")) {
                         let sig_str = self.delegate_sig(body, "");
-                        self.out += &format!("{indent}type {name}{} = delegate of {sig_str}\n\n", self.type_params(d));
+                        self.out += &format!("{indent}type {name}{params} = delegate of {sig_str}\n\n");
                     } else {
                         let t = self.ty(body, "");
-                        self.out += &format!("{indent}type {name}{} = {t}\n\n", self.type_params(d));
+                        self.out += &format!("{indent}type {name}{params} = {t}\n\n");
                     }
                 }
                 "var" => {
@@ -1500,4 +1521,60 @@ fn js_path(prefix: &str, name: &str) -> String {
 // The type of an alias, after any type parameters.
 fn only_child_type<'a>(d: Node<'a, 'a>) -> Node<'a, 'a> {
     elements(d).find(|c| !c.has_tag_name("typeParameter")).unwrap_or_else(|| panic!("alias {} has no type", attr(d, "name")))
+}
+
+// For each abbreviation (an alias not of a union or object) that does not
+// show all its type parameters, those
+// it shows: not in `this`, nor a function's own (erased), nor an argument
+// another such alias drops. Until settled.
+fn alias_kept(root: Node) -> HashMap<String, Vec<usize>> {
+    let mut aliases: Vec<(String, Node, Vec<String>)> = Vec::new();
+    fn collect<'a>(n: Node<'a, 'a>, prefix: &str, out: &mut Vec<(String, Node<'a, 'a>, Vec<String>)>) {
+        for d in elements(n) {
+            if d.has_tag_name("namespace") {
+                collect(d, &format!("{prefix}{}.", attr(d, "name")), out);
+            } else if d.has_tag_name("typeAlias") && !matches!(only_child_type(d).tag_name().name(), "union" | "object") {
+                let params = named(d, "typeParameter").map(|p| attr(p, "name").to_string()).collect::<Vec<_>>();
+                if !params.is_empty() {
+                    out.push((format!("{prefix}{}", attr(d, "name")), only_child_type(d), params));
+                }
+            }
+        }
+    }
+    collect(root, "", &mut aliases);
+    fn shown(n: Node, kept: &HashMap<String, Vec<usize>>, shadow: &mut Vec<String>, out: &mut HashSet<String>) {
+        if n.has_tag_name("this") || n.has_tag_name("typeParameter") {
+            return;
+        }
+        let depth = shadow.len();
+        if n.has_tag_name("functionType") {
+            shadow.extend(named(n, "typeParameter").map(|p| attr(p, "name").to_string()));
+        }
+        if n.has_tag_name("ref") && attr(n, "kind") == "typeParameter" && !shadow.iter().any(|s| s == attr(n, "name")) {
+            out.insert(attr(n, "name").to_string());
+        }
+        let only = n.has_tag_name("ref").then(|| kept.get(n.attribute("qualified").unwrap_or(attr(n, "name")))).flatten();
+        for (i, c) in elements(n).enumerate() {
+            if only.is_none_or(|k| k.contains(&i)) {
+                shown(c, kept, shadow, out);
+            }
+        }
+        shadow.truncate(depth);
+    }
+    let mut kept: HashMap<String, Vec<usize>> = HashMap::new();
+    loop {
+        let mut changed = false;
+        for (name, body, params) in &aliases {
+            let mut out = HashSet::new();
+            shown(*body, &kept, &mut Vec::new(), &mut out);
+            let k: Vec<usize> = (0..params.len()).filter(|&i| out.contains(&params[i])).collect();
+            if k.len() < params.len() && kept.get(name) != Some(&k) {
+                kept.insert(name.clone(), k);
+                changed = true;
+            }
+        }
+        if !changed {
+            return kept;
+        }
+    }
 }
