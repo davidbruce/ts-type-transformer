@@ -320,7 +320,13 @@ the time control returns to JavaScript is reported, not lost.
   tested by `instanceof` on the import. The built-ins Fable has are its
   types (`JS.Uint8Array`, `JS.DataView`, `JS.Date`); an `Error` is an `exn`,
   as Fable catches it, and `jsError "..."` makes one JavaScript recognises:
-  an F# exception is not an `Error` there.
+  an F# exception is not an `Error` there. Overloads F# calls alike, apart
+  only in what they return (`marked(src, {async: true})`), are `marked` and
+  `marked_2`, calling the same function. An abbreviation shows the type
+  parameters its F# type does, the others dropped where it is named. A
+  generic base reached twice at other arguments is inherited once, and its
+  members declared again at the arguments given (F# allows one
+  instantiation). Unions past `U9` nest: `U9<A, ..., H, U3<I, J, K>>`.
 
 ## Unions
 
@@ -470,7 +476,8 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 - 8 DOM unions have members no runtime test can tell apart (two array types,
   `ArrayBufferLike | ArrayBufferView`): bound as untyped values. A union with
   an `any` member is `any`.
-- F# on Pts skips 7 unions whose members no test tells apart. Namespaced
+- F# on Pts erases 7 unions whose members no test tells apart (`U3<...>`,
+  matched by nothing). Namespaced
   classes of a module library are still tested through `globalThis`.
 - F# has no `SharedArrayBuffer` or `BigUint64Array` of Fable's: they are
   opaque. A built-in as a base type stays opaque too (`Pt` extends an opaque

@@ -38,6 +38,8 @@ struct Gen {
     fn_params: Vec<String>,
     // Aliases a type extends, by id: an interface, as F# inherits only those.
     inherited: HashSet<String>,
+    // The numbers of arguments constructor types take: a `JsConstructor<N>` each.
+    ctor_arities: BTreeSet<usize>,
     // Abbreviations without type parameters, by name: what F# sees through
     // when it tells members apart (`type ArrayLike_or_x = obj`).
     abbrevs: HashMap<String, String>,
@@ -201,9 +203,11 @@ impl Gen {
             }
             let (out, skipped) = (std::mem::take(&mut self.out), self.skipped.clone());
             let told_apart = self.named_union("probe", body, "");
+            let recursive = body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(attr(d, "name")));
+            let erased = if told_apart { None } else if recursive { Some("obj".to_string()) } else { Some(self.ty(body, "")) };
             (self.out, self.skipped) = (out, skipped);
-            if !told_apart {
-                self.abbrevs.insert(type_ident(attr(d, "name")), "obj".into());
+            if let Some(t) = erased {
+                self.abbrevs.insert(type_ident(attr(d, "name")), t);
             }
         }
     }
@@ -261,6 +265,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         fn_params: Vec::new(),
         abbrevs: HashMap::new(),
         inherited: HashSet::new(),
+        ctor_arities: BTreeSet::new(),
         maps: BTreeSet::new(),
         types: BTreeMap::new(),
         values: String::new(),
@@ -309,7 +314,6 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         g.bases.entry(name).or_insert_with(Vec::new).extend::<Vec<String>>(bases);
     }
     g.constrained = constrained_interfaces(doc.root_element(), &g.bases);
-    g.alias_kept = alias_kept(doc.root_element());
     let (plan, units) = file_plan(doc.root_element());
     for (i, group) in plan.iter().enumerate() {
         for m in group {
@@ -321,6 +325,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     g.index(doc.root_element(), "");
     g.inherited = doc.root_element().descendants().filter(|e| e.has_tag_name("extends")).filter_map(|e| elements(e).next()).filter(|r| r.attribute("kind") == Some("typeAlias")).filter_map(|r| r.attribute("to")).map(str::to_string).collect();
     g.union_abbrevs(doc.root_element());
+    g.settle_alias_kept(doc.root_element());
     g.decls(doc.root_element(), "", "");
     g.key_modules(doc.root_element());
 
@@ -331,13 +336,19 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
          /// A JavaScript object used as a map: `{ [key: string]: T }` is `JsRecord<string, T>`.\n\
          /// A value whose type F# cannot write, of type arguments it still takes.\n\
-         [<AllowNullLiteral>]\ntype Opaque<'T> = interface end\n\n\
          [<AllowNullLiteral>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n\n\
          /// A JavaScript Error, where an API takes one: an F# exception is not an Error in JavaScript.\n\
          [<AutoOpen>]\nmodule JsErrors =\n    [<Emit(\"new Error($0)\")>]\n    let jsError (message: string) : exn = jsNative\n\n\
          [<AllowNullLiteral>]\ntype JsAsyncIterator<'T> =\n    \
          [<Emit(\"$0.next().then(r => r.done ? undefined : r.value)\")>] abstract next: unit -> JS.Promise<'T option>\n\n",
     );
+    // A constructor (`new (a: A) => T`), by its number of arguments: called with `new`.
+    for k in &g.ctor_arities {
+        let args: Vec<String> = (1..=*k).map(|i| format!("'A{i}")).collect();
+        let params = if *k == 0 { "unit".to_string() } else { (1..=*k).map(|i| format!("a{i}: 'A{i}")).collect::<Vec<_>>().join(" * ") };
+        let vars = args.iter().cloned().chain(["'T".to_string()]).collect::<Vec<_>>().join(", ");
+        prelude += &format!("[<AllowNullLiteral>]\ntype JsConstructor{k}<{vars}> =\n    [<EmitConstructor>] abstract Create: {params} -> 'T\n\n");
+    }
     // Types from other files are opaque.
     let mut apart = String::new();
     for (name, arity) in &g.external {
@@ -595,6 +606,52 @@ impl Gen {
         }
     }
 
+    // The members of generic bases left to another path (which has them at
+    // other arguments, `GPUDataOwner<obj>`), and of their bases, at the
+    // arguments given here: F# lets an interface declare again a member it
+    // inherits, at a type of its own. Those whose type is the same either way,
+    // or that it declares already, it inherits.
+    fn redeclared(&mut self, d: Node, left: &[Node], body: &[String], owner: &str, extend: &str, indent: &str) -> Vec<String> {
+        let root = d.document().root_element();
+        let mut own: HashSet<String> = body.iter().filter_map(|l| member_name(l)).map(|(_, n)| n.to_string()).collect();
+        let mut out = Vec::new();
+        let mut todo: Vec<(Node, HashMap<String, String>)> = Vec::new();
+        for r in left {
+            let args: HashMap<String, String> = HashMap::new();
+            todo.push((*r, args));
+        }
+        let mut seen = HashSet::new();
+        while let Some((r, outer)) = todo.pop() {
+            let Some(base) = r.attribute("to").and_then(|to| find_decl(root, to)) else { continue };
+            if !seen.insert(r.attribute("to").unwrap_or_default().to_string()) {
+                continue;
+            }
+            // Its type parameters, as the arguments given here.
+            let mut map = HashMap::new();
+            for (p, a) in named(base, "typeParameter").zip(elements(r)) {
+                let t = self.ty(a, owner);
+                map.insert(attr(p, "name").to_string(), subst_params(&t, &outer));
+            }
+            for e in named(base, "extends") {
+                todo.push((only_child(e), map.clone()));
+            }
+            let src = if base.has_tag_name("typeAlias") { only_child_type(base) } else { base };
+            let members: Vec<Node> = elements(src).filter(|m| matches!(m.tag_name().name(), "property" | "method" | "get" | "set") && !flag(*m, "static")).collect();
+            // Rendered apart: what goes to later files' extensions, and what is skipped, is the base's.
+            let saved = (self.extensions.clone(), self.skipped.clone());
+            let lines = self.members(&members, owner, extend, indent);
+            (self.extensions, self.skipped) = saved;
+            for line in lines {
+                let again = subst_params(&line, &map);
+                let Some((_, name)) = member_name(&again) else { continue };
+                if again != line && own.insert(name.to_string()) {
+                    out.push(again);
+                }
+            }
+        }
+        out
+    }
+
     // Whether `from` extends `to`, through its bases, by id.
     fn reaches(&self, from: &str, to: &str) -> bool {
         let mut todo = vec![from.to_string()];
@@ -625,6 +682,62 @@ impl Gen {
             }
         }
         false
+    }
+
+    // What an alias other than a non-generic union is in F#: an interface
+    // where an abbreviation cannot be one, a delegate where a function has
+    // optional parameters, else an abbreviation of this type.
+    fn alias_form(&mut self, d: Node) -> AliasForm {
+        let raw = attr(d, "name");
+        let body = only_child_type(d);
+        // F# abbreviations cannot refer to themselves; an interface can.
+        let recursive = body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(raw));
+        // So can one a type extends: F# inherits only interfaces.
+        let inherited = d.attribute("id").is_some_and(|id| self.inherited.contains(id));
+        // And one with more than properties, or a lone index signature, has members.
+        let members = body.has_tag_name("object")
+            && elements(body).next().is_some()
+            && !elements(body).all(|m| m.has_tag_name("property"))
+            && !(elements(body).count() == 1 && elements(body).all(|m| m.has_tag_name("index")));
+        if body.has_tag_name("object") && (recursive || inherited || members) {
+            return AliasForm::Interface;
+        }
+        if recursive && !(body.has_tag_name("functionType") && d.parent().is_some_and(|p| !p.has_tag_name("namespace"))) {
+            self.skip("recursive type alias, bound as obj");
+            return AliasForm::Abbreviation("obj".into());
+        }
+        if body.has_tag_name("functionType") && named(body, "parameter").any(|p| flag(p, "optional")) {
+            return AliasForm::Delegate;
+        }
+        AliasForm::Abbreviation(self.ty(body, ""))
+    }
+
+    // Which type parameters each generic abbreviation shows: F# wants all it
+    // declares in its type. Those its type does not show (in `this`, in a
+    // union bound as `obj`, in an argument another drops) are dropped from
+    // it and from references to it, until settled.
+    fn settle_alias_kept(&mut self, root: Node) {
+        let aliases: Vec<Node> = root.descendants().filter(|d| d.has_tag_name("typeAlias") && named(*d, "typeParameter").next().is_some()).collect();
+        loop {
+            let mut changed = false;
+            for d in &aliases {
+                let saved = (std::mem::take(&mut self.skipped), std::mem::take(&mut self.problems));
+                let form = self.alias_form(*d);
+                (self.skipped, self.problems) = saved;
+                let AliasForm::Abbreviation(t) = form else { continue };
+                let words = words(&t);
+                let params: Vec<&str> = named(*d, "typeParameter").map(|p| attr(p, "name")).collect();
+                let k: Vec<usize> = (0..params.len()).filter(|&i| words.contains(params[i])).collect();
+                let id = d.attribute("id").unwrap_or(attr(*d, "name")).to_string();
+                if k.len() < params.len() && self.alias_kept.get(&id) != Some(&k) {
+                    self.alias_kept.insert(id, k);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
     }
 
     fn skip(&mut self, why: &str) {
@@ -726,14 +839,7 @@ impl Gen {
                         parts.push(t);
                     }
                 }
-                match parts.len() {
-                    1 => parts.pop().unwrap(),
-                    2..=9 => format!("U{}<{}>", parts.len(), parts.join(", ")),
-                    _ => {
-                        self.skip("union of more than 9 types, bound as obj");
-                        "obj".into()
-                    }
-                }
+                erased_union(parts)
             }
             "array" => format!("ResizeArray<{}>", self.ty(only_child(n), owner)),
             // `M[K]` for a key parameter: the value type the key selects.
@@ -751,6 +857,16 @@ impl Gen {
             "tuple" => {
                 let parts: Vec<String> = named(n, "element").map(|e| self.ty(only_child(e), owner)).collect();
                 if parts.len() < 2 || named(n, "element").any(|e| flag(e, "rest") || flag(e, "optional")) {
+                    // An array of the one type its elements have (`[A]`, `[A, ...A[]]`).
+                    let elems: Vec<String> = named(n, "element")
+                        .map(|e| match only_child(e) {
+                            t if flag(e, "rest") && t.has_tag_name("array") => self.ty(only_child(t), owner),
+                            t => self.ty(t, owner),
+                        })
+                        .collect();
+                    if let Some(first) = elems.first().filter(|f| elems.iter().all(|e| e == *f)) {
+                        return format!("ResizeArray<{first}>");
+                    }
                     self.skip("irregular tuple, bound as an array");
                     return "ResizeArray<obj>".into();
                 }
@@ -791,6 +907,17 @@ impl Gen {
                 let m = elements(n).next().unwrap();
                 let key = named(m, "parameter").next().map(|p| self.ty(only_child(p), owner)).unwrap_or("string".into());
                 format!("JsRecord<{key}, {}>", self.returns(m, owner))
+            }
+            // A constructor: `new` on it makes a T. Its own type parameters are `obj`.
+            "constructorType" if !named(n, "parameter").any(|p| flag(p, "rest") || flag(p, "optional")) => {
+                let depth = self.fn_params.len();
+                self.fn_params.extend(named(n, "typeParameter").map(|p| attr(p, "name").to_string()));
+                let mut parts: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
+                let k = parts.len();
+                parts.push(named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or("obj".into()));
+                self.fn_params.truncate(depth);
+                self.ctor_arities.insert(k);
+                format!("JsConstructor{k}<{}>", parts.join(", "))
             }
             "object" | "constructorType" => {
                 self.skip("inline type with methods, bound as obj");
@@ -1231,6 +1358,7 @@ impl Gen {
         // interface cannot inherit ResizeArray, which is a class.
         let mut is_array = false;
         let direct: Vec<Option<&str>> = named(d, "extends").map(|e| only_child(e).attribute("to")).collect();
+        let mut left: Vec<Node> = Vec::new();
         for (i, e) in named(d, "extends").enumerate() {
             // A generic base another base reaches already, maybe with other
             // arguments (`GPUDataOwner<'D>` beside a Container that is a
@@ -1240,7 +1368,8 @@ impl Gen {
                 && let Some(to) = target.attribute("to")
                 && direct.iter().enumerate().any(|(j, other)| j != i && other.is_some_and(|o| self.reaches(o, to)))
             {
-                self.skip("base reached through another base, left to that one");
+                // Its members are declared again, with these arguments.
+                left.push(target);
                 continue;
             }
             let base = self.ty(target, &owner);
@@ -1283,6 +1412,7 @@ impl Gen {
             self.constrained_owner.insert(extend.clone(), qualified);
         }
         body.extend(self.members(&instance, &owner, &extend, indent));
+        body.extend(self.redeclared(d, &left, &body, &owner, &extend, indent));
         if body.is_empty() {
             body.push(format!("{indent}    interface end\n"));
         }
@@ -1436,28 +1566,23 @@ impl Gen {
                 "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
                     let body = only_child_type(d);
                     if !self.named_union(&name, body, indent) {
-                        self.skip("union whose members cannot be told apart, bound as obj");
-                        self.abbrevs.insert(name.to_string(), "obj".into());
-                        self.out += &format!("{indent}type {name} = obj\n\n");
+                        // Erased: its types, though a match cannot tell them apart.
+                        let recursive = body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(raw));
+                        let t = if recursive {
+                            self.skip("recursive union, bound as obj");
+                            "obj".to_string()
+                        } else {
+                            self.skip("union whose members cannot be told apart, erased");
+                            self.ty(body, "")
+                        };
+                        self.abbrevs.insert(name.to_string(), t.clone());
+                        self.out += &format!("{indent}type {name} = {t}\n\n");
                     }
                 }
                 "typeAlias" => {
                     let body = only_child_type(d);
-                    // F# abbreviations cannot refer to themselves; an interface can.
-                    let recursive = body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(raw));
-                    // So can one a type extends: F# inherits only interfaces.
-                    let inherited = d.attribute("id").is_some_and(|id| self.inherited.contains(id));
-                    if (recursive || inherited) && body.has_tag_name("object") {
-                        self.interface(d, prefix, indent);
-                        return;
-                    }
-                    if recursive && !(body.has_tag_name("functionType") && indent.is_empty()) {
-                        self.skip("recursive type alias, bound as obj");
-                        self.abbrevs.insert(name.to_string(), "obj".into());
-                        self.out += &format!("{indent}type {name} = obj\n\n");
-                        return;
-                    }
-                    let params = match self.alias_kept.get(&js_path(prefix, raw)).or(self.alias_kept.get(raw)) {
+                    let id = d.attribute("id").unwrap_or(raw);
+                    let params = match self.alias_kept.get(id) {
                         Some(kept) => {
                             let all: Vec<Node> = named(d, "typeParameter").collect();
                             let shown: Vec<String> = kept.iter().map(|&i| format!("'{}", attr(all[i], "name"))).collect();
@@ -1465,33 +1590,34 @@ impl Gen {
                         }
                         None => self.type_params(d),
                     };
-                    // The constraints its type needs, written as F# wants them.
-                    let when: Vec<String> = match d.attribute("id").and_then(|id| self.constrained.get(id)) {
-                        Some(cs) => named(d, "typeParameter").zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("'{} :> {}", attr(p, "name"), fable_builtin(c).unwrap_or_else(|| type_path(c))))).collect(),
+                    // The constraints its type needs of those it shows, written as F# wants them.
+                    let kept = self.alias_kept.get(id).cloned();
+                    let when: Vec<String> = match self.constrained.get(id) {
+                        Some(cs) => named(d, "typeParameter")
+                            .zip(cs)
+                            .enumerate()
+                            .filter(|(i, _)| kept.as_ref().is_none_or(|k| k.contains(i)))
+                            .filter_map(|(_, (p, c))| c.as_ref().map(|c| format!("'{} :> {}", attr(p, "name"), fable_builtin(c).unwrap_or_else(|| type_path(c)))))
+                            .collect(),
                         None => Vec::new(),
                     };
                     let header = if when.is_empty() || params.is_empty() { params.clone() } else { format!("{} when {} >", params.trim_end_matches('>'), when.join(" and ")) };
-                    if body.has_tag_name("functionType") && named(body, "parameter").any(|p| flag(p, "optional")) {
-                        // A function value's own type parameters are `obj`, as in `ty`.
-                        let depth = self.fn_params.len();
-                        self.fn_params.extend(named(body, "typeParameter").map(|p| attr(p, "name").to_string()));
-                        let sig_str = self.delegate_sig(body, "");
-                        self.fn_params.truncate(depth);
-                        self.out += &format!("{indent}type {name}{header} = delegate of {sig_str}\n\n");
-                    } else {
-                        let mut t = self.ty(body, "");
-                        // An abbreviation must show its type parameters: one whose type
-                        // shows none of some (a union bound as `obj`) is opaque, of them.
-                        let shown: Vec<&str> = params.trim_start_matches('<').trim_end_matches('>').split(", ").filter(|p| !p.is_empty()).collect();
-                        let words = words(&t);
-                        if shown.iter().any(|p| !words.contains(&p.trim_start_matches('\''))) {
-                            self.skip("alias that does not show its type parameters, bound as opaque");
-                            t = format!("Opaque<{}>", shown.join(" * "));
+                    match self.alias_form(d) {
+                        AliasForm::Interface => self.interface(d, prefix, indent),
+                        AliasForm::Delegate => {
+                            // A function value's own type parameters are `obj`, as in `ty`.
+                            let depth = self.fn_params.len();
+                            self.fn_params.extend(named(body, "typeParameter").map(|p| attr(p, "name").to_string()));
+                            let sig_str = self.delegate_sig(body, "");
+                            self.fn_params.truncate(depth);
+                            self.out += &format!("{indent}type {name}{header} = delegate of {sig_str}\n\n");
                         }
-                        if params.is_empty() {
-                            self.abbrevs.insert(name.to_string(), t.clone());
+                        AliasForm::Abbreviation(t) => {
+                            if params.is_empty() {
+                                self.abbrevs.insert(name.to_string(), t.clone());
+                            }
+                            self.out += &format!("{indent}type {name}{header} = {t}\n\n");
                         }
-                        self.out += &format!("{indent}type {name}{header} = {t}\n\n");
                     }
                 }
                 "var" => {
@@ -1695,69 +1821,50 @@ fn only_child_type<'a>(d: Node<'a, 'a>) -> Node<'a, 'a> {
     elements(d).find(|c| !c.has_tag_name("typeParameter")).unwrap_or_else(|| panic!("alias {} has no type", attr(d, "name")))
 }
 
-// For each abbreviation (an alias not of a union or object) that does not
-// show all its type parameters, those
-// it shows: not in `this`, nor a function's own (erased), nor an argument
-// another such alias drops. Until settled.
-fn alias_kept(root: Node) -> HashMap<String, Vec<usize>> {
-    let mut aliases: Vec<(String, Node, Vec<String>)> = Vec::new();
-    fn collect<'a>(n: Node<'a, 'a>, prefix: &str, out: &mut Vec<(String, Node<'a, 'a>, Vec<String>)>) {
-        for d in elements(n) {
-            if d.has_tag_name("namespace") {
-                collect(d, &format!("{prefix}{}.", attr(d, "name")), out);
-            } else if d.has_tag_name("typeAlias") && !matches!(only_child_type(d).tag_name().name(), "union" | "object") {
-                let params = named(d, "typeParameter").map(|p| attr(p, "name").to_string()).collect::<Vec<_>>();
-                if !params.is_empty() {
-                    out.push((format!("{prefix}{}", attr(d, "name")), only_child_type(d), params));
-                }
-            }
-        }
+// Adds a member. One F# would call as another is there (TypeScript
+// overloads apart only in what they return, `marked(src, {async: true})`):
+// the same line is left out; else it is the next free `name_2`, `name_3`,
+// calling the same JavaScript.
+fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, String>) {
+    let (head, types) = member_key(&line);
+    let types = types.map(|t| expand(&t, abbrevs));
+    let same = |l: &String| {
+        let (h, t) = member_key(l);
+        h == head && t.map(|t| expand(&t, abbrevs)) == types
+    };
+    let Some(other) = lines.iter().find(|l| same(l)) else {
+        lines.push(line);
+        return;
+    };
+    if types.is_none() || expand(other.trim(), abbrevs) == expand(line.trim(), abbrevs) {
+        return;
     }
-    collect(root, "", &mut aliases);
-    fn shown(n: Node, kept: &HashMap<String, Vec<usize>>, shadow: &mut Vec<String>, out: &mut HashSet<String>) {
-        if n.has_tag_name("this") || n.has_tag_name("thisParameter") || n.has_tag_name("typeParameter") {
-            return;
-        }
-        let depth = shadow.len();
-        if n.has_tag_name("functionType") {
-            shadow.extend(named(n, "typeParameter").map(|p| attr(p, "name").to_string()));
-        }
-        if n.has_tag_name("ref") && attr(n, "kind") == "typeParameter" && !shadow.iter().any(|s| s == attr(n, "name")) {
-            out.insert(attr(n, "name").to_string());
-        }
-        let only = n.has_tag_name("ref").then(|| n.attribute("to").and_then(|t| kept.get(t))).flatten();
-        for (i, c) in elements(n).enumerate() {
-            if only.is_none_or(|k| k.contains(&i)) {
-                shown(c, kept, shadow, out);
-            }
-        }
-        shadow.truncate(depth);
-    }
-    let mut kept: HashMap<String, Vec<usize>> = HashMap::new();
-    loop {
-        let mut changed = false;
-        for (name, body, params) in &aliases {
-            let mut out = HashSet::new();
-            shown(*body, &kept, &mut Vec::new(), &mut out);
-            let k: Vec<usize> = (0..params.len()).filter(|&i| out.contains(&params[i])).collect();
-            if k.len() < params.len() && kept.get(name) != Some(&k) {
-                kept.insert(name.clone(), k);
-                changed = true;
-            }
-        }
-        if !changed {
-            return kept;
-        }
-    }
+    let Some((at, name)) = member_name(&line) else { return };
+    let taken: HashSet<String> = lines.iter().filter_map(|l| member_name(l)).map(|(_, n)| n.to_string()).collect();
+    let bare = name.trim_matches('`');
+    let free = (2..).map(|n| format!("{bare}_{n}")).map(|n| ident(&n)).find(|n| !taken.contains(n)).unwrap();
+    // Its JavaScript, where the name was it.
+    let emit = if line.contains("Emit") {
+        String::new()
+    } else if ident(bare) == bare {
+        format!("[<Emit(\"$0.{bare}($1...)\")>] ")
+    } else {
+        format!("[<Emit(\"$0[\\\"{bare}\\\"]($1...)\")>] ")
+    };
+    let start = line.len() - line.trim_start().len();
+    lines.push(format!("{}{emit}{}{free}{}", &line[..start], &line[start..at], &line[at + name.len()..]));
 }
 
-// Adds a member unless one F# would call the same is there: the first
-// stays, as TypeScript picks the first overload that matches a call.
-fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, String>) {
-    let key = expand(&member_key(&line), abbrevs);
-    if !lines.iter().any(|l| expand(&member_key(l), abbrevs) == key) {
-        lines.push(line);
+// Where in a member line its name is, and the name.
+fn member_name(line: &str) -> Option<(usize, &str)> {
+    let mut s = line.trim_start();
+    while let Some(rest) = s.strip_prefix("[<") {
+        s = rest[rest.find(">]")? + 2..].trim_start();
     }
+    let rest = s.strip_prefix("abstract ").or_else(|| s.strip_prefix("static member "))?;
+    let start = line.len() - rest.len();
+    let len = if rest.starts_with("``") { rest[2..].find("``")? + 4 } else { rest.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(rest.len()) };
+    Some((start, &line[start..start + len]))
 }
 
 // `text` with each abbreviation's name replaced by what it stands for.
@@ -1788,7 +1895,7 @@ fn expand(text: &str, abbrevs: &HashMap<String, String>) -> String {
 // What F# tells members apart by: name and parameter types, not attributes,
 // parameter names or return type. Overloads that differ only in a literal
 // (`async: true` or `false`, each a `bool`) are one F# member.
-fn member_key(line: &str) -> String {
+fn member_key(line: &str) -> (String, Option<String>) {
     let mut s = line.trim();
     while let Some(rest) = s.strip_prefix("[<") {
         match rest.find(">]") {
@@ -1828,7 +1935,7 @@ fn member_key(line: &str) -> String {
     };
     if let Some(rest) = s.strip_prefix("static member ") {
         // `static member f<'T> (a: T, b: U): R = jsNative`.
-        let Some(open) = rest.find(" (") else { return s.to_string() };
+        let Some(open) = rest.find(" (") else { return (s.to_string(), None) };
         let name = &rest[..open];
         let inner = &rest[open + 2..];
         let close = {
@@ -1850,16 +1957,68 @@ fn member_key(line: &str) -> String {
             at
         };
         let params: Vec<String> = split_top(&inner[..close], ", ").into_iter().filter(|p| !p.trim().is_empty()).map(type_of).collect();
-        return format!("static {name}({})", params.join(", "));
+        return (format!("static {name}"), Some(params.join(", ")));
     }
     // `abstract f: a: A * b: B -> R`: the types before its last arrow outside brackets.
-    let Some(rest) = s.strip_prefix("abstract ") else { return s.to_string() };
-    let Some((name, sig)) = rest.split_once(": ") else { return s.to_string() };
+    let Some(rest) = s.strip_prefix("abstract ") else { return (s.to_string(), None) };
+    let Some((name, sig)) = rest.split_once(": ") else { return (s.to_string(), None) };
     let parts = split_top(sig, " -> ");
     if parts.len() < 2 {
-        return s.to_string();
+        return (s.to_string(), None);
     }
     let params = parts[..parts.len() - 1].join(" -> ");
     let types: Vec<String> = split_top(&params, " * ").into_iter().map(type_of).collect();
-    format!("abstract {name}({})", types.join(" * "))
+    (format!("abstract {name}"), Some(types.join(" * ")))
+}
+
+// Fable's erased union of these types: `U2<A, B>` up to `U9`; more nest in
+// the last place, `U9<A, ..., H, U3<I, J, K>>`.
+fn erased_union(mut parts: Vec<String>) -> String {
+    match parts.len() {
+        0 => "obj".into(),
+        1 => parts.pop().unwrap(),
+        2..=9 => format!("U{}<{}>", parts.len(), parts.join(", ")),
+        _ => {
+            let rest = parts.split_off(8);
+            parts.push(erased_union(rest));
+            format!("U9<{}>", parts.join(", "))
+        }
+    }
+}
+
+enum AliasForm {
+    Interface,
+    Delegate,
+    Abbreviation(String),
+}
+
+// `text` with each type parameter `'T` in `map` replaced by its type.
+fn subst_params(text: &str, map: &HashMap<String, String>) -> String {
+    if map.is_empty() {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        let after_word = text[..i].chars().last().is_some_and(|p| p.is_alphanumeric() || p == '_');
+        if c == '\'' && !after_word {
+            let start = i + 1;
+            let mut end = start;
+            while let Some(&(j, n)) = chars.peek() {
+                if n.is_alphanumeric() || n == '_' {
+                    end = j + n.len_utf8();
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            match map.get(&text[start..end]) {
+                Some(t) => out += t,
+                None => out += &text[i..end.max(start)],
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
 }

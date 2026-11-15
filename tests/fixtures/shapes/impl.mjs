@@ -18,6 +18,7 @@ class Shape {
     }
     resize(size, round) { this.size = round ? Math.round(size) : size; }
     label(value) { return `${typeof value}:${value}`; }
+    measure(options) { return options.exact ? this.area() : `${this.area()}`; }
 }
 globalThis.Shape = Shape;
 globalThis.totalArea = (a, b) => a.area() + b.area();

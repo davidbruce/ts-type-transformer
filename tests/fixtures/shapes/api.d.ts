@@ -11,6 +11,9 @@ interface Shape extends Named {
     scale(factor: number, name: string): Shape;
     resize(size: number, round?: boolean): void;
     label(value: string | number): string;
+    // Overloads apart only in a literal option and what they return.
+    measure(options: { exact: true }): number;
+    measure(options: { exact: false }): string;
 }
 declare var Shape: {
     prototype: Shape;
