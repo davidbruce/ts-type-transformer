@@ -569,6 +569,12 @@ template <class T, class U>
 struct extends_t : std::bool_constant<std::same_as<T, U> || std::same_as<T, Value> || std::same_as<U, Value> || any_extends<U, typename bases<T>::type>::value> {};
 template <class... A, class U>
 struct extends_t<std::variant<A...>, U> : std::bool_constant<(extends_t<A, U>::value && ...)> {};
+// A type extends a union it is, or extends, a member of; a union, one whose
+// members each do.
+template <class T, class... B>
+struct extends_t<T, std::variant<B...>> : std::bool_constant<(extends_t<T, B>::value || ...)> {};
+template <class... A, class... B>
+struct extends_t<std::variant<A...>, std::variant<B...>> : std::bool_constant<(extends_t<A, std::variant<B...>>::value && ...)> {};
 template <class T, class U>
 concept extends = extends_t<T, U>::value;
 

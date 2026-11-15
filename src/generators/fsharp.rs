@@ -548,11 +548,7 @@ impl Gen {
                         // Built-ins Fable has: its types, which have their members.
                         // Their buffer argument (`Uint8Array<ArrayBufferLike>`) it does not take.
                         // Not as a base: an interface cannot inherit them (`Pt extends Float32Array`).
-                        ("ArrayBuffer" | "ArrayBufferView" | "DataView" | "Date" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array", _) if !is_base(n) => {
-                            return format!("JS.{name}");
-                        }
-                        // A JavaScript Error, as Fable catches it: an F# exception.
-                        ("Error", 0) if !is_base(n) => return "exn".into(),
+                        (_, n_args) if !is_base(n) && (n_args == 0 || name != "Error") && let Some(t) = fable_builtin(name) => return t,
                         // A type from another library, an alias too: an opaque type by its name.
                         _ if matches!(attr(n, "kind"), "class" | "interface" | "typeAlias") => {
                             let arity = self.external.entry(name.to_string()).or_default();
@@ -1073,7 +1069,8 @@ impl Gen {
         let header = match self.constrained.get(attr(d, "name")) {
             Some(cs) => {
                 let ps: Vec<String> = named(d, "typeParameter").map(|p| format!("'{}", attr(p, "name"))).collect();
-                let when: Vec<String> = ps.iter().zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("{p} :> {c}"))).collect();
+                // The constraint as F# names it: a built-in Fable has is its type (`JS.Date`).
+                let when: Vec<String> = ps.iter().zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("{p} :> {}", fable_builtin(c).unwrap_or_else(|| c.clone())))).collect();
                 format!("{name}<{} when {} >", ps.join(", "), when.join(" and "))
             }
             None => owner.clone(),
@@ -1403,6 +1400,16 @@ impl Gen {
 fn js_access(name: &str) -> String {
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$') && !name.as_bytes()[0].is_ascii_digit();
     if plain { format!(".{name}") } else { format!("[{name:?}]") }
+}
+
+// A JavaScript built-in as Fable has it: `JS.Date`; an Error is an F#
+// exception, as Fable catches it.
+fn fable_builtin(name: &str) -> Option<String> {
+    match name {
+        "ArrayBuffer" | "ArrayBufferView" | "DataView" | "Date" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array" => Some(format!("JS.{name}")),
+        "Error" => Some("exn".into()),
+        _ => None,
+    }
 }
 
 // Whether a reference is a base type: `<extends>`, or an argument of one.

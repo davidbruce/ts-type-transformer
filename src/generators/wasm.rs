@@ -337,6 +337,8 @@ struct Builder<'a> {
     // A generic callback's own type parameters, bound as untyped values: a
     // closure cannot be generic.
     erased: HashSet<String>,
+    // Type parameters over the keys of a type that is not a map: strings.
+    key_strings: HashSet<String>,
 }
 
 // The model of the XML for a target, or what the target cannot express.
@@ -359,6 +361,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         folder_names: HashMap::new(),
         package: None,
         erased: HashSet::new(),
+        key_strings: HashSet::new(),
     };
     b.index(doc.root_element(), "");
     b.decls_of(doc.root_element(), "");
@@ -818,6 +821,7 @@ impl<'a> Builder<'a> {
     fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
         // Type parameters left after `generics = "erase"` range over a map's keys.
         self.keyed.clear();
+        self.key_strings.clear();
         self.last_type_params.clear();
         let own: Vec<Node> = named(n, "typeParameter").filter(|p| !self.erased.contains(attr(*p, "name"))).collect();
         for p in own {
@@ -827,6 +831,9 @@ impl<'a> Builder<'a> {
                     let name = m.attribute("qualified").unwrap_or(attr(m, "name")).to_string();
                     if self.key_map(&name) {
                         self.keyed.insert(attr(p, "name").to_string(), ident(&name));
+                    } else {
+                        // A key of a type that is not a map of keys: a string.
+                        self.key_strings.insert(attr(p, "name").to_string());
                     }
                 }
                 None if self.generics => {
@@ -919,6 +926,7 @@ impl<'a> Builder<'a> {
                 _ => Ty::Any,
             },
             "this" => Ty::Obj(owner.to_string()),
+            "ref" if attr(n, "kind") == "typeParameter" && self.key_strings.contains(attr(n, "name")) => Ty::Str,
             "ref" if attr(n, "kind") == "typeParameter" && self.erased.contains(attr(n, "name")) => {
                 self.skip("type parameter of a generic callback, bound as an untyped value");
                 Ty::Any
@@ -933,6 +941,11 @@ impl<'a> Builder<'a> {
             },
             "ref" => self.reference(n),
             // `M[K]`: the value the key selects.
+            // `M[K]` where K is a key of a type that is not a map of keys: whatever M holds.
+            "indexedAccess" if elements(n).nth(1).is_some_and(|k| k.has_tag_name("ref") && self.key_strings.contains(attr(k, "name"))) => {
+                self.skip("value of a key of a type that is not a map, bound as an untyped value");
+                Ty::Any
+            }
             "indexedAccess" => {
                 let index = elements(n).nth(1).unwrap();
                 match index.attribute("name").and_then(|k| self.keyed.get(k)) {

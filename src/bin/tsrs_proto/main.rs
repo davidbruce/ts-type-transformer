@@ -228,7 +228,10 @@ fn main() {
         )));
         (fs, "/".into(), "/tsconfig.json".into(), format!("{}/{}", bundled::lib_path(), input), None)
     } else {
-        let abs = std::fs::canonicalize(&input).unwrap_or_else(|_| std::path::absolute(&input).expect("resolve input"));
+        let Ok(abs) = std::fs::canonicalize(&input) else {
+            eprintln!("error: no such file: {input} (a package is given with --package)");
+            std::process::exit(2);
+        };
         let abs_str = tspath::normalize_path(&abs.to_string_lossy());
         let dir = tspath::get_directory_path(&abs_str);
         let tsconfig_path = if dir.ends_with('/') { format!("{dir}__tsrs_tsconfig.json") } else { format!("{dir}/__tsrs_tsconfig.json") };

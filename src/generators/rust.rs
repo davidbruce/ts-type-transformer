@@ -345,7 +345,13 @@ fn parts(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>) -
         }
         None => f.import.clone(),
     };
-    imports.entry(import.clone()).or_insert_with(|| format!("    pub fn {import}({}) -> {};\n", raw_params.join(", "), raw_ret(&f.ret)));
+    // An import named as a keyword (`use`) is linked by its name, and called by another.
+    let raw_name = if KEYWORDS.contains(&import.as_str()) { format!("{import}_") } else { import.clone() };
+    imports.entry(import.clone()).or_insert_with(|| {
+        let link = if raw_name != import { format!("#[link_name = \"{import}\"] ") } else { String::new() };
+        format!("    {link}pub fn {raw_name}({}) -> {};\n", raw_params.join(", "), raw_ret(&f.ret))
+    });
+    let import = raw_name;
     let mut type_params: Vec<String> = f.type_params.iter().map(bound).collect();
     if f.params.iter().any(|p| matches!(p.1, Ty::Key(_))) {
         type_params.insert(0, "V: JsType".into());
@@ -1254,10 +1260,19 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let mut taken: HashSet<String> = declared.iter().map(|n| n.to_string()).collect();
     let mut types: HashMap<String, String> = RUNTIME_TYPES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
     for n in &declared {
-        let name = camel(n);
-        if name != **n && !types.contains_key(*n) && taken.insert(name.clone()) {
-            types.insert(n.to_string(), name);
+        // CamelCase, numbered where another has the name: a type named in
+        // snake_case would share its constructor's name with a function.
+        let base = camel(n);
+        if base == **n || types.contains_key(*n) {
+            continue;
         }
+        let mut name = base.clone();
+        let mut i = 2;
+        while !taken.insert(name.clone()) {
+            name = format!("{base}{i}");
+            i += 1;
+        }
+        types.insert(n.to_string(), name);
     }
     CX.with(|c| {
         *c.borrow_mut() = Context {

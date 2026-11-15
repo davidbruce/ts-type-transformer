@@ -42,6 +42,10 @@ pub struct Front<'c> {
     // converted may still convert.
     depth: usize,
     budget: usize,
+    // Conversions cut short by a limit, and checker types converted, with
+    // how much of a budget each took.
+    cut: usize,
+    converted: HashMap<TypeId, (Type, usize)>,
     // Lowering: merge `A & B` into one object type.
     pub merge_intersections: bool,
     pub intersection_limit: usize,
@@ -63,7 +67,7 @@ pub struct Front<'c> {
 
 // Checker types one conversion may make: what an ordinary type needs many
 // times over, and less than a type that expands without end.
-const BUDGET: usize = 20_000;
+const BUDGET: usize = 2_000;
 
 const DEFERRED: TypeFlags = TypeFlags::Index
     .union(TypeFlags::IndexedAccess)
@@ -92,6 +96,8 @@ impl<'c> Front<'c> {
             in_progress: Vec::new(),
             depth: 0,
             budget: BUDGET,
+            cut: 0,
+            converted: HashMap::new(),
             merge_intersections: false,
             intersection_limit: 64,
             expand_keyed: false,
@@ -412,7 +418,10 @@ impl<'c> Front<'c> {
             }
             Kind::FunctionDeclaration => {
                 if self.emitted_nodes.insert(s) {
-                    let name = s.name().map(text).unwrap_or_else(|| anonymous_name(s));
+                    let name = match self.c.get_symbol_of_declaration_exported(s) {
+                        Some(sym) => self.output_name(sym),
+                        None => s.name().map(text).unwrap_or_else(|| anonymous_name(s)),
+                    };
                     out.push(Decl::Function(Function { name, js_name: None, sig: self.signature(s) }));
                 }
             }
@@ -427,14 +436,15 @@ impl<'c> Front<'c> {
                 }
             }
             Kind::VariableDeclaration => {
-                if self.first_time(s).is_some() {
+                if let Some((sym, _)) = self.first_time(s) {
                     // A `const`, or any variable at the top of a module: a module's
                     // exports cannot be assigned from outside it.
                     let constant = ast::get_combined_node_flags(s).intersects(ast::NodeFlags::Constant);
                     let statement = s.parent().and_then(|list| list.parent());
                     let module_top = statement.and_then(|st| st.parent()).is_some_and(|f| f.kind() == Kind::SourceFile)
                         && ast::get_source_file_of_node(s).is_some_and(|f| f.external_module_indicator().is_some());
-                    out.push(Decl::Var(Var { name: text(s.as_variable_declaration().name()), ty: self.opt_type(s.type_node()), js_name: None, readonly: constant || module_top }));
+                    let name = self.output_name(sym);
+                    out.push(Decl::Var(Var { name, ty: self.opt_type(s.type_node()), js_name: None, readonly: constant || module_top }));
                 }
             }
             Kind::VariableStatement => {
@@ -687,7 +697,7 @@ impl<'c> Front<'c> {
                 None => {}
             }
         }
-        Some(Namespace { name: text(name_of(node)), decls })
+        Some(Namespace { name: self.output_name(sym), decls })
     }
 
     fn members(&mut self, nodes: &[P<Node>]) -> Vec<Member> {
@@ -738,8 +748,11 @@ impl<'c> Front<'c> {
         let mut sig = Signature { type_params: self.type_params(node.type_parameters()), ..Default::default() };
         for &p in node.parameters() {
             let pd = p.as_parameter_declaration();
-            let name = text(pd.name());
             let ty = self.opt_type(p.type_node());
+            let name = match pd.name().kind() {
+                Kind::ObjectBindingPattern | Kind::ArrayBindingPattern => destructured_name(&ty, sig.params.len()),
+                _ => text(pd.name()),
+            };
             // `this:` declares the receiver; it is not an argument.
             if name == "this" {
                 sig.this = Some(ty);
@@ -1016,17 +1029,36 @@ impl<'c> Front<'c> {
             self.budget = BUDGET;
         }
         if self.depth > 48 {
+            self.cut += 1;
             self.count("erased: type too deep");
             return Type::Erased("type too deep");
         }
         if self.budget == 0 {
+            self.cut += 1;
             self.count("erased: type too large");
             return Type::Erased("type too large");
         }
+        // A type converts the same wherever it is, but for a key being
+        // expanded or an alias's own body: each once, and again from memory.
+        let cacheable = self.key_binding.is_none() && self.skip_alias.is_none();
+        if cacheable && let Some((ty, size)) = self.converted.get(&t.id()) {
+            if *size > self.budget {
+                self.cut += 1;
+                self.count("erased: type too large");
+                return Type::Erased("type too large");
+            }
+            self.budget -= size;
+            return ty.clone();
+        }
+        let (budget, cut) = (self.budget, self.cut);
         self.budget -= 1;
         self.depth += 1;
         let out = self.from_type_at(t);
         self.depth -= 1;
+        // Not what a limit cut short here: elsewhere it may fit.
+        if cacheable && self.cut == cut {
+            self.converted.insert(t.id(), (out.clone(), budget - self.budget));
+        }
         out
     }
 
@@ -1473,7 +1505,9 @@ impl<'c> Front<'c> {
             if optional {
                 ty = strip_undefined(ty);
             }
-            out.params.push(Param { name: p.name().to_string(), optional, rest, constant: None, ty });
+            // `__0`: a parameter destructured where it was declared.
+            let name = if p.name().starts_with("__") { destructured_name(&ty, i) } else { p.name().to_string() };
+            out.params.push(Param { name, optional, rest, constant: None, ty });
         }
         let ret = self.c.get_return_type_of_signature_exported(sig);
         out.ret = Some(self.from_type(ret));
@@ -1594,5 +1628,17 @@ fn decl_name(d: &Decl) -> &str {
         Decl::Var(v) => &v.name,
         Decl::Enum(e) => &e.name,
         Decl::Namespace(n) => &n.name,
+    }
+}
+
+// A destructured parameter's name, `{ years, months }: Duration`: its type's,
+// `duration`, else its place, `arg0`.
+fn destructured_name(ty: &Type, index: usize) -> String {
+    match ty {
+        Type::Ref(r) if !r.name.is_empty() && r.name.chars().all(|c| c.is_alphanumeric() || c == '_') => {
+            let mut cs = r.name.chars();
+            cs.next().map(|c| c.to_lowercase().collect::<String>() + cs.as_str()).unwrap_or_default()
+        }
+        _ => format!("arg{index}"),
     }
 }

@@ -175,6 +175,8 @@ fn tuple_type(es: &[Ty]) -> String {
             Ty::Num => format!(" {{ uint32_t h = ts_raw_js_from_number(v{i}); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
             Ty::Bool => format!(" {{ uint32_t h = ts_raw_js_from_bool(v{i}); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
             Ty::Str => format!(" {{ uint32_t h = ts_raw_js_from_string(v{i}, ts_strlen(v{i})); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
+            // A union is a tagged struct: made a value, pushed, and released.
+            Ty::NamedUnion(n) if decodable(n) => format!(" {{ uint32_t h = {n}_to_handle(v{i}); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
             _ => format!(" ts_raw_js_array_push(a.h, v{i}.h);"),
         })
         .collect();
@@ -184,6 +186,7 @@ fn tuple_type(es: &[Ty]) -> String {
         let get = match e {
             Ty::Num => "double x = ts_raw_js_to_number(h); ts_raw_js_release(h); return x;".to_string(),
             Ty::Bool => "bool x = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); return x;".to_string(),
+            Ty::NamedUnion(n) if decodable(n) => format!("return {n}_from_handle(h);"),
             _ => format!("return ({elem}){{ h }};"),
         };
         out += &format!("static inline {elem} {name}_get_{i}({name} a) {{ uint32_t h = ts_raw_js_array_get(a.h, {i}); {get} }}\n");

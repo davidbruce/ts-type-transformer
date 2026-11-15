@@ -1402,6 +1402,18 @@ fn widen(t: &mut Type) {
 }
 
 fn unique(base: String, taken: &mut HashSet<String>) -> String {
+    // A name made of a long path (`Class_extend_result_extend_result_...`)
+    // keeps its start and a hash of the rest: names become file names.
+    let base = if base.len() > 64 {
+        let hash = base.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+        let mut cut = 48;
+        while !base.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        format!("{}_{:08x}", &base[..cut], hash as u32)
+    } else {
+        base
+    };
     let mut name = base.clone();
     let mut n = 2;
     while !taken.insert(name.clone()) {
@@ -1414,7 +1426,39 @@ fn unique(base: String, taken: &mut HashSet<String>) -> String {
 // ---- anonymous types ----
 
 // Inline object and function types become named declarations.
+// `this` in an inline type of a class (`options: (opt) => this`) is the
+// class: once hoisted out of it, `this` would mean nothing.
+fn bind_this(decls: &mut [Decl]) {
+    for d in decls {
+        match d {
+            Decl::Interface(i) => {
+                let args = i.type_params.iter().map(|p| Type::Ref(Ref { name: p.name.clone(), kind: "typeParameter", sym: p.sym, args: Vec::new(), tid: p.tid, qualified: None, file: None, computed: false, node: None })).collect();
+                let me = Type::Ref(Ref { name: i.name.clone(), kind: if i.class.is_some() { "class" } else { "interface" }, sym: i.sym, args, tid: None, qualified: None, file: None, computed: false, node: None });
+                let inline = &mut |t: &mut Type, _: &[String]| {
+                    if !matches!(t, Type::Function(_) | Type::Constructor(_) | Type::Object(_)) {
+                        return true;
+                    }
+                    walk_type(t, &mut Vec::new(), &mut |u, _| {
+                        if matches!(u, Type::This) {
+                            *u = me.clone();
+                        }
+                        true
+                    });
+                    false
+                };
+                walk_members(&mut i.members, &mut Vec::new(), inline);
+                if let Some(c) = &mut i.class {
+                    walk_members(&mut c.statics, &mut Vec::new(), inline);
+                }
+            }
+            Decl::Namespace(n) => bind_this(&mut n.decls),
+            _ => {}
+        }
+    }
+}
+
 fn hoist(decls: &mut Vec<Decl>, sep: &str) {
+    bind_this(decls);
     let mut names: HashSet<String> = HashSet::new();
     collect_declared_names(decls, "", sep, &mut names);
     let mut by_key: HashMap<String, (String, Vec<Type>)> = HashMap::new();
