@@ -2,7 +2,6 @@
 import bindings/areas/main as b
 import bindings/runtime as r
 import bindings/types as t
-import bindings/types/areas_main
 import gleam/io
 import gleam/option.{None, Some}
 
@@ -13,7 +12,7 @@ fn check(ok: Bool, what: String) -> Nil {
   }
 }
 
-fn pt(x: Float, y: Float) -> areas_main.Pt {
+fn pt(x: Float, y: Float) -> t.Pt(Nil) {
   b.pt_new([r.dynamic(x), r.dynamic(y)])
 }
 

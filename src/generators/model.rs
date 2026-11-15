@@ -170,6 +170,9 @@ pub struct Class {
     pub iterates_async: Option<Ty>,
     // What it is an array of, when it extends Array: `class Group extends Array<Pt>`.
     pub elements: Option<Ty>,
+    // Where its constructor is, when it is a class at runtime (not only an
+    // interface): what `instanceof` tests against.
+    pub js: Option<String>,
 }
 
 pub struct NamedUnion {
@@ -629,9 +632,10 @@ impl<'a> Builder<'a> {
 
     // A class named for `path`, its constructor and statics reached at `js`.
     fn class_at(&mut self, d: Node<'a, 'a>, path: &str, js: &str) -> Class {
+        let runtime = d.has_tag_name("class").then(|| js.to_string());
         let path_js = js;
         let owner = self.type_ident(path);
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: runtime };
         let mut names = HashSet::new();
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
@@ -645,7 +649,7 @@ impl<'a> Builder<'a> {
     }
 
     fn statics(&mut self, body: Node<'a, 'a>, path: &str, name: String) -> Class {
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: None };
         let mut names = HashSet::new();
         for m in elements(body) {
             self.member(&mut c, &mut names, m, path, true);
@@ -686,7 +690,7 @@ impl<'a> Builder<'a> {
                     return;
                 }
                 // Where generics are erased, a generic base is the base without its arguments.
-                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(self.type_ident(name)) } else { self.reference(base) };
+                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(self.type_ident(name)) } else { self.reference(base, &owner) };
                 if !self.decls.contains_key(name) {
                     self.opaque.insert(self.type_ident(name));
                 }
@@ -991,7 +995,7 @@ impl<'a> Builder<'a> {
                     Ty::Any
                 }
             },
-            "ref" => self.reference(n),
+            "ref" => self.reference(n, owner),
             // `M[K]`: the value the key selects.
             // `M[K]` where K is a key of a type that is not a map of keys: whatever M holds.
             "indexedAccess" if elements(n).nth(1).is_some_and(|k| k.has_tag_name("ref") && self.key_strings.contains(attr(k, "name"))) => {
@@ -1088,14 +1092,15 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn reference(&mut self, n: Node<'a, 'a>) -> Ty {
+    // `owner` is what `this` is, in a type argument (`GetSet<number, this>`).
+    fn reference(&mut self, n: Node<'a, 'a>, owner: &str) -> Ty {
         let key = self.ref_key(n);
         let declared = self.decls.get(&key).copied();
         // `Array<T>` is `T[]`.
         if declared.is_none() && matches!(external(&key), "Array" | "ReadonlyArray") {
             return match elements(n).next() {
                 Some(e) => {
-                    let elem = self.ty(e, "");
+                    let elem = self.ty(e, owner);
                     self.array_of(elem)
                 }
                 None => Ty::Array,
@@ -1114,7 +1119,7 @@ impl<'a> Builder<'a> {
                 let body = self.alias_body(d);
                 if body.has_tag_name("functionType") || body.has_tag_name("object") {
                     if self.generics && elements(n).next().is_some() {
-                        let args: Vec<Ty> = elements(n).map(|a| self.ty(a, "")).collect();
+                        let args: Vec<Ty> = elements(n).map(|a| self.ty(a, owner)).collect();
                         return Ty::Generic(self.type_ident(&key), args);
                     }
                     return Ty::Obj(self.type_ident(&key));
@@ -1133,7 +1138,7 @@ impl<'a> Builder<'a> {
                 // A union with a name of its own is declared once.
                 if body.has_tag_name("union") {
                     let name = self.type_ident(&key);
-                    let args: Vec<Ty> = if generic_union { elements(n).map(|a| self.ty(a, "")).collect() } else { Vec::new() };
+                    let args: Vec<Ty> = if generic_union { elements(n).map(|a| self.ty(a, owner)).collect() } else { Vec::new() };
                     // `void` in a union is a value that may be absent: `void | Promise<void>`.
                     // So is a member that may itself be absent: `string | (number | null)`.
                     let is_void = |p: Node| p.has_tag_name("primitive") && attr(p, "name") == "void";
@@ -1186,7 +1191,7 @@ impl<'a> Builder<'a> {
                 t
             }
             ("class" | "interface", declared) if self.generics && elements(n).next().is_some() => {
-                let args: Vec<Ty> = elements(n).map(|a| self.ty(a, "")).collect();
+                let args: Vec<Ty> = elements(n).map(|a| self.ty(a, owner)).collect();
                 if declared.is_none() {
                     self.opaque.insert(self.type_ident(&key));
                     let arity = self.model.opaque_arity.entry(self.type_ident(&key)).or_default();

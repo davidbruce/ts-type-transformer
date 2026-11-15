@@ -1,12 +1,12 @@
 # Example target: Gleam on JavaScript. Functions and custom types, generics
-# without constraints; no methods, subtypes, overloads or optional arguments:
+# without constraints, subtypes as phantom types; no methods, overloads or optional arguments:
 # members are functions of their type's, an optional argument an Option.
 [constructs]
 classes = "pair"
 type_ops = "evaluate"
 aliases = "expand"
 intersections = "merge"
-inheritance = "flatten"
+inheritance = "keep"
 nullable = "wrap"
 literals = "enum"
 anonymous = "hoist"

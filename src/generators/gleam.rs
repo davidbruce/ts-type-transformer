@@ -2,12 +2,15 @@
 // types and external functions, each with an FFI module that calls the API
 // and converts between JavaScript's values and Gleam's.
 //
-// Gleam modules may not import each other in a cycle. A class is an opaque
-// type, which names nothing: each area's are in `bindings/types/<area>`,
-// importing nothing. Enums, unions and callbacks, which may name each other,
-// are in `bindings/types`; `Promise`, `JsError` and `Codec` in
-// `bindings/runtime`. An area's functions, in `bindings/<area>`, import
-// only types, so no module imports one that imports it.
+// Gleam modules may not import each other in a cycle. Every type is in
+// `bindings/types`; `Promise`, `JsError` and `Codec` in `bindings/runtime`.
+// An area's functions, in `bindings/<area>`, import only types, so no
+// module imports one that imports it.
+//
+// Subtypes are phantom types along each class's chain of first bases:
+// `Element(a) = Node(ElementTag(a))`. Parameters are open (`Node(a)`, any
+// subtype); results, callbacks' parameters and what lists and variants hold
+// are closed (`Node(Nil)`). See DESIGN.md.
 //
 // Gleam has functions and custom types; no methods, subtypes, overloads or
 // optional arguments. So, from the shared model (`generators::model`): a class
@@ -24,7 +27,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use roxmltree::Document;
 
 use super::js::{access, global, js_test};
-use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, model, with_self_args};
+use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, model, subst, walk, with_self_args};
 use super::names::{Kind, Naming};
 
 const KEYWORDS: &[&str] = &[
@@ -46,7 +49,12 @@ pub const NAMING: Naming = Naming {
     reserved: || KEYWORDS.iter().chain(OWN).chain(OWN_VALUES).map(|k| k.to_string()).collect(),
     // An external `Promise` is Gleam's own; a class the API declares as
     // `Option` is not, and gives way.
-    type_names: |candidate, _, kind, _| if kind == Kind::Opaque && (OWN.contains(&candidate) || candidate == "PromiseLike") { Vec::new() } else { vec![upper(candidate)] },
+    type_names: |candidate, _, kind, _| match kind {
+        Kind::Opaque if OWN.contains(&candidate) || candidate == "PromiseLike" => Vec::new(),
+        // A class's marker for the phantom of its subtypes.
+        Kind::Class => vec![upper(candidate), format!("{}Tag", upper(candidate))],
+        _ => vec![upper(candidate)],
+    },
     values_of: |own, name, kind, m| {
         let prefix = snake(own);
         // Every type has a codec: `shape_codec`.
@@ -57,7 +65,14 @@ pub const NAMING: Naming = Naming {
         if c.iterates.is_some() || c.elements.is_some() {
             out.push(lower(&format!("{prefix}_to_list")));
         }
-        out.extend(c.ancestors.iter().map(|a| lower(&format!("{prefix}_as_{}", snake(&upper(a))))));
+        if c.elements.is_some() {
+            out.extend([lower(&format!("{prefix}_get_at")), lower(&format!("{prefix}_length"))]);
+        }
+        out.push(lower(&format!("as_{prefix}")));
+        out.extend(secondary(m, c).iter().map(|a| lower(&format!("{prefix}_as_{}", snake(&upper(a))))));
+        if c.js.is_some() {
+            out.extend([lower(&format!("{prefix}_from")), lower(&format!("{prefix}_cast"))]);
+        }
         out
     },
     types_apart: true,
@@ -138,6 +153,18 @@ struct Gen<'m> {
     units: BTreeMap<String, Unit>,
     // The module each Gleam type is declared in.
     home: HashMap<String, String>,
+    // Each class's type parameter count; and the class its chain continues
+    // from, with the arguments it gives it.
+    classes: HashMap<String, usize>,
+    parents: HashMap<String, (String, Vec<Ty>)>,
+    // Where a class's type is open, `Element(a)`, any subtype (a function's
+    // parameters): the variables given out. None where it is closed,
+    // `Element(Nil)`, that type and no more (what comes back, what a callback
+    // is given, what a list or variant holds).
+    open: RefCell<Option<usize>>,
+    // A function's own type parameters bound to a class (`T extends Node`):
+    // that class, open in the parameter's variable.
+    bound: RefCell<HashMap<String, (String, Vec<Ty>)>>,
     skipped: BTreeMap<String, usize>,
 }
 
@@ -201,6 +228,9 @@ impl<'m> Gen<'m> {
 
     // A generic type named without its arguments: `Polygon(Dynamic)`.
     fn bare(&self, n: &str) -> String {
+        if self.classes.contains_key(n) {
+            return self.class_type(n, &[]);
+        }
         let arity = self.m.classes.iter().find(|c| c.name == n).map(|c| c.type_params.len())
             .or_else(|| self.m.opaque_arity.get(n).copied())
             .or_else(|| self.m.unions.iter().find(|u| u.name == n).map(|u| u.type_params.len()))
@@ -217,6 +247,41 @@ impl<'m> Gen<'m> {
 
     fn tvar(n: &str) -> String {
         lower(n)
+    }
+
+    // A class type's last argument: a fresh variable where open, else `Nil`.
+    fn phantom(&self) -> String {
+        let mut open = self.open.borrow_mut();
+        match open.as_mut() {
+            Some(k) => {
+                *k += 1;
+                format!("sub_{k}")
+            }
+            None => "Nil".into(),
+        }
+    }
+
+    // `f`, with class types closed.
+    fn closed<T>(&self, f: impl FnOnce() -> T) -> T {
+        let was = self.open.replace(None);
+        let out = f();
+        *self.open.borrow_mut() = was;
+        out
+    }
+
+    // A class's type with its arguments (`Dynamic` for those not given) and
+    // its last, phantom one.
+    fn class_type(&self, n: &str, args: &[Ty]) -> String {
+        let count = self.classes[n];
+        let mut parts: Vec<String> = (0..count).map(|i| match args.get(i) {
+            Some(a) => self.closed(|| self.ty(a)),
+            None => {
+                self.note("Dynamic");
+                "Dynamic".to_string()
+            }
+        }).collect();
+        parts.push(self.phantom());
+        format!("{}({})", self.gt(n), parts.join(", "))
     }
 
     fn decodable(&self, n: &str) -> bool {
@@ -268,15 +333,28 @@ impl<'m> Gen<'m> {
             }
             Ty::NamedUnion(n) if self.decodable(n) => self.bare(n),
             Ty::NamedUnion(_) => dynamic(),
-            Ty::Param(n) => Self::tvar(n),
+            Ty::Param(n) => match self.bound.borrow().get(n).cloned() {
+                Some((class, args)) => {
+                    let inner = self.closed(|| args.iter().map(|a| self.ty(a)).collect::<Vec<_>>());
+                    let mut parts = inner;
+                    parts.extend((parts.len()..self.classes[&class]).map(|_| "Dynamic".to_string()));
+                    parts.push(Self::tvar(n));
+                    format!("{}({})", self.gt(&class), parts.join(", "))
+                }
+                None => Self::tvar(n),
+            },
+            Ty::Generic(n, args) if self.classes.contains_key(n) => self.class_type(n, args),
             Ty::Generic(n, _) if self.m.unions.iter().any(|u| u.name == *n) && !self.decodable(n) => dynamic(),
             // A callback takes the type arguments it uses.
             Ty::Generic(n, args) if self.callbacks.contains_key(n) => {
-                let args: Vec<String> = self.callbacks[n].iter().filter_map(|&i| args.get(i)).map(|a| self.ty(a)).collect();
+                let args: Vec<String> = self.closed(|| self.callbacks[n].iter().filter_map(|&i| args.get(i)).map(|a| self.ty(a)).collect());
                 if args.is_empty() { self.gt(n) } else { format!("{}({})", self.gt(n), args.join(", ")) }
             }
             Ty::Generic(n, args) if args.is_empty() => self.bare(n),
-            Ty::Generic(n, args) => format!("{}({})", self.gt(n), args.iter().map(|a| self.ty(a)).collect::<Vec<_>>().join(", ")),
+            Ty::Generic(n, args) => {
+                let args = self.closed(|| args.iter().map(|a| self.ty(a)).collect::<Vec<_>>());
+                format!("{}({})", self.gt(n), args.join(", "))
+            }
         }
     }
 
@@ -284,6 +362,7 @@ impl<'m> Gen<'m> {
     fn to_gleam(&self, t: &Ty, x: &str) -> String {
         match t {
             // A type parameter's values cross by the codec the function was given.
+            Ty::Param(n) if self.bound.borrow().contains_key(n) => x.to_string(),
             Ty::Param(n) => format!("{}.to({x})", codec_var(n)),
             Ty::Void => format!("({x}, undefined)"),
             Ty::Nullable(inner, _) => format!("((v) => v == null ? new None() : new Some({}))({x})", self.to_gleam(inner, "v")),
@@ -325,6 +404,9 @@ impl<'m> Gen<'m> {
     // option, list, tuple or promise, through a callback or a union. Not
     // inside a handle (`Box(t)`), which crosses as it is.
     fn crosses(&self, t: &Ty, p: &str) -> bool {
+        if self.bound.borrow().contains_key(p) {
+            return false;
+        }
         match t {
             Ty::Param(n) => n == p,
             Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => self.crosses(inner, p),
@@ -337,6 +419,7 @@ impl<'m> Gen<'m> {
     // A JavaScript expression that is `x`, Gleam's value, as JavaScript has it.
     fn from_gleam(&self, t: &Ty, x: &str) -> String {
         match t {
+            Ty::Param(n) if self.bound.borrow().contains_key(n) => x.to_string(),
             Ty::Param(n) => format!("{}.from({x})", codec_var(n)),
             Ty::Nullable(inner, undefined) => format!("((v) => v instanceof Some ? {} : {})({x})", self.from_gleam(inner, "v[0]"), if *undefined { "undefined" } else { "null" }),
             Ty::Array => format!("{x}.toArray()"),
@@ -359,10 +442,24 @@ impl<'m> Gen<'m> {
 
     // One external function, `name`, and its JavaScript.
     fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) {
+        // Its own type parameters bound to a class are that class's type, open
+        // in the parameter: `append_child(self: Node(a), node: Node(t)) -> Node(t)`.
+        *self.bound.borrow_mut() = f
+            .type_params
+            .iter()
+            .filter_map(|p| match &p.constraint {
+                Some(Ty::Obj(c)) if self.classes.contains_key(c) => Some((p.name.clone(), (c.clone(), Vec::new()))),
+                Some(Ty::Generic(c, args)) if self.classes.contains_key(c) => Some((p.name.clone(), (c.clone(), args.clone()))),
+                _ => None,
+            })
+            .collect();
         let mut params = Vec::new();
         let mut js_params = Vec::new();
+        // A class's type is open in the parameters: any subtype.
+        *self.open.borrow_mut() = Some(0);
         if let Some((class, tps)) = owner.filter(|_| Class::has_self(f)) {
-            params.push(format!("self: {}{}", self.gt(class), Self::type_params(tps)));
+            let own: Vec<Ty> = tps.iter().map(|p| Ty::Param(p.name.clone())).collect();
+            params.push(format!("self: {}", self.class_type(class, &own)));
             js_params.push("self".to_string());
         }
         let mut taken: HashSet<String> = HashSet::from(["self".to_string()]);
@@ -373,12 +470,14 @@ impl<'m> Gen<'m> {
                 id.push('_');
             }
             let last_rest = f.rest && i == f.params.len() - 1;
-            params.push(format!("{id}: {}", self.ty(t)));
+            let param_ty = self.ty(t);
+            params.push(format!("{id}: {param_ty}"));
             js_params.push(id.clone());
             let value = self.from_gleam(t, &id);
             args.push(if last_rest { format!("...({value} ?? [])") } else { value });
         }
         // A codec for each type parameter whose values cross: the class's, then the function's own.
+        *self.open.borrow_mut() = None;
         let class_params: &[TParam] = owner.map_or(&[], |o| o.1);
         let mut seen = HashSet::new();
         for p in class_params.iter().chain(&f.type_params).filter(|p| seen.insert(p.name.clone())) {
@@ -416,6 +515,7 @@ impl<'m> Gen<'m> {
         let ret = self.ty(&f.ret);
         self.out += &format!("@external(javascript, \"{}\", \"{name}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
         self.ffi += &format!("export function {name}({}) {{\n  {body}\n}}\n", js_params.join(", "));
+        self.bound.borrow_mut().clear();
     }
 
     // A union as a custom type, and its conversions: told apart by its tests.
@@ -445,6 +545,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let root_import = doc.root_element().attribute("import").map(str::to_string);
     let mut m = model(xml, "Gleam")?;
+    take_secondary(&mut m);
     super::names::settle(&mut m, &NAMING);
     break_cycles(&mut m);
     let mut g = Gen {
@@ -459,6 +560,10 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         used: RefCell::default(),
         units: BTreeMap::new(),
         home: HashMap::new(),
+        classes: m.classes.iter().map(|c| (c.name.clone(), c.type_params.len())).collect(),
+        parents: m.classes.iter().filter_map(|c| parent(&m, c).map(|p| (c.name.clone(), p))).collect(),
+        open: RefCell::new(None),
+        bound: RefCell::default(),
         skipped: m.skipped.clone(),
     };
 
@@ -554,7 +659,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let segments: Vec<String> = area.split('/').filter(|s| !s.is_empty()).map(lower).collect();
         let mut path = format!("bindings/{}", segments.join("/"));
         let mut n = 2;
-        while !taken.insert(path.clone()) || !taken.insert(class_unit(&path)) {
+        while !taken.insert(path.clone()) {
             path = format!("bindings/{}_{n}", segments.join("/"));
             n += 1;
         }
@@ -564,7 +669,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         g.home.insert(o.to_string(), RUNTIME.into());
     }
     for c in &m.classes {
-        g.home.insert(g.tname(&c.name), class_unit(&paths[&c.module]));
+        g.home.insert(g.tname(&c.name), TYPES.into());
+        g.home.insert(format!("{}Tag", g.tname(&c.name)), TYPES.into());
     }
     let others = m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)).chain(m.callbacks.iter().map(|c| &c.name)).chain(m.unions.iter().map(|u| &u.name)).chain(&m.opaque);
     for n in others.filter(|n| !OWN.contains(&n.as_str()) && *n != "PromiseLike") {
@@ -693,11 +799,45 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let arity = m.opaque_arity.get(o).copied().unwrap_or(0);
         codecs.push((o.clone(), (1..=arity).map(|i| TParam { name: format!("t{i}"), default: None, constraint: None }).collect(), false, TYPES.to_string()));
     }
-    // Classes: an opaque type each, in its area's module of types.
+    // Classes. A class with no class for a base is an opaque type, its last
+    // parameter a phantom: `Node(a)`. One with a base is its base's type,
+    // with a marker of its own for the phantom: `Element(a) = Node(ElementTag(a))`.
+    // So an `Element(Nil)` is a `Node(ElementTag(Nil))`: a Node to any function
+    // that takes a `Node(a)`, and nothing more than an Element.
+    // A base's arguments may not name the class, nor one below it on its
+    // chain (`BitmapFont extends AbstractBitmapFont<BitmapFont>`): an alias
+    // in terms of itself. Those are `Dynamic`.
+    let mut below: HashMap<String, HashSet<String>> = HashMap::new();
     for c in &m.classes {
-        g.switch(&class_unit(&paths[&c.module]));
-        g.out += &format!("pub type {}{}\n\n", g.tname(&c.name), Gen::type_params(&c.type_params));
-        codecs.push((c.name.clone(), c.type_params.clone(), false, g.unit.clone()));
+        let mut at = c.name.clone();
+        below.entry(at.clone()).or_default().insert(c.name.clone());
+        while let Some((p, _)) = g.parents.get(&at) {
+            below.entry(p.clone()).or_default().insert(c.name.clone());
+            at = p.clone();
+        }
+    }
+    for c in &m.classes {
+        let name = g.tname(&c.name);
+        let mut vars: Vec<String> = c.type_params.iter().map(|p| Gen::tvar(&p.name)).collect();
+        vars.push(PHANTOM.into());
+        let vars = vars.join(", ");
+        match g.parents.get(&c.name).cloned() {
+            None => g.out += &format!("pub type {name}({vars})\n\n"),
+            Some((base, args)) => {
+                let own = &below[&c.name];
+                let args: Vec<Ty> = args.iter().map(|a| walk(a, &|t| matches!(t, Ty::Obj(n) | Ty::Generic(n, _) if own.contains(n)).then_some(Ty::Any))).collect();
+                let mut parts: Vec<String> = g.closed(|| args.iter().map(|a| g.ty(a)).collect());
+                while parts.len() < g.classes[&base] {
+                    g.note("Dynamic");
+                    parts.push("Dynamic".into());
+                }
+                parts.push(format!("{name}Tag({vars})"));
+                g.out += &format!("pub type {name}Tag({vars})\n\npub type {name}({vars}) = {}({})\n\n", g.gt(&base), parts.join(", "));
+            }
+        }
+        let mut params = c.type_params.clone();
+        params.push(TParam { name: PHANTOM.into(), default: None, constraint: None });
+        codecs.push((c.name.clone(), params, false, TYPES.to_string()));
     }
     for (n, params, converts, unit) in codecs {
         g.switch(&unit);
@@ -722,8 +862,15 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         g.switch(&paths[&c.module]);
         // Noted where written: a class may have no functions.
         let name = g.tname(&c.name);
-        let params = Gen::type_params(&c.type_params);
         let prefix = snake(&name);
+        let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
+        // The class's type, open (any subtype) or closed.
+        let open = |g: &Gen| {
+            *g.open.borrow_mut() = Some(0);
+            let t = g.class_type(&c.name, &own);
+            *g.open.borrow_mut() = None;
+            t
+        };
         for (constant, value) in &c.consts {
             let gleam = if value.starts_with('"') {
                 value.clone()
@@ -750,28 +897,59 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
             let id = g.value_name(&format!("{prefix}_to_list"));
             let elem_ty = g.ty(&elem);
-            g.note(&name);
-            g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(self: {name}{params}) -> List({elem_ty})\n\n", g.own_ffi());
+            let this = open(&g);
+            g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(self: {this}) -> List({elem_ty})\n\n", g.own_ffi());
             g.ffi += &format!("export function {id}(self) {{\n  return toList(Array.from(self, (v) => {}));\n}}\n", g.to_gleam(&elem, "v"));
+        }
+        // A subclass of Array has no class to inherit Array's members from:
+        // its elements by index, and how many.
+        if let Some(elem) = c.elements.as_ref() {
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            let elem_ty = g.ty(&elem);
+            g.note("Option");
+            let (at, length) = (g.value_name(&format!("{prefix}_get_at")), g.value_name(&format!("{prefix}_length")));
+            let this = open(&g);
+            g.out += &format!("@external(javascript, \"{}\", \"{at}\")\npub fn {at}(self: {this}, index: Float) -> Option({elem_ty})\n\n", g.own_ffi());
+            let this = open(&g);
+            g.out += &format!("@external(javascript, \"{}\", \"{length}\")\npub fn {length}(self: {this}) -> Float\n\n", g.own_ffi());
+            g.ffi += &format!(
+                "export function {at}(self, i) {{\n  const v = self[i];\n  return v === undefined ? new None() : new Some({});\n}}\nexport function {length}(self) {{\n  return self.length;\n}}\n",
+                g.to_gleam(&elem, "v")
+            );
         }
         if c.iterates_async.is_some() {
             g.skip("async iteration");
         }
-        // An ancestor's functions take the type: `shape_as_named(s)`.
-        for a in &c.ancestors {
-            let Some(k) = m.classes.iter().find(|k| k.name == *a) else { continue };
-            let args = if k.type_params.is_empty() {
-                String::new()
-            } else {
-                match base_args(&m, c, a) {
-                    Some(args) => format!("({})", args.iter().map(|t| g.ty(t)).collect::<Vec<_>>().join(", ")),
-                    None => continue,
-                }
-            };
-            let id = g.value_name(&format!("{prefix}_as_{}", snake(&g.tname(a))));
-            let ancestor = g.gt(a);
-            g.note(&name);
-            g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {name}{params}) -> {ancestor}{args}\n\n", g.runtime_ffi());
+        // Upcasts. Along the chain a subtype is its base already; this closes
+        // the type at this class, for a list or a branch of several subtypes:
+        // `as_element(div)` is an `Element(Nil)`.
+        let id = g.value_name(&format!("as_{prefix}"));
+        let (this, closed) = (open(&g), g.class_type(&c.name, &own));
+        g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
+        // A base off the chain, whose members it has taken: `html_element_as_global_event_handlers(e)`.
+        for a in secondary(&m, c) {
+            let Some(args) = base_args(&m, c, &a) else { continue };
+            let id = g.value_name(&format!("{prefix}_as_{}", snake(&g.tname(&a))));
+            let (this, base) = (open(&g), g.class_type(&a, &args));
+            g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {base}\n\n", g.runtime_ffi());
+        }
+        // Downcasts, checked: only a class has a constructor to test against.
+        if let Some(js) = &c.js {
+            let test = format!("v instanceof {}", global(js));
+            let target = g.class_type(&c.name, &[]);
+            let root = chain_root(&g, &c.name);
+            if root != c.name {
+                let id = g.value_name(&format!("{prefix}_from"));
+                *g.open.borrow_mut() = Some(0);
+                let from = g.class_type(&root, &[]);
+                *g.open.borrow_mut() = None;
+                g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(value: {from}) -> Result({target}, Nil)\n\n", g.own_ffi());
+                g.ffi += &format!("export function {id}(v) {{\n  return {test} ? new Ok(v) : new GleamError(undefined);\n}}\n");
+            }
+            let id = g.value_name(&format!("{prefix}_cast"));
+            g.note("Dynamic");
+            g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(value: Dynamic) -> Result({target}, Nil)\n\n", g.own_ffi());
+            g.ffi += &format!("export function {id}(v) {{\n  return {test} ? new Ok(v) : new GleamError(undefined);\n}}\n");
         }
     }
     for f in &m.funcs {
@@ -826,9 +1004,83 @@ const RUNTIME: &str = "bindings/runtime";
 const TYPES: &str = "bindings/types";
 const OWN_RUNTIME: &[&str] = &["Promise", "JsError", "Codec"];
 
-// An area's module of class types: `bindings/areas/main` -> `bindings/types/areas_main`.
-fn class_unit(area: &str) -> String {
-    format!("{TYPES}/{}", area.trim_start_matches("bindings/").replace('/', "_"))
+// A class type's phantom parameter, where it is declared.
+const PHANTOM: &str = "sub";
+
+// The class a class's chain continues from, and the arguments it gives it:
+// its first base that is a class of the model.
+fn parent(m: &Model, c: &Class) -> Option<(String, Vec<Ty>)> {
+    c.bases.iter().find_map(|b| match b {
+        Ty::Obj(n) if m.classes.iter().any(|k| k.name == *n) => Some((n.clone(), Vec::new())),
+        Ty::Generic(n, args) if m.classes.iter().any(|k| k.name == *n) => Some((n.clone(), args.clone())),
+        _ => None,
+    })
+}
+
+// The top of a class's chain.
+fn chain_root(g: &Gen, class: &str) -> String {
+    let mut at = class.to_string();
+    while let Some((p, _)) = g.parents.get(&at) {
+        at = p.clone();
+    }
+    at
+}
+
+// Every class a class extends, through any base.
+fn ancestors(m: &Model, c: &Class) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut todo: Vec<&Class> = vec![c];
+    while let Some(k) = todo.pop() {
+        for b in &k.bases {
+            let (Ty::Obj(n) | Ty::Generic(n, _)) = b else { continue };
+            if let Some(base) = m.classes.iter().find(|x| x.name == *n)
+                && !out.contains(n)
+            {
+                out.push(n.clone());
+                todo.push(base);
+            }
+        }
+    }
+    out
+}
+
+// The classes a class extends off its chain: neither on the chain nor
+// extended by a class on it. Their members it takes as its own.
+fn secondary(m: &Model, c: &Class) -> Vec<String> {
+    let mut chain: Vec<&Class> = Vec::new();
+    let mut at = c;
+    while let Some((p, _)) = parent(m, at) {
+        let Some(k) = m.classes.iter().find(|k| k.name == p) else { break };
+        chain.push(k);
+        at = k;
+    }
+    let mut covered: HashSet<String> = chain.iter().map(|k| k.name.clone()).collect();
+    for k in &chain {
+        covered.extend(ancestors(m, k));
+    }
+    ancestors(m, c).into_iter().filter(|a| !covered.contains(a)).collect()
+}
+
+// Each class takes its secondary bases' members, their type arguments
+// applied; its own of a name win. Those on its chain it has as a subtype.
+fn take_secondary(m: &mut Model) {
+    let mut taken: Vec<(usize, Vec<Func>)> = Vec::new();
+    for (i, c) in m.classes.iter().enumerate() {
+        let mut names: HashSet<String> = c.funcs.iter().map(|f| f.name.clone()).collect();
+        let mut funcs = Vec::new();
+        for s in secondary(m, c) {
+            let (Some(k), Some(args)) = (m.classes.iter().find(|k| k.name == s), base_args(m, c, &s)) else { continue };
+            for f in k.funcs.iter().filter(|f| Class::has_self(f)) {
+                if names.insert(f.name.clone()) {
+                    funcs.push(map_types(f, &|t| subst(t, &k.type_params, &args)));
+                }
+            }
+        }
+        taken.push((i, funcs));
+    }
+    for (i, funcs) in taken {
+        m.classes[i].funcs.extend(funcs);
+    }
 }
 
 // `to` (a path from the package's root), relative to module `from`.

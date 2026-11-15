@@ -23,3 +23,7 @@ declare function largest(a: Shape, b: Shape | null): Shape | null;
 declare function nameOf(n: Named): string;
 declare function orUnit(s: Shape | undefined): Shape;
 declare function find(name: string): Shape | undefined;
+// A type parameter bound to a type: what it is given, it gives back.
+declare function adopt<T extends Named>(child: T): T;
+// A Named that is no Shape.
+declare function plain(): Named;

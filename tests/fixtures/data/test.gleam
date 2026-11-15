@@ -80,11 +80,12 @@ pub fn main() {
   check(b.unbox(t.EitherBox(bx), float) == 21.0, "union of Box(T)")
   check(b.ids() == [t.IdNumber(1.0), t.IdString("two")], "array of unions")
 
-  // A name both generic bases have is the type's own.
+  // Pipe extends Source(Float) and Sink(Float). It is a Source, and has
+  // Sink's members as its own, Float for T.
   let pp = b.pipe()
-  check(b.pipe_get_label(pp) == "pipe", "flattened")
+  check(b.pipe_get_label(pp) == "pipe", "a member of both bases")
   b.pipe_put(pp, 4.0)
-  check(b.pipe_take(pp) == 4.0, "flattened generic")
+  check(b.source_take(pp, r.codec_float()) == 4.0, "the base's, on the subtype")
 
   io.println("checks passed")
 }

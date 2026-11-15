@@ -26,3 +26,5 @@ globalThis.nameOf = n => n.name;
 // Strict on purpose: `null` and `undefined` are not interchangeable.
 globalThis.orUnit = s => (s === undefined ? Shape.unit() : s);
 globalThis.find = name => (name === "unit" ? Shape.unit() : undefined);
+globalThis.adopt = child => child;
+globalThis.plain = () => ({ name: "plain", describe: () => "plain" });

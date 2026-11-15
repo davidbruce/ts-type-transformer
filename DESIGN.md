@@ -273,14 +273,28 @@ the time control returns to JavaScript is reported, not lost.
   borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
 - Gleam (JavaScript target): no wasm and no glue, as F#; from the shared
   model, as the wasm targets, since Gleam has no methods, subtypes, overloads
-  or optional arguments. Gleam modules may not import each other in a cycle,
-  as the API's areas would (`Element.ownerDocument`, `Document.body`). A
-  class is an opaque type, which names nothing: each area's are in
-  `bindings/types/<area>`; enums, unions and callbacks, which may name each
-  other, in `bindings/types`; `Promise`, `JsError`, `Codec` in
-  `bindings/runtime`. An area's functions, named for their type
-  (`shape_get_size(s)`, `shape_as_named(s)`), are in `bindings/<area>`,
-  which imports types only. Each has an FFI module that calls the API and
+  or optional arguments. Subtypes are phantom types along each class's chain
+  of first bases: `Node(a)` is opaque, `Element(a) = Node(ElementTag(a))`,
+  so an `Element(Nil)` is a `Node` to any function that takes a `Node(a)`,
+  and only an Element. A function's parameters are open (`Node(a)`, any
+  subtype); what comes back, what a callback is given, what a list or
+  variant holds, are closed (`Node(Nil)`). Members are their declaring
+  type's: `named_get_name(shape)`. A type parameter bound to a class is that
+  class, open: `append_child(self: Node(a), node: Node(t)) -> Node(t)`.
+  Members of bases off the chain (mixins) are the class's own, with an
+  upcast to the base; `as_node(x)` closes a type at Node, for a list of
+  several kinds; a class at runtime has checked downcasts,
+  `html_input_element_from(target)` and `_cast(dynamic)`. An interface has
+  none: nothing at runtime says what it is. Where a base's arguments name the
+  class itself (`BitmapFont extends AbstractBitmapFont<BitmapFont>`), they are
+  `Dynamic`: an alias may not be defined in terms of itself. A subclass of
+  Array has `_to_list`, `_get_at` and `_length`. The DOM is 61,823
+  functions; flattened, it was 300,398.
+  Gleam modules may not import each other in a cycle, as the API's areas
+  would (`Element.ownerDocument`, `Document.body`). Every type is in
+  `bindings/types`, which imports only `bindings/runtime` (`Promise`,
+  `JsError`, `Codec`); an area's functions are in `bindings/<area>`, which
+  imports types only. Each has an FFI module that calls the API and
   converts what Gleam holds otherwise:
   an `Option(a)` for a nullable value or optional argument, a `List(a)` for an
   array, custom types for unions and string enums, a Gleam function for a

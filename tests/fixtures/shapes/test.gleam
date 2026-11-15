@@ -2,6 +2,7 @@
 import bindings/areas/main as b
 import bindings/types as t
 import gleam/io
+import gleam/list
 import gleam/option.{None, Some}
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -26,15 +27,18 @@ pub fn main() {
   b.shape_set_size(s, 4.0)
   check(b.shape_get_size(s) == 4.0, "property")
 
-  // Inherited members are the type's own; an ancestor is reached by `as`.
-  check(b.shape_get_name(s) == "square-3", "inherited")
-  check(b.shape_describe(s) == "square-3 (16)", "inherited method")
-  check(b.name_of(b.shape_as_named(s)) == "square-3", "upcast")
+  // A Shape is a Named: the Named's functions take it as it is, no upcast.
+  check(b.named_get_name(s) == "square-3", "inherited")
+  check(b.named_describe(s) == "square-3 (16)", "inherited method")
+  check(b.name_of(s) == "square-3", "a Shape where a Named is wanted")
+  // Closing the type at Named, for a list of several kinds of Named.
+  let named = [b.as_named(s), b.as_named(b.shape_unit())]
+  check(list.length(named) == 2, "upcast")
 
   // Overloads are renamed.
   let big = b.shape_scale(s, 2.0)
   check(b.shape_get_size(big) == 8.0, "overload")
-  check(b.shape_get_name(b.shape_scale_with_name(s, 2.0, "big")) == "big", "renamed overload")
+  check(b.named_get_name(b.shape_scale_with_name(s, 2.0, "big")) == "big", "renamed overload")
 
   // An optional argument is an Option.
   b.shape_resize(s, 2.6, None)
@@ -60,6 +64,14 @@ pub fn main() {
   check(b.or_unit(Some(s)) == s, "defined argument")
   check(b.find("nothing") == None, "undefined result")
   check(option.map(b.find("unit"), b.shape_area) == Some(1.0), "defined result")
+
+  // `adopt<T extends Named>(child: T): T` takes any Named and gives back its
+  // type: a Shape stays a Shape.
+  check(b.shape_area(b.adopt(s)) == b.shape_area(s), "bound type parameter")
+  // Narrowing, checked: a Shape is a class at runtime; a plain Named is not one.
+  let assert Ok(back) = b.shape_from(b.as_named(s))
+  check(b.shape_area(back) == b.shape_area(s), "checked downcast")
+  check(b.shape_from(b.plain()) == Error(Nil), "not a Shape")
 
   io.println("checks passed")
 }
