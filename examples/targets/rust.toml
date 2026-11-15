@@ -5,6 +5,7 @@
 classes = "pair"
 type_ops = "evaluate"
 aliases = "expand"
+constraints = "exact"
 intersections = "merge"
 nullable = "wrap"
 literals = "enum"

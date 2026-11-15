@@ -29,6 +29,7 @@
       <attribute name="inheritance"><choice><value>keep</value><value>flatten</value></choice></attribute>
       <attribute name="aliases"><choice><value>keep</value><value>expand</value></choice></attribute>
       <attribute name="generics"><choice><value>keep</value><value>erase</value></choice></attribute>
+      <attribute name="constraints"><choice><value>keep</value><value>nominal</value><value>exact</value></choice></attribute>
       <attribute name="nullable"><choice><value>keep</value><value>wrap</value></choice></attribute>
       <attribute name="literals"><choice><value>keep</value><value>enum</value></choice></attribute>
       <attribute name="anonymous"><choice><value>keep</value><value>hoist</value></choice></attribute>

@@ -20,6 +20,9 @@ pub struct Options {
     pub inheritance: bool,
     pub generics: bool,
     pub aliases: bool,
+    pub constraints: bool,
+    // A type parameter meets a constraint only with that one (`constraints = "exact"`).
+    pub exact_constraints: bool,
     pub nullable: bool,
     pub literals: bool,
     pub anonymous: bool,
@@ -48,7 +51,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Options {
-            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, aliases: false, nullable: false,
+            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, aliases: false, constraints: false, exact_constraints: false, nullable: false,
             literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
         }
@@ -65,6 +68,7 @@ impl Options {
             "inheritance" => &mut self.inheritance,
             "generics" => &mut self.generics,
             "aliases" => &mut self.aliases,
+            "constraints" => &mut self.constraints,
             "nullable" => &mut self.nullable,
             "literals" => &mut self.literals,
             "anonymous" => &mut self.anonymous,
@@ -168,6 +172,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     }
     if o.classes {
         mark_class_refs(decls);
+    }
+    if o.constraints {
+        nominal_constraints(front, decls, o.exact_constraints);
     }
     annotate_unions(front, decls);
 }
@@ -1080,6 +1087,162 @@ fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
         }
     }
     inline_object_bases_with(front, decls, &aliases);
+}
+
+// `constraints = "nominal"`: a declaration's type parameter keeps its
+// constraint only where every use in the output satisfies it by name: a type
+// declared to extend it, a type parameter so constrained, a member of a union
+// it is. TypeScript checks by shape; a target that checks by name (Rust's
+// `T: Is<Base>`, C++'s `ts::extends`) would reject a use TypeScript accepts.
+// With `exact`, a type parameter meets only the constraint it has: Rust's
+// bounds do not follow bases (`T: Is<Readable>` is not `T: Is<Stream>`).
+// Dropping one can break another that relied on it: until settled.
+fn nominal_constraints(front: &mut Front, decls: &mut [Decl], exact: bool) {
+    fn key(r: &Ref) -> &str {
+        r.qualified.as_deref().unwrap_or(&r.name)
+    }
+    // Each declared type's bases, generic declarations, and union aliases.
+    fn collect(decls: &[Decl], prefix: &str, f: &mut Facts, generic: &mut HashMap<String, Vec<Option<Type>>>) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) => {
+                    let name = format!("{prefix}{}", i.name);
+                    // A map of keys to types: `M[K]` is one of its values.
+                    f.values.insert(name.clone(), i.members.iter().filter(|m| m.kind == MemberKind::Property).filter_map(|m| m.ty.clone()).collect());
+                    let mut bs: Vec<String> = i.extends.iter().filter_map(|e| if let Type::Ref(r) = e { Some(key(r).to_string()) } else { None }).collect();
+                    bs.extend(i.ancestors.iter().cloned());
+                    f.bases.insert(name.clone(), bs);
+                    for p in &i.type_params {
+                        f.named_params.insert(format!("{name}.{}", p.name), p.constraint.clone());
+                    }
+                    if i.type_params.iter().any(|p| p.constraint.is_some()) {
+                        generic.insert(name, i.type_params.iter().map(|p| p.constraint.clone()).collect());
+                    }
+                }
+                Decl::Alias(a) => {
+                    let name = format!("{prefix}{}", a.name);
+                    if let Type::Union(parts) = &a.ty {
+                        f.unions.insert(name.clone(), parts.clone());
+                    }
+                    for p in &a.type_params {
+                        f.named_params.insert(format!("{name}.{}", p.name), p.constraint.clone());
+                    }
+                    if a.type_params.iter().any(|p| p.constraint.is_some()) {
+                        generic.insert(name, a.type_params.iter().map(|p| p.constraint.clone()).collect());
+                    }
+                }
+                Decl::Namespace(n) => collect(&n.decls, &format!("{prefix}{}.", n.name), f, generic),
+                _ => {}
+            }
+        }
+    }
+    #[derive(Default)]
+    struct Facts {
+        bases: HashMap<String, Vec<String>>,
+        unions: HashMap<String, Vec<Type>>,
+        values: HashMap<String, Vec<Type>>,
+        params: HashMap<P<Symbol>, Option<Type>>,
+        // A declaration's own, by qualified name: `NodeListOf.TNode`.
+        named_params: HashMap<String, Option<Type>>,
+        exact: bool,
+    }
+    fn extends(f: &Facts, t: &str, c: &str) -> bool {
+        let mut todo = vec![t.to_string()];
+        let mut seen = HashSet::new();
+        while let Some(x) = todo.pop() {
+            if x == c {
+                return true;
+            }
+            if seen.insert(x.clone()) {
+                todo.extend(f.bases.get(&x).cloned().unwrap_or_default());
+            }
+        }
+        false
+    }
+    fn satisfies(f: &Facts, arg: &Type, c: &Type, depth: usize) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        if type_key(arg) == type_key(c) || matches!(c, Type::Primitive(p) if p == "any" || p == "unknown") || matches!(c, Type::Erased(_)) {
+            return true;
+        }
+        let parts = match c {
+            Type::Union(ps) => Some(ps.clone()),
+            Type::Ref(r) if r.kind == "typeAlias" => f.unions.get(key(r)).cloned(),
+            _ => None,
+        };
+        if let Some(ps) = parts {
+            return ps.iter().any(|p| satisfies(f, arg, p, depth + 1));
+        }
+        match arg {
+            Type::Union(ps) => ps.iter().all(|p| satisfies(f, p, c, depth + 1)),
+            Type::Op(op, _) => match &**op {
+                Op::IndexedAccess(Type::Ref(m), _) => f.values.get(key(m)).is_some_and(|vs| !vs.is_empty() && vs.iter().all(|v| satisfies(f, v, c, depth + 1))),
+                _ => false,
+            },
+            Type::Ref(r) if r.kind == "typeParameter" => {
+                let own = r.sym.and_then(|s| f.params.get(&s).cloned().flatten());
+                let pc = own.or_else(|| r.qualified.as_ref().and_then(|q| f.named_params.get(q).cloned().flatten()));
+                pc.is_some_and(|pc| if f.exact { type_key(&pc) == type_key(c) } else { satisfies(f, &pc, c, depth + 1) })
+            }
+            // A named union: each of its members.
+            Type::Ref(r) if r.kind == "typeAlias" && f.unions.contains_key(key(r)) => f.unions[key(r)].iter().all(|p| satisfies(f, p, c, depth + 1)),
+            Type::Ref(a) if matches!(a.kind, "class" | "interface") => matches!(c, Type::Ref(b) if matches!(b.kind, "class" | "interface") && extends(f, key(a), key(b))),
+            _ => false,
+        }
+    }
+    let mut dropped = 0;
+    loop {
+        let mut facts = Facts { exact, ..Facts::default() };
+        let mut generic = HashMap::new();
+        collect(decls, "", &mut facts, &mut generic);
+        for_each_type_params(decls, true, &mut |ps| {
+            for p in ps.iter() {
+                if let Some(s) = p.sym {
+                    facts.params.insert(s, p.constraint.clone());
+                }
+            }
+        });
+        let mut broken: HashSet<(String, usize)> = HashSet::new();
+        walk(decls, &mut |t, _| {
+            if let Type::Ref(r) = t
+                && let Some(cs) = generic.get(key(r))
+            {
+                for (i, arg) in r.args.iter().enumerate() {
+                    if let Some(Some(c)) = cs.get(i)
+                        && !satisfies(&facts, arg, c, 0)
+                    {
+                        broken.insert((key(r).to_string(), i));
+                    }
+                }
+            }
+            true
+        });
+        if broken.is_empty() {
+            break;
+        }
+        fn drop(decls: &mut [Decl], prefix: &str, broken: &HashSet<(String, usize)>, n: &mut usize) {
+            for d in decls {
+                let (name, ps) = match d {
+                    Decl::Interface(i) => (format!("{prefix}{}", i.name), &mut i.type_params),
+                    Decl::Alias(a) => (format!("{prefix}{}", a.name), &mut a.type_params),
+                    Decl::Namespace(ns) => {
+                        drop(&mut ns.decls, &format!("{prefix}{}.", ns.name), broken, n);
+                        continue;
+                    }
+                    _ => continue,
+                };
+                for (i, p) in ps.iter_mut().enumerate() {
+                    if p.constraint.is_some() && broken.contains(&(name.clone(), i)) {
+                        p.constraint = None;
+                        *n += 1;
+                    }
+                }
+            }
+        }
+        drop(decls, "", &broken, &mut dropped);
+    }
+    *front.stats.entry("dropped: constraint not met by name".into()).or_default() += dropped;
 }
 
 // `aliases = "expand"`: `List<number>`, where `type List<T> = T[]`, is

@@ -16,6 +16,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("inheritance", "flatten", "<extends>", "inherited members copied into each type"),
     ("aliases", "expand", "generic aliases of other than an object, a function or a union (`type List<T> = T[]`)", "each use is the alias's type with its arguments: `number[]`"),
     ("generics", "erase", "type parameters", "their constraint, or any"),
+    ("constraints", "nominal|exact", "a declaration's type parameter constraints, which TypeScript checks by shape", "kept only where every use in the output names a type declared to extend it, or a type parameter constrained so (nominal), or to it alone (exact)"),
     ("nullable", "wrap", "T | null | undefined", "<nullable> around T"),
     ("literals", "enum", "literal types", "enums for string unions, const= for constants"),
     ("anonymous", "hoist", "inline object and function types", "named declarations"),
@@ -153,6 +154,10 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
                     if key == "keyed_params" {
                         o.map_keyed = chosen == "map";
                     }
+                    if key == "constraints" {
+                        o.constraints = chosen != "keep";
+                        o.exact_constraints = chosen == "exact";
+                    }
                 }
                 ("limits", "union_param_overloads") => o.union_param_limit = count(&at, value)?,
                 ("limits", "intersection_members") => o.intersection_limit = count(&at, value)?,
@@ -216,6 +221,8 @@ pub fn describe(mut o: Options) -> Vec<(&'static str, &'static str)> {
                 "name"
             } else if *key == "keyed_params" && o.map_keyed {
                 "map"
+            } else if *key == "constraints" && o.exact_constraints {
+                "exact"
             } else if *o.slot(key).unwrap() {
                 first
             } else {

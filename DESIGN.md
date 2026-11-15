@@ -54,6 +54,8 @@ are errors. Example targets are in `examples/targets/`.
 | `inheritance` | `flatten` | `<extends>` | inherited members copied in, base type arguments applied; `<ancestor>` list kept | yes |
 | `aliases` | `expand` | generic aliases of other than an object, function or union: `type List<T> = T[]` | each use is the type with its arguments: `number[]` | no |
 | `generics` | `erase` | type parameters | their constraint, or `any` | no |
+| `constraints` | `nominal` | a declaration's type parameter constraints, which TypeScript checks by shape | kept only where every use in the output names a type declared to extend it, or a type parameter so constrained, as C++'s `ts::extends` checks | no |
+| `constraints` | `exact` | the same | as `nominal`, but a type parameter meets only the constraint it has: Rust's `T: Is<Readable>` is not `Is<Stream>` | no |
 | `nullable` | `wrap` | `T \| null \| undefined` | `<nullable absent="null\|undefined\|either">` | no |
 | `literals` | `enum` | literal types | string unions -> `<enum>`, constants -> `const=`, others widened | no |
 | `anonymous` | `hoist` | inline object and function types | named synthetic declarations | no |

@@ -406,6 +406,24 @@ fn packages_need_their_modules() {
     assert!(said.contains("no module for the package \"pb\""), "{said}");
 }
 
+// A declaration's constraint is kept where its uses meet it by name, and
+// with `exact` a type parameter meets only the constraint it has.
+#[test]
+fn constraints_are_kept_where_met_by_name() {
+    let input = root().join("tests/fixtures/constraints/api.d.ts");
+    let constrained = |xml: &str, decl: &str| {
+        let at = xml.find(&format!("name=\"{decl}\">")).unwrap_or_else(|| panic!("no {decl}"));
+        let body = &xml[at..at + xml[at..].find("</interface>").unwrap()];
+        body.contains("<constraint>")
+    };
+    let nominal = lower(&input, None, &["constraints=nominal"]);
+    assert!(constrained(&nominal, "Kept") && !constrained(&nominal, "ByShape"));
+    assert!(constrained(&nominal, "Options") && constrained(&nominal, "ReadableOptions"));
+    let exact = lower(&input, None, &["constraints=exact"]);
+    assert!(constrained(&exact, "Kept") && !constrained(&exact, "ByShape"));
+    assert!(!constrained(&exact, "Options") && constrained(&exact, "ReadableOptions"));
+}
+
 mod builtins {
     #[test] fn fsharp() { super::fsharp("builtins"); }
     #[test] fn c() { super::c("builtins"); }
