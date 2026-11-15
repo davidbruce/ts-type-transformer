@@ -783,7 +783,8 @@ fn flatten(front: &mut Front, decls: &mut [Decl]) {
                 if let Some(sym) = i.sym {
                     let (members, ancestors) = front.flattened(sym);
                     i.members = members;
-                    i.ancestors = ancestors;
+                    i.ancestor_syms = ancestors.iter().map(|a| a.1).collect();
+                    i.ancestors = ancestors.into_iter().map(|a| a.0).collect();
                     i.extends.clear();
                 }
             }
@@ -1601,7 +1602,7 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
             let name = by_values.entry(sorted(strings.clone())).or_insert_with(|| {
                 let name = unique(path.join(sep), &mut names);
                 let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone() }).collect();
-                enums.push(Enum { name: name.clone(), members, synthetic: true });
+                enums.push(Enum { name: name.clone(), sym: None, members, synthetic: true });
                 name
             });
             *t = Type::synthetic_ref(name.clone(), "enum", vec![]);
@@ -1815,7 +1816,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let body = std::mem::replace(t, Type::This);
                     added.push(match body {
                         Type::Object(members) => Decl::Interface(Interface {
-                            name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], members, class: None, synthetic: true, js_name: None,
+                            name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], ancestor_syms: vec![], members, class: None, synthetic: true, js_name: None,
                         }),
                         ty => Decl::Alias(Alias { name: name.clone(), sym: None, type_params, ty, computed: false, synthetic: true }),
                     });

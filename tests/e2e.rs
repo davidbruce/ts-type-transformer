@@ -49,9 +49,13 @@ fn lower_with(input: &Path, target: Option<&str>, configs: &[PathBuf], overrides
     String::from_utf8(out.stdout).unwrap()
 }
 
-// The packages in `dir/node_modules`, bound together.
+// The packages in `dir/node_modules`, bound together: those `packages.txt`
+// lists, or all.
 fn lower_packages(dir: &Path, target: &str) -> String {
-    let mut names: Vec<String> = fs::read_dir(dir.join("node_modules")).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    let mut names: Vec<String> = match fs::read_to_string(dir.join("packages.txt")) {
+        Ok(list) => list.lines().map(str::to_string).filter(|l| !l.is_empty()).collect(),
+        Err(_) => fs::read_dir(dir.join("node_modules")).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect(),
+    };
     names.sort();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"));
     cmd.arg("--from").arg(dir).arg("--config").arg(config(target));
@@ -412,7 +416,7 @@ fn packages_need_their_modules() {
 fn constraints_are_kept_where_met_by_name() {
     let input = root().join("tests/fixtures/constraints/api.d.ts");
     let constrained = |xml: &str, decl: &str| {
-        let at = xml.find(&format!("name=\"{decl}\">")).unwrap_or_else(|| panic!("no {decl}"));
+        let at = xml.find(&format!("name=\"{decl}\" id=")).unwrap_or_else(|| panic!("no {decl}"));
         let body = &xml[at..at + xml[at..].find("</interface>").unwrap()];
         body.contains("<constraint>")
     };
@@ -637,7 +641,7 @@ fn package_declarations_keep_apart() {
     }
     assert!(xml.matches("<class module=\"main\" name=\"Material\"").count() == 1 && !xml.contains("<interface module=\"main\" name=\"Material\"") && xml.contains("name=\"transparent\""), "one Material with both declarations' members:\n{xml}");
     // References follow: makeA returns a's own Item.
-    assert!(xml.contains("<ref name=\"a_Item\" kind=\"interface\"/>") && xml.contains("<ref name=\"b_Item\" kind=\"interface\"/>"), "references to renamed types:\n{xml}");
+    assert!(xml.contains("<ref name=\"a_Item\" kind=\"interface\" to=\"a_Item\"/>") && xml.contains("<ref name=\"b_Item\" kind=\"interface\" to=\"b_Item\"/>"), "references to renamed types:\n{xml}");
     assert!(xml.contains("name=\"width\"") && !xml.contains("<extends>\n      <object>"), "an object base gives its members:\n{xml}");
     let model = model(&xml, "Rust");
     assert!(model.skipped.keys().any(|k| k.contains("constructor type")), "a constructor type is a value: {:?}", model.skipped);
@@ -650,7 +654,7 @@ fn package_declarations_keep_apart() {
 fn generated_names_can_be_chosen() {
     let api = root().join("tests/fixtures/data/api.d.ts");
     let xml = lower(&api, Some("rust"), &["rename.Options_mode=Mode", "rename.norm_point=Point"]);
-    assert!(xml.contains("name=\"Mode\" synthetic=\"true\"") && xml.contains("<ref name=\"Mode\" kind=\"enum\"/>") && !xml.contains("Options_mode"), "the enum and every reference to it are renamed");
+    assert!(xml.contains("name=\"Mode\" id=\"Mode\" synthetic=\"true\"") && xml.contains("<ref name=\"Mode\" kind=\"enum\" to=\"Mode\"/>") && !xml.contains("Options_mode"), "the enum and every reference to it are renamed");
     assert!(xml.contains("name=\"Point\"") && !xml.contains("norm_point"));
     let fails = |setting: &str, why: &str| {
         let out = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&api).arg("--config").arg(config("rust")).args(["--set", setting]).output().unwrap();
@@ -1032,9 +1036,9 @@ fn multifile_packages_keep_their_types() {
     }
     // An unnamed default class is named for its file: `default` is a keyword in several targets.
     assert!(xml.contains("<class module=\"main\" name=\"anon_default\""), "missing default class:\n{xml}");
-    assert!(xml.contains("<ref name=\"Point\" kind=\"interface\"/>"), "origin return should reference Point interface:\n{xml}");
-    assert!(xml.contains("<ref name=\"Coord\" kind=\"interface\"/>"), "Point.x should reference transitive Coord:\n{xml}");
-    assert!(xml.contains("<ref name=\"NsType\" kind=\"interface\"/>"), "Ns.NsType should reference NsType interface:\n{xml}");
+    assert!(xml.contains("<ref name=\"Point\" kind=\"interface\" to=\"Point\"/>"), "origin return should reference Point interface:\n{xml}");
+    assert!(xml.contains("<ref name=\"Coord\" kind=\"interface\" to=\"Coord\"/>"), "Point.x should reference transitive Coord:\n{xml}");
+    assert!(xml.contains("<ref name=\"NsType\" kind=\"interface\" to=\"NsType\"/>"), "Ns.NsType should reference NsType interface:\n{xml}");
 
     // Verify generated Rust bindings actually compile against those multi-file types.
     if let Some(rustc) = rustc_wasm() {

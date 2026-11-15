@@ -102,6 +102,25 @@
     </optional>
   </define>
 
+  <define name="id">
+    <optional>
+      <attribute name="id">
+        <a:documentation>A type declaration's id: its path (`Konva.Shape`). What a
+          reference's `to` names.</a:documentation>
+      </attribute>
+    </optional>
+  </define>
+
+  <define name="to">
+    <optional>
+      <attribute name="to">
+        <a:documentation>The id of the declaration a reference means, found by the checker's
+          symbol. Absent: a type not declared in this output, though one declared here may
+          have its name (GeoJSON's `Point` beside leaflet's).</a:documentation>
+      </attribute>
+    </optional>
+  </define>
+
   <define name="jsName">
     <attribute name="jsName">
       <a:documentation>The real JavaScript name, when overloads=rename gave this overload a
@@ -114,6 +133,7 @@
 
   <define name="interface.body">
     <attribute name="name"/>
+    <ref name="id"/>
     <optional><ref name="jsName"/></optional>
     <ref name="synthetic"/>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
@@ -124,6 +144,7 @@
   <!-- classes=pair: an interface and its `var X: { prototype: X; new(); statics }`. -->
   <define name="class.body">
     <attribute name="name"/>
+    <ref name="id"/>
     <optional><ref name="jsName"/></optional>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <ref name="bases"/>
@@ -150,7 +171,7 @@
     <choice>
       <zeroOrMore><ref name="extends"/></zeroOrMore>
       <zeroOrMore>
-        <element name="ancestor"><attribute name="name"/></element>
+        <element name="ancestor"><attribute name="name"/><ref name="to"/></element>
       </zeroOrMore>
     </choice>
   </define>
@@ -162,6 +183,7 @@
 
   <define name="typeAlias.body">
     <attribute name="name"/>
+    <ref name="id"/>
     <ref name="synthetic"/>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <ref name="type"/>
@@ -183,6 +205,7 @@
 
   <define name="enum.body">
     <attribute name="name"/>
+    <ref name="id"/>
     <ref name="synthetic"/>
     <zeroOrMore>
       <element name="member">
@@ -519,6 +542,7 @@
     <optional>
       <attribute name="file"><a:documentation>Declaring file's base name, when it is not the input.</a:documentation></attribute>
     </optional>
+    <ref name="to"/>
     <!-- Type arguments, defaults spelled out. -->
     <zeroOrMore><ref name="type"/></zeroOrMore>
   </define>

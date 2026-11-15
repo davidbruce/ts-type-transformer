@@ -335,6 +335,8 @@ struct Builder<'a> {
     js_prefix: String,
     // See `type_ident`.
     declared: Vec<String>,
+    // The XML says which declaration each reference is (`to`).
+    has_ids: bool,
     idents: std::cell::RefCell<HashMap<String, String>>,
     ident_taken: std::cell::RefCell<HashSet<String>>,
     // A generic callback's own type parameters, bound as untyped values: a
@@ -366,6 +368,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         root_import: doc.root_element().attribute("import").map(str::to_string),
         js_prefix: String::new(),
         declared: Vec::new(),
+        has_ids: doc.descendants().any(|d| d.has_attribute("id")),
         idents: Default::default(),
         ident_taken: Default::default(),
         erased: HashSet::new(),
@@ -396,6 +399,14 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     b.problems.into_inner().result(b.model)
 }
 
+// A reference to a type declared elsewhere, by this and its name.
+const EXTERNAL: &str = "external:";
+
+// The name of a type declared elsewhere, or the key as it is.
+fn external(key: &str) -> &str {
+    key.strip_prefix(EXTERNAL).unwrap_or(key)
+}
+
 fn join(prefix: &str, name: &str) -> String {
     if prefix.is_empty() { name.to_string() } else { format!("{prefix}.{name}") }
 }
@@ -421,6 +432,18 @@ impl<'a> Builder<'a> {
         }
     }
 
+    // Where a reference leads: the declaration its `to` names; with none, a
+    // type declared elsewhere, apart from any declared here of its name
+    // (GeoJSON's `Point` beside leaflet's). XML without ids is by name.
+    fn ref_key(&self, n: Node) -> String {
+        let name = n.attribute("qualified").unwrap_or(attr(n, "name"));
+        match n.attribute("to") {
+            Some(to) => to.to_string(),
+            None if self.has_ids => format!("{EXTERNAL}{name}"),
+            None => name.to_string(),
+        }
+    }
+
     // A type's identifier, by its path in the XML: the path flattened
     // (`cluster_Worker` for `cluster.Worker`), numbered where another path
     // flattens alike. Declared types have theirs first: a top-level one its
@@ -429,7 +452,7 @@ impl<'a> Builder<'a> {
         if let Some(i) = self.idents.borrow().get(path) {
             return i.clone();
         }
-        let base = ident(path);
+        let base = ident(external(path));
         let mut name = base.clone();
         let mut n = 2;
         while !self.ident_taken.borrow_mut().insert(name.clone()) {
@@ -636,18 +659,20 @@ impl<'a> Builder<'a> {
         let tag = m.tag_name().name();
         if matches!(tag, "ancestor") {
             // A base from another file is still a type to convert to.
-            if !self.decls.contains_key(raw_name) {
-                self.opaque.insert(self.type_ident(raw_name));
+            let key = self.ref_key(m);
+            if !self.decls.contains_key(&key) {
+                self.opaque.insert(self.type_ident(&key));
             }
-            return c.ancestors.push(self.type_ident(raw_name));
+            return c.ancestors.push(self.type_ident(&key));
         }
         // A direct base, when inheritance is kept: members stay on the type that declares them.
         if tag == "extends" {
             let base = only_child(m);
             if base.has_tag_name("ref") {
-                let name = base.attribute("qualified").unwrap_or(attr(base, "name"));
+                let key = self.ref_key(base);
+                let name = key.as_str();
                 // A subclass of Array is an array of its elements.
-                if matches!(name, "Array" | "ReadonlyArray") && !self.decls.contains_key(name) {
+                if matches!(external(name), "Array" | "ReadonlyArray") && !self.decls.contains_key(name) {
                     if let Some(e) = elements(base).next() {
                         let elem = self.ty(e, &owner);
                         if let Ty::ArrayOf(elem) = self.array_of(elem) {
@@ -855,7 +880,7 @@ impl<'a> Builder<'a> {
             let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child);
             match map {
                 Some(m) => {
-                    let name = m.attribute("qualified").unwrap_or(attr(m, "name")).to_string();
+                    let name = self.ref_key(m);
                     if self.key_map(&name) {
                         self.keyed.insert(attr(p, "name").to_string(), self.type_ident(&name));
                     } else {
@@ -925,7 +950,7 @@ impl<'a> Builder<'a> {
             props.extend(named(d, "property").filter(|p| seen_keys.insert(attr(*p, "name").to_string())));
             for e in named(d, "extends") {
                 let base = only_child(e);
-                if let Some(b) = self.decls.get(base.attribute("qualified").unwrap_or(attr(base, "name"))) {
+                if let Some(b) = self.decls.get(&self.ref_key(base)) {
                     todo.insert(0, *b);
                 }
             }
@@ -1064,10 +1089,10 @@ impl<'a> Builder<'a> {
     }
 
     fn reference(&mut self, n: Node<'a, 'a>) -> Ty {
-        let key = n.attribute("qualified").unwrap_or(attr(n, "name")).to_string();
+        let key = self.ref_key(n);
         let declared = self.decls.get(&key).copied();
         // `Array<T>` is `T[]`.
-        if declared.is_none() && matches!(key.as_str(), "Array" | "ReadonlyArray") {
+        if declared.is_none() && matches!(external(&key), "Array" | "ReadonlyArray") {
             return match elements(n).next() {
                 Some(e) => {
                     let elem = self.ty(e, "");

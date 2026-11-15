@@ -1,6 +1,7 @@
 // IR -> XML, plus a census of the constructs that were emitted.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
+
 use std::fmt::Write as _;
 
 use crate::ir::*;
@@ -13,6 +14,14 @@ pub struct Xml {
     pub census: BTreeMap<String, usize>,
     // Attributes for the next element, from `Type::Tested`.
     pending: Vec<(&'static str, String)>,
+    // Each type declaration's id (its path: `Konva.Shape`), by path and by
+    // symbol; what a reference's `to` names. See `index`.
+    ids: HashMap<String, String>,
+    by_sym: HashMap<Sym, String>,
+    // Declarations without a symbol: what lowering made up.
+    symless: HashSet<String>,
+    // The path of the namespaces being written.
+    prefix: String,
 }
 
 type Attrs<'a> = Vec<(&'a str, &'a str)>;
@@ -56,8 +65,62 @@ impl Xml {
         self.close(tag);
     }
 
+    // Gives each type declaration an id, its path, unique among them.
+    fn index(&mut self, decls: &[Decl], prefix: &str) {
+        for d in decls {
+            let (name, sym) = match d {
+                Decl::Interface(i) => (&i.name, i.sym),
+                Decl::Alias(a) => (&a.name, a.sym),
+                Decl::Enum(e) => (&e.name, e.sym),
+                Decl::Namespace(n) => {
+                    self.index(&n.decls, &format!("{prefix}{}.", n.name));
+                    continue;
+                }
+                _ => continue,
+            };
+            let path = format!("{prefix}{name}");
+            let mut id = path.clone();
+            let mut n = 2;
+            while self.ids.values().any(|v| *v == id) {
+                id = format!("{path}#{n}");
+                n += 1;
+            }
+            match sym {
+                Some(_) => {
+                    self.by_sym.insert(sym, id.clone());
+                }
+                None => {
+                    self.symless.insert(path.clone());
+                }
+            }
+            self.ids.insert(path, id);
+        }
+    }
+
+    // The declaration a reference means: by its symbol; else, for one that
+    // has none or whose symbol is not declared here, a declaration without a
+    // symbol of its path. Never another declaration of the same name.
+    fn target(&self, r: &Ref) -> Option<&String> {
+        if r.kind == "typeParameter" {
+            return None;
+        }
+        if let Some(id) = r.sym.and(self.by_sym.get(&r.sym)) {
+            return Some(id);
+        }
+        let path = r.qualified.as_ref().unwrap_or(&r.name);
+        if r.sym.is_none() || self.symless.contains(path) {
+            return self.ids.get(path).filter(|_| r.sym.is_none() || self.symless.contains(path));
+        }
+        None
+    }
+
+    fn id_of(&self, name: &str) -> Option<String> {
+        self.ids.get(&format!("{}{name}", self.prefix)).cloned()
+    }
+
     // Top-level declarations, each with the module it belongs to.
     pub fn top(&mut self, decls: &[Decl], modules: &crate::config::Modules) {
+        self.index(decls, "");
         for d in decls {
             let module = match d {
                 Decl::Namespace(n) => n.name.clone(),
@@ -85,7 +148,11 @@ impl Xml {
             match d {
                 Decl::Interface(i) => self.interface(i),
                 Decl::Alias(a) => {
+                    let id = self.id_of(&a.name);
                     let mut attrs = vec![("name", a.name.as_str())];
+                    if let Some(id) = &id {
+                        attrs.push(("id", id));
+                    }
                     if a.synthetic {
                         attrs.push(("synthetic", "true"));
                     }
@@ -116,7 +183,11 @@ impl Xml {
                     self.close("var");
                 }
                 Decl::Enum(e) => {
+                    let id = self.id_of(&e.name);
                     let mut attrs = vec![("name", e.name.as_str())];
+                    if let Some(id) = &id {
+                        attrs.push(("id", id));
+                    }
                     if e.synthetic {
                         attrs.push(("synthetic", "true"));
                     }
@@ -132,7 +203,10 @@ impl Xml {
                         attrs.push(("jsName", js));
                     }
                     self.open("namespace", &attrs);
+                    let inner = format!("{}{}.", self.prefix, n.name);
+                    let outer = std::mem::replace(&mut self.prefix, inner);
                     self.decls(&n.decls);
+                    self.prefix = outer;
                     self.close("namespace");
                 }
             }
@@ -141,7 +215,11 @@ impl Xml {
 
     fn interface(&mut self, i: &Interface) {
         let tag = if i.class.is_some() { "class" } else { "interface" };
+        let id = self.id_of(&i.name);
         let mut attrs = vec![("name", i.name.as_str())];
+        if let Some(id) = &id {
+            attrs.push(("id", id));
+        }
         if let Some(js) = &i.js_name {
             attrs.push(("jsName", js));
         }
@@ -153,8 +231,15 @@ impl Xml {
         for e in &i.extends {
             self.wrap("extends", &[e]);
         }
-        for a in &i.ancestors {
-            self.leaf("ancestor", &vec![("name", a.as_str())]);
+        for (n, a) in i.ancestors.iter().enumerate() {
+            let sym = i.ancestor_syms.get(n).copied().flatten();
+            let r = Ref { name: a.clone(), kind: "interface", sym, args: Vec::new(), tid: None, qualified: None, file: None, computed: false, node: None };
+            let to = self.target(&r).cloned();
+            let mut attrs = vec![("name", a.as_str())];
+            if let Some(to) = &to {
+                attrs.push(("to", to));
+            }
+            self.leaf("ancestor", &attrs);
         }
         if let Some(c) = &i.class {
             for m in &c.constructors {
@@ -281,9 +366,13 @@ impl Xml {
             Type::Erased(why) => self.leaf("primitive", &vec![("name", "any"), ("lossy", why)]),
             Type::Literal { kind, value } => self.leaf("literal", &vec![("type", kind), ("value", value.as_str())]),
             Type::Ref(r) => {
+                let to = self.target(r).cloned();
                 let mut attrs = vec![("name", r.name.as_str()), ("kind", r.kind)];
                 if let Some(q) = &r.qualified {
                     attrs.push(("qualified", q));
+                }
+                if let Some(to) = &to {
+                    attrs.push(("to", to));
                 }
                 if let Some(f) = &r.file {
                     attrs.push(("file", f));

@@ -23,6 +23,11 @@ pub fn main() {
   check(b.pb_node_size(n) == 10.0, "pb's pick")
   let assert b.PbNodeOrStringString(_) = b.pb_pick(False)
 
+  // pa's own Point, and geo's, a type declared elsewhere of the same name.
+  let own = b.point_new()
+  check(b.point_get_x(own) == 3.0, "pa's Point")
+  let _geo: b.Point2 = b.to_geo(own)
+
   // Namespaces of one name.
   check(b.util_tag() == "pa", "pa's util")
   check(b.pb_util_tag() == "pb", "pb's util")

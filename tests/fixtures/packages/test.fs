@@ -27,6 +27,12 @@ let b =
 check (b = 10.0) "pb's pick"
 check ((match pb_pick false with pb_Node_or_string.String s -> s | _ -> "") = "small") "pb's pick, a string"
 
+// pa's own Point, and geo's, a type declared elsewhere of the same name.
+let own = Point.Create ()
+check (own.x = 3.0) "pa's Point"
+let geo: External.Point = toGeo own
+check (not (isNull geo)) "geo's Point"
+
 // Namespaces of one name.
 check (util.Globals.tag () = "pa") "pa's util"
 check (pb_util.Globals.tag () = "pb") "pb's util"

@@ -158,8 +158,10 @@ pub struct Interface {
     pub sym: Sym,
     pub type_params: Vec<TypeParam>,
     pub extends: Vec<Type>,
-    // All transitive bases, kept after flattening for casts.
+    // All transitive bases, kept after flattening for casts; and their
+    // symbols, which say which declaration each is.
     pub ancestors: Vec<String>,
+    pub ancestor_syms: Vec<Sym>,
     pub members: Vec<Member>,
     // Set by class pairing.
     pub class: Option<Class>,
@@ -206,6 +208,7 @@ pub struct EnumMember {
 
 pub struct Enum {
     pub name: String,
+    pub sym: Sym,
     pub members: Vec<EnumMember>,
     pub synthetic: bool,
 }

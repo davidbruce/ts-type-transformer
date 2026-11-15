@@ -584,6 +584,7 @@ impl<'c> Front<'c> {
             type_params: self.type_params(node.type_parameters()),
             extends,
             ancestors: Vec::new(),
+            ancestor_syms: Vec::new(),
             members,
             class: None,
             synthetic: false,
@@ -688,6 +689,7 @@ impl<'c> Front<'c> {
             type_params: self.type_params(node.type_parameters()),
             extends,
             ancestors: Vec::new(),
+            ancestor_syms: Vec::new(),
             members,
             class: Some(class),
             synthetic: false,
@@ -711,7 +713,7 @@ impl<'c> Front<'c> {
                 members.push(EnumMember { name: member_name(name_of(*m)), kind, value });
             }
         }
-        Some(Enum { name: self.output_name(sym), members, synthetic: false })
+        Some(Enum { name: self.output_name(sym), sym: Some(sym), members, synthetic: false })
     }
 
     fn namespace(&mut self, node: P<Node>) -> Option<Namespace> {
@@ -1592,24 +1594,20 @@ impl<'c> Front<'c> {
     }
 
     // Own and inherited members of an interface, with base type arguments applied.
-    pub fn flattened(&mut self, sym: P<Symbol>) -> (Vec<Member>, Vec<String>) {
+    // Ancestors by their names in the output, as references have them, with
+    // their symbols.
+    pub fn flattened(&mut self, sym: P<Symbol>) -> (Vec<Member>, Vec<(String, Sym)>) {
         let t = self.c.get_declared_type_of_symbol_exported(sym);
         let members = self.members_of_type(t, Some(sym));
-        let mut ancestors = Vec::new();
+        let mut ancestors: Vec<(String, Sym)> = Vec::new();
         let mut queue = vec![t];
         while let Some(t) = queue.pop() {
             for base in self.c.get_base_types_exported(t) {
-                let name = base.symbol().map(|s| {
-                    let s = self.resolve_alias(s);
-                    let raw = self.c.get_fully_qualified_name_exported(s);
-                    if raw.starts_with('"') {
-                        raw.find("\".").map(|i| raw[i + 2..].to_string()).unwrap_or(raw)
-                    } else {
-                        raw
-                    }
-                }).unwrap_or_default();
-                if !name.is_empty() && !ancestors.contains(&name) {
-                    ancestors.push(name);
+                let Some(s) = base.symbol() else { continue };
+                let r = self.make_ref(Some(s), Vec::new());
+                let name = r.qualified.clone().unwrap_or(r.name);
+                if !name.is_empty() && !ancestors.iter().any(|a| a.0 == name) {
+                    ancestors.push((name, r.sym));
                     queue.push(*base);
                 }
             }

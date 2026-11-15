@@ -29,6 +29,12 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(b.tag == pb_Node_or_string_pb_Node && pb_Node_size(b.as.pb_Node) == 10);
     CHECK(pb_pick(0).tag == pb_Node_or_string_string);
 
+    // pa's own Point, and geo's, a type declared elsewhere of the same name.
+    Point own = Point_new();
+    CHECK(Point_get_x(own) == 3);
+    Point_2 geo = toGeo(own);
+    CHECK(geo.h != 0);
+
     // Namespaces of one name.
     CHECK(str_eq(util_tag(), "pa"));
     CHECK(str_eq(pb_util_tag(), "pb"));

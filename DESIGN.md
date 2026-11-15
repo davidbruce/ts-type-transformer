@@ -160,6 +160,13 @@ trims the glue to what a compiled module imports. The generators
 that a target cannot express, each kind once, with how often, where first,
 and the setting that lowers it.
 
+References: each type declaration has an `id` (its path, `Konva.Shape`),
+and each reference to one a `to`, found by the checker's symbol, never by
+name. A reference without `to` is a type declared elsewhere, even where
+one declared here has its name: GeoJSON's `Point` beside leaflet's, the
+DOM's `Node` beside prosemirror's. Generators look references up by `to`;
+F# puts such a type in a module `External`, the model numbers it apart.
+
 Names: lowering makes declarations' names apart in the XML; each target
 then spells them its own way (`foo_bar` and `fooBar` are one `foo_bar` in
 snake case; C's `Shape_area` is a method and could be a function too).

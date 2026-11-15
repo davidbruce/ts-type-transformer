@@ -93,7 +93,7 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
         }
         false
     };
-    let constraint_of = |p: Node| elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|c| c.has_tag_name("ref") && matches!(attr(*c, "kind"), "interface" | "class") && elements(*c).next().is_none()).map(|c| attr(c, "name").to_string());
+    let constraint_of = |p: Node| elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|c| c.has_tag_name("ref") && matches!(attr(*c, "kind"), "interface" | "class") && elements(*c).next().is_none()).and_then(|c| c.attribute("to")).map(str::to_string);
     let mut out: HashMap<String, Vec<Option<String>>> = HashMap::new();
     for d in elements(root).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
         let cs: Vec<Option<String>> = named(d, "typeParameter").map(constraint_of).collect();
@@ -105,10 +105,10 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
     let param_constraint = |r: Node, name: &str| r.ancestors().find_map(|a| named(a, "typeParameter").find(|p| attr(*p, "name") == name)).and_then(constraint_of);
     let mut broken: HashSet<(String, usize)> = HashSet::new();
     for r in root.descendants().filter(|r| r.has_tag_name("ref")) {
-        let Some(cs) = out.get(attr(r, "name")) else { continue };
+        let Some(cs) = r.attribute("to").and_then(|t| out.get(t)) else { continue };
         for (i, arg) in elements(r).enumerate() {
             let Some(Some(c)) = cs.get(i) else { continue };
-            let is = |t: Node| t.has_tag_name("ref") && matches!(attr(t, "kind"), "interface" | "class") && extends(attr(t, "name"), c);
+            let is = |t: Node| t.has_tag_name("ref") && matches!(attr(t, "kind"), "interface" | "class") && t.attribute("to").is_some_and(|to| extends(to, c));
             let ok = match (arg.tag_name().name(), arg.attribute("kind")) {
                 ("ref", Some("interface" | "class")) => is(arg),
                 ("ref", Some("typeParameter")) => param_constraint(r, attr(arg, "name")).is_some_and(|pc| extends(&pc, c)),
@@ -117,7 +117,7 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
                 // `M[K]`: one of a map's values, each of which must be one. The
                 // signature's type parameter then has the constraint.
                 ("indexedAccess", _) => {
-                    let map = elements(arg).next().filter(|m| m.has_tag_name("ref")).and_then(|m| find_decl(root, m.attribute("qualified").unwrap_or(attr(m, "name"))));
+                    let map = elements(arg).next().filter(|m| m.has_tag_name("ref")).and_then(|m| find_decl(root, m.attribute("to")?));
                     map.is_some_and(|m| map_properties(root, m).into_iter().all(|(_, t)| is(t)))
                 }
                 _ => false,
@@ -138,9 +138,19 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
     out
 }
 
+impl Gen {
+    // The F# name of a type declared elsewhere: its path flattened
+    // (`NodeJS_Dict`), in module `External` where a type declared here has
+    // the name (GeoJSON's `Point` beside leaflet's).
+    fn external_name(&self, name: &str) -> String {
+        let flat = name.replace('.', "_");
+        if self.declared.contains(name) || self.declared.contains(&flat) { format!("External.{}", ident(&flat)) } else { ident(&flat) }
+    }
+}
+
 // The members of a union an alias names, if `r` refers to one.
 fn union_members<'a>(root: Node<'a, 'a>, r: Node<'a, 'a>) -> Option<Vec<Node<'a, 'a>>> {
-    let d = find_decl(root, r.attribute("qualified").unwrap_or(attr(r, "name")))?;
+    let d = find_decl(root, r.attribute("to")?)?;
     let body = elements(d).find(|c| !c.has_tag_name("typeParameter"))?;
     body.has_tag_name("union").then(|| elements(body).collect())
 }
@@ -245,10 +255,17 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          [<Emit(\"$0.next().then(r => r.done ? undefined : r.value)\")>] abstract next: unit -> JS.Promise<'T option>\n\n",
     );
     // Types from other files are opaque.
+    let mut apart = String::new();
     for (name, arity) in &g.external {
         let params: Vec<String> = (1..=*arity).map(|i| format!("'T{i}")).collect();
         let params = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
-        prelude += &format!("[<AllowNullLiteral>]\ntype {}{params} = interface end\n\n", ident(name));
+        match name.strip_prefix("External.") {
+            Some(own) => apart += &format!("    [<AllowNullLiteral>]\n    type {own}{params} = interface end\n\n"),
+            None => prelude += &format!("[<AllowNullLiteral>]\ntype {name}{params} = interface end\n\n"),
+        }
+    }
+    if !apart.is_empty() {
+        prelude += &format!("/// Types declared elsewhere that have the names of types declared here.\nmodule External =\n{apart}");
     }
     let mut files = vec![("Bindings.Prelude.fs".to_string(), prelude)];
     for (i, group) in plan.iter().enumerate() {
@@ -293,7 +310,7 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
         let Some(m) = unit(d) else { continue };
         let m = m.as_str();
         modules.insert(m.to_string());
-        let target = |r: Node| r.attribute("qualified").or(r.attribute("name")).and_then(|n| units.get(n).or_else(|| home.get(n))).filter(|t| t.as_str() != m).cloned();
+        let target = |r: Node| r.attribute("to").and_then(|n| units.get(n).or_else(|| home.get(n))).filter(|t| t.as_str() != m).cloned();
         // An alias has no fixed place: it goes where its parts are (`alias_files`).
         let hard_scope: Vec<Node> = match d.tag_name().name() {
             "namespace" => vec![d],
@@ -343,7 +360,7 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
 fn units(root: Node, home: &HashMap<String, String>) -> HashMap<String, String> {
     let mut bases: HashMap<&str, Vec<String>> = HashMap::new();
     for d in elements(root).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
-        let refs = named(d, "extends").flat_map(|e| e.descendants()).filter(|r| r.has_tag_name("ref")).filter_map(|r| r.attribute("qualified").or(r.attribute("name"))).map(str::to_string);
+        let refs = named(d, "extends").flat_map(|e| e.descendants()).filter(|r| r.has_tag_name("ref")).filter_map(|r| r.attribute("to")).map(str::to_string);
         bases.insert(attr(d, "name"), refs.collect());
     }
     let mut base: HashSet<String> = HashSet::new();
@@ -396,7 +413,7 @@ fn declared_files(root: Node, plan: &[Vec<String>], units: &HashMap<String, Stri
     // An alias goes in the first file where everything it refers to exists.
     let aliases: Vec<(String, Vec<String>)> = elements(root)
         .filter(|d| d.has_tag_name("typeAlias"))
-        .map(|d| (attr(d, "name").to_string(), d.descendants().filter(|r| r.has_tag_name("ref")).filter_map(|r| r.attribute("qualified").or(r.attribute("name"))).map(str::to_string).collect()))
+        .map(|d| (attr(d, "name").to_string(), d.descendants().filter(|r| r.has_tag_name("ref")).filter_map(|r| r.attribute("to")).map(str::to_string).collect()))
         .collect();
     for _ in 0..aliases.len().min(32) {
         let mut changed = false;
@@ -544,15 +561,17 @@ impl Gen {
             "ref" if attr(n, "kind") == "typeParameter" && self.fn_params.iter().any(|p| p == attr(n, "name")) => "obj".into(),
             "ref" if attr(n, "kind") == "typeParameter" => format!("'{}", attr(n, "name")),
             "ref" => {
-                let name = n.attribute("qualified").unwrap_or(attr(n, "name"));
-                if let Some(kept) = self.alias_kept.get(name).cloned() {
+                // Declared here (`to`), or elsewhere, though one declared here may have its name.
+                let to = n.attribute("to");
+                let name = to.unwrap_or_else(|| n.attribute("qualified").unwrap_or(attr(n, "name")));
+                if let Some(kept) = to.and_then(|t| self.alias_kept.get(t)).cloned() {
                     let args: Vec<Node> = elements(n).collect();
                     let args: Vec<String> = kept.iter().filter_map(|&i| args.get(i)).map(|a| self.ty(*a, owner)).collect();
                     let name = name.split('.').map(ident).collect::<Vec<_>>().join(".");
                     return if args.is_empty() { name } else { format!("{name}<{}>", args.join(", ")) };
                 }
                 // Where the interface keeps a constraint, a union of subtypes is named as the constraint: F# has no union that is one.
-                let kept = self.constrained.get(name).cloned().unwrap_or_default();
+                let kept = to.and_then(|t| self.constrained.get(t)).cloned().unwrap_or_default();
                 let args: Vec<String> = elements(n)
                     .enumerate()
                     .map(|(i, a)| match kept.get(i) {
@@ -560,7 +579,7 @@ impl Gen {
                         _ => self.ty(a, owner),
                     })
                     .collect();
-                let name = if self.declared.contains(name) {
+                let name = if to.is_some() {
                     name.split('.').map(ident).collect::<Vec<_>>().join(".")
                 } else {
                     match (name, args.len()) {
@@ -572,9 +591,10 @@ impl Gen {
                         (_, n_args) if !is_base(n) && (n_args == 0 || name != "Error") && let Some(t) = fable_builtin(name) => return t,
                         // A type from another library, an alias too: an opaque type by its name.
                         _ if matches!(attr(n, "kind"), "class" | "interface" | "typeAlias") => {
-                            let arity = self.external.entry(name.to_string()).or_default();
+                            let ext = self.external_name(name);
+                            let arity = self.external.entry(ext.clone()).or_default();
                             *arity = (*arity).max(args.len());
-                            ident(name)
+                            ext
                         }
                         // A value from another file: nothing to refer to.
                         _ => {
@@ -689,7 +709,7 @@ impl Gen {
         for p in named(n, "typeParameter") {
             let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child).filter(|r| r.has_tag_name("ref"));
             if let Some(map) = map {
-                let name = map.attribute("qualified").unwrap_or(attr(map, "name")).to_string();
+                let name = map.attribute("to").unwrap_or_default().to_string();
                 if self.maps.contains(&name) {
                     self.keyed.insert(attr(p, "name").to_string(), ident(&name));
                 }
@@ -796,7 +816,7 @@ impl Gen {
         for p in named(n, "typeParameter") {
             let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child).filter(|r| r.has_tag_name("ref"));
             if let Some(map) = map {
-                let name = map.attribute("qualified").unwrap_or(attr(map, "name")).to_string();
+                let Some(name) = map.attribute("to").map(str::to_string) else { continue };
                 self.maps.insert(name.clone());
                 self.keyed.insert(attr(p, "name").to_string(), name.split('.').map(ident).collect::<Vec<_>>().join("."));
             }
@@ -1515,7 +1535,7 @@ fn map_properties<'a>(root: Node<'a, 'a>, decl: Node<'a, 'a>) -> Vec<(String, No
     let mut out: Vec<(String, Node)> = named(decl, "property").map(|p| (attr(p, "name").to_string(), only_child(p))).collect();
     for e in named(decl, "extends") {
         let base = only_child(e);
-        if let Some(b) = find_decl(root, base.attribute("qualified").unwrap_or(attr(base, "name"))) {
+        if let Some(b) = base.attribute("to").and_then(|t| find_decl(root, t)) {
             out.extend(map_properties(root, b));
         }
     }
@@ -1561,7 +1581,7 @@ fn alias_kept(root: Node) -> HashMap<String, Vec<usize>> {
         if n.has_tag_name("ref") && attr(n, "kind") == "typeParameter" && !shadow.iter().any(|s| s == attr(n, "name")) {
             out.insert(attr(n, "name").to_string());
         }
-        let only = n.has_tag_name("ref").then(|| kept.get(n.attribute("qualified").unwrap_or(attr(n, "name")))).flatten();
+        let only = n.has_tag_name("ref").then(|| n.attribute("to").and_then(|t| kept.get(t))).flatten();
         for (i, c) in elements(n).enumerate() {
             if only.is_none_or(|k| k.contains(&i)) {
                 shown(c, kept, shadow, out);
