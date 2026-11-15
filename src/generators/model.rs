@@ -743,7 +743,15 @@ impl<'a> Builder<'a> {
             let (params, rest, fixed, ret) = self.signature(m, &owner);
             let (base, call) = if tag == "call" { ("invoke", Call::Invoke) } else { ("construct", Call::Construct) };
             let name = if self.target == "C++" { base.to_string() } else {
-                let mut name = base.to_string();
+                // Named for the marks it has that its siblings do not all have
+                // (`invoke_async`); the first without any is `invoke`, which
+                // none before it took.
+                let siblings: Vec<Node> = m.parent().map(|p| elements(p).filter(|s| s.tag_name() == m.tag_name() && !flag(*s, "static")).collect()).unwrap_or_default();
+                let own = super::own_marks(&siblings.iter().map(|s| super::marks(*s)).collect::<Vec<_>>());
+                let me = siblings.iter().position(|s| *s == m).unwrap_or(0);
+                let plain = own.iter().position(Vec::is_empty).unwrap_or(0);
+                let base = if me == plain || own[me].is_empty() { base.to_string() } else { format!("{base}_{}", own[me].join("_")) };
+                let mut name = base.clone();
                 let mut n = 2;
                 while !names.insert(name.clone()) {
                     name = format!("{base}_{n}");

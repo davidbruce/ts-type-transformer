@@ -66,4 +66,8 @@ check (obj.ReferenceEquals(orUnit (Some s), s)) "defined argument"
 check (find "nothing").IsNone "undefined result"
 check ((find "unit").Value.area () = 1.0) "defined result"
 
+// Overloads apart only in a constraint: named for it.
+check (wrapNamed s = "[square-3]") "overload named for its constraint"
+check (wrap 2.0 = 4.0) "unconstrained overload"
+
 printfn "%d checks passed" passed

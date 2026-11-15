@@ -124,6 +124,9 @@ pub struct Signature {
     pub this: Option<Type>,
     pub params: Vec<Param>,
     pub ret: Option<Type>,
+    // On an overload: what tells it apart where a target loses it, as words
+    // (`Dictionary`, `async`). See `lower::mark_overloads`.
+    pub marks: Vec<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -110,3 +110,14 @@ fn hint(tag: &str) -> &'static str {
         _ => "the target config must lower it",
     }
 }
+
+// An overload's marks, as the lowering wrote them: what tells it apart
+// where a target loses it (`async`, `Dictionary`).
+pub fn marks(n: roxmltree::Node) -> Vec<String> {
+    n.attribute("marks").map(|m| m.split(' ').map(str::to_string).collect()).unwrap_or_default()
+}
+
+// Each overload's marks the others do not all have: what to name it by.
+pub fn own_marks(marks: &[Vec<String>]) -> Vec<Vec<String>> {
+    marks.iter().map(|m| m.iter().filter(|w| marks.iter().any(|o| !o.contains(w))).cloned().collect()).collect()
+}

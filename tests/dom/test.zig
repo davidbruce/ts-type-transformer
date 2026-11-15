@@ -117,7 +117,7 @@ export fn run() void {
     expect(std.mem.eql(u8, seed_text.toOwned(fba.allocator()) catch "", "seed text"), @src());
 
     // An invalid selector throws: the call returns null, and the exception is kept.
-    expect(box.querySelectorWithString("<bad") == null, @src());
+    expect(box.querySelectorElement("<bad") == null, @src());
     const bad = b.jsTakeError();
     expect(bad != null, @src());
     if (bad) |e| b.jsRelease(e);

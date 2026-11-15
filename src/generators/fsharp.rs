@@ -44,7 +44,7 @@ struct Gen {
     // when it tells members apart (`type ArrayLike_or_x = obj`).
     abbrevs: HashMap<String, String>,
     // What tells each member line's TypeScript overload apart, by the line:
-    // see `overload_marks`.
+    // its `marks`.
     marks: HashMap<String, Vec<String>>,
     // Maps whose keys are used: a `<Map>Keys` module is written for each.
     maps: BTreeSet<String>,
@@ -1246,7 +1246,7 @@ impl Gen {
                     continue;
                 }
                 // Distinct TypeScript overloads can map to the same F# signature.
-                self.marks.insert(line.trim().to_string(), overload_marks(m));
+                self.marks.insert(line.trim().to_string(), super::marks(m));
                 push_member(&mut lines, format!("{indent}    {line}\n"), &self.abbrevs, &self.marks);
             }
         }
@@ -1449,7 +1449,7 @@ impl Gen {
                     continue;
                 }
                 let line = format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n");
-                self.marks.insert(line.trim().to_string(), overload_marks(m));
+                self.marks.insert(line.trim().to_string(), super::marks(m));
                 push_member(&mut lines, line, &self.abbrevs, &self.marks);
             } else {
                 for line in self.members(&[m], "obj", &static_name, indent) {
@@ -1569,7 +1569,7 @@ impl Gen {
                     };
                     let tps = self.constrained_type_params(d);
                     let line = format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", "));
-                    self.marks.insert(line.trim().to_string(), overload_marks(d));
+                    self.marks.insert(line.trim().to_string(), super::marks(d));
                     push_member(functions, line, &self.abbrevs, &self.marks);
                 }
                 "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
@@ -1890,35 +1890,6 @@ fn rename_member(line: &str, to: &str) -> String {
     format!("{}{emit}{}{to}{}", &line[..start], &line[start..at], &line[at + name.len()..])
 }
 
-// What a TypeScript signature has that F# leaves out, as words to name it
-// by: its type parameters' constraints (`Dictionary`), the literal values
-// of its parameters and their options (`async: true` is `async`, a string
-// its value; `false` is the default, nothing).
-fn overload_marks(m: Node) -> Vec<String> {
-    let sig = if m.has_tag_name("property") { only_child(m) } else { m };
-    let mut out: Vec<String> = Vec::new();
-    for p in named(sig, "typeParameter") {
-        let c = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child);
-        if let Some(c) = c.filter(|c| c.has_tag_name("ref")) {
-            out.push(attr(c, "name").rsplit('.').next().unwrap_or_default().to_string());
-        }
-    }
-    for p in named(sig, "parameter") {
-        let consts = std::iter::once(p).chain(p.descendants().filter(|d| d.has_tag_name("property")));
-        for c in consts {
-            match c.attribute("const") {
-                Some("true") => out.push(attr(c, "name").to_string()),
-                Some("false") | None => {}
-                Some(v) if v.parse::<f64>().is_err() => out.push(v.to_string()),
-                Some(_) => {}
-            }
-        }
-    }
-    let mut seen = HashSet::new();
-    out.retain(|w| !w.is_empty() && seen.insert(w.clone()));
-    out
-}
-
 // `async` as `Async`, `no-cache` as `NoCache`.
 fn pascal(word: &str) -> String {
     let mut out = String::new();
@@ -2036,7 +2007,8 @@ fn member_key(line: &str) -> (String, Option<String>) {
             at
         };
         let params: Vec<String> = split_top(&inner[..close], ", ").into_iter().filter(|p| !p.trim().is_empty()).map(type_of).collect();
-        return (format!("static {name}"), Some(params.join(", ")));
+        // F# tells no overloads apart by their constraints: the name alone.
+        return (format!("static {}", name.split('<').next().unwrap_or(name)), Some(params.join(", ")));
     }
     // `abstract f: a: A * b: B -> R`: the types before its last arrow outside brackets.
     let Some(rest) = s.strip_prefix("abstract ") else { return (s.to_string(), None) };
@@ -2047,7 +2019,7 @@ fn member_key(line: &str) -> (String, Option<String>) {
     }
     let params = parts[..parts.len() - 1].join(" -> ");
     let types: Vec<String> = split_top(&params, " * ").into_iter().map(type_of).collect();
-    (format!("abstract {name}"), Some(types.join(" * ")))
+    (format!("abstract {}", name.split('<').next().unwrap_or(name)), Some(types.join(" * ")))
 }
 
 // Fable's erased union of these types: `U2<A, B>` up to `U9`; more nest in

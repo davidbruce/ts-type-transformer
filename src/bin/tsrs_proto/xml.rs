@@ -188,6 +188,10 @@ impl Xml {
                     if let Some(js) = &f.js_name {
                         attrs.push(("jsName", js));
                     }
+                    let marks = f.sig.marks.join(" ");
+                    if !marks.is_empty() {
+                        attrs.push(("marks", &marks));
+                    }
                     self.open("function", &attrs);
                     self.signature(&f.sig);
                     self.close("function");
@@ -269,6 +273,10 @@ impl Xml {
                 if let Some(js) = &m.js_name {
                     attrs.push(("jsName", js));
                 }
+                let marks = m.sig.as_ref().map(|s| s.marks.join(" ")).unwrap_or_default();
+                if !marks.is_empty() {
+                    attrs.push(("marks", &marks));
+                }
                 self.open("constructor", &attrs);
                 self.signature(m.sig.as_ref().unwrap());
                 self.close("constructor");
@@ -324,6 +332,10 @@ impl Xml {
         }
         if let Some(c) = &m.constant {
             attrs.push(("const", c));
+        }
+        let marks = m.sig.as_ref().map(|s| s.marks.join(" ")).unwrap_or_default();
+        if !marks.is_empty() {
+            attrs.push(("marks", &marks));
         }
         self.open(tag, &attrs);
         if let Some(t) = &m.ty {

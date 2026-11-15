@@ -89,6 +89,8 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.expand_keyed = o.keyed;
     front.map_keyed = o.map_keyed;
     front.keyed_limit = o.keyed_limit;
+    // Before widening and erasing lose what marks them.
+    mark_overloads(decls);
     // An inherited member serves every subtype, where a target has subtypes.
     if o.redeclared && !o.inheritance {
         let dropped = drop_redeclared(decls);
@@ -112,6 +114,8 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         evaluate(front, decls, o);
         flatten_unions(decls);
         inline_object_bases(front, decls);
+        // And the overloads evaluating made (`typeof merge`).
+        mark_overloads(decls);
     }
     if o.aliases {
         expand_aliases(front, decls);
@@ -957,9 +961,12 @@ fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize
 // whose parameters repeat an earlier one's can never be chosen. Expansion
 // makes these: `"a"` is a key of both the HTML and the SVG tag maps.
 fn drop_unreachable_overloads(decls: &mut Vec<Decl>) {
+    // With its constraints: `wrap<T>(v: T)` after `wrap<T extends Named>(v: T)`
+    // is reached by what is no Named.
     let call_key = |name: &str, s: &Signature| {
         let params: Vec<String> = s.params.iter().map(|p| format!("{:?}{}{}{}", p.constant, p.optional, p.rest, type_key(&p.ty))).collect();
-        format!("{name}({})", params.join(","))
+        let tps: Vec<String> = s.type_params.iter().map(|t| t.constraint.as_ref().map(type_key).unwrap_or_default()).collect();
+        format!("{name}<{}>({})", tps.join(","), params.join(","))
     };
     each_member_list(decls, &mut |members| {
         let mut seen = HashSet::new();
@@ -2046,9 +2053,122 @@ fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, 
     out
 }
 
+// ---- overload marks ----
+
+// Records on each overload what tells it apart from the others where a
+// target loses it: its type parameters' constraints (`merge<T extends
+// Dictionary>` beside `merge<T>`), the literals of its options (`{async:
+// true}` is `async`, a string its value; `false` is the default, nothing).
+// Words to name it by; kept only where the overloads' differ.
+fn mark_overloads(decls: &mut [Decl]) {
+    fn mark(sigs: Vec<&mut Signature>) {
+        let marks: Vec<Vec<String>> = sigs.iter().map(|s| signature_marks(s)).collect();
+        // Marked before: kept, as erasing may have lost them since.
+        if sigs.iter().any(|s| !s.marks.is_empty()) || marks.iter().all(|m| *m == marks[0]) {
+            return;
+        }
+        for (s, m) in sigs.into_iter().zip(marks) {
+            s.marks = m;
+        }
+    }
+    each_member_list(decls, &mut |members| {
+        let mut groups: Vec<((u8, String), Vec<usize>)> = Vec::new();
+        for (i, m) in members.iter().enumerate() {
+            if !matches!(m.kind, MemberKind::Method | MemberKind::Call | MemberKind::Construct) || m.sig.is_none() {
+                continue;
+            }
+            let key = (m.kind as u8, m.name.clone());
+            match groups.iter_mut().find(|g| g.0 == key) {
+                Some(g) => g.1.push(i),
+                None => groups.push((key, vec![i])),
+            }
+        }
+        for (_, idx) in groups.into_iter().filter(|g| g.1.len() > 1) {
+            let sigs = members.iter_mut().enumerate().filter(|(i, _)| idx.contains(i)).filter_map(|(_, m)| m.sig.as_mut()).collect();
+            mark(sigs);
+        }
+    });
+    fn functions(decls: &mut [Decl]) {
+        let mut names: Vec<String> = Vec::new();
+        for d in decls.iter_mut() {
+            match d {
+                Decl::Function(f) if !names.contains(&f.name) => names.push(f.name.clone()),
+                Decl::Namespace(n) => functions(&mut n.decls),
+                _ => {}
+            }
+        }
+        for name in names {
+            let sigs: Vec<&mut Signature> = decls.iter_mut().filter_map(|d| if let Decl::Function(f) = d { (f.name == name).then_some(&mut f.sig) } else { None }).collect();
+            if sigs.len() > 1 {
+                mark(sigs);
+            }
+        }
+    }
+    functions(decls);
+}
+
+fn signature_marks(s: &Signature) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for p in &s.type_params {
+        if let Some(Type::Ref(r)) = &p.constraint
+            && r.kind != "typeParameter"
+        {
+            out.push(r.name.rsplit('.').next().unwrap_or_default().to_string());
+        }
+    }
+    // The literal options: properties of an object written in a parameter.
+    fn literals(t: &Type, out: &mut Vec<String>) {
+        match t {
+            Type::Object(members) => {
+                for m in members.iter().filter(|m| m.kind == MemberKind::Property) {
+                    let value = match &m.ty {
+                        Some(Type::Literal { kind, value }) => Some((*kind, value.as_str())),
+                        _ => m.constant.as_deref().map(|v| (if v == "true" || v == "false" { "boolean" } else { "string" }, v)),
+                    };
+                    match value {
+                        Some(("boolean", "true")) => out.push(m.name.clone()),
+                        Some(("string", v)) => out.push(v.to_string()),
+                        _ => {}
+                    }
+                }
+            }
+            Type::Intersection(parts, _) => parts.iter().for_each(|p| literals(p, out)),
+            Type::Nullable(inner, _) | Type::Readonly(inner) => literals(inner, out),
+            _ => {}
+        }
+    }
+    for p in &s.params {
+        literals(&p.ty, &mut out);
+    }
+    let mut seen = HashSet::new();
+    out.into_iter().map(|w| name_part(&w)).filter(|w| seen.insert(w.clone())).collect()
+}
+
+// Each overload's marks the others do not all have: what to name it by.
+fn own_marks(sigs: &[&Signature]) -> Vec<Vec<String>> {
+    sigs.iter().map(|s| s.marks.iter().filter(|m| sigs.iter().any(|t| !t.marks.contains(m))).cloned().collect()).collect()
+}
+
+// Names for overloads that share their fixed values. The one with no marks
+// of its own (the first, without marks) takes `base`, the others are named
+// for theirs, `merge_Dictionary`, else as `family_names_from` names them.
+fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut HashSet<String>, o: Options) -> Vec<String> {
+    let own = own_marks(sigs);
+    let plain = own.iter().position(Vec::is_empty).unwrap_or(0);
+    let order: Vec<usize> = std::iter::once(plain).chain((0..sigs.len()).filter(|&i| i != plain)).collect();
+    let ordered: Vec<&Signature> = order.iter().map(|&i| sigs[i]).collect();
+    let ordered_own: Vec<Vec<String>> = order.iter().map(|&i| own[i].clone()).collect();
+    let names = family_names_from(base, &ordered, &ordered_own, base_taken, taken, o);
+    let mut out = vec![String::new(); sigs.len()];
+    for (k, i) in order.into_iter().enumerate() {
+        out[i] = names[k].clone();
+    }
+    out
+}
+
 // Names for overloads that share their fixed values. The first takes `base`;
 // `base_taken` says whether it is already the member's own name.
-fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut HashSet<String>, o: Options) -> Vec<String> {
+fn family_names_from(base: &str, sigs: &[&Signature], own: &[Vec<String>], base_taken: bool, taken: &mut HashSet<String>, o: Options) -> Vec<String> {
     let sep = o.separator;
     let first = sigs[0];
     let mut out = Vec::new();
@@ -2059,6 +2179,10 @@ fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut H
         }
         if o.numbered_overloads {
             out.push(unique(format!("{base}{sep}{}", n + 1), taken));
+            continue;
+        }
+        if !own[n].is_empty() {
+            out.push(unique(format!("{base}{sep}{}", own[n].join(sep)), taken));
             continue;
         }
         let with = |parts: Vec<String>| format!("{base}{sep}with{sep}{}", parts.join(&format!("{sep}and{sep}")));

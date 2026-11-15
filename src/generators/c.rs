@@ -550,7 +550,8 @@ fn generic_types(t: &Ty) -> Option<Vec<String>> {
         Ty::Num => list(&["double", "float", "int", "unsigned int", "long", "unsigned long"]),
         // `true` is an int.
         Ty::Bool => list(&["bool", "int"]),
-        Ty::Enum(_) | Ty::NumEnum(_) | Ty::Nullable(..) | Ty::Void => None,
+        // Any value: `_Generic` matches only a `JsValue`, not the Shape it would take.
+        Ty::Enum(_) | Ty::NumEnum(_) | Ty::Nullable(..) | Ty::Void | Ty::Any => None,
         t => Some(vec![typed(t, true)]),
     }
 }

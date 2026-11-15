@@ -336,6 +336,11 @@
   <!-- ==== signatures ==== -->
 
   <define name="signature">
+    <optional>
+      <attribute name="marks">
+        <a:documentation>On an overload: what it has that a target may lose, as words to name it by, space-separated: its type parameters' constraints ("Dictionary"), the literals of its options ("async" for async: true, a string its value).</a:documentation>
+      </attribute>
+    </optional>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <optional><ref name="thisParameter"/></optional>
     <zeroOrMore><ref name="parameter"/></zeroOrMore>

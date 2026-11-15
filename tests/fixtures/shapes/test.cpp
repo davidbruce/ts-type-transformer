@@ -55,4 +55,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(orUnit(s) == s);
     CHECK(!find("nothing"));
     CHECK(find("unit")->area() == 1);
+
+    // Overloads apart only in a constraint: the constrained one where it is met.
+    CHECK(wrap(s) == "[square-3]");
+    CHECK(wrap(2.0) == 4);
 }

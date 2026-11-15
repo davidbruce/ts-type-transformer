@@ -335,7 +335,9 @@ fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place,
         Place::Free if templated => (String::new(), format!("{first}inline {ret} {name}({params}) {{ {body} }}\n")),
         Place::Free => (format!("{ret} {name}({params});\n"), format!("{ret} {name}({params}) {{ {body} }}\n")),
     };
-    let key = format!("{}{name}({})", if place == Place::Static { "static " } else { "" }, f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
+    // With its template head: an overload constrained and one not are two,
+    // the more constrained chosen where both fit (`merge<T extends Dictionary>`).
+    let key = format!("{}{}{name}({})", again.replace('\n', " "), if place == Place::Static { "static " } else { "" }, f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
     Function { import: import_decl, decl, def, templated, key, refs }
 }
 

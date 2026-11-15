@@ -30,3 +30,6 @@ declare function find(name: string): Shape | undefined;
 declare function adopt<T extends Named>(child: T): T;
 // A Named that is no Shape.
 declare function plain(): Named;
+// Overloads apart only in a constraint.
+declare function wrap<T extends Named>(value: T): string;
+declare function wrap<T>(value: T): number;

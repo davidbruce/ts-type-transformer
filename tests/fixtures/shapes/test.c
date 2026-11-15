@@ -66,4 +66,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(js_same(orUnit(s), s));
     CHECK(find("nothing").h == 0);
     CHECK(Shape_area(find("unit")) == 1);
+
+    // Overloads apart only in a constraint: named for it.
+    CHECK(str_eq(wrap_Named(s), "[square-3]"));
 }
