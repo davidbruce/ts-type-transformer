@@ -1063,12 +1063,14 @@ fn splice_union_aliases(decls: &mut [Decl]) {
 // evaluated to (`extends Partial<X>`) gives its members to the interface,
 // and `any`, which says nothing, is dropped.
 fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
-    // A base that is an alias, by what the alias lowered to: an object, or nothing.
+    // A base that is an alias, by what the alias lowered to: an object, a
+    // class or interface (`type _Worker = Worker`), or nothing.
     let mut aliases: HashMap<String, Type> = HashMap::new();
     for d in decls.iter() {
         if let Decl::Alias(a) = d
             && a.type_params.is_empty()
-            && matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
+            && (matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
+                || matches!(&a.ty, Type::Ref(r) if matches!(r.kind, "class" | "interface")))
         {
             aliases.insert(a.name.clone(), a.ty.clone());
         }
@@ -1383,14 +1385,21 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     });
     // `type X = "a" | "b"` becomes `enum X` itself.
     let named: HashSet<&str> = enums.iter().map(|e| e.name.as_str()).collect();
-    remove_enum_aliases(decls, &named);
+    let mut moved = HashMap::new();
+    remove_enum_aliases(decls, &named, &[], sep, &mut moved);
     // What referred to such an alias now refers to the enum.
     walk(decls, &mut |t, _| {
         if let Type::Ref(r) = t
             && r.kind == "typeAlias"
-            && named.contains(r.name.as_str())
         {
-            r.kind = "enum";
+            // `symlink.Type`, as written or as the checker names it.
+            if let Some(flat) = r.qualified.as_ref().and_then(|q| moved.get(q)).or_else(|| moved.get(&r.name)) {
+                r.name = flat.clone();
+                r.qualified = None;
+                r.kind = "enum";
+            } else if named.contains(r.name.as_str()) && r.qualified.is_none() {
+                r.kind = "enum";
+            }
         }
         true
     });
@@ -1398,11 +1407,21 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     widened
 }
 
-fn remove_enum_aliases(decls: &mut Vec<Decl>, enums: &HashSet<&str>) {
+// In a namespace, the enum has the alias's path (`NodeJS_Platform`): what
+// referred to the alias (`NodeJS.Platform`) goes in `moved`.
+fn remove_enum_aliases(decls: &mut Vec<Decl>, enums: &HashSet<&str>, path: &[String], sep: &str, moved: &mut HashMap<String, String>) {
     decls.retain_mut(|d| match d {
-        Decl::Alias(a) => !matches!(&a.ty, Type::Ref(r) if r.kind == "enum" && r.name == a.name && enums.contains(a.name.as_str())),
+        Decl::Alias(a) => {
+            let flat = path.iter().chain([&a.name]).cloned().collect::<Vec<_>>().join(sep);
+            let gone = matches!(&a.ty, Type::Ref(r) if r.kind == "enum" && r.name == flat && enums.contains(flat.as_str()));
+            if gone && !path.is_empty() {
+                moved.insert(path.iter().chain([&a.name]).cloned().collect::<Vec<_>>().join("."), flat);
+            }
+            !gone
+        }
         Decl::Namespace(n) => {
-            remove_enum_aliases(&mut n.decls, enums);
+            let inner: Vec<String> = path.iter().cloned().chain([n.name.clone()]).collect();
+            remove_enum_aliases(&mut n.decls, enums, &inner, sep, moved);
             true
         }
         _ => true,
@@ -1532,7 +1551,8 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                 return true;
             }
             // A callback of `M[K]` depends on its signature's key: it stays inline.
-            if !keyed.is_empty() && mentions(t, &keyed) {
+            // An object holding one is hoisted, the signature with it.
+            if is_function && !keyed.is_empty() && mentions(t, &keyed) {
                 return false;
             }
             let key = type_key(t);

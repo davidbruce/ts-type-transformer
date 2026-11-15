@@ -1292,6 +1292,8 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             .iter()
             .map(|v| {
                 let id = camel(&super::wasm::ident(if v.is_empty() { "empty" } else { v }));
+                // Nothing of it is a name (`"\\"`, `"/"`).
+                let id = if id.trim_matches('_').is_empty() { "Value".to_string() } else { id };
                 let id = if seen.insert(id.clone()) { id } else { format!("{id}{}", seen.len()) };
                 (id, v.clone())
             })

@@ -1199,7 +1199,7 @@ impl Gen {
                 && let Some(module) = d.attribute("module")
             {
                 let unit = self.units.get(raw).cloned().unwrap_or_else(|| module.to_string());
-                self.current_file = if d.has_tag_name("typeAlias") { self.file_of[raw] } else { self.file_of.get(&format!("module:{unit}")).copied().unwrap_or(0) };
+                self.current_file = if d.has_tag_name("typeAlias") { self.file_of.get(raw).copied().unwrap_or(0) } else { self.file_of.get(&format!("module:{unit}")).copied().unwrap_or(0) };
             }
             let start = self.out.len();
             let prev_globals = std::mem::replace(&mut self.in_globals, indent.is_empty() && !d.has_attribute("module"));
@@ -1218,7 +1218,7 @@ impl Gen {
             {
                 let text = self.out.split_off(start);
                 if d.has_tag_name("typeAlias") {
-                    let file = self.file_of[raw];
+                    let file = self.file_of.get(raw).copied().unwrap_or(0);
                     *self.alias_types.entry(file).or_default() += &text;
                 } else {
                     let unit = self.units.get(raw).cloned().unwrap_or_else(|| module.to_string());

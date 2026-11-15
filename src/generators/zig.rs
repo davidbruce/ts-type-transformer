@@ -7,7 +7,7 @@ use super::wasm::{Call, Class, Func, Model, NamedUnion, Ty};
 
 // Quoted identifiers accept any name, keywords included.
 fn ident(name: &str) -> String {
-    format!("@\"{name}\"")
+    format!("@\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 // `get_x` -> `getX`, `addEventListener_with_string` -> `addEventListenerWithString`.

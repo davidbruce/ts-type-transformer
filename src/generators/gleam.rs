@@ -120,6 +120,19 @@ impl<'m> Gen<'m> {
         self.callbacks.contains_key(n)
     }
 
+    // Whether Gleam's type of a value names a type parameter.
+    fn shows(&self, t: &Ty, param: &str) -> bool {
+        match t {
+            Ty::Param(n) => n == param,
+            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) => self.shows(inner, param),
+            Ty::Tuple(es) => es.iter().any(|e| self.shows(e, param)),
+            Ty::Generic(n, _) if self.m.unions.iter().any(|u| u.name == *n) && !self.decodable(n) => false,
+            Ty::Generic(n, args) if self.callbacks.contains_key(n) => self.callbacks[n].iter().filter_map(|&i| args.get(i)).any(|a| self.shows(a, param)),
+            Ty::Generic(_, args) => args.iter().any(|a| self.shows(a, param)),
+            _ => false,
+        }
+    }
+
     // Gleam's type of a value.
     fn ty(&self, t: &Ty) -> String {
         match t {
@@ -285,9 +298,22 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     }
     for c in &m.callbacks {
         name_type(&c.name, &mut g);
-        // Gleam allows no unused type parameter: `this` of a callback has gone.
-        let used = (0..c.type_params.len()).filter(|&i| c.params.iter().map(|x| &x.1).chain([&c.ret]).any(|t| mentions(t, &c.type_params[i].name))).collect();
-        g.callbacks.insert(c.name.clone(), used);
+        g.callbacks.insert(c.name.clone(), (0..c.type_params.len()).collect());
+    }
+    // Gleam allows no unused type parameter: `this` of a callback has gone, and
+    // what is `Dynamic` shows none. A callback may hold another: until settled.
+    loop {
+        let mut changed = false;
+        for c in &m.callbacks {
+            let used: Vec<usize> = (0..c.type_params.len()).filter(|&i| c.params.iter().map(|x| &x.1).chain([&c.ret]).any(|t| g.shows(t, &c.type_params[i].name))).collect();
+            if used != g.callbacks[&c.name] {
+                g.callbacks.insert(c.name.clone(), used);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
     }
     for u in &m.unions {
         name_type(&u.name, &mut g);
@@ -496,14 +522,6 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     Ok(Output { files: vec![("bindings.gleam".into(), out), ("bindings_ffi.mjs".into(), g.ffi)], skipped: g.skipped })
 }
 
-fn mentions(t: &Ty, param: &str) -> bool {
-    match t {
-        Ty::Param(n) => n == param,
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => mentions(inner, param),
-        Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().any(|a| mentions(a, param)),
-        _ => false,
-    }
-}
 
 // A function's name, as the model has it; a `$` method (`$add`, which
 // returns a new value where `add` changes this one) is `add_new`.

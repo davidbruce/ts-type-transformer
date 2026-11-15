@@ -290,6 +290,8 @@ fn main() {
     }
 
     let mut front = front::Front::new(&mut checker, name, bundled::lib_path());
+    // Types the checker makes while collecting merge as lowering's would.
+    front.merge_intersections = opts.intersections;
     for (package, source, _) in &entries {
         front.add_package(package, source.file_name());
     }
