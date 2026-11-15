@@ -20,9 +20,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
+use super::names::{Kind, Naming};
 
-fn ident(name: &str) -> String {
-    const KEYWORDS: &[&str] = &[
+const KEYWORDS: &[&str] = &[
         "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char", "char8_t", "char16_t",
         "char32_t", "class", "compl", "concept", "const", "consteval", "constexpr", "constinit", "const_cast", "continue", "co_await", "co_return",
         "co_yield", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "float",
@@ -30,12 +30,40 @@ fn ident(name: &str) -> String {
         "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "requires", "return", "short", "signed", "sizeof", "static",
         "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid",
         "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq", "errno", "assert", "NULL", "stdin", "stdout", "stderr",
-        // The handle every type holds.
-        "h",
-    ];
+    // The handle every type holds.
+    "h",
+];
+
+fn ident(name: &str) -> String {
     let s = super::model::ident(name);
     if KEYWORDS.contains(&s.as_str()) { format!("{s}_") } else { s }
 }
+
+// Types, their helpers (`decode_Id`, `Mode_keys`) and free functions are in
+// the global namespace; a type's functions in its own, where they overload.
+pub const NAMING: Naming = Naming {
+    reserved: || KEYWORDS.iter().map(|k| k.to_string()).chain(["ts", "std"].map(String::from)).collect(),
+    type_names: |candidate, name, kind, m| {
+        let mut ids = vec![candidate.to_string()];
+        match kind {
+            Kind::Union => ids.push(format!("decode_{candidate}")),
+            Kind::Class if m.maps.iter().any(|k| k.name == name) => ids.push(format!("{candidate}Keys")),
+            _ => {}
+        }
+        ids
+    },
+    values_of: |_, _, _, _| Vec::new(),
+    types_apart: false,
+    overloads: true,
+    // A getter or setter is its property's name, a constructor `create`.
+    func_name: |owner, name, f| match &f.call {
+        Call::Get(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::New(_) | Call::Create => None,
+        Call::StaticGet(_) | Call::StaticSet(_) if f.module.is_empty() => None,
+        _ => Some(cpp_name_as(f, name, if owner.is_some() { "create" } else { "" })),
+    },
+    funcs_flat: false,
+    members: |c| vec![c.name.clone(), "h".into()],
+};
 
 // C++ type of a value going in. `V` is the value a typed key selects.
 fn ty_in(t: &Ty) -> String {
@@ -216,13 +244,18 @@ enum Place {
 
 // The C++ name of a function, from what it calls. `ctor` names constructors.
 fn cpp_name(f: &Func, ctor: &str) -> String {
+    cpp_name_as(f, &f.name, ctor)
+}
+
+// As `cpp_name`, were the function's model name `name`.
+fn cpp_name_as(f: &Func, name: &str, ctor: &str) -> String {
     let base = match &f.call {
         Call::Get(p) | Call::Set(p) => ident(p),
         Call::StaticGet(p) | Call::StaticSet(p) if f.module.is_empty() => ident(p.rsplit('.').next().unwrap_or(p)),
         Call::IndexGet => "at".into(),
         Call::IndexSet => "set_at".into(),
         Call::New(_) | Call::Create => ctor.into(),
-        _ => ident(&f.name),
+        _ => ident(name),
     };
     // Overloads that differ only in a fixed argument are named after it.
     if f.fixed.is_empty() {

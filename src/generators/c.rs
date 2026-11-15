@@ -70,11 +70,13 @@ pub const NAMING: Naming = Naming {
         ids.swap(0, own);
         ids
     },
+    values_of: |_, _, _, _| Vec::new(),
     types_apart: false,
-    func_name: |owner, name, _| match owner {
+    overloads: false,
+    func_name: |owner, name, _| Some(match owner {
         Some(o) => format!("{o}_{name}"),
         None => name.to_string(),
-    },
+    }),
     funcs_flat: true,
     members: |_| Vec::new(),
 };

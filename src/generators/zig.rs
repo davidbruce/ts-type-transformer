@@ -1,9 +1,10 @@
 // XML -> Zig module for a wasm32 module. As C, but unions of simple types
 // become tagged unions, and nullable objects become optionals.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::model::{Call, Class, Func, Model, NamedUnion, Ty};
+use super::names::Naming;
 
 // Quoted identifiers accept any name, keywords included.
 fn ident(name: &str) -> String {
@@ -34,20 +35,42 @@ fn method_name(name: &str) -> String {
     out
 }
 
-// Unique Zig names for a set of functions in one scope, keyed by the model's name.
-fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>, taken: &mut HashSet<String>) -> HashMap<String, String> {
-    let mut out = HashMap::new();
-    for f in funcs {
-        let base = method_name(&f.name);
-        let mut name = base.clone();
-        let mut n = 2;
-        while !taken.insert(name.clone()) {
-            name = format!("{base}_{n}");
-            n += 1;
+// What the runtime declares at the top of every file.
+const RUNTIME_NAMES: &[&str] = &[
+    "JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback",
+    "jsTakeError", "jsErrorMessage", "jsErrorName", "jsErrorStack", "jsErrorNew", "jsDateNow", "jsEnumOf", "jsSame", "jsTry", "JsScope", "jsTake",
+];
+
+// Types and functions share a file's namespace, and the root's that
+// re-exports them; a type's functions are in its struct, beside what the
+// struct has of its own.
+pub const NAMING: Naming = Naming {
+    reserved: || RUNTIME_NAMES.iter().chain(&["raw", "std", "builtin", "JsAsyncIterator", "JsIterator"]).map(|n| n.to_string()).collect(),
+    type_names: |candidate, _, _, _| vec![candidate.to_string()],
+    values_of: |_, _, _, _| Vec::new(),
+    types_apart: false,
+    overloads: false,
+    func_name: |_, name, _| Some(method_name(name)),
+    funcs_flat: false,
+    members: |c| {
+        let mut own = vec!["h".to_string(), "Methods".to_string(), "Key".to_string(), "Type".to_string()];
+        own.extend(c.consts.iter().map(|(n, _)| n.clone()));
+        own.extend(c.ancestors.iter().map(|a| format!("as{a}")));
+        // Its own `iterate`, where it declares none.
+        let declares = |n: &str| c.funcs.iter().any(|f| f.name == n);
+        if c.iterates_async.is_some() && !declares("iterateAsync") {
+            own.push("iterateAsync".into());
         }
-        out.insert(f.name.clone(), name);
-    }
-    out
+        if c.iterates.is_some() && !declares("iterate") {
+            own.push("iterate".into());
+        }
+        own
+    },
+};
+
+// Each function's Zig name, by the model's: `names::settle` made them apart.
+fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>) -> HashMap<String, String> {
+    funcs.map(|f| (f.name.clone(), method_name(&f.name))).collect()
 }
 
 // Parameters get a suffix: Zig forbids shadowing a declaration in scope.
@@ -565,7 +588,10 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
-    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), ["JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback", "jsTakeError", "jsErrorMessage", "jsErrorName", "jsErrorStack", "jsErrorNew", "jsDateNow", "jsEnumOf", "jsSame", "jsTry", "JsScope", "jsTake"].map(String::from).to_vec()));
+    // File -> the names of other files its declarations may use: the types
+    // they name, from the model, not from the source written.
+    let mut uses: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    files.insert("runtime".into(), (RUNTIME.into(), RUNTIME_EXTERNS.into(), RUNTIME_NAMES.iter().map(|n| n.to_string()).collect()));
     let mut types = (String::new(), String::new(), Vec::new());
     for (id, (name, values)) in m.enums.iter().enumerate() {
         let mut seen = std::collections::HashSet::new();
@@ -591,7 +617,9 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         types.0 += &format!("pub const {name} = enum(i32) {{ {},{aliases} }};\n", fields.join(", "));
         types.2.push(name.clone());
     }
+    let types_uses = uses.entry("types".into()).or_default();
     for u in &m.unions {
+        u.parts.iter().for_each(|p| type_refs(p, types_uses));
         types.0 += &union_decl(u);
         types.1 += &format!("    extern \"env\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
         types.2.push(u.name.clone());
@@ -600,6 +628,10 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let mut opaque = m.opaque.clone();
     if iterates_async && !opaque.iter().any(|n| n == "Promise") {
         opaque.push("Promise".into());
+    }
+    for c in &m.callbacks {
+        c.params.iter().for_each(|p| type_refs(&p.1, types_uses));
+        type_refs(&c.ret, types_uses);
     }
     if iterates_async {
         types.0 += "// A JavaScript async iterator: `next()` is a promise of the next value, or of a null handle at the end.\n\
@@ -761,30 +793,25 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
     }
     let shares: HashSet<&str> = homes.values().map(|h| h.0).collect();
-    let class_names: HashMap<&str, HashMap<String, String>> = m
-        .classes
-        .iter()
-        .map(|c| {
-            let mut taken: HashSet<String> = HashSet::from(["h".to_string()]);
-            taken.extend(c.consts.iter().map(|(n, _)| n.clone()));
-            if c.iterates_async.is_some() {
-                taken.insert("iterateAsync".into());
-            }
-            if c.iterates.is_some() {
-                taken.insert("iterate".into());
-            }
-            if m.maps.iter().any(|k| k.name == c.name) {
-                taken.extend(["Key".into(), "Type".into()]);
-            }
-            taken.extend(c.ancestors.iter().map(|a| format!("as{a}")));
-            if shares.contains(c.name.as_str()) {
-                taken.insert("Methods".into());
-            }
-            (c.name.as_str(), names_of(c.funcs.iter(), &mut taken))
-        })
-        .collect();
+    let class_names: HashMap<&str, HashMap<String, String>> = m.classes.iter().map(|c| (c.name.as_str(), names_of(c.funcs.iter()))).collect();
     // Every object is an opaque handle; methods live in the struct's namespace.
     for c in &m.classes {
+        let refs = uses.entry(c.module.clone()).or_default();
+        for f in &c.funcs {
+            f.params.iter().for_each(|p| type_refs(&p.1, refs));
+            type_refs(&f.ret, refs);
+            if let Some((from, _)) = homes.get(&(c.name.as_str(), f.name.as_str())) {
+                refs.insert(from.to_string());
+            }
+        }
+        refs.extend(c.ancestors.iter().cloned());
+        c.iterates.iter().chain(&c.elements).for_each(|t| type_refs(t, refs));
+        if c.iterates_async.is_some() {
+            refs.extend(["JsAsyncIterator".to_string(), "Promise".to_string()]);
+        }
+        if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
+            map.values.iter().for_each(|v| type_refs(v, refs));
+        }
         let (out, externs, names) = files.entry(c.module.clone()).or_default();
         names.push(c.name.clone());
         *out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
@@ -831,9 +858,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
         *out += "};\n";
     }
-    let mut top_taken: HashSet<String> = files.values().flat_map(|(_, _, ns)| ns.iter().cloned()).collect();
-    let top_names = names_of(m.funcs.iter(), &mut top_taken);
+    let top_names = names_of(m.funcs.iter());
     for f in &m.funcs {
+        let refs = uses.entry(f.module.clone()).or_default();
+        f.params.iter().for_each(|p| type_refs(&p.1, refs));
+        type_refs(&f.ret, refs);
         let (out, externs, names) = files.entry(f.module.clone()).or_default();
         let zig_name = &top_names[&f.name];
         names.push(zig_name.clone());
@@ -846,9 +875,9 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let mut root = String::from("// Generated. Every name, from the file that declares it.\n");
     for (file, (body, externs, names)) in &files {
         let own: HashSet<&str> = names.iter().map(String::as_str).collect();
-        let mut used: Vec<&str> = identifiers(body).into_iter().filter(|n| !own.contains(n) && home.contains_key(n)).collect();
-        used.sort();
-        used.dedup();
+        // The runtime's names, and the types the file's declarations name.
+        let wanted = RUNTIME_NAMES.iter().copied().chain(uses.get(file).into_iter().flatten().map(String::as_str));
+        let used: BTreeSet<&str> = wanted.filter(|n| !own.contains(n) && home.contains_key(n)).collect();
         // Paths are relative to the importing file: `areas/css.zig` imports `../types.zig`.
         let up = "../".repeat(file.matches('/').count());
         let imports: String = used.iter().map(|n| format!("const {n} = @import(\"{up}{}.zig\").{n};\n", home[n])).collect();
@@ -862,39 +891,20 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     Ok(out)
 }
 
-// The plain identifiers in Zig source: not quoted ones (`@"x"`), not strings.
-fn identifiers(src: &str) -> HashSet<&str> {
-    let mut out = HashSet::new();
-    let b = src.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        match b[i] {
-            b'"' => {
-                i += 1;
-                while i < b.len() && b[i] != b'"' {
-                    i += if b[i] == b'\\' { 2 } else { 1 };
-                }
-                i += 1;
-            }
-            b'/' if b.get(i + 1) == Some(&b'/') => {
-                while i < b.len() && b[i] != b'\n' {
-                    i += 1;
-                }
-            }
-            c if c.is_ascii_alphabetic() || c == b'_' => {
-                let start = i;
-                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
-                    i += 1;
-                }
-                // Not a field (`.name`) or builtin (`@name`).
-                if start == 0 || !matches!(b[start - 1], b'.' | b'@') {
-                    out.insert(&src[start..i]);
-                }
-            }
-            _ => i += 1,
+// The model's types `t` names: what Zig code of it refers to.
+fn type_refs(t: &Ty, out: &mut BTreeSet<String>) {
+    match t {
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) | Ty::Key(n) | Ty::Mapped(n) => {
+            out.insert(n.clone());
         }
+        Ty::Generic(n, args) => {
+            out.insert(n.clone());
+            args.iter().for_each(|a| type_refs(a, out));
+        }
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => type_refs(inner, out),
+        Ty::Union(parts) | Ty::Tuple(parts) => parts.iter().for_each(|p| type_refs(p, out)),
+        Ty::Void | Ty::Num | Ty::Bool | Ty::Str | Ty::Any | Ty::Array | Ty::Param(_) => {}
     }
-    out
 }
 
 // A buffer element as a Zig type.

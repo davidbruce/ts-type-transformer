@@ -17,6 +17,7 @@ use roxmltree::Document;
 
 use super::js::{access, global, js_test};
 use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, model, with_self_args};
+use super::names::{Kind, Naming};
 
 const KEYWORDS: &[&str] = &[
     "as", "assert", "auto", "case", "const", "delegate", "derive", "echo", "else", "fn", "if", "implement", "import", "let", "macro", "opaque", "panic", "pub", "test", "todo", "type", "use",
@@ -25,6 +26,38 @@ const KEYWORDS: &[&str] = &[
 // Types the bindings declare whatever the API: what a module of Gleam can
 // name of JavaScript's values. Not opaque types of the API.
 const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray"];
+
+// The fixed values of every module of bindings.
+const OWN_VALUES: &[&str] = &["promise_then", "attempt", "js_error_message", "dynamic"];
+
+// Types (and variants) and values are apart; a type's functions, constants,
+// upcasts and `to_list` are values named for it: `shape_area`.
+pub const NAMING: Naming = Naming {
+    reserved: || KEYWORDS.iter().chain(OWN).chain(OWN_VALUES).map(|k| k.to_string()).collect(),
+    // An external `Promise` is Gleam's own; a class the API declares as
+    // `Option` is not, and gives way.
+    type_names: |candidate, _, kind, _| if kind == Kind::Opaque && (OWN.contains(&candidate) || candidate == "PromiseLike") { Vec::new() } else { vec![upper(candidate)] },
+    values_of: |own, name, kind, m| {
+        let Some(c) = m.classes.iter().find(|c| c.name == name).filter(|_| kind == Kind::Class) else { return Vec::new() };
+        let prefix = snake(own);
+        let mut out: Vec<String> = c.consts.iter().map(|(k, _)| lower(&format!("{prefix}_{k}"))).collect();
+        if c.iterates.is_some() || c.elements.is_some() {
+            out.push(lower(&format!("{prefix}_to_list")));
+        }
+        out.extend(c.ancestors.iter().map(|a| lower(&format!("{prefix}_as_{}", snake(&upper(a))))));
+        out
+    },
+    types_apart: true,
+    overloads: false,
+    func_name: |owner, name, f| {
+        Some(match owner {
+            Some(o) => lower(&format!("{}_{}", snake(o), function_name(f, name))),
+            None => lower(&function_name(f, name)),
+        })
+    },
+    funcs_flat: true,
+    members: |_| Vec::new(),
+};
 
 pub struct Output {
     pub files: Vec<(String, String)>,
@@ -93,15 +126,11 @@ impl<'m> Gen<'m> {
         *self.skipped.entry(why.to_string()).or_default() += 1;
     }
 
-    // A module-level value name not yet taken: `shape_get_size`, `area_2`.
+    // A module-level value's name: `shape_get_size`. `names::settle` made
+    // them apart; one given out twice is a mistake in its naming.
     fn value_name(&mut self, base: &str) -> String {
-        let base = lower(base);
-        let mut name = base.clone();
-        let mut i = 2;
-        while !self.values.insert(name.clone()) {
-            name = format!("{base}_{i}");
-            i += 1;
-        }
+        let name = lower(base);
+        assert!(self.values.insert(name.clone()), "Gleam: the value `{name}` is named twice");
         name
     }
 
@@ -292,19 +321,16 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let root_import = doc.root_element().attribute("import").map(str::to_string);
     let mut m = model(xml, "Gleam")?;
+    super::names::settle(&mut m, &NAMING);
     break_cycles(&mut m);
     let mut g = Gen { m: &m, types: HashMap::new(), variants: HashMap::new(), callbacks: HashMap::new(), values: HashSet::new(), out: String::new(), ffi: String::new(), skipped: m.skipped.clone() };
 
-    // Names: every type, and every variant of a union or enum, apart.
+    // Names: every type (`names::settle` made them apart), then every
+    // variant of a union or enum, apart from them and each other.
     let mut type_names: HashSet<String> = OWN.iter().map(|s| s.to_string()).collect();
     let mut name_type = |n: &str, g: &mut Gen| {
-        let base = upper(n);
-        let mut name = base.clone();
-        let mut i = 2;
-        while !type_names.insert(name.clone()) {
-            name = format!("{base}{i}");
-            i += 1;
-        }
+        let name = upper(n);
+        assert!(type_names.insert(name.clone()), "Gleam: the type `{name}` is named twice");
         g.types.insert(n.to_string(), name);
     };
     for c in &m.classes {
@@ -481,7 +507,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let name = g.tname(&c.name);
         let params = Gen::type_params(&c.type_params);
         g.out += &format!("pub type {name}{params}\n\n");
-        let prefix = snake(&c.name);
+        let prefix = snake(&name);
         for (constant, value) in &c.consts {
             let gleam = if value.starts_with('"') {
                 value.clone()
@@ -500,7 +526,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
         for f in &c.funcs {
             let f = with_self_args(f, c);
-            let id = g.value_name(&format!("{prefix}_{}", function_name(&f)));
+            let id = g.value_name(&format!("{prefix}_{}", function_name(&f, &f.name)));
             g.function(&id, &f, Some((&c.name, &c.type_params)));
         }
         // What it iterates, or holds as a subclass of Array: a list.
@@ -524,12 +550,12 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
                     None => continue,
                 }
             };
-            let id = g.value_name(&format!("{prefix}_as_{}", snake(a)));
+            let id = g.value_name(&format!("{prefix}_as_{}", snake(&g.tname(a))));
             g.out += &format!("@external(javascript, \"./bindings_ffi.mjs\", \"dynamic\")\npub fn {id}(value: {name}{params}) -> {}{args}\n\n", g.tname(a));
         }
     }
     for f in &m.funcs {
-        let id = g.value_name(&function_name(f));
+        let id = g.value_name(&function_name(f, &f.name));
         g.function(&id, f, None);
     }
     // No unused import: a warning, where warnings are errors.
@@ -540,15 +566,15 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
 
 // A function's name, as the model has it; a `$` method (`$add`, which
 // returns a new value where `add` changes this one) is `add_new`.
-fn function_name(f: &Func) -> String {
+fn function_name(f: &Func, name: &str) -> String {
     let dollar = match &f.call {
         Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => js.rsplit('.').next().is_some_and(|n| n.starts_with('$')),
         _ => false,
     };
     if !dollar {
-        return f.name.clone();
+        return name.to_string();
     }
-    let stem = f.name.trim_start_matches('_');
+    let stem = name.trim_start_matches('_');
     match stem.strip_prefix("set_") {
         Some(rest) => format!("set_{}_new", rest.trim_start_matches('_')),
         None => format!("{}_new", if stem.is_empty() { "dollar" } else { stem }),

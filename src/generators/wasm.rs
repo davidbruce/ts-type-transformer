@@ -16,6 +16,9 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut m = super::model::model(xml, target)?;
     let naming = match target {
         "C" => Some(&super::c::NAMING),
+        "C++" => Some(&super::cpp::NAMING),
+        "Zig" => Some(&super::zig::NAMING),
+        "Rust" => Some(&super::rust::NAMING),
         _ => None,
     };
     if let Some(n) = naming {

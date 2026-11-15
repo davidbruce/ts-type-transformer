@@ -24,6 +24,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
+use super::names::{Kind, Naming, identifiers};
 
 const KEYWORDS: &[&str] = &[
     "as", "break", "const", "continue", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
@@ -257,10 +258,10 @@ fn mentions(t: &Ty, param: &str) -> bool {
 
 // A function's name: a property `x` reads as `x()` and writes as `set_x(..)`.
 // A `$` method (`$add`) reads as `add_new()` rather than `_add()`.
-fn function_name(f: &Func) -> String {
+fn function_name_as(f: &Func, name: &str) -> String {
     let base = match &f.call {
-        Call::Get(_) | Call::StaticGet(_) | Call::IndexGet => f.name.strip_prefix("get_").unwrap_or(&f.name),
-        _ => &f.name,
+        Call::Get(_) | Call::StaticGet(_) | Call::IndexGet => name.strip_prefix("get_").unwrap_or(name),
+        _ => name,
     };
     let dollar = match &f.call {
         Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => {
@@ -278,20 +279,9 @@ fn function_name(f: &Func) -> String {
     ident(&if is_set { format!("set_{stem}_new") } else { format!("{stem}_new") })
 }
 
-// Names for a set of functions, each once: by the model's name.
-fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>, taken: &mut HashSet<String>) -> HashMap<String, String> {
-    let mut out = HashMap::new();
-    for f in funcs {
-        let base = function_name(f);
-        let mut name = if TAKEN.contains(&base.as_str()) { format!("js_{base}") } else { base.clone() };
-        let mut n = 2;
-        while !taken.insert(name.clone()) {
-            name = format!("{base}_{n}");
-            n += 1;
-        }
-        out.insert(f.name.clone(), name);
-    }
-    out
+// Each function's Rust name, by the model's: `names::settle` made them apart.
+fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>) -> HashMap<String, String> {
+    funcs.map(|f| (f.name.clone(), rust_function(f, &f.name))).collect()
 }
 
 // One function as source: `vis fn name<..>(..) -> R { .. }`. `this` is the
@@ -1231,6 +1221,55 @@ impl<T: JsType> JsAsyncIterator<T> {
 // What the model names that the runtime declares under another name.
 const RUNTIME_TYPES: &[(&str, &str)] = &[("Promise", "JsPromise"), ("PromiseLike", "JsPromise")];
 
+// A model type's Rust name: CamelCase (a type named in snake_case would
+// share its constructor's name with a function), or the runtime's.
+fn rust_type(n: &str) -> String {
+    RUNTIME_TYPES.iter().find(|r| r.0 == n).map_or_else(|| camel(n), |r| r.1.to_string())
+}
+
+// A tuple struct is also a function of its name: types and functions share
+// a namespace. A type's functions are in its `impl`, beside what every
+// handle has (`clone`, `lend`); a class's inherited ones in `XMethods`.
+pub const NAMING: Naming = Naming {
+    // The runtime's own types; std's (`Box`) a type of the crate may shadow.
+    reserved: || {
+        let words = identifiers(RUNTIME);
+        let mut declared: Vec<String> = Vec::new();
+        // At the top of the file, not an associated `type Item` in an `impl`.
+        for line in RUNTIME.lines().filter(|l| !l.starts_with(char::is_whitespace)) {
+            let mut it = line.split(|c: char| !(c.is_alphanumeric() || c == '_')).filter(|w| !w.is_empty());
+            while let Some(w) = it.next() {
+                if matches!(w, "struct" | "trait" | "enum" | "type")
+                    && let Some(name) = it.next()
+                {
+                    declared.push(name.to_string());
+                }
+            }
+        }
+        KEYWORDS.iter().map(|k| k.to_string()).chain(declared.into_iter().filter(|d| words.contains(d))).collect()
+    },
+    type_names: |candidate, _, kind, _| {
+        if RUNTIME_TYPES.iter().any(|r| r.0 == candidate) {
+            return Vec::new();
+        }
+        let t = rust_type(candidate);
+        if kind == Kind::Class { vec![t.clone(), format!("{t}Methods")] } else { vec![t] }
+    },
+    values_of: |_, _, _, _| Vec::new(),
+    types_apart: false,
+    overloads: false,
+    func_name: |_, name, f| Some(rust_function(f, name)),
+    funcs_flat: false,
+    members: |_| TAKEN.iter().map(|t| t.to_string()).collect(),
+};
+
+// A function's Rust name, were its model name `name`: what every handle has
+// already (`clone`) is `js_clone`.
+fn rust_function(f: &Func, name: &str) -> String {
+    let base = function_name_as(f, name);
+    if TAKEN.contains(&base.as_str()) { format!("js_{base}") } else { base }
+}
+
 // What every file of the crate starts with.
 const PRELUDE: &str = "// Generated.\n#![allow(unused_imports)]\nuse crate::raw;\nuse crate::runtime::handle;\nuse crate::*;\nuse core::marker::PhantomData;\n\n";
 
@@ -1255,24 +1294,11 @@ fn module_file(module: &str) -> String {
 
 // The crate: see the top of this file.
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
-    // Generated type names, in CamelCase where that is free.
+    // Each type's Rust name: `names::settle` made them apart.
     let declared: Vec<&String> = m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)).chain(m.classes.iter().map(|c| &c.name)).chain(m.callbacks.iter().map(|c| &c.name)).chain(m.unions.iter().map(|u| &u.name)).chain(&m.opaque).collect();
-    let mut taken: HashSet<String> = declared.iter().map(|n| n.to_string()).collect();
     let mut types: HashMap<String, String> = RUNTIME_TYPES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
     for n in &declared {
-        // CamelCase, numbered where another has the name: a type named in
-        // snake_case would share its constructor's name with a function.
-        let base = camel(n);
-        if base == **n || types.contains_key(*n) {
-            continue;
-        }
-        let mut name = base.clone();
-        let mut i = 2;
-        while !taken.insert(name.clone()) {
-            name = format!("{base}{i}");
-            i += 1;
-        }
-        types.insert(n.to_string(), name);
+        types.entry(n.to_string()).or_insert_with(|| rust_type(n));
     }
     CX.with(|c| {
         *c.borrow_mut() = Context {
@@ -1411,7 +1437,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         out
     };
     // The Rust name of each class's functions, by the model's.
-    let names: HashMap<&str, HashMap<String, String>> = m.classes.iter().map(|c| (c.name.as_str(), names_of(c.funcs.iter(), &mut HashSet::new()))).collect();
+    let names: HashMap<&str, HashMap<String, String>> = m.classes.iter().map(|c| (c.name.as_str(), names_of(c.funcs.iter()))).collect();
     let type_names: HashSet<String> = declared.iter().map(|n| tn(n)).collect();
     let grouped: HashMap<&str, Vec<Family>> = m.classes.iter().map(|c| (c.name.as_str(), families(c, &names[c.name.as_str()], &type_names))).collect();
     // The family a member is one overload of.
@@ -1524,7 +1550,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             }
         }
     }
-    let function_names = names_of(m.funcs.iter(), &mut HashSet::new());
+    let function_names = names_of(m.funcs.iter());
     for f in &m.funcs {
         let out = modules.entry(module_file(&f.module)).or_insert_with(|| PRELUDE.to_string());
         for item in function(f, &function_names[&f.name], "pub ", &mut imports, None) {

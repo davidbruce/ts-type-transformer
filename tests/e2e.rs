@@ -426,7 +426,12 @@ fn constraints_are_kept_where_met_by_name() {
 
 // Names apart in TypeScript that a target would make one identifier of.
 mod clashes {
+    #[test] fn fsharp() { super::fsharp("clashes"); }
     #[test] fn c() { super::c("clashes"); }
+    #[test] fn cpp() { super::cpp("clashes"); }
+    #[test] fn zig() { super::zig("clashes"); }
+    #[test] fn rust() { super::rust("clashes"); }
+    #[test] fn gleam() { super::gleam("clashes"); }
 }
 
 mod builtins {

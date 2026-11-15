@@ -63,11 +63,19 @@ pub struct Naming {
     // first (C's `Shape`, `AS_Shape`, `Shape_from_handle`; Rust's `Shape`).
     // `name` is its name in the model, to find it by.
     pub type_names: fn(candidate: &str, name: &str, Kind, &Model) -> Vec<String>,
+    // The functions and constants a type makes, given its identifier
+    // (Gleam's `shape_as_named`, `shape_to_list`), where they are apart.
+    pub values_of: fn(ident: &str, name: &str, Kind, &Model) -> Vec<String>,
     // Types and functions are in separate namespaces (Rust, Gleam).
     pub types_apart: bool,
+    // Functions may share a name, told apart by their parameters (C++);
+    // never a type's.
+    pub overloads: bool,
     // A function's identifier with the model name `name`, given its type's
-    // identifier, if it has a type.
-    pub func_name: fn(Option<&str>, &str, &Func) -> String,
+    // identifier, if it has a type. None where the target does not name it
+    // from the model's name (C++ names a getter by its property): renaming
+    // it would not change it.
+    pub func_name: fn(Option<&str>, &str, &Func) -> Option<String>,
     // A type's functions are top-level identifiers (C's `Shape_area`,
     // Gleam's `shape_area`), else each type is a scope of its own.
     pub funcs_flat: bool,
@@ -79,7 +87,7 @@ pub struct Naming {
 pub fn settle(m: &mut Model, naming: &Naming) {
     let reserved = (naming.reserved)();
     let reserved = || reserved.iter().map(String::as_str);
-    let mut top = Tops { types: Scope::with(reserved()), values: Scope::with(reserved()), apart: naming.types_apart };
+    let mut top = Tops { types: Scope::with(reserved()), values: Scope::with(reserved()), apart: naming.types_apart, overloads: naming.overloads };
     let mut type_renames: HashMap<String, String> = HashMap::new();
     // (class, or none for a top-level function; index): its new model name.
     let mut func_renames: Vec<(Option<usize>, usize, String)> = Vec::new();
@@ -99,7 +107,8 @@ pub fn settle(m: &mut Model, naming: &Naming) {
             for (name, kind) in all.iter().filter(|(n, _)| m.synthetic.contains(*n) == synthetic) {
                 let chosen = claim(name, &mut |candidate| {
                     let ids = (naming.type_names)(candidate, name, *kind, m);
-                    top.take_type(ids)
+                    let values = ids.first().map(|own| (naming.values_of)(own, name, *kind, m)).unwrap_or_default();
+                    top.take_type(ids, values)
                 });
                 if chosen != **name {
                     renames.insert((*name).clone(), chosen);
@@ -113,9 +122,18 @@ pub fn settle(m: &mut Model, naming: &Naming) {
                 let mut own = Scope::with(reserved());
                 own.take((naming.members)(c));
                 for (fi, f) in c.funcs.iter().enumerate() {
+                    if (naming.func_name)(Some(&owner), &f.name, f).is_none() {
+                        continue;
+                    }
                     let chosen = claim(&f.name, &mut |candidate| {
-                        let id = (naming.func_name)(Some(&owner), candidate, f);
-                        if naming.funcs_flat { top.take_value(vec![id]) } else { take(&mut own, vec![id]) }
+                        let id = (naming.func_name)(Some(&owner), candidate, f).unwrap_or_default();
+                        if naming.funcs_flat {
+                            top.take_value(vec![id])
+                        } else if naming.overloads {
+                            own.free(&[id])
+                        } else {
+                            take(&mut own, vec![id])
+                        }
                     });
                     if chosen != f.name {
                         out.push((Some(ci), fi, chosen));
@@ -126,8 +144,8 @@ pub fn settle(m: &mut Model, naming: &Naming) {
         // What the library declares, then functions, then what lowering made up.
         claim_types(false, &mut top, &mut type_renames);
         claim_funcs(false, &mut top, &type_renames, &mut func_renames);
-        for (fi, f) in m.funcs.iter().enumerate() {
-            let chosen = claim(&f.name, &mut |candidate| top.take_value(vec![(naming.func_name)(None, candidate, f)]));
+        for (fi, f) in m.funcs.iter().enumerate().filter(|(_, f)| (naming.func_name)(None, &f.name, f).is_some()) {
+            let chosen = claim(&f.name, &mut |candidate| top.take_value(vec![(naming.func_name)(None, candidate, f).unwrap_or_default()]));
             if chosen != f.name {
                 func_renames.push((None, fi, chosen));
             }
@@ -144,20 +162,31 @@ pub fn settle(m: &mut Model, naming: &Naming) {
     rename_types(m, &type_renames);
 }
 
-// The top-level scopes: one, or one for types and one for values.
+// The top-level identifiers, of types and of functions: in one namespace,
+// or two apart; functions may share theirs where they overload.
 struct Tops {
     types: Scope,
     values: Scope,
     apart: bool,
+    overloads: bool,
 }
 
 impl Tops {
-    fn take_type(&mut self, ids: Vec<String>) -> bool {
-        take(&mut self.types, ids)
+    fn take_type(&mut self, ids: Vec<String>, values: Vec<String>) -> bool {
+        let free = self.types.free(&ids) && (self.apart || self.values.free(&ids)) && self.values.free(&values) && (self.apart || self.types.free(&values));
+        if free {
+            self.types.take(ids);
+            self.values.take(values);
+        }
+        free
     }
 
     fn take_value(&mut self, ids: Vec<String>) -> bool {
-        if self.apart { take(&mut self.values, ids) } else { take(&mut self.types, ids) }
+        let free = (self.overloads || self.values.free(&ids)) && (self.apart || self.types.free(&ids));
+        if free {
+            self.values.take(ids);
+        }
+        free
     }
 }
 
@@ -169,11 +198,13 @@ fn take(scope: &mut Scope, ids: Vec<String>) -> bool {
     free
 }
 
-// `name`, or `name_2`, `name_3`, ...: the first `try_take` takes.
+// `name`, or `name_2`, `name_3`, ...: the first `try_take` takes. A naming
+// whose identifier does not follow the name would never find one.
 fn claim(name: &str, try_take: &mut dyn FnMut(&str) -> bool) -> String {
     let mut candidate = name.to_string();
     let mut n = 2;
     while !try_take(&candidate) {
+        assert!(n < 10_000, "names: no identifier for `{name}`: does the naming follow the name?");
         candidate = format!("{name}_{n}");
         n += 1;
     }

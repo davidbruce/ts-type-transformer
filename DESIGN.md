@@ -160,6 +160,19 @@ trims the glue to what a compiled module imports. The generators
 that a target cannot express, each kind once, with how often, where first,
 and the setting that lowers it.
 
+Names: lowering makes declarations' names apart in the XML; each target
+then spells them its own way (`foo_bar` and `fooBar` are one `foo_bar` in
+snake case; C's `Shape_area` is a method and could be a function too).
+`names.rs` renames the model until every identifier a target makes is unique
+in its scope, given the target's naming: how it spells types and functions,
+what else a type's name makes (C's `AS_Shape`, Gleam's `shape_as_named`),
+whether types and functions share a namespace, and whether functions
+overload (C++). What the library declares claims names first, then
+functions, then what lowering made up, which takes the `_2`. The model
+names each XML path apart first (`cluster.Worker` beside a class
+`cluster_Worker`), a top-level declaration before a namespace's. The
+`clashes` fixture runs each case in every language.
+
 C, C++, Zig, Rust and Gleam write from one binding model (`model.rs`):
 functions for properties, option bags and overloads, each saying how
 JavaScript is called. `wasm.rs` is the wasm boundary and its glue; `js.rs`
