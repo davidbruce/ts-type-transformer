@@ -36,6 +36,8 @@ struct Gen {
     keyed: HashMap<String, String>,
     // A function value's own type parameters, which F# has not: `obj`.
     fn_params: Vec<String>,
+    // Aliases a type extends, by id: an interface, as F# inherits only those.
+    inherited: HashSet<String>,
     // Abbreviations without type parameters, by name: what F# sees through
     // when it tells members apart (`type ArrayLike_or_x = obj`).
     abbrevs: HashMap<String, String>,
@@ -110,16 +112,41 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
         for a in r.ancestors() {
             let ps: Vec<Node> = named(a, "typeParameter").collect();
             let Some(i) = ps.iter().position(|p| attr(*p, "name") == name) else { continue };
-            if a.has_tag_name("interface") || a.has_tag_name("class") {
+            // A function value's own are `obj`, which meets nothing.
+            if a.has_tag_name("functionType") {
+                return None;
+            }
+            if a.has_tag_name("interface") || a.has_tag_name("class") || a.has_tag_name("typeAlias") {
                 return out.get(a.attribute("id").unwrap_or(attr(a, "name"))).and_then(|cs| cs.get(i).cloned().flatten());
             }
             return constraint_of(ps[i]);
         }
         None
     };
+    // An abbreviation (`Cell<F, D, V> = Cell_Core<F, D, V>`) has the
+    // constraints its type needs of its parameters: F# wants them written.
+    let aliases: Vec<Node> = root.descendants().filter(|d| d.has_tag_name("typeAlias") && named(*d, "typeParameter").next().is_some()).collect();
+    let mut dropped_ever: HashSet<(String, usize)> = HashSet::new();
     // A constraint dropped can break one a type parameter met through it:
     // until nothing more is dropped.
     loop {
+        for d in &aliases {
+            let body = only_child_type(*d);
+            let Some(target) = body.attribute("to").filter(|_| body.has_tag_name("ref")).and_then(|t| out.get(t)).cloned() else { continue };
+            let id = d.attribute("id").unwrap_or(attr(*d, "name")).to_string();
+            let cs: Vec<Option<String>> = named(*d, "typeParameter")
+                .enumerate()
+                .map(|(j, p)| {
+                    let at = elements(body).position(|a| a.has_tag_name("ref") && a.attribute("kind") == Some("typeParameter") && attr(a, "name") == attr(p, "name"));
+                    at.and_then(|i| target.get(i).cloned().flatten()).filter(|_| !dropped_ever.contains(&(id.clone(), j)))
+                })
+                .collect();
+            if cs.iter().any(Option::is_some) {
+                out.insert(id, cs);
+            } else {
+                out.remove(&id);
+            }
+        }
         let mut broken: HashSet<(String, usize)> = HashSet::new();
         for r in root.descendants().filter(|r| r.has_tag_name("ref")) {
             let Some(to) = r.attribute("to") else { continue };
@@ -151,6 +178,7 @@ fn constrained_interfaces(root: Node, bases: &HashMap<String, Vec<String>>) -> H
                 if c.is_some() && broken.contains(&(name.clone(), i)) {
                     *c = None;
                     dropped = true;
+                    dropped_ever.insert((name.clone(), i));
                 }
             }
         }
@@ -232,6 +260,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         keyed: HashMap::new(),
         fn_params: Vec::new(),
         abbrevs: HashMap::new(),
+        inherited: HashSet::new(),
         maps: BTreeSet::new(),
         types: BTreeMap::new(),
         values: String::new(),
@@ -290,6 +319,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     g.file_of.extend(declared_files(doc.root_element(), &plan, &units));
     g.units = units;
     g.index(doc.root_element(), "");
+    g.inherited = doc.root_element().descendants().filter(|e| e.has_tag_name("extends")).filter_map(|e| elements(e).next()).filter(|r| r.attribute("kind") == Some("typeAlias")).filter_map(|r| r.attribute("to")).map(str::to_string).collect();
     g.union_abbrevs(doc.root_element());
     g.decls(doc.root_element(), "", "");
     g.key_modules(doc.root_element());
@@ -790,7 +820,8 @@ impl Gen {
         for (i, &p) in params.iter().enumerate() {
             let t_node = only_child(p);
             let raw = attr(p, "name");
-            let mut pname = if raw.is_empty() { format!("arg{i}") } else { raw.to_string() };
+            // `_` names no parameter in F#.
+            let mut pname = if raw.is_empty() || raw == "_" { format!("arg{i}") } else { raw.to_string() };
             while !seen.insert(pname.clone()) {
                 pname.push('_');
             }
@@ -971,7 +1002,10 @@ impl Gen {
                 continue;
             }
             let t = only_child(p);
-            let name = ident(attr(p, "name"));
+            let name = match attr(p, "name") {
+                "_" | "" => "arg".to_string(),
+                n => ident(n),
+            };
             // F# wants optional arguments last and a parameter array last: not
             // both. A method is two overloads (see `members`); elsewhere the rest is left out.
             if flag(p, "rest") && has_optional && self.split_rest != Some(true) {
@@ -1094,6 +1128,8 @@ impl Gen {
         let js = js_access(m.attribute("jsName").unwrap_or(raw));
         let tps = self.constrained_type_params(m);
         let property = |name: &str, t: &str, settable: bool, js: &str| {
+            // A `unit` cannot be set (`static protoInitialize: void`).
+            let settable = settable && t != "unit";
             let get = format!("[<Emit(\"$0{}\")>] get (): {t} = jsNative", js.replace('"', "\\\""));
             let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
             (format!("abstract {name}: {t}{}", if settable { " with get, set" } else { "" }), if settable { format!("member this.{name} with {get} and {set}") } else { format!("member this.{name} with {get}") })
@@ -1409,7 +1445,9 @@ impl Gen {
                     let body = only_child_type(d);
                     // F# abbreviations cannot refer to themselves; an interface can.
                     let recursive = body.descendants().any(|r| r.has_tag_name("ref") && r.attribute("name") == Some(raw));
-                    if recursive && body.has_tag_name("object") {
+                    // So can one a type extends: F# inherits only interfaces.
+                    let inherited = d.attribute("id").is_some_and(|id| self.inherited.contains(id));
+                    if (recursive || inherited) && body.has_tag_name("object") {
                         self.interface(d, prefix, indent);
                         return;
                     }
@@ -1427,13 +1465,19 @@ impl Gen {
                         }
                         None => self.type_params(d),
                     };
+                    // The constraints its type needs, written as F# wants them.
+                    let when: Vec<String> = match d.attribute("id").and_then(|id| self.constrained.get(id)) {
+                        Some(cs) => named(d, "typeParameter").zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("'{} :> {}", attr(p, "name"), fable_builtin(c).unwrap_or_else(|| type_path(c))))).collect(),
+                        None => Vec::new(),
+                    };
+                    let header = if when.is_empty() || params.is_empty() { params.clone() } else { format!("{} when {} >", params.trim_end_matches('>'), when.join(" and ")) };
                     if body.has_tag_name("functionType") && named(body, "parameter").any(|p| flag(p, "optional")) {
                         // A function value's own type parameters are `obj`, as in `ty`.
                         let depth = self.fn_params.len();
                         self.fn_params.extend(named(body, "typeParameter").map(|p| attr(p, "name").to_string()));
                         let sig_str = self.delegate_sig(body, "");
                         self.fn_params.truncate(depth);
-                        self.out += &format!("{indent}type {name}{params} = delegate of {sig_str}\n\n");
+                        self.out += &format!("{indent}type {name}{header} = delegate of {sig_str}\n\n");
                     } else {
                         let mut t = self.ty(body, "");
                         // An abbreviation must show its type parameters: one whose type
@@ -1447,7 +1491,7 @@ impl Gen {
                         if params.is_empty() {
                             self.abbrevs.insert(name.to_string(), t.clone());
                         }
-                        self.out += &format!("{indent}type {name}{params} = {t}\n\n");
+                        self.out += &format!("{indent}type {name}{header} = {t}\n\n");
                     }
                 }
                 "var" => {

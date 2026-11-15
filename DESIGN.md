@@ -485,11 +485,9 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 - Rust and Zig callbacks with a union argument receive it decoded; C's
   receive a handle.
 - Gleam: no async iteration; builtins are opaque.
-- Of the real libraries, all twelve compile in C and Gleam, ten in Zig, seven
-  in C++, six in Rust, three in F# (katex, rapier and prosemirror in all).
-  What is left is per library: F# abbreviations of constrained or union types,
-  C++ and Rust constraints a generic base does not meet, Zig members two
-  overloads name alike. A type that expands without end converts to a
-  budget, then `any`.
+- Of the real libraries, all twelve compile in C, F# and Gleam, ten in Zig,
+  nine in Rust, seven in C++ (62 of 72). What is left is per library: C++
+  and Rust with a few libraries' generic bases, Zig's node and pixi. A type
+  that expands without end converts to a budget, then `any`.
 - Each construct has one lowering strategy so far. Values are strings so more
   can be added (`generics = "monomorphize"`).
