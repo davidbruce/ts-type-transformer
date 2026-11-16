@@ -308,14 +308,72 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
     m.funcs.iter_mut().for_each(|f| func(f, &to));
 }
 
-// A type named by its origin: `readline` and `Key` are `ReadlineKey`,
-// `fs/promises` and `FileHandle` `FsPromisesFileHandle`. None where the
-// origin is only its name again (`sortMixin` of sortMixin.d.ts).
+// A type named by its origin, less what its name says already:
+// `readline` and `Key` are `ReadlineKey`, `stream/web` and
+// `StreamPipeOptions` `WebStreamPipeOptions`, `GlContextSystem` and
+// `ContextSystemOptions` `GlContextSystemOptions`. None where the name says
+// all of it (`AddDaysOptions` of addDays.d.ts): the origin adds nothing.
 fn origin_name(origin: &str, name: &str) -> Option<String> {
     let upper = |w: &str| {
         let mut cs = w.chars();
         cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
     };
-    let prefix: String = origin.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(upper).collect();
-    (!prefix.eq_ignore_ascii_case(name)).then(|| format!("{prefix}{}", upper(name)))
+    // `Events` is the name's `Event`.
+    let stem = |w: &str| {
+        let w = w.to_lowercase();
+        if w.len() > 4 && w.ends_with("es") {
+            w[..w.len() - 2].to_string()
+        } else if w.len() > 3 && w.ends_with('s') {
+            w[..w.len() - 1].to_string()
+        } else {
+            w
+        }
+    };
+    let said: HashSet<String> = words(name).iter().map(|w| stem(w)).collect();
+    let prefix: String = words(origin).iter().filter(|w| !said.contains(&stem(w))).map(|w| upper(w)).collect();
+    (!prefix.is_empty()).then(|| format!("{prefix}{}", upper(name)))
+}
+
+// The words of a name: `fs/promises` is fs, promises; `HTMLElement` HTML,
+// Element; `addISOWeekYears` add, ISO, Week, Years.
+fn words(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for part in s.split(|c: char| !c.is_alphanumeric()).filter(|p| !p.is_empty()) {
+        let cs: Vec<char> = part.chars().collect();
+        let mut word = String::new();
+        for (i, &c) in cs.iter().enumerate() {
+            let prev = i.checked_sub(1).map(|j| cs[j]);
+            let next = cs.get(i + 1);
+            let starts = prev.is_some_and(|p| {
+                (c.is_uppercase() && (p.is_lowercase() || p.is_ascii_digit()))
+                    || (c.is_uppercase() && p.is_uppercase() && next.is_some_and(|n| n.is_lowercase()))
+                    || (c.is_ascii_digit() != p.is_ascii_digit())
+            });
+            if starts && !word.is_empty() {
+                out.push(std::mem::take(&mut word));
+            }
+            word.push(c);
+        }
+        if !word.is_empty() {
+            out.push(word);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn origin_names_say_nothing_twice() {
+        assert_eq!(origin_name("readline", "Key").as_deref(), Some("ReadlineKey"));
+        assert_eq!(origin_name("stream/web", "StreamPipeOptions").as_deref(), Some("WebStreamPipeOptions"));
+        assert_eq!(origin_name("GlContextSystem", "ContextSystemOptions").as_deref(), Some("GlContextSystemOptions"));
+        assert_eq!(origin_name("fs/promises", "FileHandle").as_deref(), Some("FsPromisesFileHandle"));
+        assert_eq!(origin_name("addDays", "AddDaysOptions"), None);
+        assert_eq!(origin_name("PointerEvents", "KonvaPointerEvent"), None);
+        assert_eq!(words("addISOWeekYears"), ["add", "ISO", "Week", "Years"]);
+        assert_eq!(words("HTMLElement2D"), ["HTML", "Element", "2", "D"]);
+    }
 }
