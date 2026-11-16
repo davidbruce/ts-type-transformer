@@ -656,6 +656,12 @@ impl Gen {
         out
     }
 
+    // Whether a type extends this one.
+    fn is_extended(&self, d: Node) -> bool {
+        let id = d.attribute("id").unwrap_or(attr(d, "name"));
+        self.bases.values().any(|bs| bs.iter().any(|b| b == id))
+    }
+
     // Whether `from` extends `to`, through its bases, by id.
     fn reaches(&self, from: &str, to: &str) -> bool {
         let mut todo = vec![from.to_string()];
@@ -876,7 +882,8 @@ impl Gen {
                 }
                 format!("({})", parts.join(" * "))
             }
-            "functionType" => {
+            // A call signature is one: an interface of only that is a function.
+            "functionType" | "call" => {
                 let own: Vec<String> = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
                 let depth = self.fn_params.len();
                 self.fn_params.extend(own);
@@ -1626,6 +1633,25 @@ impl Gen {
                     }
                     self.out += "\n";
                 }
+                // Only a call signature (`EventListener`): a function, written as a
+                // lambda. Unless a type extends it (F# inherits only interfaces),
+                // or it names a later file's type (only a member can go there).
+                "interface" if is_function_interface(d) && !self.is_extended(d) => {
+                    let call = only_child(d);
+                    let t = if named(call, "parameter").any(|p| flag(p, "optional")) {
+                        format!("delegate of {}", self.delegate_sig(call, ""))
+                    } else {
+                        self.ty(call, "")
+                    };
+                    if words(&t).iter().filter_map(|w| self.file_of.get(*w)).any(|f| *f > self.current_file) {
+                        self.interface(d, prefix, indent);
+                        return;
+                    }
+                    if !t.starts_with("delegate") {
+                        self.abbrevs.insert(name.to_string(), t.clone());
+                    }
+                    self.out += &format!("{indent}type {name} = {t}\n\n");
+                }
                 "interface" | "class" => self.interface(d, prefix, indent),
                 "function" => {
                     let params = self.params(d, "");
@@ -2173,4 +2199,10 @@ fn subst_params(text: &str, map: &HashMap<String, String>) -> String {
         out.push(c);
     }
     out
+}
+
+// An interface of only a call signature: a function type.
+fn is_function_interface(d: Node) -> bool {
+    let mut members = elements(d);
+    members.next().is_some_and(|m| m.has_tag_name("call")) && members.next().is_none()
 }

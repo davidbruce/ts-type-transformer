@@ -64,14 +64,14 @@ check (clicks = 2) "listener removed"
 let mutable pings = 0
 
 let onPing: EventListener =
-    unbox (fun (_: Event) ->
+    fun (_: Event) ->
         pings <- pings + 1
-        box.setAttribute ("data-pings", string pings))
+        box.setAttribute ("data-pings", string pings)
 
 // An options bag is made with named arguments.
 let once = AddEventListenerOptions.Create (once = true)
-// Union arguments take a value of any of their types.
-box.addEventListener ("ping", onPing, once)
+// Union arguments take a value of any of their types; a function, by `!^`.
+box.addEventListener ("ping", !^ onPing, once)
 box.dispatchEvent (Event.Create "ping") |> ignore
 box.dispatchEvent (Event.Create "ping") |> ignore
 check (pings = 1) "once listener"
