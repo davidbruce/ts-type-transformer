@@ -916,14 +916,14 @@ fn run_browser(c: &Case) {
 mod dom {
     use super::*;
 
-    // Every binding of the DOM, in each wasm target's model, reaches what it
-    // names in a real browser (tests/dom/bindings.mjs): about 30,000 each.
+    // Every binding of the DOM, in each wasm target's model and Gleam's,
+    // reaches what it names in a real browser (tests/dom/bindings.mjs).
     #[test]
     fn every_binding_resolves() {
         let out = root().join("target/e2e/dom-bindings");
         let _ = fs::remove_dir_all(&out);
         fs::create_dir_all(&out).unwrap();
-        let targets = [("c", "C"), ("cpp", "C++"), ("zig", "Zig"), ("rust", "Rust")];
+        let targets = [("c", "C"), ("cpp", "C++"), ("zig", "Zig"), ("rust", "Rust"), ("gleam", "Gleam")];
         let mut declared = std::collections::BTreeSet::new();
         for (target, name) in targets {
             let xml = lower_with(Path::new("lib.dom.d.ts"), Some(target), &[root().join("examples/modules/dom.toml")], &[]);
@@ -931,7 +931,11 @@ mod dom {
             for n in doc.descendants().filter(|n| n.is_element()) {
                 declared.extend(["name", "jsName"].iter().filter_map(|a| n.attribute(*a)).map(str::to_string));
             }
-            fs::write(out.join(format!("manifest-{target}.mjs")), generators::wasm::manifest(&model(&xml, name))).unwrap();
+            let manifest = match target {
+                "gleam" => generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n"))).manifest,
+                _ => generators::wasm::manifest(&model(&xml, name)),
+            };
+            fs::write(out.join(format!("manifest-{target}.mjs")), manifest).unwrap();
         }
         fs::write(out.join("declared.mjs"), format!("export const declared = {:?};\n", declared.into_iter().collect::<Vec<_>>())).unwrap();
         let imports: String = targets.iter().map(|(t, _)| format!("import * as {t} from './manifest-{t}.mjs';\n")).collect();
