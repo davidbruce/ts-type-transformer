@@ -1909,7 +1909,8 @@ impl Gen {
                 let attr = match exact {
                     Some(c) if !native && !imported => format!("[<CaseTest(\"$0 != null && Object.getPrototypeOf($0) === globalThis.{c}.prototype\")>] "),
                     _ => match test.as_deref().and_then(|t| case_test(t, union.attribute("discriminant"))) {
-                    Some(js) if !native && !imported => format!("[<CaseTest(\"{}\")>] ", js.replace('"', "\\\"")),
+                    // An F# string: its backslashes too (katex's `"\\href"`).
+                    Some(js) if !native && !imported => format!("[<CaseTest(\"{}\")>] ", js.replace('\\', "\\\\").replace('"', "\\\"")),
                     _ => String::new(),
                     },
                 };
