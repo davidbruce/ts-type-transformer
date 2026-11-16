@@ -573,7 +573,19 @@ fn walk_type(t: &mut Type, path: &mut Vec<String>, f: &mut TypeFn) {
     match t {
         Type::Primitive(_) | Type::Erased(_) | Type::Literal { .. } | Type::This => {}
         Type::Ref(r) => r.args.iter_mut().for_each(|a| walk_type(a, path, f)),
-        Type::Union(ts) | Type::Intersection(ts, _) => ts.iter_mut().for_each(|a| walk_type(a, path, f)),
+        Type::Union(ts) => {
+            let segs = arm_names(ts);
+            for (a, seg) in ts.iter_mut().zip(segs) {
+                if let Some(seg) = &seg {
+                    path.push(seg.clone());
+                }
+                walk_type(a, path, f);
+                if seg.is_some() {
+                    path.pop();
+                }
+            }
+        }
+        Type::Intersection(ts, _) => ts.iter_mut().for_each(|a| walk_type(a, path, f)),
         Type::Array(inner) | Type::Readonly(inner) | Type::Nullable(inner, _) => walk_type(inner, path, f),
         Type::Tuple(els) => els.iter_mut().for_each(|e| walk_type(&mut e.ty, path, f)),
         Type::Function(sig) | Type::Constructor(sig) => walk_signature(sig, path, f),
@@ -612,6 +624,34 @@ fn walk_type(t: &mut Type, path: &mut Vec<String>, f: &mut TypeFn) {
             Op::TypeOf(_) | Op::Raw { .. } => {}
         },
     }
+}
+
+// A union's inline objects, each named apart from the others: by the value
+// of a property that tells them apart (katex's `TrustContext` of `command:
+// "\\href"` is `TrustContext_href`), else by a property only it has.
+fn arm_names(parts: &[Type]) -> Vec<Option<String>> {
+    let objects: Vec<Option<&Vec<Member>>> = parts.iter().map(|p| if let Type::Object(ms) = p { Some(ms) } else { None }).collect();
+    if objects.iter().flatten().count() < 2 {
+        return vec![None; parts.len()];
+    }
+    let props = |ms: &Vec<Member>| ms.iter().filter(|m| m.kind == MemberKind::Property).map(|m| (m.name.clone(), m.optional, m.constant.clone())).collect::<Vec<_>>();
+    let shapes: Vec<Option<Vec<(String, bool, Option<String>)>>> = objects.iter().map(|o| o.map(props)).collect();
+    // A property every object fixes, to a value each its own.
+    let tag = shapes.iter().flatten().next().and_then(|first| {
+        first.iter().map(|f| &f.0).find(|name| {
+            let values: Vec<Option<&String>> = shapes.iter().flatten().map(|s| s.iter().find(|g| &&g.0 == name).and_then(|g| g.2.as_ref())).collect();
+            values.iter().all(|v| v.is_some()) && values.iter().collect::<HashSet<_>>().len() == values.len()
+        })
+    });
+    (0..parts.len())
+        .map(|i| {
+            let own = shapes[i].as_ref()?;
+            match tag {
+                Some(t) => own.iter().find(|g| &g.0 == t).and_then(|g| g.2.as_deref()).map(|v| name_part(v).trim_matches('_').to_string()).filter(|v| !v.is_empty()),
+                None => unique_property(&shapes, i),
+            }
+        })
+        .collect()
 }
 
 // Visits every list of members: interfaces, class statics and constructors, object types.
@@ -1908,7 +1948,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
             && a.type_params.is_empty()
             && matches!(a.ty, Type::Function(_) | Type::Constructor(_))
         {
-            by_key.entry(type_key(&a.ty)).or_insert_with(|| (a.name.clone(), Vec::new()));
+            by_key.entry(hoist_key(&a.ty)).or_insert_with(|| (a.name.clone(), Vec::new()));
         }
     }
     let mut start = 0;
@@ -1928,10 +1968,10 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         let mut best: HashMap<String, Vec<String>> = HashMap::new();
         walk(&mut decls[start..], &mut |t, path| {
             if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
-                *uses.entry(type_key(t)).or_default() += 1;
+                *uses.entry(hoist_key(t)).or_default() += 1;
             }
             if matches!(t, Type::Object(_) | Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
-                let known = best.entry(type_key(t)).or_insert_with(|| path.to_vec());
+                let known = best.entry(hoist_key(t)).or_insert_with(|| path.to_vec());
                 if (path.len(), path) < (known.len(), &known[..]) {
                     *known = path.to_vec();
                 }
@@ -1948,15 +1988,17 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
             if is_function && !keyed.is_empty() && mentions(t, &keyed) {
                 return false;
             }
-            let key = type_key(t);
+            let key = hoist_key(t);
             let (name, args) = by_key
                 .entry(key)
                 .or_insert_with(|| {
-                    let shared = uses.get(&type_key(t)).is_some_and(|n| *n > 1);
-                    let at = best.get(&type_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep));
+                    let shared = uses.get(&hoist_key(t)).is_some_and(|n| *n > 1);
+                    let at = best.get(&hoist_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep));
                     // A shared callback by what it takes, if that is short; else where it is first.
                     let base = match t {
-                        Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep).filter(|n| n.len() <= NAME_MAX).unwrap_or(at),
+                        // Another of that name (pixi's `(width, localWidth)` beside
+                        // `(height, localHeight)`): where it is.
+                        Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep).filter(|n| n.len() <= NAME_MAX && !names.contains(n)).unwrap_or(at),
                         _ => at,
                     };
                     let name = unique(base, &mut names);
@@ -1984,6 +2026,18 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         start = decls.len();
         decls.extend(added);
     }
+}
+
+// An inline type's key when hoisted: one `any` is another, whyever erased.
+fn hoist_key(t: &Type) -> String {
+    let mut t = t.clone();
+    visit(&mut t, &mut |x| {
+        if matches!(x, Type::Erased(_)) {
+            *x = Type::prim("any");
+        }
+        true
+    });
+    type_key(&t)
 }
 
 // `(this: HTMLElement, ev: MouseEvent) => any` -> `HTMLElement_MouseEvent_fn`,
