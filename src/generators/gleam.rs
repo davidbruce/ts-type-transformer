@@ -511,6 +511,7 @@ impl<'m> Gen<'m> {
         let call = match &f.call {
             Call::Method(js) => format!("self{}({list})", access(js)),
             Call::Get(p) => format!("self{}", access(p)),
+            Call::GetBound(p) => format!("((v) => typeof v === \"function\" ? v.bind(self) : v)(self{})", access(p)),
             Call::Set(p) => format!("self{} = {list}", access(p)),
             Call::New(path) => format!("new ({})({list})", global(path)),
             Call::Static(path) => format!("{}({list})", global(path)),
@@ -518,7 +519,7 @@ impl<'m> Gen<'m> {
             // A top-level variable is assigned where it is: a module's cannot be.
             Call::StaticSet(path) if !path.contains('.') && !path.contains("::") => format!("globalThis{} = {list}", access(path)),
             Call::StaticSet(path) => format!("{} = {list}", global(path)),
-            Call::Create => "({})".into(),
+            Call::Create(literal) => format!("({literal})"),
             Call::Invoke => format!("self({list})"),
             Call::Construct => format!("new self({list})"),
             Call::IndexGet => format!("self[{first}]"),
@@ -818,12 +819,22 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         g.out += &format!("pub type {name}{params} =\n  fn({}) -> {ret}\n\n", args.join(", "));
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let into_gleam: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| g.to_gleam(t, a)).collect();
-        let into_js: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| g.from_gleam(t, a)).collect();
+        let mut into_js: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| g.from_gleam(t, a)).collect();
         let codecs: String = used.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
+        // The rest of the arguments: gathered into a list, and spread back.
+        let mut gathered = names.clone();
+        if c.rest {
+            if let Some(last) = gathered.last_mut() {
+                *last = format!("...{last}");
+            }
+            if let Some(last) = into_js.last_mut() {
+                *last = format!("...{last}");
+            }
+        }
         g.ffi += &format!(
             "export function {name}_from(f{codecs}) {{\n  return $wrap(f, (f) => ({}) => {});\n}}\n\
              export function {name}_to(f{codecs}) {{\n  return typeof f === \"function\" ? ({}) => {} : f;\n}}\n",
-            names.join(", "),
+            gathered.join(", "),
             g.from_gleam(&c.ret, &format!("f({})", into_gleam.join(", "))),
             names.join(", "),
             g.to_gleam(&c.ret, &format!("f({})", into_js.join(", "))),
@@ -935,7 +946,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
         // What it iterates, or holds as a subclass of Array: a list.
         if let Some(elem) = c.iterates.as_ref().or(c.elements.as_ref()) {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
             let id = g.value_name("to_list");
             let elem_ty = g.ty(&elem);
             let this = open(&g);
@@ -945,7 +956,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         // A subclass of Array has no class to inherit Array's members from:
         // its elements by index, and how many.
         if let Some(elem) = c.elements.as_ref() {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
             let elem_ty = g.ty(&elem);
             g.note("Option");
             let (at, length) = (g.value_name("get_at"), g.value_name("length"));

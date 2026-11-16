@@ -286,11 +286,11 @@ fn mentions(t: &Ty, param: &str) -> bool {
 // A `$` method (`$add`) reads as `add_new()` rather than `_add()`.
 fn function_name_as(f: &Func, name: &str) -> String {
     let base = match &f.call {
-        Call::Get(_) | Call::StaticGet(_) | Call::IndexGet => name.strip_prefix("get_").unwrap_or(name),
+        Call::Get(_) | Call::GetBound(_) | Call::StaticGet(_) | Call::IndexGet => name.strip_prefix("get_").unwrap_or(name),
         _ => name,
     };
     let dollar = match &f.call {
-        Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => {
+        Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::GetBound(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => {
             js.rsplit('.').next().is_some_and(|n| n.starts_with('$'))
         }
         _ => false,
@@ -1560,7 +1560,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             dispatch += &g.dispatch(&mut imports);
         }
         if let Some(elem) = &c.iterates {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
             trait_body += &format!("    fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem));
         }
         if let Some(elem) = &c.iterates_async {

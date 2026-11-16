@@ -57,7 +57,7 @@ pub const NAMING: Naming = Naming {
     overloads: true,
     // A getter or setter is its property's name, a constructor `create`.
     func_name: |owner, name, f| match &f.call {
-        Call::Get(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::New(_) | Call::Create => None,
+        Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::New(_) | Call::Create(_) => None,
         Call::StaticGet(_) | Call::StaticSet(_) if f.module.is_empty() => None,
         _ => Some(cpp_name_as(f, name, if owner.is_some() { "create" } else { "" })),
     },
@@ -260,11 +260,11 @@ fn cpp_name(f: &Func, ctor: &str) -> String {
 // As `cpp_name`, were the function's model name `name`.
 fn cpp_name_as(f: &Func, name: &str, ctor: &str) -> String {
     let base = match &f.call {
-        Call::Get(p) | Call::Set(p) => ident(p),
+        Call::Get(p) | Call::GetBound(p) | Call::Set(p) => ident(p),
         Call::StaticGet(p) | Call::StaticSet(p) if f.module.is_empty() => ident(p.rsplit('.').next().unwrap_or(p)),
         Call::IndexGet => "at".into(),
         Call::IndexSet => "set_at".into(),
-        Call::New(_) | Call::Create => ctor.into(),
+        Call::New(_) | Call::Create(_) => ctor.into(),
         _ => ident(name),
     };
     // Overloads that differ only in a fixed argument are named after it.
@@ -863,7 +863,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let unions = &m.unions;
     DECODABLE.with(|d| *d.borrow_mut() = unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
     // A constructor is named as its class, and hides nothing.
-    let members: BTreeSet<String> = m.classes.iter().flat_map(|c| c.funcs.iter().filter(|f| !matches!(f.call, Call::New(_) | Call::Create)).map(|f| cpp_name(f, &c.name))).collect();
+    let members: BTreeSet<String> = m.classes.iter().flat_map(|c| c.funcs.iter().filter(|f| !matches!(f.call, Call::New(_) | Call::Create(_))).map(|f| cpp_name(f, &c.name))).collect();
     QUALIFIED.with(|q| *q.borrow_mut() = members.into_iter().filter(|n| m.classes.iter().any(|c| c.name == *n) || m.callbacks.iter().any(|c| c.name == *n) || m.unions.iter().any(|u| u.name == *n) || m.enums.iter().any(|e| e.0 == *n) || m.num_enums.iter().any(|e| e.0 == *n)).collect());
     let mut taken = HashMap::new();
     // Where each declared type is defined, without the extension.
@@ -1029,7 +1029,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let class_head = head(&c.type_params, false);
         let owner = if c.type_params.is_empty() { c.name.clone() } else { format!("{}<{}>", c.name, c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
         // A member named `create` leaves the constructors `make`.
-        let ctor = if c.funcs.iter().any(|f| !matches!(f.call, Call::New(_) | Call::Create) && cpp_name(f, "") == "create") { "make" } else { "create" };
+        let ctor = if c.funcs.iter().any(|f| !matches!(f.call, Call::New(_) | Call::Create(_)) && cpp_name(f, "") == "create") { "make" } else { "create" };
 
         // A name in two unrelated bases is ambiguous in C++. A more derived
         // ancestor's member already hides its own ancestors' (`Element::textContent`
@@ -1117,7 +1117,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             && !own.contains("begin")
             && !own.contains("end")
         {
-            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret));
+            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret));
             members += &format!("    {it} begin() const;\n    ts::IterationEnd end() const {{ return {{}}; }}\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::begin() const {{ return {it}(ts_raw_js_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
@@ -1127,7 +1127,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         if let Some(elem) = &c.iterates_async
             && !own.contains("iterate_async")
         {
-            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret));
+            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret));
             members += &format!("    {it} iterate_async() const;\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::iterate_async() const {{ return {it}(ts::handle, ts_raw_js_async_iterate(this->h)); }}\n", if templated { "inline " } else { "" });

@@ -155,6 +155,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
     let call = match &f.call {
         Call::Method(js) => format!("get(self){}({args})", access(js)),
         Call::Get(prop) => format!("get(self){}", access(prop)),
+        Call::GetBound(prop) => format!("(v => typeof v === 'function' ? v.bind(get(self)) : v)(get(self){})", access(prop)),
         Call::Set(prop) => format!("get(self){} = {args}", access(prop)),
         Call::New(path) => format!("new ({})({args})", global(path)),
         Call::Static(path) => format!("{}({args})", global(path)),
@@ -162,7 +163,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
         // A variable of the library's own module cannot be assigned from outside it.
         Call::StaticSet(path) if !path.contains('.') => format!("globalThis{} = {args}", access_path(path)),
         Call::StaticSet(path) => format!("{} = {args}", global(path)),
-        Call::Create => "({})".to_string(),
+        Call::Create(literal) => format!("({literal})"),
         Call::Invoke => format!("get(self)({args})"),
         Call::Construct => format!("new (get(self))({args})"),
         Call::IndexGet => format!("get(self)[{args}]"),
@@ -184,20 +185,20 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
 pub fn manifest(m: &Model) -> String {
     let kind = |c: &Call| match c {
         Call::Method(_) => "method",
-        Call::Get(_) => "get",
+        Call::Get(_) | Call::GetBound(_) => "get",
         Call::Set(_) => "set",
         Call::New(_) => "new",
         Call::Static(_) => "static",
         Call::StaticGet(_) => "staticGet",
         Call::StaticSet(_) => "staticSet",
-        Call::Create => "create",
+        Call::Create(_) => "create",
         Call::Invoke => "invoke",
         Call::Construct => "construct",
         Call::IndexGet => "indexGet",
         Call::IndexSet => "indexSet",
     };
     let member = |c: &Call| match c {
-        Call::Method(n) | Call::Get(n) | Call::Set(n) | Call::New(n) | Call::Static(n) | Call::StaticGet(n) | Call::StaticSet(n) => n.clone(),
+        Call::Method(n) | Call::Get(n) | Call::GetBound(n) | Call::Set(n) | Call::New(n) | Call::Static(n) | Call::StaticGet(n) | Call::StaticSet(n) => n.clone(),
         _ => String::new(),
     };
     let json = |s: &str| format!("{s:?}");
@@ -696,6 +697,11 @@ export function makeEnv(getInstance, options = {}) {
             },
             &args,
         );
+        // The rest of the arguments, gathered.
+        let mut names = names;
+        if c.rest && let Some(last) = names.last_mut() {
+            *last = format!("...{last}");
+        }
         out += &format!("    {}_from: (fn, ctx) => callback({:?}, fn, ctx, (f, s) => ({}) => {{ if (!s.alive) dead(); {body} }}),\n", c.name, c.name, names.join(", "));
     }
     // A call that throws returns zero, and its exception is kept for wasm to take.

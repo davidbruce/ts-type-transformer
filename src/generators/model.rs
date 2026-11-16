@@ -117,14 +117,18 @@ pub enum Ty {
 pub enum Call {
     Method(String),
     Get(String),
+    // A property holding a function, read bound to its object: called later,
+    // it is its method still (Konva's `node.x`, TanStack's `table.getRowModel`).
+    GetBound(String),
     Set(String),
     // The rest are reached from a global path such as `WebAssembly.Module`.
     New(String),
     Static(String),
     StaticGet(String),
     StaticSet(String),
-    // An empty object, for interfaces used as option bags.
-    Create,
+    // An object, for interfaces used as option bags: empty but for the
+    // values its type fixes (`{ type: "bar" }`), as a JavaScript literal.
+    Create(String),
     // The object called, or constructed with `new`: a callable interface.
     Invoke,
     Construct,
@@ -223,6 +227,9 @@ pub struct Callback {
     pub name: String,
     pub params: Vec<(String, Ty)>,
     pub ret: Ty,
+    // Its last parameter gathers the rest of the arguments (`...args: any[]`):
+    // JavaScript calls it with them one by one.
+    pub rest: bool,
 }
 
 // One import for functions that differ only in their fixed arguments:
@@ -285,7 +292,7 @@ pub struct Model {
 
 impl Class {
     pub fn has_self(f: &Func) -> bool {
-        matches!(f.call, Call::Method(_) | Call::Get(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::Invoke | Call::Construct)
+        matches!(f.call, Call::Method(_) | Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::Invoke | Call::Construct)
     }
 }
 
@@ -464,6 +471,23 @@ impl<'a> Builder<'a> {
         }
     }
 
+    // Whether a type is a function that knows no `this` of its own: one
+    // written so, an alias of one, or a type of only call signatures.
+    fn function_value(&self, t: Node) -> bool {
+        let t = if t.has_tag_name("nullable") { only_child(t) } else { t };
+        let no_this = |f: Node| !named(f, "thisParameter").any(|_| true);
+        match t.tag_name().name() {
+            "functionType" => no_this(t),
+            "object" => elements(t).next().is_some() && elements(t).all(|m| m.has_tag_name("call") && no_this(m)),
+            "ref" => match self.decls.get(&self.ref_key(t)) {
+                Some(d) if d.has_tag_name("typeAlias") => elements(*d).find(|c| !c.has_tag_name("typeParameter")).is_some_and(|b| b.has_tag_name("functionType") && no_this(b) || b.has_tag_name("object") && elements(b).next().is_some() && elements(b).all(|m| m.has_tag_name("call") && no_this(m))),
+                Some(d) if d.has_tag_name("interface") => elements(*d).filter(|m| !m.has_tag_name("typeParameter")).all(|m| m.has_tag_name("call") && no_this(m)) && named(*d, "call").next().is_some(),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     // Where a reference leads: the declaration its `to` names; with none, a
     // type declared elsewhere, apart from any declared here of its name
     // (GeoJSON's `Point` beside leaflet's). XML without ids is by name.
@@ -602,7 +626,8 @@ impl<'a> Builder<'a> {
                 "interface" if is_function_interface(d) => {
                     let owner = self.type_ident(&path);
                     let (params, _, _, ret) = self.callback_signature(only_child(d), &owner);
-                    self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
+                    let rest = named(only_child(d), "parameter").last().is_some_and(|p| flag(p, "rest"));
+                    self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params), rest });
                 }
                 "interface" | "class" => {
                     let c = self.class_at(d, &path, &self.js(d, &path));
@@ -614,8 +639,9 @@ impl<'a> Builder<'a> {
                     if body.has_tag_name("functionType") {
                         let owner = self.type_ident(&path);
                         let (params, _, _, ret) = self.callback_signature(body, &owner);
+                        let rest = named(body, "parameter").last().is_some_and(|p| flag(p, "rest"));
                         self.last_type_params = alias_params.clone();
-                        self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params) });
+                        self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params), rest });
                     }
                     // A named object type is an interface in all but syntax.
                     if body.has_tag_name("object") {
@@ -853,7 +879,18 @@ impl<'a> Builder<'a> {
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
             let import = self.import(format!("{owner}_create"));
-            c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()) });
+            // What its type requires and fixes: echarts' `BarSeriesOption` is `{ type: "bar" }`.
+            let fixed: Vec<String> = elements(d)
+                .filter(|m| m.has_tag_name("property") && !flag(*m, "optional") && !flag(*m, "static"))
+                .filter_map(|m| {
+                    let value = m.attribute("const")?;
+                    let key = m.attribute("jsName").unwrap_or(attr(m, "name"));
+                    let quoted = only_child(m).attribute("name") == Some("string");
+                    Some(format!("{key:?}: {}", if quoted { format!("{value:?}") } else { value.to_string() }))
+                })
+                .collect();
+            let literal = format!("{{{}}}", fixed.join(", "));
+            c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create(literal), params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()) });
         }
         for m in elements(d) {
             self.member(&mut c, &mut names, m, path_js, m.has_tag_name("constructor") || flag(m, "static"));
@@ -1072,6 +1109,8 @@ impl<'a> Builder<'a> {
                 }
                 let (get, set) = if is_static {
                     (Call::StaticGet(format!("{path}.{js}")), Call::StaticSet(format!("{path}.{js}")))
+                } else if self.function_value(only_child(m)) {
+                    (Call::GetBound(js.clone()), Call::Set(js))
                 } else {
                     (Call::Get(js.clone()), Call::Set(js))
                 };
