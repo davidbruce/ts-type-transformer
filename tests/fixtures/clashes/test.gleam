@@ -5,7 +5,8 @@ import bindings/areas/main/gizmo
 import bindings/areas/main/ns_node
 import bindings/areas/main/point
 import bindings/areas/main/shape
-import bindings/namespaces/ns/ns_node2
+import bindings/namespaces/ns
+import bindings/namespaces/ns/node
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -31,7 +32,10 @@ pub fn main() {
   let _ = point.get_create(p)
 
   check(ns_node.id(ns_node.new()) == 2.0, "class")
-  check(ns_node2.id(ns_node2.new()) == 1.0, "namespace's class")
+  // The namespace's class: its functions in a module of its own name, its
+  // type by its own name in the namespace's.
+  let n: ns.Node(Nil) = node.new()
+  check(node.id(n) == 1.0, "namespace's class")
 
   io.println("checks passed")
 }

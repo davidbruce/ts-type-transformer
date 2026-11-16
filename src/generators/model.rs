@@ -270,6 +270,8 @@ pub struct Model {
     // Types declared in a namespace, by name: their path, the namespaces
     // and their own name (`Stream`, `PipeOptions`).
     pub namespaced: HashMap<String, Vec<String>>,
+    // And the module of their namespace (`namespaces/Stream`).
+    pub namespace_modules: HashMap<String, String>,
 }
 
 impl Class {
@@ -364,7 +366,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -548,6 +550,7 @@ impl<'a> Builder<'a> {
             // top-level declaration a target would name the same.
             if path.contains('.') && !flag(d, "synthetic") {
                 self.model.namespaced.insert(self.type_ident(&path), path.split('.').map(str::to_string).collect());
+                self.model.namespace_modules.insert(self.type_ident(&path), self.module.clone());
             }
             if let Some(origin) = d.attribute("origin") {
                 self.model.origins.insert(self.type_ident(&path), origin.to_string());
@@ -614,6 +617,7 @@ impl<'a> Builder<'a> {
                         if let Some((ns, own)) = path.rsplit_once('.') {
                             let own = if self.decls.contains_key(&path) { format!("{own}_statics") } else { own.to_string() };
                             self.model.namespaced.insert(name.clone(), ns.split('.').map(str::to_string).chain([own]).collect());
+                            self.model.namespace_modules.insert(name.clone(), self.module.clone());
                         }
                         let c = self.statics(body, &self.js(d, &path), name);
                         self.model.classes.push(c);

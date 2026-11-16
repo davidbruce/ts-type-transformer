@@ -177,7 +177,19 @@ whether types and functions share a namespace, and whether functions
 overload (C++). What the library declares claims names first, a top-level
 declaration before a namespace's (`StreamPipeOptions` before a flattened
 `Stream.PipeOptions`), then functions, then what lowering made up, which
-takes the `_2`. A declared
+takes the `_2`.
+
+A namespace's types are its namespace's, as each target has namespaces:
+F#'s nested modules (`Stream.PipeOptions`); Rust's modules
+(`stream::PipeOptions`, defined in `src/stream.rs`, their member traits in
+scope with the crate's); Zig's structs in `bindings.zig`
+(`bindings.stream.PipeOptions`); C++'s aliases of the flat definitions in a
+namespace (`NodeJS::ArrayBufferView`), or in the class the namespace shares
+its name with (`Stream::Duplex`); Gleam's aliases in the namespace's module
+(`stream.PipeOptions`), each class's functions in a module of its own name
+(`bindings/namespaces/stream/readable`). C has none: `Stream_PipeOptions`.
+Where a function or a generic class has the namespace's name, its
+namespace is `<name>_ns`. A declared
 type that must give way (to Zig's `Key` of a map's struct, Gleam's `Bool`)
 is named by where it comes from, before a number: its ambient module or
 file, `origin` in the XML where there are several: node's `readline` `Key`

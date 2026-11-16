@@ -668,7 +668,9 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     // Each class's module, in its area's: `bindings/areas/main/shape`.
     let mut class_paths: HashMap<String, String> = HashMap::new();
     for c in &m.classes {
-        let mut segment = snake(&g.tname(&c.name));
+        // A namespace's class by its own name: `ns.Node`'s is `namespaces/ns/node`.
+        let own = m.namespaced.get(&c.name).map(|p| p[1..].iter().map(|s| snake(&upper(s))).collect::<Vec<_>>().join("/"));
+        let mut segment = own.unwrap_or_else(|| snake(&g.tname(&c.name)));
         if KEYWORDS.contains(&segment.as_str()) {
             segment.push('_');
         }
@@ -971,6 +973,46 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         g.function(&id, f, None);
     }
     g.switch("");
+
+    // A namespace's types by their own names, in its module: `ns.Node` is
+    // `pub type Node(sub) = NsNode2(sub)` in `bindings/namespaces/ns`, as the
+    // types themselves are in `bindings/types`.
+    let headers: HashMap<String, String> = g
+        .units
+        .get(TYPES)
+        .map(|u| {
+            u.out
+                .lines()
+                .filter_map(|l| l.strip_prefix("pub opaque type ").or_else(|| l.strip_prefix("pub type ")))
+                .map(|rest| {
+                    let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                    let params = rest[name.len()..].strip_prefix('(').and_then(|r| r.split_once(')')).map(|(p, _)| format!("({p})")).unwrap_or_default();
+                    (name, params)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut aliases: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
+    for (name, path) in &m.namespaced {
+        let Some(module) = m.namespace_modules.get(name) else { continue };
+        let gleam = g.tname(name);
+        let Some(params) = headers.get(&gleam) else { continue };
+        let base = paths.get(module).cloned().unwrap_or_else(|| format!("bindings/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/")));
+        let unit = std::iter::once(base).chain(path[1..path.len() - 1].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
+        aliases.entry(unit).or_default().push((upper(path.last().unwrap()), gleam, params.clone()));
+    }
+    for (unit, list) in aliases {
+        let u = g.units.entry(unit).or_default();
+        let mut seen = HashSet::new();
+        for (leaf, target, params) in list {
+            // Once, and not where the module names another type so.
+            if leaf == target || u.used.contains(&leaf) || !seen.insert(leaf.clone()) {
+                continue;
+            }
+            u.out += &format!("pub type {leaf}{params} =\n  {target}{params}\n\n");
+            u.used.insert(target);
+        }
+    }
 
     // Each module: what it imports of the others, of Gleam's, and its JavaScript's.
     let mut files = Vec::new();
