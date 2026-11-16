@@ -1,0 +1,162 @@
+// Node's fs, path and events from Zig. Every expect must hold.
+const std = @import("std");
+const b = @import("bindings.zig");
+
+extern "env" fn check(ok: i32, line: u32) void;
+
+fn expect(ok: bool, src: std.builtin.SourceLocation) void {
+    check(@intFromBool(ok), src.line);
+}
+
+fn str(text: []const u8) b.JsString {
+    return b.JsString.from(text);
+}
+
+// A path as the union fs wants.
+fn at(p: b.JsString) b.fs.PathLike {
+    return .{ .string = p };
+}
+
+var hits: u32 = 0;
+var last: f64 = 0;
+fn onTick(ctx: ?*anyopaque, args: b.JsArray) void {
+    const total: *u32 = @ptrCast(@alignCast(ctx));
+    total.* += 1;
+    // FINDING 10: the listener type is `(...args: any[]) => void`, typed here as taking a JsArray, but the
+    // glue forwards only the first argument, as itself. It is read as a value.
+    last = (b.JsValue{ .h = args.h }).toNumber();
+}
+var once_hits: u32 = 0;
+var other_hits: u32 = 0;
+
+export fn run() void {
+    // FINDING 8: every path function fails at run time. The glue calls PK["path"].path.join(...),
+    // but the module `path` has `join` on itself (`export = path`), so `.path` is undefined
+    // ("Cannot read properties of undefined (reading 'join')"). The path checks are left out.
+
+    // fs: a scratch directory, files in it, and cleaning up.
+    const dir = b.fs.mkdtempSync("target/e2e/node-zig-", null);
+    expect(dir.len() > "target/e2e/node-zig-".len, @src());
+    expect(b.fs.existsSync(at(dir)), @src());
+    const stat_dir = b.fs.statSync(at(dir));
+    expect(stat_dir.isDirectory() and !stat_dir.isFile(), @src());
+
+    var path_buf: [256]u8 = undefined;
+    const dir_text = dir.copy(&path_buf);
+    var hello_buf: [320]u8 = undefined;
+    const hello_path = std.fmt.bufPrint(&hello_buf, "{s}/hello.txt", .{dir_text}) catch "";
+    b.fs.writeFileSync(.{ .string = str(hello_path) }, b.JsValue.string("hello, node\nsecond line\n"), null);
+    expect(b.fs.existsSync(at(str(hello_path))), @src());
+    // FINDING 7: the encoding parameter is global_BufferEncoding, an opaque handle (the BufferEncoding enum
+    // exists but is not what these unions hold), so the string is made by hand.
+    const encoding: b.global_BufferEncoding = .{ .h = str("utf8").h };
+    const text = b.fs.readFileSyncOrBufferEncoding(.{ .string = str(hello_path) }, .{ .global_BufferEncoding = encoding });
+    expect(text.eql("hello, node\nsecond line\n"), @src());
+    expect(b.fs.statSync(at(str(hello_path))).isFile(), @src());
+    expect(b.fs.statSync(at(str(hello_path))).getSize() == 24, @src());
+
+    // Append, copy, rename, a nested directory and a listing.
+    b.fs.appendFileSync(.{ .string = str(hello_path) }, .{ .string = str("third\n") }, null);
+    expect(b.fs.statSync(at(str(hello_path))).getSize() == 30, @src());
+    var copy_buf: [320]u8 = undefined;
+    const copy_path = std.fmt.bufPrint(&copy_buf, "{s}/copy.txt", .{dir_text}) catch "";
+    b.fs.copyFileSync(at(str(hello_path)), at(str(copy_path)), .{});
+    var renamed_buf: [320]u8 = undefined;
+    const renamed_path = std.fmt.bufPrint(&renamed_buf, "{s}/renamed.txt", .{dir_text}) catch "";
+    b.fs.renameSync(at(str(copy_path)), at(str(renamed_path)));
+    expect(!b.fs.existsSync(at(str(copy_path))) and b.fs.existsSync(at(str(renamed_path))), @src());
+    var nested_buf: [320]u8 = undefined;
+    const nested = std.fmt.bufPrint(&nested_buf, "{s}/a/b/c", .{dir_text}) catch "";
+    const mk = b.fs.MakeDirectoryOptions.create();
+    mk.setRecursive(true);
+    // FINDING 6: mkdirSync with { recursive: true } has no overload taking MakeDirectoryOptions without a
+    // returned string; mkdirSyncWithOptNumberOrStringOrMakeDirectoryOptions is the one that takes it.
+    _ = b.fs.mkdirSyncWithOptNumberOrStringOrMakeDirectoryOptions(at(str(nested)), .{ .MakeDirectoryOptions = mk });
+    expect(b.fs.statSync(at(str(nested))).isDirectory(), @src());
+
+    const names = b.fs.readdirSync(at(dir), null);
+    expect(names.len() == 3, @src());
+    var seen: u8 = 0;
+    var i: usize = 0;
+    while (i < names.len()) : (i += 1) {
+        const n = names.get(i);
+        if (n.eql("a")) seen |= 1;
+        if (n.eql("hello.txt")) seen |= 2;
+        if (n.eql("renamed.txt")) seen |= 4;
+    }
+    expect(seen == 7, @src());
+
+    // Errors: a missing file throws ENOENT; the call returns an empty value and the error is kept.
+    var missing_buf: [320]u8 = undefined;
+    const missing = std.fmt.bufPrint(&missing_buf, "{s}/nope.txt", .{dir_text}) catch "";
+    expect(!b.fs.existsSync(at(str(missing))), @src());
+    _ = b.fs.statSync(at(str(missing)));
+    const err = b.jsTakeError();
+    expect(err != null, @src());
+    if (err) |e| {
+        defer b.jsRelease(e);
+        const msg = b.jsErrorMessage(e);
+        defer b.jsRelease(msg);
+        var mbuf: [256]u8 = undefined;
+        expect(std.mem.indexOf(u8, msg.copy(&mbuf), "ENOENT") != null, @src());
+    }
+
+    // Remove it all; the directory is gone.
+    b.fs.unlinkSync(at(str(renamed_path)));
+    expect(!b.fs.existsSync(at(str(renamed_path))), @src());
+    const rm = b.fs.RmOptions.create();
+    rm.setRecursive(true);
+    rm.setForce(true);
+    b.fs.rmSync(at(dir), .{ .options = rm });
+    expect(!b.fs.existsSync(at(dir)), @src());
+
+    // events: an EventEmitter.
+    const em = b.events.EventEmitter.new(null);
+    const tick = b.JsValue.string("tick");
+    expect(em.listenerCount(tick, .{}) == 0, @src());
+    const listener = b.any_array_fn.from(onTick, &hits);
+    _ = em.on(tick, listener);
+    expect(em.listenerCount(tick, .{}) == 1, @src());
+    const args = b.JsArray.new();
+    args.push(b.JsValue.number(7));
+    expect(em.emit(tick, args), @src());
+    expect(hits == 1 and last == 7, @src());
+    args.push(b.JsValue.number(9));
+    _ = em.emit(tick, args);
+    expect(hits == 2, @src());
+
+    // once fires one time only.
+    const once_listener = b.any_array_fn.from(onTick, &once_hits);
+    _ = em.once(tick, once_listener);
+    expect(em.listenerCount(tick, .{}) == 2, @src());
+    _ = em.emit(tick, args);
+    _ = em.emit(tick, args);
+    expect(once_hits == 1 and hits == 4, @src());
+    expect(em.listenerCount(tick, .{}) == 1, @src());
+
+    // An event nobody listens to: emit says so.
+    expect(!em.emit(b.JsValue.string("quiet"), b.JsArray.new()), @src());
+
+    // removeListener, with the same function and context, is the same listener.
+    _ = em.removeListener(tick, b.any_array_fn.from(onTick, &hits));
+    expect(em.listenerCount(tick, .{}) == 0, @src());
+    _ = em.emit(tick, args);
+    expect(hits == 4, @src());
+
+    // eventNames and removeAllListeners; a second event, and prepend order.
+    _ = em.on(b.JsValue.string("a"), b.any_array_fn.from(onTick, &other_hits));
+    _ = em.on(b.JsValue.string("b"), b.any_array_fn.from(onTick, &other_hits));
+    expect(em.eventNames().len() == 2, @src());
+    _ = em.removeAllListeners(b.JsValue.string("a"));
+    expect(em.eventNames().len() == 1, @src());
+    // FINDING 9: removeAllListeners(null) means "all events" but the glue calls removeAllListeners(undefined),
+    // and Node tests arguments.length, so it removes the listeners of the event `undefined` and nothing else.
+    _ = em.removeAllListeners(b.JsValue.string("b"));
+    expect(em.eventNames().len() == 0, @src());
+    expect(em.listeners(tick).len() == 0, @src());
+
+    // The default max listeners is ten.
+    expect(em.getMaxListeners() == 10, @src());
+    _ = em.setMaxListeners(20);
+    expect(em.getMaxListeners() == 20, @src());
+}

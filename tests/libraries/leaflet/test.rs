@@ -73,4 +73,26 @@ pub extern "C" fn run() {
     m.fire("click", Some(&data), None);
     m.fire("click", Some(&data), None);
     check!(clicks.get() == 2);
+
+    // Zoom set directly and by steps; the view moved by pixels.
+    m.set_view(&london, Some(10.0), None);
+    m.set_zoom(12.0, None);
+    check!(m.get_zoom() == 12.0);
+    // (Zoom and pan animate unless told not to: the value would only change later.)
+    let zoom_now = ZoomOptions::create();
+    zoom_now.set_animate(Some(false));
+    let pan_now = PanOptions::create();
+    pan_now.set_animate(Some(false));
+    m.zoom_in(Some(2.0), Some(&zoom_now));
+    check!(m.get_zoom() == 14.0);
+    m.zoom_out(None, Some(&zoom_now));
+    check!(m.get_zoom() == 13.0);
+    m.set_view(&london, Some(13.0), None);
+    m.pan_by(&point(100.0, 0.0, None), Some(&pan_now));
+    check!(m.get_center().lng() > london.lng());
+    check!((m.get_center().lat() - london.lat()).abs() < 1e-3);
+    // The zoom that shows the bounds of both cities.
+    let z = m.get_bounds_zoom(&bounds, None, None);
+    check!(z > 3.0 && z < 13.0);
+    check!(z == z.floor());
 }

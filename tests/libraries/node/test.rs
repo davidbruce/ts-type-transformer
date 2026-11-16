@@ -1,0 +1,153 @@
+// Node's fs, path and events from Rust: files made and read in a scratch
+// directory, paths taken apart and joined, an EventEmitter used. Every
+// check! must hold.
+#![no_main]
+use bindings::events::*;
+use bindings::fs;
+use bindings::path;
+use bindings::*;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+#[link(wasm_import_module = "env")]
+unsafe extern "C" {
+    #[link_name = "check"]
+    fn check_at(ok: i32, line: u32);
+}
+macro_rules! check {
+    ($c:expr) => {
+        unsafe { check_at($c as i32, line!()) }
+    };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn run() {
+    paths();
+    files();
+    emitter();
+}
+
+fn paths() {
+    // FINDING 6: every function of `path` (join, basename, extname, resolve,
+    // relative, parse, ...) is called as `modules.path.path.join(..)`, because
+    // the declaration is `export = path`; the module `import("node:path")`
+    // has no `.path`, so each call throws. They are left out. What the module
+    // declares as plain objects works:
+    let back = path::FormatInputPathObject::create();
+    back.set_dir(Some("/tmp/out"));
+    back.set_name(Some("report"));
+    back.set_ext(Some(".txt"));
+    check!(back.dir().as_deref() == Some("/tmp/out"));
+    check!(back.name().as_deref() == Some("report") && back.ext().as_deref() == Some(".txt"));
+    check!(back.root().is_none());
+    let parsed = path::ParsedPath::create();
+    parsed.set_base("notes.md");
+    parsed.set_ext(".md");
+    check!(parsed.base() == "notes.md" && parsed.ext() == ".md");
+}
+
+fn files() {
+    // A scratch directory, made under target/e2e and removed at the end.
+    let dir = fs::mkdtemp_sync("target/e2e/node-fs-", None);
+    check!(dir.starts_with("target/e2e/node-fs-"));
+    check!(fs::exists_sync(dir.as_str()));
+    check!(fs::stat_sync(dir.as_str()).is_directory());
+
+    let file = format!("{}/{}", dir.as_str(), "hello.txt");
+    check!(!fs::exists_sync(file.as_str()));
+    fs::write_file_sync(file.as_str(), "hello, node\nsecond line\n", None);
+    check!(fs::exists_sync(file.as_str()));
+
+    // Read back as bytes, and as text with an encoding.
+    let bytes = fs::read_file_sync(file.as_str(), None);
+    // FINDING 3: `Buffer` is not bound as a `Uint8Array`, so its bytes cannot be
+    // read; the same handle is viewed as one here.
+    let view = Uint8Array::<ArrayBufferLike>(bytes.0.clone(), core::marker::PhantomData);
+    check!(view.len() == 24);
+    check!(String::from_utf8(view.to_vec()).unwrap() == "hello, node\nsecond line\n");
+    // FINDING 4: `BufferEncoding` is bound as the opaque `GlobalBufferEncoding`,
+    // not an enum of its strings; a handle made from "utf8" stands in.
+    let utf8 = GlobalBufferEncoding(JsValue::from("utf8").0.clone());
+    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), &utf8);
+    check!(text == "hello, node\nsecond line\n");
+
+    fs::append_file_sync(file.as_str(), "third\n", None);
+    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), &utf8);
+    check!(text.lines().count() == 3 && text.ends_with("third\n"));
+    let stats = fs::stat_sync(file.as_str());
+    check!(stats.is_file() && !stats.is_directory());
+    check!(stats.size() == 30.0);
+
+    // A directory made, with a file in it, listed.
+    let sub = format!("{}/{}", dir.as_str(), "sub");
+    let mk = fs::MakeDirectoryOptions::create();
+    mk.set_recursive(Some(true));
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(sub.as_str(), &mk);
+    fs::write_file_sync(format!("{}/{}", sub.as_str(), "b.txt").as_str(), "b", None);
+    fs::copy_file_sync(file.as_str(), format!("{}/{}", dir.as_str(), "copy.txt").as_str(), None);
+    let mut names: Vec<String> = fs::readdir_sync(dir.as_str(), None).iter().collect();
+    names.sort();
+    check!(names == ["copy.txt", "hello.txt", "sub"]);
+    check!(fs::stat_sync(sub.as_str()).is_directory());
+
+    // Renamed and removed.
+    let moved = format!("{}/{}", dir.as_str(), "moved.txt");
+    fs::rename_sync(file.as_str(), moved.as_str());
+    check!(!fs::exists_sync(file.as_str()) && fs::exists_sync(moved.as_str()));
+    fs::unlink_sync(moved.as_str());
+    check!(!fs::exists_sync(moved.as_str()));
+
+    // A missing file throws; the call returns a zero value and the error is kept.
+    let missing = js::attempt(|| fs::read_file_sync(format!("{}/{}", dir.as_str(), "nope").as_str(), None));
+    check!(missing.is_err_and(|e| e.message().contains("ENOENT")));
+
+    // Removed with everything in it.
+    let rm = fs::RmOptions::create();
+    rm.set_recursive(Some(true));
+    fs::rm_sync(dir.as_str(), Some(&rm));
+    check!(!fs::exists_sync(dir.as_str()));
+}
+
+fn emitter() {
+    let em = EventEmitter::<JsValue>::new(None);
+    let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+    let on_greet = AnyArrayFn::new({
+        let log = log.clone();
+        move |args: JsArray| {
+            // FINDING 5: `(...args: any[]) => void` is bound as one JsArray, but
+            // the glue passes only the first argument, as that "array": read here
+            // as the value it is, and an emit with no argument gives a null.
+            log.borrow_mut().push(format!("greet {}", JsValue(args.0.clone()).as_string()));
+        }
+    });
+    em.on::<JsValue>("greet", &on_greet);
+    check!(em.listener_count::<JsValue>("greet", None) == 1.0);
+    check!(em.emit::<JsValue>("greet", [JsValue::from("world")]));
+    check!(log.borrow().len() == 1 && log.borrow()[0] == "greet world");
+
+    // once fires one time only; emit says whether anyone listened.
+    let once_count = Rc::new(Cell::new(0));
+    let once = AnyArrayFn::new({
+        let c = once_count.clone();
+        move |_: JsArray| c.set(c.get() + 1)
+    });
+    em.once::<JsValue>("ping", &once);
+    check!(em.listener_count::<JsValue>("ping", None) == 1.0);
+    check!(em.emit::<JsValue>("ping", Vec::<JsValue>::new()));
+    check!(!em.emit::<JsValue>("ping", Vec::<JsValue>::new()));
+    check!(once_count.get() == 1);
+    check!(em.listener_count::<JsValue>("ping", None) == 0.0);
+
+    // remove_listener stops a listener; event_names lists what is left.
+    check!(em.event_names().len() == 1);
+    em.remove_listener::<JsValue>("greet", &on_greet);
+    check!(em.listener_count::<JsValue>("greet", None) == 0.0);
+    check!(!em.emit::<JsValue>("greet", [JsValue::from("again")]));
+    check!(log.borrow().len() == 1);
+
+    em.set_max_listeners(3.0);
+    check!(em.get_max_listeners() == 3.0);
+    // An "error" event nobody listens for throws.
+    let thrown = js::attempt(|| em.emit::<JsValue>("error", [JsValue::from(&Error::new("boom"))]));
+    check!(thrown.is_err_and(|e| e.message().contains("boom")));
+}
