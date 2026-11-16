@@ -817,7 +817,9 @@ impl<'a> Builder<'a> {
                 let ret = if tag == "construct" && sig_ret != Ty::Void { sig_ret } else { Ty::Obj(owner.clone()) };
                 let name = unique(if raw_name.is_empty() { "new".into() } else { ident(raw_name) }, names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret });
+                // Its own type parameters (`new<T>(x: T)`), as a method's.
+                let type_params = std::mem::take(&mut self.last_type_params);
+                c.funcs.push(Func { type_params, module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret });
             }
             "method" => {
                 let (params, rest, fixed, ret) = self.signature(m, &owner);

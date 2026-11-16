@@ -1093,8 +1093,10 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let bases: Vec<String> = if c.bases.is_empty() { vec!["virtual ts::Handle".into()] } else { c.bases.iter().map(|b| format!("virtual {}", ty_in(b))).collect() };
         let mut decl = format!("// Generated.\n#pragma once\n{}", include(&decl_path, "ts_types.hpp"));
         for a in &c.ancestors {
+            // A class's declaration; a callback's (a call signature) one file.
+            let class = m.classes.iter().any(|k| k.name == *a);
             if let Some(h) = home.get(a) {
-                decl += &include(&decl_path, &format!("{h}.decl.hpp"));
+                decl += &include(&decl_path, &format!("{h}{}", if class { ".decl.hpp" } else { ".hpp" }));
             }
         }
         decl += &format!(
@@ -1318,6 +1320,10 @@ fn declarations(m: &Model) -> String {
         c.bases.iter().for_each(|b| named_types(b, &mut named));
         let mut needs: BTreeSet<String> = named.iter().filter(|n| **n != c.name && m.classes.iter().any(|k| k.name == **n && !k.bases.is_empty())).map(|n| format!("bases:{n}")).collect();
         needs.extend(named.into_iter().filter(|n| *n != c.name));
+        // A template is specialized once declared.
+        if !c.type_params.is_empty() {
+            needs.insert(c.name.clone());
+        }
         templates.push((format!("bases:{}", c.name), text, needs));
     }
     let names: BTreeSet<String> = templates.iter().map(|t| t.0.clone()).collect();
