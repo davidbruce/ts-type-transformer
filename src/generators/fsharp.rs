@@ -78,6 +78,8 @@ struct Gen {
     pending_delegates: String,
     global_delegates: String,
     in_globals: bool,
+    // A namespace's functions, for a type of its name beside its module.
+    carrier: Option<Vec<String>>,
     cur_indent: String,
     cur_prefix: String,
     // The JavaScript path of the namespaces being written: `util` for the
@@ -292,6 +294,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         pending_delegates: String::new(),
         global_delegates: String::new(),
         in_globals: false,
+        carrier: None,
         cur_indent: String::new(),
         cur_prefix: String::new(),
         js_prefix: String::new(),
@@ -1590,7 +1593,10 @@ impl Gen {
             }
         }
         if !functions.is_empty() {
-            self.out += &format!("{indent}[<Erase>]\n{indent}type Globals =\n{}\n", functions.concat());
+            match self.carrier.as_mut() {
+                Some(carrier) => carrier.extend(functions),
+                None => self.out += &format!("{indent}[<Erase>]\n{indent}type Globals =\n{}\n", functions.concat()),
+            }
         }
     }
 
@@ -1606,10 +1612,20 @@ impl Gen {
                     let before = self.out.len();
                     let inner = js_path(&self.js_prefix, d.attribute("jsName").unwrap_or(raw));
                     let outer = std::mem::replace(&mut self.js_prefix, inner);
+                    // Its functions on a type of its name beside it (`Geometry.point`,
+                    // `Geometry.Deep.twice`), F# resolving `Geometry.Point` in the
+                    // module still; in it, as `Globals`, where its scope has
+                    // something else of that name (node's class `Stream`).
+                    let alone = d.parent().is_some_and(|p| !elements(p).any(|o| o != d && o.attribute("name") == Some(raw)));
+                    let outer_carrier = std::mem::replace(&mut self.carrier, alone.then(Vec::new));
                     self.decls(d, &js_path(prefix, raw), &format!("{indent}    "));
+                    let functions = std::mem::replace(&mut self.carrier, outer_carrier);
                     self.js_prefix = outer;
                     if self.out.len() == before {
                         self.out += &format!("{indent}    let private empty = ()\n\n");
+                    }
+                    if let Some(functions) = functions.filter(|f| !f.is_empty()) {
+                        self.out += &format!("{indent}[<Erase>]\n{indent}type {name} =\n{}\n", functions.concat());
                     }
                 }
                 "enum" => {

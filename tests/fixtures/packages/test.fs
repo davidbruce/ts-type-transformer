@@ -34,7 +34,7 @@ let geo: External.Point = toGeo own
 check (not (isNull geo)) "geo's Point"
 
 // Namespaces of one name.
-check (util.Globals.tag () = "pa") "pa's util"
-check (pb_util.Globals.tag () = "pb") "pb's util"
+check (util.tag () = "pa") "pa's util"
+check (pb_util.tag () = "pb") "pb's util"
 
 printfn "%d checks passed" passed
