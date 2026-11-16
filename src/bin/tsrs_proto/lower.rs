@@ -1186,6 +1186,7 @@ fn nominal_constraints(front: &mut Front, decls: &mut [Decl], exact: bool) {
                     let mut bs: Vec<String> = i.extends.iter().filter_map(|e| if let Type::Ref(r) = e { Some(key(r).to_string()) } else { None }).collect();
                     bs.extend(i.ancestors.iter().cloned());
                     f.bases.insert(name.clone(), bs);
+                    f.base_refs.insert(name.clone(), i.extends.iter().filter_map(|e| if let Type::Ref(r) = e { Some(r.clone()) } else { None }).collect());
                     for p in &i.type_params {
                         f.named_params.insert(format!("{name}.{}", p.name), p.constraint.clone());
                     }
@@ -1213,6 +1214,8 @@ fn nominal_constraints(front: &mut Front, decls: &mut [Decl], exact: bool) {
     #[derive(Default)]
     struct Facts {
         bases: HashMap<String, Vec<String>>,
+        // The same, as written: with their arguments.
+        base_refs: HashMap<String, Vec<Ref>>,
         unions: HashMap<String, Vec<Type>>,
         values: HashMap<String, Vec<Type>>,
         params: HashMap<P<Symbol>, Option<Type>>,
@@ -1229,6 +1232,32 @@ fn nominal_constraints(front: &mut Front, decls: &mut [Decl], exact: bool) {
             }
             if seen.insert(x.clone()) {
                 todo.extend(f.bases.get(&x).cloned().unwrap_or_default());
+            }
+        }
+        false
+    }
+    // Whether `a` is, or extends, `c` as written: a generic constraint
+    // (`AbstractRenderData<GraphicsBatcher>`) is met by that instantiation, as
+    // a target tells them apart, not by another (`<SmoothBatcher>`).
+    fn extends_ref(f: &Facts, a: &Ref, c: &Ref) -> bool {
+        if c.args.is_empty() {
+            return extends(f, key(a), key(c));
+        }
+        let same = |b: &Ref| key(b) == key(c) && b.args.len() == c.args.len() && b.args.iter().zip(&c.args).all(|(x, y)| type_key(x) == type_key(y));
+        if same(a) {
+            return true;
+        }
+        let mut todo = vec![key(a).to_string()];
+        let mut seen = HashSet::new();
+        while let Some(x) = todo.pop() {
+            if !seen.insert(x.clone()) {
+                continue;
+            }
+            for b in f.base_refs.get(&x).into_iter().flatten() {
+                if same(b) {
+                    return true;
+                }
+                todo.push(key(b).to_string());
             }
         }
         false
@@ -1261,7 +1290,7 @@ fn nominal_constraints(front: &mut Front, decls: &mut [Decl], exact: bool) {
             }
             // A named union: each of its members.
             Type::Ref(r) if r.kind == "typeAlias" && f.unions.contains_key(key(r)) => f.unions[key(r)].iter().all(|p| satisfies(f, p, c, depth + 1)),
-            Type::Ref(a) if matches!(a.kind, "class" | "interface") => matches!(c, Type::Ref(b) if matches!(b.kind, "class" | "interface") && extends(f, key(a), key(b))),
+            Type::Ref(a) if matches!(a.kind, "class" | "interface") => matches!(c, Type::Ref(b) if matches!(b.kind, "class" | "interface") && extends_ref(f, a, b)),
             _ => false,
         }
     }
@@ -1753,7 +1782,13 @@ fn string_union(t: &Type) -> Option<Vec<String>> {
     let Type::Union(parts) = t else { return None };
     let strings: Vec<String> =
         parts.iter().filter_map(|p| if let Type::Literal { kind: "string", value } = p { Some(value.clone()) } else { None }).collect();
-    (strings.len() == parts.len() && strings.len() > 1).then_some(strings)
+    if strings.len() != parts.len() {
+        return None;
+    }
+    // Once each, as TypeScript has them: a library may write one twice.
+    let mut seen = HashSet::new();
+    let strings: Vec<String> = strings.into_iter().filter(|s| seen.insert(s.clone())).collect();
+    (strings.len() > 1).then_some(strings)
 }
 
 // The checker orders union members its own way: compare sets, not sequences.
@@ -1949,19 +1984,44 @@ fn collect_bodies(decls: &[Decl], out: &mut HashSet<*const Type>) {
 // Type parameters a type uses but does not declare.
 fn free_type_params(t: &Type) -> Vec<Ref> {
     let mut used: Vec<Ref> = Vec::new();
-    let mut bound: HashSet<P<Symbol>> = HashSet::new();
-    let mut probe = t.clone();
-    walk_type(&mut probe, &mut Vec::new(), &mut |t, _| {
-        match t {
-            Type::Function(s) | Type::Constructor(s) => bound.extend(s.type_params.iter().filter_map(|p| p.sym)),
-            Type::Object(ms) => bound.extend(ms.iter().filter_map(|m| m.sig.as_ref()).flat_map(|s| s.type_params.iter().filter_map(|p| p.sym))),
-            Type::Ref(r) if r.kind == "typeParameter" && !used.iter().any(|u| u.sym == r.sym) => used.push(r.clone()),
-            _ => {}
-        }
-        true
-    });
-    used.retain(|r| r.sym.is_none_or(|s| !bound.contains(&s)));
+    collect_free(t, &mut Vec::new(), &mut used);
     used
+}
+
+// A type parameter is bound only within the signature that declares it: a
+// method `extend<Options>` beside `new (o: Options)` leaves that one free.
+fn collect_free(t: &Type, bound: &mut Vec<P<Symbol>>, used: &mut Vec<Ref>) {
+    fn signature(s: &Signature, bound: &mut Vec<P<Symbol>>, used: &mut Vec<Ref>) {
+        let depth = bound.len();
+        bound.extend(s.type_params.iter().filter_map(|p| p.sym));
+        for p in &s.type_params {
+            p.constraint.iter().chain(p.default.iter()).for_each(|t| collect_free(t, bound, used));
+        }
+        s.params.iter().for_each(|p| collect_free(&p.ty, bound, used));
+        s.this.iter().chain(s.ret.iter()).for_each(|t| collect_free(t, bound, used));
+        bound.truncate(depth);
+    }
+    let mut probe = t.clone();
+    walk_type(&mut probe, &mut Vec::new(), &mut |t, _| match t {
+        Type::Function(s) | Type::Constructor(s) => {
+            signature(s, bound, used);
+            false
+        }
+        Type::Object(ms) => {
+            for m in ms.iter() {
+                m.ty.iter().for_each(|t| collect_free(t, bound, used));
+                m.sig.iter().for_each(|s| signature(s, bound, used));
+            }
+            false
+        }
+        Type::Ref(r) if r.kind == "typeParameter" => {
+            if r.sym.is_none_or(|s| !bound.contains(&s)) && !used.iter().any(|u| u.sym == r.sym) {
+                used.push(r.clone());
+            }
+            true
+        }
+        _ => true,
+    });
 }
 
 // ---- overloads ----

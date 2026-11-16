@@ -315,6 +315,9 @@ struct Builder<'a> {
     imports: HashSet<String>,
     // Aliases being resolved, to stop on recursive ones.
     resolving: Vec<String>,
+    // A generic union's type parameters its members use, where not all:
+    // the others are dropped, and the arguments given for them.
+    union_kept: HashMap<String, Vec<usize>>,
     // In the signature being read: type parameters over a map's keys, and their map.
     keyed: HashMap<String, String>,
     // Why the member being read cannot be bound, if it cannot.
@@ -359,6 +362,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
+        union_kept: HashMap::new(),
         keyed: HashMap::new(),
         bad: None,
         problems: Default::default(),
@@ -715,8 +719,11 @@ impl<'a> Builder<'a> {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
                 c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true) });
-                let import = self.import(format!("{owner}_set_at"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
+                // A value of none (`[key: number]: never`) is never set.
+                if value != Ty::Void {
+                    let import = self.import(format!("{owner}_set_at"));
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
+                }
             }
             return;
         }
@@ -1158,16 +1165,25 @@ impl<'a> Builder<'a> {
                     // So is a member that may itself be absent: `string | (number | null)`.
                     let is_void = |p: Node| p.has_tag_name("primitive") && attr(p, "name") == "void";
                     let has_void = elements(body).any(|p| is_void(p) || p.has_tag_name("nullable"));
-                    let named_type = |name: String| {
-                        let t = if generic_union { Ty::Generic(name, args.clone()) } else { Ty::NamedUnion(name) };
+                    let named_type = |name: String, kept: Option<&Vec<usize>>| {
+                        let args: Vec<Ty> = args.iter().enumerate().filter(|(i, _)| kept.is_none_or(|k| k.contains(i))).map(|(_, a)| a.clone()).collect();
+                        // One left with no type parameters is no generic union.
+                        let t = if generic_union && !args.is_empty() { Ty::Generic(name, args) } else { Ty::NamedUnion(name) };
                         if has_void { absent(t, true) } else { t }
                     };
                     if self.model.unions.iter().any(|u| u.name == name) {
-                        return named_type(name);
+                        return named_type(name.clone(), self.union_kept.get(&name));
                     }
                     let type_params: Vec<TParam> = named(d, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
                     let members: Vec<Node> = elements(body).filter(|p| !is_void(*p)).collect();
                     self.resolving.push(key.clone());
+                    // Its own type parameters, not those of where it is named
+                    // (a callback's erased `T` is not this `T`).
+                    let own: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
+                    let saved = (self.erased.clone(), self.keyed.clone(), self.key_strings.clone());
+                    self.erased.retain(|e| !own.contains(e));
+                    self.keyed.retain(|k, _| !own.contains(k));
+                    self.key_strings.retain(|k| !own.contains(k));
                     let parts: Vec<Ty> = members
                         .iter()
                         .map(|p| match self.ty(*p, "") {
@@ -1175,6 +1191,7 @@ impl<'a> Builder<'a> {
                             t => t,
                         })
                         .collect();
+                    (self.erased, self.keyed, self.key_strings) = saved;
                     self.resolving.pop();
                     // Members that are one type here, as two generic types are once erased, are one member.
                     let mut kept = Vec::new();
@@ -1197,8 +1214,17 @@ impl<'a> Builder<'a> {
                     }
                     let tests = members.iter().map(|p| p.attribute("test").map(str::to_string)).collect();
                     let discriminant = body.attribute("discriminant").map(str::to_string);
+                    // A type parameter no member uses (`Number<TNum> = NodeClass | number`)
+                    // is no parameter of it: a target may not declare one unused.
+                    let kept: Vec<usize> = (0..type_params.len()).filter(|&i| parts.iter().any(|p| mentions(p, &type_params[i].name))).collect();
+                    let type_params: Vec<TParam> = if kept.len() < type_params.len() {
+                        self.union_kept.insert(name.clone(), kept.clone());
+                        kept.iter().map(|&i| type_params[i].clone()).collect()
+                    } else {
+                        type_params
+                    };
                     self.model.unions.push(NamedUnion { name: name.clone(), type_params, parts, tests, discriminant });
-                    return named_type(name);
+                    return named_type(name.clone(), self.union_kept.get(&name));
                 }
                 self.resolving.push(key.clone());
                 let t = self.ty(body, "");
@@ -1383,4 +1409,14 @@ pub fn each_type(m: &Model, f: &mut dyn FnMut(&str, &Ty)) {
 // one a lowering made (an erased `U`, which the caller reads).
 pub fn listener_result(f: Node) -> bool {
     named(f, "returns").next().map(only_child).is_some_and(|r| r.has_tag_name("primitive") && attr(r, "name") == "any" && !r.has_attribute("lossy"))
+}
+
+// Whether a type names the type parameter `p`.
+pub fn mentions(t: &Ty, p: &str) -> bool {
+    match t {
+        Ty::Param(n) => n == p,
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => mentions(inner, p),
+        Ty::Tuple(es) | Ty::Union(es) | Ty::Generic(_, es) => es.iter().any(|e| mentions(e, p)),
+        _ => false,
+    }
 }

@@ -45,7 +45,9 @@ const RUNTIME_NAMES: &[&str] = &[
 // re-exports them; a type's functions are in its struct, beside what the
 // struct has of its own.
 pub const NAMING: Naming = Naming {
-    reserved: || RUNTIME_NAMES.iter().chain(&["raw", "std", "builtin", "JsAsyncIterator", "JsIterator"]).map(|n| n.to_string()).collect(),
+    // And what a struct declares inside (a map's `Key` and `Type`): Zig lets
+    // no declaration shadow another, so no type of the file has those names.
+    reserved: || RUNTIME_NAMES.iter().chain(&["raw", "std", "builtin", "JsAsyncIterator", "JsIterator", "Key", "Type", "Methods"]).map(|n| n.to_string()).collect(),
     type_names: |candidate, _, _, _| vec![candidate.to_string()],
     values_of: |_, _, _, _| Vec::new(),
     types_apart: false,

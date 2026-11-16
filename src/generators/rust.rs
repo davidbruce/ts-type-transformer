@@ -73,7 +73,14 @@ fn camel(name: &str) -> String {
             cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
         })
         .collect();
-    if out.chars().next().is_none_or(|c| c.is_ascii_digit()) { format!("_{out}") } else { out }
+    if out.chars().next().is_none_or(|c| c.is_ascii_digit()) {
+        format!("_{out}")
+    } else if KEYWORDS.contains(&out.as_str()) {
+        // `"self"` as a variant is `Self_`: `Self` is Rust's.
+        format!("{out}_")
+    } else {
+        out
+    }
 }
 
 #[derive(Default)]
@@ -1337,14 +1344,25 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     for (name, members) in &m.num_enums {
         let name = tn(name);
-        let variants: Vec<(String, &String)> = members.iter().map(|(member, value)| (camel(&super::model::ident(member)), value)).collect();
+        let all: Vec<(String, &String)> = members.iter().map(|(member, value)| (camel(&super::model::ident(member)), value)).collect();
+        // A value once a variant; a member of a value given already
+        // (`ROTATE = 0` beside `LEFT = 0`) is a constant of that variant.
+        let mut variants: Vec<(String, &String)> = Vec::new();
+        let mut aliases: Vec<String> = Vec::new();
+        for (v, value) in all {
+            match variants.iter().find(|(_, w)| *w == value) {
+                Some((first, _)) => aliases.push(format!("pub const {v}: {name} = {name}::{first}; ")),
+                None => variants.push((v, value)),
+            }
+        }
         let from: String = variants.iter().map(|(v, value)| format!("{value} => {name}::{v}, ")).collect();
         types_file += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
-             impl {name} {{ pub fn from_value(v: i32) -> Self {{ match v {{ {from}_ => panic!(\"{name}: no value {{v}}\") }} }} }}\n\
+             #[allow(non_upper_case_globals)]\nimpl {name} {{ {}pub fn from_value(v: i32) -> Self {{ match v {{ {from}_ => panic!(\"{name}: no value {{v}}\") }} }} }}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ (*self as i32 as f64).lend() }} }}\n\
              impl FromJs for {name} {{ fn from_handle(h: u32) -> Self {{ Self::from_value(f64::from_handle(h) as i32) }} }}\n",
-            variants.iter().map(|(v, value)| format!("{v} = {value}")).collect::<Vec<_>>().join(", ")
+            variants.iter().map(|(v, value)| format!("{v} = {value}")).collect::<Vec<_>>().join(", "),
+            aliases.concat()
         );
     }
     // Types declared elsewhere: handles, generic or not.

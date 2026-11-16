@@ -879,8 +879,33 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     // as the compiler joins them without resolving `..`.
     let include = |_from: &str, to: &str| format!("#include \"{to}\"\n");
     // The headers of the given types.
+    // What a union holds, by name: a value of it needs each of them complete.
+    let union_parts: HashMap<&str, BTreeSet<String>> = unions
+        .iter()
+        .map(|u| {
+            let mut parts = BTreeSet::new();
+            u.parts.iter().for_each(|p| named_types(p, &mut parts));
+            (u.name.as_str(), parts)
+        })
+        .collect();
+    let classes: BTreeSet<&str> = m.classes.iter().map(|c| c.name.as_str()).collect();
+    // First the structs of the classes used, and of those the unions used
+    // hold: declarations include only declarations, so each is complete
+    // before any definition, however the full headers include each other.
+    // Then the full headers.
     let includes = |from: &str, types: &BTreeSet<String>| -> String {
-        types.iter().filter_map(|t| home.get(t)).map(|h| format!("{h}.hpp")).filter(|h| h != from).map(|h| include(from, &h)).collect()
+        let mut all = types.clone();
+        let mut todo: Vec<String> = types.iter().cloned().collect();
+        while let Some(t) = todo.pop() {
+            for p in union_parts.get(t.as_str()).into_iter().flatten() {
+                if all.insert(p.clone()) {
+                    todo.push(p.clone());
+                }
+            }
+        }
+        let decls = all.iter().filter(|t| classes.contains(t.as_str())).filter_map(|t| home.get(t)).map(|h| format!("{h}.decl.hpp"));
+        let full = types.iter().filter_map(|t| home.get(t)).map(|h| format!("{h}.hpp"));
+        decls.chain(full).filter(|h| h != from).map(|h| include(from, &h)).collect()
     };
 
     let types = declarations(m);
