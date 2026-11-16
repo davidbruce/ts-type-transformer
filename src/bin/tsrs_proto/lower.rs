@@ -324,7 +324,7 @@ fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
             && a.type_params.is_empty()
             && matches!(a.ty, Type::Union(_))
         {
-            by_key.entry(type_key(&a.ty)).or_insert_with(|| a.name.clone());
+            by_key.entry(union_key(&a.ty)).or_insert_with(|| a.name.clone());
         }
     }
     // A named union may itself hold unions, inside its arrays: until none is left.
@@ -338,6 +338,18 @@ fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
     }
 }
 
+// A union's key whatever the order of its members: `A | B` is `B | A`.
+fn union_key(t: &Type) -> String {
+    match t {
+        Type::Union(parts) => {
+            let mut keys: Vec<String> = parts.iter().map(type_key).collect();
+            keys.sort();
+            format!("union({})", keys.join("|"))
+        }
+        t => type_key(t),
+    }
+}
+
 fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String>, by_key: &mut HashMap<String, String>, free_of: &mut HashMap<String, Vec<Ref>>) {
     let mut bodies: HashSet<*const Type> = HashSet::new();
     collect_bodies(decls, &mut bodies);
@@ -348,7 +360,7 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
         }
         let Type::Union(parts) = &*t else { unreachable!() };
         let name = by_key
-            .entry(type_key(t))
+            .entry(union_key(t))
             .or_insert_with(|| {
                 // By its members, if a few that say what they are; else where it is.
                 let joined = parts.iter().map(describe).collect::<Option<Vec<_>>>().map(|ps| ps.join(&format!("{sep}or{sep}")));
@@ -1974,12 +1986,18 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
     }
 }
 
-// `(this: HTMLElement, ev: MouseEvent) => any` -> `HTMLElement_MouseEvent_fn`;
-// none if a parameter has no few words to say it.
+// `(this: HTMLElement, ev: MouseEvent) => any` -> `HTMLElement_MouseEvent_fn`,
+// `(t: Token) => boolean` -> `Token_to_boolean_fn`; none if a type has no
+// few words to say it.
 fn callback_name(s: &Signature, sep: &str) -> Option<String> {
     let mut parts: Vec<String> = s.this.iter().chain(s.params.iter().map(|p| &p.ty)).map(describe).collect::<Option<_>>()?;
     if parts.is_empty() {
         parts.push("void".into());
+    }
+    let says_nothing = |t: &Type| matches!(t, Type::Erased(_)) || matches!(t, Type::Primitive(p) if matches!(p.as_str(), "void" | "undefined" | "any" | "unknown"));
+    if let Some(ret) = s.ret.as_ref().filter(|r| !says_nothing(r)) {
+        parts.push("to".into());
+        parts.push(describe(ret)?);
     }
     parts.push("fn".into());
     Some(parts.join(sep))
