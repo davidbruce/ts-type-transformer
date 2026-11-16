@@ -46,6 +46,8 @@ pub struct Options {
     pub separator: &'static str,
     // Overload names: `f_2`, `f_3` instead of `f_with_x`.
     pub numbered_overloads: bool,
+    // Generated type names in PascalCase: `BooleanOrAddEventListenerOptions`.
+    pub pascal_types: bool,
 }
 
 impl Default for Options {
@@ -53,7 +55,7 @@ impl Default for Options {
         Options {
             classes: false, typeops: false, intersections: false, inheritance: false, generics: false, aliases: false, constraints: false, exact_constraints: false, nullable: false,
             literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
-            union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false,
+            union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false, pascal_types: false,
         }
     }
 }
@@ -660,6 +662,44 @@ pub fn rename(decls: &mut [Decl], renames: &[(String, String)]) -> Result<Vec<St
     }
     rename_everywhere(decls, renames);
     Ok(unused)
+}
+
+// Generated types named in PascalCase, as a target names types:
+// `boolean_or_AddEventListenerOptions` is `BooleanOrAddEventListenerOptions`,
+// `Shape_kind` is `ShapeKind`. Apart from every name declared.
+pub fn pascal_types(decls: &mut [Decl]) {
+    fn collect(decls: &[Decl], all: &mut HashSet<String>, generated: &mut Vec<String>) {
+        for d in decls {
+            let (name, synthetic) = match d {
+                Decl::Interface(i) => (&i.name, i.synthetic),
+                Decl::Alias(a) => (&a.name, a.synthetic),
+                Decl::Enum(e) => (&e.name, e.synthetic),
+                Decl::Function(f) => (&f.name, false),
+                Decl::Var(v) => (&v.name, false),
+                Decl::Namespace(n) => {
+                    all.insert(n.name.clone());
+                    collect(&n.decls, all, generated);
+                    continue;
+                }
+            };
+            all.insert(name.clone());
+            if synthetic && !generated.contains(name) {
+                generated.push(name.clone());
+            }
+        }
+    }
+    let (mut taken, mut generated) = (HashSet::new(), Vec::new());
+    collect(decls, &mut taken, &mut generated);
+    let mut renames = Vec::new();
+    for old in generated {
+        let pascal: String = old.split('_').filter(|p| !p.is_empty()).map(|p| p[..1].to_uppercase() + &p[1..]).collect();
+        if pascal == old || pascal.is_empty() {
+            continue;
+        }
+        let new = unique(pascal, &mut taken);
+        renames.push((old, new));
+    }
+    rename_everywhere(decls, &renames);
 }
 
 // Renames declarations, and what refers to them: references, inherited

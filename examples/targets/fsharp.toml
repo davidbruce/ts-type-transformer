@@ -8,3 +8,6 @@ literals = "enum"
 keyed_params = "map"
 unions = "name"
 redeclarations = "drop"
+
+[naming]
+types = "pascal"

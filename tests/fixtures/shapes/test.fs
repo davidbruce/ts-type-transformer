@@ -11,14 +11,14 @@ let check (ok: bool) (what: string) =
     if ok then passed <- passed + 1 else failwithf "check failed: %s" what
 
 // Class pairing: constructor, static method, constant.
-let s = Shape.Create(Shape_kind.Square, 3.0)
+let s = Shape.Create(ShapeKind.Square, 3.0)
 check (s.area () = 9.0) "constructor"
 check (Shape.unit().area () = 1.0) "static method"
 check (Shape.SIDES = 4.0) "constant"
 
 // Literal union -> enum, in both directions.
-check (s.kind = Shape_kind.Square) "enum out"
-check (Shape.Create(Shape_kind.Circle, 1.0).kind = Shape_kind.Circle) "enum in"
+check (s.kind = ShapeKind.Square) "enum out"
+check (Shape.Create(ShapeKind.Circle, 1.0).kind = ShapeKind.Circle) "enum in"
 
 // Properties.
 s.size <- 4.0
@@ -41,8 +41,8 @@ s.resize (2.6, true)
 check (s.size = 3.0) "optional given"
 
 // Union parameter: a named union.
-check (s.label (string_or_number.String "a") = "string:a") "union string"
-check (s.label (string_or_number.Number 7.0) = "number:7") "union number"
+check (s.label (StringOrNumber.String "a") = "string:a") "union string"
+check (s.label (StringOrNumber.Number 7.0) = "number:7") "union number"
 
 // Overloads F# cannot tell apart, apart only in a literal option: the one
 // with `exact: true` is named for it; both call the same JavaScript.

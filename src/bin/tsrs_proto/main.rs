@@ -331,6 +331,9 @@ fn main() {
             std::process::exit(2);
         }
     }
+    if opts.pascal_types {
+        lower::pascal_types(&mut decls);
+    }
 
     let mut x = xml::Xml::default();
     x.top(&decls, &modules);

@@ -25,10 +25,10 @@ check (LIMIT = 10.0) "constant"
 check (bump () = 1.0) "function"
 
 // A union told apart by the classes as exported.
-let kind (v: Figure_or_Badge) =
+let kind (v: FigureOrBadge) =
     match v with
-    | Figure_or_Badge.Figure f -> "figure " + string f.size
-    | Figure_or_Badge.Badge b -> "badge " + b.label
+    | FigureOrBadge.Figure f -> "figure " + string f.size
+    | FigureOrBadge.Badge b -> "badge " + b.label
 check (kind (pick 0.0) = "figure 2") "instanceof the imported Figure"
 check (kind (pick 1.0) = "badge b") "instanceof the imported Badge"
 

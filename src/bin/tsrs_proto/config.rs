@@ -164,6 +164,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
                 ("limits", "keyed_overloads") => o.keyed_limit = count(&at, value)?,
                 ("naming", "separator") => o.separator = Box::leak(string(&at, value)?.to_string().into_boxed_str()),
                 ("naming", "overloads") => o.numbered_overloads = one_of(&at, value, OVERLOAD_NAMES)? == "numbered",
+                ("naming", "types") => o.pascal_types = one_of(&at, value, &["as_generated", "pascal"])? == "pascal",
                 ("library", "module") => modules.import = Some(string(&at, value)?.to_string()),
                 ("rename", old) => renames.push((old.to_string(), string(&at, value)?.to_string())),
                 ("modules", "default") => modules.default = string(&at, value)?.to_string(),
@@ -246,6 +247,7 @@ pub fn template() -> String {
          # Most keys a keyed signature is expanded over.\nkeyed_overloads = {}\n\
          \n[naming]\n# Joins the parts of generated names.\nseparator = \"{}\"\n\
          # \"with_params\": f_with_x. \"numbered\": f_2.\noverloads = \"with_params\"\n\
+         # Generated types: \"as_generated\" (boolean_or_Options) or \"pascal\" (BooleanOrOptions).\ntypes = \"as_generated\"\n\
          \n# Names for declarations a pass generated, which are named after where they came from.\n[rename]\n# SVGSVGElement_getEnclosureList_result = \"EnclosureList\"\n",
         d.union_param_limit, d.intersection_limit, d.keyed_limit, d.separator
     );

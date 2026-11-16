@@ -15,7 +15,7 @@ let check (ok: bool) (what: string) =
 let o =
     jsOptions<Options> (fun o ->
         o.width <- 3.0
-        o.mode <- Options_mode.Fill)
+        o.mode <- OptionsMode.Fill)
 
 check (describe o = "3x? fill") "options in"
 o.height <- Some 2.0
@@ -24,19 +24,19 @@ check (describe o = "3x2 fill \"hi\"") "optional properties in"
 
 // Built by JavaScript, read here.
 let d = defaults ()
-check (d.width = 4.0 && d.mode = Options_mode.Fit) "options out"
+check (d.width = 4.0 && d.mode = OptionsMode.Fit) "options out"
 check d.height.IsNone "missing optional property"
 
 // Partial<Options>.
 let patched = patch (d, {| width = Some 9.0; height = None; title = None; mode = None |})
-check (patched.width = 9.0 && patched.mode = Options_mode.Fit) "Partial"
+check (patched.width = 9.0 && patched.mode = OptionsMode.Fit) "Partial"
 
 // Pick<Options, "width" | "height">.
 check (area {| width = 3.0; height = None |} = 9.0) "Pick"
 check (area {| width = 3.0; height = Some 5.0 |} = 15.0) "Pick with optional"
 
 // keyof Options.
-check (field () = field_result.Title) "keyof"
+check (field () = FieldResult.Title) "keyof"
 
 // Record<string, number>: a JsRecord, indexed by its keys.
 let table = createEmpty<JsRecord<string, float>>
