@@ -47,6 +47,7 @@ pub struct Front<'c> {
     computed_alias: HashMap<P<Symbol>, bool>,
     // Anonymous types being converted; guards recursive types.
     in_progress: Vec<TypeId>,
+    aliases_in_progress: Vec<(P<Symbol>, Vec<TypeId>)>,
     // How deep `from_type` is, and how many types the declaration being
     // converted may still convert.
     depth: usize,
@@ -108,6 +109,7 @@ impl<'c> Front<'c> {
             stats: BTreeMap::new(),
             computed_alias: HashMap::new(),
             in_progress: Vec::new(),
+            aliases_in_progress: Vec::new(),
             depth: 0,
             budget: BUDGET,
             cut: 0,
@@ -1414,8 +1416,20 @@ impl<'c> Front<'c> {
                 return Type::prim(prim);
             }
         }
+        // One alias of the same arguments within itself, as a new type each
+        // time (echarts' `MapToType<any, S>`, `{ [k]: S | MapToType<any, S> }`), once.
+        let alias = t.alias().and_then(|a| Some((a.symbol()?, a.type_arguments().iter().map(|x| x.id()).collect::<Vec<TypeId>>())));
+        if alias.as_ref().is_some_and(|a| self.aliases_in_progress.contains(a)) {
+            return self.erased("recursive anonymous type");
+        }
         self.in_progress.push(t.id());
+        if let Some(a) = &alias {
+            self.aliases_in_progress.push(a.clone());
+        }
         let members = self.members_of_type(t, None);
+        if alias.is_some() {
+            self.aliases_in_progress.pop();
+        }
         self.in_progress.pop();
         if members.is_empty() && of.intersects(ObjectFlags::Mapped) {
             return self.erased("generic mapped type");

@@ -136,6 +136,10 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         *front.stats.entry("widened: literal -> primitive".into()).or_default() += widened;
     }
     if o.anonymous {
+        walk(decls, &mut |t, _| {
+            cut_recursive_dictionary(t);
+            true
+        });
         hoist(decls, o.separator);
     }
     if o.optionals || o.param_unions {
@@ -1857,7 +1861,14 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
         if let Some(strings) = string_union(t) {
             let path = &best[&sorted(strings.clone())];
             let name = by_values.entry(sorted(strings.clone())).or_insert_with(|| {
-                let name = unique(path.join(sep), &mut names);
+                // Another's place (leaflet's event names by kind, all `type`): with its first.
+                let at = path.join(sep);
+                let first = strings.first().map(|v| name_part(v).trim_matches('_').to_string()).filter(|v| !v.is_empty());
+                let base = match first {
+                    Some(f) if names.contains(&at) => format!("{at}{sep}{f}"),
+                    _ => at,
+                };
+                let name = unique(base, &mut names);
                 let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone() }).collect();
                 enums.push(Enum { name: name.clone(), sym: None, members, synthetic: true });
                 name
@@ -2148,6 +2159,44 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         }
         start = decls.len();
         decls.extend(added);
+    }
+}
+
+// A dictionary of `S` or of itself, unrolled (echarts' `MapToType<any, S>`
+// is `{ [k]: S | { [k]: S | ... } }`), once: the second's own is `any`.
+// `Record<string, Record<string, S>>`, of nothing beside, is two.
+fn cut_recursive_dictionary(t: &mut Type) {
+    fn dictionary(t: &mut Type) -> Option<(String, &mut Type)> {
+        let Type::Object(ms) = t else { return None };
+        let [m] = ms.as_mut_slice() else { return None };
+        if m.kind != MemberKind::Index {
+            return None;
+        }
+        let sig = m.sig.as_mut()?;
+        let key = type_key(&sig.params.first()?.ty);
+        Some((key, sig.ret.as_mut()?))
+    }
+    // A value's other members, and its dictionary.
+    fn split(v: &mut Type) -> Option<(Vec<String>, &mut Type)> {
+        let Type::Union(parts) = v else { return None };
+        let others: Vec<String> = parts.iter().filter(|p| !matches!(p, Type::Object(_))).map(type_key).collect();
+        let inner = parts.iter_mut().find(|p| matches!(p, Type::Object(_)))?;
+        Some((others, inner))
+    }
+    let Some((key, value)) = dictionary(t) else { return };
+    let Some((others, inner)) = split(value) else { return };
+    if others.is_empty() {
+        return;
+    }
+    let Some((inner_key, inner_value)) = dictionary(inner) else { return };
+    if inner_key != key {
+        return;
+    }
+    if let Some((inner_others, innermost)) = split(inner_value)
+        && inner_others == others
+        && dictionary(innermost).is_some()
+    {
+        *innermost = Type::Erased("recursive anonymous type");
     }
 }
 
