@@ -1124,6 +1124,147 @@ window.__result = {{ passed, failed, dom: [], domChecks: 0, notes }};\n</script>
     }
 }
 
+// ---- the DOM by area ----
+//
+// tests/dom/areas/<area>/test.<ext>: a program per area of the DOM (the
+// tree, events, forms, ...) in each language, against the whole DOM's
+// bindings, in Chrome. Its `page.html`, if any, is in the page's body.
+// Slow, so not run by default:
+//
+//     cargo test --test e2e dom_areas -- --ignored
+
+mod dom_areas {
+    use super::*;
+
+    fn area(name: &str, target: &str) {
+        let dir = root().join("tests/dom/areas").join(name);
+        let ext = match target {
+            "fsharp" => "fs",
+            "rust" => "rs",
+            t => t,
+        };
+        if !dir.join(format!("test.{ext}")).exists() {
+            eprintln!("SKIPPED: no tests/dom/areas/{name}/test.{ext}");
+            return;
+        }
+        let out = root().join("target/e2e").join(format!("dom-{name}-{target}"));
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let xml = lower_with(Path::new("lib.dom.d.ts"), Some(target), &[root().join("examples/modules/dom.toml")], &[]);
+        let c = Case { fixture: dir.clone(), out, xml };
+        let body = fs::read_to_string(dir.join("page.html")).unwrap_or_default();
+        let page = |script: &str| format!("<!doctype html>\n<title>{name}</title>\n<body>\n{body}\n{script}</body>\n");
+        match target {
+            "c" => {
+                let Some([clang]) = tools(["clang"]) else { return };
+                let model = model(&c.xml, "C");
+                write_files(&c.out.join("bindings"), generators::c::files(&model).unwrap());
+                run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+                write_glue(&c, &model);
+                fs::write(c.out.join("index.html"), page(AREA_WASM)).unwrap();
+            }
+            "cpp" => {
+                let Some(clang) = wasi_clang() else { return };
+                let model = model(&c.xml, "C++");
+                build_cpp(&clang, &c, &model);
+                write_glue(&c, &model);
+                fs::write(c.out.join("index.html"), page(AREA_WASM)).unwrap();
+            }
+            "zig" => {
+                let Some([zig]) = tools(["zig"]) else { return };
+                let model = model(&c.xml, "Zig");
+                write_files(&c.out, generators::zig::files(&model).unwrap());
+                fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
+                run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
+                write_glue(&c, &model);
+                fs::write(c.out.join("index.html"), page(AREA_WASM)).unwrap();
+            }
+            "rust" => {
+                let Some(rustc) = rustc_wasm() else { return };
+                let model = model(&c.xml, "Rust");
+                build_rust(&rustc, &c, &model);
+                write_glue(&c, &model);
+                fs::write(c.out.join("index.html"), page(AREA_WASM)).unwrap();
+            }
+            "fsharp" => {
+                let Some([fable]) = tools(["fable"]) else { return };
+                write_fsharp(&c, &generators::fsharp::module(&c.xml).unwrap());
+                run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+                fs::write(c.out.join("index.html"), page(&area_program("await import('./js/Test.mjs');"))).unwrap();
+            }
+            "gleam" => {
+                let Some([gleam]) = tools(["gleam"]) else { return };
+                write_gleam_project(&c.out, &generators::gleam::module(&c.xml).unwrap_or_else(|p| panic!("{}", p.join("\n"))));
+                fs::copy(c.fixture.join("test.gleam"), c.out.join("src/check.gleam")).unwrap();
+                run(Command::new(gleam).current_dir(&c.out).args(["build", "--warnings-as-errors"]));
+                fs::write(c.out.join("index.html"), page(&area_program("(await import('./build/dev/javascript/check/check.mjs')).main();"))).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        run_browser(&c);
+    }
+
+    // C, C++, Zig, Rust: `run`, then, once `busy()` is 0, `finish`.
+    const AREA_WASM: &str = r#"<script type="module">
+import { makeEnv } from './glue.mjs';
+let instance;
+let passed = 0;
+const failed = [];
+const options = { check: true, unchecked: e => failed.push('unchecked exception: ' + (e?.message ?? e)) };
+const env = { ...makeEnv(() => instance, options), check: (ok, line) => (ok ? passed++ : failed.push('line ' + line)) };
+const wasi = new Proxy({}, { get: () => () => 0 });
+({ instance } = await WebAssembly.instantiate(await (await fetch('./test.wasm')).arrayBuffer(), { env, wasi_snapshot_preview1: wasi }));
+instance.exports._initialize?.();
+instance.exports.run();
+await new Promise(r => setTimeout(r, 200));
+const deadline = Date.now() + 20000;
+while (instance.exports.busy?.() && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
+instance.exports.finish?.();
+window.__result = { passed, failed, dom: [], domChecks: 0 };
+</script>
+"#;
+
+    // F# and Gleam: the program reports `N checks passed`, last, or throws.
+    fn area_program(start: &str) -> String {
+        format!(
+            r#"<script type="module">
+let passed = 0;
+const failed = [];
+const log = console.log;
+console.log = (...args) => {{
+  const m = String(args[0]).match(/(\d+) checks passed/);
+  if (m) passed = Number(m[1]);
+  log(...args);
+}};
+window.addEventListener('unhandledrejection', e => failed.push('rejected: ' + (e.reason?.message ?? e.reason)));
+try {{
+  {start}
+}} catch (e) {{
+  failed.push('threw: ' + (e?.message ?? e));
+}}
+const deadline = Date.now() + 20000;
+while (!passed && !failed.length && Date.now() < deadline) await new Promise(r => setTimeout(r, 50));
+if (!passed && !failed.length) failed.push('the program did not report');
+window.__result = {{ passed, failed, dom: [], domChecks: 0 }};
+</script>
+"#
+        )
+    }
+
+    macro_rules! areas {
+        ($($name:ident),*) => { $(mod $name {
+            #[test] #[ignore] fn c() { super::area(stringify!($name), "c"); }
+            #[test] #[ignore] fn cpp() { super::area(stringify!($name), "cpp"); }
+            #[test] #[ignore] fn zig() { super::area(stringify!($name), "zig"); }
+            #[test] #[ignore] fn rust() { super::area(stringify!($name), "rust"); }
+            #[test] #[ignore] fn fsharp() { super::area(stringify!($name), "fsharp"); }
+            #[test] #[ignore] fn gleam() { super::area(stringify!($name), "gleam"); }
+        })* };
+    }
+
+    areas!(tree, events, forms, cssom, canvas, fetch, url, storage, timers, observers, svg);
+}
+
 // File names must differ where letter case does not count, and avoid names
 // Windows reserves.
 #[test]
