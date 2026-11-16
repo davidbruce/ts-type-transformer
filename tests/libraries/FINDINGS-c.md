@@ -1,5 +1,7 @@
 # Findings: C library programs
 
+**Status:** Fixed: 5 (but no top-level `parseInline`), 7, 8, 11, 13, 16, 18. Fixed by filling optional fixed values, programs not yet updated: 15.
+
 Numbers match `// FINDING n` in tests/libraries/*/test.c (there is no 17).
 Generated paths are under `target/e2e/libraries/<lib>-c-run/bindings/`
 unless they start with `glue.mjs`.

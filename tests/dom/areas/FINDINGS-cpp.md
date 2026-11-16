@@ -1,5 +1,7 @@
 # Findings: C++ DOM area programs
 
+**Status:** Fixed: 9.
+
 Numbers match `// FINDING n` in tests/dom/areas/*/test.cpp. Lines refer to
 `target/e2e/dom-cpp/bindings/`.
 

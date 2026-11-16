@@ -1,5 +1,7 @@
 # F# findings from the library programs
 
+**Status:** Fixed: 7, 10, 21 (the bindings compile; the program is still a stub). Partly: 2 (the backslash; a case of an anonymous record still never matches), 11 and 26 (rest-parameter delegates: Fable compiles a ParamArray delegate to a one-parameter function, so only the first argument arrives).
+
 Kinds: runtime bug / can't express / awkward.
 
 1. katex, awkward. `macros: JsRecord<string, StringOrObjectOrFn>` is wanted, but `JsRecord` (Bindings.Prelude.fs) has only an indexer, no constructor or `Create`: `JsRecord<_,_>.Create ()` does not compile ("does not define the field, constructor or member 'Create'"). Worked around with `createEmpty<JsRecord<..>>` from Fable.Core.JsInterop.

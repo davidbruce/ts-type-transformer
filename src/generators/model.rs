@@ -893,9 +893,10 @@ impl<'a> Builder<'a> {
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
             let import = self.import(format!("{owner}_create"));
-            // What its type requires and fixes: echarts' `BarSeriesOption` is `{ type: "bar" }`.
+            // What its type fixes, optional or not: echarts' `BarSeriesOption`,
+            // `type?: "bar"`, is `{ type: "bar" }`, as echarts tells series apart.
             let fixed: Vec<String> = elements(d)
-                .filter(|m| m.has_tag_name("property") && !flag(*m, "optional") && !flag(*m, "static"))
+                .filter(|m| m.has_tag_name("property") && !flag(*m, "static"))
                 .filter_map(|m| {
                     let value = m.attribute("const")?;
                     let key = m.attribute("jsName").unwrap_or(attr(m, "name"));

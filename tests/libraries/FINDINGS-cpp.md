@@ -1,5 +1,7 @@
 # C++ findings from the library programs
 
+**Status:** Fixed: 2 (lexer, parser; not `parse`/`parseInline`), 4, 5, 8, 9, 10, 12 (but `createColumnHelper().accessor`), 20, 21. Fixed by filling optional fixed values, programs not yet updated: 18.
+
 1. katex (awkward): a caught `ts::Error` converts to nothing generated: `ParseError` extends the generated global `::Error`, not `ts::Error`. To use `ParseError::length()` on a caught error, copy the handle: `static_cast<ts::Handle&>(pe) = caught;` (`ParseError(ts::handle, e.h)` would double-release).
 2. marked (can't express): function-typed consts (`marked.lexer`, `parser`, `options`, `setOptions`, `walkTokens`) are bound as bare `ts::Callback` structs (e.g. types/string_MarkedOptions_to_TokensList_fn.hpp): constructible from a lambda but with no way to call them. `marked_ns::get_parse()` is a `ts::Value`, and the `parseInline` const (callable object type) has struct `parseInline` with `invoke` but no accessor to obtain it. Used `Lexer::lex_static` and `Marked::parse()/parseInline().invoke` instead.
 3. marked (can't express): the `Token` union (bindings/types/Token.hpp) declares `ts_raw_Token_tag` but defines no `decode_Token`, so `ts::Array<Token>` fails to compile (`ts_runtime.hpp:205 no matching constructor for variant`), and `TokensList` iteration/`at()` yield untyped `ts::Value`. Workaround: rewrap the value as `Tokens_Generic` to read `type()`, then as the specific token type, via handle copy.
