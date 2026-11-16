@@ -19,20 +19,42 @@ fn at(p: b.JsString) b.fs.PathLike {
 
 var hits: u32 = 0;
 var last: f64 = 0;
+var argc: usize = 0;
 fn onTick(ctx: ?*anyopaque, args: b.JsArray) void {
     const total: *u32 = @ptrCast(@alignCast(ctx));
     total.* += 1;
-    // FINDING 10: the listener type is `(...args: any[]) => void`, typed here as taking a JsArray, but the
-    // glue forwards only the first argument, as itself. It is read as a value.
-    last = (b.JsValue{ .h = args.h }).toNumber();
+    // The listener's rest parameter arrives as the array of all the emit arguments.
+    argc = args.len();
+    last = args.get(argc - 1).toNumber();
 }
 var once_hits: u32 = 0;
 var other_hits: u32 = 0;
 
 export fn run() void {
-    // FINDING 8: every path function fails at run time. The glue calls PK["path"].path.join(...),
-    // but the module `path` has `join` on itself (`export = path`), so `.path` is undefined
-    // ("Cannot read properties of undefined (reading 'join')"). The path checks are left out.
+    // path.
+    const parts = b.JsArrayOf(b.JsString).new();
+    parts.push(str("/a"));
+    parts.push(str("b/../c"));
+    parts.push(str("d.txt"));
+    expect(b.path.join(parts).eql("/a/c/d.txt"), @src());
+    expect(b.path.normalize("/a//b/./c/..").eql("/a/b"), @src());
+    expect(b.path.basename("/x/y/file.txt", .{}).eql("file.txt"), @src());
+    expect(b.path.basename("/x/y/file.txt", .{ .suffix = ".txt" }).eql("file"), @src());
+    expect(b.path.extname("archive.tar.gz").eql(".gz"), @src());
+    expect(b.path.dirname("/x/y/file.txt").eql("/x/y"), @src());
+    expect(b.path.isAbsolute("/x") and !b.path.isAbsolute("x/y"), @src());
+    expect(b.path.relative("/a/b/c", "/a/d").eql("../../d"), @src());
+    const abs = b.JsArrayOf(b.JsString).of(&.{ str("/r"), str("s"), str("../t") });
+    expect(b.path.resolve(abs).eql("/r/t"), @src());
+    const parsed = b.path.parse("/home/u/doc.md");
+    expect(parsed.getRoot().eql("/") and parsed.getDir().eql("/home/u"), @src());
+    expect(parsed.getBase().eql("doc.md") and parsed.getExt().eql(".md") and parsed.getName().eql("doc"), @src());
+    const fmt = b.path.FormatInputPathObject.create();
+    fmt.setDir("/tmp");
+    fmt.setBase("x.js");
+    expect(b.path.format(fmt).eql("/tmp/x.js"), @src());
+    expect(b.path.getSep() == .@"/" and b.path.getDelimiter() == .@":", @src());
+    expect(b.path.matchesGlob("/a/b.txt", "/a/*.txt"), @src());
 
     // fs: a scratch directory, files in it, and cleaning up.
     const dir = b.fs.mkdtempSync("target/e2e/node-zig-", null);
@@ -67,11 +89,9 @@ export fn run() void {
     expect(!b.fs.existsSync(at(str(copy_path))) and b.fs.existsSync(at(str(renamed_path))), @src());
     var nested_buf: [320]u8 = undefined;
     const nested = std.fmt.bufPrint(&nested_buf, "{s}/a/b/c", .{dir_text}) catch "";
-    const mk = b.fs.MakeDirectoryOptions.create();
-    mk.setRecursive(true);
-    // FINDING 6: mkdirSync with { recursive: true } has no overload taking MakeDirectoryOptions without a
-    // returned string; mkdirSyncWithOptNumberOrStringOrMakeDirectoryOptions is the one that takes it.
-    _ = b.fs.mkdirSyncWithOptNumberOrStringOrMakeDirectoryOptions(at(str(nested)), .{ .MakeDirectoryOptions = mk });
+    // The recursive overload: its options already hold recursive: true.
+    const made = b.fs.mkdirSyncRecursive(at(str(nested)), b.mkdir_options.create());
+    expect(made != null and made.?.len() > 0, @src());
     expect(b.fs.statSync(at(str(nested))).isDirectory(), @src());
 
     const names = b.fs.readdirSync(at(dir), null);
@@ -120,10 +140,11 @@ export fn run() void {
     const args = b.JsArray.new();
     args.push(b.JsValue.number(7));
     expect(em.emit(tick, args), @src());
-    expect(hits == 1 and last == 7, @src());
+    expect(hits == 1 and last == 7 and argc == 1, @src());
     args.push(b.JsValue.number(9));
     _ = em.emit(tick, args);
-    expect(hits == 2, @src());
+    // Every argument arrives, not just the first.
+    expect(hits == 2 and argc == 2 and last == 9, @src());
 
     // once fires one time only.
     const once_listener = b.any_array_fn.from(onTick, &once_hits);

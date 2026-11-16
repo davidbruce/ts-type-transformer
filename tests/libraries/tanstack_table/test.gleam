@@ -1,14 +1,29 @@
-// TanStack Table (table-core v9) from Gleam, in Node: what can be reached
-// without a constructed table. A table itself cannot be made (FINDING 9).
+// TanStack Table (table-core v9) from Gleam, in Node: the helpers, and a table
+// built with reactivity written here, sorted through setSorting.
+//
+// FINDING 9 (still open, awkward): Atom and ReadonlyAtom are opaque with no
+// constructor, so the reactivity's atoms are plain objects taken as Atoms by an
+// identity @external to runtime_ffi.mjs's `dynamic`; so are the table options
+// object and the table's TableRowSorting view (`coerce`).
+// FINDING 21 (new, runtime bug): table.create_core_row_model and
+// create_sorted_row_model throw `$c_TFeatures is not defined` (the glue uses a
+// codec the Gleam signature does not take), so a table has no row model and
+// getRowModel cannot be called here.
 import bindings/areas/main as table
 import bindings/areas/main/column_helper
 import bindings/areas/main/column_helper_accessor_column_header_string as header_options
 import bindings/areas/main/core_features
+import bindings/areas/main/column_sort
 import bindings/areas/main/get_function_name_info_result as name_info
+import bindings/areas/main/make_object_map_result as make_object
+import bindings/areas/main/table_core_properties
+import bindings/areas/main/table_reactivity_bindings as reactivity
+import bindings/areas/main/table_row_sorting
 import bindings/areas/main/table_features
 import bindings/areas/main/table_options_core
 import bindings/runtime
 import bindings/types as t
+import cell
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
@@ -23,6 +38,17 @@ fn check(ok: Bool, what: String) -> Int {
     False -> panic as what
   }
 }
+
+// Atom and the other opaque types have no constructor: a plain object is taken
+// as one (an identity in JavaScript).
+@external(javascript, "./bindings/runtime_ffi.mjs", "dynamic")
+fn atom_of(d: dynamic.Dynamic) -> t.Atom(dynamic.Dynamic)
+
+@external(javascript, "./bindings/runtime_ffi.mjs", "dynamic")
+fn readonly_atom_of(d: dynamic.Dynamic) -> t.ReadonlyAtom(dynamic.Dynamic)
+
+@external(javascript, "./bindings/runtime_ffi.mjs", "dynamic")
+fn coerce(a: a) -> b
 
 fn field(d: dynamic.Dynamic, path: List(String), decoder: decode.Decoder(a)) -> a {
   let assert Ok(v) = decode.run(d, decode.at(path, decoder))
@@ -102,12 +128,8 @@ pub fn main() {
     + check(table.flatten_by([2.0, 4.0], children, runtime.codec_float()) == [2.0, 4.0], "flatten_by of leaves")
 
   // ---- a table ----
-  // FINDING 9: constructTable needs features.coreReactivityFeature, a
-  // TableReactivityBindings whose atoms (`Atom`, `ReadonlyAtom`) are opaque types
-  // with no members or constructor here, and the module that makes one
-  // (@tanstack/table-core/store-reactivity-bindings) is not a bound package. No
-  // table, row model or sorted rows can be reached from Gleam; the call below
-  // throws a TypeError.
+  // constructTable needs features.coreReactivityFeature: bindings holding atoms
+  // (an atom is a plain object with get, set and subscribe; see FINDING 9).
   let attempt =
     runtime.attempt(fn() { table.construct_table(table_options_core.create()) })
   let passed =
@@ -117,6 +139,78 @@ pub fn main() {
       Error(e) ->
         check(string.contains(runtime.js_error_message(e), "coreReactivityFeature"), "no table without reactivity")
     }
+
+  let bindings = reactivity.create()
+  reactivity.set_create_options_store(bindings, False)
+  reactivity.set_wrap_external_atoms(bindings, False)
+  let atom = fn(get: dynamic.Dynamic, set: option.Option(fn(dynamic.Dynamic) -> Nil)) {
+    let o = make_object.create()
+    make_object.set_at(o, "get", get, runtime.codec_dynamic())
+    case set {
+      Some(f) -> make_object.set_at(o, "set", runtime.dynamic(f), runtime.codec_dynamic())
+      None -> Nil
+    }
+    make_object.set_at(o, "subscribe", runtime.dynamic(fn(_) { Nil }), runtime.codec_dynamic())
+    runtime.dynamic(o)
+  }
+  reactivity.set_create_writable_atom(bindings, fn(initial, _) {
+    let value = cell.new(initial)
+    atom(
+      runtime.dynamic(fn() { cell.get(value) }),
+      Some(fn(v) {
+        cell.set(value, table.functional_update(t.UpdaterT(v), cell.get(value), runtime.codec_dynamic()))
+      }),
+    )
+    |> atom_of
+  })
+  reactivity.set_create_readonly_atom(bindings, fn(compute, _) {
+    atom(runtime.dynamic(compute), None) |> readonly_atom_of
+  })
+  reactivity.set_untrack(bindings, fn(f) { table.call_void_to_t_fn(f, runtime.codec_dynamic()) })
+  let run_it = fn(f) { table.call_column_column_grouping_toggle_grouping(f) }
+  reactivity.set_batch(bindings, run_it)
+  reactivity.set_schedule(bindings, run_it)
+  reactivity.set_add_subscription(bindings, fn(_) { Nil })
+
+  let person = fn(name: String, age: Float) {
+    let o = make_object.create()
+    make_object.set_at(o, "name", dynamic.string(name), runtime.codec_dynamic())
+    make_object.set_at(o, "age", dynamic.float(age), runtime.codec_dynamic())
+    runtime.dynamic(o)
+  }
+  let column = fn(key: String, header: String) {
+    let o = make_object.create()
+    make_object.set_at(o, "accessorKey", dynamic.string(key), runtime.codec_dynamic())
+    make_object.set_at(o, "header", dynamic.string(header), runtime.codec_dynamic())
+    runtime.dynamic(o)
+  }
+  let feature_map = make_object.create()
+  make_object.set_at(feature_map, "coreReactivityFeature", runtime.dynamic(bindings), runtime.codec_dynamic())
+  make_object.set_at(feature_map, "rowSortingFeature", runtime.dynamic(table.get_row_sorting_feature()), runtime.codec_dynamic())
+  let options = make_object.create()
+  make_object.set_at(options, "features", runtime.dynamic(feature_map), runtime.codec_dynamic())
+  make_object.set_at(options, "data", dynamic.array([person("bo", 30.0), person("al", 20.0), person("cy", 25.0)]), runtime.codec_dynamic())
+  make_object.set_at(options, "columns", dynamic.array([column("name", "Name"), column("age", "Age")]), runtime.codec_dynamic())
+  let tbl = table.construct_table(coerce(options))
+  let initial = table_core_properties.get_initial_state(tbl)
+  let passed =
+    passed
+    + check(field(initial, ["sorting"], decode.list(decode.dynamic)) == [], "the table starts unsorted")
+    + check(field(runtime.dynamic(table_core_properties.get_options(tbl)), ["data"], decode.list(decode.dynamic)) |> list.length == 3, "the table's options hold the data")
+    + check(field(runtime.dynamic(table_core_properties.get_options(tbl)), ["columns"], decode.list(decode.dynamic)) |> list.length == 2, "and the columns")
+
+  // Sorting by age, through the table's setSorting (a function-valued property).
+  let by_age = column_sort.create()
+  column_sort.set_id(by_age, "age")
+  column_sort.set_desc(by_age, False)
+  let sortable: t.TableRowSorting(t.TableFeatures(Nil), dynamic.Dynamic, Nil) = coerce(tbl)
+  table.call_table_row_sorting_set_sorting(table_row_sorting.get_set_sorting(sortable), t.UpdaterT([by_age]))
+  let passed =
+    passed
+    + check(
+      field(runtime.dynamic(table_core_properties.get_store(tbl)), ["state", "sorting"], decode.list(decode.at(["id"], decode.string))) == ["age"],
+      "setSorting reached the table's state",
+    )
 
   io.println(int.to_string(passed) <> " checks passed")
 }

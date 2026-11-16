@@ -35,12 +35,8 @@ fn onMove(_: ?*anyopaque, _: kv.KonvaEventObject) void {
     moved += 1;
 }
 
-// FINDING 18: nothing of Konva that needs the module can run. The package's only export is
-// `export default Konva` (an object holding Stage, Layer, Rect, ...), but the glue calls
-// `new (PK["konva"].Stage)(...)`, `PK["konva"].Layer` and so on, on the module namespace, so every
-// constructor fails with "PK.konva.Stage is not a constructor". Only plain-object configs, which the
-// glue builds with `{}`, work. The program below is the intended one, kept for when that is fixed.
-fn pending() void {
+// The stage, layers and shapes, with their events and serialisation.
+fn scene() void {
     // A stage on the page's #stage, 400 by 300, with one layer.
     const config = kv.StageConfig.create();
     config.setContainer(.{ .string = b.JsString.from("stage") });
@@ -163,7 +159,10 @@ fn pending() void {
 
     // Drawing and hit testing.
     _ = stage.batchDraw().draw();
-    expect(rect.asShape().intersects(kv.Vector2d.create()) == false, @src());
+    const outside = kv.Vector2d.create();
+    outside.setX(5);
+    outside.setY(5);
+    expect(rect.asShape().intersects(outside) == false, @src());
     const point = kv.Vector2d.create();
     point.setX(100);
     point.setY(100);
@@ -239,4 +238,6 @@ export fn run() void {
     const stage = kv.StageConfig.create();
     stage.setContainer(.{ .string = b.JsString.from("stage") });
     expect(stage.getContainer().?.string.eql("stage"), @src());
+
+    scene();
 }

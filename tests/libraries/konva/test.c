@@ -1,13 +1,6 @@
-// Konva from C, in a page. FINDING 16: none of Konva's classes can be
-// constructed: Stage_new, Layer_new, Rect_new, ... run `new PK.konva.Stage`,
-// but the package exports only `default` (the Konva object that has Stage on
-// it); PK.konva.Stage is undefined ("PK.konva.Stage is not a constructor").
-// `Konva_get_Stage()` gives the class as a bare JsValue, and a JsValue cannot
-// be constructed. So no stage, layer, shape, group, find, event or JSON can be
-// made. The program that was meant (a Stage on the "stage" element, a Layer,
-// Rect/Circle/Text/Group, positions, getClientRect, find/findOne, on/fire,
-// toJSON, destroy) is left out; what can be reached is the
-// Konva object itself: settings and the Util and Easings helpers.
+// Konva from C, in a page: the Konva object's settings, the Util and Easings
+// helpers, and a stage on the page's element with a layer, shapes and a group,
+// their positions and bounds, finding, events, JSON.
 // Every CHECK must hold.
 #include "bindings.h"
 
@@ -26,6 +19,174 @@ static bool contains(JsString s, const char* needle) {
     return false;
 }
 static double ease(JsValue v) { return js_to_number(v); }
+
+static JsOptionalDouble D(double v) { return js_some_double(v); }
+static double num(GetSet f) { return js_to_number(GetSet_invoke(f)); }
+static bool text_is(JsValue v, const char* s) { return JsString_equals(js_to_string(v), s); }
+static JsArray_Node nodes1(Node a) {
+    JsArray_Node list = JsArray_Node_new();
+    JsArray_Node_push(list, a);
+    return list;
+}
+
+static int clicks;
+static void on_click(void* ctx, KonvaEventObject e) { clicks++; }
+
+static void shapes(void) {
+    // A stage on the page's #stage, 400 by 300.
+    StageConfig config = StageConfig_create();
+    StageConfig_set_container(config, HTMLDivElement_or_string_of(JsString_from("stage")));
+    ContainerConfig_set_width(StageConfig_as_ContainerConfig(config), D(400));
+    ContainerConfig_set_height(StageConfig_as_ContainerConfig(config), D(300));
+    Stage stage = Stage_new(config);
+    CHECK(Stage_getContent(stage).h != 0);
+    CHECK(JsString_equals(Node_getType(stage), "Stage"));
+    CHECK(JsArray_Stage_length(Konva_get_stages()) == 1);
+
+    Layer layer = Layer_new(LayerConfig_create());
+    Stage_add(stage, layer, JsArray_new());
+    CHECK(JsArray_Node_length(Container_getChildren(stage, (Container_getChildren_filterFunc){ 0 })) == 1);
+    CHECK(js_same((JsValue){ Node_getStage(layer).h }, (JsValue){ stage.h }));
+    CHECK(JsString_equals(Node_getType(layer), "Layer"));
+
+    // A rectangle from a config: position, size, colour, id and name.
+    RectConfig rc = RectConfig_create();
+    RectConfig_set_x(rc, D(20));
+    RectConfig_set_y(rc, D(30));
+    RectConfig_set_width(rc, D(100));
+    RectConfig_set_height(rc, D(50));
+    RectConfig_set_fill(rc, string_or_CanvasGradient_of_string(JsString_from("red")));
+    RectConfig_set_stroke(rc, string_or_CanvasGradient_of_string(JsString_from("black")));
+    RectConfig_set_strokeWidth(rc, D(4));
+    RectConfig_set_id(rc, "box");
+    RectConfig_set_name(rc, "shape box");
+    Rect rect = Rect_new(rc);
+    // The GetSet properties are read bound to their node.
+    CHECK(num(Node_get_x(rect)) == 20 && num(Node_get_y(rect)) == 30);
+    CHECK(num(Node_get_width(rect)) == 100 && num(Node_get_height(rect)) == 50);
+    CHECK(text_is(GetSet_invoke(Node_get_id(rect)), "box"));
+    CHECK(text_is(GetSet_invoke(Node_get_name(rect)), "shape box"));
+    CHECK(text_is(GetSet_invoke(Shape_get_fill(rect)), "red"));
+    CHECK(num(Shape_get_strokeWidth(rect)) == 4);
+    CHECK(JsString_equals(Node_getClassName(rect), "Rect"));
+    Container_add(layer, nodes1(AS_Node(rect)));
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 1);
+    CHECK(js_same((JsValue){ Node_getLayer(rect).h }, (JsValue){ layer.h }) && js_same((JsValue){ Node_getStage(rect).h }, (JsValue){ stage.h }));
+
+    // A Circle and a Text, from their configs.
+    CircleConfig cc = CircleConfig_create();
+    CircleConfig_set_x(cc, D(200));
+    CircleConfig_set_y(cc, D(100));
+    CircleConfig_set_radius(cc, D(40));
+    CircleConfig_set_fill(cc, string_or_CanvasGradient_of_string(JsString_from("green")));
+    CircleConfig_set_name(cc, "shape dot");
+    Circle circle = Circle_new(cc);
+    CHECK(num(Node_get_width(circle)) == 80 && num(Node_get_height(circle)) == 80);
+
+    TextConfig tc = TextConfig_create();
+    TextConfig_set_x(tc, D(10));
+    TextConfig_set_y(tc, D(200));
+    TextConfig_set_text(tc, "Hello Konva");
+    TextConfig_set_fontSize(tc, D(24));
+    TextConfig_set_fontFamily(tc, "sans-serif");
+    TextConfig_set_name(tc, "shape text");
+    Text label = Text_new(tc);
+    CHECK(text_is(GetSet_invoke(Text_get_text(label)), "Hello Konva"));
+    CHECK(num(Text_get_fontSize(label)) == 24);
+    CHECK(Text_getTextWidth(label) > 50 && Text_getTextHeight(label) > 0);
+    Text_setText(label, "Hi");
+    CHECK(text_is(GetSet_invoke(Text_get_text(label)), "Hi"));
+
+    // A group moves what is in it.
+    GroupConfig gc = GroupConfig_create();
+    ContainerConfig_set_x(GroupConfig_as_ContainerConfig(gc), D(100));
+    ContainerConfig_set_y(GroupConfig_as_ContainerConfig(gc), D(100));
+    ContainerConfig_set_name(GroupConfig_as_ContainerConfig(gc), "cluster");
+    Group group = Group_new(gc);
+    JsArray_Node inside = JsArray_Node_new();
+    JsArray_Node_push(inside, AS_Node(circle));
+    JsArray_Node_push(inside, AS_Node(label));
+    Container_add(group, inside);
+    Container_add(layer, nodes1(AS_Node(group)));
+    CHECK(JsArray_Node_length(Container_getChildren(group, (Container_getChildren_filterFunc){ 0 })) == 2);
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 2);
+    CHECK(js_same((JsValue){ Node_getParent(circle).h }, (JsValue){ group.h }));
+
+    // Positions: a node's own and its absolute one.
+    Node_getAbsolutePosition_result abs = Node_getAbsolutePosition(circle);
+    CHECK(near(Node_getAbsolutePosition_result_get_x(abs), 300, 1e-6) && near(Node_getAbsolutePosition_result_get_y(abs), 200, 1e-6));
+    Node_getAbsolutePosition_result rel = Node_getPosition(circle);
+    CHECK(Node_getAbsolutePosition_result_get_x(rel) == 200 && Node_getAbsolutePosition_result_get_y(rel) == 100);
+    // A GetSet is set by calling it with the value.
+    GetSet_invoke_2(Node_get_x(rect), js_number(60));
+    CHECK(num(Node_get_x(rect)) == 60);
+    CHECK(near(IRect_get_x(Node_getClientRect(rect)), 58, 1e-6));
+    GetSet_invoke_2(Node_get_x(rect), js_number(20));
+    CHECK(num(Node_get_x(rect)) == 20);
+
+    // Rotation, opacity, visibility.
+    GetSet_invoke_2(Node_get_rotation(rect), js_number(90));
+    GetSet_invoke_2(Node_get_opacity(rect), js_number(0.5));
+    CHECK(num(Node_get_rotation(rect)) == 90 && num(Node_get_opacity(rect)) == 0.5);
+    Node_hide(rect);
+    CHECK(!js_to_bool(Node_isVisible(rect)));
+    Node_show(rect);
+    CHECK(js_to_bool(Node_isVisible(rect)));
+    GetSet_invoke_2(Node_get_rotation(rect), js_number(0));
+    GetSet_invoke_2(Node_get_opacity(rect), js_number(1));
+
+    // The client rect: the shape's bounds, stroke included.
+    IRect box = Node_getClientRect(rect);
+    CHECK(near(IRect_get_x(box), 18, 1e-6) && near(IRect_get_y(box), 28, 1e-6));
+    CHECK(near(IRect_get_width(box), 104, 1e-6) && near(IRect_get_height(box), 54, 1e-6));
+    CHECK(near(IRect_get_width(Node_getClientRect(circle)), 80, 1e-6));
+
+    // Finding by name, by id and by type.
+    CHECK(JsArray_Node_length(Container_find(layer, js_string("#box"))) == 1);
+    CHECK(JsArray_Node_length(Container_find(layer, js_string(".shape"))) == 3);
+    CHECK(JsArray_Node_length(Container_find(layer, js_string("Circle"))) == 1);
+    CHECK(Container_findOne(layer, "#box").h != 0);
+    CHECK(Container_findOne(layer, "#nothing").h == 0);
+    CHECK(JsArray_Node_length(Container_find(group, js_string(".shape"))) == 2);
+
+    // Events: a click fired by hand, then off.
+    Node_on_click(rect, KonvaEventListener_from(on_click, 0));
+    Node_fire(rect, "click");
+    Node_fire(rect, "click");
+    CHECK(clicks == 2);
+    Node_removeEventListener(rect, "click");
+    Node_fire(rect, "click");
+    CHECK(clicks == 2);
+
+    // Draw, and the stage as an image.
+    Node_draw(layer);
+    CHECK(Layer_getNativeCanvasElement(layer).h != 0);
+    JsString png = Node_toDataURL(stage);
+    char head[16];
+    JsString_copy(png, head, sizeof head);
+    CHECK(head[0] == 'd' && head[1] == 'a' && head[2] == 't' && head[3] == 'a' && head[4] == ':' && head[5] == 'i');
+
+    // Z order.
+    CHECK(Node_getZIndex(rect) == 0);
+    Node_moveToTop(rect);
+    CHECK(Node_getZIndex(rect) == 1);
+    Node_moveToBottom(rect);
+    CHECK(Node_getZIndex(rect) == 0);
+
+    // toJSON holds the className and attrs.
+    JsString json = Node_toJSON(rect);
+    CHECK(contains(json, "\"className\":\"Rect\""));
+    CHECK(contains(json, "\"width\":100"));
+    CHECK(contains(json, "\"fill\":\"red\""));
+
+    // Removing and destroying.
+    Node_destroy(group);
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 1);
+    Node_remove(rect);
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 0);
+    Node_destroy(stage);
+    CHECK(JsArray_Stage_length(Konva_get_stages()) == 0);
+}
 
 __attribute__((export_name("run"))) void run(void) {
     // ---- the Konva object ----
@@ -90,4 +251,6 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(near(ease(Konva_Easings_EaseInOut(e, js_number(2), js_number(0), js_number(100), js_number(4))), 50, 1e-9));
     CHECK(ease(Konva_Easings_StrongEaseIn(e, js_number(2), js_number(0), js_number(100), js_number(4))) < 50);
     CHECK(near(ease(Konva_Easings_BounceEaseOut(e, js_number(4), js_number(0), js_number(100), js_number(4))), 100, 1e-9));
+
+    shapes();
 }

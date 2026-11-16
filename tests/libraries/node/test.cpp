@@ -17,12 +17,22 @@ static std::string join(const std::string& a, const std::string& b) { return a +
 
 extern "C" __attribute__((export_name("run"))) void run() {
     // ---- path ----
-    // FINDING 8: every path:: function throws "Cannot read properties of
-    // undefined (reading 'join')": the glue calls PK["path"].path.join(...)
-    // (glue.mjs:389), but the module object impl.mjs binds, import("node:path"),
-    // has no `.path` (the `export =` namespace is its `default`; its functions
-    // are also on the module itself). The path:: calls are left out and paths
-    // are joined as strings.
+    CHECK(path::join({"a", "b", "../c", "d.txt"}) == "a/c/d.txt");
+    CHECK(path::normalize("/x//y/./z/../w") == "/x/y/w");
+    CHECK(path::basename("/a/b/file.tar.gz") == "file.tar.gz");
+    CHECK(path::basename("/a/b/file.tar.gz", ".gz") == "file.tar");
+    CHECK(path::dirname("/a/b/file.txt") == "/a/b");
+    CHECK(path::extname("/a/b/file.tar.gz") == ".gz");
+    CHECK(path::isAbsolute("/a") && !path::isAbsolute("a/b"));
+    CHECK(path::relative("/a/b/c", "/a/d") == "../../d");
+    CHECK(path::resolve({"/a/b", "../c", "d"}) == "/a/c/d");
+    path_ParsedPath pp = path::parse("/home/u/file.txt");
+    CHECK(pp.root() == "/" && pp.dir() == "/home/u" && pp.base() == "file.txt" && pp.ext() == ".txt" && pp.name() == "file");
+    path_FormatInputPathObject fo = path_FormatInputPathObject::create();
+    fo.dir("/q");
+    fo.base("z.md");
+    CHECK(path::format(fo) == "/q/z.md");
+    CHECK(path::matchesGlob("/a/b/c.txt", "/a/**/*.txt"));
     // ---- fs, in a scratch directory made under target/e2e ----
     std::string dir = fs::mkdtempSync("target/e2e/cpp-node-");
     CHECK(has(dir, "target/e2e/cpp-node-"));
@@ -67,13 +77,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // A directory with a few files; readdirSync lists them.
     std::string sub = join(join(dir, "sub"), "deeper");
-    // FINDING 9: mkdir_options has `static constexpr double recursive = true`
-    // (it is `recursive: true` in the .d.ts) but create() gives `{}` (glue.mjs:365),
-    // so the call is not recursive and fails with ENOENT. MakeDirectoryOptions
-    // has a settable recursive, used instead.
-    MakeDirectoryOptions mk = MakeDirectoryOptions::create();
-    mk.recursive(true);
-    CHECK(fs::mkdirSync(sub, std::optional<number_or_string_or_MakeDirectoryOptions>(mk)).has_value());
+    mkdir_options mk = mkdir_options::create();
+    CHECK(mkdir_options::recursive == true);
+    CHECK(fs::mkdirSync(sub, mk).has_value());
     CHECK(fs::statSync(sub).isDirectory());
     fs::writeFileSync(join(sub, "x.txt"), std::string("x"));
     fs::copyFileSync(file, join(dir, "copy.txt"));
@@ -113,17 +119,20 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(emitter.listenerCount<void>(ping) == 0);
 
     int pings = 0;
-    // FINDING 10: a listener `(...args: any[]) => void` is typed to take a
-    // ts::Array<> but the glue (glue.mjs:345) passes only the first argument
-    // as a0, so reading the array (emit("ping", 5, "x")) fails. Listeners are
-    // left to count calls.
-    any_array_fn onPing = [&](ts::Array<>) { pings++; };
+    // A rest-parameter listener is given all the arguments, gathered.
+    std::string heard;
+    any_array_fn onPing = [&](ts::Array<> args) {
+        pings++;
+        heard += std::to_string(args.size()) + ":";
+        if (args.size() == 2) CHECK(ts::Value(args[0]).to_number() == 5 && ts::Value(args[1]).to_string() == "x");
+    };
     emitter.on<void>(ping, onPing);
     CHECK(emitter.listenerCount<void>(ping) == 1);
     CHECK(emitter.emit<void>(ping, ts::Array<>{ts::Value::number(5), ts::Value::string("x")}));
     CHECK(pings == 1);
     emitter.emit<void>(ping, ts::Array<>{ts::Value::number(7)});
     CHECK(pings == 2);
+    CHECK(heard == "2:1:");
 
     // once: heard one time only.
     int onces = 0;

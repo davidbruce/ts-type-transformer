@@ -114,11 +114,14 @@ export fn run() void {
         expect(name.eql("TypeError"), @src());
     }
 
-    // FINDING 12: functions the library returns cannot be called. createColumnHelper().getAccessor() is a
-    // ColumnHelper_accessor, createSortedRowModel() a Table_Core_to_fn_fn; those types have only `from`
-    // (to make a JavaScript function from Zig) and no `invoke`, so column helpers and row models are unusable.
+    // A function the library returns can be called: createColumnHelper().accessor(key, column).
     const helper = b.createColumnHelper();
     expect(helper.getAccessor().h != 0 and helper.getDisplay().h != 0, @src());
+    const column = b.ColumnHelper_accessor_column_header_string.create();
+    const def = b.callColumnHelperAccessor(helper.getAccessor(), .{ .string = b.JsString.from("age") }, .{ .ColumnHelper_accessor_column_header_string = column });
+    expect(def.h != 0, @src());
+    const keyed: b.TableOptions_Core_defaultColumn_accessorKey = .{ .h = def.h };
+    expect(keyed.getAccessorKey().toString().eql("age"), @src());
 
     // FINDING 13: a table cannot be built. constructTable needs options.features with a coreReactivityFeature
     // whose createWritableAtom returns an Atom, but Atom is an opaque handle (from @tanstack/store, not bound),

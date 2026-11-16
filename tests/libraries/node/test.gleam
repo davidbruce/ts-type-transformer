@@ -5,6 +5,10 @@ import bindings/areas/fs as fs
 import bindings/areas/fs/rm_options
 import bindings/areas/fs/stats_base
 import bindings/areas/main/buffer
+import bindings/areas/main/mkdir_options
+import bindings/areas/path
+import bindings/areas/path/format_input_path_object as path_format
+import bindings/areas/path/parsed_path
 import bindings/namespaces/node_js/event_emitter as emitter
 import bindings/runtime
 import bindings/types as t
@@ -23,24 +27,35 @@ fn check(ok: Bool, what: String) -> Int {
   }
 }
 
-fn join(a: String, b: String) -> String {
-  a <> "/" <> b
-}
-
 fn str(s: String) {
   t.PathLikeString(s)
 }
 
 pub fn main() {
   // ---- path ----
-  // FINDING 5: every function of the path module (join, basename, parse, ...) calls
-  // PK["path"].path.X, and the module has no `path` property: TypeError. Left out;
-  // the paths below are joined by hand.
-  let passed = 0
+  let parsed = path.parse("/home/user/dir/file.txt")
+  let to_format = path_format.create()
+  path_format.set_dir(to_format, Some("/tmp"))
+  path_format.set_name(to_format, Some("note"))
+  path_format.set_ext(to_format, Some(".md"))
+  let passed =
+    check(path.join(["a", "b", "../c", "d.txt"]) == "a/c/d.txt", "path.join")
+    + check(path.normalize("/a//b/./c/..") == "/a/b", "path.normalize")
+    + check(path.resolve(["/a", "b", "../c"]) == "/a/c", "path.resolve")
+    + check(path.is_absolute("/x") && !path.is_absolute("x/y"), "path.isAbsolute")
+    + check(path.relative("/a/b/c", "/a/d") == "../../d", "path.relative")
+    + check(path.dirname("/a/b/c.txt") == "/a/b", "path.dirname")
+    + check(path.basename("/a/b/c.txt", None) == "c.txt", "path.basename")
+    + check(path.basename("/a/b/c.txt", Some(".txt")) == "c", "path.basename with a suffix")
+    + check(path.extname("archive.tar.gz") == ".gz", "path.extname")
+    + check(path.matches_glob("/a/b/c.txt", "/a/**/*.txt"), "path.matchesGlob")
+    + check(parsed_path.get_root(parsed) == "/" && parsed_path.get_dir(parsed) == "/home/user/dir", "path.parse root and dir")
+    + check(parsed_path.get_base(parsed) == "file.txt" && parsed_path.get_name(parsed) == "file" && parsed_path.get_ext(parsed) == ".txt", "path.parse base, name and ext")
+    + check(path.format(to_format) == "/tmp/note.md", "path.format")
 
   // ---- fs: a temporary directory under target/e2e ----
   let dir = fs.mkdtemp_sync("target/e2e/gleam-node-", None)
-  let file = join(dir, "hello.txt")
+  let file = path.join([dir, "hello.txt"])
   // FINDING 7: a read with an encoding (utf8) cannot be made: GlobalBufferEncoding
   // is an opaque type with no values. Read as a Buffer, then to_string.
   let read = fn(p) {
@@ -74,10 +89,10 @@ pub fn main() {
     + check(list.length(string.split(read(file), "\n")) == 2, "lines")
 
   // More files, a subdirectory, a listing.
-  let sub = join(dir, "sub")
+  let sub = path.join([dir, "sub"])
   fs.mkdir_sync(str(sub), None)
-  write(join(sub, "b.txt"), "bbb")
-  write(join(dir, "a.json"), "{\"n\": 1}")
+  write(path.join([sub, "b.txt"]), "bbb")
+  write(path.join([dir, "a.json"]), "{\"n\": 1}")
   let names = list.sort(fs.readdir_sync(str(dir), None), string.compare)
   let passed =
     passed
@@ -94,18 +109,28 @@ pub fn main() {
     + check(stats_base.get_size(st, runtime.codec_float()) == 24.0, "stat size")
 
   // Renamed and copied.
-  fs.rename_sync(str(join(dir, "a.json")), str(join(dir, "b.json")))
-  fs.copy_file_sync(str(file), str(join(dir, "copy.txt")), None)
+  fs.rename_sync(str(path.join([dir, "a.json"])), str(path.join([dir, "b.json"])))
+  fs.copy_file_sync(str(file), str(path.join([dir, "copy.txt"])), None)
   let passed =
     passed
-    + check(!fs.exists_sync(str(join(dir, "a.json"))), "renamed away")
-    + check(read(join(dir, "b.json")) == "{\"n\": 1}", "renamed to")
-    + check(read(join(dir, "copy.txt")) == read(file), "copy_file_sync")
-  fs.unlink_sync(str(join(dir, "copy.txt")))
-  let passed = passed + check(!fs.exists_sync(str(join(dir, "copy.txt"))), "unlinkSync")
+    + check(!fs.exists_sync(str(path.join([dir, "a.json"]))), "renamed away")
+    + check(read(path.join([dir, "b.json"])) == "{\"n\": 1}", "renamed to")
+    + check(read(path.join([dir, "copy.txt"])) == read(file), "copy_file_sync")
+  fs.unlink_sync(str(path.join([dir, "copy.txt"])))
+  let passed = passed + check(!fs.exists_sync(str(path.join([dir, "copy.txt"]))), "unlinkSync")
+
+  // A nested directory, made recursively; mkdir options say so.
+  let deep = path.join([dir, "x", "y", "z"])
+  let opts = mkdir_options.create()
+  let first = fs.mkdir_sync_recursive(str(deep), opts)
+  let passed =
+    passed
+    + check(decode.run(runtime.dynamic(opts), decode.at(["recursive"], decode.bool)) == Ok(True), "mkdir options are recursive")
+    + check(fs.exists_sync(str(deep)), "a nested directory")
+    + check(first == Some(path.join([dir, "x"])), "mkdir reports the first directory made")
 
   // Missing files throw.
-  let missing = runtime.attempt(fn() { read(join(dir, "nope.txt")) })
+  let missing = runtime.attempt(fn() { read(path.join([dir, "nope.txt"])) })
   let passed =
     passed
     + case missing {
@@ -130,10 +155,14 @@ pub fn main() {
   let bus = events.new(None)
   let name = runtime.dynamic("greet")
   let log = cell.new([])
-  // FINDING 6: a listener `(...args: any[]) => void` is given Array.from(first
-  // argument) by the glue, so a listener only counts calls: emit's own
-  // arguments cannot be read.
-  let on_greet = fn(_) { cell.set(log, ["greet", ..cell.get(log)]) }
+  let on_greet = fn(args) {
+    let words =
+      list.map(args, fn(a) {
+        let assert Ok(s) = decode.run(a, decode.string)
+        s
+      })
+    cell.set(log, [string.join(words, "+"), ..cell.get(log)])
+  }
   emitter.on(bus, name, on_greet)
   let count = cell.new(0)
   let on_once = fn(_) { cell.set(count, cell.get(count) + 1) }
@@ -141,14 +170,14 @@ pub fn main() {
   let passed =
     passed
     + check(emitter.listener_count(bus, name, None) == 2.0, "two listeners")
-    + check(emitter.emit(bus, name, []), "emit reports listeners")
-    + check(cell.get(log) == ["greet"], "the listener was called")
+    + check(emitter.emit(bus, name, [runtime.dynamic("hi"), runtime.dynamic("there")]), "emit reports listeners")
+    + check(cell.get(log) == ["hi+there"], "the listener got every argument")
     + check(cell.get(count) == 1, "once ran")
     + check(emitter.listener_count(bus, name, None) == 1.0, "once is gone after one emit")
-  let _ = emitter.emit(bus, name, [])
+  let _ = emitter.emit(bus, name, [runtime.dynamic("again")])
   let passed =
     passed
-    + check(cell.get(log) == ["greet", "greet"], "emit again")
+    + check(cell.get(log) == ["again", "hi+there"], "emit again")
     + check(cell.get(count) == 1, "once ran only once")
     + check(!emitter.emit(bus, runtime.dynamic("nobody"), []), "emit with no listener")
     + check(list.length(emitter.event_names(bus)) == 1, "event_names")
@@ -157,7 +186,7 @@ pub fn main() {
     passed
     + check(emitter.listener_count(bus, name, None) == 0.0, "removeListener")
     + check(!emitter.emit(bus, name, []), "no listeners left")
-    + check(cell.get(log) == ["greet", "greet"], "the removed listener was not called")
+    + check(cell.get(log) == ["again", "hi+there"], "the removed listener was not called")
   let _ = emitter.set_max_listeners(bus, 3.0)
   let passed = passed + check(emitter.get_max_listeners(bus) == 3.0, "max listeners")
 

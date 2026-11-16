@@ -238,11 +238,15 @@ fn editor_view(doc: &Node) {
     check!(seen.get() == 1);
     check!(view.state().doc().text_content() == "Zhelloworld");
 
+    // The view's own `dispatch` is a function value: called, it reaches ours.
+    call_transaction_fn(&view.dispatch(), &view.state().tr());
+    check!(seen.get() == 2);
+
     // A new state set directly does not dispatch.
     let replaced = EditorStateConfig::create();
     replaced.set_doc(Some(&doc.child(1.0).type_().schema().node("doc", None, nodes(vec![doc.child(1.0)]), None)));
     view.update_state(&EditorState::create(&replaced));
-    check!(view.state().doc().text_content() == "world" && seen.get() == 1);
+    check!(view.state().doc().text_content() == "world" && seen.get() == 2);
 
     view.destroy();
     check!(view.is_destroyed());

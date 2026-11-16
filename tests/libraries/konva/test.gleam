@@ -1,19 +1,12 @@
 // Konva from Gleam, in a page: a stage on the page's element, a layer, shapes,
 // groups, finding, events, JSON, destroying. Every check must hold.
 //
-// FINDING 15: this program fails in the page as generated: every call reads
-// PK["konva"].<Name> (Stage, Layer, ...), but the konva package has only a default
-// export (`Konva`), so `PK.konva.Stage is not a constructor`. It passes (36 checks)
-// with runtime_ffi.mjs's `"konva": P0` changed to `"konva": P0.default`.
-// FINDING 16: a node's x, y, width, ... are GetSet values: get_x(node) returns the
-// unbound `node.x`, and get_set.invoke calls it without `this` (TypeError reading
-// 'getX' of undefined). Positions are read with get_position instead; attrs by
-// get_attr / get_attrs_2.
 import bindings/areas/konva/circle
 import bindings/areas/konva/circle_config
 import bindings/areas/konva/container
 import bindings/areas/konva/container_config
 import bindings/areas/konva/group
+import bindings/areas/konva/get_set
 import bindings/areas/konva/group_config
 import bindings/areas/konva/i_rect
 import bindings/areas/konva/konva_event_object
@@ -21,6 +14,7 @@ import bindings/areas/konva/layer
 import bindings/areas/konva/node
 import bindings/areas/konva/rect
 import bindings/areas/konva/rect_config
+import bindings/areas/konva/shape
 import bindings/areas/konva/stage
 import bindings/areas/konva/stage_config
 import bindings/areas/konva/text
@@ -92,6 +86,10 @@ pub fn main() {
     + check(i_rect.get_x(client) == 20.0 && i_rect.get_y(client) == 30.0, "client rect position")
     + check(i_rect.get_width(client) == 100.0 && i_rect.get_height(client) == 50.0, "client rect size")
     + check(node.get_class_name_2(r) == "Rect", "class name of a rect")
+    + check(get_set.invoke(node.get_x(r), runtime.codec_float()) == 20.0, "the x property")
+    + check(get_set.invoke(node.get_y(r), runtime.codec_float()) == 30.0, "the y property")
+    + check(get_set.invoke(node.get_width(r), runtime.codec_float()) == 100.0, "the width property")
+    + check(get_set.invoke(shape.get_fill(r), t.string_or_canvas_gradient_codec()) == t.StringOrCanvasGradientString("red"), "the fill property")
     + check(node.get_parent(r) |> option.is_some, "the rect has a parent")
     + check(option.is_some(node.get_layer(r)), "the rect knows its layer")
     + check(rect_config.get_fill(node.get_attrs_2(r, t.rect_config_codec())) == Some(t.StringOrCanvasGradientString("red")), "fill in the attrs")

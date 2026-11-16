@@ -14,9 +14,11 @@ fn num(x: f64) b.JsValue {
 }
 
 var fired: u32 = 0;
-fn onPing(ctx: ?*anyopaque, _: b.JsArray) ?bool {
+var ping_args: usize = 0;
+fn onPing(ctx: ?*anyopaque, args: b.JsArray) ?bool {
     const n: *u32 = @ptrCast(@alignCast(ctx));
     n.* += 1;
+    ping_args = args.len();
     return null;
 }
 
@@ -136,8 +138,13 @@ export fn run() void {
     const handler = b.any_unknown_array_to_void_or_boolean_fn.from(onPing, &fired);
     _ = c.on(.{ .string = b.JsString.from("ping") }, handler, .{});
     _ = c.trigger(.{ .string = b.JsString.from("ping") }, b.JsArray.new());
-    _ = c.trigger(.{ .string = b.JsString.from("ping") }, b.JsArray.new());
+    const payload = b.JsArray.new();
+    payload.push(b.JsValue.number(1));
+    payload.push(b.JsValue.number(2));
+    _ = c.trigger(.{ .string = b.JsString.from("ping") }, payload);
     expect(fired == 2, @src());
+    // The handler gets every argument.
+    expect(ping_args == 2, @src());
     expect(!c.isSilent(.{ .string = b.JsString.from("ping") }), @src());
     _ = c.off(.{ .eventType = .{ .string = b.JsString.from("ping") } });
     _ = c.trigger(.{ .string = b.JsString.from("ping") }, b.JsArray.new());

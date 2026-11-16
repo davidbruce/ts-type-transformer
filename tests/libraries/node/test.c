@@ -39,14 +39,20 @@ static void join2(char* out, const char* a, const char* b) {
 }
 
 // Listeners count and remember what they were given.
-static int hits;
+static int hits, well_formed;
+static double last_number;
 static void on_event(void* ctx, JsArray args) {
     (*(int*)ctx)++;
     hits++;
-    // FINDING 8: a rest-parameter callback `(...args: any[]) => void` gets
-    // only its first JavaScript argument, as the handle `args`, not an array
-    // of them all. Emitted arguments cannot be read, so the listeners only count.
-    (void)args;
+    // The rest parameter arrives gathered: every emitted argument.
+    if (JsArray_length(args) == 2) {
+        JsValue a = JsArray_get(args, 0), b = JsArray_get(args, 1);
+        JsString s = js_to_string(b);
+        if (JsString_equals(s, "payload")) {
+            last_number = js_to_number(a);
+            well_formed++;
+        }
+    }
 }
 
 __attribute__((export_name("run"))) void run(void) {
@@ -192,6 +198,8 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_push(args, word);
     CHECK(NodeJS_EventEmitter_emit(em, "data", args));
     CHECK(on_count == 1 && once_count == 1 && other_count == 0);
+    // Both listeners got both arguments.
+    CHECK(well_formed == 2 && last_number == 42);
     // The once listener is gone after the first emit.
     CHECK(NodeJS_EventEmitter_listenerCount(em, "data") == 1);
     NodeJS_EventEmitter_emit(em, "data", args);

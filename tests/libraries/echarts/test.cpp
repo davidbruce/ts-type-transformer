@@ -30,9 +30,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
     xaxis.data(days);
     YAXisComponentOption_yAxis_value yaxis = YAXisComponentOption_yAxis_value::create();
 
-    // FINDING 18: BarSeriesOption::type is `static constexpr "bar"`, the literal
-    // discriminant of the series, but BarSeriesOption::create() makes `{}` (no
-    // `type`) and there is no setter: setOption fails with "[ECharts] Unknown
+    // FINDING 18 (still open: `type?: 'bar'` is optional in the .d.ts, so create()
+    // still makes `{}` and there is no setter): BarSeriesOption::create() makes `{}` (no
+    // `type`): setOption fails with "[ECharts] Unknown
     // series undefined", and the page is left with nothing. The series is
     // built as a Dictionary<ts::Value> (`{}` with set_at) instead.
     ts::Array<> values = ts::Array<>::create();
@@ -109,14 +109,17 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // Events: handlers by name; trigger calls them at once.
     int heard = 0;
-    any_any_array_to_void_or_boolean_fn handler = [&](ts::Array<>) -> std::optional<bool> {
+    std::string seen;
+    any_any_array_to_void_or_boolean_fn handler = [&](ts::Array<> args) -> std::optional<bool> {
         heard++;
+        seen += std::to_string(args.size()) + ":";
         return std::nullopt;
     };
     chart.on<ts::Value, std::string>(std::string("custom"), handler);
     chart.trigger<std::string>(std::string("custom"), ts::Array<>::create());
-    chart.trigger<std::string>(std::string("custom"), ts::Array<>::create());
+    chart.trigger<std::string>(std::string("custom"), ts::Array<>{ts::Value::number(1), ts::Value::string("x")});
     CHECK(heard == 2);
+    CHECK(seen == "0:2:");
     chart.off(ts::Value::string("custom"));
     chart.trigger<std::string>(std::string("custom"), ts::Array<>::create());
     CHECK(heard == 2);

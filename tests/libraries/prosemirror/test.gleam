@@ -19,6 +19,7 @@ import bindings/areas/main/schema_marks
 import bindings/areas/main/schema_nodes
 import bindings/areas/main/editor_state_apply_transaction_result as applied
 import bindings/areas/main/editor_view_coords_at_pos_result as coords
+import bindings/areas/prosemirror_state as pstate
 import bindings/areas/prosemirror_state/editor_state
 import bindings/areas/prosemirror_state/editor_state_config
 import bindings/areas/prosemirror_state/plugin
@@ -343,6 +344,24 @@ pub fn main() {
     passed
     + check(cell.get(dispatched) == 1, "dispatch reaches dispatchTransaction")
     + check(node.get_text_content(editor_state.get_doc(editor_view.get_state(view))) == "A Oh HelloWorld", "and the handler updated the view")
+  // A command, called with the state and the view's dispatch.
+  let command = fn(state, dispatch, _) {
+    case dispatch {
+      Some(send) -> {
+        let tr = editor_state.get_tr(state)
+        let _ = transaction.insert_text(tr, "C ", Some(1.0), Some(1.0))
+        send(tr)
+        True
+      }
+      None -> False
+    }
+  }
+  let ran = pstate.call_command(command, editor_view.get_state(view), Some(editor_view.get_dispatch(view)), None)
+  let dry = pstate.call_command(command, editor_view.get_state(view), None, None)
+  let passed =
+    passed
+    + check(ran && !dry, "a command reports whether it applies")
+    + check(node.get_text_content(editor_state.get_doc(editor_view.get_state(view))) == "C A Oh HelloWorld", "the command's transaction was dispatched")
   editor_view.destroy(view)
   let passed = passed + check(editor_view.get_is_destroyed(view), "destroyed")
 

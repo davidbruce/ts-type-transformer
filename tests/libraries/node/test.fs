@@ -12,28 +12,42 @@ let mutable passed = 0
 let check (ok: bool) (what: string) =
     if ok then passed <- passed + 1 else failwithf "check failed: %s" what
 
-// path: FINDING 10: every `path` function is imported as `import { path } from "path"`, and
-// node:path has no such named export, so the program fails to load. None of path is used.
-// Paths are joined by hand below.
-let join (a: string) (b: string) = a + "/" + b
+// path
+check (path.join ("a", "b", "c.txt") = "a/b/c.txt") "path.join"
+check (path.basename "/x/y/file.txt" = "file.txt") "path.basename"
+check (path.basename ("/x/y/file.txt", ".txt") = "file") "path.basename with a suffix"
+check (path.dirname "/x/y/file.txt" = "/x/y") "path.dirname"
+check (path.extname "file.tar.gz" = ".gz") "path.extname"
+check (path.normalize "/a/b/../c/./d" = "/a/c/d") "path.normalize"
+check (path.isAbsolute "/a" && not (path.isAbsolute "a")) "path.isAbsolute"
+check (path.resolve ("/a/b", "../c") = "/a/c") "path.resolve"
+check (path.relative ("/a/b", "/a/c/d") = "../c/d") "path.relative"
+let parsed = path.parse "/home/u/file.txt"
+check (parsed.root = "/" && parsed.dir = "/home/u" && parsed.``base`` = "file.txt" && parsed.ext = ".txt" && parsed.name = "file") "path.parse"
+check (path.format (path.FormatInputPathObject.Create (dir = Some "/d", name = Some "n", ext = Some ".e")) = "/d/n.e") "path.format"
+check (path.sep = path.sep && path.delimiter = path.delimiter) "sep and delimiter are bound"
+let join (a: string) (b: string) = path.join (a, b)
 
 // events
 let emitter = Events.EventEmitter.Create<obj> ()
 let mutable calls = 0
-// FINDING 11: a listener is typed to take a ResizeArray of the arguments, but is called with them one by one:
-// its arguments cannot be read. Held as a value, so that removing it passes the same function.
-let listener: ResizeArray<obj> -> unit =
-    let f = fun (_: ResizeArray<obj>) -> calls <- calls + 1
-    f
+let mutable seen: string list = []
+// Still open (finding 11): Fable compiles the delegate to a one-parameter function, so `args` is the first
+// argument itself, not an array of them; it is read by casting.
+let listener =
+    NodeJS.AddListenerListener(fun args ->
+        calls <- calls + 1
+        seen <- seen @ [ unbox<string> (box args) ])
 emitter.on ("ping", listener) |> ignore
 check (emitter.listenerCount (U2.Case1 "ping") = 1.0) "listenerCount"
 check (emitter.emit (U2.Case1 "ping", box "one")) "emit with a listener is true"
 check (calls = 1) "the listener ran"
+check (seen = [ "one" ]) "the listener read what was emitted"
 check (not (emitter.emit (U2.Case1 "nobody"))) "emit without a listener is false"
 emitter.emit (U2.Case1 "ping", box "two") |> ignore
-check (calls = 2) "twice"
+check (calls = 2 && seen = [ "one"; "two" ]) "twice"
 let mutable onceCalls = 0
-emitter.once ("once", fun _ -> onceCalls <- onceCalls + 1) |> ignore
+emitter.once ("once", NodeJS.AddListenerListener(fun _ -> onceCalls <- onceCalls + 1)) |> ignore
 emitter.emit (U2.Case1 "once") |> ignore
 emitter.emit (U2.Case1 "once") |> ignore
 check (onceCalls = 1) "once"

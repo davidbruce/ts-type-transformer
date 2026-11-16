@@ -5,6 +5,7 @@ import bindings/areas/main/lexer
 import bindings/areas/main/marked as marked_class
 import bindings/areas/main/marked_extension
 import bindings/areas/main/marked_extension_hooks
+import bindings/areas/main/marked_extension_renderer
 import bindings/areas/main/marked_options_no_async
 import bindings/areas/main/marked_parse
 import bindings/areas/main/marked_parse_call_options_no_async
@@ -14,6 +15,7 @@ import bindings/types as t
 import cell
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
+import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
@@ -73,8 +75,8 @@ pub fn main() {
     + check(marked.marked_with_opt_marked_options("*x*", None) == t.StringOrPromiseString("<p><em>x</em></p>\n"), "marked with no options")
 
   // An instance: parse and parseInline.
-  // FINDING 1: marked.get_marked_instance() reads the unexported markedInstance (undefined).
-  // FINDING 2: the module's parse is a Dynamic and its parseInline is not bound at all.
+  // The module's parse is a Dynamic and its parseInline is not bound at all
+  // (FINDING 2): an instance's parse and parseInline are used instead.
   let instance = marked_class.new([])
   let parse = marked_class.get_parse(instance)
   let parse_inline = marked_class.get_parse_inline(instance)
@@ -120,21 +122,36 @@ pub fn main() {
     + check(has(marked_parse.invoke(marked_class.get_parse(inst), "a\nb", call, runtime.codec_string()), "a<br>b"), "an instance with breaks")
     + check(!has(marked_parse.invoke(parse, "a\nb", call, runtime.codec_string()), "<br>"), "a plain instance is unchanged")
 
-  // FINDING 3: a renderer function (set_heading and the others) is called with
-  // undefined: the glue reads token[0] of the one argument marked passes. Left out.
+  // A renderer function: called with the heading's token.
+  let rendered = cell.new([])
+  let renderer = marked_extension_renderer.create()
+  marked_extension_renderer.set_heading(
+    renderer,
+    Some(fn(args) {
+      let #(heading) = args
+      let token = runtime.dynamic(heading)
+      cell.set(rendered, [#(field_string(token, "text"), field_float(token, "depth")), ..cell.get(rendered)])
+      t.BooleanOrRendererOutputRendererOutput("<h" <> int.to_string(float.round(field_float(token, "depth"))) <> " class=\"x\">" <> field_string(token, "text") <> "</h>\n")
+    }),
+    runtime.codec_string(),
+    runtime.codec_string(),
+  )
+  let ext = marked_extension.create()
+  marked_extension.set_renderer(ext, Some(renderer))
+  let with_renderer = marked_class.new([ext])
+  let heading_html = marked_parse.invoke(marked_class.get_parse(with_renderer), "# Hi\n\n## There", call, runtime.codec_string())
+  let passed =
+    passed
+    + check(heading_html == "<h1 class=\"x\">Hi</h>\n<h2 class=\"x\">There</h>\n", "a renderer's output is used")
+    + check(list.reverse(cell.get(rendered)) == [#("Hi", 1.0), #("There", 2.0)], "a renderer gets its token")
 
-  // A preprocess hook: the markdown arrives as a list of its characters.
-  // FINDING 4 (awkward): a string argument is split into a list of Dynamic.
+  // A preprocess hook: the markdown arrives as the one argument.
   let hooks = marked_extension_hooks.create()
   marked_extension_hooks.set_preprocess(
     hooks,
-    Some(fn(chars) {
-      let text =
-        list.map(chars, fn(c) {
-          let assert Ok(s) = decode.run(c, decode.string)
-          s
-        })
-        |> string.concat
+    Some(fn(args) {
+      let assert [first] = args
+      let assert Ok(text) = decode.run(first, decode.string)
       t.StringOrPromiseString(string.replace(text, "foo", "bar"))
     }),
     runtime.codec_string(),

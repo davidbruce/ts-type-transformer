@@ -46,10 +46,7 @@ check (formatDate (asDate (addHours (day friday, 36.0)), "yyyy-MM-dd HH") = "202
 check (formatDate (asDate (nextMonday (day friday)), "yyyy-MM-dd") = "2024-03-18") "nextMonday"
 check (formatDate (asDate (startOfWeek (day friday)), "yyyy-MM-dd") = "2024-03-10") "startOfWeek is a Sunday"
 check (formatDate (asDate (setMonth (day friday, 0.0)), "yyyy-MM-dd") = "2024-01-15") "setMonth"
-let values = createEmpty<DateValues> // FINDING 7: DateValues has no Create
-values.year <- Some 2000.0
-values.month <- Some 1.0
-values.date <- Some 29.0
+let values = DateValues.Create (year = 2000.0, month = 1.0, date = 29.0)
 check (formatDate (asDate (set (day friday, values)), "yyyy-MM-dd") = "2000-02-29") "set"
 
 // Compared: dates and ISO strings alike.

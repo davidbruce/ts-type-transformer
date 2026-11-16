@@ -20,13 +20,6 @@ static Group_or_Shape child(const ts::Handle& h) {
 }
 static Group_or_Shape child(const ::Group& g) { return Group_or_Shape(g); }
 
-// FINDING 20: konva's `x`, `width`, `fill`... are methods on the prototype typed as
-// GetSet properties (callable objects). The getter returns the bare method, and
-// GetSet::invoke calls it without its receiver: "Cannot read properties of
-// undefined (reading 'getX')". Nothing of the GetSet API works; attributes are
-// read with getAttr and written with setAttrs.
-#define ATTR(node, Cfg, key) (node).getAttr<Cfg, std::string>(std::string(key))
-
 static ts::Value str(std::string_view s) { return ts::Value::string(s); }
 
 static void exercise() {
@@ -59,12 +52,20 @@ static void exercise() {
     rc.id("box");
     rc.name("shape box");
     ::Rect rect = ::Rect::create(rc);
-    CHECK(ATTR(rect, RectConfig, "x").to_number() == 20);
-    CHECK(ATTR(rect, RectConfig, "y").to_number() == 30);
-    CHECK(ATTR(rect, RectConfig, "width").to_number() == 100);
-    CHECK(ATTR(rect, RectConfig, "id").to_string() == "box");
-    CHECK(ATTR(rect, RectConfig, "name").to_string() == "shape box");
+    CHECK(rect.x().invoke() == 20);
+    CHECK(rect.y().invoke() == 30);
+    CHECK(rect.width().invoke() == 100);
+    CHECK(rect.id().invoke() == "box");
+    CHECK(rect.name().invoke() == "shape box");
     CHECK(rect.getClassName() == "Rect");
+    {
+        string_or_CanvasGradient fillv = rect.fill().invoke();
+        CHECK(std::get_if<std::string>(&fillv) && *std::get_if<std::string>(&fillv) == "red");
+    }
+    // The setter form: called with a value, it returns the node.
+    rect.strokeWidth().invoke(ts::Value::number(6));
+    CHECK(rect.strokeWidth().invoke() == 6);
+    rect.strokeWidth().invoke(ts::Value::number(4));
     layer.add(ts::Array<Group_or_Shape>{child(rect)});
     CHECK(layer.getChildren().size() == 1);
     CHECK(rect.getLayer() == layer);
@@ -79,7 +80,7 @@ static void exercise() {
     cc.fill(string_or_CanvasGradient(std::string("green")));
     cc.name("shape dot");
     ::Circle circle = ::Circle::create(cc);
-    CHECK(ATTR(circle, CircleConfig, "radius").to_number() == 40);
+    CHECK(circle.radius().invoke() == 40);
     CHECK(circle.getWidth() == 80 && circle.getHeight() == 80);
 
     TextConfig tc = TextConfig::create();
@@ -90,12 +91,12 @@ static void exercise() {
     tc.fontFamily("sans-serif");
     tc.name("shape text");
     ::Text label = ::Text::create(tc);
-    CHECK(ATTR(label, TextConfig, "text").to_string() == "Hello Konva");
-    CHECK(ATTR(label, TextConfig, "fontSize").to_number() == 24);
+    CHECK(label.text().invoke() == "Hello Konva");
+    CHECK(label.fontSize().invoke() == 24);
     CHECK(label.getTextWidth() > 50);
     CHECK(label.getTextHeight() > 0);
     label.setText("Hi");
-    CHECK(ATTR(label, TextConfig, "text").to_string() == "Hi");
+    CHECK(label.text().invoke() == "Hi");
 
     // A group moves what is in it.
     GroupConfig gc = GroupConfig::create();
@@ -110,7 +111,7 @@ static void exercise() {
     CHECK(circle.getParent().has_value() && *circle.getParent() == group);
 
     // Positions: a node's own and its absolute one.
-    CHECK(ATTR(circle, CircleConfig, "x").to_number() == 200);
+    CHECK(circle.x().invoke() == 200);
     Node_getAbsolutePosition_result abs = circle.getAbsolutePosition();
     CHECK(near(abs.x(), 300) && near(abs.y(), 200));
     Node_getAbsolutePosition_result rel = circle.getPosition();
@@ -118,12 +119,12 @@ static void exercise() {
     RectConfig moved = RectConfig::create();
     moved.x(60);
     rect.setAttrs(moved);
-    CHECK(ATTR(rect, RectConfig, "x").to_number() == 60);
+    CHECK(rect.x().invoke() == 60);
     CHECK(near(rect.getClientRect().x(), 58));
     moved.x(20);
     moved.y(30);
     rect.setAttrs(moved);
-    CHECK(ATTR(rect, RectConfig, "x").to_number() == 20 && ATTR(rect, RectConfig, "y").to_number() == 30);
+    CHECK(rect.x().invoke() == 20 && rect.y().invoke() == 30);
 
     // Scale, rotation, opacity, visibility.
     RectConfig look = RectConfig::create();
@@ -131,10 +132,10 @@ static void exercise() {
     look.rotation(90);
     look.opacity(0.5);
     rect.setAttrs(look);
-    CHECK(ATTR(rect, RectConfig, "scaleX").to_number() == 2);
+    CHECK(rect.scaleX().invoke() == 2);
     CHECK(near(rect.getAbsoluteScale().x(), 2));
-    CHECK(ATTR(rect, RectConfig, "rotation").to_number() == 90);
-    CHECK(ATTR(rect, RectConfig, "opacity").to_number() == 0.5);
+    CHECK(rect.rotation().invoke() == 90);
+    CHECK(rect.opacity().invoke() == 0.5);
     rect.hide();
     CHECK(!rect.isVisible().to_bool());
     rect.show();

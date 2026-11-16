@@ -231,9 +231,7 @@ export fn run() void {
     const typed = view.getState().getTr().insertText("!", .{ .from = 14, .to = 14 });
     props.setState(view.getState());
     view.update(props);
-    // FINDING 20: EditorView.dispatch(tr) is typed as a property, getDispatch() -> Transaction_fn, a type
-    // with only `from` and no way to call it (see FINDING 12), so the dispatch function is called by hand.
-    onDispatch(null, typed);
+    b.callTransactionFn(view.getDispatch(), typed);
     expect(dispatched == 1, @src());
     expect(view.getState().getDoc().child(1).getTextContent().eql("wo!rld"), @src());
 

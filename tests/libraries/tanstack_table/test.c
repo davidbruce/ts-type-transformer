@@ -12,14 +12,19 @@ TS_IMPORT(check) void check(int ok, int line);
 
 static const JsValue NONE = { 0 };
 
-// FINDING 13: the bindings give the table's methods (getRowModel, setSorting,
-// ...) as function-typed properties, and a function handle cannot be called.
-// `functionalUpdate(f, x)` calls `f(x)`, so it is the one way to call a
-// function handle, with exactly one argument.
+// An Updater<T> is a value or a function of the old value: functionalUpdate
+// resolves it.
 static JsValue call(JsValue f, JsValue arg) { return functionalUpdate(f, arg); }
 static JsValue get(JsValue obj, const char* key) { return RowData_map_get_at((RowData_map){ obj.h }, key); }
-static JsValue call0(JsValue obj, const char* method) { return call(get(obj, method), NONE); }
-static JsValue call1(JsValue obj, const char* method, JsValue arg) { return call(get(obj, method), arg); }
+// The table's methods are function-typed properties: read bound to the table,
+// called with call_<Type>.
+// ReadonlyStore is opaque in the bindings (no methods): its `get` is read as a
+// property of the object and called.
+static JsValue store_state(JsValue table) { return call(get(get(table, "store"), "get"), NONE); }
+static JsValue row_model(Table_RowModels_Core t) { return (JsValue){ call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel(t)).h }; }
+static JsValue core_row_model(Table_RowModels t) { return (JsValue){ call_void_to_RowModel_fn(Table_RowModels_get_getCoreRowModel(t)).h }; }
+static JsValue pre_sorted_row_model(Table_RowModels t) { return (JsValue){ call_void_to_RowModel_fn(Table_RowModels_get_getPreSortedRowModel(t)).h }; }
+static void set_sorting(Table_RowSorting t, JsValue sorting) { call_Table_RowSorting_setSorting(Table_RowSorting_get_setSorting(t), sorting); }
 
 static bool str_is(JsValue v, const char* expected) { return JsString_equals(js_to_string(v), expected); }
 
@@ -35,7 +40,7 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->readonly) return call(a->derive, NONE);
+    if (a->readonly) return call_void_fn((void_fn){ a->derive.h });
     js_retain(a->value);
     return a->value;
 }
@@ -75,16 +80,16 @@ static ReadonlyAtom create_readonly(void* ctx, void_fn fn, TableAtomOptions opti
 }
 static void add_subscription(void* ctx, Subscription s) {}
 static void unmount(void* ctx) {}
-static void batch(void* ctx, Column_ColumnGrouping_toggleGrouping fn) { js_release(call((JsValue){ fn.h }, NONE)); }
-static JsValue untrack(void* ctx, void_fn fn) { return call((JsValue){ fn.h }, NONE); }
+static void batch(void* ctx, Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }
+static JsValue untrack(void* ctx, void_fn fn) { return call_void_fn(fn); }
 
 // ---- the table ----
 
-static JsValue default_sorting_update;   // what the library does on a sorting change
+static Updater_fn default_sorting_update;   // what the library does on a sorting change
 static int sorting_changes;
 static void on_sorting_change(void* ctx, JsValue updater) {
     sorting_changes++;
-    js_release(call(default_sorting_update, updater));
+    call_Updater_fn(default_sorting_update, updater);
 }
 
 static JsValue person(const char* name, double age) {
@@ -126,7 +131,7 @@ static bool same(const char* a, const char* b) {
     while (*a && *a == *b) a++, b++;
     return *a == *b;
 }
-static const char* sorted_names(JsValue table) { return names(call0(table, "getRowModel")); }
+static const char* sorted_names(JsValue table) { return names(row_model((Table_RowModels_Core){ table.h })); }
 
 __attribute__((export_name("run"))) void run(void) {
     // ---- static functions ----
@@ -184,49 +189,48 @@ __attribute__((export_name("run"))) void run(void) {
     Table_Core table_handle = constructTable((TableOptions_Core){ options.h });
     CHECK(table_handle.h != 0);
     JsValue table = { table_handle.h };
-    default_sorting_update = (JsValue){ makeStateUpdater("sorting", (makeStateUpdater_instance){ table.h }).h };
+    default_sorting_update = makeStateUpdater("sorting", (makeStateUpdater_instance){ table.h });
 
     // ---- columns ----
-    JsValue all_columns = call0(table, "getAllColumns");
-    JsArray cols = (JsArray){ all_columns.h };
+    JsArray cols = (JsArray){ call_Table_ColumnPinning_getCenterLeafColumns(Table_Columns_get_getAllColumns((Table_Columns){ table.h })).h };
     CHECK(JsArray_length(cols) == 2);
     CHECK(str_is(get(JsArray_get(cols, 0), "id"), "name") && str_is(get(JsArray_get(cols, 1), "id"), "age"));
-    JsValue age_column = call1(table, "getColumn", js_string("age"));
+    JsValue age_column = (JsValue){ call_Table_Columns_getColumn(Table_Columns_get_getColumn((Table_Columns){ table.h }), "age").h };
     CHECK(age_column.h != 0 && str_is(get(age_column, "id"), "age"));
 
     // ---- row models ----
-    CHECK(JsArray_length((JsArray){ RowModel_get_rows((RowModel){ call0(table, "getCoreRowModel").h }).h }) == 4);
-    CHECK(same(names(call0(table, "getCoreRowModel")), "Bob,Alice,Carol,Dave"));
+    CHECK(JsArray_length((JsArray){ RowModel_get_rows((RowModel){ core_row_model((Table_RowModels){ table.h }).h }).h }) == 4);
+    CHECK(same(names(core_row_model((Table_RowModels){ table.h })), "Bob,Alice,Carol,Dave"));
     // No sorting yet: the display model is the data's order.
     CHECK(same(sorted_names(table), "Bob,Alice,Carol,Dave"));
-    JsValue first_row = (JsValue){ JsArray_Row_Core_get(RowModel_get_rows((RowModel){ call0(table, "getRowModel").h }), 0).h };
+    JsValue first_row = (JsValue){ JsArray_Row_Core_get(RowModel_get_rows((RowModel){ row_model((Table_RowModels_Core){ table.h }).h }), 0).h };
     CHECK(str_is(get(first_row, "id"), "0") && js_to_number(get(first_row, "index")) == 0);
-    // FINDING 13: row.getValue("name") reads `this`, which a function handle
-    // called through functionalUpdate does not have: it throws. Left out; the
-    // row's own data is read through `original`.
+    // row.getValue keeps its `this`.
+    CHECK(str_is(call_string_fn(Row_Row_get_getValue((Row_Row){ first_row.h }), "name"), "Bob"));
+    CHECK(js_to_number(call_string_fn(Row_Row_get_getValue((Row_Row){ first_row.h }), "age")) == 30);
     CHECK(str_is(get(get(first_row, "original"), "name"), "Bob"));
 
     // ---- sorting ----
-    CHECK(JsArray_length((JsArray){ get(call0(get(table, "store"), "get"), "sorting").h }) == 0);
-    call1(table, "setSorting", sort_by("age", false));
+    CHECK(JsArray_length((JsArray){ get(store_state(table), "sorting").h }) == 0);
+    set_sorting((Table_RowSorting){ table.h }, sort_by("age", false));
     CHECK(sorting_changes == 1);
     // Ages 25, 25, 30, 35; ties keep the data's order.
     CHECK(same(sorted_names(table), "Alice,Dave,Bob,Carol"));
-    JsValue state = call0(get(table, "store"), "get");
+    JsValue state = store_state(table);
     JsArray sorting = (JsArray){ get(state, "sorting").h };
     CHECK(JsArray_length(sorting) == 1);
     CHECK(str_is(get(JsArray_get(sorting, 0), "id"), "age") && !js_to_bool(get(JsArray_get(sorting, 0), "desc")));
     // The core model is not sorted.
-    CHECK(same(names(call0(table, "getCoreRowModel")), "Bob,Alice,Carol,Dave"));
-    CHECK(same(names(call0(table, "getPreSortedRowModel")), "Bob,Alice,Carol,Dave"));
+    CHECK(same(names(core_row_model((Table_RowModels){ table.h })), "Bob,Alice,Carol,Dave"));
+    CHECK(same(names(pre_sorted_row_model((Table_RowModels){ table.h })), "Bob,Alice,Carol,Dave"));
 
-    call1(table, "setSorting", sort_by("name", true));
+    set_sorting((Table_RowSorting){ table.h }, sort_by("name", true));
     CHECK(sorting_changes == 2);
     CHECK(same(sorted_names(table), "Dave,Carol,Bob,Alice"));
-    call1(table, "setSorting", sort_by("age", true));
+    set_sorting((Table_RowSorting){ table.h }, sort_by("age", true));
     CHECK(same(sorted_names(table), "Carol,Bob,Alice,Dave"));
     // An empty sorting is the original order again.
-    call1(table, "setSorting", (JsValue){ JsArray_new().h });
+    set_sorting((Table_RowSorting){ table.h }, (JsValue){ JsArray_new().h });
     CHECK(same(sorted_names(table), "Bob,Alice,Carol,Dave"));
     CHECK(sorting_changes == 4);
 }

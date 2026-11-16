@@ -89,6 +89,12 @@ export fn run() void {
     const inner: b.tokens.Text = .{ .h = head.getTokens().get(0).h };
     expect(inner.getText().eql("Head"), @src());
 
+    // marked.lexer and marked.parser are function values: called through their call functions.
+    const lexed = b.callStringMarkedOptionsToTokensListFn(b.marked_ns.getLexer_2(), "# T\n\ntext", .{});
+    expect(lexed.getLength() == 3, @src());
+    const rendered = b.callTokenArrayMarkedOptionsFn(b.marked_ns.getParser_2(), .{ .h = lexed.h }, .{});
+    expect(has(.{ .h = rendered.h }, "<h1>T</h1>") and has(.{ .h = rendered.h }, "<p>text</p>"), @src());
+
     // lexInline.
     expect(b.Lexer.lexInline("a *b*", .{}).len() == 2, @src());
 
@@ -122,24 +128,23 @@ export fn run() void {
 }
 
 fn renderCodespan(_: ?*anyopaque, args: b.JsTuple(&.{b.tokens.Codespan})) b.JsValue {
-    const t: b.tokens.Codespan = .{ .h = args.h };
+    const t = args.get(0);
     var out: [64]u8 = undefined;
     var text: [32]u8 = undefined;
     const body = t.getText().copy(&text);
     return b.JsValue.string(std.fmt.bufPrint(&out, "<tt>{s}</tt>", .{body}) catch "");
 }
 
-// FINDING 4 again: the string arrives typed as a JsArray.
+// The hook's arguments arrive as the array: item 0 is the markdown.
 fn preprocess(_: ?*anyopaque, args: b.JsArray) b.string_or_Promise {
-    const md: b.JsString = .{ .h = args.h };
+    const md: b.JsString = .{ .h = args.get(0).h };
     return .{ .string = b.JsString.from(if (md.eql("original")) "replaced" else "other") };
 }
 
 fn renderHeading(_: ?*anyopaque, args: b.JsTuple(&.{b.tokens.Heading})) b.JsValue {
-    // FINDING 4: the callback's parameter is typed JsTuple(&.{Heading}) but the handle is the Heading
-    // itself (marked calls heading(token)); args.get(0) reads token[0], null. Reinterpreted by hand.
-    const t: b.tokens.Heading = .{ .h = args.h };
+    const t = args.get(0);
     var out: [64]u8 = undefined;
-    const text = std.fmt.bufPrint(&out, "<h{d} class=\"mine\">{s}</h{d}>", .{ @as(u32, @intFromFloat(t.getDepth())), "Hi", @as(u32, @intFromFloat(t.getDepth())) }) catch "";
+    var title: [32]u8 = undefined;
+    const text = std.fmt.bufPrint(&out, "<h{d} class=\"mine\">{s}</h{d}>", .{ @as(u32, @intFromFloat(t.getDepth())), t.getText().copy(&title), @as(u32, @intFromFloat(t.getDepth())) }) catch "";
     return b.JsValue.string(text);
 }

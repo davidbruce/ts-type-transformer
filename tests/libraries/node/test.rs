@@ -28,11 +28,24 @@ pub extern "C" fn run() {
 }
 
 fn paths() {
-    // FINDING 6: every function of `path` (join, basename, extname, resolve,
-    // relative, parse, ...) is called as `modules.path.path.join(..)`, because
-    // the declaration is `export = path`; the module `import("node:path")`
-    // has no `.path`, so each call throws. They are left out. What the module
-    // declares as plain objects works:
+    // Taking paths apart and putting them together.
+    check!(path::join(["/usr", "local", "..", "lib", "x.txt"]) == "/usr/lib/x.txt");
+    check!(path::normalize("/a//b/./c/..") == "/a/b");
+    check!(path::basename("/tmp/out/report.txt", None) == "report.txt");
+    check!(path::basename("/tmp/out/report.txt", Some(".txt")) == "report");
+    check!(path::dirname("/tmp/out/report.txt") == "/tmp/out");
+    check!(path::extname("report.tar.gz") == ".gz" && path::extname("README") == "");
+    check!(path::is_absolute("/tmp") && !path::is_absolute("tmp/x"));
+    check!(path::resolve(["/a/b", "../c", "d"]) == "/a/c/d");
+    check!(path::relative("/a/b/c", "/a/d") == "../../d");
+    check!(path::matches_glob("/foo/bar.txt", "/foo/*.txt") && !path::matches_glob("/foo/bar.md", "/foo/*.txt"));
+    check!(path::to_namespaced_path("/a/b") == "/a/b");
+    check!(path::sep().as_str() == "/" && path::delimiter().as_str() == ":");
+    let p = path::parse("/home/user/dir/file.txt");
+    check!(p.root() == "/" && p.dir() == "/home/user/dir" && p.base() == "file.txt");
+    check!(p.ext() == ".txt" && p.name() == "file");
+
+    // What the module declares as plain objects:
     let back = path::FormatInputPathObject::create();
     back.set_dir(Some("/tmp/out"));
     back.set_name(Some("report"));
@@ -40,6 +53,7 @@ fn paths() {
     check!(back.dir().as_deref() == Some("/tmp/out"));
     check!(back.name().as_deref() == Some("report") && back.ext().as_deref() == Some(".txt"));
     check!(back.root().is_none());
+    check!(path::format(&back) == "/tmp/out/report.txt");
     let parsed = path::ParsedPath::create();
     parsed.set_base("notes.md");
     parsed.set_ext(".md");
@@ -114,16 +128,13 @@ fn emitter() {
     let on_greet = AnyArrayFn::new({
         let log = log.clone();
         move |args: JsArray| {
-            // FINDING 5: `(...args: any[]) => void` is bound as one JsArray, but
-            // the glue passes only the first argument, as that "array": read here
-            // as the value it is, and an emit with no argument gives a null.
-            log.borrow_mut().push(format!("greet {}", JsValue(args.0.clone()).as_string()));
+            log.borrow_mut().push(format!("greet {} {}", args.get(0).as_string(), args.len()));
         }
     });
     em.on::<JsValue>("greet", &on_greet);
     check!(em.listener_count::<JsValue>("greet", None) == 1.0);
     check!(em.emit::<JsValue>("greet", [JsValue::from("world")]));
-    check!(log.borrow().len() == 1 && log.borrow()[0] == "greet world");
+    check!(log.borrow().len() == 1 && log.borrow()[0] == "greet world 1");
 
     // once fires one time only; emit says whether anyone listened.
     let once_count = Rc::new(Cell::new(0));

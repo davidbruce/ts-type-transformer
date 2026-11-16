@@ -75,10 +75,9 @@ m.fire ("click", data) |> ignore
 check (clicks = 2) "off removes it"
 
 // Paths with options: a polyline's bounds are those of its points.
-// FINDING 20: `PolylineOptions.Create (color = ...)` is ambiguous with the Create of its bases (PathOptions ...).
-let style = createEmpty<PolylineOptions>
-style.color <- Some (Some "red")
-style.weight <- Some (Some 5.0)
+// FINDING 20 (still open): `Create (color = ..., weight = ...)` alone is ambiguous with PathOptions.Create; naming
+// a field only PolylineOptions has (smoothFactor) selects it.
+let style = PolylineOptions.Create (smoothFactor = Some 1.0, color = Some "red", weight = Some 5.0)
 let line =
     Leaflet.polyline<obj, obj> (ResizeArray [ PolylineNewLatlngs.LatLng london; PolylineNewLatlngs.LatLng paris ], style)
 line.addTo (MapOrLayerGroup.Map m) |> ignore

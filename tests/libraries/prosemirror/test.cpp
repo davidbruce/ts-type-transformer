@@ -254,14 +254,20 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(view.editable());
     CHECK(!view.composing());
 
-    // FINDING 2 again: `view.dispatch` is a bare Callback (Transaction_fn) that
-    // cannot be called. pasteText makes the view dispatch a transaction itself,
-    // which reaches dispatchTransaction.
+    // pasteText makes the view dispatch a transaction itself; view.dispatch is a
+    // function value, called with call_Transaction_fn.
     CHECK(dispatched == 0);
     view.pasteText("pasted");
     CHECK(dispatched >= 1);
     CHECK(current.doc().textContent().find("pasted") != std::string::npos);
     CHECK(view.state().doc().textContent().find("pasted") != std::string::npos);
+    int before = dispatched;
+    Transaction bang = view.state().tr();
+    bang.insertText("!", 1);
+    call_Transaction_fn(view.dispatch(), bang);
+    CHECK(dispatched == before + 1);
+    CHECK(current.doc().textContent().find("!") != std::string::npos);
+    CHECK(view.state().doc().textContent().find("!") != std::string::npos);
     view_ref = nullptr;
     view.destroy();
     CHECK(view.isDestroyed());

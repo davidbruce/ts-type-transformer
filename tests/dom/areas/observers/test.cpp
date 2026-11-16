@@ -23,17 +23,6 @@
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
-// FINDING 9 (runtime bug): assigning a temporary to a handle type with several
-// virtual-base paths (Document, Element, HTMLDivElement, ...) leaves it null: the
-// implicit move assignment runs Handle::operator=(Handle) (ts_runtime.hpp:81)
-// once per base path, and every run after the first takes from a source already
-// emptied. `doc = get_document();` made `doc` null. A copy assignment from an
-// lvalue is fine, so values go through a named reference.
-template <class T>
-static void assign(T& to, const T& from) {
-    to = from;
-}
-
 static int pending = 0;
 static int completed = 0;
 
@@ -74,7 +63,7 @@ extern "C" __attribute__((export_name("finish"))) void finish() {
 }
 
 extern "C" __attribute__((export_name("run"))) void run() {
-    assign(doc, get_document());
+    doc = get_document();
     HTMLElement body = doc.body();
 
     // takeRecords: the pending records, at once; the callback never sees them.
@@ -162,21 +151,21 @@ extern "C" __attribute__((export_name("run"))) void run() {
     deep.disconnect();
 
     // A delivered batch: both changes arrive in one callback after run.
-    assign<HTMLElement>(box, doc.createElement(HTMLElementTagNameMapKeys::div));
+    box = doc.createElement(HTMLElementTagNameMapKeys::div);
     box.id("watched");
     box.style().setProperty("width", "100px");
     box.style().setProperty("height", "50px");
     box.style().setProperty("background", "orange");
     body.appendChild(box);
     pending++;
-    assign(delivered, MutationObserver::create([](ts::Array<MutationRecord> rs, MutationObserver) {
+    delivered = MutationObserver::create([](ts::Array<MutationRecord> rs, MutationObserver) {
         for (MutationRecord r : rs) {
             if (r.type() == MutationRecordType::childList) mutation_log += "childList:" + std::to_string(int(r.addedNodes().length())) + " ";
             else mutation_log += "attributes:" + *r.attributeName() + " ";
         }
         completed++;
         pending--;
-    }));
+    });
     MutationObserverInit both = MutationObserverInit::create();
     both.childList(true);
     both.attributes(true);
@@ -189,7 +178,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // ResizeObserver: the first report, then a report after a resize.
     pending++;
-    assign(resizer, ResizeObserver::create([](ts::Array<ResizeObserverEntry> entries, ResizeObserver) {
+    resizer = ResizeObserver::create([](ts::Array<ResizeObserverEntry> entries, ResizeObserver) {
         for (ResizeObserverEntry e : entries) {
             CHECK(e.target() == box);
             double w = e.contentRect().width();
@@ -202,12 +191,12 @@ extern "C" __attribute__((export_name("run"))) void run() {
                 pending--;
             }
         }
-    }));
+    });
     resizer.observe(box);
 
     // IntersectionObserver: the box is on screen.
     pending++;
-    assign(watcher, IntersectionObserver::create([](ts::Array<IntersectionObserverEntry> entries, IntersectionObserver) {
+    watcher = IntersectionObserver::create([](ts::Array<IntersectionObserverEntry> entries, IntersectionObserver) {
         for (IntersectionObserverEntry e : entries) {
             if (e.isIntersecting() && !intersected) {
                 intersected = true;
@@ -219,14 +208,14 @@ extern "C" __attribute__((export_name("run"))) void run() {
                 pending--;
             }
         }
-    }));
+    });
     watcher.observe(box);
     CHECK(watcher.thresholds().size() == 1 && watcher.rootMargin() == "0px 0px 0px 0px");
 
     // AbortSignal.timeout aborts by itself; one already aborted says so.
     AbortSignal fresh = AbortSignal::abort();
     CHECK(fresh.aborted());
-    assign(timeout_signal, AbortSignal::timeout(30));
+    timeout_signal = AbortSignal::timeout(30);
     CHECK(!timeout_signal.aborted());
     pending++;
     on_abort = [](Event e) {

@@ -253,9 +253,7 @@ __attribute__((export_name("run"))) void run(void) {
     Transaction_insertText(edit, "Say: ", js_some_double(1), js_some_double(1));
     Transaction_fn dispatch = EditorView_get_dispatch(view);
     CHECK(dispatch.h != 0);
-    // FINDING 18: view.dispatch is a function handle and cannot be called, so
-    // the transaction is applied the way our dispatchTransaction does it.
-    on_dispatch(0, edit);
+    call_Transaction_fn(dispatch, edit);
     CHECK(dispatched == 1);
     CHECK(str_is(text_of(EditorState_get_doc(EditorView_get_state(view))), "Say: Hello world"));
 

@@ -17,9 +17,15 @@ static JsValue RowGet(JsValue obj, const char* key) { return Dictionary_get_at((
 static JsValue dict_value(Dictionary d) { return (JsValue){ d.h }; }
 
 static int highlights, finished;
+static bool highlight_event_ok;
 static int32_t on_highlight(void* ctx, JsArray args) {
     highlights++;
-    (void)args;
+    // The rest parameter arrives gathered: item 0 is the event.
+    if (JsArray_length(args) >= 1) {
+        JsValue ev = JsArray_get(args, 0);
+        JsValue type = Dictionary_get_at((Dictionary){ ev.h }, "type");
+        if (JsString_equals(js_to_string(type), "highlight")) highlight_event_ok = true;
+    }
     return 0;
 }
 static int32_t on_finished(void* ctx, JsArray args) {
@@ -55,10 +61,10 @@ __attribute__((export_name("run"))) void run(void) {
     Eventful_on(chart, "highlight", any_any_array_to_void_or_boolean_fn_from(on_highlight, 0), (JsValue){ 0 });
 
     // The option: a category axis, a value axis, one bar series.
-    // FINDING 15: BarSeriesOption's `type` is the literal "bar", present only
-    // as a #define (BarSeriesOption_type): a BarSeriesOption made here has no
-    // `type`, and echarts cannot tell what series it is. The series is a
-    // Dictionary (any string-keyed object) here instead.
+    // FINDING 15 (still open): BarSeriesOption's `type?: 'bar'` is optional, so
+    // _create does not set it and there is no setter (only the #define
+    // BarSeriesOption_type): echarts cannot tell what series it is. The series
+    // is a Dictionary (any string-keyed object) here instead.
     Dictionary x_axis = Dictionary_create();
     Dictionary_set_at(x_axis, "type", js_string("category"));
     JsArray categories = JsArray_new();
@@ -162,9 +168,7 @@ __attribute__((export_name("run"))) void run(void) {
     Dictionary_set_at(action, "dataIndex", js_number(1));
     EChartsType_dispatchAction(chart, (Payload){ action.h }, js_none_bool());
     CHECK(highlights >= 1);
-    // FINDING 8 again: the handler is `(...args: any[])`, so args should be an
-    // array holding the event, but it is the event itself: JsArray_length(args)
-    // is 0. The event cannot be read. Left out.
+    CHECK(highlight_event_ok);
 
     // The chart as an image.
     JsString url = EChartsType_getDataURL(chart, (EChartsType_getDataURL_opts){ 0 });

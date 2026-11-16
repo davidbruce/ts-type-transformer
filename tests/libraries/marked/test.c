@@ -33,9 +33,8 @@ static bool token_is(JsValue token, const char* type) {
 // The renderer for headings: a class by depth, the heading's own text.
 static int headings_rendered;
 static JsValue render_heading(void* ctx, JsTuple_Tokens_Heading args) {
-    // FINDING 8: the callback is typed with the rest-args tuple, but the glue
-    // passes the token itself (the first argument); get_0 on it is null.
-    Tokens_Heading h = { args.h };
+    // The rest-args tuple: item 0 is the heading token.
+    Tokens_Heading h = JsTuple_Tokens_Heading_get_0(args);
     headings_rendered++;
     char html[128];
     uint32_t depth = (uint32_t)Tokens_Heading_get_depth(h);
@@ -216,17 +215,31 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(broken);
 
     // The async option gives a promise.
-    // FINDING 7: marked_options is `MarkedOptions & { async: true }`, but a
-    // marked_options made here has no `async` property (only a #define), so
-    // marked_async on it would not give a promise. A MarkedOptions with async
-    // set, cast, does.
-    MarkedOptions async_opts = MarkedOptions_create();
-    MarkedOptions_set_async(async_opts, js_some_bool(true));
-    pending = marked_async("**async**", (marked_options){ async_opts.h });
+    // marked_options is `MarkedOptions & { async: true }`: _create sets async.
+    pending = marked_async("**async**", marked_options_create());
     Promise_then(pending, on_async, 0);
 
     // The defaults are an options object.
     MarkedOptions defaults = getDefaults();
     CHECK(MarkedOptions_get_gfm(defaults).has && MarkedOptions_get_gfm(defaults).value);
     CHECK(MarkedOptions_get_breaks(defaults).has && !MarkedOptions_get_breaks(defaults).value);
+
+    // The top-level lexer and parser are function values: call_<Type> calls them.
+    TokensList lexed = call_string_MarkedOptions_to_TokensList_fn(get_lexer(), "# H\n\ntext *x*");
+    CHECK(TokensList_get_length(lexed) >= 2);
+    JsValue lexed0 = TokensList_get_at(lexed, 0);
+    CHECK(token_is(lexed0, "heading"));
+    JsString parsed = js_to_string(call_Token_array_MarkedOptions_fn(get_parser(), (JsArray){ lexed.h }));
+    CHECK(contains(parsed, "<h1>H</h1>") && contains(parsed, "<em>x</em>"));
+    js_release(parsed);
+
+    // marked's own `use` changes the defaults for marked(): last, so nothing above sees it.
+    JsArray_MarkedExtension global = JsArray_MarkedExtension_new();
+    MarkedExtension global_breaks = MarkedExtension_create();
+    MarkedExtension_set_breaks(global_breaks, js_some_bool(true));
+    JsArray_MarkedExtension_push(global, global_breaks);
+    js_release(use(global));
+    JsString global_br = marked("p\nq", NO_OPTIONS);
+    CHECK(contains(global_br, "p<br>q"));
+    js_release(global_br);
 }

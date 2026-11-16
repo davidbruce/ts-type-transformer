@@ -2,11 +2,10 @@
 // accessor columns and a sorted row model, its rows, cells and sorting.
 // Every CHECK must hold.
 //
-// Two things in the packages as bound make this awkward, both noted as
-// findings below: the table needs a `coreReactivityFeature` (atoms, from a
-// package impl.mjs does not give), written here in C++; and the table's
-// methods are function-typed properties, which the bindings give as callbacks
-// that cannot be called, so `call` runs them through `functionalUpdate`.
+// One thing in the packages as bound makes this awkward, noted as finding 13
+// below: the table needs a `coreReactivityFeature` (atoms, from a package
+// impl.mjs does not give), written here in C++. The table's methods are
+// function-typed properties, called with the generated call_<Callback>.
 #include <memory>
 
 #include "bindings.hpp"
@@ -38,22 +37,10 @@ static T as(const ts::Handle& h) {
 }
 static V str(std::string_view s) { return V::string(s); }
 
-// FINDING 12: `getRowModel: () => RowModel`, `getColumn: (id) => Column`,
-// `getValue: (id) => value`... are properties of function type; the bindings
-// give them as `ts::Callback` structs (Table_RowModels_getCoreRowModel,
-// string_to_TValue_fn...) that can be made from a lambda but not called. And
-// the property getter hands back the bare function, so `this` is lost (rows
-// and columns keep their methods on a prototype and fail with "Cannot read
-// properties of undefined"). Two library helpers do the calling here:
-// functionalUpdate(fn, x) is `typeof fn === "function" ? fn(x) : fn`, for a
-// function that needs no `this`; and callMemoOrStaticFn(obj, "name", _, args)
-// is `obj.name(...args)`, a method call.
-static V call(const ts::Handle& fn, V arg = V()) {
-    return functionalUpdate<V>(Updater<V>(std::in_place_index<0>, val(fn)), arg);
-}
-static V callm(const ts::Handle& obj, std::string_view name, ts::Array<> args = ts::Array<>::create()) {
-    using Static = callMemoOrStaticFn_staticFn<Obj, ts::Array<>, V>;
-    return callMemoOrStaticFn<Obj, ts::Array<>, V>(as<Obj>(obj), name, Static([](Obj, ts::Array<>) { return V(); }), args);
+// An atom's `set` receives a value or an updater function: the library's own
+// functionalUpdate(fn, x) is `typeof fn === "function" ? fn(x) : fn`.
+static V apply_update(const ts::Handle& update, V old) {
+    return functionalUpdate<V>(Updater<V>(std::in_place_index<0>, val(update)), old);
 }
 
 // FINDING 13: constructTable needs features.coreReactivityFeature (atoms);
@@ -70,15 +57,15 @@ static V writable_atom(V initial) {
     Obj atom = Obj::create();
     atom.set_at("get", val(void_to_T_fn<V>([state] { return *state; })));
     atom.set_at("set", val(Updater_fn2<V>([state](V update) {
-                    *state = call(update, *state);
+                    *state = apply_update(update, *state);
                     return V();
                 })));
     atom.set_at("subscribe", val(Updater_fn2<V>([](V) { return unsubscribe_object(); })));
     return val(atom);
 }
-static V readonly_atom(V compute) {
+static V readonly_atom(void_to_T_fn<V> compute) {
     Obj atom = Obj::create();
-    atom.set_at("get", val(void_to_T_fn<V>([compute] { return call(compute); })));
+    atom.set_at("get", val(void_to_T_fn<V>([compute] { return call_void_to_T_fn<V>(compute); })));
     atom.set_at("subscribe", val(Updater_fn2<V>([](V) { return unsubscribe_object(); })));
     return val(atom);
 }
@@ -88,10 +75,10 @@ static V reactivity() {
     r.wrapExternalAtoms(false);
     r.addSubscription(TableReactivityBindings_addSubscription([](Subscription) {}));
     r.createWritableAtom(TableReactivityBindings_createWritableAtom([](V initial, std::optional<TableAtomOptions<V>>) { return writable_atom(initial); }));
-    r.createReadonlyAtom(TableReactivityBindings_createReadonlyAtom([](void_to_T_fn<V> compute, std::optional<TableAtomOptions<V>>) { return readonly_atom(val(compute)); }));
-    r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return call(fn); }));
-    r.batch(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call(fn); }));
-    r.schedule(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call(fn); }));
+    r.createReadonlyAtom(TableReactivityBindings_createReadonlyAtom([](void_to_T_fn<V> compute, std::optional<TableAtomOptions<V>>) { return readonly_atom(compute); }));
+    r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return call_void_to_T_fn<V>(fn); }));
+    r.batch(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }));
+    r.schedule(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }));
     return val(r);
 }
 
@@ -145,67 +132,72 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(table.h != 0);
 
     // The row model: three rows, by index as ids.
-    Model model = as<Model>(callm(table, "getRowModel"));
+    Model model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
     CHECK(model.rows().size() == 3);
     CHECK(ids(model.rows()) == "Cy#0,Al#1,Bo#2");
-    CHECK(as<Model>(callm(table, "getCoreRowModel")).rows().size() == 3);
+    CHECK(call_Table_RowModels_getCoreRowModel(table.getCoreRowModel()).rows().size() == 3);
 
     // Rows: the original data, and cell values by column id.
     auto first = as<RowP>(model.rows()[0]);
     CHECK(first.original().at("name").to_string() == "Cy");
     CHECK(first.original().at("age").to_number() == 30);
-    CHECK(callm(model.rows()[0], "getValue", {str("name")}).to_string() == "Cy");
-    CHECK(callm(model.rows()[1], "getValue", {str("age")}).to_number() == 25);
-    CHECK(callm(model.rows()[2], "getValue", {str("team")}).to_string() == "red");
+    CHECK(call_string_to_TValue_fn(model.rows()[0].getValue(), "name").to_string() == "Cy");
+    CHECK(call_string_to_TValue_fn(model.rows()[1].getValue(), "age").to_number() == 25);
+    CHECK(call_string_to_TValue_fn(model.rows()[2].getValue(), "team").to_string() == "red");
 
     // The cells of a row, one per column, ids from row and column.
-    ts::Array<> cells = as<ts::Array<>>(callm(model.rows()[0], "getAllCells"));
+    auto cells = call_Row_Row_getAllCells(model.rows()[0].getAllCells());
     CHECK(cells.size() == 3);
     using CellP = Cell_CoreProperties<TableFeatures, RowData_map, V>;
     CHECK(as<CellP>(cells[1]).id() == "Cy#0_age");
 
     // Columns.
-    auto all = as<ts::Array<ColC>>(callm(table, "getAllColumns"));
+    auto all = call_Table_Columns_getAllColumns(table.getAllColumns());
     CHECK(all.size() == 3);
-    CHECK(callm(table, "getAllLeafColumns").h != 0);
-    auto age = as<ColP>(callm(table, "getColumn", {str("age")}));
+    CHECK(call_Table_Columns_getAllColumns(table.getAllLeafColumns()).h != 0);
+    auto agec = call_Table_Columns_getColumn(table.getColumn(), "age");
+    CHECK(agec.has_value());
+    auto age = as<ColP>(*agec);
     CHECK(age.id() == "age");
-    CHECK(!callm(table, "getColumn", {str("nope")}).h);
+    CHECK(!call_Table_Columns_getColumn(table.getColumn(), "nope").has_value());
 
     // Header groups: one row of three headers.
-    ts::Array<> groups = as<ts::Array<>>(callm(table, "getHeaderGroups"));
-    CHECK(groups.size() == 1);
+    CHECK(call_Table_Headers_getFooterGroups(table.getHeaderGroups()).size() == 1);
 
     // Sorting: an ascending sort on age puts Al (25), Cy (30), Bo (41) in order.
-    auto sorted = as<ColSort>(callm(table, "getColumn", {str("age")}));
-    CHECK((callm(sorted, "getIsSorted").to_bool() == false));
-    callm(sorted, "toggleSorting", {V::boolean(false)});
-    model = as<Model>(callm(table, "getRowModel"));
+    auto sorted = as<ColSort>(*call_Table_Columns_getColumn(table.getColumn(), "age"));
+    auto isSorted = [&](const ColSort& c) { return call_Column_RowSorting_getIsSorted(c.getIsSorted()); };
+    auto notSorted = [&](const ColSort& c) {
+        auto r = isSorted(c);
+        return std::holds_alternative<bool>(r) && !std::get<bool>(r);
+    };
+    CHECK(notSorted(sorted));
+    call_Column_RowSorting_toggleSorting(sorted.toggleSorting(), false, std::nullopt);
+    model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
     CHECK(ids(model.rows()) == "Al#1,Cy#0,Bo#2");
-    CHECK(callm(sorted, "getIsSorted").to_string() == "asc");
+    CHECK(std::get<SortDirection>(isSorted(sorted)) == SortDirection::asc);
 
     // setSorting with a new state: by name, descending: Cy, Bo, Al.
-    Obj by_name = Obj::create();
-    by_name.set_at("id", str("name"));
-    by_name.set_at("desc", V::boolean(true));
-    ts::Array<Obj> state{by_name};
-    callm(as<TabSort>(table), "setSorting", {val(state)});
-    model = as<Model>(callm(table, "getRowModel"));
+    ColumnSort by_name = ColumnSort::create();
+    by_name.id("name");
+    by_name.desc(true);
+    ts::Array<ColumnSort> state{by_name};
+    call_Table_RowSorting_setSorting(as<TabSort>(table).setSorting(), Updater<ts::Array<ColumnSort>>(state));
+    model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
     CHECK(ids(model.rows()) == "Cy#0,Bo#2,Al#1");
-    CHECK((callm(sorted, "getIsSorted").to_bool() == false));
-    CHECK(callm(as<ColSort>(callm(table, "getColumn", {str("name")})), "getIsSorted").to_string() == "desc");
+    CHECK(notSorted(sorted));
+    auto byName = as<ColSort>(*call_Table_Columns_getColumn(table.getColumn(), "name"));
+    CHECK(std::get<SortDirection>(isSorted(byName)) == SortDirection::desc);
     // The unsorted model is still the data's order.
-    CHECK(ids(as<Model>(callm(table, "getCoreRowModel")).rows()) == "Cy#0,Al#1,Bo#2");
+    CHECK(ids(call_Table_RowModels_getCoreRowModel(table.getCoreRowModel()).rows()) == "Cy#0,Al#1,Bo#2");
 
     // A sort by a text column, ascending.
-    ts::Array<Obj> by_team = ts::Array<Obj>::create();
-    Obj team = Obj::create();
-    team.set_at("id", str("team"));
-    team.set_at("desc", V::boolean(false));
-    by_team.push(team);
-    callm(as<TabSort>(table), "setSorting", {val(by_team)});
-    model = as<Model>(callm(table, "getRowModel"));
-    CHECK(callm(model.rows()[0], "getValue", {str("team")}).to_string() == "blue");
+    ColumnSort team = ColumnSort::create();
+    team.id("team");
+    team.desc(false);
+    ts::Array<ColumnSort> by_team{team};
+    call_Table_RowSorting_setSorting(as<TabSort>(table).setSorting(), Updater<ts::Array<ColumnSort>>(by_team));
+    model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
+    CHECK(call_string_to_TValue_fn(model.rows()[0].getValue(), "team").to_string() == "blue");
     CHECK(ids(model.rows()).substr(0, 5) == "Al#1,");
-
 }

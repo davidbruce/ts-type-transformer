@@ -66,8 +66,7 @@ pub extern "C" fn run() {
     check!(defaults.breaks() == Some(false));
 
     // An inline parse has no paragraph.
-    // FINDING 1: marked_instance() reads `markedInstance`, which marked
-    // declares but does not export; an instance is made here instead.
+    // marked's `markedInstance` is not exported, so an instance is made here.
     let plain_instance = Marked::<String, String>::new(Vec::<MarkedExtension<String, String>>::new());
     let inline = plain_instance.parse_inline().invoke_2("a *b* `c`", None);
     check!(html_of(inline) == "a <em>b</em> <code>c</code>");
@@ -124,9 +123,7 @@ pub extern "C" fn run() {
     let ext = MarkedExtension::<String, String>::create();
     let renderer = MarkedExtensionRenderer::<String, String>::create();
     let heading = MarkedExtensionRendererHeading::<String, String>::new(|args: JsArray| {
-        // FINDING 2: `...args: Parameters<Renderer["heading"]>` is bound as one
-        // JsArray, but JavaScript passes the token itself as the first argument.
-        let h = tokens::Heading(args.0.clone());
+        let h = tokens::Heading(args.get(0).0.clone());
         BooleanOrRendererOutput::RendererOutput(format!("<h{0} class=\"x\">{1}</h{0}>", h.depth() as u32, h.text()))
     });
     renderer.set_heading(Some(&heading));

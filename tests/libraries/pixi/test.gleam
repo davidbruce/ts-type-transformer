@@ -2,9 +2,6 @@
 // graph of containers, graphics and sprites, and their bounds. Every check
 // must hold.
 //
-// FINDING 13: this program does not build for the page: bindings/runtime_ffi.mjs
-// imports "*.frag" (an ambient wildcard module, not a package), and bun cannot
-// resolve it. The program was checked in Node with that one import removed.
 // FINDING 12: Texture.WHITE is Texture(BufferImageSource(Nil), Nil), which no
 // function taking a Texture(TextureSource(Dynamic, Nil), Nil) accepts; a sprite is
 // made with Sprite.from through a Dynamic instead.

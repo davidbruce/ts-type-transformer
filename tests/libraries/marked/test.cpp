@@ -44,14 +44,15 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(marked("~~x~~", plain) == "<p>~~x~~</p>\n");
     CHECK(marked("~~x~~", marked_options_no_async::create()) == "<p><del>x</del></p>\n");
 
-    // FINDING 2: `marked.lexer`, `marked.parser`, `marked.options`, `walkTokens`...
-    // are function-typed consts bound as bare Callbacks: they can be made from a
-    // lambda but there is no way to call one. The Lexer class and a Marked
-    // instance are used instead. (Likewise `parse` is a ts::Value, and the
-    // `parseInline` const has a struct but no accessor to get it.)
+    // The function-typed consts are called through call_<Callback>.
+    TokensList viaConst = call_string_MarkedOptions_to_TokensList_fn(marked_ns::get_lexer(), "# T\n\npara", std::nullopt);
+    CHECK(viaConst.length() == 3);
+    CHECK(as<Tokens_Generic>(*viaConst.at(0)).type() == "heading");
+    ts::Array<> tokenArray;
+    static_cast<ts::Handle&>(tokenArray) = viaConst;
+    ts::Value out = call_Token_array_MarkedOptions_to_ParserOutput_fn(marked_ns::get_parser(), tokenArray, std::nullopt);
+    CHECK(out.to_string() == "<h1>T</h1>\n<p>para</p>\n");
     using Mk = Marked<std::string, std::string>;
-    // FINDING 4: get_markedInstance() reads `markedInstance`, a top-level
-    // declaration that marked.d.ts does not export: null at runtime.
     Mk md = Mk::create(ts::Array<MarkedExtension<std::string, std::string>>::create());
     TokensList list = md.lexer("# H *x*\n\npara **b**\n\n- x\n- y\n\n```js\nlet a\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n");
     // FINDING 3: iterating or indexing a TokensList gives untyped ts::Value, and
@@ -111,13 +112,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // use with a renderer: heading is given its token.
     MarkedExtension<std::string, std::string> ext = MarkedExtension<std::string, std::string>::create();
     MarkedExtension_renderer<std::string, std::string> rend = MarkedExtension_renderer<std::string, std::string>::create();
-    // FINDING 5: a renderer taking `...args: [Tokens.Heading]` is typed
-    // ts::Tuple<Tokens_Heading>, but the glue calls it spread: what arrives is
-    // the heading itself, so args.get<0>() is null. Read the Tuple's handle
-    // as the heading.
     rend.heading(MarkedExtension_renderer_heading<std::string, std::string>([](ts::Tuple<Tokens_Heading> args) {
-        Tokens_Heading t;
-        static_cast<ts::Handle&>(t) = args;
+        Tokens_Heading t = args.get<0>();
         return std::string("H") + std::to_string(int(t.depth())) + ":" + t.text() + "|";
     }));
     ext.renderer(rend);

@@ -1,7 +1,7 @@
-// TanStack Table (table-core v9) from Rust, in Node. Very little of its API
-// can be driven from here: see the FINDINGs. What can be: its helper
-// functions, the features and initial state they give, and a table built
-// with reactivity bindings written in Rust. Every check! must hold.
+// TanStack Table (table-core v9) from Rust, in Node: its helper functions,
+// the features and initial state they give, and a table built with
+// reactivity bindings written in Rust, its row model and sorting called
+// through the call_* functions. Every check! must hold.
 #![no_main]
 use bindings::*;
 use std::cell::RefCell;
@@ -33,7 +33,7 @@ fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsHandle {
     let o = MakeObjectMapResult::<JsValue>::create();
     o.set_at("get", get);
     if let Some(mut set) = set {
-        o.set_at("set", JsValue(AnyFunction::new(move |v: JsValue| set(v)).0.clone()));
+        o.set_at("set", JsValue(AnyFunction::new(move |args: JsValue| set(as_array(&args).get(0))).0.clone()));
     }
     o.set_at("subscribe", JsValue(AnyFunction::new(|_: JsValue| {}).0.clone()));
     o.0.clone()
@@ -101,20 +101,13 @@ pub extern "C" fn run() {
         }))), PhantomData)
     });
     bindings.set_create_writable_atom(&writable);
-    // FINDING 10: a value of function type (`compute: () => T`, and every
-    // `table.getRowModel`, `setSorting`, `columnHelper.accessor`) can be made
-    // but has no call method, so almost nothing of the API can be used. Here
     // `compute` is made the atom's `get` itself.
     let readonly = TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| ReadonlyAtom(atom(JsValue(compute.0.clone()), None), PhantomData));
     bindings.set_create_readonly_atom(&readonly);
-    // FINDING 10 again: `untrack`, `batch` and `schedule` must call the
-    // function they are given; `functionalUpdate` does, and stands in for that.
-    let call = |f: &JsValue| functional_update(Updater::T(f.clone()), JsValue::null());
-    let call = call;
-    let untrack = TableReactivityBindingsUntrack::new(move |f: VoidToTFn<JsValue>| call(&JsValue(f.0.clone())));
+    let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
     bindings.set_untrack(&untrack);
     let run_it = FnFn::new(move |f: ColumnColumnGroupingToggleGrouping| {
-        call(&JsValue(f.0.clone()));
+        call_column_column_grouping_toggle_grouping(&f);
     });
     bindings.set_batch(&run_it);
     bindings.set_schedule(&run_it);
@@ -140,9 +133,9 @@ pub extern "C" fn run() {
     check!(as_array(&MakeObjectMapResult::<JsValue>(state.0.clone(), PhantomData).at("sorting").unwrap()).len() == 0);
     check!(table.options().0 .0 != 0);
 
-    // The row model, got by calling the function-valued property (FINDING 10's
-    // stand-in again): three rows in the data's order.
-    let model = RowModel::<TableFeatures, JsValue>(call(&JsValue(table.get_row_model().0.clone())).0.clone(), PhantomData);
+    // The row model, got by calling the function-valued property: three rows
+    // in the data's order.
+    let model = call_table_row_models_get_core_row_model(&table.get_row_model());
     let rows = model.rows();
     check!(rows.len() == 3);
     let name_of = |r: &RowCore<TableFeatures, JsValue>| MakeObjectMapResult::<JsValue>(r.original().0.clone(), PhantomData).at("name").unwrap().as_string();
@@ -158,8 +151,8 @@ pub extern "C" fn run() {
     // The table's sorting members are on a type its core type is not: a view.
     let sortable = TableRowSorting::<TableFeatures, JsValue>(table.0.clone(), PhantomData);
     let sorts = JsArray::<ColumnSort>::from(vec![by_age]);
-    functional_update(Updater::T(JsValue(sortable.set_sorting().0.clone())), JsValue(sorts.0.clone()));
-    let model = RowModel::<TableFeatures, JsValue>(call(&JsValue(table.get_row_model().0.clone())).0.clone(), PhantomData);
+    call_table_row_sorting_set_sorting(&sortable.set_sorting(), Updater::T(sorts));
+    let model = call_table_row_models_get_core_row_model(&table.get_row_model());
     let names: Vec<String> = model.rows().iter().map(|r| name_of(&r)).collect();
     check!(names == ["al", "cy", "bo"]);
 }

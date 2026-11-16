@@ -68,16 +68,20 @@ check ((merged.[0]?data: ResizeArray<float>) |> Seq.toList = [ 10.0; 10.0; 10.0 
 // The rendered chart as an image.
 check (chart.getDataURL () |> fun u -> u.StartsWith "data:image/png") "getDataURL"
 
-// Events: `on` and `trigger`. FINDING 26: the handler is typed `ResizeArray<obj> -> BooleanOrVoid` (rest
-// arguments as an array) but is called with the arguments one by one.
+// Events: `on` and `trigger`. The handler is an `OnHandler` delegate with a ParamArray; Fable compiles it to a
+// one-parameter function, so `args` is the first argument itself, read by casting (finding 26, still open in part).
 let mutable fired = 0
-let handler: ResizeArray<obj> -> BooleanOrVoid =
-    let f = fun (_: ResizeArray<obj>) -> fired <- fired + 1; U2.Case2 ()
-    f
+let mutable seen: float list = []
+let handler =
+    Echarts.OnHandler(fun args ->
+        fired <- fired + 1
+        seen <- seen @ [ unbox<float> (box args) ]
+        U2.Case2 ())
 chart.on<obj, string> ("ping", handler) |> ignore
 chart.trigger<string> ("ping", box 1) |> ignore
 chart.trigger<string> ("ping", box 2) |> ignore
 check (fired = 2) "an event reaches its handler"
+check (seen = [ 1.0; 2.0 ]) "it reads what was triggered"
 chart.off (U3.Case1 "ping") |> ignore
 chart.trigger<string> ("ping", box 3) |> ignore
 check (fired = 2) "off"

@@ -1,12 +1,6 @@
 // ECharts from Rust, in a page: a bar chart on the page's #chart element,
 // its options set and read back, its size, a coordinate conversion, events
 // and disposal. Every check! must hold.
-//
-// FINDING 20: with `test-page` bound beside echarts, the bindings crate does
-// not compile: identifiers like `SeriesOption$1` (lib.rs:240, types.rs:2508,
-// echarts.rs) are not valid Rust. This program type-checks against a copy of
-// the bindings with `$1` renamed, and its JavaScript equivalent was checked in
-// Chrome; it has not run through the bindings.
 #![no_main]
 use bindings::echarts::*;
 use bindings::*;
@@ -99,18 +93,20 @@ pub extern "C" fn run() {
 
     // Events: a handler on a custom event, triggered with an argument.
     let heard = Rc::new(Cell::new(0.0));
+    let count = Rc::new(Cell::new(0));
     let handler = AnyAnyArrayToVoidOrBooleanFn::new({
         let heard = heard.clone();
-        // FINDING 5 again: the rest `...args` arrive as the first argument itself.
+        let count = count.clone();
         move |args: JsArray| {
-            heard.set(JsValue(args.0.clone()).as_f64());
+            count.set(args.len());
+            heard.set(args.get(0).as_f64());
             None
         }
     });
     // (The event name is a generic parameter: a String, not a &str.)
     chart.on("custom".to_string(), &handler, None::<JsValue>);
-    chart.trigger("custom".to_string(), vec![num(42.0)]);
-    check!(heard.get() == 42.0);
+    chart.trigger("custom".to_string(), vec![num(42.0), num(1.0)]);
+    check!(heard.get() == 42.0 && count.get() == 2);
     chart.off(Some(&text("custom")), None);
     chart.trigger("custom".to_string(), vec![num(7.0)]);
     check!(heard.get() == 42.0);

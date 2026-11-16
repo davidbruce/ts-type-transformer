@@ -93,10 +93,22 @@ let strictFails =
 check strictFails "strict error throws"
 
 // Trust: a function deciding on each \href.
-// FINDING 2: matching the TrustContext the function is given never succeeds.
-let trusting = KatexOptions.Create (trust = BooleanOrFn.Function (fun _ -> true))
+// FINDING 2 (still open): the case tests now keep their backslash, but Fable compiles matching a case whose
+// payload is an anonymous record to `if (false && ...)`, so `TrustContext.Object_ o` never matches. The context
+// is read as the object it is.
+let mutable asked: string list = []
+let decide (ctx: TrustContext) =
+    let command: string = (box ctx)?command
+    let url: string = (box ctx)?url
+    asked <- asked @ [ command + " " + url ]
+    command = @"\href" && url.StartsWith "https://example.com"
+let trusting = KatexOptions.Create (trust = BooleanOrFn.Function decide)
 let link = renderToString (@"\href{https://example.com}{x}", trusting)
 check (link.Contains "https://example.com") "a trusted link"
+check (asked = [ @"\href https://example.com" ]) "the function was given the href context"
+let refused = renderToString (@"\href{https://other.org}{x}", trusting)
+check (not (refused.Contains "href=\"https")) "a link the function refuses is not rendered"
+check (asked.Length = 2 && asked.[1] = @"\href https://other.org") "the function was asked again"
 let untrusted = renderToString @"\href{https://example.com}{x}"
 check (not (untrusted.Contains "href=\"https")) "untrusted links are not rendered as links"
 

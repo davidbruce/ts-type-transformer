@@ -2,13 +2,9 @@
 // as an option and read back, its size and pixel conversions, events, resizing,
 // disposal. Every check must hold.
 //
-// FINDING 17: the generated bindings/areas/echarts.gleam does not compile: it
-// defines `pub type List(host_model, visual, sub) = SharedList(...)` (echarts'
-// own `List` class), which shadows Gleam's List in that module ("Incorrect arity:
-// `List` requires 3 type arguments but 1 where provided", 20 times). The program
-// was checked with that alias renamed in a copy of the generated project.
-// FINDING 18: a series is a typed option (BarSeriesOption) whose `type: 'bar'` has
-// no setter (`pub const type_ = "bar"` only), so the typed series cannot be used;
+// FINDING 18: a series is a typed option (BarSeriesOption) whose `type?: 'bar'` is
+// optional in the declarations, so create() does not set it and it has no setter
+// (`pub const type_ = "bar"` only); the typed series cannot be used;
 // an EChartsCoreOption with set_at("type", ...) builds the plain object instead.
 import bindings/areas/echarts as echarts
 import bindings/areas/echarts/e_charts_core_option as raw
