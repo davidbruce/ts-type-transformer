@@ -198,7 +198,58 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         nominal_constraints(front, decls, o.exact_constraints);
     }
     prune_bundled(decls);
+    readonly_globals(decls);
     annotate_unions(front, decls);
+}
+
+// A global `var` that the global object has read-only is read-only:
+// lib.dom's `declare var document: Document` is `Window`'s `readonly
+// document`, the global object's interface being what `window` or `self` is
+// (`declare var self: Window & typeof globalThis`), with what it extends.
+// A namespace's variables are its object's, read-only (`CSS.highlights`).
+fn readonly_globals(decls: &mut [Decl]) {
+    let interfaces: HashMap<String, &Interface> = decls.iter().filter_map(|d| if let Decl::Interface(i) = d { Some((i.name.clone(), i)) } else { None }).collect();
+    let mut scopes: Vec<String> = Vec::new();
+    for d in decls.iter() {
+        if let Decl::Var(v) = d
+            && matches!(v.name.as_str(), "window" | "self")
+        {
+            let mut t = v.ty.clone();
+            visit(&mut t, &mut |x| {
+                if let Type::Ref(r) = x
+                    && interfaces.contains_key(&r.name)
+                {
+                    scopes.push(r.name.clone());
+                }
+                true
+            });
+        }
+    }
+    let mut readonly: HashSet<String> = HashSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    while let Some(name) = scopes.pop() {
+        let Some(i) = interfaces.get(&name).filter(|_| seen.insert(name.clone())) else { continue };
+        readonly.extend(i.members.iter().filter(|m| m.kind == MemberKind::Property && m.readonly).map(|m| m.name.clone()));
+        scopes.extend(i.ancestors.iter().cloned());
+        for e in &i.extends {
+            if let Type::Ref(r) = e {
+                scopes.push(r.name.clone());
+            }
+        }
+    }
+    for d in decls.iter_mut() {
+        match d {
+            Decl::Var(v) if readonly.contains(&v.name) => v.readonly = true,
+            Decl::Namespace(n) => {
+                for d in n.decls.iter_mut() {
+                    if let Decl::Var(v) = d {
+                        v.readonly = true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 // A declaration a bundler renamed (rollup's `BarSeriesOption$1`), once what

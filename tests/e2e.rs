@@ -916,6 +916,41 @@ fn run_browser(c: &Case) {
 mod dom {
     use super::*;
 
+    // Every binding of the DOM, in each wasm target's model, reaches what it
+    // names in a real browser (tests/dom/bindings.mjs): about 30,000 each.
+    #[test]
+    fn every_binding_resolves() {
+        let out = root().join("target/e2e/dom-bindings");
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let targets = [("c", "C"), ("cpp", "C++"), ("zig", "Zig"), ("rust", "Rust")];
+        let mut declared = std::collections::BTreeSet::new();
+        for (target, name) in targets {
+            let xml = lower_with(Path::new("lib.dom.d.ts"), Some(target), &[root().join("examples/modules/dom.toml")], &[]);
+            let doc = roxmltree::Document::parse(&xml).unwrap();
+            for n in doc.descendants().filter(|n| n.is_element()) {
+                declared.extend(["name", "jsName"].iter().filter_map(|a| n.attribute(*a)).map(str::to_string));
+            }
+            fs::write(out.join(format!("manifest-{target}.mjs")), generators::wasm::manifest(&model(&xml, name))).unwrap();
+        }
+        fs::write(out.join("declared.mjs"), format!("export const declared = {:?};\n", declared.into_iter().collect::<Vec<_>>())).unwrap();
+        let imports: String = targets.iter().map(|(t, _)| format!("import * as {t} from './manifest-{t}.mjs';\n")).collect();
+        let checks: String = targets.iter().map(|(t, _)| format!("results.{t} = verify({t}.bindings, {t}.implementers, declared);\n")).collect();
+        fs::write(
+            out.join("index.html"),
+            format!(
+                "<!doctype html>\n<title>bindings</title>\n<script type=\"module\">\nimport {{ verify }} from './bindings.mjs';\nimport {{ declared }} from './declared.mjs';\n{imports}const results = {{}};\n{checks}\
+const failed = Object.entries(results).flatMap(([t, r]) => r.wrong.map(w => `${{t}}: ${{w}}`));\n\
+const passed = Object.values(results).reduce((n, r) => n + r.counts.resolved, 0);\n\
+const notes = Object.entries(results).map(([t, r]) => `${{t}}: ${{Object.entries(r.counts).map(([k, n]) => `${{n}} ${{k}}`).join(', ')}}`);\n\
+window.__result = {{ passed, failed, dom: [], domChecks: 0, notes }};\n</script>\n"
+            ),
+        )
+        .unwrap();
+        fs::copy(root().join("tests/dom/bindings.mjs"), out.join("bindings.mjs")).unwrap();
+        run_browser(&Case { fixture: root().join("tests/dom"), out, xml: String::new() });
+    }
+
     #[test]
     fn c() {
         let Some([clang]) = tools(["clang"]) else { return };

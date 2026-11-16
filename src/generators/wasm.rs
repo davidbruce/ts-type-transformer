@@ -175,6 +175,57 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
     (wasm_params, body)
 }
 
+// What each import reaches, for a page to check against the real API:
+// `export const bindings = [[import, kind, owner, member, class], ...]`, the
+// owner being where its class's constructor is (`HTMLElement`), or, for an
+// interface no constructor is of (`GlobalEventHandlers`), `interface:` its
+// name; and `implementers`, the constructors of each class's or interface's
+// descendants (Chrome has `AbstractRange`'s members on `Range`'s prototype).
+pub fn manifest(m: &Model) -> String {
+    let kind = |c: &Call| match c {
+        Call::Method(_) => "method",
+        Call::Get(_) => "get",
+        Call::Set(_) => "set",
+        Call::New(_) => "new",
+        Call::Static(_) => "static",
+        Call::StaticGet(_) => "staticGet",
+        Call::StaticSet(_) => "staticSet",
+        Call::Create => "create",
+        Call::Invoke => "invoke",
+        Call::Construct => "construct",
+        Call::IndexGet => "indexGet",
+        Call::IndexSet => "indexSet",
+    };
+    let member = |c: &Call| match c {
+        Call::Method(n) | Call::Get(n) | Call::Set(n) | Call::New(n) | Call::Static(n) | Call::StaticGet(n) | Call::StaticSet(n) => n.clone(),
+        _ => String::new(),
+    };
+    let json = |s: &str| format!("{s:?}");
+    let mut out = String::from("// Generated. What each import reaches.\nexport const bindings = [\n");
+    for c in &m.classes {
+        let owner = c.js.clone().unwrap_or_else(|| format!("interface:{}", c.name));
+        for f in &c.funcs {
+            out += &format!("  [{}, {}, {}, {}, {}],\n", json(&f.import), json(kind(&f.call)), json(&owner), json(&member(&f.call)), json(&c.name));
+        }
+    }
+    for f in &m.funcs {
+        out += &format!("  [{}, {}, \"\", {}, \"\"],\n", json(&f.import), json(kind(&f.call)), json(&member(&f.call)));
+    }
+    out += "];\nexport const implementers = {\n";
+    let mut by: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for c in m.classes.iter().filter(|c| c.js.is_some()) {
+        for a in c.ancestors.iter().chain(std::iter::once(&c.name)) {
+            by.entry(a.as_str()).or_default().push(c.js.as_deref().unwrap());
+        }
+    }
+    for c in &m.classes {
+        let js = by.get(c.name.as_str()).cloned().unwrap_or_default();
+        out += &format!("  {}: [{}],\n", json(&c.name), js.iter().map(|j| json(j)).collect::<Vec<_>>().join(", "));
+    }
+    out += "};\n";
+    out
+}
+
 // JavaScript that implements every import by calling the real API.
 // The functions a compiled module imports from `env`: what the glue must provide.
 pub fn imports(wasm: &[u8]) -> HashSet<String> {

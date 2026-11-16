@@ -130,6 +130,7 @@ if (!result) {
 } else {
     const problems = [...missing.map(m => `not found: ${m}`), ...result.failed.map(f => `check failed: ${f}`), ...result.dom.map(d => `page is wrong: ${d}`), ...errors.map(e => `error: ${e}`)];
     console.log(`${browser}: ${result.passed} checks passed in the program, ${result.domChecks} on the page`);
+    for (const note of result.notes ?? []) console.log(`  ${note}`);
     if (problems.length || result.passed === 0) {
         console.error(problems.join('\n') || 'no checks ran');
         finish(1);
