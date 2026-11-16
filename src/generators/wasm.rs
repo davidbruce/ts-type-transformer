@@ -480,15 +480,23 @@ export function makeEnv(getInstance, options = {}) {
   const enums = {
 ",
     );
-    // Each package's module: given, or makeEnv fails here, not at a call.
-    let mut packages: Vec<&String> = m.packages.values().collect();
+    // Each package's module the program reaches: one asked for is given,
+    // or makeEnv fails here, not at a call; one a declaration only comes
+    // from (node's `stream`) fails where it is used, if not given.
+    let used = m.runtime_packages();
+    let mut packages: Vec<&String> = m.packages.values().filter(|p| used.contains(*p)).collect();
     packages.sort();
     packages.dedup();
-    let alone = packages.len() == 1;
+    let alone = packages.len() == 1 && m.requested_packages.len() <= 1;
     let mut pk = String::from("  const PK = {};\n");
     for p in packages {
         let given = if alone { format!("M[{p:?}] ?? options.root") } else { format!("M[{p:?}]") };
-        pk += &format!("  PK[{p:?}] = {given};\n  if (PK[{p:?}] === undefined) throw new Error({:?});\n", format!("makeEnv: no module for the package {p:?}: give it in options.modules{}", if alone { " or options.root" } else { "" }));
+        let missing = format!("makeEnv: no module for the package {p:?}: give it in options.modules{}", if alone { " or options.root" } else { "" });
+        if m.requested_packages.is_empty() || m.requested_packages.contains(p) {
+            pk += &format!("  PK[{p:?}] = {given};\n  if (PK[{p:?}] === undefined) throw new Error({missing:?});\n");
+        } else {
+            pk += &format!("  PK[{p:?}] = {given} ?? new Proxy({{}}, {{ get() {{ throw new Error({missing:?}); }} }});\n");
+        }
     }
     out = out.replacen("  const CHECK = !!options.check;\n", &format!("{pk}  const CHECK = !!options.check;\n"), 1);
     for (name, values) in &m.enums {

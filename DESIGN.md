@@ -189,7 +189,18 @@ its name with (`Stream::Duplex`); Gleam's aliases in the namespace's module
 (`stream.PipeOptions`), each class's functions in a module of its own name
 (`bindings/namespaces/stream/readable`). C has none: `Stream_PipeOptions`.
 Where a function or a generic class has the namespace's name, its
-namespace is `<name>_ns`. A declared
+namespace is `<name>_ns`.
+
+With several packages bound together, each is a module of its declarations
+as a namespace is: `pb::Node` beside `pa::Node`, `prosemirror_model::Node`,
+`fs::promises::FileHandle` for `fs/promises`, a scope's `@` part left out;
+a namespace of its package's name (node's `stream` `Stream`, `path`) is that
+module. A declaration's package is the ambient module it is declared in
+(`declare module "stream"`), bound or not, as JavaScript imports it from
+there; in `declare global`, or an ambient-module package's file outside any
+module, none. The XML's `packages` says which were asked for: a program
+must give their modules, and others only where it uses them; a type-only
+module (`stream/iter`) is imported by nothing. A declared
 type that must give way (to Zig's `Key` of a map's struct, Gleam's `Bool`)
 is named by where it comes from, before a number: its ambient module or
 file, `origin` in the XML where there are several: node's `readline` `Key`

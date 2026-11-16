@@ -21,6 +21,9 @@ pub struct Front<'c> {
     packages: Vec<(String, String)>,
     // The package each top-level declaration comes from, by its output name.
     pub package_of_name: HashMap<String, String>,
+    // Packages that are ambient modules (`@types/node`'s `fs`): what their
+    // files declare outside a `declare module` is global.
+    pub ambient_packages: HashSet<String>,
     // Where each top-level declaration comes from, as a word to name it by
     // where its name must give way: `readline` for node's `Key`.
     pub origin_of_name: HashMap<String, String>,
@@ -87,6 +90,7 @@ impl<'c> Front<'c> {
             root_file,
             packages: Vec::new(),
             package_of_name: HashMap::new(),
+            ambient_packages: HashSet::new(),
             origin_of_name: HashMap::new(),
             lib_path,
             seen: HashSet::new(),
@@ -431,12 +435,24 @@ impl<'c> Front<'c> {
     fn emit_top(&mut self, node: P<Node>, out: &mut Vec<Decl>) {
         let before = out.len();
         self.emit_decl_node(node, out);
+        // In `declare global`, or in an ambient-module package's file outside
+        // any `declare module` (`@types/node`'s `console`, `NodeJS`): global.
+        let global = std::iter::successors(node.parent(), |n| n.parent()).any(|n| n.kind() == Kind::ModuleDeclaration && ast::is_global_scope_augmentation(n));
         let ambient = std::iter::successors(node.parent(), |n| n.parent())
             .find(|n| n.kind() == Kind::ModuleDeclaration && n.name().is_some_and(|m| m.kind() == Kind::StringLiteral))
             .and_then(|m| m.name().map(|n| text(n).trim_matches(|c| c == '"' || c == '\'').to_string()))
-            // `node:events` is `events`: one module by two names.
-            .and_then(|m| self.packages.iter().find(|p| p.1.trim_start_matches("node:") == m.trim_start_matches("node:")).map(|p| p.1.clone()));
-        let package = ambient.or_else(|| ast::get_source_file_of_node(node).and_then(|f| self.package_of(f.file_name()).map(str::to_string)));
+            // `node:events` is `events`: one module by two names; one not bound
+            // is its own module still (`stream`, `readline`), where JavaScript
+            // imports it from.
+            .map(|m| self.packages.iter().find(|p| p.1.trim_start_matches("node:") == m.trim_start_matches("node:")).map_or_else(|| m.trim_start_matches("node:").to_string(), |p| p.1.clone()));
+        let package = if global {
+            None
+        } else {
+            ambient.or_else(|| {
+                let file_package = ast::get_source_file_of_node(node).and_then(|f| self.package_of(f.file_name()).map(str::to_string));
+                file_package.filter(|p| !self.ambient_packages.contains(p))
+            })
+        };
         // Its ambient module (`node:fs/promises` is `fs/promises`), else its file
         // (`readline.d.ts`), else its directory where the file is an index.
         let module = std::iter::successors(node.parent(), |n| n.parent())

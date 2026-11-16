@@ -882,7 +882,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let func_paths: HashMap<&String, Vec<String>> = m
         .funcs
         .iter()
-        .filter_map(|f| m.func_namespaces.get(&f.import).map(|(path, own, _)| (&top_names[&f.name], path.iter().cloned().chain([method_name(own)]).collect())))
+        .filter_map(|f| m.func_namespaces.get(&f.import).map(|(path, own, _, _)| (&top_names[&f.name], path.iter().cloned().chain([method_name(own)]).collect())))
         .collect();
     for (file, (body, externs, names)) in &files {
         let own: HashSet<&str> = names.iter().map(String::as_str).collect();

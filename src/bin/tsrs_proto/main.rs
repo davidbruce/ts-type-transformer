@@ -292,8 +292,11 @@ fn main() {
     let mut front = front::Front::new(&mut checker, name, bundled::lib_path());
     // Types the checker makes while collecting merge as lowering's would.
     front.merge_intersections = opts.intersections;
-    for (package, source, _) in &entries {
+    for (package, source, ambient) in &entries {
         front.add_package(package, source.file_name());
+        if ambient.is_some() {
+            front.ambient_packages.insert(package.clone());
+        }
     }
     // A lib file's namespaces gather their declarations from the other lib files.
     if is_lib {
@@ -341,7 +344,10 @@ fn main() {
     // The strategies in effect, so a consumer can check what it is reading.
     let strategies: Vec<String> = config::describe(opts).iter().map(|(k, v)| format!("{k}=\"{v}\"")).collect();
     let import = modules.import.as_ref().map(|m| format!(" import=\"{}\"", xml::escape(m))).unwrap_or_default();
-    let mut doc = format!("<declarations{import}>\n  <lowering {}/>\n", strategies.join(" "));
+    // The packages asked for: a program gives each one's module; others
+    // declarations come from only where they are used.
+    let requested = if entries.len() > 1 { format!(" packages=\"{}\"", xml::escape(&entries.iter().map(|e| e.0.as_str()).collect::<Vec<_>>().join(" "))) } else { String::new() };
+    let mut doc = format!("<declarations{import}{requested}>\n  <lowering {}/>\n", strategies.join(" "));
     for line in x.out.lines() {
         doc += &format!("  {line}\n");
     }

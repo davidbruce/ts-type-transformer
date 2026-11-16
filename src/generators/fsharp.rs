@@ -372,6 +372,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     let mut files = vec![("Bindings.Prelude.fs".to_string(), prelude)];
     for (i, group) in plan.iter().enumerate() {
         let name = if group.len() == 1 { group[0].clone() } else { format!("{}_and_{}_more", group[0], group.len() - 1) };
+        // A module of a path (`fs/promises`) is one file name still.
+        let name: String = name.chars().map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
         let mut body: String = group.iter().filter_map(|m| g.types.get(m)).map(String::as_str).collect();
         body += g.alias_types.get(&i).map_or("", String::as_str);
         // Members of earlier types that mention types of this file.
@@ -405,6 +407,31 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
     let mut modules: BTreeSet<String> = BTreeSet::new();
     let mut hard: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut soft: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    // An alias is where its parts are: a reference to one is to those.
+    let alias_refs: HashMap<&str, Vec<&str>> = root
+        .descendants()
+        .filter(|d| d.has_tag_name("typeAlias"))
+        .filter_map(|d| Some((d.attribute("id")?, d.descendants().filter(|r| r.has_tag_name("ref")).filter_map(|r| r.attribute("to")).collect())))
+        .collect();
+    let through = |to: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let mut todo = vec![to];
+        let mut seen = HashSet::new();
+        while let Some(t) = todo.pop() {
+            if !seen.insert(t) {
+                continue;
+            }
+            match alias_refs.get(t) {
+                // Its own module too: one F# declares (`OpenMode`, a union) is there.
+                Some(parts) => {
+                    out.push(t.to_string());
+                    todo.extend(parts.iter().copied());
+                }
+                _ => out.push(t.to_string()),
+            }
+        }
+        out
+    };
     for d in elements(root) {
         if d.attribute("module").is_none() || d.has_tag_name("var") || d.has_tag_name("function") {
             continue;
@@ -412,7 +439,9 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
         let Some(m) = unit(d) else { continue };
         let m = m.as_str();
         modules.insert(m.to_string());
-        let target = |r: Node| r.attribute("to").and_then(|n| units.get(n).or_else(|| home.get(n))).filter(|t| t.as_str() != m).cloned();
+        let target = |r: Node| -> Vec<String> {
+            r.attribute("to").map(|n| through(n)).unwrap_or_default().iter().filter_map(|n| units.get(n.as_str()).or_else(|| home.get(n.as_str()))).filter(|t| t.as_str() != m).cloned().collect()
+        };
         // An alias has no fixed place: it goes where its parts are (`alias_files`).
         let hard_scope: Vec<Node> = match d.tag_name().name() {
             "namespace" => vec![d],
@@ -420,9 +449,9 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
             _ => named(d, "extends").collect(),
         };
         for scope in &hard_scope {
-            hard.entry(m.to_string()).or_default().extend(scope.descendants().filter(|r| r.has_tag_name("ref")).filter_map(target));
+            hard.entry(m.to_string()).or_default().extend(scope.descendants().filter(|r| r.has_tag_name("ref")).flat_map(target));
         }
-        soft.entry(m.to_string()).or_default().extend(d.descendants().filter(|r| r.has_tag_name("ref")).filter_map(target));
+        soft.entry(m.to_string()).or_default().extend(d.descendants().filter(|r| r.has_tag_name("ref")).flat_map(target));
     }
     let names: Vec<String> = modules.into_iter().collect();
     let index: HashMap<&str, usize> = names.iter().enumerate().map(|(i, n)| (n.as_str(), i)).collect();

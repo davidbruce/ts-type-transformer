@@ -5,7 +5,7 @@
 // called (`Call`), so a generator only writes its side. The wasm boundary and
 // its glue are in `wasm`.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeSet, BTreeMap, HashMap, HashSet};
 
 use roxmltree::{Document, Node};
 
@@ -271,11 +271,16 @@ pub struct Model {
     // Types declared in a namespace, by name: their path, the namespaces
     // and their own name (`Stream`, `PipeOptions`).
     pub namespaced: HashMap<String, Vec<String>>,
-    // And the module of their namespace (`namespaces/Stream`).
-    pub namespace_modules: HashMap<String, String>,
+    // And their module (`namespaces/Stream`), with how many of the path's
+    // first segments it stands for.
+    pub namespace_modules: HashMap<String, (String, usize)>,
     // A namespace's functions, and its variables' accessors, by their
-    // import: the namespaces, their own name, their namespace's module.
-    pub func_namespaces: HashMap<String, (Vec<String>, String, String)>,
+    // import: the namespaces, their own name, their module, and how many of
+    // the namespaces it stands for.
+    pub func_namespaces: HashMap<String, (Vec<String>, String, String, usize)>,
+    // With several packages bound together, those asked for: a program must
+    // give their modules; others only where used.
+    pub requested_packages: Vec<String>,
 }
 
 impl Class {
@@ -320,6 +325,10 @@ pub fn ident(name: &str) -> String {
 
 struct Builder<'a> {
     target: &'a str,
+    // Several packages bound together: each is a module of its declarations.
+    multi: bool,
+    // Each top-level namespace's own name in its package, by its name.
+    namespace_names: HashMap<String, String>,
     // Every declaration by qualified name.
     decls: HashMap<String, Node<'a, 'a>>,
     model: Model,
@@ -370,7 +379,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -385,6 +394,8 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         folder_names: HashMap::new(),
         package: None,
         root_import: doc.root_element().attribute("import").map(str::to_string),
+        multi: doc.root_element().has_attribute("packages"),
+        namespace_names: HashMap::new(),
         js_prefix: String::new(),
         declared: Vec::new(),
         has_ids: doc.descendants().any(|d| d.has_attribute("id")),
@@ -399,6 +410,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
             b.type_ident(path);
         }
     }
+    b.model.requested_packages = doc.root_element().attribute("packages").map(|p| p.split(' ').map(str::to_string).collect()).unwrap_or_default();
     b.decls_of(doc.root_element(), "");
     b.nest_generated(doc.root_element());
     let mut opaque: Vec<String> = b.opaque.into_iter().collect();
@@ -553,9 +565,12 @@ impl<'a> Builder<'a> {
             }
             // Declared in a namespace (`Stream.PipeOptions`): it gives way to a
             // top-level declaration a target would name the same.
-            if path.contains('.') && !flag(d, "synthetic") {
-                self.model.namespaced.insert(self.type_ident(&path), path.split('.').map(str::to_string).collect());
-                self.model.namespace_modules.insert(self.type_ident(&path), self.module.clone());
+            if !flag(d, "synthetic")
+                && matches!(d.tag_name().name(), "interface" | "class" | "typeAlias" | "enum")
+                && let Some((full, depth)) = self.scope(&path).map(|(f, depth)| (self.exported_as(d, f), depth))
+            {
+                self.model.namespaced.insert(self.type_ident(&path), full);
+                self.model.namespace_modules.insert(self.type_ident(&path), (self.module.clone(), depth));
             }
             if let Some(origin) = d.attribute("origin") {
                 self.model.origins.insert(self.type_ident(&path), origin.to_string());
@@ -563,6 +578,11 @@ impl<'a> Builder<'a> {
             match d.tag_name().name() {
                 "lowering" => {}
                 "namespace" => {
+                    // A package's namespace by the name it exports (`pb`'s `util`).
+                    if prefix.is_empty() {
+                        let own = self.exported_name(d, name);
+                        self.namespace_names.insert(name.to_string(), own);
+                    }
                     let inner = join(&self.js_prefix, d.attribute("jsName").unwrap_or(name));
                     let outer = std::mem::replace(&mut self.js_prefix, inner);
                     self.decls_of(d, &path);
@@ -607,10 +627,10 @@ impl<'a> Builder<'a> {
                 "function" => {
                     let (params, rest, fixed, ret) = self.signature(d, "");
                     let js = self.js(d, &path);
-                    let own = name;
+                    let own = self.exported_name(d, name);
                     let name = ident(&join(prefix, name));
                     let import = self.import(name.clone());
-                    self.namespace_func(prefix, &import, own);
+                    self.namespace_func(prefix, &import, &own);
                     let type_params = std::mem::take(&mut self.last_type_params);
                     self.model.funcs.push(Func { type_params, module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret });
                 }
@@ -621,17 +641,20 @@ impl<'a> Builder<'a> {
                         // A type may have the same name (`type NodeFilter` and `var NodeFilter`).
                         let name = if self.decls.contains_key(&path) { format!("{}_statics", self.type_ident(&path)) } else { self.type_ident(&path) };
                         // A namespace's, as its types are: `Intl.Locale`'s statics, `intl.Locale_statics`.
-                        if let Some((ns, own)) = path.rsplit_once('.') {
-                            let own = if self.decls.contains_key(&path) { format!("{own}_statics") } else { own.to_string() };
-                            self.model.namespaced.insert(name.clone(), ns.split('.').map(str::to_string).chain([own]).collect());
-                            self.model.namespace_modules.insert(name.clone(), self.module.clone());
+                        if let Some((mut full, depth)) = self.scope(&path) {
+                            if self.decls.contains_key(&path) {
+                                let own = full.pop().unwrap_or_default();
+                                full.push(format!("{own}_statics"));
+                            }
+                            self.model.namespaced.insert(name.clone(), full);
+                            self.model.namespace_modules.insert(name.clone(), (self.module.clone(), depth));
                         }
                         let c = self.statics(body, &self.js(d, &path), name);
                         self.model.classes.push(c);
                         continue;
                     }
                     let ret = self.ty(body, "");
-                    let own = name;
+                    let own = &self.exported_name(d, name);
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
                     self.namespace_func(prefix, &import, &format!("get_{}", ident(own)));
@@ -708,21 +731,81 @@ impl<'a> Builder<'a> {
             let id = d.attribute("id").unwrap_or_default();
             let Some(ns) = owner.get(id).filter(|ns| !ns.is_empty()) else { continue };
             let Some(own) = id.strip_prefix(&format!("{}_", ns.join("_"))) else { continue };
-            // In the namespace's module, as its own declarations are.
-            let Some(module) = root.descendants().find(|n| n.has_tag_name("namespace") && n.parent() == Some(root) && attr(*n, "name") == ns[0]).and_then(|n| n.attribute("module")) else { continue };
+            // In the namespace's module, as its own declarations are; with
+            // several packages, in its package's (`fs`'s `readFile`).
+            let Some(top) = root.descendants().find(|n| n.has_tag_name("namespace") && n.parent() == Some(root) && attr(*n, "name") == ns[0]) else { continue };
+            let Some(module) = top.attribute("module") else { continue };
+            let package = top.attribute("import").map(str::to_string).or_else(|| self.root_import.clone());
             let module = self.folder("namespaces", module);
+            let Some((full, depth)) = self.scope_in(package.as_deref(), &ns.iter().cloned().chain([own.to_string()]).collect::<Vec<_>>().join(".")) else { continue };
             let name = self.type_ident(id);
-            self.model.namespaced.insert(name.clone(), ns.iter().cloned().chain([own.to_string()]).collect());
-            self.model.namespace_modules.insert(name, module);
+            self.model.namespaced.insert(name.clone(), full);
+            self.model.namespace_modules.insert(name, (module, depth));
         }
     }
 
     // A namespace's function, or a variable's accessor: its namespace and its
     // own name (`Geometry`, `distance`), by its import.
     fn namespace_func(&mut self, prefix: &str, import: &str, own: &str) {
-        if !prefix.is_empty() {
-            self.model.func_namespaces.insert(import.to_string(), (prefix.split('.').map(str::to_string).collect(), own.to_string(), self.module.clone()));
+        if let Some((mut full, depth)) = self.scope(&join(prefix, own)) {
+            full.pop();
+            self.model.func_namespaces.insert(import.to_string(), (full, own.to_string(), self.module.clone(), depth));
         }
+    }
+
+    // A package's declaration by the name it exports, not one it was given
+    // apart from another package's (`pb_Node` is `pb`'s `Node`); not
+    // `default`, which names no declaration.
+    fn exported_name(&self, d: Node, name: &str) -> String {
+        match d.attribute("jsName").filter(|j| *j != "default" && self.multi && self.package.is_some() && !d.ancestors().skip(1).any(|a| a.has_tag_name("namespace"))) {
+            Some(js) => js.to_string(),
+            None => name.to_string(),
+        }
+    }
+
+    fn exported_as(&self, d: Node, mut full: Vec<String>) -> Vec<String> {
+        if let Some(last) = full.last_mut() {
+            *last = self.exported_name(d, last);
+        }
+        full
+    }
+
+    // Where a declaration of this path is, if not at the top level: its
+    // namespaces (`Stream.PipeOptions`), and with several packages its
+    // package's module first (`prosemirror-model` is `prosemirror_model`,
+    // `fs/promises` `fs`, `promises`, `@dimforge/rapier3d-compat`
+    // `rapier3d_compat`). A namespace of its package's name (node's `stream`
+    // `Stream`, `path`) is that module. With how many of the segments its
+    // module stands for.
+    fn scope(&self, path: &str) -> Option<(Vec<String>, usize)> {
+        self.scope_in(self.package.as_deref(), path)
+    }
+
+    fn scope_in(&self, package: Option<&str>, path: &str) -> Option<(Vec<String>, usize)> {
+        let mut parts: Vec<String> = path.split('.').map(str::to_string).collect();
+        if parts.len() > 1
+            && let Some(own) = self.namespace_names.get(&parts[0])
+        {
+            parts[0] = own.clone();
+        }
+        let package: Vec<String> = match package {
+            Some(p) if self.multi && Some(p) != self.root_import.as_deref() => {
+                let p = p.trim_start_matches("node:");
+                let p = if p.starts_with('@') { p.split_once('/').map_or(p, |x| x.1) } else { p };
+                p.split('/').filter(|s| !s.is_empty()).map(ident).collect()
+            }
+            _ => Vec::new(),
+        };
+        if package.is_empty() {
+            return (parts.len() > 1).then(|| (parts, 1));
+        }
+        let same = |a: &str, b: &str| a.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).eq(b.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase));
+        let depth = package.len();
+        if parts.len() > 1 && same(&parts[0], package.last().unwrap()) {
+            return Some((package.into_iter().chain(parts.into_iter().skip(1)).collect(), depth));
+        }
+        let depth = if parts.len() > 1 { depth + 1 } else { depth };
+        Some((package.into_iter().chain(parts).collect(), depth))
     }
 
     // Where a declaration is reached: its JavaScript path, in its package when
@@ -1524,5 +1607,39 @@ pub fn mentions(t: &Ty, p: &str) -> bool {
         Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => mentions(inner, p),
         Ty::Tuple(es) | Ty::Union(es) | Ty::Generic(_, es) => es.iter().any(|e| mentions(e, p)),
         _ => false,
+    }
+}
+
+impl Model {
+    // The packages the program's JavaScript is reached through: its calls,
+    // its classes, and those unions test values to be instances of. A type
+    // has none at runtime (node's `stream/iter`).
+    pub fn runtime_packages(&self) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        let mut note = |path: &str| {
+            if let Some((p, _)) = path.split_once("::") {
+                out.insert(p.to_string());
+            }
+        };
+        for f in self.funcs.iter().chain(self.classes.iter().flat_map(|c| &c.funcs)) {
+            if let Call::New(p) | Call::Static(p) | Call::StaticGet(p) | Call::StaticSet(p) = &f.call {
+                note(p);
+            }
+        }
+        for c in &self.classes {
+            if let Some(js) = &c.js {
+                note(js);
+            }
+        }
+        for u in &self.unions {
+            for t in u.tests.iter().flatten() {
+                if let Some(class) = t.strip_prefix("instanceof:")
+                    && let Some(js) = self.js_refs.get(class)
+                {
+                    note(js);
+                }
+            }
+        }
+        out
     }
 }

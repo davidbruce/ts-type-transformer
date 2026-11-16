@@ -913,10 +913,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let (namespaces, in_structs) = namespace_aliases(m);
     // A namespace's functions where it is a class's: its statics, by their own names.
     let containers = namespace_containers(m);
+    let levels = level_names(m);
     let mut class_statics: HashMap<String, Vec<Func>> = HashMap::new();
     let mut class_statics_of: HashSet<String> = HashSet::new();
     for f in &m.funcs {
-        if let Some((path, own, _)) = m.func_namespaces.get(&f.import)
+        if let Some((path, own, _, _)) = m.func_namespaces.get(&f.import)
             && path.len() == 1
             && let Some(Container::Class(c)) = containers.get(&path[0])
         {
@@ -1162,14 +1163,18 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let mut seen = BTreeSet::new();
     for f in m.funcs.iter().filter(|f| !class_statics_of.contains(&f.import)) {
         // A namespace's, by its own name in a namespace of it: `marked_ns::parseInline`.
-        let space = m.func_namespaces.get(&f.import).map(|(path, _, _)| {
+        let space = m.func_namespaces.get(&f.import).map(|(path, _, _, _)| {
             let top = match &containers.get(&path[0]) {
                 Some(Container::Namespace(n)) => n.clone(),
                 _ => format!("{}_ns", ident(&path[0])),
             };
-            std::iter::once(top).chain(path[1..].iter().map(|s| ident(s))).collect::<Vec<_>>().join("::")
+            let mut parts = vec![top];
+            for i in 1..path.len() {
+                parts.push(nested_name(&levels, &path[..i], &path[i]));
+            }
+            parts.join("::")
         });
-        let name = m.func_namespaces.get(&f.import).map_or_else(|| cpp_name(f, "create"), |(_, own, _)| cpp_name_as(f, own, "create"));
+        let name = m.func_namespaces.get(&f.import).map_or_else(|| cpp_name(f, "create"), |(_, own, _, _)| cpp_name_as(f, own, "create"));
         let mut func = function(f, name, "", "", Place::Free, unions);
         if let Some(space) = &space {
             let wrap = |text: &str| if text.is_empty() { String::new() } else { format!("namespace {space} {{\n{text}}}\n") };
@@ -1486,19 +1491,28 @@ fn namespace_aliases(m: &Model) -> (String, HashMap<String, String>) {
         format!("{}using {} = ::{target}{args};\n", head(&params, true).replace('\n', " "), ident(leaf))
     };
     // One level: its own types' aliases, then each namespace in it.
-    fn level(entries: &[(Vec<String>, String, String)], at: &[String], kind: &str, indent: &str, alias: &dyn Fn(&str, &str) -> String) -> String {
+    let levels = level_names(m);
+    fn level(entries: &[(Vec<String>, String, String)], at: &[String], kind: &str, indent: &str, alias: &dyn Fn(&str, &str) -> String, levels: &HashMap<Vec<String>, HashSet<String>>) -> String {
         let mut out = String::new();
         let own: Vec<&String> = entries.iter().filter(|(p, _, _)| p == at).map(|(_, l, _)| l).collect();
+        // Each name once (node's `cluster` has a class and an interface `Worker`).
+        let mut seen: HashSet<String> = HashSet::new();
         for (_, leaf, target) in entries.iter().filter(|(p, _, _)| p == at) {
-            out += &format!("{indent}{}", alias(leaf, target));
+            let mut name = leaf.clone();
+            let mut i = 2;
+            while !seen.insert(name.clone()) {
+                name = format!("{leaf}_{i}");
+                i += 1;
+            }
+            out += &format!("{indent}{}", alias(&name, target));
         }
         let children: BTreeSet<&String> = entries.iter().filter(|(p, _, _)| p.len() > at.len() && p[..at.len()] == *at).map(|(p, _, _)| &p[at.len()]).collect();
         for child in children {
             let mut path = at.to_vec();
             path.push(child.clone());
-            // Beside a type of its name it is apart.
-            let name = if own.contains(&child) { format!("{}_ns", ident(child)) } else { ident(child) };
-            let inner = level(entries, &path, kind, &format!("{indent}    "), alias);
+            // Beside a type or function of its name it is apart.
+            let name = if own.contains(&child) || levels.get(at).is_some_and(|n| n.contains(&ident(child))) { format!("{}_ns", ident(child)) } else { ident(child) };
+            let inner = level(entries, &path, kind, &format!("{indent}    "), alias, levels);
             out += &if kind == "struct" { format!("{indent}struct {name} {{\n{inner}{indent}}};\n") } else { format!("{indent}namespace {name} {{\n{inner}{indent}}}\n") };
         }
         out
@@ -1511,14 +1525,32 @@ fn namespace_aliases(m: &Model) -> (String, HashMap<String, String>) {
     for top in tops {
         match &containers[top] {
             Container::Class(c) => {
-                in_structs.insert(c.clone(), level(&entries, std::slice::from_ref(top), "struct", "    ", &alias));
+                in_structs.insert(c.clone(), level(&entries, std::slice::from_ref(top), "struct", "    ", &alias, &levels));
             }
             Container::Namespace(name) => {
-                namespaces += &format!("namespace {name} {{\n{}}}\n", level(&entries, std::slice::from_ref(top), "namespace", "    ", &alias));
+                namespaces += &format!("namespace {name} {{\n{}}}\n", level(&entries, std::slice::from_ref(top), "namespace", "    ", &alias, &levels));
             }
         }
     }
     (namespaces, in_structs)
+}
+
+// The names directly in each namespace: its types' and functions' own.
+fn level_names(m: &Model) -> HashMap<Vec<String>, HashSet<String>> {
+    let mut out: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
+    for path in m.namespaced.values() {
+        out.entry(path[..path.len() - 1].to_vec()).or_default().insert(ident(path.last().unwrap()));
+    }
+    for (path, own, _, _) in m.func_namespaces.values() {
+        out.entry(path.clone()).or_default().insert(ident(own));
+    }
+    out
+}
+
+// A nested namespace's name: `<name>_ns` where its parent has something of
+// its name (`events`' class `EventEmitter` beside its namespace of functions).
+fn nested_name(levels: &HashMap<Vec<String>, HashSet<String>>, parent: &[String], name: &str) -> String {
+    if levels.get(parent).is_some_and(|n| n.contains(&ident(name))) { format!("{}_ns", ident(name)) } else { ident(name) }
 }
 
 // Where a top-level namespace's types and functions are: in the class it
@@ -1542,7 +1574,7 @@ fn namespace_containers(m: &Model) -> HashMap<String, Container> {
             e.insert(ident(&path[1]));
         }
     }
-    for (path, leaf, _) in m.func_namespaces.values() {
+    for (path, leaf, _, _) in m.func_namespaces.values() {
         let e = own.entry(path[0].clone()).or_default();
         if path.len() == 1 {
             e.insert(ident(leaf));

@@ -1640,7 +1640,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let mut taken_in: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
     for f in &m.funcs {
         let (out, name) = match m.func_namespaces.get(&f.import) {
-            Some((path, own, _)) => {
+            Some((path, own, _, _)) => {
                 let segments: Vec<String> = path.iter().map(|s| ns_module(s)).collect();
                 let base = rust_function(f, own);
                 let taken = taken_in.entry(segments.clone()).or_default();

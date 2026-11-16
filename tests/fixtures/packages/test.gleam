@@ -8,7 +8,7 @@ import bindings/types as t
 import gleam/io
 import bindings/areas/pa/node
 import bindings/areas/pa/point
-import bindings/areas/pb/pb_node
+import bindings/areas/pb/node as pb_node
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -26,9 +26,9 @@ pub fn main() {
   let assert t.NodeOrStringNode(a) = pa.pick(True)
   check(node.name(a) == "a", "pa's pick")
   let assert t.NodeOrStringString(_) = pa.pick(False)
-  let assert t.PbNodeOrStringPbNode(n) = pb.pb_pick(True)
+  let assert t.PbNodeOrStringPbNode(n) = pb.pick(True)
   check(pb_node.size(n) == 10.0, "pb's pick")
-  let assert t.PbNodeOrStringString(_) = pb.pb_pick(False)
+  let assert t.PbNodeOrStringString(_) = pb.pick(False)
 
   // pa's own Point, and geo's, a type declared elsewhere of the same name.
   let own = point.new()

@@ -686,7 +686,10 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     let mut class_paths: HashMap<String, String> = HashMap::new();
     for c in &m.classes {
         // A namespace's class by its own name: `ns.Node`'s is `namespaces/ns/node`.
-        let own = m.namespaced.get(&c.name).map(|p| p[1..].iter().map(|s| snake(&upper(s))).collect::<Vec<_>>().join("/"));
+        let own = m.namespaced.get(&c.name).map(|p| {
+            let depth = m.namespace_modules.get(&c.name).map_or(1, |(_, d)| *d).min(p.len() - 1);
+            p[depth..].iter().map(|s| snake(&upper(s))).collect::<Vec<_>>().join("/")
+        });
         let mut segment = own.unwrap_or_else(|| snake(&g.tname(&c.name)));
         if KEYWORDS.contains(&segment.as_str()) {
             segment.push('_');
@@ -733,7 +736,9 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
               @external(javascript, \"./runtime_ffi.mjs\", \"codec_list\")\npub fn codec_list(of: Codec(a)) -> Codec(List(a))\n\n";
     g.note("Dynamic");
     g.note("Option");
-    let mut packages: Vec<&String> = m.packages.values().collect();
+    // The modules the program reaches: not a type-only one (node's `stream/iter`).
+    let used = m.runtime_packages();
+    let mut packages: Vec<&String> = m.packages.values().filter(|p| used.contains(*p)).collect();
     packages.sort();
     packages.dedup();
     let mut imports = String::new();
@@ -988,8 +993,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         match m.func_namespaces.get(&f.import) {
             // A namespace's by its own name, in its module (a nested one's
             // in a module of it): `geometry.distance`, `deep.twice`.
-            Some((path, own, _)) => {
-                let unit = std::iter::once(paths[&f.module].clone()).chain(path[1..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
+            Some((path, own, _, depth)) => {
+                let unit = std::iter::once(paths[&f.module].clone()).chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
                 g.switch(&unit);
                 let id = g.fresh_value(&function_name(f, own));
                 g.function(&id, f, None);
@@ -1023,11 +1028,12 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         .unwrap_or_default();
     let mut aliases: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
     for (name, path) in &m.namespaced {
-        let Some(module) = m.namespace_modules.get(name) else { continue };
+        let Some((module, depth)) = m.namespace_modules.get(name) else { continue };
         let gleam = g.tname(name);
         let Some(params) = headers.get(&gleam) else { continue };
         let base = paths.get(module).cloned().unwrap_or_else(|| format!("bindings/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/")));
-        let unit = std::iter::once(base).chain(path[1..path.len() - 1].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
+        // Past what its module stands for: a namespace's own module.
+        let unit = std::iter::once(base).chain(path[(*depth).min(path.len() - 1)..path.len() - 1].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
         aliases.entry(unit).or_default().push((upper(path.last().unwrap()), gleam, params.clone()));
     }
     for (unit, list) in aliases {
@@ -1047,7 +1053,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
 
     // Each module: what it imports of the others, of Gleam's, and its JavaScript's.
     let mut files = Vec::new();
-    for (path, unit) in std::mem::take(&mut g.units).into_iter().filter(|(p, _)| !p.is_empty()) {
+    // Not a module with nothing in it (one whose aliases all gave way).
+    for (path, unit) in std::mem::take(&mut g.units).into_iter().filter(|(p, u)| !p.is_empty() && !(u.out.trim().is_empty() && u.ffi.is_empty())) {
         let mut by_module: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
         for t in &unit.used {
             let module = match t.as_str() {
