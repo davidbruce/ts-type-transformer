@@ -350,7 +350,9 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
         let name = by_key
             .entry(type_key(t))
             .or_insert_with(|| {
-                let base = if parts.len() <= 3 { parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}")) } else { path.join(sep) };
+                // By its members, if a few short ones; else where it is.
+                let joined = parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}"));
+                let base = if parts.len() <= 3 && (joined.len() <= NAME_MAX || path.is_empty()) { joined } else { path.join(sep) };
                 let name = unique(base, names);
                 // Type parameters the union mentions become its own.
                 let free = free_type_params(t);
@@ -1803,16 +1805,26 @@ fn widen(t: &mut Type) {
     }
 }
 
+// The longest name made of others' before it is cut and hashed.
+const NAME_MAX: usize = 64;
+
 fn unique(base: String, taken: &mut HashSet<String>) -> String {
-    // A name made of a long path (`Class_extend_result_extend_result_...`)
-    // keeps its start and a hash of the rest: names become file names.
-    let base = if base.len() > 64 {
-        let hash = base.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
-        let mut cut = 48;
-        while !base.is_char_boundary(cut) {
-            cut -= 1;
+    // A name made of a long path (echarts' `MapToType` of `Path`'s properties,
+    // `Path__transitionState_animationProps___value_changed_…`) keeps where it
+    // starts and where it ends: names become file names.
+    let parts: Vec<&str> = base.split('_').collect();
+    let base = if base.len() > NAME_MAX && parts.len() > 2 {
+        let mut tail = Vec::new();
+        let head = parts[0];
+        for p in parts[1..].iter().rev() {
+            if head.len() + tail.iter().map(|t: &&str| t.len() + 1).sum::<usize>() + p.len() + 1 > NAME_MAX {
+                break;
+            }
+            tail.insert(0, *p);
         }
-        format!("{}_{:08x}", &base[..cut], hash as u32)
+        if tail.iter().all(|t| t.is_empty()) { hashed(&base) } else { format!("{head}_{}", tail.join("_")) }
+    } else if base.len() > NAME_MAX {
+        hashed(&base)
     } else {
         base
     };
@@ -1823,6 +1835,16 @@ fn unique(base: String, taken: &mut HashSet<String>) -> String {
         n += 1;
     }
     name
+}
+
+// A name too long to keep: its start and a hash of it.
+fn hashed(base: &str) -> String {
+    let hash = base.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+    let mut cut = 48;
+    while !base.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}_{:08x}", &base[..cut], hash as u32)
 }
 
 // ---- anonymous types ----
@@ -1915,9 +1937,11 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                 .entry(key)
                 .or_insert_with(|| {
                     let shared = uses.get(&type_key(t)).is_some_and(|n| *n > 1);
+                    let at = best.get(&type_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep));
+                    // A shared callback by what it takes, if that is short; else where it is first.
                     let base = match t {
-                        Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep),
-                        _ => best.get(&type_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep)),
+                        Type::Function(s) | Type::Constructor(s) if shared => Some(callback_name(s, sep)).filter(|n| n.len() <= NAME_MAX).unwrap_or(at),
+                        _ => at,
                     };
                     let name = unique(base, &mut names);
                     // Enclosing type parameters the type mentions become its own.
@@ -2320,8 +2344,13 @@ fn family_names_from(base: &str, sigs: &[&Signature], own: &[Vec<String>], base_
             (!added.is_empty()).then(|| with(added.clone())),
             retyped.last().map(|t| with(vec![t.clone()])),
             (!retyped.is_empty()).then(|| with(retyped.clone())),
+            // Too long to say all it adds (`compressedTexImage2D(…, srcData,
+            // srcOffset, srcLengthOverride)`): the first.
+            added.first().map(|a| with(vec![a.clone()])),
+            varying.first().map(|v| with(vec![v.clone()])),
         ];
-        let name = candidates.into_iter().flatten().find(|c| !taken.contains(c)).unwrap_or_else(|| format!("{base}{sep}{}", n + 1));
+        let free: Vec<String> = candidates.into_iter().flatten().filter(|c| !taken.contains(c)).collect();
+        let name = free.iter().find(|c| c.len() <= NAME_MAX).or(free.first()).cloned().unwrap_or_else(|| format!("{base}{sep}{}", n + 1));
         out.push(unique(name, taken));
     }
     out

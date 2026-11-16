@@ -1380,6 +1380,17 @@ impl<'c> Front<'c> {
         if let Some(a) = self.array_like(t) {
             return a;
         }
+        // A mapped type over a primitive's keys is the primitive (echarts'
+        // `MapToType<string, S>`), as TypeScript has it: an object of `String`'s
+        // members is a string.
+        let names: HashSet<String> = self.c.get_properties_of_type_exported(t).iter().map(|p| p.name().to_string()).collect();
+        let has = |ns: &[&str]| ns.iter().all(|n| names.contains(*n));
+        for (prim, own) in [("string", ["charAt", "charCodeAt", "toUpperCase"]), ("number", ["toFixed", "toExponential", "toPrecision"])] {
+            if has(&own) {
+                self.count("widened: object of a primitive's members -> the primitive");
+                return Type::prim(prim);
+            }
+        }
         self.in_progress.push(t.id());
         let members = self.members_of_type(t, None);
         self.in_progress.pop();
