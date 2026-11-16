@@ -524,6 +524,7 @@ impl<'m> Gen<'m> {
             Call::Construct => format!("new self({list})"),
             Call::IndexGet => format!("self[{first}]"),
             Call::IndexSet => format!("self[{first}] = {second}"),
+            Call::Apply => format!("({first})({})", args.get(1..).unwrap_or_default().join(", ")),
         };
         let body = match &f.ret {
             Ty::Void => format!("{call};\n  return undefined;"),

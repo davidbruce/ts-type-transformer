@@ -135,6 +135,9 @@ pub enum Call {
     // `object[key]`, from an index signature.
     IndexGet,
     IndexSet,
+    // Its first argument, a function, called with the rest: what calls a
+    // callback a value holds (`call_Transaction_fn(view.dispatch, tr)`).
+    Apply,
 }
 
 #[derive(Clone)]
@@ -471,6 +474,15 @@ impl<'a> Builder<'a> {
         }
     }
 
+    // A function calling a callback, given it: a callback a value holds
+    // (`view.dispatch`, `table.getRowModel`) is called with it.
+    fn caller(&mut self, owner: &str, params: &[(String, Ty)], ret: &Ty, type_params: &[TParam], rest: bool) {
+        let f = if type_params.is_empty() { Ty::Obj(owner.to_string()) } else { Ty::Generic(owner.to_string(), type_params.iter().map(|p| Ty::Param(p.name.clone())).collect()) };
+        let import = self.import(format!("{owner}_call"));
+        let params = std::iter::once(("f".to_string(), f)).chain(params.iter().cloned()).collect();
+        self.model.funcs.push(Func { type_params: type_params.to_vec(), module: self.module.clone(), import, name: format!("call_{owner}"), call: Call::Apply, params, rest, fixed: vec![], shared: None, ret: ret.clone() });
+    }
+
     // Whether a type is a function that knows no `this` of its own: one
     // written so, an alias of one, or a type of only call signatures.
     fn function_value(&self, t: Node) -> bool {
@@ -627,7 +639,9 @@ impl<'a> Builder<'a> {
                     let owner = self.type_ident(&path);
                     let (params, _, _, ret) = self.callback_signature(only_child(d), &owner);
                     let rest = named(only_child(d), "parameter").last().is_some_and(|p| flag(p, "rest"));
-                    self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params), rest });
+                    let type_params = std::mem::take(&mut self.last_type_params);
+                    self.caller(&owner, &params, &ret, &type_params, rest);
+                    self.model.callbacks.push(Callback { name: owner, params, ret, type_params, rest });
                 }
                 "interface" | "class" => {
                     let c = self.class_at(d, &path, &self.js(d, &path));
@@ -640,8 +654,8 @@ impl<'a> Builder<'a> {
                         let owner = self.type_ident(&path);
                         let (params, _, _, ret) = self.callback_signature(body, &owner);
                         let rest = named(body, "parameter").last().is_some_and(|p| flag(p, "rest"));
-                        self.last_type_params = alias_params.clone();
-                        self.model.callbacks.push(Callback { name: owner, params, ret, type_params: std::mem::take(&mut self.last_type_params), rest });
+                        self.caller(&owner, &params, &ret, &alias_params, rest);
+                        self.model.callbacks.push(Callback { name: owner, params, ret, type_params: alias_params.clone(), rest });
                     }
                     // A named object type is an interface in all but syntax.
                     if body.has_tag_name("object") {

@@ -168,6 +168,11 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
         Call::Construct => format!("new (get(self))({args})"),
         Call::IndexGet => format!("get(self)[{args}]"),
         Call::IndexSet => format!("get(self)[{first}] = {second}"),
+        // The function is a handle: `get(a0)`, with no comma in it.
+        Call::Apply => {
+            let (f, rest) = args.split_once(", ").unwrap_or((args.as_str(), ""));
+            format!("({f})({rest})")
+        }
     };
     let body = match &f.ret {
         Ty::Void => format!("{{ {call}; }}"),
@@ -196,6 +201,7 @@ pub fn manifest(m: &Model) -> String {
         Call::Construct => "construct",
         Call::IndexGet => "indexGet",
         Call::IndexSet => "indexSet",
+        Call::Apply => "invoke",
     };
     let member = |c: &Call| match c {
         Call::Method(n) | Call::Get(n) | Call::GetBound(n) | Call::Set(n) | Call::New(n) | Call::Static(n) | Call::StaticGet(n) | Call::StaticSet(n) => n.clone(),

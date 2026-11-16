@@ -334,7 +334,8 @@ fn rust_bindings(rustc: &Path, out: &Path, model: &generators::model::Model) {
     (&files, RUSTC_WASM).hash(&mut hasher);
     let stamp = format!("{:x}", hasher.finish());
     let cache = root().join("target/e2e-cache");
-    let name = out.file_name().unwrap().to_string_lossy().to_string();
+    // By the whole output path: `multifile-pkg/rust` is not `rust`.
+    let name = out.strip_prefix(root().join("target")).unwrap_or(out).to_string_lossy().replace(['/', '\\'], "-");
     let (lib, stamp_file) = (cache.join(format!("{name}.rlib")), cache.join(format!("{name}.stamp")));
     write_files(&out.join("bindings"), files);
     if !(lib.exists() && fs::read_to_string(&stamp_file).is_ok_and(|s| s == stamp)) {
