@@ -13,7 +13,7 @@ let check (ok: bool) (what: string) =
 
 // Values made here, one per case.
 let widget = Widget.Create "w"
-let options = jsOptions<Options> (fun o -> o.verbose <- true)
+let options = Options.Create (verbose = true)
 // A value of a case's type is the union where an argument is one; `!^`
 // makes one elsewhere; a case can be named.
 check (describe "text" = "string text") "string case in"

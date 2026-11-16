@@ -1357,7 +1357,10 @@ impl Gen {
             Some(module) if prefix.is_empty() => format!("{indent}[<Import({js_name:?}, {module:?})>]\n"),
             _ => String::new(),
         };
-        self.out += &format!("{origin}{indent}[<AllowNullLiteral>]\n{indent}type {header} =\n");
+        // A static member makes F# take it for a class unless told.
+        let factory = if d.has_tag_name("class") { None } else { self.factory(d, &owner) };
+        let kind = if factory.is_some() { "AllowNullLiteral; Interface" } else { "AllowNullLiteral" };
+        self.out += &format!("{origin}{indent}[<{kind}>]\n{indent}type {header} =\n");
         let mut body = Vec::new();
         // A subclass of Array is a seq with an indexer and a length: an F#
         // interface cannot inherit ResizeArray, which is a class.
@@ -1418,6 +1421,9 @@ impl Gen {
         }
         body.extend(self.members(&instance, &owner, &extend, indent));
         body.extend(self.redeclared(d, &left, &body, &owner, &extend, indent));
+        if let Some(line) = factory {
+            body.push(format!("{indent}    [<ParamObject; Emit(\"$0\")>]\n{indent}    static member Create ({line}) : {owner} = jsNative\n"));
+        }
         if body.is_empty() {
             body.push(format!("{indent}    interface end\n"));
         }
@@ -1426,6 +1432,60 @@ impl Gen {
         if d.has_tag_name("class") {
             self.static_side(&name, &path, &statics, Some(&owner), indent);
         }
+    }
+
+    // An options bag (only properties, its bases' too) is made with named
+    // arguments: `AddEventListenerOptions.Create (once = true)`, the object
+    // they make, by Fable's ParamObject. Not where a value of its name has
+    // a `Create` (a class), nor where an argument would be of a later file.
+    fn factory(&mut self, d: Node, owner: &str) -> Option<String> {
+        let root = d.document().root_element();
+        let raw = attr(d, "name");
+        let constrained = d.attribute("id").is_some_and(|id| self.constrained.contains_key(id));
+        if constrained || d.parent().is_some_and(|p| elements(p).any(|v| v.has_tag_name("var") && attr(v, "name") == raw)) {
+            return None;
+        }
+        // Own properties first, then each base's not declared again.
+        let mut props: Vec<Node> = Vec::new();
+        let mut todo = vec![d];
+        let mut seen = HashSet::new();
+        while let Some(t) = todo.pop() {
+            if !seen.insert(t.attribute("id").unwrap_or(attr(t, "name")).to_string()) {
+                continue;
+            }
+            let src = if t.has_tag_name("typeAlias") { only_child_type(t) } else { t };
+            for m in elements(src).filter(|m| !m.has_tag_name("typeParameter") && !m.has_tag_name("extends")) {
+                if !m.has_tag_name("property") || flag(m, "static") {
+                    return None;
+                }
+                if !props.iter().any(|p| attr(*p, "name") == attr(m, "name")) {
+                    props.push(m);
+                }
+            }
+            for e in named(t, "extends") {
+                let r = only_child(e);
+                match r.attribute("to").filter(|_| elements(r).next().is_none()).and_then(|to| find_decl(root, to)) {
+                    Some(b) if b.has_tag_name("interface") => todo.push(b),
+                    _ => return None,
+                }
+            }
+        }
+        let plain = |n: &str| !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '_') && !n.as_bytes()[0].is_ascii_digit();
+        if props.is_empty() || props.iter().any(|p| !plain(attr(*p, "name")) || attr(*p, "name") == "Create") {
+            return None;
+        }
+        let (required, optional): (Vec<Node>, Vec<Node>) = props.into_iter().partition(|p| !flag(*p, "optional"));
+        let mut args = Vec::new();
+        for p in required.iter().chain(&optional) {
+            let t = self.ty(only_child(*p), owner);
+            let q = if flag(*p, "optional") { "?" } else { "" };
+            args.push(format!("{q}{}: {t}", ident(attr(*p, "name"))));
+        }
+        let line = args.join(", ");
+        if words(&line).iter().filter_map(|w| self.file_of.get(*w)).any(|f| *f > self.current_file) {
+            return None;
+        }
+        Some(line)
     }
 
     // A value with constructors and static members: a type for its shape and a global of that type.

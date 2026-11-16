@@ -69,7 +69,8 @@ let onPing: EventListener =
         pings <- pings + 1
         box.setAttribute ("data-pings", string pings))
 
-let once = jsOptions<AddEventListenerOptions> (fun o -> o.once <- Some true)
+// An options bag is made with named arguments.
+let once = AddEventListenerOptions.Create (once = true)
 // Union arguments take a value of any of their types.
 box.addEventListener ("ping", onPing, once)
 box.dispatchEvent (Event.Create "ping") |> ignore
