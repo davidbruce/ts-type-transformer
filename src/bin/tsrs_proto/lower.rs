@@ -135,11 +135,12 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         let widened = literals(decls, o.separator);
         *front.stats.entry("widened: literal -> primitive".into()).or_default() += widened;
     }
+    // Whether hoisted or kept inline.
+    walk(decls, &mut |t, _| {
+        cut_recursive_dictionary(t);
+        true
+    });
     if o.anonymous {
-        walk(decls, &mut |t, _| {
-            cut_recursive_dictionary(t);
-            true
-        });
         hoist(decls, o.separator);
     }
     if o.optionals || o.param_unions {
