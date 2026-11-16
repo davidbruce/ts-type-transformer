@@ -877,8 +877,13 @@ impl<'a> Builder<'a> {
     // A callback's signature: its own type parameters (`<T>(x: T) => T`) are untyped values.
     fn callback_signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
         self.erased = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
-        let sig = self.signature(n, owner);
+        let mut sig = self.signature(n, owner);
         self.erased.clear();
+        // A listener (one argument, a declared `any` result) returns nothing
+        // JavaScript reads: its result is void, as its writer would have it.
+        if sig.0.len() == 1 && sig.3 == Ty::Any && listener_result(n) {
+            sig.3 = Ty::Void;
+        }
         sig
     }
 
@@ -1370,4 +1375,10 @@ pub fn each_type(m: &Model, f: &mut dyn FnMut(&str, &Ty)) {
     for k in &m.maps {
         k.values.iter().for_each(|v| visit(&k.name, v, f));
     }
+}
+
+// Whether a function type's result is an `any` the library declared, not
+// one a lowering made (an erased `U`, which the caller reads).
+pub fn listener_result(f: Node) -> bool {
+    named(f, "returns").next().map(only_child).is_some_and(|r| r.has_tag_name("primitive") && attr(r, "name") == "any" && !r.has_attribute("lossy"))
 }

@@ -887,7 +887,15 @@ impl Gen {
                     if parts.is_empty() {
                         parts.push("unit".into());
                     }
-                    let ret = named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or("unit".into());
+                    let ret = named(n, "returns").next().map(only_child);
+                    // A listener (one argument, any result): its result is
+                    // nothing JavaScript reads, as the model has it.
+                    let listener = named(n, "parameter").count() == 1 && super::model::listener_result(n);
+                    let ret = match ret {
+                        Some(_) if listener => "unit".to_string(),
+                        Some(r) => self.ty(r, owner),
+                        None => "unit".into(),
+                    };
                     parts.push(ret);
                     format!("({})", parts.join(" -> "))
                 };

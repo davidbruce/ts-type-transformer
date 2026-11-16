@@ -44,12 +44,11 @@ button.textContent <- "press"
 box.appendChild button |> ignore
 
 // A typed key selects the event type: the listener of "click" takes a PointerEvent.
-let onClick: PointerEvent -> obj =
+let onClick: PointerEvent -> unit =
     let f =
         fun (_: PointerEvent) ->
             clicks <- clicks + 1
             box.setAttribute ("data-count", string clicks)
-            null
 
     f
 

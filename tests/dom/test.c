@@ -40,10 +40,7 @@ static void bump(Counter* counter) {
     Element_setAttribute(counter->box, counter->attribute, digits);
 }
 
-static JsValue on_click(void* ctx, PointerEvent ev) {
-    bump(ctx);
-    return (JsValue){ 0 };
-}
+static void on_click(void* ctx, PointerEvent ev) { bump(ctx); }
 
 static void on_ping(void* ctx, Event ev) { bump(ctx); }
 

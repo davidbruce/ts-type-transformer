@@ -1494,7 +1494,8 @@ fn substitute_constraint(t: &mut Type, constraints: &Constraints, all: bool, kee
                 substitute_constraint(&mut k, constraints, all, keep, depth + 1);
                 k
             }
-            _ => Type::prim("any"),
+            // Marked: a result of it is one the caller reads (`map<U>(f: (v: T) => U)`).
+            _ => Type::Erased("type parameter"),
         };
         false
     });

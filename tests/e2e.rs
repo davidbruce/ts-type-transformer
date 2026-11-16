@@ -1403,7 +1403,6 @@ fn webworker_bindings_and_worker() {
                      for b in &mut v { *b = b.wrapping_mul(2); }\n\
                      let reply = Uint8Array::<ArrayBufferLike>::from_slice(&v);\n\
                      post_message(&reply, Vec::<Transferable>::new());\n\
-                     JsValue::from_handle(0)\n\
                  });\n\
                  set_onmessage(Some(&handler));\n\
              }\n",

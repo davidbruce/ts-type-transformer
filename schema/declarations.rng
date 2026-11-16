@@ -512,6 +512,7 @@
             <value>unresolved</value>
             <value>type too deep</value>
             <value>type too large</value>
+            <value>type parameter</value>
           </choice>
         </attribute>
       </group>
