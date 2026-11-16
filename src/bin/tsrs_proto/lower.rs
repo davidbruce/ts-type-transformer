@@ -2486,12 +2486,20 @@ fn family_names_from(base: &str, sigs: &[&Signature], own: &[Vec<String>], base_
             added = vec![added.pop().unwrap()];
         }
         // Parameters whose type differs from the plain overload's.
+        // One only made optional, or no longer, by its name: `marked_with_options`.
+        let unwrapped = |t: &Type| match t {
+            Type::Nullable(inner, _) => type_key(inner),
+            t => type_key(t),
+        };
         let retyped: Vec<String> = s
             .params
             .iter()
             .enumerate()
             .filter(|(i, p)| first.params.get(*i).is_none_or(|q| type_key(&q.ty) != type_key(&p.ty)))
-            .map(|(_, p)| param_mnemonic(s, &p.ty))
+            .map(|(i, p)| match first.params.get(i) {
+                Some(q) if unwrapped(&q.ty) == unwrapped(&p.ty) => p.name.clone(),
+                _ => param_mnemonic(s, &p.ty),
+            })
             .collect();
         // Named by the first type that sets it apart, plus what it adds:
         // `addEventListener_with_string_and_options`.
