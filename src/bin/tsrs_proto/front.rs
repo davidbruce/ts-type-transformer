@@ -167,8 +167,27 @@ impl<'c> Front<'c> {
                 self.reserve(sym);
             }
         }
+        // A module's values it does not export are not there to call (marked's
+        // `declare const markedInstance`); its types may be named by others.
+        let exported: HashSet<P<Symbol>> = match file.symbol().filter(|_| file.external_module_indicator().is_some()) {
+            Some(module) => {
+                let module = self.c.get_merged_symbol_exported(module);
+                self.c.get_exports_of_module_exported(module).iter().map(|e| self.resolve_alias(*e)).collect()
+            }
+            None => HashSet::new(),
+        };
+        let module_file = file.external_module_indicator().is_some();
         let mut out = Vec::new();
         for &s in file.statements().nodes() {
+            if module_file && matches!(s.kind(), Kind::VariableStatement | Kind::FunctionDeclaration) && !has_syntactic_modifier(s, ModifierFlags::Export) {
+                let symbols: Vec<P<Symbol>> = match s.kind() {
+                    Kind::VariableStatement => s.as_variable_statement().declaration_list().as_variable_declaration_list().declarations().nodes().iter().filter_map(|d| self.c.get_symbol_of_declaration_exported(*d)).collect(),
+                    _ => self.c.get_symbol_of_declaration_exported(s).into_iter().collect(),
+                };
+                if symbols.iter().all(|sym| !exported.contains(&self.c.get_merged_symbol_exported(*sym))) {
+                    continue;
+                }
+            }
             self.emit_top(s, &mut out);
         }
         while let Some(sym) = self.pending.pop_front() {

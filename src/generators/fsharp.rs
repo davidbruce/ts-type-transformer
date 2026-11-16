@@ -30,6 +30,7 @@ struct Gen {
     skipped: BTreeMap<String, usize>,
     // Qualified names declared in the XML.
     declared: HashSet<String>,
+    type_names: HashSet<String>,
     // Types declared elsewhere, with the most type arguments seen.
     external: BTreeMap<String, usize>,
     // In the signature being written: type parameters over a map's keys, and their map.
@@ -268,6 +269,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         out: String::new(),
         skipped: BTreeMap::new(),
         declared: HashSet::new(),
+        type_names: HashSet::new(),
         external: BTreeMap::new(),
         keyed: HashMap::new(),
         fn_params: Vec::new(),
@@ -302,6 +304,9 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         cur_prefix: String::new(),
         js_prefix: String::new(),
     };
+    // Every type the declarations name: a delegate named by its place
+    // (`each`'s `cb`, `EachCb`) takes none of their names.
+    g.type_names = doc.root_element().descendants().filter(|d| matches!(d.tag_name().name(), "interface" | "class" | "typeAlias" | "enum")).filter_map(|d| d.attribute("name")).map(type_ident).collect();
     // Classes unions tell apart by instanceof (named as the output names
     // them), with the module each is imported from.
     let tested: HashSet<&str> = doc.root_element().descendants().filter_map(|n| n.attribute("test")?.strip_prefix("instanceof:")).collect();
@@ -762,7 +767,7 @@ impl Gen {
             self.skip("recursive type alias, bound as obj");
             return AliasForm::Abbreviation("obj".into());
         }
-        if body.has_tag_name("functionType") && named(body, "parameter").any(|p| flag(p, "optional")) {
+        if body.has_tag_name("functionType") && named(body, "parameter").any(|p| flag(p, "optional") || flag(p, "rest")) {
             return AliasForm::Delegate;
         }
         AliasForm::Abbreviation(self.ty(body, ""))
@@ -933,7 +938,9 @@ impl Gen {
                 let own: Vec<String> = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
                 let depth = self.fn_params.len();
                 self.fn_params.extend(own);
-                let t = if named(n, "parameter").any(|p| flag(p, "optional")) {
+                // Optional arguments, or the rest of them (`...args`), as
+                // JavaScript calls it: a delegate's.
+                let t = if named(n, "parameter").any(|p| flag(p, "optional") || flag(p, "rest")) {
                     self.function_delegate(n, owner)
                 } else {
                     let mut parts: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
@@ -1080,7 +1087,7 @@ impl Gen {
                 .map(pascal)
                 .filter(|p| !p.is_empty())
                 .collect();
-            let free = |c: &String, g: &Self| !g.file_of.contains_key(c) && !g.declared.contains(c) && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()));
+            let free = |c: &String, g: &Self| !g.file_of.contains_key(c) && !g.declared.contains(c) && !g.type_names.contains(c) && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()));
             let at: Vec<String> = (2..=places.len().min(3)).chain(1..=1).map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>()).filter(|c| !c.is_empty()).collect();
             // Else with the types it takes, or gives (node's `pipeline` sources).
             let said: Vec<String> = named(n, "parameter")
@@ -1902,7 +1909,8 @@ impl Gen {
                 let attr = match exact {
                     Some(c) if !native && !imported => format!("[<CaseTest(\"$0 != null && Object.getPrototypeOf($0) === globalThis.{c}.prototype\")>] "),
                     _ => match test.as_deref().and_then(|t| case_test(t, union.attribute("discriminant"))) {
-                    Some(js) if !native && !imported => format!("[<CaseTest(\"{}\")>] ", js.replace('"', "\\\"")),
+                    // An F# string: its backslashes too (katex's `"\\href"`).
+                    Some(js) if !native && !imported => format!("[<CaseTest(\"{}\")>] ", js.replace('\\', "\\\\").replace('"', "\\\"")),
                     _ => String::new(),
                     },
                 };
