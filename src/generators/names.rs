@@ -103,8 +103,16 @@ pub fn settle(m: &mut Model, naming: &Naming) {
             .chain(m.num_enums.iter().map(|e| (&e.0, Kind::NumEnum)))
             .chain(m.opaque.iter().map(|o| (o, Kind::Opaque)))
             .collect();
+        // What the library declares at the top level, then in namespaces
+        // (`Stream.PipeOptions` gives way to a top-level `StreamPipeOptions`);
+        // what lowering made up, after.
+        let ranked: Vec<&(&String, Kind)> = {
+            let mut v: Vec<&(&String, Kind)> = all.iter().collect();
+            v.sort_by_key(|(n, _)| m.namespaced.contains(*n));
+            v
+        };
         let claim_types = |synthetic: bool, top: &mut Tops, renames: &mut HashMap<String, String>| {
-            for (name, kind) in all.iter().filter(|(n, _)| m.synthetic.contains(*n) == synthetic) {
+            for (name, kind) in ranked.iter().copied().filter(|(n, _)| m.synthetic.contains(*n) == synthetic) {
                 // Where it must give way, it is named by where it comes from:
                 // node's `readline` `Key` is `ReadlineKey`.
                 let by_origin: Vec<String> = m.origins.get(*name).and_then(|o| origin_name(o, name)).into_iter().collect();

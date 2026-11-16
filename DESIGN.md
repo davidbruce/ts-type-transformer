@@ -174,8 +174,10 @@ snake case; C's `Shape_area` is a method and could be a function too).
 in its scope, given the target's naming: how it spells types and functions,
 what else a type's name makes (C's `AS_Shape`, Gleam's `shape_as_named`),
 whether types and functions share a namespace, and whether functions
-overload (C++). What the library declares claims names first, then
-functions, then what lowering made up, which takes the `_2`. A declared
+overload (C++). What the library declares claims names first, a top-level
+declaration before a namespace's (`StreamPipeOptions` before a flattened
+`Stream.PipeOptions`), then functions, then what lowering made up, which
+takes the `_2`. A declared
 type that must give way (to Zig's `Key` of a map's struct, Gleam's `Bool`)
 is named by where it comes from, before a number: its ambient module or
 file, `origin` in the XML where there are several: node's `readline` `Key`
