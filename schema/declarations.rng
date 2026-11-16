@@ -90,6 +90,13 @@
           from: on the declaration, not on &lt;declarations&gt;.</a:documentation>
       </attribute>
     </optional>
+    <optional>
+      <attribute name="origin">
+        <a:documentation>Where it is declared, where the declarations come from more than one
+          place: its ambient module ("fs/promises" for "node:fs/promises"), else its file
+          ("readline" for readline.d.ts). A word to name it by where its name must give way.</a:documentation>
+      </attribute>
+    </optional>
   </define>
 
   <define name="synthetic">

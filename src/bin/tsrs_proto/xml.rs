@@ -16,6 +16,8 @@ pub struct Xml {
     pub census: BTreeMap<String, usize>,
     // Attributes for the next element, from `Type::Tested`.
     pending: Vec<(&'static str, String)>,
+    // The same, written after the element's own (`origin`).
+    trailing: Vec<(&'static str, String)>,
     // Each type declaration's id (its path: `Konva.Shape`), by path and by
     // symbol; what a reference's `to` names. See `index`.
     ids: HashMap<String, String>,
@@ -45,9 +47,13 @@ impl Xml {
                 for (k, v) in attrs {
                     (k, v).hash(h);
                 }
+                for (k, v) in &self.trailing {
+                    (k, v).hash(h);
+                }
                 close.hash(h);
             }
             self.pending.clear();
+            self.trailing.clear();
             return;
         }
         self.tally(tag);
@@ -61,6 +67,9 @@ impl Xml {
                 self.tally(&format!("{tag}@{k}"));
             }
             let _ = write!(self.out, " {k}=\"{}\"", escape(v));
+        }
+        for (k, v) in std::mem::take(&mut self.trailing) {
+            let _ = write!(self.out, " {k}=\"{}\"", escape(&v));
         }
         self.out.push_str(if close { "/>\n" } else { ">\n" });
     }
@@ -143,6 +152,8 @@ impl Xml {
     // Top-level declarations, each with the module it belongs to.
     pub fn top(&mut self, decls: &[Decl], modules: &crate::config::Modules) {
         self.index(decls, "");
+        // Origins tell declarations apart only where there are several.
+        let origins: std::collections::HashSet<&String> = decls.iter().filter_map(|d| modules.origins.get(decl_key(d))).collect();
         for d in decls {
             let module = match d {
                 Decl::Namespace(n) => n.name.clone(),
@@ -156,6 +167,12 @@ impl Xml {
             // With several packages, the one it is imported from.
             if let Some(package) = modules.packages.get(decl_key(d)) {
                 self.pending.push(("import", package.clone()));
+            }
+            if origins.len() > 1
+                && !matches!(d, Decl::Namespace(_))
+                && let Some(origin) = modules.origins.get(decl_key(d))
+            {
+                self.trailing.push(("origin", origin.clone()));
             }
             // A namespace comes from the library, an area from the config: kept apart in file layouts.
             if matches!(d, Decl::Namespace(_)) {

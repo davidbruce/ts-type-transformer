@@ -42,6 +42,9 @@ pub struct Modules {
     // With several packages bound together, the one each top-level
     // declaration is imported from, by name: written `import="..."` on it.
     pub packages: std::collections::HashMap<String, String>,
+    // Where each top-level declaration comes from (`readline`), by name:
+    // written `origin="..."` where they come from more than one place.
+    pub origins: std::collections::HashMap<String, String>,
 }
 
 impl Modules {
@@ -123,7 +126,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
         let t = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?;
         merge(&mut table, t);
     }
-    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None, packages: Default::default() };
+    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None, packages: Default::default(), origins: Default::default() };
     // `--set generics=erase`, `--set limits.union_param_overloads=4`.
     for o in overrides {
         let (key, value) = o.split_once('=').ok_or_else(|| format!("--set {o}: expected key=value"))?;

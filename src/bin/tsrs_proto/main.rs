@@ -313,6 +313,7 @@ fn main() {
         }
         all
     };
+    modules.origins = front.origin_of_name.clone();
     match entries.as_slice() {
         [] => {}
         [(package, _, _)] => modules.import = modules.import.take().or_else(|| Some(package.clone())),

@@ -21,6 +21,9 @@ pub struct Front<'c> {
     packages: Vec<(String, String)>,
     // The package each top-level declaration comes from, by its output name.
     pub package_of_name: HashMap<String, String>,
+    // Where each top-level declaration comes from, as a word to name it by
+    // where its name must give way: `readline` for node's `Key`.
+    pub origin_of_name: HashMap<String, String>,
     lib_path: String,
     // Merged symbols already converted, by kind and fully qualified name.
     seen: HashSet<String>,
@@ -84,6 +87,7 @@ impl<'c> Front<'c> {
             root_file,
             packages: Vec::new(),
             package_of_name: HashMap::new(),
+            origin_of_name: HashMap::new(),
             lib_path,
             seen: HashSet::new(),
             exported_as: HashMap::new(),
@@ -208,6 +212,9 @@ impl<'c> Front<'c> {
             }
         }
         for (old, new) in &renames {
+            if let Some(origin) = self.origin_of_name.remove(old) {
+                self.origin_of_name.insert(new.clone(), origin);
+            }
             if let Some(package) = self.package_of_name.remove(old) {
                 self.package_of_name.insert(new.clone(), package);
             }
@@ -430,6 +437,23 @@ impl<'c> Front<'c> {
             // `node:events` is `events`: one module by two names.
             .and_then(|m| self.packages.iter().find(|p| p.1.trim_start_matches("node:") == m.trim_start_matches("node:")).map(|p| p.1.clone()));
         let package = ambient.or_else(|| ast::get_source_file_of_node(node).and_then(|f| self.package_of(f.file_name()).map(str::to_string)));
+        // Its ambient module (`node:fs/promises` is `fs/promises`), else its file
+        // (`readline.d.ts`), else its directory where the file is an index.
+        let module = std::iter::successors(node.parent(), |n| n.parent())
+            .find(|n| n.kind() == Kind::ModuleDeclaration && n.name().is_some_and(|m| m.kind() == Kind::StringLiteral))
+            .and_then(|m| m.name().map(|n| text(n).trim_matches(|c| c == '"' || c == '\'').to_string()));
+        let file = ast::get_source_file_of_node(node).map(|f| {
+            let path = f.file_name().to_string();
+            let mut parts = path.rsplit('/');
+            let stem = parts.next().unwrap_or_default().split('.').next().unwrap_or_default().to_string();
+            if stem == "index" { parts.next().unwrap_or_default().to_string() } else { stem }
+        });
+        let origin = module.map(|m| m.trim_start_matches("node:").to_string()).or(file).filter(|o| !o.is_empty());
+        if let Some(origin) = origin {
+            for d in &out[before..] {
+                self.origin_of_name.insert(decl_name(d).to_string(), origin.clone());
+            }
+        }
         if let Some(package) = package {
             for d in &out[before..] {
                 self.package_of_name.insert(decl_name(d).to_string(), package.clone());

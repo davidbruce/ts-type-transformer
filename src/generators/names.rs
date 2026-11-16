@@ -105,7 +105,10 @@ pub fn settle(m: &mut Model, naming: &Naming) {
             .collect();
         let claim_types = |synthetic: bool, top: &mut Tops, renames: &mut HashMap<String, String>| {
             for (name, kind) in all.iter().filter(|(n, _)| m.synthetic.contains(*n) == synthetic) {
-                let chosen = claim(name, &mut |candidate| {
+                // Where it must give way, it is named by where it comes from:
+                // node's `readline` `Key` is `ReadlineKey`.
+                let by_origin: Vec<String> = m.origins.get(*name).and_then(|o| origin_name(o, name)).into_iter().collect();
+                let chosen = claim_as(name, &by_origin, &mut |candidate| {
                     let ids = (naming.type_names)(candidate, name, *kind, m);
                     let values = ids.first().map(|own| (naming.values_of)(own, name, *kind, m)).unwrap_or_default();
                     top.take_type(ids, values)
@@ -201,8 +204,16 @@ fn take(scope: &mut Scope, ids: Vec<String>) -> bool {
 // `name`, or `name_2`, `name_3`, ...: the first `try_take` takes. A naming
 // whose identifier does not follow the name would never find one.
 fn claim(name: &str, try_take: &mut dyn FnMut(&str) -> bool) -> String {
-    let mut candidate = name.to_string();
-    let mut n = 2;
+    claim_as(name, &[], try_take)
+}
+
+// As `claim`, trying the `others` after `name`, before numbers.
+fn claim_as(name: &str, others: &[String], try_take: &mut dyn FnMut(&str) -> bool) -> String {
+    if let Some(o) = std::iter::once(name).chain(others.iter().map(String::as_str)).find(|c| try_take(c)) {
+        return o.to_string();
+    }
+    let mut candidate = format!("{name}_2");
+    let mut n = 3;
     while !try_take(&candidate) {
         assert!(n < 10_000, "names: no identifier for `{name}`: does the naming follow the name?");
         candidate = format!("{name}_{n}");
@@ -295,4 +306,16 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
     m.opaque_arity = std::mem::take(&mut m.opaque_arity).into_iter().map(|(mut k, v)| (to(&mut k), (k, v)).1).collect();
     m.synthetic = std::mem::take(&mut m.synthetic).into_iter().map(|mut k| (to(&mut k), k).1).collect();
     m.funcs.iter_mut().for_each(|f| func(f, &to));
+}
+
+// A type named by its origin: `readline` and `Key` are `ReadlineKey`,
+// `fs/promises` and `FileHandle` `FsPromisesFileHandle`. None where the
+// origin is only its name again (`sortMixin` of sortMixin.d.ts).
+fn origin_name(origin: &str, name: &str) -> Option<String> {
+    let upper = |w: &str| {
+        let mut cs = w.chars();
+        cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
+    };
+    let prefix: String = origin.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(upper).collect();
+    (!prefix.eq_ignore_ascii_case(name)).then(|| format!("{prefix}{}", upper(name)))
 }
