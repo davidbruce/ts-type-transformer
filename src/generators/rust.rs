@@ -1635,9 +1635,26 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
     }
     let function_names = names_of(m.funcs.iter());
+    // A namespace's function is in its module, by its own name:
+    // `stream::finished`, `intl::date_time_format`.
+    let mut taken_in: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
     for f in &m.funcs {
-        let out = modules.entry(module_file(&f.module)).or_insert_with(|| PRELUDE.to_string());
-        for item in function(f, &function_names[&f.name], "pub ", &mut imports, None) {
+        let (out, name) = match m.func_namespaces.get(&f.import) {
+            Some((path, own, _)) => {
+                let segments: Vec<String> = path.iter().map(|s| ns_module(s)).collect();
+                let base = rust_function(f, own);
+                let taken = taken_in.entry(segments.clone()).or_default();
+                let mut name = base.clone();
+                let mut i = 2;
+                while !taken.insert(name.clone()) {
+                    name = format!("{base}_{i}");
+                    i += 1;
+                }
+                (namespaces.entry(segments).or_default(), name)
+            }
+            None => (modules.entry(module_file(&f.module)).or_insert_with(|| PRELUDE.to_string()), function_names[&f.name].clone()),
+        };
+        for item in function(f, &name, "pub ", &mut imports, None) {
             *out += &format!("{item}\n");
         }
     }

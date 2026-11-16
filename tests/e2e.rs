@@ -1324,13 +1324,13 @@ fn intl_locale_formatting() {
                      d_opts.set_year(Some(IntlDateTimeFormatOptionsDay::Numeric));\n\
                      d_opts.set_month(Some(IntlDateTimeFormatOptionsMonth::Short));\n\
                      d_opts.set_day(Some(IntlDateTimeFormatOptionsDay::_2Digit));\n\
-                     let dtf = intl_date_time_format().construct(\"en-US\", Some(&d_opts));\n\
+                     let dtf = intl::date_time_format().construct(\"en-US\", Some(&d_opts));\n\
                      let formatted_date = dtf.format(&Date::from_time(1700000000000.0));\n\
                      check!(formatted_date == \"Nov 14, 2023\");\n\
                      let n_opts = intl::NumberFormatOptions::create();\n\
                      n_opts.set_style(Some(IntlNumberFormatOptionsStyle::Currency));\n\
                      n_opts.set_currency(Some(\"USD\"));\n\
-                     let nf = intl_number_format().construct(\"en-US\", Some(&n_opts));\n\
+                     let nf = intl::number_format().construct(\"en-US\", Some(&n_opts));\n\
                      check!(nf.format(1234.5) == \"$1,234.50\");\n\
                      let rtf = intl::RelativeTimeFormatStatics::new(\"en-US\", None);\n\
                      check!(rtf.format(-1.0, IntlRelativeTimeFormatUnit::Day) == \"1 day ago\");\n\

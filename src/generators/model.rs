@@ -272,6 +272,9 @@ pub struct Model {
     pub namespaced: HashMap<String, Vec<String>>,
     // And the module of their namespace (`namespaces/Stream`).
     pub namespace_modules: HashMap<String, String>,
+    // A namespace's functions, and its variables' accessors, by their
+    // import: the namespaces, their own name, their namespace's module.
+    pub func_namespaces: HashMap<String, (Vec<String>, String, String)>,
 }
 
 impl Class {
@@ -366,7 +369,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -602,8 +605,10 @@ impl<'a> Builder<'a> {
                 "function" => {
                     let (params, rest, fixed, ret) = self.signature(d, "");
                     let js = self.js(d, &path);
+                    let own = name;
                     let name = ident(&join(prefix, name));
                     let import = self.import(name.clone());
+                    self.namespace_func(prefix, &import, own);
                     let type_params = std::mem::take(&mut self.last_type_params);
                     self.model.funcs.push(Func { type_params, module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret });
                 }
@@ -624,8 +629,10 @@ impl<'a> Builder<'a> {
                         continue;
                     }
                     let ret = self.ty(body, "");
+                    let own = name;
                     let name = format!("get_{}", ident(&path));
                     let import = self.import(name.clone());
+                    self.namespace_func(prefix, &import, &format!("get_{}", ident(own)));
                     let js = self.js(d, &path);
                     self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(js.clone()), params: vec![], rest: false, fixed: vec![], shared: None, ret: ret.clone() });
                     // A `const`, or a module's export, cannot be assigned.
@@ -635,10 +642,19 @@ impl<'a> Builder<'a> {
                     let path = js;
                     let set_name = format!("set_{}", ident(&path));
                     let set_import = self.import(set_name.clone());
+                    self.namespace_func(prefix, &set_import, &format!("set_{}", ident(own)));
                     self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import: set_import, name: set_name, call: Call::StaticSet(path), params: vec![("value".into(), value(ret))], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
                 }
                 _ => self.unsupported(d),
             }
+        }
+    }
+
+    // A namespace's function, or a variable's accessor: its namespace and its
+    // own name (`Geometry`, `distance`), by its import.
+    fn namespace_func(&mut self, prefix: &str, import: &str, own: &str) {
+        if !prefix.is_empty() {
+            self.model.func_namespaces.insert(import.to_string(), (prefix.split('.').map(str::to_string).collect(), own.to_string(), self.module.clone()));
         }
     }
 

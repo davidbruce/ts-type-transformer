@@ -27,12 +27,12 @@ pub extern "C" fn run() {
     check!(Clock::ZERO == 0.0);
 
     // Namespaces, nested ones included.
-    let a = geometry_point(0.0, 0.0);
-    let b = geometry_point(3.0, 4.0);
-    check!(geometry_distance(&a, &b) == 5.0);
+    let a = geometry::point(0.0, 0.0);
+    let b = geometry::point(3.0, 4.0);
+    check!(geometry::distance(&a, &b) == 5.0);
     check!(b.x() == 3.0);
-    check!(geometry_unit() == 1.0);
-    check!(geometry_deep_twice(4.0) == 8.0);
+    check!(geometry::unit() == 1.0);
+    check!(geometry::deep::twice(4.0) == 8.0);
 
     // Rest parameters take an array: a Rust array, a Vec, a slice or a JsArray.
     check!(join("-", ["a", "b", "c"]) == "a-b-c");
