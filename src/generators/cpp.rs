@@ -76,23 +76,31 @@ fn ty_in(t: &Ty) -> String {
         Ty::Array => "ts::Array<>".into(),
         Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg(e)),
         Ty::Tuple(es) => format!("ts::Tuple<{}>", es.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
-        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => tn(n),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("std::optional<{}>", ty_in(inner).trim_start_matches("const ").trim_end_matches('&')),
         Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_in(inner)),
-        Ty::NamedUnion(n) => format!("const {n}&"),
+        Ty::NamedUnion(n) => format!("const {}&", tn(n)),
         Ty::Union(_) => "ts::Value".into(),
         Ty::Key(m) => format!("ts::Key<{m}, V>"),
         Ty::Mapped(_) => "V".into(),
         // Not deduced from the lambda: the key says what the listener takes.
         Ty::Listener(ev) => format!("std::type_identity_t<ts::Listener<{}>>", ty_in(ev)),
         Ty::Param(n) => n.clone(),
-        Ty::Generic(n, args) => format!("{n}<{}>", args.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
+        Ty::Generic(n, args) => format!("{}<{}>", tn(n), args.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
     }
 }
 
 thread_local! {
     // The unions of the model being generated that values can be decoded to.
     static DECODABLE: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
+    // Types a class's member is named as (`easingFunc easingFunc()`): within
+    // the class the member hides the type, so it is written `::easingFunc`.
+    static QUALIFIED: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
+}
+
+// A declared type's name where a type is written: global where a member hides it.
+fn tn(n: &str) -> String {
+    if QUALIFIED.with(|q| q.borrow().contains(n)) { format!("::{n}") } else { n.to_string() }
 }
 
 // A type as a template argument: a value type, not a view.
@@ -101,7 +109,7 @@ fn ty_arg(t: &Ty) -> String {
         Ty::Str => "std::string".into(),
         Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_arg(inner)),
         // A union a handle can be decoded to; any other stays a value.
-        Ty::NamedUnion(n) if DECODABLE.with(|d| d.borrow().contains(n)) => n.clone(),
+        Ty::NamedUnion(n) if DECODABLE.with(|d| d.borrow().contains(n)) => tn(n),
         Ty::NamedUnion(_) | Ty::Union(_) => "ts::Value".into(),
         t => ty_in(t),
     }
@@ -113,7 +121,7 @@ fn ty_out(t: &Ty, unions: &[NamedUnion]) -> String {
         Ty::Str => "std::string".into(),
         Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_out(inner, unions)),
         Ty::NamedUnion(n) | Ty::Generic(n, _) if is_union(n, unions) && !decodable(n, unions) => "ts::Value".into(),
-        Ty::NamedUnion(n) => n.clone(),
+        Ty::NamedUnion(n) => tn(n),
         t => ty_in(t),
     }
 }
@@ -142,7 +150,8 @@ fn head(params: &[TParam], defaults: bool) -> String {
         })
         .collect();
     let requires: Vec<String> = params.iter().filter_map(|p| constraint(&p.name, p.constraint.as_ref()?)).collect();
-    let requires = if requires.is_empty() { String::new() } else { format!(" requires {}", requires.join(" && ")) };
+    // In parentheses: a type written `::T` after it would join it.
+    let requires = if requires.is_empty() { String::new() } else { format!(" requires ({})", requires.join(" && ")) };
     format!("template <{}>{requires}\n", ps.join(", "))
 }
 
@@ -224,7 +233,7 @@ fn raise(t: &Ty, r: &str, unions: &[NamedUnion]) -> String {
         Ty::NamedUnion(n) if decodable(n, unions) => format!("decode_{n}({r})"),
         Ty::Generic(n, args) if decodable(n, unions) => format!("decode_{n}<{}>({r})", args.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
         Ty::Generic(n, _) if is_union(n, unions) => format!("ts::Value(ts::handle, {r})"),
-        Ty::Obj(n) => format!("{n}(ts::handle, {r})"),
+        Ty::Obj(n) => format!("{}(ts::handle, {r})", tn(n)),
         Ty::Mapped(_) => format!("V(ts::handle, {r})"),
         Ty::Param(n) => format!("ts::from_handle<{n}>({r})"),
         Ty::Generic(..) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => format!("{}(ts::handle, {r})", ty_in(t)),
@@ -337,7 +346,9 @@ fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place,
     };
     // With its template head: an overload constrained and one not are two,
     // the more constrained chosen where both fit (`merge<T extends Dictionary>`).
+    // Its template parameters by place: C++ tells none apart by name.
     let key = format!("{}{}{name}({})", again.replace('\n', " "), if place == Place::Static { "static " } else { "" }, f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
+    let key = rename_words(&key, &type_params.iter().enumerate().map(|(i, p)| (p.name.clone(), format!("${i}"))).collect());
     Function { import: import_decl, decl, def, templated, key, refs }
 }
 
@@ -850,6 +861,9 @@ struct Listener : Callback {
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let unions = &m.unions;
     DECODABLE.with(|d| *d.borrow_mut() = unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
+    // A constructor is named as its class, and hides nothing.
+    let members: BTreeSet<String> = m.classes.iter().flat_map(|c| c.funcs.iter().filter(|f| !matches!(f.call, Call::New(_) | Call::Create)).map(|f| cpp_name(f, &c.name))).collect();
+    QUALIFIED.with(|q| *q.borrow_mut() = members.into_iter().filter(|n| m.classes.iter().any(|c| c.name == *n) || m.callbacks.iter().any(|c| c.name == *n) || m.unions.iter().any(|u| u.name == *n) || m.enums.iter().any(|e| e.0 == *n) || m.num_enums.iter().any(|e| e.0 == *n)).collect());
     let mut taken = HashMap::new();
     // Where each declared type is defined, without the extension.
     let mut home: HashMap<String, String> = HashMap::new();
@@ -1145,7 +1159,33 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
 // Whether `u` declares the decoder of its variant: unions with the same
 // members are the same type, and the first one does.
 fn decoder_owner(u: &NamedUnion, unions: &[NamedUnion]) -> bool {
-    let key = |u: &NamedUnion| u.parts.iter().map(|p| ty_out(p, unions)).collect::<Vec<_>>();
+    // As C++ sees it, through other unions' aliases: `ts::Array<OptionId>`
+    // and `ts::Array<OrdinalRawValue>` are one type where both are one variant.
+    let aliases: HashMap<&str, String> = unions.iter().filter(|o| o.type_params.is_empty()).map(|o| (o.name.as_str(), format!("std::variant<{}>", o.parts.iter().map(|p| ty_out(p, unions)).collect::<Vec<_>>().join(", ")))).collect();
+    let expand = |text: String| {
+        let mut out = text;
+        for _ in 0..8 {
+            let mut next = String::new();
+            let mut word = String::new();
+            for c in out.chars().chain(['\0']) {
+                if c.is_alphanumeric() || c == '_' {
+                    word.push(c);
+                    continue;
+                }
+                next += aliases.get(word.as_str()).map_or(word.as_str(), String::as_str);
+                word.clear();
+                if c != '\0' {
+                    next.push(c);
+                }
+            }
+            if next == out {
+                break;
+            }
+            out = next;
+        }
+        out
+    };
+    let key = |u: &NamedUnion| u.parts.iter().map(|p| expand(ty_out(p, unions))).collect::<Vec<_>>();
     u.type_params.is_empty() && u.decodable() && unions.iter().find(|o| o.type_params.is_empty() && o.decodable() && key(o) == key(u)).is_some_and(|o| o.name == u.name)
 }
 
@@ -1262,7 +1302,23 @@ fn declarations(m: &Model) -> String {
         u.parts.iter().for_each(|p| named_types(p, &mut needs));
         param_types(&u.type_params, &mut needs);
         needs.remove(&u.name);
+        // Naming a constrained template (`Path<PathProps>`) checks its
+        // constraint there: the bases of what it names come first.
+        let bases: Vec<String> = needs.iter().filter(|n| m.classes.iter().any(|c| c.name == **n && !c.bases.is_empty())).map(|n| format!("bases:{n}")).collect();
+        needs.extend(bases);
         templates.push((u.name.clone(), text, needs));
+    }
+    // What each type extends, for constraints: see `ts::bases`. After the
+    // types its bases name, theirs first.
+    for c in m.classes.iter().filter(|c| !c.bases.is_empty()) {
+        let args = if c.type_params.is_empty() { String::new() } else { format!("<{}>", c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
+        let header = if c.type_params.is_empty() { "template <>\n".to_string() } else { head(&c.type_params, false) };
+        let text = format!("{header}struct ts::bases<{}{args}> {{\n    using type = ts::list<{}>;\n}};\n", c.name, c.bases.iter().map(ty_in).collect::<Vec<_>>().join(", "));
+        let mut named = BTreeSet::new();
+        c.bases.iter().for_each(|b| named_types(b, &mut named));
+        let mut needs: BTreeSet<String> = named.iter().filter(|n| **n != c.name && m.classes.iter().any(|k| k.name == **n && !k.bases.is_empty())).map(|n| format!("bases:{n}")).collect();
+        needs.extend(named.into_iter().filter(|n| *n != c.name));
+        templates.push((format!("bases:{}", c.name), text, needs));
     }
     let names: BTreeSet<String> = templates.iter().map(|t| t.0.clone()).collect();
     let mut done = BTreeSet::new();
@@ -1271,32 +1327,6 @@ fn declarations(m: &Model) -> String {
         let (name, text, _) = templates.remove(ready);
         types += &text;
         done.insert(name);
-    }
-    // What each type extends, for constraints: see `ts::bases`.
-    // A type's bases, and the types they name, come first: naming a
-    // constrained template checks its constraint at once.
-    let mut ordered: Vec<&Class> = Vec::new();
-    let mut state: HashMap<&str, bool> = HashMap::new();
-    fn visit<'a>(c: &'a Class, m: &'a Model, state: &mut HashMap<&'a str, bool>, out: &mut Vec<&'a Class>) {
-        if state.insert(c.name.as_str(), false).is_some() {
-            return;
-        }
-        let mut named = BTreeSet::new();
-        c.bases.iter().for_each(|b| named_types(b, &mut named));
-        for n in &named {
-            if let Some(k) = m.classes.iter().find(|k| k.name == *n) {
-                visit(k, m, state, out);
-            }
-        }
-        out.push(c);
-    }
-    for c in &m.classes {
-        visit(c, m, &mut state, &mut ordered);
-    }
-    for c in ordered.into_iter().filter(|c| !c.bases.is_empty()) {
-        let args = if c.type_params.is_empty() { String::new() } else { format!("<{}>", c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
-        let header = if c.type_params.is_empty() { "template <>\n".to_string() } else { head(&c.type_params, false) };
-        types += &format!("{header}struct ts::bases<{}{args}> {{\n    using type = ts::list<{}>;\n}};\n", c.name, c.bases.iter().map(ty_in).collect::<Vec<_>>().join(", "));
     }
     // A map's keys, each typed by the value it selects.
     for k in &m.maps {
@@ -1341,4 +1371,22 @@ fn lower_callback(t: &Ty, x: &str) -> String {
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("[](auto v) {{ return v ? int32_t(*v) : -1; }}({x})"),
         _ => format!("ts::Arg({x}).give()"),
     }
+}
+
+// `text` with each whole word in `to` replaced.
+fn rename_words(text: &str, to: &HashMap<String, String>) -> String {
+    let mut out = String::new();
+    let mut word = String::new();
+    for c in text.chars().chain(['\0']) {
+        if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+            continue;
+        }
+        out += to.get(&word).map_or(word.as_str(), String::as_str);
+        word.clear();
+        if c != '\0' {
+            out.push(c);
+        }
+    }
+    out
 }
