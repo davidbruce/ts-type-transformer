@@ -84,6 +84,8 @@ pub const NAMING: Naming = Naming {
 pub struct Output {
     pub files: Vec<(String, String)>,
     pub skipped: BTreeMap<String, usize>,
+    // What each binding reaches, for a page to check (`wasm::manifest`).
+    pub manifest: String,
 }
 
 // `getElementById` -> `get_element_by_id`, `HTMLElement` -> `html_element`.
@@ -1091,7 +1093,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
         files.push((format!("{path}_ffi.mjs"), format!("{header}{}", unit.ffi)));
     }
-    Ok(Output { files, skipped: g.skipped })
+    Ok(Output { files, skipped: g.skipped, manifest: super::wasm::manifest(&m) })
 }
 
 // What JavaScript reserves, as a function's name.
