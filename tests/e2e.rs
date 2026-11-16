@@ -1716,6 +1716,8 @@ const wasi = new Proxy({}, { get: () => () => 0 });
 instance.exports._initialize?.();
 instance.exports.run();
 await new Promise(r => setTimeout(r, 500));
+const deadline = Date.now() + 20000;
+while (instance.exports.busy?.() && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
 instance.exports.finish?.();
 window.__result = { passed, failed, dom: [], domChecks: 0 };
 </script>

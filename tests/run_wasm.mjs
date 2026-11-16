@@ -20,8 +20,12 @@ const env = { ...makeEnv(() => instance, options), check: (ok, line) => (ok ? pa
 ({ instance } = await WebAssembly.instantiate(fs.readFileSync(wasm), { env, wasi_snapshot_preview1: wasi }));
 instance.exports._initialize?.();
 instance.exports.run();
-// Asynchronous work settles, then `finish` checks what it did.
+// Asynchronous work settles, then `finish` checks what it did. A program
+// whose work takes longer (a library's `init()`) exports `busy`, nonzero
+// until it is done.
 await new Promise(r => setTimeout(r, 50));
+const deadline = Date.now() + 20000;
+while (instance.exports.busy?.() && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
 instance.exports.finish?.();
 if (failed.length || passed === 0) {
     console.error(`${failed.length} checks failed (test source lines: ${failed.join(', ')}); ${passed} passed`);
