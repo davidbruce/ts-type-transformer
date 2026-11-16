@@ -1579,6 +1579,171 @@ mod libraries {
         }
     }
 
+    // Runs tests/libraries/<name>/test.<ext> against the real packages: in
+    // Node, or in Chrome for a library of the page (a `browser` file in its
+    // directory), bound with tests/libraries/test-page for the page's elements.
+    fn exercise(name: &str, packages: &[&str], target: &str) {
+        let dir = root().join("tests/libraries").join(name);
+        let ext = match target {
+            "fsharp" => "fs",
+            "rust" => "rs",
+            t => t,
+        };
+        if !dir.join(format!("test.{ext}")).exists() {
+            eprintln!("SKIPPED: no tests/libraries/{name}/test.{ext}");
+            return;
+        }
+        let from = root().join("target/libraries");
+        if !from.join("node_modules").is_dir() {
+            eprintln!("SKIPPED: libraries are not installed (tests/libraries/install.sh)");
+            return;
+        }
+        let Some([node]) = tools(["node"]) else { return };
+        let browser = dir.join("browser").exists();
+        let mut packages = packages.to_vec();
+        if browser {
+            copy_dir(&root().join("tests/libraries/test-page"), &from.join("node_modules/test-page"));
+            packages.push("test-page");
+        }
+        let out = root().join("target/e2e/libraries").join(format!("{name}-{target}-run"));
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"));
+        for p in &packages {
+            cmd.args(["--package", p]);
+        }
+        cmd.arg("--from").arg(&from).arg("--config").arg(config(target));
+        let xml = run(&mut cmd);
+        fs::write(out.join("api.xml"), &xml).unwrap();
+        // The packages, where the program and its glue import them from.
+        std::os::unix::fs::symlink(from.join("node_modules"), out.join("node_modules")).unwrap();
+        fs::copy(dir.join("impl.mjs"), out.join("impl.mjs")).unwrap();
+        let c = Case { fixture: dir, out, xml };
+        let program = match target {
+            "c" => {
+                let Some([clang]) = tools(["clang"]) else { return };
+                let model = model(&c.xml, "C");
+                write_files(&c.out.join("bindings"), generators::c::files(&model).unwrap());
+                run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(c.out.join("bindings")).arg("-o").arg(c.out.join("test.wasm")).arg(c.fixture.join("test.c")));
+                write_glue(&c, &model);
+                None
+            }
+            "cpp" => {
+                let Some(clang) = wasi_clang() else { return };
+                let model = model(&c.xml, "C++");
+                build_cpp(&clang, &c, &model);
+                write_glue(&c, &model);
+                None
+            }
+            "zig" => {
+                let Some([zig]) = tools(["zig"]) else { return };
+                let model = model(&c.xml, "Zig");
+                write_files(&c.out, generators::zig::files(&model).unwrap());
+                fs::copy(c.fixture.join("test.zig"), c.out.join("test.zig")).unwrap();
+                run(Command::new(zig).current_dir(&c.out).args(ZIG_WASM));
+                write_glue(&c, &model);
+                None
+            }
+            "rust" => {
+                let Some(rustc) = rustc_wasm() else { return };
+                let model = model(&c.xml, "Rust");
+                build_rust(&rustc, &c, &model);
+                write_glue(&c, &model);
+                None
+            }
+            "fsharp" => {
+                let Some([fable]) = tools(["fable"]) else { return };
+                write_fsharp(&c, &generators::fsharp::module(&c.xml).unwrap());
+                run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+                Some((root().join("tests/run_fable.mjs"), c.out.join("js/Test.mjs"), "import './js/Test.mjs';\n"))
+            }
+            "gleam" => {
+                let Some([gleam]) = tools(["gleam"]) else { return };
+                write_gleam_project(&c.out, &generators::gleam::module(&c.xml).unwrap_or_else(|p| panic!("{}", p.join("\n"))));
+                fs::copy(c.fixture.join("test.gleam"), c.out.join("src/check.gleam")).unwrap();
+                run(Command::new(gleam).current_dir(&c.out).args(["build", "--warnings-as-errors"]));
+                Some((root().join("tests/run_gleam.mjs"), c.out.join("build/dev/javascript/check/check.mjs"), "import { main } from './build/dev/javascript/check/check.mjs';\nmain();\n"))
+            }
+            _ => unreachable!(),
+        };
+        if !browser {
+            let report = match &program {
+                None => run(Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(c.out.join("impl.mjs")).arg(c.out.join("glue.mjs")).arg(c.out.join("test.wasm"))),
+                Some((runner, entry, _)) => run(Command::new(&node).arg(runner).arg(c.out.join("impl.mjs")).arg(entry)),
+            };
+            return print!("{report}");
+        }
+        // In the page: what is imported, bundled, and files of its packages
+        // the library asks the page for (`assets`: Leaflet's marker icons).
+        let Some([bun]) = tools(["bun"]) else { return };
+        for asset in fs::read_to_string(c.fixture.join("assets")).unwrap_or_default().lines().filter(|l| !l.trim().is_empty()) {
+            let from = from.join("node_modules").join(asset.trim());
+            fs::copy(&from, c.out.join(from.file_name().unwrap())).unwrap();
+        }
+        let bundle = |entry: &Path, outfile: &str| run(Command::new(&bun).current_dir(&c.out).args(["build", "--target=browser", "--format=esm"]).arg(entry).arg(format!("--outfile={outfile}")));
+        match &program {
+            None => {
+                bundle(&c.out.join("impl.mjs"), "impl.js");
+                fs::write(c.out.join("index.html"), format!("{LIBRARY_PAGE}{LIBRARY_WASM}")).unwrap();
+            }
+            Some((_, _, entry)) => {
+                fs::write(c.out.join("entry.mjs"), entry).unwrap();
+                bundle(&c.out.join("entry.mjs"), "program.js");
+                fs::write(c.out.join("index.html"), format!("{LIBRARY_PAGE}{LIBRARY_PROGRAM}")).unwrap();
+            }
+        }
+        run_browser(&c);
+    }
+
+    // The page a library of the page runs in: the elements test-page gives.
+    const LIBRARY_PAGE: &str = r#"<!doctype html>
+<title>library test</title>
+<style>#map, #stage, #chart, #canvas { width: 400px; height: 300px; }</style>
+<div id="map"></div><div id="stage"></div><div id="chart"></div><canvas id="canvas" width="400" height="300"></canvas>
+"#;
+
+    const LIBRARY_WASM: &str = r#"<script type="module">
+import { makeEnv } from './glue.mjs';
+import * as impl from './impl.js';
+const { root, modules } = impl;
+let instance;
+let passed = 0;
+const failed = [];
+const options = { root, modules, check: true, unchecked: e => failed.push('unchecked exception: ' + (e?.message ?? e)) };
+const env = { ...makeEnv(() => instance, options), check: (ok, line) => (ok ? passed++ : failed.push('line ' + line)) };
+const wasi = new Proxy({}, { get: () => () => 0 });
+({ instance } = await WebAssembly.instantiate(await (await fetch('./test.wasm')).arrayBuffer(), { env, wasi_snapshot_preview1: wasi }));
+instance.exports._initialize?.();
+instance.exports.run();
+await new Promise(r => setTimeout(r, 500));
+instance.exports.finish?.();
+window.__result = { passed, failed, dom: [], domChecks: 0 };
+</script>
+"#;
+
+    // F# and Gleam: the program reports `N checks passed`, last, or throws.
+    const LIBRARY_PROGRAM: &str = r#"<script type="module">
+let passed = 0;
+const failed = [];
+const log = console.log;
+console.log = (...args) => {
+  const m = String(args[0]).match(/(\d+) checks passed/);
+  if (m) passed = Number(m[1]);
+  log(...args);
+};
+window.addEventListener('unhandledrejection', e => failed.push('rejected: ' + (e.reason?.message ?? e.reason)));
+try {
+  await import('./program.js');
+} catch (e) {
+  failed.push('threw: ' + (e?.message ?? e));
+}
+const deadline = Date.now() + 20000;
+while (!passed && !failed.length && Date.now() < deadline) await new Promise(r => setTimeout(r, 50));
+if (!passed && !failed.length) failed.push('the program did not report');
+window.__result = { passed, failed, dom: [], domChecks: 0 };
+</script>
+"#;
+
     macro_rules! library {
         ($($name:ident: [$($package:literal),+];)*) => { $(mod $name {
             const PACKAGES: &[&str] = &[$($package),+];
@@ -1588,6 +1753,13 @@ mod libraries {
             #[test] #[ignore] fn zig() { super::check(stringify!($name), PACKAGES, "zig"); }
             #[test] #[ignore] fn rust() { super::check(stringify!($name), PACKAGES, "rust"); }
             #[test] #[ignore] fn gleam() { super::check(stringify!($name), PACKAGES, "gleam"); }
+            // Its test programs, run against the real library.
+            #[test] #[ignore] fn run_fsharp() { super::exercise(stringify!($name), PACKAGES, "fsharp"); }
+            #[test] #[ignore] fn run_c() { super::exercise(stringify!($name), PACKAGES, "c"); }
+            #[test] #[ignore] fn run_cpp() { super::exercise(stringify!($name), PACKAGES, "cpp"); }
+            #[test] #[ignore] fn run_zig() { super::exercise(stringify!($name), PACKAGES, "zig"); }
+            #[test] #[ignore] fn run_rust() { super::exercise(stringify!($name), PACKAGES, "rust"); }
+            #[test] #[ignore] fn run_gleam() { super::exercise(stringify!($name), PACKAGES, "gleam"); }
         })* };
     }
 

@@ -316,17 +316,18 @@ fn main() {
         }
         all
     };
+    if !include.is_empty() {
+        let libs: Vec<_> = program.get_source_files().iter().copied().filter(|f| f.file_name().starts_with(&bundled::lib_path())).collect();
+        front.collect_included(&libs, &include, &mut decls);
+    }
+    lower::lower(&mut front, &mut decls, opts);
+    // After lowering: an overload it renamed is of its package too.
     modules.origins = front.origin_of_name.clone();
     match entries.as_slice() {
         [] => {}
         [(package, _, _)] => modules.import = modules.import.take().or_else(|| Some(package.clone())),
         _ => modules.packages = front.package_of_name.clone(),
     }
-    if !include.is_empty() {
-        let libs: Vec<_> = program.get_source_files().iter().copied().filter(|f| f.file_name().starts_with(&bundled::lib_path())).collect();
-        front.collect_included(&libs, &include, &mut decls);
-    }
-    lower::lower(&mut front, &mut decls, opts);
     match lower::rename(&mut decls, &renames) {
         Ok(unused) if census => unused.iter().for_each(|n| eprintln!("# rename.{n}: not generated for this target")),
         Ok(_) => {}

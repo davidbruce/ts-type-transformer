@@ -759,6 +759,10 @@ impl<'a> Builder<'a> {
     // `default`, which names no declaration.
     fn exported_name(&self, d: Node, name: &str) -> String {
         match d.attribute("jsName").filter(|j| *j != "default" && self.multi && self.package.is_some() && !d.ancestors().skip(1).any(|a| a.has_tag_name("namespace"))) {
+            // An overload, named for what sets it apart (`circle_with_radius`
+            // of `circle`), keeps that name; a name given apart from another
+            // package's (`pb_pick`) is the one exported.
+            Some(js) if name.starts_with(&format!("{js}_")) => name.to_string(),
             Some(js) => js.to_string(),
             None => name.to_string(),
         }
@@ -1142,7 +1146,9 @@ impl<'a> Builder<'a> {
                 // An optional parameter is an optional value: null, or a null handle, when absent.
                 "parameter" if flag(p, "optional") => {
                     let t = value(self.ty(only_child(p), owner));
-                    let optional = absent(t.clone(), true);
+                    // One of any type: `undefined` when absent (leaflet's `on(type, fn,
+                    // context?)`), where a null handle would be `null`.
+                    let optional = if t == Ty::Any { Ty::Nullable(Box::new(Ty::Any), true) } else { absent(t.clone(), true) };
                     if optional == Ty::Any && t != Ty::Any {
                         self.skip("optional parameter of a type that cannot be absent, bound as an untyped value");
                     }

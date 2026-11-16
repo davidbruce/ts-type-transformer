@@ -181,7 +181,15 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     }
     if o.overloads {
         each_member_list(decls, &mut |members| rename_members(members, o));
-        rename_functions(decls, o);
+        // A renamed overload is of its package (leaflet's `circle_with_radius`).
+        for (old, new) in rename_functions(decls, o) {
+            if let Some(p) = front.package_of_name.get(&old).cloned() {
+                front.package_of_name.insert(new.clone(), p);
+            }
+            if let Some(origin) = front.origin_of_name.get(&old).cloned() {
+                front.origin_of_name.insert(new, origin);
+            }
+        }
     }
     if o.classes {
         mark_class_refs(decls);
@@ -2788,7 +2796,9 @@ fn rename_members(members: &mut [Member], o: Options) {
     }
 }
 
-fn rename_functions(decls: &mut [Decl], o: Options) {
+// Gives each renamed overload's (old, new) name.
+fn rename_functions(decls: &mut [Decl], o: Options) -> Vec<(String, String)> {
+    let mut renamed = Vec::new();
     let mut taken: HashSet<String> = HashSet::new();
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
     for (i, d) in decls.iter_mut().enumerate() {
@@ -2800,7 +2810,7 @@ fn rename_functions(decls: &mut [Decl], o: Options) {
                     None => groups.push((f.name.clone(), vec![i])),
                 }
             }
-            Decl::Namespace(n) => rename_functions(&mut n.decls, o),
+            Decl::Namespace(n) => renamed.extend(rename_functions(&mut n.decls, o)),
             _ => {}
         }
     }
@@ -2813,8 +2823,10 @@ fn rename_functions(decls: &mut [Decl], o: Options) {
             {
                 // What it is exported as (`default`), else the name it shares.
                 f.js_name = Some(f.js_name.take().unwrap_or_else(|| base.clone()));
+                renamed.push((base.clone(), name.clone()));
                 f.name = name;
             }
         }
     }
+    renamed
 }

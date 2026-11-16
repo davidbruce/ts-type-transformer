@@ -772,7 +772,7 @@ impl<T: FromJs> FromJs for Option<T> {
 macro_rules! handle {
     ($name:ident $(<$($p:ident),*>)?) => {
         #[repr(transparent)]
-        pub struct $name $(<$($p),*>)? (pub $crate::runtime::JsHandle $(, core::marker::PhantomData<fn() -> ($($p,)*)>)?);
+        pub struct $name $(<$($p),*>)? (pub $crate::runtime::JsHandle $(, pub core::marker::PhantomData<fn() -> ($($p,)*)>)?);
         impl $(<$($p),*>)? AsRef<$name $(<$($p),*>)?> for $name $(<$($p),*>)? {
             fn as_ref(&self) -> &Self {
                 self
@@ -822,6 +822,10 @@ impl JsValue {
     }
     pub fn is_null(&self) -> bool {
         self.0 .0 == 0
+    }
+    // `null`, for an argument of any type given nothing.
+    pub fn null() -> Self {
+        JsValue(JsHandle(0))
     }
 }
 impl From<f64> for JsValue {
@@ -1621,17 +1625,16 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         // The traits of its ancestors, and conversions to them.
         for a in &all {
             let Some(k) = class_of(a) else {
-                if params.is_empty() && !m.opaque_arity.contains_key(a) && !RUNTIME_TYPES.iter().any(|r| r.0 == a.as_str()) {
-                    *out += &upcast(&me, &tn(a));
+                if !m.opaque_arity.contains_key(a) && !RUNTIME_TYPES.iter().any(|r| r.0 == a.as_str()) {
+                    *out += &upcast_in(&bounds, &me, &tn(a));
                 }
                 continue;
             };
             let base: Vec<Ty> = base_args(m, c, a).unwrap_or_default();
             let base_args = if k.type_params.is_empty() { String::new() } else { format!("<{}>", (0..k.type_params.len()).map(|i| base.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", ")) };
             *out += &format!("impl{bounds} {}Methods{base_args} for {me} {{}}\n", tn(a));
-            if params.is_empty() && k.type_params.is_empty() {
-                *out += &upcast(&me, &tn(a));
-            }
+            // Generic or not: `Marker<P>` is a `Layer`.
+            *out += &upcast_in(&bounds, &me, &format!("{}{base_args}", tn(a)));
         }
     }
     let function_names = names_of(m.funcs.iter());
@@ -1699,12 +1702,15 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
 }
 
 // A subtype as its ancestor: by value with `into()`, by reference with
-// `as_ref()`. Both are one handle, transparently.
-fn upcast(sub: &str, base: &str) -> String {
+// `as_ref()`. Both are one handle, transparently; for a class or base of
+// type parameters too (`impl<P: JsType>`: `Marker<P>` is a `Layer`).
+fn upcast_in(bounds: &str, sub: &str, base: &str) -> String {
+    let name = base.split('<').next().unwrap_or(base);
+    let make = if base.contains('<') { format!("{name}(x.0, core::marker::PhantomData)") } else { format!("{name}(x.0)") };
     format!(
-        "impl From<{sub}> for {base} {{ fn from(x: {sub}) -> Self {{ {base}(x.0) }} }}\n\
-         impl AsRef<{base}> for {sub} {{ fn as_ref(&self) -> &{base} {{ unsafe {{ &*(self as *const {sub} as *const {base}) }} }} }}\n\
-         impl Is<{base}> for {sub} {{}}\n"
+        "impl{bounds} From<{sub}> for {base} {{ fn from(x: {sub}) -> Self {{ {make} }} }}\n\
+         impl{bounds} AsRef<{base}> for {sub} {{ fn as_ref(&self) -> &{base} {{ unsafe {{ &*(self as *const {sub} as *const {base}) }} }} }}\n\
+         impl{bounds} Is<{base}> for {sub} {{}}\n"
     )
 }
 

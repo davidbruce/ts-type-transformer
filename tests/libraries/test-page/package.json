@@ -1,0 +1,1 @@
+{ "name": "test-page", "type": "module", "exports": { ".": { "types": "./index.d.ts", "default": "./index.mjs" } } }
