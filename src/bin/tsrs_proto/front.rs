@@ -55,6 +55,8 @@ pub struct Front<'c> {
     converted: HashMap<TypeId, (Type, usize)>,
     // Lowering: merge `A & B` into one object type.
     pub merge_intersections: bool,
+    // Within a generic expression's constraint, which the checker makes.
+    widening: usize,
     pub intersection_limit: usize,
     // Lowering: expand a signature over the keys its type parameter may take.
     pub expand_keyed: bool,
@@ -108,6 +110,7 @@ impl<'c> Front<'c> {
             cut: 0,
             converted: HashMap::new(),
             merge_intersections: false,
+            widening: 0,
             intersection_limit: 64,
             expand_keyed: false,
             map_keyed: false,
@@ -1266,10 +1269,39 @@ impl<'c> Front<'c> {
                 self.count("widened: branded primitive");
                 return self.from_type(*p);
             }
+            // An array with nothing more of its own (`Array<T> & { [k: string]:
+            // never }`, `T[] & [...U]`, an array and a class) is the array:
+            // merged, Array.prototype's members would be an object's. One with
+            // an object literal's properties (marked's `Token[] & { links }`) is
+            // merged, for them; unless the checker made it, as the constraint
+            // of eventemitter3's `ArgumentMap<T>[K]` (each event's arguments).
+            let is_array = |c: &mut Checker, p: P<CType>| {
+                c.is_array_type_exported(p)
+                    || (p.object_flags().intersects(ObjectFlags::Reference) && p.target().is_some_and(|g| g.object_flags().intersects(ObjectFlags::Tuple)))
+                    || ["length", "slice", "indexOf", "concat", "push"].iter().all(|n| c.get_properties_of_type_exported(p).iter().any(|s| s.name() == *n))
+            };
+            let parts: Vec<P<CType>> = t.types().to_vec();
+            let array = parts.iter().copied().find(|p| is_array(self.c, *p));
+            let literal = |c: &mut Checker, p: P<CType>| !p.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Reference) && !c.get_properties_of_type_exported(p).is_empty();
+            let nothing_more = self.widening > 0 || parts.iter().all(|p| is_array(self.c, *p) || !literal(self.c, *p));
+            if let Some(p) = array.filter(|_| nothing_more) {
+                self.count("widened: intersection with an array -> the array");
+                return self.from_type(p);
+            }
             let mergeable = t.types().iter().all(|p| p.flags().intersects(TypeFlags::Object));
             // An alias's own body is written once, under its name, whatever its size.
             if mergeable && (skip.is_some() || self.c.get_properties_of_type_exported(t).len() <= self.intersection_limit) {
-                return Type::Object(self.members_of_type(t, None));
+                if nothing_more && let Some(a) = self.array_like(t) {
+                    return a;
+                }
+                // One of itself (leaflet's `extend(): { new(): any } & typeof Class`) once.
+                if self.in_progress.contains(&t.id()) {
+                    return self.erased("recursive anonymous type");
+                }
+                self.in_progress.push(t.id());
+                let members = self.members_of_type(t, None);
+                self.in_progress.pop();
+                return Type::Object(members);
             }
             // Too large to inline (`Window & typeof globalThis`): keep the named part.
             let named = t.types().iter().find(|p| p.flags().intersects(TypeFlags::Object) && p.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Reference));
@@ -1284,7 +1316,10 @@ impl<'c> Front<'c> {
             return match self.c.get_base_constraint_of_type_exported(t) {
                 Some(k) if k != t && !k.flags().intersects(DEFERRED) => {
                     self.count("widened: generic type-level expression -> constraint");
-                    self.from_type(k)
+                    self.widening += 1;
+                    let w = self.from_type(k);
+                    self.widening -= 1;
+                    w
                 }
                 _ if f.intersects(TypeFlags::TemplateLiteral | TypeFlags::StringMapping) => {
                     self.count("widened: template literal -> string");
@@ -1342,6 +1377,9 @@ impl<'c> Front<'c> {
         if self.in_progress.contains(&t.id()) || self.in_progress.len() > 12 {
             return self.erased("recursive anonymous type");
         }
+        if let Some(a) = self.array_like(t) {
+            return a;
+        }
         self.in_progress.push(t.id());
         let members = self.members_of_type(t, None);
         self.in_progress.pop();
@@ -1359,6 +1397,19 @@ impl<'c> Front<'c> {
     }
 
     // All members of a type, inherited ones included, as the checker resolves them.
+    // An array by its members (a mapped type over one, as eventemitter3's
+    // `ArgumentMap<T>[K]`, or an intersection with one): an array of what it is
+    // indexed to, not Array.prototype's members as an object's.
+    fn array_like(&mut self, t: P<CType>) -> Option<Type> {
+        let names: HashSet<String> = self.c.get_properties_of_type_exported(t).iter().map(|p| p.name().to_string()).collect();
+        if !["length", "slice", "indexOf", "concat", "push"].iter().all(|n| names.contains(*n)) {
+            return None;
+        }
+        let info = self.c.get_index_infos_of_type_exported(t).into_iter().find(|i| i.key_type().flags().intersects(TypeFlags::Number))?;
+        self.count("widened: array-like object -> array");
+        Some(Type::Array(Box::new(self.from_type(info.value_type()))))
+    }
+
     pub fn members_of_type(&mut self, t: P<CType>, owner: Option<P<Symbol>>) -> Vec<Member> {
         let mut out = Vec::new();
         for (kind, mk) in [(SignatureKind::Call, MemberKind::Call), (SignatureKind::Construct, MemberKind::Construct)] {
