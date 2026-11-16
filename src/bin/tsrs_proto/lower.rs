@@ -447,9 +447,18 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
             .or_insert_with(|| {
                 // By its members, if a few that say what they are; else where it is.
                 let joined = parts.iter().map(describe).collect::<Option<Vec<_>>>().map(|ps| ps.join(&format!("{sep}or{sep}")));
+                // Another's (F#'s `string | (a) => b` beside `string | (c) => d`,
+                // both `string_or_fn`): where it is; a place another has, with what
+                // else it holds (`string | FileHandle_readFile_options`).
+                let at = path.join(sep);
+                let or_rest = || -> Option<String> {
+                    let rest: Vec<String> = parts.iter().filter_map(describe).filter(|d| !d.starts_with(&at)).collect();
+                    (!rest.is_empty() && rest.len() < parts.len()).then(|| format!("{at}{sep}or{sep}{}", rest.join(&format!("{sep}or{sep}"))))
+                };
                 let base = match joined {
-                    Some(j) if parts.len() <= 3 && j.len() <= NAME_MAX => j,
-                    _ if !path.is_empty() => path.join(sep),
+                    Some(j) if parts.len() <= 3 && j.len() <= NAME_MAX && !names.contains(&j) => j,
+                    _ if !path.is_empty() && !names.contains(&at) => at,
+                    _ if !path.is_empty() => or_rest().filter(|n| !names.contains(n)).unwrap_or(at),
                     j => j.unwrap_or_else(|| parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}"))),
                 };
                 let name = unique(base, names);
@@ -710,8 +719,9 @@ fn walk_type(t: &mut Type, path: &mut Vec<String>, f: &mut TypeFn) {
 }
 
 // A union's inline objects, each named apart from the others: by the value
-// of a property that tells them apart (katex's `TrustContext` of `command:
-// "\\href"` is `TrustContext_href`), else by a property only it has.
+// of the property that tags them (katex's `TrustContext` of `command:
+// "\\href"` is `TrustContext_href`), where it has one; else by a property
+// only it has. Those still alike are named apart where hoisted.
 fn arm_names(parts: &[Type]) -> Vec<Option<String>> {
     let objects: Vec<Option<&Vec<Member>>> = parts.iter().map(|p| if let Type::Object(ms) = p { Some(ms) } else { None }).collect();
     if objects.iter().flatten().count() < 2 {
@@ -719,20 +729,20 @@ fn arm_names(parts: &[Type]) -> Vec<Option<String>> {
     }
     let props = |ms: &Vec<Member>| ms.iter().filter(|m| m.kind == MemberKind::Property).map(|m| (m.name.clone(), m.optional, m.constant.clone())).collect::<Vec<_>>();
     let shapes: Vec<Option<Vec<(String, bool, Option<String>)>>> = objects.iter().map(|o| o.map(props)).collect();
-    // A property every object fixes, to a value each its own.
-    let tag = shapes.iter().flatten().next().and_then(|first| {
-        first.iter().map(|f| &f.0).find(|name| {
-            let values: Vec<Option<&String>> = shapes.iter().flatten().map(|s| s.iter().find(|g| &&g.0 == name).and_then(|g| g.2.as_ref())).collect();
-            values.iter().all(|v| v.is_some()) && values.iter().collect::<HashSet<_>>().len() == values.len()
-        })
-    });
+    // The property most of them fix, if two do.
+    let mut fixed: Vec<(String, usize)> = Vec::new();
+    for f in shapes.iter().flatten().flatten().filter(|f| f.2.is_some()) {
+        match fixed.iter_mut().find(|(n, _)| *n == f.0) {
+            Some(e) => e.1 += 1,
+            None => fixed.push((f.0.clone(), 1)),
+        }
+    }
+    let tag = fixed.iter().filter(|f| f.1 >= 2).max_by_key(|f| f.1).map(|f| f.0.clone());
     (0..parts.len())
         .map(|i| {
             let own = shapes[i].as_ref()?;
-            match tag {
-                Some(t) => own.iter().find(|g| &g.0 == t).and_then(|g| g.2.as_deref()).map(|v| name_part(v).trim_matches('_').to_string()).filter(|v| !v.is_empty()),
-                None => unique_property(&shapes, i),
-            }
+            let tagged = tag.as_ref().and_then(|t| own.iter().find(|g| &g.0 == t)).and_then(|g| g.2.as_deref()).map(|v| name_part(v).trim_matches('_').to_string()).filter(|v| !v.is_empty());
+            tagged.or_else(|| unique_property(&shapes, i))
         })
         .collect()
 }
@@ -2049,18 +2059,40 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         // then the first in alphabetical order. Moving declarations around
         // does not rename it.
         let mut best: HashMap<String, Vec<String>> = HashMap::new();
+        let mut order: Vec<String> = Vec::new();
+        let mut sample: HashMap<String, Type> = HashMap::new();
         walk(&mut decls[start..], &mut |t, path| {
             if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
                 *uses.entry(hoist_key(t)).or_default() += 1;
             }
             if matches!(t, Type::Object(_) | Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
-                let known = best.entry(hoist_key(t)).or_insert_with(|| path.to_vec());
+                let key = hoist_key(t);
+                if !sample.contains_key(&key) {
+                    order.push(key.clone());
+                    sample.insert(key.clone(), t.clone());
+                }
+                let known = best.entry(key).or_insert_with(|| path.to_vec());
                 if (path.len(), path) < (known.len(), &known[..]) {
                     *known = path.to_vec();
                 }
             }
             true
         });
+        // Types that would have one place's name (overloads' `options`, a
+        // union's object and callback) are named apart by what they are.
+        let mut at_path: HashMap<&Vec<String>, Vec<&String>> = HashMap::new();
+        for k in &order {
+            at_path.entry(&best[k]).or_default().push(k);
+        }
+        let mut apart: HashMap<String, String> = HashMap::new();
+        for keys in at_path.values().filter(|ks| ks.len() > 1) {
+            let types: Vec<&Type> = keys.iter().map(|k| &sample[*k]).collect();
+            for (k, word) in keys.iter().zip(siblings_apart(&types, sep)) {
+                if let Some(w) = word {
+                    apart.insert((*k).clone(), w);
+                }
+            }
+        }
         walk(&mut decls[start..], &mut |t, path| {
             let is_function = matches!(t, Type::Function(_) | Type::Constructor(_));
             if !(matches!(t, Type::Object(_)) || is_function) || bodies.contains(&(t as *const Type)) {
@@ -2076,7 +2108,14 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                 .entry(key)
                 .or_insert_with(|| {
                     let shared = uses.get(&hoist_key(t)).is_some_and(|n| *n > 1);
-                    let at = best.get(&hoist_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep));
+                    let mut at = best.get(&hoist_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep));
+                    if let Some(w) = apart.get(&hoist_key(t)) {
+                        at = format!("{at}{sep}{w}");
+                    // Its declaration's name only, which that has (`type ExpandedState
+                    // = true | Record<string, boolean>`): by what it is.
+                    } else if path.len() == 1 && names.contains(&at) {
+                        at = format!("{at}{sep}{}", kind_word(t));
+                    }
                     // A shared callback by what it takes, if that is short; else where it is first.
                     let base = match t {
                         // Another of that name (pixi's `(width, localWidth)` beside
@@ -2109,6 +2148,107 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         start = decls.len();
         decls.extend(added);
     }
+}
+
+// What an inline type is, in a word.
+fn kind_word(t: &Type) -> &'static str {
+    match t {
+        Type::Object(ms) if !ms.is_empty() && ms.iter().all(|m| m.kind == MemberKind::Index) => "map",
+        Type::Object(_) => "object",
+        Type::Constructor(_) => "ctor",
+        _ => "fn",
+    }
+}
+
+// Words for each of several inline types one place would name, to name them
+// apart: the first keeps the place's name, each other is named by how it
+// differs from it (`lstatSync_options_bigint`, `stat_callback_BigIntStats`).
+fn siblings_apart(ts: &[&Type], sep: &str) -> Vec<Option<String>> {
+    let first = ts[0];
+    // `{place}_{member}` is the first's member where names are flat (C's
+    // `lstatSync_options_bigint`): no word of those.
+    let members: HashSet<String> = match first {
+        Type::Object(ms) => ms.iter().map(|m| m.name.clone()).chain(["create".to_string()]).collect(),
+        _ => HashSet::new(),
+    };
+    let mut out: Vec<Option<String>> = vec![None];
+    for t in &ts[1..] {
+        let cands: Vec<String> = differences(first, t, sep).into_iter().filter(|c| !members.contains(c)).collect();
+        let taken = |c: &String, out: &Vec<Option<String>>| out.iter().flatten().any(|o| o == c);
+        // The first word no earlier one has, else two.
+        let word = cands.iter().find(|c| !taken(c, &out)).cloned().or_else(|| {
+            cands.iter().enumerate().flat_map(|(i, a)| cands[i + 1..].iter().map(move |b| format!("{a}{sep}{b}"))).find(|c| !taken(c, &out))
+        });
+        out.push(word);
+    }
+    out
+}
+
+// How `t` differs from `first`, most telling first.
+fn differences(first: &Type, t: &Type, sep: &str) -> Vec<String> {
+    let props = |ms: &Vec<Member>| ms.iter().filter(|m| m.kind == MemberKind::Property).cloned().collect::<Vec<_>>();
+    let mut out = Vec::new();
+    match (first, t) {
+        (Type::Object(a), Type::Object(b)) => {
+            let (a, b) = (props(a), props(b));
+            let find = |ms: &Vec<Member>, n: &str| ms.iter().find(|m| m.name == n).cloned();
+            // A value it fixes: `bigint: true` is `bigint`, `throwIfNoEntry: false` `no_throwIfNoEntry`.
+            for m in &b {
+                if let Some(c) = &m.constant
+                    && find(&a, &m.name).and_then(|o| o.constant) != Some(c.clone())
+                {
+                    out.push(match c.as_str() {
+                        "true" if find(&a, &m.name).is_some() => format!("{}{sep}true", m.name),
+                        "true" => m.name.clone(),
+                        "false" => format!("no{sep}{}", m.name),
+                        c if c.parse::<f64>().is_ok() => format!("{}{sep}{}", m.name, name_part(c)),
+                        c => name_part(c).trim_matches('_').to_string(),
+                    });
+                }
+            }
+            // What only it has, required first.
+            let mut added: Vec<&Member> = b.iter().filter(|m| find(&a, &m.name).is_none()).collect();
+            added.sort_by_key(|m| m.optional);
+            out.extend(added.iter().map(|m| m.name.clone()));
+            // What it has otherwise.
+            for m in &b {
+                if let Some(o) = find(&a, &m.name)
+                    && m.constant.is_none()
+                    && let (Some(x), Some(y)) = (&o.ty, &m.ty)
+                    && (type_key(x) != type_key(y) || o.constant.is_some())
+                    && let Some(d) = describe(y)
+                {
+                    out.push(format!("{}{sep}{d}", m.name));
+                }
+            }
+            for m in &b {
+                if find(&a, &m.name).is_some_and(|o| o.optional && !m.optional) {
+                    out.push(m.name.clone());
+                }
+            }
+            // What it lacks.
+            out.extend(a.iter().filter(|m| find(&b, &m.name).is_none()).map(|m| format!("no{sep}{}", m.name)));
+        }
+        (Type::Function(a) | Type::Constructor(a), Type::Function(b) | Type::Constructor(b)) => {
+            for (i, p) in b.params.iter().enumerate() {
+                match a.params.get(i) {
+                    Some(q) if type_key(&q.ty) == type_key(&p.ty) => {}
+                    Some(_) => out.extend(describe(&p.ty)),
+                    None => out.push(format!("with{sep}{}", p.name)),
+                }
+            }
+            if let (Some(x), Some(y)) = (&a.ret, &b.ret)
+                && type_key(x) != type_key(y)
+                && let Some(d) = describe(y)
+            {
+                out.push(format!("to{sep}{d}"));
+            }
+        }
+        (a, b) if kind_word(a) != kind_word(b) => out.push(kind_word(b).to_string()),
+        _ => {}
+    }
+    out.retain(|w| !w.is_empty());
+    out
 }
 
 // An inline type's key when hoisted: one `any` is another, whyever erased.
