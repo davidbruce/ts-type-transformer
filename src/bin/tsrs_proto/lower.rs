@@ -184,7 +184,90 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     if o.constraints {
         nominal_constraints(front, decls, o.exact_constraints);
     }
+    prune_bundled(decls);
     annotate_unions(front, decls);
+}
+
+// A declaration a bundler renamed (rollup's `BarSeriesOption$1`), once what
+// it was for has its members (the export, merged with it), is gone; so are
+// the types made of its own, once only it had them.
+fn prune_bundled(decls: &mut Vec<Decl>) {
+    let mut gone: Vec<String> = Vec::new();
+    loop {
+        let mut used: HashSet<String> = HashSet::new();
+        walk(decls, &mut |t, _| {
+            if let Type::Ref(r) = t {
+                used.insert(r.name.clone());
+            }
+            true
+        });
+        for d in decls.iter() {
+            if let Decl::Interface(i) = d {
+                used.extend(i.ancestors.iter().cloned());
+            }
+        }
+        let before = decls.len();
+        decls.retain(|d| {
+            let (name, synthetic) = match d {
+                Decl::Interface(i) => (&i.name, i.synthetic),
+                Decl::Alias(a) => (&a.name, a.synthetic),
+                _ => return true,
+            };
+            let bundled = name.contains('$') && !synthetic;
+            let made_of_gone = synthetic && gone.iter().any(|g| name.starts_with(&format!("{g}_")));
+            if used.contains(name) || !(bundled || made_of_gone) {
+                return true;
+            }
+            if bundled {
+                gone.push(name.clone());
+            }
+            false
+        });
+        if decls.len() == before {
+            break;
+        }
+    }
+    // One still used has its own name if no other has it: `NullUndefined$1`
+    // is `NullUndefined`, and `string_or_LabelFormatter$1` `string_or_LabelFormatter`.
+    let mut taken: HashSet<String> = HashSet::new();
+    collect_declared_names(decls, "", "_", &mut taken);
+    let bundled: Vec<String> = decls
+        .iter()
+        .filter_map(|d| match d {
+            Decl::Interface(i) if !i.synthetic => Some(&i.name),
+            Decl::Alias(a) if !a.synthetic => Some(&a.name),
+            _ => None,
+        })
+        .filter(|n| n.contains('$'))
+        .cloned()
+        .collect();
+    let strip = |n: &str| -> String {
+        let mut out = n.to_string();
+        for b in &bundled {
+            out = out.replace(b.as_str(), b.split('$').next().unwrap_or(b));
+        }
+        out
+    };
+    let mut names: Vec<String> = Vec::new();
+    collect_names(decls, &mut names);
+    let mut renames = Vec::new();
+    for n in names.into_iter().filter(|n| n.contains('$')) {
+        let new = strip(&n);
+        if new != n && !new.contains('$') && !taken.contains(&new) {
+            taken.insert(new.clone());
+            renames.push((n, new));
+        }
+    }
+    rename_everywhere(decls, &renames);
+}
+
+fn collect_names(decls: &[Decl], out: &mut Vec<String>) {
+    for d in decls {
+        match d {
+            Decl::Namespace(n) => collect_names(&n.decls, out),
+            d => out.extend(decl_name(d).map(str::to_string)),
+        }
+    }
 }
 
 // A method a type redeclares as its ancestor declares it, but for the types

@@ -33,6 +33,8 @@ pub struct Front<'c> {
     // Declarations exported under another name than their own, by their own.
     // What a symbol is exported as, when not its own name.
     exported_as: HashMap<P<Symbol>, String>,
+    // Symbols a module exports by their own names.
+    exported_plain: HashSet<P<Symbol>>,
     // A package's top-level symbols by the name they have in the output, and
     // the reverse: two files may each declare their own `Options`.
     output_names: HashMap<P<Symbol>, String>,
@@ -97,6 +99,7 @@ impl<'c> Front<'c> {
             lib_path,
             seen: HashSet::new(),
             exported_as: HashMap::new(),
+            exported_plain: HashSet::new(),
             output_names: HashMap::new(),
             named: HashMap::new(),
             emitted_nodes: HashSet::new(),
@@ -186,7 +189,11 @@ impl<'c> Front<'c> {
                 Decl::Namespace(n) => Some(n.name.clone()),
             }
         };
-        let declared: HashSet<String> = out.iter().filter_map(name_of).collect();
+        let mut declared: HashSet<String> = out.iter().filter_map(name_of).collect();
+        // A name held by what is not exported by it gives way: rollup's
+        // `BarSeriesOption$1`, exported as `BarSeriesOption`, takes the name
+        // from the local interface it extends, which takes `BarSeriesOption$1`.
+        let plain: HashSet<String> = self.exported_plain.iter().filter_map(|s| self.output_names.get(s).cloned()).collect();
         // By the name each exported symbol has in the output.
         let by_name: HashMap<String, String> = self
             .exported_as
@@ -194,6 +201,7 @@ impl<'c> Front<'c> {
             .map(|(s, e)| (self.output_names.get(s).cloned().unwrap_or_else(|| self.own_name(*s)), e.clone()))
             .collect();
         let mut renames = Vec::new();
+        let mut swaps = Vec::new();
         for d in out.iter_mut() {
             let Some(name) = name_of(d) else { continue };
             let Some(exported) = by_name.get(&name).cloned() else { continue };
@@ -207,9 +215,18 @@ impl<'c> Front<'c> {
                 }
             // A namespace is reached by what contains it: `path.posix` is `path` by
             // another name, not a rename of it.
-            } else if exported != name && !declared.contains(&exported) && !matches!(d, Decl::Namespace(_)) {
-                renames.push((name, exported));
+            } else if exported != name && !matches!(d, Decl::Namespace(_)) {
+                if !declared.contains(&exported) {
+                    renames.push((name, exported));
+                } else if !plain.contains(&exported) && !by_name.contains_key(&exported) && !renames.iter().any(|(_, n)| *n == name || *n == exported) {
+                    swaps.push((name, exported));
+                }
             }
+        }
+        for (name, exported) in swaps {
+            declared.insert(name.clone());
+            renames.push((exported.clone(), name.clone()));
+            renames.push((name, exported));
         }
         crate::lower::rename_everywhere(out, &renames);
         // References made after this (union tests, in lowering) have the new names.
@@ -218,12 +235,14 @@ impl<'c> Front<'c> {
                 *name = new.clone();
             }
         }
-        for (old, new) in &renames {
-            if let Some(origin) = self.origin_of_name.remove(old) {
-                self.origin_of_name.insert(new.clone(), origin);
+        // All at once: a swap renames each to the other.
+        let origins: Vec<_> = renames.iter().map(|(old, new)| (new.clone(), self.origin_of_name.remove(old), self.package_of_name.remove(old))).collect();
+        for (new, origin, package) in origins {
+            if let Some(o) = origin {
+                self.origin_of_name.insert(new.clone(), o);
             }
-            if let Some(package) = self.package_of_name.remove(old) {
-                self.package_of_name.insert(new.clone(), package);
+            if let Some(p) = package {
+                self.package_of_name.insert(new, p);
             }
         }
     }
@@ -385,7 +404,11 @@ impl<'c> Front<'c> {
     // else, from the entry module's exports, where its own declarations hide
     // what `export *` brings of the same name.
     fn reserve(&mut self, sym: P<Symbol>) {
+        let exported = sym.name().to_string();
         let sym = self.resolve_alias(sym);
+        if exported == self.own_name(sym) {
+            self.exported_plain.insert(sym);
+        }
         self.output_name(sym);
     }
 
