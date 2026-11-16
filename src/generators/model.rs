@@ -610,6 +610,11 @@ impl<'a> Builder<'a> {
                         // A value with members of its own: bound like a class with only statics.
                         // A type may have the same name (`type NodeFilter` and `var NodeFilter`).
                         let name = if self.decls.contains_key(&path) { format!("{}_statics", self.type_ident(&path)) } else { self.type_ident(&path) };
+                        // A namespace's, as its types are: `Intl.Locale`'s statics, `intl.Locale_statics`.
+                        if let Some((ns, own)) = path.rsplit_once('.') {
+                            let own = if self.decls.contains_key(&path) { format!("{own}_statics") } else { own.to_string() };
+                            self.model.namespaced.insert(name.clone(), ns.split('.').map(str::to_string).chain([own]).collect());
+                        }
                         let c = self.statics(body, &self.js(d, &path), name);
                         self.model.classes.push(c);
                         continue;

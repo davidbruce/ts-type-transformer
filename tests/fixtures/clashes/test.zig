@@ -24,5 +24,6 @@ export fn run() void {
     expect(b.Point.create().h != 0, @src());
 
     expect(b.ns_Node.new().id() == 2, @src());
-    expect(b.ns_Node_2.new().id() == 1, @src());
+    // The namespace's `Node`, in a struct of its namespace.
+    expect(b.ns.Node.new().id() == 1, @src());
 }

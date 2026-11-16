@@ -1332,7 +1332,7 @@ fn intl_locale_formatting() {
                      n_opts.set_currency(Some(\"USD\"));\n\
                      let nf = intl_number_format().construct(\"en-US\", Some(&n_opts));\n\
                      check!(nf.format(1234.5) == \"$1,234.50\");\n\
-                     let rtf = IntlRelativeTimeFormatStatics::new(\"en-US\", None);\n\
+                     let rtf = intl::RelativeTimeFormatStatics::new(\"en-US\", None);\n\
                      check!(rtf.format(-1.0, IntlRelativeTimeFormatUnit::Day) == \"1 day ago\");\n\
                  }\n\
                  check!(js::live_handles() == 0);\n\
@@ -1362,15 +1362,15 @@ fn intl_locale_formatting() {
              fn expect(ok: bool, src: anytype) void { check(@intFromBool(ok), src.line); }\n\
              export fn run() void {\n\
                  var scope = b.JsScope.open();\n\
-                 const loc = b.Intl_Locale_statics.new(.{ .string = b.JsString.from(\"en-US\") }, .{});\n\
+                 const loc = b.intl.Locale_statics.new(.{ .string = b.JsString.from(\"en-US\") }, .{});\n\
                  const opts = loc.asIntl_LocaleOptions();\n\
                  expect(opts.getLanguage().?.eql(\"en\"), @src());\n\
-                 const n_opts = b.Intl_NumberFormatOptions.create();\n\
+                 const n_opts = b.intl.NumberFormatOptions.create();\n\
                  n_opts.setStyle(.currency);\n\
                  n_opts.setCurrency(\"USD\");\n\
                  const nf = b.getIntlNumberFormat().construct(.{ .locales = .{ .string = b.JsString.from(\"en-US\") }, .options = n_opts });\n\
                  expect(nf.format(1234.5).eql(\"$1,234.50\"), @src());\n\
-                 const rtf = b.Intl_RelativeTimeFormat_statics.new(.{ .locales = .{ .string = b.JsString.from(\"en-US\") } });\n\
+                 const rtf = b.intl.RelativeTimeFormat_statics.new(.{ .locales = .{ .string = b.JsString.from(\"en-US\") } });\n\
                  expect(rtf.format(-1.0, .day).eql(\"1 day ago\"), @src());\n\
                  scope.close();\n\
                  expect(b.jsLiveHandles() == 0, @src());\n\

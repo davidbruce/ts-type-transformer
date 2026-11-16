@@ -876,6 +876,8 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let home: HashMap<&str, &str> = files.iter().flat_map(|(file, (_, _, names))| names.iter().map(move |n| (n.as_str(), file.as_str()))).collect();
     let mut out = Vec::new();
     let mut root = String::from("// Generated. Every name, from the file that declares it.\n");
+    // A namespace's types: their path, and where each is declared.
+    let mut namespaces: Vec<(Vec<String>, String)> = Vec::new();
     for (file, (body, externs, names)) in &files {
         let own: HashSet<&str> = names.iter().map(String::as_str).collect();
         // The runtime's names, and the types the file's declarations name.
@@ -887,11 +889,62 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let body = if file == "runtime" { body.clone() } else { format!("// Generated.\n{imports}\n{body}") };
         out.push((format!("{file}.zig"), format!("{body}\nconst raw = struct {{\n{externs}}};\n")));
         for n in names {
-            root += &format!("pub const {} = @import(\"{file}.zig\").{};\n", ident(n), ident(n));
+            // A namespace's type is its namespace's, not the root's.
+            match m.namespaced.get(n) {
+                Some(path) => namespaces.push((path.clone(), format!("@import(\"{file}.zig\").{}", ident(n)))),
+                None => root += &format!("pub const {} = @import(\"{file}.zig\").{};\n", ident(n), ident(n)),
+            }
         }
     }
+    root += &namespace_structs(&namespaces, &root);
     out.push(("bindings.zig".into(), root));
     Ok(out)
+}
+
+// A namespace as a struct of its types, by their own names: `Stream`'s
+// `PipeOptions` is `stream.PipeOptions`. Each refers to its definition
+// through its file, never by a bare name another scope could also mean.
+fn namespace_structs(types: &[(Vec<String>, String)], root: &str) -> String {
+    let taken: HashSet<&str> = root.lines().filter_map(|l| l.strip_prefix("pub const ")?.split(' ').next()).collect();
+    fn level(types: &[(Vec<String>, String)], at: &[String], depth: usize, taken: &HashSet<&str>) -> String {
+        let indent = "    ".repeat(depth);
+        let mut out = String::new();
+        for (path, target) in types.iter().filter(|(p, _)| p.len() == at.len() + 1 && p[..at.len()] == *at) {
+            out += &format!("{indent}pub const {} = {target};\n", ident(path.last().unwrap()));
+        }
+        let children: BTreeSet<&String> = types.iter().filter(|(p, _)| p.len() > at.len() + 1 && p[..at.len()] == *at).map(|(p, _)| &p[at.len()]).collect();
+        for child in children {
+            // Apart from what the root has (leaflet's function `icon`).
+            let base = snake_case(child);
+            let name = if depth == 0 && taken.contains(ident(&base).as_str()) { ident(&format!("{base}_ns")) } else { ident(&base) };
+            let mut path = at.to_vec();
+            path.push(child.clone());
+            out += &format!("{indent}pub const {name} = struct {{\n{}{indent}}};\n", level(types, &path, depth + 1, taken));
+        }
+        out
+    }
+    level(types, &[], 0, &taken)
+}
+
+// `NodeJS` -> `node_js`, `Stream` -> `stream`: a namespace's name.
+fn snake_case(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let mut out = String::new();
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_uppercase() {
+            let prev = i.checked_sub(1).map(|j| chars[j]);
+            let next = chars.get(i + 1);
+            let after_word = prev.is_some_and(|p| p.is_lowercase() || p.is_ascii_digit());
+            let ends_acronym = prev.is_some_and(|p| p.is_uppercase()) && next.is_some_and(|n| n.is_lowercase());
+            if (after_word || ends_acronym) && !out.is_empty() && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.extend(c.to_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 // The model's types `t` names: what Zig code of it refers to.
