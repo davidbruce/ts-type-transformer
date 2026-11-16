@@ -401,8 +401,33 @@ the one type that differs, else a number. F# and C++ keep overloads, so
 name them only where they collide: F# by the same marks (`markedAsync`), C++
 not at all, a `requires` clause choosing. An overload whose parameters and
 constraints repeat an earlier one's is dropped: TypeScript would never
-choose it. A callback type
-used in several places is named by what it takes: `HTMLElement_MouseEvent_fn`.
+choose it. An overload that only makes a parameter optional is named by it.
+
+## Generated names
+
+An inline type is named by where it first is, by its shortest path
+(`Renderer_getAnimationLoop_result`), keeping the owner: a name stays put
+when a library adds an unrelated one. A callback used in several places is
+named by what it takes and gives, if that is short and free
+(`HTMLElement_MouseEvent_fn`, `Token_to_boolean_fn`). A union by its members
+when a few short ones say it (`string_or_number`, member order aside), else
+by its place; a place another union has, with what else it holds
+(`FileHandle_readFile_options_or_string`), or `_union`.
+
+Inline types one place would name (overloads' options, a union's members)
+are named apart: the first keeps the place's name, each other is named by
+how it differs: its tag (`TrustContext_href`), a value it fixes
+(`lstatSync_options_bigint_true`), a property only it has, has otherwise or
+makes optional (`ColumnHelper_accessor_column_opt_id`), a parameter or result
+(`stat_callback_opt_BigIntStats`), what it is (`ExpandedState_map`). Never
+by a member of the first: in C `{Type}_{member}` is the first's own. Enums
+of strings by their first value (`Evented_addEventListener_type_click`).
+Names too long are cut in the middle; a number is the last resort.
+
+Bundled declarations take their exported names: rollup's
+`BarSeriesOption$1`, exported as `BarSeriesOption`, swaps names with the
+local interface; an unused `$N` is pruned, a used one drops `$N` if free.
+F# delegates are named by their place (`MkdirCallback`), then their types.
 
 ## Provenance
 
