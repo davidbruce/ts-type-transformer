@@ -5,6 +5,7 @@ import bindings/types as t
 import gleam/io
 import bindings/areas/main/clock
 import bindings/areas/main/settings
+import bindings/namespaces/geometry/deep
 import bindings/namespaces/geometry/point
 
 
@@ -27,10 +28,10 @@ pub fn main() {
   check(clock.now() == 1000.0 && clock.zero == 0.0, "statics")
 
   // Namespaces, nested ones included.
-  let p = geometry.geometry_point(0.0, 0.0)
-  let q = geometry.geometry_point(3.0, 4.0)
-  check(geometry.geometry_distance(p, q) == 5.0 && point.get_x(q) == 3.0, "namespace")
-  check(geometry.get_geometry_unit() == 1.0 && geometry.geometry_deep_twice(4.0) == 8.0, "nested namespace")
+  let p = geometry.point(0.0, 0.0)
+  let q = geometry.point(3.0, 4.0)
+  check(geometry.distance(p, q) == 5.0 && point.get_x(q) == 3.0, "namespace")
+  check(geometry.get_unit() == 1.0 && deep.twice(4.0) == 8.0, "nested namespace")
 
   // Rest parameters take a list.
   check(b.join("-", ["a", "b", "c"]) == "a-b-c" && b.join("-", []) == "", "rest")

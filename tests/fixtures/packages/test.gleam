@@ -36,8 +36,8 @@ pub fn main() {
   let _geo: t.Point2 = pa.to_geo(own)
 
   // Namespaces of one name.
-  check(util.util_tag() == "pa", "pa's util")
-  check(pb_util.pb_util_tag() == "pb", "pb's util")
+  check(util.tag() == "pa", "pa's util")
+  check(pb_util.tag() == "pb", "pb's util")
 
   io.println("checks passed")
 }

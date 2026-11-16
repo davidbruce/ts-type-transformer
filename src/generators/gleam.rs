@@ -184,6 +184,23 @@ impl<'m> Gen<'m> {
         name
     }
 
+    // A value's name in the module being written, the first of `base`,
+    // `base_2`, ... it has not given out, and no keyword.
+    fn fresh_value(&mut self, base: &str) -> String {
+        let mut base = lower(base);
+        if KEYWORDS.contains(&base.as_str()) {
+            base.push('_');
+        }
+        let mut name = base.clone();
+        let mut i = 2;
+        while self.reserved_values.contains(&name) || self.values.contains(&(self.unit.clone(), name.clone())) {
+            name = format!("{base}_{i}");
+            i += 1;
+        }
+        self.values.insert((self.unit.clone(), name.clone()));
+        name
+    }
+
     fn tname(&self, n: &str) -> String {
         self.types.get(n).cloned().unwrap_or_else(|| upper(n))
     }
@@ -968,9 +985,21 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
     }
     for f in &m.funcs {
-        g.switch(&paths[&f.module]);
-        let id = g.value_name(&function_name(f, &f.name));
-        g.function(&id, f, None);
+        match m.func_namespaces.get(&f.import) {
+            // A namespace's by its own name, in its module (a nested one's
+            // in a module of it): `geometry.distance`, `deep.twice`.
+            Some((path, own, _)) => {
+                let unit = std::iter::once(paths[&f.module].clone()).chain(path[1..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
+                g.switch(&unit);
+                let id = g.fresh_value(&function_name(f, own));
+                g.function(&id, f, None);
+            }
+            None => {
+                g.switch(&paths[&f.module]);
+                let id = g.value_name(&function_name(f, &f.name));
+                g.function(&id, f, None);
+            }
+        }
     }
     g.switch("");
 
