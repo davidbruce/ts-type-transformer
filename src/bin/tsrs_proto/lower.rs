@@ -207,6 +207,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
 // document`, the global object's interface being what `window` or `self` is
 // (`declare var self: Window & typeof globalThis`), with what it extends.
 // A namespace's variables are its object's, read-only (`CSS.highlights`).
+// A class's `prototype` is read-only.
 fn readonly_globals(decls: &mut [Decl]) {
     let interfaces: HashMap<String, &Interface> = decls.iter().filter_map(|d| if let Decl::Interface(i) = d { Some((i.name.clone(), i)) } else { None }).collect();
     let mut scopes: Vec<String> = Vec::new();
@@ -238,6 +239,13 @@ fn readonly_globals(decls: &mut [Decl]) {
         }
     }
     for d in decls.iter_mut() {
+        // A class's static side has its `prototype` read-only (`declare var
+        // SVGMatrix: { prototype: DOMMatrix; new(): DOMMatrix }`).
+        if let Decl::Var(v) = d
+            && let Type::Object(members) = &mut v.ty
+        {
+            members.iter_mut().filter(|m| m.name == "prototype" && m.kind == MemberKind::Property).for_each(|m| m.readonly = true);
+        }
         match d {
             Decl::Var(v) if readonly.contains(&v.name) => v.readonly = true,
             Decl::Namespace(n) => {

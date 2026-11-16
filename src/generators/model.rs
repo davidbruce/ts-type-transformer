@@ -1069,7 +1069,6 @@ impl<'a> Builder<'a> {
                 if flag(m, "optional") {
                     t = absent(t, true);
                 }
-                let prototype = is_static && js == "prototype";
                 let (get, set) = if is_static {
                     (Call::StaticGet(format!("{path}.{js}")), Call::StaticSet(format!("{path}.{js}")))
                 } else {
@@ -1078,8 +1077,7 @@ impl<'a> Builder<'a> {
                 let name = unique(format!("get_{}", ident(raw_name)), names);
                 let import = self.import(format!("{owner}_{name}"));
                 c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone() });
-                // A class's `prototype` is never assigned (`declare var SVGMatrix: typeof DOMMatrix`).
-                if !flag(m, "readonly") && !prototype {
+                if !flag(m, "readonly") {
                     let name = unique(format!("set_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
                     c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });

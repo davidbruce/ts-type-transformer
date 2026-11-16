@@ -916,6 +916,78 @@ fn run_browser(c: &Case) {
 mod dom {
     use super::*;
 
+    // What F#'s instance members reach, read from the generated code: an
+    // abstract member is the JavaScript member of its name (Fable compiles
+    // `abstract checked: bool with get, set` to `x.checked`), an `Emit` one
+    // what it emits. Static sides and constructors are not read.
+    fn fsharp_manifest(files: &[(String, String)]) -> String {
+        let mut out = String::from("export const bindings = [\n");
+        let mut n = 0;
+        for (_, text) in files {
+            let mut owner = String::new();
+            for line in text.lines() {
+                let t = line.trim_start();
+                if let Some(rest) = t.strip_prefix("type ").or_else(|| t.strip_prefix("and ")) {
+                    owner = rest.split([' ', '<', '=']).next().unwrap_or_default().trim_matches('`').to_string();
+                    continue;
+                }
+                // A type-level map (`HTMLElementTagNameMap`) is nothing at runtime.
+                if owner.ends_with("Map") {
+                    continue;
+                }
+                // A static side's members are its class's statics.
+                let class = owner.strip_suffix("Static").map(str::to_string);
+                let mut push = |kind: &str, member: &str| {
+                    n += 1;
+                    match &class {
+                        Some(c) => {
+                            let kind = match kind {
+                                "get" => "staticGet",
+                                "set" => "staticSet",
+                                _ => "static",
+                            };
+                            out += &format!("  [\"fs{n}\", {kind:?}, \"\", \"{c}.{member}\", \"\"],\n");
+                        }
+                        None => out += &format!("  [\"fs{n}\", {kind:?}, {owner:?}, {member:?}, {owner:?}],\n"),
+                    }
+                };
+                // `Emit("$0.foo")`, `Emit("$0.foo = $1")`, `Emit("$0.foo($1...)")`.
+                let emits: Vec<&str> = line.split("Emit(\"").skip(1).filter_map(|e| e.split("\")").next()).collect();
+                for e in &emits {
+                    let Some(rest) = e.strip_prefix("$0.") else { continue };
+                    let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '$').collect();
+                    let after = &rest[name.len()..];
+                    if after.starts_with(" = ") {
+                        push("set", &name);
+                    } else if after.starts_with('(') {
+                        push("method", &name);
+                    } else if after.is_empty() {
+                        push("get", &name);
+                    }
+                }
+                if !emits.is_empty() {
+                    continue;
+                }
+                let Some(rest) = t.strip_prefix("abstract ") else { continue };
+                let Some((name, sig)) = rest.split_once(':') else { continue };
+                let name = name.trim().split('<').next().unwrap_or_default().trim_matches('`');
+                if name.contains(' ') || name.is_empty() {
+                    continue;
+                }
+                if sig.contains("with get, set") {
+                    push("get", name);
+                    push("set", name);
+                } else if sig.contains("with get") || !sig.contains("->") {
+                    push("get", name);
+                } else {
+                    push("method", name);
+                }
+            }
+        }
+        out += "];\nexport const implementers = {};\n";
+        out
+    }
+
     // Every binding of the DOM, in each wasm target's model and Gleam's,
     // reaches what it names in a real browser (tests/dom/bindings.mjs).
     #[test]
@@ -937,9 +1009,14 @@ mod dom {
             };
             fs::write(out.join(format!("manifest-{target}.mjs")), manifest).unwrap();
         }
+        let xml = lower_with(Path::new("lib.dom.d.ts"), Some("fsharp"), &[root().join("examples/modules/dom.toml")], &[]);
+        fs::write(out.join("manifest-fsharp.mjs"), fsharp_manifest(&generators::fsharp::module(&xml).unwrap().files)).unwrap();
         fs::write(out.join("declared.mjs"), format!("export const declared = {:?};\n", declared.into_iter().collect::<Vec<_>>())).unwrap();
-        let imports: String = targets.iter().map(|(t, _)| format!("import * as {t} from './manifest-{t}.mjs';\n")).collect();
-        let checks: String = targets.iter().map(|(t, _)| format!("results.{t} = verify({t}.bindings, {t}.implementers, declared);\n")).collect();
+        let imports: String = targets.iter().map(|(t, _)| format!("import * as {t} from './manifest-{t}.mjs';\n")).collect::<String>() + "import * as fsharp from './manifest-fsharp.mjs';\n";
+        // F#'s classes are the DOM's: Rust's say what implements what.
+        let checks: String = targets.iter().map(|(t, _)| format!("results.{t} = verify({t}.bindings, {t}.implementers, declared);\n")).collect::<String>() + "const owners = new Map(rust.bindings.map(b => [b[4], b[2]]));\n\
+const bags = rust.bindings.filter(b => b[1] === 'create');\n\
+results.fsharp = verify(fsharp.bindings.map(([i, k, o, m, c]) => [i, k, owners.get(c) ?? o, m, c]).concat(bags), rust.implementers, declared);\n";
         fs::write(
             out.join("index.html"),
             format!(
