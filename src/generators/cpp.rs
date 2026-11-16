@@ -157,8 +157,16 @@ fn head(params: &[TParam], defaults: bool) -> String {
 }
 
 // A type's constructors: none, or from a handle.
+// With its assignments: the handle, a virtual base by several paths, is
+// assigned once (an implicit move assignment may move it once per path, the
+// second from what the first emptied).
 fn constructors(name: &str) -> String {
-    format!("    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n")
+    format!(
+        "    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n\
+         \x20   {name}(const {name}&) = default;\n    {name}({name}&&) = default;\n\
+         \x20   {name}& operator=(const {name}& o) {{ ts::Handle::operator=(static_cast<const ts::Handle&>(o)); return *this; }}\n\
+         \x20   {name}& operator=({name}&& o) noexcept {{ ts::Handle::operator=(std::move(static_cast<ts::Handle&>(o))); return *this; }}\n"
+    )
 }
 
 // A type parameter's constraint, where C++ can state it.
