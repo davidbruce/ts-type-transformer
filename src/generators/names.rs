@@ -80,7 +80,7 @@ pub struct Naming {
     // Gleam's `shape_area`), else each type is a scope of its own.
     pub funcs_flat: bool,
     // What a type's own scope holds before its functions (Zig's `h`).
-    pub members: fn(&Class) -> Vec<String>,
+    pub members: fn(&Class, &Model) -> Vec<String>,
 }
 
 // Renames the model so that `naming` makes each identifier once.
@@ -120,7 +120,7 @@ pub fn settle(m: &mut Model, naming: &Naming) {
                 let owner = renames.get(&c.name).unwrap_or(&c.name);
                 let owner = (naming.type_names)(owner, &c.name, Kind::Class, m).into_iter().next().unwrap_or_default();
                 let mut own = Scope::with(reserved());
-                own.take((naming.members)(c));
+                own.take((naming.members)(c, m));
                 for (fi, f) in c.funcs.iter().enumerate() {
                     if (naming.func_name)(Some(&owner), &f.name, f).is_none() {
                         continue;

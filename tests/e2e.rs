@@ -446,13 +446,13 @@ fn gleam_rejects_what_is_not_a_subtype() {
     let c = case_in("shapes", "gleam", "shapes-gleam-wrong");
     let bindings = generators::gleam::module(&c.xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
     write_gleam_project(&c.out, &bindings);
-    let wrong = "import bindings/areas/main as b\n\n\
+    let wrong = "import bindings/areas/main as b\nimport bindings/areas/main/shape\n\n\
                  // A string where a Named is wanted (`adopt<T extends Named>`).\n\
                  pub fn not_named() {\n  b.adopt(\"text\")\n}\n\n\
                  // A Named where a Shape is wanted.\n\
-                 pub fn not_a_shape() {\n  b.shape_area(b.plain())\n}\n\n\
+                 pub fn not_a_shape() {\n  shape.area(b.plain())\n}\n\n\
                  // A Shape and a Named in one list, without closing the Shape at Named.\n\
-                 pub fn mixed() {\n  [b.shape_unit(), b.plain()]\n}\n\n\
+                 pub fn mixed() {\n  [shape.unit(), b.plain()]\n}\n\n\
                  pub fn main() {\n  Nil\n}\n";
     fs::write(c.out.join("src/check.gleam"), wrong).unwrap();
     let out = Command::new(gleam).current_dir(&c.out).arg("build").output().unwrap();

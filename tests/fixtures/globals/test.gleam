@@ -3,6 +3,9 @@ import bindings/areas/main as b
 import bindings/namespaces/geometry
 import bindings/types as t
 import gleam/io
+import bindings/areas/main/clock
+import bindings/areas/main/settings
+import bindings/namespaces/geometry/geometry_point
 
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -15,18 +18,18 @@ fn check(ok: Bool, what: String) -> Nil {
 pub fn main() {
   // Global values.
   let s = b.get_settings()
-  check(b.settings_get_level(s) == 2.0 && !b.settings_get_debug(s), "global")
-  b.settings_set_debug(s, True)
-  check(b.settings_get_debug(b.get_settings()), "global object")
+  check(settings.get_level(s) == 2.0 && !settings.get_debug(s), "global")
+  settings.set_debug(s, True)
+  check(settings.get_debug(b.get_settings()), "global object")
   check(b.get_version() == "1.2.3", "global value")
 
   // A global with members of its own.
-  check(b.clock_now() == 1000.0 && b.clock_zero == 0.0, "statics")
+  check(clock.now() == 1000.0 && clock.zero == 0.0, "statics")
 
   // Namespaces, nested ones included.
   let p = geometry.geometry_point(0.0, 0.0)
   let q = geometry.geometry_point(3.0, 4.0)
-  check(geometry.geometry_distance(p, q) == 5.0 && geometry.geometry_point_get_x(q) == 3.0, "namespace")
+  check(geometry.geometry_distance(p, q) == 5.0 && geometry_point.get_x(q) == 3.0, "namespace")
   check(geometry.get_geometry_unit() == 1.0 && geometry.geometry_deep_twice(4.0) == 8.0, "nested namespace")
 
   // Rest parameters take a list.

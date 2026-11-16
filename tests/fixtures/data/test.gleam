@@ -4,6 +4,16 @@ import bindings/runtime as r
 import bindings/types as t
 import gleam/io
 import gleam/option.{None, Some}
+import bindings/areas/main/area_size
+import bindings/areas/main/box
+import bindings/areas/main/item
+import bindings/areas/main/lookup_table
+import bindings/areas/main/norm_point
+import bindings/areas/main/options
+import bindings/areas/main/patch_changes
+import bindings/areas/main/pipe
+import bindings/areas/main/source
+import bindings/areas/main/tagged
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -14,41 +24,41 @@ fn check(ok: Bool, what: String) -> Nil {
 
 pub fn main() {
   // Option objects: built here, read by JavaScript.
-  let o = b.options_create()
-  b.options_set_width(o, 3.0)
-  b.options_set_mode(o, t.OptionsModeFill)
+  let o = options.create()
+  options.set_width(o, 3.0)
+  options.set_mode(o, t.OptionsModeFill)
   check(b.describe(o) == "3x? fill", "option object")
-  b.options_set_height(o, Some(2.0))
-  b.options_set_title(o, Some("hi"))
+  options.set_height(o, Some(2.0))
+  options.set_title(o, Some("hi"))
   check(b.describe(o) == "3x2 fill \"hi\"", "optional properties")
 
   // Built by JavaScript, read here. A missing optional property is None.
   let d = b.defaults()
-  check(b.options_get_width(d) == 4.0 && b.options_get_mode(d) == t.OptionsModeFit, "read")
-  check(b.options_get_height(d) == None && b.options_get_title(d) == None, "missing")
+  check(options.get_width(d) == 4.0 && options.get_mode(d) == t.OptionsModeFit, "read")
+  check(options.get_height(d) == None && options.get_title(d) == None, "missing")
 
   // Partial<Options>, Pick<Options, ...>, keyof Options.
-  let changes = b.patch_changes_create()
-  b.patch_changes_set_width(changes, Some(9.0))
+  let changes = patch_changes.create()
+  patch_changes.set_width(changes, Some(9.0))
   let patched = b.patch(d, changes)
-  check(b.options_get_width(patched) == 9.0, "Partial")
-  let size = b.area_size_create()
-  b.area_size_set_width(size, 3.0)
+  check(options.get_width(patched) == 9.0, "Partial")
+  let size = area_size.create()
+  area_size.set_width(size, 3.0)
   check(b.area(size) == 9.0, "Pick")
   check(b.field() == t.FieldResultTitle, "keyof")
 
   // Record<string, number>: an index.
-  let table = b.lookup_table_create()
-  b.lookup_table_set_at(table, "a", 7.0)
+  let table = lookup_table.create()
+  lookup_table.set_at(table, "a", 7.0)
   check(b.lookup(table, "a") == 7.0 && b.lookup(table, "b") == -1.0, "Record")
-  check(b.lookup_table_get_at(table, "a") == Some(7.0) && b.lookup_table_get_at(table, "b") == None, "index")
+  check(lookup_table.get_at(table, "a") == Some(7.0) && lookup_table.get_at(table, "b") == None, "index")
 
   // An intersection, and an inline object type.
-  let tagged = b.tagged_create()
-  b.tagged_set_name(tagged, "x")
-  b.tagged_set_id(tagged, 5.0)
+  let tagged = tagged.create()
+  tagged.set_name(tagged, "x")
+  tagged.set_id(tagged, 5.0)
   check(b.show(tagged) == "x#5", "intersection")
-  check(b.norm_point_get_x(b.origin()) == 0.0, "inline object")
+  check(norm_point.get_x(b.origin()) == 0.0, "inline object")
 
   // Arrays are lists, tuples tuples.
   check(b.range(4.0) == [0.0, 1.0, 2.0, 3.0], "array")
@@ -60,20 +70,20 @@ pub fn main() {
   check(b.total([1.0, 2.0]) == 3.0, "List(Float)")
   check(b.flip(#("x", 7.0)) == #(7.0, "x"), "Pair(String, Float)")
   let assert [first, ..] = b.items()
-  check(b.item_get_id(first) == 1.0 && b.item_get_tags(first) == ["a", "b"], "array of objects")
+  check(item.get_id(first) == 1.0 && item.get_tags(first) == ["a", "b"], "array of objects")
 
   // Generics are Gleam's. A value of T crosses by the codec of T: a handle
   // (`Box(t)`) as it is, so it needs none.
   let float = r.codec_float()
   let bx = b.wrap(21.0, float)
-  check(b.box_get_value(bx, float) == 21.0, "generic")
-  check(b.box_get_value(b.box_map(bx, fn(v) { v *. 2.0 }, float, float), float) == 42.0, "generic callback")
+  check(box.get_value(bx, float) == 21.0, "generic")
+  check(box.get_value(box.map(bx, fn(v) { v *. 2.0 }, float, float), float) == 42.0, "generic callback")
   check(b.first(b.range(4.0), float) == Some(0.0) && b.first([], float) == None, "generic function")
   // What a Box holds is converted as T is: an Id, a variant, not JavaScript's string.
-  let assert t.IdString(three) = b.box_get_value(b.boxed_id(), t.id_codec())
+  let assert t.IdString(three) = box.get_value(b.boxed_id(), t.id_codec())
   check(three == "three", "Box(Id)")
-  let assert [t.IdNumber(1.0), ..] = b.box_get_value(b.wrap([t.IdNumber(1.0)], r.codec_list(t.id_codec())), r.codec_list(t.id_codec()))
-  check(b.box_get_value(b.wrap(Some("x"), r.codec_option(r.codec_string())), r.codec_option(r.codec_string())) == Some("x"), "Box(Option(String))")
+  let assert [t.IdNumber(1.0), ..] = box.get_value(b.wrap([t.IdNumber(1.0)], r.codec_list(t.id_codec())), r.codec_list(t.id_codec()))
+  check(box.get_value(b.wrap(Some("x"), r.codec_option(r.codec_string())), r.codec_option(r.codec_string())) == Some("x"), "Box(Option(String))")
 
   // A generic union, and a union in an array.
   check(b.unbox(t.EitherT(5.0), float) == 5.0, "union of T")
@@ -83,9 +93,9 @@ pub fn main() {
   // Pipe extends Source(Float) and Sink(Float). It is a Source, and has
   // Sink's members as its own, Float for T.
   let pp = b.pipe()
-  check(b.pipe_get_label(pp) == "pipe", "a member of both bases")
-  b.pipe_put(pp, 4.0)
-  check(b.source_take(pp, r.codec_float()) == 4.0, "the base's, on the subtype")
+  check(pipe.get_label(pp) == "pipe", "a member of both bases")
+  pipe.put(pp, 4.0)
+  check(source.take(pp, r.codec_float()) == 4.0, "the base's, on the subtype")
 
   io.println("checks passed")
 }

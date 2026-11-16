@@ -1260,7 +1260,7 @@ pub const NAMING: Naming = Naming {
     overloads: false,
     func_name: |_, name, f| Some(rust_function(f, name)),
     funcs_flat: false,
-    members: |_| TAKEN.iter().map(|t| t.to_string()).collect(),
+    members: |_, _| TAKEN.iter().map(|t| t.to_string()).collect(),
 };
 
 // A function's Rust name, were its model name `name`: what every handle has

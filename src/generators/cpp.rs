@@ -62,7 +62,7 @@ pub const NAMING: Naming = Naming {
         _ => Some(cpp_name_as(f, name, if owner.is_some() { "create" } else { "" })),
     },
     funcs_flat: false,
-    members: |c| vec![c.name.clone(), "h".into()],
+    members: |c, _| vec![c.name.clone(), "h".into()],
 };
 
 // C++ type of a value going in. `V` is the value a typed key selects.

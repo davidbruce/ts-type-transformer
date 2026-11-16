@@ -55,36 +55,29 @@ pub const NAMING: Naming = Naming {
         Kind::Class => vec![upper(candidate), format!("{}Tag", upper(candidate))],
         _ => vec![upper(candidate)],
     },
-    values_of: |own, name, kind, m| {
-        let prefix = snake(own);
-        // Every type has a codec: `shape_codec`.
-        let codec = lower(&format!("{prefix}_codec"));
-        let Some(c) = m.classes.iter().find(|c| c.name == name).filter(|_| kind == Kind::Class) else { return vec![codec] };
-        let mut out: Vec<String> = c.consts.iter().map(|(k, _)| lower(&format!("{prefix}_{k}"))).collect();
-        out.push(codec);
-        if c.iterates.is_some() || c.elements.is_some() {
-            out.push(lower(&format!("{prefix}_to_list")));
-        }
-        if c.elements.is_some() {
-            out.extend([lower(&format!("{prefix}_get_at")), lower(&format!("{prefix}_length"))]);
-        }
-        out.push(lower(&format!("as_{prefix}")));
-        out.extend(secondary(m, c).iter().map(|a| lower(&format!("{prefix}_as_{}", snake(&upper(a))))));
-        if c.js.is_some() {
-            out.extend([lower(&format!("{prefix}_from")), lower(&format!("{prefix}_cast"))]);
-        }
-        out
-    },
+    // Every type has a codec in the types module: `shape_codec`.
+    values_of: |own, _, _, _| vec![lower(&format!("{}_codec", snake(own)))],
     types_apart: true,
     overloads: false,
-    func_name: |owner, name, f| {
-        Some(match owner {
-            Some(o) => lower(&format!("{}_{}", snake(o), function_name(f, name))),
-            None => lower(&function_name(f, name)),
-        })
+    // A class's functions are in its own module: `shape.area`.
+    func_name: |_, name, f| Some(lower(&function_name(f, name))),
+    funcs_flat: false,
+    // Beside its functions there: its constants, list helpers and casts.
+    members: |c, m| {
+        let mut out: Vec<String> = c.consts.iter().map(|(k, _)| lower(k)).collect();
+        out.push("upcast".into());
+        if c.iterates.is_some() || c.elements.is_some() {
+            out.push("to_list".into());
+        }
+        if c.elements.is_some() {
+            out.extend(["get_at", "length"].map(String::from));
+        }
+        if c.js.is_some() {
+            out.extend(["from", "cast"].map(String::from));
+        }
+        out.extend(secondary(m, c).iter().map(|a| lower(&format!("as_{}", snake(&upper(a))))));
+        out
     },
-    funcs_flat: true,
-    members: |_| Vec::new(),
 };
 
 pub struct Output {
@@ -142,8 +135,9 @@ struct Gen<'m> {
     variants: HashMap<(String, usize), String>,
     // Each callback, by the places of the type parameters it uses.
     callbacks: HashMap<String, Vec<usize>>,
-    // Names given out: module-level values, and types and variants.
-    values: HashSet<String>,
+    // Values given out, by module; and names no module's value may have.
+    values: HashSet<(String, String)>,
+    reserved_values: HashSet<String>,
     // The module being written: its Gleam, its JavaScript, and the Gleam
     // types its Gleam names (for its imports). Those written, by path.
     unit: String,
@@ -180,11 +174,12 @@ impl<'m> Gen<'m> {
         *self.skipped.entry(why.to_string()).or_default() += 1;
     }
 
-    // A module-level value's name: `shape_get_size`. `names::settle` made
-    // them apart; one given out twice is a mistake in its naming.
+    // A module-level value's name: `get_size` in a class's module.
+    // `names::settle` made them apart; one given out twice in a module is a
+    // mistake in its naming.
     fn value_name(&mut self, base: &str) -> String {
         let name = lower(base);
-        assert!(self.values.insert(name.clone()), "Gleam: the value `{name}` is named twice");
+        assert!(!self.reserved_values.contains(&name) && self.values.insert((self.unit.clone(), name.clone())), "Gleam: the value `{name}` is named twice in {}", self.unit);
         name
     }
 
@@ -513,8 +508,10 @@ impl<'m> Gen<'m> {
             t => format!("return {};", self.to_gleam(t, &call)),
         };
         let ret = self.ty(&f.ret);
-        self.out += &format!("@external(javascript, \"{}\", \"{name}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
-        self.ffi += &format!("export function {name}({}) {{\n  {body}\n}}\n", js_params.join(", "));
+        // A name JavaScript reserves (`new`, `delete`) is `new_` there.
+        let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
+        self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
+        self.ffi += &format!("export function {js}({}) {{\n  {body}\n}}\n", js_params.join(", "));
         self.bound.borrow_mut().clear();
     }
 
@@ -554,6 +551,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         variants: HashMap::new(),
         callbacks: HashMap::new(),
         values: HashSet::new(),
+        reserved_values: HashSet::new(),
         unit: RUNTIME.into(),
         out: String::new(),
         ffi: String::new(),
@@ -647,7 +645,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     }
     // What the FFI's own helpers are called: not a function's name.
     for reserved in ["promise_then", "attempt", "js_error_message", "dynamic"] {
-        g.values.insert(reserved.into());
+        g.reserved_values.insert(reserved.into());
     }
 
     // Each area's modules: `areas/main` is `bindings/areas/main` (its
@@ -664,6 +662,22 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             n += 1;
         }
         paths.insert(area.clone(), path);
+    }
+    // Each class's module, in its area's: `bindings/areas/main/shape`.
+    let mut class_paths: HashMap<String, String> = HashMap::new();
+    for c in &m.classes {
+        let mut segment = snake(&g.tname(&c.name));
+        if KEYWORDS.contains(&segment.as_str()) {
+            segment.push('_');
+        }
+        let base = format!("{}/{segment}", paths[&c.module]);
+        let mut path = base.clone();
+        let mut n = 2;
+        while !taken.insert(path.clone()) {
+            path = format!("{base}_{n}");
+            n += 1;
+        }
+        class_paths.insert(c.name.clone(), path);
     }
     for o in OWN_RUNTIME {
         g.home.insert(o.to_string(), RUNTIME.into());
@@ -857,12 +871,9 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             js.trim_start_matches(", ")
         );
     }
-    // Functions named for a class, in its area's module of functions.
+    // A class's functions, in its own module.
     for c in &m.classes {
-        g.switch(&paths[&c.module]);
-        // Noted where written: a class may have no functions.
-        let name = g.tname(&c.name);
-        let prefix = snake(&name);
+        g.switch(&class_paths[&c.name]);
         let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
         // The class's type, open (any subtype) or closed.
         let open = |g: &Gen| {
@@ -884,18 +895,18 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
                 g.skip("constant of another kind");
                 continue;
             };
-            let id = g.value_name(&format!("{prefix}_{constant}"));
+            let id = g.value_name(constant);
             g.out += &format!("pub const {id} = {gleam}\n\n");
         }
         for f in &c.funcs {
             let f = with_self_args(f, c);
-            let id = g.value_name(&format!("{prefix}_{}", function_name(&f, &f.name)));
+            let id = g.value_name(&function_name(&f, &f.name));
             g.function(&id, &f, Some((&c.name, &c.type_params)));
         }
         // What it iterates, or holds as a subclass of Array: a list.
         if let Some(elem) = c.iterates.as_ref().or(c.elements.as_ref()) {
             let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
-            let id = g.value_name(&format!("{prefix}_to_list"));
+            let id = g.value_name("to_list");
             let elem_ty = g.ty(&elem);
             let this = open(&g);
             g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(self: {this}) -> List({elem_ty})\n\n", g.own_ffi());
@@ -907,7 +918,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create, params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
             let elem_ty = g.ty(&elem);
             g.note("Option");
-            let (at, length) = (g.value_name(&format!("{prefix}_get_at")), g.value_name(&format!("{prefix}_length")));
+            let (at, length) = (g.value_name("get_at"), g.value_name("length"));
             let this = open(&g);
             g.out += &format!("@external(javascript, \"{}\", \"{at}\")\npub fn {at}(self: {this}, index: Float) -> Option({elem_ty})\n\n", g.own_ffi());
             let this = open(&g);
@@ -922,14 +933,14 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
         // Upcasts. Along the chain a subtype is its base already; this closes
         // the type at this class, for a list or a branch of several subtypes:
-        // `as_element(div)` is an `Element(Nil)`.
-        let id = g.value_name(&format!("as_{prefix}"));
+        // `element.upcast(div)` is an `Element(Nil)`.
+        let id = g.value_name("upcast");
         let (this, closed) = (open(&g), g.class_type(&c.name, &own));
         g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
-        // A base off the chain, whose members it has taken: `html_element_as_global_event_handlers(e)`.
+        // A base off the chain, whose members it has taken: `html_element.as_global_event_handlers(e)`.
         for a in secondary(&m, c) {
             let Some(args) = base_args(&m, c, &a) else { continue };
-            let id = g.value_name(&format!("{prefix}_as_{}", snake(&g.tname(&a))));
+            let id = g.value_name(&format!("as_{}", snake(&g.tname(&a))));
             let (this, base) = (open(&g), g.class_type(&a, &args));
             g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {base}\n\n", g.runtime_ffi());
         }
@@ -939,14 +950,14 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             let target = g.class_type(&c.name, &[]);
             let root = chain_root(&g, &c.name);
             if root != c.name {
-                let id = g.value_name(&format!("{prefix}_from"));
+                let id = g.value_name("from");
                 *g.open.borrow_mut() = Some(0);
                 let from = g.class_type(&root, &[]);
                 *g.open.borrow_mut() = None;
                 g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(value: {from}) -> Result({target}, Nil)\n\n", g.own_ffi());
                 g.ffi += &format!("export function {id}(v) {{\n  return {test} ? new Ok(v) : new GleamError(undefined);\n}}\n");
             }
-            let id = g.value_name(&format!("{prefix}_cast"));
+            let id = g.value_name("cast");
             g.note("Dynamic");
             g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(value: Dynamic) -> Result({target}, Nil)\n\n", g.own_ffi());
             g.ffi += &format!("export function {id}(v) {{\n  return {test} ? new Ok(v) : new GleamError(undefined);\n}}\n");
@@ -998,6 +1009,13 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     }
     Ok(Output { files, skipped: g.skipped })
 }
+
+// What JavaScript reserves, as a function's name.
+const JS_RESERVED: &[&str] = &[
+    "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "enum", "export", "extends", "false",
+    "finally", "for", "function", "if", "implements", "import", "in", "instanceof", "interface", "let", "new", "null", "package", "private", "protected",
+    "public", "return", "static", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
+];
 
 // The modules every library's bindings have.
 const RUNTIME: &str = "bindings/runtime";

@@ -7,6 +7,8 @@ import gleam/int
 import gleam/io
 import gleam/option.{None, Some}
 import gleam/string
+import bindings/areas/main/counter
+import bindings/areas/main/scaler
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -18,15 +20,15 @@ fn check(ok: Bool, what: String) -> Nil {
 pub fn main() {
   // An object that is also a function, and can be constructed.
   let s = b.scaler(2.0)
-  check(b.scaler_invoke(s, 5.0) == 10.0, "invoke")
-  check(b.scaler_get_factor(s) == 2.0, "property of a function")
-  check(b.scaler_invoke(b.scaler_construct(s, 3.0), 5.0) == 15.0, "construct")
+  check(scaler.invoke(s, 5.0) == 10.0, "invoke")
+  check(scaler.get_factor(s) == 2.0, "property of a function")
+  check(scaler.invoke(scaler.construct(s, 3.0), 5.0) == 15.0, "construct")
 
   // A call that throws: `attempt` gives the exception.
   check(r.attempt(fn() { b.explode("boom") }) |> result_message == Error("boom"), "exception")
   check(r.attempt(fn() { b.flush() }) == Ok(0.0), "no exception")
 
-  let c = b.counter_new()
+  let c = counter.new()
   let last = cell.new(0.0)
   let calls = cell.new(0)
 
@@ -35,33 +37,33 @@ pub fn main() {
     cell.set(last, value)
     cell.set(calls, cell.get(calls) + 1)
   }
-  b.counter_subscribe(c, on_value)
-  check(b.counter_increment(c, None) == 1.0, "increment")
+  counter.subscribe(c, on_value)
+  check(counter.increment(c, None) == 1.0, "increment")
   check(cell.get(last) == 1.0, "listener called")
-  let _ = b.counter_increment(c, Some(4.0))
+  let _ = counter.increment(c, Some(4.0))
   check(cell.get(last) == 5.0 && cell.get(calls) == 2, "listener called again")
 
   // A callback that takes an object and returns a value.
-  check(b.counter_visit(c, fn(counter) { b.counter_get_count(counter) == 5.0 }), "callback result")
+  check(counter.visit(c, fn(counter) { counter.get_count(counter) == 5.0 }), "callback result")
 
   // Removed by identity.
-  b.counter_unsubscribe(c, on_value)
-  let _ = b.counter_increment(c, None)
+  counter.unsubscribe(c, on_value)
+  let _ = counter.increment(c, None)
   check(cell.get(last) == 5.0 && cell.get(calls) == 2, "listener removed")
 
   // A nullable callback property.
-  check(option.is_none(b.counter_get_onchange(c)), "no callback")
+  check(option.is_none(counter.get_onchange(c)), "no callback")
   let prop = cell.new(0.0)
-  b.counter_set_onchange(c, Some(fn(value) { cell.set(prop, value) }))
-  check(option.is_some(b.counter_get_onchange(c)), "a callback")
-  let _ = b.counter_increment(c, None)
+  counter.set_onchange(c, Some(fn(value) { cell.set(prop, value) }))
+  check(option.is_some(counter.get_onchange(c)), "a callback")
+  let _ = counter.increment(c, None)
   check(cell.get(prop) == 7.0, "callback property called")
-  b.counter_set_onchange(c, None)
-  let _ = b.counter_increment(c, None)
+  counter.set_onchange(c, None)
+  let _ = counter.increment(c, None)
   check(cell.get(prop) == 7.0, "callback property removed")
 
   // Several arguments, a string among them, and a result.
-  check(b.counter_fold(c, fn(total, label) { total *. 2.0 +. int.to_float(string.length(label)) }) == 8.0 *. 2.0 +. 5.0, "several arguments")
+  check(counter.fold(c, fn(total, label) { total *. 2.0 +. int.to_float(string.length(label)) }) == 8.0 *. 2.0 +. 5.0, "several arguments")
 
   // A callback kept and called later.
   let ran = cell.new(0)

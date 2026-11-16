@@ -2,6 +2,9 @@
 import bindings/areas/main as b
 import bindings/types as t
 import gleam/io
+import bindings/areas/main/options
+import bindings/areas/main/square
+import bindings/areas/main/widget
 
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -12,9 +15,9 @@ fn check(ok: Bool, what: String) -> Nil {
 }
 
 pub fn main() {
-  let widget = b.widget_new("w")
-  let options = b.options_create()
-  b.options_set_verbose(options, True)
+  let widget = widget.new("w")
+  let options = options.create()
+  options.set_verbose(options, True)
 
   // A union is a custom type: any member goes in.
   check(b.describe(t.ValueString("text")) == "string text", "string case")
@@ -26,12 +29,12 @@ pub fn main() {
   check(b.pick(0.0) == t.ValueString("text"), "string out")
   check(b.pick(1.0) == t.ValueNumber(42.0), "number out")
   let assert t.ValueWidget(w) = b.pick(2.0)
-  check(b.widget_get_name(w) == "w", "instanceof out")
+  check(widget.get_name(w) == "w", "instanceof out")
 
   // A tagged union, told apart by its `kind`.
   let square = b.make_shape("square", 3.0)
   let assert t.ShapeSquare(sq) = square
-  check(b.square_get_side(sq) == 3.0 && b.area(square) == 9.0, "tagged union")
+  check(square.get_side(sq) == 3.0 && b.area(square) == 9.0, "tagged union")
 
   // An inline union.
   check(b.setup(t.BooleanOrOptionsBoolean(True)) == "bool true", "inline union")

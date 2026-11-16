@@ -78,7 +78,7 @@ pub const NAMING: Naming = Naming {
         None => name.to_string(),
     }),
     funcs_flat: true,
-    members: |_| Vec::new(),
+    members: |_, _| Vec::new(),
 };
 
 fn raw(t: &Ty) -> &'static str {

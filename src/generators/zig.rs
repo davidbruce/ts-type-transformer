@@ -52,7 +52,7 @@ pub const NAMING: Naming = Naming {
     overloads: false,
     func_name: |_, name, _| Some(method_name(name)),
     funcs_flat: false,
-    members: |c| {
+    members: |c, _| {
         let mut own = vec!["h".to_string(), "Methods".to_string(), "Key".to_string(), "Type".to_string()];
         own.extend(c.consts.iter().map(|(n, _)| n.clone()));
         own.extend(c.ancestors.iter().map(|a| format!("as{a}")));
