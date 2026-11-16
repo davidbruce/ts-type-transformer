@@ -400,6 +400,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         }
     }
     b.decls_of(doc.root_element(), "");
+    b.nest_generated(doc.root_element());
     let mut opaque: Vec<String> = b.opaque.into_iter().collect();
     opaque.sort();
     b.model.opaque = opaque;
@@ -648,6 +649,71 @@ impl<'a> Builder<'a> {
                 }
                 _ => self.unsupported(d),
             }
+        }
+    }
+
+    // A type the lowering made from a namespace's declarations is that
+    // namespace's (`Intl.DateTimeFormatOptions_day`): where every reference to
+    // it is in the namespace, or in another such type of it, and its name is
+    // made from there (`Intl_...`). One made from a class the namespace shares
+    // its name with (node's `Stream`) is referred to from the class: not.
+    fn nest_generated(&mut self, root: Node<'a, 'a>) {
+        let generated: Vec<Node> = elements(root).filter(|d| flag(*d, "synthetic") && matches!(d.tag_name().name(), "interface" | "class" | "typeAlias" | "enum")).collect();
+        if generated.is_empty() {
+            return;
+        }
+        let ids: HashSet<&str> = generated.iter().filter_map(|d| d.attribute("id")).collect();
+        let mut refs: HashMap<&str, Vec<Node>> = HashMap::new();
+        for r in root.descendants().filter(|r| r.has_tag_name("ref")) {
+            if let Some(to) = r.attribute("to").filter(|t| ids.contains(t)) {
+                refs.entry(to).or_default().push(r);
+            }
+        }
+        // Where a reference is: the namespaces it is in, or the generated
+        // declaration it is in (whose owner it then shares).
+        enum At<'b> {
+            Namespaces(Vec<String>),
+            Generated(&'b str),
+        }
+        let at = |r: Node<'a, 'a>| -> At<'a> {
+            let decl = r.ancestors().find(|a| a.parent().is_some_and(|p| p == root || p.has_tag_name("namespace")));
+            if let Some(d) = decl.filter(|d| d.parent() == Some(root) && flag(*d, "synthetic")) {
+                return At::Generated(d.attribute("id").unwrap_or_default());
+            }
+            At::Namespaces(r.ancestors().filter(|a| a.has_tag_name("namespace")).map(|a| attr(a, "name").to_string()).collect::<Vec<_>>().into_iter().rev().collect())
+        };
+        let mut owner: HashMap<&str, Vec<String>> = HashMap::new();
+        for _ in 0..8 {
+            let mut changed = false;
+            for d in &generated {
+                let id = d.attribute("id").unwrap_or_default();
+                let places: Vec<Vec<String>> = refs.get(id).into_iter().flatten().map(|r| match at(*r) {
+                    At::Namespaces(ns) => ns,
+                    At::Generated(g) => owner.get(g).cloned().unwrap_or_default(),
+                }).collect();
+                let common = match places.split_first() {
+                    Some((first, rest)) if !first.is_empty() && rest.iter().all(|p| p == first) => first.clone(),
+                    _ => Vec::new(),
+                };
+                if owner.get(id).cloned().unwrap_or_default() != common {
+                    owner.insert(id, common);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        for d in &generated {
+            let id = d.attribute("id").unwrap_or_default();
+            let Some(ns) = owner.get(id).filter(|ns| !ns.is_empty()) else { continue };
+            let Some(own) = id.strip_prefix(&format!("{}_", ns.join("_"))) else { continue };
+            // In the namespace's module, as its own declarations are.
+            let Some(module) = root.descendants().find(|n| n.has_tag_name("namespace") && n.parent() == Some(root) && attr(*n, "name") == ns[0]).and_then(|n| n.attribute("module")) else { continue };
+            let module = self.folder("namespaces", module);
+            let name = self.type_ident(id);
+            self.model.namespaced.insert(name.clone(), ns.iter().cloned().chain([own.to_string()]).collect());
+            self.model.namespace_modules.insert(name, module);
         }
     }
 

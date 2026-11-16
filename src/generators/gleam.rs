@@ -1033,9 +1033,11 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     for (unit, list) in aliases {
         let u = g.units.entry(unit).or_default();
         let mut seen = HashSet::new();
+        // What the module imports, these aliases' types included.
+        let targets: HashSet<String> = list.iter().map(|(_, t, _)| t.clone()).collect();
         for (leaf, target, params) in list {
             // Once, and not where the module names another type so.
-            if leaf == target || u.used.contains(&leaf) || !seen.insert(leaf.clone()) {
+            if leaf == target || u.used.contains(&leaf) || targets.contains(&leaf) || !seen.insert(leaf.clone()) {
                 continue;
             }
             u.out += &format!("pub type {leaf}{params} =\n  {target}{params}\n\n");
