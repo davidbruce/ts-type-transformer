@@ -823,18 +823,6 @@ fn lowered_constructs_are_absent() {
 }
 
 // The whole DOM's Gleam bindings compile.
-#[test]
-fn dom_gleam_compiles() {
-    let Some([gleam]) = tools(["gleam"]) else { return };
-    let out = root().join("target/e2e/dom-gleam");
-    let _ = fs::remove_dir_all(&out);
-    fs::create_dir_all(&out).unwrap();
-    let xml = lower_with(Path::new("lib.dom.d.ts"), Some("gleam"), &[root().join("examples/modules/dom.toml")], &[]);
-    let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
-    write_gleam_project(&out, &bindings);
-    fs::write(out.join("src/check.gleam"), "// Every module in src is compiled.\npub fn main() {\n  Nil\n}\n").unwrap();
-    run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
-}
 
 // ---- the whole DOM ----
 //
@@ -891,6 +879,23 @@ try {
 }
 const page = verify('fsharp');
 const { passed, failed } = window.__fsharp ?? { passed: 0, failed: ['the program did not report'] };
+window.__result = { passed, failed, dom: page.problems, domChecks: page.checks };
+</script>
+"#;
+
+const GLEAM_PAGE: &str = r#"<!doctype html>
+<title>untouched</title>
+<div id="seed" data-x="42">seed text</div>
+<script type="module">
+import { verify } from './verify.mjs';
+try {
+  const { main } = await import('./build/dev/javascript/check/check.mjs');
+  main();
+} catch (e) {
+  window.__gleam = { passed: 0, failed: ['threw: ' + e] };
+}
+const page = verify('gleam');
+const { passed, failed } = window.__gleam ?? { passed: 0, failed: ['the program did not report'] };
 window.__result = { passed, failed, dom: page.problems, domChecks: page.checks };
 </script>
 "#;
@@ -970,6 +975,21 @@ mod dom {
         fs::write(c.out.join("index.html"), FSHARP_PAGE).unwrap();
         print!("{}", skipped(&bindings.skipped));
         run(Command::new(fable).current_dir(&c.out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+        run_browser(&c);
+    }
+
+    // Every module in src is compiled, not only those the program imports.
+    #[test]
+    fn gleam() {
+        let Some([gleam]) = tools(["gleam"]) else { return };
+        let c = dom_case("gleam");
+        let bindings = generators::gleam::module(&c.xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+        write_gleam_project(&c.out, &bindings);
+        fs::copy(c.fixture.join("test.gleam"), c.out.join("src/check.gleam")).unwrap();
+        fs::copy(c.fixture.join("page_ffi.mjs"), c.out.join("src/page_ffi.mjs")).unwrap();
+        fs::write(c.out.join("index.html"), GLEAM_PAGE).unwrap();
+        print!("{}", skipped(&bindings.skipped));
+        run(Command::new(gleam).current_dir(&c.out).args(["build", "--warnings-as-errors"]));
         run_browser(&c);
     }
 

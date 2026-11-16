@@ -460,8 +460,9 @@ impl<'m> Gen<'m> {
         let mut taken: HashSet<String> = HashSet::from(["self".to_string()]);
         let mut args = Vec::new();
         for (i, (p, t)) in f.params.iter().enumerate() {
+            // A parameter of the FFI's JavaScript too: `default_` there.
             let mut id = lower(p);
-            while !taken.insert(id.clone()) {
+            while JS_RESERVED.contains(&id.as_str()) || !taken.insert(id.clone()) {
                 id.push('_');
             }
             let last_rest = f.rest && i == f.params.len() - 1;
@@ -1015,6 +1016,8 @@ const JS_RESERVED: &[&str] = &[
     "await", "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "enum", "export", "extends", "false",
     "finally", "for", "function", "if", "implements", "import", "in", "instanceof", "interface", "let", "new", "null", "package", "private", "protected",
     "public", "return", "static", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
+    // Not names in a module's strict code.
+    "arguments", "eval",
 ];
 
 // The modules every library's bindings have.

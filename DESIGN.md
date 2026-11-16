@@ -308,7 +308,8 @@ the time control returns to JavaScript is reported, not lost.
   it, `box_get_value(b, mode_codec())`, which the type checker ties to the
   `t` of `Box(t)`. Each type has one (`shape_codec()`), with `codec_float()`,
   `codec_option(c)`, `codec_list(c)`; a handle crosses as it is (`Box(t)` as
-  an argument needs none). A `$` method is `add_new`. The DOM compiles.
+  an argument needs none). A `$` method is `add_new`. The DOM runs in
+  Chrome, as the other targets' does.
 - F#: files must not refer to each other in cycles: they are ordered by what
   F# cannot refer to forward, and a member that mentions a later file's type
   becomes an extension there. Iterables are `seq<T>`, async iterables
