@@ -14,10 +14,14 @@ let check (ok: bool) (what: string) =
 // Values made here, one per case.
 let widget = Widget.Create "w"
 let options = jsOptions<Options> (fun o -> o.verbose <- true)
-check (describe (Value.String "text") = "string text") "string case in"
-check (describe (Value.Number 42.0) = "number 42") "number case in"
-check (describe (Value.Widget widget) = "widget w") "class case in"
+// A value of a case's type is the union where an argument is one; `!^`
+// makes one elsewhere; a case can be named.
+check (describe "text" = "string text") "string case in"
+check (describe 42.0 = "number 42") "number case in"
+check (describe widget = "widget w") "class case in"
 check (describe (Value.Options options) = "options verbose=true") "option bag case in"
+let values: Value list = [ !^ "text"; !^ widget ]
+check (values |> List.map describe = [ "string text"; "widget w" ]) "erased cast"
 
 // Values made by JavaScript, told apart by matching.
 let kind (v: Value) =
@@ -43,8 +47,8 @@ check (size (makeShape ("square", 3.0)) = 3.0) "tag square"
 check (area (makeShape ("square", 3.0)) = 9.0) "tagged union in"
 
 // Unions written inline are named after their members.
-check (setup (boolean_or_Options.Bool true) = "bool true") "inline union, bool"
-check (setup (boolean_or_Options.Options options) = "options verbose=true") "inline union, options"
+check (setup true = "bool true") "inline union, bool"
+check (setup options = "options verbose=true") "inline union, options"
 check ((match lookup "w" with number_or_Widget.Widget w -> w.name | number_or_Widget.Number _ -> "") = "w") "inline union out, class"
 check ((match lookup "abc" with number_or_Widget.Number n -> n | number_or_Widget.Widget _ -> 0.0) = 3.0) "inline union out, number"
 

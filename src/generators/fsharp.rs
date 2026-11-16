@@ -1704,8 +1704,41 @@ impl Gen {
                 self.out += &format!("{indent}    | {attr}{case} of {payload}\n");
             }
         }
+        // A value of a case's type converts to the union: implicitly where an
+        // argument is one, with `!^` elsewhere and from subtypes. Once per
+        // type F# sees (`DOMHighResTimeStamp` is a float); never from a type
+        // parameter, `obj`, `unit` or the union itself.
+        if !name.contains('<') {
+            let mut seen = HashSet::new();
+            for ((case, payload, _), m) in cases.iter().zip(&members) {
+                let seen_as = expand(&self.through_aliases(*m), &self.abbrevs);
+                if payload.contains('\'') || matches!(payload.as_str(), "obj" | "unit") || payload == name || !seen.insert(seen_as) {
+                    continue;
+                }
+                for op in ["op_Implicit", "op_ErasedCast"] {
+                    self.out += &format!("{indent}    static member inline {op} (x: {payload}) : {name} = {name}.{case} x\n");
+                }
+            }
+        }
         self.out += "\n";
         true
+    }
+
+    // A type as F# sees it through aliases not declared yet (`OrdinalNumber`
+    // is a float): what an abbreviation of it would stand for.
+    fn through_aliases<'a>(&mut self, mut t: Node<'a, 'a>) -> String {
+        let root = t.document().root_element();
+        for _ in 0..16 {
+            let alias = t.has_tag_name("ref").then(|| t.attribute("to")).flatten().filter(|_| attr(t, "kind") == "typeAlias" && elements(t).next().is_none()).and_then(|to| find_decl(root, to));
+            match alias.filter(|d| named(*d, "typeParameter").next().is_none()) {
+                Some(d) => t = only_child_type(d),
+                None => break,
+            }
+        }
+        let saved = (std::mem::take(&mut self.skipped), std::mem::take(&mut self.problems));
+        let out = self.ty(t, "");
+        (self.skipped, self.problems) = saved;
+        out
     }
 
     fn numeric_enum(&mut self, d: Node, name: &str, indent: &str) {

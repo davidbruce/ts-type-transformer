@@ -70,7 +70,8 @@ let onPing: EventListener =
         box.setAttribute ("data-pings", string pings))
 
 let once = jsOptions<AddEventListenerOptions> (fun o -> o.once <- Some true)
-box.addEventListener ("ping", EventListenerOrEventListenerObject.EventListener onPing, boolean_or_AddEventListenerOptions.AddEventListenerOptions once)
+// Union arguments take a value of any of their types.
+box.addEventListener ("ping", onPing, once)
 box.dispatchEvent (Event.Create "ping") |> ignore
 box.dispatchEvent (Event.Create "ping") |> ignore
 check (pings = 1) "once listener"
@@ -80,6 +81,10 @@ box.style.setProperty ("color", "red")
 check (box.style.color = "red") "style"
 check (box.getBoundingClientRect().width > 0.0) "layout"
 check (box.children.length = 2.0) "children"
+// A subtype where `Node | string` is wanted: `!^`.
+let holder = document.createElement "section"
+holder.append (!^ (document.createElement "span"), "tail")
+check (holder.childNodes.length = 2.0) "append a subtype and a string"
 // Collections are seqs.
 let tags = [ for child in box.children -> child.tagName ]
 check (tags.Length = 2) "children iterate"
