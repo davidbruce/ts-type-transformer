@@ -1081,7 +1081,20 @@ impl Gen {
                 .filter(|p| !p.is_empty())
                 .collect();
             let free = |c: &String, g: &Self| !g.file_of.contains_key(c) && !g.declared.contains(c) && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()));
-            let by_place = (2..=places.len().min(3)).chain(1..=1).map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>()).find(|c| !c.is_empty() && free(c, self));
+            let at: Vec<String> = (2..=places.len().min(3)).chain(1..=1).map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>()).filter(|c| !c.is_empty()).collect();
+            // Else with the types it takes, or gives (node's `pipeline` sources).
+            let said: Vec<String> = named(n, "parameter")
+                .filter_map(|p| type_word(only_child(p)))
+                .chain(named(n, "returns").next().and_then(|r| type_word(only_child(r))).map(|w| format!("To{w}")))
+                .collect();
+            let mut cands = at.clone();
+            if let Some(a) = at.first() {
+                cands.extend(said.iter().map(|w| format!("{a}{w}")));
+                for (i, x) in said.iter().enumerate() {
+                    cands.extend(said[i + 1..].iter().map(|y| format!("{a}{x}{y}")));
+                }
+            }
+            let by_place = cands.into_iter().find(|c| free(c, self));
             let mut dname = match by_place {
                 Some(c) => c,
                 None => loop {
@@ -2119,6 +2132,16 @@ fn rename_member(line: &str, to: &str) -> String {
     format!("{}{emit}{}{to}{}", &line[..start], &line[start..at], &line[at + name.len()..])
 }
 
+// A type in a word, if it is one: `AsyncIterable`, `StringArray`.
+fn type_word(t: Node) -> Option<String> {
+    match t.tag_name().name() {
+        "ref" => t.attribute("name").and_then(|n| n.rsplit('.').next()).map(pascal),
+        "primitive" => t.attribute("name").filter(|n| !matches!(*n, "any" | "void" | "undefined" | "unknown")).map(pascal),
+        "array" => type_word(only_child(t)).map(|w| format!("{w}Array")),
+        _ => None,
+    }
+}
+
 // `async` as `Async`, `no-cache` as `NoCache`.
 fn pascal(word: &str) -> String {
     let mut out = String::new();
@@ -2355,20 +2378,23 @@ fn package_modules(xml: &str) -> Option<String> {
     // apart from the module's others (node's `cluster` has a class `Worker`
     // and its merged namespace an interface `Worker`): else its own, else a
     // number. A merged namespace's members keep theirs.
+    // A module and a type may share a name (events' class `EventEmitter`
+    // and its namespace): F# tells them apart.
+    let key = |d: Node, n: &str| if d.has_tag_name("namespace") { format!("module {}", type_ident(n)) } else { type_ident(n) };
     let mut taken: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
     for d in packaged.iter().filter(|d| merged.contains(&d.id())) {
-        taken.entry(segments(d.attribute("import").unwrap())).or_default().extend(elements(*d).filter_map(|e| e.attribute("name")).map(type_ident));
+        taken.entry(segments(d.attribute("import").unwrap())).or_default().extend(elements(*d).filter_map(|e| e.attribute("name").map(|n| key(e, n))));
     }
     let mut names: HashMap<NodeId, String> = HashMap::new();
     for d in packaged.iter().filter(|d| !merged.contains(&d.id())) {
         let t = taken.entry(segments(d.attribute("import").unwrap())).or_default();
         let exported = d.attribute("jsName").filter(|j| *j != "default").unwrap_or(attr(*d, "name")).to_string();
-        let name = [exported.clone(), attr(*d, "name").to_string()].into_iter().find(|n| !t.contains(&type_ident(n))).unwrap_or_else(|| {
-            (2..).map(|i| format!("{exported}_{i}")).find(|n| !t.contains(&type_ident(n))).unwrap()
+        let name = [exported.clone(), attr(*d, "name").to_string()].into_iter().find(|n| !t.contains(&key(*d, n))).unwrap_or_else(|| {
+            (2..).map(|i| format!("{exported}_{i}")).find(|n| !t.contains(&key(*d, n))).unwrap()
         });
         // A type and a value of one name are one class (`Node` and its static side).
         if !matches!(d.tag_name().name(), "function" | "var") {
-            t.insert(type_ident(&name));
+            t.insert(key(*d, &name));
         }
         names.insert(d.id(), name);
     }
