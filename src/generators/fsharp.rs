@@ -1070,12 +1070,27 @@ impl Gen {
         let dname = if let Some(existing) = self.delegates.get(&key) {
             existing.clone()
         } else {
-            let mut dname = loop {
-                self.delegate_counter += 1;
-                let candidate = format!("JsFn{}", self.delegate_counter);
-                if !self.file_of.contains_key(&candidate) && !self.declared.contains(&candidate) {
-                    break candidate;
-                }
+            // By where it is first: `mkdir`'s `callback` is `MkdirCallback`;
+            // with what holds that, if another has the name; else numbered.
+            let places: Vec<String> = n
+                .ancestors()
+                .skip(1)
+                .filter(|a| matches!(a.tag_name().name(), "parameter" | "property" | "method" | "function" | "interface" | "class" | "typeAlias" | "var" | "namespace"))
+                .filter_map(|a| a.attribute("jsName").filter(|j| *j != "default").or(a.attribute("name")))
+                .map(pascal)
+                .filter(|p| !p.is_empty())
+                .collect();
+            let free = |c: &String, g: &Self| !g.file_of.contains_key(c) && !g.declared.contains(c) && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()));
+            let by_place = (2..=places.len().min(3)).chain(1..=1).map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>()).find(|c| !c.is_empty() && free(c, self));
+            let mut dname = match by_place {
+                Some(c) => c,
+                None => loop {
+                    self.delegate_counter += 1;
+                    let candidate = format!("JsFn{}", self.delegate_counter);
+                    if free(&candidate, self) {
+                        break candidate;
+                    }
+                },
             };
             let tp_suffix = if tparams.is_empty() { String::new() } else { format!("<{}>", tparams.join(", ")) };
             let def = format!("{}type {dname}{tp_suffix} = delegate of {sig_str}\n\n", self.cur_indent);
