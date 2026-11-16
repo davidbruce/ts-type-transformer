@@ -758,7 +758,8 @@ impl<'a> Builder<'a> {
     // apart from another package's (`pb_Node` is `pb`'s `Node`); not
     // `default`, which names no declaration.
     fn exported_name(&self, d: Node, name: &str) -> String {
-        match d.attribute("jsName").filter(|j| *j != "default" && self.multi && self.package.is_some() && !d.ancestors().skip(1).any(|a| a.has_tag_name("namespace"))) {
+        // A path (`default.Stage`) is where it is, not what it is exported as.
+        match d.attribute("jsName").filter(|j| *j != "default" && !j.contains('.') && self.multi && self.package.is_some() && !d.ancestors().skip(1).any(|a| a.has_tag_name("namespace"))) {
             // An overload, named for what sets it apart (`circle_with_radius`
             // of `circle`), keeps that name; a name given apart from another
             // package's (`pb_pick`) is the one exported.

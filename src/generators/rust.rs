@@ -1255,7 +1255,8 @@ const RUNTIME_TYPES: &[(&str, &str)] = &[("Promise", "JsPromise"), ("PromiseLike
 // A model type's Rust name: CamelCase (a type named in snake_case would
 // share its constructor's name with a function), or the runtime's.
 fn rust_type(n: &str) -> String {
-    RUNTIME_TYPES.iter().find(|r| r.0 == n).map_or_else(|| camel(n), |r| r.1.to_string())
+    // A bundler's `SeriesOption$1` is `SeriesOption1`.
+    RUNTIME_TYPES.iter().find(|r| r.0 == n).map_or_else(|| camel(&ident(n)), |r| r.1.to_string())
 }
 
 // A tuple struct is also a function of its name: types and functions share

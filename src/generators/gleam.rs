@@ -1046,8 +1046,9 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         // What the module imports, these aliases' types included.
         let targets: HashSet<String> = list.iter().map(|(_, t, _)| t.clone()).collect();
         for (leaf, target, params) in list {
-            // Once, and not where the module names another type so.
-            if leaf == target || u.used.contains(&leaf) || targets.contains(&leaf) || !seen.insert(leaf.clone()) {
+            // Once, and not where the module names another type so, nor
+            // Gleam's own (echarts' `List` would hide `List`).
+            if leaf == target || OWN.contains(&leaf.as_str()) || u.used.contains(&leaf) || targets.contains(&leaf) || !seen.insert(leaf.clone()) {
                 continue;
             }
             u.out += &format!("pub type {leaf}{params} =\n  {target}{params}\n\n");

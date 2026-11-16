@@ -174,8 +174,49 @@ impl<'c> Front<'c> {
         while let Some(sym) = self.pending.pop_front() {
             self.emit_symbol(sym, &mut out);
         }
+        if let Some(module) = file.symbol() {
+            let module = self.c.get_merged_symbol_exported(module);
+            self.held_classes(module, &mut out);
+        }
         self.exports(&mut out);
         out
+    }
+
+    // A class the module exports only as a property of an object it exports
+    // is reached there: Konva's `Stage` is `default.Stage`, the module
+    // exporting `Konva`, of `Stage: typeof Stage`, as its default.
+    fn held_classes(&mut self, module: P<Symbol>, out: &mut [Decl]) {
+        let exports = self.c.get_exports_of_module_exported(module);
+        let direct: HashSet<P<Symbol>> = exports.iter().map(|e| self.resolve_alias(*e)).collect();
+        let mut held: HashMap<String, String> = HashMap::new();
+        for e in &exports {
+            let v = self.resolve_alias(*e);
+            if !v.flags().intersects(SymbolFlags::Variable) {
+                continue;
+            }
+            let as_ = if e.name() == "export=" { "default".to_string() } else { e.name().to_string() };
+            let t = self.c.get_type_of_symbol_exported(v);
+            for p in self.c.get_properties_of_type_exported(t) {
+                let pt = self.c.get_type_of_symbol_exported(*p);
+                let Some(class) = pt.symbol().filter(|c| c.flags().intersects(SymbolFlags::Class)) else { continue };
+                let class = self.c.get_merged_symbol_exported(class);
+                if direct.contains(&class) {
+                    continue;
+                }
+                if let Some(name) = self.output_names.get(&class) {
+                    held.entry(name.clone()).or_insert_with(|| format!("{as_}.{}", p.name()));
+                }
+            }
+        }
+        for d in out.iter_mut() {
+            if let Decl::Interface(i) = d
+                && i.class.is_some()
+                && i.js_name.is_none()
+                && let Some(path) = held.get(&i.name)
+            {
+                i.js_name = Some(path.clone());
+            }
+        }
     }
 
     // A declaration exported under another name is known by that name; one
@@ -252,6 +293,11 @@ impl<'c> Front<'c> {
     // A package that is an ambient module, `declare module "fs" { }`: what it exports.
     pub fn collect_module(&mut self, module: P<Symbol>) -> Vec<Decl> {
         let module = self.c.get_merged_symbol_exported(module);
+        // `export = path`: the module is `path`, imported as `default`.
+        if let Some(target) = module.exports().and_then(|t| t.lookup("export=")) {
+            let target = self.resolve_alias(target);
+            self.exported_as.insert(target, "default".into());
+        }
         let exports = self.c.get_exports_of_module_exported(module);
         for &sym in &exports {
             self.reserve(sym);
@@ -473,6 +519,12 @@ impl<'c> Front<'c> {
             // is its own module still (`stream`, `readline`), where JavaScript
             // imports it from.
             .map(|m| self.packages.iter().find(|p| p.1.trim_start_matches("node:") == m.trim_start_matches("node:")).map_or_else(|| m.trim_start_matches("node:").to_string(), |p| p.1.clone()));
+        // A wildcard module (pixi's `declare module '*.frag'`) types files a
+        // bundler imports, not a module JavaScript can: nothing to bind.
+        if ambient.as_deref().is_some_and(|m| m.contains('*')) {
+            out.truncate(before);
+            return;
+        }
         let package = if global {
             None
         } else {

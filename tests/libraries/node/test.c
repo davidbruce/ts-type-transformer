@@ -51,10 +51,6 @@ static void on_event(void* ctx, JsArray args) {
 
 __attribute__((export_name("run"))) void run(void) {
     // ---- path ----
-    // FINDING 11: every path_* function runs `PK["path"].path.join(...)` (the
-    // `export =` namespace read as a property of the module), which is
-    // undefined for node:path, so each throws. Left out:
-#if 0
     JsArray_JsString parts = JsArray_JsString_new();
     JsArray_JsString_push(parts, "a");
     JsArray_JsString_push(parts, "b/../c");
@@ -84,8 +80,6 @@ __attribute__((export_name("run"))) void run(void) {
     path_FormatInputPathObject_set_name(fmt, "note");
     path_FormatInputPathObject_set_ext(fmt, ".md");
     CHECK(same(take(path_format(fmt)), "/tmp/note.md"));
-
-#endif
 
     // ---- fs ----
     char dir[512], file[600], sub[600], moved[600];

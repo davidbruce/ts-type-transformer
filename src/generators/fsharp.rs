@@ -2380,7 +2380,13 @@ fn package_modules(xml: &str) -> Option<String> {
     // number. A merged namespace's members keep theirs.
     // A module and a type may share a name (events' class `EventEmitter`
     // and its namespace): F# tells them apart.
-    let key = |d: Node, n: &str| if d.has_tag_name("namespace") { format!("module {}", type_ident(n)) } else { type_ident(n) };
+    // Variables of one name are two values (Konva's default export and its
+    // internal `Konva`); functions of one name, overloads.
+    let key = |d: Node, n: &str| match d.tag_name().name() {
+        "namespace" => format!("module {}", type_ident(n)),
+        "var" => format!("value {}", ident(n)),
+        _ => type_ident(n),
+    };
     let mut taken: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
     for d in packaged.iter().filter(|d| merged.contains(&d.id())) {
         taken.entry(segments(d.attribute("import").unwrap())).or_default().extend(elements(*d).filter_map(|e| e.attribute("name").map(|n| key(e, n))));
@@ -2388,12 +2394,12 @@ fn package_modules(xml: &str) -> Option<String> {
     let mut names: HashMap<NodeId, String> = HashMap::new();
     for d in packaged.iter().filter(|d| !merged.contains(&d.id())) {
         let t = taken.entry(segments(d.attribute("import").unwrap())).or_default();
-        let exported = d.attribute("jsName").filter(|j| *j != "default").unwrap_or(attr(*d, "name")).to_string();
+        let exported = d.attribute("jsName").filter(|j| *j != "default" && !j.contains('.')).unwrap_or(attr(*d, "name")).to_string();
         let name = [exported.clone(), attr(*d, "name").to_string()].into_iter().find(|n| !t.contains(&key(*d, n))).unwrap_or_else(|| {
             (2..).map(|i| format!("{exported}_{i}")).find(|n| !t.contains(&key(*d, n))).unwrap()
         });
         // A type and a value of one name are one class (`Node` and its static side).
-        if !matches!(d.tag_name().name(), "function" | "var") {
+        if d.tag_name().name() != "function" {
             t.insert(key(*d, &name));
         }
         names.insert(d.id(), name);

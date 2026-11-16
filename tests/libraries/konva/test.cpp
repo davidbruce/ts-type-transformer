@@ -207,17 +207,5 @@ static void exercise() {
 }
 
 extern "C" __attribute__((export_name("run"))) void run() {
-    // FINDING 21: nothing in konva can be made. Its d.ts has `export default Konva`
-    // (an object of classes) and the glue calls `new PK["konva"].Layer()`
-    // (glue.mjs: Layer_new...), but the module impl.mjs binds,
-    // `await import("konva")`, has only `default`: "PK.konva.Layer is not a
-    // constructor". The rest of this program, run against a glue patched to read
-    // `PK["konva"].default`, passes all its checks (see findings 19 and 20 for what
-    // it works around); it runs only once the constructor is found.
-    ts::Result<::Layer> probe = ts::attempt([] { return ::Layer::create(); });
-    if (!probe) {
-        CHECK(probe.error().message().find("not a constructor") != std::string::npos);
-        return;
-    }
     exercise();
 }
