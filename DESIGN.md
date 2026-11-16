@@ -192,7 +192,9 @@ Where a function or a generic class has the namespace's name, its
 namespace is `<name>_ns`.
 
 With several packages bound together, each is a module of its declarations
-as a namespace is: `pb::Node` beside `pa::Node`, `prosemirror_model::Node`,
+as a namespace is: `pb::Node` beside `pa::Node` (F#'s `Pb.Node`, a module of
+each package; Gleam's `bindings/areas/pb`, its namespaces in it),
+`prosemirror_model::Node`,
 `fs::promises::FileHandle` for `fs/promises`, a scope's `@` part left out;
 a namespace of its package's name (node's `stream` `Stream`, `path`) is that
 module. A declaration's package is the ambient module it is declared in

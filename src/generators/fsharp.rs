@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use roxmltree::{Document, Node};
+use roxmltree::{Document, Node, NodeId};
 
 use super::{Problems, attr, elements, flag, named, only_child};
 
@@ -259,6 +259,9 @@ fn type_ident(name: &str) -> String {
 // values: globals, functions as `Globals`, and the `<Map>Keys` modules.
 // The bindings, or what F# cannot express of the XML.
 pub fn module(xml: &str) -> Result<Output, Vec<String>> {
+    // With several packages, each one's declarations are in a module of it.
+    let regrouped = package_modules(xml);
+    let xml = regrouped.as_deref().unwrap_or(xml);
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let mut g = Gen {
         problems: Problems::default(),
@@ -301,13 +304,19 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     };
     // Classes unions tell apart by instanceof (named as the output names
     // them), with the module each is imported from.
-    let tested: HashSet<&str> = doc.root_element().descendants().filter_map(|n| n.attribute("test")?.strip_prefix("instanceof:").filter(|c| !c.contains('.'))).collect();
-    for d in elements(doc.root_element()) {
-        let name = d.attribute("name").unwrap_or_default();
-        if let Some(module) = d.attribute("import").or(g.root_import.as_deref())
-            && tested.contains(name)
+    let tested: HashSet<&str> = doc.root_element().descendants().filter_map(|n| n.attribute("test")?.strip_prefix("instanceof:")).collect();
+    for d in doc.root_element().descendants().filter(|d| d.is_element() && d.parent().is_some_and(|p| p == doc.root_element() || p.has_tag_name("namespace"))) {
+        let Some(id) = d.attribute("id").or(d.attribute("name")) else { continue };
+        // Imported: at the top level, or in a package's module (`Pb.Node`).
+        let namespaces: Vec<Node> = d.ancestors().skip(1).filter(|a| a.has_tag_name("namespace")).collect();
+        if !namespaces.iter().all(|n| matches!(n.attribute("moduleKind"), Some("package" | "merged"))) {
+            continue;
+        }
+        let module = namespaces.iter().find(|n| n.attribute("moduleKind") == Some("package")).and_then(|n| n.attribute("import")).or(d.attribute("import")).or(g.root_import.as_deref());
+        if let Some(module) = module
+            && tested.contains(id)
         {
-            g.tested_classes.insert(name.to_string(), module.to_string());
+            g.tested_classes.insert(id.to_string(), module.to_string());
         }
     }
     // By id: a namespace's `PixiMixins.ViewContainer` is not the `ViewContainer`.
@@ -514,6 +523,11 @@ fn homes(root: Node) -> HashMap<String, String> {
         for d in elements(scope) {
             let Some(n) = d.attribute("name") else { continue };
             let module = d.attribute("module").unwrap_or(module);
+            // A namespace merged into its package's module adds to no path.
+            if d.attribute("moduleKind") == Some("merged") {
+                walk(d, prefix, module, home);
+                continue;
+            }
             let key = if prefix.is_empty() { n.to_string() } else { format!("{prefix}.{n}") };
             if d.has_tag_name("namespace") {
                 walk(d, &key, module, home);
@@ -1075,6 +1089,11 @@ impl Gen {
                 self.file_of.insert(dname.clone(), target_file);
                 *self.alias_types.entry(target_file).or_default() += &def;
             }
+            // In a namespace, by its path: a companion type of the namespace's
+            // functions, beside its module, names it too (`Fs.JsFn16`).
+            if !self.cur_indent.is_empty() && !self.cur_prefix.is_empty() {
+                dname = format!("{}.{dname}", self.cur_prefix.split('.').map(type_ident).collect::<Vec<_>>().join("."));
+            }
             self.delegates.insert(key, dname.clone());
             if !tparams.is_empty() {
                 dname = format!("{dname}{tp_suffix}");
@@ -1109,7 +1128,8 @@ impl Gen {
                 continue;
             };
             let map_type = map.split('.').map(type_ident).collect::<Vec<_>>().join(".");
-            let module = ident(&format!("{}Keys", map.rsplit('.').next().unwrap()));
+            // By its whole path: two packages' `WriteStreamEventMap` are two.
+            let module = ident(&format!("{}Keys", map.split('.').collect::<String>()));
             self.out += &format!("/// The keys of {map}.\nmodule {module} =\n");
             let mut seen = HashSet::new();
             for (key, ty) in map_properties(root, decl) {
@@ -1400,8 +1420,8 @@ impl Gen {
         let instance: Vec<Node> = elements(src).filter(|m| is_member(m) && !flag(*m, "static")).collect();
         let statics: Vec<Node> = elements(src).filter(|m| m.has_tag_name("constructor") || is_member(m) && flag(*m, "static")).collect();
         // A class of an imported library that unions tell apart: Fable tests it with instanceof.
-        let origin = match self.tested_classes.get(attr(d, "name")) {
-            Some(module) if prefix.is_empty() => format!("{indent}[<Import({js_name:?}, {module:?})>]\n"),
+        let origin = match self.tested_classes.get(d.attribute("id").unwrap_or(attr(d, "name"))) {
+            Some(module) => format!("{indent}[<Import({js_name:?}, {module:?})>]\n"),
             _ => String::new(),
         };
         // A static member makes F# take it for a class unless told.
@@ -1636,10 +1656,22 @@ impl Gen {
         {
             match d.tag_name().name() {
                 "lowering" => {}
+                // A namespace of a package's name (node's `stream` `Stream`): its
+                // members are the package's module's, reached through it.
+                "namespace" if d.attribute("moduleKind") == Some("merged") => {
+                    let inner = js_path(&self.js_prefix, d.attribute("jsName").unwrap_or(raw));
+                    let outer = std::mem::replace(&mut self.js_prefix, inner);
+                    self.decls(d, prefix, indent);
+                    self.js_prefix = outer;
+                }
                 "namespace" => {
                     self.out += &format!("{indent}module {name} =\n");
                     let before = self.out.len();
-                    let inner = js_path(&self.js_prefix, d.attribute("jsName").unwrap_or(raw));
+                    // A package's module adds nothing to what JavaScript reaches: it imports.
+                    let package = d.attribute("moduleKind") == Some("package");
+                    let inner = if package { self.js_prefix.clone() } else { js_path(&self.js_prefix, d.attribute("jsName").unwrap_or(raw)) };
+                    // A package's members are imported from it, a nested one's (`fs/promises`) too.
+                    let outer_import = if package { std::mem::replace(&mut self.import, d.attribute("import").map(str::to_string)) } else { self.import.clone() };
                     let outer = std::mem::replace(&mut self.js_prefix, inner);
                     // Its functions on a type of its name beside it (`Geometry.point`,
                     // `Geometry.Deep.twice`), F# resolving `Geometry.Point` in the
@@ -1650,7 +1682,13 @@ impl Gen {
                     self.decls(d, &js_path(prefix, raw), &format!("{indent}    "));
                     let functions = std::mem::replace(&mut self.carrier, outer_carrier);
                     self.js_prefix = outer;
-                    if self.out.len() == before {
+                    self.import = outer_import;
+                    let has_functions = functions.as_ref().is_some_and(|f| !f.is_empty());
+                    if self.out.len() == before && has_functions {
+                        // Only functions: the type of its name is all of it.
+                        let line = format!("{indent}module {name} =\n");
+                        self.out.truncate(before - line.len());
+                    } else if self.out.len() == before {
                         self.out += &format!("{indent}    let private empty = ()\n\n");
                     }
                     if let Some(functions) = functions.filter(|f| !f.is_empty()) {
@@ -1854,8 +1892,12 @@ impl Gen {
                 if payload.contains('\'') || matches!(payload.as_str(), "obj" | "unit") || payload == name || !seen.insert(seen_as) {
                     continue;
                 }
+                // Its cases by its path from the root: a value of its name, or
+                // of its module's, nearer (node's class `Stream.Transform`, and
+                // `Stream` itself) would be taken.
+                let path = if self.cur_prefix.is_empty() { name.to_string() } else { format!("Bindings.{}.{name}", self.cur_prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
                 for op in ["op_Implicit", "op_ErasedCast"] {
-                    self.out += &format!("{indent}    static member inline {op} (x: {payload}) : {name} = {name}.{case} x\n");
+                    self.out += &format!("{indent}    static member inline {op} (x: {payload}) : {name} = {path}.{case} x\n");
                 }
             }
         }
@@ -2250,4 +2292,156 @@ fn subst_params(text: &str, map: &HashMap<String, String>) -> String {
 fn is_function_interface(d: Node) -> bool {
     let mut members = elements(d);
     members.next().is_some_and(|m| m.has_tag_name("call")) && members.next().is_none()
+}
+
+
+// With several packages bound together, the declarations as F# has them: in
+// a module of their package (`Pb.Node`, `ProsemirrorModel.Node`,
+// `Fs.Promises.FileHandle`), by the names they export (`pb_Node` is `pb`'s
+// `Node`). A namespace of the package's name (node's `stream` `Stream`) is
+// merged into the module, which takes its name. Each is a namespace
+// element: `package`, adding to no JavaScript path, as it is imported;
+// `merged`, adding to no F# one. References follow. None with one package.
+fn package_modules(xml: &str) -> Option<String> {
+    let doc = Document::parse(xml).ok()?;
+    let root = doc.root_element();
+    root.attribute("packages")?;
+    let root_import = root.attribute("import");
+    let alnum_lower = |s: &str| -> String { s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect() };
+    let pascal = |s: &str| -> String {
+        s.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(|w| {
+            let mut cs = w.chars();
+            cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
+        }).collect()
+    };
+    // Each package's module path, by its import.
+    let segments = |p: &str| -> Vec<String> {
+        let p = p.trim_start_matches("node:");
+        let p = if p.starts_with('@') { p.split_once('/').map_or(p, |x| x.1) } else { p };
+        p.split('/').filter(|s| !s.is_empty()).map(str::to_string).collect()
+    };
+    let packaged: Vec<Node> = elements(root).filter(|d| !d.has_tag_name("lowering") && d.attribute("import").is_some_and(|i| Some(i) != root_import)).collect();
+    if packaged.is_empty() {
+        return None;
+    }
+    // A package's module's F# names: its segments, the last the name of a
+    // namespace merged into it.
+    let mut module_names: BTreeMap<Vec<String>, Vec<String>> = BTreeMap::new();
+    let mut merged: HashSet<NodeId> = HashSet::new();
+    for d in &packaged {
+        let segs = segments(d.attribute("import").unwrap());
+        let names = module_names.entry(segs.clone()).or_insert_with(|| segs.iter().map(|s| pascal(s)).collect());
+        if d.has_tag_name("namespace") && alnum_lower(attr(*d, "name")) == alnum_lower(segs.last().unwrap()) {
+            *names.last_mut().unwrap() = type_ident(attr(*d, "name"));
+            merged.insert(d.id());
+        }
+    }
+    // Each declaration's name in its package's module: the one it exports,
+    // apart from the module's others (node's `cluster` has a class `Worker`
+    // and its merged namespace an interface `Worker`): else its own, else a
+    // number. A merged namespace's members keep theirs.
+    let mut taken: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
+    for d in packaged.iter().filter(|d| merged.contains(&d.id())) {
+        taken.entry(segments(d.attribute("import").unwrap())).or_default().extend(elements(*d).filter_map(|e| e.attribute("name")).map(type_ident));
+    }
+    let mut names: HashMap<NodeId, String> = HashMap::new();
+    for d in packaged.iter().filter(|d| !merged.contains(&d.id())) {
+        let t = taken.entry(segments(d.attribute("import").unwrap())).or_default();
+        let exported = d.attribute("jsName").filter(|j| *j != "default").unwrap_or(attr(*d, "name")).to_string();
+        let name = [exported.clone(), attr(*d, "name").to_string()].into_iter().find(|n| !t.contains(&type_ident(n))).unwrap_or_else(|| {
+            (2..).map(|i| format!("{exported}_{i}")).find(|n| !t.contains(&type_ident(n))).unwrap()
+        });
+        // A type and a value of one name are one class (`Node` and its static side).
+        if !matches!(d.tag_name().name(), "function" | "var") {
+            t.insert(type_ident(&name));
+        }
+        names.insert(d.id(), name);
+    }
+    let own = |d: Node| -> String { names.get(&d.id()).cloned().unwrap_or_else(|| attr(d, "name").to_string()) };
+    // Each moved declaration's id, and its descendants', by the old.
+    let mut ids: HashMap<String, String> = HashMap::new();
+    for d in &packaged {
+        if merged.contains(&d.id()) {
+            continue;
+        }
+        let module = module_names[&segments(d.attribute("import").unwrap())].join(".");
+        let old = d.attribute("id").unwrap_or(attr(*d, "name")).to_string();
+        let new = format!("{module}.{}", own(*d));
+        for e in d.descendants().filter(|e| e.is_element()) {
+            if let Some(id) = e.attribute("id") {
+                if id == old {
+                    ids.insert(id.to_string(), new.clone());
+                } else if let Some(rest) = id.strip_prefix(&format!("{old}.")) {
+                    ids.insert(id.to_string(), format!("{new}.{rest}"));
+                }
+            }
+        }
+    }
+    fn write(n: Node, out: &mut String, ids: &HashMap<String, String>, rename: Option<&str>, extra: &[(&str, String)], moved: bool) {
+        let esc = |v: &str| v.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+        *out += &format!("<{}", n.tag_name().name());
+        // In a package's module, its module is the package's.
+        for a in n.attributes().filter(|a| !extra.iter().any(|(k, _)| *k == a.name()) && !(moved && a.name() == "module")) {
+            // A reference to a moved declaration names it as it is now (`pb_Node` is `Node`).
+            let moved_to = n.attribute("to").and_then(|t| ids.get(t));
+            let v = match a.name() {
+                "to" | "id" => ids.get(a.value()).cloned().unwrap_or_else(|| a.value().to_string()),
+                // A union member tested to be an instance of a moved class: of it.
+                "test" if a.value().strip_prefix("instanceof:").is_some_and(|c| ids.contains_key(c)) => format!("instanceof:{}", ids[a.value().strip_prefix("instanceof:").unwrap()]),
+                "name" if n.has_tag_name("ref") && moved_to.is_some() => moved_to.unwrap().rsplit('.').next().unwrap_or_default().to_string(),
+                "name" => rename.map_or_else(|| a.value().to_string(), str::to_string),
+                _ => a.value().to_string(),
+            };
+            *out += &format!(" {}=\"{}\"", a.name(), esc(&v));
+        }
+        for (k, v) in extra {
+            *out += &format!(" {k}=\"{}\"", esc(v));
+        }
+        *out += ">";
+        for c in n.children().filter(|c| c.is_element()) {
+            write(c, out, ids, None, &[], moved);
+        }
+        *out += &format!("</{}>\n", n.tag_name().name());
+    }
+    // The tree of package modules, each with what is directly in it.
+    let mut members: BTreeMap<Vec<String>, Vec<Node>> = BTreeMap::new();
+    for d in &packaged {
+        members.entry(segments(d.attribute("import").unwrap())).or_default().push(*d);
+    }
+    fn module_text(at: &[String], members: &BTreeMap<Vec<String>, Vec<Node>>, module_names: &BTreeMap<Vec<String>, Vec<String>>, ids: &HashMap<String, String>, merged: &HashSet<NodeId>, own: &dyn Fn(Node) -> String, import: &str, out: &mut String) {
+        let names = module_names.get(at).cloned().unwrap_or_else(|| at.to_vec());
+        let name = names.last().cloned().unwrap_or_default();
+        *out += &format!("<namespace module=\"{}\" import=\"{}\" moduleKind=\"package\" name=\"{}\">\n", at.join("/"), import, name);
+        for d in members.get(at).into_iter().flatten() {
+            if merged.contains(&d.id()) {
+                write(*d, out, ids, None, &[("moduleKind", "merged".to_string())], true);
+            } else {
+                write(*d, out, ids, Some(&own(*d)), &[], true);
+            }
+        }
+        let children: BTreeSet<&String> = members.keys().filter(|k| k.len() > at.len() && k[..at.len()] == *at).map(|k| &k[at.len()]).collect();
+        for child in children {
+            let mut path = at.to_vec();
+            path.push(child.clone());
+            let child_import = members.get(&path).and_then(|ds| ds.first()).and_then(|d| d.attribute("import")).unwrap_or(import).to_string();
+            module_text(&path, members, module_names, ids, merged, own, &child_import, out);
+        }
+        *out += "</namespace>\n";
+    }
+    let mut out = String::from("<declarations");
+    for a in root.attributes() {
+        out += &format!(" {}=\"{}\"", a.name(), a.value().replace('&', "&amp;").replace('"', "&quot;"));
+    }
+    out += ">\n";
+    for d in elements(root).filter(|d| !packaged.iter().any(|p| p.id() == d.id())) {
+        write(d, &mut out, &ids, None, &[], false);
+    }
+    let tops: BTreeSet<&String> = members.keys().map(|k| &k[0]).collect();
+    for top in tops {
+        let path = vec![top.clone()];
+        let import = members.get(&path).and_then(|ds| ds.first()).and_then(|d| d.attribute("import")).map(str::to_string).unwrap_or_else(|| top.clone());
+        module_text(&path, &members, &module_names, &ids, &merged, &own, &import, &mut out);
+    }
+    out += "</declarations>\n";
+    Some(out)
 }
