@@ -28,12 +28,12 @@ export fn run() void {
     expect(b.Clock.ZERO == 0, @src());
 
     // Namespaces, nested ones included.
-    const p = b.GeometryPoint(0, 0);
-    const q = b.GeometryPoint(3, 4);
-    expect(b.GeometryDistance(p, q) == 5, @src());
+    const p = b.geometry.point(0, 0);
+    const q = b.geometry.point(3, 4);
+    expect(b.geometry.distance(p, q) == 5, @src());
     expect(q.getX() == 3, @src());
-    expect(b.getGeometryUNIT() == 1, @src());
-    expect(b.GeometryDeepTwice(4) == 8, @src());
+    expect(b.geometry.getUNIT() == 1, @src());
+    expect(b.geometry.deep.twice(4) == 8, @src());
 
     // Rest parameters take an array.
     const parts = b.JsArrayOf(b.JsString).new();

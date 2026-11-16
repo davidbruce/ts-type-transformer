@@ -1368,7 +1368,7 @@ fn intl_locale_formatting() {
                  const n_opts = b.intl.NumberFormatOptions.create();\n\
                  n_opts.setStyle(.currency);\n\
                  n_opts.setCurrency(\"USD\");\n\
-                 const nf = b.getIntlNumberFormat().construct(.{ .locales = .{ .string = b.JsString.from(\"en-US\") }, .options = n_opts });\n\
+                 const nf = b.intl.getNumberFormat().construct(.{ .locales = .{ .string = b.JsString.from(\"en-US\") }, .options = n_opts });\n\
                  expect(nf.format(1234.5).eql(\"$1,234.50\"), @src());\n\
                  const rtf = b.intl.RelativeTimeFormat_statics.new(.{ .locales = .{ .string = b.JsString.from(\"en-US\") } });\n\
                  expect(rtf.format(-1.0, .day).eql(\"1 day ago\"), @src());\n\

@@ -876,8 +876,14 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let home: HashMap<&str, &str> = files.iter().flat_map(|(file, (_, _, names))| names.iter().map(move |n| (n.as_str(), file.as_str()))).collect();
     let mut out = Vec::new();
     let mut root = String::from("// Generated. Every name, from the file that declares it.\n");
-    // A namespace's types: their path, and where each is declared.
+    // A namespace's types and functions: their path, and where each is declared.
     let mut namespaces: Vec<(Vec<String>, String)> = Vec::new();
+    // A namespace's function by its own name: `geometry.distance`.
+    let func_paths: HashMap<&String, Vec<String>> = m
+        .funcs
+        .iter()
+        .filter_map(|f| m.func_namespaces.get(&f.import).map(|(path, own, _)| (&top_names[&f.name], path.iter().cloned().chain([method_name(own)]).collect())))
+        .collect();
     for (file, (body, externs, names)) in &files {
         let own: HashSet<&str> = names.iter().map(String::as_str).collect();
         // The runtime's names, and the types the file's declarations name.
@@ -890,7 +896,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         out.push((format!("{file}.zig"), format!("{body}\nconst raw = struct {{\n{externs}}};\n")));
         for n in names {
             // A namespace's type is its namespace's, not the root's.
-            match m.namespaced.get(n) {
+            match m.namespaced.get(n).or_else(|| func_paths.get(n)) {
                 Some(path) => namespaces.push((path.clone(), format!("@import(\"{file}.zig\").{}", ident(n)))),
                 None => root += &format!("pub const {} = @import(\"{file}.zig\").{};\n", ident(n), ident(n)),
             }
@@ -909,14 +915,35 @@ fn namespace_structs(types: &[(Vec<String>, String)], root: &str) -> String {
     fn level(types: &[(Vec<String>, String)], at: &[String], depth: usize, taken: &HashSet<&str>) -> String {
         let indent = "    ".repeat(depth);
         let mut out = String::new();
+        // Its own, once each: a function and a type of one name (`function Point`
+        // beside `interface Point`) are apart.
+        let mut own: HashSet<String> = HashSet::new();
         for (path, target) in types.iter().filter(|(p, _)| p.len() == at.len() + 1 && p[..at.len()] == *at) {
-            out += &format!("{indent}pub const {} = {target};\n", ident(path.last().unwrap()));
+            let base = path.last().unwrap().clone();
+            let mut name = base.clone();
+            let mut i = 2;
+            while !own.insert(name.clone()) {
+                name = format!("{base}_{i}");
+                i += 1;
+            }
+            out += &format!("{indent}pub const {} = {target};\n", ident(&name));
         }
         let children: BTreeSet<&String> = types.iter().filter(|(p, _)| p.len() > at.len() + 1 && p[..at.len()] == *at).map(|(p, _)| &p[at.len()]).collect();
         for child in children {
-            // Apart from what the root has (leaflet's function `icon`).
+            // Apart from what its scope has: the root's (leaflet's function
+            // `icon`), a namespace's own (`a.b()` beside `a.b.c()`), or another
+            // namespace of the same name but its case (leaflet's `Control` and
+            // `control`).
             let base = snake_case(child);
-            let name = if depth == 0 && taken.contains(ident(&base).as_str()) { ident(&format!("{base}_ns")) } else { ident(&base) };
+            let free = |n: &str| !own.contains(n) && !(depth == 0 && taken.contains(ident(n).as_str()));
+            let mut name = if free(&base) { base.clone() } else { format!("{base}_ns") };
+            let mut i = 2;
+            while !free(&name) {
+                name = format!("{base}_ns{i}");
+                i += 1;
+            }
+            own.insert(name.clone());
+            let name = ident(&name);
             let mut path = at.to_vec();
             path.push(child.clone());
             out += &format!("{indent}pub const {name} = struct {{\n{}{indent}}};\n", level(types, &path, depth + 1, taken));
