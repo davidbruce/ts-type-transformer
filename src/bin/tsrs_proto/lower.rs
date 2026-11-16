@@ -458,7 +458,8 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
                 let base = match joined {
                     Some(j) if parts.len() <= 3 && j.len() <= NAME_MAX && !names.contains(&j) => j,
                     _ if !path.is_empty() && !names.contains(&at) => at,
-                    _ if !path.is_empty() => or_rest().filter(|n| !names.contains(n)).unwrap_or(at),
+                    // Of the types of its place alone: what it is.
+                    _ if !path.is_empty() => or_rest().filter(|n| !names.contains(n)).unwrap_or_else(|| format!("{at}{sep}union")),
                     j => j.unwrap_or_else(|| parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}"))),
                 };
                 let name = unique(base, names);
@@ -2113,7 +2114,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                         at = format!("{at}{sep}{w}");
                     // Its declaration's name only, which that has (`type ExpandedState
                     // = true | Record<string, boolean>`): by what it is.
-                    } else if path.len() == 1 && names.contains(&at) {
+                    } else if best.get(&hoist_key(t)).map_or(path.len(), Vec::len) == 1 && names.contains(&at) {
                         at = format!("{at}{sep}{}", kind_word(t));
                     }
                     // A shared callback by what it takes, if that is short; else where it is first.
@@ -2222,8 +2223,10 @@ fn differences(first: &Type, t: &Type, sep: &str) -> Vec<String> {
                 }
             }
             for m in &b {
-                if find(&a, &m.name).is_some_and(|o| o.optional && !m.optional) {
-                    out.push(m.name.clone());
+                match find(&a, &m.name) {
+                    Some(o) if o.optional && !m.optional => out.push(m.name.clone()),
+                    Some(o) if !o.optional && m.optional => out.push(format!("opt{sep}{}", m.name)),
+                    _ => {}
                 }
             }
             // What it lacks.
