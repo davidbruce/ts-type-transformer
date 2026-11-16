@@ -567,10 +567,11 @@ impl<'a> Builder<'a> {
             // top-level declaration a target would name the same.
             if !flag(d, "synthetic")
                 && matches!(d.tag_name().name(), "interface" | "class" | "typeAlias" | "enum")
-                && let Some((full, depth)) = self.scope(&path).map(|(f, depth)| (self.exported_as(d, f), depth))
+                && let Some((full, depth, module)) = self.scope(&path)
             {
+                let full = self.exported_as(d, full);
                 self.model.namespaced.insert(self.type_ident(&path), full);
-                self.model.namespace_modules.insert(self.type_ident(&path), (self.module.clone(), depth));
+                self.model.namespace_modules.insert(self.type_ident(&path), (module, depth));
             }
             if let Some(origin) = d.attribute("origin") {
                 self.model.origins.insert(self.type_ident(&path), origin.to_string());
@@ -641,13 +642,13 @@ impl<'a> Builder<'a> {
                         // A type may have the same name (`type NodeFilter` and `var NodeFilter`).
                         let name = if self.decls.contains_key(&path) { format!("{}_statics", self.type_ident(&path)) } else { self.type_ident(&path) };
                         // A namespace's, as its types are: `Intl.Locale`'s statics, `intl.Locale_statics`.
-                        if let Some((mut full, depth)) = self.scope(&path) {
+                        if let Some((mut full, depth, module)) = self.scope(&path) {
                             if self.decls.contains_key(&path) {
                                 let own = full.pop().unwrap_or_default();
                                 full.push(format!("{own}_statics"));
                             }
                             self.model.namespaced.insert(name.clone(), full);
-                            self.model.namespace_modules.insert(name.clone(), (self.module.clone(), depth));
+                            self.model.namespace_modules.insert(name.clone(), (module, depth));
                         }
                         let c = self.statics(body, &self.js(d, &path), name);
                         self.model.classes.push(c);
@@ -737,7 +738,7 @@ impl<'a> Builder<'a> {
             let Some(module) = top.attribute("module") else { continue };
             let package = top.attribute("import").map(str::to_string).or_else(|| self.root_import.clone());
             let module = self.folder("namespaces", module);
-            let Some((full, depth)) = self.scope_in(package.as_deref(), &ns.iter().cloned().chain([own.to_string()]).collect::<Vec<_>>().join(".")) else { continue };
+            let Some((full, depth, module)) = self.scope_in(package.as_deref(), &ns.iter().cloned().chain([own.to_string()]).collect::<Vec<_>>().join("."), module) else { continue };
             let name = self.type_ident(id);
             self.model.namespaced.insert(name.clone(), full);
             self.model.namespace_modules.insert(name, (module, depth));
@@ -747,9 +748,9 @@ impl<'a> Builder<'a> {
     // A namespace's function, or a variable's accessor: its namespace and its
     // own name (`Geometry`, `distance`), by its import.
     fn namespace_func(&mut self, prefix: &str, import: &str, own: &str) {
-        if let Some((mut full, depth)) = self.scope(&join(prefix, own)) {
+        if let Some((mut full, depth, module)) = self.scope(&join(prefix, own)) {
             full.pop();
-            self.model.func_namespaces.insert(import.to_string(), (full, own.to_string(), self.module.clone(), depth));
+            self.model.func_namespaces.insert(import.to_string(), (full, own.to_string(), module, depth));
         }
     }
 
@@ -777,35 +778,49 @@ impl<'a> Builder<'a> {
     // `rapier3d_compat`). A namespace of its package's name (node's `stream`
     // `Stream`, `path`) is that module. With how many of the segments its
     // module stands for.
-    fn scope(&self, path: &str) -> Option<(Vec<String>, usize)> {
-        self.scope_in(self.package.as_deref(), path)
+    fn scope(&mut self, path: &str) -> Option<(Vec<String>, usize, String)> {
+        let package = self.package.clone();
+        self.scope_in(package.as_deref(), path, self.module.clone())
     }
 
-    fn scope_in(&self, package: Option<&str>, path: &str) -> Option<(Vec<String>, usize)> {
+    // As `scope`, with the module a declaration is in where not its
+    // package's: a package's own is its area (`areas/pb`), standing for its
+    // segments, its namespaces' in it (`pb`'s `util`).
+    fn scope_in(&mut self, package: Option<&str>, path: &str, module: String) -> Option<(Vec<String>, usize, String)> {
+        let (full, depth, package) = self.scope_parts(package, path)?;
+        let module = match package {
+            Some(p) => self.folder("areas", &p),
+            None => module,
+        };
+        Some((full, depth, module))
+    }
+
+    fn scope_parts(&self, package: Option<&str>, path: &str) -> Option<(Vec<String>, usize, Option<String>)> {
         let mut parts: Vec<String> = path.split('.').map(str::to_string).collect();
         if parts.len() > 1
             && let Some(own) = self.namespace_names.get(&parts[0])
         {
             parts[0] = own.clone();
         }
-        let package: Vec<String> = match package {
-            Some(p) if self.multi && Some(p) != self.root_import.as_deref() => {
+        let scoped = package.filter(|p| self.multi && Some(*p) != self.root_import.as_deref());
+        let segments: Vec<String> = match scoped {
+            Some(p) => {
                 let p = p.trim_start_matches("node:");
                 let p = if p.starts_with('@') { p.split_once('/').map_or(p, |x| x.1) } else { p };
                 p.split('/').filter(|s| !s.is_empty()).map(ident).collect()
             }
-            _ => Vec::new(),
+            None => Vec::new(),
         };
-        if package.is_empty() {
-            return (parts.len() > 1).then(|| (parts, 1));
+        if segments.is_empty() {
+            return (parts.len() > 1).then(|| (parts, 1, None));
         }
         let same = |a: &str, b: &str| a.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).eq(b.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase));
-        let depth = package.len();
-        if parts.len() > 1 && same(&parts[0], package.last().unwrap()) {
-            return Some((package.into_iter().chain(parts.into_iter().skip(1)).collect(), depth));
+        let depth = segments.len();
+        let package = scoped.map(str::to_string);
+        if parts.len() > 1 && same(&parts[0], segments.last().unwrap()) {
+            return Some((segments.into_iter().chain(parts.into_iter().skip(1)).collect(), depth, package));
         }
-        let depth = if parts.len() > 1 { depth + 1 } else { depth };
-        Some((package.into_iter().chain(parts).collect(), depth))
+        Some((segments.into_iter().chain(parts).collect(), depth, package))
     }
 
     // Where a declaration is reached: its JavaScript path, in its package when

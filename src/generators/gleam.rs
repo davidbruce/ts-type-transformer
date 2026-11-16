@@ -694,7 +694,9 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         if KEYWORDS.contains(&segment.as_str()) {
             segment.push('_');
         }
-        let base = format!("{}/{segment}", paths[&c.module]);
+        // Its namespace's module, a package's in the package's (`areas/pb/util`).
+        let module = m.namespace_modules.get(&c.name).map_or(&c.module, |(m, _)| m);
+        let base = format!("{}/{segment}", module_path(&paths, module));
         let mut path = base.clone();
         let mut n = 2;
         while !taken.insert(path.clone()) {
@@ -993,8 +995,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         match m.func_namespaces.get(&f.import) {
             // A namespace's by its own name, in its module (a nested one's
             // in a module of it): `geometry.distance`, `deep.twice`.
-            Some((path, own, _, depth)) => {
-                let unit = std::iter::once(paths[&f.module].clone()).chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
+            Some((path, own, module, depth)) => {
+                let unit = std::iter::once(module_path(&paths, module)).chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
                 g.switch(&unit);
                 let id = g.fresh_value(&function_name(f, own));
                 g.function(&id, f, None);
@@ -1031,7 +1033,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let Some((module, depth)) = m.namespace_modules.get(name) else { continue };
         let gleam = g.tname(name);
         let Some(params) = headers.get(&gleam) else { continue };
-        let base = paths.get(module).cloned().unwrap_or_else(|| format!("bindings/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/")));
+        let base = module_path(&paths, module);
         // Past what its module stands for: a namespace's own module.
         let unit = std::iter::once(base).chain(path[(*depth).min(path.len() - 1)..path.len() - 1].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
         aliases.entry(unit).or_default().push((upper(path.last().unwrap()), gleam, params.clone()));
@@ -1292,4 +1294,10 @@ fn mentions(t: &Ty, p: &str) -> bool {
         Ty::Tuple(es) | Ty::Union(es) | Ty::Generic(_, es) => es.iter().any(|e| mentions(e, p)),
         _ => false,
     }
+}
+
+// A module's Gleam path: as given out, else as one would be (`areas/pb`
+// where only a namespace of the package's has functions).
+fn module_path(paths: &HashMap<String, String>, module: &str) -> String {
+    paths.get(module).cloned().unwrap_or_else(|| format!("bindings/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/")))
 }

@@ -2,8 +2,8 @@
 // its own package's. Every check must hold.
 import bindings/areas/pa
 import bindings/areas/pb
-import bindings/namespaces/pb_util
-import bindings/namespaces/util
+import bindings/areas/pa/util
+import bindings/areas/pb/util as pb_util
 import bindings/types as t
 import gleam/io
 import bindings/areas/pa/node
