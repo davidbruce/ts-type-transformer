@@ -31,6 +31,7 @@ pub extern "C" fn run() {
     let _c: PointCreate = p.create_2();
     let _empty: Point = Point::create();
 
+    // The class `ns_Node`, and the namespace's `Node` in a module of its own.
     check!(NsNode::new().id() == 2.0);
-    check!(NsNode2::new().id() == 1.0);
+    check!(ns::Node::new().id() == 1.0);
 }

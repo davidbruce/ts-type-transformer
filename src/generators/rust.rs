@@ -90,8 +90,13 @@ struct Context {
     unions: BTreeSet<String>,
     // Types declared without type parameters: `Is` is implemented for them.
     classes: BTreeSet<String>,
-    // The Rust name of each type the model names.
+    // The Rust name of each type the model names: a namespace's as its
+    // path, `stream::PipeOptions`.
     types: HashMap<String, String>,
+    // A namespace's types' own names (`PipeOptions`), by the model's; and
+    // all of them, which a top-level type's name may be too.
+    own: HashMap<String, String>,
+    leaves: HashSet<String>,
 }
 
 thread_local! {
@@ -116,9 +121,23 @@ fn option() -> &'static str {
     if CX.with(|c| c.borrow().classes.contains("Option") || c.borrow().types.contains_key("Option")) { "::core::option::Option" } else { "Option" }
 }
 
-// A type's name in Rust.
+// A type's name in Rust, where it is named: a namespace's by its path
+// (`stream::PipeOptions`); a top-level one a namespace's type is also
+// named, from the crate (`crate::PipeOptions`), as that would hide it there.
 fn tn(n: &str) -> String {
-    CX.with(|c| c.borrow().types.get(n).cloned().unwrap_or_else(|| n.to_string()))
+    CX.with(|c| {
+        let c = c.borrow();
+        let t = c.types.get(n).cloned().unwrap_or_else(|| n.to_string());
+        if !c.own.contains_key(n) && c.leaves.contains(&t) { format!("crate::{t}") } else { t }
+    })
+}
+
+// A type's name where it is defined: a namespace's own (`PipeOptions`).
+fn def_name(n: &str) -> String {
+    CX.with(|c| {
+        let c = c.borrow();
+        c.own.get(n).cloned().or_else(|| c.types.get(n).cloned()).unwrap_or_else(|| n.to_string())
+    })
 }
 
 const VALUE: &str = "JsValue";
@@ -472,7 +491,8 @@ impl Family {
         let p = parts(first, &mut BTreeMap::new(), Some("this"));
         let rest_param = if self.others.is_empty() { String::new() } else { format!(", rest: ({},)", self.others.iter().map(|i| format!("R{i}_")).collect::<Vec<_>>().join(", ")) };
         let trait_params = if self.others.is_empty() { String::new() } else { format!("<{}>", self.others.iter().map(|i| format!("R{i}_")).collect::<Vec<_>>().join(", ")) };
-        let mut out = format!("pub trait {}{trait_params} {{\n    type Output;\n    #[doc(hidden)]\n    fn call(self, this: u32{rest_param}{}) -> Self::Output;\n}}\n", self.trait_name, same(&p));
+        let own = self.trait_name.rsplit("::").next().unwrap_or_default();
+        let mut out = format!("pub trait {own}{trait_params} {{\n    type Output;\n    #[doc(hidden)]\n    fn call(self, this: u32{rest_param}{}) -> Self::Output;\n}}\n", same(&p));
         for f in &self.members {
             let f = &defaulted(f);
             let p = parts(f, imports, Some("this"));
@@ -1267,6 +1287,7 @@ pub const NAMING: Naming = Naming {
     overloads: false,
     func_name: |_, name, f| Some(rust_function(f, name)),
     funcs_flat: false,
+    nests: true,
     members: |_, _| TAKEN.iter().map(|t| t.to_string()).collect(),
 };
 
@@ -1286,7 +1307,8 @@ fn variant(t: &Ty) -> String {
         Ty::Num => "Number".into(),
         Ty::Str => "String".into(),
         Ty::Bool => "Boolean".into(),
-        Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) => tn(n),
+        // A namespace's type by its own name: `ExportValue::Global`.
+        Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) => def_name(n),
         Ty::Param(n) => n.clone(),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "Array".into(),
         t => panic!("Rust generator: a union member it cannot hold: {t:?}"),
@@ -1304,22 +1326,47 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     // Each type's Rust name: `names::settle` made them apart.
     let declared: Vec<&String> = m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)).chain(m.classes.iter().map(|c| &c.name)).chain(m.callbacks.iter().map(|c| &c.name)).chain(m.unions.iter().map(|u| &u.name)).chain(&m.opaque).collect();
     let mut types: HashMap<String, String> = RUNTIME_TYPES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+    // A namespace's type is in a module of it: `Stream.PipeOptions` is
+    // `stream::PipeOptions`. Its own name is apart in that module.
+    let mut own: HashMap<String, String> = HashMap::new();
+    let mut module_of: HashMap<String, Vec<String>> = HashMap::new();
+    let mut taken_in: HashMap<Vec<String>, HashSet<String>> = HashMap::new();
+    for n in declared.iter().filter(|n| m.namespaced.contains_key(n.as_str())) {
+        let path = &m.namespaced[n.as_str()];
+        let segments: Vec<String> = path[..path.len() - 1].iter().map(|s| ns_module(s)).collect();
+        let base = rust_type(path.last().unwrap());
+        let taken = taken_in.entry(segments.clone()).or_default();
+        let mut leaf = base.clone();
+        let mut i = 2;
+        while !taken.insert(leaf.clone()) {
+            leaf = format!("{base}{i}");
+            i += 1;
+        }
+        types.insert(n.to_string(), format!("{}::{leaf}", segments.join("::")));
+        own.insert(n.to_string(), leaf);
+        module_of.insert(n.to_string(), segments);
+    }
     for n in &declared {
         types.entry(n.to_string()).or_insert_with(|| rust_type(n));
     }
+    let leaves: HashSet<String> = own.values().cloned().collect();
     CX.with(|c| {
         *c.borrow_mut() = Context {
             decodable: m.unions.iter().filter(|u| u.decodable()).map(|u| u.name.clone()).collect(),
             unions: m.unions.iter().map(|u| u.name.clone()).collect(),
             classes: m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).cloned()).collect(),
             types,
+            own,
+            leaves,
         }
     });
+    // What a namespace's module defines, by its path.
+    let mut namespaces: BTreeMap<Vec<String>, String> = BTreeMap::new();
     let mut imports: BTreeMap<String, String> = BTreeMap::new();
     let mut types_file = String::from(PRELUDE);
 
-    for (name, values) in &m.enums {
-        let name = tn(name);
+    for (model_name, values) in &m.enums {
+        let name = def_name(model_name);
         let mut seen = HashSet::new();
         let variants: Vec<(String, String)> = values
             .iter()
@@ -1334,7 +1381,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let index: String = variants.iter().enumerate().map(|(i, (v, _))| format!("{i} => {name}::{v}, ")).collect();
         let from: String = variants.iter().map(|(v, s)| format!("{s:?} => {name}::{v}, ")).collect();
         let to: String = variants.iter().map(|(v, s)| format!("{name}::{v} => {s:?}, ")).collect();
-        types_file += &format!(
+        let out = match module_of.get(model_name) {
+            Some(path) => namespaces.entry(path.clone()).or_default(),
+            None => &mut types_file,
+        };
+        *out += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
              impl {name} {{\n    pub fn from_index(i: i32) -> Self {{ match i {{ {index}_ => panic!(\"{name}: no value {{i}}\") }} }}\n    pub fn as_str(self) -> &'static str {{ match self {{ {to}}} }}\n}}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ self.as_str().lend() }} }}\n\
@@ -1342,8 +1393,8 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             variants.iter().map(|(v, _)| v.as_str()).collect::<Vec<_>>().join(", ")
         );
     }
-    for (name, members) in &m.num_enums {
-        let name = tn(name);
+    for (model_name, members) in &m.num_enums {
+        let name = def_name(model_name);
         let all: Vec<(String, &String)> = members.iter().map(|(member, value)| (camel(&super::model::ident(member)), value)).collect();
         // A value once a variant; a member of a value given already
         // (`ROTATE = 0` beside `LEFT = 0`) is a constant of that variant.
@@ -1356,7 +1407,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             }
         }
         let from: String = variants.iter().map(|(v, value)| format!("{value} => {name}::{v}, ")).collect();
-        types_file += &format!(
+        let out = match module_of.get(model_name) {
+            Some(path) => namespaces.entry(path.clone()).or_default(),
+            None => &mut types_file,
+        };
+        *out += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
              #[allow(non_upper_case_globals)]\nimpl {name} {{ {}pub fn from_value(v: i32) -> Self {{ match v {{ {from}_ => panic!(\"{name}: no value {{v}}\") }} }} }}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ (*self as i32 as f64).lend() }} }}\n\
@@ -1370,7 +1425,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
         let params: Vec<String> = (1..=arity).map(|i| format!("T{i}")).collect();
         let raw_name = name.as_str();
-        let name = tn(name);
+        let name = def_name(name);
         let targs = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
         let phantom = if params.is_empty() { "" } else { ", PhantomData" };
         types_file += &format!("handle!({name}{targs});\n");
@@ -1433,10 +1488,18 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     // Unions that can be decoded: enums.
     for u in m.unions.iter().filter(|u| u.decodable()) {
-        types_file += &union_enum(u, &mut imports);
+        let text = union_enum(u, &mut imports);
+        match module_of.get(&u.name) {
+            Some(path) => *namespaces.entry(path.clone()).or_default() += &text,
+            None => types_file += &text,
+        }
     }
     for c in &m.callbacks {
-        types_file += &callback(&c.name, &c.type_params, &c.params, &c.ret, &mut imports);
+        let text = callback(&c.name, &c.type_params, &c.params, &c.ret, &mut imports);
+        match module_of.get(&c.name) {
+            Some(path) => *namespaces.entry(path.clone()).or_default() += &text,
+            None => types_file += &text,
+        }
     }
 
     // Each class: a struct, a trait of its members, and that trait for each subtype.
@@ -1464,10 +1527,13 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     let this = "AsRef::<JsHandle>::as_ref(self).0";
     let mut modules: BTreeMap<String, String> = BTreeMap::new();
     for c in &m.classes {
-        let out = modules.entry(module_file(&c.module)).or_insert_with(|| PRELUDE.to_string());
+        let out = match module_of.get(&c.name) {
+            Some(path) => namespaces.entry(path.clone()).or_default(),
+            None => modules.entry(module_file(&c.module)).or_insert_with(|| PRELUDE.to_string()),
+        };
         let params: Vec<String> = c.type_params.iter().map(|p| p.name.clone()).collect();
         let (bounds, args) = (generics(&c.type_params), args_of(&c.type_params));
-        let name = tn(&c.name);
+        let name = def_name(&c.name);
         let me = format!("{name}{args}");
         let own = &names[c.name.as_str()];
         *out += &format!("\nhandle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
@@ -1580,6 +1646,30 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         "// Generated. Bindings: `use bindings::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\nmod runtime;\npub use runtime::*;\nmod types;\npub use types::*;\n",
     );
     let mut out = vec![("Cargo.toml".to_string(), "# Generated.\n[package]\nname = \"bindings\"\nversion = \"0.1.0\"\nedition = \"2024\"\n".to_string()), ("src/runtime.rs".to_string(), RUNTIME.to_string()), ("src/types.rs".to_string(), types_file)];
+    // A namespace's module, by its own name (`pub mod stream;`), not taken
+    // into the crate's: its types are `stream::PipeOptions`. Its members'
+    // traits are in scope with the crate's, under no name.
+    let tops: BTreeSet<&String> = namespaces.keys().filter_map(|k| k.first()).collect();
+    for top in tops {
+        let mut text = PRELUDE.to_string();
+        fn nest(at: &[String], namespaces: &BTreeMap<Vec<String>, String>, depth: usize, text: &mut String) {
+            *text += namespaces.get(at).map(String::as_str).unwrap_or_default();
+            let children: BTreeSet<&String> = namespaces.keys().filter(|k| k.len() > at.len() && k[..at.len()] == *at).map(|k| &k[at.len()]).collect();
+            for child in children {
+                let mut path = at.to_vec();
+                path.push(child.clone());
+                *text += &format!("\npub mod {child} {{\n{}", PRELUDE.replace("// Generated.\n#![allow(unused_imports)]\n", "#[allow(unused_imports)]\nuse crate::*;\n"));
+                nest(&path, namespaces, depth + 1, text);
+                *text += "}\n";
+            }
+        }
+        nest(std::slice::from_ref(top), &namespaces, 0, &mut text);
+        lib += &format!("pub mod {top};\n");
+        out.push((format!("src/{top}.rs"), text));
+    }
+    for c in m.classes.iter().filter(|c| module_of.contains_key(&c.name)) {
+        lib += &format!("#[allow(unused_imports)]\npub use {}Methods as _;\n", tn(&c.name));
+    }
     for (module, text) in modules {
         // A module named as one of the crate's own files gets another name.
         let module = if matches!(module.as_str(), "raw" | "runtime" | "types" | "lib") { format!("{module}_") } else { module };
@@ -1604,10 +1694,23 @@ fn upcast(sub: &str, base: &str) -> String {
 // A union as an enum: decoded from a handle by its tag, lent as its member,
 // and made from any member: `describe(42.0)`.
 fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String {
-    let n = tn(&u.name);
+    let n = def_name(&u.name);
     let opt = option();
     let import = &u.name;
     let (bounds, args) = (generics(&u.type_params), args_of(&u.type_params));
+    // Each member's variant: by its type's own name, by its whole path
+    // where two would be one (`stream::Readable` beside a `Readable`).
+    let names: Vec<String> = u.parts.iter().map(variant).collect();
+    let names: Vec<String> = u
+        .parts
+        .iter()
+        .zip(&names)
+        .map(|(p, v)| match p {
+            Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) if names.iter().filter(|w| *w == v).count() > 1 => tn(n).trim_start_matches("crate::").split("::").map(camel).collect(),
+            _ => v.clone(),
+        })
+        .collect();
+    let variant = |p: &Ty| names[u.parts.iter().position(|q| q == p).unwrap()].clone();
     let variants: Vec<String> = u.parts.iter().map(|p| format!("{}({})", variant(p), ty(p))).collect();
     // A bare type parameter is told apart by what its argument is.
     let kind = u.parts.iter().find_map(|p| if let Ty::Param(t) = p { Some(format!("{t}::KIND")) } else { None }).unwrap_or("0".into());
@@ -1645,7 +1748,7 @@ fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String 
 // or for the length of a call, `CounterVisitF::scoped(|c| .., |f| counter.visit(f))`.
 fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &Ty, imports: &mut BTreeMap<String, String>) -> String {
     let import = name;
-    let name = tn(name);
+    let name = def_name(name);
     let (bounds, args) = (generics(type_params), args_of(type_params));
     let tps: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
     let arg_types: Vec<String> = params.iter().map(|(_, t)| ty(t)).collect();
@@ -1692,4 +1795,11 @@ fn rust_elem(e: super::model::Elem) -> &'static str {
         F32 => "f32",
         F64 => "f64",
     }
+}
+
+// A namespace's module name: `Stream` is `stream`, `NodeJS` `node_js`; not a
+// file of the crate's own.
+fn ns_module(name: &str) -> String {
+    let m = ident(&snake(name));
+    if matches!(m.as_str(), "raw" | "runtime" | "types" | "lib") { format!("{m}_") } else { m }
 }

@@ -78,6 +78,7 @@ pub const NAMING: Naming = Naming {
         None => name.to_string(),
     }),
     funcs_flat: true,
+    nests: false,
     members: |_, _| Vec::new(),
 };
 

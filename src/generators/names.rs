@@ -81,6 +81,9 @@ pub struct Naming {
     pub funcs_flat: bool,
     // What a type's own scope holds before its functions (Zig's `h`).
     pub members: fn(&Class, &Model) -> Vec<String>,
+    // A namespace's types are in a scope of their own (Rust's
+    // `stream::PipeOptions`, Zig's `stream.PipeOptions`), not the top level's.
+    pub nests: bool,
 }
 
 // Renames the model so that `naming` makes each identifier once.
@@ -108,11 +111,11 @@ pub fn settle(m: &mut Model, naming: &Naming) {
         // what lowering made up, after.
         let ranked: Vec<&(&String, Kind)> = {
             let mut v: Vec<&(&String, Kind)> = all.iter().collect();
-            v.sort_by_key(|(n, _)| m.namespaced.contains(*n));
+            v.sort_by_key(|(n, _)| m.namespaced.contains_key(*n));
             v
         };
         let claim_types = |synthetic: bool, top: &mut Tops, renames: &mut HashMap<String, String>| {
-            for (name, kind) in ranked.iter().copied().filter(|(n, _)| m.synthetic.contains(*n) == synthetic) {
+            for (name, kind) in ranked.iter().copied().filter(|(n, _)| m.synthetic.contains(*n) == synthetic && !(naming.nests && m.namespaced.contains_key(*n))) {
                 // Where it must give way, it is named by where it comes from:
                 // node's `readline` `Key` is `ReadlineKey`.
                 let by_origin: Vec<String> = m.origins.get(*name).and_then(|o| origin_name(o, name)).into_iter().collect();
@@ -313,6 +316,8 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
     m.opaque.iter_mut().for_each(to);
     m.opaque_arity = std::mem::take(&mut m.opaque_arity).into_iter().map(|(mut k, v)| (to(&mut k), (k, v)).1).collect();
     m.synthetic = std::mem::take(&mut m.synthetic).into_iter().map(|mut k| (to(&mut k), k).1).collect();
+    m.namespaced = std::mem::take(&mut m.namespaced).into_iter().map(|(mut k, v)| (to(&mut k), (k, v)).1).collect();
+    m.origins = std::mem::take(&mut m.origins).into_iter().map(|(mut k, v)| (to(&mut k), (k, v)).1).collect();
     m.funcs.iter_mut().for_each(|f| func(f, &to));
 }
 

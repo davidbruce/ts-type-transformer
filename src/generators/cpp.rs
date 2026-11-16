@@ -62,6 +62,7 @@ pub const NAMING: Naming = Naming {
         _ => Some(cpp_name_as(f, name, if owner.is_some() { "create" } else { "" })),
     },
     funcs_flat: false,
+    nests: false,
     members: |c, _| vec![c.name.clone(), "h".into()],
 };
 

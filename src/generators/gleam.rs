@@ -62,6 +62,7 @@ pub const NAMING: Naming = Naming {
     // A class's functions are in its own module: `shape.area`.
     func_name: |_, name, f| Some(lower(&function_name(f, name))),
     funcs_flat: false,
+    nests: false,
     // Beside its functions there: its constants, list helpers and casts.
     members: |c, m| {
         let mut out: Vec<String> = c.consts.iter().map(|(k, _)| lower(k)).collect();

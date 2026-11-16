@@ -1319,7 +1319,7 @@ fn intl_locale_formatting() {
              #[unsafe(no_mangle)]\n\
              pub extern \"C\" fn run() {\n\
                  {\n\
-                     let d_opts = IntlDateTimeFormatOptions::create();\n\
+                     let d_opts = intl::DateTimeFormatOptions::create();\n\
                      d_opts.set_time_zone(Some(\"UTC\"));\n\
                      d_opts.set_year(Some(IntlDateTimeFormatOptionsDay::Numeric));\n\
                      d_opts.set_month(Some(IntlDateTimeFormatOptionsMonth::Short));\n\
@@ -1327,7 +1327,7 @@ fn intl_locale_formatting() {
                      let dtf = intl_date_time_format().construct(\"en-US\", Some(&d_opts));\n\
                      let formatted_date = dtf.format(&Date::from_time(1700000000000.0));\n\
                      check!(formatted_date == \"Nov 14, 2023\");\n\
-                     let n_opts = IntlNumberFormatOptions::create();\n\
+                     let n_opts = intl::NumberFormatOptions::create();\n\
                      n_opts.set_style(Some(IntlNumberFormatOptionsStyle::Currency));\n\
                      n_opts.set_currency(Some(\"USD\"));\n\
                      let nf = intl_number_format().construct(\"en-US\", Some(&n_opts));\n\

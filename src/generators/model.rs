@@ -267,8 +267,9 @@ pub struct Model {
     // Where each declared type comes from (`readline`, `fs/promises`): what
     // it is named by where its name must give way, `ReadlineKey`.
     pub origins: HashMap<String, String>,
-    // Types declared in a namespace, by name.
-    pub namespaced: HashSet<String>,
+    // Types declared in a namespace, by name: their path, the namespaces
+    // and their own name (`Stream`, `PipeOptions`).
+    pub namespaced: HashMap<String, Vec<String>>,
 }
 
 impl Class {
@@ -363,7 +364,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashSet::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -546,7 +547,7 @@ impl<'a> Builder<'a> {
             // Declared in a namespace (`Stream.PipeOptions`): it gives way to a
             // top-level declaration a target would name the same.
             if path.contains('.') && !flag(d, "synthetic") {
-                self.model.namespaced.insert(self.type_ident(&path));
+                self.model.namespaced.insert(self.type_ident(&path), path.split('.').map(str::to_string).collect());
             }
             if let Some(origin) = d.attribute("origin") {
                 self.model.origins.insert(self.type_ident(&path), origin.to_string());
