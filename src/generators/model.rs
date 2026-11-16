@@ -133,6 +133,7 @@ pub enum Call {
     IndexSet,
 }
 
+#[derive(Clone)]
 pub struct Func {
     // Its own type parameters, where generics are kept.
     pub type_params: Vec<TParam>,

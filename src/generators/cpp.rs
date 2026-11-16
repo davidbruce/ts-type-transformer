@@ -911,6 +911,19 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
 
     // A namespace's types, also by their own names in it.
     let (namespaces, in_structs) = namespace_aliases(m);
+    // A namespace's functions where it is a class's: its statics, by their own names.
+    let containers = namespace_containers(m);
+    let mut class_statics: HashMap<String, Vec<Func>> = HashMap::new();
+    let mut class_statics_of: HashSet<String> = HashSet::new();
+    for f in &m.funcs {
+        if let Some((path, own, _)) = m.func_namespaces.get(&f.import)
+            && path.len() == 1
+            && let Some(Container::Class(c)) = containers.get(&path[0])
+        {
+            class_statics.entry(c.clone()).or_default().push(Func { name: own.clone(), ..(*f).clone() });
+            class_statics_of.insert(f.import.clone());
+        }
+    }
     let types = declarations(m) + &namespaces;
     let mut out = vec![("ts_runtime.hpp".to_string(), RUNTIME.to_string()), ("ts_types.hpp".to_string(), types)];
 
@@ -1071,7 +1084,9 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         // same parameters, as TypeScript can: the static one says it is.
         let signature = |f: &Func| format!("{}({})", cpp_name(f, ctor), f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
         let instance: BTreeSet<String> = c.funcs.iter().filter(|f| Class::has_self(f)).map(|f| signature(&with_self_args(f, c))).collect();
-        for f in c.funcs.iter().map(|f| with_self_args(f, c)).chain(again) {
+        // The functions of the namespace it shares its name with, as its statics.
+        let namespaced: Vec<Func> = class_statics.get(&c.name).cloned().unwrap_or_default();
+        for f in c.funcs.iter().map(|f| with_self_args(f, c)).chain(again).chain(namespaced) {
             let place = if Class::has_self(&f) { Place::Member } else { Place::Static };
             let name = if place == Place::Static && instance.contains(&signature(&f)) { format!("{}_static", cpp_name(&f, ctor)) } else { cpp_name(&f, ctor) };
             let func = function(&f, name, &owner, &class_head, place, unions);
@@ -1145,8 +1160,23 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     let mut functions: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>, String, String)> = BTreeMap::new();
     let mut seen = BTreeSet::new();
-    for f in &m.funcs {
-        let func = function(f, cpp_name(f, "create"), "", "", Place::Free, unions);
+    for f in m.funcs.iter().filter(|f| !class_statics_of.contains(&f.import)) {
+        // A namespace's, by its own name in a namespace of it: `marked_ns::parseInline`.
+        let space = m.func_namespaces.get(&f.import).map(|(path, _, _)| {
+            let top = match &containers.get(&path[0]) {
+                Some(Container::Namespace(n)) => n.clone(),
+                _ => format!("{}_ns", ident(&path[0])),
+            };
+            std::iter::once(top).chain(path[1..].iter().map(|s| ident(s))).collect::<Vec<_>>().join("::")
+        });
+        let name = m.func_namespaces.get(&f.import).map_or_else(|| cpp_name(f, "create"), |(_, own, _)| cpp_name_as(f, own, "create"));
+        let mut func = function(f, name, "", "", Place::Free, unions);
+        if let Some(space) = &space {
+            let wrap = |text: &str| if text.is_empty() { String::new() } else { format!("namespace {space} {{\n{text}}}\n") };
+            func.key = format!("{space}::{}", func.key);
+            func.decl = wrap(&func.decl);
+            func.def = wrap(&func.def);
+        }
         if !seen.insert(func.key) {
             continue;
         }
@@ -1475,22 +1505,62 @@ fn namespace_aliases(m: &Model) -> (String, HashMap<String, String>) {
     }
     let mut namespaces = String::new();
     let mut in_structs: HashMap<String, String> = HashMap::new();
+    let _ = taken;
     let tops: BTreeSet<&String> = entries.iter().map(|(p, _, _)| &p[0]).collect();
+    let containers = namespace_containers(m);
     for top in tops {
-        let class = m.classes.iter().find(|c| c.name == *top && !m.namespaced.contains_key(&c.name));
-        let members: HashSet<String> = class.map(|c| c.funcs.iter().map(|f| cpp_name(f, &c.name)).collect()).unwrap_or_default();
-        let clashes = entries.iter().any(|(p, l, _)| p.len() == 1 && p[0] == *top && (members.contains(l) || l == top));
-        match class {
-            // In the class, but for a generic one (`Control<O>::Zoom` would want
-            // its arguments) or where a member has the name.
-            Some(c) if c.type_params.is_empty() && !clashes => {
-                in_structs.insert(c.name.clone(), level(&entries, std::slice::from_ref(top), "struct", "    ", &alias));
+        match &containers[top] {
+            Container::Class(c) => {
+                in_structs.insert(c.clone(), level(&entries, std::slice::from_ref(top), "struct", "    ", &alias));
             }
-            _ => {
-                let name = if taken.contains(top) { format!("{}_ns", ident(top)) } else { ident(top) };
+            Container::Namespace(name) => {
                 namespaces += &format!("namespace {name} {{\n{}}}\n", level(&entries, std::slice::from_ref(top), "namespace", "    ", &alias));
             }
         }
     }
     (namespaces, in_structs)
+}
+
+// Where a top-level namespace's types and functions are: in the class it
+// shares its name with (node's `Stream`: `Stream::Duplex`,
+// `Stream::finished`), but for a generic one (`Control<O>::Zoom` would want
+// its arguments) or one a member of which has a name of theirs; else in a
+// namespace of its name, `<name>_ns` where something else has it (marked's
+// function `marked`), as C++ allows a name one kind of thing in a scope.
+#[derive(Clone, PartialEq)]
+enum Container {
+    Class(String),
+    Namespace(String),
+}
+
+fn namespace_containers(m: &Model) -> HashMap<String, Container> {
+    // Each top-level namespace's own names, directly in it.
+    let mut own: BTreeMap<String, HashSet<String>> = BTreeMap::new();
+    for path in m.namespaced.values() {
+        let e = own.entry(path[0].clone()).or_default();
+        if path.len() == 2 {
+            e.insert(ident(&path[1]));
+        }
+    }
+    for (path, leaf, _) in m.func_namespaces.values() {
+        let e = own.entry(path[0].clone()).or_default();
+        if path.len() == 1 {
+            e.insert(ident(leaf));
+        }
+    }
+    let mut taken: HashSet<String> = m.classes.iter().map(|c| c.name.clone()).chain(m.callbacks.iter().map(|c| c.name.clone())).chain(m.unions.iter().map(|u| u.name.clone())).collect();
+    taken.extend(m.enums.iter().map(|e| e.0.clone()).chain(m.num_enums.iter().map(|e| e.0.clone())).chain(m.opaque.iter().cloned()));
+    taken.extend(m.funcs.iter().filter(|f| !m.func_namespaces.contains_key(&f.import)).map(|f| cpp_name(f, "create")).chain(m.maps.iter().map(|k| format!("{}Keys", k.name))).chain(["ts".to_string()]));
+    let mut out = HashMap::new();
+    for (top, names) in own {
+        let class = m.classes.iter().find(|c| c.name == top && !m.namespaced.contains_key(&c.name));
+        let members: HashSet<String> = class.map(|c| c.funcs.iter().map(|f| cpp_name(f, &c.name)).collect()).unwrap_or_default();
+        let clashes = names.iter().any(|n| members.contains(n) || *n == top);
+        let container = match class {
+            Some(c) if c.type_params.is_empty() && !clashes => Container::Class(c.name.clone()),
+            _ => Container::Namespace(if taken.contains(&top) { format!("{}_ns", ident(&top)) } else { ident(&top) }),
+        };
+        out.insert(top, container);
+    }
+    out
 }

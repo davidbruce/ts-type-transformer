@@ -17,12 +17,12 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(Clock::ZERO == 0);
 
     // Namespaces, nested ones included.
-    Geometry_Point a = Geometry_point(0, 0);
-    Geometry_Point b = Geometry_point(3, 4);
-    CHECK(Geometry_distance(a, b) == 5);
+    Geometry::Point a = Geometry::point(0, 0);
+    Geometry::Point b = Geometry::point(3, 4);
+    CHECK(Geometry::distance(a, b) == 5);
     CHECK(b.x() == 3);
-    CHECK(get_Geometry_UNIT() == 1);
-    CHECK(Geometry_Deep_twice(4) == 8);
+    CHECK(Geometry::get_UNIT() == 1);
+    CHECK(Geometry::Deep::twice(4) == 8);
 
     // Rest parameters take an array; overloads keep the name.
     CHECK(join("-", {"a", "b", "c"}) == "a-b-c");
