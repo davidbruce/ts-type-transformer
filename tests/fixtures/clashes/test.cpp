@@ -21,5 +21,6 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(Point::make().h != 0);
 
     CHECK(ns_Node::create().id() == 2);
-    CHECK(ns_Node_2::create().id() == 1);
+    // The namespace's `Node`, by its own name in a namespace of it.
+    CHECK(ns::Node::create().id() == 1);
 }

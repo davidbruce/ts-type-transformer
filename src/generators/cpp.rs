@@ -17,7 +17,7 @@
 // - `<module>.cpp`: every other definition, compiled once and linked.
 // - `types/X.hpp`: a callback or union.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
 use super::names::{Kind, Naming};
@@ -909,7 +909,9 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         decls.chain(full).filter(|h| h != from).map(|h| include(from, &h)).collect()
     };
 
-    let types = declarations(m);
+    // A namespace's types, also by their own names in it.
+    let (namespaces, in_structs) = namespace_aliases(m);
+    let types = declarations(m) + &namespaces;
     let mut out = vec![("ts_runtime.hpp".to_string(), RUNTIME.to_string()), ("ts_types.hpp".to_string(), types)];
 
     // A union: its alternatives, and how to tell which one came back.
@@ -1033,7 +1035,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         // A name the type declares itself hides its ancestors' overloads in C++,
         // where TypeScript merges them: `using Base::name;` brings them back, and
         // an own overload of the same signature still hides its base's.
-        let mut usings = String::new();
+        let mut usings = in_structs.get(&c.name).cloned().unwrap_or_default();
         for (name, hs) in &holders {
             let visible: Vec<&&String> = hs.iter().filter(|h| !hs.iter().any(|o| o != *h && ancestors(o).contains(**h))).collect();
             if own.contains(name) && visible.len() == 1 {
@@ -1421,4 +1423,74 @@ fn rename_words(text: &str, to: &HashMap<String, String>) -> String {
         }
     }
     out
+}
+
+// A namespace's types by their own names in it, as aliases of theirs:
+// `Intl.Locale` is `Intl::Locale` too, a namespace of aliases after every
+// type is declared. A namespace a class shares its name with (node's
+// `Stream`) is in that class: `Stream::PipeOptions`. One a function or a
+// generic class shares its name with is `<name>_ns`, as C++ allows a name
+// one kind of thing in a scope. Returns the namespaces, and each class's
+// aliases.
+fn namespace_aliases(m: &Model) -> (String, HashMap<String, String>) {
+    let params_of = |n: &str| -> Option<Vec<TParam>> {
+        m.classes.iter().find(|c| c.name == n).map(|c| c.type_params.clone())
+            .or_else(|| m.callbacks.iter().find(|c| c.name == n).map(|c| c.type_params.clone()))
+            .or_else(|| m.unions.iter().find(|u| u.name == n).map(|u| u.type_params.clone()))
+            .or_else(|| (m.enums.iter().any(|e| e.0 == n) || m.num_enums.iter().any(|e| e.0 == n)).then(Vec::new))
+    };
+    // (namespaces, own name, the type): every namespaced type C++ has.
+    let mut entries: Vec<(Vec<String>, String, String)> = Vec::new();
+    for (name, path) in &m.namespaced {
+        if params_of(name).is_some() {
+            entries.push((path[..path.len() - 1].to_vec(), path.last().unwrap().clone(), name.clone()));
+        }
+    }
+    entries.sort();
+    let mut taken: HashSet<String> = m.classes.iter().map(|c| c.name.clone()).chain(m.callbacks.iter().map(|c| c.name.clone())).chain(m.unions.iter().map(|u| u.name.clone())).collect();
+    taken.extend(m.enums.iter().map(|e| e.0.clone()).chain(m.num_enums.iter().map(|e| e.0.clone())).chain(m.opaque.iter().cloned()));
+    taken.extend(m.funcs.iter().map(|f| cpp_name(f, "create")).chain(m.maps.iter().map(|k| format!("{}Keys", k.name))).chain(["ts".to_string()]));
+    let alias = |leaf: &str, target: &str| -> String {
+        let params = params_of(target).unwrap_or_default();
+        let args = if params.is_empty() { String::new() } else { format!("<{}>", params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
+        format!("{}using {} = ::{target}{args};\n", head(&params, true).replace('\n', " "), ident(leaf))
+    };
+    // One level: its own types' aliases, then each namespace in it.
+    fn level(entries: &[(Vec<String>, String, String)], at: &[String], kind: &str, indent: &str, alias: &dyn Fn(&str, &str) -> String) -> String {
+        let mut out = String::new();
+        let own: Vec<&String> = entries.iter().filter(|(p, _, _)| p == at).map(|(_, l, _)| l).collect();
+        for (_, leaf, target) in entries.iter().filter(|(p, _, _)| p == at) {
+            out += &format!("{indent}{}", alias(leaf, target));
+        }
+        let children: BTreeSet<&String> = entries.iter().filter(|(p, _, _)| p.len() > at.len() && p[..at.len()] == *at).map(|(p, _, _)| &p[at.len()]).collect();
+        for child in children {
+            let mut path = at.to_vec();
+            path.push(child.clone());
+            // Beside a type of its name it is apart.
+            let name = if own.contains(&child) { format!("{}_ns", ident(child)) } else { ident(child) };
+            let inner = level(entries, &path, kind, &format!("{indent}    "), alias);
+            out += &if kind == "struct" { format!("{indent}struct {name} {{\n{inner}{indent}}};\n") } else { format!("{indent}namespace {name} {{\n{inner}{indent}}}\n") };
+        }
+        out
+    }
+    let mut namespaces = String::new();
+    let mut in_structs: HashMap<String, String> = HashMap::new();
+    let tops: BTreeSet<&String> = entries.iter().map(|(p, _, _)| &p[0]).collect();
+    for top in tops {
+        let class = m.classes.iter().find(|c| c.name == *top && !m.namespaced.contains_key(&c.name));
+        let members: HashSet<String> = class.map(|c| c.funcs.iter().map(|f| cpp_name(f, &c.name)).collect()).unwrap_or_default();
+        let clashes = entries.iter().any(|(p, l, _)| p.len() == 1 && p[0] == *top && (members.contains(l) || l == top));
+        match class {
+            // In the class, but for a generic one (`Control<O>::Zoom` would want
+            // its arguments) or where a member has the name.
+            Some(c) if c.type_params.is_empty() && !clashes => {
+                in_structs.insert(c.name.clone(), level(&entries, std::slice::from_ref(top), "struct", "    ", &alias));
+            }
+            _ => {
+                let name = if taken.contains(top) { format!("{}_ns", ident(top)) } else { ident(top) };
+                namespaces += &format!("namespace {name} {{\n{}}}\n", level(&entries, std::slice::from_ref(top), "namespace", "    ", &alias));
+            }
+        }
+    }
+    (namespaces, in_structs)
 }
