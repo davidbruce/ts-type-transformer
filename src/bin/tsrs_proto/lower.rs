@@ -350,9 +350,13 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
         let name = by_key
             .entry(type_key(t))
             .or_insert_with(|| {
-                // By its members, if a few short ones; else where it is.
-                let joined = parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}"));
-                let base = if parts.len() <= 3 && (joined.len() <= NAME_MAX || path.is_empty()) { joined } else { path.join(sep) };
+                // By its members, if a few that say what they are; else where it is.
+                let joined = parts.iter().map(describe).collect::<Option<Vec<_>>>().map(|ps| ps.join(&format!("{sep}or{sep}")));
+                let base = match joined {
+                    Some(j) if parts.len() <= 3 && j.len() <= NAME_MAX => j,
+                    _ if !path.is_empty() => path.join(sep),
+                    j => j.unwrap_or_else(|| parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}"))),
+                };
                 let name = unique(base, names);
                 // Type parameters the union mentions become its own.
                 let free = free_type_params(t);
@@ -1940,7 +1944,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let at = best.get(&type_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep));
                     // A shared callback by what it takes, if that is short; else where it is first.
                     let base = match t {
-                        Type::Function(s) | Type::Constructor(s) if shared => Some(callback_name(s, sep)).filter(|n| n.len() <= NAME_MAX).unwrap_or(at),
+                        Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep).filter(|n| n.len() <= NAME_MAX).unwrap_or(at),
                         _ => at,
                     };
                     let name = unique(base, &mut names);
@@ -1970,14 +1974,15 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
     }
 }
 
-// `(this: HTMLElement, ev: MouseEvent) => any` -> `HTMLElement_MouseEvent_fn`.
-fn callback_name(s: &Signature, sep: &str) -> String {
-    let mut parts: Vec<String> = s.this.iter().chain(s.params.iter().map(|p| &p.ty)).map(mnemonic).collect();
+// `(this: HTMLElement, ev: MouseEvent) => any` -> `HTMLElement_MouseEvent_fn`;
+// none if a parameter has no few words to say it.
+fn callback_name(s: &Signature, sep: &str) -> Option<String> {
+    let mut parts: Vec<String> = s.this.iter().chain(s.params.iter().map(|p| &p.ty)).map(describe).collect::<Option<_>>()?;
     if parts.is_empty() {
         parts.push("void".into());
     }
     parts.push("fn".into());
-    parts.join(sep)
+    Some(parts.join(sep))
 }
 
 fn decl_name(d: &Decl) -> Option<&str> {
@@ -2376,17 +2381,28 @@ fn param_mnemonic(s: &Signature, t: &Type) -> String {
 }
 
 fn mnemonic(t: &Type) -> String {
-    match t {
+    describe(t).unwrap_or_else(|| "x".into())
+}
+
+// A type in a few words, if it has them: not an inline object, nor a
+// type-level expression.
+fn describe(t: &Type) -> Option<String> {
+    Some(match t {
         Type::Primitive(n) => n.clone(),
         // Written qualified: `Tokens.HTML` is `Tokens_HTML`.
         Type::Ref(r) => r.name.replace('.', "_"),
-        Type::Array(inner) => format!("{}_array", mnemonic(inner)),
-        Type::Nullable(inner, _) => format!("opt_{}", mnemonic(inner)),
+        Type::Array(inner) => format!("{}_array", describe(inner)?),
+        Type::Nullable(inner, _) => format!("opt_{}", describe(inner)?),
+        Type::Readonly(inner) | Type::Tested(inner, _) => describe(inner)?,
+        Type::Union(parts) => parts.iter().map(describe).collect::<Option<Vec<_>>>()?.join("_or_"),
+        Type::Literal { value, .. } => name_part(value),
         Type::Function(_) => "fn".into(),
+        Type::Constructor(_) => "ctor".into(),
         Type::Tuple(_) => "tuple".into(),
         Type::Erased(_) => "any".into(),
-        _ => "x".into(),
-    }
+        Type::This => "this".into(),
+        Type::Object(_) | Type::Intersection(..) | Type::Op(..) => return None,
+    })
 }
 
 fn rename_members(members: &mut [Member], o: Options) {
