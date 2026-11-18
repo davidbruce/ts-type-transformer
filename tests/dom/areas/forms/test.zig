@@ -95,23 +95,17 @@ export fn run() void {
     expect(color.getSelectedOptions().getLength() == 1, @src());
     expect(!color.getMultiple(), @src());
 
-    // An option made here joins the select.
-    const extra = doc.createElement(.option, .{});
-    extra.setValue("y");
-    extra.setText("Yellow");
+    // Options made via the global Option constructor (and Image/Audio constructors).
+    const extra = b.Option.new(.{ .text = "Yellow", .value = "y" });
     color.add(.{ .HTMLOptionElement = extra }, null);
     expect(color.getLength() == 4, @src());
-    expect(color.item(3).?.getText().eql("Yellow"), @src());
-
-    // FINDING 1: `new Option(text, value)` has no binding; HTMLOptionElement.new() takes no
-    // arguments and runs `new HTMLOptionElement()`, which throws "Illegal constructor".
-    // So an option is made with createElement(.option) above. Checked as it is:
-    const made_option = b.HTMLOptionElement.new();
-    expect(made_option.h == 0, @src());
-    const option_error = b.jsTakeError();
-    var message: [96]u8 = undefined;
-    const text = if (option_error) |e| b.jsErrorMessage(e).copy(&message) else "";
-    expect(std.mem.indexOf(u8, text, "Illegal constructor") != null, @src());
+    expect(color.item(3).?.getText().eql("Yellow") and color.item(3).?.getValue().eql("y"), @src());
+    const selected_opt = b.Option.new(.{ .text = "Purple", .value = "p", .defaultSelected = true, .selected = true });
+    expect(selected_opt.getText().eql("Purple") and selected_opt.getValue().eql("p") and selected_opt.getDefaultSelected() and selected_opt.getSelected(), @src());
+    const img = b.Image.new(.{ .width = 16, .height = 8 });
+    expect(img.getWidth() == 16 and img.getHeight() == 8, @src());
+    const audio = b.Audio.new(null);
+    expect(audio.getTagName().eql("AUDIO"), @src());
 
     // A textarea.
     expect(note.getValue().eql("hello") and note.getTextLength() == 5, @src());

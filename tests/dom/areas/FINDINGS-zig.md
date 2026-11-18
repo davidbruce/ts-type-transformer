@@ -1,5 +1,7 @@
 # Findings: Zig DOM area programs
 
+**Status:** Not a bug: 1 (`b.Option.new`, `b.Image.new`, and `b.Audio.new` are bound in `areas/core.zig` and `areas/webaudio.zig`, re-exported from `bindings.zig`; `test.zig` now uses them. `HTMLOptionElement.new()` throws "Illegal constructor" because `lib.dom.d.ts` declares `new(): HTMLOptionElement` on the interface just as on `HTMLDivElement`).
+
 Numbers match `// FINDING n` in tests/dom/areas/*/test.zig.
 
 1. Runtime bug: `HTMLOptionElement.new()` runs `new HTMLOptionElement()`: "Illegal constructor". The real constructor is the global `Option` (`declare var Option: { new(text?, value?, ...): HTMLOptionElement }`), which has no binding; likewise `HTMLImageElement.new` (`Image`), `HTMLAudioElement.new` (`Audio`).
