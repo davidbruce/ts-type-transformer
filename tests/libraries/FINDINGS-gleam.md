@@ -1,6 +1,6 @@
 # Findings: Gleam library programs
 
-**Status:** Fixed: 1, 3, 4, 5, 6, 13, 15, 16, 17, 21; partly 9 (a table is built; atoms are opaque). Fixed by filling optional fixed values, programs not yet updated: 18.
+**Status:** Fixed: 1, 3, 4, 5, 6, 13, 15, 16, 17, 18, 21; partly 9 (a table is built; atoms are opaque).
 
 Numbers match `// FINDING n` in tests/libraries/*/test.gleam. Paths are
 under `target/e2e/libraries/<lib>-gleam/src/bindings/`.

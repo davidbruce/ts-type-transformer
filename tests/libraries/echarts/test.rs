@@ -61,7 +61,10 @@ pub extern "C" fn run() {
     option.set_animation(Some(false));
     option.set_x_axis(Some(&obj(&[("type", text("category")), ("data", list(vec![text("mon"), text("tue"), text("wed")]))])));
     option.set_y_axis(Some(&obj(&[("type", text("value"))])));
-    option.set_series(Some(&list(vec![obj(&[("type", text("bar")), ("name", text("sales")), ("data", list(vec![num(5.0), num(20.0), num(36.0)]))])])));
+    let bars = BarSeriesOption::create();
+    bars.set_name(PositionSizeOption::String("sales".to_string()));
+    bars.set_data(Some(&JsArray::<JsValue>::from(vec![num(5.0), num(20.0), num(36.0)])));
+    option.set_series(Some(&JsValue(bars.0.clone())));
     chart.set_option(option.clone(), None, None);
 
     // Read back what was set: the series, with its data.

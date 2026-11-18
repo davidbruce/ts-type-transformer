@@ -22,15 +22,6 @@ fn onPing(ctx: ?*anyopaque, args: b.JsArray) ?bool {
     return null;
 }
 
-// FINDING 16: BarSeriesOption.create() makes `{}`; the discriminant `type: "bar"` is only a Zig constant
-// (BarSeriesOption.type), never written to the object, and there is no setType. ECharts throws
-// "Unknown series undefined" without it. The property is written here through EChartsCoreOption.setAt,
-// an index-signature type whose handle is reinterpreted.
-fn stampType(h: u32, name: []const u8) void {
-    const any: ec.EChartsCoreOption = .{ .h = h };
-    any.setAt("type", b.JsValue.string(name));
-}
-
 // FINDING 22: which namespace a name is in is not predictable: echarts.EChartsOption and
 // echarts.BarSeriesOption are in the package's struct, but XAXisComponentOption_xAxis (a nested/synthetic
 // type) is at the top of bindings, so this program mixes `ec.` and `b.`.
@@ -63,7 +54,6 @@ export fn run() void {
     option.setXAxis(.{ .XAXisComponentOption_xAxis = x_axis });
     option.setYAxis(.{ .YAXisComponentOption_yAxis_value = b.YAXisComponentOption_yAxis_value.create() });
     const bars = ec.BarSeriesOption.create();
-    stampType(bars.h, "bar");
     bars.setName(.{ .string = b.JsString.from("sales") });
     const values = b.JsArray.new();
     values.push(num(5));
@@ -110,7 +100,6 @@ export fn run() void {
     // Updating the option merges: the same series gets new data.
     const next = ec.EChartsOption.create();
     const next_bars = ec.BarSeriesOption.create();
-    stampType(next_bars.h, "bar");
     next_bars.setName(.{ .string = b.JsString.from("sales") });
     const more = b.JsArray.new();
     more.push(num(1));

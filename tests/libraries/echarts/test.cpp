@@ -30,24 +30,16 @@ extern "C" __attribute__((export_name("run"))) void run() {
     xaxis.data(days);
     YAXisComponentOption_yAxis_value yaxis = YAXisComponentOption_yAxis_value::create();
 
-    // FINDING 18 (still open: `type?: 'bar'` is optional in the .d.ts, so create()
-    // still makes `{}` and there is no setter): BarSeriesOption::create() makes `{}` (no
-    // `type`): setOption fails with "[ECharts] Unknown
-    // series undefined", and the page is left with nothing. The series is
-    // built as a Dictionary<ts::Value> (`{}` with set_at) instead.
     ts::Array<> values = ts::Array<>::create();
     for (double v : {5.0, 20.0, 36.0}) values.push(ts::Value::number(v));
-    Dictionary<ts::Value> bars = Dictionary<ts::Value>::create();
-    bars.set_at("type", ts::Value::string("bar"));
-    bars.set_at("name", ts::Value::string("sales"));
-    bars.set_at("data", val_of(values));
-    ts::Array<> series = ts::Array<>::create();
-    series.push(val_of(bars));
+    BarSeriesOption bars = BarSeriesOption::create();
+    bars.name(PositionSizeOption(std::string("sales")));
+    bars.data(values);
 
     EChartsOption option = EChartsOption::create();
     option.xAxis(EChartsOption_xAxis(xaxis));
     option.yAxis(EChartsOption_yAxis(yaxis));
-    option.series(EChartsOption_series(series));
+    option.series(EChartsOption_series(bars));
     chart.setOption(option);
     CHECK(!ts::take_error());
 

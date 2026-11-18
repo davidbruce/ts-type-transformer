@@ -61,10 +61,6 @@ __attribute__((export_name("run"))) void run(void) {
     Eventful_on(chart, "highlight", any_any_array_to_void_or_boolean_fn_from(on_highlight, 0), (JsValue){ 0 });
 
     // The option: a category axis, a value axis, one bar series.
-    // FINDING 15 (still open): BarSeriesOption's `type?: 'bar'` is optional, so
-    // _create does not set it and there is no setter (only the #define
-    // BarSeriesOption_type): echarts cannot tell what series it is. The series
-    // is a Dictionary (any string-keyed object) here instead.
     Dictionary x_axis = Dictionary_create();
     Dictionary_set_at(x_axis, "type", js_string("category"));
     JsArray categories = JsArray_new();
@@ -81,16 +77,15 @@ __attribute__((export_name("run"))) void run(void) {
     Dictionary_set_at(grid, "right", js_number(50));
     Dictionary_set_at(grid, "top", js_number(50));
     Dictionary_set_at(grid, "bottom", js_number(50));
-    Dictionary series0 = Dictionary_create();
-    Dictionary_set_at(series0, "type", js_string("bar"));
-    Dictionary_set_at(series0, "name", js_string("sales"));
+    BarSeriesOption series0 = BarSeriesOption_create();
+    BarSeriesOption_set_name(series0, PositionSizeOption_of_string(JsString_from("sales")));
     JsArray values = JsArray_new();
     JsArray_push(values, js_number(5));
     JsArray_push(values, js_number(20));
     JsArray_push(values, js_number(36));
-    Dictionary_set_at(series0, "data", (JsValue){ values.h });
+    BarSeriesOption_set_data(series0, values);
     JsArray series = JsArray_new();
-    JsArray_push(series, dict_value(series0));
+    JsArray_push(series, (JsValue){ series0.h });
 
     EChartsCoreOption option = EChartsCoreOption_create();
     EChartsCoreOption_set_at(option, "xAxis", dict_value(x_axis));

@@ -1,12 +1,8 @@
 // ECharts from Gleam, in a page: a chart on the page's element, a bar series set
 // as an option and read back, its size and pixel conversions, events, resizing,
 // disposal. Every check must hold.
-//
-// FINDING 18: a series is a typed option (BarSeriesOption) whose `type?: 'bar'` is
-// optional in the declarations, so create() does not set it and it has no setter
-// (`pub const type_ = "bar"` only); the typed series cannot be used;
-// an EChartsCoreOption with set_at("type", ...) builds the plain object instead.
 import bindings/areas/echarts as echarts
+import bindings/areas/echarts/bar_series_option
 import bindings/areas/echarts/e_charts_core_option as raw
 import bindings/areas/echarts/e_charts_type
 import bindings/areas/echarts/eventful
@@ -44,10 +40,6 @@ fn array(items: List(dynamic.Dynamic)) -> dynamic.Dynamic {
   dynamic.array(items)
 }
 
-fn numbers(xs: List(Float)) -> dynamic.Dynamic {
-  array(list.map(xs, dynamic.float))
-}
-
 pub fn main() {
   // A chart on the page's #chart.
   let chart = echarts.init(Some(test_page.element("chart")), None, None)
@@ -59,15 +51,12 @@ pub fn main() {
     + check(option.is_some(echarts.get_instance_by_id(e_charts_type.get_id(chart))), "found by its id")
 
   // A bar series with a category axis and a value axis.
-  let series =
-    object([
-      #("type", dynamic.string("bar")),
-      #("name", dynamic.string("sales")),
-      #("data", numbers([5.0, 20.0, 36.0, 10.0])),
-    ])
+  let series = bar_series_option.create()
+  bar_series_option.set_name(series, Some(t.PositionSizeOptionString("sales")))
+  bar_series_option.set_data(series, Some(list.map([5.0, 20.0, 36.0, 10.0], dynamic.float)))
   let option_object = raw.create()
   raw.set_animation(option_object, Some(False))
-  raw.set_at(option_object, "series", array([series]))
+  raw.set_at(option_object, "series", array([runtime.dynamic(series)]))
   raw.set_at(
     option_object,
     "xAxis",
