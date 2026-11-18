@@ -36,14 +36,14 @@ let features: TableFeatures =
 // Columns from the helper: a string accessor, with a header.
 let helper = createColumnHelper<TableFeatures, obj> ()
 let named (header: string) =
-    U6.Case2 {| getUniqueValues = None; footer = None; cell = None; meta = None; header = header; id = None |}
+    U6.Case2 (ColumnHelperAccessorColumn2.Create (header = header))
 let nameColumn = helper.accessor<string, obj> ("name", named "Name")
 let ageColumn = helper.accessor<string, obj> ("age", named "Age")
 // An accessor function with an explicit id.
 let doubleColumn =
     helper.accessor<obj -> obj, obj> (
         (fun (p: obj) -> box ((p?age: float) * 2.0)),
-        U6.Case1 {| getUniqueValues = None; footer = None; cell = None; meta = None; id = "double"; header = Some (U2.Case1 "Double") |}
+        U6.Case1 (ColumnHelperAccessorColumn1.Create (id = "double", header = U2.Case1 "Double"))
     )
 
 let people =

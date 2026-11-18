@@ -93,15 +93,24 @@ let tl = m.lexer "x *y*"
 check (m.parser (ResizeArray [ tl.[0.0] ]) = "<p>x <em>y</em></p>\n") "instance parser"
 
 // FINDING 5: `marked.parse`, `Marked#parse` and `Marked#parseInline` are typed `obj`: not callable.
-// FINDING 6: `use`: MarkedExtension has no Create and its renderer/hooks callbacks take a ResizeArray of arguments.
-// walkTokens is the one hook with a usable type.
+// Custom renderer and walkTokens extension.
 let seen = ResizeArray<string>()
 let ext = createEmpty<MarkedExtension<string, string>>
+ext.renderer <- Some (
+    MarkedExtensionRenderer.Create (
+        heading = RendererSpace.Create (fun args ->
+            let h = unbox<Tokens.Heading> args.[0]
+            U2.Case2 (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
+    )
+)
 ext.walkTokens <- Some (Some (fun (t: Token) ->
     seen.Add (unbox<Tokens.Generic> t).``type``
     U3.Case1 ()))
 let m2 = Marked.Create ext
 check (not (isNull (box m2)) && seen.Count = 0) "an instance with an extension"
+let customTokens = m2.lexer "# Hi"
+let customHtml = m2.parser (ResizeArray [ customTokens.[0.0] ])
+check (customHtml = "<h1 class=\"custom\">Hi</h1>\n") "custom renderer override"
 m2.walkTokens (TokenArrayOrTokensList.TokensList (Lexer.lex "# a *b*"), fun t -> seen.Add ((unbox<Tokens.Generic> t).``type``); U3.Case1 ()) |> ignore
 check (seen.Contains "heading" && seen.Contains "em") "walkTokens visits nested tokens"
 

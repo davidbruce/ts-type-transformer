@@ -114,14 +114,12 @@ check (stage.children.Count = 0) "removeChildren"
 box.destroy ()
 check box.destroyed "destroy"
 
-// An Application: its renderer is made asynchronously (`init`). FINDING 24: `init`'s options are an
-// anonymous record of ~85 required fields (Bindings.03.PixiMixins_and_1_more.fs:713), so only `init ()` can be called,
-// and the page's canvas cannot be given: the application makes its own.
+// An Application: its renderer is made asynchronously (`init`) with named options.
 async {
     let app = Application.Create<obj> ()
-    do! Async.AwaitPromise (app.init ())
+    do! Async.AwaitPromise (app.init (InitOptions.Create (width = 200.0, height = 100.0)))
     check (not (isNull app.canvas)) "the application's canvas"
-    check (app.screen.width > 0.0 && app.screen.height > 0.0) "the screen has a size"
+    check (app.screen.width = 200.0 && app.screen.height = 100.0) "the screen has the requested size"
     app.stage.addChild stage |> ignore
     app.render ()
     check (app.stage.children.Count = 1) "the stage holds a container"

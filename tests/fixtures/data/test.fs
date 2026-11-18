@@ -28,7 +28,7 @@ check (d.width = 4.0 && d.mode = OptionsMode.Fit) "options out"
 check d.height.IsNone "missing optional property"
 
 // Partial<Options>.
-let patched = patch (d, {| width = Some 9.0; height = None; title = None; mode = None |})
+let patched = patch (d, PatchChanges.Create (width = 9.0))
 check (patched.width = 9.0 && patched.mode = OptionsMode.Fit) "Partial"
 
 // Pick<Options, "width" | "height">.

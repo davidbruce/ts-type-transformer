@@ -76,6 +76,11 @@ struct Gen {
     // Synthetic delegates synthesized for function types with optional parameters.
     delegates: HashMap<(String, Vec<String>, String), String>,
     delegate_counter: usize,
+    // Synthetic interfaces hoisted from inline option-bag objects.
+    records: HashMap<(String, Vec<String>, String), String>,
+    record_counter: usize,
+    probing: bool,
+    cur_constrained: HashSet<String>,
     pending_delegates: String,
     global_delegates: String,
     in_globals: bool,
@@ -296,6 +301,10 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         split_rest: None,
         delegates: HashMap::new(),
         delegate_counter: 0,
+        records: HashMap::new(),
+        record_counter: 0,
+        probing: false,
+        cur_constrained: HashSet::new(),
         pending_delegates: String::new(),
         global_delegates: String::new(),
         in_globals: false,
@@ -767,7 +776,10 @@ impl Gen {
             && elements(body).next().is_some()
             && !elements(body).all(|m| m.has_tag_name("property"))
             && !(elements(body).count() == 1 && elements(body).all(|m| m.has_tag_name("index")));
-        if body.has_tag_name("object") && (recursive || inherited || members) {
+        // An object with optional properties is an interface (with a ParamObject
+        // `Create`), not an anonymous record where every field is required.
+        let has_optional = body.has_tag_name("object") && elements(body).any(|m| m.has_tag_name("property") && flag(m, "optional"));
+        if body.has_tag_name("object") && (recursive || inherited || members || has_optional) {
             return AliasForm::Interface;
         }
         if recursive && !(body.has_tag_name("functionType") && d.parent().is_some_and(|p| !p.has_tag_name("namespace"))) {
@@ -786,6 +798,7 @@ impl Gen {
     // it and from references to it, until settled.
     fn settle_alias_kept(&mut self, root: Node) {
         let aliases: Vec<Node> = root.descendants().filter(|d| d.has_tag_name("typeAlias") && named(*d, "typeParameter").next().is_some()).collect();
+        self.probing = true;
         loop {
             let mut changed = false;
             for d in &aliases {
@@ -806,6 +819,7 @@ impl Gen {
                 break;
             }
         }
+        self.probing = false;
     }
 
     fn skip(&mut self, why: &str) {
@@ -969,12 +983,23 @@ impl Gen {
                 self.fn_params.truncate(depth);
                 t
             }
-            // An object with only properties is an anonymous record.
+            // An object with only properties is an anonymous record, unless it has
+            // optional properties and enough fields that writing every `None` is
+            // unwieldy — then it is hoisted to an interface with a ParamObject `Create`.
             "object" if elements(n).all(|m| m.has_tag_name("property")) && elements(n).next().is_some() => {
-                let fields: Vec<String> = elements(n)
+                let props: Vec<Node> = elements(n).collect();
+                let has_opt = props.iter().any(|m| flag(*m, "optional"));
+                let plain = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_') && !s.as_bytes()[0].is_ascii_digit();
+                if !self.probing && has_opt && props.len() >= 4 && props.iter().all(|m| plain(attr(*m, "name")) && attr(*m, "name") != "Create") {
+                    if let Some(hoisted) = self.hoist_object(n, &props, owner) {
+                        return hoisted;
+                    }
+                }
+                let fields: Vec<String> = props
+                    .iter()
                     .map(|m| {
-                        let t = self.ty(only_child(m), owner);
-                        format!("{}: {t}{}", ident(attr(m, "name")), if flag(m, "optional") { " option" } else { "" })
+                        let t = self.ty(only_child(*m), owner);
+                        format!("{}: {t}{}", ident(attr(*m, "name")), if flag(*m, "optional") { " option" } else { "" })
                     })
                     .collect();
                 format!("{{| {} |}}", fields.join("; "))
@@ -1151,7 +1176,13 @@ impl Gen {
                 .map(pascal)
                 .filter(|p| !p.is_empty())
                 .collect();
-            let free = |c: &String, g: &Self| !g.file_of.contains_key(c) && !g.declared.contains(c) && !g.type_names.contains(c) && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()));
+            let free = |c: &String, g: &Self| {
+                !g.file_of.contains_key(c)
+                    && !g.declared.contains(c)
+                    && !g.type_names.contains(c)
+                    && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
+                    && !g.records.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
+            };
             let at: Vec<String> = (2..=places.len().min(3)).chain(1..=1).map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>()).filter(|c| !c.is_empty()).collect();
             // Else with the types it takes, or gives (node's `pipeline` sources).
             let said: Vec<String> = named(n, "parameter")
@@ -1205,6 +1236,147 @@ impl Gen {
         } else {
             dname
         }
+    }
+
+    // Hoists an inline option-bag object (`{ a?: T; b?: U; ... }`) to a named
+    // `[<AllowNullLiteral; Interface>]` with a `[<ParamObject>]` `Create`, so
+    // callers pass only the fields they want instead of every `None`.
+    fn hoist_object(&mut self, n: Node, props: &[Node], owner: &str) -> Option<String> {
+        let mut fields: Vec<(String, String, String, bool, bool, Option<String>)> = Vec::new();
+        let mut seen_props = HashSet::new();
+        for &m in props {
+            let raw = attr(m, "name");
+            if !seen_props.insert(raw.to_string()) {
+                continue;
+            }
+            let t = self.ty(only_child(m), owner);
+            let opt = flag(m, "optional");
+            let ro = flag(m, "readonly");
+            let fixed = const_js(m);
+            fields.push((raw.to_string(), ident(raw), t, opt, ro, fixed));
+        }
+        let key_sig: String = fields
+            .iter()
+            .map(|(raw, _, t, opt, ro, fixed)| format!("{raw}:{t}:{}:{}:{}", u8::from(*opt), u8::from(*ro), fixed.as_deref().unwrap_or("")))
+            .collect::<Vec<_>>()
+            .join(";");
+        let mut tparams: Vec<String> = Vec::new();
+        let b = key_sig.as_bytes();
+        for (i, _) in key_sig.match_indices('\'') {
+            let end = b[i + 1..].iter().position(|c| !(c.is_ascii_alphanumeric() || *c == b'_')).map_or(b.len(), |p| i + 1 + p);
+            let tp = key_sig[i..end].to_string();
+            if end > i + 1 && !tparams.contains(&tp) {
+                tparams.push(tp);
+            }
+        }
+        // A constrained enclosing type parameter cannot be hoisted without its constraint.
+        if tparams.iter().any(|tp| self.cur_constrained.contains(tp)) {
+            return None;
+        }
+        let scope = if !self.cur_indent.is_empty() {
+            format!("ns:{}", self.cur_prefix)
+        } else if self.in_globals {
+            "globals".into()
+        } else {
+            "files".into()
+        };
+        let key = (scope, tparams.clone(), key_sig.clone());
+        let rname = if let Some(existing) = self.records.get(&key) {
+            existing.clone()
+        } else {
+            let places: Vec<String> = n
+                .ancestors()
+                .skip(1)
+                .filter(|a| matches!(a.tag_name().name(), "parameter" | "property" | "method" | "function" | "interface" | "class" | "typeAlias" | "var" | "namespace"))
+                .filter_map(|a| a.attribute("jsName").filter(|j| *j != "default").or(a.attribute("name")))
+                .map(pascal)
+                .filter(|p| !p.is_empty())
+                .collect();
+            let free = |c: &String, g: &Self| {
+                !g.file_of.contains_key(c)
+                    && !g.declared.contains(c)
+                    && !g.type_names.contains(c)
+                    && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
+                    && !g.records.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
+            };
+            let at: Vec<String> = (2..=places.len().min(3)).chain(1..=1).map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>()).filter(|c| !c.is_empty()).collect();
+            // If the object fixes a string tag (like `type: "category"`), prefer naming it after that tag.
+            let mut candidates: Vec<String> = Vec::new();
+            let string_tags: Vec<&str> = props
+                .iter()
+                .filter_map(|m| m.attribute("const").filter(|_| only_child(*m).attribute("name") == Some("string")))
+                .collect();
+            if string_tags.len() == 1 {
+                let tag = pascal(string_tags[0]);
+                if !tag.is_empty() {
+                    for base in &at {
+                        candidates.push(format!("{base}{tag}"));
+                    }
+                }
+            }
+            candidates.extend(at.iter().cloned());
+            let mut rname = match candidates.into_iter().find(|c| free(c, self)) {
+                Some(c) => c,
+                None => {
+                    if let Some(base) = at.first() {
+                        (1usize..)
+                            .map(|i| format!("{base}{i}"))
+                            .find(|c| free(c, self))
+                            .unwrap()
+                    } else {
+                        loop {
+                            self.record_counter += 1;
+                            let candidate = format!("JsObj{}", self.record_counter);
+                            if free(&candidate, self) {
+                                break candidate;
+                            }
+                        }
+                    }
+                }
+            };
+            let tp_suffix = if tparams.is_empty() { String::new() } else { format!("<{}>", tparams.join(", ")) };
+            let indent = self.cur_indent.clone();
+            let mut def = format!("{indent}[<AllowNullLiteral; Interface>]\n{indent}type {rname}{tp_suffix} =\n");
+            let mut fixed_entries = Vec::new();
+            let mut req_args = Vec::new();
+            let mut opt_args = Vec::new();
+            for (raw, fname, t, opt, ro, fixed) in &fields {
+                let prop_ty = if *opt { format!("{t} option") } else { t.clone() };
+                let acc = if !*ro && prop_ty != "unit" { " with get, set" } else { "" };
+                def += &format!("{indent}    abstract {fname}: {prop_ty}{acc}\n");
+                if let Some(val) = fixed {
+                    fixed_entries.push(format!("{raw:?}: {val}"));
+                }
+                if *opt || fixed.is_some() {
+                    opt_args.push(format!("?{fname}: {t}"));
+                } else {
+                    req_args.push(format!("{fname}: {t}"));
+                }
+            }
+            req_args.extend(opt_args);
+            let create_args = req_args.join(", ");
+            let emit = if fixed_entries.is_empty() { "$0".to_string() } else { format!("Object.assign({{{}}}, $0)", fixed_entries.join(", ")) };
+            def += &format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({create_args}) : {rname}{tp_suffix} = jsNative\n\n");
+            if !self.cur_indent.is_empty() {
+                self.pending_delegates += &def;
+            } else if self.in_globals {
+                self.global_delegates += &def;
+            } else {
+                let latest = words(&def).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
+                let target_file = latest.max(self.current_file);
+                self.file_of.insert(rname.clone(), target_file);
+                *self.alias_types.entry(target_file).or_default() += &def;
+            }
+            if !self.cur_indent.is_empty() && !self.cur_prefix.is_empty() {
+                rname = format!("{}.{rname}", self.cur_prefix.split('.').map(type_ident).collect::<Vec<_>>().join("."));
+            }
+            self.records.insert(key, rname.clone());
+            if !tparams.is_empty() {
+                rname = format!("{rname}{tp_suffix}");
+            }
+            rname
+        };
+        Some(if !tparams.is_empty() && !rname.contains('<') { format!("{rname}<{}>", tparams.join(", ")) } else { rname })
     }
 
     // Notes the type parameters of a signature that range over a map's keys.
@@ -1505,9 +1677,15 @@ impl Gen {
         let params = self.type_params(d);
         let owner = format!("{name}{params}");
         // The declaration, and its extensions, state the constraints it keeps.
+        let saved_constrained = self.cur_constrained.clone();
         let header = match d.attribute("id").and_then(|id| self.constrained.get(id)) {
             Some(cs) => {
                 let ps: Vec<String> = named(d, "typeParameter").map(|p| format!("'{}", attr(p, "name"))).collect();
+                for (p, c) in ps.iter().zip(cs) {
+                    if c.is_some() {
+                        self.cur_constrained.insert(p.clone());
+                    }
+                }
                 // The constraint as F# names it: a built-in Fable has is its type (`JS.Date`).
                 let when: Vec<String> = ps.iter().zip(cs).filter_map(|(p, c)| c.as_ref().map(|c| format!("{p} :> {}", fable_builtin(c).unwrap_or_else(|| type_path(c))))).collect();
                 format!("{name}<{} when {} >", ps.join(", "), when.join(" and "))
@@ -1588,8 +1766,8 @@ impl Gen {
         }
         body.extend(self.members(&instance, &owner, &extend, indent));
         body.extend(self.redeclared(d, &left, &body, &owner, &extend, indent));
-        if let Some(line) = factory {
-            body.push(format!("{indent}    [<ParamObject; Emit(\"$0\")>]\n{indent}    static member Create ({line}) : {owner} = jsNative\n"));
+        if let Some((line, emit)) = factory {
+            body.push(format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({line}) : {owner} = jsNative\n"));
         }
         if body.is_empty() {
             body.push(format!("{indent}    interface end\n"));
@@ -1599,13 +1777,14 @@ impl Gen {
         if d.has_tag_name("class") {
             self.static_side(&name, &path, &statics, Some(&owner), indent);
         }
+        self.cur_constrained = saved_constrained;
     }
 
     // An options bag (only properties, its bases' too) is made with named
     // arguments: `AddEventListenerOptions.Create (once = true)`, the object
     // they make, by Fable's ParamObject. Not where a value of its name has
     // a `Create` (a class), nor where an argument would be of a later file.
-    fn factory(&mut self, d: Node, owner: &str) -> Option<String> {
+    fn factory(&mut self, d: Node, owner: &str) -> Option<(String, String)> {
         let root = d.document().root_element();
         let raw = attr(d, "name");
         let constrained = d.attribute("id").is_some_and(|id| self.constrained.contains_key(id));
@@ -1622,6 +1801,9 @@ impl Gen {
             }
             let src = if t.has_tag_name("typeAlias") { only_child_type(t) } else { t };
             for m in elements(src).filter(|m| !m.has_tag_name("typeParameter") && !m.has_tag_name("extends")) {
+                if m.has_tag_name("index") {
+                    continue;
+                }
                 if !m.has_tag_name("property") || flag(m, "static") {
                     return None;
                 }
@@ -1641,18 +1823,23 @@ impl Gen {
         if props.is_empty() || props.iter().any(|p| !plain(attr(*p, "name")) || attr(*p, "name") == "Create") {
             return None;
         }
-        let (required, optional): (Vec<Node>, Vec<Node>) = props.into_iter().partition(|p| !flag(*p, "optional"));
+        let (required, optional): (Vec<Node>, Vec<Node>) = props.into_iter().partition(|p| !flag(*p, "optional") && !p.has_attribute("const"));
+        let mut fixed = Vec::new();
         let mut args = Vec::new();
         for p in required.iter().chain(&optional) {
+            if let Some(val) = const_js(*p) {
+                fixed.push(format!("{:?}: {val}", attr(*p, "name")));
+            }
             let t = self.ty(only_child(*p), owner);
-            let q = if flag(*p, "optional") { "?" } else { "" };
+            let q = if flag(*p, "optional") || p.has_attribute("const") { "?" } else { "" };
             args.push(format!("{q}{}: {t}", ident(attr(*p, "name"))));
         }
         let line = args.join(", ");
         if words(&line).iter().filter_map(|w| self.file_of.get(*w)).any(|f| *f > self.current_file) {
             return None;
         }
-        Some(line)
+        let emit = if fixed.is_empty() { "$0".to_string() } else { format!("Object.assign({{{}}}, $0)", fixed.join(", ")) };
+        Some((line, emit))
     }
 
     // A value with constructors and static members: a type for its shape and a global of that type.
@@ -1900,7 +2087,17 @@ impl Gen {
                         None => Vec::new(),
                     };
                     let header = if when.is_empty() || params.is_empty() { params.clone() } else { format!("{} when {} >", params.trim_end_matches('>'), when.join(" and ")) };
-                    match self.alias_form(d) {
+                    let saved_constrained = self.cur_constrained.clone();
+                    if let Some(cs) = self.constrained.get(id) {
+                        for (p, c) in named(d, "typeParameter").zip(cs) {
+                            if c.is_some() {
+                                self.cur_constrained.insert(format!("'{}", attr(p, "name")));
+                            }
+                        }
+                    }
+                    let form = self.alias_form(d);
+                    self.cur_constrained = saved_constrained;
+                    match form {
                         AliasForm::Interface => self.interface(d, prefix, indent),
                         AliasForm::Delegate => {
                             // A function value's own type parameters are `obj`, as in `ty`.
@@ -2156,6 +2353,12 @@ fn js_path(prefix: &str, name: &str) -> String {
 // The type of an alias, after any type parameters.
 fn only_child_type<'a>(d: Node<'a, 'a>) -> Node<'a, 'a> {
     elements(d).find(|c| !c.has_tag_name("typeParameter")).unwrap_or_else(|| panic!("alias {} has no type", attr(d, "name")))
+}
+
+// A property's fixed (`const`) value as a JavaScript literal.
+fn const_js(m: Node) -> Option<String> {
+    let val = m.attribute("const")?;
+    Some(if only_child(m).attribute("name") == Some("string") { format!("{val:?}") } else { val.to_string() })
 }
 
 // Adds a member. One F# would call as another is there (TypeScript

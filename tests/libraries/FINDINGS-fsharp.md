@@ -1,6 +1,6 @@
 # F# findings from the library programs
 
-**Status:** Fixed: 7, 10, 11, 21, 26. Partly: 2 (the backslash; a case of an anonymous record still never matches), 6 (rest-parameter callbacks gather all arguments; anonymous records still require every field).
+**Status:** Fixed: 6, 7, 10, 11, 21, 24, 25, 26. Partly: 2 (the backslash; a case of an anonymous record still never matches), 18 (helper column options now have `Create`; `TableOptions_Core` still has none).
 
 Kinds: runtime bug / can't express / awkward.
 

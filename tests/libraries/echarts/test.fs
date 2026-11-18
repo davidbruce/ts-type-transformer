@@ -21,18 +21,47 @@ check (obj.ReferenceEquals (chart.getDom (), TestPage.element "chart")) "getDom"
 check (chart.getId () <> "") "getId"
 check (obj.ReferenceEquals (Echarts.getInstanceByDom (TestPage.element "chart") |> Option.get, chart)) "getInstanceByDom"
 
-// FINDING 25: a series option (`BarSeriesOption`, `EChartsOptionXAxis`...) is an anonymous record
-// of ~100 required fields (Bindings.01.echarts_and_1_more.fs:92, 11454, 11544): an option cannot be written
-// but as an object made by hand.
-let option: EChartsOption =
-    unbox (
-        createObj [
-            "animation" ==> false
-            "xAxis" ==> createObj [ "type" ==> "category"; "data" ==> [| "mon"; "tue"; "wed" |] ]
-            "yAxis" ==> createObj [ "type" ==> "value"; "min" ==> 0; "max" ==> 40 ]
-            "series" ==> [| createObj [ "type" ==> "bar"; "name" ==> "sales"; "data" ==> ResizeArray<float> [ 5.0; 20.0; 36.0 ] ] |]
-            "grid" ==> createObj [ "left" ==> 50; "right" ==> 50; "top" ==> 50; "bottom" ==> 50 ]
-        ]
+let option =
+    EChartsOption.Create (
+        animation = false,
+        xAxis =
+            U5.Case1 (
+                EChartsOptionXAxis1.Create (
+                    data = ResizeArray [
+                        AngleAxisComponentOptionCategoryData.String "mon"
+                        AngleAxisComponentOptionCategoryData.String "tue"
+                        AngleAxisComponentOptionCategoryData.String "wed"
+                    ]
+                )
+            ),
+        yAxis =
+            U5.Case4 (
+                EChartsOptionYAxis4.Create (
+                    min = AngleAxisComponentOptionCategoryMin.Number 0.0,
+                    max = AngleAxisComponentOptionCategoryMin.Number 40.0
+                )
+            ),
+        series =
+            U9.Case1 (
+                BarSeriesOption.Create (
+                    name = PositionSizeOption.String "sales",
+                    data = ResizeArray [
+                        Some (BarSeriesOptionData.Number 5.0)
+                        Some (BarSeriesOptionData.Number 20.0)
+                        Some (BarSeriesOptionData.Number 36.0)
+                    ]
+                )
+            ),
+        grid =
+            GridComponentOptionOrGridComponentOptionArray.GridComponentOption (
+                GridComponentOption.Create (
+                    show = false,
+                    left = PositionSizeOption.Number 50.0,
+                    right = PositionSizeOption.Number 50.0,
+                    top = PositionSizeOption.Number 50.0,
+                    bottom = PositionSizeOption.Number 50.0
+                )
+            )
     )
 // FINDING 27: `chart.setOption option` is ambiguous between the two overloads (notMerge/lazyUpdate or opts): a flag picks one.
 chart.setOption (option, false)
@@ -49,19 +78,34 @@ let xAxis = got.["xAxis"] |> unbox<ResizeArray<obj>>
 check ((xAxis.[0]?data: ResizeArray<string>) |> Seq.toList = [ "mon"; "tue"; "wed" ]) "the x axis categories"
 
 // Coordinates: the category axis at the middle of the plot, and values on the y axis.
-let top = chart.convertToPixel (ModelFinder.ModelFinderObject (unbox (createObj [ "yAxisIndex" ==> 0 ])), ScaleDataValue.Number 40.0)
-let bottom = chart.convertToPixel (ModelFinder.ModelFinderObject (unbox (createObj [ "yAxisIndex" ==> 0 ])), ScaleDataValue.Number 0.0)
+let yFinder = ModelFinder.ModelFinderObject (ModelFinderObject.Create (yAxisIndex = ModelFinderIndexQuery.Number 0.0))
+let gridFinder = ModelFinder.ModelFinderObject (ModelFinderObject.Create (gridIndex = ModelFinderIndexQuery.Number 0.0))
+let top = chart.convertToPixel (yFinder, ScaleDataValue.Number 40.0)
+let bottom = chart.convertToPixel (yFinder, ScaleDataValue.Number 0.0)
 check (abs (top - 50.0) < 1.0) "the top of the y axis"
 check (abs (bottom - 250.0) < 1.0) "the bottom of the y axis"
-let mid = chart.convertToPixel (ModelFinder.ModelFinderObject (unbox (createObj [ "yAxisIndex" ==> 0 ])), ScaleDataValue.Number 20.0)
+let mid = chart.convertToPixel (yFinder, ScaleDataValue.Number 20.0)
 check (abs (mid - 150.0) < 1.0) "a value in the middle"
-let back = chart.convertFromPixel (ModelFinder.ModelFinderObject (unbox (createObj [ "yAxisIndex" ==> 0 ])), 150.0)
+let back = chart.convertFromPixel (yFinder, 150.0)
 check (abs (back - 20.0) < 0.5) "convertFromPixel"
-check (chart.containPixel (ModelFinder.ModelFinderObject (unbox (createObj [ "gridIndex" ==> 0 ])), ResizeArray [ 200.0; 150.0 ])) "containPixel inside"
-check (not (chart.containPixel (ModelFinder.ModelFinderObject (unbox (createObj [ "gridIndex" ==> 0 ])), ResizeArray [ 5.0; 5.0 ]))) "containPixel outside"
+check (chart.containPixel (gridFinder, ResizeArray [ 200.0; 150.0 ])) "containPixel inside"
+check (not (chart.containPixel (gridFinder, ResizeArray [ 5.0; 5.0 ]))) "containPixel outside"
 
 // Setting again merges: a new series data keeps the rest.
-chart.setOption (unbox<EChartsOption> (createObj [ "series" ==> [| createObj [ "data" ==> ResizeArray<float> [ 10.0; 10.0; 10.0 ] ] |] ]), false)
+let updated =
+    EChartsOption.Create (
+        series =
+            U9.Case1 (
+                BarSeriesOption.Create (
+                    data = ResizeArray [
+                        Some (BarSeriesOptionData.Number 10.0)
+                        Some (BarSeriesOptionData.Number 10.0)
+                        Some (BarSeriesOptionData.Number 10.0)
+                    ]
+                )
+            )
+    )
+chart.setOption (updated, false)
 let merged = chart.getOption().["series"] |> unbox<ResizeArray<obj>>
 check ((merged.[0]?data: ResizeArray<float>) |> Seq.toList = [ 10.0; 10.0; 10.0 ] && (merged.[0]?``type``: string) = "bar") "setOption merges"
 
@@ -86,7 +130,7 @@ chart.trigger<string> ("ping", box 3) |> ignore
 check (fired = 2) "off"
 
 // Resize and clear.
-chart.resize (unbox (createObj [ "width" ==> 200; "height" ==> 100 ]))
+chart.resize (ResizeOpts.Create (width = PositionSizeOption.Number 200.0, height = PositionSizeOption.Number 100.0))
 check (chart.getWidth () = 200.0 && chart.getHeight () = 100.0) "resize"
 chart.clear ()
 check ((chart.getOption().["series"] |> unbox<ResizeArray<obj>>).Count = 0) "clear"
