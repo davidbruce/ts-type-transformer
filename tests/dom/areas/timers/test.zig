@@ -26,16 +26,11 @@ fn mark(c: u8) void {
 
 var perf: b.Performance = undefined;
 
-// FINDING 5: setTimeout and setInterval take TimerHandler = string | Function, and
-// `Function` is a bare handle (types.zig:1998) with no `from` to make one out of a Zig
-// function. A VoidFunction made with `from` is the same JavaScript function, so its handle
-// is wrapped by hand: kind awkward.
-fn handler(comptime f: b.VoidFunction.Fn) b.TimerHandler {
-    const fun = b.VoidFunction.from(f, null);
-    return .{ .Function = .{ .h = fun.h } };
+fn handler(comptime f: b.Function.Fn) b.TimerHandler {
+    return .{ .Function = b.Function.from(f, null) };
 }
 
-fn after(ms: f64, comptime f: b.VoidFunction.Fn) f64 {
+fn after(ms: f64, comptime f: b.Function.Fn) f64 {
     pending += 1;
     return b.setTimeout(handler(f), ms, b.JsArray.new());
 }
@@ -45,51 +40,59 @@ var timeout_fired: u32 = 0;
 var cancelled_fired: u32 = 0;
 var started: f64 = 0;
 var elapsed: f64 = 0;
-fn onTimeout(_: ?*anyopaque) void {
+fn onTimeout(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     timeout_fired += 1;
     elapsed = perf.now() - started;
     mark('t');
     // A timeout set from a timeout runs after it.
     _ = after(0, onChained);
     pending -= 1;
+    return .{ .h = 0 };
 }
-fn onChained(_: ?*anyopaque) void {
+fn onChained(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     mark('c');
     pending -= 1;
+    return .{ .h = 0 };
 }
-fn onNoDelay(_: ?*anyopaque) void {
+fn onNoDelay(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     mark('u');
     pending -= 1;
+    return .{ .h = 0 };
 }
-fn onCancelled(_: ?*anyopaque) void {
+fn onCancelled(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     cancelled_fired += 1;
     pending -= 1;
+    return .{ .h = 0 };
 }
-fn onZero(_: ?*anyopaque) void {
+fn onZero(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     mark('z');
     pending -= 1;
+    return .{ .h = 0 };
 }
-fn onLate(_: ?*anyopaque) void {
+fn onLate(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     mark('l');
     pending -= 1;
+    return .{ .h = 0 };
 }
 
 // An interval that stops itself after three ticks.
 var interval_id: f64 = 0;
 var ticks: u32 = 0;
 var tick_times: [3]f64 = undefined;
-fn onTick(_: ?*anyopaque) void {
+fn onTick(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     tick_times[ticks] = perf.now();
     ticks += 1;
     if (ticks == 3) {
         b.clearInterval(interval_id);
         pending -= 1;
     }
+    return .{ .h = 0 };
 }
 // An interval cleared before it ever ticks.
 var dead_ticks: u32 = 0;
-fn onDeadTick(_: ?*anyopaque) void {
+fn onDeadTick(_: ?*anyopaque, _: b.JsArray) b.JsValue {
     dead_ticks += 1;
+    return .{ .h = 0 };
 }
 
 // Microtasks.

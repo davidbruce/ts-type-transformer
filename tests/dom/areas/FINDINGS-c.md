@@ -1,6 +1,6 @@
 # Findings: C DOM area programs
 
-**Status:** Fixed: 8 (checked downcasts `T_cast(v)` for classes).
+**Status:** Fixed: 6 (`Function_from`), 8 (checked downcasts `T_cast(v)` for classes).
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.c. No runtime bugs.
 

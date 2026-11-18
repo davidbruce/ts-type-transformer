@@ -29,11 +29,11 @@ fn log(entry: &str) {
     LOG.with(|l| l.borrow_mut().push(entry.to_string()));
 }
 
-// FINDING 6: setTimeout takes a TimerHandler (a string or a Function), and a Function has no
-// constructor from a Rust closure (can't express directly): a VoidFunction made from the
-// closure is rewrapped as a Function from its handle.
-fn function(f: impl FnMut() + 'static) -> Function {
-    Function(VoidFunction::new(f).0.clone())
+fn function(mut f: impl FnMut() + 'static) -> Function {
+    Function::new(move |_| {
+        f();
+        JsValue::from(0.0)
+    })
 }
 
 // A callback that is due: counted until it has run.

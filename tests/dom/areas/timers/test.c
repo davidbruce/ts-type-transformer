@@ -7,14 +7,10 @@ TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 #define STR(s, text) JsString_equals((s), (text))
 
-// FINDING 6: setTimeout and setInterval take a TimerHandler (string or Function), and Function
-// has no `_from`: a C callback cannot be made into one. A VoidFunction made with VoidFunction_from
-// is the same JavaScript function, so its handle is passed as a Function.
-static TimerHandler handler(VoidFunction_fn fn, void* ctx) {
-    VoidFunction f = VoidFunction_from(fn, ctx);
-    return TimerHandler_of_Function((Function){ f.h });
+static TimerHandler handler(Function_fn fn, void* ctx) {
+    return TimerHandler_of_Function(Function_from(fn, ctx));
 }
-static double after(double ms, VoidFunction_fn fn, void* ctx) { return setTimeout(handler(fn, ctx), js_some_double(ms), (JsArray){ 0 }); }
+static double after(double ms, Function_fn fn, void* ctx) { return setTimeout(handler(fn, ctx), js_some_double(ms), (JsArray){ 0 }); }
 
 static char order[32];
 static int order_len;
@@ -30,32 +26,34 @@ __attribute__((export_name("busy"))) int busy(void) { return pending; }
 
 static int sequence_len;
 static char sequence[8];
-static void tick(void* ctx) { sequence[sequence_len++] = *(char*)ctx; pending--; }
+static JsValue tick(void* ctx, JsArray args) { (void)args; sequence[sequence_len++] = *(char*)ctx; pending--; return (JsValue){ 0 }; }
 static char tag_a = 'a', tag_b = 'b', tag_c = 'c';
 
 static int timeout_fired, cancelled_fired;
 static double started, fired_at;
-static void on_timeout(void* ctx) { (void)ctx; timeout_fired++; fired_at = Performance_now(get_performance()); pending--; }
-static void on_cancelled(void* ctx) { (void)ctx; cancelled_fired++; }
+static JsValue on_timeout(void* ctx, JsArray args) { (void)ctx; (void)args; timeout_fired++; fired_at = Performance_now(get_performance()); pending--; return (JsValue){ 0 }; }
+static JsValue on_cancelled(void* ctx, JsArray args) { (void)ctx; (void)args; cancelled_fired++; return (JsValue){ 0 }; }
 
 static int interval_count, count_after_clear;
 static double interval_id;
 static double tick_times[3];
-static void on_interval(void* ctx) {
+static JsValue on_interval(void* ctx, JsArray args) {
     (void)ctx;
+    (void)args;
     tick_times[interval_count] = Performance_now(get_performance());
     interval_count++;
     if (interval_count == 3) {
         clearInterval(js_some_double(interval_id));
         pending--;
     }
+    return (JsValue){ 0 };
 }
-static void after_clear(void* ctx) { (void)ctx; count_after_clear = interval_count; pending--; }
+static JsValue after_clear(void* ctx, JsArray args) { (void)ctx; (void)args; count_after_clear = interval_count; pending--; return (JsValue){ 0 }; }
 
 static char n_tag = 'n';
 static void micro_inner(void* ctx) { note(*(char*)ctx); }
 static void micro(void* ctx) { note(*(char*)ctx); queueMicrotask(VoidFunction_from(micro_inner, &n_tag)); }
-static void zero_timeout(void* ctx) { note(*(char*)ctx); pending--; }
+static JsValue zero_timeout(void* ctx, JsArray args) { (void)args; note(*(char*)ctx); pending--; return (JsValue){ 0 }; }
 static char m = 'm', t = 't';
 
 static int frames;

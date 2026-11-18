@@ -1,6 +1,6 @@
 # Findings: Gleam DOM area programs
 
-**Status:** Fixed: 1, 5.
+**Status:** Fixed: 1, 5, 6 (`Function` is a callback `fn(List(Dynamic)) -> Dynamic`).
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.gleam.
 

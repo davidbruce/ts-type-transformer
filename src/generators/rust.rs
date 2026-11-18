@@ -1799,8 +1799,9 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
     let turbofish: Vec<String> = tps.iter().cloned().chain(std::iter::once("F".to_string())).collect();
     imports.insert(format!("{import}_from"), format!("    pub fn {import}_from(f: usize, ctx: *mut c_void) -> u32;\n"));
     let handle_params = if tps.is_empty() { String::new() } else { format!("<{}>", tps.join(", ")) };
+    let is_self = if tps.is_empty() { format!("impl Is<{name}> for {name} {{}}\n") } else { String::new() };
     format!(
-        "handle!({name}{handle_params});\nimpl{bounds} JsCallback for {name}{args} {{}}\n\
+        "handle!({name}{handle_params});\n{is_self}impl{bounds} JsCallback for {name}{args} {{}}\n\
          impl{bounds} {name}{args} {{\n    \
          pub fn new<F: {fn_bound} + 'static>(f: F) -> Self {{\n        {}\n        \
          Self::from_handle(unsafe {{ raw::{import}_from(call::<{2}> as *const () as usize, crate::runtime::closure(f)) }})\n    }}\n    \

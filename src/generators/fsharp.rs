@@ -377,6 +377,13 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let params = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
         match name.strip_prefix("External.") {
             Some(own) => apart += &format!("    [<AllowNullLiteral>]\n    type {own}{params} = interface end\n\n"),
+            None if name == "Function" && *arity == 0 => {
+                prelude += "[<AllowNullLiteral; Interface>]\n\
+                            type Function =\n\
+                            \x20   [<Emit(\"$0($1...)\")>] abstract Invoke: [<System.ParamArray>] args: obj[] -> obj\n\
+                            \x20   [<Emit(\"$0\")>] static member Create (f: unit -> unit) : Function = jsNative\n\
+                            \x20   [<Emit(\"((...r) => ($0)(r))\")>] static member Create (f: ResizeArray<obj> -> obj) : Function = jsNative\n\n";
+            }
             None => prelude += &format!("[<AllowNullLiteral>]\ntype {name}{params} = interface end\n\n"),
         }
     }
@@ -1077,8 +1084,7 @@ impl Gen {
         let mut out = format!(
             "{indent}[<AllowNullLiteral; Interface>]\n\
              {indent}type {name}{header} =\n\
-             {indent}    [<Emit(\"$0($1...)\")>]\n\
-             {indent}    abstract Invoke: {}\n",
+             {indent}    [<Emit(\"$0($1...)\")>] abstract Invoke: {}\n",
             sig.invoke
         );
         let rest_ty = format!("ResizeArray<{elem}>");

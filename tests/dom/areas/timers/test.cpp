@@ -14,18 +14,16 @@
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
-// FINDING 8: setTimeout and setInterval take a TimerHandler, a string or a
-// `Function`, and Function is an opaque handle with no constructor from a
-// lambda (VoidFunction has one, but is no Function). A VoidFunction is made
-// and its handle copied (a retain) into a Function; the rest parameter
-// `...arguments` is also required, as an empty array.
-static std::vector<VoidFunction> kept;
+// `Function` takes a lambda directly; the rest parameter `...arguments` is passed as an empty array.
+static std::vector<Function> kept;
 template <class F>
 static Function function(F f) {
-    VoidFunction fn(std::move(f));
+    Function fn([f = std::move(f)](ts::Array<>) mutable {
+        f();
+        return ts::Value();
+    });
     kept.push_back(fn);
-    VoidFunction copy = fn;
-    return Function(ts::handle, std::exchange(copy.h, 0));
+    return fn;
 }
 static double set_timeout(Function f, double ms) { return setTimeout(f, ms, ts::Array<>::create()); }
 static double set_interval(Function f, double ms) { return setInterval(f, ms, ts::Array<>::create()); }
@@ -78,7 +76,7 @@ extern "C" __attribute__((export_name("finish"))) void finish() {
     // Animation frames: a timestamp, in order, the cancelled one never ran.
     CHECK(frame_time > 0 && frames == 2 && !frame_cancelled_ran);
     CHECK(pending == 0);
-    for (VoidFunction& f : kept) f.release();
+    for (Function& f : kept) f.release();
 }
 
 extern "C" __attribute__((export_name("run"))) void run() {

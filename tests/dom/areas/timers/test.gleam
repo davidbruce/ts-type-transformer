@@ -1,34 +1,24 @@
 // Timers and scheduling from Gleam: setTimeout, setInterval, microtasks,
 // animation frames, and the performance clock. Reports after they fire.
-//
-// FINDING 6 (can't express): setTimeout and setInterval take a TimerHandler,
-// whose function case holds a `Function`, an opaque type nothing can make
-// (no constructor, no conversion from a Gleam fn). Only the string case works,
-// which runs JavaScript source, so the timers below act through the page
-// (attributes of the body) and the program watches them from animation frames.
 import bindings/areas/core as dom
-import bindings/areas/core/document
-import bindings/areas/core/element
 import bindings/areas/core/idle_deadline
 import bindings/areas/core/performance
-import cell
+import bindings/runtime
 import bindings/types as t
+import cell
+import gleam/dynamic
+import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/io
 import gleam/option.{None, Some}
 import gleam/string
 
-fn code(js: String) {
-  t.TimerHandlerString(js)
-}
-
-fn bump(attr: String) -> String {
-  "document.body.setAttribute('"
-  <> attr
-  <> "', String(+(document.body.getAttribute('"
-  <> attr
-  <> "')||0)+1))"
+fn callback(f: fn() -> Nil) -> t.TimerHandler {
+  t.TimerHandlerFunction(fn(_) {
+    f()
+    runtime.dynamic(Nil)
+  })
 }
 
 // Runs `then` on the first animation frame after `ready()` holds.
@@ -54,16 +44,7 @@ pub fn main() {
       False -> panic as what
     }
   }
-  let doc = dom.get_document()
-  let body = document.get_body(doc)
   let perf = dom.get_performance()
-  let attr = fn(name) { element.get_attribute(body, name) }
-  let num = fn(name) {
-    case option.map(attr(name), int.parse) {
-      Some(Ok(n)) -> n
-      _ -> 0
-    }
-  }
 
   // The clock: monotonic, and after the time origin.
   let t0 = performance.now(perf)
@@ -76,38 +57,55 @@ pub fn main() {
   let _ = mark
 
   // Order: synchronous code, then microtasks, then a zero-delay timer.
-  element.set_attribute(body, "data-order", "")
-  let add = fn(letter) {
-    let old = case attr("data-order") {
-      Some(s) -> s
-      None -> ""
-    }
-    element.set_attribute(body, "data-order", old <> letter)
-  }
-  let timer_a = dom.set_timeout(code("document.body.setAttribute('data-order', document.body.getAttribute('data-order') + 'T')"), Some(0.0), [])
+  let order = cell.new("")
+  let add = fn(letter) { cell.set(order, cell.get(order) <> letter) }
+  let timer_a = dom.set_timeout(callback(fn() { add("T") }), Some(0.0), [])
   dom.queue_microtask(fn() { add("1") })
   dom.queue_microtask(fn() {
     add("2")
     dom.queue_microtask(fn() { add("3") })
   })
   add("S")
-  check(attr("data-order") == Some("S"), "microtasks wait for the synchronous code")
+  check(cell.get(order) == "S", "microtasks wait for the synchronous code")
   check(timer_a >. 0.0, "a timer id")
 
-  // Timeouts: one fires, one is cleared, ids differ.
-  let fired = dom.set_timeout(code(bump("data-fired")), Some(10.0), [])
-  let cleared = dom.set_timeout(code(bump("data-cleared")), Some(10.0), [])
+  // Timeouts: one fires (receiving extra args), one is cleared, ids differ.
+  let fired_count = cell.new(0)
+  let got_args = cell.new("")
+  let cleared_count = cell.new(0)
+  let late_count = cell.new(0)
+  let ticks = cell.new(0)
+  let cancelled_frame = cell.new(False)
+  let fired =
+    dom.set_timeout(
+      t.TimerHandlerFunction(fn(args) {
+        cell.set(fired_count, cell.get(fired_count) + 1)
+        let decoded = case args {
+          [a, b] -> {
+            let assert Ok(sa) = decode.run(a, decode.string)
+            let assert Ok(sb) = decode.run(b, decode.string)
+            sa <> "," <> sb
+          }
+          _ -> ""
+        }
+        cell.set(got_args, decoded)
+        runtime.dynamic(Nil)
+      }),
+      Some(10.0),
+      [dynamic.string("x"), dynamic.string("y")],
+    )
+  let cleared = dom.set_timeout(callback(fn() { cell.set(cleared_count, cell.get(cleared_count) + 1) }), Some(10.0), [])
   check(fired != cleared, "timer ids differ")
   dom.clear_timeout(Some(cleared))
   dom.clear_timeout(None)
-  let late = dom.set_timeout(code(bump("data-late")), Some(250.0), [])
+  let late = dom.set_timeout(callback(fn() { cell.set(late_count, cell.get(late_count) + 1) }), Some(250.0), [])
 
   // An interval that is cleared once it has ticked three times.
-  let interval = dom.set_interval(code(bump("data-ticks")), Some(15.0), [])
+  let interval = dom.set_interval(callback(fn() { cell.set(ticks, cell.get(ticks) + 1) }), Some(15.0), [])
   check(interval != fired, "interval id differs")
 
   // A frame request that is cancelled, and one that runs.
-  let cancelled = dom.request_animation_frame(fn(_) { element.set_attribute(body, "data-cancelled-frame", "ran") })
+  let cancelled = dom.request_animation_frame(fn(_) { cell.set(cancelled_frame, True) })
   dom.cancel_animation_frame(cancelled)
   let frame_time = cell.new(-1.0)
   let frame_started = performance.now(perf)
@@ -119,21 +117,22 @@ pub fn main() {
   when(fn() { cell.get(frame_time) >=. 0.0 }, "the frame", started, fn() {
     check(cell.get(frame_time) >=. frame_started -. 1000.0, "the frame timestamp is a clock reading")
     check(cell.get(frame_time) <=. performance.now(perf), "the frame timestamp is not in the future")
-    check(attr("data-cancelled-frame") == None, "a cancelled frame never runs")
-    check(string.starts_with(option.unwrap(attr("data-order"), ""), "S123"), "microtasks 1 2 3, nested one last: " <> option.unwrap(attr("data-order"), "?"))
-    when(fn() { num("data-ticks") >= 3 }, "three ticks", started, fn() {
+    check(!cell.get(cancelled_frame), "a cancelled frame never runs")
+    check(string.starts_with(cell.get(order), "S123"), "microtasks 1 2 3, nested one last: " <> cell.get(order))
+    when(fn() { cell.get(ticks) >= 3 }, "three ticks", started, fn() {
       dom.clear_interval(Some(interval))
-      let at_clear = num("data-ticks")
+      let at_clear = cell.get(ticks)
       check(at_clear >= 3, "the interval ticked at least three times")
-      check(attr("data-order") == Some("S123T"), "the zero timer ran after the microtasks")
-      check(num("data-fired") == 1, "the timeout fired once")
-      check(attr("data-cleared") == None, "a cleared timeout never fired")
-      check(num("data-late") == 0, "the late timeout has not fired yet")
+      check(cell.get(order) == "S123T", "the zero timer ran after the microtasks")
+      check(cell.get(fired_count) == 1, "the timeout fired once")
+      check(cell.get(got_args) == "x,y", "the timeout received its extra arguments")
+      check(cell.get(cleared_count) == 0, "a cleared timeout never fired")
+      check(cell.get(late_count) == 0, "the late timeout has not fired yet")
       // Let some intervals' worth of time pass: a cleared interval is quiet.
-      when(fn() { num("data-late") == 1 }, "the late timeout", started, fn() {
-        check(num("data-late") == 1, "the late timeout fired once")
+      when(fn() { cell.get(late_count) == 1 }, "the late timeout", started, fn() {
+        check(cell.get(late_count) == 1, "the late timeout fired once")
         check(performance.now(perf) -. started >=. 100.0, "the late timeout waited")
-        check(num("data-ticks") == at_clear, "the cleared interval stopped")
+        check(cell.get(ticks) == at_clear, "the cleared interval stopped")
         dom.clear_timeout(Some(late))
         idle(check, count, perf)
       })

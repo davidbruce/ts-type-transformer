@@ -11,10 +11,7 @@ let mutable passed = 0
 let check (ok: bool) (what: string) =
     if ok then passed <- passed + 1 else failwithf "check failed: %s" what
 
-// FINDING 6: setTimeout/setInterval take a TimerHandler = string | Function, and `Function` is an
-// empty interface (Bindings.Prelude.fs:42, Bindings.10.core.fs:4345): an F# function is not one, so no
-// callback can be passed to setTimeout/setInterval without an escape hatch. `handler` is that one cast.
-let handler (f: unit -> unit) : TimerHandler = !^ (unbox<Function> f)
+let handler (f: unit -> unit) : TimerHandler = !^ (Function.Create f)
 
 let order = ResizeArray<string>()
 let note (s: string) = order.Add s
@@ -65,7 +62,7 @@ intervalId <-
 
 // A timeout with extra arguments.
 let mutable got = ""
-window.setTimeout (handler (fun () -> got <- "args"), 1.0, "a", "b") |> ignore
+window.setTimeout (!^ (Function.Create (fun (args: ResizeArray<obj>) -> got <- args |> Seq.map string |> String.concat ","; null)), 1.0, "a", "b") |> ignore
 
 // requestAnimationFrame: a callback with a timestamp; cancelled ones never run.
 let mutable frames = 0
@@ -91,7 +88,7 @@ let rec finish () =
         check (List.ofSeq fired = [ "fast"; "mid"; "slow" ]) "timers fire by delay"
         check (ticks = 4) "the interval stopped when cleared"
         check (elapsed >= 45.0) "four 15ms ticks took about 60ms"
-        check (got = "args") "timeout with arguments"
+        check (got = "a,b") "timeout with arguments"
         check (List.ofSeq fifo = [ "a"; "b"; "c" ]) "equal delays fire in order set"
         performance.mark "end" |> ignore
         let measure = performance.measure ("span", "start", "end")

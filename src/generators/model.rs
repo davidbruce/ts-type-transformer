@@ -423,6 +423,14 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     b.model.requested_packages = doc.root_element().attribute("packages").map(|p| p.split(' ').map(str::to_string).collect()).unwrap_or_default();
     b.decls_of(doc.root_element(), "");
     b.nest_generated(doc.root_element());
+    // JavaScript's built-in `Function` (used by `TimerHandler`, Konva, etc.)
+    // is a callable variadic callback rather than an unconstructible opaque handle.
+    if b.opaque.remove("Function") && !b.model.callbacks.iter().any(|c| c.name == "Function") && !b.model.classes.iter().any(|c| c.name == "Function") {
+        let params = vec![("args".into(), Ty::Array)];
+        b.module = b.model.funcs.first().map_or_else(|| b.model.classes.first().map_or_else(|| "areas/main".into(), |c| c.module.clone()), |f| f.module.clone());
+        b.caller("Function", &params, &Ty::Any, &[], true);
+        b.model.callbacks.push(Callback { type_params: vec![], name: "Function".into(), params, rest: true, ret: Ty::Any });
+    }
     let mut opaque: Vec<String> = b.opaque.into_iter().collect();
     opaque.sort();
     b.model.opaque = opaque;

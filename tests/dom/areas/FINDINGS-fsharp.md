@@ -1,5 +1,7 @@
 # Findings: F# DOM area programs
 
+**Status:** Fixed: 6 (`Function.Create` and `Function.Invoke`).
+
 Numbers match `// FINDING n` in tests/dom/areas/*/test.fs.
 
 1. Awkward: the value `Option` (the `<option>` constructor) hides F#'s `Option` module when `Bindings` is open.
