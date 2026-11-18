@@ -1,6 +1,6 @@
 # Findings: C++ DOM area programs
 
-**Status:** Fixed: 2, 4, 8 (partly: `Function` takes a lambda directly; `...arguments` still required), 9.
+**Status:** Fixed: 2, 4, 5 (`ts::Value::object`/`get`/`set`/`has`/`of`/`to_array`), 8 (partly: `Function` takes a lambda directly; `...arguments` still required), 9.
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.cpp. Lines refer to
 `target/e2e/dom-cpp/bindings/`.

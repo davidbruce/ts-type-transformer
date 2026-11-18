@@ -18,15 +18,6 @@
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
-// FINDING 5: as in the CSS program, a value from JavaScript of a type the API
-// does not give (here, the object json() resolves with) needs a cast the
-// bindings lack; the copied handle's reference goes to the type wanted.
-template <class D, class B>
-static D downcast(const B& b) {
-    B copy = b;
-    return D(ts::handle, std::exchange(copy.h, 0));
-}
-
 // FINDING 6: Response declares the static json(data), which hides Body's
 // json() for a Response; the base class is named to read the body.
 static ts::Promise<ts::Value> body_json(const Response& r) { return static_cast<const Body&>(r).json(); }
@@ -131,24 +122,27 @@ static ts::Task response_made() {
     pending--;
 }
 
-// Response.json(): an object goes in, and the same comes out.
+// Response.json(): an arbitrary plain object and array go in, and the same come out.
 static ts::Task json_round_trip() {
     pending++;
-    // A dictionary is a plain object: {status: 7, statusText: "seven"}.
-    ResponseInit data = ResponseInit::create();
-    data.status(7);
-    data.statusText("seven");
-    Response res = Response::json(ts::Value(ts::handle, [&] {
-        ResponseInit copy = data;
-        return std::exchange(copy.h, 0);
-    }()));
+    ts::Value data = ts::Value::object();
+    data.set("n", 7.0);
+    data.set("label", "seven");
+    data.set("items", ts::Array<double>{1.0, 2.5, 3.0});
+    Response res = Response::json(data);
     CHECK(res.headers().get("content-type") == "application/json");
     ts::Result<ts::Value> parsed = co_await body_json(res);
     CHECK(bool(parsed));
     if (parsed) {
-        ResponseInit back = downcast<ResponseInit>(*parsed);
-        CHECK(back.status() == 7 && back.statusText() == "seven");
+        CHECK(parsed->has("n") && parsed->has("label") && !parsed->has("missing"));
+        CHECK(parsed->get("n").to_number() == 7.0 && parsed->get("label").to_string() == "seven");
+        ts::Array<double> items = parsed->get("items").to_array<double>();
+        CHECK(items.size() == 3 && items[1] == 2.5);
     }
+    // A plain array as JSON too.
+    Response arr = Response::json(ts::Value::of(ts::Array<double>{4.0, 5.0}));
+    ts::Result<ts::Value> parsed_arr = co_await body_json(arr);
+    CHECK(parsed_arr && parsed_arr->to_array<double>().size() == 2 && parsed_arr->to_array<double>()[0] == 4.0);
     // A string is JSON too.
     Response s = Response::json(ts::Value::string("hi"));
     ts::Result<std::string> raw = co_await s.text();

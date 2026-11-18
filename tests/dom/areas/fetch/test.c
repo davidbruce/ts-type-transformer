@@ -93,14 +93,15 @@ static void json_number(void* ctx, bool ok, JsValue value) {
     over(ok);
 }
 
-// 4. Response.json() of an object: its fields come back as JSON.
+// 4. Response.json() of an arbitrary plain object and array: fields come back as JSON.
 static void json_object(void* ctx, bool ok, JsValue value) {
     (void)ctx;
     CHECK(ok);
-    // The object {status, statusText} is read back through the dictionary type it was made from.
-    ResponseInit back = { value.h };
-    CHECK(ResponseInit_get_status(back).has && ResponseInit_get_status(back).value == 201);
-    CHECK(STR(ResponseInit_get_statusText(back), "made"));
+    CHECK(js_object_has(value, "status") && js_object_has(value, "label") && !js_object_has(value, "missing"));
+    CHECK(js_to_number(js_object_get(value, "status")) == 201);
+    CHECK(STR(js_to_string(js_object_get(value, "label")), "made"));
+    JsArray items = js_to_array(js_object_get(value, "items"));
+    CHECK(JsArray_length(items) == 2 && js_to_number(JsArray_get(items, 1)) == 20);
     over(ok);
 }
 
@@ -157,10 +158,11 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Request_new(RequestInfo_of(JsString_from("http://"))).h == 0 && js_failed());
     JsValue bad_url = js_take_error();
     CHECK(bad_url.h != 0 && STR(js_error_name(bad_url), "TypeError"));
-    // FINDING 5: HeadersInit_map (a record) has only _create: no way to set its entries, so
-    // { "x-token": "abc" } cannot be built, nor can Response.json() take an arbitrary object or array.
-    // A Headers object stands in, and below a dictionary made with _create is used as the JSON object.
-    // (Headers_new() with no arguments is finding 4 again: (HeadersInit){ .tag = -1 } is passed.)
+    // HeadersInit_map builds a plain record of headers.
+    HeadersInit_map hmap = HeadersInit_map_create();
+    HeadersInit_map_set_at(hmap, "x-from-map", "yes");
+    Headers from_map = Headers_new(HeadersInit_of(hmap));
+    CHECK(STR(Headers_get(from_map, "x-from-map"), "yes"));
 
     // Headers: case-insensitive names, appended values joined, sorted iteration.
     Headers h = Headers_new((HeadersInit){ .tag = -1 });
@@ -212,10 +214,14 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Response_get_status(moved) == 301 && ends_with(Headers_get(Response_get_headers(moved), "location"), "/elsewhere"));
     pending++;
     Promise_then(Body_json(Response_json(js_number(42))), json_number, 0);
-    ResponseInit shape = ResponseInit_create();
-    ResponseInit_set_status(shape, js_some_double(201));
-    ResponseInit_set_statusText(shape, "made");
-    Response as_json = Response_json((JsValue){ shape.h });
+    JsValue shape = js_object();
+    js_object_set(shape, "status", js_number(201));
+    js_object_set(shape, "label", js_string("made"));
+    JsArray list = JsArray_new();
+    JsArray_push(list, js_number(10));
+    JsArray_push(list, js_number(20));
+    js_object_set(shape, "items", js_value(list));
+    Response as_json = Response_json(shape);
     CHECK(starts_with(Headers_get(Response_get_headers(as_json), "content-type"), "application/json"));
     pending++;
     Promise_then(Body_json(as_json), json_object, 0);

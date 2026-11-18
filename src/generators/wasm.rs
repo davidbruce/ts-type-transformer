@@ -593,6 +593,10 @@ export function makeEnv(getInstance, options = {}) {
     js_array_length: guard(h => get(h).length),
     js_array_get: guard((h, i) => put(get(h)[i])),
     js_array_push: guard((h, v) => {{ get(h).push(get(v)); }}),
+    js_object_new: () => put({{}}),
+    js_object_get: guard((h, ptr, len) => put(get(h)[str(ptr, len)])),
+    js_object_set: guard((h, ptr, len, v) => {{ get(h)[str(ptr, len)] = get(v); }}),
+    js_object_has: guard((h, ptr, len) => (Object.prototype.hasOwnProperty.call(get(h), str(ptr, len)) ? 1 : 0)),
     js_listener_from: (fn, ctx) => callback('listener', fn, ctx, (f, s) => ev => {{ if (!s.alive) dead(); {listener} }}),
     // Forgets a callback made here; returns its context, for wasm to free, or 0.
     js_callback_release: guard(h => {{

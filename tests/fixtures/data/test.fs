@@ -39,11 +39,13 @@ check (area {| width = 3.0; height = Some 5.0 |} = 15.0) "Pick with optional"
 check (field () = FieldResult.Title) "keyof"
 
 // Record<string, number>: a JsRecord, indexed by its keys.
-let table = createEmpty<JsRecord<string, float>>
+let table = JsRecord<string, float>.Create ()
 table["a"] <- 7.0
 check (lookup (table, "a") = 7.0) "Record hit"
 check (lookup (table, "b") = -1.0) "Record miss"
 check (table["a"] = 7.0) "Record read"
+let table2 = JsRecord.Create [ "k", 9.0 ]
+check (lookup (table2, "k") = 9.0) "Record from entries"
 
 // An intersection of object types.
 check (show {| name = "x"; id = 5.0 |} = "x#5") "intersection"

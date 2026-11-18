@@ -414,6 +414,10 @@ TS_IMPORT(js_array_new) uint32_t ts_raw_js_array_new();
 TS_IMPORT(js_array_length) uint32_t ts_raw_js_array_length(uint32_t);
 TS_IMPORT(js_array_get) uint32_t ts_raw_js_array_get(uint32_t, uint32_t);
 TS_IMPORT(js_array_push) void ts_raw_js_array_push(uint32_t, uint32_t);
+TS_IMPORT(js_object_new) uint32_t ts_raw_js_object_new();
+TS_IMPORT(js_object_get) uint32_t ts_raw_js_object_get(uint32_t, const char*, uint32_t);
+TS_IMPORT(js_object_set) void ts_raw_js_object_set(uint32_t, const char*, uint32_t, uint32_t);
+TS_IMPORT(js_object_has) int32_t ts_raw_js_object_has(uint32_t, const char*, uint32_t);
 TS_IMPORT(js_listener_from) uint32_t ts_raw_js_listener_from(uintptr_t, void*);
 TS_IMPORT(js_callback_release) uint32_t ts_raw_js_callback_release(uint32_t);
 TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
@@ -590,12 +594,28 @@ T from_handle(uint32_t h) {
     } else return T(handle, h);
 }
 
+template <class T = struct Value>
+struct Array;
+
 // A JavaScript value of no particular type.
 struct Value : Handle {
     using Handle::Handle;
     static Value number(double x) { return {handle, ts_raw_js_from_number(x)}; }
     static Value boolean(bool x) { return {handle, ts_raw_js_from_bool(x)}; }
     static Value string(std::string_view s) { return {handle, ts_raw_js_from_string(s.data(), s.size())}; }
+    static Value object() { return {handle, ts_raw_js_object_new()}; }
+    static Value of(const Handle& x) {
+        if (x.h) ts_raw_js_retain(x.h);
+        return {handle, x.h};
+    }
+    Value get(std::string_view key) const { return {handle, ts_raw_js_object_get(h, key.data(), key.size())}; }
+    template <class U>
+    void set(std::string_view key, const U& v) const {
+        ts_raw_js_object_set(h, key.data(), key.size(), Arg(v).h);
+    }
+    bool has(std::string_view key) const { return ts_raw_js_object_has(h, key.data(), key.size()) != 0; }
+    template <class T = Value>
+    Array<T> to_array() const;
     double to_number() const { return ts_raw_js_to_number(h); }
     bool to_bool() const { return ts_raw_js_to_bool(h) != 0; }
     std::string to_string() const { return read_string(h); }
@@ -639,7 +659,7 @@ struct IterationEnd {};
 
 // A JavaScript array of T; `Array<>` of any values. A type that extends
 // Array inherits this: it can be indexed and iterated.
-template <class T = Value>
+template <class T>
 struct Array : virtual Handle {
     Array() = default;
     Array(handle_t, uint32_t h) : Handle(handle, h) {}
@@ -658,6 +678,12 @@ struct Array : virtual Handle {
     Iterator<T> begin() const;
     IterationEnd end() const { return {}; }
 };
+
+template <class T>
+inline Array<T> Value::to_array() const {
+    if (h) ts_raw_js_retain(h);
+    return Array<T>(handle, h);
+}
 
 // A JavaScript exception, or the reason a promise was rejected.
 struct Error : Handle {

@@ -76,7 +76,7 @@ let tinted = renderToString (@"\notacommand", KatexOptions.Create (throwOnError 
 check (tinted.Contains "color:#00ff00;") "errorColor"
 
 // Macros: an object of strings.
-let macros = createEmpty<JsRecord<string, StringOrObjectOrFn>> // FINDING 1: JsRecord has no constructor
+let macros = JsRecord<string, StringOrObjectOrFn>.Create ()
 macros.["\\RR"] <- U3.Case1 @"\mathbb{R}"
 let withMacro = renderToString (@"\RR", KatexOptions.Create (macros = macros))
 check (withMacro.Contains "mathbb") "a macro"

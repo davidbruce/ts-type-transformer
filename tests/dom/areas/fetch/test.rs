@@ -116,26 +116,24 @@ pub extern "C" fn run() {
         check!(made.text().await.is_err());
     });
 
-    // Response.json: a JavaScript object, as a body and parsed back.
+    // Response.json: an arbitrary plain object and array, as a body and parsed back.
     task(async {
-        let object = EventInit::create();
-        object.set_bubbles(Some(true));
-        object.set_cancelable(Some(false));
+        let object = JsValue::object();
+        object.set("n", 7.0);
+        object.set("label", "seven");
+        object.set("flag", true);
         let json = Response::json(&object, None);
         check!(json.headers().get("content-type").as_deref() == Some("application/json"));
         let copy = json.js_clone();
-        check!(copy.text().await.as_deref() == Ok("{\"bubbles\":true,\"cancelable\":false}"));
-        let parsed = EventInit(json.json().await.unwrap().0);
-        check!(parsed.bubbles() == Some(true) && parsed.cancelable() == Some(false) && parsed.composed().is_none());
-        // FINDING 5: a parsed JsValue cannot be typed as a JsArray<T> (can't express): JsArray's
-        // marker field is private, so unlike a handle type it cannot be rewrapped from a handle.
-        // The array is checked as text instead. (A JsArray does not convert to a JsValue either:
-        // it is rewrapped from its handle.)
+        check!(copy.text().await.as_deref() == Ok("{\"n\":7,\"label\":\"seven\",\"flag\":true}"));
+        let parsed = json.json().await.unwrap();
+        check!(parsed.has("n") && parsed.has("label") && !parsed.has("missing"));
+        check!(parsed.get("n").as_f64() == 7.0 && parsed.get("label").as_string() == "seven" && parsed.get("flag").as_bool());
         let numbers = JsArray::<f64>::from([1.0, 2.5, 3.0]);
-        let any = JsValue(numbers.0.clone());
-        let list = Response::json(&any, None);
-        check!(list.json().await.is_ok());
-        check!(Response::json(&any, None).text().await.as_deref() == Ok("[1,2.5,3]"));
+        let list = Response::json(&numbers, None);
+        let back: JsArray<f64> = list.json().await.unwrap().as_array();
+        check!(back.len() == 3 && back.get(0) == 1.0 && back.get(1) == 2.5 && back.get(2) == 3.0);
+        check!(Response::json(&numbers, None).text().await.as_deref() == Ok("[1,2.5,3]"));
     });
 
     // Blob: size, type, slices and text.

@@ -120,17 +120,24 @@ pub fn main() {
   await(body.text(made), fn(text) {
     check(text == "hello", "response text")
     check(body.get_body_used(made), "body used after reading")
-    // Response.json takes a JS value; a ResponseInit is a plain object.
-    // FINDING 4 (awkward): Response.json's data is Dynamic and Gleam has no
-    // way to make a JS object, so a dictionary from the bindings stands in.
-    let data = response_init.create()
-    response_init.set_status(data, Some(7.0))
-    response_init.set_status_text(data, Some("seven"))
-    let json = response.json(runtime.dynamic(data), None)
+    // Response.json with a plain JS object and array built via runtime helpers.
+    let data =
+      runtime.js_object([
+        #("status", runtime.dynamic(7.0)),
+        #("label", runtime.dynamic("seven")),
+        #("items", runtime.js_array([runtime.dynamic(1.0), runtime.dynamic(2.0)])),
+      ])
+    let json = response.json(data, None)
     check(headers.get(response.get_headers(json), "content-type") == Some("application/json"), "json content type")
     await(body.json(json), fn(parsed) {
+      check(runtime.js_has(parsed, "status") && !runtime.js_has(parsed, "missing"), "js_has on parsed object")
       check(decode.run(parsed, decode.at(["status"], decode.int)) == Ok(7), "json body")
-      check(decode.run(parsed, decode.at(["statusText"], decode.string)) == Ok("seven"), "json string")
+      check(decode.run(parsed, decode.at(["label"], decode.string)) == Ok("seven"), "json string")
+      let items = case runtime.js_get(parsed, "items") {
+        Some(a) -> runtime.js_to_list(a)
+        None -> []
+      }
+      check(items == [runtime.dynamic(1.0), runtime.dynamic(2.0)], "json array round-trip")
       await(blob.text(the_blob), fn(text) {
         check(text == "hello blob", "blob text")
         await(blob.text(tail), fn(text) {

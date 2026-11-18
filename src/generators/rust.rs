@@ -571,6 +571,10 @@ pub(crate) mod rt {
         pub fn js_array_length(h: u32) -> u32;
         pub fn js_array_get(h: u32, i: u32) -> u32;
         pub fn js_array_push(h: u32, v: u32);
+        pub fn js_object_new() -> u32;
+        pub fn js_object_get(h: u32, p: *const u8, n: usize) -> u32;
+        pub fn js_object_set(h: u32, p: *const u8, n: usize, v: u32);
+        pub fn js_object_has(h: u32, p: *const u8, n: usize) -> i32;
         pub fn js_listener_from(f: usize, ctx: *mut c_void) -> u32;
         pub fn js_callback_release(h: u32) -> u32;
         pub fn js_retain(h: u32);
@@ -811,6 +815,22 @@ pub(crate) use handle;
 // string, or any object: `f(42.0)`, `f("text")`, `f(&element)`.
 handle!(JsValue);
 impl JsValue {
+    pub fn object() -> Self {
+        JsValue(JsHandle(unsafe { rt::js_object_new() }))
+    }
+    pub fn get(&self, key: &str) -> JsValue {
+        JsValue(JsHandle(unsafe { rt::js_object_get(self.0 .0, key.as_ptr(), key.len()) }))
+    }
+    pub fn set(&self, key: &str, v: impl Into<JsValue>) {
+        let v: JsValue = v.into();
+        unsafe { rt::js_object_set(self.0 .0, key.as_ptr(), key.len(), v.0 .0) };
+    }
+    pub fn has(&self, key: &str) -> bool {
+        unsafe { rt::js_object_has(self.0 .0, key.as_ptr(), key.len()) != 0 }
+    }
+    pub fn as_array<T>(&self) -> JsArray<T> {
+        JsArray(self.0.clone(), PhantomData)
+    }
     pub fn as_f64(&self) -> f64 {
         unsafe { rt::js_to_number(self.0 .0) }
     }
@@ -860,6 +880,16 @@ pub struct JsArray<T = JsValue>(pub JsHandle, PhantomData<fn() -> T>);
 impl<T> Clone for JsArray<T> {
     fn clone(&self) -> Self {
         JsArray(self.0.clone(), PhantomData)
+    }
+}
+impl<T> AsRef<JsHandle> for JsArray<T> {
+    fn as_ref(&self) -> &JsHandle {
+        &self.0
+    }
+}
+impl<T> From<JsArray<T>> for JsValue {
+    fn from(a: JsArray<T>) -> Self {
+        JsValue(a.0)
     }
 }
 impl<T> ToJs for JsArray<T> {

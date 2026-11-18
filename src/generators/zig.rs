@@ -370,9 +370,15 @@ pub const JsValue = extern struct {
     pub fn number(x: f64) JsValue { return .{ .h = raw.js_from_number(x) }; }
     pub fn boolean(x: bool) JsValue { return .{ .h = raw.js_from_bool(@intFromBool(x)) }; }
     pub fn string(s: []const u8) JsValue { return .{ .h = raw.js_from_string(s.ptr, s.len) }; }
+    pub fn object() JsValue { return .{ .h = raw.js_object_new() }; }
+    pub fn get(self: JsValue, key: []const u8) JsValue { return .{ .h = raw.js_object_get(self.h, key.ptr, key.len) }; }
+    pub fn set(self: JsValue, key: []const u8, v: anytype) void { const l = Lent.of(v); defer l.done(); raw.js_object_set(self.h, key.ptr, key.len, l.h); }
+    pub fn has(self: JsValue, key: []const u8) bool { return raw.js_object_has(self.h, key.ptr, key.len) != 0; }
     pub fn toNumber(self: JsValue) f64 { return raw.js_to_number(self.h); }
     pub fn toBool(self: JsValue) bool { return raw.js_to_bool(self.h) != 0; }
     pub fn toString(self: JsValue) JsString { return .{ .h = self.h }; }
+    pub fn toArray(self: JsValue) JsArray { return .{ .h = self.h }; }
+    pub fn toArrayOf(self: JsValue, comptime T: type) JsArrayOf(T) { return .{ .h = self.h }; }
     pub fn eql(self: JsValue, other: JsValue) bool { return raw.js_equals(self.h, other.h) != 0; }
     pub fn isNull(self: JsValue) bool { return self.h == 0; }
     // A number or flag from a handle a function returned, which is released.
@@ -380,11 +386,11 @@ pub const JsValue = extern struct {
     pub fn takeBool(h: u32) bool { const x = raw.js_to_bool(h) != 0; raw.js_release(h); return x; }
     // Any value a union member can hold.
     pub fn of(v: anytype) JsValue {
-        return switch (@TypeOf(v)) {
-            f64 => number(v),
-            bool => boolean(v),
-            else => .{ .h = v.h },
-        };
+        const T = @TypeOf(v);
+        if (T == f64 or T == comptime_float or T == comptime_int) return number(v);
+        if (T == bool) return boolean(v);
+        if (comptime isString(T)) return string(v);
+        return .{ .h = v.h };
     }
 };
 pub const JsString = extern struct {
@@ -546,6 +552,10 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_array_length(h: u32) usize;
     extern \"env\" fn js_array_get(h: u32, i: usize) u32;
     extern \"env\" fn js_array_push(h: u32, v: u32) void;
+    extern \"env\" fn js_object_new() u32;
+    extern \"env\" fn js_object_get(h: u32, ptr: [*]const u8, len: usize) u32;
+    extern \"env\" fn js_object_set(h: u32, ptr: [*]const u8, len: usize, v: u32) void;
+    extern \"env\" fn js_object_has(h: u32, ptr: [*]const u8, len: usize) i32;
     extern \"env\" fn js_listener_from(f: usize, ctx: ?*anyopaque) u32;
     extern \"env\" fn js_retain(h: u32) void;
     extern \"env\" fn js_release(h: u32) void;

@@ -1,6 +1,6 @@
 # Findings: Rust library programs
 
-**Status:** Fixed: 1, 2, 5, 6, 10, 16, 19, 20.
+**Status:** Fixed: 1, 2, 5, 6, 10, 11, 16, 19, 20.
 
 Numbers match `// FINDING n` in tests/libraries/*/test.rs. Paths are under
 `target/e2e/libraries/<lib>-rust-run/bindings/src/` unless `glue.mjs`.

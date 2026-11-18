@@ -366,7 +366,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
          /// A JavaScript object used as a map: `{ [key: string]: T }` is `JsRecord<string, T>`.\n\
          /// A value whose type F# cannot write, of type arguments it still takes.\n\
-         [<AllowNullLiteral>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n\n\
+         [<AllowNullLiteral; Interface>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n    [<Emit(\"{}\")>] static member Create () : JsRecord<'Key, 'Value> = jsNative\n    [<Emit(\"Object.fromEntries($0)\")>] static member Create (entries: seq<'Key * 'Value>) : JsRecord<'Key, 'Value> = jsNative\n\n\
          /// A JavaScript Error, where an API takes one: an F# exception is not an Error in JavaScript.\n\
          [<AutoOpen>]\nmodule JsErrors =\n    [<Emit(\"new Error($0)\")>]\n    let jsError (message: string) : exn = jsNative\n\n\
          [<AllowNullLiteral>]\ntype JsAsyncIterator<'T> =\n    \

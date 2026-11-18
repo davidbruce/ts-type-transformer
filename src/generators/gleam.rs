@@ -731,6 +731,18 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
               @external(javascript, \"./runtime_ffi.mjs\", \"js_error_message\")\npub fn js_error_message(error: JsError) -> String\n\n\
               /// Any value, untyped: what a value of no particular type is made from.\n\
               @external(javascript, \"./runtime_ffi.mjs\", \"dynamic\")\npub fn dynamic(value: a) -> Dynamic\n\n\
+              /// A plain JavaScript object from key-value entries.\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"js_object\")\npub fn js_object(entries: List(#(String, Dynamic))) -> Dynamic\n\n\
+              /// Reads a property from a JavaScript object.\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"js_get\")\npub fn js_get(object: Dynamic, key: String) -> Option(Dynamic)\n\n\
+              /// Sets a property on a JavaScript object.\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"js_set\")\npub fn js_set(object: Dynamic, key: String, value: Dynamic) -> Nil\n\n\
+              /// Whether a JavaScript object has its own property `key`.\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"js_has\")\npub fn js_has(object: Dynamic, key: String) -> Bool\n\n\
+              /// A plain JavaScript array from a Gleam list.\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"js_array\")\npub fn js_array(items: List(Dynamic)) -> Dynamic\n\n\
+              /// Reads a JavaScript array into a Gleam list.\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"js_to_list\")\npub fn js_to_list(array: Dynamic) -> List(Dynamic)\n\n\
               /// How a type's values cross between Gleam and JavaScript: what a generic\n\
               /// function takes for each type parameter whose values cross (`box_value(b,\n\
               /// codec_float())`). Each type has one: `shape_codec()`, `mode_codec()`.\n\
@@ -767,6 +779,12 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          export function attempt(f) {{\n  try {{\n    return new Ok(f());\n  }} catch (e) {{\n    return new GleamError(e);\n  }}\n}}\n\
          export function js_error_message(e) {{\n  return String(e instanceof Error ? e.message : e?.message ?? e);\n}}\n\
          export function dynamic(v) {{\n  return v;\n}}\n\
+         export function js_object(entries) {{\n  return Object.fromEntries(entries.toArray());\n}}\n\
+         export function js_get(o, k) {{\n  const v = o?.[k];\n  return v === undefined ? new None() : new Some(v);\n}}\n\
+         export function js_set(o, k, v) {{\n  o[k] = v;\n}}\n\
+         export function js_has(o, k) {{\n  return o != null && Object.prototype.hasOwnProperty.call(o, k);\n}}\n\
+         export function js_array(items) {{\n  return items.toArray();\n}}\n\
+         export function js_to_list(a) {{\n  return toList(Array.from(a ?? []));\n}}\n\
          // Codecs: how a type parameter's values cross, each way.\n\
          export const $same = {{ to: (v) => v, from: (v) => v }};\n\
          export function codec_same() {{\n  return $same;\n}}\n\

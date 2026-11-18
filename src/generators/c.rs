@@ -436,6 +436,10 @@ TS_IMPORT(js_array_new) uint32_t ts_raw_js_array_new(void);
 TS_IMPORT(js_array_length) uint32_t ts_raw_js_array_length(uint32_t);
 TS_IMPORT(js_array_get) uint32_t ts_raw_js_array_get(uint32_t, uint32_t);
 TS_IMPORT(js_array_push) void ts_raw_js_array_push(uint32_t, uint32_t);
+TS_IMPORT(js_object_new) uint32_t ts_raw_js_object_new(void);
+TS_IMPORT(js_object_get) uint32_t ts_raw_js_object_get(uint32_t, const char*, uint32_t);
+TS_IMPORT(js_object_set) void ts_raw_js_object_set(uint32_t, const char*, uint32_t, uint32_t);
+TS_IMPORT(js_object_has) int32_t ts_raw_js_object_has(uint32_t, const char*, uint32_t);
 TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
 TS_IMPORT(js_release) void ts_raw_js_release(uint32_t);
 TS_IMPORT(js_live) uint32_t ts_raw_js_live(void);
@@ -526,6 +530,12 @@ static inline JsArray JsArray_new(void) { return (JsArray){ ts_raw_js_array_new(
 static inline uint32_t JsArray_length(JsArray a) { return ts_raw_js_array_length(a.h); }
 static inline JsValue JsArray_get(JsArray a, uint32_t i) { return (JsValue){ ts_raw_js_array_get(a.h, i) }; }
 static inline void JsArray_push(JsArray a, JsValue v) { ts_raw_js_array_push(a.h, v.h); }
+static inline JsValue js_object(void) { return (JsValue){ ts_raw_js_object_new() }; }
+static inline JsValue js_object_get(JsValue o, const char* key) { return (JsValue){ ts_raw_js_object_get(o.h, key, ts_strlen(key)) }; }
+static inline void js_object_set(JsValue o, const char* key, JsValue v) { ts_raw_js_object_set(o.h, key, ts_strlen(key), v.h); }
+static inline bool js_object_has(JsValue o, const char* key) { return ts_raw_js_object_has(o.h, key, ts_strlen(key)) != 0; }
+static inline JsArray js_to_array(JsValue v) { return (JsArray){ v.h }; }
+#define js_value(x) ((JsValue){ (x).h })
 
 ";
 

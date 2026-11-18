@@ -27,6 +27,7 @@ var hello_text = false;
 var blob_text = false;
 var json_number: f64 = 0;
 var json_text = false;
+var json_object = false;
 var abort_rejected = false;
 var abort_name_ok = false;
 var bad_rejected = false;
@@ -100,6 +101,13 @@ fn onJsonNumber(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
 fn onJsonText(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
     defer done();
     json_text = ok and v.toString().eql("quoted \"text\"");
+}
+
+fn onJsonObject(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
+    defer done();
+    if (!ok) return;
+    const items = v.get("items").toArrayOf(f64);
+    json_object = v.has("n") and !v.has("missing") and v.get("n").toNumber() == 7 and v.get("label").toString().eql("seven") and items.len() == 2 and items.get(1) == 20;
 }
 
 fn onAbort(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
@@ -199,15 +207,18 @@ export fn run() void {
     expect(b.Response.@"error"().getType() == .@"error", @src());
     expect(b.Response.redirect(.{ .string = b.JsString.from("https://example.com/next") }, .{ .status = 302 }).getStatus() == 302, @src());
 
-    // FINDING 4: Body's instance `json()` is generated as `json2` (areas/network.zig:518) because
-    // the static Response.json took the name: kind awkward. And a JSON object read back through
-    // json2() is a bare JsValue with no way to read its properties, so only a number and a string
-    // are round-tripped here: kind can't express (reading fields of an untyped value).
+    // FINDING 4 (partly fixed): Body's instance `json()` is generated as `json2` (areas/network.zig:518)
+    // because the static Response.json took the name. Plain JS objects and arrays can now be built and read.
     // Response.json writes the body as JSON and says so.
     const json = b.Response.json(b.JsValue.number(7), .{});
     expect(json.getHeaders().get("content-type").?.eql("application/json"), @src());
     launch(json.json2(), onJsonNumber);
     launch(b.Response.json(b.JsValue.string("quoted \"text\""), .{}).json2(), onJsonText);
+    const obj = b.JsValue.object();
+    obj.set("n", 7);
+    obj.set("label", "seven");
+    obj.set("items", b.JsArrayOf(f64).of(&.{ 10, 20 }));
+    launch(b.Response.json(obj, .{}).json2(), onJsonObject);
 
     // Bodies read as text.
     launch(b.Response.new(bodyOf("hello"), .{}).text(), onHello);
@@ -256,7 +267,7 @@ export fn finish() void {
     expect(page_len > 0 and page_has_title, @src());
     expect(hello_text, @src());
     expect(blob_text, @src());
-    expect(json_number == 7 and json_text, @src());
+    expect(json_number == 7 and json_text and json_object, @src());
     expect(abort_rejected and abort_name_ok, @src());
     expect(bad_rejected, @src());
     expect(request_fetched, @src());

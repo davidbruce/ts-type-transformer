@@ -1,6 +1,6 @@
 # Findings: Gleam DOM area programs
 
-**Status:** Fixed: 1, 5, 6 (`Function` is a callback `fn(List(Dynamic)) -> Dynamic`).
+**Status:** Fixed: 1, 4 (`runtime.js_object`/`js_get`/`js_set`/`js_has`/`js_array`/`js_to_list`), 5, 6 (`Function` is a callback `fn(List(Dynamic)) -> Dynamic`).
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.gleam.
 

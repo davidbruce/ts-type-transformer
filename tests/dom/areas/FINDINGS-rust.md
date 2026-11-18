@@ -1,6 +1,6 @@
 # Findings: Rust DOM area programs
 
-**Status:** Fixed: 1, 3 (checked downcasts `T::cast(&v)` for classes), 6 (`Function::new`).
+**Status:** Fixed: 1, 3 (checked downcasts `T::cast(&v)` for classes), 5 (`JsValue::object`/`get`/`set`/`has`/`as_array`, `JsArray` <-> `JsValue`), 6 (`Function::new`).
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.rs. No runtime bugs.
 
