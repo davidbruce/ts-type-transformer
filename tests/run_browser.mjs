@@ -27,6 +27,13 @@ const missing = [];
 const types = { '.html': 'text/html', '.mjs': 'text/javascript', '.js': 'text/javascript', '.wasm': 'application/wasm' };
 const server = http.createServer((req, res) => {
     const name = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    // Synthetic status responses so fetch tests can exercise non-200 statuses
+    // without triggering missing-asset failures.
+    const statusMatch = name.match(/^\/status\/([1-5]\d\d)$/);
+    if (statusMatch) {
+        const code = Number(statusMatch[1]);
+        return res.writeHead(code, { 'content-type': 'text/plain' }).end(code === 204 ? '' : `status ${code}`);
+    }
     // Only files inside one of the roots.
     const file = roots.map(r => [r, path.join(r, name)]).find(([r, f]) => f.startsWith(r + path.sep) && fs.existsSync(f) && fs.statSync(f).isFile())?.[1];
     if (!file) {

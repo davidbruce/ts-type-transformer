@@ -58,8 +58,7 @@ static ts::Task fetch_page() {
     pending--;
 }
 
-// Another file of the page: its script, as text and as bytes. (The test server
-// fails a run on any 404, so a missing file cannot be asked for.)
+// Another file of the page: its script, as text and as bytes, plus a 404 response.
 static ts::Task fetch_script() {
     pending++;
     ts::Result<Response> r = co_await fetch("./glue.mjs");
@@ -72,6 +71,13 @@ static ts::Task fetch_script() {
         CHECK(text && text->find("makeEnv") != std::string::npos);
         ts::Result<Uint8Array<ArrayBuffer>> bytes = co_await static_cast<const Body&>(twin).bytes();
         CHECK(bytes && text && bytes->size() == text->size());
+    }
+    ts::Result<Response> missing = co_await fetch("/status/404");
+    CHECK(bool(missing));
+    if (missing) {
+        CHECK(!missing->ok() && missing->status() == 404);
+        ts::Result<std::string> body = co_await missing->text();
+        CHECK(body && *body == "status 404");
     }
     completed++;
     pending--;

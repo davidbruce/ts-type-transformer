@@ -160,7 +160,11 @@ async {
     check (asBlob.size = float a.Length || asBlob.size > 0.0) "response blob"
     check (asBlob.``type``.StartsWith "text/html") "response blob type"
 
-    // (A fetch of a missing file is left out: the test server fails the page on any 404.)
+    // A 404 resolves with ok = false rather than rejecting.
+    let! missing = wait (fetch "/status/404")
+    check (not missing.ok && missing.status = 404.0) "fetch 404 resolves not ok"
+    let! missingText = wait (missing.text ())
+    check (missingText = "status 404") "fetch 404 body"
 
     // A fetch is aborted by its signal.
     let controller = AbortController.Create ()

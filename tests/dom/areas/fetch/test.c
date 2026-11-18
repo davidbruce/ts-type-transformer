@@ -7,7 +7,7 @@ TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 #define STR(s, text) JsString_equals((s), (text))
 
-#define CHAINS 11
+#define CHAINS 12
 static int pending;  // chains started and not yet over
 static int done;     // chains that ended where they should
 
@@ -53,8 +53,14 @@ static void page_response(void* ctx, bool ok, JsValue value) {
     CHECK(Body_get_bodyUsed(r));
 }
 
-// 2. Another served file keeps its type; a data: URL is fetched too.
-// (The test server fails the run on any 404, so a missing file cannot be fetched here.)
+// 2. Another served file keeps its type; a data: URL and a 404 status are fetched too.
+static void missing_response(void* ctx, bool ok, JsValue value) {
+    (void)ctx;
+    CHECK(ok);
+    Response r = { value.h };
+    CHECK(!Response_get_ok(r) && Response_get_status(r) == 404);
+    over(ok);
+}
 static void wasm_response(void* ctx, bool ok, JsValue value) {
     (void)ctx;
     CHECK(ok);
@@ -126,11 +132,12 @@ static void body_blob(void* ctx, bool ok, JsValue value) {
 }
 
 __attribute__((export_name("run"))) void run(void) {
-    // Fetch a file the page is served with.
-    pending += 3;
+    // Fetch files the page is served with, plus a 404 response.
+    pending += 4;
     Promise_then(fetch(RequestInfo_of(JsString_from("./index.html"))), page_response, 0);
     Promise_then(fetch(RequestInfo_of(JsString_from("./test.wasm"))), wasm_response, 0);
     Promise_then(fetch(RequestInfo_of(JsString_from("data:text/plain,from a data url"))), data_response, 0);
+    Promise_then(fetch(RequestInfo_of(JsString_from("/status/404"))), missing_response, 0);
 
     // A Request built directly.
     RequestInit post = RequestInit_create();

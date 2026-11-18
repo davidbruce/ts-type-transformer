@@ -187,12 +187,17 @@ fn fetch_page(check, count) -> Nil {
   })
 }
 
-// The harness fails a page that requests a missing file, so a 404 is made, not fetched.
 fn by_request(check, count) -> Nil {
   let get = request.new(t.RequestOrStringOrURLString("./index.html"), None)
   await(dom.fetch(t.RequestOrStringOrURLString(request.get_url(get)), None), fn(res2) {
     check(response.get_status(res2) == 200.0, "fetch by absolute url")
-    aborting(check, count)
+    await(dom.fetch(t.RequestOrStringOrURLString("/status/404"), None), fn(missing) {
+      check(!response.get_ok(missing) && response.get_status(missing) == 404.0, "fetch 404 resolves not ok")
+      await(body.text(missing), fn(text) {
+        check(text == "status 404", "fetch 404 body")
+        aborting(check, count)
+      })
+    })
   })
 }
 

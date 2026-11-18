@@ -181,8 +181,10 @@ pub extern "C" fn run() {
         let request = Request::new("./index.html", Some(&init));
         let again = fetch(&request, None).await.unwrap();
         check!(again.status() == 200.0 && again.text().await.unwrap_or_default() == text);
-        // (A missing file would be a 404 response, not an error: the harness fails a page that
-        // makes any request that is not found, so it is not tried.)
+        // A 404 resolves with ok == false, not a rejection.
+        let missing = fetch("/status/404", None).await.unwrap();
+        check!(!missing.ok() && missing.status() == 404.0);
+        check!(missing.text().await.unwrap_or_default() == "status 404");
     });
 
     // AbortController cancels a request: the promise rejects with an AbortError.

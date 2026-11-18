@@ -12,4 +12,4 @@ Numbers match `// FINDING n` in tests/dom/areas/*/test.c. No runtime bugs.
 8. Awkward: no downcasts: listeners get `Event`; `cloneNode` returns `Node`; promise results `JsValue`.
 9. Awkward: `Promise_then` loses the result type.
 
-Not in comments: `get_name()` returns void (lib.dom declares `name: void`); the harness fails a page on any 404.
+Not in comments: `get_name()` returns void (lib.dom declares `name: void`).

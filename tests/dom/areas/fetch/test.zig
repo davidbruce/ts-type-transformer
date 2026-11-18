@@ -34,6 +34,14 @@ var request_fetched = false;
 var clone_texts = false;
 var clone_first = false;
 var formdata_text = false;
+var missing_status_ok = false;
+
+fn onMissing(_: ?*anyopaque, ok: bool, value: b.JsValue) void {
+    defer done();
+    if (!ok) return;
+    const res: b.Response = .{ .h = value.h };
+    missing_status_ok = !res.getOk() and res.getStatus() == 404;
+}
 
 fn launch(p: b.Promise, comptime f: fn (?*anyopaque, bool, b.JsValue) void) void {
     pending += 1;
@@ -225,9 +233,9 @@ export fn run() void {
     form.appendWithString("k", "v");
     launch(b.Response.new(.{ .FormData = form }, .{}).text(), onFormText);
 
-    // The page's own file, over the network.
+    // The page's own file, over the network, and a 404 response.
     launch(b.fetch(.{ .string = b.JsString.from("./index.html") }, .{}), onPage);
-    // (A missing file is left out: the test server fails the whole run on a 404.)
+    launch(b.fetch(.{ .string = b.JsString.from("/status/404") }, .{}), onMissing);
     // A Request object fetched.
     launch(b.fetch(.{ .Request = b.Request.new(.{ .string = b.JsString.from("./index.html") }, .{}) }, .{}), onRequest);
     // A fetch aborted before it can finish rejects with an AbortError.
@@ -253,6 +261,7 @@ export fn finish() void {
     expect(bad_rejected, @src());
     expect(request_fetched, @src());
     expect(clone_first and clone_texts, @src());
+    expect(missing_status_ok, @src());
     expect(formdata_text, @src());
     expect(pending == 0, @src());
 }
