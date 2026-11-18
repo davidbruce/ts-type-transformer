@@ -47,17 +47,21 @@ pub fn main() {
   let half_pi = 3.141592653589793 /. 2.0
 
   // ---- Vector3 ----
-  // FINDING 8: a method that takes a `Vector3Like` (add, sub, dot, cross,
-  // distance_to, equals, copy, ...) cannot be given a Vector3: the two types
-  // are unrelated, and a Vector3Like can be made empty only. Left out.
+  // Vector3 structurally satisfies Vector3Like, so add/dot/cross/equals work directly.
   let v = v3(3.0, 4.0, 0.0)
   let w = vector3.clone(v)
   vector3.set_x(w, 10.0)
+  let sum = vector3.add(vector3.clone(v3(1.0, 2.0, 3.0)), v3(4.0, 5.0, 6.0))
+  let cross = vector3.cross(v3(1.0, 0.0, 0.0), v3(0.0, 1.0, 0.0))
   let passed =
     check(vector3.length(v) == 5.0, "length")
     + check(vector3.get_x(v) == 3.0 && vector3.get_y(v) == 4.0, "components")
     + check(vector3.get_x(w) == 10.0 && vector3.get_x(v) == 3.0, "clone is independent")
     + check(vector3.length_sq(v) == 25.0, "length_sq")
+    + check(vector3.to_list(sum) == [5.0, 7.0, 9.0], "add Vector3 as Vector3Like")
+    + check(vector3.dot(v3(1.0, 2.0, 3.0), v3(4.0, 5.0, 6.0)) == 32.0, "dot Vector3 as Vector3Like")
+    + check(vector3.to_list(cross) == [0.0, 0.0, 1.0], "cross Vector3 as Vector3Like")
+    + check(vector3.equals(v3(1.0, 2.0, 3.0), v3(1.0, 2.0, 3.0)), "equals Vector3 as Vector3Like")
   let _ = vector3.normalize(w)
   let _ = vector3.multiply_scalar(v, 2.0)
   let passed =

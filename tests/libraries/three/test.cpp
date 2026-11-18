@@ -10,46 +10,32 @@ extern "C" TS_IMPORT(check) void check(int ok, int line);
 
 static bool near(double a, double b, double eps = 1e-6) { return std::fabs(a - b) < eps; }
 
-// FINDING 11: Vector3Like and QuaternionLike are interfaces, and a Vector3 or
-// Quaternion is one structurally, but the bindings give no conversion: a call
-// like v.add(other) does not compile. The handle is rewrapped by hand.
-static Vector3Like like(const Vector3& v) {
-    Vector3Like l;
-    static_cast<ts::Handle&>(l) = v;
-    return l;
-}
-static QuaternionLike like(const Quaternion& q) {
-    QuaternionLike l;
-    static_cast<ts::Handle&>(l) = q;
-    return l;
-}
-
 extern "C" __attribute__((export_name("run"))) void run() {
     // ---- vectors ----
     Vector3 a = Vector3::create(1, 2, 3);
     Vector3 b = Vector3::create(4, 5, 6);
     CHECK(a.x() == 1 && a.y() == 2 && a.z() == 3);
-    CHECK(a.dot(like(b)) == 32);
-    Vector3 sum = a.clone().add(like(b));
+    CHECK(a.dot(b) == 32);
+    Vector3 sum = a.clone().add(b);
     CHECK(sum.x() == 5 && sum.y() == 7 && sum.z() == 9);
     CHECK(a.x() == 1);  // the clone, not a, was added to
-    Vector3 cross = Vector3::create(1, 0, 0).cross(like(Vector3::create(0, 1, 0)));
+    Vector3 cross = Vector3::create(1, 0, 0).cross(Vector3::create(0, 1, 0));
     CHECK(cross.x() == 0 && cross.y() == 0 && cross.z() == 1);
     CHECK(near(Vector3::create(3, 4, 0).length(), 5));
     Vector3 unit = Vector3::create(0, 0, 9).normalize();
     CHECK(unit.z() == 1 && unit.length() == 1);
-    CHECK(Vector3::create(1, 1, 1).distanceTo(like(Vector3::create(1, 1, 4))) == 3);
+    CHECK(Vector3::create(1, 1, 1).distanceTo(Vector3::create(1, 1, 4)) == 3);
     a.setX(10);
     a.y(20);  // a property, set
     CHECK(a.x() == 10 && a.y() == 20);
-    CHECK(a.set(1, 2, 3).equals(like(Vector3::create(1, 2, 3))));
+    CHECK(a.set(1, 2, 3).equals(Vector3::create(1, 2, 3)));
     CHECK(a.multiplyScalar(2).z() == 6);
     ts::Array<double> parts = Vector3::create(7, 8, 9).toArray();
     CHECK(parts.size() == 3 && parts[0] == 7 && parts[2] == 9);
     double acc = 0;
     for (double c : Vector3::create(1, 2, 3)) acc += c;  // vectors iterate
     CHECK(acc == 6);
-    Vector3 lerped = Vector3::create(0, 0, 0).lerp(like(Vector3::create(10, 20, 30)), 0.5);
+    Vector3 lerped = Vector3::create(0, 0, 0).lerp(Vector3::create(10, 20, 30), 0.5);
     CHECK(lerped.x() == 5 && lerped.y() == 10 && lerped.z() == 15);
 
     // ---- matrices ----
@@ -85,9 +71,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(near(drot.w(), 1));
 
     // ---- quaternions and eulers ----
-    Quaternion q = Quaternion::create().setFromAxisAngle(like(Vector3::create(0, 0, 1)), M_PI / 2);
+    Quaternion q = Quaternion::create().setFromAxisAngle(Vector3::create(0, 0, 1), M_PI / 2);
     CHECK(near(q.z(), std::sqrt(0.5)) && near(q.w(), std::sqrt(0.5)));
-    Vector3 qv = Vector3::create(1, 0, 0).applyQuaternion(like(q));
+    Vector3 qv = Vector3::create(1, 0, 0).applyQuaternion(q);
     CHECK(near(qv.x(), 0) && near(qv.y(), 1));
     CHECK(near(q.length(), 1));
     CHECK(near(q.angleTo(Quaternion::create()), M_PI / 2));
@@ -129,11 +115,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(center.x() == 0 && center.y() == 1 && center.z() == 2);
     CHECK(box.containsPoint(Vector3::create(0, 0, 0)));
     CHECK(!box.containsPoint(Vector3::create(2, 0, 0)));
-    box.expandByPoint(like(Vector3::create(10, 0, 0)));
+    box.expandByPoint(Vector3::create(10, 0, 0));
     CHECK(box.max().x() == 10);
     CHECK(box.intersectsBox(Box3::create(Vector3::create(9, 0, 0), Vector3::create(12, 1, 1))));
     CHECK(Box3::create().isEmpty());
-    Box3 fromPoints = Box3::create().setFromPoints({like(Vector3::create(1, 5, 2)), like(Vector3::create(-3, 0, 9))});
+    Box3 fromPoints = Box3::create().setFromPoints({Vector3::create(1, 5, 2), Vector3::create(-3, 0, 9)});
     CHECK(fromPoints.min().x() == -3 && fromPoints.max().z() == 9);
 
     Sphere ball = Sphere::create(Vector3::create(0, 0, 0), 2);

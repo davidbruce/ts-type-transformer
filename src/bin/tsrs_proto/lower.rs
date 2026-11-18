@@ -109,6 +109,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     if o.inheritance {
         flatten(front, decls);
     }
+    if o.classes {
+        structural_extends(decls, o.inheritance);
+    }
     if o.keyed || o.map_keyed {
         drop_unreachable_overloads(decls);
     }
@@ -1065,6 +1068,194 @@ fn flatten(front: &mut Front, decls: &mut [Decl]) {
             }
             Decl::Namespace(n) => flatten(front, &mut n.decls),
             _ => {}
+        }
+    }
+}
+
+// Structural conformance for nominal targets: where a class in the same scope
+// has every required property of a pure-property interface (like Three's
+// `Vector3` and `Vector3Like`, or Pixi's `Point` and `PointData`), record it
+// as an inherited interface so nominal targets allow the conversion.
+fn structural_extends(decls: &mut [Decl], flattened: bool) {
+    fn type_eq(a: &Type, b: &Type) -> bool {
+        match (a, b) {
+            (Type::Primitive(x), Type::Primitive(y)) => x == y,
+            (Type::Literal { kind: k1, value: v1 }, Type::Literal { kind: k2, value: v2 }) => k1 == k2 && v1 == v2,
+            (Type::Ref(r1), Type::Ref(r2)) => {
+                let same = match (r1.sym, r2.sym) {
+                    (Some(s1), Some(s2)) => s1 == s2,
+                    (None, None) => r1.name == r2.name,
+                    _ => false,
+                };
+                same && r1.args.len() == r2.args.len() && r1.args.iter().zip(&r2.args).all(|(x, y)| type_eq(x, y))
+            }
+            (Type::Array(x), Type::Array(y)) | (Type::Readonly(x), Type::Readonly(y)) => type_eq(x, y),
+            (Type::Nullable(x, ax), Type::Nullable(y, ay)) => ax == ay && type_eq(x, y),
+            (Type::This, Type::This) => true,
+            _ => false,
+        }
+    }
+
+    // Recurse into namespaces first.
+    for d in decls.iter_mut() {
+        if let Decl::Namespace(n) = d {
+            structural_extends(&mut n.decls, flattened);
+        }
+    }
+
+    // Index interfaces in this scope by name.
+    let by_name: HashMap<String, usize> = decls
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, d)| if let Decl::Interface(i) = d { Some((i.name.clone(), idx)) } else { None })
+        .collect();
+
+    // Candidate pure-property structural target interfaces (at least 2 required properties).
+    struct Target {
+        name: String,
+        sym: Sym,
+        req_names: HashSet<String>,
+        props: Vec<(String, bool, bool, Type)>, // (name, optional, readonly, ty)
+    }
+    let mut targets: Vec<Target> = Vec::new();
+    for d in decls.iter() {
+        let Decl::Interface(i) = d else { continue };
+        if i.class.is_some() || i.synthetic || !i.type_params.is_empty() || !i.extends.is_empty() || !i.ancestors.is_empty() || i.members.is_empty() {
+            continue;
+        }
+        if !i.members.iter().all(|m| m.kind == MemberKind::Property && m.ty.is_some()) {
+            continue;
+        }
+        let req_names: HashSet<String> = i.members.iter().filter(|m| !m.optional).map(|m| m.name.clone()).collect();
+        if req_names.len() < 2 {
+            continue;
+        }
+        let props = i.members.iter().map(|m| (m.name.clone(), m.optional, m.readonly, m.ty.clone().unwrap())).collect();
+        targets.push(Target { name: i.name.clone(), sym: i.sym, req_names, props });
+    }
+    if targets.is_empty() {
+        return;
+    }
+
+    // Collect effective properties, methods, and nominal ancestors of each class in this scope.
+    let collect_class = |idx: usize| -> (HashMap<String, (bool, bool, Type)>, HashSet<String>, HashSet<String>) {
+        let mut props: HashMap<String, (bool, bool, Type)> = HashMap::new();
+        let mut methods: HashSet<String> = HashSet::new();
+        let mut bases: HashSet<String> = HashSet::new();
+        let mut todo = vec![idx];
+        let mut visited = HashSet::new();
+        while let Some(cur) = todo.pop() {
+            if !visited.insert(cur) {
+                continue;
+            }
+            let Decl::Interface(i) = &decls[cur] else { continue };
+            for m in &i.members {
+                match m.kind {
+                    MemberKind::Property => {
+                        if let Some(ty) = &m.ty {
+                            props.entry(m.name.clone()).or_insert_with(|| (m.optional, m.readonly, ty.clone()));
+                        }
+                    }
+                    MemberKind::Method => {
+                        methods.insert(m.name.clone());
+                    }
+                    _ => {}
+                }
+            }
+            if flattened {
+                for a in &i.ancestors {
+                    bases.insert(a.clone());
+                }
+            } else {
+                for e in &i.extends {
+                    if let Type::Ref(r) = e {
+                        bases.insert(r.name.clone());
+                        if let Some(&bidx) = by_name.get(&r.name) {
+                            todo.push(bidx);
+                        }
+                    }
+                }
+            }
+        }
+        (props, methods, bases)
+    };
+
+    // First compute maximal matching target indices for every class in this scope.
+    let mut matched: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut nominal_bases: HashMap<String, HashSet<String>> = HashMap::new();
+    for (idx, d) in decls.iter().enumerate() {
+        let Decl::Interface(c) = d else { continue };
+        if c.class.is_none() {
+            continue;
+        }
+        let (props, methods, bases) = collect_class(idx);
+        let mut hits: Vec<usize> = Vec::new();
+        for (ti, t) in targets.iter().enumerate() {
+            if t.name == c.name || bases.contains(&t.name) {
+                continue;
+            }
+            let ok = t.props.iter().all(|(pname, popt, pro, pty)| {
+                if methods.contains(pname) {
+                    return false;
+                }
+                match props.get(pname) {
+                    Some((copt, cro, cty)) => {
+                        if !*popt && *copt {
+                            return false;
+                        }
+                        (*pro || !*cro) && type_eq(cty, pty)
+                    }
+                    None => *popt,
+                }
+            });
+            if ok {
+                hits.push(ti);
+            }
+        }
+        if hits.is_empty() {
+            continue;
+        }
+        // Keep only maximal structural interfaces (drop any whose required set is a strict subset of another's).
+        let keep: Vec<usize> = hits
+            .iter()
+            .copied()
+            .filter(|&a| !hits.iter().any(|&b| b != a && targets[a].req_names.len() < targets[b].req_names.len() && targets[a].req_names.is_subset(&targets[b].req_names)))
+            .collect();
+        let mut keep = keep;
+        // Prefer an interface named after this class (`Vector3Like` for `Vector3`, `QuaternionLike` for `Quaternion`).
+        keep.sort_by_key(|&ti| (!targets[ti].name.starts_with(&c.name), targets[ti].name.clone()));
+        nominal_bases.insert(c.name.clone(), bases);
+        matched.insert(c.name.clone(), keep);
+    }
+
+    // Apply structural extends, skipping any target already inherited via a nominal base class.
+    for d in decls.iter_mut() {
+        let Decl::Interface(c) = d else { continue };
+        let Some(hits) = matched.get(&c.name) else { continue };
+        let bases = &nominal_bases[&c.name];
+        for &ti in hits {
+            if !flattened && bases.iter().any(|b| matched.get(b).is_some_and(|bh| bh.contains(&ti))) {
+                continue;
+            }
+            let t = &targets[ti];
+            if flattened {
+                if !c.ancestors.contains(&t.name) {
+                    c.ancestors.push(t.name.clone());
+                    c.ancestor_syms.push(t.sym);
+                }
+            } else {
+                c.extends.push(Type::Ref(Ref {
+                    name: t.name.clone(),
+                    kind: "interface",
+                    sym: t.sym,
+                    args: Vec::new(),
+                    tid: None,
+                    qualified: None,
+                    file: None,
+                    computed: false,
+                    node: None,
+                }));
+            }
         }
     }
 }

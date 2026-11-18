@@ -13,36 +13,31 @@ let check (ok: bool) (what: string) =
 
 let near (a: float) (b: float) = abs (a - b) < 1e-6
 
-// FINDING 14: a Vector3 is not a Vector3Like (nor a Quaternion a QuaternionLike) to F#, though the JavaScript
-// classes have the fields: every `v.add w` needs the cast.
-let like (v: Vector3) : Vector3Like = unbox v
-let qlike (q: Quaternion) : QuaternionLike = unbox q
-
 // Vectors.
 let v = Vector3.Create (1.0, 2.0, 3.0)
 check (v.x = 1.0 && v.y = 2.0 && v.z = 3.0) "Vector3 fields"
 check (near (v.length ()) (sqrt 14.0)) "length"
 let w = Vector3.Create (4.0, 5.0, 6.0)
-check (v.dot (like w) = 32.0) "dot"
-let c = Vector3.Create(1.0, 0.0, 0.0).cross (like (Vector3.Create (0.0, 1.0, 0.0)))
+check (v.dot w = 32.0) "dot"
+let c = Vector3.Create(1.0, 0.0, 0.0).cross (Vector3.Create (0.0, 1.0, 0.0))
 check (c.x = 0.0 && c.y = 0.0 && c.z = 1.0) "cross"
-let sum = v.clone().add (like w)
+let sum = v.clone().add w
 check (sum.x = 5.0 && sum.y = 7.0 && sum.z = 9.0) "add"
 check (v.x = 1.0) "clone leaves the original"
-check (v.distanceTo (like w) = sqrt 27.0) "distanceTo"
+check (v.distanceTo w = sqrt 27.0) "distanceTo"
 let unit' = Vector3.Create(3.0, 0.0, 4.0).normalize ()
 check (near unit'.x 0.6 && near unit'.z 0.8) "normalize"
 check (v.clone().multiplyScalar(2.0).z = 6.0) "multiplyScalar"
-check (Vector3.Create(0.0, 0.0, 0.0).lerp (Vector3Like.Create (10.0, 0.0, 0.0), 0.25) |> fun l -> l.x = 2.5) "lerp"
-check (v.equals (Vector3Like.Create (1.0, 2.0, 3.0))) "equals"
+check (Vector3.Create(0.0, 0.0, 0.0).lerp (Vector3.Create (10.0, 0.0, 0.0), 0.25) |> fun l -> l.x = 2.5) "lerp"
+check (v.equals (Vector3.Create (1.0, 2.0, 3.0))) "equals"
 check ((Seq.toList v) = [ 1.0; 2.0; 3.0 ]) "a vector is a sequence"
 check (v.toArray () |> Seq.toList = [ 1.0; 2.0; 3.0 ]) "toArray"
 
 // Quaternions and Euler angles: a quarter turn about Z takes x to y.
 let q = Quaternion.Create ()
-q.setFromAxisAngle (Vector3Like.Create (0.0, 0.0, 1.0), System.Math.PI / 2.0) |> ignore
+q.setFromAxisAngle (Vector3.Create (0.0, 0.0, 1.0), System.Math.PI / 2.0) |> ignore
 check (near q.z (sqrt 0.5) && near q.w (sqrt 0.5)) "setFromAxisAngle"
-let turned = Vector3.Create(1.0, 0.0, 0.0).applyQuaternion (qlike q)
+let turned = Vector3.Create(1.0, 0.0, 0.0).applyQuaternion q
 check (near turned.x 0.0 && near turned.y 1.0) "applyQuaternion"
 check (near (q.length ()) 1.0) "a unit quaternion"
 let e = Euler.Create (0.0, 0.0, System.Math.PI / 2.0)
@@ -91,7 +86,7 @@ check (bx.containsPoint (Vector3.Create (0.5, 0.5, 0.5))) "Box3 contains"
 check (not (bx.containsPoint (Vector3.Create (2.0, 0.0, 0.0)))) "Box3 does not contain"
 let size = bx.getSize (Vector3.Create ())
 check (size.x = 2.0 && size.y = 2.0 && size.z = 2.0) "getSize"
-bx.expandByPoint (Vector3Like.Create (3.0, 0.0, 0.0)) |> ignore
+bx.expandByPoint (Vector3.Create (3.0, 0.0, 0.0)) |> ignore
 check (bx.max.x = 3.0) "expandByPoint"
 check (not (bx.isEmpty ())) "not empty"
 let ball = Sphere.Create (Vector3.Create (0.0, 0.0, 0.0), 2.0)

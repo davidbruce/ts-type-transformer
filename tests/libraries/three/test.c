@@ -12,9 +12,6 @@ static bool near_f(double a, double b) { return (a > b ? a - b : b - a) < 1e-5; 
 
 // Optional numbers, as a vector's constructor takes them.
 static Vector3 V3(double x, double y, double z) { return Vector3_new(js_some_double(x), js_some_double(y), js_some_double(z)); }
-// FINDING 12: Vector3 is not a Vector3Like to C (three never says it
-// `implements` it), so wherever the d.ts says Vector3Like a Vector3 is cast.
-static Vector3Like L(Vector3 v) { return (Vector3Like){ v.h }; }
 static bool is(Vector3 v, double x, double y, double z) { return near(Vector3_get_x(v), x) && near(Vector3_get_y(v), y) && near(Vector3_get_z(v), z); }
 
 static bool str_is(JsString s, const char* expected) {
@@ -30,17 +27,17 @@ __attribute__((export_name("run"))) void run(void) {
     Vector3 a = V3(1, 2, 3), b = V3(4, 5, 6);
     CHECK(Vector3_get_x(a) == 1 && Vector3_get_y(a) == 2 && Vector3_get_z(a) == 3);
     Vector3 sum = Vector3_clone(a);
-    Vector3_add(sum, L(b));
+    Vector3_add(sum, b);
     CHECK(is(sum, 5, 7, 9));
     CHECK(is(a, 1, 2, 3));
-    CHECK(Vector3_dot(a, L(b)) == 32);
-    Vector3 cross = Vector3_cross(V3(1, 0, 0), L(V3(0, 1, 0)));
+    CHECK(Vector3_dot(a, b) == 32);
+    Vector3 cross = Vector3_cross(V3(1, 0, 0), V3(0, 1, 0));
     CHECK(is(cross, 0, 0, 1));
     CHECK(Vector3_length(V3(3, 4, 0)) == 5);
-    CHECK(Vector3_distanceTo(a, L(b)) > 5.19 && Vector3_distanceTo(a, L(b)) < 5.2);
+    CHECK(Vector3_distanceTo(a, b) > 5.19 && Vector3_distanceTo(a, b) < 5.2);
     Vector3 unit = Vector3_normalize(V3(0, 0, 9));
     CHECK(is(unit, 0, 0, 1));
-    Vector3 mid = Vector3_lerp(V3(0, 0, 0), L(V3(10, 20, 30)), 0.5);
+    Vector3 mid = Vector3_lerp(V3(0, 0, 0), V3(10, 20, 30), 0.5);
     CHECK(is(mid, 5, 10, 15));
     Vector3 scaled = Vector3_multiplyScalar(V3(1, 2, 3), 2);
     CHECK(is(scaled, 2, 4, 6));
@@ -78,7 +75,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Matrix4_equals(Matrix4_clone(t), t));
     CHECK(!Matrix4_equals(s, t));
     // Compose and decompose.
-    Quaternion qy = Quaternion_setFromAxisAngle(Quaternion_new(js_none_double(), js_none_double(), js_none_double(), js_none_double()), L(V3(0, 1, 0)), PI / 2);
+    Quaternion qy = Quaternion_setFromAxisAngle(Quaternion_new(js_none_double(), js_none_double(), js_none_double(), js_none_double()), V3(0, 1, 0), PI / 2);
     Matrix4 composed = Matrix4_compose(Matrix4_new(), V3(1, 2, 3), qy, V3(2, 2, 2));
     Vector3 pos = V3(0, 0, 0), scl = V3(1, 1, 1);
     Quaternion rot = Quaternion_new(js_none_double(), js_none_double(), js_none_double(), js_none_double());
@@ -89,7 +86,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // ---- Quaternion and Euler ----
     CHECK(near(Quaternion_length(qy), 1));
-    Vector3 turned = Vector3_applyQuaternion(V3(1, 0, 0), (QuaternionLike){ qy.h });
+    Vector3 turned = Vector3_applyQuaternion(V3(1, 0, 0), qy);
     CHECK(near_f(Vector3_get_x(turned), 0) && near_f(Vector3_get_z(turned), -1));
     Euler e = Euler_new(js_some_double(0.1), js_some_double(0.2), js_some_double(0.3), EulerOrder_XYZ);
     CHECK(Euler_get_order(e) == EulerOrder_XYZ && near(Euler_get_y(e), 0.2));
@@ -123,7 +120,7 @@ __attribute__((export_name("run"))) void run(void) {
     Vector3 center = Box3_getCenter(box, V3(0, 0, 0));
     CHECK(is(center, 0, 0.5, 1));
     CHECK(Box3_containsPoint(box, V3(0, 0, 0)) && !Box3_containsPoint(box, V3(5, 0, 0)));
-    Box3_expandByPoint(box, L(V3(5, 0, 0)));
+    Box3_expandByPoint(box, V3(5, 0, 0));
     CHECK(Box3_containsPoint(box, V3(5, 0, 0)));
     CHECK(Vector3_get_x(Box3_get_max(box)) == 5);
     Box3 other = Box3_new(V3(4, 0, 0), V3(8, 1, 1));

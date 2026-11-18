@@ -12,13 +12,11 @@ fn near(a: f64, c: f64) bool {
     return @abs(a - c) < 1e-9;
 }
 
-// FINDING 11: Vector3 is passed where the interface Vector3Like is wanted, but there is no
-// `asVector3Like`; the handle is reinterpreted by hand (the same for QuaternionLike).
 fn like(v: b.Vector3) b.Vector3Like {
-    return .{ .h = v.h };
+    return v.asVector3Like();
 }
 fn qlike(q: b.Quaternion) b.QuaternionLike {
-    return .{ .h = q.h };
+    return q.asQuaternionLike();
 }
 
 fn vec(x: f64, y: f64, z: f64) b.Vector3 {

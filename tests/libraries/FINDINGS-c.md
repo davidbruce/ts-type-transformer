@@ -1,6 +1,6 @@
 # Findings: C library programs
 
-**Status:** Fixed: 5 (but no top-level `parseInline`), 7, 8, 11, 13, 15, 16, 18.
+**Status:** Fixed: 5 (but no top-level `parseInline`), 7, 8, 11, 12 (structural `Vector3` -> `Vector3Like`), 13, 15, 16, 18.
 
 Numbers match `// FINDING n` in tests/libraries/*/test.c (there is no 17).
 Generated paths are under `target/e2e/libraries/<lib>-c-run/bindings/`

@@ -21,16 +21,6 @@ fn near(a: f64, b: f64) -> bool {
 fn v(x: f64, y: f64, z: f64) -> Vector3 {
     Vector3::new(Some(x), Some(y), Some(z))
 }
-// FINDING 7: `add(v: Vector3Like)` and every method like it take the
-// structural interface `Vector3Like`, which a `Vector3` satisfies in
-// TypeScript but is not, in the bindings (no AsRef/Is); the same handle is
-// viewed as one. Likewise `QuaternionLike`.
-fn like(p: &Vector3) -> Vector3Like {
-    Vector3Like(p.0.clone())
-}
-fn qlike(q: &Quaternion) -> QuaternionLike {
-    QuaternionLike(q.0.clone())
-}
 fn at(p: &Vector3, x: f64, y: f64, z: f64) -> bool {
     near(p.x(), x) && near(p.y(), y) && near(p.z(), z)
 }
@@ -47,18 +37,18 @@ fn vectors() {
     let a = v(1.0, 2.0, 3.0);
     let b = v(4.0, 5.0, 6.0);
     // Methods change the vector and return it, so they chain.
-    let sum = a.js_clone().add(&like(&b));
+    let sum = a.js_clone().add(&b);
     check!(at(&sum, 5.0, 7.0, 9.0));
     check!(at(&a, 1.0, 2.0, 3.0));
-    check!(near(a.dot(&like(&b)), 32.0));
-    check!(at(&v(1.0, 0.0, 0.0).cross(&like(&v(0.0, 1.0, 0.0))), 0.0, 0.0, 1.0));
+    check!(near(a.dot(&b), 32.0));
+    check!(at(&v(1.0, 0.0, 0.0).cross(&v(0.0, 1.0, 0.0)), 0.0, 0.0, 1.0));
     check!(near(v(3.0, 4.0, 0.0).length(), 5.0));
     check!(near(v(0.0, 3.0, 4.0).normalize().length(), 1.0));
-    check!(near(a.distance_to(&like(&b)), 27f64.sqrt()));
+    check!(near(a.distance_to(&b), 27f64.sqrt()));
     check!(at(&a.js_clone().multiply_scalar(2.0).sub_scalar(1.0), 1.0, 3.0, 5.0));
     check!(at(&Vector3::new(None, None, None), 0.0, 0.0, 0.0));
-    check!(at(&a.js_clone().lerp(&like(&b), 0.5), 2.5, 3.5, 4.5));
-    check!(a.equals(&like(&v(1.0, 2.0, 3.0))) && !a.equals(&like(&b)));
+    check!(at(&a.js_clone().lerp(&b, 0.5), 2.5, 3.5, 4.5));
+    check!(a.equals(&v(1.0, 2.0, 3.0)) && !a.equals(&b));
     let arr = b.to_array(None, None);
     check!(arr.len() == 3 && arr.get(2) == 6.0);
     check!(at(&Vector3::new(None, None, None).from_array(JsArray::<f64>::from(vec![7.0, 8.0, 9.0]), None), 7.0, 8.0, 9.0));
@@ -83,8 +73,8 @@ fn rotations() {
     // A quarter turn about Z takes x to y.
     let q = Quaternion::new(None, None, None, None);
     check!(q.w() == 1.0);
-    q.set_from_axis_angle(&like(&v(0.0, 0.0, 1.0)), std::f64::consts::FRAC_PI_2);
-    let p = v(1.0, 0.0, 0.0).apply_quaternion(&qlike(&q));
+    q.set_from_axis_angle(&v(0.0, 0.0, 1.0), std::f64::consts::FRAC_PI_2);
+    let p = v(1.0, 0.0, 0.0).apply_quaternion(&q);
     check!(at(&p, 0.0, 1.0, 0.0));
     check!(near(q.length(), 1.0));
     check!(near(q.angle_to(&Quaternion::new(None, None, None, None)), std::f64::consts::FRAC_PI_2));
@@ -118,8 +108,8 @@ fn shapes() {
     // A box grown to hold points, and a sphere around it.
     let b = Box3::new(None, None);
     check!(b.is_empty());
-    b.expand_by_point(&like(&v(-1.0, -2.0, -3.0)));
-    b.expand_by_point(&like(&v(1.0, 2.0, 3.0)));
+    b.expand_by_point(&v(-1.0, -2.0, -3.0));
+    b.expand_by_point(&v(1.0, 2.0, 3.0));
     check!(!b.is_empty());
     check!(at(&b.get_center(&Vector3::new(None, None, None)), 0.0, 0.0, 0.0));
     check!(at(&b.get_size(&Vector3::new(None, None, None)), 2.0, 4.0, 6.0));

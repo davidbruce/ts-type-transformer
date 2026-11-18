@@ -1,6 +1,6 @@
 # F# findings from the library programs
 
-**Status:** Fixed: 1 (`JsRecord.Create`), 6, 7, 10, 11, 21, 24, 25, 26. Partly: 2 (the backslash; a case of an anonymous record still never matches), 18 (helper column options now have `Create`; `TableOptions_Core` still has none).
+**Status:** Fixed: 1 (`JsRecord.Create`), 6, 7, 10, 11, 14, 21, 24, 25, 26. Partly: 2 (the backslash; a case of an anonymous record still never matches), 18 (helper column options now have `Create`; `TableOptions_Core` still has none).
 
 Kinds: runtime bug / can't express / awkward.
 
