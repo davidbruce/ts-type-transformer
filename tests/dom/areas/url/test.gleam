@@ -2,6 +2,7 @@
 // live link between a URL and its search parameters.
 import bindings/areas/network/url
 import bindings/areas/network/url_search_params as params
+import bindings/areas/network/url_search_params_iterator as params_iter
 import bindings/runtime
 import bindings/types as t
 import cell
@@ -105,11 +106,13 @@ pub fn main() {
 
   // Iteration.
   check(params.to_list(q) == [#("a", "2"), #("a", "1"), #("m", "3"), #("z", "1")], "entries as a list")
-  // FINDING 5 (runtime bug): URLSearchParamsIterator.to_list refers to an
-  // undefined $c_T (url_search_params_iterator_ffi.mjs:10), so keys() and
-  // values() cannot be listed; the entries do the job.
-  check(list.map(params.to_list(q), fn(kv) { kv.0 }) == ["a", "a", "m", "z"], "keys")
-  check(list.map(params.to_list(q), fn(kv) { kv.1 }) == ["2", "1", "3", "1"], "values")
+  check(
+    params_iter.to_list(params.entries(q), runtime.codec_tuple2(runtime.codec_string(), runtime.codec_string()))
+      == [#("a", "2"), #("a", "1"), #("m", "3"), #("z", "1")],
+    "entries iterator",
+  )
+  check(params_iter.to_list(params.keys(q), runtime.codec_string()) == ["a", "a", "m", "z"], "keys")
+  check(params_iter.to_list(params.values(q), runtime.codec_string()) == ["2", "1", "3", "1"], "values")
   let seen = cell.new([])
   params.for_each(q, fn(value, name, _) { cell.set(seen, [name <> "=" <> value, ..cell.get(seen)]) }, None)
   check(list.reverse(cell.get(seen)) == ["a=2", "a=1", "m=3", "z=1"], "forEach")

@@ -8,8 +8,10 @@ import bindings/areas/core/dom_token_list
 import bindings/areas/core/element
 import bindings/areas/core/node
 import bindings/areas/core/node_list
+import bindings/areas/core/node_list_of
 import bindings/areas/core/tree_walker
 import bindings/areas/html/html_collection_base as collection
+import bindings/types as t
 import cell
 import gleam/int
 import gleam/io
@@ -134,10 +136,8 @@ pub fn main() {
   check(element.get_attribute(p, "class") == Some("x y"), "classList toggle")
   dom_token_list.remove(element.get_class_list(p), ["x"])
   check(element.get_class_name(p) == "y", "classList remove")
-  // FINDING 1: NodeListOf.to_list refers to an undefined $c_TNode (runtime bug,
-  // node_list_of_ffi.mjs:33); NodeList's own to_list does the job.
   check(
-    node_list.to_list(element.query_selector_all(host, "p, b")) |> list.length == 2,
+    node_list_of.to_list(element.query_selector_all(host, "p, b"), t.element_codec()) |> list.length == 2,
     "querySelectorAll",
   )
 

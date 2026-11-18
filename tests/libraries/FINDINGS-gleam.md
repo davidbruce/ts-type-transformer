@@ -1,6 +1,6 @@
 # Findings: Gleam library programs
 
-**Status:** Fixed: 1, 3, 4, 5, 6, 13, 15, 16, 17; partly 9 (a table is built; atoms are opaque). Fixed by filling optional fixed values, programs not yet updated: 18. New: 21, `create_core_row_model` throws `$c_TFeatures is not defined` (same cause as the DOM findings 1 and 5).
+**Status:** Fixed: 1, 3, 4, 5, 6, 13, 15, 16, 17, 21; partly 9 (a table is built; atoms are opaque). Fixed by filling optional fixed values, programs not yet updated: 18.
 
 Numbers match `// FINDING n` in tests/libraries/*/test.gleam. Paths are
 under `target/e2e/libraries/<lib>-gleam/src/bindings/`.

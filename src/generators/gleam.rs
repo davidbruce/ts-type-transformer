@@ -409,6 +409,7 @@ impl<'m> Gen<'m> {
     // A JavaScript codec for values of `t`: how they cross each way.
     fn codec_expr(&self, t: &Ty) -> String {
         match t {
+            Ty::Param(n) if self.bound.borrow().contains_key(n) => "$same".into(),
             Ty::Param(n) => codec_var(n),
             t if self.to_gleam(t, "v") == "v" && self.from_gleam(t, "v") == "v" => "$same".into(),
             t => format!("{{ to: (v) => {}, from: (v) => {} }}", self.to_gleam(t, "v"), self.from_gleam(t, "v")),
@@ -739,7 +740,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
               @external(javascript, \"./runtime_ffi.mjs\", \"codec_same\")\npub fn codec_bool() -> Codec(Bool)\n\n\
               @external(javascript, \"./runtime_ffi.mjs\", \"codec_same\")\npub fn codec_dynamic() -> Codec(Dynamic)\n\n\
               @external(javascript, \"./runtime_ffi.mjs\", \"codec_option\")\npub fn codec_option(of: Codec(a)) -> Codec(Option(a))\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_list\")\npub fn codec_list(of: Codec(a)) -> Codec(List(a))\n\n";
+              @external(javascript, \"./runtime_ffi.mjs\", \"codec_list\")\npub fn codec_list(of: Codec(a)) -> Codec(List(a))\n\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"codec_tuple2\")\npub fn codec_tuple2(a: Codec(a), b: Codec(b)) -> Codec(#(a, b))\n\n";
     g.note("Dynamic");
     g.note("Option");
     // The modules the program reaches: not a type-only one (node's `stream/iter`).
@@ -770,6 +772,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
          export function codec_same() {{\n  return $same;\n}}\n\
          export function codec_option(c) {{\n  return {{ to: (v) => (v == null ? new None() : new Some(c.to(v))), from: (v) => (v instanceof Some ? c.from(v[0]) : undefined) }};\n}}\n\
          export function codec_list(c) {{\n  return {{ to: (v) => toList(Array.from(v ?? [], (x) => c.to(x))), from: (v) => v.toArray().map((x) => c.from(x)) }};\n}}\n\
+         export function codec_tuple2(a, b) {{\n  return {{ to: (v) => [a.to(v[0]), b.to(v[1])], from: (v) => [a.from(v[0]), b.from(v[1])] }};\n}}\n\
          // A Gleam function made a JavaScript function, the same one each time: one\n\
          // listener added and removed is one function.\n\
          const $wrapped = new WeakMap();\n\
@@ -951,8 +954,17 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             let id = g.value_name("to_list");
             let elem_ty = g.ty(&elem);
             let this = open(&g);
-            g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(self: {this}) -> List({elem_ty})\n\n", g.own_ffi());
-            g.ffi += &format!("export function {id}(self) {{\n  return toList(Array.from(self, (v) => {}));\n}}\n", g.to_gleam(&elem, "v"));
+            let mut params = vec![format!("self: {this}")];
+            let mut js_params = vec!["self".to_string()];
+            for p in &c.type_params {
+                if g.crosses(&elem, &p.name) {
+                    g.note("Codec");
+                    params.push(format!("{}_codec: Codec({})", lower(&p.name), Gen::tvar(&p.name)));
+                    js_params.push(codec_var(&p.name));
+                }
+            }
+            g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}({}) -> List({elem_ty})\n\n", g.own_ffi(), params.join(", "));
+            g.ffi += &format!("export function {id}({}) {{\n  return toList(Array.from(self, (v) => {}));\n}}\n", js_params.join(", "), g.to_gleam(&elem, "v"));
         }
         // A subclass of Array has no class to inherit Array's members from:
         // its elements by index, and how many.
@@ -962,11 +974,21 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             g.note("Option");
             let (at, length) = (g.value_name("get_at"), g.value_name("length"));
             let this = open(&g);
-            g.out += &format!("@external(javascript, \"{}\", \"{at}\")\npub fn {at}(self: {this}, index: Float) -> Option({elem_ty})\n\n", g.own_ffi());
+            let mut at_params = vec![format!("self: {this}"), "index: Float".to_string()];
+            let mut at_js_params = vec!["self".to_string(), "i".to_string()];
+            for p in &c.type_params {
+                if g.crosses(&elem, &p.name) {
+                    g.note("Codec");
+                    at_params.push(format!("{}_codec: Codec({})", lower(&p.name), Gen::tvar(&p.name)));
+                    at_js_params.push(codec_var(&p.name));
+                }
+            }
+            g.out += &format!("@external(javascript, \"{}\", \"{at}\")\npub fn {at}({}) -> Option({elem_ty})\n\n", g.own_ffi(), at_params.join(", "));
             let this = open(&g);
             g.out += &format!("@external(javascript, \"{}\", \"{length}\")\npub fn {length}(self: {this}) -> Float\n\n", g.own_ffi());
             g.ffi += &format!(
-                "export function {at}(self, i) {{\n  const v = self[i];\n  return v === undefined ? new None() : new Some({});\n}}\nexport function {length}(self) {{\n  return self.length;\n}}\n",
+                "export function {at}({}) {{\n  const v = self[i];\n  return v === undefined ? new None() : new Some({});\n}}\nexport function {length}(self) {{\n  return self.length;\n}}\n",
+                at_js_params.join(", "),
                 g.to_gleam(&elem, "v")
             );
         }

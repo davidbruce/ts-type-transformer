@@ -5,10 +5,6 @@
 // constructor, so the reactivity's atoms are plain objects taken as Atoms by an
 // identity @external to runtime_ffi.mjs's `dynamic`; so are the table options
 // object and the table's TableRowSorting view (`coerce`).
-// FINDING 21 (new, runtime bug): table.create_core_row_model and
-// create_sorted_row_model throw `$c_TFeatures is not defined` (the glue uses a
-// codec the Gleam signature does not take), so a table has no row model and
-// getRowModel cannot be called here.
 import bindings/areas/main as table
 import bindings/areas/main/column_helper
 import bindings/areas/main/column_helper_accessor_column_header_string as header_options
@@ -16,8 +12,11 @@ import bindings/areas/main/core_features
 import bindings/areas/main/column_sort
 import bindings/areas/main/get_function_name_info_result as name_info
 import bindings/areas/main/make_object_map_result as make_object
+import bindings/areas/main/row_core_properties
+import bindings/areas/main/row_model
 import bindings/areas/main/table_core_properties
 import bindings/areas/main/table_reactivity_bindings as reactivity
+import bindings/areas/main/table_row_models_core
 import bindings/areas/main/table_row_sorting
 import bindings/areas/main/table_features
 import bindings/areas/main/table_options_core
@@ -187,6 +186,7 @@ pub fn main() {
   let feature_map = make_object.create()
   make_object.set_at(feature_map, "coreReactivityFeature", runtime.dynamic(bindings), runtime.codec_dynamic())
   make_object.set_at(feature_map, "rowSortingFeature", runtime.dynamic(table.get_row_sorting_feature()), runtime.codec_dynamic())
+  make_object.set_at(feature_map, "sortedRowModel", runtime.dynamic(table.create_sorted_row_model(runtime.codec_dynamic())), runtime.codec_dynamic())
   let options = make_object.create()
   make_object.set_at(options, "features", runtime.dynamic(feature_map), runtime.codec_dynamic())
   make_object.set_at(options, "data", dynamic.array([person("bo", 30.0), person("al", 20.0), person("cy", 25.0)]), runtime.codec_dynamic())
@@ -199,18 +199,36 @@ pub fn main() {
     + check(field(runtime.dynamic(table_core_properties.get_options(tbl)), ["data"], decode.list(decode.dynamic)) |> list.length == 3, "the table's options hold the data")
     + check(field(runtime.dynamic(table_core_properties.get_options(tbl)), ["columns"], decode.list(decode.dynamic)) |> list.length == 2, "and the columns")
 
+  // Core row model factory works directly and through getRowModel().
+  let core_model_fn = table.create_core_row_model(runtime.codec_dynamic())
+  let core_model = core_model_fn(tbl)()
+  let name_of = fn(r) {
+    field(row_core_properties.get_original(r, runtime.codec_dynamic()), ["name"], decode.string)
+  }
+  let passed =
+    passed
+    + check(list.map(row_model.get_rows(core_model), name_of) == ["bo", "al", "cy"], "createCoreRowModel lists rows")
+  let model_view: t.TableRowModelsCore(t.TableFeatures(Nil), dynamic.Dynamic, Nil) = coerce(tbl)
+  let get_row_model = table_row_models_core.get_get_row_model(model_view, t.table_features_codec(), runtime.codec_dynamic())
+  let unsorted_model = get_row_model()
+  let passed =
+    passed
+    + check(list.map(row_model.get_rows(unsorted_model), name_of) == ["bo", "al", "cy"], "getRowModel starts in data order")
+
   // Sorting by age, through the table's setSorting (a function-valued property).
   let by_age = column_sort.create()
   column_sort.set_id(by_age, "age")
   column_sort.set_desc(by_age, False)
   let sortable: t.TableRowSorting(t.TableFeatures(Nil), dynamic.Dynamic, Nil) = coerce(tbl)
   table.call_table_row_sorting_set_sorting(table_row_sorting.get_set_sorting(sortable), t.UpdaterT([by_age]))
+  let sorted_model = get_row_model()
   let passed =
     passed
     + check(
       field(runtime.dynamic(table_core_properties.get_store(tbl)), ["state", "sorting"], decode.list(decode.at(["id"], decode.string))) == ["age"],
       "setSorting reached the table's state",
     )
+    + check(list.map(row_model.get_rows(sorted_model), name_of) == ["al", "cy", "bo"], "sorted row model orders by age")
 
   io.println(int.to_string(passed) <> " checks passed")
 }
