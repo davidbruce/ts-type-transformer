@@ -1,6 +1,6 @@
 # F# findings from the library programs
 
-**Status:** Fixed: 7, 10, 21 (the bindings compile; the program is still a stub). Partly: 2 (the backslash; a case of an anonymous record still never matches), 11 and 26 (rest-parameter delegates: Fable compiles a ParamArray delegate to a one-parameter function, so only the first argument arrives).
+**Status:** Fixed: 7, 10, 11, 21 (the bindings compile; the program is still a stub), 26. Partly: 2 (the backslash; a case of an anonymous record still never matches), 6 (rest-parameter callbacks gather all arguments; anonymous records still require every field).
 
 Kinds: runtime bug / can't express / awkward.
 

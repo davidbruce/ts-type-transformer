@@ -1002,7 +1002,7 @@ impl Gen {
         }
     }
 
-    fn delegate_sig(&mut self, n: Node, owner: &str) -> String {
+    fn callback_sig(&mut self, n: Node, owner: &str) -> CallbackSig {
         let saved_keyed = self.keyed.clone();
         for p in named(n, "typeParameter") {
             let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child).filter(|r| r.has_tag_name("ref"));
@@ -1014,8 +1014,11 @@ impl Gen {
             }
         }
         let params: Vec<Node> = named(n, "parameter").filter(|p| !p.has_attribute("const")).collect();
+        let has_trailing_rest = params.last().is_some_and(|p| flag(*p, "rest"));
         let mut seen = HashSet::new();
         let mut out = Vec::new();
+        let mut fixed_types = Vec::new();
+        let mut rest_elem = None;
         for (i, &p) in params.iter().enumerate() {
             let t_node = only_child(p);
             let raw = attr(p, "name");
@@ -1028,6 +1031,9 @@ impl Gen {
             if flag(p, "rest") {
                 let elem = if t_node.has_tag_name("array") { self.ty(only_child(t_node), owner) } else { "obj".into() };
                 out.push(format!("[<System.ParamArray>] {pname}: {elem}[]"));
+                if has_trailing_rest && i + 1 == params.len() {
+                    rest_elem = Some(elem);
+                }
                 continue;
             }
             let t = if t_node.has_tag_name("ref") && attr(t_node, "kind") == "typeParameter" && self.keyed.contains_key(attr(t_node, "name")) {
@@ -1042,20 +1048,72 @@ impl Gen {
                     out.push(format!("?{pname}: {base}"));
                 } else {
                     let opt = if t.ends_with(" option") { t } else { format!("{t} option") };
+                    if has_trailing_rest {
+                        fixed_types.push(opt.clone());
+                    }
                     out.push(format!("{pname}: {opt}"));
                 }
             } else {
+                if has_trailing_rest {
+                    fixed_types.push(t.clone());
+                }
                 out.push(format!("{pname}: {t}"));
             }
         }
         let params_str = if out.is_empty() { "unit".to_string() } else { out.join(" * ") };
         let ret = named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or_else(|| "unit".into());
         self.keyed = saved_keyed;
-        format!("{params_str} -> {ret}")
+        let rest = rest_elem.map(|elem| (fixed_types, elem, ret.clone()));
+        CallbackSig { invoke: format!("{params_str} -> {ret}"), rest }
+    }
+
+    // Fable compiles a ParamArray delegate to a one-parameter function, so a
+    // rest-parameter callback is an interface with `Invoke` (spreading on call)
+    // and `Create` (gathering `...r` into a ResizeArray in JS).
+    fn callback_def(&self, name: &str, header: &str, ret_type: &str, sig: &CallbackSig, indent: &str) -> String {
+        let Some((fixed, elem, ret)) = &sig.rest else {
+            return format!("{indent}type {name}{header} = delegate of {}\n\n", sig.invoke);
+        };
+        let mut out = format!(
+            "{indent}[<AllowNullLiteral; Interface>]\n\
+             {indent}type {name}{header} =\n\
+             {indent}    [<Emit(\"$0($1...)\")>]\n\
+             {indent}    abstract Invoke: {}\n",
+            sig.invoke
+        );
+        let rest_ty = format!("ResizeArray<{elem}>");
+        let create_fn = if fixed.is_empty() && !is_fn_type(ret, &self.abbrevs) {
+            Some(format!("{rest_ty} -> {ret}"))
+        } else if fixed.len() < 16 {
+            let mut args = fixed.clone();
+            args.push(rest_ty);
+            if ret == "unit" {
+                Some(format!("System.Action<{}>", args.join(", ")))
+            } else {
+                args.push(ret.clone());
+                Some(format!("System.Func<{}>", args.join(", ")))
+            }
+        } else {
+            None
+        };
+        if let Some(create_fn) = create_fn {
+            let mut js_params: Vec<String> = (0..fixed.len()).map(|i| format!("p{i}")).collect();
+            let mut js_args = js_params.clone();
+            js_params.push("...r".into());
+            js_args.push("r".into());
+            let emit = format!("(({}) => ($0)({}))", js_params.join(", "), js_args.join(", "));
+            out += &format!(
+                "{indent}    [<Emit({emit:?})>]\n\
+                 {indent}    static member Create (f: {create_fn}) : {ret_type} = jsNative\n"
+            );
+        }
+        out.push('\n');
+        out
     }
 
     fn function_delegate(&mut self, n: Node, owner: &str) -> String {
-        let sig_str = self.delegate_sig(n, owner);
+        let sig = self.callback_sig(n, owner);
+        let sig_str = sig.invoke.clone();
         // The type parameters the signature shows, in order: erased ones it does not.
         let mut tparams: Vec<String> = Vec::new();
         let b = sig_str.as_bytes();
@@ -1113,7 +1171,8 @@ impl Gen {
                 },
             };
             let tp_suffix = if tparams.is_empty() { String::new() } else { format!("<{}>", tparams.join(", ")) };
-            let def = format!("{}type {dname}{tp_suffix} = delegate of {sig_str}\n\n", self.cur_indent);
+            let ret_type = format!("{dname}{tp_suffix}");
+            let def = self.callback_def(&dname, &tp_suffix, &ret_type, &sig, &self.cur_indent);
             if !self.cur_indent.is_empty() {
                 self.pending_delegates += &def;
             } else if self.in_globals {
@@ -1756,8 +1815,20 @@ impl Gen {
                 // or it names a later file's type (only a member can go there).
                 "interface" if is_function_interface(d) && !self.is_extended(d) => {
                     let call = only_child(d);
+                    if named(call, "parameter").any(|p| flag(p, "rest")) {
+                        let depth = self.fn_params.len();
+                        self.fn_params.extend(named(call, "typeParameter").map(|p| attr(p, "name").to_string()));
+                        let sig = self.callback_sig(call, "");
+                        self.fn_params.truncate(depth);
+                        if words(&sig.invoke).iter().filter_map(|w| self.file_of.get(*w)).any(|f| *f > self.current_file) {
+                            self.interface(d, prefix, indent);
+                            return;
+                        }
+                        self.out += &self.callback_def(&name, "", &name, &sig, indent);
+                        return;
+                    }
                     let t = if named(call, "parameter").any(|p| flag(p, "optional")) {
-                        format!("delegate of {}", self.delegate_sig(call, ""))
+                        format!("delegate of {}", self.callback_sig(call, "").invoke)
                     } else {
                         self.ty(call, "")
                     };
@@ -1829,9 +1900,10 @@ impl Gen {
                             // A function value's own type parameters are `obj`, as in `ty`.
                             let depth = self.fn_params.len();
                             self.fn_params.extend(named(body, "typeParameter").map(|p| attr(p, "name").to_string()));
-                            let sig_str = self.delegate_sig(body, "");
+                            let sig = self.callback_sig(body, "");
                             self.fn_params.truncate(depth);
-                            self.out += &format!("{indent}type {name}{header} = delegate of {sig_str}\n\n");
+                            let ret_type = format!("{name}{params}");
+                            self.out += &self.callback_def(&name, &header, &ret_type, &sig, indent);
                         }
                         AliasForm::Abbreviation(t) => {
                             if params.is_empty() {
@@ -2301,6 +2373,33 @@ enum AliasForm {
     Interface,
     Delegate,
     Abbreviation(String),
+}
+
+struct CallbackSig {
+    invoke: String,
+    rest: Option<(Vec<String>, String, String)>,
+}
+
+// Whether an F# type string (or what it abbreviates) is an arrow type `(a -> b)`.
+fn is_fn_type<'a>(mut t: &'a str, abbrevs: &'a HashMap<String, String>) -> bool {
+    for _ in 0..8 {
+        let Some(next) = abbrevs.get(t) else { break };
+        t = next.as_str();
+    }
+    let Some(inner) = t.strip_prefix('(').and_then(|s| s.strip_suffix(')')) else {
+        return false;
+    };
+    let mut depth = 0usize;
+    let b = inner.as_bytes();
+    for i in 0..b.len() {
+        match b[i] {
+            b'(' | b'<' => depth += 1,
+            b')' | b'>' => depth = depth.saturating_sub(1),
+            b'-' if depth == 0 && inner[i..].starts_with("->") => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 // `text` with each type parameter `'T` in `map` replaced by its type.

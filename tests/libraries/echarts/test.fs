@@ -68,20 +68,19 @@ check ((merged.[0]?data: ResizeArray<float>) |> Seq.toList = [ 10.0; 10.0; 10.0 
 // The rendered chart as an image.
 check (chart.getDataURL () |> fun u -> u.StartsWith "data:image/png") "getDataURL"
 
-// Events: `on` and `trigger`. The handler is an `OnHandler` delegate with a ParamArray; Fable compiles it to a
-// one-parameter function, so `args` is the first argument itself, read by casting (finding 26, still open in part).
+// Events: `on` and `trigger`.
 let mutable fired = 0
-let mutable seen: float list = []
+let mutable seen: (float * string) list = []
 let handler =
-    Echarts.OnHandler(fun args ->
+    Echarts.OnHandler.Create(fun args ->
         fired <- fired + 1
-        seen <- seen @ [ unbox<float> (box args) ]
+        seen <- seen @ [ (unbox<float> args.[0], unbox<string> args.[1]) ]
         U2.Case2 ())
 chart.on<obj, string> ("ping", handler) |> ignore
-chart.trigger<string> ("ping", box 1) |> ignore
-chart.trigger<string> ("ping", box 2) |> ignore
+chart.trigger<string> ("ping", box 1, box "a") |> ignore
+chart.trigger<string> ("ping", box 2, box "b") |> ignore
 check (fired = 2) "an event reaches its handler"
-check (seen = [ 1.0; 2.0 ]) "it reads what was triggered"
+check (seen = [ (1.0, "a"); (2.0, "b") ]) "it reads all triggered arguments"
 chart.off (U3.Case1 "ping") |> ignore
 chart.trigger<string> ("ping", box 3) |> ignore
 check (fired = 2) "off"

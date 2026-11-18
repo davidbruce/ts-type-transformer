@@ -32,22 +32,20 @@ let join (a: string) (b: string) = path.join (a, b)
 let emitter = Events.EventEmitter.Create<obj> ()
 let mutable calls = 0
 let mutable seen: string list = []
-// Still open (finding 11): Fable compiles the delegate to a one-parameter function, so `args` is the first
-// argument itself, not an array of them; it is read by casting.
 let listener =
-    NodeJS.AddListenerListener(fun args ->
+    NodeJS.AddListenerListener.Create(fun args ->
         calls <- calls + 1
-        seen <- seen @ [ unbox<string> (box args) ])
+        seen <- seen @ [ args |> Seq.map string |> String.concat "," ])
 emitter.on ("ping", listener) |> ignore
 check (emitter.listenerCount (U2.Case1 "ping") = 1.0) "listenerCount"
-check (emitter.emit (U2.Case1 "ping", box "one")) "emit with a listener is true"
+check (emitter.emit (U2.Case1 "ping", box "one", box "extra")) "emit with a listener is true"
 check (calls = 1) "the listener ran"
-check (seen = [ "one" ]) "the listener read what was emitted"
+check (seen = [ "one,extra" ]) "the listener read all emitted arguments"
 check (not (emitter.emit (U2.Case1 "nobody"))) "emit without a listener is false"
 emitter.emit (U2.Case1 "ping", box "two") |> ignore
-check (calls = 2 && seen = [ "one"; "two" ]) "twice"
+check (calls = 2 && seen = [ "one,extra"; "two" ]) "twice"
 let mutable onceCalls = 0
-emitter.once ("once", NodeJS.AddListenerListener(fun _ -> onceCalls <- onceCalls + 1)) |> ignore
+emitter.once ("once", NodeJS.AddListenerListener.Create(fun _ -> onceCalls <- onceCalls + 1)) |> ignore
 emitter.emit (U2.Case1 "once") |> ignore
 emitter.emit (U2.Case1 "once") |> ignore
 check (onceCalls = 1) "once"
