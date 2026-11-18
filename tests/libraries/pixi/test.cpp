@@ -159,12 +159,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(near(root.getBounds().minX(), 120));
 
     // A sprite on the white texture: its size, anchor and place.
-    // FINDING 15: Texture<BufferImageSource> (what Texture.WHITE is) is a
-    // Texture<TextureSource<any>> in TypeScript, but there is no conversion
-    // between the two instantiations, so Sprite::from(Texture::WHITE()) does
-    // not compile; the handle is rewrapped.
-    Texture<TextureSource<ts::Value>> white;
-    static_cast<ts::Handle&>(white) = Texture<BufferImageSource>::WHITE();
+    Texture<TextureSource<ts::Value>> white = Texture<BufferImageSource>::WHITE();
     Sprite sprite = Sprite::from(Sprite_from_source(white));
     CHECK(sprite.width() == Texture<BufferImageSource>::WHITE().width());
     sprite.width(40);

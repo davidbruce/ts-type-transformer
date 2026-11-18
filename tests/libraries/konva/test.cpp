@@ -10,16 +10,6 @@ extern "C" TS_IMPORT(check) void check(int ok, int line);
 
 static bool near(double a, double b, double eps = 1e-6) { return std::fabs(a - b) < eps; }
 
-// FINDING 19: a Rect is a ::Shape<RectConfig>, which does not convert to the
-// ::Shape<ShapeConfig> in `Group_or_Shape` (the same object in TypeScript), so
-// layer.add(rect) does not compile: the handle is rewrapped as a Shape<ShapeConfig>.
-static Group_or_Shape child(const ts::Handle& h) {
-    ::Shape<ShapeConfig> shape;
-    static_cast<ts::Handle&>(shape) = h;
-    return Group_or_Shape(shape);
-}
-static Group_or_Shape child(const ::Group& g) { return Group_or_Shape(g); }
-
 static ts::Value str(std::string_view s) { return ts::Value::string(s); }
 
 static void exercise() {
@@ -66,7 +56,7 @@ static void exercise() {
     rect.strokeWidth().invoke(ts::Value::number(6));
     CHECK(rect.strokeWidth().invoke() == 6);
     rect.strokeWidth().invoke(ts::Value::number(4));
-    layer.add(ts::Array<Group_or_Shape>{child(rect)});
+    layer.add(ts::Array<Group_or_Shape>{rect});
     CHECK(layer.getChildren().size() == 1);
     CHECK(rect.getLayer() == layer);
     CHECK(rect.getStage() == stage);
@@ -104,8 +94,8 @@ static void exercise() {
     gc.y(100);
     gc.name("cluster");
     ::Group group = ::Group::create(gc);
-    group.add(ts::Array<Group_or_Shape>{child(circle), child(label)});
-    layer.add(ts::Array<Group_or_Shape>{child(group)});
+    group.add(ts::Array<Group_or_Shape>{circle, label});
+    layer.add(ts::Array<Group_or_Shape>{group});
     CHECK(group.getChildren().size() == 2);
     CHECK(layer.getChildren().size() == 2);
     CHECK(circle.getParent().has_value() && *circle.getParent() == group);
@@ -153,12 +143,11 @@ static void exercise() {
     IRect dotbox = circle.getClientRect();
     CHECK(near(dotbox.width(), 80));
 
-    // Finding by name, by id and by type. (FINDING 19 again: find<::Rect> fails the
-    // constraint `extends Node<NodeConfig>`, as Rect is a Node<RectConfig>.)
-    ts::Array<::Node<NodeConfig>> boxes = layer.find<::Node<NodeConfig>>(str("#box"));
+    // Finding by name, by id and by type.
+    ts::Array<::Rect> boxes = layer.find<::Rect>(str("#box"));
     CHECK(boxes.size() == 1);
     CHECK(layer.find<::Node<NodeConfig>>(str(".shape")).size() == 3);
-    CHECK(layer.find<::Node<NodeConfig>>(str("Circle")).size() == 1);
+    CHECK(layer.find<::Circle>(str("Circle")).size() == 1);
     CHECK(layer.findOne(string_or_Function(std::string("#box"))).has_value());
     CHECK(!layer.findOne(string_or_Function(std::string("#nothing"))).has_value());
     CHECK(group.find<::Node<NodeConfig>>(str(".shape")).size() == 2);

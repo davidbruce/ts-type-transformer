@@ -175,9 +175,7 @@ fn scene() {
     // (Awkward: a static of the generic class needs its type parameter given, though unused.)
     let white = Texture::<TextureSource<JsValue>>::white();
     check!(white.frame().width() >= 1.0 && white.frame().height() >= 1.0);
-    // FINDING 12: `Texture.WHITE` is a `Texture<BufferImageSource>`, which TypeScript
-    // takes as a `Texture` (of any source) but the bindings do not: no conversion.
-    let texture = Texture::<TextureSource<JsValue>>(white.0.clone(), std::marker::PhantomData);
+    let texture = white.upcast::<TextureSource<JsValue>>();
     let sprite = Sprite::new(SpriteOptionsOrTexture::from(texture.clone()));
     sprite.set_width(64.0);
     sprite.set_height(32.0);

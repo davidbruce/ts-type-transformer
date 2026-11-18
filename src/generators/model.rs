@@ -580,7 +580,7 @@ impl<'a> Builder<'a> {
                 self.unsupported(p);
             }
         }
-        elements(d).find(|c| !c.has_tag_name("typeParameter")).unwrap_or_else(|| only_child(d))
+        elements(d).find(|c| !c.has_tag_name("typeParameter") && !c.has_tag_name("extends")).unwrap_or_else(|| only_child(d))
     }
 
     fn decls_of(&mut self, scope: Node<'a, 'a>, prefix: &str) {
@@ -669,6 +669,10 @@ impl<'a> Builder<'a> {
                     if body.has_tag_name("object") {
                         let mut c = self.class(body, &path);
                         c.type_params = alias_params;
+                        let mut ext_names = HashSet::new();
+                        for ext in named(d, "extends") {
+                            self.member(&mut c, &mut ext_names, ext, &path, false);
+                        }
                         self.model.classes.push(c);
                     }
                     // Other aliases are resolved where they are used.

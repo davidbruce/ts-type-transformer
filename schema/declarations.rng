@@ -198,6 +198,7 @@
     <ref name="id"/>
     <ref name="synthetic"/>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
+    <zeroOrMore><ref name="extends"/></zeroOrMore>
     <ref name="type"/>
   </define>
 

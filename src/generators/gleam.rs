@@ -1019,6 +1019,48 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let id = g.value_name("upcast");
         let (this, closed) = (open(&g), g.class_type(&c.name, &own));
         g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
+        // Covariant widening for generic classes with class-typed defaults:
+        // `shape.widen(rect)` turns `Shape(RectConfig(Nil), RectTag(Nil))` into `Shape(ShapeConfig(Nil), Nil)`.
+        if c.type_params.iter().any(|p| matches!(&p.default, Some(Ty::Obj(dn) | Ty::Generic(dn, _)) if g.classes.contains_key(dn))) {
+            let wid = g.value_name("widen");
+            let mut n = 0usize;
+            let mut in_parts: Vec<String> = Vec::new();
+            let mut out_parts: Vec<String> = Vec::new();
+            for p in &c.type_params {
+                match &p.default {
+                    Some(Ty::Obj(dn)) if g.classes.contains_key(dn) => {
+                        let count = g.classes[dn];
+                        let mut sub_parts: Vec<String> = (0..count).map(|_| { n += 1; format!("w{n}_") }).collect();
+                        n += 1;
+                        sub_parts.push(format!("w{n}_"));
+                        in_parts.push(format!("{}({})", g.gt(dn), sub_parts.join(", ")));
+                        out_parts.push(g.class_type(dn, &[]));
+                    }
+                    Some(Ty::Generic(dn, dargs)) if g.classes.contains_key(dn) => {
+                        let count = g.classes[dn];
+                        let mut sub_parts: Vec<String> = (0..count).map(|i| match dargs.get(i) {
+                            Some(Ty::Any) | None => { n += 1; format!("w{n}_") }
+                            Some(a) => g.closed(|| g.ty(a)),
+                        }).collect();
+                        n += 1;
+                        sub_parts.push(format!("w{n}_"));
+                        in_parts.push(format!("{}({})", g.gt(dn), sub_parts.join(", ")));
+                        out_parts.push(g.class_type(dn, dargs));
+                    }
+                    _ => {
+                        let v = Gen::tvar(&p.name);
+                        in_parts.push(v.clone());
+                        out_parts.push(v);
+                    }
+                }
+            }
+            n += 1;
+            in_parts.push(format!("w{n}_"));
+            out_parts.push("Nil".into());
+            let from = format!("{}({})", g.gt(&c.name), in_parts.join(", "));
+            let to = format!("{}({})", g.gt(&c.name), out_parts.join(", "));
+            g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {wid}(value: {from}) -> {to}\n\n", g.runtime_ffi());
+        }
         // A base off the chain, whose members it has taken: `html_element.as_global_event_handlers(e)`.
         for a in secondary(&m, c) {
             let Some(args) = base_args(&m, c, &a) else { continue };

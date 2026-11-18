@@ -334,7 +334,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
     }
     // By id: a namespace's `PixiMixins.ViewContainer` is not the `ViewContainer`.
-    for d in doc.root_element().descendants().filter(|d| d.has_tag_name("interface") || d.has_tag_name("class")) {
+    for d in doc.root_element().descendants().filter(|d| d.has_tag_name("interface") || d.has_tag_name("class") || d.has_tag_name("typeAlias")) {
         let name = d.attribute("id").unwrap_or(attr(d, "name")).to_string();
         if elements(d).any(|m| m.attribute("name") == Some("[Symbol.iterator]")) {
             g.iterable.insert(name.clone());
@@ -1710,9 +1710,13 @@ impl Gen {
         // A subclass of Array is a seq with an indexer and a length: an F#
         // interface cannot inherit ResizeArray, which is a class.
         let mut is_array = false;
-        let direct: Vec<Option<&str>> = named(d, "extends").map(|e| only_child(e).attribute("to")).collect();
+        let direct: Vec<Option<&str>> = if d.has_tag_name("typeAlias") { Vec::new() } else { named(d, "extends").map(|e| only_child(e).attribute("to")).collect() };
         let mut left: Vec<Node> = Vec::new();
+        let mut widen_methods: Vec<String> = Vec::new();
         for (i, e) in named(d, "extends").enumerate() {
+            if d.has_tag_name("typeAlias") {
+                break;
+            }
             // A generic base another base reaches already, maybe with other
             // arguments (`GPUDataOwner<'D>` beside a Container that is a
             // `GPUDataOwner<obj>`): F# allows one instantiation; the other path has it.
@@ -1734,6 +1738,37 @@ impl Gen {
                     body.push(format!("{indent}    [<Emit(\"$0.length\")>] abstract length: int\n"));
                 }
                 None => body.push(format!("{indent}    inherit {base}\n")),
+            }
+            // If this concrete type extends a generic base `G<A0, ...>` whose defaults
+            // `D0, ...` are supertypes of `A0, ...` (e.g. Konva `Rect` extending `Shape<RectConfig>`
+            // where `Shape`'s default is `ShapeConfig`), emit `asShape: unit -> Shape<ShapeConfig>`.
+            let root = d.document().root_element();
+            if elements(target).next().is_some()
+                && let Some(to) = target.attribute("to")
+                && let Some(gdecl) = find_decl(root, to)
+            {
+                let gparams: Vec<Node> = named(gdecl, "typeParameter").collect();
+                let actual: Vec<Node> = elements(target).collect();
+                if !gparams.is_empty() && gparams.len() == actual.len() && gparams.iter().all(|p| named(*p, "default").next().is_some()) {
+                    let defaults: Vec<Node> = gparams.iter().map(|p| only_child(named(*p, "default").next().unwrap())).collect();
+                    let all_sub = actual.iter().zip(&defaults).all(|(a, def)| {
+                        let Some(ato) = a.attribute("to") else { return false };
+                        if def.has_tag_name("primitive") && def.attribute("name") == Some("any") {
+                            return true;
+                        }
+                        let Some(dto) = def.attribute("to") else { return false };
+                        ato == dto || self.reaches(ato, dto)
+                    });
+                    let def_tys: Vec<String> = defaults.iter().map(|def| self.ty(*def, &owner)).collect();
+                    let base_name_ty = base.split('<').next().unwrap_or(&base);
+                    let def_base = format!("{base_name_ty}<{}>", def_tys.join(", "));
+                    if all_sub && def_base != base && words(&def_base).iter().filter_map(|w| self.file_of.get(*w)).all(|f| *f <= self.current_file) {
+                        let mname = format!("as{}", pascal(attr(gdecl, "name")));
+                        if !instance.iter().any(|m| attr(*m, "name") == mname) {
+                            widen_methods.push(format!("{indent}    [<Emit(\"$0\")>] abstract {mname}: unit -> {def_base}\n"));
+                        }
+                    }
+                }
             }
         }
         // `[Symbol.iterator](): ArrayIterator<Node>`: a seq of Nodes, which Fable iterates by that method.
@@ -1766,6 +1801,7 @@ impl Gen {
         }
         body.extend(self.members(&instance, &owner, &extend, indent));
         body.extend(self.redeclared(d, &left, &body, &owner, &extend, indent));
+        body.extend(widen_methods);
         if let Some((line, emit)) = factory {
             body.push(format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({line}) : {owner} = jsNative\n"));
         }
@@ -1811,11 +1847,13 @@ impl Gen {
                     props.push(m);
                 }
             }
-            for e in named(t, "extends") {
-                let r = only_child(e);
-                match r.attribute("to").filter(|_| elements(r).next().is_none()).and_then(|to| find_decl(root, to)) {
-                    Some(b) if b.has_tag_name("interface") => todo.push(b),
-                    _ => return None,
+            if !t.has_tag_name("typeAlias") {
+                for e in named(t, "extends") {
+                    let r = only_child(e);
+                    match r.attribute("to").filter(|_| elements(r).next().is_none()).and_then(|to| find_decl(root, to)) {
+                        Some(b) if b.has_tag_name("interface") || (b.has_tag_name("typeAlias") && only_child_type(b).has_tag_name("object")) => todo.push(b),
+                        _ => return None,
+                    }
                 }
             }
         }
@@ -2350,9 +2388,9 @@ fn js_path(prefix: &str, name: &str) -> String {
     if prefix.is_empty() { name.to_string() } else { format!("{prefix}.{name}") }
 }
 
-// The type of an alias, after any type parameters.
+// The type of an alias, after any type parameters and intersection bases.
 fn only_child_type<'a>(d: Node<'a, 'a>) -> Node<'a, 'a> {
-    elements(d).find(|c| !c.has_tag_name("typeParameter")).unwrap_or_else(|| panic!("alias {} has no type", attr(d, "name")))
+    elements(d).find(|c| !c.has_tag_name("typeParameter") && !c.has_tag_name("extends")).unwrap_or_else(|| panic!("alias {} has no type", attr(d, "name")))
 }
 
 // A property's fixed (`const`) value as a JavaScript literal.

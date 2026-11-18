@@ -4,6 +4,7 @@
 import bindings/areas/echarts as echarts
 import bindings/areas/echarts/bar_series_option
 import bindings/areas/echarts/e_charts_core_option as raw
+import bindings/areas/echarts/ec_unit_option as unit
 import bindings/areas/echarts/e_charts_type
 import bindings/areas/echarts/eventful
 import bindings/areas/echarts/model_finder_object
@@ -31,9 +32,7 @@ fn check(ok: Bool, what: String) -> Int {
 
 // A plain JavaScript object from keys and values.
 fn object(entries: List(#(String, dynamic.Dynamic))) -> dynamic.Dynamic {
-  let o = raw.create()
-  list.each(entries, fn(e) { raw.set_at(o, e.0, e.1) })
-  runtime.dynamic(o)
+  runtime.js_object(entries)
 }
 
 fn array(items: List(dynamic.Dynamic)) -> dynamic.Dynamic {
@@ -55,9 +54,9 @@ pub fn main() {
   bar_series_option.set_name(series, Some(t.PositionSizeOptionString("sales")))
   bar_series_option.set_data(series, Some(list.map([5.0, 20.0, 36.0, 10.0], dynamic.float)))
   let option_object = raw.create()
-  raw.set_animation(option_object, Some(False))
-  raw.set_at(option_object, "series", array([runtime.dynamic(series)]))
-  raw.set_at(
+  unit.set_animation(option_object, Some(False))
+  unit.set_at(option_object, "series", array([runtime.dynamic(series)]))
+  unit.set_at(
     option_object,
     "xAxis",
     object([
@@ -65,14 +64,14 @@ pub fn main() {
       #("data", array(list.map(["A", "B", "C", "D"], dynamic.string))),
     ]),
   )
-  raw.set_at(option_object, "yAxis", object([#("type", dynamic.string("value"))]))
-  raw.set_at(option_object, "title", object([#("text", dynamic.string("Sales"))]))
+  unit.set_at(option_object, "yAxis", object([#("type", dynamic.string("value"))]))
+  unit.set_at(option_object, "title", object([#("text", dynamic.string("Sales"))]))
   e_charts_type.set_option(chart, option_object, None, None)
 
   // Read back.
   let read = e_charts_type.get_option(chart)
   let first_series = fn() {
-    let assert Ok([s]) = decode.run(raw.get_at(read, "series"), decode.list(decode.dynamic))
+    let assert Ok([s]) = decode.run(unit.get_at(read, "series"), decode.list(decode.dynamic))
     s
   }
   let assert Ok(data) =
@@ -81,18 +80,18 @@ pub fn main() {
   let assert Ok(name) = decode.run(first_series(), decode.at(["name"], decode.string))
   let assert Ok([categories]) =
     decode.run(
-      raw.get_at(read, "xAxis"),
+      unit.get_at(read, "xAxis"),
       decode.list(decode.at(["data"], decode.list(decode.string))),
     )
   let assert Ok([title]) =
-    decode.run(raw.get_at(read, "title"), decode.list(decode.at(["text"], decode.string)))
+    decode.run(unit.get_at(read, "title"), decode.list(decode.at(["text"], decode.string)))
   let passed =
     passed
     + check(kind == "bar" && name == "sales", "the series reads back")
     + check(data == [5.0, 20.0, 36.0, 10.0], "its data")
     + check(categories == ["A", "B", "C", "D"], "the categories")
     + check(title == "Sales", "the title")
-    + check(raw.get_animation(read) == Some(False), "animation is off")
+    + check(unit.get_animation(read) == Some(False), "animation is off")
 
   // Pixel conversions: along the x axis in order, and the taller bar higher up.
   let on_x = model_finder_object.create()
@@ -150,7 +149,7 @@ pub fn main() {
   let passed =
     passed
     + check(
-      decode.run(raw.get_at(after_clear, "series"), decode.list(decode.dynamic)) == Ok([]),
+      decode.run(unit.get_at(after_clear, "series"), decode.list(decode.dynamic)) == Ok([]),
       "clear removes the series",
     )
   e_charts_type.dispose(chart)

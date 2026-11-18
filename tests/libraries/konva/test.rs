@@ -18,14 +18,6 @@ macro_rules! check {
     };
 }
 
-// FINDING 15: `layer.add(rect)` is ordinary Konva, but a `Rect` (a
-// `Shape<RectConfig>`) is not a `Shape<ShapeConfig>` in the bindings, so no
-// `GroupOrShape` can be made of it (nor of a Circle or Text): the handle is
-// viewed as a Shape by hand.
-fn shape(s: &impl AsRef<JsHandle>) -> GroupOrShape {
-    GroupOrShape::Shape(Shape::<ShapeConfig>(s.as_ref().clone(), std::marker::PhantomData))
-}
-
 fn point(x: f64, y: f64) -> Vector2d {
     let p = Vector2d::create();
     p.set_x(x);
@@ -85,12 +77,12 @@ pub extern "C" fn run() {
     text.set_text("hi");
     check!(text.text().invoke() == "hi");
 
-    // Shapes added to the layer, in order; a group holding two of them.
-    layer.add([shape(&rect), shape(&circle)]);
+    // Shapes added to the layer, in order; a group holding one of them.
+    layer.add([GroupOrShape::from(&rect), GroupOrShape::from(&circle)]);
     check!(layer.get_children(None).len() == 2);
     let group = Group::new(None);
     group.set_position(&point(50.0, 10.0));
-    group.add([shape(&text)]);
+    group.add([GroupOrShape::from(&text)]);
     layer.add([group.clone()]);
     check!(layer.get_children(None).len() == 3);
     check!(group.get_children(None).len() == 1);

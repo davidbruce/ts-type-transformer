@@ -88,16 +88,16 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_push(series, (JsValue){ series0.h });
 
     EChartsCoreOption option = EChartsCoreOption_create();
-    EChartsCoreOption_set_at(option, "xAxis", dict_value(x_axis));
-    EChartsCoreOption_set_at(option, "yAxis", dict_value(y_axis));
-    EChartsCoreOption_set_at(option, "grid", dict_value(grid));
-    EChartsCoreOption_set_at(option, "series", (JsValue){ series.h });
-    EChartsCoreOption_set_animation(option, js_some_bool(false));
+    ECUnitOption_set_at(option, "xAxis", dict_value(x_axis));
+    ECUnitOption_set_at(option, "yAxis", dict_value(y_axis));
+    ECUnitOption_set_at(option, "grid", dict_value(grid));
+    ECUnitOption_set_at(option, "series", (JsValue){ series.h });
+    ECUnitOption_set_animation(option, js_some_bool(false));
     EChartsType_setOption(chart, option);
 
     // Read back what it settled on: the option, normalised into arrays.
     EChartsCoreOption got = EChartsType_getOption(chart);
-    JsValue got_series = EChartsCoreOption_get_at(got, "series");
+    JsValue got_series = ECUnitOption_get_at(got, "series");
     CHECK(JsArray_length((JsArray){ got_series.h }) == 1);
     JsValue first = at(got_series, 0);
     CHECK(str_is(RowGet(first, "type"), "bar"));
@@ -105,12 +105,12 @@ __attribute__((export_name("run"))) void run(void) {
     JsValue data = RowGet(first, "data");
     CHECK(JsArray_length((JsArray){ data.h }) == 3);
     CHECK(js_to_number(at(data, 0)) == 5 && js_to_number(at(data, 1)) == 20 && js_to_number(at(data, 2)) == 36);
-    JsValue got_x = EChartsCoreOption_get_at(got, "xAxis");
+    JsValue got_x = ECUnitOption_get_at(got, "xAxis");
     CHECK(JsArray_length((JsArray){ got_x.h }) == 1);
     CHECK(str_is(RowGet(at(got_x, 0), "type"), "category"));
     JsValue got_x_data = RowGet(at(got_x, 0), "data");
     CHECK(JsArray_length((JsArray){ got_x_data.h }) == 3 && str_is(at(got_x_data, 1), "Tue"));
-    CHECK(js_to_number(RowGet(at(EChartsCoreOption_get_at(got, "yAxis"), 0), "max")) == 40);
+    CHECK(js_to_number(RowGet(at(ECUnitOption_get_at(got, "yAxis"), 0), "max")) == 40);
 
     // A later setOption merges: the series gets a new value and keeps its name.
     JsArray more = JsArray_new();
@@ -123,14 +123,14 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray update_series = JsArray_new();
     JsArray_push(update_series, dict_value(update));
     EChartsCoreOption patch = EChartsCoreOption_create();
-    EChartsCoreOption_set_at(patch, "series", (JsValue){ update_series.h });
+    ECUnitOption_set_at(patch, "series", (JsValue){ update_series.h });
     EChartsType_setOption(chart, patch);
-    JsValue merged = at(EChartsCoreOption_get_at(EChartsType_getOption(chart), "series"), 0);
+    JsValue merged = at(ECUnitOption_get_at(EChartsType_getOption(chart), "series"), 0);
     CHECK(str_is(RowGet(merged, "name"), "sales") && str_is(RowGet(merged, "type"), "bar"));
     CHECK(JsArray_length((JsArray){ RowGet(merged, "data").h }) == 4);
     // With notMerge, it replaces.
     EChartsType_setOption(chart, option, js_some_bool(true), js_none_bool());
-    CHECK(JsArray_length((JsArray){ RowGet(at(EChartsCoreOption_get_at(EChartsType_getOption(chart), "series"), 0), "data").h }) == 3);
+    CHECK(JsArray_length((JsArray){ RowGet(at(ECUnitOption_get_at(EChartsType_getOption(chart), "series"), 0), "data").h }) == 3);
 
     // Pixels: the grid is 50 in from each side of 400 x 300.
     ModelFinderObject finder_obj = ModelFinderObject_create();
@@ -190,10 +190,10 @@ __attribute__((export_name("run"))) void run(void) {
 
     // Clearing empties the option; disposing ends the chart.
     EChartsType_clear(chart);
-    JsValue left = EChartsCoreOption_get_at(EChartsType_getOption(chart), "series");
+    JsValue left = ECUnitOption_get_at(EChartsType_getOption(chart), "series");
     CHECK(left.h == 0 || JsArray_length((JsArray){ left.h }) == 0);
     EChartsType_setOption(chart, option);
-    CHECK(JsArray_length((JsArray){ EChartsCoreOption_get_at(EChartsType_getOption(chart), "series").h }) == 1);
+    CHECK(JsArray_length((JsArray){ ECUnitOption_get_at(EChartsType_getOption(chart), "series").h }) == 1);
     // (The dispose is left to `finish`: `finished` is still to come.)
     the_chart = chart;
     the_host = host;

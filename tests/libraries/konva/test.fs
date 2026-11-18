@@ -15,9 +15,6 @@ let check (ok: bool) (what: string) =
 
 let near (a: float) (b: float) = abs (a - b) < 1e-6
 
-// A Shape_2<RectConfig_2> is not a Shape_2<ShapeConfig_2> because generic interfaces are invariant in F#.
-let asShape (s: obj) : GroupOrShape = GroupOrShape.Shape_2(unbox<Shape_2<ShapeConfig_2>> s)
-
 // A stage in the page's #stage, 400 by 300.
 let stageConfig = createEmpty<StageConfig_2>
 stageConfig.container <- Some(HTMLDivElementOrString.String "stage")
@@ -65,11 +62,11 @@ text.setText "hi" |> ignore
 check (text.text.Invoke () = "hi") "setText"
 
 // Shapes added to the layer, in order; a group holding one of them.
-layer.add (asShape rect, asShape circle) |> ignore
+layer.add (GroupOrShape.Shape_2 (rect.asShape2 ()), GroupOrShape.Shape_2 (circle.asShape2 ())) |> ignore
 check (layer.getChildren().Count = 2) "layer has two shapes"
 let group = Group_2.Create ()
 group.setPosition (Vector2d_2.Create (50.0, 10.0)) |> ignore
-group.add (asShape text) |> ignore
+group.add (GroupOrShape.Shape_2 (text.asShape2 ())) |> ignore
 layer.add (GroupOrShape.Group_2 group) |> ignore
 check (layer.getChildren().Count = 3) "layer has three children"
 check (group.getChildren().Count = 1) "group has one child"

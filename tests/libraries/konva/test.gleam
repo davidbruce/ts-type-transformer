@@ -4,7 +4,6 @@
 import bindings/areas/konva/circle
 import bindings/areas/konva/circle_config
 import bindings/areas/konva/container
-import bindings/areas/konva/container_config
 import bindings/areas/konva/group
 import bindings/areas/konva/get_set
 import bindings/areas/konva/group_config
@@ -12,6 +11,7 @@ import bindings/areas/konva/i_rect
 import bindings/areas/konva/konva_event_object
 import bindings/areas/konva/layer
 import bindings/areas/konva/node
+import bindings/areas/konva/node_config
 import bindings/areas/konva/rect
 import bindings/areas/konva/rect_config
 import bindings/areas/konva/shape
@@ -53,8 +53,8 @@ pub fn main() {
   // A stage on the page's #stage, 400 by 300, with a layer.
   let cfg = stage_config.create()
   stage_config.set_container(cfg, Some(t.HTMLDivElementOrStringString("stage")))
-  container_config.set_width(cfg, Some(400.0))
-  container_config.set_height(cfg, Some(300.0))
+  node_config.set_width(cfg, Some(400.0))
+  node_config.set_height(cfg, Some(300.0))
   let s = stage.new(cfg)
   let l = layer.new(None)
   let _ = stage.add(s, l, [])
@@ -73,11 +73,7 @@ pub fn main() {
   rect_config.set_id(rc, Some("box"))
   rect_config.set_name(rc, Some("shape"))
   let r = rect.new(Some(rc))
-  // FINDING 14: Layer.add and Group.add take `Shape(ShapeConfig(Nil), Nil)`, which no
-  // Rect, Circle or Text is (their config argument differs), and shape.cast gives a
-  // Shape(Dynamic, Nil): a shape cannot be added by `add`. moveTo(container) does
-  // the same, through a Dynamic.
-  let _ = node.move_to(r, runtime.dynamic(l))
+  let _ = container.add(l, [t.GroupOrShapeShape(shape.widen(r))], t.group_or_shape_codec())
   let at = node.get_position(r)
   let client = node.get_client_rect(r, None)
   let passed =
@@ -97,23 +93,22 @@ pub fn main() {
 
   // A circle and a text, and a group holding both.
   let cc = circle_config.create()
-  circle_config.set_x(cc, Some(10.0))
-  circle_config.set_y(cc, Some(10.0))
+  node_config.set_x(cc, Some(10.0))
+  node_config.set_y(cc, Some(10.0))
   circle_config.set_radius(cc, Some(25.0))
-  circle_config.set_name(cc, Some("shape"))
+  node_config.set_name(cc, Some("shape"))
   let c = circle.new(Some(cc))
   let tc = text_config.create()
   text_config.set_text(tc, Some("Hello Konva"))
   text_config.set_font_size(tc, Some(20.0))
-  text_config.set_y(tc, Some(100.0))
+  node_config.set_y(tc, Some(100.0))
   let tx = text.new(Some(tc))
   let gc = group_config.create()
-  container_config.set_x(gc, Some(200.0))
-  container_config.set_y(gc, Some(100.0))
-  container_config.set_name(gc, Some("cluster"))
+  node_config.set_x(gc, Some(200.0))
+  node_config.set_y(gc, Some(100.0))
+  node_config.set_name(gc, Some("cluster"))
   let g = group.new(Some(gc))
-  let _ = node.move_to(c, runtime.dynamic(g))
-  let _ = node.move_to(tx, runtime.dynamic(g))
+  let _ = container.add(g, [t.GroupOrShapeShape(shape.widen(c)), t.GroupOrShapeShape(shape.widen(tx))], t.group_or_shape_codec())
   let _ = container.add(l, [t.GroupOrShapeGroup(g)], t.group_or_shape_codec())
   let circle_at = node.get_absolute_position(c, None)
   let text_rect = node.get_client_rect(tx, None)

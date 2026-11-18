@@ -1,6 +1,6 @@
 # C++ findings from the library programs
 
-**Status:** Fixed: 2 (lexer, parser; not `parse`/`parseInline`), 4, 5, 8, 9, 10, 11, 12 (but `createColumnHelper().accessor`), 18, 20, 21.
+**Status:** Fixed: 2 (lexer, parser; not `parse`/`parseInline`), 4, 5, 8, 9, 10, 11, 12 (but `createColumnHelper().accessor`), 15, 18, 19, 20, 21.
 
 1. katex (awkward): a caught `ts::Error` converts to nothing generated: `ParseError` extends the generated global `::Error`, not `ts::Error`. To use `ParseError::length()` on a caught error, copy the handle: `static_cast<ts::Handle&>(pe) = caught;` (`ParseError(ts::handle, e.h)` would double-release).
 2. marked (can't express): function-typed consts (`marked.lexer`, `parser`, `options`, `setOptions`, `walkTokens`) are bound as bare `ts::Callback` structs (e.g. types/string_MarkedOptions_to_TokensList_fn.hpp): constructible from a lambda but with no way to call them. `marked_ns::get_parse()` is a `ts::Value`, and the `parseInline` const (callable object type) has struct `parseInline` with `invoke` but no accessor to obtain it. Used `Lexer::lex_static` and `Marked::parse()/parseInline().invoke` instead.

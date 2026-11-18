@@ -1523,7 +1523,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     // Unions that can be decoded: enums.
     for u in m.unions.iter().filter(|u| u.decodable()) {
-        let text = union_enum(u, &mut imports);
+        let text = union_enum(u, m, &mut imports);
         match module_of.get(&u.name) {
             Some(path) => *namespaces.entry(path.clone()).or_default() += &text,
             None => types_file += &text,
@@ -1572,9 +1572,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let me = format!("{name}{args}");
         let own = &names[c.name.as_str()];
         *out += &format!("\nhandle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
-        if params.is_empty() {
-            *out += &format!("impl Is<{name}> for {name} {{}}\n");
-        }
+        *out += &format!("impl{bounds} Is<{me}> for {me} {{}}\n");
         // The trait of its own members.
         let mut trait_body = String::new();
         for f in c.funcs.iter().filter(|f| Class::has_self(f) && family_of(c, f).is_none()) {
@@ -1650,6 +1648,18 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         if let Some(elem) = &c.elements {
             inherent += &format!("    pub fn as_array(&self) -> JsArray<{}> {{ JsArray::from_handle(crate::runtime::give(self)) }}\n", ty(elem));
         }
+        // Covariant upcast for generic handles: `Texture<BufferImageSource>::upcast::<TextureSource<JsValue>>()`.
+        if !c.type_params.is_empty() && !c.funcs.iter().any(|f| own[&f.name] == "upcast") && !holders.contains_key("upcast") {
+            let u_names: Vec<String> = (0..c.type_params.len()).map(|i| format!("U{i}_")).collect();
+            let u_bounds: Vec<String> = u_names.iter().map(|u| format!("{u}: JsType")).collect();
+            let wheres: Vec<String> = c.type_params.iter().zip(&u_names).map(|(p, u)| format!("{}: Is<{u}>", p.name)).collect();
+            let u_args = u_names.join(", ");
+            inherent += &format!(
+                "    pub fn upcast<{}>(&self) -> {name}<{u_args}> where {} {{ {name}(self.0.clone(), core::marker::PhantomData) }}\n",
+                u_bounds.join(", "),
+                wheres.join(", ")
+            );
+        }
         // Checked downcast: only a class has a constructor to test against.
         if c.js.is_some() {
             let cast_name = if c.funcs.iter().any(|f| own[&f.name] == "cast") || holders.get("cast").is_some_and(|hs| hs.len() > 1) { "try_cast" } else { "cast" };
@@ -1672,10 +1682,20 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                 continue;
             };
             let base: Vec<Ty> = base_args(m, c, a).unwrap_or_default();
-            let base_args = if k.type_params.is_empty() { String::new() } else { format!("<{}>", (0..k.type_params.len()).map(|i| base.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", ")) };
-            *out += &format!("impl{bounds} {}Methods{base_args} for {me} {{}}\n", tn(a));
+            let base_args_str = if k.type_params.is_empty() { String::new() } else { format!("<{}>", (0..k.type_params.len()).map(|i| base.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", ")) };
+            *out += &format!("impl{bounds} {}Methods{base_args_str} for {me} {{}}\n", tn(a));
             // Generic or not: `Marker<P>` is a `Layer`.
-            *out += &upcast_in(&bounds, &me, &format!("{}{base_args}", tn(a)));
+            *out += &upcast_in(&bounds, &me, &format!("{}{base_args_str}", tn(a)));
+            // Covariant default-instantiated base for concrete classes: `Rect` (`Shape<RectConfig>`) -> `Shape<ShapeConfig>`,
+            // `BufferImageSource` (`TextureSource<...>`) -> `TextureSource<JsValue>`.
+            if c.type_params.is_empty() && !k.type_params.is_empty() {
+                let def_tys: Vec<Ty> = k.type_params.iter().map(|p| p.default.clone().unwrap_or(Ty::Any)).collect();
+                let def_str = format!("<{}>", def_tys.iter().map(ty).collect::<Vec<_>>().join(", "));
+                let actual: Vec<Ty> = (0..k.type_params.len()).map(|i| base.get(i).cloned().unwrap_or(Ty::Any)).collect();
+                if def_str != base_args_str && actual.iter().zip(&def_tys).all(|(x, y)| is_subtype(m, x, y, 0)) {
+                    *out += &upcast_in(&bounds, &me, &format!("{}{def_str}", tn(a)));
+                }
+            }
         }
     }
     let function_names = names_of(m.funcs.iter());
@@ -1755,9 +1775,58 @@ fn upcast_in(bounds: &str, sub: &str, base: &str) -> String {
     )
 }
 
+fn is_subtype(m: &Model, a: &Ty, b: &Ty, depth: usize) -> bool {
+    if depth > 8 {
+        return false;
+    }
+    if a == b || matches!(b, Ty::Any) {
+        return true;
+    }
+    let class_of = |n: &str| m.classes.iter().find(|k| k.name == n);
+    let has_ancestor = |sub: &str, target: &str| -> bool {
+        let mut todo = vec![sub];
+        let mut seen = HashSet::new();
+        while let Some(cur) = todo.pop() {
+            if cur == target {
+                return true;
+            }
+            if seen.insert(cur)
+                && let Some(k) = class_of(cur)
+            {
+                todo.extend(k.ancestors.iter().map(String::as_str));
+            }
+        }
+        false
+    };
+    match (a, b) {
+        (Ty::Obj(an), Ty::Obj(bn)) => has_ancestor(an, bn),
+        (Ty::Generic(an, _), Ty::Obj(bn)) => has_ancestor(an, bn),
+        (Ty::Generic(an, a_args), Ty::Generic(bn, b_args)) => {
+            if an == bn && a_args.len() == b_args.len() {
+                return a_args.iter().zip(b_args).all(|(x, y)| is_subtype(m, x, y, depth + 1));
+            }
+            let Some(ca) = class_of(an) else { return false };
+            let Some(cb) = class_of(bn) else { return false };
+            let Some(raw) = base_args(m, ca, bn) else { return false };
+            let inst: Vec<Ty> = (0..cb.type_params.len())
+                .map(|i| raw.get(i).map(|t| subst(t, &ca.type_params, a_args)).unwrap_or(Ty::Any))
+                .collect();
+            inst.len() == b_args.len() && inst.iter().zip(b_args).all(|(x, y)| is_subtype(m, x, y, depth + 1))
+        }
+        (Ty::Obj(an), Ty::Generic(bn, b_args)) => {
+            let Some(ca) = class_of(an) else { return false };
+            let Some(cb) = class_of(bn) else { return false };
+            let Some(raw) = base_args(m, ca, bn) else { return false };
+            let inst: Vec<Ty> = (0..cb.type_params.len()).map(|i| raw.get(i).cloned().unwrap_or(Ty::Any)).collect();
+            inst.len() == b_args.len() && inst.iter().zip(b_args).all(|(x, y)| is_subtype(m, x, y, depth + 1))
+        }
+        _ => false,
+    }
+}
+
 // A union as an enum: decoded from a handle by its tag, lent as its member,
 // and made from any member: `describe(42.0)`.
-fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String {
+fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<String, String>) -> String {
     let n = def_name(&u.name);
     let opt = option();
     let import = &u.name;
@@ -1803,6 +1872,34 @@ fn union_enum(u: &NamedUnion, imports: &mut BTreeMap<String, String>) -> String 
             Ty::Str => out += &format!("impl{bounds} From<&str> for {n}{args} {{ fn from(x: &str) -> Self {{ {n}::{v}(x.to_string()) }} }}\n"),
             Ty::Num | Ty::Bool | Ty::Enum(_) => {}
             _ => out += &format!("impl{bounds} From<&{t}> for {n}{args} {{ fn from(x: &{t}) -> Self {{ {n}::{v}(Clone::clone(x)) }} }}\n"),
+        }
+    }
+    // Made from concrete subtypes of an arm when unambiguous and small (e.g. Konva's `Rect` -> `GroupOrShape`).
+    if u.type_params.is_empty() {
+        let exact: HashSet<String> = u.parts.iter().map(ty).collect();
+        let mut sub_impls: Vec<(String, String, String)> = Vec::new();
+        for c in &m.classes {
+            if !c.type_params.is_empty() {
+                continue;
+            }
+            let c_ty = Ty::Obj(c.name.clone());
+            let c_rust = ty(&c_ty);
+            if exact.contains(&c_rust) {
+                continue;
+            }
+            let matches: Vec<&Ty> = u.parts.iter().filter(|p| matches!(p, Ty::Obj(_) | Ty::Generic(..)) && is_subtype(m, &c_ty, p, 0)).collect();
+            if matches.len() == 1 {
+                let p = matches[0];
+                sub_impls.push((c_rust, variant(p), ty(p)));
+            }
+        }
+        if sub_impls.len() <= 40 {
+            for (sub, v, target) in sub_impls {
+                out += &format!(
+                    "impl From<{sub}> for {n} {{ fn from(x: {sub}) -> Self {{ {n}::{v}(<{target}>::from_handle(x.0 .0)) }} }}\n\
+                     impl From<&{sub}> for {n} {{ fn from(x: &{sub}) -> Self {{ {n}::{v}(<{target}>::from_handle(crate::runtime::give(x))) }} }}\n"
+                );
+            }
         }
     }
     out

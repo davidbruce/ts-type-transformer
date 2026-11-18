@@ -183,6 +183,8 @@ pub struct Alias {
     pub name: String,
     pub sym: Sym,
     pub type_params: Vec<TypeParam>,
+    // Intersection arms kept as nominal bases when `ty` evaluates to an object.
+    pub extends: Vec<Type>,
     pub ty: Type,
     pub computed: bool,
     pub synthetic: bool,

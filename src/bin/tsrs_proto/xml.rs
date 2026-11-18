@@ -197,6 +197,11 @@ impl Xml {
                     }
                     self.open("typeAlias", &attrs);
                     self.type_params(&a.type_params);
+                    if matches!(a.ty, Type::Object(_)) {
+                        for e in &a.extends {
+                            self.wrap("extends", &[e]);
+                        }
+                    }
                     self.ty(&a.ty);
                     self.close("typeAlias");
                 }

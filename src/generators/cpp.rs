@@ -640,8 +640,15 @@ template <class U, class L>
 struct any_extends : std::false_type {};
 template <class U, class B, class... R>
 struct any_extends<U, list<B, R...>> : std::bool_constant<extends_t<B, U>::value || any_extends<U, list<R...>>::value> {};
+template <class T>
+inline constexpr bool is_variant = false;
+template <class... Ts>
+inline constexpr bool is_variant<std::variant<Ts...>> = true;
 template <class T, class U>
 struct extends_t : std::bool_constant<std::same_as<T, U> || std::same_as<T, Value> || std::same_as<U, Value> || any_extends<U, typename bases<T>::type>::value> {};
+template <template <class...> class G, class... A, class... B>
+    requires (!is_variant<G<A...>> && sizeof...(A) == sizeof...(B) && (extends_t<A, B>::value && ...))
+struct extends_t<G<A...>, G<B...>> : std::true_type {};
 template <class... A, class U>
 struct extends_t<std::variant<A...>, U> : std::bool_constant<(extends_t<A, U>::value && ...)> {};
 // A type extends a union it is, or extends, a member of; a union, one whose
@@ -1145,6 +1152,29 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         for (name, value) in &c.consts {
             let ty = if value.starts_with('"') { "std::string_view" } else { "double" };
             members += &format!("    static constexpr {ty} {} = {value};\n", ident(name));
+        }
+        // Covariant conversion for generic classes: `Shape<RectConfig>` -> `Shape<ShapeConfig>`.
+        if !c.type_params.is_empty() {
+            let u_names: Vec<String> = (0..c.type_params.len()).map(|i| format!("U{i}_")).collect();
+            let u_decls: Vec<String> = u_names.iter().map(|u| format!("class {u}")).collect();
+            let same: Vec<String> = c.type_params.iter().zip(&u_names).map(|(p, u)| format!("std::same_as<{}, {u}>", ident(&p.name))).collect();
+            let mut reqs: Vec<String> = vec![format!("!({})", same.join(" && "))];
+            for (p, u) in c.type_params.iter().zip(&u_names) {
+                reqs.push(format!("ts::extends<{}, {u}>", ident(&p.name)));
+            }
+            let u_args_ty: Vec<Ty> = u_names.iter().map(|u| Ty::Param(u.clone())).collect();
+            for (p, u) in c.type_params.iter().zip(&u_names) {
+                if let Some(con) = &p.constraint {
+                    let sub_con = subst(con, &c.type_params, &u_args_ty);
+                    reqs.push(format!("ts::extends<{u}, {}>", ty_arg(&sub_con)));
+                }
+            }
+            let target = format!("{}<{}>", ident(&c.name), u_names.join(", "));
+            members += &format!(
+                "    template <{}>\n        requires ({})\n    operator {target}() const {{ if (this->h) ts_raw_js_retain(this->h); return {target}(ts::handle, this->h); }}\n",
+                u_decls.join(", "),
+                reqs.join(" && ")
+            );
         }
         // Checked downcast: only a class has a constructor to test against.
         if c.js.is_some() {

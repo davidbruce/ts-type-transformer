@@ -542,7 +542,7 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
                 let free = free_type_params(t);
                 let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
                 free_of.insert(name.clone(), free);
-                added.push(Decl::Alias(Alias { name: name.clone(), sym: None, type_params, ty: t.clone(), computed: false, synthetic: true }));
+                added.push(Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty: t.clone(), computed: false, synthetic: true }));
                 name
             })
             .clone();
@@ -658,6 +658,9 @@ fn walk_decls(decls: &mut [Decl], path: &mut Vec<String>, f: &mut TypeFn) {
             Decl::Alias(a) => {
                 path.push(a.name.clone());
                 walk_type_params(&mut a.type_params, path, f);
+                for e in &mut a.extends {
+                    walk_type(e, path, f);
+                }
                 walk_type(&mut a.ty, path, f);
                 path.pop();
             }
@@ -1267,7 +1270,20 @@ fn evaluate(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         drop_type_functions(decls);
     }
     // An alias body is evaluated without folding back into the alias itself.
+    // Where an intersection alias (`type RectConfig = ShapeConfig & { ... }`)
+    // evaluates to an object, keep its named object arms as bases so nominal
+    // targets know `RectConfig` extends `ShapeConfig`.
     for_each_alias(decls, &mut |a| {
+        let arms: Vec<Type> = match &a.ty {
+            Type::Intersection(parts, _) if o.intersections => parts
+                .iter()
+                .filter_map(|p| match p {
+                    Type::Ref(r) if !r.computed && r.file.is_none() && r.args.is_empty() && matches!(r.kind, "interface" | "typeAlias") && r.name != a.name => Some(Type::Ref(r.clone())),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
         let node = match &a.ty {
             Type::Op(_, node) if o.typeops => *node,
             // Not a reference by name to an alias the output declares, which is
@@ -1278,6 +1294,36 @@ fn evaluate(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         };
         if let (Some(node), Some(sym)) = (node, a.sym) {
             a.ty = front.eval_alias_body(node, sym);
+        }
+        if matches!(a.ty, Type::Object(_)) && !arms.is_empty() {
+            a.extends = arms;
+        }
+    });
+    // Keep only intersection bases that refer to object-shaped declarations
+    // (interfaces or object-valued aliases) without cycles.
+    fn collect_object_syms(decls: &[Decl], out: &mut HashSet<P<Symbol>>) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) if i.type_params.is_empty() => {
+                    out.extend(i.sym);
+                }
+                Decl::Alias(a) if a.type_params.is_empty() && matches!(a.ty, Type::Object(_)) => {
+                    out.extend(a.sym);
+                }
+                Decl::Namespace(n) => collect_object_syms(&n.decls, out),
+                _ => {}
+            }
+        }
+    }
+    let mut obj_syms = HashSet::new();
+    collect_object_syms(decls, &mut obj_syms);
+    for_each_alias(decls, &mut |a| {
+        if !a.extends.is_empty() {
+            let mut seen = HashSet::new();
+            a.extends.retain(|e| {
+                let Type::Ref(r) = e else { return false };
+                r.sym.is_some_and(|s| obj_syms.contains(&s) && Some(s) != a.sym && seen.insert(s))
+            });
         }
     });
     // `keyed_params = "map"`: `K extends keyof M` and `M[K]` stay as written.
@@ -1563,7 +1609,7 @@ fn inline_object_bases(front: &mut Front, decls: &mut [Decl]) {
         for d in decls {
             match d {
                 Decl::Alias(a)
-                    if a.type_params.is_empty() && matches!(a.ty, Type::Object(_) | Type::Erased(_) | Type::Primitive(_))
+                    if a.type_params.is_empty() && matches!(a.ty, Type::Erased(_) | Type::Primitive(_))
                         || matches!(&a.ty, Type::Ref(r) if matches!(r.kind, "class" | "interface")) =>
                 {
                     out.insert(format!("{prefix}{}", a.name), (a.type_params.clone(), a.ty.clone()));
@@ -1611,6 +1657,11 @@ fn nominal_constraints(front: &mut Front, decls: &mut [Decl], exact: bool) {
                 }
                 Decl::Alias(a) => {
                     let name = format!("{prefix}{}", a.name);
+                    if !a.extends.is_empty() {
+                        let bs: Vec<String> = a.extends.iter().filter_map(|e| if let Type::Ref(r) = e { Some(key(r).to_string()) } else { None }).collect();
+                        f.bases.insert(name.clone(), bs);
+                        f.base_refs.insert(name.clone(), a.extends.iter().filter_map(|e| if let Type::Ref(r) = e { Some(r.clone()) } else { None }).collect());
+                    }
                     if let Type::Union(parts) = &a.ty {
                         f.unions.insert(name.clone(), parts.clone());
                     }
@@ -2404,7 +2455,7 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                         Type::Object(members) => Decl::Interface(Interface {
                             name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], ancestor_syms: vec![], members, class: None, synthetic: true, js_name: None,
                         }),
-                        ty => Decl::Alias(Alias { name: name.clone(), sym: None, type_params, ty, computed: false, synthetic: true }),
+                        ty => Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty, computed: false, synthetic: true }),
                     });
                     (name, args)
                 })

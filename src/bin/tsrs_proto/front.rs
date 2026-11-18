@@ -586,6 +586,7 @@ impl<'c> Front<'c> {
                         name: self.output_name(sym),
                         sym: Some(sym),
                         type_params: self.type_params(s.type_parameters()),
+                        extends: Vec::new(),
                         ty: self.opt_type(s.type_node()),
                         computed: self.is_computed_alias(sym),
                         synthetic: false,

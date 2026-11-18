@@ -36,8 +36,8 @@ static void shapes(void) {
     // A stage on the page's #stage, 400 by 300.
     StageConfig config = StageConfig_create();
     StageConfig_set_container(config, HTMLDivElement_or_string_of(JsString_from("stage")));
-    ContainerConfig_set_width(StageConfig_as_ContainerConfig(config), D(400));
-    ContainerConfig_set_height(StageConfig_as_ContainerConfig(config), D(300));
+    NodeConfig_set_width(config, D(400));
+    NodeConfig_set_height(config, D(300));
     Stage stage = Stage_new(config);
     CHECK(Stage_getContent(stage).h != 0);
     CHECK(JsString_equals(Node_getType(stage), "Stage"));
@@ -75,21 +75,21 @@ static void shapes(void) {
 
     // A Circle and a Text, from their configs.
     CircleConfig cc = CircleConfig_create();
-    CircleConfig_set_x(cc, D(200));
-    CircleConfig_set_y(cc, D(100));
+    NodeConfig_set_x(cc, D(200));
+    NodeConfig_set_y(cc, D(100));
     CircleConfig_set_radius(cc, D(40));
-    CircleConfig_set_fill(cc, string_or_CanvasGradient_of_string(JsString_from("green")));
-    CircleConfig_set_name(cc, "shape dot");
+    ShapeConfig_set_fill(cc, string_or_CanvasGradient_of_string(JsString_from("green")));
+    NodeConfig_set_name(cc, "shape dot");
     Circle circle = Circle_new(cc);
     CHECK(num(Node_get_width(circle)) == 80 && num(Node_get_height(circle)) == 80);
 
     TextConfig tc = TextConfig_create();
-    TextConfig_set_x(tc, D(10));
-    TextConfig_set_y(tc, D(200));
+    NodeConfig_set_x(tc, D(10));
+    NodeConfig_set_y(tc, D(200));
     TextConfig_set_text(tc, "Hello Konva");
     TextConfig_set_fontSize(tc, D(24));
     TextConfig_set_fontFamily(tc, "sans-serif");
-    TextConfig_set_name(tc, "shape text");
+    NodeConfig_set_name(tc, "shape text");
     Text label = Text_new(tc);
     CHECK(text_is(GetSet_invoke(Text_get_text(label)), "Hello Konva"));
     CHECK(num(Text_get_fontSize(label)) == 24);
@@ -99,9 +99,9 @@ static void shapes(void) {
 
     // A group moves what is in it.
     GroupConfig gc = GroupConfig_create();
-    ContainerConfig_set_x(GroupConfig_as_ContainerConfig(gc), D(100));
-    ContainerConfig_set_y(GroupConfig_as_ContainerConfig(gc), D(100));
-    ContainerConfig_set_name(GroupConfig_as_ContainerConfig(gc), "cluster");
+    NodeConfig_set_x(gc, D(100));
+    NodeConfig_set_y(gc, D(100));
+    NodeConfig_set_name(gc, "cluster");
     Group group = Group_new(gc);
     JsArray_Node inside = JsArray_Node_new();
     JsArray_Node_push(inside, AS_Node(circle));
