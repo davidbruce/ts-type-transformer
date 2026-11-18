@@ -111,8 +111,8 @@ export fn run() void {
     line.asElement().setAttribute("x2", "6");
     line.asElement().setAttribute("y2", "8");
     _ = svg.asNode().appendChild(line.asNode());
-    // FINDING 2 again: no downcast from SVGElement to SVGLineElement, so the handle is rebuilt by hand.
-    const as_line = b.SVGLineElement{ .h = line.h };
+    const as_line = b.SVGLineElement.cast(line).?;
+    expect(b.SVGCircleElement.cast(line) == null, @src());
     expect(near(as_line.getTotalLength(), 10), @src());
     expect(line.asElement().getTagName().eql("line"), @src());
 

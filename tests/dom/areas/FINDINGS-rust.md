@@ -1,5 +1,7 @@
 # Findings: Rust DOM area programs
 
+**Status:** Fixed: 1, 3 (checked downcasts `T::cast(&v)` for classes).
+
 Numbers match `// FINDING n` in tests/dom/areas/*/test.rs. No runtime bugs.
 
 1. Can't express: no downcast from `Event` to a subtype (`CustomEvent`, `MouseEvent`) or `CSSRule` to `CSSStyleRule`; a listener added by a string name gets a plain `Event`. Rewrapped by hand.

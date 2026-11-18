@@ -1620,6 +1620,16 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         if let Some(elem) = &c.elements {
             inherent += &format!("    pub fn as_array(&self) -> JsArray<{}> {{ JsArray::from_handle(crate::runtime::give(self)) }}\n", ty(elem));
         }
+        // Checked downcast: only a class has a constructor to test against.
+        if c.js.is_some() {
+            let cast_name = if c.funcs.iter().any(|f| own[&f.name] == "cast") || holders.get("cast").is_some_and(|hs| hs.len() > 1) { "try_cast" } else { "cast" };
+            let is_imp = format!("js_is__{}", c.name);
+            imports.entry(is_imp.clone()).or_insert_with(|| format!("    pub fn {is_imp}(h: u32) -> i32;\n"));
+            let opt = option();
+            inherent += &format!(
+                "    pub fn {cast_name}(v: &impl AsRef<JsHandle>) -> {opt}<Self> {{ let h = v.as_ref().0; if h != 0 && unsafe {{ raw::{is_imp}(h) }} != 0 {{ let c = v.as_ref().clone(); core::mem::forget(c); Some(<Self>::from_handle(h)) }} else {{ None }} }}\n"
+            );
+        }
         if !inherent.is_empty() {
             *out += &format!("impl{bounds} {me} {{\n{inherent}}}\n");
         }

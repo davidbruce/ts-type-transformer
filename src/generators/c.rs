@@ -897,6 +897,16 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         for a in all_ancestors(m, &c.name) {
             body += &format!("static inline {a} {}_as_{a}({} self) {{ return ({a}){{ self.h }}; }}\n", c.name, c.name);
         }
+        // Checked downcast: only a class has a constructor to test against.
+        if c.js.is_some() {
+            let cast_name = if c.funcs.iter().any(|f| f.name == "cast") { "try_cast" } else { "cast" };
+            body += &format!(
+                "TS_IMPORT(js_is__{0}) int32_t ts_raw_js_is__{0}(uint32_t);\n\
+                 static inline {0} {0}_{cast_name}_h(uint32_t h) {{ return ({0}){{ (h && ts_raw_js_is__{0}(h)) ? h : 0 }}; }}\n\
+                 #define {0}_{cast_name}(v) {0}_{cast_name}_h((v).h)\n",
+                c.name
+            );
+        }
         for f in &c.funcs {
             func(&mut body, Some(&c.name), f);
         }

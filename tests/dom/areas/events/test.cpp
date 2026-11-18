@@ -146,11 +146,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
     init.bubbles(true);
     double got = 0;
     ts::Scoped<EventListener> onCustom = [&](Event e) {
-        // FINDING 2: a string-typed listener gets an Event, and there is no cast
-        // from Event to CustomEvent<T>; the handle is retained by hand and
-        // wrapped (the constructor takes over a reference).
-        ts_raw_js_retain(e.h);
-        got = CustomEvent<ts::Value>(ts::handle, e.h).detail().to_number();
+        auto ce = CustomEvent<ts::Value>::cast(e);
+        CHECK(ce.has_value() && !MouseEvent::cast(e).has_value());
+        got = ce->detail().to_number();
     };
     CustomEvent<ts::Value> custom = CustomEvent<ts::Value>::create("custom", init);
     CHECK(custom.detail().to_number() == 42);

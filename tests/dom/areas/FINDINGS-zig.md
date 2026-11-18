@@ -1,6 +1,6 @@
 # Findings: Zig DOM area programs
 
-**Status:** Not a bug: 1 (`b.Option.new`, `b.Image.new`, and `b.Audio.new` are bound in `areas/core.zig` and `areas/webaudio.zig`, re-exported from `bindings.zig`; `test.zig` now uses them. `HTMLOptionElement.new()` throws "Illegal constructor" because `lib.dom.d.ts` declares `new(): HTMLOptionElement` on the interface just as on `HTMLDivElement`).
+**Status:** Fixed: 2 (checked downcasts `T.cast(v)` for classes). Not a bug: 1 (`b.Option.new`, `b.Image.new`, and `b.Audio.new` are bound in `areas/core.zig` and `areas/webaudio.zig`, re-exported from `bindings.zig`; `test.zig` now uses them. `HTMLOptionElement.new()` throws "Illegal constructor" because `lib.dom.d.ts` declares `new(): HTMLOptionElement` on the interface just as on `HTMLDivElement`).
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.zig.
 

@@ -1120,6 +1120,28 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             let ty = if value.starts_with('"') { "std::string_view" } else { "double" };
             members += &format!("    static constexpr {ty} {} = {value};\n", ident(name));
         }
+        // Checked downcast: only a class has a constructor to test against.
+        if c.js.is_some() {
+            let cast_name = if own.contains("cast") || holders.contains_key("cast") || c.consts.iter().any(|(n, _)| n == "cast") || class_statics.get(&c.name).is_some_and(|fs| fs.iter().any(|f| cpp_name(f, ctor) == "cast")) {
+                "try_cast"
+            } else {
+                "cast"
+            };
+            let is_import = format!("extern \"C\" TS_IMPORT(js_is__{0}) int32_t ts_raw_js_is__{0}(uint32_t);\n", c.name);
+            members += &format!("    static std::optional<{owner}> {cast_name}(const ts::Handle& v);\n");
+            let def = format!(
+                "{class_head}{}std::optional<{owner}> {owner}::{cast_name}(const ts::Handle& v) {{ if (v.h != 0 && ts_raw_js_is__{}(v.h)) {{ ts_raw_js_retain(v.h); return {owner}(ts::handle, v.h); }} return std::nullopt; }}\n",
+                if class_head.is_empty() { "" } else { "inline " },
+                c.name
+            );
+            if !class_head.is_empty() {
+                header_defs += &def;
+                header_imports.insert(is_import);
+            } else {
+                lib.1 += &def;
+                lib.0.insert(is_import);
+            }
+        }
         // Iterable: `for (Node n : list)`.
         if let Some(elem) = &c.iterates
             && !own.contains("begin")

@@ -9,13 +9,9 @@ fn expect(ok: bool, src: std.builtin.SourceLocation) void {
     check(@intFromBool(ok), src.line);
 }
 
-// FINDING 2: there is no downcast from a base type to the one it is (CSSRule to CSSStyleRule,
-// css.zig: CSSRule has no `asCSSStyleRule`); the handle is rebuilt by hand with `.{ .h = rule.h }`.
-// Kind awkward, and unchecked. Likewise Event to MouseEvent/CustomEvent in the events program,
-// Node to Element in the tree program, SVGElement to SVGLineElement in the svg program.
-// The rule at an index, which these sheets hold only style rules.
+// The rule at an index, checked via CSSStyleRule.cast.
 fn ruleAt(sheet: b.CSSStyleSheet, i: f64) b.CSSStyleRule {
-    return .{ .h = sheet.getCssRules().item(i).?.h };
+    return b.CSSStyleRule.cast(sheet.getCssRules().item(i).?).?;
 }
 fn selectorAt(sheet: b.CSSStyleSheet, i: f64) b.JsString {
     return ruleAt(sheet, i).getSelectorText();

@@ -101,8 +101,9 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(!Node_hasChildNodes(shallow));
     CHECK(Node_isEqualNode(deep, list) && !Node_isSameNode(deep, list));
     CHECK(Node_isSameNode(list, list));
-    // FINDING 8: cloneNode returns Node and there is no downcast; (Element){ deep.h } is the way.
-    CHECK(STR(Element_get_id((Element){ deep.h }), "list"));
+    Element deep_el = Element_cast(deep);
+    CHECK(deep_el.h != 0 && Text_cast(deep).h == 0);
+    CHECK(STR(Element_get_id(deep_el), "list"));
     CHECK(Node_get_parentNode(deep).h == 0);
 
     // Markup parsed and written.

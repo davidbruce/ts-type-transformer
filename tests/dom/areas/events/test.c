@@ -45,13 +45,15 @@ static void on_event(void* ctx, Event ev) {
 static void on_custom(void* ctx, Event ev) {
     Rec* r = ctx;
     r->count++;
-    CustomEvent ce = { ev.h };  // FINDING 8: a listener gets an Event; there is no downcast, so the handle is recast by hand
+    CustomEvent ce = CustomEvent_cast(ev);
+    CHECK(ce.h != 0 && MouseEvent_cast(ev).h == 0);
     r->detail = js_to_number(CustomEvent_get_detail(ce));
 }
 
 static void on_mouse(void* ctx, Event ev) {
     Rec* r = ctx;
-    MouseEvent me = { ev.h };
+    MouseEvent me = MouseEvent_cast(ev);
+    CHECK(me.h != 0 && KeyboardEvent_cast(ev).h == 0);
     r->count++;
     r->x = MouseEvent_get_clientX(me) * 1000 + MouseEvent_get_clientY(me) + MouseEvent_get_button(me) * 1000000;
     r->ctrl = MouseEvent_get_ctrlKey(me);
@@ -60,7 +62,8 @@ static void on_mouse(void* ctx, Event ev) {
 
 static void on_key(void* ctx, Event ev) {
     Rec* r = ctx;
-    KeyboardEvent ke = { ev.h };
+    KeyboardEvent ke = KeyboardEvent_cast(ev);
+    CHECK(ke.h != 0 && MouseEvent_cast(ev).h == 0);
     r->count++;
     JsString_copy(KeyboardEvent_get_key(ke), r->key, sizeof r->key);
     r->ctrl = KeyboardEvent_get_ctrlKey(ke);

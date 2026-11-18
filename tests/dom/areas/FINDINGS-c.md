@@ -1,5 +1,7 @@
 # Findings: C DOM area programs
 
+**Status:** Fixed: 8 (checked downcasts `T_cast(v)` for classes).
+
 Numbers match `// FINDING n` in tests/dom/areas/*/test.c. No runtime bugs.
 
 1. Awkward: `Node_or_string_of(x)` selects on the exact type: an `HTMLLIElement` is rejected where `Node_or_string` is wanted.

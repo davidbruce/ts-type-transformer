@@ -691,6 +691,11 @@ export function makeEnv(getInstance, options = {}) {
         };
         out += &format!("    {}_tag: guard((h, k) => {{ const v = get(h); {} return {default}; }}),\n", u.name, arms.join(" "));
     }
+    // Checked downcasts: whether a handle is an instance of class `c` (1 or 0).
+    for c in m.classes.iter().filter(|c| c.js.is_some() && wanted(&format!("js_is__{}", c.name))) {
+        let js = c.js.as_deref().unwrap();
+        out += &format!("    js_is__{}: guard(h => {{ const c = {}; return h !== 0 && typeof c === 'function' && get(h) instanceof c ? 1 : 0; }}),\n", c.name, global(js));
+    }
     for c in m.callbacks.iter().filter(|c| wanted(&format!("{}_from", c.name))) {
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let args: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| to_wasm(a, t)).collect();

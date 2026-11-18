@@ -87,16 +87,17 @@ pub extern "C" fn run() {
     // FINDING 4: a union (Element | ProcessingInstruction) has no ==, and a subtype (an
     // HTMLStyleElement) does not convert into it: only the exact member does (awkward).
     check!(matches!(sheet.owner_node(), Some(ElementOrProcessingInstruction::Element(e)) if e == *sheet_el.as_ref()));
-    // FINDING 3: a CSSRule cannot be downcast to its CSSStyleRule (awkward), as with events:
-    // its handle is rewrapped by hand.
-    let first = CSSStyleRule(rules.item(0.0).unwrap().0.clone());
+    let first_rule = rules.item(0.0).unwrap();
+    let first = CSSStyleRule::cast(&first_rule).unwrap();
+    check!(CSSMediaRule::cast(&first_rule).is_none());
     check!(first.selector_text() == ".box");
     check!(first.style().width() == "50px" && first.style().get_property_value("color") == "blue");
     check!(first.css_text().starts_with(".box {"));
     check!(first.parent_style_sheet() == Some(sheet.clone()));
     check!(first.type_() == 1.0);
-    check!(rules.item(3.0).unwrap().type_() == 4.0);
-    let selectors: Vec<String> = rules.iter().take(3).map(|r| CSSStyleRule(r.0.clone()).selector_text()).collect();
+    let media_rule = rules.item(3.0).unwrap();
+    check!(media_rule.type_() == 4.0 && CSSStyleRule::cast(&media_rule).is_none() && CSSMediaRule::cast(&media_rule).is_some());
+    let selectors: Vec<String> = rules.iter().take(3).map(|r| CSSStyleRule::cast(&r).unwrap().selector_text()).collect();
     check!(selectors == [".box", ".wide", "#styled.boxed"]);
 
     // A class makes the sheet apply.

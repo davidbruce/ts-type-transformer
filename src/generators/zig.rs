@@ -841,9 +841,15 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         for a in &c.ancestors {
             *out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);
         }
+        let own_names = &class_names[c.name.as_str()];
+        // Checked downcast: only a class has a constructor to test against.
+        if c.js.is_some() {
+            let cast_name = if own_names.values().any(|n| n == "cast") || c.consts.iter().any(|(n, _)| n == "cast") { "tryCast" } else { "cast" };
+            *externs += &format!("    extern \"env\" fn @\"js_is__{}\"(u32) i32;\n", c.name);
+            *out += &format!("    pub fn {}(v: anytype) ?{} {{ return if (v.h != 0 and raw.@\"js_is__{1}\"(v.h) != 0) .{{ .h = v.h }} else null; }}\n", ident(cast_name), c.name);
+        }
         let inherited = |f: &Func| if Class::has_self(f) { homes.get(&(c.name.as_str(), f.name.as_str())).copied() } else { None };
         let shared = |f: &Func| shares.contains(c.name.as_str()) && Class::has_self(f) && inherited(f).is_none();
-        let own_names = &class_names[c.name.as_str()];
         if c.funcs.iter().any(|f| shared(f)) {
             *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
             for f in c.funcs.iter().filter(|f| shared(f)) {

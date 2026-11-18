@@ -136,14 +136,13 @@ pub extern "C" fn run() {
     check!(!inner.dispatch_event(&cancel));
     check!(cancel.default_prevented());
 
-    // A CustomEvent carries a detail. A listener gets an Event: its handle is a CustomEvent.
-    // FINDING 1: no downcast from Event to CustomEvent<T>/MouseEvent (awkward): the handle is
-    // rewrapped by hand, and a string-named listener cannot be typed (only typed keys carry a type).
+    // A CustomEvent carries a detail. A listener gets an Event, downcast via CustomEvent::cast.
     let seen = Rc::new(RefCell::new(String::new()));
     let on_custom = EventListener::new({
         let seen = seen.clone();
         move |e: Event| {
-            let custom = CustomEvent::<String>(e.0.clone(), std::marker::PhantomData);
+            check!(MouseEvent::cast(&e).is_none());
+            let custom = CustomEvent::<String>::cast(&e).unwrap();
             *seen.borrow_mut() = custom.detail();
         }
     });

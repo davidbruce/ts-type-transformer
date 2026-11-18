@@ -12,15 +12,6 @@
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
-// FINDING 4: a CSSRuleList holds CSSRule, and there is no cast to CSSStyleRule (or
-// from Node to a derived element, Event to CustomEvent...). The handle is
-// copied (a retain) and the copy's reference handed to the derived type.
-template <class D, class B>
-static D downcast(const B& b) {
-    B copy = b;
-    return D(ts::handle, std::exchange(copy.h, 0));
-}
-
 extern "C" __attribute__((export_name("run"))) void run() {
     Document doc = get_document();
     HTMLElement body = doc.body();
@@ -68,14 +59,15 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(sheet.cssRules().length() == 3);
     CSSRule rule0 = *sheet.cssRules().item(0);
     CHECK(rule0.type() == CSSRule::STYLE_RULE);
-    CSSStyleRule card = downcast<CSSStyleRule>(rule0);
+    CSSStyleRule card = *CSSStyleRule::cast(rule0);
+    CHECK(!CSSMediaRule::cast(rule0).has_value());
     CHECK(card.selectorText() == ".card");
     CHECK(card.style().color() == "green" && card.style().getPropertyValue("padding") == "4px");
     CHECK(card.cssText().starts_with(".card {"));
     CHECK(card.parentStyleSheet() && *card.parentStyleSheet() == sheet);
     CSSRule rule2 = *sheet.cssRules().item(2);
     CHECK(rule2.type() == CSSRule::MEDIA_RULE);
-    CHECK(downcast<CSSMediaRule>(rule2).cssRules().length() == 1);
+    CHECK(CSSMediaRule::cast(rule2)->cssRules().length() == 1 && !CSSStyleRule::cast(rule2).has_value());
 
     // Rules change the page's styles.
     card.style().setProperty("color", "rgb(1, 2, 3)");
@@ -88,7 +80,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // insertRule and deleteRule.
     double at = sheet.insertRule(".extra { display: none }", 1);
     CHECK(at == 1 && sheet.cssRules().length() == 4);
-    CHECK(downcast<CSSStyleRule>(*sheet.cssRules().item(1)).selectorText() == ".extra");
+    CHECK(CSSStyleRule::cast(*sheet.cssRules().item(1))->selectorText() == ".extra");
     HTMLDivElement hidden = doc.createElement(HTMLElementTagNameMapKeys::div);
     hidden.className("extra");
     body.appendChild(hidden);
@@ -97,7 +89,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(sheet.cssRules().length() == 3);
     CHECK(getComputedStyle(hidden).display() == "block");
     CHECK(sheet.insertRule("p { margin: 0 }") == 0);
-    CHECK(downcast<CSSStyleRule>(*sheet.cssRules().item(0)).selectorText() == "p");
+    CHECK(CSSStyleRule::cast(*sheet.cssRules().item(0))->selectorText() == "p");
     sheet.deleteRule(0);
 
     // Changing a rule's selector.
