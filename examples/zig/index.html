@@ -222,6 +222,26 @@
         flex-direction: column;
         z-index: 20;
       }
+      #loading {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.85);
+        z-index: 10;
+        pointer-events: none;
+      }
+      #loading-box {
+        padding: 10px 14px;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border-strong);
+        border-radius: 3px;
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 12px;
+      }
+      #loading[hidden],
       #source-drawer[hidden],
       #node-card[hidden],
       #viewer[hidden] {
@@ -276,6 +296,9 @@
         </header>
         <div id="viewport-wrap">
           <iframe id="viewer" title="Demo Viewer"></iframe>
+          <div id="loading" hidden>
+            <div id="loading-box">Loading demo (first visit compiles on demand)...</div>
+          </div>
           <div id="node-card" hidden>
             <p id="node-desc"></p>
             <pre id="node-cmd"></pre>
@@ -303,6 +326,7 @@
       const activeDesc = document.getElementById('active-desc');
       const openDirect = document.getElementById('open-direct');
       const viewer = document.getElementById('viewer');
+      const loading = document.getElementById('loading');
       const nodeCard = document.getElementById('node-card');
       const nodeDesc = document.getElementById('node-desc');
       const nodeCmd = document.getElementById('node-cmd');
@@ -318,6 +342,7 @@
       countEl.textContent = `${manifest.examples.length} examples`;
 
       let current = null;
+      let activeSeq = 0;
 
       function renderNav(query) {
         const q = query.trim().toLowerCase();
@@ -358,6 +383,7 @@
       async function activate(id) {
         const item = manifest.examples.find(e => e.id === id) ?? manifest.examples[0];
         if (!item) return;
+        const seq = ++activeSeq;
         current = item;
         sourceDrawer.hidden = true;
         activePkg.textContent = item.package;
@@ -368,12 +394,14 @@
           el.classList.toggle('active', el.dataset.id === item.id);
         }
         if (item.kind === 'node') {
+          loading.hidden = true;
           viewer.hidden = true;
           viewer.removeAttribute('src');
           nodeCard.hidden = false;
           nodeDesc.textContent = `${item.title} — Node benchmark / CLI example`;
           nodeCmd.textContent = item.command ?? `node ./${item.package}/...`;
           nodeSource.textContent = await (await fetch(item.source)).text();
+          if (seq !== activeSeq) return;
           window.__galleryReady = {
             target: manifest.target,
             label: manifest.label,
@@ -383,6 +411,7 @@
         } else {
           nodeCard.hidden = true;
           viewer.hidden = false;
+          loading.hidden = false;
           await new Promise(resolve => {
             const onLoad = () => {
               viewer.removeEventListener('load', onLoad);
@@ -391,6 +420,8 @@
             viewer.addEventListener('load', onLoad);
             viewer.src = new URL(item.path, location.href).href;
           });
+          if (seq !== activeSeq) return;
+          loading.hidden = true;
           window.__galleryReady = {
             target: manifest.target,
             label: manifest.label,

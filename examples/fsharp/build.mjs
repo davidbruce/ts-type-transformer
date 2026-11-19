@@ -6,7 +6,16 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'examples.json'), 'utf8'));
-const filters = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const force = rawArgs.includes('--force');
+const filters = rawArgs.filter(a => a !== '--force');
+
+function isUpToDate(ex, outputPath) {
+  if (force || !fs.existsSync(outputPath)) return false;
+  const srcPath = path.resolve(ROOT, ex.source);
+  if (!fs.existsSync(srcPath)) return false;
+  return fs.statSync(outputPath).mtimeMs >= fs.statSync(srcPath).mtimeMs;
+}
 
 const PACKAGES = {
   pts: { npm: ['pts'], needsDom: false, outDir: 'Pts' },
@@ -72,8 +81,12 @@ const fableBin =
 
 for (const ex of selected) {
   const demoDir = path.join(ROOT, path.dirname(ex.path));
+  const outPath = path.join(demoDir, 'js/Program.mjs');
+  if (isUpToDate(ex, outPath)) continue;
   console.log(`Building fsharp ${ex.id}...`);
-  execFileSync(fableBin, ['App.fsproj', '-o', 'js', '--extension', '.mjs', '--noCache'], {
+  const fableArgs = ['App.fsproj', '-o', 'js', '--extension', '.mjs'];
+  if (process.env.FABLE_NO_CACHE === '1') fableArgs.push('--noCache');
+  execFileSync(fableBin, fableArgs, {
     cwd: demoDir,
     stdio: 'inherit',
     env: { ...process.env, MSBUILDDISABLENODEREUSE: '1' },

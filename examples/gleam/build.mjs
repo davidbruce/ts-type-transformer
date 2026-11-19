@@ -5,7 +5,16 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'examples.json'), 'utf8'));
-const filters = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const force = rawArgs.includes('--force');
+const filters = rawArgs.filter(a => a !== '--force');
+
+function isUpToDate(ex, outputPath) {
+  if (force || !fs.existsSync(outputPath)) return false;
+  const srcPath = path.resolve(ROOT, ex.source);
+  if (!fs.existsSync(srcPath)) return false;
+  return fs.statSync(outputPath).mtimeMs >= fs.statSync(srcPath).mtimeMs;
+}
 
 const PACKAGES = {
   pts: { npm: ['pts'], needsDom: false, outDir: 'pts', name: 'pts' },
@@ -67,6 +76,8 @@ for (const pkg of neededPkgs) {
 for (const ex of selected) {
   const spec = PACKAGES[ex.package];
   const demoDir = path.join(ROOT, path.dirname(ex.path));
+  const outPath = path.join(demoDir, 'build/dev/javascript/app/app.mjs');
+  if (isUpToDate(ex, outPath)) continue;
   const pkgEntries = [];
   const reqEntries = [`gleam_stdlib = { version = ">= 1.0.0 and < 2.0.0" }`];
   if (spec.needsDom) {

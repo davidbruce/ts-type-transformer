@@ -5,7 +5,16 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'examples.json'), 'utf8'));
-const filters = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const force = rawArgs.includes('--force');
+const filters = rawArgs.filter(a => a !== '--force');
+
+function isUpToDate(ex, outputPath) {
+  if (force || !fs.existsSync(outputPath)) return false;
+  const srcPath = path.resolve(ROOT, ex.source);
+  if (!fs.existsSync(srcPath)) return false;
+  return fs.statSync(outputPath).mtimeMs >= fs.statSync(srcPath).mtimeMs;
+}
 
 const PACKAGES = {
   pts: { npm: ['pts'], needsDom: false, outDir: 'pts', name: 'pts' },
@@ -77,17 +86,20 @@ for (const pkg of neededPkgs) {
   }
 }
 
-const domRlib = needsDom ? ensureRlib('dom') : null;
+let domRlib = null;
 for (const ex of selected) {
+  const demoDir = path.join(ROOT, path.dirname(ex.path));
+  const outPath = path.join(demoDir, 'app.wasm');
+  if (isUpToDate(ex, outPath)) continue;
   const spec = PACKAGES[ex.package];
   const externs = [];
   if (spec.needsDom) {
+    if (domRlib === null) domRlib = ensureRlib('dom');
     externs.push(['dom', domRlib]);
     externs.push([spec.outDir, ensureRlib(spec.outDir, [['dom', domRlib]])]);
   } else {
     externs.push([spec.outDir, ensureRlib(spec.outDir)]);
   }
-  const demoDir = path.join(ROOT, path.dirname(ex.path));
   console.log(`Building rust ${ex.id}...`);
   const args = [
     ...RUSTC_WASM,
@@ -101,6 +113,6 @@ for (const ex of selected) {
     rlibsDir,
   ];
   for (const [n, p] of externs) args.push('--extern', `${n}=${p}`);
-  args.push('-o', path.join(demoDir, 'app.wasm'), path.join(demoDir, 'src/lib.rs'));
+  args.push('-o', outPath, path.join(demoDir, 'src/lib.rs'));
   execFileSync('rustc', args, { stdio: 'inherit' });
 }

@@ -6,7 +6,16 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'examples.json'), 'utf8'));
-const filters = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const force = rawArgs.includes('--force');
+const filters = rawArgs.filter(a => a !== '--force');
+
+function isUpToDate(ex, outputPath) {
+  if (force || !fs.existsSync(outputPath)) return false;
+  const srcPath = path.resolve(ROOT, ex.source);
+  if (!fs.existsSync(srcPath)) return false;
+  return fs.statSync(outputPath).mtimeMs >= fs.statSync(srcPath).mtimeMs;
+}
 
 const PACKAGES = {
   pts: { npm: ['pts'], needsDom: false, outDir: 'pts', name: 'pts' },
@@ -109,13 +118,16 @@ for (const pkg of neededPkgs) {
   }
 }
 
-const domObjs = needsDom ? ensurePkgObjects('dom') : [];
+let domObjs = null;
 for (const ex of selected) {
-  const spec = PACKAGES[ex.package];
-  const objs = [...(spec.needsDom ? domObjs : []), ...ensurePkgObjects(spec.outDir)];
   const demoDir = path.join(ROOT, path.dirname(ex.path));
+  const outPath = path.join(demoDir, 'app.wasm');
+  if (isUpToDate(ex, outPath)) continue;
+  const spec = PACKAGES[ex.package];
+  if (spec.needsDom && domObjs === null) domObjs = ensurePkgObjects('dom');
+  const objs = [...(spec.needsDom ? domObjs : []), ...ensurePkgObjects(spec.outDir)];
   console.log(`Building cpp ${ex.id}...`);
-  execFileSync(clangxx, [...CLANGXX_WASM, '-I', bindingsDir, '-o', path.join(demoDir, 'app.wasm'), path.join(demoDir, 'main.cpp'), ...objs], {
+  execFileSync(clangxx, [...CLANGXX_WASM, '-I', bindingsDir, '-o', outPath, path.join(demoDir, 'main.cpp'), ...objs], {
     stdio: 'inherit',
   });
 }
