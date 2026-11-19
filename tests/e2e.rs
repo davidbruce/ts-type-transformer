@@ -2779,6 +2779,25 @@ mod examples {
         },
     };
 
+    const RAPIER_SPEC: PackageSpec = PackageSpec {
+        pkg: "rapier",
+        npm: &["@dimforge/rapier3d-compat"],
+        crate_name: "dimforge_rapier3d_compat",
+        fsharp_name: "Dimforge.Rapier3dCompat",
+        needs_dom: true,
+        demos: &[
+            "gravity_bouncing",
+            "domino_cascade",
+            "pendulum_joints",
+            "raycast_lidar",
+            "collision_events_sensor",
+        ],
+        verify: VerifyKind::CanvasNonEmpty {
+            selector: "#stage canvas",
+            min_count: 1,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3431,6 +3450,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(tanstack_table, TANSTACK_TABLE_SPEC);
     pkg_tests!(prosemirror, PROSEMIRROR_SPEC);
     pkg_tests!(three, THREE_SPEC);
+    pkg_tests!(rapier, RAPIER_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

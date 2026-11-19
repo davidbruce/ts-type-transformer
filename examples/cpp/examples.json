@@ -469,6 +469,51 @@
       "path": "./three/raycaster_picking/index.html",
       "source": "./three/raycaster_picking/main.cpp",
       "kind": "browser"
+    },
+    {
+      "id": "rapier/gravity_bouncing",
+      "package": "rapier",
+      "title": "Rapier 3D \u2014 Gravity & Restitution",
+      "description": "Five 3D spheres with graduated restitution coefficients bouncing under Earth or Moon gravity",
+      "path": "./rapier/gravity_bouncing/index.html",
+      "source": "./rapier/gravity_bouncing/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "rapier/domino_cascade",
+      "package": "rapier",
+      "title": "Rapier 3D \u2014 Domino Cascade",
+      "description": "Impulse-launched striker ball toppling nine dynamic cuboids rendered from live 3D quaternions",
+      "path": "./rapier/domino_cascade/index.html",
+      "source": "./rapier/domino_cascade/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "rapier/pendulum_joints",
+      "package": "rapier",
+      "title": "Rapier 3D \u2014 Revolute Joint Pendulums",
+      "description": "Multi-link hanging pendulum chain and offset articulated arm coupled by JointData.revolute",
+      "path": "./rapier/pendulum_joints/index.html",
+      "source": "./rapier/pendulum_joints/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "rapier/raycast_lidar",
+      "package": "rapier",
+      "title": "Rapier 3D \u2014 Raycast Lidar Scanner",
+      "description": "37-ray castRayAndGetNormal fan scanning static boxes, ramps, and spheres with surface normals",
+      "path": "./rapier/raycast_lidar/index.html",
+      "source": "./rapier/raycast_lidar/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "rapier/collision_events_sensor",
+      "package": "rapier",
+      "title": "Rapier 3D \u2014 Collision Events & Sensor Gate",
+      "description": "EventQueue.drainCollisionEvents tracking live contacts and sensor-gate crossings on angled ramps",
+      "path": "./rapier/collision_events_sensor/index.html",
+      "source": "./rapier/collision_events_sensor/main.cpp",
+      "kind": "browser"
     }
   ]
 }

@@ -29,7 +29,7 @@ const PACKAGES = {
   echarts: { npm: ['echarts'], needsDom: true, outDir: 'echarts', name: 'echarts' },
   konva: { npm: ['konva'], needsDom: true, outDir: 'konva', name: 'konva' },
   three: { npm: ['three'], needsDom: true, outDir: 'three', name: 'three' },
-  rapier: { npm: ['@dimforge/rapier3d-compat'], needsDom: false, outDir: 'dimforge_rapier3d_compat', name: 'dimforge_rapier3d_compat' },
+  rapier: { npm: ['@dimforge/rapier3d-compat'], needsDom: true, outDir: 'dimforge_rapier3d_compat', name: 'dimforge_rapier3d_compat' },
   tanstack_table: { npm: ['@tanstack/table-core'], needsDom: true, outDir: 'tanstack_table_core', name: 'tanstack_table_core' },
   prosemirror: { npm: ['prosemirror-model', 'prosemirror-transform', 'prosemirror-state', 'prosemirror-view'], needsDom: true, outDir: 'prosemirror', name: 'prosemirror' },
 };
