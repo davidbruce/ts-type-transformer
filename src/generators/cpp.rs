@@ -189,8 +189,8 @@ fn ty_in(t: &Ty) -> String {
         Ty::Str => "std::string_view".into(),
         Ty::Any => "ts::Value".into(),
         Ty::Array => "ts::Array<>".into(),
-        Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg(e)),
-        Ty::Tuple(es) => format!("ts::Tuple<{}>", es.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
+        Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg_for("", e)),
+        Ty::Tuple(es) => format!("ts::Tuple<{}>", es.iter().map(|e| ty_arg_for("", e)).collect::<Vec<_>>().join(", ")),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => tn(n),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("std::optional<{}>", ty_in(inner).trim_start_matches("const ").trim_end_matches('&')),
         Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_in(inner)),
@@ -201,7 +201,7 @@ fn ty_in(t: &Ty) -> String {
         // Not deduced from the lambda: the key says what the listener takes.
         Ty::Listener(ev) => format!("std::type_identity_t<ts::Listener<{}>>", ty_in(ev)),
         Ty::Param(n) => n.clone(),
-        Ty::Generic(n, args) => format!("{}<{}>", tn(n), args.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
+        Ty::Generic(n, args) => format!("{}<{}>", tn(n), args.iter().map(|a| ty_arg_for(n, a)).collect::<Vec<_>>().join(", ")),
     }
 }
 
@@ -235,6 +235,14 @@ fn ty_arg(t: &Ty) -> String {
     }
 }
 
+fn ty_arg_for(owner: &str, t: &Ty) -> String {
+    if *t == Ty::Void && !matches!(owner, "Promise" | "PromiseLike") {
+        "ts::Value".into()
+    } else {
+        ty_arg(t)
+    }
+}
+
 // C++ type of a value coming back.
 fn ty_out(t: &Ty, unions: &[NamedUnion]) -> String {
     match t {
@@ -265,7 +273,7 @@ fn head(params: &[TParam], defaults: bool) -> String {
     let ps: Vec<String> = params
         .iter()
         .map(|p| match &p.default {
-            Some(d) if defaults && trailing => format!("class {} = {}", p.name, ty_arg(d)),
+            Some(d) if defaults && trailing => format!("class {} = {}", p.name, ty_arg_for("", d)),
             _ => format!("class {}", p.name),
         })
         .collect();
@@ -359,7 +367,7 @@ fn raise(t: &Ty, r: &str, unions: &[NamedUnion]) -> String {
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("({r} < 0 ? std::nullopt : {}({}({r})))", ty_out(t, unions), ty_in(inner)),
         Ty::Nullable(inner, _) => format!("({r} ? {}({}) : std::nullopt)", ty_out(t, unions), raise(inner, r, unions)),
         Ty::NamedUnion(n) if decodable(n, unions) => format!("decode_{n}({r})"),
-        Ty::Generic(n, args) if decodable(n, unions) => format!("decode_{n}<{}>({r})", args.iter().map(ty_arg).collect::<Vec<_>>().join(", ")),
+        Ty::Generic(n, args) if decodable(n, unions) => format!("decode_{n}<{}>({r})", args.iter().map(|a| ty_arg_for(n, a)).collect::<Vec<_>>().join(", ")),
         Ty::Generic(n, _) if is_union(n, unions) => format!("ts::Value(ts::handle, {r})"),
         Ty::Obj(n) => format!("{}(ts::handle, {r})", tn(n)),
         Ty::Mapped(_) => format!("V(ts::handle, {r})"),

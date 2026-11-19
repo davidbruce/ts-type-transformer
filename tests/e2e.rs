@@ -2529,5 +2529,6 @@ window.__result = { passed, failed, dom: [], domChecks: 0 };
         rapier: ["@dimforge/rapier3d-compat"];
         tanstack_table: ["@tanstack/table-core"];
         prosemirror: ["prosemirror-model", "prosemirror-transform", "prosemirror-state", "prosemirror-view"];
+        babylon_lite: ["@babylonjs/lite"];
     }
 }

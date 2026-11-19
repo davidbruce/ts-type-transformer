@@ -756,9 +756,11 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         }
         g.variants.insert((owner, i), name);
     }
-    // What the FFI's own helpers are called: not a function's name.
-    for reserved in ["promise_then", "attempt", "js_error_message", "dynamic"] {
-        g.reserved_values.insert(reserved.into());
+    // What the FFI's own helpers are called in the runtime module.
+    for reserved in [
+        "promise_then", "attempt", "js_error_message", "dynamic", "js_object", "js_get", "js_set", "js_has", "js_array", "js_to_list",
+    ] {
+        g.values.insert((runtime_mod.clone(), reserved.into()));
     }
 
     // Each area's modules: `areas/main` is `bindings/areas/main` (its
