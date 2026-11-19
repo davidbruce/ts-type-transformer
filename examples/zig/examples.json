@@ -19,6 +19,51 @@
       "path": "./babylon_lite/torus_knot/index.html",
       "source": "./babylon_lite/torus_knot/src/main.zig",
       "kind": "browser"
+    },
+    {
+      "id": "katex/formula_gallery",
+      "package": "katex",
+      "title": "Formula Gallery",
+      "description": "Five iconic physics and math formulas rendered into DOM slots with katex.render",
+      "path": "./katex/formula_gallery/index.html",
+      "source": "./katex/formula_gallery/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "katex/inline_vs_display",
+      "package": "katex",
+      "title": "Inline vs Display",
+      "description": "Side-by-side comparison of inline vs displayMode rendering",
+      "path": "./katex/inline_vs_display/index.html",
+      "source": "./katex/inline_vs_display/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "katex/custom_macros",
+      "package": "katex",
+      "title": "Custom Macros",
+      "description": "Defining reusable LaTeX macros via KaTeX options records",
+      "path": "./katex/custom_macros/index.html",
+      "source": "./katex/custom_macros/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "katex/error_inspector",
+      "package": "katex",
+      "title": "Error Inspector",
+      "description": "Inline throwOnError: false coloring vs caught ParseError diagnostics",
+      "path": "./katex/error_inspector/index.html",
+      "source": "./katex/error_inspector/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "katex/output_modes",
+      "package": "katex",
+      "title": "Output & Layout Options",
+      "description": "HTML, MathML, combined outputs, leqno, fleqn, maxSize, and strict flags",
+      "path": "./katex/output_modes/index.html",
+      "source": "./katex/output_modes/src/main.zig",
+      "kind": "browser"
     }
   ]
 }

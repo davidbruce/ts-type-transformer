@@ -10,7 +10,7 @@ const filters = process.argv.slice(2);
 const PACKAGES = {
   pts: { npm: ['pts'], needsDom: false, outDir: 'Pts' },
   babylon_lite: { npm: ['@babylonjs/lite'], needsDom: true, outDir: 'Babylonjs.Lite' },
-  katex: { npm: ['katex'], needsDom: false, outDir: 'Katex' },
+  katex: { npm: ['katex'], needsDom: true, outDir: 'Katex' },
   marked: { npm: ['marked'], needsDom: false, outDir: 'Marked' },
   date_fns: { npm: ['date-fns'], needsDom: false, outDir: 'DateFns' },
   node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'Node' },

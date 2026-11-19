@@ -1,0 +1,11 @@
+[package]
+name = "katex-error-inspector"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dom = { path = "../../bindings/dom" }
+katex = { path = "../../bindings/katex" }

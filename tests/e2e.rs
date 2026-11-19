@@ -2548,6 +2548,10 @@ mod examples {
     enum VerifyKind {
         PtsCanvas,
         BabylonWebGpu,
+        DomSelector {
+            selector: &'static str,
+            min_count: usize,
+        },
     }
 
     #[derive(Clone, Copy)]
@@ -2581,14 +2585,33 @@ mod examples {
         verify: VerifyKind::BabylonWebGpu,
     };
 
+    const KATEX_SPEC: PackageSpec = PackageSpec {
+        pkg: "katex",
+        npm: &["katex"],
+        needs_dom: true,
+        crate_name: "katex",
+        fsharp_name: "Katex",
+        demos: &[
+            "formula_gallery",
+            "inline_vs_display",
+            "custom_macros",
+            "error_inspector",
+            "output_modes",
+        ],
+        verify: VerifyKind::DomSelector {
+            selector: ".katex, .katex-error, math",
+            min_count: 2,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
         let mutex = {
-            let mut g = map.lock().unwrap();
+            let mut g = map.lock().unwrap_or_else(|e| e.into_inner());
             *g.entry(key.to_string()).or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
         };
-        mutex.lock().unwrap()
+        mutex.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn tool_stamp(path: &Path) -> String {
@@ -3010,10 +3033,33 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
         };
         assert!(html.contains(old_tag), "missing `{old_tag}` in {}", out.join("index.html").display());
         let verify = match spec.verify {
-            VerifyKind::PtsCanvas => PTS_VERIFY_SCRIPT,
-            VerifyKind::BabylonWebGpu => BABYLON_VERIFY_SCRIPT,
+            VerifyKind::PtsCanvas => PTS_VERIFY_SCRIPT.to_string(),
+            VerifyKind::BabylonWebGpu => BABYLON_VERIFY_SCRIPT.to_string(),
+            VerifyKind::DomSelector { selector, min_count } => format!(
+                r#"<script type="module">
+let passed = 0;
+const failed = [];
+window.addEventListener('unhandledrejection', e => failed.push('rejected: ' + (e.reason?.message ?? e.reason)));
+try {{
+  await import('./bundle.mjs');
+  const deadline = Date.now() + 5000;
+  let ok = false;
+  while (Date.now() < deadline) {{
+    const count = document.querySelectorAll({selector:?}).length;
+    const textLen = (document.getElementById('app')?.textContent ?? '').trim().length;
+    if (count >= {min_count} && textLen > 0) {{ ok = true; break; }}
+    await new Promise(r => setTimeout(r, 50));
+  }}
+  if (ok) passed++;
+  else failed.push(`expected >= {min_count} nodes matching {selector} inside #app`);
+}} catch (e) {{
+  failed.push('threw: ' + (e?.message ?? e));
+}}
+window.__result = {{ passed, failed, dom: [], domChecks: 1 }};
+</script>"#
+            ),
         };
-        fs::write(out.join("index.html"), html.replacen(old_tag, verify, 1)).unwrap();
+        fs::write(out.join("index.html"), html.replacen(old_tag, &verify, 1)).unwrap();
         fs::write(&sentinel, demo_stamp).unwrap();
         true
     }
@@ -3147,6 +3193,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
 
     pkg_tests!(pts, PTS_SPEC);
     pkg_tests!(babylon_lite, BABYLON_LITE_SPEC);
+    pkg_tests!(katex, KATEX_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }
