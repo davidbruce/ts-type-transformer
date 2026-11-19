@@ -199,6 +199,51 @@
       "path": "./echarts/radar_gauge/index.html",
       "source": "./echarts/radar_gauge/src/main.zig",
       "kind": "browser"
+    },
+    {
+      "id": "konva/shapes_gallery",
+      "package": "konva",
+      "title": "Konva — Geometric Primitives",
+      "description": "Monochrome Rect, Circle, RegularPolygon, Star, Ring, Wedge, and Text shapes on a single Konva Layer.",
+      "path": "./konva/shapes_gallery/index.html",
+      "source": "./konva/shapes_gallery/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "konva/groups_transforms",
+      "package": "konva",
+      "title": "Konva — Nested Groups & Transforms",
+      "description": "Nested Konva Groups with translation, rotation, scaling, getAbsolutePosition(), and getClientRect().",
+      "path": "./konva/groups_transforms/index.html",
+      "source": "./konva/groups_transforms/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "konva/wireframe_diagram",
+      "package": "konva",
+      "title": "Konva — Wireframe Architecture Diagram",
+      "description": "System pipeline boxes connected with Konva Arrows, dashed Lines, selectors, and toJSON() inspection.",
+      "path": "./konva/wireframe_diagram/index.html",
+      "source": "./konva/wireframe_diagram/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "konva/radial_rosette",
+      "package": "konva",
+      "title": "Konva — Parametric Radial Rosette",
+      "description": "Procedurally generated concentric rings, radial spokes, rotated petals, and perimeter ticks.",
+      "path": "./konva/radial_rosette/index.html",
+      "source": "./konva/radial_rosette/src/main.zig",
+      "kind": "browser"
+    },
+    {
+      "id": "konva/layers_hit_test",
+      "package": "konva",
+      "title": "Konva — Multi-Layer Z-Order & Hit Test",
+      "description": "Two stacked Konva Layers with z-order elevation, findOne(), synthetic click events, and stage.getIntersection().",
+      "path": "./konva/layers_hit_test/index.html",
+      "source": "./konva/layers_hit_test/src/main.zig",
+      "kind": "browser"
     }
   ]
 }

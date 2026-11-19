@@ -2665,6 +2665,25 @@ mod examples {
         },
     };
 
+    const KONVA_SPEC: PackageSpec = PackageSpec {
+        pkg: "konva",
+        npm: &["konva"],
+        crate_name: "konva",
+        fsharp_name: "Konva",
+        needs_dom: true,
+        demos: &[
+            "shapes_gallery",
+            "groups_transforms",
+            "wireframe_diagram",
+            "radial_rosette",
+            "layers_hit_test",
+        ],
+        verify: VerifyKind::CanvasNonEmpty {
+            selector: "#stage canvas",
+            min_count: 1,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3302,6 +3321,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(marked, MARKED_SPEC);
     pkg_tests!(date_fns, DATE_FNS_SPEC);
     pkg_tests!(echarts, ECHARTS_SPEC);
+    pkg_tests!(konva, KONVA_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

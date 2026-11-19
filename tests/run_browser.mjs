@@ -58,12 +58,26 @@ let finished = false;
 const finish = code => {
     if (finished) return;
     finished = true;
-    chrome.kill();
     server.close();
-    setTimeout(() => {
-        fs.rmSync(profile, { recursive: true, force: true });
+    const cleanup = () => {
+        try {
+            fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+        } catch {}
         process.exit(code);
-    }, 200);
+    };
+    if (chrome.exitCode !== null || chrome.signalCode !== null) {
+        cleanup();
+        return;
+    }
+    const timer = setTimeout(() => {
+        try { chrome.kill('SIGKILL'); } catch {}
+        setTimeout(cleanup, 100);
+    }, 500);
+    chrome.once('exit', () => {
+        clearTimeout(timer);
+        cleanup();
+    });
+    try { chrome.kill(); } catch {}
 };
 const abort = msg => {
     if (!finished) {
