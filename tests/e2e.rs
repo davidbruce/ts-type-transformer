@@ -2548,6 +2548,7 @@ mod examples {
     enum VerifyKind {
         PtsCanvas,
         BabylonWebGpu,
+        NodeCli,
         DomSelector {
             selector: &'static str,
             min_count: usize,
@@ -2808,6 +2809,22 @@ mod examples {
             selector: "#stage canvas",
             min_count: 1,
         },
+    };
+
+    const NODE_SPEC: PackageSpec = PackageSpec {
+        pkg: "node",
+        npm: &["fs", "path", "events"],
+        crate_name: "node",
+        fsharp_name: "Node",
+        needs_dom: false,
+        demos: &[
+            "path_inspector",
+            "event_bus",
+            "temp_workspace",
+            "directory_tree",
+            "file_pipeline",
+        ],
+        verify: VerifyKind::NodeCli,
     };
 
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
@@ -3164,7 +3181,7 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
         print!("{text}");
     }
 
-    fn prepare_demo(target: &str, target_root: &Path, spec: &PackageSpec, demo: &str, bindings_stamp: &str, bun: &Path) -> bool {
+    fn prepare_demo(target: &str, target_root: &Path, spec: &PackageSpec, demo: &str, bindings_stamp: &str, bun: Option<&Path>) -> bool {
         let ex_dir = root().join("examples").join(target).join(spec.pkg).join(demo);
         let out = target_root.join(spec.pkg).join(demo);
         let bindings = target_root.join("bindings");
@@ -3234,6 +3251,12 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
             _ => unreachable!("unknown target {target}"),
         }
 
+        if matches!(spec.verify, VerifyKind::NodeCli) {
+            fs::write(&sentinel, demo_stamp).unwrap();
+            return true;
+        }
+
+        let bun = bun.expect("bun required for browser demos");
         let entry = if target == "fsharp" { "js/Program.mjs" } else { "main.mjs" };
         run(Command::new(bun).current_dir(&out).args(["build", "--target=browser", "--format=esm", entry, "--outfile=bundle.mjs"]));
 
@@ -3247,6 +3270,7 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
         let verify = match spec.verify {
             VerifyKind::PtsCanvas => PTS_VERIFY_SCRIPT.to_string(),
             VerifyKind::BabylonWebGpu => BABYLON_VERIFY_SCRIPT.to_string(),
+            VerifyKind::NodeCli => unreachable!("NodeCli returns above"),
             VerifyKind::DomSelector { selector, min_count } => format!(
                 r#"<script type="module">
 let passed = 0;
@@ -3341,15 +3365,43 @@ window.__result = {{ passed, failed, dom: [], domChecks: 1 }};
             eprintln!("SKIPPED: libraries are not installed (tests/libraries/install.sh)");
             return;
         }
-        let Some([bun]) = tools(["bun"]) else { return };
         if !has_target_tool(target) {
             return;
         }
+        if matches!(spec.verify, VerifyKind::NodeCli) {
+            let Some([node]) = tools(["node"]) else { return };
+            let target_root = ensure_target_root(target, &from.join("node_modules"));
+            let stamp = ensure_bindings_for_spec(&from, target, &target_root, spec);
+            for demo in spec.demos {
+                if !prepare_demo(target, &target_root, spec, demo, &stamp, None) {
+                    return;
+                }
+                let demo_dir = target_root.join(spec.pkg).join(demo);
+                let output = Command::new(&node).current_dir(&demo_dir).arg("main.mjs").output().expect("run node");
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                assert!(
+                    output.status.success(),
+                    "node CLI demo {target}/node/{demo} failed (status {:?}):\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                    output.status.code()
+                );
+                assert!(
+                    stderr.trim().is_empty(),
+                    "node CLI demo {target}/node/{demo} wrote to stderr:\n{stderr}"
+                );
+                assert!(
+                    stdout.contains("PASS:") && stdout.lines().count() >= 3,
+                    "node CLI demo {target}/node/{demo} missing expected PASS summary:\n{stdout}"
+                );
+            }
+            return;
+        }
+        let Some([bun]) = tools(["bun"]) else { return };
         let target_root = ensure_target_root(target, &from.join("node_modules"));
         let stamp = ensure_bindings_for_spec(&from, target, &target_root, spec);
         let mut pages = Vec::new();
         for demo in spec.demos {
-            if !prepare_demo(target, &target_root, spec, demo, &stamp, &bun) {
+            if !prepare_demo(target, &target_root, spec, demo, &stamp, Some(&bun)) {
                 return;
             }
             pages.push(format!("/{}/{demo}/index.html", spec.pkg));
@@ -3369,7 +3421,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 1 }};
         }
         let target_root = ensure_target_root(target, &from.join("node_modules"));
         let stamp = ensure_bindings_for_spec(&from, target, &target_root, &PTS_SPEC);
-        if !prepare_demo(target, &target_root, &PTS_SPEC, "vector_field", &stamp, &bun) {
+        if !prepare_demo(target, &target_root, &PTS_SPEC, "vector_field", &stamp, Some(&bun)) {
             return;
         }
         let page = format!(
@@ -3463,6 +3515,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(prosemirror, PROSEMIRROR_SPEC);
     pkg_tests!(three, THREE_SPEC);
     pkg_tests!(rapier, RAPIER_SPEC);
+    pkg_tests!(node, NODE_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

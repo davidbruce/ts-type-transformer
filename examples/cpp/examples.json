@@ -586,6 +586,56 @@
       "path": "./rapier/collision_events_sensor/index.html",
       "source": "./rapier/collision_events_sensor/main.cpp",
       "kind": "browser"
+    },
+    {
+      "id": "node/path_inspector",
+      "package": "node",
+      "title": "Node \u2014 Path Inspector",
+      "description": "POSIX path joining, normalization, resolution, relative diffs, parsing, formatting, and glob matching via node:path",
+      "path": "./node/path_inspector/main.mjs",
+      "source": "./node/path_inspector/main.cpp",
+      "command": "node ./node/path_inspector/main.mjs",
+      "kind": "node"
+    },
+    {
+      "id": "node/event_bus",
+      "package": "node",
+      "title": "Node \u2014 Event Bus",
+      "description": "EventEmitter pub/sub dispatch, once listeners, listener counts, removal, and max-listener limits via node:events",
+      "path": "./node/event_bus/main.mjs",
+      "source": "./node/event_bus/main.cpp",
+      "command": "node ./node/event_bus/main.mjs",
+      "kind": "node"
+    },
+    {
+      "id": "node/temp_workspace",
+      "package": "node",
+      "title": "Node \u2014 Temp Workspace",
+      "description": "Temporary directory lifecycle with writeFileSync, appendFileSync, readFileSync, statSync, copy, rename, unlink, and rmSync",
+      "path": "./node/temp_workspace/main.mjs",
+      "source": "./node/temp_workspace/main.cpp",
+      "command": "node ./node/temp_workspace/main.mjs",
+      "kind": "node"
+    },
+    {
+      "id": "node/directory_tree",
+      "package": "node",
+      "title": "Node \u2014 Directory Tree",
+      "description": "Recursive directory creation, multi-level readdirSync traversal, statSync classification, and byte-size tallying",
+      "path": "./node/directory_tree/main.mjs",
+      "source": "./node/directory_tree/main.cpp",
+      "command": "node ./node/directory_tree/main.mjs",
+      "kind": "node"
+    },
+    {
+      "id": "node/file_pipeline",
+      "package": "node",
+      "title": "Node \u2014 File Pipeline",
+      "description": "Combined path, fs, and EventEmitter build pipeline with stage telemetry, log bundling, and ENOENT error handling",
+      "path": "./node/file_pipeline/main.mjs",
+      "source": "./node/file_pipeline/main.cpp",
+      "command": "node ./node/file_pipeline/main.mjs",
+      "kind": "node"
     }
   ]
 }

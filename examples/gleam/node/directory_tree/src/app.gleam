@@ -1,0 +1,98 @@
+import gleam/float
+import gleam/int
+import gleam/io
+import gleam/list
+import gleam/option.{None, Some}
+import gleam/string
+import node/areas/fs
+import node/areas/fs/rm_options
+import node/areas/fs/stats_base
+import node/areas/main/mkdir_options
+import node/areas/path
+import node/runtime
+import node/types as t
+
+fn check(ok: Bool, what: String) -> Int {
+  case ok {
+    True -> 1
+    False -> panic as what
+  }
+}
+
+fn str(s: String) {
+  t.PathLikeString(s)
+}
+
+fn write_text(p: String, body: String) -> Nil {
+  fs.write_file_sync(
+    t.PathOrFileDescriptorString(p),
+    t.StringOrNodeJSArrayBufferViewString(body),
+    None,
+  )
+}
+
+fn walk_dir(dir: String, counts: #(Int, Int, Float)) -> #(Int, Int, Float) {
+  let entries = list.sort(fs.readdir_sync(str(dir), None), string.compare)
+  list.fold(entries, counts, fn(acc, name) {
+    let #(dirs, files, bytes) = acc
+    let full = path.join([dir, name])
+    let st = fs.stat_sync(str(full))
+    case stats_base.is_directory(st), stats_base.is_file(st) {
+      True, _ -> walk_dir(full, #(dirs + 1, files, bytes))
+      False, True -> #(
+        dirs,
+        files + 1,
+        bytes +. stats_base.get_size(st, runtime.codec_float()),
+      )
+      False, False -> acc
+    }
+  })
+}
+
+pub fn main() -> Nil {
+  let root = fs.mkdtemp_sync("/tmp/tsrs-node-tree-", None)
+  let passed = check(fs.exists_sync(str(root)), "temp tree created")
+
+  let mk = mkdir_options.create()
+  let _ = fs.mkdir_sync_recursive(str(path.join([root, "src", "core"])), mk)
+  let _ = fs.mkdir_sync_recursive(str(path.join([root, "src", "cli"])), mk)
+  let _ = fs.mkdir_sync_recursive(str(path.join([root, "docs"])), mk)
+
+  write_text(path.join([root, "README.md"]), "node tree demo")
+  write_text(
+    path.join([root, "src", "core", "engine.txt"]),
+    "engine core module!\n",
+  )
+  write_text(path.join([root, "src", "cli", "args.txt"]), "cli args parser\n")
+  write_text(
+    path.join([root, "docs", "guide.md"]),
+    "monochrome documentation\n",
+  )
+
+  let #(dir_count, file_count, total_bytes) = walk_dir(root, #(0, 0, 0.0))
+
+  let rm = rm_options.create()
+  rm_options.set_recursive(rm, Some(True))
+  rm_options.set_force(rm, Some(True))
+  fs.rm_sync(str(root), Some(rm))
+
+  let passed =
+    passed
+    + check(dir_count == 4, "dir count = 4")
+    + check(file_count == 4, "file count = 4")
+    + check(total_bytes == 75.0, "total bytes = 75")
+    + check(!fs.exists_sync(str(root)), "tree cleaned up")
+    + check(dir_count + file_count == 8, "total entries = 8")
+    + check(True, "walk complete")
+
+  io.println("root=" <> root)
+  io.println(
+    "dirs="
+    <> int.to_string(dir_count)
+    <> " files="
+    <> int.to_string(file_count)
+    <> " total_bytes="
+    <> int.to_string(float.round(total_bytes)),
+  )
+  io.println("PASS: directory_tree (" <> int.to_string(passed) <> " checks)")
+}
