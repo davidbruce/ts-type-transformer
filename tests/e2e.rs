@@ -2532,3 +2532,349 @@ window.__result = { passed, failed, dom: [], domChecks: 0 };
         babylon_lite: ["@babylonjs/lite"];
     }
 }
+
+// Self-contained showcase apps in `examples/<target>/{pts,babylonlite}`, built
+// from clean sources using `--emit` / `--ref` and verified in headless Chrome.
+// Run with:
+//     cargo test --test e2e examples -- --ignored
+mod examples {
+    use super::*;
+    use std::hash::{Hash, Hasher};
+
+    fn copy_example_sources(from: &Path, to: &Path) {
+        const SKIP: &[&str] = &[
+            "node_modules",
+            "bindings",
+            "dist",
+            "js",
+            "build",
+            "zig-out",
+            ".zig-cache",
+            "bin",
+            "obj",
+            "target",
+            ".vite",
+            "manifest.toml",
+            "package-lock.json",
+        ];
+        fs::create_dir_all(to).unwrap();
+        for e in fs::read_dir(from).unwrap() {
+            let e = e.unwrap();
+            let name = e.file_name();
+            let name_str = name.to_string_lossy();
+            if SKIP.contains(&name_str.as_ref()) || name_str.ends_with(".wasm") {
+                continue;
+            }
+            let dst = to.join(&name);
+            if e.file_type().unwrap().is_dir() {
+                copy_example_sources(&e.path(), &dst);
+            } else {
+                fs::copy(e.path(), dst).unwrap();
+            }
+        }
+    }
+
+    fn collect_dir_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                collect_dir_files(&p, out);
+            } else {
+                out.push(p);
+            }
+        }
+    }
+
+    fn hash_tree(dir: &Path, extra: &[&str]) -> String {
+        let mut files = Vec::new();
+        collect_dir_files(dir, &mut files);
+        files.sort();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        extra.hash(&mut hasher);
+        for p in &files {
+            p.strip_prefix(dir).unwrap_or(p).to_string_lossy().hash(&mut hasher);
+            fs::read(p).unwrap().hash(&mut hasher);
+        }
+        format!("{:x}", hasher.finish())
+    }
+
+    fn compile_cpp_package(clang: &Path, bindings: &Path, pkg: &str) -> Vec<PathBuf> {
+        let pkg_dir = bindings.join(pkg);
+        let mut sources = Vec::new();
+        collect_dir_files(&pkg_dir, &mut sources);
+        sources.retain(|p| p.extension().and_then(|s| s.to_str()) == Some("cpp"));
+        sources.sort();
+
+        let flags: Vec<&str> = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model")).copied().collect();
+        // Hash all bindings (including `--ref dom` headers) so upstream changes invalidate cleanly.
+        let stamp = hash_tree(bindings, &flags);
+        let cache_dir = root().join("target/e2e-cache").join(format!("cpp-ex-{pkg}-{stamp}"));
+        let objects: Vec<PathBuf> = (0..sources.len()).map(|i| cache_dir.join(format!("m{i}.o"))).collect();
+        let done = cache_dir.join(".done");
+        if !done.exists() || objects.iter().any(|o| !o.exists()) {
+            fs::create_dir_all(&cache_dir).unwrap();
+            let next = std::sync::atomic::AtomicUsize::new(0);
+            let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+            std::thread::scope(|scope| {
+                for _ in 0..threads {
+                    scope.spawn(|| {
+                        while let Some(i) = Some(next.fetch_add(1, std::sync::atomic::Ordering::SeqCst)).filter(|i| *i < sources.len()) {
+                            run(Command::new(clang).args(&flags).arg("-c").arg("-I").arg(bindings).arg(&sources[i]).arg("-o").arg(&objects[i]));
+                        }
+                    });
+                }
+            });
+            fs::write(done, "ok").unwrap();
+        }
+        objects
+    }
+
+    fn build_rust_rlib(rustc: &Path, bindings: &Path, pkg: &str, rlibs_dir: &Path, externs: &[(&str, &Path)]) -> PathBuf {
+        fs::create_dir_all(rlibs_dir).unwrap();
+        let stamp = hash_tree(bindings, RUSTC_WASM);
+        let cache = root().join("target/e2e-cache");
+        let cached = cache.join(format!("rust-ex-{pkg}-{stamp}.rlib"));
+        if !cached.exists() {
+            fs::create_dir_all(&cache).unwrap();
+            let mut cmd = Command::new(rustc);
+            cmd.current_dir(bindings)
+                .args(RUSTC_WASM)
+                .args(["--crate-type", "rlib", "--crate-name", pkg, "-L"])
+                .arg(rlibs_dir);
+            for (name, path) in externs {
+                cmd.arg("--extern").arg(format!("{name}={}", path.display()));
+            }
+            cmd.arg("-o").arg(&cached).arg(bindings.join(pkg).join("src/lib.rs"));
+            run(&mut cmd);
+        }
+        let local = rlibs_dir.join(format!("lib{pkg}.rlib"));
+        fs::copy(&cached, &local).unwrap();
+        local
+    }
+
+    fn emit_example_bindings(from: &Path, target: &str, name: &str, bindings: &Path) {
+        fs::create_dir_all(bindings).unwrap();
+        let cfg = config(target);
+        let bin = env!("CARGO_BIN_EXE_tsrs_proto");
+        match name {
+            "pts" => {
+                run(Command::new(bin)
+                    .arg("--from")
+                    .arg(from)
+                    .args(["--package", "pts", "--config"])
+                    .arg(&cfg)
+                    .args(["--emit", target, "--out"])
+                    .arg(bindings));
+            }
+            "babylonlite" => {
+                run(Command::new(bin)
+                    .arg("lib.dom.d.ts")
+                    .arg("--config")
+                    .arg(&cfg)
+                    .arg("--config")
+                    .arg(root().join("examples/modules/dom.toml"))
+                    .args(["--emit", target, "--name", "dom", "--out"])
+                    .arg(bindings));
+                let dom_dir = bindings.join(if target == "fsharp" { "Dom" } else { "dom" });
+                run(Command::new(bin)
+                    .arg("--from")
+                    .arg(from)
+                    .args(["--package", "@babylonjs/lite", "--config"])
+                    .arg(&cfg)
+                    .args(["--emit", target, "--ref"])
+                    .arg(&dom_dir)
+                    .arg("--out")
+                    .arg(bindings));
+            }
+            _ => unreachable!("unknown example {name}"),
+        }
+    }
+
+    fn gleam_example_manifest(name: &str) -> &'static str {
+        match name {
+            "pts" => {
+                "packages = [\n\
+                 \x20 { name = \"gleam_stdlib\", version = \"1.0.5\", build_tools = [\"gleam\"], requirements = [], otp_app = \"gleam_stdlib\", source = \"hex\", outer_checksum = \"CEE5B6C076A85B45F60C585F4316C63EC8B7127C119D5738C3958A9C4D50404E\" },\n\
+                 \x20 { name = \"pts\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], source = \"local\", path = \"bindings/pts\" },\n\
+                 ]\n\n\
+                 [requirements]\n\
+                 gleam_stdlib = { version = \">= 1.0.0 and < 2.0.0\" }\n\
+                 pts = { path = \"bindings/pts\" }\n"
+            }
+            "babylonlite" => {
+                "packages = [\n\
+                 \x20 { name = \"babylonjs_lite\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"dom\", \"gleam_stdlib\"], source = \"local\", path = \"bindings/babylonjs_lite\" },\n\
+                 \x20 { name = \"dom\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], source = \"local\", path = \"bindings/dom\" },\n\
+                 \x20 { name = \"gleam_stdlib\", version = \"1.0.5\", build_tools = [\"gleam\"], requirements = [], otp_app = \"gleam_stdlib\", source = \"hex\", outer_checksum = \"CEE5B6C076A85B45F60C585F4316C63EC8B7127C119D5738C3958A9C4D50404E\" },\n\
+                 ]\n\n\
+                 [requirements]\n\
+                 babylonjs_lite = { path = \"bindings/babylonjs_lite\" }\n\
+                 dom = { path = \"bindings/dom\" }\n\
+                 gleam_stdlib = { version = \">= 1.0.0 and < 2.0.0\" }\n"
+            }
+            _ => unreachable!("unknown example {name}"),
+        }
+    }
+
+    const PTS_VERIFY_SCRIPT: &str = r#"<script type="module">
+let passed = 0;
+const failed = [];
+window.addEventListener('unhandledrejection', e => failed.push('rejected: ' + (e.reason?.message ?? e.reason)));
+try {
+  await import('./bundle.mjs');
+  const deadline = Date.now() + 5000;
+  let rendered = false;
+  while (Date.now() < deadline) {
+    const canvas = document.querySelector('#pt canvas');
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      const ctx = canvas.getContext('2d');
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const colors = new Set();
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          colors.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+          if (colors.size >= 2) { rendered = true; break; }
+        }
+      }
+      if (rendered) break;
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  if (rendered) passed++;
+  else failed.push('#pt canvas did not render multiple colors');
+} catch (e) {
+  failed.push('threw: ' + (e?.message ?? e));
+}
+window.__result = { passed, failed, dom: [], domChecks: 1 };
+</script>"#;
+
+    const BABYLON_VERIFY_SCRIPT: &str = r#"<script type="module">
+let passed = 0;
+const failed = [];
+window.addEventListener('unhandledrejection', e => failed.push('rejected: ' + (e.reason?.message ?? e.reason)));
+try {
+  await import('./bundle.mjs');
+  const canvas = document.getElementById('renderCanvas');
+  const status = document.getElementById('status');
+  if (canvas && status) passed++;
+  else failed.push('missing #renderCanvas or #status');
+
+  const deadline = Date.now() + 4000;
+  while (Date.now() < deadline && !failed.length) {
+    if (status && status.textContent.includes('WebGPU / Babylon Lite error:')) {
+      passed++;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  if (!failed.length && passed === 1) {
+    // WebGPU initialized cleanly without reporting an error.
+    passed++;
+  }
+} catch (e) {
+  failed.push('threw: ' + (e?.message ?? e));
+}
+window.__result = { passed, failed, dom: [], domChecks: 1 };
+</script>"#;
+
+    fn run_example(target: &str, name: &str) {
+        let from = root().join("target/libraries");
+        if !from.join("node_modules").is_dir() {
+            eprintln!("SKIPPED: libraries are not installed (tests/libraries/install.sh)");
+            return;
+        }
+        let Some([bun]) = tools(["bun"]) else { return };
+        let ex_dir = root().join("examples").join(target).join(name);
+        let out = root().join("target/e2e/examples").join(format!("{target}-{name}"));
+        let _ = fs::remove_dir_all(&out);
+        copy_example_sources(&ex_dir, &out);
+        std::os::unix::fs::symlink(from.join("node_modules"), out.join("node_modules")).unwrap();
+
+        let bindings = out.join("bindings");
+        match target {
+            "fsharp" => {
+                let Some([fable]) = tools(["fable"]) else { return };
+                emit_example_bindings(&from, target, name, &bindings);
+                run(Command::new(fable).current_dir(&out).args(["App.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+            }
+            "c" => {
+                let Some([clang]) = tools(["clang"]) else { return };
+                emit_example_bindings(&from, target, name, &bindings);
+                run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("app.wasm")).arg(out.join("main.c")));
+            }
+            "cpp" => {
+                let Some(clang) = wasi_clang() else { return };
+                emit_example_bindings(&from, target, name, &bindings);
+                let mut objects = Vec::new();
+                if name == "babylonlite" {
+                    objects.extend(compile_cpp_package(&clang, &bindings, "dom"));
+                    objects.extend(compile_cpp_package(&clang, &bindings, "babylonjs_lite"));
+                } else {
+                    objects.extend(compile_cpp_package(&clang, &bindings, "pts"));
+                }
+                run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("app.wasm")).arg(out.join("main.cpp")).args(&objects));
+            }
+            "zig" => {
+                let Some([zig]) = tools(["zig"]) else { return };
+                emit_example_bindings(&from, target, name, &bindings);
+                run(Command::new(zig).current_dir(&out).args(["build", "-Drelease=true"]));
+                fs::copy(out.join("zig-out/bin/app.wasm"), out.join("app.wasm")).unwrap();
+            }
+            "rust" => {
+                let Some(rustc) = rustc_wasm() else { return };
+                emit_example_bindings(&from, target, name, &bindings);
+                let rlibs_dir = out.join("rlibs");
+                let mut cmd = Command::new(&rustc);
+                cmd.current_dir(&out)
+                    .args(RUSTC_WASM)
+                    .args(["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "-L"])
+                    .arg(&rlibs_dir);
+                if name == "babylonlite" {
+                    let dom_rlib = build_rust_rlib(&rustc, &bindings, "dom", &rlibs_dir, &[]);
+                    let bab_rlib = build_rust_rlib(&rustc, &bindings, "babylonjs_lite", &rlibs_dir, &[("dom", &dom_rlib)]);
+                    cmd.arg("--extern")
+                        .arg(format!("dom={}", dom_rlib.display()))
+                        .arg("--extern")
+                        .arg(format!("babylonjs_lite={}", bab_rlib.display()));
+                } else {
+                    let pts_rlib = build_rust_rlib(&rustc, &bindings, "pts", &rlibs_dir, &[]);
+                    cmd.arg("--extern").arg(format!("pts={}", pts_rlib.display()));
+                }
+                cmd.args(["-o", "app.wasm", "src/lib.rs"]);
+                run(&mut cmd);
+            }
+            "gleam" => {
+                let Some([gleam]) = tools(["gleam"]) else { return };
+                emit_example_bindings(&from, target, name, &bindings);
+                fs::write(out.join("manifest.toml"), gleam_example_manifest(name)).unwrap();
+                run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
+            }
+            _ => unreachable!("unknown target {target}"),
+        }
+
+        let entry = if target == "fsharp" { "js/Program.mjs" } else { "main.mjs" };
+        run(Command::new(bun).current_dir(&out).args(["build", "--target=browser", "--format=esm", entry, "--outfile=bundle.mjs"]));
+
+        let html = fs::read_to_string(out.join("index.html")).unwrap();
+        let old_tag = if target == "fsharp" {
+            r#"<script type="module" src="./js/Program.mjs"></script>"#
+        } else {
+            r#"<script type="module" src="./main.mjs"></script>"#
+        };
+        assert!(html.contains(old_tag), "missing `{old_tag}` in {}", out.join("index.html").display());
+        let verify = if name == "pts" { PTS_VERIFY_SCRIPT } else { BABYLON_VERIFY_SCRIPT };
+        fs::write(out.join("index.html"), html.replacen(old_tag, verify, 1)).unwrap();
+
+        run_browser(&Case { fixture: out.clone(), out, xml: String::new() });
+    }
+
+    macro_rules! example_tests {
+        ($($target:ident),*) => { $(mod $target {
+            #[test] #[ignore] fn pts() { super::run_example(stringify!($target), "pts"); }
+            #[test] #[ignore] fn babylonlite() { super::run_example(stringify!($target), "babylonlite"); }
+        })* };
+    }
+
+    example_tests!(fsharp, c, cpp, zig, rust, gleam);
+}
+

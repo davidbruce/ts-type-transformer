@@ -733,7 +733,7 @@ fn family<'a>(f: &'a Func, all: &'a [Func]) -> Option<(usize, Vec<&'a Func>)> {
 // for the first of a family of overloads, have `_Generic` choose among them.
 // `earlier` are the functions declared before f beside it: where one of them,
 // called with the same leading arguments, leaves out the same ones, f does not.
-fn call_macros(name: &str, owner: Option<&str>, f: &Func, earlier: &[&Func], family: Option<(usize, Vec<String>, Vec<&Func>)>, descendants: &std::collections::BTreeMap<String, Vec<String>>) -> String {
+fn call_macros(name: &str, owner: Option<&str>, f: &Func, earlier: &[&Func], family: Option<(usize, Vec<String>, Vec<&Func>)>, descendants: &std::collections::BTreeMap<String, Vec<String>>, as_macro: &dyn Fn(&str) -> String) -> String {
     let upcast = |t: &Ty| match t {
         Ty::Obj(n) if descendants.contains_key(n) => Some(n.clone()),
         Ty::Nullable(inner, _) => match &**inner {
@@ -749,7 +749,7 @@ fn call_macros(name: &str, owner: Option<&str>, f: &Func, earlier: &[&Func], fam
         params.push("self".to_string());
         let upcast_self = descendants.contains_key(o);
         any |= upcast_self;
-        args.push(if upcast_self { format!("AS_{o}(self)") } else { "(self)".into() });
+        args.push(if upcast_self { format!("{}(self)", as_macro(o)) } else { "(self)".into() });
     }
     let chosen = family.as_ref().map(|f| f.0);
     for (i, (_, t)) in f.params.iter().enumerate() {
@@ -758,7 +758,7 @@ fn call_macros(name: &str, owner: Option<&str>, f: &Func, earlier: &[&Func], fam
         match upcast(t).filter(|_| chosen != Some(i)) {
             Some(n) => {
                 any = true;
-                args.push(format!("AS_{n}({a})"));
+                args.push(format!("{}({a})", as_macro(&n)));
             }
             None => args.push(format!("({a})")),
         }
@@ -856,6 +856,13 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         }
     }
     let used_refs: BTreeSet<usize> = resolved_opaque.values().copied().collect();
+    let as_macro = |base: &str| -> String {
+        if pkg_name != "bindings" && (is_builtin_c_type(base) || resolved_opaque.contains_key(base)) {
+            format!("AS_{pkg_name}_{base}")
+        } else {
+            format!("AS_{base}")
+        }
+    };
 
     DECODABLE.with(|d| *d.borrow_mut() = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
     let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n");
@@ -973,7 +980,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     }
     for (base, subs) in &descendants {
         let arms: Vec<String> = subs.iter().map(|s| format!("    {s}: ({base}){{ (x).h }}")).collect();
-        types += &format!("#define AS_{base}(x) _Generic((x), \\\n    {base}: (x), \\\n{})\n", arms.join(", \\\n"));
+        types += &format!("#define {}(x) _Generic((x), \\\n    {base}: (x), \\\n{})\n", as_macro(base), arms.join(", \\\n"));
     }
     // A promise: `Promise_then(p, fn, ctx)` calls fn(ctx, ok, value) once it
     // settles, ok with its value or not with its reason; the value is lent.
@@ -1092,7 +1099,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             body += &format!("static inline bool {n}_iterate_next(JsIterator it, {ty}* out) {{ uint32_t v = ts_raw_js_iterator_next(it.h); if (v == 0xFFFFFFFFu) return false; *out = {value}; return true; }}\n");
             // Any subtype iterates: `HTMLCollectionBase_iterate(children)`.
             if descendants.contains_key(n) {
-                body += &format!("#define {n}_iterate(self) {n}_iterate(AS_{n}(self))\n");
+                body += &format!("#define {n}_iterate(self) {n}_iterate({}(self))\n", as_macro(n));
             }
         }
         // A cast to every ancestor: an inherited member is called on the type that declares it.
@@ -1119,7 +1126,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         for (i, f) in c.funcs.iter().enumerate() {
             let overloads = family(f, &c.funcs).map(|(at, members)| (at, members.iter().map(|o| format!("{}_{}", c.name, o.name)).collect(), members));
             let earlier: Vec<&Func> = c.funcs[..i].iter().collect();
-            body += &call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants);
+            body += &call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants, &as_macro);
         }
         let path = format!("{}.h", super::model::file_name(&format!("{}/{}", c.module, c.name), &mut taken));
         modules.entry(c.module.clone()).or_default().push(path.clone());
@@ -1133,7 +1140,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         // Overloads in one module: in one header.
         let overloads = family(f, &m.funcs).filter(|(_, members)| members.iter().all(|o| o.module == f.module)).map(|(at, members)| (at, members.iter().map(|o| o.name.clone()).collect(), members));
         let earlier: Vec<&Func> = m.funcs[..i].iter().filter(|g| g.module == f.module).collect();
-        *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, &earlier, overloads, &descendants);
+        *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, &earlier, overloads, &descendants, &as_macro);
     }
     for (module, body) in functions {
         let path = format!("{}.h", super::model::file_name(&format!("{module}/functions"), &mut taken));

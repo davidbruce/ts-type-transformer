@@ -12,6 +12,22 @@ target/
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+# Generated bindings and build outputs in examples/
+.vite/
+examples/**/node_modules/
+examples/**/dist/
+examples/**/bin/
+examples/**/obj/
+examples/**/js/
+examples/**/build/
+examples/**/zig-out/
+examples/**/.zig-cache/
+examples/**/bindings/
+examples/**/target/
+examples/**/*.wasm
+examples/**/manifest.toml
+examples/**/package-lock.json
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

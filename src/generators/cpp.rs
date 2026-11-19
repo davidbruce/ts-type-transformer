@@ -212,6 +212,12 @@ thread_local! {
     // the class the member hides the type, so it is written `::easingFunc`.
     static QUALIFIED: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
     static NS_PREFIX: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+    // Types imported from `--ref` project headers (may be handles, enums, or variants).
+    static RESOLVED_REF: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
+}
+
+fn is_resolved_ref(n: &str) -> bool {
+    RESOLVED_REF.with(|r| r.borrow().contains(n))
 }
 
 // A declared type's name where a type is written: global where a member hides it.
@@ -345,8 +351,10 @@ fn lower(t: &Ty, x: &str) -> Vec<String> {
         Ty::Nullable(inner, _) if **inner == Ty::Bool => vec![format!("({x} ? (*{x} ? 1 : 0) : -1)")],
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => vec![format!("({x} ? int32_t(*{x}) : -1)")],
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Param(_) | Ty::Generic(..) | Ty::NamedUnion(_)) => vec![format!("ts::Arg({x}).h")],
+        Ty::Nullable(inner, _) if matches!(&**inner, Ty::Obj(n) if is_resolved_ref(n)) => vec![format!("ts::Arg({x}).h")],
         Ty::Nullable(..) => vec![format!("({x} ? {x}->h : 0)")],
         Ty::Param(_) | Ty::Generic(..) | Ty::NamedUnion(_) => vec![format!("ts::Arg({x}).h")],
+        Ty::Obj(n) if is_resolved_ref(n) => vec![format!("ts::Arg({x}).h")],
         _ => vec![format!("{x}.h")],
     }
 }
@@ -369,6 +377,7 @@ fn raise(t: &Ty, r: &str, unions: &[NamedUnion]) -> String {
         Ty::NamedUnion(n) if decodable(n, unions) => format!("decode_{n}({r})"),
         Ty::Generic(n, args) if decodable(n, unions) => format!("decode_{n}<{}>({r})", args.iter().map(|a| ty_arg_for(n, a)).collect::<Vec<_>>().join(", ")),
         Ty::Generic(n, _) if is_union(n, unions) => format!("ts::Value(ts::handle, {r})"),
+        Ty::Obj(n) if is_resolved_ref(n) => format!("ts::from_handle<{}>({r})", tn(n)),
         Ty::Obj(n) => format!("{}(ts::handle, {r})", tn(n)),
         Ty::Mapped(_) => format!("V(ts::handle, {r})"),
         Ty::Param(n) => format!("ts::from_handle<{n}>({r})"),
@@ -1048,6 +1057,14 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
 
     let unions = &m.unions;
     DECODABLE.with(|d| *d.borrow_mut() = unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
+    let resolved_opaque: HashMap<String, usize> = m
+        .opaque
+        .iter()
+        .filter(|n| !is_builtin_cpp_type(n))
+        .filter(|n| m.opaque_arity.get(*n).copied().unwrap_or(0) == 0)
+        .filter_map(|n| refs.iter().enumerate().find(|(_, r)| r.types.contains(n.as_str())).map(|(i, _)| (n.clone(), i)))
+        .collect();
+    RESOLVED_REF.with(|r| *r.borrow_mut() = resolved_opaque.keys().cloned().collect());
     // A constructor is named as its class, and hides nothing.
     let members: BTreeSet<String> = m.classes.iter().flat_map(|c| c.funcs.iter().filter(|f| !matches!(f.call, Call::New(_) | Call::Create(_))).map(|f| cpp_name(f, &c.name))).collect();
     QUALIFIED.with(|q| *q.borrow_mut() = members.into_iter().filter(|n| m.classes.iter().any(|c| c.name == *n) || m.callbacks.iter().any(|c| c.name == *n) || m.unions.iter().any(|u| u.name == *n) || m.enums.iter().any(|e| e.0 == *n) || m.num_enums.iter().any(|e| e.0 == *n)).collect());
@@ -1111,7 +1128,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             class_statics_of.insert(f.import.clone());
         }
     }
-    let types = declarations(m, pkg_name, refs) + &wrap_ns(ns, &namespaces);
+    let types = declarations(m, pkg_name, refs, &resolved_opaque) + &wrap_ns(ns, &namespaces);
     let mut out = vec![("ts_runtime.hpp".to_string(), RUNTIME.to_string()), ("ts_types.hpp".to_string(), types)];
 
     // A union: its alternatives, and how to tell which one came back.
@@ -1159,7 +1176,13 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
                 cases.concat()
             );
             if decoder_owner(u, unions) {
-                decoder_ext += &format!("inline ::{ns_prefix}{0} ts::decoder<::{ns_prefix}{0}>::from(uint32_t h) {{ return ::{ns_prefix}decode_{0}(h); }}\n", u.name);
+                let guard = decoder_guard_id(u, m, pkg_name, &resolved_opaque, refs);
+                decoder_ext += &format!(
+                    "#ifndef TS_DECODER_DEF_{guard}\n#define TS_DECODER_DEF_{guard}\n\
+                     inline ::{ns_prefix}{0} ts::decoder<::{ns_prefix}{0}>::from(uint32_t h) {{ return ::{ns_prefix}decode_{0}(h); }}\n\
+                     #endif\n",
+                    u.name
+                );
             }
         }
         text += &wrap_ns(ns, &decode_ns);
@@ -1507,6 +1530,81 @@ fn decoder_owner(u: &NamedUnion, unions: &[NamedUnion]) -> bool {
     u.type_params.is_empty() && u.decodable() && unions.iter().find(|o| o.type_params.is_empty() && o.decodable() && key(o) == key(u)).is_some_and(|o| o.name == u.name)
 }
 
+fn fnv1a_hex(s: &str) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.as_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{h:016x}")
+}
+
+fn decoder_guard_id(u: &NamedUnion, m: &Model, pkg_name: &str, resolved_opaque: &HashMap<String, usize>, refs: &[ProjectRef]) -> String {
+    let unions = &m.unions;
+    let aliases: HashMap<&str, String> = unions
+        .iter()
+        .filter(|o| o.type_params.is_empty())
+        .map(|o| (o.name.as_str(), format!("std::variant<{}>", o.parts.iter().map(|p| ty_out(p, unions)).collect::<Vec<_>>().join(", "))))
+        .collect();
+    let mut expanded = format!("std::variant<{}>", u.parts.iter().map(|p| ty_out(p, unions)).collect::<Vec<_>>().join(", "));
+    for _ in 0..8 {
+        let mut next = String::new();
+        let mut word = String::new();
+        for c in expanded.chars().chain(['\0']) {
+            if c.is_alphanumeric() || c == '_' {
+                word.push(c);
+                continue;
+            }
+            next += aliases.get(word.as_str()).map_or(word.as_str(), String::as_str);
+            word.clear();
+            if c != '\0' {
+                next.push(c);
+            }
+        }
+        if next == expanded {
+            break;
+        }
+        expanded = next;
+    }
+    let local_types: HashSet<&str> = m
+        .classes
+        .iter()
+        .map(|c| c.name.as_str())
+        .chain(m.callbacks.iter().map(|c| c.name.as_str()))
+        .chain(m.enums.iter().map(|e| e.0.as_str()))
+        .chain(m.num_enums.iter().map(|e| e.0.as_str()))
+        .chain(m.opaque.iter().map(String::as_str).filter(|n| !matches!(*n, "Promise" | "PromiseLike")))
+        .collect();
+    let mut canonical = String::new();
+    let mut word = String::new();
+    let mut preceded_by_colon = false;
+    for c in expanded.chars().chain(['\0']) {
+        if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+            continue;
+        }
+        if !word.is_empty() {
+            let tok = word.as_str();
+            let is_std = matches!(tok, "std" | "variant" | "string" | "optional" | "double" | "bool" | "ts" | "Array" | "Tuple" | "Value" | "Promise" | "PromiseLike");
+            if preceded_by_colon || is_std {
+                canonical.push_str(tok);
+            } else if let Some(&idx) = resolved_opaque.get(tok) {
+                canonical += &format!("::{}::{tok}", refs[idx].pkg_name);
+            } else if pkg_name != "bindings" && local_types.contains(tok) {
+                canonical += &format!("::{pkg_name}::{tok}");
+            } else {
+                canonical.push_str(tok);
+            }
+            word.clear();
+        }
+        if c != '\0' {
+            preceded_by_colon = c == ':';
+            canonical.push(c);
+        }
+    }
+    fnv1a_hex(&canonical)
+}
+
 // A union as a type in its own definitions: `Either` or `Either<T>`.
 fn union_type(u: &NamedUnion) -> String {
     if u.type_params.is_empty() { u.name.clone() } else { format!("{}<{}>", u.name, u.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) }
@@ -1515,19 +1613,12 @@ fn union_type(u: &NamedUnion) -> String {
 // `ts_types.hpp`: every type declared, so a struct may name any of them
 // before it is defined. A template comes after what its defaults and
 // constraints name.
-fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> String {
+fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque: &HashMap<String, usize>) -> String {
     let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
     let raw_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}_") };
     let ns: Option<&str> = (pkg_name != "bindings").then_some(pkg_name);
     let ns_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}::") };
     let inc_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}/") };
-    let resolved_opaque: HashMap<String, usize> = m
-        .opaque
-        .iter()
-        .filter(|n| !is_builtin_cpp_type(n))
-        .filter(|n| m.opaque_arity.get(*n).copied().unwrap_or(0) == 0)
-        .filter_map(|n| refs.iter().enumerate().find(|(_, r)| r.types.contains(n.as_str())).map(|(i, _)| (n.clone(), i)))
-        .collect();
     let used_refs: BTreeSet<usize> = resolved_opaque.values().copied().collect();
 
     let unions = &m.unions;
@@ -1661,7 +1752,13 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> String {
             text += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false), union_type(u), u.name);
             // Unions with the same members are the same variant: one decoder.
             if decoder_owner(u, unions) {
-                let spec = format!("template <>\nstruct ts::decoder<::{ns_prefix}{0}> {{\n    static ::{ns_prefix}{0} from(uint32_t h);\n}};\n", u.name);
+                let guard = decoder_guard_id(u, m, pkg_name, resolved_opaque, refs);
+                let spec = format!(
+                    "#ifndef TS_DECODER_{guard}\n#define TS_DECODER_{guard}\n\
+                     template <>\nstruct ts::decoder<::{ns_prefix}{0}> {{\n    static ::{ns_prefix}{0} from(uint32_t h);\n}};\n\
+                     #endif\n",
+                    u.name
+                );
                 if let Some(pkg) = ns {
                     text += &format!("}}  // namespace {pkg}\n{spec}namespace {pkg} {{\n");
                 } else {
