@@ -57,6 +57,42 @@
       "kind": "browser"
     },
     {
+      "id": "babylon_lite/pbr_material_matrix",
+      "package": "babylon_lite",
+      "title": "Babylon Lite \u2014 PBR Material Matrix",
+      "description": "5x5 monochrome metallic-roughness PBR sphere grid with orbiting studio point light",
+      "path": "./babylon_lite/pbr_material_matrix/index.html",
+      "source": "./babylon_lite/pbr_material_matrix/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "babylon_lite/polyhedron_sculptures",
+      "package": "babylon_lite",
+      "title": "Babylon Lite \u2014 Polyhedron Sculptures",
+      "description": "Five Platonic and Archimedean polyhedra on plinths under a sweeping spotlight",
+      "path": "./babylon_lite/polyhedron_sculptures/index.html",
+      "source": "./babylon_lite/polyhedron_sculptures/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "babylon_lite/csg_boolean_sculpture",
+      "package": "babylon_lite",
+      "title": "Babylon Lite \u2014 CSG Boolean Sculpture",
+      "description": "Constructive solid geometry cube carved by orthogonal cylinders with clearcoat finish and gimbal rings",
+      "path": "./babylon_lite/csg_boolean_sculpture/index.html",
+      "source": "./babylon_lite/csg_boolean_sculpture/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "babylon_lite/kinetic_wave_monoliths",
+      "package": "babylon_lite",
+      "title": "Babylon Lite \u2014 Kinetic Wave Monoliths",
+      "description": "6x6 undulating architectural monolith field with orbiting clearcoat capsules and dual point lights",
+      "path": "./babylon_lite/kinetic_wave_monoliths/index.html",
+      "source": "./babylon_lite/kinetic_wave_monoliths/main.c",
+      "kind": "browser"
+    },
+    {
       "id": "katex/formula_gallery",
       "package": "katex",
       "title": "Formula Gallery",

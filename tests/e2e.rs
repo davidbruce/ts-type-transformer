@@ -2591,7 +2591,13 @@ mod examples {
         needs_dom: true,
         crate_name: "babylonjs_lite",
         fsharp_name: "Babylonjs.Lite",
-        demos: &["torus_knot"],
+        demos: &[
+            "torus_knot",
+            "pbr_material_matrix",
+            "polyhedron_sculptures",
+            "csg_boolean_sculpture",
+            "kinetic_wave_monoliths",
+        ],
         verify: VerifyKind::BabylonWebGpu,
     };
 

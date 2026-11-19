@@ -1,0 +1,11 @@
+[package]
+name = "babylonlite-rust-example"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dom = { path = "../../bindings/dom" }
+babylonjs_lite = { path = "../../bindings/babylonjs_lite" }
