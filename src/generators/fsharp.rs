@@ -2249,6 +2249,7 @@ impl Gen {
                     }
                     self.out += &format!("{indent}[<StringEnum; RequireQualifiedAccess>]\n{indent}type {name} =\n");
                     let mut seen = HashSet::new();
+                    let mut testers = HashSet::new();
                     for v in named(d, "member") {
                         let value = attr(v, "value");
                         let mut case: String = value.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
@@ -2256,9 +2257,13 @@ impl Gen {
                             case.insert(0, 'V');
                         }
                         case[..1].make_ascii_uppercase();
-                        while !seen.insert(case.clone()) {
+                        // F# synthesizes `member Is<Case>` for every union case;
+                        // avoid clashing with another case named `Is<Case>` (e.g. `IsNaN` and `NaN`).
+                        while seen.contains(&case) || testers.contains(&case) || seen.contains(&format!("Is{case}")) {
                             case.push('_');
                         }
+                        testers.insert(format!("Is{case}"));
+                        seen.insert(case.clone());
                         self.out += &format!("{indent}    | [<CompiledName({value:?})>] {case}\n");
                     }
                     self.out += "\n";
@@ -2407,14 +2412,17 @@ impl Gen {
         let members: Vec<Node> = elements(union).collect();
         let mut cases: Vec<(String, String, Option<String>)> = Vec::new();
         let mut seen_names = HashSet::new();
+        let mut seen_testers = HashSet::new();
         let mut seen_tests = HashSet::new();
         let mut untested = 0;
         for m in &members {
             let payload = self.ty(*m, "");
             let mut case = case_name(*m);
-            while !seen_names.insert(case.clone()) {
+            while seen_names.contains(&case) || seen_testers.contains(&case) || seen_names.contains(&format!("Is{case}")) {
                 case.push('_');
             }
+            seen_testers.insert(format!("Is{case}"));
+            seen_names.insert(case.clone());
             let test = m.attribute("test").map(str::to_string);
             // Fable tests these itself; anything else needs a test from the XML.
             let native = matches!(payload.as_str(), "string" | "float" | "bool");
