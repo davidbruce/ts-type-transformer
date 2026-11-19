@@ -708,8 +708,20 @@ fn emit_writes_bindings_or_says_why_not() {
     let _ = fs::remove_dir_all(&fs_out);
     let fs_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&shapes).arg("--config").arg(config("fsharp")).args(["--emit", "fsharp", "--out"]).arg(&fs_out).output().unwrap();
     assert!(fs_ok.status.success(), "{}", String::from_utf8_lossy(&fs_ok.stderr));
-    let fsproj = fs::read_to_string(fs_out.join("Bindings.fsproj")).expect("Bindings.fsproj written");
+    let fsproj = fs::read_to_string(fs_out.join("Bindings/Bindings.fsproj")).expect("Bindings/Bindings.fsproj written");
     assert!(fsproj.contains("<Compile Include=\"Bindings.Prelude.fs\" />") && fsproj.contains("<Compile Include=\"Bindings.Values.fs\" />") && fsproj.contains("Fable.Core"), "{fsproj}");
+    // Package-named nested folder + namespace + .fsproj, and explicit `--name` override.
+    let pts = root().join("tests/fixtures/pts/api.d.ts");
+    let pts_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&pts).arg("--config").arg(config("fsharp")).args(["--emit", "fsharp", "--out"]).arg(&fs_out).output().unwrap();
+    assert!(pts_ok.status.success(), "{}", String::from_utf8_lossy(&pts_ok.stderr));
+    let pts_fsproj = fs::read_to_string(fs_out.join("Pts/Pts.fsproj")).expect("Pts/Pts.fsproj written");
+    assert!(pts_fsproj.contains("<Compile Include=\"Pts.Prelude.fs\" />") && pts_fsproj.contains("<Compile Include=\"Pts.Values.fs\" />"), "{pts_fsproj}");
+    let pts_prelude = fs::read_to_string(fs_out.join("Pts/Pts.Prelude.fs")).unwrap();
+    assert!(pts_prelude.contains("namespace Pts\n"), "{pts_prelude}");
+    let custom_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&shapes).arg("--config").arg(config("fsharp")).args(["--emit", "fsharp", "--name", "MyLib.Core", "--out"]).arg(&fs_out).output().unwrap();
+    assert!(custom_ok.status.success(), "{}", String::from_utf8_lossy(&custom_ok.stderr));
+    let custom_fsproj = fs::read_to_string(fs_out.join("MyLib.Core/MyLib.Core.fsproj")).expect("MyLib.Core/MyLib.Core.fsproj written");
+    assert!(custom_fsproj.contains("<Compile Include=\"MyLib.Core.Prelude.fs\" />"), "{custom_fsproj}");
 }
 
 // Generated names do not depend on the order of declarations.

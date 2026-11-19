@@ -10,6 +10,8 @@ use super::{Problems, attr, elements, flag, named, only_child};
 const T: &str = "F#";
 
 pub struct Output {
+    // F# namespace and project name (`Bindings`, `Pts`, `Babylonjs.Lite`, `Dom`).
+    pub name: String,
     // File name and contents, in compilation order.
     pub files: Vec<(String, String)>,
     // What the generator does not bind yet, by reason.
@@ -17,6 +19,11 @@ pub struct Output {
 }
 
 impl Output {
+    /// The `.fsproj` filename for this binding project (`<name>.fsproj`).
+    pub fn fsproj_name(&self) -> String {
+        format!("{}.fsproj", self.name)
+    }
+
     /// An F# project file compiling the generated binding files in order,
     /// ready to pull into another project via `<ProjectReference>`.
     pub fn fsproj(&self) -> String {
@@ -37,7 +44,27 @@ impl Output {
     }
 }
 
+/// Converts a package or lib name into a valid F# namespace / project name:
+/// `@babylonjs/lite` -> `Babylonjs.Lite`, `date-fns` -> `DateFns`, `dom` -> `Dom`.
+pub fn package_namespace(raw: &str) -> String {
+    let raw = raw.trim().trim_start_matches('@');
+    let mut parts = Vec::new();
+    for seg in raw.split(['/', '.']) {
+        let mut p = pascal(seg);
+        if p.is_empty() {
+            continue;
+        }
+        if !p.as_bytes()[0].is_ascii_alphabetic() {
+            p.insert(0, 'N');
+        }
+        parts.push(p);
+    }
+    if parts.is_empty() { "Bindings".to_string() } else { parts.join(".") }
+}
+
 struct Gen {
+    // Root F# namespace (`Bindings`, `Pts`, `Babylonjs.Lite`, ...).
+    namespace: String,
     // The module the library is imported from, if it is not globals.
     import: Option<String>,
     // Classes a union tells apart by `instanceof`: imported types, which Fable tests itself.
@@ -288,11 +315,17 @@ fn type_ident(name: &str) -> String {
 // values: globals, functions as `Globals`, and the `<Map>Keys` modules.
 // The bindings, or what F# cannot express of the XML.
 pub fn module(xml: &str) -> Result<Output, Vec<String>> {
+    module_named(xml, "Bindings")
+}
+
+pub fn module_named(xml: &str, namespace: &str) -> Result<Output, Vec<String>> {
+    let ns = if namespace.is_empty() { "Bindings".to_string() } else { namespace.to_string() };
     // With several packages, each one's declarations are in a module of it.
     let regrouped = package_modules(xml);
     let xml = regrouped.as_deref().unwrap_or(xml);
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let mut g = Gen {
+        namespace: ns.clone(),
         problems: Problems::default(),
         out: String::new(),
         skipped: BTreeMap::new(),
@@ -383,14 +416,14 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     g.decls(doc.root_element(), "", "");
     g.key_modules(doc.root_element());
 
-    let mut prelude = String::from(
-        "// Generated.\nnamespace Bindings\n\nopen Fable.Core\n\n\
+    let mut prelude = format!(
+        "// Generated.\nnamespace {ns}\n\nopen Fable.Core\n\n\
          /// A key of the map 'Map whose value has type 'V: `el.addEventListener (HTMLElementEventMapKeys.click, fun e -> ...)`.\n\
          [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n\
          /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
-         /// A JavaScript object used as a map: `{ [key: string]: T }` is `JsRecord<string, T>`.\n\
+         /// A JavaScript object used as a map: `{{ [key: string]: T }}` is `JsRecord<string, T>`.\n\
          /// A value whose type F# cannot write, of type arguments it still takes.\n\
-         [<AllowNullLiteral; Interface>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n    [<Emit(\"{}\")>] static member Create () : JsRecord<'Key, 'Value> = jsNative\n    [<Emit(\"Object.fromEntries($0)\")>] static member Create (entries: seq<'Key * 'Value>) : JsRecord<'Key, 'Value> = jsNative\n\n\
+         [<AllowNullLiteral; Interface>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n    [<Emit(\"{{}}\")>] static member Create () : JsRecord<'Key, 'Value> = jsNative\n    [<Emit(\"Object.fromEntries($0)\")>] static member Create (entries: seq<'Key * 'Value>) : JsRecord<'Key, 'Value> = jsNative\n\n\
          /// A JavaScript Error, where an API takes one: an F# exception is not an Error in JavaScript.\n\
          [<AutoOpen>]\nmodule JsErrors =\n    [<Emit(\"new Error($0)\")>]\n    let jsError (message: string) : exn = jsNative\n\n\
          [<AllowNullLiteral>]\ntype JsAsyncIterator<'T> =\n    \
@@ -423,7 +456,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     if !apart.is_empty() {
         prelude += &format!("/// Types declared elsewhere that have the names of types declared here.\nmodule External =\n{apart}");
     }
-    let mut files = vec![("Bindings.Prelude.fs".to_string(), prelude)];
+    let mut files = vec![(format!("{ns}.Prelude.fs"), prelude)];
     for (i, group) in plan.iter().enumerate() {
         let name = if group.len() == 1 { group[0].clone() } else { format!("{}_and_{}_more", group[0], group.len() - 1) };
         // A module of a path (`fs/promises`) is one file name still.
@@ -438,13 +471,13 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
                 body += &format!("    type {owner} with\n{}\n", lines.concat());
             }
         }
-        files.push((format!("Bindings.{:02}.{name}.fs", i + 1), format!("// Generated. Modules: {}.\nnamespace rec Bindings\n\nopen Fable.Core\n\n{body}", group.join(", "))));
+        files.push((format!("{ns}.{:02}.{name}.fs", i + 1), format!("// Generated. Modules: {}.\nnamespace rec {ns}\n\nopen Fable.Core\n\n{body}", group.join(", "))));
     }
     let values: String = g.values.lines().map(|l| if l.is_empty() { "\n".to_string() } else { format!("    {l}\n") }).collect();
     let globals = std::mem::take(&mut g.out);
     let global_delegates = std::mem::take(&mut g.global_delegates);
-    files.push(("Bindings.Values.fs".into(), format!("// Generated.\nnamespace Bindings\n\nopen Fable.Core\n\n{global_delegates}{globals}[<AutoOpen>]\nmodule Values =\n    let private _values = ()\n\n{values}")));
-    g.problems.result(Output { files, skipped: g.skipped })
+    files.push((format!("{ns}.Values.fs"), format!("// Generated.\nnamespace {ns}\n\nopen Fable.Core\n\n{global_delegates}{globals}[<AutoOpen>]\nmodule Values =\n    let private _values = ()\n\n{values}")));
+    g.problems.result(Output { name: ns, files, skipped: g.skipped })
 }
 
 // The files of types, in the order F# must see them: one per module, each
@@ -2478,7 +2511,7 @@ impl Gen {
                 // Its cases by its path from the root: a value of its name, or
                 // of its module's, nearer (node's class `Stream.Transform`, and
                 // `Stream` itself) would be taken.
-                let path = if self.cur_prefix.is_empty() { name.to_string() } else { format!("Bindings.{}.{name}", self.cur_prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
+                let path = if self.cur_prefix.is_empty() { name.to_string() } else { format!("global.{}.{}.{name}", self.namespace, self.cur_prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
                 for op in ["op_Implicit", "op_ErasedCast"] {
                     self.out += &format!("{indent}    static member inline {op} (x: {payload}) : {name} = {path}.{case} x\n");
                 }

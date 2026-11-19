@@ -133,6 +133,7 @@ fn main() {
     let mut census = false;
     let mut emit: Option<String> = None;
     let mut out_dir: Option<String> = None;
+    let mut project_name: Option<String> = None;
     let mut glue_for: Option<String> = None;
     let mut libs_arg: Option<String> = None;
     // Lib namespaces to bind as well: `--include Intl`.
@@ -150,6 +151,7 @@ fn main() {
             "--census" => census = true,
             "--emit" => emit = Some(args.next().expect("c, cpp, zig or fsharp")),
             "--out" => out_dir = Some(args.next().expect("output directory")),
+            "--name" => project_name = Some(args.next().expect("project / namespace name")),
             "--glue-for" => glue_for = Some(args.next().expect("compiled module")),
             "--lib" => libs_arg = Some(args.next().expect("comma-separated lib list")),
             "--include" => include.push(args.next().expect("a namespace of the lib files, such as Intl")),
@@ -357,7 +359,10 @@ fn main() {
         None => print!("{doc}"),
         Some(target) => {
             let out = std::path::PathBuf::from(out_dir.unwrap_or_else(|| "bindings".into()));
-            if let Err(e) = emit::bindings(&target, &doc, &out, glue_for.as_deref().map(std::path::Path::new)) {
+            let derived_name = project_name.or_else(|| modules.import.clone()).or_else(|| {
+                is_lib.then(|| input.strip_prefix("lib.").and_then(|s| s.strip_suffix(".d.ts")).unwrap_or(&input).to_string())
+            });
+            if let Err(e) = emit::bindings(&target, &doc, &out, glue_for.as_deref().map(std::path::Path::new), derived_name.as_deref()) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }
