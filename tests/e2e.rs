@@ -2552,6 +2552,10 @@ mod examples {
             selector: &'static str,
             min_count: usize,
         },
+        CanvasNonEmpty {
+            selector: &'static str,
+            min_count: usize,
+        },
     }
 
     #[derive(Clone, Copy)]
@@ -2639,6 +2643,25 @@ mod examples {
         verify: VerifyKind::DomSelector {
             selector: "#app .day-cell, #app tbody tr, #app .milestone, #app .gantt-row",
             min_count: 4,
+        },
+    };
+
+    const ECHARTS_SPEC: PackageSpec = PackageSpec {
+        pkg: "echarts",
+        npm: &["echarts"],
+        needs_dom: true,
+        crate_name: "echarts",
+        fsharp_name: "Echarts",
+        demos: &[
+            "bar_chart",
+            "line_area",
+            "pie_donut",
+            "scatter_plot",
+            "radar_gauge",
+        ],
+        verify: VerifyKind::CanvasNonEmpty {
+            selector: "#app canvas",
+            min_count: 1,
         },
     };
 
@@ -2755,7 +2778,13 @@ mod examples {
         for file in ["index.html", "examples.json"] {
             let src = ex_root.join(file);
             if src.exists() {
-                fs::copy(&src, target_root.join(file)).unwrap();
+                let bytes = fs::read(&src).unwrap();
+                let dst = target_root.join(file);
+                if fs::read(&dst).ok().as_deref() != Some(bytes.as_slice()) {
+                    let tmp = target_root.join(format!(".{file}.tmp"));
+                    fs::write(&tmp, bytes).unwrap();
+                    fs::rename(&tmp, &dst).unwrap();
+                }
             }
         }
         target_root
@@ -3096,6 +3125,44 @@ try {{
 window.__result = {{ passed, failed, dom: [], domChecks: 1 }};
 </script>"#
             ),
+            VerifyKind::CanvasNonEmpty { selector, min_count } => format!(
+                r#"<script type="module">
+let passed = 0;
+const failed = [];
+window.addEventListener('unhandledrejection', e => failed.push('rejected: ' + (e.reason?.message ?? e.reason)));
+try {{
+  await import('./bundle.mjs');
+  const deadline = Date.now() + 5000;
+  let ok = false;
+  while (Date.now() < deadline) {{
+    const canvases = [...document.querySelectorAll({selector:?})];
+    if (canvases.length >= {min_count}) {{
+      ok = canvases.every(canvas => {{
+        if (!canvas || canvas.width <= 0 || canvas.height <= 0) return false;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return false;
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const colors = new Set();
+        for (let i = 0; i < data.length; i += 4) {{
+          if (data[i + 3] > 0) {{
+            colors.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+            if (colors.size >= 2) return true;
+          }}
+        }}
+        return false;
+      }});
+      if (ok) break;
+    }}
+    await new Promise(r => setTimeout(r, 50));
+  }}
+  if (ok) passed++;
+  else failed.push(`expected >= {min_count} non-empty canvas elements matching {selector}`);
+}} catch (e) {{
+  failed.push('threw: ' + (e?.message ?? e));
+}}
+window.__result = {{ passed, failed, dom: [], domChecks: 1 }};
+</script>"#
+            ),
         };
         fs::write(out.join("index.html"), html.replacen(old_tag, &verify, 1)).unwrap();
         fs::write(&sentinel, demo_stamp).unwrap();
@@ -3234,6 +3301,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(katex, KATEX_SPEC);
     pkg_tests!(marked, MARKED_SPEC);
     pkg_tests!(date_fns, DATE_FNS_SPEC);
+    pkg_tests!(echarts, ECHARTS_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

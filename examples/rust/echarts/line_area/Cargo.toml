@@ -1,0 +1,11 @@
+[package]
+name = "echarts-line-area"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dom = { path = "../../bindings/dom" }
+echarts = { path = "../../bindings/echarts" }

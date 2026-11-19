@@ -1825,7 +1825,7 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         for a in &all {
             let Some(k) = class_of(a) else {
                 if !m.opaque_arity.contains_key(a) && !RUNTIME_TYPES.iter().any(|r| r.0 == a.as_str()) {
-                    *out += &upcast_in(&bounds, &me, &tn(a));
+                    *out += &upcast_in(&bounds, &me, &tn(a), resolved_opaque.contains_key(a));
                 }
                 continue;
             };
@@ -1833,7 +1833,7 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             let base_args_str = if k.type_params.is_empty() { String::new() } else { format!("<{}>", (0..k.type_params.len()).map(|i| base.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", ")) };
             *out += &format!("impl{bounds} {}Methods{base_args_str} for {me} {{}}\n", tn(a));
             // Generic or not: `Marker<P>` is a `Layer`.
-            *out += &upcast_in(&bounds, &me, &format!("{}{base_args_str}", tn(a)));
+            *out += &upcast_in(&bounds, &me, &format!("{}{base_args_str}", tn(a)), false);
             // Covariant default-instantiated base for concrete classes: `Rect` (`Shape<RectConfig>`) -> `Shape<ShapeConfig>`,
             // `BufferImageSource` (`TextureSource<...>`) -> `TextureSource<JsValue>`.
             if c.type_params.is_empty() && !k.type_params.is_empty() {
@@ -1841,7 +1841,7 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
                 let def_str = format!("<{}>", def_tys.iter().map(ty).collect::<Vec<_>>().join(", "));
                 let actual: Vec<Ty> = (0..k.type_params.len()).map(|i| base.get(i).cloned().unwrap_or(Ty::Any)).collect();
                 if def_str != base_args_str && actual.iter().zip(&def_tys).all(|(x, y)| is_subtype(m, x, y, 0)) {
-                    *out += &upcast_in(&bounds, &me, &format!("{}{def_str}", tn(a)));
+                    *out += &upcast_in(&bounds, &me, &format!("{}{def_str}", tn(a)), false);
                 }
             }
         }
@@ -1926,9 +1926,9 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
 // A subtype as its ancestor: by value with `into()`, by reference with
 // `as_ref()`. Both are one handle, transparently; for a class or base of
 // type parameters too (`impl<P: JsType>`: `Marker<P>` is a `Layer`).
-fn upcast_in(bounds: &str, sub: &str, base: &str) -> String {
+fn upcast_in(bounds: &str, sub: &str, base: &str, is_external: bool) -> String {
     let name = base.split('<').next().unwrap_or(base);
-    let make = if name.starts_with("::") {
+    let make = if is_external || name.starts_with("::") {
         format!("<{base} as crate::runtime::FromJs>::from_handle({{ let h = x.0 .0; core::mem::forget(x); h }})")
     } else if base.contains('<') {
         format!("{name}(x.0, core::marker::PhantomData)")

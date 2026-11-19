@@ -154,6 +154,51 @@
       "path": "./date_fns/interval_overlap/index.html",
       "source": "./date_fns/interval_overlap/Program.fs",
       "kind": "browser"
+    },
+    {
+      "id": "echarts/bar_chart",
+      "package": "echarts",
+      "title": "Bar Chart",
+      "description": "Monochrome monthly vertical bar chart with grid, axes, and live dimension readout",
+      "path": "./echarts/bar_chart/index.html",
+      "source": "./echarts/bar_chart/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "echarts/line_area",
+      "package": "echarts",
+      "title": "Line & Area Chart",
+      "description": "Dual-series solid area and dashed baseline line chart with monochrome legend",
+      "path": "./echarts/line_area/index.html",
+      "source": "./echarts/line_area/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "echarts/pie_donut",
+      "package": "echarts",
+      "title": "Donut Breakdown",
+      "description": "Monochrome greyscale donut ring chart displaying five subsystem weights",
+      "path": "./echarts/pie_donut/index.html",
+      "source": "./echarts/pie_donut/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "echarts/scatter_plot",
+      "package": "echarts",
+      "title": "Scatter Correlation",
+      "description": "Two-cluster 2D scatter plot comparing solid circle and hollow square series",
+      "path": "./echarts/scatter_plot/index.html",
+      "source": "./echarts/scatter_plot/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "echarts/radar_gauge",
+      "package": "echarts",
+      "title": "Radar & Gauge Dashboard",
+      "description": "Side-by-side 5-axis radar comparison and circular monochrome progress gauge",
+      "path": "./echarts/radar_gauge/index.html",
+      "source": "./echarts/radar_gauge/Program.fs",
+      "kind": "browser"
     }
   ]
 }
