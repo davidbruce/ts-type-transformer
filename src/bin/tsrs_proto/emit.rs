@@ -4,13 +4,18 @@ use std::path::Path;
 
 use ts_type_transformer::generators::{c, cpp, fsharp, gleam, model::Model, rust, wasm, zig};
 
-pub fn bindings(target: &str, xml: &str, out: &Path, glue_for: Option<&Path>, project_name: Option<&str>) -> Result<(), String> {
+pub fn bindings(target: &str, xml: &str, out: &Path, glue_for: Option<&Path>, project_name: Option<&str>, refs: &[String]) -> Result<(), String> {
     let fsharp_ns = matches!(target, "fsharp" | "f#").then(|| fsharp_namespace(xml, project_name));
     let dest = match &fsharp_ns {
         Some(ns) if out.file_name().and_then(|s| s.to_str()) != Some(ns.as_str()) => out.join(ns),
         _ => out.to_path_buf(),
     };
-    let files = generate(target, xml, glue_for, fsharp_ns.as_deref()).map_err(|problems| problems.join("\n"))?;
+    let loaded_refs: Vec<fsharp::ProjectRef> = if fsharp_ns.is_some() {
+        refs.iter().map(|r| fsharp::load_project_ref(Path::new(r), &dest)).collect::<Result<Vec<_>, _>>()?
+    } else {
+        Vec::new()
+    };
+    let files = generate(target, xml, glue_for, fsharp_ns.as_deref(), &loaded_refs).map_err(|problems| problems.join("\n"))?;
     for (path, content) in &files {
         let path = dest.join(path);
         std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -35,7 +40,7 @@ fn fsharp_namespace(xml: &str, explicit: Option<&str>) -> String {
 type Files = Vec<(String, String)>;
 
 // The files of a target's bindings, or everything it cannot express.
-fn generate(target: &str, xml: &str, glue_for: Option<&Path>, fsharp_ns: Option<&str>) -> Result<Files, Vec<String>> {
+fn generate(target: &str, xml: &str, glue_for: Option<&Path>, fsharp_ns: Option<&str>, fsharp_refs: &[fsharp::ProjectRef]) -> Result<Files, Vec<String>> {
     let used = match glue_for {
         Some(p) => Some(wasm::imports(&std::fs::read(p).map_err(|e| vec![format!("{}: {e}", p.display())])?)),
         None => None,
@@ -57,7 +62,7 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, fsharp_ns: Option<
         "rust" => wasm_files("Rust", rust::files),
         "fsharp" | "f#" => {
             let ns = fsharp_ns.unwrap_or("Bindings");
-            let m = fsharp::module_named(xml, ns)?;
+            let m = fsharp::module_with_refs(xml, ns, fsharp_refs)?;
             for (why, n) in &m.skipped {
                 eprintln!("not bound: {n} x {why}");
             }

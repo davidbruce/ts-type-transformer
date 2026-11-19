@@ -724,6 +724,73 @@ fn emit_writes_bindings_or_says_why_not() {
     assert!(custom_fsproj.contains("<Compile Include=\"MyLib.Core.Prelude.fs\" />"), "{custom_fsproj}");
 }
 
+// F# `--ref` resolves external types against previously generated binding projects
+// and wires `<ProjectReference>` into the generated `.fsproj`.
+#[test]
+fn fsharp_cross_project_refs() {
+    let Some([fable]) = tools(["fable"]) else { return };
+    let out = root().join("target/e2e/fsharp-refs");
+    let _ = fs::remove_dir_all(&out);
+    let bindings = out.join("bindings");
+    let pkg_dir = out.join("node_modules/base-lib");
+    fs::create_dir_all(&bindings).unwrap();
+    fs::create_dir_all(&pkg_dir).unwrap();
+    // Base package in node_modules so `app.d.ts` imports `Surface` as an external package type.
+    let base_dts = pkg_dir.join("index.d.ts");
+    fs::write(pkg_dir.join("package.json"), "{ \"name\": \"base-lib\", \"types\": \"./index.d.ts\" }\n").unwrap();
+    fs::write(&base_dts, "export interface Surface { width: number; height: number; }\n").unwrap();
+    let app_dts = out.join("app.d.ts");
+    fs::write(&app_dts, "import type { Surface } from 'base-lib';\nexport declare function render(s: Surface): number;\n").unwrap();
+    let base_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg(&base_dts)
+        .arg("--config")
+        .arg(config("fsharp"))
+        .args(["--emit", "fsharp", "--name", "BaseLib", "--out"])
+        .arg(&bindings)
+        .output()
+        .unwrap();
+    assert!(base_ok.status.success(), "{}", String::from_utf8_lossy(&base_ok.stderr));
+    let app_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg(&app_dts)
+        .arg("--config")
+        .arg(config("fsharp"))
+        .args(["--emit", "fsharp", "--name", "AppLib", "--ref"])
+        .arg(bindings.join("BaseLib"))
+        .arg("--out")
+        .arg(&bindings)
+        .output()
+        .unwrap();
+    assert!(app_ok.status.success(), "{}", String::from_utf8_lossy(&app_ok.stderr));
+    let app_fsproj = fs::read_to_string(bindings.join("AppLib/AppLib.fsproj")).unwrap();
+    assert!(app_fsproj.contains("<ProjectReference Include=\"../BaseLib/BaseLib.fsproj\" />"), "{app_fsproj}");
+    let app_prelude = fs::read_to_string(bindings.join("AppLib/AppLib.Prelude.fs")).unwrap();
+    assert!(!app_prelude.contains("type Surface ="), "Surface should come from BaseLib, not an opaque stub:\n{app_prelude}");
+    let app_values = fs::read_to_string(bindings.join("AppLib/AppLib.Values.fs")).unwrap();
+    assert!(app_values.contains("BaseLib.Surface"), "{app_values}");
+    // Consumer project passes `BaseLib.Surface` straight to `AppLib.Globals.render` without casts.
+    fs::write(
+        out.join("Test.fs"),
+        "module Test\nopen BaseLib\nopen AppLib\nlet s = Surface.Create(width = 640.0, height = 480.0)\nlet n: float = Globals.render s\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("Test.fsproj"),
+        r#"<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="bindings/BaseLib/BaseLib.fsproj" />
+    <ProjectReference Include="bindings/AppLib/AppLib.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Test.fs" />
+  </ItemGroup>
+</Project>
+"#,
+    )
+    .unwrap();
+    run(Command::new(fable).current_dir(&out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+}
+
 // Generated names do not depend on the order of declarations.
 #[test]
 fn generated_names_do_not_depend_on_order() {

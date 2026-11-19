@@ -2,6 +2,7 @@
 // optional parameters and unions; needs literals and type-level expressions gone.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::{Component, Path, PathBuf};
 
 use roxmltree::{Document, Node, NodeId};
 
@@ -9,11 +10,131 @@ use super::{Problems, attr, elements, flag, named, only_child};
 
 const T: &str = "F#";
 
+#[derive(Clone, Debug)]
+pub struct ProjectRef {
+    /// Path written into `<ProjectReference Include="..." />` (relative to the generated `.fsproj`).
+    pub include_path: String,
+    /// Root F# namespace of the referenced binding project (e.g. `Dom`, `Webgpu.Types`).
+    pub namespace: String,
+    /// Top-level types exported by the referenced project: F# name -> `(arity, is_interface, abbrev_target)`.
+    pub types: HashMap<String, (usize, bool, Option<String>)>,
+}
+
+/// Loads a previously generated F# binding project (`.fsproj` file or directory
+/// containing one) so another generated binding project can reference its types
+/// directly instead of emitting opaque stubs.
+pub fn load_project_ref(fsproj_or_dir: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
+    let fsproj = if fsproj_or_dir.is_dir() {
+        let mut found: Vec<PathBuf> = std::fs::read_dir(fsproj_or_dir)
+            .map_err(|e| format!("{}: {e}", fsproj_or_dir.display()))?
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("fsproj"))
+            .collect();
+        found.sort();
+        match found.as_slice() {
+            [only] => only.clone(),
+            [] => return Err(format!("{}: no .fsproj file found", fsproj_or_dir.display())),
+            _ => return Err(format!("{}: multiple .fsproj files found; pass the .fsproj path explicitly", fsproj_or_dir.display())),
+        }
+    } else {
+        fsproj_or_dir.to_path_buf()
+    };
+    let proj_dir = fsproj.parent().unwrap_or_else(|| Path::new("."));
+    let content = std::fs::read_to_string(&fsproj).map_err(|e| format!("{}: {e}", fsproj.display()))?;
+    let mut compile_files = Vec::new();
+    for line in content.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("<Compile Include=\"")
+            && let Some(file) = rest.split('"').next()
+        {
+            compile_files.push(file.to_string());
+        }
+    }
+    let mut namespace = fsproj.file_stem().and_then(|s| s.to_str()).unwrap_or("Bindings").to_string();
+    let mut types: HashMap<String, (usize, bool, Option<String>)> = HashMap::new();
+    for file in &compile_files {
+        // Skip Prelude files so opaque external stubs in a referenced project are not re-exported.
+        if file.ends_with(".Prelude.fs") || file == "Prelude.fs" {
+            continue;
+        }
+        let path = proj_dir.join(file);
+        let Ok(src) = std::fs::read_to_string(&path) else { continue };
+        let lines: Vec<&str> = src.lines().collect();
+        for (i, &line) in lines.iter().enumerate() {
+            if let Some(rest) = line.strip_prefix("namespace rec ").or_else(|| line.strip_prefix("namespace ")) {
+                let ns = rest.trim();
+                if !ns.is_empty() {
+                    namespace = ns.to_string();
+                }
+                continue;
+            }
+            let Some(rest) = line.strip_prefix("type ") else { continue };
+            let Some((lhs, rhs)) = rest.split_once('=') else { continue };
+            let lhs = lhs.trim();
+            let (raw_name, arity) = match lhs.find('<') {
+                Some(lt) => {
+                    let n = lhs[..lt].trim();
+                    let inside = &lhs[lt + 1..];
+                    let inside = inside.split(" when ").next().unwrap_or(inside).trim_end_matches('>').trim();
+                    let count = if inside.is_empty() { 0 } else { inside.split(',').count() };
+                    (n, count)
+                }
+                None => (lhs, 0),
+            };
+            if raw_name.is_empty() || raw_name == "Globals" {
+                continue;
+            }
+            let rhs = rhs.trim();
+            let (is_interface, abbrev) = if rhs == "interface end" {
+                (true, None)
+            } else if !rhs.is_empty() {
+                // Single-line type abbreviation (`type Foo = float` or `type Foo = U2<...>`).
+                (false, Some(rhs.to_string()))
+            } else {
+                // Multi-line type: interface unless its body starts with union/enum cases `|`.
+                let first_body = lines[i + 1..].iter().map(|l| l.trim()).find(|l| !l.is_empty());
+                let is_iface = first_body.is_some_and(|b| !b.starts_with('|'));
+                (is_iface, None)
+            };
+            types.entry(raw_name.to_string()).or_insert((arity, is_interface, abbrev));
+        }
+    }
+    let include_path = relative_path(from_dir, &fsproj);
+    Ok(ProjectRef { include_path, namespace, types })
+}
+
+// Relative path with forward slashes from `from_dir` to `target_file`.
+fn relative_path(from_dir: &Path, target_file: &Path) -> String {
+    let abs_from = std::fs::canonicalize(from_dir).unwrap_or_else(|_| {
+        std::env::current_dir().map(|cwd| cwd.join(from_dir)).unwrap_or_else(|_| from_dir.to_path_buf())
+    });
+    let abs_target = std::fs::canonicalize(target_file).unwrap_or_else(|_| {
+        std::env::current_dir().map(|cwd| cwd.join(target_file)).unwrap_or_else(|_| target_file.to_path_buf())
+    });
+    let a: Vec<Component> = abs_from.components().collect();
+    let b: Vec<Component> = abs_target.components().collect();
+    let mut common = 0;
+    while common < a.len() && common < b.len() && a[common] == b[common] {
+        common += 1;
+    }
+    let mut parts: Vec<String> = Vec::new();
+    for _ in common..a.len() {
+        parts.push("..".to_string());
+    }
+    for comp in &b[common..] {
+        parts.push(comp.as_os_str().to_string_lossy().into_owned());
+    }
+    parts.join("/")
+}
+
 pub struct Output {
     // F# namespace and project name (`Bindings`, `Pts`, `Babylonjs.Lite`, `Dom`).
     pub name: String,
     // File name and contents, in compilation order.
     pub files: Vec<(String, String)>,
+    // Relative `.fsproj` paths of referenced binding projects whose types were used.
+    pub project_refs: Vec<String>,
     // What the generator does not bind yet, by reason.
     pub skipped: BTreeMap<String, usize>,
 }
@@ -28,11 +149,18 @@ impl Output {
     /// ready to pull into another project via `<ProjectReference>`.
     pub fn fsproj(&self) -> String {
         let compile: String = self.files.iter().map(|(name, _)| format!("    <Compile Include=\"{name}\" />\n")).collect();
+        let refs = if self.project_refs.is_empty() {
+            String::new()
+        } else {
+            let items: String = self.project_refs.iter().map(|r| format!("    <ProjectReference Include=\"{r}\" />\n")).collect();
+            format!("  <ItemGroup>\n{items}  </ItemGroup>\n")
+        };
         format!(
             "<Project Sdk=\"Microsoft.NET.Sdk\">\n\
              \x20 <PropertyGroup>\n\
              \x20   <TargetFramework>netstandard2.0</TargetFramework>\n\
              \x20 </PropertyGroup>\n\
+             {refs}\
              \x20 <ItemGroup>\n\
              {compile}\
              \x20 </ItemGroup>\n\
@@ -141,6 +269,10 @@ struct Gen {
     js_prefix: String,
     // Method names declared on any ancestor of the interface currently being written.
     inherited_methods: HashSet<String>,
+    // External binding projects whose types may be referenced directly.
+    refs: Vec<ProjectRef>,
+    // Indices into `refs` that were actually referenced.
+    used_refs: BTreeSet<usize>,
 }
 
 // The constraints each generic interface can keep, by position: those every
@@ -319,6 +451,10 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
 }
 
 pub fn module_named(xml: &str, namespace: &str) -> Result<Output, Vec<String>> {
+    module_with_refs(xml, namespace, &[])
+}
+
+pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Result<Output, Vec<String>> {
     let ns = if namespace.is_empty() { "Bindings".to_string() } else { namespace.to_string() };
     // With several packages, each one's declarations are in a module of it.
     let regrouped = package_modules(xml);
@@ -369,7 +505,18 @@ pub fn module_named(xml: &str, namespace: &str) -> Result<Output, Vec<String>> {
         cur_prefix: String::new(),
         js_prefix: String::new(),
         inherited_methods: HashSet::new(),
+        refs: refs.to_vec(),
+        used_refs: BTreeSet::new(),
     };
+    for r in &g.refs {
+        for (name, (arity, _, abbrev)) in &r.types {
+            if *arity == 0
+                && let Some(target) = abbrev
+            {
+                g.abbrevs.insert(format!("{}.{name}", r.namespace), target.clone());
+            }
+        }
+    }
     // Every type the declarations name: a delegate named by its place
     // (`each`'s `cb`, `EachCb`) takes none of their names.
     g.type_names = doc.root_element().descendants().filter(|d| matches!(d.tag_name().name(), "interface" | "class" | "typeAlias" | "enum")).filter_map(|d| d.attribute("name")).map(type_ident).collect();
@@ -477,7 +624,8 @@ pub fn module_named(xml: &str, namespace: &str) -> Result<Output, Vec<String>> {
     let globals = std::mem::take(&mut g.out);
     let global_delegates = std::mem::take(&mut g.global_delegates);
     files.push((format!("{ns}.Values.fs"), format!("// Generated.\nnamespace {ns}\n\nopen Fable.Core\n\n{global_delegates}{globals}[<AutoOpen>]\nmodule Values =\n    let private _values = ()\n\n{values}")));
-    g.problems.result(Output { name: ns, files, skipped: g.skipped })
+    let project_refs = g.used_refs.iter().map(|&i| g.refs[i].include_path.clone()).collect();
+    g.problems.result(Output { name: ns, files, project_refs, skipped: g.skipped })
 }
 
 // The files of types, in the order F# must see them: one per module, each
@@ -897,6 +1045,30 @@ impl Gen {
         }
     }
 
+    // Looks up an external type name in any referenced binding project.
+    fn resolve_ref_type(&self, raw_name: &str, arity: usize, need_interface: bool) -> Option<(usize, String)> {
+        let bare = raw_name.strip_prefix("global.").unwrap_or(raw_name);
+        if bare.contains('.') {
+            return None;
+        }
+        let fsharp_name = type_ident(bare);
+        for (i, r) in self.refs.iter().enumerate() {
+            if let Some(&(ref_arity, is_interface, _)) = r.types.get(&fsharp_name)
+                && ref_arity == arity
+                && (!need_interface || is_interface)
+            {
+                let first = r.namespace.split('.').next().unwrap_or(&r.namespace);
+                let prefix = if self.declared.contains(first) || self.type_names.contains(first) {
+                    format!("global.{}", r.namespace)
+                } else {
+                    r.namespace.clone()
+                };
+                return Some((i, format!("{prefix}.{fsharp_name}")));
+            }
+        }
+        None
+    }
+
     fn ty(&mut self, n: Node, owner: &str) -> String {
         match n.tag_name().name() {
             "primitive" => match attr(n, "name") {
@@ -940,12 +1112,20 @@ impl Gen {
                         // Their buffer argument (`Uint8Array<ArrayBufferLike>`) it does not take.
                         // Not as a base: an interface cannot inherit them (`Pt extends Float32Array`).
                         (_, n_args) if !is_base(n) && (n_args == 0 || name != "Error") && let Some(t) = fable_builtin(name) => return t,
-                        // A type from another library, an alias too: an opaque type by its name.
+                        // A type from another library, an alias too: resolve through a
+                        // referenced binding project if one defines it, else an opaque stub.
                         _ if matches!(attr(n, "kind"), "class" | "interface" | "typeAlias") => {
-                            let ext = self.external_name(name);
-                            let arity = self.external.entry(ext.clone()).or_default();
-                            *arity = (*arity).max(args.len());
-                            ext
+                            if let Some((ref_idx, qualified)) = self.resolve_ref_type(name, args.len(), is_base(n)) {
+                                if !self.probing {
+                                    self.used_refs.insert(ref_idx);
+                                }
+                                qualified
+                            } else {
+                                let ext = self.external_name(name);
+                                let arity = self.external.entry(ext.clone()).or_default();
+                                *arity = (*arity).max(args.len());
+                                ext
+                            }
                         }
                         // A value from another file: nothing to refer to.
                         _ => {
@@ -2810,7 +2990,7 @@ fn expand(text: &str, abbrevs: &HashMap<String, String>) -> String {
         let mut next = String::new();
         let mut word = String::new();
         for c in out.chars().chain(['\0']) {
-            if c.is_alphanumeric() || c == '_' || c == '\'' {
+            if c.is_alphanumeric() || c == '_' || c == '\'' || c == '.' {
                 word.push(c);
                 continue;
             }
