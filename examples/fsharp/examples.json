@@ -203,7 +203,7 @@
     {
       "id": "konva/shapes_gallery",
       "package": "konva",
-      "title": "Konva — Geometric Primitives",
+      "title": "Konva \u2014 Geometric Primitives",
       "description": "Monochrome Rect, Circle, RegularPolygon, Star, Ring, Wedge, and Text shapes on a single Konva Layer.",
       "path": "./konva/shapes_gallery/index.html",
       "source": "./konva/shapes_gallery/Program.fs",
@@ -212,7 +212,7 @@
     {
       "id": "konva/groups_transforms",
       "package": "konva",
-      "title": "Konva — Nested Groups & Transforms",
+      "title": "Konva \u2014 Nested Groups & Transforms",
       "description": "Nested Konva Groups with translation, rotation, scaling, getAbsolutePosition(), and getClientRect().",
       "path": "./konva/groups_transforms/index.html",
       "source": "./konva/groups_transforms/Program.fs",
@@ -221,7 +221,7 @@
     {
       "id": "konva/wireframe_diagram",
       "package": "konva",
-      "title": "Konva — Wireframe Architecture Diagram",
+      "title": "Konva \u2014 Wireframe Architecture Diagram",
       "description": "System pipeline boxes connected with Konva Arrows, dashed Lines, selectors, and toJSON() inspection.",
       "path": "./konva/wireframe_diagram/index.html",
       "source": "./konva/wireframe_diagram/Program.fs",
@@ -230,7 +230,7 @@
     {
       "id": "konva/radial_rosette",
       "package": "konva",
-      "title": "Konva — Parametric Radial Rosette",
+      "title": "Konva \u2014 Parametric Radial Rosette",
       "description": "Procedurally generated concentric rings, radial spokes, rotated petals, and perimeter ticks.",
       "path": "./konva/radial_rosette/index.html",
       "source": "./konva/radial_rosette/Program.fs",
@@ -239,7 +239,7 @@
     {
       "id": "konva/layers_hit_test",
       "package": "konva",
-      "title": "Konva — Multi-Layer Z-Order & Hit Test",
+      "title": "Konva \u2014 Multi-Layer Z-Order & Hit Test",
       "description": "Two stacked Konva Layers with z-order elevation, findOne(), synthetic click events, and stage.getIntersection().",
       "path": "./konva/layers_hit_test/index.html",
       "source": "./konva/layers_hit_test/Program.fs",
@@ -248,7 +248,7 @@
     {
       "id": "pixi/vector_primitives",
       "package": "pixi",
-      "title": "PixiJS — Vector Primitives",
+      "title": "PixiJS \u2014 Vector Primitives",
       "description": "Monochrome Graphics rect, roundRect, circle, ellipse, regularPoly, star, and stroke outlines on WebGL.",
       "path": "./pixi/vector_primitives/index.html",
       "source": "./pixi/vector_primitives/Program.fs",
@@ -257,7 +257,7 @@
     {
       "id": "pixi/sprite_mosaic",
       "package": "pixi",
-      "title": "PixiJS — Tinted Sprite Mosaic",
+      "title": "PixiJS \u2014 Tinted Sprite Mosaic",
       "description": "40 Texture.WHITE hardware-accelerated Sprites arranged in an 8x5 monochrome greyscale grid.",
       "path": "./pixi/sprite_mosaic/index.html",
       "source": "./pixi/sprite_mosaic/Program.fs",
@@ -266,7 +266,7 @@
     {
       "id": "pixi/scene_hierarchy",
       "package": "pixi",
-      "title": "PixiJS — Nested Container Hierarchy",
+      "title": "PixiJS \u2014 Nested Container Hierarchy",
       "description": "Nested PixiJS Containers with translation, rotation, scaling, Matrix transforms, and local bounds.",
       "path": "./pixi/scene_hierarchy/index.html",
       "source": "./pixi/scene_hierarchy/Program.fs",
@@ -275,7 +275,7 @@
     {
       "id": "pixi/generative_lattice",
       "package": "pixi",
-      "title": "PixiJS — Generative Isometric Lattice",
+      "title": "PixiJS \u2014 Generative Isometric Lattice",
       "description": "Procedural monochrome isometric grid rendered with PixiJS Graphics polygons and wireframe lines.",
       "path": "./pixi/generative_lattice/index.html",
       "source": "./pixi/generative_lattice/Program.fs",
@@ -284,10 +284,55 @@
     {
       "id": "pixi/bounds_intersection",
       "package": "pixi",
-      "title": "PixiJS — Bounds & Hit Containment",
+      "title": "PixiJS \u2014 Bounds & Hit Containment",
       "description": "PixiJS Rectangle intersection, padding, and Point/Graphics containsPoint() hit testing visualized on WebGL.",
       "path": "./pixi/bounds_intersection/index.html",
       "source": "./pixi/bounds_intersection/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "leaflet/vector_route",
+      "package": "leaflet",
+      "title": "Leaflet \u2014 Vector Route & Graticule",
+      "description": "Trans-European polyline route and dashed alternate corridor over monochrome graticule and waypoint circleMarkers.",
+      "path": "./leaflet/vector_route/index.html",
+      "source": "./leaflet/vector_route/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "leaflet/polygon_zones",
+      "package": "leaflet",
+      "title": "Leaflet \u2014 Nested Polygon Zones",
+      "description": "Concentric Hull Rectangle, concave sector Polygon, core Polygon, and bounds.contains() probe classification.",
+      "path": "./leaflet/polygon_zones/index.html",
+      "source": "./leaflet/polygon_zones/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "leaflet/geodesic_circles",
+      "package": "leaflet",
+      "title": "Leaflet \u2014 Metric Geodesic Circles",
+      "description": "Concentric metric-radius circles centered on Zurich with regional coverage zones and beacon distance calculation.",
+      "path": "./leaflet/geodesic_circles/index.html",
+      "source": "./leaflet/geodesic_circles/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "leaflet/simple_crs_blueprint",
+      "package": "leaflet",
+      "title": "Leaflet \u2014 Simple CRS Blueprint",
+      "description": "Architectural floorplan in non-geographic L.CRS.Simple projection with structural rooms, atrium polygon, and coordinate projection.",
+      "path": "./leaflet/simple_crs_blueprint/index.html",
+      "source": "./leaflet/simple_crs_blueprint/Program.fs",
+      "kind": "browser"
+    },
+    {
+      "id": "leaflet/interactive_markers",
+      "package": "leaflet",
+      "title": "Leaflet \u2014 DivIcon Pins & Events",
+      "description": "Custom DivIcon station markers, tooltips, opened monochrome popup, and synthetic click event listener dispatch.",
+      "path": "./leaflet/interactive_markers/index.html",
+      "source": "./leaflet/interactive_markers/Program.fs",
       "kind": "browser"
     }
   ]

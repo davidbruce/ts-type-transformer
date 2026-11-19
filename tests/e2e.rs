@@ -2703,6 +2703,25 @@ mod examples {
         },
     };
 
+    const LEAFLET_SPEC: PackageSpec = PackageSpec {
+        pkg: "leaflet",
+        npm: &["leaflet"],
+        crate_name: "leaflet",
+        fsharp_name: "Leaflet",
+        needs_dom: true,
+        demos: &[
+            "vector_route",
+            "polygon_zones",
+            "geodesic_circles",
+            "simple_crs_blueprint",
+            "interactive_markers",
+        ],
+        verify: VerifyKind::DomSelector {
+            selector: "#map svg path",
+            min_count: 3,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3351,6 +3370,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(echarts, ECHARTS_SPEC);
     pkg_tests!(konva, KONVA_SPEC);
     pkg_tests!(pixi, PIXI_SPEC);
+    pkg_tests!(leaflet, LEAFLET_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }
