@@ -26,7 +26,7 @@ pub fn main() -> Nil {
 
       let lenient = katex_options.create()
       katex_options.set_throw_on_error(lenient, Some(False))
-      katex_options.set_error_color(lenient, Some("#f87171"))
+      katex_options.set_error_color(lenient, Some("#555555"))
 
       let strict = katex_options.create()
       katex_options.set_throw_on_error(strict, Some(True))
@@ -46,7 +46,7 @@ pub fn main() -> Nil {
         element.set_class_name(left, "cell mode-html")
         let l_lbl = document.create_element_div(doc, None)
         element.set_class_name(l_lbl, "label")
-        node.set_text_content(l_lbl, Some("throwOnError: false (#f87171)"))
+        node.set_text_content(l_lbl, Some("throwOnError: false (#555555)"))
         let l_slot = document.create_element_div(doc, None)
         element.set_class_name(l_slot, "slot")
         element.set_inner_html(

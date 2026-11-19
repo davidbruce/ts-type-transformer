@@ -2604,6 +2604,25 @@ mod examples {
         },
     };
 
+    const MARKED_SPEC: PackageSpec = PackageSpec {
+        pkg: "marked",
+        npm: &["marked"],
+        needs_dom: true,
+        crate_name: "marked",
+        fsharp_name: "Marked",
+        demos: &[
+            "document_preview",
+            "token_inspector",
+            "inline_vs_block",
+            "custom_renderer",
+            "gfm_and_breaks",
+        ],
+        verify: VerifyKind::DomSelector {
+            selector: "#app .md-out *, #app tbody tr, #app .tok-pill",
+            min_count: 3,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3194,6 +3213,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(pts, PTS_SPEC);
     pkg_tests!(babylon_lite, BABYLON_LITE_SPEC);
     pkg_tests!(katex, KATEX_SPEC);
+    pkg_tests!(marked, MARKED_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

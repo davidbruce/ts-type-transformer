@@ -6,13 +6,16 @@
     <title>tsrs_proto Examples</title>
     <style>
       :root {
-        color-scheme: dark;
-        --bg: #0b0f17;
-        --panel: #111827;
-        --border: #1f2937;
-        --text: #e5e7eb;
-        --muted: #9ca3af;
-        --accent: #60a5fa;
+        color-scheme: light;
+        --bg: #ffffff;
+        --surface: #f7f7f7;
+        --surface-2: #efefef;
+        --border: #d4d4d4;
+        --border-strong: #111111;
+        --text: #111111;
+        --muted: #555555;
+        --inv-bg: #111111;
+        --inv-text: #ffffff;
       }
       * {
         box-sizing: border-box;
@@ -35,7 +38,7 @@
         height: 100%;
       }
       #sidebar {
-        background: var(--panel);
+        background: var(--surface);
         border-right: 1px solid var(--border);
         display: flex;
         flex-direction: column;
@@ -60,9 +63,10 @@
       }
       #count {
         font-size: 11px;
-        color: var(--muted);
-        border: 1px solid var(--border);
-        border-radius: 999px;
+        color: #333333;
+        background: var(--bg);
+        border: 1px solid #c4c4c4;
+        border-radius: 3px;
         padding: 2px 8px;
         white-space: nowrap;
       }
@@ -72,12 +76,12 @@
         background: var(--bg);
         color: var(--text);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: 3px;
         font-size: 13px;
         outline: none;
       }
       #filter:focus {
-        border-color: var(--accent);
+        border-color: var(--border-strong);
       }
       #nav {
         flex: 1;
@@ -100,20 +104,20 @@
         display: block;
         padding: 7px 10px;
         margin: 2px 0;
-        border-radius: 6px;
+        border-radius: 3px;
         color: var(--text);
         text-decoration: none;
         font-size: 13px;
         border: 1px solid transparent;
       }
       .demo-link:hover {
-        background: rgba(255, 255, 255, 0.04);
+        background: var(--surface-2);
         border-color: var(--border);
       }
       .demo-link.active {
-        background: rgba(96, 165, 250, 0.14);
-        border-color: rgba(96, 165, 250, 0.45);
-        color: #fff;
+        background: var(--inv-bg);
+        border-color: var(--border-strong);
+        color: var(--inv-text);
       }
       #stage {
         position: relative;
@@ -129,7 +133,7 @@
         gap: 12px;
         padding: 10px 16px;
         border-bottom: 1px solid var(--border);
-        background: var(--panel);
+        background: var(--surface);
       }
       .bar-meta {
         display: flex;
@@ -140,9 +144,10 @@
       #active-pkg {
         font-size: 11px;
         font-family: ui-monospace, SFMono-Regular, monospace;
-        color: var(--accent);
-        border: 1px solid rgba(96, 165, 250, 0.35);
-        border-radius: 4px;
+        color: #333333;
+        background: var(--bg);
+        border: 1px solid #c4c4c4;
+        border-radius: 3px;
         padding: 2px 6px;
       }
       #active-title {
@@ -167,15 +172,16 @@
         appearance: none;
         background: var(--bg);
         color: var(--text);
-        border: 1px solid var(--border);
-        border-radius: 6px;
+        border: 1px solid #c4c4c4;
+        border-radius: 3px;
         padding: 5px 10px;
         font-size: 12px;
         text-decoration: none;
         cursor: pointer;
       }
       .btn:hover {
-        border-color: var(--accent);
+        border-color: var(--border-strong);
+        background: var(--surface-2);
       }
       #viewport-wrap {
         position: relative;
@@ -195,11 +201,12 @@
         overflow: auto;
         font-family: ui-monospace, SFMono-Regular, monospace;
         font-size: 13px;
+        background: var(--bg);
       }
       #node-card pre {
-        background: var(--panel);
+        background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: 3px;
         padding: 14px;
         overflow-x: auto;
       }
@@ -209,7 +216,7 @@
         right: 0;
         bottom: 0;
         width: min(560px, 55%);
-        background: var(--panel);
+        background: var(--surface);
         border-left: 1px solid var(--border);
         display: flex;
         flex-direction: column;
@@ -239,7 +246,7 @@
         font-size: 12px;
         line-height: 1.5;
         background: var(--bg);
-        color: #d1d5db;
+        color: var(--text);
       }
     </style>
   </head>
@@ -356,7 +363,7 @@
         activePkg.textContent = item.package;
         activeTitle.textContent = item.title;
         activeDesc.textContent = item.description ?? '';
-        openDirect.href = item.kind === 'node' ? item.source : item.path;
+        openDirect.href = new URL(item.kind === 'node' ? item.source : item.path, location.href).href;
         for (const el of nav.querySelectorAll('.demo-link')) {
           el.classList.toggle('active', el.dataset.id === item.id);
         }
@@ -382,7 +389,7 @@
               resolve();
             };
             viewer.addEventListener('load', onLoad);
-            viewer.src = item.path;
+            viewer.src = new URL(item.path, location.href).href;
           });
           window.__galleryReady = {
             target: manifest.target,

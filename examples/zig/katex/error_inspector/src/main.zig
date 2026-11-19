@@ -31,7 +31,7 @@ export fn start() void {
     const lenient = katex.KatexOptions.create();
     defer katex.jsRelease(lenient);
     lenient.setThrowOnError(false);
-    lenient.setErrorColor("#f87171");
+    lenient.setErrorColor("#555555");
 
     const strict = katex.KatexOptions.create();
     defer katex.jsRelease(strict);
@@ -48,7 +48,7 @@ export fn start() void {
         const row = makeEl(doc, "div", "row", null);
 
         const left = makeEl(doc, "div", "cell mode-html", null);
-        appendAndRelease(left, makeEl(doc, "div", "label", "throwOnError: false (#f87171)"));
+        appendAndRelease(left, makeEl(doc, "div", "label", "throwOnError: false (#555555)"));
         const l_slot = makeEl(doc, "div", "slot", null);
         const html = katex.renderToString(tex, .{ .options = lenient });
         defer katex.jsRelease(html);

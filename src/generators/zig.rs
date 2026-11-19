@@ -279,6 +279,18 @@ fn raw_callback(t: &Ty) -> &'static str {
     }
 }
 
+fn callback_param_ty(t: &Ty, unions: &[NamedUnion]) -> String {
+    let decodable = |n: &str| unions.iter().any(|u| u.name == n && u.decodable());
+    match t {
+        Ty::NamedUnion(n) if !decodable(n) => "JsValue".into(),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::NamedUnion(n) if !decodable(n) => "?JsValue".into(),
+            _ => typed(t, false),
+        },
+        _ => typed(t, false),
+    }
+}
+
 // A callback argument, lent, as its Zig type.
 fn callback_arg(t: &Ty, a: &str, unions: &[NamedUnion]) -> String {
     let decodable = |n: &str| unions.iter().any(|u| u.name == n && u.decodable());
@@ -296,9 +308,10 @@ fn callback_arg(t: &Ty, a: &str, unions: &[NamedUnion]) -> String {
                 Ty::Num => format!("(JsValue{{ .h = {a} }}).toNumber()"),
                 Ty::NumEnum(e) => format!("@as({e}, @enumFromInt(@as(i32, @intFromFloat((JsValue{{ .h = {a} }}).toNumber()))))"),
                 Ty::NamedUnion(n) if decodable(n) => format!("{n}.lent({a})"),
+                Ty::NamedUnion(_) | Ty::Union(_) | Ty::Any => format!("JsValue{{ .h = {a} }}"),
                 inner => format!("{}{{ .h = {a} }}", typed(inner, false)),
             };
-            format!("@as({}, if ({a} == 0) null else {some})", typed(t, false))
+            format!("@as({}, if ({a} == 0) null else {some})", callback_param_ty(t, unions))
         }
         t => format!("{}{{ .h = {a} }}", typed(t, false)),
     }
@@ -855,7 +868,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     // C-convention trampoline turns what JavaScript passes into them.
     for c in &m.callbacks {
         let mut params = vec!["?*anyopaque".to_string()];
-        params.extend(c.params.iter().map(|(_, t)| typed(t, false)));
+        params.extend(c.params.iter().map(|(_, t)| callback_param_ty(t, &m.unions)));
         let raw_params: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| format!("a{i}: {}", raw_callback(t))).collect();
         let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| callback_arg(t, &format!("a{i}"), &m.unions)).collect();
         let ret = typed(&c.ret, false);

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +12,7 @@ const PACKAGES = {
   pts: { npm: ['pts'], needsDom: false, outDir: 'Pts' },
   babylon_lite: { npm: ['@babylonjs/lite'], needsDom: true, outDir: 'Babylonjs.Lite' },
   katex: { npm: ['katex'], needsDom: true, outDir: 'Katex' },
-  marked: { npm: ['marked'], needsDom: false, outDir: 'Marked' },
+  marked: { npm: ['marked'], needsDom: true, outDir: 'Marked' },
   date_fns: { npm: ['date-fns'], needsDom: false, outDir: 'DateFns' },
   node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'Node' },
   leaflet: { npm: ['leaflet'], needsDom: true, outDir: 'Leaflet' },
@@ -26,12 +27,14 @@ const PACKAGES = {
 
 const tsrsProto =
   process.env.TSRS_PROTO ??
-  ([path.resolve(ROOT, '../../target/release/tsrs_proto'), path.resolve(ROOT, '../../target/debug/tsrs_proto')].find(p =>
-    fs.existsSync(p),
-  ) || 'tsrs_proto');
+  ([path.resolve(ROOT, '../../target/debug/tsrs_proto'), path.resolve(ROOT, '../../target/release/tsrs_proto')]
+    .filter(p => fs.existsSync(p))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] || 'tsrs_proto');
 const cfg = path.resolve(ROOT, '../targets/fsharp.toml');
 const domCfg = path.resolve(ROOT, '../modules/dom.toml');
 const bindingsDir = path.join(ROOT, 'bindings');
+const fallbackFrom = path.resolve(ROOT, '../../target/libraries');
+const fromDir = fs.existsSync(path.join(ROOT, 'node_modules/pts')) ? ROOT : fallbackFrom;
 
 const selected = manifest.examples.filter(
   e => filters.length === 0 || filters.some(f => e.package === f || e.id === f || e.id.startsWith(`${f}/`)),
@@ -52,7 +55,7 @@ for (const pkg of neededPkgs) {
   if (!spec) throw new Error(`Unknown package spec: ${pkg}`);
   const outFsproj = path.join(bindingsDir, spec.outDir, `${spec.outDir}.fsproj`);
   if (!fs.existsSync(outFsproj)) {
-    const args = ['--from', ROOT];
+    const args = ['--from', fromDir];
     for (const n of spec.npm) args.push('--package', n);
     args.push('--config', cfg, '--emit', 'fsharp');
     if (spec.needsDom) args.push('--ref', path.join(bindingsDir, 'Dom'));
@@ -61,11 +64,18 @@ for (const pkg of neededPkgs) {
   }
 }
 
+const fableBin =
+  [
+    path.join(os.homedir(), '.dotnet/tools/fable'),
+    path.join(os.homedir(), '.dotnet/tools/fable.exe'),
+  ].find(p => fs.existsSync(p)) ?? 'fable';
+
 for (const ex of selected) {
   const demoDir = path.join(ROOT, path.dirname(ex.path));
   console.log(`Building fsharp ${ex.id}...`);
-  execFileSync('fable', ['App.fsproj', '-o', 'js', '--extension', '.mjs', '--noCache'], {
+  execFileSync(fableBin, ['App.fsproj', '-o', 'js', '--extension', '.mjs', '--noCache'], {
     cwd: demoDir,
     stdio: 'inherit',
+    env: { ...process.env, MSBUILDDISABLENODEREUSE: '1' },
   });
 }

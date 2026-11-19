@@ -13,14 +13,14 @@ static double approx_sin(double x) {
     return x * (1.0 - x2 / 6.0 * (1.0 - x2 / 20.0 * (1.0 - x2 / 42.0)));
 }
 
-static void format_hsla(char* out, int hue, int alpha_pct) {
+static void format_gray_hsla(char* out, int light, int alpha_pct) {
     char* p = out;
-    const char* prefix = "hsla(";
+    const char* prefix = "hsla(0, 0%, ";
     while (*prefix) *p++ = *prefix++;
-    if (hue >= 100) *p++ = (char)('0' + (hue / 100) % 10);
-    if (hue >= 10) *p++ = (char)('0' + (hue / 10) % 10);
-    *p++ = (char)('0' + hue % 10);
-    const char* mid = ", 85%, 62%, ";
+    if (light >= 100) *p++ = (char)('0' + (light / 100) % 10);
+    if (light >= 10) *p++ = (char)('0' + (light / 10) % 10);
+    *p++ = (char)('0' + light % 10);
+    const char* mid = "%, ";
     while (*mid) *p++ = *mid++;
     if (alpha_pct >= 100) {
         *p++ = '1';
@@ -65,9 +65,9 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Space current
         Group seg = Line_fromAngle(PtLike_of(pt), angle, len);
 
         char color[40];
-        int hue = (int)(155.0 + 185.0 * t + 0.5);
+        int light = (int)(65.0 - 57.0 * t + 0.5);
         int alpha_pct = (int)((0.25 + 0.75 * t) * 100.0 + 0.5);
-        format_hsla(color, hue, alpha_pct);
+        format_gray_hsla(color, light, alpha_pct);
 
         CanvasForm_line_2(CanvasForm_strokeOnly(g_form, color, js_some_double(1.5 + 2.5 * t)), PtLikeIterable_of(seg));
         Group dot = Circle_fromCenter(PtLike_of(pt), 1.5 + 4.5 * t * t);
@@ -76,14 +76,14 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Space current
 
     double ring_radius = 18.0 + 6.0 * approx_sin(time_ms * 0.004);
     Group ring = Circle_fromCenter(PtLike_of(pointer), ring_radius);
-    CanvasForm_circle_2(CanvasForm_strokeOnly(g_form, "#ffffffaa", js_some_double(2.0)), PtLikeIterable_of(ring));
+    CanvasForm_circle_2(CanvasForm_strokeOnly(g_form, "#11111199", js_some_double(2.0)), PtLikeIterable_of(ring));
 
     js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
     CanvasSpaceOptions opts = CanvasSpaceOptions_create();
-    CanvasSpaceOptions_set_bgcolor(opts, "#101622");
+    CanvasSpaceOptions_set_bgcolor(opts, "#ffffff");
     CanvasSpaceOptions_set_resize(opts, js_some_bool(true));
     CanvasSpaceOptions_set_retina(opts, js_some_bool(true));
 

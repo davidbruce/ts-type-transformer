@@ -22,7 +22,7 @@ head.appendChild title |> ignore
 head.appendChild badge |> ignore
 app.appendChild head |> ignore
 
-let lenientOpts = KatexOptions.Create (throwOnError = false, errorColor = "#f87171")
+let lenientOpts = KatexOptions.Create (throwOnError = false, errorColor = "#555555")
 let strictOpts = KatexOptions.Create (throwOnError = true)
 
 let badInputs =
@@ -35,7 +35,7 @@ for tex in badInputs do
     let row = div "row"
     let left = div "cell mode-html"
     let lLbl = div "label"
-    lLbl.textContent <- "throwOnError: false (#f87171)"
+    lLbl.textContent <- "throwOnError: false (#555555)"
     let lOut = div "slot"
     lOut.innerHTML <- renderToString (tex, lenientOpts)
     left.appendChild lLbl |> ignore

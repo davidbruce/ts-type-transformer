@@ -22,7 +22,7 @@ fn sin(x: Float) -> Float
 
 pub fn main() -> Nil {
   let opts = canvas_space_options.create()
-  canvas_space_options.set_bgcolor(opts, Some("#101622"))
+  canvas_space_options.set_bgcolor(opts, Some("#ffffff"))
   canvas_space_options.set_resize(opts, Some(True))
   canvas_space_options.set_retina(opts, Some(True))
 
@@ -49,16 +49,16 @@ pub fn main() -> Nil {
         let angle =
           pt.angle(delta, None) +. sin(time *. 0.0015 +. dist *. 0.01) *. 0.35
         let len = 8.0 +. 34.0 *. weight
-        let hue = int.to_string(float.round(155.0 +. 185.0 *. weight))
+        let light = int.to_string(float.round(65.0 -. 57.0 *. weight))
         let alpha = 0.25 +. 0.75 *. weight
 
         let _ =
           canvas_form.stroke_only(
             form,
             t.CanvasFormFillCString(
-              "hsla("
-              <> hue
-              <> ", 85%, 64%, "
+              "hsla(0, 0%, "
+              <> light
+              <> "%, "
               <> float.to_string(alpha)
               <> ")",
             ),
@@ -70,7 +70,7 @@ pub fn main() -> Nil {
             t.PtLikeIterableGroup(line.from_angle(t.PtLikePt(p), angle, len)),
           )
           |> canvas_form.fill_only(
-            t.CanvasFormFillCString("hsla(" <> hue <> ", 90%, 72%, 0.9)"),
+            t.CanvasFormFillCString("hsla(0, 0%, " <> light <> "%, 0.9)"),
           )
           |> canvas_form.circle_2(
             t.PtLikeIterableGroup(circle.from_center(
@@ -85,7 +85,7 @@ pub fn main() -> Nil {
       let _ =
         canvas_form.stroke_only(
           form,
-          t.CanvasFormFillCString("#ffffffaa"),
+          t.CanvasFormFillCString("#11111199"),
           Some(2.0),
           None,
           None,

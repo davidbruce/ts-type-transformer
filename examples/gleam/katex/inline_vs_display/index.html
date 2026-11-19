@@ -5,23 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inline vs Display — KaTeX + Gleam</title>
     <style>
-      :root { color-scheme: dark; }
+      :root { color-scheme: light; }
       * { box-sizing: border-box; }
-      body { margin: 0; padding: 20px; background: #0b0f17; color: #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
       #app { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 10px; }
+      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #111111; padding-bottom: 10px; }
       .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
-      .badge { font-size: 11px; color: #93c5fd; border: 1px solid #1e3a8a; border-radius: 999px; padding: 2px 9px; }
+      .badge { font-size: 11px; color: #111111; background: #f7f7f7; border: 1px solid #b5b5b5; border-radius: 3px; padding: 2px 9px; }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-      .card { background: #111827; border: 1px solid #1f2937; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-      .label { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; }
-      .tex { font-size: 11px; color: #93c5fd; background: #0b0f17; border: 1px solid #1f2937; border-radius: 4px; padding: 6px 8px; overflow-x: auto; margin: 0; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #111827; border: 1px solid #1f2937; border-radius: 6px; padding: 12px; }
-      .cell { padding: 8px; background: #0b0f17; border: 1px solid #1f2937; border-radius: 4px; overflow-x: auto; display: flex; flex-direction: column; gap: 6px; }
-      .err { color: #fca5a5; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+      .card { background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+      .label { font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.06em; }
+      .tex { font-size: 11px; color: #111111; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 6px 8px; overflow-x: auto; margin: 0; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 12px; }
+      .cell { padding: 8px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; overflow-x: auto; display: flex; flex-direction: column; gap: 6px; color: #111111; }
+      .err { color: #111111; background: #efefef; border-left: 2px solid #111111; padding: 6px 8px; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
       .katex-html { display: none; }
       .katex-mathml math { font-size: 1.25rem; }
-      .mode-html .katex-html { display: inline-block; color: #e5e7eb; }
+      .mode-html .katex-html { display: inline-block; color: #111111; }
       .mode-html .katex-error { font-weight: 600; }
     </style>
   </head>

@@ -64,6 +64,51 @@
       "path": "./katex/output_modes/index.html",
       "source": "./katex/output_modes/src/lib.rs",
       "kind": "browser"
+    },
+    {
+      "id": "marked/document_preview",
+      "package": "marked",
+      "title": "Document Preview",
+      "description": "Full Markdown article with headings, emphasis, lists, blockquote, fenced code, and link",
+      "path": "./marked/document_preview/index.html",
+      "source": "./marked/document_preview/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "marked/token_inspector",
+      "package": "marked",
+      "title": "Token Inspector",
+      "description": "Lexer AST inspection displaying each token's index, type, byte length, and raw snippet",
+      "path": "./marked/token_inspector/index.html",
+      "source": "./marked/token_inspector/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "marked/inline_vs_block",
+      "package": "marked",
+      "title": "Inline vs Block",
+      "description": "Side-by-side comparison of block parse vs parseInline rendered output and raw HTML",
+      "path": "./marked/inline_vs_block/index.html",
+      "source": "./marked/inline_vs_block/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "marked/custom_renderer",
+      "package": "marked",
+      "title": "Custom Renderer & Walker",
+      "description": "Custom heading renderer override and walkTokens AST traversal strip",
+      "path": "./marked/custom_renderer/index.html",
+      "source": "./marked/custom_renderer/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "marked/gfm_and_breaks",
+      "package": "marked",
+      "title": "GFM & Line Breaks",
+      "description": "Comparing gfm: true/false (tables, strikethrough) and breaks: true/false (<br>)",
+      "path": "./marked/gfm_and_breaks/index.html",
+      "source": "./marked/gfm_and_breaks/src/lib.rs",
+      "kind": "browser"
     }
   ]
 }

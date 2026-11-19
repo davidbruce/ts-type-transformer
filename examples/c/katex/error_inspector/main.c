@@ -26,7 +26,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     KatexOptions lenient = KatexOptions_create();
     KatexOptions_set_throwOnError(lenient, js_some_bool(false));
-    KatexOptions_set_errorColor(lenient, "#f87171");
+    KatexOptions_set_errorColor(lenient, "#555555");
 
     KatexOptions strict = KatexOptions_create();
     KatexOptions_set_throwOnError(strict, js_some_bool(true));
@@ -41,7 +41,7 @@ __attribute__((export_name("start"))) void start(void) {
     for (int i = 0; i < 4; i++) {
         HTMLElement row = make_el(doc, "div", "row", 0);
         HTMLElement left = make_el(doc, "div", "cell mode-html", 0);
-        append_and_release(left, make_el(doc, "div", "label", "throwOnError: false (#f87171)"));
+        append_and_release(left, make_el(doc, "div", "label", "throwOnError: false (#555555)"));
         HTMLElement l_slot = make_el(doc, "div", "slot", 0);
         JsString html = renderToString(bad_inputs[i], lenient);
         JsString_copy(html, html_buf, sizeof(html_buf));

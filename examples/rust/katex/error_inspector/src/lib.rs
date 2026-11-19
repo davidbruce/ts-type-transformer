@@ -30,7 +30,7 @@ pub extern "C" fn start() {
 
     let lenient = KatexOptions::create();
     lenient.set_throw_on_error(Some(false));
-    lenient.set_error_color(Some("#f87171"));
+    lenient.set_error_color(Some("#555555"));
 
     let strict = KatexOptions::create();
     strict.set_throw_on_error(Some(true));
@@ -46,7 +46,7 @@ pub extern "C" fn start() {
         let row = make_el(&doc, "div", "row", None);
 
         let left = make_el(&doc, "div", "cell mode-html", None);
-        append(&left, make_el(&doc, "div", "label", Some("throwOnError: false (#f87171)")));
+        append(&left, make_el(&doc, "div", "label", Some("throwOnError: false (#555555)")));
         let l_slot = make_el(&doc, "div", "slot", None);
         l_slot.set_inner_html(&katex::render_to_string(tex, Some(&lenient)));
         append(&left, l_slot);

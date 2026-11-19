@@ -12,7 +12,7 @@ const PACKAGES = {
   pts: { npm: ['pts'], needsDom: false, outDir: 'pts', name: 'pts' },
   babylon_lite: { npm: ['@babylonjs/lite'], needsDom: true, outDir: 'babylonjs_lite', name: 'babylonjs_lite' },
   katex: { npm: ['katex'], needsDom: true, outDir: 'katex', name: 'katex' },
-  marked: { npm: ['marked'], needsDom: false, outDir: 'marked', name: 'marked' },
+  marked: { npm: ['marked'], needsDom: true, outDir: 'marked', name: 'marked' },
   date_fns: { npm: ['date-fns'], needsDom: false, outDir: 'date_fns', name: 'date_fns' },
   node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'node', name: 'node' },
   leaflet: { npm: ['leaflet'], needsDom: true, outDir: 'leaflet', name: 'leaflet' },
@@ -56,13 +56,15 @@ const CLANGXX_OBJ = CLANGXX_WASM.filter(f => !f.startsWith('-Wl,') && !f.startsW
 
 const tsrsProto =
   process.env.TSRS_PROTO ??
-  ([path.resolve(ROOT, '../../target/release/tsrs_proto'), path.resolve(ROOT, '../../target/debug/tsrs_proto')].find(p =>
-    fs.existsSync(p),
-  ) || 'tsrs_proto');
+  ([path.resolve(ROOT, '../../target/debug/tsrs_proto'), path.resolve(ROOT, '../../target/release/tsrs_proto')]
+    .filter(p => fs.existsSync(p))
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] || 'tsrs_proto');
 const cfg = path.resolve(ROOT, '../targets/cpp.toml');
 const domCfg = path.resolve(ROOT, '../modules/dom.toml');
 const bindingsDir = path.join(ROOT, 'bindings');
 const objRoot = path.join(bindingsDir, '.obj');
+const fallbackFrom = path.resolve(ROOT, '../../target/libraries');
+const fromDir = fs.existsSync(path.join(ROOT, 'node_modules/pts')) ? ROOT : fallbackFrom;
 
 const selected = manifest.examples.filter(
   e => filters.length === 0 || filters.some(f => e.package === f || e.id === f || e.id.startsWith(`${f}/`)),
@@ -97,7 +99,7 @@ for (const pkg of neededPkgs) {
   const spec = PACKAGES[pkg];
   if (!spec) throw new Error(`Unknown package spec: ${pkg}`);
   if (!fs.existsSync(path.join(bindingsDir, spec.outDir))) {
-    const args = ['--from', ROOT];
+    const args = ['--from', fromDir];
     for (const n of spec.npm) args.push('--package', n);
     args.push('--config', cfg, '--emit', 'cpp');
     if (spec.npm.length > 1) args.push('--name', spec.name);

@@ -9,7 +9,7 @@ use pts::{
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let opts = CanvasSpaceOptions::create();
-    opts.set_bgcolor(Some("#101622"));
+    opts.set_bgcolor(Some("#ffffff"));
     opts.set_resize(Some(true));
     opts.set_retina(Some(true));
 
@@ -33,9 +33,9 @@ pub extern "C" fn start() {
                 let len = 8.0 + 34.0 * t;
                 let seg = Line::from_angle(&pt, angle, len);
 
-                let hue = 155.0 + 185.0 * t;
+                let light = 65.0 - 57.0 * t;
                 let alpha = 0.25 + 0.75 * t;
-                let color = format!("hsla({hue:.0}, 85%, 62%, {alpha:.2})");
+                let color = format!("hsla(0, 0%, {light:.0}%, {alpha:.2})");
 
                 form.stroke_only(color.as_str(), Some(1.5 + 2.5 * t), None, None)
                     .line_2(&seg);
@@ -45,7 +45,7 @@ pub extern "C" fn start() {
 
             let ring_radius = 18.0 + 6.0 * (time * 0.004).sin();
             let ring = Circle::from_center(&pointer, ring_radius);
-            form.stroke_only("#ffffffaa", Some(2.0), None, None)
+            form.stroke_only("#11111199", Some(2.0), None, None)
                 .circle_2(&ring);
         })
     };

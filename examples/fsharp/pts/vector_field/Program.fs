@@ -8,7 +8,7 @@ open Pts
 let space =
     CanvasSpace
         .Create("#pt")
-        .setup(CanvasSpaceOptions.Create(bgcolor = "#101622", resize = true, retina = true))
+        .setup(CanvasSpaceOptions.Create(bgcolor = "#ffffff", resize = true, retina = true))
 
 let form = space.getForm ()
 
@@ -28,9 +28,9 @@ player.animate <-
             let len = 8.0 + 34.0 * t
             let seg = Line.fromAngle (pt, angle, len)
 
-            let hue = 155.0 + 185.0 * t
+            let light = 65.0 - 57.0 * t
             let alpha = 0.25 + 0.75 * t
-            let color = $"hsla({hue:F0}, 85%%, 62%%, {alpha:F2})"
+            let color = $"hsla(0, 0%%, {light:F0}%%, {alpha:F2})"
 
             form
                 .strokeOnly(color, 1.5 + 2.5 * t)
@@ -48,7 +48,7 @@ player.animate <-
         let ring = Circle.fromCenter (pointer, ringRadius)
 
         form
-            .strokeOnly("#ffffffaa", 2.0)
+            .strokeOnly("#11111199", 2.0)
             .circle(ring)
         |> ignore)
 

@@ -19,7 +19,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
 
     katex::KatexOptions lenient = katex::KatexOptions::create();
     lenient.throwOnError(false);
-    lenient.errorColor("#f87171");
+    lenient.errorColor("#555555");
 
     katex::KatexOptions strict = katex::KatexOptions::create();
     strict.throwOnError(true);
@@ -34,7 +34,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
     for (const char* tex : bad_inputs) {
         dom::HTMLElement row = make_el(doc, "div", "row", "");
         dom::HTMLElement left = make_el(doc, "div", "cell mode-html", "");
-        left.appendChild(make_el(doc, "div", "label", "throwOnError: false (#f87171)"));
+        left.appendChild(make_el(doc, "div", "label", "throwOnError: false (#555555)"));
         dom::HTMLElement l_slot = make_el(doc, "div", "slot", "");
         l_slot.innerHTML(katex::renderToString(tex, lenient));
         left.appendChild(l_slot);

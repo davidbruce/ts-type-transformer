@@ -9,7 +9,7 @@ using namespace pts;
 
 extern "C" __attribute__((export_name("start"))) void start() {
     CanvasSpaceOptions opts = CanvasSpaceOptions::create();
-    opts.bgcolor("#101622");
+    opts.bgcolor("#ffffff");
     opts.resize(true);
     opts.retina(true);
 
@@ -31,10 +31,10 @@ extern "C" __attribute__((export_name("start"))) void start() {
             double len = 8.0 + 34.0 * t;
             Group seg = Line::fromAngle(pt, angle, len);
 
-            double hue = 155.0 + 185.0 * t;
+            double light = 65.0 - 57.0 * t;
             double alpha = 0.25 + 0.75 * t;
             char buf[48];
-            std::snprintf(buf, sizeof(buf), "hsla(%.0f, 85%%, 62%%, %.2f)", hue, alpha);
+            std::snprintf(buf, sizeof(buf), "hsla(0, 0%%, %.0f%%, %.2f)", light, alpha);
             std::string color(buf);
 
             form.strokeOnly(CanvasForm_fill_c(color), 1.5 + 2.5 * t).line(PtLikeIterable(seg));
@@ -44,7 +44,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
 
         double ring_radius = 18.0 + 6.0 * std::sin(time_ms * 0.004);
         Group ring = Circle::fromCenter(pointer, ring_radius);
-        form.strokeOnly(CanvasForm_fill_c(std::string("#ffffffaa")), 2.0).circle(PtLikeIterable(ring));
+        form.strokeOnly(CanvasForm_fill_c(std::string("#11111199")), 2.0).circle(PtLikeIterable(ring));
     }));
 
     space.add(player);

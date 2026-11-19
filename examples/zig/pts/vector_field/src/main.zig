@@ -27,8 +27,8 @@ fn onAnimate(_: ?*anyopaque, time_ms: f64, _: f64, _: b.Space) void {
         var buf: [48]u8 = undefined;
         const color = std.fmt.bufPrint(
             &buf,
-            "hsla({d:.0}, 85%, 62%, {d:.2})",
-            .{ 155.0 + 185.0 * t, 0.25 + 0.75 * t },
+            "hsla(0, 0%, {d:.0}%, {d:.2})",
+            .{ 65.0 - 57.0 * t, 0.25 + 0.75 * t },
         ) catch continue;
         const color_str = b.JsString.from(color);
 
@@ -39,13 +39,13 @@ fn onAnimate(_: ?*anyopaque, time_ms: f64, _: f64, _: b.Space) void {
 
     const ring_radius = 18.0 + 6.0 * @sin(time_ms * 0.004);
     const ring = b.Circle.fromCenter(.{ .Pt = pointer }, ring_radius);
-    _ = g_form.strokeOnly(.{ .string = b.JsString.from("#ffffffaa") }, .{ .width = 2.0 }).circle2(.{ .Group = ring });
+    _ = g_form.strokeOnly(.{ .string = b.JsString.from("#11111199") }, .{ .width = 2.0 }).circle2(.{ .Group = ring });
 }
 
 export fn start() void {
     const opts = b.CanvasSpaceOptions.create();
     defer b.jsRelease(opts);
-    opts.setBgcolor("#101622");
+    opts.setBgcolor("#ffffff");
     opts.setResize(true);
     opts.setRetina(true);
 
