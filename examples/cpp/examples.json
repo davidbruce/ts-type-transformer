@@ -12,6 +12,42 @@
       "kind": "browser"
     },
     {
+      "id": "pts/polygon_subdivision",
+      "package": "pts",
+      "title": "Pts \u2014 Polygon Subdivision",
+      "description": "Recursive 9-level Polygon.midpoints subdivision with rotating spokes and live centroid marker",
+      "path": "./pts/polygon_subdivision/index.html",
+      "source": "./pts/polygon_subdivision/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "pts/curve_splines",
+      "package": "pts",
+      "title": "Pts \u2014 Spline Curves",
+      "description": "Interactive Catmull-Rom, Cardinal, and B-spline ribbons sharing an 11-point control wave",
+      "path": "./pts/curve_splines/index.html",
+      "source": "./pts/curve_splines/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "pts/circle_intersections",
+      "package": "pts",
+      "title": "Pts \u2014 Circle Intersections",
+      "description": "Real-time Circle.intersectCircle2D nodes and Line.perpendicularFromPt chord projections",
+      "path": "./pts/circle_intersections/index.html",
+      "source": "./pts/circle_intersections/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "pts/convex_hull_network",
+      "package": "pts",
+      "title": "Pts \u2014 Convex Hull & Network",
+      "description": "Harmonic radial point cloud with live Polygon.convexHull, Polygon.network chords, and Geom.boundingBox",
+      "path": "./pts/convex_hull_network/index.html",
+      "source": "./pts/convex_hull_network/main.cpp",
+      "kind": "browser"
+    },
+    {
       "id": "babylon_lite/torus_knot",
       "package": "babylon_lite",
       "title": "Torus Knot (WebGPU)",

@@ -1,0 +1,174 @@
+import gleam/float
+import gleam/int
+import gleam/list
+import gleam/option.{None, Some}
+import pts/areas/main/canvas_form
+import pts/areas/main/canvas_space
+import pts/areas/main/canvas_space_options
+import pts/areas/main/curve
+import pts/areas/main/group
+import pts/areas/main/i_player
+import pts/areas/main/multi_touch_space
+import pts/areas/main/pt
+import pts/areas/main/space
+import pts/runtime as r
+import pts/types as t
+
+@external(javascript, "./app_ffi.mjs", "sin")
+fn sin(x: Float) -> Float
+
+@external(javascript, "./app_ffi.mjs", "cos")
+fn cos(x: Float) -> Float
+
+@external(javascript, "./app_ffi.mjs", "abs")
+fn abs(x: Float) -> Float
+
+fn mk_pt(x: Float, y: Float) -> t.Pt(Nil) {
+  let p = pt.make(2.0, None, None)
+  pt.set_x(p, x)
+  pt.set_y(p, y)
+  p
+}
+
+fn range_loop(i: Int, end: Int, acc: List(Int)) -> List(Int) {
+  case i >= end {
+    True -> list.reverse(acc)
+    False -> range_loop(i + 1, end, [i, ..acc])
+  }
+}
+
+pub fn main() -> Nil {
+  let opts = canvas_space_options.create()
+  canvas_space_options.set_bgcolor(opts, Some("#ffffff"))
+  canvas_space_options.set_resize(opts, Some(True))
+  canvas_space_options.set_retina(opts, Some(True))
+
+  let cs =
+    canvas_space.new(Some(t.StringOrElementString("#pt")), None)
+    |> canvas_space.setup(opts)
+  let form = canvas_space.get_form(cs)
+
+  let player = i_player.create()
+  i_player.set_animate(
+    player,
+    Some(fn(time_ms, _ftime, _space) {
+      let size = space.get_size(cs)
+      let c = space.get_center(cs)
+      let pointer = multi_touch_space.get_pointer(cs)
+      let w = float.max(120.0, pt.get_x(size))
+      let h = float.max(120.0, pt.get_y(size))
+      let cy = pt.get_y(c)
+      let amp = h *. 0.24
+      let count = 11
+      let px = pt.get_x(pointer)
+      let py = pt.get_y(pointer)
+
+      let base_line = group.new([mk_pt(w *. 0.06, cy), mk_pt(w *. 0.94, cy)])
+      let _ =
+        canvas_form.stroke_only(
+          form,
+          t.CanvasFormFillCString("#e5e5e5"),
+          Some(1.0),
+          None,
+          None,
+        )
+        |> canvas_form.line_2(t.PtLikeIterableGroup(base_line))
+
+      let pts_list =
+        list.map(range_loop(0, count, []), fn(i) {
+          let fi = int.to_float(i)
+          let u = fi /. int.to_float(count - 1)
+          let x = w *. { 0.08 +. 0.84 *. u }
+          let y0 =
+            cy
+            +. sin(time_ms *. 0.0014 +. fi *. 0.72) *. amp
+            +. cos(time_ms *. 0.0009 -. fi *. 0.45) *. { amp *. 0.42 }
+          let dx = abs(x -. px)
+          let y = case dx <. w *. 0.25 && { px >. 1.0 || py >. 1.0 } {
+            True -> {
+              let pull = 1.0 -. dx /. { w *. 0.25 }
+              y0 +. { py -. y0 } *. pull *. 0.35
+            }
+            False -> y0
+          }
+          mk_pt(x, y)
+        })
+
+      let ctrls = group.new(pts_list)
+      let bs = curve.bspline(t.GroupLikeGroup(ctrls), Some(12.0), None)
+      let card =
+        curve.cardinal(t.PtLikeIterableGroup(ctrls), Some(12.0), Some(0.35))
+      let cr = curve.catmull_rom(t.PtLikeIterableGroup(ctrls), Some(12.0))
+
+      let _ =
+        list.index_fold(group.to_list(cr), Nil, fn(_, p, i) {
+          case i % 3 == 0 {
+            True -> {
+              let stem = group.new([mk_pt(pt.get_x(p), cy), p])
+              let _ =
+                canvas_form.stroke_only(
+                  form,
+                  t.CanvasFormFillCString("#d4d4d4"),
+                  Some(1.0),
+                  None,
+                  None,
+                )
+                |> canvas_form.line_2(t.PtLikeIterableGroup(stem))
+              Nil
+            }
+            False -> Nil
+          }
+        })
+
+      let _ =
+        canvas_form.stroke_only(
+          form,
+          t.CanvasFormFillCString("#d4d4d4"),
+          Some(1.0),
+          None,
+          None,
+        )
+        |> canvas_form.line_2(t.PtLikeIterableGroup(ctrls))
+        |> canvas_form.stroke_only(
+          t.CanvasFormFillCString("#b5b5b5"),
+          Some(2.0),
+          None,
+          None,
+        )
+        |> canvas_form.line_2(t.PtLikeIterableGroup(bs))
+        |> canvas_form.stroke_only(
+          t.CanvasFormFillCString("#555555"),
+          Some(1.8),
+          None,
+          None,
+        )
+        |> canvas_form.line_2(t.PtLikeIterableGroup(card))
+        |> canvas_form.stroke_only(
+          t.CanvasFormFillCString("#111111"),
+          Some(2.6),
+          None,
+          None,
+        )
+        |> canvas_form.line_2(t.PtLikeIterableGroup(cr))
+
+      list.each(pts_list, fn(p) {
+        let _ =
+          canvas_form.fill(form, t.CanvasFormFillCString("#ffffff"))
+          |> canvas_form.stroke(
+            t.CanvasFormFillCString("#111111"),
+            Some(1.5),
+            None,
+            None,
+          )
+          |> canvas_form.point_2(t.PtLikePt(p), Some(4.5), Some("circle"))
+        Nil
+      })
+    }),
+  )
+
+  let _ = space.add(cs, r.dynamic(player))
+  let _ = multi_touch_space.bind_mouse(cs, Some(True), None)
+  let _ = multi_touch_space.bind_touch(cs, Some(True), None, None)
+  let _ = space.play(cs, None)
+  Nil
+}

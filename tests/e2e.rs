@@ -2575,7 +2575,13 @@ mod examples {
         needs_dom: false,
         crate_name: "pts",
         fsharp_name: "Pts",
-        demos: &["vector_field"],
+        demos: &[
+            "vector_field",
+            "polygon_subdivision",
+            "curve_splines",
+            "circle_intersections",
+            "convex_hull_network",
+        ],
         verify: VerifyKind::PtsCanvas,
     };
 

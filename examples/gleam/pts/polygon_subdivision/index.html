@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pts — Polygon Subdivision + Gleam</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #ffffff;
+      }
+      #pt {
+        width: 100%;
+        height: 100%;
+      }
+      .badge {
+        pointer-events: none;
+        position: fixed;
+        top: 12px;
+        left: 14px;
+        background: #ffffff;
+        border: 1px solid #d4d4d4;
+        padding: 4px 10px;
+        font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #111111;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="pt"></div>
+    <div class="badge">Pts — Polygon Subdivision · Gleam</div>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>
