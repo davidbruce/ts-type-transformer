@@ -13,6 +13,7 @@ pub struct ProjectRef {
     pub ts_types_include: String,
     pub umbrella_include: String,
     pub structs: HashSet<String>,
+    pub external_structs: HashSet<String>,
     pub all_names: Vec<String>,
 }
 
@@ -76,6 +77,7 @@ pub fn load_project_ref(dir_or_header: &Path, from_dir: &Path) -> Result<Project
     };
 
     let mut structs = HashSet::new();
+    let mut external_structs = HashSet::new();
     let mut all_names = Vec::new();
     let mut prev_is_external = false;
     for line in src.lines().map(str::trim) {
@@ -84,8 +86,12 @@ pub fn load_project_ref(dir_or_header: &Path, from_dir: &Path) -> Result<Project
             continue;
         }
         if let Some(name) = line.strip_prefix("typedef struct { uint32_t h; } ").and_then(|r| r.strip_suffix(';')).map(str::trim) {
-            if !prev_is_external && !is_builtin_c_type(name) {
-                structs.insert(name.to_string());
+            if !is_builtin_c_type(name) {
+                if prev_is_external {
+                    external_structs.insert(name.to_string());
+                } else {
+                    structs.insert(name.to_string());
+                }
                 all_names.push(name.to_string());
             }
         } else if line.starts_with("typedef enum {")
@@ -119,7 +125,7 @@ pub fn load_project_ref(dir_or_header: &Path, from_dir: &Path) -> Result<Project
     collect_c_header_functions(root_dir, &mut all_names);
     all_names.sort();
     all_names.dedup();
-    Ok(ProjectRef { pkg_name, ts_types_include, umbrella_include, structs, all_names })
+    Ok(ProjectRef { pkg_name, ts_types_include, umbrella_include, structs, external_structs, all_names })
 }
 
 fn import_attr(wasm_module: &str, name: &str) -> String {

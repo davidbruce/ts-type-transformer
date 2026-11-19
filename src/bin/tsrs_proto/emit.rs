@@ -73,7 +73,10 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| vec![e])?;
             let extra_reserved: Vec<String> = loaded.iter().flat_map(|r| r.all_names.iter().cloned()).collect();
-            let ref_structs: HashSet<String> = loaded.iter().flat_map(|r| r.structs.iter().cloned()).collect();
+            let ref_structs: HashSet<String> = loaded
+                .iter()
+                .flat_map(|r| r.structs.iter().chain(r.external_structs.iter()).cloned())
+                .collect();
             let model = wasm::model_with_reserved(xml, "C", &extra_reserved, &ref_structs)?;
             let mut out = c::files_named(&model, pkg_name, &loaded)?;
             push_glue(&model, &mut out);
