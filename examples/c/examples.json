@@ -109,6 +109,51 @@
       "path": "./marked/gfm_and_breaks/index.html",
       "source": "./marked/gfm_and_breaks/main.c",
       "kind": "browser"
+    },
+    {
+      "id": "date_fns/calendar_grid",
+      "package": "date_fns",
+      "title": "Calendar Grid",
+      "description": "Monthly March 2024 calendar matrix built with startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, and isSameDay",
+      "path": "./date_fns/calendar_grid/index.html",
+      "source": "./date_fns/calendar_grid/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "date_fns/format_cookbook",
+      "package": "date_fns",
+      "title": "Format & Parse Cookbook",
+      "description": "Reference table of formatDate, lightFormat, formatISO, parse, isMatch, isValid, and isExists",
+      "path": "./date_fns/format_cookbook/index.html",
+      "source": "./date_fns/format_cookbook/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "date_fns/date_arithmetic",
+      "package": "date_fns",
+      "title": "Date Arithmetic & Durations",
+      "description": "Immutable date stepping with addDays, subDays, addWeeks, addMonths, subMonths, addYears, startOfWeek, endOfMonth, and Duration",
+      "path": "./date_fns/date_arithmetic/index.html",
+      "source": "./date_fns/date_arithmetic/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "date_fns/relative_timeline",
+      "package": "date_fns",
+      "title": "Relative Timeline",
+      "description": "Chronological milestone timeline using formatDistance, formatDistanceStrict, isBefore, isAfter, compareAsc, min, and max",
+      "path": "./date_fns/relative_timeline/index.html",
+      "source": "./date_fns/relative_timeline/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "date_fns/interval_overlap",
+      "package": "date_fns",
+      "title": "Interval Overlap & Clamp",
+      "description": "31-day wireframe Gantt grid using eachDayOfInterval, isWithinInterval, areIntervalsOverlapping, intervalToDuration, and clamp",
+      "path": "./date_fns/interval_overlap/index.html",
+      "source": "./date_fns/interval_overlap/main.c",
+      "kind": "browser"
     }
   ]
 }

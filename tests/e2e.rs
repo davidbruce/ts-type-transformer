@@ -2623,6 +2623,25 @@ mod examples {
         },
     };
 
+    const DATE_FNS_SPEC: PackageSpec = PackageSpec {
+        pkg: "date_fns",
+        npm: &["date-fns"],
+        needs_dom: true,
+        crate_name: "date_fns",
+        fsharp_name: "DateFns",
+        demos: &[
+            "calendar_grid",
+            "format_cookbook",
+            "date_arithmetic",
+            "relative_timeline",
+            "interval_overlap",
+        ],
+        verify: VerifyKind::DomSelector {
+            selector: "#app .day-cell, #app tbody tr, #app .milestone, #app .gantt-row",
+            min_count: 4,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3214,6 +3233,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(babylon_lite, BABYLON_LITE_SPEC);
     pkg_tests!(katex, KATEX_SPEC);
     pkg_tests!(marked, MARKED_SPEC);
+    pkg_tests!(date_fns, DATE_FNS_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

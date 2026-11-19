@@ -1,0 +1,146 @@
+import date_fns/areas/main as df
+import date_fns/areas/main/interval
+import date_fns/runtime
+import date_fns/types as dt
+import dom/areas/core
+import dom/areas/core/document
+import dom/areas/core/element
+import dom/areas/core/node
+import gleam/float
+import gleam/int
+import gleam/list
+import gleam/option.{None, Some}
+
+fn add_metric(doc, metrics, label: String, val: String) -> Nil {
+  let m = document.create_element_div(doc, None)
+  element.set_class_name(m, "metric")
+  let lbl = document.create_element_div(doc, None)
+  element.set_class_name(lbl, "label")
+  node.set_text_content(lbl, Some(label))
+  let v = document.create_element_div(doc, None)
+  element.set_class_name(v, "val")
+  node.set_text_content(v, Some(val))
+  let _ = node.append_child(m, lbl)
+  let _ = node.append_child(m, v)
+  let _ = node.append_child(metrics, m)
+  Nil
+}
+
+pub fn main() -> Nil {
+  let doc = core.get_document()
+  case document.get_element_by_id(doc, "app") {
+    None -> Nil
+    Some(app) -> {
+      let dc = dt.date_codec()
+      let day = dt.DateOrStringOrNumberDate
+      let arg = dt.DateArgDateType
+
+      let head = document.create_element_div(doc, None)
+      element.set_class_name(head, "head")
+      let h1 = document.create_element_h1(doc, None)
+      node.set_text_content(h1, Some("Date-fns Calendar Grid (Gleam)"))
+      let badge = document.create_element_span(doc, None)
+      element.set_class_name(badge, "badge")
+      node.set_text_content(badge, Some("March 2024"))
+      let _ = node.append_child(head, h1)
+      let _ = node.append_child(head, badge)
+      let _ = node.append_child(app, head)
+
+      let ref_day = df.parse_iso("2024-03-15", None, dc)
+      let month_start = df.start_of_month(arg(ref_day), None, dc, dc)
+      let month_end = df.end_of_month(arg(ref_day), None, dc, dc)
+      let offset = float.round(df.get_day(day(month_start), None))
+
+      let metrics = document.create_element_div(doc, None)
+      element.set_class_name(metrics, "metrics")
+      add_metric(
+        doc,
+        metrics,
+        "Days in Month",
+        int.to_string(float.round(df.get_days_in_month(day(ref_day), None))),
+      )
+      add_metric(
+        doc,
+        metrics,
+        "Quarter",
+        "Q" <> int.to_string(float.round(df.get_quarter(day(ref_day), None))),
+      )
+      add_metric(
+        doc,
+        metrics,
+        "ISO Week",
+        "W" <> int.to_string(float.round(df.get_iso_week(day(ref_day), None))),
+      )
+      let leap = case df.is_leap_year(day(ref_day), None) {
+        True -> "Yes · #"
+        False -> "No · #"
+      }
+      add_metric(
+        doc,
+        metrics,
+        "Leap Year / DOY",
+        leap <> int.to_string(float.round(df.get_day_of_year(day(ref_day), None))),
+      )
+      let _ = node.append_child(app, metrics)
+
+      let card = document.create_element_div(doc, None)
+      element.set_class_name(card, "card")
+      let lbl = document.create_element_div(doc, None)
+      element.set_class_name(lbl, "label")
+      node.set_text_content(lbl, Some("March 2024 — Reference 2024-03-15"))
+      let _ = node.append_child(card, lbl)
+
+      let grid = document.create_element_div(doc, None)
+      element.set_class_name(grid, "cal-grid")
+      list.each(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], fn(dow) {
+        let el = document.create_element_div(doc, None)
+        element.set_class_name(el, "dow")
+        node.set_text_content(el, Some(dow))
+        let _ = node.append_child(grid, el)
+        Nil
+      })
+
+      list.each(list.repeat(Nil, offset), fn(_) {
+        let empty = document.create_element_div(doc, None)
+        element.set_class_name(empty, "day-cell empty")
+        let _ = node.append_child(grid, empty)
+        Nil
+      })
+
+      let span = interval.create()
+      interval.set_start(span, arg(month_start), dt.date_arg_codec(dc))
+      interval.set_end(span, arg(month_end), dt.date_arg_codec(dc))
+      let days = df.each_day_of_interval(span, None, runtime.codec_dynamic())
+
+      list.each(days, fn(d) {
+        let is_ref = df.is_same_day(d, day(ref_day), None)
+        let is_wknd = df.is_weekend(d, None)
+        let cls = case is_ref, is_wknd {
+          True, _ -> "day-cell today"
+          False, True -> "day-cell weekend"
+          False, False -> "day-cell"
+        }
+        let cell = document.create_element_div(doc, None)
+        element.set_class_name(cell, cls)
+        let day_num = document.create_element_span(doc, None)
+        element.set_class_name(day_num, "day-num")
+        node.set_text_content(day_num, Some(df.format_date(d, "d", None)))
+        let sub = document.create_element_span(doc, None)
+        element.set_class_name(sub, "sub")
+        let sub_txt = case is_ref {
+          True -> "REF"
+          False -> df.format_date(d, "EEE", None)
+        }
+        node.set_text_content(sub, Some(sub_txt))
+        let _ = node.append_child(cell, day_num)
+        let _ = node.append_child(cell, sub)
+        let _ = node.append_child(grid, cell)
+        Nil
+      })
+
+      let _ = node.append_child(card, grid)
+      let _ = node.append_child(app, card)
+      Nil
+    }
+  }
+}

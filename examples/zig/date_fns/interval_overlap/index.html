@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interval Overlap &amp; Clamp — date-fns + Zig</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      #app { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #111111; padding-bottom: 10px; }
+      .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      .badge { font-size: 11px; color: #111111; background: #f7f7f7; border: 1px solid #b5b5b5; border-radius: 3px; padding: 2px 9px; }
+      .card { background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .label { font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.06em; }
+      .gantt { display: flex; flex-direction: column; gap: 6px; }
+      .gantt-head, .gantt-row { display: grid; grid-template-columns: 155px 1fr 84px; gap: 10px; align-items: center; }
+      .gantt-head { font-size: 11px; color: #555555; text-transform: uppercase; border-bottom: 1px solid #d4d4d4; padding-bottom: 6px; }
+      .gantt-row { background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 8px 10px; }
+      .track-meta { display: flex; flex-direction: column; gap: 2px; }
+      .track-name { font-weight: 600; font-size: 12px; }
+      .track-dur { font-size: 11px; color: #555555; }
+      .slots { display: grid; grid-template-columns: repeat(31, minmax(0, 1fr)); gap: 2px; align-items: center; }
+      .slot-lbl { font-size: 9px; color: #666666; text-align: center; }
+      .slot { height: 18px; background: #f2f2f2; border: 1px solid #e0e0e0; border-radius: 2px; }
+      .slot.active { background: #111111; border-color: #111111; }
+      .slot.overlap { background: #737373; border-color: #111111; }
+      .pill { display: inline-block; text-align: center; padding: 2px 6px; border-radius: 3px; font-size: 11px; background: #111111; color: #ffffff; border: 1px solid #111111; }
+      .pill-muted { display: inline-block; text-align: center; padding: 2px 6px; border-radius: 3px; font-size: 11px; background: #ffffff; color: #555555; border: 1px solid #b5b5b5; }
+      table { width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #d4d4d4; }
+      th, td { border: 1px solid #d4d4d4; padding: 7px 10px; text-align: left; font-size: 12px; }
+      th { background: #efefef; font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.04em; }
+    </style>
+  </head>
+  <body>
+    <main id="app"></main>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>

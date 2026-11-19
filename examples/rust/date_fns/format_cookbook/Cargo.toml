@@ -1,0 +1,11 @@
+[package]
+name = "date-fns-format-cookbook"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dom = { path = "../../bindings/dom" }
+date_fns = { path = "../../bindings/date_fns" }

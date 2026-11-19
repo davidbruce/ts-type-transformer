@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relative Timeline — date-fns + C</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      #app { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #111111; padding-bottom: 10px; }
+      .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      .badge { font-size: 11px; color: #111111; background: #f7f7f7; border: 1px solid #b5b5b5; border-radius: 3px; padding: 2px 9px; }
+      .card { background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .label { font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.06em; }
+      .timeline { display: flex; flex-direction: column; gap: 8px; border-left: 2px solid #111111; padding-left: 14px; }
+      .milestone { background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 10px 12px; display: grid; grid-template-columns: 165px 1fr 150px 135px 90px; gap: 10px; align-items: center; }
+      .milestone.anchor { background: #111111; border-color: #111111; color: #ffffff; }
+      .milestone.anchor .muted { color: #d4d4d4; }
+      .milestone.anchor .pill { background: #ffffff; color: #111111; border-color: #ffffff; }
+      .title { font-weight: 600; }
+      .muted { color: #555555; font-size: 12px; }
+      .pill { display: inline-block; text-align: center; padding: 2px 7px; border-radius: 3px; font-size: 11px; background: #efefef; color: #111111; border: 1px solid #b5b5b5; }
+      .summary { display: flex; flex-wrap: wrap; gap: 16px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 10px 12px; }
+    </style>
+  </head>
+  <body>
+    <main id="app"></main>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>

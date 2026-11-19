@@ -22,7 +22,7 @@ const PACKAGES = {
   babylon_lite: { npm: ['@babylonjs/lite'], needsDom: true, outDir: 'Babylonjs.Lite' },
   katex: { npm: ['katex'], needsDom: true, outDir: 'Katex' },
   marked: { npm: ['marked'], needsDom: true, outDir: 'Marked' },
-  date_fns: { npm: ['date-fns'], needsDom: false, outDir: 'DateFns' },
+  date_fns: { npm: ['date-fns'], needsDom: true, outDir: 'DateFns' },
   node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'Node' },
   leaflet: { npm: ['leaflet'], needsDom: true, outDir: 'Leaflet' },
   pixi: { npm: ['pixi.js'], needsDom: true, outDir: 'PixiJs' },
