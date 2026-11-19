@@ -1,0 +1,24 @@
+{
+  "target": "cpp",
+  "label": "C++ (WASI WASM)",
+  "examples": [
+    {
+      "id": "pts/vector_field",
+      "package": "pts",
+      "title": "Vector Field",
+      "description": "Interactive 2D pointer-reactive vector grid",
+      "path": "./pts/vector_field/index.html",
+      "source": "./pts/vector_field/main.cpp",
+      "kind": "browser"
+    },
+    {
+      "id": "babylon_lite/torus_knot",
+      "package": "babylon_lite",
+      "title": "Torus Knot (WebGPU)",
+      "description": "PBR torus knot, orbiting point light, and procedural grid ground",
+      "path": "./babylon_lite/torus_knot/index.html",
+      "source": "./babylon_lite/torus_knot/main.cpp",
+      "kind": "browser"
+    }
+  ]
+}

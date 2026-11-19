@@ -27,6 +27,8 @@ examples/**/target/
 examples/**/*.wasm
 examples/**/manifest.toml
 examples/**/package-lock.json
+examples/**/bundle.mjs
+examples/**/.vite/
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
