@@ -30,7 +30,7 @@ const PACKAGES = {
   konva: { npm: ['konva'], needsDom: true, outDir: 'Konva' },
   three: { npm: ['three'], needsDom: true, outDir: 'Three' },
   rapier: { npm: ['@dimforge/rapier3d-compat'], needsDom: false, outDir: 'Dimforge.Rapier3dCompat' },
-  tanstack_table: { npm: ['@tanstack/table-core'], needsDom: false, outDir: 'Tanstack.TableCore' },
+  tanstack_table: { npm: ['@tanstack/table-core'], needsDom: true, outDir: 'Tanstack.TableCore' },
   prosemirror: { npm: ['prosemirror-model', 'prosemirror-transform', 'prosemirror-state', 'prosemirror-view'], needsDom: true, outDir: 'Prosemirror' },
 };
 

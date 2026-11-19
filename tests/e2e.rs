@@ -2722,6 +2722,25 @@ mod examples {
         },
     };
 
+    const TANSTACK_TABLE_SPEC: PackageSpec = PackageSpec {
+        pkg: "tanstack_table",
+        npm: &["@tanstack/table-core"],
+        crate_name: "tanstack_table_core",
+        fsharp_name: "Tanstack.TableCore",
+        needs_dom: true,
+        demos: &[
+            "sorting_leaderboard",
+            "filtering_facets",
+            "pagination_ledger",
+            "grouping_aggregation",
+            "visibility_pinning_selection",
+        ],
+        verify: VerifyKind::DomSelector {
+            selector: "#app table tbody tr",
+            min_count: 3,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3371,6 +3390,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(konva, KONVA_SPEC);
     pkg_tests!(pixi, PIXI_SPEC);
     pkg_tests!(leaflet, LEAFLET_SPEC);
+    pkg_tests!(tanstack_table, TANSTACK_TABLE_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

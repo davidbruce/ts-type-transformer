@@ -334,6 +334,51 @@
       "path": "./leaflet/interactive_markers/index.html",
       "source": "./leaflet/interactive_markers/src/lib.rs",
       "kind": "browser"
+    },
+    {
+      "id": "tanstack_table/sorting_leaderboard",
+      "package": "tanstack_table",
+      "title": "TanStack Table \u2014 Multi-Column Sorting Leaderboard",
+      "description": "8 compute nodes with multi-column sorting (region + latency), sort direction badges, and live toolbar controls.",
+      "path": "./tanstack_table/sorting_leaderboard/index.html",
+      "source": "./tanstack_table/sorting_leaderboard/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "tanstack_table/filtering_facets",
+      "package": "tanstack_table",
+      "title": "TanStack Table \u2014 Column & Global Filtering",
+      "description": "10 telemetry services with column filters (equalsString, greaterThanOrEqualTo) and global substring search.",
+      "path": "./tanstack_table/filtering_facets/index.html",
+      "source": "./tanstack_table/filtering_facets/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "tanstack_table/pagination_ledger",
+      "package": "tanstack_table",
+      "title": "TanStack Table \u2014 Client-Side Paginated Ledger",
+      "description": "18 settlement entries paginated client-side with next/prev navigation and dynamic page sizes.",
+      "path": "./tanstack_table/pagination_ledger/index.html",
+      "source": "./tanstack_table/pagination_ledger/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "tanstack_table/grouping_aggregation",
+      "package": "tanstack_table",
+      "title": "TanStack Table \u2014 Grouping & Aggregation",
+      "description": "9 cluster hosts grouped by region or role with mean CPU, sum Memory, and count rollups plus row expansion.",
+      "path": "./tanstack_table/grouping_aggregation/index.html",
+      "source": "./tanstack_table/grouping_aggregation/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "tanstack_table/visibility_pinning_selection",
+      "package": "tanstack_table",
+      "title": "TanStack Table \u2014 Visibility, Pinning & Row Selection",
+      "description": "7 cluster tasks demonstrating column visibility toggles, start/end pinning, and multi-row selection.",
+      "path": "./tanstack_table/visibility_pinning_selection/index.html",
+      "source": "./tanstack_table/visibility_pinning_selection/src/lib.rs",
+      "kind": "browser"
     }
   ]
 }

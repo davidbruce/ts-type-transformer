@@ -1,0 +1,11 @@
+[package]
+name = "tanstack-table-visibility-pinning-selection"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dom = { path = "../../bindings/dom" }
+tanstack_table_core = { path = "../../bindings/tanstack_table_core" }

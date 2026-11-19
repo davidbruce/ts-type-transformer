@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grouping & Aggregation — TanStack Table + F#</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      #app { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #111111; padding-bottom: 10px; }
+      .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      .badge { font-size: 11px; color: #111111; background: #f7f7f7; border: 1px solid #b5b5b5; border-radius: 3px; padding: 2px 9px; }
+      .card { background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .label { font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.06em; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
+      .toolbar button { appearance: none; background: #ffffff; color: #111111; border: 1px solid #b5b5b5; border-radius: 3px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+      .toolbar button:hover { background: #efefef; border-color: #111111; }
+      .toolbar button.active { background: #111111; color: #ffffff; border-color: #111111; }
+      .table-wrap { background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      th, td { padding: 7px 10px; border-bottom: 1px solid #e5e5e5; text-align: left; white-space: nowrap; }
+      thead th { background: #f7f7f7; border-bottom: 1px solid #111111; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #262626; }
+      tbody tr:last-child td { border-bottom: none; }
+      tbody tr:hover td { background: #f7f7f7; }
+      tbody tr.group-row td { background: #efefef; font-weight: 600; border-bottom: 1px solid #d4d4d4; }
+      tbody tr.selected-row td { background: #efefef; font-weight: 600; }
+      td.num, th.num { text-align: right; }
+      .child-indent { padding-left: 24px; color: #404040; }
+      .pin-tag { display: inline-block; margin-left: 5px; padding: 0 4px; border: 1px solid #111111; border-radius: 2px; font-size: 9px; font-weight: 600; }
+      .meta { font-size: 12px; color: #555555; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 8px 10px; }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div class="head">
+        <h1>TanStack Table — Grouping & Aggregation (F#)</h1>
+        <span class="badge">@tanstack/table-core · grouping · aggregation · expanding</span>
+      </div>
+      <div class="card">
+        <div class="label">9 Fleet Hosts · Grouped Rollups (mean / sum / count) & Expansion</div>
+        <div class="toolbar">
+          <button id="btn-0">Expand All</button>
+          <button id="btn-1">Collapse All</button>
+          <button id="btn-2">Group by Region</button>
+          <button id="btn-3">Group by Role</button>
+        </div>
+        <div id="table-wrap" class="table-wrap"></div>
+        <div id="meta" class="meta">Initializing TanStack Table...</div>
+      </div>
+    </main>
+    <script type="module" src="./js/Program.mjs"></script>
+  </body>
+</html>
