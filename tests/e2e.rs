@@ -2741,6 +2741,25 @@ mod examples {
         },
     };
 
+    const PROSEMIRROR_SPEC: PackageSpec = PackageSpec {
+        pkg: "prosemirror",
+        npm: &["prosemirror-model", "prosemirror-transform", "prosemirror-state", "prosemirror-view"],
+        crate_name: "prosemirror",
+        fsharp_name: "Prosemirror",
+        needs_dom: true,
+        demos: &[
+            "rich_schema_marks",
+            "structural_transforms",
+            "decorations_search",
+            "plugin_history_transactions",
+            "dom_json_roundtrip",
+        ],
+        verify: VerifyKind::DomSelector {
+            selector: "#editor .ProseMirror > *",
+            min_count: 3,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3391,6 +3410,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(pixi, PIXI_SPEC);
     pkg_tests!(leaflet, LEAFLET_SPEC);
     pkg_tests!(tanstack_table, TANSTACK_TABLE_SPEC);
+    pkg_tests!(prosemirror, PROSEMIRROR_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rich Schema & Inline Mark Toolbar — ProseMirror + C</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      #app { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #111111; padding-bottom: 10px; }
+      .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      .badge { font-size: 11px; color: #111111; background: #f7f7f7; border: 1px solid #b5b5b5; border-radius: 3px; padding: 2px 9px; }
+      .card { background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .label { font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.06em; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
+      .toolbar button { appearance: none; background: #ffffff; color: #111111; border: 1px solid #b5b5b5; border-radius: 3px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+      .toolbar button:hover { background: #efefef; border-color: #111111; }
+      .toolbar button.active { background: #111111; color: #ffffff; border-color: #111111; }
+      .editor-wrap { background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px 16px; min-height: 180px; }
+      .ProseMirror { position: relative; outline: none; word-wrap: break-word; white-space: pre-wrap; white-space: break-spaces; line-height: 1.55; color: #111111; }
+      .ProseMirror h1, .ProseMirror h2, .ProseMirror h3 { margin: 0 0 8px 0; font-weight: 700; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px; }
+      .ProseMirror p { margin: 0 0 10px 0; }
+      .ProseMirror p:last-child { margin-bottom: 0; }
+      .ProseMirror blockquote { margin: 8px 0; padding: 6px 12px; border-left: 3px solid #111111; background: #f7f7f7; color: #262626; }
+      .ProseMirror pre { margin: 8px 0; padding: 8px 10px; background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 2px; font-size: 12px; white-space: pre-wrap; }
+      .ProseMirror code { background: #efefef; border: 1px solid #d4d4d4; border-radius: 2px; padding: 1px 4px; font-size: 12px; }
+      .ProseMirror pre code { background: none; border: none; padding: 0; }
+      .ProseMirror hr { border: none; border-top: 1px solid #111111; margin: 12px 0; }
+      .ProseMirror ul { margin: 6px 0 10px 20px; padding: 0; }
+      .ProseMirror li { position: relative; margin: 3px 0; }
+      .ProseMirror-selectednode { outline: 2px solid #111111; }
+      .pm-match { background: #111111; color: #ffffff; padding: 0 2px; border-radius: 2px; }
+      .pm-hit-block { background: #f7f7f7; border-left: 3px solid #111111; padding-left: 8px; }
+      .output { margin: 0; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 10px 12px; font-size: 11px; color: #262626; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; }
+      .meta { font-size: 12px; color: #555555; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 8px 10px; }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div class="head">
+        <h1>ProseMirror — Rich Schema & Inline Mark Toolbar (C)</h1>
+        <span class="badge">prosemirror-model · schema · marks · setBlockType</span>
+      </div>
+      <div class="card">
+        <div class="label">Custom Schema · Inline Marks (Bold / Italic / Code) & Block Type Switching</div>
+        <div class="toolbar">
+          <button id="btn-0">Toggle Bold</button>
+          <button id="btn-1">Toggle Italic</button>
+          <button id="btn-2">Toggle Code</button>
+          <button id="btn-3">Heading / Para</button>
+          <button id="btn-4">Reset Doc</button>
+        </div>
+        <div id="editor" class="editor-wrap"></div>
+        <div id="meta" class="meta">Initializing ProseMirror...</div>
+      </div>
+    </main>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>

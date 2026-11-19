@@ -379,6 +379,51 @@
       "path": "./tanstack_table/visibility_pinning_selection/index.html",
       "source": "./tanstack_table/visibility_pinning_selection/src/app.gleam",
       "kind": "browser"
+    },
+    {
+      "id": "prosemirror/rich_schema_marks",
+      "package": "prosemirror",
+      "title": "ProseMirror \u2014 Rich Schema & Inline Mark Toolbar",
+      "description": "Custom document schema (heading, paragraph, blockquote, code_block, hr) with strong, em, code marks and setBlockType toolbar.",
+      "path": "./prosemirror/rich_schema_marks/index.html",
+      "source": "./prosemirror/rich_schema_marks/src/app.gleam",
+      "kind": "browser"
+    },
+    {
+      "id": "prosemirror/structural_transforms",
+      "package": "prosemirror",
+      "title": "ProseMirror \u2014 Block Structure & Transform Operations",
+      "description": "Structural Transform operations: split, wrap in blockquote, lift nested content, and insert divider + note blocks.",
+      "path": "./prosemirror/structural_transforms/index.html",
+      "source": "./prosemirror/structural_transforms/src/app.gleam",
+      "kind": "browser"
+    },
+    {
+      "id": "prosemirror/decorations_search",
+      "package": "prosemirror",
+      "title": "ProseMirror \u2014 Search Highlighting & Decorations Plugin",
+      "description": "Plugin StateField tracking search queries and rendering Decoration.inline token highlights plus Decoration.node block outlines.",
+      "path": "./prosemirror/decorations_search/index.html",
+      "source": "./prosemirror/decorations_search/src/app.gleam",
+      "kind": "browser"
+    },
+    {
+      "id": "prosemirror/plugin_history_transactions",
+      "package": "prosemirror",
+      "title": "ProseMirror \u2014 Plugin Filter & Step-Inversion Undo/Redo",
+      "description": "Custom history stack via Step.invert() alongside a StateField revision counter and filterTransaction read-only lock.",
+      "path": "./prosemirror/plugin_history_transactions/index.html",
+      "source": "./prosemirror/plugin_history_transactions/src/app.gleam",
+      "kind": "browser"
+    },
+    {
+      "id": "prosemirror/dom_json_roundtrip",
+      "package": "prosemirror",
+      "title": "ProseMirror \u2014 DOMSerializer, DOMParser & JSON Round-Trip",
+      "description": "HTML parsing with DOMParser.fromSchema, live DOMSerializer HTML output, AST inspection, and Node.toJSON / Node.fromJSON verification.",
+      "path": "./prosemirror/dom_json_roundtrip/index.html",
+      "source": "./prosemirror/dom_json_roundtrip/src/app.gleam",
+      "kind": "browser"
     }
   ]
 }

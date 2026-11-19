@@ -23,7 +23,7 @@ const PACKAGES = {
   katex: { npm: ['katex'], needsDom: true, outDir: 'Katex' },
   marked: { npm: ['marked'], needsDom: true, outDir: 'Marked' },
   date_fns: { npm: ['date-fns'], needsDom: true, outDir: 'DateFns' },
-  node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'Node' },
+  node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'Node', name: 'node' },
   leaflet: { npm: ['leaflet'], needsDom: true, outDir: 'Leaflet' },
   pixi: { npm: ['pixi.js'], needsDom: true, outDir: 'Pixi.Js' },
   echarts: { npm: ['echarts'], needsDom: true, outDir: 'Echarts' },
@@ -31,7 +31,7 @@ const PACKAGES = {
   three: { npm: ['three'], needsDom: true, outDir: 'Three' },
   rapier: { npm: ['@dimforge/rapier3d-compat'], needsDom: false, outDir: 'Dimforge.Rapier3dCompat' },
   tanstack_table: { npm: ['@tanstack/table-core'], needsDom: true, outDir: 'Tanstack.TableCore' },
-  prosemirror: { npm: ['prosemirror-model', 'prosemirror-transform', 'prosemirror-state', 'prosemirror-view'], needsDom: true, outDir: 'Prosemirror' },
+  prosemirror: { npm: ['prosemirror-model', 'prosemirror-transform', 'prosemirror-state', 'prosemirror-view'], needsDom: true, outDir: 'Prosemirror', name: 'prosemirror' },
 };
 
 const tsrsProto =
@@ -67,6 +67,7 @@ for (const pkg of neededPkgs) {
     const args = ['--from', fromDir];
     for (const n of spec.npm) args.push('--package', n);
     args.push('--config', cfg, '--emit', 'fsharp');
+    if (spec.npm.length > 1) args.push('--name', spec.name);
     if (spec.needsDom) args.push('--ref', path.join(bindingsDir, 'Dom'));
     args.push('--out', bindingsDir);
     execFileSync(tsrsProto, args, { cwd: ROOT, stdio: 'inherit' });
