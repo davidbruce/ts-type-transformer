@@ -160,7 +160,7 @@ check (logged () = "abortable") "aborted signal removed the listener"
 // The signal itself is an event target.
 let mutable abortEvents = 0
 let c2 = AbortController.Create ()
-c2.signal.addEventListener ("abort", !^ (fun (_: Event) -> abortEvents <- abortEvents + 1))
+c2.signal.addEventListener ("abort", fun (_: Event) -> abortEvents <- abortEvents + 1)
 c2.abort ()
 c2.abort ()
 check (abortEvents = 1) "abort event fires once"

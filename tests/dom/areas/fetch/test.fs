@@ -19,7 +19,7 @@ let check (ok: bool) (what: string) =
 let wait (p: JS.Promise<'T>) = Async.AwaitPromise p
 
 // Headers built directly.
-let headers = Headers.Create (!^ (ResizeArray [ ("X-One", "1"); ("Content-Type", "text/plain") ]))
+let headers = Headers.Create (ResizeArray [ ("X-One", "1"); ("Content-Type", "text/plain") ])
 check (headers.get "x-one" = "1") "header names are case-insensitive"
 check (headers.has "Content-Type") "has"
 headers.append ("X-One", "2")
@@ -31,7 +31,7 @@ check (not (headers.has "X-One")) "delete"
 check (isNull (headers.get "X-One")) "a missing header is null"
 let names = [ for (k, _) in headers -> k ]
 check (names = [ "content-type" ]) "headers iterate, names lower-cased"
-let copied = Headers.Create (!^ headers)
+let copied = Headers.Create headers
 check (copied.get "content-type" = "text/plain") "Headers from Headers"
 
 // A Request built directly.
@@ -56,7 +56,7 @@ check (getRequest.``method`` = "GET") "default method is GET"
 check (getRequest.url.EndsWith "/index.html") "a relative url is resolved"
 
 // A Response built directly.
-let made = Response.Create (!^ "hello body", ResponseInit.Create (status = 201.0, statusText = "Made", headers = !^ (Headers.Create (!^ (ResizeArray [ ("X-Made", "yes") ])))))
+let made = Response.Create (!^ "hello body", ResponseInit.Create (status = 201.0, statusText = "Made", headers = !^ (Headers.Create (ResizeArray [ ("X-Made", "yes") ]))))
 check (made.status = 201.0) "response status"
 check (made.statusText = "Made") "statusText"
 check made.ok "201 is ok"
@@ -65,7 +65,7 @@ check (made.``type`` = ResponseType.Default) "response type"
 let failure = Response.Create (!^ "nope", ResponseInit.Create (status = 404.0))
 check (not failure.ok) "404 is not ok"
 check (Response.error().``type`` = ResponseType.Error) "Response.error"
-let redirect = Response.redirect (!^ "https://example.com/there", 301.0)
+let redirect = Response.redirect ("https://example.com/there", 301.0)
 check (redirect.status = 301.0 && redirect.headers.get "location" = "https://example.com/there") "Response.redirect"
 
 // Blob made directly.

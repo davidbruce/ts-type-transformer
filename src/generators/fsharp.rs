@@ -91,6 +91,8 @@ struct Gen {
     // The JavaScript path of the namespaces being written: `util` for the
     // module `pb_util`.
     js_prefix: String,
+    // Method names declared on any ancestor of the interface currently being written.
+    inherited_methods: HashSet<String>,
 }
 
 // The constraints each generic interface can keep, by position: those every
@@ -312,6 +314,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         cur_indent: String::new(),
         cur_prefix: String::new(),
         js_prefix: String::new(),
+        inherited_methods: HashSet::new(),
     };
     // Every type the declarations name: a delegate named by its place
     // (`each`'s `cb`, `EachCb`) takes none of their names.
@@ -1500,6 +1503,143 @@ impl Gen {
         out
     }
 
+    // Extra parameter lists produced by expanding small union parameters into
+    // their arm types (always required, so 0-argument calls still unambiguously
+    // hit the original optional overload). Never partially expands: if any union
+    // parameter would remain unexpanded, returns empty (otherwise F# treats
+    // 1-op_Implicit and 2-op_Implicit overloads as equally ambiguous, FS0041).
+    fn union_param_expansions(&mut self, n: Node, owner: &str, base_params: &[String]) -> Vec<Vec<String>> {
+        const MAX_OVERLOADS: usize = 9;
+        let root = n.document().root_element();
+        let has_optional = named(n, "parameter").any(|p| flag(p, "optional"));
+        let mut req_choices: Vec<(usize, Vec<String>)> = Vec::new();
+        let mut opt_choice: Option<(usize, Vec<String>)> = None;
+        let mut idx = 0usize;
+        let mut seen_optional = false;
+        for p in named(n, "parameter") {
+            if p.has_attribute("const") {
+                continue;
+            }
+            if flag(p, "rest") && has_optional && self.split_rest != Some(true) {
+                continue;
+            }
+            let cur = idx;
+            idx += 1;
+            let optional = flag(p, "optional") && self.split_rest != Some(true);
+            let is_first_optional = optional && !seen_optional;
+            if optional {
+                seen_optional = true;
+            }
+            if cur >= base_params.len() {
+                continue;
+            }
+            let mut t = only_child(p);
+            if t.has_tag_name("nullable") && attr(t, "absent") == "null" {
+                t = only_child(t);
+            }
+            let union_node = if t.has_tag_name("union") {
+                Some(t)
+            } else if t.has_tag_name("ref") && attr(t, "kind") == "typeAlias" && elements(t).next().is_none() {
+                t.attribute("to")
+                    .and_then(|to| find_decl(root, to))
+                    .filter(|d| d.has_tag_name("typeAlias") && named(*d, "typeParameter").next().is_none())
+                    .map(only_child_type)
+                    .filter(|b| b.has_tag_name("union"))
+            } else {
+                None
+            };
+            let Some(u) = union_node else { continue };
+            // Leaving any union parameter unexpanded would cause FS0041 whenever
+            // another parameter is expanded.
+            if flag(p, "rest") || (optional && !is_first_optional) {
+                return Vec::new();
+            }
+            let members: Vec<Node> = elements(u).collect();
+            if members.len() < 2 || members.len() > 6 {
+                return Vec::new();
+            }
+            let pname = match attr(p, "name") {
+                "_" | "" => "arg".to_string(),
+                s => ident(s),
+            };
+            let mut arms = Vec::new();
+            let mut seen = HashSet::new();
+            for m in members {
+                let arm_ty = self.ty(m, owner);
+                // Do not expand `obj`, `unit`, or nested erased `U2<..>`..`U9<..>` arms.
+                let is_erased_u = arm_ty.starts_with('U')
+                    && arm_ty.as_bytes().get(1).is_some_and(u8::is_ascii_digit)
+                    && arm_ty.as_bytes().get(2) == Some(&b'<');
+                if matches!(arm_ty.as_str(), "obj" | "unit") || is_erased_u {
+                    return Vec::new();
+                }
+                // Skip if arm references a later file.
+                if words(&arm_ty).iter().filter_map(|w| self.file_of.get(*w)).any(|f| *f > self.current_file) {
+                    return Vec::new();
+                }
+                let norm = expand(&self.through_aliases(m), &self.abbrevs);
+                if seen.insert(norm) {
+                    // Always required so omitting an optional arg hits the original union overload.
+                    arms.push(format!("{pname}: {arm_ty}"));
+                }
+            }
+            if arms.len() < 2 {
+                return Vec::new();
+            }
+            if optional {
+                opt_choice = Some((cur, arms));
+            } else {
+                req_choices.push((cur, arms));
+            }
+        }
+        if req_choices.is_empty() && opt_choice.is_none() {
+            return Vec::new();
+        }
+        let expand_over = |seed: Vec<String>, choices: &[(usize, Vec<String>)]| -> Vec<Vec<String>> {
+            let mut rows = vec![seed];
+            for (pos, arms) in choices {
+                let mut next = Vec::with_capacity(rows.len() * arms.len());
+                for row in &rows {
+                    for arm in arms {
+                        let mut copy = row.clone();
+                        copy[*pos] = arm.clone();
+                        next.push(copy);
+                    }
+                }
+                rows = next;
+            }
+            rows
+        };
+        let req_prod: usize = req_choices.iter().try_fold(1usize, |acc, (_, a)| acc.checked_mul(a.len())).unwrap_or(usize::MAX);
+        match opt_choice {
+            None => {
+                if req_prod > MAX_OVERLOADS {
+                    return Vec::new();
+                }
+                expand_over(base_params.to_vec(), &req_choices)
+            }
+            Some((opt_pos, opt_arms)) => {
+                let full_prod = req_prod.saturating_mul(opt_arms.len());
+                if req_choices.is_empty() {
+                    if full_prod > MAX_OVERLOADS {
+                        return Vec::new();
+                    }
+                    expand_over(base_params.to_vec(), &[(opt_pos, opt_arms)])
+                } else {
+                    if req_prod.saturating_add(full_prod) > MAX_OVERLOADS {
+                        return Vec::new();
+                    }
+                    // Prefix overloads (omitting the optional union and later optionals)
+                    // plus full overloads (passing both required and optional union arms).
+                    let mut out = expand_over(base_params[..opt_pos].to_vec(), &req_choices);
+                    req_choices.push((opt_pos, opt_arms));
+                    out.extend(expand_over(base_params.to_vec(), &req_choices));
+                    out
+                }
+            }
+        }
+    }
+
     // For a signature with fixed arguments: a name suffix made of their values,
     // and the argument list of the call with them written in. `first` is the
     // placeholder of the first real argument.
@@ -1531,18 +1671,12 @@ impl Gen {
         named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or("unit".into())
     }
 
-    fn signature(&mut self, n: Node, owner: &str, ret: Option<&str>) -> String {
-        let params = self.params(n, owner);
-        let params = if params.is_empty() { "unit".to_string() } else { params.join(" * ") };
-        let ret = ret.map(str::to_string).unwrap_or_else(|| self.returns(n, owner));
-        format!("{params} -> {ret}")
-    }
-
     // The members of one side of a type, as `abstract` lines. A member that
     // mentions a type from a later file cannot be abstract (F# files cannot
     // refer forward): it becomes an extension of `extend` in that file.
     fn members(&mut self, members: &[Node], owner: &str, extend: &str, indent: &str) -> Vec<String> {
         let mut lines: Vec<String> = Vec::new();
+        let mut extras: Vec<String> = Vec::new();
         let setters: HashSet<&str> = members.iter().filter(|m| m.has_tag_name("set")).map(|m| attr(*m, "name")).collect();
         for &m in members {
             let raw = m.attribute("name").unwrap_or_default();
@@ -1552,12 +1686,12 @@ impl Gen {
             }
             let fn_prop = m.has_tag_name("property") && !flag(m, "optional") && only_child(m).has_tag_name("functionType");
             let sig_node = if fn_prop { Some(only_child(m)) } else if m.has_tag_name("method") { Some(m) } else { None };
-            let pairs: Vec<(String, String)> = if raw == "[Symbol.asyncIterator]" {
+            let pairs: Vec<(String, String, Vec<String>)> = if raw == "[Symbol.asyncIterator]" {
                 // `x.asyncIterator ()`, whose `next ()` is a promise of the next value.
                 let elem = named(m, "returns").next().and_then(|r| elements(r).next()).and_then(|it| elements(it).next());
                 let t = elem.map_or("obj".to_string(), |e| self.ty(e, owner));
                 let emit = "[<Emit(\"$0[Symbol.asyncIterator]()\")>]";
-                vec![(format!("{emit} abstract asyncIterator: unit -> JsAsyncIterator<{t}>"), format!("{emit} member this.asyncIterator(): JsAsyncIterator<{t}> = jsNative"))]
+                vec![(format!("{emit} abstract asyncIterator: unit -> JsAsyncIterator<{t}>"), format!("{emit} member this.asyncIterator(): JsAsyncIterator<{t}> = jsNative"), Vec::new())]
             } else if raw.starts_with('[') {
                 self.skip("symbol-named member");
                 Vec::new()
@@ -1573,7 +1707,7 @@ impl Gen {
             } else {
                 self.member(m, owner, setters.contains(raw)).into_iter().collect()
             };
-            for (line, ext) in pairs {
+            for (line, ext, exp) in pairs {
                 // The latest file a type in the member is declared in.
                 let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
                 if latest > self.current_file && indent.is_empty() {
@@ -1587,13 +1721,21 @@ impl Gen {
                 // Distinct TypeScript overloads can map to the same F# signature.
                 self.marks.insert(line.trim().to_string(), super::marks(m));
                 push_member(&mut lines, format!("{indent}    {line}\n"), &self.abbrevs, &self.marks);
+                for e in exp {
+                    extras.push(format!("{indent}    {e}\n"));
+                }
+            }
+        }
+        for e in extras {
+            if !has_member_conflict(&lines, &e, &self.abbrevs) {
+                lines.push(e);
             }
         }
         lines
     }
 
-    // One member, as an `abstract` line and as an extension member.
-    fn member(&mut self, m: Node, owner: &str, has_setter: bool) -> Option<(String, String)> {
+    // One member, as an `abstract` line, an extension member, and any union-expanded overloads.
+    fn member(&mut self, m: Node, owner: &str, has_setter: bool) -> Option<(String, String, Vec<String>)> {
         let raw = m.attribute("name").unwrap_or_default();
         let name = ident(raw);
         let js = js_access(m.attribute("jsName").unwrap_or(raw));
@@ -1603,7 +1745,7 @@ impl Gen {
             let settable = settable && t != "unit";
             let get = format!("[<Emit(\"$0{}\")>] get (): {t} = jsNative", js.replace('"', "\\\""));
             let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
-            (format!("abstract {name}: {t}{}", if settable { " with get, set" } else { "" }), if settable { format!("member this.{name} with {get} and {set}") } else { format!("member this.{name} with {get}") })
+            (format!("abstract {name}: {t}{}", if settable { " with get, set" } else { "" }), if settable { format!("member this.{name} with {get} and {set}") } else { format!("member this.{name} with {get}") }, Vec::new())
         };
         let method_from = |g: &mut Gen, sig_node: Node, tps: &str, name: &str, emit: String, attr: &str| {
             let params = g.params(sig_node, owner);
@@ -1611,7 +1753,32 @@ impl Gen {
             let sig = if params.is_empty() { "unit".to_string() } else { params.join(" * ") };
             let abstract_line = format!("{attr}abstract {name}{tps}: {sig} -> {ret}");
             let ext = format!("[<Emit(\"{}\")>] member this.{name}{tps}({}): {ret} = jsNative", emit.replace('"', "\\\""), params.join(", "));
-            (abstract_line, ext)
+            let raw_name = sig_node.attribute("name").unwrap_or(raw);
+            let overrides_base = g.inherited_methods.contains(raw_name);
+            let mut expanded = Vec::new();
+            for ep in g.union_param_expansions(sig_node, owner, &params) {
+                let first_opt = ep.iter().position(|p| p.starts_with('?'));
+                let has_param_array = ep.iter().any(|p| p.contains("[<System.ParamArray>]"));
+                if overrides_base
+                    && !has_param_array
+                    && let Some(first_opt) = first_opt
+                    && ep[first_opt..].iter().all(|p| p.starts_with('?'))
+                    && ep.len() - first_opt <= 4
+                {
+                    // When overriding an inherited method whose trailing optional
+                    // parameter types differ (e.g. `VisualForm.strokeOnly` vs
+                    // `CanvasForm.strokeOnly`), F# does not shadow the base's
+                    // optional overload unless exact-arity overloads are provided.
+                    for arity in first_opt..=ep.len() {
+                        let prefix: Vec<String> = ep[..arity].iter().map(|p| p.trim_start_matches('?').to_string()).collect();
+                        let ep_sig = if prefix.is_empty() { "unit".to_string() } else { prefix.join(" * ") };
+                        expanded.push(format!("{attr}abstract {name}{tps}: {ep_sig} -> {ret}"));
+                    }
+                } else {
+                    expanded.push(format!("{attr}abstract {name}{tps}: {} -> {ret}", ep.join(" * ")));
+                }
+            }
+            (abstract_line, ext, expanded)
         };
         Some(match m.tag_name().name() {
             "property" if !flag(m, "optional") && only_child(m).has_tag_name("functionType") => {
@@ -1660,7 +1827,7 @@ impl Gen {
                 } else {
                     format!("member this.Item with {get}")
                 };
-                (abstract_line, ext)
+                (abstract_line, ext, Vec::new())
             }
             _ => {
                 self.problems.element(T, m);
@@ -1799,7 +1966,23 @@ impl Gen {
             let qualified = if prefix.is_empty() { header.clone() } else { format!("{}.{header}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
             self.constrained_owner.insert(extend.clone(), qualified);
         }
+        let root = d.document().root_element();
+        let mut inherited_methods: HashSet<String> = HashSet::new();
+        for b in &seen {
+            if let Some(bd) = find_decl(root, b) {
+                let bsrc = if bd.has_tag_name("typeAlias") { only_child_type(bd) } else { bd };
+                for bm in elements(bsrc) {
+                    if !flag(bm, "static") && (bm.has_tag_name("method") || (bm.has_tag_name("property") && !flag(bm, "optional") && only_child(bm).has_tag_name("functionType"))) {
+                        if let Some(n) = bm.attribute("name") {
+                            inherited_methods.insert(n.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        let saved_inherited_methods = std::mem::replace(&mut self.inherited_methods, inherited_methods);
         body.extend(self.members(&instance, &owner, &extend, indent));
+        self.inherited_methods = saved_inherited_methods;
         body.extend(self.redeclared(d, &left, &body, &owner, &extend, indent));
         body.extend(widen_methods);
         if let Some((line, emit)) = factory {
@@ -1885,14 +2068,16 @@ impl Gen {
         let static_name = type_ident(&format!("{}Static", name.trim_matches('`')));
         self.out += &format!("{indent}[<AllowNullLiteral>]\n{indent}type {static_name} =\n");
         let mut lines = Vec::new();
+        let mut ctor_extras = Vec::new();
+        let mut non_ctors = Vec::new();
         for &m in members {
             if (m.has_tag_name("constructor") || m.has_tag_name("construct")) && instance.is_some() {
                 let ret = instance.unwrap().to_string();
                 let tps = self.type_params(m);
-                let sig = self.signature(m, "", Some(&ret));
+                let params = self.params(m, "");
+                let sig = format!("{} -> {ret}", if params.is_empty() { "unit".to_string() } else { params.join(" * ") });
                 let latest = words(&sig).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
                 if latest > self.current_file && indent.is_empty() {
-                    let params = self.params(m, "");
                     let ext = format!("        [<Emit(\"new $0($1...)\")>] member this.Create{tps}({}): {ret} = jsNative\n", params.join(", "));
                     let lines = self.extensions.entry(latest).or_default().entry(static_name.clone()).or_default();
                     if !lines.contains(&ext) {
@@ -1903,10 +2088,19 @@ impl Gen {
                 let line = format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n");
                 self.marks.insert(line.trim().to_string(), super::marks(m));
                 push_member(&mut lines, line, &self.abbrevs, &self.marks);
-            } else {
-                for line in self.members(&[m], "obj", &static_name, indent) {
-                    push_member(&mut lines, line, &self.abbrevs, &self.marks);
+                for ep in self.union_param_expansions(m, "", &params) {
+                    ctor_extras.push(format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {} -> {ret}\n", ep.join(" * ")));
                 }
+            } else {
+                non_ctors.push(m);
+            }
+        }
+        for line in self.members(&non_ctors, "obj", &static_name, indent) {
+            push_member(&mut lines, line, &self.abbrevs, &self.marks);
+        }
+        for e in ctor_extras {
+            if !has_member_conflict(&lines, &e, &self.abbrevs) {
+                lines.push(e);
             }
         }
         if lines.is_empty() {
@@ -1926,6 +2120,7 @@ impl Gen {
         // Functions can be overloaded and take optional arguments, which only
         // members can do in F#: they become static members of one erased type.
         let mut functions: Vec<String> = Vec::new();
+        let mut func_extras: Vec<String> = Vec::new();
         for d in elements(scope) {
             // Each top-level declaration is imported from its package; a namespace's members from its.
             if prefix.is_empty() {
@@ -1945,7 +2140,7 @@ impl Gen {
             let prev_globals = std::mem::replace(&mut self.in_globals, indent.is_empty() && !d.has_attribute("module"));
             let prev_indent = std::mem::replace(&mut self.cur_indent, indent.to_string());
             let prev_prefix = std::mem::replace(&mut self.cur_prefix, prefix.to_string());
-            self.decl(d, raw, &name, &path, prefix, indent, &mut functions);
+            self.decl(d, raw, &name, &path, prefix, indent, &mut functions, &mut func_extras);
             self.in_globals = prev_globals;
             self.cur_indent = prev_indent;
             self.cur_prefix = prev_prefix;
@@ -1966,6 +2161,12 @@ impl Gen {
                 }
             }
         }
+        for e in func_extras {
+            let carrier_conflict = self.carrier.as_ref().is_some_and(|c| has_member_conflict(c, &e, &self.abbrevs));
+            if !carrier_conflict && !has_member_conflict(&functions, &e, &self.abbrevs) {
+                functions.push(e);
+            }
+        }
         if !functions.is_empty() {
             match self.carrier.as_mut() {
                 Some(carrier) => carrier.extend(functions),
@@ -1975,7 +2176,7 @@ impl Gen {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn decl(&mut self, d: Node, raw: &str, name: &str, path: &str, prefix: &str, indent: &str, functions: &mut Vec<String>) {
+    fn decl(&mut self, d: Node, raw: &str, name: &str, path: &str, prefix: &str, indent: &str, functions: &mut Vec<String>, func_extras: &mut Vec<String>) {
         let name = name.to_string();
         let path = path.to_string();
         {
@@ -2082,9 +2283,13 @@ impl Gen {
                         None => (name, "$0...".to_string()),
                     };
                     let tps = self.constrained_type_params(d);
-                    let line = format!("{indent}    {} static member {name}{tps} ({}): {ret} = jsNative\n", self.at(&path, Some(&args)), params.join(", "));
+                    let at_attr = self.at(&path, Some(&args));
+                    let line = format!("{indent}    {at_attr} static member {name}{tps} ({}): {ret} = jsNative\n", params.join(", "));
                     self.marks.insert(line.trim().to_string(), super::marks(d));
                     push_member(functions, line, &self.abbrevs, &self.marks);
+                    for ep in self.union_param_expansions(d, "", &params) {
+                        func_extras.push(format!("{indent}    {at_attr} static member {name}{tps} ({}): {ret} = jsNative\n", ep.join(", ")));
+                    }
                 }
                 "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
                     let body = only_child_type(d);
@@ -2444,6 +2649,46 @@ fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, 
     }
 }
 
+// Whether adding `line` (an expanded union overload) would collide with or
+// create a call-site arity ambiguity against any member already in `lines`.
+fn has_member_conflict(lines: &[String], line: &str, abbrevs: &HashMap<String, String>) -> bool {
+    let (head, Some(cand)) = member_key(line) else { return true };
+    let sep = if head.starts_with("static ") { ", " } else { " * " };
+    let arities = |raw: &str| -> Vec<Vec<String>> {
+        if raw.is_empty() || raw == "unit" {
+            return vec![Vec::new()];
+        }
+        let parts: Vec<&str> = split_top(raw, sep);
+        let types: Vec<String> = parts.iter().map(|p| expand(p.trim().trim_start_matches('?'), abbrevs)).collect();
+        let mut min_req = parts.len();
+        while min_req > 0 && parts[min_req - 1].trim().starts_with('?') {
+            min_req -= 1;
+        }
+        (min_req..=types.len()).map(|n| types[..n].to_vec()).collect()
+    };
+    let cand_arities = arities(&cand);
+    let cand_has_param_array = line.contains("[<System.ParamArray>]");
+    lines.iter().any(|l| {
+        let (h, t) = member_key(l);
+        if h != head {
+            return false;
+        }
+        let Some(t) = t else { return true };
+        let existing = arities(&t);
+        if cand_arities.iter().any(|c| existing.contains(c)) {
+            return true;
+        }
+        // If either side has a trailing ParamArray, also check dropping that last element.
+        if cand_has_param_array && cand_arities.last().is_some_and(|c| !c.is_empty() && existing.iter().any(|e| e.as_slice() == &c[..c.len() - 1])) {
+            return true;
+        }
+        if l.contains("[<System.ParamArray>]") && existing.last().is_some_and(|e| !e.is_empty() && cand_arities.iter().any(|c| c.as_slice() == &e[..e.len() - 1])) {
+            return true;
+        }
+        false
+    })
+}
+
 // A member line under another F# name, calling the same JavaScript.
 fn rename_member(line: &str, to: &str) -> String {
     let Some((at, name)) = member_name(line) else { return line.to_string() };
@@ -2521,6 +2766,29 @@ fn expand(text: &str, abbrevs: &HashMap<String, String>) -> String {
     out
 }
 
+// Splits `text` at `sep` outside brackets.
+fn split_top<'a>(text: &'a str, sep: &str) -> Vec<&'a str> {
+    let b = text.as_bytes();
+    let (mut depth, mut start, mut out, mut i) = (0i32, 0, Vec::new(), 0);
+    while i < b.len() {
+        match b[i] {
+            b'-' if b.get(i + 1) == Some(&b'>') => i += 1,
+            b'(' | b'<' | b'[' | b'{' => depth += 1,
+            b')' | b'>' | b']' | b'}' => depth -= 1,
+            _ if depth == 0 && text[i..].starts_with(sep) => {
+                out.push(&text[start..i]);
+                i += sep.len();
+                start = i;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    out.push(&text[start..]);
+    out
+}
+
 // What F# tells members apart by: name and parameter types, not attributes,
 // parameter names or return type. Overloads that differ only in a literal
 // (`async: true` or `false`, each a `bool`) are one F# member.
@@ -2531,28 +2799,6 @@ fn member_key(line: &str) -> (String, Option<String>) {
             Some(i) => s = rest[i + 2..].trim_start(),
             None => break,
         }
-    }
-    // Splits `text` at `sep` outside brackets.
-    fn split_top<'a>(text: &'a str, sep: &str) -> Vec<&'a str> {
-        let b = text.as_bytes();
-        let (mut depth, mut start, mut out, mut i) = (0i32, 0, Vec::new(), 0);
-        while i < b.len() {
-            match b[i] {
-                b'-' if b.get(i + 1) == Some(&b'>') => i += 1,
-                b'(' | b'<' | b'[' | b'{' => depth += 1,
-                b')' | b'>' | b']' | b'}' => depth -= 1,
-                _ if depth == 0 && text[i..].starts_with(sep) => {
-                    out.push(&text[start..i]);
-                    i += sep.len();
-                    start = i;
-                    continue;
-                }
-                _ => {}
-            }
-            i += 1;
-        }
-        out.push(&text[start..]);
-        out
     }
     // `name: T` or `?name: T` is its type, with the `?`.
     let type_of = |p: &str| -> String {

@@ -22,8 +22,9 @@ check (p.id = "corner") "property"
 let moved = p.``$add``(1.0, 1.0)
 check (not (obj.ReferenceEquals(moved, p)) && moved.x = 4.0 && p.x = 3.0) "$add returns another"
 check (obj.ReferenceEquals(p.add(1.0, 1.0), p) && p.x = 4.0) "add returns this"
-check (p.equals (PtLike.Pt moved)) "union argument"
-check (p.clone().equals(PtLike.Pt p, 0.001)) "optional argument"
+check (p.equals moved) "union argument"
+check (p.equals (PtLike.Pt moved)) "explicit union argument"
+check (p.clone().equals(p, 0.001)) "optional argument"
 
 // Statics.
 check (Num.lerp (0.0, 10.0, 0.5) = 5.0) "lerp"
@@ -40,9 +41,9 @@ check (square.centroid().toString () = "Pt(2, 2)") "centroid"
 check (square.boundingBox().p2.x = 4.0) "bounding box"
 
 // A union parameter takes any of its members: a Group where points are wanted.
-check (Geom.centroid(PtLikeIterable.Group square).x = 2.0) "a Group as points"
-check (Line.magnitude (PtIterable.Group(Group.Create(Pt.Create(0.0, 0.0), Pt.Create(3.0, 4.0)))) = 5.0) "line magnitude"
-let ray = Line.fromAngle (PtLike.Pt(Pt.Create(1.0, 1.0)), 0.0, 5.0)
+check (Geom.centroid(square).x = 2.0) "a Group as points"
+check (Line.magnitude (Group.Create(Pt.Create(0.0, 0.0), Pt.Create(3.0, 4.0))) = 5.0) "line magnitude"
+let ray = Line.fromAngle (Pt.Create(1.0, 1.0), 0.0, 5.0)
 check (ray.p2.x = 6.0 && ray.p2.y = 1.0) "from angle"
 
 // A union value from JavaScript is told apart by the class it is an instance

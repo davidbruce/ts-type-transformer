@@ -71,7 +71,7 @@ check ((URL.Create ("?new=2", baseUrl)).href = "https://example.com/dir/sub/page
 check ((URL.Create ("#other", baseUrl)).href = "https://example.com/dir/sub/page.html?old=1#other") "fragment only"
 check ((URL.Create ("//cdn.test/x.js", baseUrl)).href = "https://cdn.test/x.js") "scheme-relative"
 check ((URL.Create ("http://abs.test/", baseUrl)).host = "abs.test") "an absolute URL ignores the base"
-check ((URL.Create (!^ u)).href = u.href) "a URL object as input"
+check ((URL.Create u).href = u.href) "a URL object as input"
 
 // canParse and parse.
 check (URL.canParse "https://example.com") "canParse absolute"
@@ -93,7 +93,7 @@ u.search <- "?k=v"
 check (sp.get "k" = "v" && not (sp.has "x")) "setting search updates the params"
 
 // URLSearchParams on their own.
-let p = URLSearchParams.Create (!^ "b=2&a=1&a=3&c=%20spaced%26")
+let p = URLSearchParams.Create "b=2&a=1&a=3&c=%20spaced%26"
 check (p.get "a" = "1") "get returns the first"
 check ((List.ofSeq (p.getAll "a")) = [ "1"; "3" ]) "getAll"
 check (isNull (p.get "nope")) "get of a missing key is null"
@@ -127,13 +127,13 @@ p.forEach (fun v k _ -> seen.Add(k + ":" + v))
 check (seen.Count = 3 && seen.[0] = "a:only") "forEach"
 
 // Built from other inits.
-let fromPairs = URLSearchParams.Create (!^ (ResizeArray [ ResizeArray [ "p"; "1" ]; ResizeArray [ "q"; "2" ] ]))
+let fromPairs = URLSearchParams.Create (ResizeArray [ ResizeArray [ "p"; "1" ]; ResizeArray [ "q"; "2" ] ])
 check (fromPairs.toString () = "p=1&q=2") "from pairs"
-let fromParams = URLSearchParams.Create (!^ fromPairs)
+let fromParams = URLSearchParams.Create fromPairs
 fromParams.append ("r", "3")
 check (fromParams.toString () = "p=1&q=2&r=3" && fromPairs.size = 2.0) "from another, a copy"
 check ((URLSearchParams.Create ()).size = 0.0) "empty"
-check ((URLSearchParams.Create (!^ "?lead=1")).get "lead" = "1") "a leading ? is dropped"
+check ((URLSearchParams.Create "?lead=1").get "lead" = "1") "a leading ? is dropped"
 
 // Encoding of reserved characters when set through the URL.
 let e = URL.Create "https://example.com/"

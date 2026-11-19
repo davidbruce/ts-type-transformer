@@ -84,7 +84,7 @@ color.value <- "r"
 check (color.selectedIndex = 0.0) "value sets selectedIndex"
 check ((color.item 0.0).text = "Red") "option text"
 let extra = Option.Create ("Violet", "v")
-color.add !^extra
+color.add extra
 check (color.options.length = 4.0) "option added"
 color.value <- "v"
 check (color.selectedIndex = 3.0) "new option selectable"

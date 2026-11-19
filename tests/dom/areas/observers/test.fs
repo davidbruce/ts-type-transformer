@@ -181,7 +181,7 @@ async {
     let signal = AbortSignal.timeout 40.0
     check (not signal.aborted) "the timeout signal starts live"
     let mutable abortEvents = 0
-    signal.addEventListener ("abort", !^ (fun (_: Event) -> abortEvents <- abortEvents + 1))
+    signal.addEventListener ("abort", fun (_: Event) -> abortEvents <- abortEvents + 1)
     do! waitFor "the signal aborted after its timeout" (fun () -> signal.aborted)
     do! Async.Sleep 10
     check (abortEvents = 1) "abort event fired once"
