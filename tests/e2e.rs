@@ -2684,6 +2684,25 @@ mod examples {
         },
     };
 
+    const PIXI_SPEC: PackageSpec = PackageSpec {
+        pkg: "pixi",
+        npm: &["pixi.js"],
+        crate_name: "pixi_js",
+        fsharp_name: "Pixi.Js",
+        needs_dom: true,
+        demos: &[
+            "vector_primitives",
+            "sprite_mosaic",
+            "scene_hierarchy",
+            "generative_lattice",
+            "bounds_intersection",
+        ],
+        verify: VerifyKind::CanvasNonEmpty {
+            selector: "#stage canvas",
+            min_count: 1,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3159,8 +3178,17 @@ try {{
       ok = canvases.every(canvas => {{
         if (!canvas || canvas.width <= 0 || canvas.height <= 0) return false;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return false;
-        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let data = null;
+        if (ctx) {{
+          data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        }} else {{
+          const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+          if (gl) {{
+            data = new Uint8Array(canvas.width * canvas.height * 4);
+            gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, data);
+          }}
+        }}
+        if (!data) return false;
         const colors = new Set();
         for (let i = 0; i < data.length; i += 4) {{
           if (data[i + 3] > 0) {{
@@ -3322,6 +3350,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(date_fns, DATE_FNS_SPEC);
     pkg_tests!(echarts, ECHARTS_SPEC);
     pkg_tests!(konva, KONVA_SPEC);
+    pkg_tests!(pixi, PIXI_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

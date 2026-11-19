@@ -25,7 +25,7 @@ const PACKAGES = {
   date_fns: { npm: ['date-fns'], needsDom: true, outDir: 'DateFns' },
   node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'Node' },
   leaflet: { npm: ['leaflet'], needsDom: true, outDir: 'Leaflet' },
-  pixi: { npm: ['pixi.js'], needsDom: true, outDir: 'PixiJs' },
+  pixi: { npm: ['pixi.js'], needsDom: true, outDir: 'Pixi.Js' },
   echarts: { npm: ['echarts'], needsDom: true, outDir: 'Echarts' },
   konva: { npm: ['konva'], needsDom: true, outDir: 'Konva' },
   three: { npm: ['three'], needsDom: true, outDir: 'Three' },

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bounds & Hit Containment — PixiJS + C</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      #app { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #111111; padding-bottom: 10px; }
+      .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      .badge { font-size: 11px; color: #111111; background: #f7f7f7; border: 1px solid #b5b5b5; border-radius: 3px; padding: 2px 9px; }
+      .card { background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .label { font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.06em; }
+      .stage-box { width: 680px; height: 400px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; overflow: hidden; }
+      .stage-box canvas { display: block; }
+      .meta { font-size: 12px; color: #555555; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 8px 10px; }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div class="head">
+        <h1>PixiJS Bounds & Hit Containment (C)</h1>
+        <span class="badge">pixi.js · webgl</span>
+      </div>
+      <div class="card">
+        <div class="label">Rectangle.intersects() · pad() · contains() Visualization</div>
+        <div id="stage" class="stage-box"></div>
+        <div id="meta" class="meta">Initializing PixiJS WebGL application...</div>
+      </div>
+    </main>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>

@@ -244,6 +244,51 @@
       "path": "./konva/layers_hit_test/index.html",
       "source": "./konva/layers_hit_test/src/lib.rs",
       "kind": "browser"
+    },
+    {
+      "id": "pixi/vector_primitives",
+      "package": "pixi",
+      "title": "PixiJS — Vector Primitives",
+      "description": "Monochrome Graphics rect, roundRect, circle, ellipse, regularPoly, star, and stroke outlines on WebGL.",
+      "path": "./pixi/vector_primitives/index.html",
+      "source": "./pixi/vector_primitives/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "pixi/sprite_mosaic",
+      "package": "pixi",
+      "title": "PixiJS — Tinted Sprite Mosaic",
+      "description": "40 Texture.WHITE hardware-accelerated Sprites arranged in an 8x5 monochrome greyscale grid.",
+      "path": "./pixi/sprite_mosaic/index.html",
+      "source": "./pixi/sprite_mosaic/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "pixi/scene_hierarchy",
+      "package": "pixi",
+      "title": "PixiJS — Nested Container Hierarchy",
+      "description": "Nested PixiJS Containers with translation, rotation, scaling, Matrix transforms, and local bounds.",
+      "path": "./pixi/scene_hierarchy/index.html",
+      "source": "./pixi/scene_hierarchy/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "pixi/generative_lattice",
+      "package": "pixi",
+      "title": "PixiJS — Generative Isometric Lattice",
+      "description": "Procedural monochrome isometric grid rendered with PixiJS Graphics polygons and wireframe lines.",
+      "path": "./pixi/generative_lattice/index.html",
+      "source": "./pixi/generative_lattice/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "pixi/bounds_intersection",
+      "package": "pixi",
+      "title": "PixiJS — Bounds & Hit Containment",
+      "description": "PixiJS Rectangle intersection, padding, and Point/Graphics containsPoint() hit testing visualized on WebGL.",
+      "path": "./pixi/bounds_intersection/index.html",
+      "source": "./pixi/bounds_intersection/src/lib.rs",
+      "kind": "browser"
     }
   ]
 }
