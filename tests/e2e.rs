@@ -196,26 +196,27 @@ fn write_gleam_project(out: &Path, bindings: &generators::gleam::Output) {
     }
 }
 
-// The bindings, the test, and a project that compiles them in order.
+// The bindings, their generated project, and a test project referencing them.
 fn write_fsharp(c: &Case, bindings: &generators::fsharp::Output) {
-    let mut compile = String::new();
+    let dir = c.out.join("bindings");
+    fs::create_dir_all(&dir).unwrap();
     for (name, content) in &bindings.files {
-        fs::write(c.out.join(name), content).unwrap();
-        compile += &format!("    <Compile Include=\"{name}\" />\n");
+        fs::write(dir.join(name), content).unwrap();
     }
+    fs::write(dir.join("Bindings.fsproj"), bindings.fsproj()).unwrap();
     fs::copy(c.fixture.join("test.fs"), c.out.join("Test.fs")).unwrap();
     fs::write(
         c.out.join("Test.fsproj"),
-        format!(
-            r#"<Project Sdk="Microsoft.NET.Sdk">
+        r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup>
-{compile}    <Compile Include="Test.fs" />
+    <ProjectReference Include="bindings/Bindings.fsproj" />
   </ItemGroup>
-  <ItemGroup><PackageReference Include="Fable.Core" Version="5.6.1" /></ItemGroup>
+  <ItemGroup>
+    <Compile Include="Test.fs" />
+  </ItemGroup>
 </Project>
-"#
-        ),
+"#,
     )
     .unwrap();
 }
@@ -573,15 +574,15 @@ fn bench() {
     let mut names: Vec<&str> = Vec::new();
     if let Some(fable) = find("fable") {
         let o = out.join("fsharp");
-        fs::create_dir_all(&o).unwrap();
+        let bdir = o.join("bindings");
+        fs::create_dir_all(&bdir).unwrap();
         let bindings = generators::fsharp::module(&xml("fsharp")).unwrap();
-        let mut compile = String::new();
         for (name, content) in &bindings.files {
-            fs::write(o.join(name), content).unwrap();
-            compile += &format!("    <Compile Include=\"{name}\" />\n");
+            fs::write(bdir.join(name), content).unwrap();
         }
+        fs::write(bdir.join("Bindings.fsproj"), bindings.fsproj()).unwrap();
         fs::copy(dir.join("bench.fs"), o.join("Bench.fs")).unwrap();
-        fs::write(o.join("Bench.fsproj"), format!("<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n  <ItemGroup>\n{compile}    <Compile Include=\"Bench.fs\" />\n  </ItemGroup>\n  <ItemGroup><PackageReference Include=\"Fable.Core\" Version=\"5.6.1\" /></ItemGroup>\n</Project>\n")).unwrap();
+        fs::write(o.join("Bench.fsproj"), "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n  <ItemGroup>\n    <ProjectReference Include=\"bindings/Bindings.fsproj\" />\n  </ItemGroup>\n  <ItemGroup>\n    <Compile Include=\"Bench.fs\" />\n  </ItemGroup>\n</Project>\n").unwrap();
         run(Command::new(fable).current_dir(&o).args(["Bench.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
         names.push("fsharp");
     }
@@ -703,6 +704,12 @@ fn emit_writes_bindings_or_says_why_not() {
     let bad = run(&["--set", "unions=keep", "--set", "union_params=keep"]);
     let errors = String::from_utf8_lossy(&bad.stderr);
     assert!(!bad.status.success() && errors.contains("cannot express a union"), "{errors}");
+    let fs_out = root().join("target/e2e/emit-fsharp");
+    let _ = fs::remove_dir_all(&fs_out);
+    let fs_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&shapes).arg("--config").arg(config("fsharp")).args(["--emit", "fsharp", "--out"]).arg(&fs_out).output().unwrap();
+    assert!(fs_ok.status.success(), "{}", String::from_utf8_lossy(&fs_ok.stderr));
+    let fsproj = fs::read_to_string(fs_out.join("Bindings.fsproj")).expect("Bindings.fsproj written");
+    assert!(fsproj.contains("<Compile Include=\"Bindings.Prelude.fs\" />") && fsproj.contains("<Compile Include=\"Bindings.Values.fs\" />") && fsproj.contains("Fable.Core"), "{fsproj}");
 }
 
 // Generated names do not depend on the order of declarations.
@@ -1790,14 +1797,13 @@ mod libraries {
             "fsharp" => {
                 let Some([fable]) = tools(["fable"]) else { return };
                 let bindings = generators::fsharp::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
-                let mut compile = String::new();
+                let bdir = out.join("bindings");
+                fs::create_dir_all(&bdir).unwrap();
                 for (file, content) in &bindings.files {
-                    fs::write(out.join(file), content).unwrap();
-                    compile += &format!("    <Compile Include=\"{file}\" />\n");
+                    fs::write(bdir.join(file), content).unwrap();
                 }
-                fs::write(out.join("Test.fs"), "module Test\n").unwrap();
-                fs::write(out.join("Test.fsproj"), format!("<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>\n  <ItemGroup>\n{compile}    <Compile Include=\"Test.fs\" />\n  </ItemGroup>\n  <ItemGroup><PackageReference Include=\"Fable.Core\" Version=\"5.6.1\" /></ItemGroup>\n</Project>\n")).unwrap();
-                run(Command::new(fable).current_dir(&out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+                fs::write(bdir.join("Bindings.fsproj"), bindings.fsproj()).unwrap();
+                run(Command::new(fable).current_dir(&out).args(["bindings/Bindings.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
             }
             "c" => {
                 let Some([clang]) = tools(["clang"]) else { return };

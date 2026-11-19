@@ -16,6 +16,27 @@ pub struct Output {
     pub skipped: BTreeMap<String, usize>,
 }
 
+impl Output {
+    /// An F# project file compiling the generated binding files in order,
+    /// ready to pull into another project via `<ProjectReference>`.
+    pub fn fsproj(&self) -> String {
+        let compile: String = self.files.iter().map(|(name, _)| format!("    <Compile Include=\"{name}\" />\n")).collect();
+        format!(
+            "<Project Sdk=\"Microsoft.NET.Sdk\">\n\
+             \x20 <PropertyGroup>\n\
+             \x20   <TargetFramework>netstandard2.0</TargetFramework>\n\
+             \x20 </PropertyGroup>\n\
+             \x20 <ItemGroup>\n\
+             {compile}\
+             \x20 </ItemGroup>\n\
+             \x20 <ItemGroup>\n\
+             \x20   <PackageReference Include=\"Fable.Core\" Version=\"5.6.1\" />\n\
+             \x20 </ItemGroup>\n\
+             </Project>\n"
+        )
+    }
+}
+
 struct Gen {
     // The module the library is imported from, if it is not globals.
     import: Option<String>,

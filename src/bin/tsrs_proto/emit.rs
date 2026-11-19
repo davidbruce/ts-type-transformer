@@ -43,10 +43,9 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>) -> Result<Files, V
             for (why, n) in &m.skipped {
                 eprintln!("not bound: {n} x {why}");
             }
-            // In the order F# compiles them.
-            let order: String = m.files.iter().map(|(name, _)| format!("<Compile Include=\"{name}\" />\n")).collect();
+            let fsproj = m.fsproj();
             let mut files = m.files;
-            files.push(("compile-order.txt".into(), order));
+            files.push(("Bindings.fsproj".into(), fsproj));
             Ok(files)
         }
         "gleam" => {
