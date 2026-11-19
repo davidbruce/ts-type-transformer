@@ -22,9 +22,101 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::Path;
 
 use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, subst, with_self_args};
 use super::names::{Kind, Naming, identifiers};
+use super::relative_path;
+
+#[derive(Clone, Debug)]
+pub struct ProjectRef {
+    pub crate_name: String,
+    pub dep_path: String,
+    /// Exported top-level types: Rust name -> `(arity, is_handle)`.
+    pub types: HashMap<String, (usize, bool)>,
+}
+
+/// Loads a previously generated Rust binding crate (directory or `Cargo.toml`)
+/// so another generated crate can reference its types directly instead of
+/// emitting duplicate opaque handles.
+pub fn load_project_ref(crate_or_toml: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
+    let crate_dir = if crate_or_toml.is_file() {
+        crate_or_toml.parent().unwrap_or_else(|| Path::new("."))
+    } else {
+        crate_or_toml
+    };
+    let toml_path = crate_dir.join("Cargo.toml");
+    let toml_src = std::fs::read_to_string(&toml_path).map_err(|e| format!("{}: {e}", toml_path.display()))?;
+    let mut crate_name = None;
+    let mut in_package = false;
+    for line in toml_src.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_package = line == "[package]";
+            continue;
+        }
+        if in_package
+            && let Some(rest) = line.strip_prefix("name")
+            && let Some((_, val)) = rest.split_once('=')
+        {
+            crate_name = Some(val.trim().trim_matches('"').to_string());
+            break;
+        }
+    }
+    let crate_name = crate_name.ok_or_else(|| format!("{}: missing package name", toml_path.display()))?;
+    let lib_src = std::fs::read_to_string(crate_dir.join("src/lib.rs")).unwrap_or_default();
+    let mut modules = vec!["types".to_string()];
+    for line in lib_src.lines().map(str::trim) {
+        if let Some(rest) = line.strip_prefix("pub use ")
+            && let Some(m) = rest.strip_suffix("::*;")
+            && !matches!(m, "runtime" | "types")
+        {
+            modules.push(m.to_string());
+        }
+    }
+    let mut types = HashMap::new();
+    for m in modules {
+        let Ok(src) = std::fs::read_to_string(crate_dir.join("src").join(format!("{m}.rs"))) else {
+            continue;
+        };
+        let mut external_next = false;
+        for line in src.lines() {
+            let t = line.trim();
+            if t == "// external" {
+                external_next = true;
+                continue;
+            }
+            if line.starts_with(char::is_whitespace) {
+                continue;
+            }
+            if let Some(rest) = t.strip_prefix("handle!(")
+                && let Some(inside) = rest.strip_suffix(");")
+            {
+                let was_ext = std::mem::take(&mut external_next);
+                if was_ext {
+                    continue;
+                }
+                let (name, arity) = match inside.split_once('<') {
+                    Some((n, args)) => (n.trim(), args.trim_end_matches('>').split(',').filter(|s| !s.trim().is_empty()).count()),
+                    None => (inside.trim(), 0),
+                };
+                if !matches!(name, "JsValue" | "Error" | "Date") && super::model::buffer_spec(name).is_none() {
+                    types.entry(name.to_string()).or_insert((arity, true));
+                }
+            } else if let Some(rest) = t.strip_prefix("pub enum ")
+                && let Some(name) = rest.split(|c: char| !c.is_alphanumeric() && c != '_').next()
+                && !name.is_empty()
+                && !rest.trim_start_matches(name).trim_start().starts_with('<')
+            {
+                external_next = false;
+                types.entry(name.to_string()).or_insert((0, false));
+            } else if !t.is_empty() {
+                external_next = false;
+            }
+        }
+    }
+    let dep_path = relative_path(from_dir, crate_dir);
+    Ok(ProjectRef { crate_name, dep_path, types })
+}
 
 const KEYWORDS: &[&str] = &[
     "as", "break", "const", "continue", "else", "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
@@ -604,6 +696,7 @@ pub(crate) mod rt {
 }
 
 // A JavaScript value, counted: `Clone` retains it, `Drop` releases it. Zero is null.
+#[repr(transparent)]
 pub struct JsHandle(pub u32);
 impl Clone for JsHandle {
     fn clone(&self) -> Self {
@@ -633,6 +726,15 @@ impl Lent {
     }
     pub fn owned(h: u32) -> Self {
         Lent { h, own: true }
+    }
+    pub fn into_raw(self) -> (u32, bool) {
+        let h = self.h;
+        let own = self.own;
+        core::mem::forget(self);
+        (h, own)
+    }
+    pub fn from_raw(h: u32, own: bool) -> Self {
+        Lent { h, own }
     }
 }
 impl Drop for Lent {
@@ -1358,6 +1460,12 @@ fn module_file(module: &str) -> String {
 
 // The crate: see the top of this file.
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
+    files_named(m, "bindings", &[])
+}
+
+pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<Vec<(String, String)>, Vec<String>> {
+    let crate_name = if crate_name.is_empty() { "bindings" } else { crate_name };
+    let wasm_module = if crate_name == "bindings" { "env" } else { crate_name };
     // Each type's Rust name: `names::settle` made them apart.
     let declared: Vec<&String> = m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)).chain(m.classes.iter().map(|c| &c.name)).chain(m.callbacks.iter().map(|c| &c.name)).chain(m.unions.iter().map(|u| &u.name)).chain(&m.opaque).collect();
     let mut types: HashMap<String, String> = RUNTIME_TYPES.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
@@ -1384,12 +1492,25 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     for n in &declared {
         types.entry(n.to_string()).or_insert_with(|| rust_type(n));
     }
+    let mut resolved_opaque: HashMap<String, (usize, String, bool)> = HashMap::new();
+    for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.iter().any(|r| r.0 == n.as_str()) && *n != "Error" && *n != "Date" && super::model::buffer_spec(n).is_none()) {
+        let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
+        if arity == 0 && !m.namespaced.contains_key(name.as_str()) {
+            let rn = rust_type(name);
+            for (idx, r) in refs.iter().enumerate() {
+                if let Some(&(0, is_handle)) = r.types.get(&rn) {
+                    resolved_opaque.insert(name.clone(), (idx, format!("::{}::{rn}", r.crate_name), is_handle));
+                    break;
+                }
+            }
+        }
+    }
     let leaves: HashSet<String> = own.values().cloned().collect();
     CX.with(|c| {
         *c.borrow_mut() = Context {
             decodable: m.unions.iter().filter(|u| u.decodable()).map(|u| u.name.clone()).collect(),
             unions: m.unions.iter().map(|u| u.name.clone()).collect(),
-            classes: m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).cloned()).collect(),
+            classes: m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).filter(|n| resolved_opaque.get(*n).is_none_or(|x| x.2)).cloned()).collect(),
             types,
             own,
             leaves,
@@ -1422,6 +1543,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         };
         *out += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
+             impl AsRef<{name}> for {name} {{ fn as_ref(&self) -> &Self {{ self }} }}\n\
              impl {name} {{\n    pub fn from_index(i: i32) -> Self {{ match i {{ {index}_ => panic!(\"{name}: no value {{i}}\") }} }}\n    pub fn as_str(self) -> &'static str {{ match self {{ {to}}} }}\n}}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ self.as_str().lend() }} }}\n\
              impl FromJs for {name} {{ fn from_handle(h: u32) -> Self {{ let s = String::from_handle(h); match s.as_str() {{ {from}_ => panic!(\"{name}: no value {{s}}\") }} }} }}\n",
@@ -1448,6 +1570,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         };
         *out += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
+             impl AsRef<{name}> for {name} {{ fn as_ref(&self) -> &Self {{ self }} }}\n\
              #[allow(non_upper_case_globals)]\nimpl {name} {{ {}pub fn from_value(v: i32) -> Self {{ match v {{ {from}_ => panic!(\"{name}: no value {{v}}\") }} }} }}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ (*self as i32 as f64).lend() }} }}\n\
              impl FromJs for {name} {{ fn from_handle(h: u32) -> Self {{ Self::from_value(f64::from_handle(h) as i32) }} }}\n",
@@ -1455,14 +1578,39 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             aliases.concat()
         );
     }
-    // Types declared elsewhere: handles, generic or not.
+    let mut used_refs: BTreeSet<usize> = BTreeSet::new();
+    // Types declared elsewhere: resolve against referenced crates where possible, else opaque handles.
     for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.iter().any(|r| r.0 == n.as_str())) {
+        if let Some((ref_idx, qualified, is_handle)) = resolved_opaque.get(name) {
+            used_refs.insert(*ref_idx);
+            let ref_crate = &refs[*ref_idx].crate_name;
+            let short = qualified.trim_start_matches("::");
+            types_file += &format!(
+                "pub use {qualified};\n\
+                 impl crate::runtime::ToJs for {qualified} {{\n\
+                 \x20   fn lend(&self) -> crate::runtime::Lent {{ let (h, owned) = ::{ref_crate}::ToJs::lend(self).into_raw(); crate::runtime::Lent::from_raw(h, owned) }}\n\
+                 }}\n\
+                 impl crate::runtime::FromJs for {qualified} {{\n\
+                 \x20   fn from_handle(h: u32) -> Self {{ <{qualified} as ::{ref_crate}::FromJs>::from_handle(h) }}\n\
+                 }}\n\
+                 impl From<{qualified}> for crate::runtime::JsValue {{ fn from(x: {qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(&x))) }} }}\n\
+                 impl From<&{qualified}> for crate::runtime::JsValue {{ fn from(x: &{qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(x))) }} }}\n"
+            );
+            if *is_handle {
+                types_file += &format!("impl crate::runtime::Is<{qualified}> for {qualified} {{}}\n");
+            }
+            let _ = short;
+            continue;
+        }
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
         let params: Vec<String> = (1..=arity).map(|i| format!("T{i}")).collect();
         let raw_name = name.as_str();
         let name = def_name(name);
         let targs = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
         let phantom = if params.is_empty() { "" } else { ", PhantomData" };
+        if raw_name != "Error" && raw_name != "Date" && super::model::buffer_spec(raw_name).is_none() {
+            types_file += "// external\n";
+        }
         types_file += &format!("handle!({name}{targs});\n");
         if params.is_empty() {
             types_file += &format!("impl Is<{name}> for {name} {{}}\n");
@@ -1723,10 +1871,23 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         }
     }
 
-    let mut lib = String::from(
-        "// Generated. Bindings: `use bindings::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\nmod runtime;\npub use runtime::*;\nmod types;\npub use types::*;\n",
+    let deps = if used_refs.is_empty() {
+        String::new()
+    } else {
+        let lines: String = used_refs
+            .iter()
+            .map(|&idx| format!("{} = {{ path = {:?} }}\n", refs[idx].crate_name, refs[idx].dep_path))
+            .collect();
+        format!("\n[dependencies]\n{lines}")
+    };
+    let mut lib = format!(
+        "// Generated. Bindings: `use {crate_name}::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\nmod runtime;\npub use runtime::*;\nmod types;\npub use types::*;\n"
     );
-    let mut out = vec![("Cargo.toml".to_string(), "# Generated.\n[package]\nname = \"bindings\"\nversion = \"0.1.0\"\nedition = \"2024\"\n".to_string()), ("src/runtime.rs".to_string(), RUNTIME.to_string()), ("src/types.rs".to_string(), types_file)];
+    let mut out = vec![
+        ("Cargo.toml".to_string(), format!("# Generated.\n[package]\nname = \"{crate_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n{deps}")),
+        ("src/runtime.rs".to_string(), RUNTIME.to_string()),
+        ("src/types.rs".to_string(), types_file),
+    ];
     // A namespace's module, by its own name (`pub mod stream;`), not taken
     // into the crate's: its types are `stream::PipeOptions`. Its members'
     // traits are in scope with the crate's, under no name.
@@ -1757,7 +1918,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         lib += &format!("mod {module};\npub use {module}::*;\n");
         out.push((format!("src/{module}.rs"), text));
     }
-    out.push(("src/raw.rs".into(), format!("// Generated. The imports.\n#![allow(dead_code, unused_imports)]\nuse core::ffi::c_void;\n\n#[link(wasm_import_module = \"env\")]\nunsafe extern \"C\" {{\n{}}}\n", imports.into_values().collect::<String>())));
+    out.push(("src/raw.rs".into(), format!("// Generated. The imports.\n#![allow(dead_code, unused_imports)]\nuse core::ffi::c_void;\n\n#[link(wasm_import_module = \"{wasm_module}\")]\nunsafe extern \"C\" {{\n{}}}\n", imports.into_values().collect::<String>())));
     out.push(("src/lib.rs".into(), lib));
     Ok(out)
 }
@@ -1767,7 +1928,13 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
 // type parameters too (`impl<P: JsType>`: `Marker<P>` is a `Layer`).
 fn upcast_in(bounds: &str, sub: &str, base: &str) -> String {
     let name = base.split('<').next().unwrap_or(base);
-    let make = if base.contains('<') { format!("{name}(x.0, core::marker::PhantomData)") } else { format!("{name}(x.0)") };
+    let make = if name.starts_with("::") {
+        format!("<{base} as crate::runtime::FromJs>::from_handle({{ let h = x.0 .0; core::mem::forget(x); h }})")
+    } else if base.contains('<') {
+        format!("{name}(x.0, core::marker::PhantomData)")
+    } else {
+        format!("{name}(x.0)")
+    };
     format!(
         "impl{bounds} From<{sub}> for {base} {{ fn from(x: {sub}) -> Self {{ {make} }} }}\n\
          impl{bounds} AsRef<{base}> for {sub} {{ fn as_ref(&self) -> &{base} {{ unsafe {{ &*(self as *const {sub} as *const {base}) }} }} }}\n\

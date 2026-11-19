@@ -700,10 +700,34 @@ fn emit_writes_bindings_or_says_why_not() {
     let shapes = root().join("tests/fixtures/shapes/api.d.ts");
     let run = |extra: &[&str]| Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&shapes).arg("--config").arg(config("c")).args(extra).arg("--emit").arg("c").arg("--out").arg(&out).output().unwrap();
     let ok = run(&[]);
-    assert!(ok.status.success() && out.join("bindings.h").exists() && out.join("glue.mjs").exists(), "{}", String::from_utf8_lossy(&ok.stderr));
+    assert!(ok.status.success() && out.join("bindings/bindings.h").exists() && out.join("bindings/glue.mjs").exists(), "{}", String::from_utf8_lossy(&ok.stderr));
     let bad = run(&["--set", "unions=keep", "--set", "union_params=keep"]);
     let errors = String::from_utf8_lossy(&bad.stderr);
     assert!(!bad.status.success() && errors.contains("cannot express a union"), "{errors}");
+    // Package-named nested outputs and manifests for every target.
+    for (target, expected_files) in [
+        ("c", ["base_lib/base_lib.h", "base_lib/bindings.h", "base_lib/glue.mjs"].as_slice()),
+        ("cpp", ["base_lib/base_lib.hpp", "base_lib/bindings.hpp", "base_lib/glue.mjs"].as_slice()),
+        ("zig", ["base_lib/build.zig", "base_lib/bindings.zig", "base_lib/glue.mjs"].as_slice()),
+        ("rust", ["base_lib/Cargo.toml", "base_lib/src/lib.rs", "base_lib/glue.mjs"].as_slice()),
+        ("gleam", ["base_lib/gleam.toml", "base_lib/src/base_lib/types.gleam"].as_slice()),
+    ] {
+        let pkg_out = root().join("target/e2e").join(format!("emit-{target}"));
+        let _ = fs::remove_dir_all(&pkg_out);
+        let cfg = if target == "cpp" { "cpp" } else { target };
+        let res = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+            .arg(&shapes)
+            .arg("--config")
+            .arg(config(cfg))
+            .args(["--emit", target, "--name", "base-lib", "--out"])
+            .arg(&pkg_out)
+            .output()
+            .unwrap();
+        assert!(res.status.success(), "{target}: {}", String::from_utf8_lossy(&res.stderr));
+        for rel in expected_files {
+            assert!(pkg_out.join(rel).exists(), "{target}: missing {}", pkg_out.join(rel).display());
+        }
+    }
     let fs_out = root().join("target/e2e/emit-fsharp");
     let _ = fs::remove_dir_all(&fs_out);
     let fs_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(&shapes).arg("--config").arg(config("fsharp")).args(["--emit", "fsharp", "--out"]).arg(&fs_out).output().unwrap();
@@ -789,6 +813,389 @@ fn fsharp_cross_project_refs() {
     )
     .unwrap();
     run(Command::new(fable).current_dir(&out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+}
+
+fn setup_ref_fixture(name: &str, target: &str) -> (PathBuf, PathBuf) {
+    let out = root().join("target/e2e").join(name);
+    let _ = fs::remove_dir_all(&out);
+    let bindings = out.join("bindings");
+    let pkg_dir = out.join("node_modules/base-lib");
+    fs::create_dir_all(&bindings).unwrap();
+    fs::create_dir_all(&pkg_dir).unwrap();
+    let base_dts = pkg_dir.join("index.d.ts");
+    fs::write(pkg_dir.join("package.json"), "{ \"name\": \"base-lib\", \"types\": \"./index.d.ts\" }\n").unwrap();
+    fs::write(
+        &base_dts,
+        "export interface Surface { width: number; height: number; }\n\
+         export type Mode = \"fast\" | \"safe\";\n\
+         export interface RenderingContext { id: number; }\n\
+         export declare function makeSurface(w: number, h: number): Surface;\n\
+         export declare function makeBaseContext(id: number): RenderingContext;\n\
+         export declare function describeMode(m: Mode): string;\n",
+    )
+    .unwrap();
+    let app_dts = out.join("app.d.ts");
+    fs::write(
+        &app_dts,
+        "import type { Surface } from 'base-lib';\n\
+         export type Quality = \"low\" | \"high\";\n\
+         export interface RenderingContext { label: string; }\n\
+         export declare function render(s: Surface, q: Quality): number;\n\
+         export declare function makeAppContext(label: string): RenderingContext;\n\
+         export declare function describeQuality(q: Quality): string;\n",
+    )
+    .unwrap();
+    let base_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg(&base_dts)
+        .arg("--config")
+        .arg(config(target))
+        .args(["--emit", target, "--name", "base-lib", "--out"])
+        .arg(&bindings)
+        .output()
+        .unwrap();
+    assert!(base_ok.status.success(), "{target} base: {}", String::from_utf8_lossy(&base_ok.stderr));
+    let app_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg(&app_dts)
+        .arg("--config")
+        .arg(config(target))
+        .args(["--emit", target, "--name", "app-lib", "--ref"])
+        .arg(bindings.join("base_lib"))
+        .arg("--out")
+        .arg(&bindings)
+        .output()
+        .unwrap();
+    assert!(app_ok.status.success(), "{target} app: {}", String::from_utf8_lossy(&app_ok.stderr));
+    (out, bindings)
+}
+
+fn write_composable_runner(out: &Path) {
+    fs::write(
+        out.join("run.mjs"),
+        "import fs from 'node:fs';\n\
+         import { createRuntime, makeEnv as baseEnv } from './bindings/base_lib/glue.mjs';\n\
+         import { makeEnv as appEnv } from './bindings/app_lib/glue.mjs';\n\
+         let instance;\n\
+         let passed = 0;\n\
+         const failed = [];\n\
+         const wasi = new Proxy({}, { get: () => () => 0 });\n\
+         const rt = createRuntime(() => instance, { check: true, unchecked: e => failed.push(e) });\n\
+         const baseImpl = {\n\
+           makeSurface: (w, h) => ({ width: w, height: h }),\n\
+           makeBaseContext: id => ({ id }),\n\
+           describeMode: m => 'mode:' + m,\n\
+         };\n\
+         const appImpl = {\n\
+           render: (s, q) => s.width + s.height + (q === 'high' ? 10 : 1),\n\
+           makeAppContext: label => ({ label }),\n\
+           describeQuality: q => 'quality:' + q,\n\
+         };\n\
+         const b = baseEnv(() => instance, { runtime: rt, root: baseImpl });\n\
+         const a = appEnv(() => instance, { runtime: rt, root: appImpl });\n\
+         ({ instance } = await WebAssembly.instantiate(fs.readFileSync('./test.wasm'), {\n\
+           env: { ...rt.env, check: (ok, line) => (ok ? passed++ : failed.push(line)) },\n\
+           base_lib: b.$pkg,\n\
+           app_lib: a.$pkg,\n\
+           wasi_snapshot_preview1: wasi,\n\
+         }));\n\
+         instance.exports._initialize?.();\n\
+         instance.exports.run();\n\
+         if (failed.length || passed === 0) {\n\
+           console.error(`${failed.length} failed; ${passed} passed; lines=${failed.join(',')}`);\n\
+           process.exit(1);\n\
+         }\n\
+         console.log(`${passed} checks passed`);\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn rust_cross_project_refs() {
+    let Some(rustc) = rustc_wasm() else { return };
+    let Some([node]) = tools(["node"]) else { return };
+    let (out, bindings) = setup_ref_fixture("rust-refs", "rust");
+    let app_toml = fs::read_to_string(bindings.join("app_lib/Cargo.toml")).unwrap();
+    assert!(app_toml.contains("base_lib = { path = \"../base_lib\" }"), "{app_toml}");
+    let app_types = fs::read_to_string(bindings.join("app_lib/src/types.rs")).unwrap();
+    assert!(app_types.contains("pub use ::base_lib::Surface;"), "{app_types}");
+
+    let base_rlib = out.join("libbase_lib.rlib");
+    let app_rlib = out.join("libapp_lib.rlib");
+    run(Command::new(&rustc).current_dir(&out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "base_lib", "-o"]).arg(&base_rlib).arg("bindings/base_lib/src/lib.rs"));
+    run(Command::new(&rustc).current_dir(&out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "app_lib", "--extern"]).arg(format!("base_lib={}", base_rlib.display())).arg("-o").arg(&app_rlib).arg("bindings/app_lib/src/lib.rs"));
+    fs::write(
+        out.join("test.rs"),
+        "#![no_main]\n\
+         use base_lib::RenderingContextMethods as _;\n\
+         use app_lib::RenderingContextMethods as _;\n\
+         #[link(wasm_import_module = \"env\")]\n\
+         unsafe extern \"C\" { fn check(ok: i32, line: u32); }\n\
+         fn assert_ok(ok: bool, line: u32) { unsafe { check(i32::from(ok), line); } }\n\
+         #[unsafe(no_mangle)]\n\
+         pub extern \"C\" fn run() {\n\
+             let s = base_lib::make_surface(640.0, 480.0);\n\
+             assert_ok(app_lib::render(&s, app_lib::Quality::High) == 1130.0, line!());\n\
+             let bc = base_lib::make_base_context(7.0);\n\
+             let ac = app_lib::make_app_context(\"gl\");\n\
+             assert_ok(bc.id() == 7.0 && ac.label() == \"gl\", line!());\n\
+             assert_ok(base_lib::describe_mode(base_lib::Mode::Fast) == \"mode:fast\", line!());\n\
+             assert_ok(app_lib::describe_quality(app_lib::Quality::High) == \"quality:high\", line!());\n\
+             drop((s, bc, ac));\n\
+             assert_ok(base_lib::js::live_handles() == 0, line!());\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(&rustc)
+        .current_dir(&out)
+        .args(RUSTC_WASM)
+        .args(["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "--extern"])
+        .arg(format!("base_lib={}", base_rlib.display()))
+        .arg("--extern")
+        .arg(format!("app_lib={}", app_rlib.display()))
+        .args(["-o", "test.wasm", "test.rs"]));
+    write_composable_runner(&out);
+    let report = run(Command::new(node).current_dir(&out).arg("run.mjs"));
+    assert!(report.contains("5 checks passed"), "{report}");
+}
+
+#[test]
+fn zig_cross_project_refs() {
+    let Some([zig, node]) = tools(["zig", "node"]) else { return };
+    let (out, bindings) = setup_ref_fixture("zig-refs", "zig");
+    let app_build = fs::read_to_string(bindings.join("app_lib/build.zig")).unwrap();
+    assert!(app_build.contains("base_lib") && app_build.contains("../base_lib/bindings.zig"), "{app_build}");
+    let app_types = fs::read_to_string(bindings.join("app_lib/types.zig")).unwrap();
+    assert!(app_types.contains("@import(\"base_lib\").Surface"), "{app_types}");
+
+    fs::write(
+        out.join("test.zig"),
+        "const base = @import(\"base_lib\");\n\
+         const app = @import(\"app_lib\");\n\
+         extern \"env\" fn check(ok: i32, line: u32) void;\n\
+         fn assertOk(ok: bool, line: u32) void { check(@intFromBool(ok), line); }\n\
+         export fn run() void {\n\
+             const s = base.makeSurface(640.0, 480.0);\n\
+             defer base.jsRelease(s);\n\
+             assertOk(app.render(s, .high) == 1130.0, @src().line);\n\
+             const bc = base.makeBaseContext(7.0);\n\
+             defer base.jsRelease(bc);\n\
+             const ac = app.makeAppContext(\"gl\");\n\
+             defer app.jsRelease(ac);\n\
+             assertOk(bc.getId() == 7.0, @src().line);\n\
+             const ac_label = ac.getLabel();\n\
+             defer app.jsRelease(ac_label);\n\
+             assertOk(ac_label.eql(\"gl\"), @src().line);\n\
+             const desc_mode = base.describeMode(.fast);\n\
+             defer base.jsRelease(desc_mode);\n\
+             assertOk(desc_mode.eql(\"mode:fast\"), @src().line);\n\
+             const desc_qual = app.describeQuality(.high);\n\
+             defer app.jsRelease(desc_qual);\n\
+             assertOk(desc_qual.eql(\"quality:high\"), @src().line);\n\
+             const ms = base.JsArrayOf(base.Mode).of(&.{ .fast, .safe });\n\
+             defer base.jsRelease(ms);\n\
+             assertOk(ms.get(1) == .safe, @src().line);\n\
+             const qs = app.JsArrayOf(app.Quality).of(&.{ .low, .high });\n\
+             defer app.jsRelease(qs);\n\
+             assertOk(qs.get(1) == .high, @src().line);\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(zig)
+        .current_dir(&out)
+        .args([
+            "build-exe",
+            "-target",
+            "wasm32-freestanding",
+            "-fno-entry",
+            "-rdynamic",
+            "--export-table",
+            "-O",
+            "ReleaseSmall",
+            "--dep",
+            "base_lib",
+            "--dep",
+            "app_lib",
+            "-Mroot=test.zig",
+            "-Mbase_lib=bindings/base_lib/bindings.zig",
+            "--dep",
+            "base_lib",
+            "-Mapp_lib=bindings/app_lib/bindings.zig",
+            "-femit-bin=test.wasm",
+        ]));
+    write_composable_runner(&out);
+    let report = run(Command::new(node).current_dir(&out).arg("run.mjs"));
+    assert!(report.contains("7 checks passed"), "{report}");
+}
+
+#[test]
+fn c_cross_project_refs() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+    let (out, bindings) = setup_ref_fixture("c-refs", "c");
+    let app_types = fs::read_to_string(bindings.join("app_lib/ts_types.h")).unwrap();
+    assert!(app_types.contains("../base_lib/ts_types.h"), "{app_types}");
+    assert!(!app_types.contains("} Surface;"), "Surface should not be redeclared:\n{app_types}");
+    assert!(bindings.join("base_lib/base_lib.h").exists() && bindings.join("app_lib/app_lib.h").exists());
+
+    fs::write(
+        out.join("test.c"),
+        "#include \"base_lib/base_lib.h\"\n\
+         #include \"app_lib/app_lib.h\"\n\
+         __attribute__((import_module(\"env\"), import_name(\"check\"))) void check(int32_t ok, uint32_t line);\n\
+         #define CHECK(ok) check((ok) ? 1 : 0, __LINE__)\n\
+         __attribute__((export_name(\"run\"))) void run(void) {\n\
+             Surface s = makeSurface(640.0, 480.0);\n\
+             CHECK(render(s, Quality_high) == 1130.0);\n\
+             RenderingContext bc = makeBaseContext(7.0);\n\
+             RenderingContext_2 ac = makeAppContext(\"gl\");\n\
+             CHECK(RenderingContext_get_id(bc) == 7.0);\n\
+             JsString lbl = RenderingContext_2_get_label(ac);\n\
+             CHECK(JsString_equals(lbl, \"gl\"));\n\
+             JsString dm = describeMode(Mode_fast);\n\
+             CHECK(JsString_equals(dm, \"mode:fast\"));\n\
+             JsString dq = describeQuality(Quality_high);\n\
+             CHECK(JsString_equals(dq, \"quality:high\"));\n\
+             js_release(dq); js_release(dm); js_release(lbl); js_release(ac); js_release(bc); js_release(s);\n\
+             CHECK(js_live_handles() == 0);\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.c")));
+    write_composable_runner(&out);
+    let report = run(Command::new(node).current_dir(&out).arg("run.mjs"));
+    assert!(report.contains("6 checks passed"), "{report}");
+}
+
+#[test]
+fn cpp_cross_project_refs() {
+    let Some(clang) = wasi_clang() else { return };
+    let Some([node]) = tools(["node"]) else { return };
+    let (out, bindings) = setup_ref_fixture("cpp-refs", "cpp");
+    let app_types = fs::read_to_string(bindings.join("app_lib/ts_types.hpp")).unwrap();
+    assert!(app_types.contains("../base_lib/base_lib.hpp") && app_types.contains("using Surface = ::base_lib::Surface;"), "{app_types}");
+
+    let mut cpp_sources = Vec::new();
+    fn collect_cpp(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let p = entry.unwrap().path();
+            if p.is_dir() {
+                collect_cpp(&p, out);
+            } else if p.extension().and_then(|s| s.to_str()) == Some("cpp") {
+                out.push(p);
+            }
+        }
+    }
+    collect_cpp(&bindings.join("base_lib"), &mut cpp_sources);
+    collect_cpp(&bindings.join("app_lib"), &mut cpp_sources);
+    fs::write(
+        out.join("test.cpp"),
+        "#include \"base_lib/base_lib.hpp\"\n\
+         #include \"app_lib/app_lib.hpp\"\n\
+         extern \"C\" __attribute__((import_module(\"env\"), import_name(\"check\"))) void check(int32_t ok, uint32_t line);\n\
+         #define CHECK(ok) check((ok) ? 1 : 0, __LINE__)\n\
+         extern \"C\" __attribute__((export_name(\"run\"))) void run() {\n\
+             {\n\
+                 base_lib::Surface s = base_lib::makeSurface(640.0, 480.0);\n\
+                 CHECK(app_lib::render(s, app_lib::Quality::high) == 1130.0);\n\
+                 base_lib::RenderingContext bc = base_lib::makeBaseContext(7.0);\n\
+                 app_lib::RenderingContext ac = app_lib::makeAppContext(\"gl\");\n\
+                 CHECK(bc.id() == 7.0 && ac.label() == \"gl\");\n\
+                 CHECK(base_lib::describeMode(base_lib::Mode::fast) == \"mode:fast\");\n\
+                 CHECK(app_lib::describeQuality(app_lib::Quality::high) == \"quality:high\");\n\
+                 ts::Array<base_lib::Mode> ms{ base_lib::Mode::fast, base_lib::Mode::safe };\n\
+                 CHECK(ms[1] == base_lib::Mode::safe);\n\
+                 ts::Array<app_lib::Quality> qs{ app_lib::Quality::low, app_lib::Quality::high };\n\
+                 CHECK(qs[1] == app_lib::Quality::high);\n\
+             }\n\
+             CHECK(ts::live_handles() == 0);\n\
+         }\n",
+    )
+    .unwrap();
+    let mut cmd = Command::new(&clang);
+    cmd.args(CLANGXX_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.cpp"));
+    for s in &cpp_sources {
+        cmd.arg(s);
+    }
+    run(&mut cmd);
+    write_composable_runner(&out);
+    let report = run(Command::new(node).current_dir(&out).arg("run.mjs"));
+    assert!(report.contains("7 checks passed"), "{report}");
+}
+
+#[test]
+fn gleam_cross_project_refs() {
+    let Some([gleam, node]) = tools(["gleam", "node"]) else { return };
+    let (out, bindings) = setup_ref_fixture("gleam-refs", "gleam");
+    let app_toml = fs::read_to_string(bindings.join("app_lib/gleam.toml")).unwrap();
+    assert!(app_toml.contains("base_lib = { path = \"../base_lib\" }"), "{app_toml}");
+
+    // Seed consumer project using the locked stdlib from tests/gleam/manifest.toml
+    // plus local base_lib/app_lib path deps so Gleam compiles offline.
+    fs::create_dir_all(out.join("src")).unwrap();
+    fs::create_dir_all(out.join("node_modules/base-lib")).unwrap();
+    fs::write(out.join("node_modules/base-lib/package.json"), "{ \"name\": \"base-lib\", \"type\": \"module\", \"exports\": \"./index.mjs\" }\n").unwrap();
+    fs::write(
+        out.join("node_modules/base-lib/index.mjs"),
+        "export function makeSurface(w, h) { return { width: w, height: h }; }\n\
+         export function makeBaseContext(id) { return { id }; }\n\
+         export function describeMode(m) { return 'mode:' + m; }\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("gleam.toml"),
+        "name = \"check\"\n\
+         version = \"1.0.0\"\n\
+         target = \"javascript\"\n\n\
+         [dependencies]\n\
+         gleam_stdlib = \">= 1.0.0 and < 2.0.0\"\n\
+         base_lib = { path = \"bindings/base_lib\" }\n\
+         app_lib = { path = \"bindings/app_lib\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("manifest.toml"),
+        "packages = [\n\
+         \x20 { name = \"app_lib\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"base_lib\", \"gleam_stdlib\"], source = \"local\", path = \"bindings/app_lib\" },\n\
+         \x20 { name = \"base_lib\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], source = \"local\", path = \"bindings/base_lib\" },\n\
+         \x20 { name = \"gleam_stdlib\", version = \"1.0.5\", build_tools = [\"gleam\"], requirements = [], otp_app = \"gleam_stdlib\", source = \"hex\", outer_checksum = \"CEE5B6C076A85B45F60C585F4316C63EC8B7127C119D5738C3958A9C4D50404E\" },\n\
+         ]\n\n\
+         [requirements]\n\
+         app_lib = { path = \"bindings/app_lib\" }\n\
+         base_lib = { path = \"bindings/base_lib\" }\n\
+         gleam_stdlib = { version = \">= 1.0.0 and < 2.0.0\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("src/check.gleam"),
+        "import gleam/io\n\
+         import base_lib/areas/main as base\n\
+         import base_lib/areas/main/surface\n\
+         import base_lib/areas/main/rendering_context as base_ctx\n\
+         import base_lib/types as base_types\n\
+         import app_lib/areas/main as app\n\
+         import app_lib/areas/main/rendering_context as app_ctx\n\
+         import app_lib/types as app_types\n\n\
+         pub fn main() {\n\
+           let s = base.make_surface(640.0, 480.0)\n\
+           let assert True = surface.get_width(s) +. surface.get_height(s) == 1120.0\n\
+           let assert True = app.render(s, app_types.QualityHigh) == 1130.0\n\
+           let bc = base.make_base_context(7.0)\n\
+           let ac = app.make_app_context(\"gl\")\n\
+           let assert True = base_ctx.get_id(bc) == 7.0 && app_ctx.get_label(ac) == \"gl\"\n\
+           let assert True = base.describe_mode(base_types.ModeFast) == \"mode:fast\"\n\
+           let assert True = app.describe_quality(app_types.QualityHigh) == \"quality:high\"\n\
+           io.println(\"5 checks passed\")\n\
+         }\n",
+    )
+    .unwrap();
+    fs::write(
+        out.join("impl.mjs"),
+        "globalThis.render = (s, q) => s.width + s.height + (q === 'high' ? 10 : 1);\n\
+         globalThis.makeAppContext = label => ({ label });\n\
+         globalThis.describeQuality = q => 'quality:' + q;\n",
+    )
+    .unwrap();
+    run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
+    let report = run(Command::new(node).arg(root().join("tests/run_gleam.mjs")).arg(out.join("impl.mjs")).arg(out.join("build/dev/javascript/check/check.mjs")));
+    assert!(report.contains("5 checks passed"), "{report}");
 }
 
 // Generated names do not depend on the order of declarations.

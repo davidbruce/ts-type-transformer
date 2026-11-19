@@ -13,6 +13,10 @@ use super::model::{Call, Class, Func, Model, Shared, Ty, ident};
 // The model of a wasm target: as `model::model`, with imports that differ only
 // in their fixed arguments made one.
 pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
+    model_with_reserved(xml, target, &[], &HashSet::new())
+}
+
+pub fn model_with_reserved(xml: &str, target: &str, extra_reserved: &[String], ref_structs: &HashSet<String>) -> Result<Model, Vec<String>> {
     let mut m = super::model::model(xml, target)?;
     let naming = match target {
         "C" => Some(&super::c::NAMING),
@@ -22,7 +26,16 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         _ => None,
     };
     if let Some(n) = naming {
-        super::names::settle(&mut m, n);
+        let opaque_kept: HashSet<&str> = m.opaque.iter().map(String::as_str).filter(|o| ref_structs.contains(*o)).collect();
+        let filtered: Vec<String> = extra_reserved
+            .iter()
+            .filter(|r| {
+                let base = r.strip_prefix("AS_").unwrap_or(r.as_str());
+                !opaque_kept.contains(base)
+            })
+            .cloned()
+            .collect();
+        super::names::settle_with(&mut m, n, &filtered);
     }
     share_imports(&mut m);
     Ok(m)
@@ -234,8 +247,12 @@ pub fn manifest(m: &Model) -> String {
 }
 
 // JavaScript that implements every import by calling the real API.
-// The functions a compiled module imports from `env`: what the glue must provide.
+// The functions a compiled module imports from `env` (or `module_name`): what the glue must provide.
 pub fn imports(wasm: &[u8]) -> HashSet<String> {
+    imports_for(wasm, "env")
+}
+
+pub fn imports_for(wasm: &[u8], module_name: &str) -> HashSet<String> {
     fn leb(b: &[u8], i: &mut usize) -> usize {
         let (mut v, mut shift) = (0usize, 0);
         loop {
@@ -292,7 +309,7 @@ pub fn imports(wasm: &[u8]) -> HashSet<String> {
                         leb(wasm, &mut i);
                     }
                 }
-                if module == "env" {
+                if module == "env" || module == module_name {
                     out.insert(field);
                 }
             }
@@ -304,6 +321,10 @@ pub fn imports(wasm: &[u8]) -> HashSet<String> {
 
 // The glue for every import in the model, or with `used`, only those a compiled module needs.
 pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
+    glue_for_module(m, used, "env")
+}
+
+pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &str) -> String {
     let wanted = |name: &str| used.is_none_or(|u| u.contains(name));
     // A value handed to a callback: wasm's own where it counts handles, else
     // lent, and released when the callback returns.
@@ -335,20 +356,22 @@ pub fn glue(m: &Model, used: Option<&HashSet<String>>) -> String {
             None => call(&args),
         }
     };
-    let mut out = String::from(
+    let listener = lending(&|args| format!("f(ctx, {args});"), &["put(ev)".to_string()]);
+    let settle = lending(&|args| format!("table().get(fn)(ctx, ok, {args});"), &["put(v)".to_string()]);
+    let mut out = format!(
         "// Generated. Implements the wasm imports by calling the JavaScript API.
+//
+// createRuntime(getInstance, options): shared handle table, memory/string helpers,
+// callbacks, and runtime env imports. Multiple generated bindings share one runtime
+// via `makeEnv(getInstance, {{ ...options, runtime: baseEnv.$runtime }})`.
 //
 // makeEnv(getInstance, options): `options.root` is where the API's names
 // are, when not all are globals: a library's module, say; `options.modules`,
-// with several packages, each one's module by its name. A package bound
-// must be given. `options.check`
+// with several packages, each one's module by its name. `options.check`
 // reports mistakes with handles (one used after its release, or released
 // twice), at some cost in speed; `options.unchecked(e)` is called with an
 // exception no one took, and by default writes it to the console.
-export function makeEnv(getInstance, options = {}) {
-  const G = options.root ?? globalThis;
-  // With several packages bound together, each one's module by its name.
-  const M = options.modules ?? {};
+export function createRuntime(getInstance, options = {{}}) {{
   const CHECK = !!options.check;
   const RELEASED = Symbol('released');
   // Values by handle. Each `ref` is a reference wasm owns, in a slot of its
@@ -357,7 +380,7 @@ export function makeEnv(getInstance, options = {}) {
   const refs = [0];
   const free = [];
   let live = 0;
-  const ref = v => {
+  const ref = v => {{
     if (v === null || v === undefined) return 0;
     // When checking, a slot is never reused: a stale handle stays stale.
     const h = free.length ? free.pop() : objs.length;
@@ -365,132 +388,132 @@ export function makeEnv(getInstance, options = {}) {
     refs[h] = 1;
     live++;
     return h;
-  };
+  }};
   // Open scopes: each holds the handles given to wasm while it is innermost,
   // released when it closes.
   const scopes = [];
-  const put = v => {
+  const put = v => {{
     const h = ref(v);
     if (h !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(h);
     return h;
-  };
-  const release = h => {
+  }};
+  const release = h => {{
     if (h === 0) return;
-    if (!(refs[h] > 0)) return fail(new Error(`handle ${h} released twice`));
-    if (--refs[h] === 0) {
+    if (!(refs[h] > 0)) return fail(new Error(`handle ${{h}} released twice`));
+    if (--refs[h] === 0) {{
       live--;
       if (CHECK) objs[h] = RELEASED;
-      else {
+      else {{
         objs[h] = undefined;
         free.push(h);
-      }
-    }
-  };
+      }}
+    }}
+  }};
   const get = CHECK
-    ? h => {
+    ? h => {{
         const v = objs[h];
-        if (v === RELEASED) throw new Error(`handle ${h} used after its release`);
+        if (v === RELEASED) throw new Error(`handle ${{h}} used after its release`);
         return v;
-      }
+      }}
     : h => objs[h];
   // A handle wasm gave up: what a callback returns.
-  const take = h => {
+  const take = h => {{
     const v = get(h);
     release(h);
     return v;
-  };
+  }};
   // The exception a call threw, until wasm takes it: a handle, or 0. One that
   // is not taken by the time control returns to JavaScript, or before the
   // next one, is reported.
   let error = 0;
   const unchecked = options.unchecked ?? (e => console.error('Uncaught in a wasm call:', e));
-  const fail = e => {
-    if (error !== 0) {
+  const fail = e => {{
+    if (error !== 0) {{
       const old = objs[error];
       release(error);
       unchecked(old);
-    }
+    }}
     const mine = (error = ref(e));
-    queueMicrotask(() => {
-      if (error === mine && objs[mine] === e) {
+    queueMicrotask(() => {{
+      if (error === mine && objs[mine] === e) {{
         error = 0;
         release(mine);
         unchecked(e);
-      }
-    });
+      }}
+    }});
     return 0;
-  };
+  }};
   // Runtime calls that can throw, with up to four arguments.
-  const guard = f => (a, b, c, d) => {
-    try {
+  const guard = f => (a, b, c, d) => {{
+    try {{
       return f(a, b, c, d);
-    } catch (e) {
+    }} catch (e) {{
       return fail(e);
-    }
-  };
+    }}
+  }};
   // The module's memory, as bytes: a new view when it has grown.
   let bytes = new Uint8Array(0);
   const mem = () => (bytes.byteLength !== 0 ? bytes : (bytes = new Uint8Array(getInstance().exports.memory.buffer)));
   const table = () => getInstance().exports.__indirect_function_table;
   const enc = new TextEncoder(), dec = new TextDecoder();
   // A string from memory. Short ones are usually ASCII, read faster by hand.
-  const decode = (m, ptr, len) => {
-    if (len <= 16) {
+  const decode = (m, ptr, len) => {{
+    if (len <= 16) {{
       let s = '';
-      for (let i = 0; i < len; i++) {
+      for (let i = 0; i < len; i++) {{
         const c = m[ptr + i];
         if (c > 127) return dec.decode(m.subarray(ptr, ptr + len));
         s += String.fromCharCode(c);
-      }
+      }}
       return s;
-    }
+    }}
     return dec.decode(m.subarray(ptr, ptr + len));
-  };
+  }};
   // Strings seen at an address, reused while the bytes there are the same:
   // most strings a program passes are its literals, passed again and again.
   const seen = new Map();
-  const str = (ptr, len) => {
+  const str = (ptr, len) => {{
     const m = mem();
     const key = ptr * 65536 + len;
     const e = seen.get(key);
-    if (e !== undefined) {
+    if (e !== undefined) {{
       const b = e.bytes;
       let i = 0;
       while (i < len && m[ptr + i] === b[i]) i++;
       if (i === len) return e.s;
       // A buffer that keeps changing is not worth remembering.
       if (e.misses++ > 2) return decode(m, ptr, len);
-    }
+    }}
     const s = decode(m, ptr, len);
     if (len > 256) return s;
     if (seen.size > 1024) seen.clear();
-    seen.set(key, { s, bytes: m.slice(ptr, ptr + len), misses: e === undefined ? 0 : e.misses });
+    seen.set(key, {{ s, bytes: m.slice(ptr, ptr + len), misses: e === undefined ? 0 : e.misses }});
     return s;
-  };
+  }};
   // The length of a string in UTF-8.
-  const utf8Length = s => {
+  const utf8Length = s => {{
     const n = s.length;
     for (let i = 0; i < n; i++) if (s.charCodeAt(i) > 127) return enc.encode(s).length;
     return n;
-  };
+  }};
   // Writes at most `cap` bytes of a string to memory; returns its whole length in UTF-8.
-  const write = (s, ptr, cap) => {
+  const write = (s, ptr, cap) => {{
     const m = mem();
     const n = s.length;
     const fits = n <= cap ? n : cap;
     let i = 0;
-    for (; i < fits; i++) {
+    for (; i < fits; i++) {{
       const c = s.charCodeAt(i);
       if (c > 127) break;
       m[ptr + i] = c;
-    }
+    }}
     if (i === n) return n;
     if (i === fits && n > cap) return utf8Length(s);
     const r = enc.encodeInto(s, m.subarray(ptr, ptr + cap));
     return r.read === n ? r.written : utf8Length(s);
-  };
+  }};
   const text = h => String(get(h) ?? '');
-  const viewOf = (h, off, len) => {
+  const viewOf = (h, off, len) => {{
     const v = get(h);
     if (v == null) return new Uint8Array(0);
     const buf = ArrayBuffer.isView(v) ? v.buffer : v;
@@ -499,7 +522,7 @@ export function makeEnv(getInstance, options = {}) {
     const start = Math.min(off >>> 0, total);
     const count = len === undefined ? total - start : Math.min(len >>> 0, total - start);
     return new Uint8Array(buf, base + start, count);
-  };
+  }};
   const bufferCtors = [
     null,
     typeof SharedArrayBuffer !== 'undefined' ? SharedArrayBuffer : null,
@@ -521,59 +544,20 @@ export function makeEnv(getInstance, options = {}) {
   const callbacks = new Map();
   // Callbacks made here: their key and context, until released.
   const owned = new Map();
-  const dead = () => {
+  const dead = () => {{
     throw new Error('callback called after release');
-  };
-  const callback = (kind, fn, ctx, make) => {
-    const key = `${kind}:${fn}:${ctx}`;
+  }};
+  const callback = (kind, fn, ctx, make) => {{
+    const key = `${{kind}}:${{fn}}:${{ctx}}`;
     let f = callbacks.get(key);
-    if (f === undefined) {
-      const state = { key, ctx, alive: true };
+    if (f === undefined) {{
+      const state = {{ key, ctx, alive: true }};
       f = make(table().get(fn), state);
       owned.set(f, state);
       callbacks.set(key, f);
-    }
+    }}
     return put(f);
-  };
-  const enums = {
-",
-    );
-    // Each package's module the program reaches: one asked for is given,
-    // or makeEnv fails here, not at a call; one a declaration only comes
-    // from (node's `stream`) fails where it is used, if not given.
-    let used = m.runtime_packages();
-    let mut packages: Vec<&String> = m.packages.values().filter(|p| used.contains(*p)).collect();
-    packages.sort();
-    packages.dedup();
-    let alone = packages.len() == 1 && m.requested_packages.len() <= 1;
-    let mut pk = String::from("  const PK = {};\n");
-    for p in packages {
-        let given = if alone { format!("M[{p:?}] ?? options.root") } else { format!("M[{p:?}]") };
-        let missing = format!("makeEnv: no module for the package {p:?}: give it in options.modules{}", if alone { " or options.root" } else { "" });
-        if m.requested_packages.is_empty() || m.requested_packages.contains(p) {
-            pk += &format!("  PK[{p:?}] = {given};\n  if (PK[{p:?}] === undefined) throw new Error({missing:?});\n");
-        } else {
-            pk += &format!("  PK[{p:?}] = {given} ?? new Proxy({{}}, {{ get() {{ throw new Error({missing:?}); }} }});\n");
-        }
-    }
-    out = out.replacen("  const CHECK = !!options.check;\n", &format!("{pk}  const CHECK = !!options.check;\n"), 1);
-    for (name, values) in &m.enums {
-        out += &format!("    {name}: {values:?},\n");
-    }
-    // The keys of each map, by index.
-    out += "  };\n  const keys = {\n";
-    for k in &m.maps {
-        out += &format!("    {}: {:?},\n", k.name, k.keys);
-    }
-    let listener = lending(&|args| format!("f(ctx, {args});"), &["put(ev)".to_string()]);
-    let settle = lending(&|args| format!("table().get(fn)(ctx, ok, {args});"), &["put(v)".to_string()]);
-    out += &format!(
-        "  }};
-  const enumList = Object.values(enums);
-  // Each enum's values by name, to their place: looked up, not searched for.
-  const places = {{}};
-  for (const name in enums) places[name] = new Map(enums[name].map((v, i) => [v, i]));
-  const placeList = Object.values(places);
+  }};
   const env = {{
     js_string_len: guard(h => utf8Length(text(h))),
     js_string_read: guard((h, ptr) => {{ write(text(h), ptr, 0x7fffffff); }}),
@@ -613,9 +597,6 @@ export function makeEnv(getInstance, options = {}) {
     js_scope_close: () => {{ (scopes.pop() ?? []).forEach(release); }},
     // References wasm holds.
     js_live: () => live,
-    // An enum's value as a handle, and back as its index: enums by the order they are declared in.
-    js_enum_value: (id, i) => put(enumList[id][i]),
-    js_enum_index: guard((id, h) => placeList[id].get(get(h)) ?? -1),
     // Iteration: an iterator over a value, and its next value, or -1 at the end.
     js_iterate: guard(h => put(get(h)[Symbol.iterator]())),
     js_iterator_next: guard(it => {{ const r = get(it).next(); return r.done ? -1 : put(r.value); }}),
@@ -670,8 +651,47 @@ export function makeEnv(getInstance, options = {}) {
       const settle = ok => v => {{ {settle} }};
       Promise.resolve(get(p)).then(settle(1), settle(0));
     }}),
+  }};
+  return {{ ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, env }};
+}}
+
+export function makeEnv(getInstance, options = {{}}) {{
+  const rt = options.runtime ?? createRuntime(getInstance, options);
+  const {{ ref, put, release, get, take, str, table, fail, guard, callback, dead, env: rtEnv }} = rt;
+  const G = options.root ?? globalThis;
+  // With several packages bound together, each one's module by its name.
+  const M = options.modules ?? {{}};
 "
     );
+    // Each package's module the program reaches: one asked for is given,
+    // or makeEnv fails here, not at a call; one a declaration only comes
+    // from (node's `stream`) fails where it is used, if not given.
+    let used = m.runtime_packages();
+    let mut packages: Vec<&String> = m.packages.values().filter(|p| used.contains(*p)).collect();
+    packages.sort();
+    packages.dedup();
+    let alone = packages.len() == 1 && m.requested_packages.len() <= 1;
+    let mut pk = String::from("  const PK = {};\n");
+    for p in packages {
+        let given = if alone { format!("M[{p:?}] ?? options.root") } else { format!("M[{p:?}]") };
+        let missing = format!("makeEnv: no module for the package {p:?}: give it in options.modules{}", if alone { " or options.root" } else { "" });
+        if m.requested_packages.is_empty() || m.requested_packages.contains(p) {
+            pk += &format!("  PK[{p:?}] = {given};\n  if (PK[{p:?}] === undefined) throw new Error({missing:?});\n");
+        } else {
+            pk += &format!("  PK[{p:?}] = {given} ?? new Proxy({{}}, {{ get() {{ throw new Error({missing:?}); }} }});\n");
+        }
+    }
+    out += &pk;
+    out += "  const enums = {\n";
+    for (name, values) in &m.enums {
+        out += &format!("    {name}: {values:?},\n");
+    }
+    // The keys of each map, by index.
+    out += "  };\n  const keys = {\n";
+    for k in &m.maps {
+        out += &format!("    {}: {:?},\n", k.name, k.keys);
+    }
+    out += "  };\n  const enumList = Object.values(enums);\n  // Each enum's values by name, to their place: looked up, not searched for.\n  const places = {};\n  for (const name in enums) places[name] = new Map(enums[name].map((v, i) => [v, i]));\n  const placeList = Object.values(places);\n  const pkgEnv = {\n    // An enum's value as a handle, and back as its index: enums by the order they are declared in.\n    js_enum_value: (id, i) => put(enumList[id][i]),\n    js_enum_index: guard((id, h) => placeList[id].get(get(h)) ?? -1),\n";
     // Which member of a union a value is: its index, or -1.
     for u in m.unions.iter().filter(|u| wanted(&format!("{}_tag", u.name))) {
         let mut arms = Vec::new();
@@ -740,5 +760,15 @@ export function makeEnv(getInstance, options = {}) {
         let table: Vec<String> = s.values.iter().map(|v| format!("[{}]", v.join(", "))).collect();
         out += &format!("    {}: (() => {{ const F = [{}]; return ({}) => {}; }})(),\n", s.name, table.join(", "), params.join(", "), guarded(&body));
     }
-    out + "  };\n  return env;\n}\n"
+    out + &format!(
+        "  }};\n\
+         \x20 const env = {{ ...rtEnv, ...pkgEnv }};\n\
+         \x20 Object.defineProperties(env, {{\n\
+         \x20   $runtime: {{ value: rt }},\n\
+         \x20   $module: {{ value: {wasm_module:?} }},\n\
+         \x20   $pkg: {{ value: pkgEnv }},\n\
+         \x20 }});\n\
+         \x20 return env;\n\
+         }}\n"
+    )
 }

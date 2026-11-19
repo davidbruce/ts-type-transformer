@@ -2,9 +2,93 @@
 // become tagged unions, and nullable objects become optionals.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::Path;
 
 use super::model::{Call, Class, Func, Model, NamedUnion, Ty};
 use super::names::Naming;
+
+/// A reference to a previously generated Zig binding package.
+pub struct ProjectRef {
+    pub pkg_name: String,
+    pub dep_path: String,
+    pub types: HashSet<String>,
+}
+
+fn unquote_zig_ident(s: &str) -> String {
+    let s = s.trim();
+    if let Some(inner) = s.strip_prefix("@\"").and_then(|r| r.strip_suffix('"')) {
+        inner.replace("\\\"", "\"").replace("\\\\", "\\")
+    } else {
+        s.to_string()
+    }
+}
+
+/// Loads a previously generated Zig binding directory (`bindings.zig` / `build.zig`)
+/// so another generated package can import its types instead of stubbing them.
+pub fn load_project_ref(dir_or_root: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
+    let root_dir = if dir_or_root.is_file() {
+        dir_or_root.parent().unwrap_or_else(|| Path::new("."))
+    } else {
+        dir_or_root
+    };
+    let bindings_path = root_dir.join("bindings.zig");
+    let bindings_src = std::fs::read_to_string(&bindings_path).map_err(|e| format!("{}: {e}", bindings_path.display()))?;
+    let pkg_name = bindings_src
+        .lines()
+        .take(5)
+        .find_map(|l| l.trim().strip_prefix("// package:").map(|s| s.trim().to_string()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| super::snake_package_name(root_dir.file_name().and_then(|s| s.to_str()).unwrap_or("bindings")));
+
+    let types_src = std::fs::read_to_string(root_dir.join("types.zig")).unwrap_or_default();
+    let mut external_opaque = HashSet::new();
+    let mut prev_external = false;
+    for line in types_src.lines().map(str::trim) {
+        if line == "// external" {
+            prev_external = true;
+            continue;
+        }
+        if prev_external
+            && let Some(rest) = line.strip_prefix("pub const ")
+            && let Some((lhs, _)) = rest.split_once(" =")
+        {
+            external_opaque.insert(unquote_zig_ident(lhs));
+        }
+        prev_external = false;
+    }
+
+    let mut file_cache: HashMap<String, String> = HashMap::new();
+    let mut types = HashSet::new();
+    for line in bindings_src.lines().map(str::trim) {
+        let Some(rest) = line.strip_prefix("pub const ") else { continue };
+        let Some((lhs, rhs)) = rest.split_once(" = @import(\"") else { continue };
+        let Some((file, _)) = rhs.split_once("\").") else { continue };
+        if file == "runtime.zig" {
+            continue;
+        }
+        let name = unquote_zig_ident(lhs);
+        if matches!(name.as_str(), "Promise" | "Error" | "Date") || super::model::buffer_spec(&name).is_some() {
+            continue;
+        }
+        if file == "types.zig" {
+            if !external_opaque.contains(&name) {
+                types.insert(name);
+            }
+            continue;
+        }
+        let src = file_cache
+            .entry(file.to_string())
+            .or_insert_with(|| std::fs::read_to_string(root_dir.join(file)).unwrap_or_default());
+        let plain = format!("pub const {name} = ");
+        let quoted = format!("pub const @\"{name}\" = ");
+        if src.lines().map(str::trim).any(|l| l.starts_with(&plain) || l.starts_with(&quoted)) {
+            types.insert(name);
+        }
+    }
+
+    let dep_path = super::relative_path(from_dir, root_dir);
+    Ok(ProjectRef { pkg_name, dep_path, types })
+}
 
 // Quoted identifiers accept any name, keywords included.
 fn ident(name: &str) -> String {
@@ -254,7 +338,7 @@ fn lower_arg(name: &str, t: &Ty) -> String {
     }
 }
 
-fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion]) {
+fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion], wasm_module: &str) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
@@ -350,7 +434,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
         Ty::Nullable(..) => format!("const h = {call}; return if (h == 0) null else .{{ .h = h }};"),
         _ => format!("return .{{ .h = {call} }};"),
     };
-    let decl = format!("    extern \"env\" fn @\"{import}\"({}) {};\n", raw_params.join(", "), raw(&f.ret));
+    let decl = format!("    extern \"{wasm_module}\" fn @\"{import}\"({}) {};\n", raw_params.join(", "), raw(&f.ret));
     // Declared once per file, though several functions use it.
     // Only a shared import can repeat; checking others would be quadratic.
     if f.shared.is_none() || !externs.contains(&decl) {
@@ -466,7 +550,7 @@ pub const Lent = struct {
         const T = @TypeOf(v);
         if (T == f64 or T == comptime_float or T == comptime_int) return .{ .h = raw.js_from_number(v), .own = true };
         if (T == bool) return .{ .h = raw.js_from_bool(@intFromBool(v)), .own = true };
-        if (@typeInfo(T) == .@\"enum\") return .{ .h = if (@hasDecl(T, \"js_id\")) raw.js_enum_value(T.js_id, @intFromEnum(v)) else raw.js_from_number(@floatFromInt(@intFromEnum(v))), .own = true };
+        if (@typeInfo(T) == .@\"enum\") return .{ .h = if (@hasDecl(T, \"toJsHandle\")) v.toJsHandle() else raw.js_from_number(@floatFromInt(@intFromEnum(v))), .own = true };
         if (comptime isString(T)) { const s: []const u8 = v; return .{ .h = raw.js_from_string(s.ptr, s.len), .own = true }; }
         if (@typeInfo(T) == .@\"union\") return switch (v) { inline else => |x| of(x) };
         return .{ .h = v.h, .own = false };
@@ -476,7 +560,7 @@ pub const Lent = struct {
 
 // An enum's value from a handle, which stays as it was.
 pub fn jsEnumOf(comptime T: type, h: u32) T {
-    return @enumFromInt(if (@hasDecl(T, \"js_id\")) raw.js_enum_index(T.js_id, h) else @as(i32, @intFromFloat(raw.js_to_number(h))));
+    return if (@hasDecl(T, \"fromJsHandle\")) T.fromJsHandle(h) else @enumFromInt(@as(i32, @intFromFloat(raw.js_to_number(h))));
 }
 
 // A T from a handle a function returned: takes the handle over.
@@ -561,8 +645,6 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_release(h: u32) void;
     extern \"env\" fn js_live() u32;
     extern \"env\" fn js_take_error() u32;
-    extern \"env\" fn js_enum_value(id: i32, i: i32) u32;
-    extern \"env\" fn js_enum_index(id: i32, h: u32) i32;
     extern \"env\" fn js_has_error() i32;
     extern \"env\" fn js_string_copy(h: u32, ptr: [*]u8, cap: usize) usize;
     extern \"env\" fn js_string_equals(h: u32, ptr: [*]const u8, len: usize) i32;
@@ -595,9 +677,24 @@ fn check(m: &Model) -> super::Problems {
 }
 
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
+    files_named(m, "bindings", &[])
+}
+
+pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec<(String, String)>, Vec<String>> {
     let problems = check(m);
     if !problems.is_empty() {
         return Err(problems.into_messages());
+    }
+    let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
+    let mut resolved_opaque: HashMap<String, usize> = HashMap::new();
+    let mut used_refs: BTreeSet<usize> = BTreeSet::new();
+    for name in &m.opaque {
+        if matches!(name.as_str(), "Promise" | "Error" | "Date") || super::model::buffer_spec(name).is_some() {
+            continue;
+        }
+        if let Some((idx, _)) = refs.iter().enumerate().find(|(_, r)| r.types.contains(name)) {
+            resolved_opaque.insert(name.clone(), idx);
+        }
     }
     // File -> (declarations, externs, names it declares).
     let mut files: BTreeMap<String, (String, String, Vec<String>)> = BTreeMap::new();
@@ -610,8 +707,16 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let mut seen = std::collections::HashSet::new();
         let members: Vec<String> = values.iter().map(|v| if v.is_empty() { "empty" } else { v }).filter(|v| seen.insert(v.to_string())).map(ident).collect();
         // `js_id`: which enum of strings it is, for its values to cross as handles.
-        types.0 += &format!("pub const {name} = enum(i32) {{ {}, pub const js_id: i32 = {id}; }};\n", members.join(", "));
+        types.0 += &format!(
+            "pub const {name} = enum(i32) {{ {}, pub const js_id: i32 = {id}; pub fn toJsHandle(self: @This()) u32 {{ return raw.js_enum_value({id}, @intFromEnum(self)); }} pub fn fromJsHandle(h: u32) @This() {{ return @enumFromInt(raw.js_enum_index({id}, h)); }} }};\n",
+            members.join(", ")
+        );
         types.2.push(name.clone());
+    }
+    if !m.enums.is_empty() {
+        types.1 += &format!(
+            "    extern \"{wasm_module}\" fn js_enum_value(id: i32, i: i32) u32;\n    extern \"{wasm_module}\" fn js_enum_index(id: i32, h: u32) i32;\n"
+        );
     }
     for (name, members) in &m.num_enums {
         // A value named twice (`LEFT = 0`, `ROTATE = 0`): the second is a constant of the first.
@@ -634,7 +739,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     for u in &m.unions {
         u.parts.iter().for_each(|p| type_refs(p, types_uses));
         types.0 += &union_decl(u);
-        types.1 += &format!("    extern \"env\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
+        types.1 += &format!("    extern \"{wasm_module}\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
         types.2.push(u.name.clone());
     }
     let iterates_async = m.classes.iter().any(|c| c.iterates_async.is_some());
@@ -717,8 +822,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                 );
             }
             types.0 += "};\n";
+        } else if let Some(&idx) = resolved_opaque.get(name) {
+            used_refs.insert(idx);
+            types.0 += &format!("pub const {name} = @import(\"{}\").{name};\n", refs[idx].pkg_name);
         } else {
-            types.0 += &format!("pub const {name} = extern struct {{ h: u32 }};\n");
+            types.0 += &format!("// external\npub const {name} = extern struct {{ h: u32 }};\n");
         }
         types.2.push(name.clone());
     }
@@ -761,7 +869,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             raw_params.iter().map(|p| format!(", {p}")).collect::<String>(),
             raw_callback(&c.ret)
         );
-        types.1 += &format!("    extern \"env\" fn {}_from(f: usize, ctx: ?*anyopaque) u32;\n", c.name);
+        types.1 += &format!("    extern \"{wasm_module}\" fn {}_from(f: usize, ctx: ?*anyopaque) u32;\n", c.name);
         types.2.push(c.name.clone());
     }
     files.insert("types".into(), types);
@@ -855,7 +963,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         // Checked downcast: only a class has a constructor to test against.
         if c.js.is_some() {
             let cast_name = if own_names.values().any(|n| n == "cast") || c.consts.iter().any(|(n, _)| n == "cast") { "tryCast" } else { "cast" };
-            *externs += &format!("    extern \"env\" fn @\"js_is__{}\"(u32) i32;\n", c.name);
+            *externs += &format!("    extern \"{wasm_module}\" fn @\"js_is__{}\"(u32) i32;\n", c.name);
             *out += &format!("    pub fn {}(v: anytype) ?{} {{ return if (v.h != 0 and raw.@\"js_is__{1}\"(v.h) != 0) .{{ .h = v.h }} else null; }}\n", ident(cast_name), c.name);
         }
         let inherited = |f: &Func| if Class::has_self(f) { homes.get(&(c.name.as_str(), f.name.as_str())).copied() } else { None };
@@ -863,7 +971,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         if c.funcs.iter().any(|f| shared(f)) {
             *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
             for f in c.funcs.iter().filter(|f| shared(f)) {
-                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions);
+                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions, wasm_module);
             }
             *out += "        };\n    }\n";
         }
@@ -872,7 +980,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             match inherited(f) {
                 Some((from, name)) => *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(own_name), ident(&class_names[from][name])),
                 None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(own_name)),
-                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions),
+                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions, wasm_module),
             }
         }
         *out += "};\n";
@@ -885,13 +993,13 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         let (out, externs, names) = files.entry(f.module.clone()).or_default();
         let zig_name = &top_names[&f.name];
         names.push(zig_name.clone());
-        func(out, externs, None, f, zig_name, "", &m.unions);
+        func(out, externs, None, f, zig_name, "", &m.unions, wasm_module);
     }
 
     // Which file declares each name.
     let home: HashMap<&str, &str> = files.iter().flat_map(|(file, (_, _, names))| names.iter().map(move |n| (n.as_str(), file.as_str()))).collect();
     let mut out = Vec::new();
-    let mut root = String::from("// Generated. Every name, from the file that declares it.\n");
+    let mut root = format!("// Generated. Every name, from the file that declares it.\n// package: {pkg_name}\n");
     // A namespace's types and functions: their path, and where each is declared.
     let mut namespaces: Vec<(Vec<String>, String)> = Vec::new();
     // A namespace's function by its own name: `geometry.distance`.
@@ -920,6 +1028,23 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     root += &namespace_structs(&namespaces, &root);
     out.push(("bindings.zig".into(), root));
+    let dep_imports = if used_refs.is_empty() {
+        "    _ = mod;\n".to_string()
+    } else {
+        used_refs
+            .iter()
+            .map(|&idx| {
+                format!(
+                    "    mod.addImport(\"{}\", b.createModule(.{{\n        .root_source_file = b.path(\"{}/bindings.zig\"),\n    }}));\n",
+                    refs[idx].pkg_name, refs[idx].dep_path
+                )
+            })
+            .collect()
+    };
+    let build_zig = format!(
+        "// Generated.\nconst std = @import(\"std\");\n\npub fn build(b: *std.Build) void {{\n    const mod = b.addModule(\"{pkg_name}\", .{{\n        .root_source_file = b.path(\"bindings.zig\"),\n    }});\n{dep_imports}}}\n"
+    );
+    out.push(("build.zig".into(), build_zig));
     Ok(out)
 }
 

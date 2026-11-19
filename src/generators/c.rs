@@ -1,8 +1,138 @@
 // XML -> C header for a wasm32 module. No inheritance, generics, overloads,
 // optional parameters or unions: the config must have lowered them all.
 
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::path::Path;
+
 use super::model::{Call, Class, Func, Model, NamedUnion, Ty};
 use super::names::{Kind, Naming, identifiers};
+
+/// A reference to a previously generated C binding directory.
+pub struct ProjectRef {
+    pub pkg_name: String,
+    pub ts_types_include: String,
+    pub umbrella_include: String,
+    pub structs: HashSet<String>,
+    pub all_names: Vec<String>,
+}
+
+fn is_builtin_c_type(name: &str) -> bool {
+    matches!(
+        name,
+        "Error" | "Date" | "Promise" | "JsValue" | "JsString" | "JsArray" | "JsIterator" | "JsOptionalDouble" | "JsOptionalBool"
+    ) || super::model::buffer_spec(name).is_some()
+        || name.starts_with("JsArray_")
+        || name.starts_with("JsTuple_")
+}
+
+fn collect_c_header_functions(dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            collect_c_header_functions(&p, out);
+        } else if p.file_name().and_then(|s| s.to_str()) == Some("functions.h")
+            && let Ok(src) = std::fs::read_to_string(&p)
+        {
+            for line in src.lines().map(str::trim) {
+                if let Some(rest) = line.strip_prefix("static inline ")
+                    && let Some((head, _)) = rest.split_once('(')
+                    && let Some(name) = head.split_whitespace().last()
+                    && !name.is_empty()
+                {
+                    out.push(name.to_string());
+                } else if let Some(rest) = line.strip_prefix("#define ")
+                    && let Some((name, _)) = rest.split_once('(')
+                {
+                    let name = name.trim();
+                    if !name.is_empty() && !name.contains("__") {
+                        out.push(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Loads a previously generated C binding directory (or `bindings.h`/`ts_types.h`)
+/// so another generated C package can `#include` its `ts_types.h` and reserve
+/// its global C identifiers against collisions.
+pub fn load_project_ref(dir_or_header: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
+    let root_dir = if dir_or_header.is_file() {
+        dir_or_header.parent().unwrap_or_else(|| Path::new("."))
+    } else {
+        dir_or_header
+    };
+    let types_path = root_dir.join("ts_types.h");
+    let src = std::fs::read_to_string(&types_path).map_err(|e| format!("{}: {e}", types_path.display()))?;
+    let pkg_name = super::snake_package_name(root_dir.file_name().and_then(|s| s.to_str()).unwrap_or("bindings"));
+    let rel_dir = super::relative_path(from_dir, root_dir);
+    let ts_types_include = format!("{rel_dir}/ts_types.h");
+    let pkg_umbrella = root_dir.join(format!("{pkg_name}.h"));
+    let umbrella_include = if pkg_umbrella.is_file() {
+        format!("{rel_dir}/{pkg_name}.h")
+    } else {
+        format!("{rel_dir}/bindings.h")
+    };
+
+    let mut structs = HashSet::new();
+    let mut all_names = Vec::new();
+    let mut prev_is_external = false;
+    for line in src.lines().map(str::trim) {
+        if line == "/* external */" {
+            prev_is_external = true;
+            continue;
+        }
+        if let Some(name) = line.strip_prefix("typedef struct { uint32_t h; } ").and_then(|r| r.strip_suffix(';')).map(str::trim) {
+            if !prev_is_external && !is_builtin_c_type(name) {
+                structs.insert(name.to_string());
+                all_names.push(name.to_string());
+            }
+        } else if line.starts_with("typedef enum {")
+            && let Some((inner, rhs)) = line.strip_prefix("typedef enum {").unwrap_or("").split_once("} ")
+            && let Some(name) = rhs.strip_suffix(';').map(str::trim)
+            && !is_builtin_c_type(name)
+        {
+            all_names.push(name.to_string());
+            for item in inner.split(',') {
+                let id = item.split('=').next().unwrap_or("").trim();
+                if !id.is_empty() {
+                    all_names.push(id.to_string());
+                }
+            }
+        } else if line.starts_with("typedef struct { int32_t tag;")
+            && let Some((_, rhs)) = line.rsplit_once("} ")
+            && let Some(name) = rhs.strip_suffix(';').map(str::trim)
+            && !is_builtin_c_type(name)
+        {
+            all_names.push(name.to_string());
+        } else if line.starts_with("typedef ")
+            && let Some((_, after)) = line.split_once("(*")
+            && let Some(fn_name) = after.split(')').next()
+            && let Some(name) = fn_name.strip_suffix("_fn")
+            && !is_builtin_c_type(name)
+        {
+            all_names.push(name.to_string());
+        }
+        prev_is_external = false;
+    }
+    collect_c_header_functions(root_dir, &mut all_names);
+    all_names.sort();
+    all_names.dedup();
+    Ok(ProjectRef { pkg_name, ts_types_include, umbrella_include, structs, all_names })
+}
+
+fn import_attr(wasm_module: &str, name: &str) -> String {
+    if wasm_module == "env" {
+        format!("TS_IMPORT({name})")
+    } else {
+        format!("TS_IMPORT_MOD(\"{wasm_module}\", {name})")
+    }
+}
+
+fn raw_fn(raw_prefix: &str, name: &str) -> String {
+    format!("ts_raw_{raw_prefix}{name}")
+}
 
 thread_local! {
     // The unions of the model being generated that values can be decoded to.
@@ -155,7 +285,7 @@ fn union_field(t: &Ty) -> String {
 // A union: a struct with a tag and its members, tag constants, and
 // conversions to and from handles: `Id_from_handle` takes a handle a function
 // returned; `Id_to_handle` gives one the caller releases.
-fn union_type(u: &NamedUnion, m: &Model) -> (String, String) {
+fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefix: &str) -> (String, String) {
     // An enum of strings crosses as a handle by its place among the enums.
     let enum_id = |e: &str| m.enums.iter().position(|x| x.0 == e).unwrap_or(0);
     let n = &u.name;
@@ -166,6 +296,8 @@ fn union_type(u: &NamedUnion, m: &Model) -> (String, String) {
         fields.join(" "),
         tags.join(", ")
     );
+    let enum_value_fn = raw_fn(raw_prefix, "js_enum_value");
+    let enum_index_fn = raw_fn(raw_prefix, "js_enum_index");
     let to: String = u
         .parts
         .iter()
@@ -175,7 +307,7 @@ fn union_type(u: &NamedUnion, m: &Model) -> (String, String) {
             match p {
                 Ty::Num => format!(" case {i}: return ts_raw_js_from_number(u.as.{f});"),
                 Ty::Bool => format!(" case {i}: return ts_raw_js_from_bool(u.as.{f});"),
-                Ty::Enum(e) => format!(" case {i}: return ts_raw_js_enum_value({}, u.as.{f});", enum_id(e)),
+                Ty::Enum(e) => format!(" case {i}: return {enum_value_fn}({}, u.as.{f});", enum_id(e)),
                 _ => format!(" case {i}: ts_raw_js_retain(u.as.{f}.h); return u.as.{f}.h;"),
             }
         })
@@ -190,15 +322,17 @@ fn union_type(u: &NamedUnion, m: &Model) -> (String, String) {
                 Ty::Num => format!(" case {i}: u.as.{f} = ts_raw_js_to_number(h); ts_raw_js_release(h); break;"),
                 Ty::Bool => format!(" case {i}: u.as.{f} = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); break;"),
                 Ty::Str => format!(" case {i}: u.as.{f} = (JsString){{ h }}; break;"),
-                Ty::Enum(e) => format!(" case {i}: u.as.{f} = ({e})ts_raw_js_enum_index({}, h); ts_raw_js_release(h); break;", enum_id(e)),
+                Ty::Enum(e) => format!(" case {i}: u.as.{f} = ({e}){enum_index_fn}({}, h); ts_raw_js_release(h); break;", enum_id(e)),
                 p => format!(" case {i}: u.as.{f} = ({}){{ h }}; break;", typed(p, false)),
             }
         })
         .collect();
+    let tag_attr = import_attr(wasm_module, &format!("{n}_tag"));
+    let tag_raw = raw_fn(raw_prefix, &format!("{n}_tag"));
     let functions = format!(
-        "TS_IMPORT({n}_tag) int32_t ts_raw_{n}_tag(uint32_t, int32_t);\n\
+        "{tag_attr} int32_t {tag_raw}(uint32_t, int32_t);\n\
          static inline uint32_t {n}_to_handle({n} u) {{ switch (u.tag) {{{to} }} return 0; }}\n\
-         static inline {n} {n}_from_handle(uint32_t h) {{ {n} u; u.tag = ts_raw_{n}_tag(h, 0); switch (u.tag) {{{from} }} return u; }}\n"
+         static inline {n} {n}_from_handle(uint32_t h) {{ {n} u; u.tag = {tag_raw}(h, 0); switch (u.tag) {{{from} }} return u; }}\n"
     );
     // Made from a member: `Value_of_number(42)`, or by its type, `Value_of(widget)`.
     let field_type = |p: &Ty| if *p == Ty::Str { "JsString".to_string() } else { typed(p, false) };
@@ -277,7 +411,7 @@ fn array_type(e: &Ty) -> String {
     .concat()
 }
 
-fn func(out: &mut String, owner: Option<&str>, f: &Func) {
+fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module: &str, raw_prefix: &str) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
@@ -355,7 +489,8 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         }
         None => f.import.as_str(),
     };
-    let mut call = format!("ts_raw_{import}({})", args.join(", "));
+    let call_raw = raw_fn(raw_prefix, import);
+    let mut call = format!("{call_raw}({})", args.join(", "));
     // With lent arguments: the call, their release, then the result.
     let mut pre = lent.concat();
     if !lent.is_empty() {
@@ -395,7 +530,7 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("return ({}){call};", typed(inner, false)),
         t => format!("return ({}){{ {call} }};", typed(t, false)),
     };
-    let decl = format!("TS_IMPORT({import}) {} ts_raw_{import}({});\n", raw(&f.ret), void(&raw_params));
+    let decl = format!("{} {} {call_raw}({});\n", import_attr(wasm_module, import), raw(&f.ret), void(&raw_params));
     // Declared once per header, though several functions use it.
     // Only a shared import can repeat; checking others would be quadratic.
     if f.shared.is_none() || !out.contains(&decl) {
@@ -406,10 +541,13 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func) {
 
 const RUNTIME: &str = "// Generated.
 #pragma once
+#ifndef TS_RUNTIME_H
+#define TS_RUNTIME_H
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#define TS_IMPORT(name) __attribute__((import_module(\"env\"), import_name(#name)))
+#define TS_IMPORT_MOD(mod, name) __attribute__((import_module(mod), import_name(#name)))
+#define TS_IMPORT(name) TS_IMPORT_MOD(\"env\", name)
 
 // `name__N`, by the number of arguments: how trailing optional arguments are left out.
 // An empty call counts as none: `orUnit()` (C23, or C11 without -pedantic).
@@ -492,8 +630,6 @@ static inline double js_date_now(void) { return ts_raw_js_date_now(); }
 // A JavaScript iterator: see `X_iterate`.
 typedef struct { uint32_t h; } JsIterator;
 TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
-TS_IMPORT(js_enum_value) uint32_t ts_raw_js_enum_value(int32_t, int32_t);
-TS_IMPORT(js_enum_index) int32_t ts_raw_js_enum_index(int32_t, uint32_t);
 TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
 TS_IMPORT(js_async_iterate) uint32_t ts_raw_js_async_iterate(uint32_t);
 TS_IMPORT(js_async_iterator_next) uint32_t ts_raw_js_async_iterator_next(uint32_t);
@@ -537,6 +673,7 @@ static inline bool js_object_has(JsValue o, const char* key) { return ts_raw_js_
 static inline JsArray js_to_array(JsValue v) { return (JsArray){ v.h }; }
 #define js_value(x) ((JsValue){ (x).h })
 
+#endif
 ";
 
 // What an argument left out is: `undefined`, as each type says it.
@@ -699,12 +836,42 @@ fn check(m: &Model) -> super::Problems {
 }
 
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
+    files_named(m, "bindings", &[])
+}
+
+pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec<(String, String)>, Vec<String>> {
     let problems = check(m);
     if !problems.is_empty() {
         return Err(problems.into_messages());
     }
+    let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
+    let raw_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}_") };
+    let mut resolved_opaque: HashMap<String, usize> = HashMap::new();
+    for name in &m.opaque {
+        if matches!(name.as_str(), "Error" | "Date" | "Promise") || super::model::buffer_spec(name).is_some() {
+            continue;
+        }
+        if let Some((idx, _)) = refs.iter().enumerate().find(|(_, r)| r.structs.contains(name)) {
+            resolved_opaque.insert(name.clone(), idx);
+        }
+    }
+    let used_refs: BTreeSet<usize> = resolved_opaque.values().copied().collect();
+
     DECODABLE.with(|d| *d.borrow_mut() = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
-    let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n\n");
+    let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n");
+    for &idx in &used_refs {
+        types += &format!("#include \"{}\"\n", refs[idx].ts_types_include);
+    }
+    types.push('\n');
+    if !m.enums.is_empty() {
+        types += &format!(
+            "{} uint32_t {}(int32_t, int32_t);\n{} int32_t {}(int32_t, uint32_t);\n\n",
+            import_attr(wasm_module, "js_enum_value"),
+            raw_fn(&raw_prefix, "js_enum_value"),
+            import_attr(wasm_module, "js_enum_index"),
+            raw_fn(&raw_prefix, "js_enum_index"),
+        );
+    }
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
         // `E_absent`, -1, is an optional enum that is not there.
@@ -730,22 +897,38 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
     }
     // Every object is an opaque handle; the struct keeps the types apart.
-    let handles = m.opaque.iter().chain(m.classes.iter().map(|c| &c.name)).chain(m.callbacks.iter().map(|c| &c.name));
-    for name in handles {
+    for name in &m.opaque {
+        if resolved_opaque.contains_key(name)
+            || matches!(name.as_str(), "Error" | "Date" | "Promise")
+            || super::model::buffer_spec(name).is_some()
+        {
+            continue;
+        }
+        types += &format!("#ifndef TS_DEFINED_{name}\n#define TS_DEFINED_{name}\n/* external */\ntypedef struct {{ uint32_t h; }} {name};\n#endif\n");
+    }
+    for name in m.classes.iter().map(|c| &c.name).chain(m.callbacks.iter().map(|c| &c.name)) {
         types += &format!("typedef struct {{ uint32_t h; }} {name};\n");
     }
     for name in &m.opaque {
         if name == "Error" {
-            types += "static inline Error Error_new(const char* message) { return (Error){ ts_raw_js_error_new(message, ts_strlen(message)) }; }\n\
+            types += "#ifndef TS_DEFINED_Error\n#define TS_DEFINED_Error\n\
+                      typedef struct { uint32_t h; } Error;\n\
+                      static inline Error Error_new(const char* message) { return (Error){ ts_raw_js_error_new(message, ts_strlen(message)) }; }\n\
                       static inline JsString Error_name(Error e) { return (JsString){ ts_raw_js_error_name(e.h) }; }\n\
                       static inline JsString Error_message(Error e) { return (JsString){ ts_raw_js_error_message(e.h) }; }\n\
-                      static inline JsString Error_stack(Error e) { return (JsString){ ts_raw_js_error_stack(e.h) }; }\n";
+                      static inline JsString Error_stack(Error e) { return (JsString){ ts_raw_js_error_stack(e.h) }; }\n\
+                      #endif\n";
         } else if name == "Date" {
-            types += "static inline Date Date_fromTime(double ms) { return (Date){ ts_raw_js_date_new(ms) }; }\n\
+            types += "#ifndef TS_DEFINED_Date\n#define TS_DEFINED_Date\n\
+                      typedef struct { uint32_t h; } Date;\n\
+                      static inline Date Date_fromTime(double ms) { return (Date){ ts_raw_js_date_new(ms) }; }\n\
                       static inline double Date_now(void) { return ts_raw_js_date_now(); }\n\
                       static inline double Date_time(Date d) { return ts_raw_js_date_time(d.h); }\n\
-                      static inline JsString Date_toISOString(Date d) { return (JsString){ ts_raw_js_date_to_iso_string(d.h) }; }\n";
+                      static inline JsString Date_toISOString(Date d) { return (JsString){ ts_raw_js_date_to_iso_string(d.h) }; }\n\
+                      #endif\n";
         } else if let Some(s) = super::model::buffer_spec(name) {
+            types += &format!("#ifndef TS_DEFINED_{name}\n#define TS_DEFINED_{name}\n");
+            types += &format!("typedef struct {{ uint32_t h; }} {name};\n");
             types += &format!("static inline uint32_t {name}_byteLength({name} x) {{ return ts_raw_js_bytes_len(x.h); }}\n");
             types += &format!("static inline uint32_t {name}_readBytes({name} x, uint32_t offset, void* dst, uint32_t len) {{ return ts_raw_js_bytes_read(x.h, offset, dst, len); }}\n");
             types += &format!("static inline uint32_t {name}_writeBytes({name} x, uint32_t offset, const void* src, uint32_t len) {{ return ts_raw_js_bytes_write(x.h, offset, src, len); }}\n");
@@ -776,6 +959,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
                      static inline uint32_t {name}_write({name} x, uint32_t offset, const void* src, uint32_t len) {{ return ts_raw_js_bytes_write(x.h, offset, src, len); }}\n"
                 );
             }
+            types += "#endif\n";
         }
     }
     // A callback is made from a function and a context pointer passed back to it.
@@ -794,16 +978,18 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     // A promise: `Promise_then(p, fn, ctx)` calls fn(ctx, ok, value) once it
     // settles, ok with its value or not with its reason; the value is lent.
     let iterates_async = m.classes.iter().any(|c| c.iterates_async.is_some());
-    if iterates_async && !m.opaque.iter().any(|n| n == "Promise") {
-        types += "typedef struct { uint32_t h; } Promise;\n";
+    if m.opaque.iter().any(|n| n == "Promise") || iterates_async {
+        types += "#ifndef TS_DEFINED_Promise\n#define TS_DEFINED_Promise\n\
+                  typedef struct { uint32_t h; } Promise;\n\
+                  typedef void (*Promise_fn)(void* ctx, bool ok, JsValue value);\n\
+                  TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, Promise_fn, void*);\n\
+                  static inline void Promise_then(Promise p, Promise_fn fn, void* ctx) { ts_raw_js_promise_then(p.h, fn, ctx); }\n\
+                  #endif\n";
     }
     if iterates_async {
-        types += "static inline Promise JsIterator_next_async(JsIterator it) { return (Promise){ ts_raw_js_async_iterator_next(it.h) }; }\n";
-    }
-    if m.opaque.iter().any(|n| n == "Promise") || iterates_async {
-        types += "typedef void (*Promise_fn)(void* ctx, bool ok, JsValue value);\n\
-                  TS_IMPORT(js_promise_then) void ts_raw_js_promise_then(uint32_t, Promise_fn, void*);\n\
-                  static inline void Promise_then(Promise p, Promise_fn fn, void* ctx) { ts_raw_js_promise_then(p.h, fn, ctx); }\n";
+        types += "#ifndef TS_DEFINED_JsIterator_next_async\n#define TS_DEFINED_JsIterator_next_async\n\
+                  static inline Promise JsIterator_next_async(JsIterator it) { return (Promise){ ts_raw_js_async_iterator_next(it.h) }; }\n\
+                  #endif\n";
     }
     // Each typed array, after its element type and before what uses it.
     let mut elements = Vec::new();
@@ -832,10 +1018,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         })
         .collect();
     for c in &containers {
-        types += c.lines().next().unwrap();
-        types += "\n";
+        let first = c.lines().next().unwrap();
+        let cname = first.rsplit_once("} ").and_then(|(_, r)| r.strip_suffix(';')).unwrap_or("JsContainer").trim();
+        types += &format!("#ifndef TS_DEFINED_{cname}_T\n#define TS_DEFINED_{cname}_T\n{first}\n#endif\n");
     }
-    let unions: Vec<(String, String)> = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| union_type(u, m)).collect();
+    let unions: Vec<(String, String)> = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| union_type(u, m, wasm_module, &raw_prefix)).collect();
     for (decl, _) in &unions {
         types += decl;
     }
@@ -843,7 +1030,10 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         types += functions;
     }
     for c in &containers {
-        types += &c.lines().skip(1).map(|l| format!("{l}\n")).collect::<String>();
+        let first = c.lines().next().unwrap();
+        let cname = first.rsplit_once("} ").and_then(|(_, r)| r.strip_suffix(';')).unwrap_or("JsContainer").trim();
+        let rest: String = c.lines().skip(1).map(|l| format!("{l}\n")).collect();
+        types += &format!("#ifndef TS_DEFINED_{cname}_FN\n#define TS_DEFINED_{cname}_FN\n{rest}#endif\n");
     }
     for c in &m.callbacks {
         let mut params = vec!["void* ctx".to_string()];
@@ -862,9 +1052,11 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
             let n = ident(n);
             format!("{} {}", plain(t), if n == "ctx" { "ctx_".to_string() } else { n })
         }));
+        let cb_from = format!("{}_from", c.name);
+        let cb_raw = raw_fn(&raw_prefix, &cb_from);
         types += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
-        types += &format!("TS_IMPORT({0}_from) uint32_t ts_raw_{0}_from({0}_fn, void*);\n", c.name);
-        types += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ ts_raw_{0}_from(fn, ctx) }}; }}\n", c.name);
+        types += &format!("{} uint32_t {cb_raw}({}_fn, void*);\n", import_attr(wasm_module, &cb_from), c.name);
+        types += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ {cb_raw}(fn, ctx) }}; }}\n", c.name);
     }
 
     let mut out = vec![("ts_runtime.h".to_string(), RUNTIME.to_string()), ("ts_types.h".to_string(), types)];
@@ -910,15 +1102,18 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         // Checked downcast: only a class has a constructor to test against.
         if c.js.is_some() {
             let cast_name = if c.funcs.iter().any(|f| f.name == "cast") { "try_cast" } else { "cast" };
+            let is_name = format!("js_is__{}", c.name);
+            let is_attr = import_attr(wasm_module, &is_name);
+            let is_raw = raw_fn(&raw_prefix, &is_name);
             body += &format!(
-                "TS_IMPORT(js_is__{0}) int32_t ts_raw_js_is__{0}(uint32_t);\n\
-                 static inline {0} {0}_{cast_name}_h(uint32_t h) {{ return ({0}){{ (h && ts_raw_js_is__{0}(h)) ? h : 0 }}; }}\n\
+                "{is_attr} int32_t {is_raw}(uint32_t);\n\
+                 static inline {0} {0}_{cast_name}_h(uint32_t h) {{ return ({0}){{ (h && {is_raw}(h)) ? h : 0 }}; }}\n\
                  #define {0}_{cast_name}(v) {0}_{cast_name}_h((v).h)\n",
                 c.name
             );
         }
         for f in &c.funcs {
-            func(&mut body, Some(&c.name), f);
+            func(&mut body, Some(&c.name), f, wasm_module, &raw_prefix);
         }
         // After every function: a macro may choose a later one.
         for (i, f) in c.funcs.iter().enumerate() {
@@ -932,7 +1127,7 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
     }
     let mut functions: std::collections::BTreeMap<String, String> = Default::default();
     for f in &m.funcs {
-        func(functions.entry(f.module.clone()).or_default(), None, f);
+        func(functions.entry(f.module.clone()).or_default(), None, f, wasm_module, &raw_prefix);
     }
     for (i, f) in m.funcs.iter().enumerate() {
         // Overloads in one module: in one header.
@@ -953,7 +1148,10 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
         out.push((format!("{module}.h"), format!("// Generated.\n#pragma once\n{includes}")));
         all += &format!("#include \"{module}.h\"\n");
     }
-    out.push(("bindings.h".into(), all));
+    out.push(("bindings.h".into(), all.clone()));
+    if pkg_name != "bindings" {
+        out.push((format!("{pkg_name}.h"), all));
+    }
     Ok(out)
 }
 

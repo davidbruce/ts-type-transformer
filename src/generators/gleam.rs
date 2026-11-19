@@ -23,12 +23,71 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::Path;
 
 use roxmltree::Document;
 
 use super::js::{access, global, js_test};
 use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, model, subst, walk, with_self_args};
 use super::names::{Kind, Naming};
+use super::relative_path;
+
+#[derive(Clone, Debug)]
+pub struct ProjectRef {
+    pub package_name: String,
+    pub dep_path: String,
+    /// Non-generic class/interface phantom types (`Name(sub)`) exported in `<pkg>/types.gleam`.
+    pub classes: HashSet<String>,
+}
+
+/// Loads a previously generated Gleam binding package (directory or `gleam.toml`)
+/// so another generated package can import its class types directly.
+pub fn load_project_ref(pkg_or_toml: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
+    let pkg_dir = if pkg_or_toml.is_file() {
+        pkg_or_toml.parent().unwrap_or_else(|| Path::new("."))
+    } else {
+        pkg_or_toml
+    };
+    let toml_path = pkg_dir.join("gleam.toml");
+    let toml_src = std::fs::read_to_string(&toml_path).map_err(|e| format!("{}: {e}", toml_path.display()))?;
+    let mut package_name = None;
+    for line in toml_src.lines().map(str::trim) {
+        if let Some(rest) = line.strip_prefix("name")
+            && let Some((_, val)) = rest.split_once('=')
+        {
+            package_name = Some(val.trim().trim_matches('"').to_string());
+            break;
+        }
+    }
+    let package_name = package_name.ok_or_else(|| format!("{}: missing package name", toml_path.display()))?;
+    let types_path = {
+        let primary = pkg_dir.join("src").join(&package_name).join("types.gleam");
+        if primary.exists() { primary } else { pkg_dir.join("src/bindings/types.gleam") }
+    };
+    let src = std::fs::read_to_string(&types_path).unwrap_or_default();
+    let mut raw_classes = HashSet::new();
+    let mut tag_markers = HashSet::new();
+    for line in src.lines().map(str::trim) {
+        let rest = line.strip_prefix("pub type ").or_else(|| line.strip_prefix("pub opaque type "));
+        let Some(rest) = rest else { continue };
+        let Some((lhs, rhs)) = rest.split_once('(') else { continue };
+        let Some((params, after)) = rhs.split_once(')') else { continue };
+        if params.trim() != PHANTOM {
+            continue;
+        }
+        let name = lhs.trim();
+        if let Some((_, target)) = after.split_once('=')
+            && let Some(tag_call) = target.split(&format!("{name}Tag(")).nth(1)
+            && tag_call.starts_with(PHANTOM)
+        {
+            tag_markers.insert(format!("{name}Tag"));
+        }
+        raw_classes.insert(name.to_string());
+    }
+    let classes = raw_classes.into_iter().filter(|n| !tag_markers.contains(n)).collect();
+    let dep_path = relative_path(from_dir, pkg_dir);
+    Ok(ProjectRef { package_name, dep_path, classes })
+}
 
 const KEYWORDS: &[&str] = &[
     "as", "assert", "auto", "case", "const", "delegate", "derive", "echo", "else", "fn", "if", "implement", "import", "let", "macro", "opaque", "panic", "pub", "test", "todo", "type", "use",
@@ -82,10 +141,31 @@ pub const NAMING: Naming = Naming {
 };
 
 pub struct Output {
+    pub name: String,
     pub files: Vec<(String, String)>,
+    pub project_refs: Vec<(String, String)>,
     pub skipped: BTreeMap<String, usize>,
     // What each binding reaches, for a page to check (`wasm::manifest`).
     pub manifest: String,
+}
+
+impl Output {
+    pub fn gleam_toml(&self) -> String {
+        let deps: String = self
+            .project_refs
+            .iter()
+            .map(|(name, path)| format!("{name} = {{ path = {:?} }}\n", path))
+            .collect();
+        format!(
+            "name = {:?}\n\
+             version = \"0.1.0\"\n\
+             target = \"javascript\"\n\n\
+             [dependencies]\n\
+             gleam_stdlib = \">= 1.0.0 and < 2.0.0\"\n\
+             {deps}",
+            self.name
+        )
+    }
 }
 
 // `getElementById` -> `get_element_by_id`, `HTMLElement` -> `html_element`.
@@ -133,6 +213,7 @@ fn upper(name: &str) -> String {
 
 struct Gen<'m> {
     m: &'m Model,
+    pkg: String,
     // Gleam's name of each type the model names, and of each union's or enum's variants.
     types: HashMap<String, String>,
     variants: HashMap<(String, usize), String>,
@@ -238,7 +319,7 @@ impl<'m> Gen<'m> {
 
     // The runtime's JavaScript, from the module being written.
     fn runtime_ffi(&self) -> String {
-        relative(&self.unit, "bindings/runtime_ffi.mjs")
+        relative(&self.unit, &format!("{}/runtime_ffi.mjs", self.pkg))
     }
 
     // A generic type named without its arguments: `Polygon(Dynamic)`.
@@ -563,6 +644,13 @@ impl<'m> Gen<'m> {
 
 // The bindings of the XML, or what Gleam cannot express of it.
 pub fn module(xml: &str) -> Result<Output, Vec<String>> {
+    module_named(xml, "bindings", &[])
+}
+
+pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Result<Output, Vec<String>> {
+    let pkg = if package_name.is_empty() { "bindings" } else { package_name };
+    let runtime_mod = format!("{pkg}/runtime");
+    let types_mod = format!("{pkg}/types");
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let root_import = doc.root_element().attribute("import").map(str::to_string);
     let mut m = model(xml, "Gleam")?;
@@ -571,12 +659,13 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     break_cycles(&mut m);
     let mut g = Gen {
         m: &m,
+        pkg: pkg.to_string(),
         types: HashMap::new(),
         variants: HashMap::new(),
         callbacks: HashMap::new(),
         values: HashSet::new(),
         reserved_values: HashSet::new(),
-        unit: RUNTIME.into(),
+        unit: runtime_mod.clone(),
         out: String::new(),
         ffi: String::new(),
         used: RefCell::default(),
@@ -674,15 +763,29 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
 
     // Each area's modules: `areas/main` is `bindings/areas/main` (its
     // functions) and `bindings/types/areas_main` (its classes).
+    let mut resolved_opaque: HashMap<String, usize> = HashMap::new();
+    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike") {
+        let gname = g.tname(o);
+        if m.opaque_arity.get(o).copied().unwrap_or(0) == 0 {
+            for (idx, r) in refs.iter().enumerate() {
+                if r.classes.contains(&gname) {
+                    resolved_opaque.insert(o.clone(), idx);
+                    g.classes.insert(o.clone(), 0);
+                    g.home.insert(gname.clone(), format!("{}/types", r.package_name));
+                    break;
+                }
+            }
+        }
+    }
     let mut paths: HashMap<String, String> = HashMap::new();
-    let mut taken: HashSet<String> = HashSet::from([RUNTIME.to_string(), TYPES.to_string()]);
+    let mut taken: HashSet<String> = HashSet::from([runtime_mod.clone(), types_mod.clone()]);
     let areas: BTreeSet<&String> = m.classes.iter().map(|c| &c.module).chain(m.funcs.iter().map(|f| &f.module)).collect();
     for area in areas {
         let segments: Vec<String> = area.split('/').filter(|s| !s.is_empty()).map(lower).collect();
-        let mut path = format!("bindings/{}", segments.join("/"));
+        let mut path = format!("{pkg}/{}", segments.join("/"));
         let mut n = 2;
         while !taken.insert(path.clone()) {
-            path = format!("bindings/{}_{n}", segments.join("/"));
+            path = format!("{pkg}/{}_{n}", segments.join("/"));
             n += 1;
         }
         paths.insert(area.clone(), path);
@@ -701,7 +804,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
         // Its namespace's module, a package's in the package's (`areas/pb/util`).
         let module = m.namespace_modules.get(&c.name).map_or(&c.module, |(m, _)| m);
-        let base = format!("{}/{segment}", module_path(&paths, module));
+        let base = format!("{}/{segment}", module_path(&paths, pkg, module));
         let mut path = base.clone();
         let mut n = 2;
         while !taken.insert(path.clone()) {
@@ -711,15 +814,15 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         class_paths.insert(c.name.clone(), path);
     }
     for o in OWN_RUNTIME {
-        g.home.insert(o.to_string(), RUNTIME.into());
+        g.home.insert(o.to_string(), runtime_mod.clone());
     }
     for c in &m.classes {
-        g.home.insert(g.tname(&c.name), TYPES.into());
-        g.home.insert(format!("{}Tag", g.tname(&c.name)), TYPES.into());
+        g.home.insert(g.tname(&c.name), types_mod.clone());
+        g.home.insert(format!("{}Tag", g.tname(&c.name)), types_mod.clone());
     }
     let others = m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)).chain(m.callbacks.iter().map(|c| &c.name)).chain(m.unions.iter().map(|u| &u.name)).chain(&m.opaque);
-    for n in others.filter(|n| !OWN.contains(&n.as_str()) && *n != "PromiseLike") {
-        g.home.insert(g.tname(n), TYPES.into());
+    for n in others.filter(|n| !OWN.contains(&n.as_str()) && *n != "PromiseLike" && !resolved_opaque.contains_key(*n)) {
+        g.home.insert(g.tname(n), types_mod.clone());
     }
 
     // The runtime: what every module may use.
@@ -800,8 +903,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     );
 
     // The types that may refer to each other: externals, enums, unions, callbacks.
-    g.switch(TYPES);
-    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike") {
+    g.switch(&types_mod);
+    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike" && !resolved_opaque.contains_key(*o)) {
         let arity = m.opaque_arity.get(o).copied().unwrap_or(0);
         let params = if arity == 0 { String::new() } else { format!("({})", (1..=arity).map(|i| format!("t{i}")).collect::<Vec<_>>().join(", ")) };
         g.out += &format!("pub type {}{params}\n\n", g.tname(o));
@@ -868,13 +971,13 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     // Each type's codec, beside it. A handle crosses as it is; an enum, a
     // union or a callback converts, a generic one by its type parameters' codecs.
     let mut codecs: Vec<(String, Vec<TParam>, bool, String)> = Vec::new();
-    codecs.extend(m.enums.iter().map(|e| (e.0.clone(), Vec::new(), true, TYPES.to_string())));
-    codecs.extend(m.num_enums.iter().map(|e| (e.0.clone(), Vec::new(), true, TYPES.to_string())));
-    codecs.extend(m.unions.iter().filter(|u| u.decodable()).map(|u| (u.name.clone(), u.type_params.clone(), true, TYPES.to_string())));
-    codecs.extend(m.callbacks.iter().map(|c| (c.name.clone(), g.callbacks[&c.name].iter().map(|&i| c.type_params[i].clone()).collect(), true, TYPES.to_string())));
-    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike") {
+    codecs.extend(m.enums.iter().map(|e| (e.0.clone(), Vec::new(), true, types_mod.clone())));
+    codecs.extend(m.num_enums.iter().map(|e| (e.0.clone(), Vec::new(), true, types_mod.clone())));
+    codecs.extend(m.unions.iter().filter(|u| u.decodable()).map(|u| (u.name.clone(), u.type_params.clone(), true, types_mod.clone())));
+    codecs.extend(m.callbacks.iter().map(|c| (c.name.clone(), g.callbacks[&c.name].iter().map(|&i| c.type_params[i].clone()).collect(), true, types_mod.clone())));
+    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike" && !resolved_opaque.contains_key(*o)) {
         let arity = m.opaque_arity.get(o).copied().unwrap_or(0);
-        codecs.push((o.clone(), (1..=arity).map(|i| TParam { name: format!("t{i}"), default: None, constraint: None }).collect(), false, TYPES.to_string()));
+        codecs.push((o.clone(), (1..=arity).map(|i| TParam { name: format!("t{i}"), default: None, constraint: None }).collect(), false, types_mod.clone()));
     }
     // Classes. A class with no class for a base is an opaque type, its last
     // parameter a phantom: `Node(a)`. One with a base is its base's type,
@@ -914,7 +1017,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         }
         let mut params = c.type_params.clone();
         params.push(TParam { name: PHANTOM.into(), default: None, constraint: None });
-        codecs.push((c.name.clone(), params, false, TYPES.to_string()));
+        codecs.push((c.name.clone(), params, false, types_mod.clone()));
     }
     for (n, params, converts, unit) in codecs {
         g.switch(&unit);
@@ -1092,7 +1195,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
             // A namespace's by its own name, in its module (a nested one's
             // in a module of it): `geometry.distance`, `deep.twice`.
             Some((path, own, module, depth)) => {
-                let unit = std::iter::once(module_path(&paths, module)).chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
+                let unit = std::iter::once(module_path(&paths, pkg, module)).chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
                 g.switch(&unit);
                 let id = g.fresh_value(&function_name(f, own));
                 g.function(&id, f, None);
@@ -1111,7 +1214,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
     // types themselves are in `bindings/types`.
     let headers: HashMap<String, String> = g
         .units
-        .get(TYPES)
+        .get(&types_mod)
         .map(|u| {
             u.out
                 .lines()
@@ -1129,7 +1232,7 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
         let Some((module, depth)) = m.namespace_modules.get(name) else { continue };
         let gleam = g.tname(name);
         let Some(params) = headers.get(&gleam) else { continue };
-        let base = module_path(&paths, module);
+        let base = module_path(&paths, pkg, module);
         // Past what its module stands for: a namespace's own module.
         let unit = std::iter::once(base).chain(path[(*depth).min(path.len() - 1)..path.len() - 1].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
         aliases.entry(unit).or_default().push((upper(path.last().unwrap()), gleam, params.clone()));
@@ -1152,6 +1255,8 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
 
     // Each module: what it imports of the others, of Gleam's, and its JavaScript's.
     let mut files = Vec::new();
+    let ref_by_mod: HashMap<String, usize> = refs.iter().enumerate().map(|(i, r)| (format!("{}/types", r.package_name), i)).collect();
+    let mut used_refs: BTreeSet<usize> = BTreeSet::new();
     // Not a module with nothing in it (one whose aliases all gave way).
     for (path, unit) in std::mem::take(&mut g.units).into_iter().filter(|(p, u)| !p.is_empty() && !(u.out.trim().is_empty() && u.ffi.is_empty())) {
         let mut by_module: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
@@ -1164,11 +1269,30 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
                     None => continue,
                 },
             };
+            if let Some(&idx) = ref_by_mod.get(&module) {
+                used_refs.insert(idx);
+            }
             if module != path {
                 by_module.entry(module).or_default().insert(t);
             }
         }
-        let imports: String = by_module.iter().map(|(module, ts)| format!("import {module}.{{{}}}\n", ts.iter().map(|t| format!("type {t}")).collect::<Vec<_>>().join(", "))).collect();
+        let mut seg_counts: HashMap<&str, usize> = HashMap::new();
+        for module in by_module.keys() {
+            let seg = module.rsplit('/').next().unwrap_or(module.as_str());
+            *seg_counts.entry(seg).or_default() += 1;
+        }
+        let imports: String = by_module
+            .iter()
+            .map(|(module, ts)| {
+                let seg = module.rsplit('/').next().unwrap_or(module.as_str());
+                let suffix = if ref_by_mod.contains_key(module) && seg_counts.get(seg).copied().unwrap_or(0) > 1 {
+                    " as _"
+                } else {
+                    ""
+                };
+                format!("import {module}.{{{}}}{suffix}\n", ts.iter().map(|t| format!("type {t}")).collect::<Vec<_>>().join(", "))
+            })
+            .collect();
         files.push((format!("{path}.gleam"), format!("// Generated. Bindings for Gleam's JavaScript target.\n{imports}\n{}", unit.out)));
         if unit.ffi.is_empty() {
             continue;
@@ -1180,15 +1304,16 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
              import {{ Some, None }} from \"{up}../gleam_stdlib/gleam/option.mjs\";\n\
              import {{ Ok, Error as GleamError, toList }} from \"{prelude}gleam.mjs\";\n"
         );
-        if path != RUNTIME {
-            header += &format!("import {{ $wrap, $same, PK, G }} from \"{}\";\nimport * as $T from \"{}\";\n", relative(&path, "bindings/runtime_ffi.mjs"), relative(&path, "bindings/types_ffi.mjs"));
+        if path != runtime_mod {
+            header += &format!("import {{ $wrap, $same, PK, G }} from \"{}\";\nimport * as $T from \"{}\";\n", relative(&path, &format!("{pkg}/runtime_ffi.mjs")), relative(&path, &format!("{pkg}/types_ffi.mjs")));
         }
-        if path == TYPES {
+        if path == types_mod {
             header += "import * as B from \"./types.mjs\";\n";
         }
         files.push((format!("{path}_ffi.mjs"), format!("{header}{}", unit.ffi)));
     }
-    Ok(Output { files, skipped: g.skipped, manifest: super::wasm::manifest(&m) })
+    let project_refs = used_refs.iter().map(|&i| (refs[i].package_name.clone(), refs[i].dep_path.clone())).collect();
+    Ok(Output { name: pkg.to_string(), files, project_refs, skipped: g.skipped, manifest: super::wasm::manifest(&m) })
 }
 
 // What JavaScript reserves, as a function's name.
@@ -1201,8 +1326,6 @@ const JS_RESERVED: &[&str] = &[
 ];
 
 // The modules every library's bindings have.
-const RUNTIME: &str = "bindings/runtime";
-const TYPES: &str = "bindings/types";
 const OWN_RUNTIME: &[&str] = &["Promise", "JsError", "Codec"];
 
 // A class type's phantom parameter, where it is declared.
@@ -1395,6 +1518,6 @@ fn mentions(t: &Ty, p: &str) -> bool {
 
 // A module's Gleam path: as given out, else as one would be (`areas/pb`
 // where only a namespace of the package's has functions).
-fn module_path(paths: &HashMap<String, String>, module: &str) -> String {
-    paths.get(module).cloned().unwrap_or_else(|| format!("bindings/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/")))
+fn module_path(paths: &HashMap<String, String>, pkg: &str, module: &str) -> String {
+    paths.get(module).cloned().unwrap_or_else(|| format!("{pkg}/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/")))
 }

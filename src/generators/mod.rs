@@ -13,7 +13,84 @@ pub mod rust;
 pub mod wasm;
 pub mod zig;
 
+use std::path::{Component, Path, PathBuf};
+
 use roxmltree::Node;
+
+/// Converts a package or lib name to a snake_case identifier usable as a crate,
+/// Gleam package, Zig module, C/C++ umbrella header/namespace, or WASM import module.
+pub fn snake_package_name(raw: &str) -> String {
+    let raw = raw.trim().trim_start_matches('@');
+    let mut out = String::new();
+    for c in raw.chars() {
+        let c = if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' };
+        if c != '_' || !out.ends_with('_') {
+            out.push(c);
+        }
+    }
+    let mut out = out.trim_matches('_').to_string();
+    if out.is_empty() {
+        return "bindings".to_string();
+    }
+    if !out.as_bytes()[0].is_ascii_alphabetic() {
+        out.insert_str(0, "pkg_");
+    }
+    out
+}
+
+fn abs_normalized(p: &Path) -> PathBuf {
+    let full = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        std::env::current_dir().map(|cwd| cwd.join(p)).unwrap_or_else(|_| p.to_path_buf())
+    };
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut cur = full.as_path();
+    loop {
+        if let Ok(canon) = std::fs::canonicalize(cur) {
+            let mut out = canon;
+            for part in tail.into_iter().rev() {
+                out.push(part);
+            }
+            return out;
+        }
+        let Some(name) = cur.file_name() else { break };
+        tail.push(name.to_os_string());
+        let Some(parent) = cur.parent() else { break };
+        cur = parent;
+    }
+    let mut norm = PathBuf::new();
+    for c in full.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                norm.pop();
+            }
+            other => norm.push(other.as_os_str()),
+        }
+    }
+    norm
+}
+
+/// Relative path with forward slashes from `from_dir` to `target`.
+pub fn relative_path(from_dir: &Path, target: &Path) -> String {
+    let abs_from = abs_normalized(from_dir);
+    let abs_target = abs_normalized(target);
+    let a: Vec<Component> = abs_from.components().collect();
+    let b: Vec<Component> = abs_target.components().collect();
+    let mut common = 0;
+    while common < a.len() && common < b.len() && a[common] == b[common] {
+        common += 1;
+    }
+    let mut parts: Vec<String> = Vec::new();
+    for _ in common..a.len() {
+        parts.push("..".to_string());
+    }
+    for comp in &b[common..] {
+        parts.push(comp.as_os_str().to_string_lossy().into_owned());
+    }
+    if parts.is_empty() { ".".to_string() } else { parts.join("/") }
+}
 
 pub fn elements<'a>(n: Node<'a, 'a>) -> impl Iterator<Item = Node<'a, 'a>> {
     n.children().filter(|c| c.is_element())

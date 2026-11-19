@@ -2,11 +2,11 @@
 // optional parameters and unions; needs literals and type-level expressions gone.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use roxmltree::{Document, Node, NodeId};
 
-use super::{Problems, attr, elements, flag, named, only_child};
+use super::{Problems, attr, elements, flag, named, only_child, relative_path};
 
 const T: &str = "F#";
 
@@ -102,30 +102,6 @@ pub fn load_project_ref(fsproj_or_dir: &Path, from_dir: &Path) -> Result<Project
     }
     let include_path = relative_path(from_dir, &fsproj);
     Ok(ProjectRef { include_path, namespace, types })
-}
-
-// Relative path with forward slashes from `from_dir` to `target_file`.
-fn relative_path(from_dir: &Path, target_file: &Path) -> String {
-    let abs_from = std::fs::canonicalize(from_dir).unwrap_or_else(|_| {
-        std::env::current_dir().map(|cwd| cwd.join(from_dir)).unwrap_or_else(|_| from_dir.to_path_buf())
-    });
-    let abs_target = std::fs::canonicalize(target_file).unwrap_or_else(|_| {
-        std::env::current_dir().map(|cwd| cwd.join(target_file)).unwrap_or_else(|_| target_file.to_path_buf())
-    });
-    let a: Vec<Component> = abs_from.components().collect();
-    let b: Vec<Component> = abs_target.components().collect();
-    let mut common = 0;
-    while common < a.len() && common < b.len() && a[common] == b[common] {
-        common += 1;
-    }
-    let mut parts: Vec<String> = Vec::new();
-    for _ in common..a.len() {
-        parts.push("..".to_string());
-    }
-    for comp in &b[common..] {
-        parts.push(comp.as_os_str().to_string_lossy().into_owned());
-    }
-    parts.join("/")
 }
 
 pub struct Output {

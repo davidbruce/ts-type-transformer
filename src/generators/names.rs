@@ -88,7 +88,12 @@ pub struct Naming {
 
 // Renames the model so that `naming` makes each identifier once.
 pub fn settle(m: &mut Model, naming: &Naming) {
-    let reserved = (naming.reserved)();
+    settle_with(m, naming, &[]);
+}
+
+pub fn settle_with(m: &mut Model, naming: &Naming, extra_reserved: &[String]) {
+    let mut reserved = (naming.reserved)();
+    reserved.extend(extra_reserved.iter().cloned());
     let reserved = || reserved.iter().map(String::as_str);
     let mut top = Tops { types: Scope::with(reserved()), values: Scope::with(reserved()), apart: naming.types_apart, overloads: naming.overloads };
     let mut type_renames: HashMap<String, String> = HashMap::new();
