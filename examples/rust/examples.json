@@ -424,6 +424,51 @@
       "path": "./prosemirror/dom_json_roundtrip/index.html",
       "source": "./prosemirror/dom_json_roundtrip/src/lib.rs",
       "kind": "browser"
+    },
+    {
+      "id": "three/platonic_wireframes",
+      "package": "three",
+      "title": "Three.js \u2014 Platonic & Parametric Solids",
+      "description": "Architectural arc of Box, Icosahedron, TorusKnot, Octahedron, and Torus solids with EdgesGeometry wireframe overlays and camera orbit controls.",
+      "path": "./three/platonic_wireframes/index.html",
+      "source": "./three/platonic_wireframes/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "three/hierarchical_orrery",
+      "package": "three",
+      "title": "Three.js \u2014 Hierarchical Scene Graph Orrery",
+      "description": "Nested Group hierarchy (central core, inner planet + moon pivot, outer station + tilted halo) with live getWorldPosition readouts.",
+      "path": "./three/hierarchical_orrery/index.html",
+      "source": "./three/hierarchical_orrery/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "three/procedural_heightfield",
+      "package": "three",
+      "title": "Three.js \u2014 Procedural BufferGeometry Heightfield",
+      "description": "28x28 indexed BufferGeometry surface with Float32BufferAttribute positions, computeVertexNormals, wireframe overlay, and Points cloud.",
+      "path": "./three/procedural_heightfield/index.html",
+      "source": "./three/procedural_heightfield/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "three/instanced_cityscape",
+      "package": "three",
+      "title": "Three.js \u2014 InstancedMesh Matrix & Isometric Ortho",
+      "description": "100-tower monochrome cityscape via single InstancedMesh (Matrix4.compose + setColorAt) with Orthographic and Perspective camera switching.",
+      "path": "./three/instanced_cityscape/index.html",
+      "source": "./three/instanced_cityscape/src/lib.rs",
+      "kind": "browser"
+    },
+    {
+      "id": "three/raycaster_picking",
+      "package": "three",
+      "title": "Three.js \u2014 Interactive Raycaster & Box3 Inspector",
+      "description": "3x3 monochrome specimen grid with click and button Raycaster picking, dynamic Box3 bounding volume, and Box3Helper wireframe.",
+      "path": "./three/raycaster_picking/index.html",
+      "source": "./three/raycaster_picking/src/lib.rs",
+      "kind": "browser"
     }
   ]
 }

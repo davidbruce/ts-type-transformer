@@ -2760,6 +2760,25 @@ mod examples {
         },
     };
 
+    const THREE_SPEC: PackageSpec = PackageSpec {
+        pkg: "three",
+        npm: &["three"],
+        crate_name: "three",
+        fsharp_name: "Three",
+        needs_dom: true,
+        demos: &[
+            "platonic_wireframes",
+            "hierarchical_orrery",
+            "procedural_heightfield",
+            "instanced_cityscape",
+            "raycaster_picking",
+        ],
+        verify: VerifyKind::CanvasNonEmpty {
+            selector: "#stage canvas",
+            min_count: 1,
+        },
+    };
+
     fn lock_key(key: &str) -> MutexGuard<'static, ()> {
         static MAP: OnceLock<Mutex<HashMap<String, &'static Mutex<()>>>> = OnceLock::new();
         let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
@@ -3411,6 +3430,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(leaflet, LEAFLET_SPEC);
     pkg_tests!(tanstack_table, TANSTACK_TABLE_SPEC);
     pkg_tests!(prosemirror, PROSEMIRROR_SPEC);
+    pkg_tests!(three, THREE_SPEC);
 
     mod gallery {
         #[test] #[ignore] fn fsharp() { super::run_gallery("fsharp"); }

@@ -53,7 +53,7 @@ await new Promise(done => server.listen(0, '127.0.0.1', done));
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-dom-test-'));
-const chrome = spawn(chromePath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank']);
+const chrome = spawn(chromePath, ['--headless=new', '--disable-gpu', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank']);
 let finished = false;
 const finish = code => {
     if (finished) return;
