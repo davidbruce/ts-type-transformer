@@ -2,92 +2,116 @@ const std = @import("std");
 const dom = @import("dom");
 const tt = @import("tanstack_table_core");
 
-const NONE = tt.JsValue{ .h = 0 };
+const NONE: tt.JsValue = std.mem.zeroes(tt.JsValue);
+
 fn getProp(obj: tt.JsValue, key: []const u8) tt.JsValue {
-    return (tt.RowData_map{ .h = obj.h }).getAt(key);
+    return obj.as(tt.RowData_map).getAt(key);
 }
+
 fn storeState(tbl: tt.Table_Core) tt.JsValue {
-    const store_v = tt.JsValue{ .h = (tt.Table_CoreProperties{ .h = tbl.h }).getStore().h };
+    const store_v = tbl.as(tt.Table_CoreProperties).getStore().as(tt.JsValue);
     return tt.functionalUpdate(getProp(store_v, "get"), NONE);
 }
 
 const AtomState = struct {
     value: tt.JsValue = NONE,
-    derive: tt.JsValue = NONE,
+    derive: tt.void_to_any_fn = std.mem.zeroes(tt.void_to_any_fn),
     is_ro: bool = false,
 };
-var atoms: [512]AtomState = undefined;
-var atom_count: usize = 0;
 
-fn atomGet(ctx: ?*anyopaque) tt.JsValue {
-    const a: *AtomState = @ptrCast(@alignCast(ctx.?));
-    if (a.is_ro) return tt.callVoidToAnyFn(.{ .h = a.derive.h });
-    _ = tt.jsRetain(a.value);
-    return a.value;
+const App = struct {
+    table: tt.Table_Core = undefined,
+    wrap: dom.HTMLElement = undefined,
+    meta: dom.HTMLElement = undefined,
+    atoms: [512]AtomState = undefined,
+    atom_count: usize = 0,
+    btns: [5]BtnCtx = undefined,
+};
+
+const BtnCtx = struct { app: *App, id: usize };
+
+var g_app: App = .{};
+var html_buf: [16384]u8 = undefined;
+var meta_buf: [256]u8 = undefined;
+var tmp_buf: [128]u8 = undefined;
+
+fn atomGet(a: *AtomState) tt.JsValue {
+    if (a.is_ro) return a.derive.call();
+    return a.value.retain();
 }
-fn atomSet(ctx: ?*anyopaque, updater: tt.JsValue) tt.JsValue {
-    const a: *AtomState = @ptrCast(@alignCast(ctx.?));
+
+fn atomSet(a: *AtomState, updater: tt.JsValue) tt.JsValue {
     const next = tt.functionalUpdate(updater, a.value);
-    _ = tt.jsRetain(next);
+    if (a.value.h != 0) a.value.deinit();
     a.value = next;
     return NONE;
 }
-fn noUnsub(_: ?*anyopaque) void {}
-fn atomSub(_: ?*anyopaque, _: tt.JsValue) tt.JsValue {
-    const sub = tt.makeObjectMap();
-    sub.setAt("unsubscribe", .{ .h = tt.void_fn.from(noUnsub, null).h });
-    return .{ .h = sub.h };
-}
-fn makeAtom(a: *AtomState) tt.JsValue {
-    const atom = tt.makeObjectMap();
-    atom.setAt("get", .{ .h = tt.void_to_any_fn.from(atomGet, a).h });
-    if (!a.is_ro) atom.setAt("set", .{ .h = tt.Updater_fn2.from(atomSet, a).h });
-    atom.setAt("subscribe", .{ .h = tt.Updater_fn2.from(atomSub, null).h });
-    return .{ .h = atom.h };
-}
-fn createWritable(_: ?*anyopaque, initial: tt.JsValue, _: ?tt.TableAtomOptions) tt.Atom {
-    const a = &atoms[atom_count];
-    atom_count += 1;
-    a.* = .{ .value = initial };
-    _ = tt.jsRetain(initial);
-    return .{ .h = makeAtom(a).h };
-}
-fn createReadonly(_: ?*anyopaque, fn_v: tt.void_to_any_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
-    const a = &atoms[atom_count];
-    atom_count += 1;
-    a.* = .{ .derive = .{ .h = fn_v.h }, .is_ro = true };
-    _ = tt.jsRetain(fn_v);
-    return .{ .h = makeAtom(a).h };
-}
-fn addSub(_: ?*anyopaque, _: tt.Subscription) void {}
-fn unmountCb(_: ?*anyopaque) void {}
-fn batchCb(_: ?*anyopaque, fn_v: tt.void_fn) void {
-    tt.callVoidFn(fn_v);
-}
-fn untrackCb(_: ?*anyopaque, fn_v: tt.void_to_any_fn) tt.JsValue {
-    return tt.callVoidToAnyFn(fn_v);
+
+fn noUnsub() void {}
+
+fn atomSub(_: tt.JsValue) tt.JsValue {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+    return tt.JsValue.obj(.{ .unsubscribe = tt.void_fn.fromFn(noUnsub) }).retain();
 }
 
-fn makeReactivity() tt.TableReactivityBindings {
-    const r = tt.TableReactivityBindings.create();
-    r.setCreateOptionsStore(false);
-    r.setWrapExternalAtoms(false);
-    r.setAddSubscription(tt.TableReactivityBindings_addSubscription.from(addSub, null));
-    r.setUnmount(tt.void_fn.from(unmountCb, null));
-    r.setBatch(tt.fn_fn.from(batchCb, null));
-    r.setSchedule(tt.fn_fn.from(batchCb, null));
-    r.setUntrack(tt.TableReactivityBindings_untrack.from(untrackCb, null));
-    r.setCreateWritableAtom(tt.TableReactivityBindings_createWritableAtom.from(createWritable, null));
-    r.setCreateReadonlyAtom(tt.TableReactivityBindings_createReadonlyAtom.from(createReadonly, null));
-    return r;
+fn makeAtom(a: *AtomState) tt.JsValue {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+    if (!a.is_ro) {
+        return tt.JsValue.obj(.{
+            .get = tt.void_to_any_fn.from(atomGet, a),
+            .set = tt.Updater_fn2.from(atomSet, a),
+            .subscribe = tt.Updater_fn2.fromFn(atomSub),
+        }).retain();
+    }
+    return tt.JsValue.obj(.{
+        .get = tt.void_to_any_fn.from(atomGet, a),
+        .subscribe = tt.Updater_fn2.fromFn(atomSub),
+    }).retain();
+}
+
+fn createWritable(app: *App, initial: tt.JsValue, _: ?tt.TableAtomOptions) tt.Atom {
+    const a = &app.atoms[app.atom_count];
+    app.atom_count += 1;
+    a.* = .{ .value = initial.retain() };
+    return makeAtom(a).as(tt.Atom);
+}
+
+fn createReadonly(app: *App, fn_v: tt.void_to_any_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
+    const a = &app.atoms[app.atom_count];
+    app.atom_count += 1;
+    a.* = .{ .derive = fn_v.retain(), .is_ro = true };
+    return makeAtom(a).as(tt.ReadonlyAtom);
+}
+
+fn addSub(_: tt.Subscription) void {}
+fn unmountCb() void {}
+fn batchCb(fn_v: tt.void_fn) void {
+    fn_v.call();
+}
+fn untrackCb(fn_v: tt.void_to_any_fn) tt.JsValue {
+    return fn_v.call();
+}
+
+fn makeReactivity(app: *App) tt.TableReactivityBindings {
+    return tt.TableReactivityBindings.init(.{
+        .createOptionsStore = false,
+        .wrapExternalAtoms = false,
+        .addSubscription = addSub,
+        .unmount = unmountCb,
+        .batch = batchCb,
+        .schedule = batchCb,
+        .untrack = untrackCb,
+        .createWritableAtom = .{ createWritable, app },
+        .createReadonlyAtom = .{ createReadonly, app },
+    });
 }
 
 fn colDef(key: []const u8, header: []const u8) tt.JsValue {
-    const c = tt.makeObjectMap();
-    c.setAt("accessorKey", tt.JsValue.string(key));
-    c.setAt("header", tt.JsValue.string(header));
-    return .{ .h = c.h };
+    return tt.JsValue.obj(.{ .accessorKey = key, .header = header });
 }
+
 fn appendEsc(w: *std.Io.Writer, s: []const u8) !void {
     for (s) |c| {
         switch (c) {
@@ -99,16 +123,12 @@ fn appendEsc(w: *std.Io.Writer, s: []const u8) !void {
     }
 }
 
-var g_table: tt.Table_Core = undefined;
-var g_wrap: dom.HTMLElement = undefined;
-var g_meta: dom.HTMLElement = undefined;
-var html_buf: [16384]u8 = undefined;
-var meta_buf: [256]u8 = undefined;
-var tmp_buf: [128]u8 = undefined;
+fn render(app: *App) void {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
 
-fn render() void {
-    const rm = tt.callVoidToRowModelFn((tt.Table_RowModels_Core{ .h = g_table.h }).getGetRowModel());
-    const core = tt.callVoidToRowModelFn((tt.Table_RowModels_Core{ .h = g_table.h }).getGetCoreRowModel());
+    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
+    const core = app.table.as(tt.Table_RowModels_Core).getGetCoreRowModel().call();
     const rows = rm.getRows();
     const nrows = rows.len();
     const ntotal = core.getRows().len();
@@ -117,103 +137,102 @@ fn render() void {
     w.writeAll("<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>") catch return;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = (tt.Row_Row{ .h = row.h }).getGetValue();
+        const gv = row.as(tt.Row_Row).getGetValue();
         w.writeAll("<tr><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "id").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "account").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("account").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "category").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("category").toString().copy(&tmp_buf)) catch return;
         w.print("</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.0}</td></tr>", .{
-            tt.callStringFn(gv, "units").toNumber(),
-            tt.callStringFn(gv, "amount").toNumber(),
+            gv.call("units").toNumber(),
+            gv.call("amount").toNumber(),
         }) catch return;
     }
     w.writeAll("</tbody></table>") catch return;
-    g_wrap.asElement().setInnerHTML(w.buffered());
+    app.wrap.setInnerHTML(w.buffered());
 
-    const pg = getProp(storeState(g_table), "pagination");
+    const pg = getProp(storeState(app.table), "pagination");
     const page_idx: i32 = @intFromFloat(@round(getProp(pg, "pageIndex").toNumber()));
     const page_sz: i32 = @intFromFloat(@round(getProp(pg, "pageSize").toNumber()));
-    const page_cnt: i32 = @intFromFloat(@round(tt.callVoidToNumberFn((tt.Table_RowPagination{ .h = g_table.h }).getGetPageCount())));
+    const page_cnt: i32 = @intFromFloat(@round(app.table.as(tt.Table_RowPagination).getGetPageCount().call()));
     const m = std.fmt.bufPrint(&meta_buf, "Page {d} / {d} · pageSize {d} · showing {d} of {d} rows", .{
         page_idx + 1, page_cnt, page_sz, nrows, ntotal,
     }) catch "Page";
-    g_meta.asNode().setTextContent(m);
+    app.meta.setTextContent(m);
 }
 
-const BTN_IDS = [5]usize{ 0, 1, 2, 3, 4 };
-fn onClick(ctx: ?*anyopaque, _: dom.PointerEvent) void {
-    const idx = @as(*const usize, @ptrCast(@alignCast(ctx.?))).*;
-    const pag = tt.Table_RowPagination{ .h = g_table.h };
-    const pg = getProp(storeState(g_table), "pagination");
-    const page_idx: f64 = getProp(pg, "pageIndex").toNumber();
-    const max_idx: f64 = tt.callVoidToNumberFn(pag.getGetPageCount()) - 1.0;
+fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
 
-    if (idx == 0) {
-        if (page_idx > 0.0) tt.callTableRowPaginationSetPageIndex(pag.getSetPageIndex(), tt.JsValue.number(page_idx - 1.0));
-    } else if (idx == 1) {
-        if (page_idx < max_idx) tt.callTableRowPaginationSetPageIndex(pag.getSetPageIndex(), tt.JsValue.number(page_idx + 1.0));
+    const app = ctx.app;
+    const pag = app.table.as(tt.Table_RowPagination);
+    const pg = getProp(storeState(app.table), "pagination");
+    const page_idx: f64 = getProp(pg, "pageIndex").toNumber();
+    const max_idx: f64 = pag.getGetPageCount().call() - 1.0;
+
+    if (ctx.id == 0) {
+        if (page_idx > 0.0) pag.getSetPageIndex().call(page_idx - 1.0);
+    } else if (ctx.id == 1) {
+        if (page_idx < max_idx) pag.getSetPageIndex().call(page_idx + 1.0);
     } else {
-        const new_sz: f64 = if (idx == 2) 5.0 else if (idx == 3) 6.0 else 9.0;
-        tt.callTableRowPaginationSetPageIndex(pag.getSetPageIndex(), tt.JsValue.number(0.0));
-        tt.callTableRowPaginationSetPageIndex(pag.getSetPageSize(), tt.JsValue.number(new_sz));
+        const new_sz: f64 = if (ctx.id == 2) 5.0 else if (ctx.id == 3) 6.0 else 9.0;
+        pag.getSetPageIndex().call(0.0);
+        pag.getSetPageSize().call(new_sz);
     }
-    render();
+    render(app);
 }
 
 export fn start() void {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+
     const accounts = [3][]const u8{ "ops-pool", "clearing-ch", "reserve-de" };
     const cats = [4][]const u8{ "compute", "storage", "egress", "audit" };
-
-    const features = tt.makeObjectMap();
-    features.setAt("coreReactivityFeature", .{ .h = makeReactivity().h });
-    features.setAt("rowPaginationFeature", .{ .h = tt.getRowPaginationFeature().h });
-    features.setAt("coreRowModel", .{ .h = tt.createCoreRowModel().h });
-    features.setAt("paginatedRowModel", .{ .h = tt.createPaginatedRowModel().h });
 
     const data = tt.JsArray.new();
     var id_buf: [16]u8 = undefined;
     for (0..18) |i| {
         const id_s = std.fmt.bufPrint(&id_buf, "TX-{d:0>3}", .{i + 1}) catch "TX";
-        const row = tt.makeObjectMap();
-        row.setAt("id", tt.JsValue.string(id_s));
-        row.setAt("account", tt.JsValue.string(accounts[i % 3]));
-        row.setAt("category", tt.JsValue.string(cats[i % 4]));
-        row.setAt("units", tt.JsValue.number(@floatFromInt((i * 7) % 19 + 4)));
-        row.setAt("amount", tt.JsValue.number(@floatFromInt(((i * 37) % 90 + 15) * 12)));
-        data.push(.{ .h = row.h });
+        data.push(.{
+            .id = id_s,
+            .account = accounts[i % 3],
+            .category = cats[i % 4],
+            .units = (i * 7) % 19 + 4,
+            .amount = ((i * 37) % 90 + 15) * 12,
+        });
     }
 
-    const cols = tt.JsArray.new();
-    cols.push(colDef("id", "Entry"));
-    cols.push(colDef("account", "Account"));
-    cols.push(colDef("category", "Category"));
-    cols.push(colDef("units", "Units"));
-    cols.push(colDef("amount", "Amount (CHF)"));
+    const opts = tt.JsValue.obj(.{
+        .features = .{
+            .coreReactivityFeature = makeReactivity(&g_app),
+            .rowPaginationFeature = tt.getRowPaginationFeature(),
+            .coreRowModel = tt.createCoreRowModel(),
+            .paginatedRowModel = tt.createPaginatedRowModel(),
+        },
+        .data = data,
+        .columns = .{
+            colDef("id", "Entry"),
+            colDef("account", "Account"),
+            colDef("category", "Category"),
+            colDef("units", "Units"),
+            colDef("amount", "Amount (CHF)"),
+        },
+        .initialState = .{
+            .pagination = .{ .pageIndex = 0.0, .pageSize = 5.0 },
+        },
+    });
 
-    const pg = tt.makeObjectMap();
-    pg.setAt("pageIndex", tt.JsValue.number(0.0));
-    pg.setAt("pageSize", tt.JsValue.number(5.0));
-    const init_state = tt.makeObjectMap();
-    init_state.setAt("pagination", .{ .h = pg.h });
-
-    const opts = tt.makeObjectMap();
-    opts.setAt("features", .{ .h = features.h });
-    opts.setAt("data", .{ .h = data.h });
-    opts.setAt("columns", .{ .h = cols.h });
-    opts.setAt("initialState", .{ .h = init_state.h });
-
-    g_table = tt.constructTable(.{ .h = opts.h });
-    _ = tt.jsRetain(g_table);
+    g_app.table = tt.constructTable(opts.as(tt.TableOptions_Core)).retain();
     const doc = dom.getDocument();
-    g_wrap = doc.getElementById("table-wrap").?;
-    g_meta = doc.getElementById("meta").?;
+    g_app.wrap = doc.getElementById("table-wrap").?.retain();
+    g_app.meta = doc.getElementById("meta").?.retain();
 
     const btn_ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (btn_ids, 0..) |bid, i| {
-        const btn = doc.getElementById(bid).?;
-        btn.addEventListener(.click, dom.JsListener(dom.PointerEvent).from(onClick, @constCast(&BTN_IDS[i])), .{});
+        g_app.btns[i] = .{ .app = &g_app, .id = i };
+        doc.getElementById(bid).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
     }
-    render();
+    render(&g_app);
 }

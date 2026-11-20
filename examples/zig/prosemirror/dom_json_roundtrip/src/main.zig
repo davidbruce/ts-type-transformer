@@ -6,102 +6,78 @@ const state_mod = pm.prosemirror_state;
 const view_mod = pm.prosemirror_view;
 
 fn holeSpec(tag: []const u8) model.DOMOutputSpec {
-    const a = pm.JsArray.new();
-    a.push(pm.JsValue.string(tag));
-    a.push(pm.JsValue.number(0));
-    return .{ .array = a };
+    return .{ .array = pm.JsArray.of(.{ tag, 0 }) };
 }
 
-fn headingToDOM(_: ?*anyopaque, n: model.Node) model.DOMOutputSpec {
+fn headingToDOM(n: model.Node) model.DOMOutputSpec {
     const lvl: i32 = @intFromFloat(n.getAttrs().getAt("level").toNumber());
     return holeSpec(if (lvl == 1) "h1" else "h2");
 }
-fn pToDOM(_: ?*anyopaque, _: model.Node) model.DOMOutputSpec {
+fn pToDOM(_: model.Node) model.DOMOutputSpec {
     return holeSpec("p");
 }
-fn bqToDOM(_: ?*anyopaque, _: model.Node) model.DOMOutputSpec {
+fn bqToDOM(_: model.Node) model.DOMOutputSpec {
     return holeSpec("blockquote");
 }
-fn strongToDOM(_: ?*anyopaque, _: model.Mark, _: bool) model.DOMOutputSpec {
+fn strongToDOM(_: model.Mark, _: bool) model.DOMOutputSpec {
     return holeSpec("strong");
 }
-fn emToDOM(_: ?*anyopaque, _: model.Mark, _: bool) model.DOMOutputSpec {
+fn emToDOM(_: model.Mark, _: bool) model.DOMOutputSpec {
     return holeSpec("em");
 }
-fn codeToDOM(_: ?*anyopaque, _: model.Mark, _: bool) model.DOMOutputSpec {
+fn codeToDOM(_: model.Mark, _: bool) model.DOMOutputSpec {
     return holeSpec("code");
 }
 
 fn makeTagRule(tag: []const u8, level: f64) model.TagParseRule {
-    const r = model.TagParseRule.create();
-    r.setTag(tag);
     if (level > 0) {
-        const a = model.Attrs.create();
-        a.setAt("level", pm.JsValue.number(level));
-        r.asGenericParseRule().setAttrs(a);
+        return model.TagParseRule.init(.{ .tag = tag, .attrs = .{ .level = level } });
     }
-    return r;
+    return model.TagParseRule.init(.{ .tag = tag });
 }
 
 fn makeSchema() model.Schema {
-    const doc = model.NodeSpec.create();
-    doc.setContent("block+");
+    const doc = model.NodeSpec.init(.{ .content = "block+" });
+    const heading = model.NodeSpec.init(.{
+        .attrs = .{ .level = model.AttributeSpec.init(.{ .default = 2 }) },
+        .content = "inline*",
+        .group = "block",
+        .defining = true,
+        .parseDOM = &.{ makeTagRule("h1", 1), makeTagRule("h2", 2) },
+        .toDOM = headingToDOM,
+    });
+    const para = model.NodeSpec.init(.{
+        .content = "inline*",
+        .group = "block",
+        .parseDOM = &.{makeTagRule("p", 0)},
+        .toDOM = pToDOM,
+    });
+    const quote = model.NodeSpec.init(.{
+        .content = "block+",
+        .group = "block",
+        .defining = true,
+        .parseDOM = &.{makeTagRule("blockquote", 0)},
+        .toDOM = bqToDOM,
+    });
+    const text = model.NodeSpec.init(.{ .group = "inline" });
 
-    const lvl = model.AttributeSpec.create();
-    lvl.setDefault(pm.JsValue.number(2));
-    const hattrs = pm.MarkSpec_attrs.create();
-    hattrs.setAt("level", lvl);
+    const ms = model.MarkSpec.init(.{
+        .parseDOM = &.{makeTagRule("strong", 0)},
+        .toDOM = strongToDOM,
+    });
+    const me = model.MarkSpec.init(.{
+        .parseDOM = &.{makeTagRule("em", 0)},
+        .toDOM = emToDOM,
+    });
+    const mc = model.MarkSpec.init(.{
+        .parseDOM = &.{makeTagRule("code", 0)},
+        .toDOM = codeToDOM,
+    });
 
-    const heading = model.NodeSpec.create();
-    heading.setAttrs(hattrs);
-    heading.setContent("inline*");
-    heading.setGroup("block");
-    heading.setDefining(true);
-    heading.setParseDOM(pm.JsArrayOf(model.TagParseRule).of(&.{ makeTagRule("h1", 1), makeTagRule("h2", 2) }));
-    heading.setToDOM(pm.Node_to_DOMOutputSpec_fn.from(headingToDOM, null));
-
-    const para = model.NodeSpec.create();
-    para.setContent("inline*");
-    para.setGroup("block");
-    para.setParseDOM(pm.JsArrayOf(model.TagParseRule).of(&.{makeTagRule("p", 0)}));
-    para.setToDOM(pm.Node_to_DOMOutputSpec_fn.from(pToDOM, null));
-
-    const quote = model.NodeSpec.create();
-    quote.setContent("block+");
-    quote.setGroup("block");
-    quote.setDefining(true);
-    quote.setParseDOM(pm.JsArrayOf(model.TagParseRule).of(&.{makeTagRule("blockquote", 0)}));
-    quote.setToDOM(pm.Node_to_DOMOutputSpec_fn.from(bqToDOM, null));
-
-    const text = model.NodeSpec.create();
-    text.setGroup("inline");
-
-    const nodes = model.NodeSpec.create();
-    nodes.setAt("doc", .{ .h = doc.h });
-    nodes.setAt("heading", .{ .h = heading.h });
-    nodes.setAt("paragraph", .{ .h = para.h });
-    nodes.setAt("blockquote", .{ .h = quote.h });
-    nodes.setAt("text", .{ .h = text.h });
-
-    const ms = model.MarkSpec.create();
-    ms.setParseDOM(pm.JsArrayOf(model.ParseRule).of(&.{.{ .TagParseRule = makeTagRule("strong", 0) }}));
-    ms.setToDOM(pm.Mark_boolean_to_DOMOutputSpec_fn.from(strongToDOM, null));
-    const me = model.MarkSpec.create();
-    me.setParseDOM(pm.JsArrayOf(model.ParseRule).of(&.{.{ .TagParseRule = makeTagRule("em", 0) }}));
-    me.setToDOM(pm.Mark_boolean_to_DOMOutputSpec_fn.from(emToDOM, null));
-    const mc = model.MarkSpec.create();
-    mc.setParseDOM(pm.JsArrayOf(model.ParseRule).of(&.{.{ .TagParseRule = makeTagRule("code", 0) }}));
-    mc.setToDOM(pm.Mark_boolean_to_DOMOutputSpec_fn.from(codeToDOM, null));
-
-    const marks = model.MarkSpec.create();
-    marks.setAt("strong", .{ .h = ms.h });
-    marks.setAt("em", .{ .h = me.h });
-    marks.setAt("code", .{ .h = mc.h });
-
-    const spec = model.SchemaSpec.create();
-    spec.setNodes(.{ .h = nodes.h });
-    spec.setMarks(.{ .h = marks.h });
-    return model.Schema.new(spec);
+    return model.Schema.new(.{
+        .nodes = .{ .doc = doc, .heading = heading, .paragraph = para, .blockquote = quote, .text = text },
+        .marks = .{ .strong = ms, .em = me, .code = mc },
+    });
 }
 
 const SPEC_HTML =
@@ -116,26 +92,36 @@ const CHANGELOG_HTML =
     "<blockquote><p>All round-trips verified with Node.eq().</p></blockquote>" ++
     "<p>Edit directly above to watch HTML output update live.</p>";
 
-var g_schema: model.Schema = undefined;
-var g_parser: model.DOMParser = undefined;
-var g_serializer: model.DOMSerializer = undefined;
-var g_view: view_mod.EditorView = undefined;
-var g_doc: dom.Document = undefined;
-var g_output: dom.HTMLElement = undefined;
-var g_meta: dom.HTMLElement = undefined;
-var g_status: []const u8 = "JSON Node.eq() pending";
+const App = struct {
+    schema: model.Schema = undefined,
+    parser: model.DOMParser = undefined,
+    serializer: model.DOMSerializer = undefined,
+    view: view_mod.EditorView = std.mem.zeroes(view_mod.EditorView),
+    doc: dom.Document = undefined,
+    output: dom.HTMLElement = undefined,
+    meta: dom.HTMLElement = undefined,
+    btns: [5]BtnCtx = undefined,
+    status: []const u8 = "JSON Node.eq() pending",
+};
 
-fn parseHtml(html: []const u8) model.Node {
-    const div = g_doc.createElementWithString("div", .{});
-    div.asElement().setInnerHTML(html);
-    return g_parser.parse(.{ .h = div.h }, .{});
+const BtnCtx = struct { app: *App, id: usize };
+
+var g_app: App = .{};
+
+fn parseHtml(app: *App, html: []const u8) model.Node {
+    const div = app.doc.createElementWithString("div", null);
+    div.setInnerHTML(html);
+    return app.parser.parse(div, null);
 }
 
-fn refreshOutput(doc: model.Node) void {
-    const div = g_doc.createElementWithString("div", .{});
-    _ = g_serializer.serializeFragment(doc.getContent(), .{ .target = .{ .HTMLElement = .{ .h = div.h } } });
+fn refreshOutput(app: *App, doc: model.Node) void {
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
+
+    const div = app.doc.createElementWithString("div", null);
+    _ = app.serializer.serializeFragment(doc.getContent(), .{ .target = div });
     var hbuf: [4096]u8 = undefined;
-    const html_out = div.asElement().getInnerHTML().read(&hbuf);
+    const html_out = div.getInnerHTML().copy(&hbuf);
 
     var obuf: [8192]u8 = undefined;
     var w = std.Io.Writer.fixed(&obuf);
@@ -149,9 +135,9 @@ fn refreshOutput(doc: model.Node) void {
     for (0..nb) |i| {
         const b = doc.child(@floatFromInt(i));
         var kbuf: [64]u8 = undefined;
-        const kname = b.getType().getName().read(&kbuf);
+        const kname = b.getType().getName().copy(&kbuf);
         var tbuf: [512]u8 = undefined;
-        const txt = b.getTextContent().read(&tbuf);
+        const txt = b.getTextContent().copy(&tbuf);
         const bsz: usize = @intFromFloat(b.getNodeSize());
         if (std.mem.eql(u8, kname, "heading")) {
             const lvl: usize = @intFromFloat(b.getAttrs().getAt("level").toNumber());
@@ -160,99 +146,95 @@ fn refreshOutput(doc: model.Node) void {
             w.print("  [{d}] {s} ({d} bytes): {s}\n", .{ i, kname, bsz, txt }) catch {};
         }
     }
-    w.print("\nROUND-TRIP STATUS: {s}", .{g_status}) catch {};
-    g_output.asNode().setTextContent(w.buffered());
+    w.print("\nROUND-TRIP STATUS: {s}", .{app.status}) catch {};
+    app.output.setTextContent(w.buffered());
 
     var mbuf: [256]u8 = undefined;
     const m = std.fmt.bufPrint(&mbuf, "{s} · blocks={d} · nodeSize={d} · htmlBytes={d}", .{
-        g_status,
+        app.status,
         nb,
         nsz,
         html_out.len,
-    }) catch g_status;
-    g_meta.asNode().setTextContent(m);
+    }) catch app.status;
+    app.meta.setTextContent(m);
 }
 
-fn onDispatch(_: ?*anyopaque, tr: state_mod.Transaction) void {
-    if (g_view.h == 0) return;
-    const next = g_view.getState().apply(tr);
-    g_view.updateState(next);
-    refreshOutput(next.getDoc());
+fn onDispatch(app: *App, tr: state_mod.Transaction) void {
+    if (app.view.h == 0) return;
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
+    const next = app.view.getState().apply(tr);
+    app.view.updateState(next);
+    refreshOutput(app, next.getDoc());
 }
 
-const BTN_IDS = [5]usize{ 0, 1, 2, 3, 4 };
-fn onClick(ctx: ?*anyopaque, _: dom.PointerEvent) void {
-    const idx = @as(*const usize, @ptrCast(@alignCast(ctx.?))).*;
-    const st = g_view.getState();
+fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
+
+    const app = ctx.app;
+    const st = app.view.getState();
     const doc = st.getDoc();
-    if (idx == 0 or idx == 1) {
-        g_status = if (idx == 0) "Parsed Spec HTML via DOMParser" else "Parsed Changelog HTML via DOMParser";
-        const cfg = state_mod.EditorStateConfig.create();
-        cfg.setSchema(g_schema);
-        cfg.setDoc(parseHtml(if (idx == 0) SPEC_HTML else CHANGELOG_HTML));
-        const next = state_mod.EditorState.create(cfg);
-        g_view.updateState(next);
-        refreshOutput(next.getDoc());
-    } else if (idx == 2) {
-        const rebuilt = model.Node.fromJSON(g_schema, doc.toJSON());
-        g_status = if (doc.eq(rebuilt)) "JSON toJSON->fromJSON eq() = true" else "JSON toJSON->fromJSON eq() = false";
-        refreshOutput(doc);
-    } else if (idx == 3) {
+    if (ctx.id == 0 or ctx.id == 1) {
+        app.status = if (ctx.id == 0) "Parsed Spec HTML via DOMParser" else "Parsed Changelog HTML via DOMParser";
+        const next = state_mod.EditorState.create(.{
+            .schema = app.schema,
+            .doc = parseHtml(app, if (ctx.id == 0) SPEC_HTML else CHANGELOG_HTML),
+        });
+        app.view.updateState(next);
+        refreshOutput(app, next.getDoc());
+    } else if (ctx.id == 2) {
+        const rebuilt = model.Node.fromJSON(app.schema, doc.toJSON());
+        app.status = if (doc.eq(rebuilt)) "JSON toJSON->fromJSON eq() = true" else "JSON toJSON->fromJSON eq() = false";
+        refreshOutput(app, doc);
+    } else if (ctx.id == 3) {
         if (doc.getChildCount() >= 2.0) {
             const insert_pos = doc.child(0).getNodeSize() + doc.child(1).getNodeSize() - 1.0;
-            const mc = g_schema.mark(.{ .string = pm.JsString.from("code") }, null);
-            const span = g_schema.text(" roundtrip()", pm.JsArrayOf(model.Mark).of(&.{mc}));
-            const tr = st.getTr();
-            _ = tr.asTransform().insert(insert_pos, .{ .Node = span });
-            g_status = "Inserted code span into paragraph";
-            pm.callTransactionFn(g_view.getDispatch(), tr);
+            const mc = app.schema.mark("code", null);
+            const span = app.schema.text(" roundtrip()", &.{mc});
+            const tr = st.getTr().insert(insert_pos, span);
+            app.status = "Inserted code span into paragraph";
+            app.view.getDispatch().call(tr);
         }
     } else {
-        const div = g_doc.createElementWithString("div", .{});
-        _ = g_serializer.serializeFragment(doc.getContent(), .{ .target = .{ .HTMLElement = .{ .h = div.h } } });
-        const reparsed = g_parser.parse(.{ .h = div.h }, .{});
-        g_status = if (doc.eq(reparsed)) "DOM serializeFragment->parse eq() = true" else "DOM serializeFragment->parse eq() = false";
-        const cfg = state_mod.EditorStateConfig.create();
-        cfg.setSchema(g_schema);
-        cfg.setDoc(reparsed);
-        const next = state_mod.EditorState.create(cfg);
-        g_view.updateState(next);
-        refreshOutput(next.getDoc());
+        const div = app.doc.createElementWithString("div", null);
+        _ = app.serializer.serializeFragment(doc.getContent(), .{ .target = div });
+        const reparsed = app.parser.parse(div, null);
+        app.status = if (doc.eq(reparsed)) "DOM serializeFragment->parse eq() = true" else "DOM serializeFragment->parse eq() = false";
+        const next = state_mod.EditorState.create(.{ .schema = app.schema, .doc = reparsed });
+        app.view.updateState(next);
+        refreshOutput(app, next.getDoc());
     }
 }
 
 export fn start() void {
-    g_doc = dom.getDocument();
-    _ = dom.jsRetain(g_doc);
-    g_output = g_doc.getElementById("output").?;
-    _ = dom.jsRetain(g_output);
-    g_meta = g_doc.getElementById("meta").?;
-    _ = dom.jsRetain(g_meta);
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
 
-    g_schema = makeSchema();
-    _ = pm.jsRetain(g_schema);
-    g_parser = model.DOMParser.fromSchema(g_schema);
-    _ = pm.jsRetain(g_parser);
-    g_serializer = model.DOMSerializer.fromSchema(g_schema);
-    _ = pm.jsRetain(g_serializer);
+    g_app.doc = dom.getDocument().retain();
+    g_app.output = g_app.doc.getElementById("output").?.retain();
+    g_app.meta = g_app.doc.getElementById("meta").?.retain();
 
-    const scfg = state_mod.EditorStateConfig.create();
-    scfg.setSchema(g_schema);
-    scfg.setDoc(parseHtml(SPEC_HTML));
+    g_app.schema = makeSchema().retain();
+    g_app.parser = model.DOMParser.fromSchema(g_app.schema).retain();
+    g_app.serializer = model.DOMSerializer.fromSchema(g_app.schema).retain();
 
-    const props = view_mod.DirectEditorProps.create();
-    props.setState(state_mod.EditorState.create(scfg));
-    props.setDispatchTransaction(pm.Transaction_fn.from(onDispatch, null));
+    const st = state_mod.EditorState.create(.{
+        .schema = g_app.schema,
+        .doc = parseHtml(&g_app, SPEC_HTML),
+    });
 
-    const mount = g_doc.getElementById("editor").?;
-    g_view = view_mod.EditorView.new(.{ .Node_2 = mount.asNode() }, props);
-    _ = pm.jsRetain(g_view);
-    g_status = "Parsed Spec HTML via DOMParser";
-    refreshOutput(g_view.getState().getDoc());
+    const mount = g_app.doc.getElementById("editor").?;
+    g_app.view = view_mod.EditorView.new(mount, .{
+        .state = st,
+        .dispatchTransaction = .{ onDispatch, &g_app },
+    }).retain();
+    g_app.status = "Parsed Spec HTML via DOMParser";
+    refreshOutput(&g_app, g_app.view.getState().getDoc());
 
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
-        const btn = g_doc.getElementById(id).?;
-        btn.addEventListener(.click, dom.JsListener(dom.PointerEvent).from(onClick, @constCast(&BTN_IDS[i])), .{});
+        g_app.btns[i] = .{ .app = &g_app, .id = i };
+        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
     }
 }

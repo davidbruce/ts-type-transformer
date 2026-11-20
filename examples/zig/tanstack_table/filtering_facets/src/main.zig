@@ -2,102 +2,121 @@ const std = @import("std");
 const dom = @import("dom");
 const tt = @import("tanstack_table_core");
 
-const NONE = tt.JsValue{ .h = 0 };
+const NONE: tt.JsValue = std.mem.zeroes(tt.JsValue);
 
 const AtomState = struct {
     value: tt.JsValue = NONE,
-    derive: tt.JsValue = NONE,
+    derive: tt.void_to_any_fn = std.mem.zeroes(tt.void_to_any_fn),
     is_ro: bool = false,
 };
-var atoms: [512]AtomState = undefined;
-var atom_count: usize = 0;
 
-fn atomGet(ctx: ?*anyopaque) tt.JsValue {
-    const a: *AtomState = @ptrCast(@alignCast(ctx.?));
-    if (a.is_ro) return tt.callVoidToAnyFn(.{ .h = a.derive.h });
-    _ = tt.jsRetain(a.value);
-    return a.value;
+const App = struct {
+    table: tt.Table_Core = undefined,
+    wrap: dom.HTMLElement = undefined,
+    meta: dom.HTMLElement = undefined,
+    atoms: [512]AtomState = undefined,
+    atom_count: usize = 0,
+    btns: [5]BtnCtx = undefined,
+};
+
+const BtnCtx = struct { app: *App, id: usize };
+
+var g_app: App = .{};
+var html_buf: [16384]u8 = undefined;
+var meta_buf: [256]u8 = undefined;
+var tmp_buf: [128]u8 = undefined;
+
+fn atomGet(a: *AtomState) tt.JsValue {
+    if (a.is_ro) return a.derive.call();
+    return a.value.retain();
 }
-fn atomSet(ctx: ?*anyopaque, updater: tt.JsValue) tt.JsValue {
-    const a: *AtomState = @ptrCast(@alignCast(ctx.?));
+
+fn atomSet(a: *AtomState, updater: tt.JsValue) tt.JsValue {
     const next = tt.functionalUpdate(updater, a.value);
-    _ = tt.jsRetain(next);
+    if (a.value.h != 0) a.value.deinit();
     a.value = next;
     return NONE;
 }
-fn noUnsub(_: ?*anyopaque) void {}
-fn atomSub(_: ?*anyopaque, _: tt.JsValue) tt.JsValue {
-    const sub = tt.makeObjectMap();
-    sub.setAt("unsubscribe", .{ .h = tt.void_fn.from(noUnsub, null).h });
-    return .{ .h = sub.h };
-}
-fn makeAtom(a: *AtomState) tt.JsValue {
-    const atom = tt.makeObjectMap();
-    atom.setAt("get", .{ .h = tt.void_to_any_fn.from(atomGet, a).h });
-    if (!a.is_ro) atom.setAt("set", .{ .h = tt.Updater_fn2.from(atomSet, a).h });
-    atom.setAt("subscribe", .{ .h = tt.Updater_fn2.from(atomSub, null).h });
-    return .{ .h = atom.h };
-}
-fn createWritable(_: ?*anyopaque, initial: tt.JsValue, _: ?tt.TableAtomOptions) tt.Atom {
-    const a = &atoms[atom_count];
-    atom_count += 1;
-    a.* = .{ .value = initial };
-    _ = tt.jsRetain(initial);
-    return .{ .h = makeAtom(a).h };
-}
-fn createReadonly(_: ?*anyopaque, fn_v: tt.void_to_any_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
-    const a = &atoms[atom_count];
-    atom_count += 1;
-    a.* = .{ .derive = .{ .h = fn_v.h }, .is_ro = true };
-    _ = tt.jsRetain(fn_v);
-    return .{ .h = makeAtom(a).h };
-}
-fn addSub(_: ?*anyopaque, _: tt.Subscription) void {}
-fn unmountCb(_: ?*anyopaque) void {}
-fn batchCb(_: ?*anyopaque, fn_v: tt.void_fn) void {
-    tt.callVoidFn(fn_v);
-}
-fn untrackCb(_: ?*anyopaque, fn_v: tt.void_to_any_fn) tt.JsValue {
-    return tt.callVoidToAnyFn(fn_v);
+
+fn noUnsub() void {}
+
+fn atomSub(_: tt.JsValue) tt.JsValue {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+    return tt.JsValue.obj(.{ .unsubscribe = tt.void_fn.fromFn(noUnsub) }).retain();
 }
 
-fn makeReactivity() tt.TableReactivityBindings {
-    const r = tt.TableReactivityBindings.create();
-    r.setCreateOptionsStore(false);
-    r.setWrapExternalAtoms(false);
-    r.setAddSubscription(tt.TableReactivityBindings_addSubscription.from(addSub, null));
-    r.setUnmount(tt.void_fn.from(unmountCb, null));
-    r.setBatch(tt.fn_fn.from(batchCb, null));
-    r.setSchedule(tt.fn_fn.from(batchCb, null));
-    r.setUntrack(tt.TableReactivityBindings_untrack.from(untrackCb, null));
-    r.setCreateWritableAtom(tt.TableReactivityBindings_createWritableAtom.from(createWritable, null));
-    r.setCreateReadonlyAtom(tt.TableReactivityBindings_createReadonlyAtom.from(createReadonly, null));
-    return r;
+fn makeAtom(a: *AtomState) tt.JsValue {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+    if (!a.is_ro) {
+        return tt.JsValue.obj(.{
+            .get = tt.void_to_any_fn.from(atomGet, a),
+            .set = tt.Updater_fn2.from(atomSet, a),
+            .subscribe = tt.Updater_fn2.fromFn(atomSub),
+        }).retain();
+    }
+    return tt.JsValue.obj(.{
+        .get = tt.void_to_any_fn.from(atomGet, a),
+        .subscribe = tt.Updater_fn2.fromFn(atomSub),
+    }).retain();
+}
+
+fn createWritable(app: *App, initial: tt.JsValue, _: ?tt.TableAtomOptions) tt.Atom {
+    const a = &app.atoms[app.atom_count];
+    app.atom_count += 1;
+    a.* = .{ .value = initial.retain() };
+    return makeAtom(a).as(tt.Atom);
+}
+
+fn createReadonly(app: *App, fn_v: tt.void_to_any_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
+    const a = &app.atoms[app.atom_count];
+    app.atom_count += 1;
+    a.* = .{ .derive = fn_v.retain(), .is_ro = true };
+    return makeAtom(a).as(tt.ReadonlyAtom);
+}
+
+fn addSub(_: tt.Subscription) void {}
+fn unmountCb() void {}
+fn batchCb(fn_v: tt.void_fn) void {
+    fn_v.call();
+}
+fn untrackCb(fn_v: tt.void_to_any_fn) tt.JsValue {
+    return fn_v.call();
+}
+
+fn makeReactivity(app: *App) tt.TableReactivityBindings {
+    return tt.TableReactivityBindings.init(.{
+        .createOptionsStore = false,
+        .wrapExternalAtoms = false,
+        .addSubscription = addSub,
+        .unmount = unmountCb,
+        .batch = batchCb,
+        .schedule = batchCb,
+        .untrack = untrackCb,
+        .createWritableAtom = .{ createWritable, app },
+        .createReadonlyAtom = .{ createReadonly, app },
+    });
 }
 
 fn colDef(key: []const u8, header: []const u8, filter_fn: ?[]const u8) tt.JsValue {
-    const c = tt.makeObjectMap();
-    c.setAt("accessorKey", tt.JsValue.string(key));
-    c.setAt("header", tt.JsValue.string(header));
-    if (filter_fn) |f| c.setAt("filterFn", tt.JsValue.string(f));
-    return .{ .h = c.h };
+    if (filter_fn) |f| {
+        return tt.JsValue.obj(.{ .accessorKey = key, .header = header, .filterFn = f });
+    }
+    return tt.JsValue.obj(.{ .accessorKey = key, .header = header });
 }
+
 fn svcRow(id: []const u8, svc: []const u8, tier: []const u8, region: []const u8, reqs: f64, errs: f64) tt.JsValue {
-    const r = tt.makeObjectMap();
-    r.setAt("id", tt.JsValue.string(id));
-    r.setAt("service", tt.JsValue.string(svc));
-    r.setAt("tier", tt.JsValue.string(tier));
-    r.setAt("region", tt.JsValue.string(region));
-    r.setAt("requests", tt.JsValue.number(reqs));
-    r.setAt("errors", tt.JsValue.number(errs));
-    return .{ .h = r.h };
+    return tt.JsValue.obj(.{
+        .id = id,
+        .service = svc,
+        .tier = tier,
+        .region = region,
+        .requests = reqs,
+        .errors = errs,
+    });
 }
-fn filterSpec(id: []const u8, val: tt.JsValue) tt.JsValue {
-    const f = tt.makeObjectMap();
-    f.setAt("id", tt.JsValue.string(id));
-    f.setAt("value", val);
-    return .{ .h = f.h };
-}
+
 fn appendEsc(w: *std.Io.Writer, s: []const u8) !void {
     for (s) |c| {
         switch (c) {
@@ -109,16 +128,12 @@ fn appendEsc(w: *std.Io.Writer, s: []const u8) !void {
     }
 }
 
-var g_table: tt.Table_Core = undefined;
-var g_wrap: dom.HTMLElement = undefined;
-var g_meta: dom.HTMLElement = undefined;
-var html_buf: [16384]u8 = undefined;
-var meta_buf: [256]u8 = undefined;
-var tmp_buf: [128]u8 = undefined;
+fn render(app: *App, label: []const u8) void {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
 
-fn render(label: []const u8) void {
-    const rm = tt.callVoidToRowModelFn((tt.Table_RowModels_Core{ .h = g_table.h }).getGetRowModel());
-    const core = tt.callVoidToRowModelFn((tt.Table_RowModels_Core{ .h = g_table.h }).getGetCoreRowModel());
+    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
+    const core = app.table.as(tt.Table_RowModels_Core).getGetCoreRowModel().call();
     const rows = rm.getRows();
     const nrows = rows.len();
     const ntotal = core.getRows().len();
@@ -127,118 +142,118 @@ fn render(label: []const u8) void {
     w.writeAll("<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>") catch return;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = (tt.Row_Row{ .h = row.h }).getGetValue();
+        const gv = row.as(tt.Row_Row).getGetValue();
         w.writeAll("<tr><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "id").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "service").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("service").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "tier").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("tier").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "region").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("region").toString().copy(&tmp_buf)) catch return;
         w.print("</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.0}</td></tr>", .{
-            tt.callStringFn(gv, "requests").toNumber(),
-            tt.callStringFn(gv, "errors").toNumber(),
+            gv.call("requests").toNumber(),
+            gv.call("errors").toNumber(),
         }) catch return;
     }
     w.writeAll("</tbody></table>") catch return;
-    g_wrap.asElement().setInnerHTML(w.buffered());
+    app.wrap.setInnerHTML(w.buffered());
 
     const m = std.fmt.bufPrint(&meta_buf, "{s} · showing {d} / {d} services", .{ label, nrows, ntotal }) catch label;
-    g_meta.asNode().setTextContent(m);
+    app.meta.setTextContent(m);
 }
 
-const BTN_IDS = [5]usize{ 0, 1, 2, 3, 4 };
-fn onClick(ctx: ?*anyopaque, _: dom.PointerEvent) void {
-    const idx = @as(*const usize, @ptrCast(@alignCast(ctx.?))).*;
-    const cf = tt.Table_ColumnFiltering{ .h = g_table.h };
-    const gf = tt.Table_GlobalFiltering{ .h = g_table.h };
+fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+
+    const app = ctx.app;
+    const cf = app.table.as(tt.Table_ColumnFiltering);
+    const gf = app.table.as(tt.Table_GlobalFiltering).getSetGlobalFilter().as(tt.Updater_fn);
     const filters = tt.JsArray.new();
     var label: []const u8 = "Filter: all services";
-    if (idx == 0) {
-        tt.callUpdaterFn(tt.Updater_fn{ .h = gf.getSetGlobalFilter().h }, tt.JsValue.string(""));
-        filters.push(filterSpec("tier", tt.JsValue.string("core")));
-        filters.push(filterSpec("requests", tt.JsValue.number(400.0)));
-        tt.callTableColumnFilteringSetColumnFilters(cf.getSetColumnFilters(), .{ .h = filters.h });
+    if (ctx.id == 0) {
+        gf.call("");
+        filters.push(.{ .id = "tier", .value = "core" });
+        filters.push(.{ .id = "requests", .value = 400.0 });
+        cf.getSetColumnFilters().call(filters);
         label = "Filter: tier = core & requests >= 400";
-    } else if (idx == 1) {
-        tt.callUpdaterFn(tt.Updater_fn{ .h = gf.getSetGlobalFilter().h }, tt.JsValue.string(""));
-        tt.callTableColumnFilteringSetColumnFilters(cf.getSetColumnFilters(), .{ .h = filters.h });
+    } else if (ctx.id == 1) {
+        gf.call("");
+        cf.getSetColumnFilters().call(filters);
         label = "Filter: all services";
-    } else if (idx == 2) {
-        tt.callUpdaterFn(tt.Updater_fn{ .h = gf.getSetGlobalFilter().h }, tt.JsValue.string(""));
-        filters.push(filterSpec("tier", tt.JsValue.string("edge")));
-        tt.callTableColumnFilteringSetColumnFilters(cf.getSetColumnFilters(), .{ .h = filters.h });
+    } else if (ctx.id == 2) {
+        gf.call("");
+        filters.push(.{ .id = "tier", .value = "edge" });
+        cf.getSetColumnFilters().call(filters);
         label = "Filter: tier = edge";
-    } else if (idx == 3) {
-        tt.callTableColumnFilteringSetColumnFilters(cf.getSetColumnFilters(), .{ .h = filters.h });
-        tt.callUpdaterFn(tt.Updater_fn{ .h = gf.getSetGlobalFilter().h }, tt.JsValue.string("auth"));
+    } else if (ctx.id == 3) {
+        cf.getSetColumnFilters().call(filters);
+        gf.call("auth");
         label = "Global search: \"auth\"";
-    } else if (idx == 4) {
-        tt.callUpdaterFn(tt.Updater_fn{ .h = gf.getSetGlobalFilter().h }, tt.JsValue.string(""));
-        filters.push(filterSpec("errors", tt.JsValue.number(5.0)));
-        tt.callTableColumnFilteringSetColumnFilters(cf.getSetColumnFilters(), .{ .h = filters.h });
+    } else if (ctx.id == 4) {
+        gf.call("");
+        filters.push(.{ .id = "errors", .value = 5.0 });
+        cf.getSetColumnFilters().call(filters);
         label = "Filter: errors >= 5";
     }
-    render(label);
+    render(app, label);
 }
 
 export fn start() void {
-    const filter_fns = tt.makeObjectMap();
-    filter_fns.setAt("includesString", .{ .h = tt.getFilterFnIncludesString().h });
-    filter_fns.setAt("equalsString", .{ .h = tt.getFilterFnEqualsString().h });
-    filter_fns.setAt("greaterThanOrEqualTo", .{ .h = tt.getFilterFnGreaterThanOrEqualTo().h });
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
 
-    const features = tt.makeObjectMap();
-    features.setAt("coreReactivityFeature", .{ .h = makeReactivity().h });
-    features.setAt("columnFilteringFeature", .{ .h = tt.getColumnFilteringFeature().h });
-    features.setAt("globalFilteringFeature", .{ .h = tt.getGlobalFilteringFeature().h });
-    features.setAt("coreRowModel", .{ .h = tt.createCoreRowModel().h });
-    features.setAt("filteredRowModel", .{ .h = tt.createFilteredRowModel().h });
-    features.setAt("filterFns", .{ .h = filter_fns.h });
+    const opts = tt.JsValue.obj(.{
+        .features = .{
+            .coreReactivityFeature = makeReactivity(&g_app),
+            .columnFilteringFeature = tt.getColumnFilteringFeature(),
+            .globalFilteringFeature = tt.getGlobalFilteringFeature(),
+            .coreRowModel = tt.createCoreRowModel(),
+            .filteredRowModel = tt.createFilteredRowModel(),
+            .filterFns = .{
+                .includesString = tt.getFilterFnIncludesString(),
+                .equalsString = tt.getFilterFnEqualsString(),
+                .greaterThanOrEqualTo = tt.getFilterFnGreaterThanOrEqualTo(),
+            },
+        },
+        .data = .{
+            svcRow("S-01", "auth-gateway", "core", "CH", 620, 2),
+            svcRow("S-02", "session-cache", "core", "CH", 480, 1),
+            svcRow("S-03", "billing-ledger", "core", "DE", 510, 6),
+            svcRow("S-04", "oauth-signer", "core", "FR", 430, 3),
+            svcRow("S-05", "trace-ingestor", "edge", "DE", 290, 8),
+            svcRow("S-06", "cdn-router", "edge", "FR", 840, 5),
+            svcRow("S-07", "static-assets", "edge", "CH", 710, 0),
+            svcRow("S-08", "mail-relay", "batch", "DE", 140, 7),
+            svcRow("S-09", "report-export", "batch", "FR", 210, 4),
+            svcRow("S-10", "audit-auth-log", "core", "US", 360, 9),
+        },
+        .columns = .{
+            colDef("id", "ID", null),
+            colDef("service", "Service", null),
+            colDef("tier", "Tier", "equalsString"),
+            colDef("region", "Region", null),
+            colDef("requests", "Req/s", "greaterThanOrEqualTo"),
+            colDef("errors", "Errors", "greaterThanOrEqualTo"),
+        },
+        .initialState = .{
+            .columnFilters = .{
+                .{ .id = "tier", .value = "core" },
+                .{ .id = "requests", .value = 400.0 },
+            },
+        },
+    });
 
-    const data = tt.JsArray.new();
-    data.push(svcRow("S-01", "auth-gateway", "core", "CH", 620, 2));
-    data.push(svcRow("S-02", "session-cache", "core", "CH", 480, 1));
-    data.push(svcRow("S-03", "billing-ledger", "core", "DE", 510, 6));
-    data.push(svcRow("S-04", "oauth-signer", "core", "FR", 430, 3));
-    data.push(svcRow("S-05", "trace-ingestor", "edge", "DE", 290, 8));
-    data.push(svcRow("S-06", "cdn-router", "edge", "FR", 840, 5));
-    data.push(svcRow("S-07", "static-assets", "edge", "CH", 710, 0));
-    data.push(svcRow("S-08", "mail-relay", "batch", "DE", 140, 7));
-    data.push(svcRow("S-09", "report-export", "batch", "FR", 210, 4));
-    data.push(svcRow("S-10", "audit-auth-log", "core", "US", 360, 9));
-
-    const cols = tt.JsArray.new();
-    cols.push(colDef("id", "ID", null));
-    cols.push(colDef("service", "Service", null));
-    cols.push(colDef("tier", "Tier", "equalsString"));
-    cols.push(colDef("region", "Region", null));
-    cols.push(colDef("requests", "Req/s", "greaterThanOrEqualTo"));
-    cols.push(colDef("errors", "Errors", "greaterThanOrEqualTo"));
-
-    const init_filters = tt.JsArray.new();
-    init_filters.push(filterSpec("tier", tt.JsValue.string("core")));
-    init_filters.push(filterSpec("requests", tt.JsValue.number(400.0)));
-    const init_state = tt.makeObjectMap();
-    init_state.setAt("columnFilters", .{ .h = init_filters.h });
-
-    const opts = tt.makeObjectMap();
-    opts.setAt("features", .{ .h = features.h });
-    opts.setAt("data", .{ .h = data.h });
-    opts.setAt("columns", .{ .h = cols.h });
-    opts.setAt("initialState", .{ .h = init_state.h });
-
-    g_table = tt.constructTable(.{ .h = opts.h });
-    _ = tt.jsRetain(g_table);
+    g_app.table = tt.constructTable(opts.as(tt.TableOptions_Core)).retain();
     const doc = dom.getDocument();
-    g_wrap = doc.getElementById("table-wrap").?;
-    g_meta = doc.getElementById("meta").?;
+    g_app.wrap = doc.getElementById("table-wrap").?.retain();
+    g_app.meta = doc.getElementById("meta").?.retain();
 
     const btn_ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (btn_ids, 0..) |bid, i| {
-        const btn = doc.getElementById(bid).?;
-        btn.addEventListener(.click, dom.JsListener(dom.PointerEvent).from(onClick, @constCast(&BTN_IDS[i])), .{});
+        g_app.btns[i] = .{ .app = &g_app, .id = i };
+        doc.getElementById(bid).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
     }
-    render("Filter: tier = core & requests >= 400");
+    render(&g_app, "Filter: tier = core & requests >= 400");
 }

@@ -2,103 +2,120 @@ const std = @import("std");
 const dom = @import("dom");
 const tt = @import("tanstack_table_core");
 
-const NONE = tt.JsValue{ .h = 0 };
+const NONE: tt.JsValue = std.mem.zeroes(tt.JsValue);
+
 fn getProp(obj: tt.JsValue, key: []const u8) tt.JsValue {
-    return (tt.RowData_map{ .h = obj.h }).getAt(key);
+    return obj.as(tt.RowData_map).getAt(key);
 }
 
 const AtomState = struct {
     value: tt.JsValue = NONE,
-    derive: tt.JsValue = NONE,
+    derive: tt.void_to_any_fn = std.mem.zeroes(tt.void_to_any_fn),
     is_ro: bool = false,
 };
-var atoms: [512]AtomState = undefined;
-var atom_count: usize = 0;
 
-fn atomGet(ctx: ?*anyopaque) tt.JsValue {
-    const a: *AtomState = @ptrCast(@alignCast(ctx.?));
-    if (a.is_ro) return tt.callVoidToAnyFn(.{ .h = a.derive.h });
-    _ = tt.jsRetain(a.value);
-    return a.value;
+const App = struct {
+    table: tt.Table_Core = undefined,
+    wrap: dom.HTMLElement = undefined,
+    meta: dom.HTMLElement = undefined,
+    atoms: [512]AtomState = undefined,
+    atom_count: usize = 0,
+    btns: [5]BtnCtx = undefined,
+};
+
+const BtnCtx = struct { app: *App, id: usize };
+
+var g_app: App = .{};
+var html_buf: [16384]u8 = undefined;
+var meta_buf: [256]u8 = undefined;
+var tmp_buf: [128]u8 = undefined;
+
+fn atomGet(a: *AtomState) tt.JsValue {
+    if (a.is_ro) return a.derive.call();
+    return a.value.retain();
 }
-fn atomSet(ctx: ?*anyopaque, updater: tt.JsValue) tt.JsValue {
-    const a: *AtomState = @ptrCast(@alignCast(ctx.?));
+
+fn atomSet(a: *AtomState, updater: tt.JsValue) tt.JsValue {
     const next = tt.functionalUpdate(updater, a.value);
-    _ = tt.jsRetain(next);
+    if (a.value.h != 0) a.value.deinit();
     a.value = next;
     return NONE;
 }
-fn noUnsub(_: ?*anyopaque) void {}
-fn atomSub(_: ?*anyopaque, _: tt.JsValue) tt.JsValue {
-    const sub = tt.makeObjectMap();
-    sub.setAt("unsubscribe", .{ .h = tt.void_fn.from(noUnsub, null).h });
-    return .{ .h = sub.h };
-}
-fn makeAtom(a: *AtomState) tt.JsValue {
-    const atom = tt.makeObjectMap();
-    atom.setAt("get", .{ .h = tt.void_to_any_fn.from(atomGet, a).h });
-    if (!a.is_ro) atom.setAt("set", .{ .h = tt.Updater_fn2.from(atomSet, a).h });
-    atom.setAt("subscribe", .{ .h = tt.Updater_fn2.from(atomSub, null).h });
-    return .{ .h = atom.h };
-}
-fn createWritable(_: ?*anyopaque, initial: tt.JsValue, _: ?tt.TableAtomOptions) tt.Atom {
-    const a = &atoms[atom_count];
-    atom_count += 1;
-    a.* = .{ .value = initial };
-    _ = tt.jsRetain(initial);
-    return .{ .h = makeAtom(a).h };
-}
-fn createReadonly(_: ?*anyopaque, fn_v: tt.void_to_any_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
-    const a = &atoms[atom_count];
-    atom_count += 1;
-    a.* = .{ .derive = .{ .h = fn_v.h }, .is_ro = true };
-    _ = tt.jsRetain(fn_v);
-    return .{ .h = makeAtom(a).h };
-}
-fn addSub(_: ?*anyopaque, _: tt.Subscription) void {}
-fn unmountCb(_: ?*anyopaque) void {}
-fn batchCb(_: ?*anyopaque, fn_v: tt.void_fn) void {
-    tt.callVoidFn(fn_v);
-}
-fn untrackCb(_: ?*anyopaque, fn_v: tt.void_to_any_fn) tt.JsValue {
-    return tt.callVoidToAnyFn(fn_v);
+
+fn noUnsub() void {}
+
+fn atomSub(_: tt.JsValue) tt.JsValue {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+    return tt.JsValue.obj(.{ .unsubscribe = tt.void_fn.fromFn(noUnsub) }).retain();
 }
 
-fn makeReactivity() tt.TableReactivityBindings {
-    const r = tt.TableReactivityBindings.create();
-    r.setCreateOptionsStore(false);
-    r.setWrapExternalAtoms(false);
-    r.setAddSubscription(tt.TableReactivityBindings_addSubscription.from(addSub, null));
-    r.setUnmount(tt.void_fn.from(unmountCb, null));
-    r.setBatch(tt.fn_fn.from(batchCb, null));
-    r.setSchedule(tt.fn_fn.from(batchCb, null));
-    r.setUntrack(tt.TableReactivityBindings_untrack.from(untrackCb, null));
-    r.setCreateWritableAtom(tt.TableReactivityBindings_createWritableAtom.from(createWritable, null));
-    r.setCreateReadonlyAtom(tt.TableReactivityBindings_createReadonlyAtom.from(createReadonly, null));
-    return r;
+fn makeAtom(a: *AtomState) tt.JsValue {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+    if (!a.is_ro) {
+        return tt.JsValue.obj(.{
+            .get = tt.void_to_any_fn.from(atomGet, a),
+            .set = tt.Updater_fn2.from(atomSet, a),
+            .subscribe = tt.Updater_fn2.fromFn(atomSub),
+        }).retain();
+    }
+    return tt.JsValue.obj(.{
+        .get = tt.void_to_any_fn.from(atomGet, a),
+        .subscribe = tt.Updater_fn2.fromFn(atomSub),
+    }).retain();
+}
+
+fn createWritable(app: *App, initial: tt.JsValue, _: ?tt.TableAtomOptions) tt.Atom {
+    const a = &app.atoms[app.atom_count];
+    app.atom_count += 1;
+    a.* = .{ .value = initial.retain() };
+    return makeAtom(a).as(tt.Atom);
+}
+
+fn createReadonly(app: *App, fn_v: tt.void_to_any_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
+    const a = &app.atoms[app.atom_count];
+    app.atom_count += 1;
+    a.* = .{ .derive = fn_v.retain(), .is_ro = true };
+    return makeAtom(a).as(tt.ReadonlyAtom);
+}
+
+fn addSub(_: tt.Subscription) void {}
+fn unmountCb() void {}
+fn batchCb(fn_v: tt.void_fn) void {
+    fn_v.call();
+}
+fn untrackCb(fn_v: tt.void_to_any_fn) tt.JsValue {
+    return fn_v.call();
+}
+
+fn makeReactivity(app: *App) tt.TableReactivityBindings {
+    return tt.TableReactivityBindings.init(.{
+        .createOptionsStore = false,
+        .wrapExternalAtoms = false,
+        .addSubscription = addSub,
+        .unmount = unmountCb,
+        .batch = batchCb,
+        .schedule = batchCb,
+        .untrack = untrackCb,
+        .createWritableAtom = .{ createWritable, app },
+        .createReadonlyAtom = .{ createReadonly, app },
+    });
 }
 
 fn colDef(key: []const u8, header: []const u8) tt.JsValue {
-    const c = tt.makeObjectMap();
-    c.setAt("accessorKey", tt.JsValue.string(key));
-    c.setAt("header", tt.JsValue.string(header));
-    return .{ .h = c.h };
+    return tt.JsValue.obj(.{ .accessorKey = key, .header = header });
 }
+
 fn nodeRow(id: []const u8, host: []const u8, region: []const u8, lat: f64, thr: f64, up: f64) tt.JsValue {
-    const r = tt.makeObjectMap();
-    r.setAt("id", tt.JsValue.string(id));
-    r.setAt("host", tt.JsValue.string(host));
-    r.setAt("region", tt.JsValue.string(region));
-    r.setAt("latency", tt.JsValue.number(lat));
-    r.setAt("throughput", tt.JsValue.number(thr));
-    r.setAt("uptime", tt.JsValue.number(up));
-    return .{ .h = r.h };
-}
-fn sortSpec(id: []const u8, desc: bool) tt.JsValue {
-    const s = tt.makeObjectMap();
-    s.setAt("id", tt.JsValue.string(id));
-    s.setAt("desc", tt.JsValue.boolean(desc));
-    return .{ .h = s.h };
+    return tt.JsValue.obj(.{
+        .id = id,
+        .host = host,
+        .region = region,
+        .latency = lat,
+        .throughput = thr,
+        .uptime = up,
+    });
 }
 
 fn appendEsc(w: *std.Io.Writer, s: []const u8) !void {
@@ -112,30 +129,26 @@ fn appendEsc(w: *std.Io.Writer, s: []const u8) !void {
     }
 }
 
-var g_table: tt.Table_Core = undefined;
-var g_wrap: dom.HTMLElement = undefined;
-var g_meta: dom.HTMLElement = undefined;
-var html_buf: [16384]u8 = undefined;
-var meta_buf: [256]u8 = undefined;
-var tmp_buf: [128]u8 = undefined;
+fn render(app: *App, label: []const u8) void {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
 
-fn render(label: []const u8) void {
-    const rm = tt.callVoidToRowModelFn((tt.Table_RowModels_Core{ .h = g_table.h }).getGetRowModel());
+    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
     const rows = rm.getRows();
-    const cols = tt.callTableColumnPinningGetCenterLeafColumns((tt.Table_Columns{ .h = g_table.h }).getGetAllLeafColumns());
+    const cols = app.table.as(tt.Table_Columns).getGetAllLeafColumns().call();
 
     var w = std.Io.Writer.fixed(&html_buf);
     w.writeAll("<table><thead><tr>") catch return;
     const ncols = cols.len();
     for (0..ncols) |i| {
         const col = cols.get(@intCast(i));
-        const cp = tt.Column_CoreProperties{ .h = col.h };
+        const cp = col.as(tt.Column_CoreProperties);
         const cid = cp.getId().copy(&tmp_buf);
         const is_num = std.mem.eql(u8, cid, "latency") or std.mem.eql(u8, cid, "throughput") or std.mem.eql(u8, cid, "uptime");
         w.writeAll(if (is_num) "<th class=\"num\">" else "<th>") catch return;
-        const hdr = getProp(.{ .h = cp.getColumnDef().h }, "header").toString().copy(&tmp_buf);
+        const hdr = getProp(cp.getColumnDef().as(tt.JsValue), "header").toString().copy(&tmp_buf);
         appendEsc(&w, hdr) catch return;
-        const sd = tt.callColumnRowSortingGetIsSorted((tt.Column_RowSorting{ .h = col.h }).getGetIsSorted());
+        const sd = col.as(tt.Column_RowSorting).getGetIsSorted().call();
         if (sd == .string) {
             if (sd.string.eql("asc")) {
                 w.writeAll(" &#9650;") catch return;
@@ -152,11 +165,11 @@ fn render(label: []const u8) void {
     var top_host: []const u8 = "-";
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = (tt.Row_Row{ .h = row.h }).getGetValue();
+        const gv = row.as(tt.Row_Row).getGetValue();
         w.writeAll("<tr><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "id").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        const host = tt.callStringFn(gv, "host").toString().copy(&tmp_buf);
+        const host = gv.call("host").toString().copy(&tmp_buf);
         if (i == 0) {
             const cpy_len = @min(host.len, top_host_buf.len);
             @memcpy(top_host_buf[0..cpy_len], host[0..cpy_len]);
@@ -164,96 +177,96 @@ fn render(label: []const u8) void {
         }
         appendEsc(&w, host) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, tt.callStringFn(gv, "region").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, gv.call("region").toString().copy(&tmp_buf)) catch return;
         w.print("</td><td class=\"num\">{d:.1}</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.2}%</td></tr>", .{
-            tt.callStringFn(gv, "latency").toNumber(),
-            tt.callStringFn(gv, "throughput").toNumber(),
-            tt.callStringFn(gv, "uptime").toNumber(),
+            gv.call("latency").toNumber(),
+            gv.call("throughput").toNumber(),
+            gv.call("uptime").toNumber(),
         }) catch return;
     }
     w.writeAll("</tbody></table>") catch return;
-    g_wrap.asElement().setInnerHTML(w.buffered());
+    app.wrap.setInnerHTML(w.buffered());
 
     const m = std.fmt.bufPrint(&meta_buf, "{s} · {d} rows · top node: {s}", .{ label, nrows, top_host }) catch label;
-    g_meta.asNode().setTextContent(m);
+    app.meta.setTextContent(m);
 }
 
-const BTN_IDS = [5]usize{ 0, 1, 2, 3, 4 };
-fn onClick(ctx: ?*anyopaque, _: dom.PointerEvent) void {
-    const idx = @as(*const usize, @ptrCast(@alignCast(ctx.?))).*;
+fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
+
+    const app = ctx.app;
     const next = tt.JsArray.new();
     var label: []const u8 = "Sort: unsorted (data order)";
-    if (idx == 0) {
-        next.push(sortSpec("region", false));
-        next.push(sortSpec("latency", false));
+    if (ctx.id == 0) {
+        next.push(.{ .id = "region", .desc = false });
+        next.push(.{ .id = "latency", .desc = false });
         label = "Sort: region asc, latency asc";
-    } else if (idx == 1) {
-        next.push(sortSpec("latency", false));
+    } else if (ctx.id == 1) {
+        next.push(.{ .id = "latency", .desc = false });
         label = "Sort: latency asc";
-    } else if (idx == 2) {
-        next.push(sortSpec("throughput", true));
+    } else if (ctx.id == 2) {
+        next.push(.{ .id = "throughput", .desc = true });
         label = "Sort: throughput desc";
-    } else if (idx == 3) {
-        next.push(sortSpec("host", false));
+    } else if (ctx.id == 3) {
+        next.push(.{ .id = "host", .desc = false });
         label = "Sort: host asc";
     }
-    tt.callTableRowSortingSetSorting((tt.Table_RowSorting{ .h = g_table.h }).getSetSorting(), .{ .h = next.h });
-    render(label);
+    app.table.as(tt.Table_RowSorting).getSetSorting().call(next);
+    render(app, label);
 }
 
 export fn start() void {
-    const sort_fns = tt.makeObjectMap();
-    sort_fns.setAt("alphanumeric", .{ .h = tt.getSortFnAlphanumeric().h });
-    sort_fns.setAt("basic", .{ .h = tt.getSortFnBasic().h });
-    sort_fns.setAt("text", .{ .h = tt.getSortFnText().h });
+    const scope = tt.JsScope.open();
+    defer scope.deinit();
 
-    const features = tt.makeObjectMap();
-    features.setAt("coreReactivityFeature", .{ .h = makeReactivity().h });
-    features.setAt("rowSortingFeature", .{ .h = tt.getRowSortingFeature().h });
-    features.setAt("coreRowModel", .{ .h = tt.createCoreRowModel().h });
-    features.setAt("sortedRowModel", .{ .h = tt.createSortedRowModel().h });
-    features.setAt("sortFns", .{ .h = sort_fns.h });
+    const opts = tt.JsValue.obj(.{
+        .features = .{
+            .coreReactivityFeature = makeReactivity(&g_app),
+            .rowSortingFeature = tt.getRowSortingFeature(),
+            .coreRowModel = tt.createCoreRowModel(),
+            .sortedRowModel = tt.createSortedRowModel(),
+            .sortFns = .{
+                .alphanumeric = tt.getSortFnAlphanumeric(),
+                .basic = tt.getSortFnBasic(),
+                .text = tt.getSortFnText(),
+            },
+        },
+        .data = .{
+            nodeRow("N-01", "eu-west-1a", "CH", 12.4, 4200, 99.98),
+            nodeRow("N-02", "eu-west-1b", "CH", 8.7, 5100, 99.99),
+            nodeRow("N-03", "eu-central-1a", "DE", 15.2, 3900, 99.91),
+            nodeRow("N-04", "eu-central-1b", "DE", 6.3, 6400, 99.97),
+            nodeRow("N-05", "eu-north-1a", "SE", 19.8, 2800, 99.85),
+            nodeRow("N-06", "eu-north-1b", "SE", 11.1, 4750, 99.95),
+            nodeRow("N-07", "us-east-1a", "US", 28.5, 7100, 99.94),
+            nodeRow("N-08", "us-east-1b", "US", 21.0, 5900, 99.96),
+        },
+        .columns = .{
+            colDef("id", "Node"),
+            colDef("host", "Host"),
+            colDef("region", "Region"),
+            colDef("latency", "Latency (ms)"),
+            colDef("throughput", "Req/s"),
+            colDef("uptime", "Uptime %"),
+        },
+        .initialState = .{
+            .sorting = .{
+                .{ .id = "region", .desc = false },
+                .{ .id = "latency", .desc = false },
+            },
+        },
+    });
 
-    const data = tt.JsArray.new();
-    data.push(nodeRow("N-01", "eu-west-1a", "CH", 12.4, 4200, 99.98));
-    data.push(nodeRow("N-02", "eu-west-1b", "CH", 8.7, 5100, 99.99));
-    data.push(nodeRow("N-03", "eu-central-1a", "DE", 15.2, 3900, 99.91));
-    data.push(nodeRow("N-04", "eu-central-1b", "DE", 6.3, 6400, 99.97));
-    data.push(nodeRow("N-05", "eu-north-1a", "SE", 19.8, 2800, 99.85));
-    data.push(nodeRow("N-06", "eu-north-1b", "SE", 11.1, 4750, 99.95));
-    data.push(nodeRow("N-07", "us-east-1a", "US", 28.5, 7100, 99.94));
-    data.push(nodeRow("N-08", "us-east-1b", "US", 21.0, 5900, 99.96));
-
-    const cols = tt.JsArray.new();
-    cols.push(colDef("id", "Node"));
-    cols.push(colDef("host", "Host"));
-    cols.push(colDef("region", "Region"));
-    cols.push(colDef("latency", "Latency (ms)"));
-    cols.push(colDef("throughput", "Req/s"));
-    cols.push(colDef("uptime", "Uptime %"));
-
-    const init_sort = tt.JsArray.new();
-    init_sort.push(sortSpec("region", false));
-    init_sort.push(sortSpec("latency", false));
-    const init_state = tt.makeObjectMap();
-    init_state.setAt("sorting", .{ .h = init_sort.h });
-
-    const opts = tt.makeObjectMap();
-    opts.setAt("features", .{ .h = features.h });
-    opts.setAt("data", .{ .h = data.h });
-    opts.setAt("columns", .{ .h = cols.h });
-    opts.setAt("initialState", .{ .h = init_state.h });
-
-    g_table = tt.constructTable(.{ .h = opts.h });
-    _ = tt.jsRetain(g_table);
+    g_app.table = tt.constructTable(opts.as(tt.TableOptions_Core)).retain();
     const doc = dom.getDocument();
-    g_wrap = doc.getElementById("table-wrap").?;
-    g_meta = doc.getElementById("meta").?;
+    g_app.wrap = doc.getElementById("table-wrap").?.retain();
+    g_app.meta = doc.getElementById("meta").?.retain();
 
     const btn_ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (btn_ids, 0..) |bid, i| {
-        const btn = doc.getElementById(bid).?;
-        btn.addEventListener(.click, dom.JsListener(dom.PointerEvent).from(onClick, @constCast(&BTN_IDS[i])), .{});
+        g_app.btns[i] = .{ .app = &g_app, .id = i };
+        doc.getElementById(bid).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
     }
-    render("Sort: region asc, latency asc");
+    render(&g_app, "Sort: region asc, latency asc");
 }

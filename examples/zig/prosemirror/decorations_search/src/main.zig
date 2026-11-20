@@ -6,114 +6,90 @@ const state_mod = pm.prosemirror_state;
 const view_mod = pm.prosemirror_view;
 
 fn holeSpec(tag: []const u8) model.DOMOutputSpec {
-    const a = pm.JsArray.new();
-    a.push(pm.JsValue.string(tag));
-    a.push(pm.JsValue.number(0));
-    return .{ .array = a };
+    return .{ .array = pm.JsArray.of(.{ tag, 0 }) };
 }
 
-fn headingToDOM(_: ?*anyopaque, n: model.Node) model.DOMOutputSpec {
+fn headingToDOM(n: model.Node) model.DOMOutputSpec {
     const lvl: i32 = @intFromFloat(n.getAttrs().getAt("level").toNumber());
     return holeSpec(if (lvl == 1) "h1" else "h2");
 }
-fn paraToDOM(_: ?*anyopaque, _: model.Node) model.DOMOutputSpec {
+fn paraToDOM(_: model.Node) model.DOMOutputSpec {
     return holeSpec("p");
 }
-fn codeBlockToDOM(_: ?*anyopaque, _: model.Node) model.DOMOutputSpec {
-    const inner = pm.JsArray.new();
-    inner.push(pm.JsValue.string("code"));
-    inner.push(pm.JsValue.number(0));
-    const outer = pm.JsArray.new();
-    outer.push(pm.JsValue.string("pre"));
-    outer.push(.{ .h = inner.h });
-    return .{ .array = outer };
+fn codeBlockToDOM(_: model.Node) model.DOMOutputSpec {
+    return .{ .array = pm.JsArray.of(.{ "pre", .{ "code", 0 } }) };
 }
-fn strongToDOM(_: ?*anyopaque, _: model.Mark, _: bool) model.DOMOutputSpec {
+fn strongToDOM(_: model.Mark, _: bool) model.DOMOutputSpec {
     return holeSpec("strong");
 }
-fn codeToDOM(_: ?*anyopaque, _: model.Mark, _: bool) model.DOMOutputSpec {
+fn codeToDOM(_: model.Mark, _: bool) model.DOMOutputSpec {
     return holeSpec("code");
 }
 
 fn makeSchema() model.Schema {
-    const doc = model.NodeSpec.create();
-    doc.setContent("block+");
+    const doc = model.NodeSpec.init(.{ .content = "block+" });
+    const heading = model.NodeSpec.init(.{
+        .attrs = .{ .level = model.AttributeSpec.init(.{ .default = 2 }) },
+        .content = "inline*",
+        .group = "block",
+        .toDOM = headingToDOM,
+    });
+    const para = model.NodeSpec.init(.{
+        .content = "inline*",
+        .group = "block",
+        .toDOM = paraToDOM,
+    });
+    const cblock = model.NodeSpec.init(.{
+        .content = "text*",
+        .marks = "",
+        .group = "block",
+        .code = true,
+        .toDOM = codeBlockToDOM,
+    });
+    const text = model.NodeSpec.init(.{ .group = "inline" });
 
-    const lvl = model.AttributeSpec.create();
-    lvl.setDefault(pm.JsValue.number(2));
-    const hattrs = pm.MarkSpec_attrs.create();
-    hattrs.setAt("level", lvl);
+    const ms = model.MarkSpec.init(.{ .toDOM = strongToDOM });
+    const mc = model.MarkSpec.init(.{ .toDOM = codeToDOM });
 
-    const heading = model.NodeSpec.create();
-    heading.setAttrs(hattrs);
-    heading.setContent("inline*");
-    heading.setGroup("block");
-    heading.setToDOM(pm.Node_to_DOMOutputSpec_fn.from(headingToDOM, null));
-
-    const para = model.NodeSpec.create();
-    para.setContent("inline*");
-    para.setGroup("block");
-    para.setToDOM(pm.Node_to_DOMOutputSpec_fn.from(paraToDOM, null));
-
-    const cblock = model.NodeSpec.create();
-    cblock.setContent("text*");
-    cblock.setMarks("");
-    cblock.setGroup("block");
-    cblock.setCode(true);
-    cblock.setToDOM(pm.Node_to_DOMOutputSpec_fn.from(codeBlockToDOM, null));
-
-    const text = model.NodeSpec.create();
-    text.setGroup("inline");
-
-    const nodes = model.NodeSpec.create();
-    nodes.setAt("doc", .{ .h = doc.h });
-    nodes.setAt("heading", .{ .h = heading.h });
-    nodes.setAt("paragraph", .{ .h = para.h });
-    nodes.setAt("code_block", .{ .h = cblock.h });
-    nodes.setAt("text", .{ .h = text.h });
-
-    const ms = model.MarkSpec.create();
-    ms.setToDOM(pm.Mark_boolean_to_DOMOutputSpec_fn.from(strongToDOM, null));
-    const mc = model.MarkSpec.create();
-    mc.setToDOM(pm.Mark_boolean_to_DOMOutputSpec_fn.from(codeToDOM, null));
-    const marks = model.MarkSpec.create();
-    marks.setAt("strong", .{ .h = ms.h });
-    marks.setAt("code", .{ .h = mc.h });
-
-    const spec = model.SchemaSpec.create();
-    spec.setNodes(.{ .h = nodes.h });
-    spec.setMarks(.{ .h = marks.h });
-    return model.Schema.new(spec);
+    return model.Schema.new(.{
+        .nodes = .{ .doc = doc, .heading = heading, .paragraph = para, .code_block = cblock, .text = text },
+        .marks = .{ .strong = ms, .code = mc },
+    });
 }
 
-var g_schema: model.Schema = undefined;
-var g_key: state_mod.PluginKey = undefined;
-var g_view: view_mod.EditorView = undefined;
-var g_doc: dom.Document = undefined;
-var g_meta: dom.HTMLElement = undefined;
-var g_active_btn: usize = 0;
+const App = struct {
+    schema: model.Schema = undefined,
+    key: state_mod.PluginKey = undefined,
+    view: view_mod.EditorView = std.mem.zeroes(view_mod.EditorView),
+    doc: dom.Document = undefined,
+    meta: dom.HTMLElement = undefined,
+    btns: [5]BtnCtx = undefined,
+    active_btn: usize = 0,
+};
 
-fn pNode(t: []const u8) model.Node {
-    return g_schema.node(.{ .string = pm.JsString.from("paragraph") }, null, .{ .content = .{ .Node = g_schema.text(t, null) } });
+const BtnCtx = struct { app: *App, id: usize };
+
+var g_app: App = .{};
+
+fn pNode(schema: model.Schema, t: []const u8) model.Node {
+    return schema.node("paragraph", null, .{ .content = schema.text(t, null) });
 }
 
-fn makeInitialDoc() model.Node {
-    const ha = model.Attrs.create();
-    ha.setAt("level", pm.JsValue.number(2));
-    const h = g_schema.node(.{ .string = pm.JsString.from("heading") }, ha, .{
-        .content = .{ .Node = g_schema.text("Immutable State & View Decorations", null) },
+fn makeInitialDoc(schema: model.Schema) model.Node {
+    const h = schema.node("heading", .{ .level = 2 }, .{
+        .content = schema.text("Immutable State & View Decorations", null),
     });
-    const cb = g_schema.node(.{ .string = pm.JsString.from("code_block") }, null, .{
-        .content = .{ .Node = g_schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view", null) },
+    const cb = schema.node("code_block", null, .{
+        .content = schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view", null),
     });
-    return g_schema.node(.{ .string = pm.JsString.from("doc") }, null, .{
-        .content = .{ .array = pm.JsArrayOf(model.Node).of(&.{
+    return schema.node("doc", null, .{
+        .content = &.{
             h,
-            pNode("A ProseMirror schema validates every document tree before state updates commit to the view."),
-            pNode("Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema."),
+            pNode(schema, "A ProseMirror schema validates every document tree before state updates commit to the view."),
+            pNode(schema, "Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema."),
             cb,
-            pNode("Inline decorations highlight matching tokens while node decorations outline matching blocks in the view."),
-        }) },
+            pNode(schema, "Inline decorations highlight matching tokens while node decorations outline matching blocks in the view."),
+        },
     });
 }
 
@@ -132,10 +108,8 @@ fn computeDecorations(doc: model.Node, query: []const u8) DecoStats {
         return .{ .set = view_mod.DecorationSet.getEmpty(), .inline_hits = 0, .block_hits = 0 };
     }
     const decos = pm.JsArrayOf(view_mod.Decoration).new();
-    const inl_attr = view_mod.DecorationAttrs.create();
-    inl_attr.setClass("pm-match");
-    const blk_attr = view_mod.DecorationAttrs.create();
-    blk_attr.setClass("pm-hit-block");
+    const inl_attr = view_mod.DecorationAttrs.init(.{ .class = "pm-match" });
+    const blk_attr = view_mod.DecorationAttrs.init(.{ .class = "pm-hit-block" });
 
     var inl_hits: usize = 0;
     var blk_hits: usize = 0;
@@ -150,12 +124,12 @@ fn computeDecorations(doc: model.Node, query: []const u8) DecoStats {
             const ch = blk.child(@floatFromInt(j));
             if (ch.getIsText()) {
                 var tbuf: [1024]u8 = undefined;
-                const txt = ch.getTextContent().read(&tbuf);
+                const txt = ch.getTextContent().copy(&tbuf);
                 var at: usize = 0;
                 while (findCi(txt, query, at)) |pos_idx| {
                     const fp = inline_pos + @as(f64, @floatFromInt(pos_idx));
                     const tp = fp + @as(f64, @floatFromInt(query.len));
-                    decos.push(view_mod.Decoration.@"inline"(fp, tp, inl_attr, .{}));
+                    decos.push(view_mod.Decoration.@"inline"(fp, tp, inl_attr, null));
                     inl_hits += 1;
                     matched = true;
                     at = pos_idx + query.len;
@@ -164,7 +138,7 @@ fn computeDecorations(doc: model.Node, query: []const u8) DecoStats {
             inline_pos += ch.getNodeSize();
         }
         if (matched) {
-            decos.push(view_mod.Decoration.node(block_pos, block_pos + blk.getNodeSize(), blk_attr, .{}));
+            decos.push(view_mod.Decoration.node(block_pos, block_pos + blk.getNodeSize(), blk_attr, null));
             blk_hits += 1;
         }
         block_pos += blk.getNodeSize();
@@ -172,28 +146,34 @@ fn computeDecorations(doc: model.Node, query: []const u8) DecoStats {
     return .{ .set = view_mod.DecorationSet.create(doc, decos), .inline_hits = inl_hits, .block_hits = blk_hits };
 }
 
-fn searchInit(_: ?*anyopaque, _: state_mod.EditorStateConfig, _: state_mod.EditorState) pm.JsValue {
+fn searchInit(_: state_mod.EditorStateConfig, _: state_mod.EditorState) pm.JsValue {
     return pm.JsValue.string("state");
 }
-fn searchApply(_: ?*anyopaque, tr: state_mod.Transaction, prev: pm.JsValue, _: state_mod.EditorState, _: state_mod.EditorState) pm.JsValue {
-    const mv = tr.getMeta2(.{ .string = pm.JsString.from("search") });
+
+fn searchApply(tr: state_mod.Transaction, prev: pm.JsValue, _: state_mod.EditorState, _: state_mod.EditorState) pm.JsValue {
+    const mv = tr.getMeta2("search");
     if (mv.h != 0) return mv;
-    return pm.jsRetain(prev);
-}
-fn searchDecos(_: ?*anyopaque, st: state_mod.EditorState) ?view_mod.DecorationSource {
-    const qv = g_key.getState(st);
-    var qbuf: [64]u8 = undefined;
-    const q = if (qv.h != 0) (pm.JsString{ .h = qv.h }).read(&qbuf) else "";
-    const dset = computeDecorations(st.getDoc(), q).set;
-    return .{ .h = dset.h };
+    return prev.retain();
 }
 
-fn syncMeta(st: state_mod.EditorState) void {
-    const qv = g_key.getState(st);
+fn searchDecos(app: *App, st: state_mod.EditorState) ?view_mod.DecorationSource {
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
+    const qv = app.key.getState(st);
     var qbuf: [64]u8 = undefined;
-    const q = if (qv.h != 0) (pm.JsString{ .h = qv.h }).read(&qbuf) else "";
+    const q = if (qv.h != 0) qv.as(pm.JsString).copy(&qbuf) else "";
+    return computeDecorations(st.getDoc(), q).set.retain().as(view_mod.DecorationSource);
+}
+
+fn syncMeta(app: *App, st: state_mod.EditorState) void {
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
+
+    const qv = app.key.getState(st);
+    var qbuf: [64]u8 = undefined;
+    const q = if (qv.h != 0) qv.as(pm.JsString).copy(&qbuf) else "";
     const stats = computeDecorations(st.getDoc(), q);
-    const total = stats.set.find(.{}).len();
+    const total = stats.set.find(null).len();
 
     var qdisp_buf: [80]u8 = undefined;
     const qdisp = if (q.len == 0) "(none)" else (std.fmt.bufPrint(&qdisp_buf, "\"{s}\"", .{q}) catch q);
@@ -205,71 +185,71 @@ fn syncMeta(st: state_mod.EditorState) void {
         stats.block_hits,
         total,
     }) catch "Updated search";
-    g_meta.asNode().setTextContent(msg);
+    app.meta.setTextContent(msg);
 
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
-        g_doc.getElementById(id).?.asElement().setClassName(if (i == g_active_btn) "active" else "");
+        app.doc.getElementById(id).?.setClassName(if (i == app.active_btn) "active" else "");
     }
 }
 
-fn onDispatch(_: ?*anyopaque, tr: state_mod.Transaction) void {
-    if (g_view.h == 0) return;
-    const next = g_view.getState().apply(tr);
-    g_view.updateState(next);
-    syncMeta(next);
+fn onDispatch(app: *App, tr: state_mod.Transaction) void {
+    if (app.view.h == 0) return;
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
+    const next = app.view.getState().apply(tr);
+    app.view.updateState(next);
+    syncMeta(app, next);
 }
 
-const BTN_IDS = [5]usize{ 0, 1, 2, 3, 4 };
 const QUERIES = [5][]const u8{ "state", "schema", "transaction", "view", "" };
-fn onClick(ctx: ?*anyopaque, _: dom.PointerEvent) void {
-    const idx = @as(*const usize, @ptrCast(@alignCast(ctx.?))).*;
-    g_active_btn = idx;
-    const tr = g_view.getState().getTr();
-    _ = tr.setMeta2(.{ .string = pm.JsString.from("search") }, pm.JsValue.string(QUERIES[idx]));
-    pm.callTransactionFn(g_view.getDispatch(), tr);
+
+fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
+
+    const app = ctx.app;
+    app.active_btn = ctx.id;
+    const tr = app.view.getState().getTr().setMeta2("search", QUERIES[ctx.id]);
+    app.view.getDispatch().call(tr);
 }
 
 export fn start() void {
-    g_doc = dom.getDocument();
-    _ = dom.jsRetain(g_doc);
-    g_meta = g_doc.getElementById("meta").?;
-    _ = dom.jsRetain(g_meta);
-    g_schema = makeSchema();
-    _ = pm.jsRetain(g_schema);
+    const scope = pm.JsScope.open();
+    defer scope.deinit();
 
-    g_key = state_mod.PluginKey.new("search");
-    _ = pm.jsRetain(g_key);
+    g_app.doc = dom.getDocument().retain();
+    g_app.meta = g_app.doc.getElementById("meta").?.retain();
+    g_app.schema = makeSchema().retain();
+    g_app.key = state_mod.PluginKey.new("search").retain();
 
-    const field = state_mod.StateField.create();
-    field.setInit(pm.StateField_init.from(searchInit, null));
-    field.setApply(pm.StateField_apply.from(searchApply, null));
+    const pspec = state_mod.PluginSpec.init(.{
+        .key = g_app.key,
+        .state = state_mod.StateField.init(.{
+            .init = searchInit,
+            .apply = searchApply,
+        }),
+        .props = view_mod.EditorProps.init(.{
+            .decorations = .{ searchDecos, &g_app },
+        }),
+    });
 
-    const eprops = view_mod.EditorProps.create();
-    eprops.setDecorations(pm.any_EditorState_to_opt_DecorationSource_fn.from(searchDecos, null));
+    const st = state_mod.EditorState.create(.{
+        .schema = g_app.schema,
+        .doc = makeInitialDoc(g_app.schema),
+        .plugins = &.{state_mod.Plugin.new(pspec)},
+    });
 
-    const pspec = state_mod.PluginSpec.create();
-    pspec.setKey(g_key);
-    pspec.setState(field);
-    pspec.setProps(eprops);
-
-    const scfg = state_mod.EditorStateConfig.create();
-    scfg.setSchema(g_schema);
-    scfg.setDoc(makeInitialDoc());
-    scfg.setPlugins(pm.JsArrayOf(state_mod.Plugin).of(&.{state_mod.Plugin.new(pspec)}));
-
-    const props = view_mod.DirectEditorProps.create();
-    props.setState(state_mod.EditorState.create(scfg));
-    props.setDispatchTransaction(pm.Transaction_fn.from(onDispatch, null));
-
-    const mount = g_doc.getElementById("editor").?;
-    g_view = view_mod.EditorView.new(.{ .Node_2 = mount.asNode() }, props);
-    _ = pm.jsRetain(g_view);
-    syncMeta(g_view.getState());
+    const mount = g_app.doc.getElementById("editor").?;
+    g_app.view = view_mod.EditorView.new(mount, .{
+        .state = st,
+        .dispatchTransaction = .{ onDispatch, &g_app },
+    }).retain();
+    syncMeta(&g_app, g_app.view.getState());
 
     const ids = [5][]const u8{ "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (ids, 0..) |id, i| {
-        const btn = g_doc.getElementById(id).?;
-        btn.addEventListener(.click, dom.JsListener(dom.PointerEvent).from(onClick, @constCast(&BTN_IDS[i])), .{});
+        g_app.btns[i] = .{ .app = &g_app, .id = i };
+        g_app.doc.getElementById(id).?.addEventListener(.click, .{ onClick, &g_app.btns[i] }, null);
     }
 }

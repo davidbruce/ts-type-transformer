@@ -2,21 +2,26 @@ const std = @import("std");
 const dom = @import("dom");
 const lf = @import("leaflet");
 
-var g_clicks: u32 = 0;
-
-fn onClick(_: ?*anyopaque, e: lf.LeafletMouseEvent) void {
+fn onClick(clicks: *u32, e: lf.LeafletMouseEvent) void {
+    const scope = lf.JsScope.open();
+    defer scope.deinit();
     if (e.getLatlng().getLat() > 0.0) {
-        g_clicks += 1;
+        clicks.* += 1;
     }
 }
 
 export fn start() void {
-    const m_opts = lf.MapOptions.create();
-    m_opts.setAttributionControl(false);
-    m_opts.setZoomAnimation(false);
-    m_opts.setFadeAnimation(false);
-    m_opts.setMarkerZoomAnimation(false);
-    const m = lf.map(.{ .string = lf.JsString.from("map") }, .{ .options = m_opts });
+    const scope = lf.JsScope.open();
+    defer scope.deinit();
+
+    var clicks: u32 = 0;
+
+    const m = lf.map("map", .{
+        .attributionControl = false,
+        .zoomAnimation = false,
+        .fadeAnimation = false,
+        .markerZoomAnimation = false,
+    });
 
     const tips = [_][]const u8{
         "01 · Geneva", "02 · Lausanne", "03 · Bern", "04 · Zurich", "05 · Basel",
@@ -25,73 +30,60 @@ export fn start() void {
         "<span>01</span>", "<span>02</span>", "<span>03</span>", "<span>04</span>", "<span>05</span>",
     };
     const pts = [_]lf.LatLng{
-        lf.latLng(46.2044, 6.1432, .{}),
-        lf.latLng(46.5197, 6.6323, .{}),
-        lf.latLng(46.9480, 7.4474, .{}),
-        lf.latLng(47.3769, 8.5417, .{}),
-        lf.latLng(47.5596, 7.5886, .{}),
+        lf.latLng(46.2044, 6.1432, null),
+        lf.latLng(46.5197, 6.6323, null),
+        lf.latLng(46.9480, 7.4474, null),
+        lf.latLng(47.3769, 8.5417, null),
+        lf.latLng(47.5596, 7.5886, null),
     };
 
-    const line_pts = lf.JsArray.new();
-    for (pts) |pt| line_pts.push(.{ .h = pt.h });
+    const corridor = lf.polyline(&pts, .{ .smoothFactor = 1.0, .color = "#404040", .weight = 2.5 });
+    _ = corridor.addTo(m);
 
-    const p_opts = lf.PolylineOptions.create();
-    p_opts.setSmoothFactor(1.0);
-    p_opts.setColor("#404040");
-    p_opts.setWeight(2.5);
-    const corridor = lf.polyline(line_pts, .{ .options = p_opts });
-    _ = corridor.addTo(.{ .Map = m });
-
-    const dot_opts = lf.CircleMarkerOptions.create();
-    dot_opts.setRadius(6.0);
-    dot_opts.setColor("#111111");
-    dot_opts.setWeight(2.0);
-    dot_opts.setFillColor("#ffffff");
-    dot_opts.setFillOpacity(1.0);
-
-    const pin_size = lf.PointExpression{ .Point = lf.point(22.0, 22.0, .{}) };
-    const pin_anchor = lf.PointExpression{ .Point = lf.point(11.0, 11.0, .{}) };
+    const dot_opts = lf.CircleMarkerOptions.init(.{
+        .radius = 6.0,
+        .color = "#111111",
+        .weight = 2.0,
+        .fillColor = "#ffffff",
+        .fillOpacity = 1.0,
+    });
+    const pin_size = lf.point(22.0, 22.0, null);
+    const pin_anchor = lf.point(11.0, 11.0, null);
 
     for (pts, 0..) |pt, i| {
-        const cm = lf.circleMarker(.{ .LatLng = pt }, .{ .options = dot_opts });
-        _ = cm.bindTooltip(.{ .string = lf.JsString.from(tips[i]) }, .{});
-        _ = cm.addTo(.{ .Map = m });
+        const cm = lf.circleMarker(pt, dot_opts);
+        _ = cm.bindTooltip(tips[i], null);
+        _ = cm.addTo(m);
 
-        const d_opts = lf.DivIconOptions.create();
-        d_opts.setClassName("mono-pin");
-        d_opts.setHtml(.{ .string = lf.JsString.from(htmls[i]) });
-        d_opts.setIconSize(pin_size);
-        d_opts.setIconAnchor(pin_anchor);
-
-        const mk_opts = lf.MarkerOptions.create();
-        mk_opts.setIcon(.{ .DivIcon = lf.divIcon(d_opts) });
-        _ = lf.marker(.{ .LatLng = pt }, .{ .options = mk_opts }).addTo(.{ .Map = m });
+        _ = lf.marker(pt, .{
+            .icon = lf.divIcon(.{
+                .className = "mono-pin",
+                .html = htmls[i],
+                .iconSize = pin_size,
+                .iconAnchor = pin_anchor,
+            }),
+        }).addTo(m);
     }
 
-    _ = m.fitBounds(.{ .LatLngBounds = corridor.getBounds().pad(0.15) }, .{});
+    _ = m.fitBounds(corridor.getBounds().pad(0.15), null);
 
-    const pop_opts = lf.PopupOptions.create();
-    pop_opts.setMaxWidth(220.0);
-    const note = lf.popup(.{ .LatLng = pts[2] }, .{ .options = pop_opts });
-    _ = note.setContent(.{ .string = lf.JsString.from("03 Bern · 46.95N, 7.45E") });
+    const note = lf.popup(pts[2], .{ .maxWidth = 220.0 });
+    _ = note.setContent("03 Bern · 46.95N, 7.45E");
     _ = note.openOn(m);
 
-    const handler = lf.LeafletMouseEventHandlerFn.from(onClick, null);
-    _ = m.onWithCanvasAddEventListenerTypeClick(.click, handler, .{});
-    const payload = lf.LeafletMouseEvent.create();
-    payload.setLatlng(pts[2]);
-    _ = m.fire("click", .{ .data = .{ .h = payload.h } });
-    _ = m.fire("click", .{ .data = .{ .h = payload.h } });
+    _ = m.onWithCanvasAddEventListenerTypeClick(.click, .{ onClick, &clicks }, null);
+    const payload = lf.LeafletMouseEvent.init(.{ .latlng = pts[2] });
+    _ = m.fire("click", .{ .data = payload });
+    _ = m.fire("click", .{ .data = payload });
 
     var buf: [160]u8 = undefined;
     const msg = std.fmt.bufPrint(
         &buf,
         "5 DivIcon stations · popup open (Bern) · {d} synthetic clicks dispatched",
-        .{g_clicks},
+        .{clicks},
     ) catch "5 DivIcon stations";
 
-    const doc = dom.getDocument();
-    if (doc.getElementById("meta")) |meta| {
-        meta.asNode().setTextContent(msg);
+    if (dom.getDocument().getElementById("meta")) |meta| {
+        meta.setTextContent(msg);
     }
 }

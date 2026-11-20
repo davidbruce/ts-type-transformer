@@ -3,38 +3,28 @@ const dom = @import("dom");
 const katex = @import("katex");
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, .{});
-    if (cls.len > 0) el.asElement().setClassName(cls);
-    if (text) |t| el.asNode().setTextContent(t);
+    const el = doc.createElementWithString(tag, null);
+    if (cls.len > 0) el.setClassName(cls);
+    if (text) |t| el.setTextContent(t);
     return el;
 }
 
-fn appendAndRelease(parent: dom.HTMLElement, child: dom.HTMLElement) void {
-    const res = parent.asNode().appendChild(child.asNode());
-    dom.jsRelease(res);
-    dom.jsRelease(child);
-}
-
 export fn start() void {
+    const scope = dom.JsScope.open();
+    defer scope.deinit();
+
     const doc = dom.getDocument();
-    defer dom.jsRelease(doc);
-    const app = doc.getElementById("app").?;
-    defer dom.jsRelease(app);
+    const app = doc.getElementById("app") orelse return;
 
     const head = makeEl(doc, "div", "head", null);
-    appendAndRelease(head, makeEl(doc, "h1", "", "KaTeX Formula Gallery (Zig)"));
-    const ver = katex.getVersion();
-    defer katex.jsRelease(ver);
-    var vbuf: [64]u8 = undefined;
+    _ = head.appendChild(makeEl(doc, "h1", "", "KaTeX Formula Gallery (Zig)"));
     var bbuf: [72]u8 = undefined;
-    const badge_txt = std.fmt.bufPrint(&bbuf, "katex v{s}", .{ver.copy(&vbuf)}) catch "katex";
-    appendAndRelease(head, makeEl(doc, "span", "badge", badge_txt));
-    appendAndRelease(app, head);
+    const badge_txt = std.fmt.bufPrint(&bbuf, "katex v{f}", .{katex.getVersion()}) catch "katex";
+    _ = head.appendChild(makeEl(doc, "span", "badge", badge_txt));
+    _ = app.appendChild(head);
 
     const grid = makeEl(doc, "div", "grid", null);
-    const opts = katex.KatexOptions.create();
-    defer katex.jsRelease(opts);
-    opts.setDisplayMode(true);
+    const opts = katex.KatexOptions.init(.{ .displayMode = true });
 
     const Entry = struct { name: []const u8, tex: []const u8 };
     const formulas = [_]Entry{
@@ -47,13 +37,13 @@ export fn start() void {
 
     for (formulas) |f| {
         const card = makeEl(doc, "div", "card", null);
-        appendAndRelease(card, makeEl(doc, "div", "label", f.name));
-        appendAndRelease(card, makeEl(doc, "pre", "tex", f.tex));
+        _ = card.appendChild(makeEl(doc, "div", "label", f.name));
+        _ = card.appendChild(makeEl(doc, "pre", "tex", f.tex));
         const slot = makeEl(doc, "div", "slot", null);
-        katex.render(f.tex, slot, .{ .options = opts });
-        appendAndRelease(card, slot);
-        appendAndRelease(grid, card);
+        katex.render(f.tex, slot, opts);
+        _ = card.appendChild(slot);
+        _ = grid.appendChild(card);
     }
 
-    appendAndRelease(app, grid);
+    _ = app.appendChild(grid);
 }

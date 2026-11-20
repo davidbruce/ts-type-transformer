@@ -4,28 +4,23 @@ const m = @import("marked");
 var html_buf: [8192]u8 = undefined;
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, .{});
-    if (cls.len > 0) el.asElement().setClassName(cls);
-    if (text) |t| el.asNode().setTextContent(t);
+    const el = doc.createElementWithString(tag, null);
+    if (cls.len > 0) el.setClassName(cls);
+    if (text) |t| el.setTextContent(t);
     return el;
 }
 
-fn appendAndRelease(parent: dom.HTMLElement, child: dom.HTMLElement) void {
-    const res = parent.asNode().appendChild(child.asNode());
-    dom.jsRelease(res);
-    dom.jsRelease(child);
-}
-
 export fn start() void {
+    const scope = dom.JsScope.open();
+    defer scope.deinit();
+
     const doc = dom.getDocument();
-    defer dom.jsRelease(doc);
-    const app = doc.getElementById("app").?;
-    defer dom.jsRelease(app);
+    const app = doc.getElementById("app") orelse return;
 
     const head = makeEl(doc, "div", "head", null);
-    appendAndRelease(head, makeEl(doc, "h1", "", "Marked Document Preview (Zig)"));
-    appendAndRelease(head, makeEl(doc, "span", "badge", "marked"));
-    appendAndRelease(app, head);
+    _ = head.appendChild(makeEl(doc, "h1", "", "Marked Document Preview (Zig)"));
+    _ = head.appendChild(makeEl(doc, "span", "badge", "marked"));
+    _ = app.appendChild(head);
 
     const markdown_src =
         "# Marked Wireframe Spec\n\n" ++
@@ -46,20 +41,16 @@ export fn start() void {
     const grid = makeEl(doc, "div", "grid", null);
 
     const src_card = makeEl(doc, "div", "card", null);
-    appendAndRelease(src_card, makeEl(doc, "div", "label", "Markdown Source"));
-    appendAndRelease(src_card, makeEl(doc, "pre", "src", markdown_src));
+    _ = src_card.appendChild(makeEl(doc, "div", "label", "Markdown Source"));
+    _ = src_card.appendChild(makeEl(doc, "pre", "src", markdown_src));
 
     const out_card = makeEl(doc, "div", "card", null);
-    appendAndRelease(out_card, makeEl(doc, "div", "label", "Rendered HTML"));
+    _ = out_card.appendChild(makeEl(doc, "div", "label", "Rendered HTML"));
     const md_out = makeEl(doc, "div", "md-out", null);
-    const none = m.marked_options_no_async.create();
-    defer m.jsRelease(none);
-    const html = m.marked(markdown_src, none);
-    defer m.jsRelease(html);
-    md_out.asElement().setInnerHTML(html.copy(&html_buf));
+    md_out.setInnerHTML(m.marked(markdown_src, .{}).copy(&html_buf));
 
-    appendAndRelease(out_card, md_out);
-    appendAndRelease(grid, src_card);
-    appendAndRelease(grid, out_card);
-    appendAndRelease(app, grid);
+    _ = out_card.appendChild(md_out);
+    _ = grid.appendChild(src_card);
+    _ = grid.appendChild(out_card);
+    _ = app.appendChild(grid);
 }

@@ -4,51 +4,39 @@ const katex = @import("katex");
 var html_buf: [65536]u8 = undefined;
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, .{});
-    if (cls.len > 0) el.asElement().setClassName(cls);
-    if (text) |t| el.asNode().setTextContent(t);
+    const el = doc.createElementWithString(tag, null);
+    if (cls.len > 0) el.setClassName(cls);
+    if (text) |t| el.setTextContent(t);
     return el;
 }
 
-fn appendAndRelease(parent: dom.HTMLElement, child: dom.HTMLElement) void {
-    const res = parent.asNode().appendChild(child.asNode());
-    dom.jsRelease(res);
-    dom.jsRelease(child);
-}
-
-fn addMacro(macros: katex.KatexOptions_macros, name: []const u8, expansion: []const u8) void {
-    const s = katex.JsString.from(expansion);
-    defer katex.jsRelease(s);
-    macros.setAt(name, .{ .h = s.h });
-}
-
 export fn start() void {
+    const scope = dom.JsScope.open();
+    defer scope.deinit();
+
     const doc = dom.getDocument();
-    defer dom.jsRelease(doc);
-    const app = doc.getElementById("app").?;
-    defer dom.jsRelease(app);
+    const app = doc.getElementById("app") orelse return;
 
     const head = makeEl(doc, "div", "head", null);
-    appendAndRelease(head, makeEl(doc, "h1", "", "Custom Macros (Zig)"));
-    appendAndRelease(head, makeEl(doc, "span", "badge", "\\RR, \\NN, \\dd, \\norm"));
-    appendAndRelease(app, head);
+    _ = head.appendChild(makeEl(doc, "h1", "", "Custom Macros (Zig)"));
+    _ = head.appendChild(makeEl(doc, "span", "badge", "\\RR, \\NN, \\dd, \\norm"));
+    _ = app.appendChild(head);
 
     const macros = katex.KatexOptions_macros.create();
-    defer katex.jsRelease(macros);
-    addMacro(macros, "\\RR", "\\mathbb{R}");
-    addMacro(macros, "\\NN", "\\mathbb{N}");
-    addMacro(macros, "\\dd", "\\mathrm{d}");
-    addMacro(macros, "\\norm", "\\left\\| #1 \\right\\|");
+    macros.setAt("\\RR", "\\mathbb{R}");
+    macros.setAt("\\NN", "\\mathbb{N}");
+    macros.setAt("\\dd", "\\mathrm{d}");
+    macros.setAt("\\norm", "\\left\\| #1 \\right\\|");
 
-    const opts = katex.KatexOptions.create();
-    defer katex.jsRelease(opts);
-    opts.setDisplayMode(true);
-    opts.setMacros(macros);
+    const opts = katex.KatexOptions.init(.{
+        .displayMode = true,
+        .macros = macros,
+    });
 
     const legend = makeEl(doc, "div", "card", null);
-    appendAndRelease(legend, makeEl(doc, "div", "label", "Defined Macros"));
-    appendAndRelease(legend, makeEl(doc, "pre", "tex", "\\RR -> \\mathbb{R}\n\\NN -> \\mathbb{N}\n\\dd -> \\mathrm{d}\n\\norm -> \\left\\| #1 \\right\\|"));
-    appendAndRelease(app, legend);
+    _ = legend.appendChild(makeEl(doc, "div", "label", "Defined Macros"));
+    _ = legend.appendChild(makeEl(doc, "pre", "tex", "\\RR -> \\mathbb{R}\n\\NN -> \\mathbb{N}\n\\dd -> \\mathrm{d}\n\\norm -> \\left\\| #1 \\right\\|"));
+    _ = app.appendChild(legend);
 
     const grid = makeEl(doc, "div", "grid", null);
     const Expr = struct { name: []const u8, tex: []const u8 };
@@ -61,15 +49,13 @@ export fn start() void {
 
     for (exprs) |e| {
         const card = makeEl(doc, "div", "card", null);
-        appendAndRelease(card, makeEl(doc, "div", "label", e.name));
-        appendAndRelease(card, makeEl(doc, "pre", "tex", e.tex));
+        _ = card.appendChild(makeEl(doc, "div", "label", e.name));
+        _ = card.appendChild(makeEl(doc, "pre", "tex", e.tex));
         const slot = makeEl(doc, "div", "slot", null);
-        const html = katex.renderToString(e.tex, .{ .options = opts });
-        defer katex.jsRelease(html);
-        slot.asElement().setInnerHTML(html.copy(&html_buf));
-        appendAndRelease(card, slot);
-        appendAndRelease(grid, card);
+        slot.setInnerHTML(katex.renderToString(e.tex, opts).copy(&html_buf));
+        _ = card.appendChild(slot);
+        _ = grid.appendChild(card);
     }
 
-    appendAndRelease(app, grid);
+    _ = app.appendChild(grid);
 }

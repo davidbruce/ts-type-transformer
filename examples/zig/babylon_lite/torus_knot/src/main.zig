@@ -2,181 +2,106 @@ const std = @import("std");
 const dom = @import("dom");
 const b = @import("babylonjs_lite");
 
-var g_canvas: dom.HTMLCanvasElement = undefined;
-var g_engine: b.EngineContext = undefined;
-var g_knot_rot: b.EulerProxy = undefined;
-var g_orb_pos: b.ObservableVec3 = undefined;
-var g_orb_light_pos: b.ObservableVec3 = undefined;
-var g_elapsed: f64 = 0.0;
+const App = struct {
+    canvas: dom.HTMLCanvasElement = undefined,
+    engine: b.EngineContext = undefined,
+    knot_rot: b.EulerProxy = undefined,
+    orb_pos: b.ObservableVec3 = undefined,
+    elapsed: f64 = 0.0,
+};
+
+var g_app: App = .{};
 
 fn setStatusError(err: b.JsValue) void {
-    const doc = dom.getDocument();
-    defer dom.jsRelease(doc);
-    if (doc.getElementById("status")) |status| {
-        defer dom.jsRelease(status);
+    const scope = b.JsScope.open();
+    defer scope.deinit();
+    if (dom.getDocument().getElementById("status")) |status| {
         const msg = b.jsErrorMessage(err);
-        defer b.jsRelease(msg);
-        var msg_buf: [256]u8 = undefined;
-        var out_buf: [320]u8 = undefined;
-        const msg_slice = msg.copy(&msg_buf);
-        const text = std.fmt.bufPrint(&out_buf, "WebGPU / Babylon Lite error: {s}", .{msg_slice}) catch return;
-        status.asNode().setTextContent(text);
+        var buf: [320]u8 = undefined;
+        const text = std.fmt.bufPrint(&buf, "WebGPU / Babylon Lite error: {f}", .{msg}) catch return;
+        status.setTextContent(text);
     }
 }
 
-fn onBeforeRender(_: ?*anyopaque, delta_ms: f64) void {
-    g_elapsed += delta_ms * 0.001;
-    g_knot_rot.setY(g_elapsed * 0.55);
-    g_knot_rot.setX(@sin(g_elapsed * 0.4) * 0.25);
-    const x = @cos(g_elapsed * 0.9) * 2.8;
-    const y = 2.0 + @sin(g_elapsed * 1.8) * 0.45;
-    const z = @sin(g_elapsed * 0.9) * 2.8;
-    g_orb_pos.set(x, y, z);
-    g_orb_light_pos.set(x, y, z);
+fn onBeforeRender(app: *App, delta_ms: f64) void {
+    app.elapsed += delta_ms * 0.001;
+    app.knot_rot.setY(app.elapsed * 0.48);
+    app.knot_rot.setX(@sin(app.elapsed * 0.5) * 0.25);
+    app.orb_pos.set(@cos(app.elapsed * 0.9) * 3.8, 1.5 + @sin(app.elapsed * 1.3) * 0.75, @sin(app.elapsed * 0.9) * 3.8);
 }
 
-fn onStarted(_: ?*anyopaque, ok: bool, val: b.JsValue) void {
+fn onStarted(ok: bool, val: b.JsValue) void {
     if (!ok) setStatusError(val);
 }
 
-fn onRegistered(_: ?*anyopaque, ok: bool, val: b.JsValue) void {
+fn onRegistered(app: *App, ok: bool, val: b.JsValue) void {
+    const scope = b.JsScope.open();
+    defer scope.deinit();
     if (!ok) {
         setStatusError(val);
         return;
     }
-    const p = b.startEngine(g_engine);
-    defer b.jsRelease(p);
-    p.then(onStarted, null);
+    b.startEngine(app.engine).thenFn(onStarted);
 }
 
-fn onEngine(_: ?*anyopaque, ok: bool, val: b.JsValue) void {
+fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
+    const scope = b.JsScope.open();
+    defer scope.deinit();
     if (!ok) {
         setStatusError(val);
         return;
     }
-    g_engine = .{ .h = val.h };
-    _ = b.jsRetain(g_engine);
+    app.engine = val.as(b.EngineContext).retain();
 
-    const scene = b.createSceneContext(g_engine.asSurfaceContext(), .{});
-    defer b.jsRelease(scene);
-    const clear = dom.GPUColorDict.create();
-    defer dom.jsRelease(clear);
-    clear.setR(0.05);
-    clear.setG(0.07);
-    clear.setB(0.11);
-    clear.setA(1.0);
-    scene.setClearColor(clear);
+    const scene = b.createSceneContext(app.engine, null);
+    scene.setClearColor(.{ .r = 0.04, .g = 0.06, .b = 0.11, .a = 1.0 });
 
-    const cam_target = b.vec3(0.0, 1.6, 0.0);
-    defer b.jsRelease(cam_target);
-    const camera = b.createArcRotateCamera(std.math.pi / 4.0, std.math.pi / 3.0, 8.5, cam_target);
-    defer b.jsRelease(camera);
-    b.addToScene(scene, .{ .Camera = camera.asCamera() });
-    const ctrl = b.attachControl(camera, g_canvas, .{ .scene = scene });
-    defer b.jsRelease(ctrl);
+    const camera = b.createArcRotateCamera(std.math.pi / 3.0, std.math.pi / 2.8, 9.5, b.vec3(0.0, 1.4, 0.0));
+    b.addToScene(scene, camera);
+    _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
 
-    const hemi_dir = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 0.0, 1.0, 0.2 });
-    defer b.jsRelease(hemi_dir);
-    const hemi = b.createHemisphericLight(.{ .direction = hemi_dir, .intensity = 0.75 });
-    defer b.jsRelease(hemi);
-    const hdc = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 0.75, 0.85, 1.0 });
-    defer b.jsRelease(hdc);
-    const hgc = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 0.12, 0.14, 0.22 });
-    defer b.jsRelease(hgc);
-    hemi.setDiffuseColor(hdc);
-    hemi.setGroundColor(hgc);
-    b.addToScene(scene, .{ .LightBase = hemi.asLightBase() });
+    const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.2 }, .intensity = 0.75 });
+    b.addToScene(scene, hemi);
 
-    const dir_v = b.JsTuple(&.{ f64, f64, f64 }).of(.{ -1.0, -2.0, -1.2 });
-    defer b.jsRelease(dir_v);
-    const dir = b.createDirectionalLight(dir_v, .{ .intensity = 2.2 });
-    defer b.jsRelease(dir);
-    const dd = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 1.0, 0.96, 0.9 });
-    defer b.jsRelease(dd);
-    dir.setDiffuse(dd);
-    b.addToScene(scene, .{ .LightBase = dir.asLightBase() });
+    const dir = b.createDirectionalLight(.{ -1.0, -2.0, -1.0 }, .{ .intensity = 1.8 });
+    dir.setDiffuse(.{ 1.0, 0.96, 0.90 });
+    b.addToScene(scene, dir);
 
-    const orb_lpos = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 2.8, 1.6, 0.0 });
-    defer b.jsRelease(orb_lpos);
-    const orb_light = b.createPointLight(orb_lpos, .{ .intensity = 8.0 });
-    defer b.jsRelease(orb_light);
-    const old = b.JsTuple(&.{ f64, f64, f64 }).of(.{ 1.0, 0.45, 0.35 });
-    defer b.jsRelease(old);
-    orb_light.setDiffuse(old);
-    orb_light.setRange(12.0);
-    b.addToScene(scene, .{ .LightBase = orb_light.asLightBase() });
-    g_orb_light_pos = orb_light.getPosition();
+    const knot = b.createTorusKnot(app.engine, .{
+        .radius = 1.15,
+        .tube = 0.34,
+        .radialSegments = 48.0,
+        .tubularSegments = 160.0,
+    });
+    knot.getPosition().set(0.0, 2.0, 0.0);
+    knot.setMaterial(b.createPbrMaterial(.{
+        .baseColorFactor = .{ 0.35, 0.76, 1.0, 1.0 },
+        .metallicFactor = 0.4,
+        .roughnessFactor = 0.25,
+    }));
+    b.addToScene(scene, knot);
+    app.knot_rot = knot.getRotation().retain();
 
-    const kprops = b.createPbrMaterial_props.create();
-    defer b.jsRelease(kprops);
-    const kbcf = b.JsTuple(&.{ f64, f64, f64, f64 }).of(.{ 0.18, 0.78, 0.95, 1.0 });
-    defer b.jsRelease(kbcf);
-    kprops.setBaseColorFactor(kbcf);
-    kprops.setMetallicFactor(0.75);
-    kprops.setRoughnessFactor(0.22);
-    const knot_mat = b.createPbrMaterial(kprops);
-    defer b.jsRelease(knot_mat);
+    const orb = b.createSphere(app.engine, .{ .diameter = 0.55, .segments = 32.0 });
+    orb.setMaterial(b.createPbrMaterial(.{
+        .baseColorFactor = .{ 1.0, 0.42, 0.32, 1.0 },
+        .metallicFactor = 0.2,
+        .roughnessFactor = 0.35,
+    }));
+    b.addToScene(scene, orb);
+    app.orb_pos = orb.getPosition().retain();
 
-    const kopts = b.TorusKnotOptions.create();
-    defer b.jsRelease(kopts);
-    kopts.setRadius(1.15);
-    kopts.setTube(0.34);
-    kopts.setRadialSegments(48.0);
-    kopts.setTubularSegments(160.0);
-    const knot = b.createTorusKnot(g_engine, .{ .options = kopts });
-    defer b.jsRelease(knot);
-    const knot_pos = knot.getPosition();
-    defer b.jsRelease(knot_pos);
-    knot_pos.set(0.0, 2.0, 0.0);
-    knot.setMaterial(knot_mat.asMaterial());
-    b.addToScene(scene, .{ .Mesh = knot });
-    g_knot_rot = knot.getRotation();
+    const ground = b.createGround(app.engine, .{ .width = 16.0, .height = 16.0 });
+    ground.setMaterial(b.createGridMaterial(null));
+    b.addToScene(scene, ground);
 
-    const oprops = b.createPbrMaterial_props.create();
-    defer b.jsRelease(oprops);
-    const obcf = b.JsTuple(&.{ f64, f64, f64, f64 }).of(.{ 1.0, 0.42, 0.32, 1.0 });
-    defer b.jsRelease(obcf);
-    oprops.setBaseColorFactor(obcf);
-    oprops.setMetallicFactor(0.2);
-    oprops.setRoughnessFactor(0.35);
-    const orb_mat = b.createPbrMaterial(oprops);
-    defer b.jsRelease(orb_mat);
-
-    const sopts = b.SphereOptions.create();
-    defer b.jsRelease(sopts);
-    sopts.setDiameter(0.55);
-    sopts.setSegments(32.0);
-    const orb = b.createSphere(g_engine, .{ .options = sopts });
-    defer b.jsRelease(orb);
-    orb.setMaterial(orb_mat.asMaterial());
-    b.addToScene(scene, .{ .Mesh = orb });
-    g_orb_pos = orb.getPosition();
-
-    const ground_mat = b.createGridMaterial(null);
-    defer b.jsRelease(ground_mat);
-    const gopts = b.GroundOptions.create();
-    defer b.jsRelease(gopts);
-    gopts.setWidth(16.0);
-    gopts.setHeight(16.0);
-    const ground = b.createGround(g_engine, .{ .options = gopts });
-    defer b.jsRelease(ground);
-    ground.setMaterial(ground_mat.asMaterial());
-    b.addToScene(scene, .{ .Mesh = ground });
-
-    const render_cb = b.number_fn.from(onBeforeRender, null);
-    defer b.jsRelease(render_cb);
-    b.onBeforeRender(scene, render_cb);
-
-    const reg = b.registerScene(scene);
-    defer b.jsRelease(reg);
-    reg.then(onRegistered, null);
+    b.onBeforeRender(scene, .{ onBeforeRender, app });
+    b.registerScene(scene).then(onRegistered, app);
 }
 
 export fn start() void {
-    const doc = dom.getDocument();
-    defer dom.jsRelease(doc);
-    g_canvas = doc.querySelector(.canvas) orelse return;
-    const p = b.createEngineWithEngineOptions(.{ .HTMLCanvasElement = g_canvas }, .{});
-    defer b.jsRelease(p);
-    p.then(onEngine, null);
+    const scope = dom.JsScope.open();
+    defer scope.deinit();
+    g_app.canvas = (dom.getDocument().querySelector(.canvas) orelse return).retain();
+    b.createEngineWithEngineOptions(g_app.canvas, null).then(onEngine, &g_app);
 }

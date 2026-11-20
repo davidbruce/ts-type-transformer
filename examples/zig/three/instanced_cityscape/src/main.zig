@@ -6,10 +6,6 @@ fn v3(x: f64, y: f64, z: f64) three.Vector3 {
     return three.Vector3.new(.{ .x = x, .y = y, .z = z });
 }
 
-fn addObj(parent: three.Object3D, child: three.Object3D) void {
-    _ = parent.add(three.JsArrayOf(three.Object3D).of(&.{child}));
-}
-
 fn towerHeight(mode: usize, gx: usize, gz: usize) f64 {
     const fx = @as(f64, @floatFromInt(gx)) - 4.5;
     const fz = @as(f64, @floatFromInt(gz)) - 4.5;
@@ -30,20 +26,30 @@ fn layoutName(mode: usize) []const u8 {
     return "Plaza";
 }
 
-var g_renderer: three.WebGLRenderer = undefined;
-var g_scene: three.Scene = undefined;
-var g_ortho: three.OrthographicCamera = undefined;
-var g_persp: three.PerspectiveCamera = undefined;
-var g_inst: three.InstancedMesh = undefined;
-var g_cam_btn: dom.HTMLElement = undefined;
-var g_meta: dom.HTMLElement = undefined;
-var g_use_ortho: bool = true;
-var g_layout_mode: usize = 0;
-var g_cam_yaw: f64 = 0.785398;
+const App = struct {
+    renderer: three.WebGLRenderer = undefined,
+    scene: three.Scene = undefined,
+    ortho: three.OrthographicCamera = undefined,
+    persp: three.PerspectiveCamera = undefined,
+    inst: three.InstancedMesh = undefined,
+    cam_btn: dom.HTMLElement = undefined,
+    meta: dom.HTMLElement = undefined,
+    btns: [5]BtnCtx = undefined,
+    use_ortho: bool = true,
+    layout_mode: usize = 0,
+    cam_yaw: f64 = 0.785398,
+};
 
-fn renderCity() void {
+const BtnCtx = struct { app: *App, id: usize };
+
+var g_app: App = .{};
+
+fn renderCity(app: *App) void {
+    const scope = three.JsScope.open();
+    defer scope.deinit();
+
     const pos = v3(0.0, 0.0, 0.0);
-    const rot_q = three.Quaternion.new(.{});
+    const rot_q = three.Quaternion.new(null);
     const scale = v3(1.0, 1.0, 1.0);
     const mtx = three.Matrix4.new();
     const axis_y = v3(0.0, 1.0, 0.0);
@@ -51,151 +57,137 @@ fn renderCity() void {
 
     var max_h: f64 = 0.0;
     var idx: usize = 0;
-    var gz: usize = 0;
-    while (gz < 10) : (gz += 1) {
-        var gx: usize = 0;
-        while (gx < 10) : (gx += 1) {
+    for (0..10) |gz| {
+        for (0..10) |gx| {
             const x = (@as(f64, @floatFromInt(gx)) - 4.5) * 0.78;
             const z = (@as(f64, @floatFromInt(gz)) - 4.5) * 0.78;
-            const h = towerHeight(g_layout_mode, gx, gz);
+            const h = towerHeight(app.layout_mode, gx, gz);
             if (h > max_h) max_h = h;
-            _ = pos.set(x, h * 0.5, .{ .z = z });
-            _ = rot_q.setFromAxisAngle(axis_y.asVector3Like(), 0.08 * @as(f64, @floatFromInt((gx + gz) % 4)));
-            _ = scale.set(1.0, h, .{ .z = 1.0 });
+            _ = pos.set(x, h * 0.5, z);
+            _ = rot_q.setFromAxisAngle(axis_y, 0.08 * @as(f64, @floatFromInt((gx + gz) % 4)));
+            _ = scale.set(1.0, h, 1.0);
             _ = mtx.compose(pos, rot_q, scale);
-            _ = g_inst.setMatrixAt(@floatFromInt(idx), mtx);
+            _ = app.inst.setMatrixAt(@floatFromInt(idx), mtx);
 
             var t = (h - 0.3) / 3.2;
             if (t < 0.0) t = 0.0;
             if (t > 1.0) t = 1.0;
             const shade = 0.82 - 0.70 * t;
-            _ = col.setRGB(shade, shade, shade, .{});
-            _ = g_inst.setColorAt(@floatFromInt(idx), col);
+            _ = col.setRGB(shade, shade, shade, null);
+            _ = app.inst.setColorAt(@floatFromInt(idx), col);
             idx += 1;
         }
     }
 
-    const imat = g_inst.getInstanceMatrix();
-    imat.asBufferAttribute().setNeedsUpdate(true);
-    if (g_inst.getInstanceColor()) |icol| {
-        icol.asBufferAttribute().setNeedsUpdate(true);
+    app.inst.getInstanceMatrix().setNeedsUpdate(true);
+    if (app.inst.getInstanceColor()) |icol| {
+        icol.setNeedsUpdate(true);
     }
 
     const radius = 11.5;
-    const cx = radius * @cos(g_cam_yaw);
-    const cz = radius * @sin(g_cam_yaw);
+    const cx = radius * @cos(app.cam_yaw);
+    const cz = radius * @sin(app.cam_yaw);
     const target = v3(0.0, 0.9, 0.0);
 
-    _ = g_ortho.asObject3D().getPosition().set(cx, 8.2, .{ .z = cz });
-    g_ortho.asObject3D().lookAt(target);
-    _ = g_persp.asObject3D().getPosition().set(cx, 7.6, .{ .z = cz });
-    g_persp.asObject3D().lookAt(target);
+    _ = app.ortho.getPosition().set(cx, 8.2, cz);
+    app.ortho.lookAt(target);
+    _ = app.persp.getPosition().set(cx, 7.6, cz);
+    app.persp.lookAt(target);
 
-    if (g_use_ortho) {
-        g_renderer.render(g_scene.asObject3D(), g_ortho.asCamera());
+    if (app.use_ortho) {
+        app.renderer.render(app.scene, app.ortho);
     } else {
-        g_renderer.render(g_scene.asObject3D(), g_persp.asCamera());
+        app.renderer.render(app.scene, app.persp);
     }
 
-    const cname = if (g_use_ortho) "Orthographic" else "Perspective";
+    const cname = if (app.use_ortho) "Orthographic" else "Perspective";
     var cbuf: [64]u8 = undefined;
     const cmsg = std.fmt.bufPrint(&cbuf, "Camera: {s}", .{cname}) catch return;
-    g_cam_btn.asNode().setTextContent(cmsg);
+    app.cam_btn.setTextContent(cmsg);
 
     var buf: [256]u8 = undefined;
     const msg = std.fmt.bufPrint(
         &buf,
         "100 InstancedMesh towers · layout: {s} · peak height: {d:.2} · camera: {s}",
-        .{ layoutName(g_layout_mode), max_h, cname },
+        .{ layoutName(app.layout_mode), max_h, cname },
     ) catch return;
-    g_meta.asNode().setTextContent(msg);
+    app.meta.setTextContent(msg);
 }
 
-const BTN_TAGS = [5]usize{ 0, 1, 2, 3, 4 };
-fn onBtn(ctx: ?*anyopaque, _: dom.PointerEvent) void {
-    const id = @as(*const usize, @ptrCast(@alignCast(ctx.?))).*;
-    if (id == 0) {
-        g_use_ortho = !g_use_ortho;
-    } else if (id >= 1 and id <= 3) {
-        g_layout_mode = id - 1;
+fn onBtn(ctx: *const BtnCtx, _: dom.PointerEvent) void {
+    const app = ctx.app;
+    if (ctx.id == 0) {
+        app.use_ortho = !app.use_ortho;
+    } else if (ctx.id >= 1 and ctx.id <= 3) {
+        app.layout_mode = ctx.id - 1;
     } else {
-        g_cam_yaw += std.math.pi / 4.0;
+        app.cam_yaw += std.math.pi / 4.0;
     }
-    renderCity();
+    renderCity(app);
 }
 
 export fn start() void {
+    const scope = three.JsScope.open();
+    defer scope.deinit();
+
     const doc = dom.getDocument();
     const width: f64 = 680.0;
     const height: f64 = 400.0;
     const aspect = width / height;
 
-    const rp = three.WebGLRendererParameters.create();
-    rp.setAntialias(true);
-    rp.setPreserveDrawingBuffer(true);
-    g_renderer = three.WebGLRenderer.new(rp);
-    g_renderer.setPixelRatio(1.0);
-    g_renderer.setSize(width, height, .{});
-    _ = doc.getElementById("stage").?.asNode().appendChild(.{ .h = g_renderer.getDomElement().h });
+    g_app.renderer = three.WebGLRenderer.new(.{ .antialias = true, .preserveDrawingBuffer = true }).retain();
+    g_app.renderer.setPixelRatio(1.0);
+    g_app.renderer.setSize(width, height, null);
+    _ = doc.getElementById("stage").?.appendChild(g_app.renderer.getDomElement());
 
-    g_scene = three.Scene.new();
-    g_scene.setBackground(.{ .Color = three.Color.new(.{ .number = 0xf7f7f7 }) });
-    g_ortho = three.OrthographicCamera.new(.{
+    g_app.scene = three.Scene.new().retain();
+    g_app.scene.setBackground(three.Color.new(0xf7f7f7));
+    g_app.ortho = three.OrthographicCamera.new(.{
         .left = -5.4 * aspect,
         .right = 5.4 * aspect,
         .top = 5.4,
         .bottom = -5.4,
         .near = 0.1,
         .far = 100.0,
-    });
-    g_persp = three.PerspectiveCamera.new(.{ .fov = 40.0, .aspect = aspect, .near = 0.1, .far = 100.0 });
+    }).retain();
+    g_app.persp = three.PerspectiveCamera.new(.{ .fov = 40.0, .aspect = aspect, .near = 0.1, .far = 100.0 }).retain();
 
-    addObj(g_scene.asObject3D(), three.AmbientLight.new(.{ .color = .{ .number = 0xffffff }, .intensity = 1.25 }).asObject3D());
-    const key = three.DirectionalLight.new(.{ .color = .{ .number = 0xffffff }, .intensity = 2.1 });
-    _ = key.asObject3D().getPosition().set(8.0, 12.0, .{ .z = 6.0 });
-    addObj(g_scene.asObject3D(), key.asObject3D());
-    const rim = three.DirectionalLight.new(.{ .color = .{ .number = 0xffffff }, .intensity = 0.9 });
-    _ = rim.asObject3D().getPosition().set(-7.0, 6.0, .{ .z = -8.0 });
-    addObj(g_scene.asObject3D(), rim.asObject3D());
+    const key = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 2.1 });
+    _ = key.getPosition().set(8.0, 12.0, 6.0);
+    const rim = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 0.9 });
+    _ = rim.getPosition().set(-7.0, 6.0, -8.0);
 
-    const pmp = three.MeshStandardMaterialParameters.create();
-    pmp.setColor(.{ .number = 0xe5e5e5 });
-    pmp.setRoughness(0.85);
     const plinth = three.Mesh.new(.{
-        .geometry = three.PlaneGeometry.new(.{ .width = 8.6, .height = 8.6 }).asBufferGeometry(),
-        .material = .{ .Material = three.MeshStandardMaterial.new(pmp).asMaterial() },
+        .geometry = three.PlaneGeometry.new(.{ .width = 8.6, .height = 8.6 }),
+        .material = three.MeshStandardMaterial.new(.{ .color = 0xe5e5e5, .roughness = 0.85 }),
     });
-    plinth.asObject3D().getRotation().setX(-std.math.pi / 2.0);
-    plinth.asObject3D().getPosition().setY(-0.01);
-    addObj(g_scene.asObject3D(), plinth.asObject3D());
+    plinth.getRotation().setX(-std.math.pi / 2.0);
+    plinth.getPosition().setY(-0.01);
 
-    const grid = three.GridHelper.new(.{
-        .size = 9.0,
-        .divisions = 10.0,
-        .color1 = .{ .number = 0x999999 },
-        .color2 = .{ .number = 0xd4d4d4 },
-    });
-    addObj(g_scene.asObject3D(), grid.asLineSegments().asLine().asObject3D());
+    const grid = three.GridHelper.new(.{ .size = 9.0, .divisions = 10.0, .color1 = 0x999999, .color2 = 0xd4d4d4 });
 
-    const tgeo = three.BoxGeometry.new(.{ .width = 0.54, .height = 1.0, .depth = 0.54 });
-    const tmp = three.MeshStandardMaterialParameters.create();
-    tmp.setColor(.{ .number = 0xffffff });
-    tmp.setRoughness(0.65);
-    tmp.setMetalness(0.08);
-    g_inst = three.InstancedMesh.new(
-        tgeo.asBufferGeometry(),
-        .{ .Material = three.MeshStandardMaterial.new(tmp).asMaterial() },
+    g_app.inst = three.InstancedMesh.new(
+        three.BoxGeometry.new(.{ .width = 0.54, .height = 1.0, .depth = 0.54 }),
+        three.MeshStandardMaterial.new(.{ .color = 0xffffff, .roughness = 0.65, .metalness = 0.08 }),
         100.0,
-    );
-    addObj(g_scene.asObject3D(), g_inst.asMesh().asObject3D());
+    ).retain();
 
-    g_cam_btn = doc.getElementById("btn-cam").?;
-    g_meta = doc.getElementById("meta").?;
+    _ = g_app.scene.add(.{
+        three.AmbientLight.new(.{ .color = 0xffffff, .intensity = 1.25 }),
+        key,
+        rim,
+        plinth,
+        grid,
+        g_app.inst,
+    });
+
+    g_app.cam_btn = doc.getElementById("btn-cam").?.retain();
+    g_app.meta = doc.getElementById("meta").?.retain();
 
     const ids = [5][]const u8{ "btn-cam", "btn-lay0", "btn-lay1", "btn-lay2", "btn-rot" };
     for (ids, 0..) |id, i| {
-        const b = doc.getElementById(id).?;
-        b.addEventListener(.click, dom.JsListener(dom.PointerEvent).from(onBtn, @constCast(&BTN_TAGS[i])), .{});
+        g_app.btns[i] = .{ .app = &g_app, .id = i };
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] }, null);
     }
-    renderCity();
+    renderCity(&g_app);
 }

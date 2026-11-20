@@ -15,58 +15,44 @@ fn println(s: []const u8) void {
     print("\n", 1);
 }
 
-fn str(text: []const u8) b.JsString {
-    return b.JsString.from(text);
-}
-
-fn at(p: b.JsString) b.fs.PathLike {
-    return .{ .string = p };
-}
-
-fn join2(a: b.JsString, c: []const u8) b.JsString {
-    return b.path.join(b.JsArrayOf(b.JsString).of(&.{ a, str(c) }));
-}
-
 export fn start() void {
+    const scope = b.JsScope.open();
+    defer scope.deinit();
+
     const dir = b.fs.mkdtempSync("/tmp/tsrs-node-ws-", null);
-    check(b.fs.existsSync(at(dir)) and b.fs.statSync(at(dir)).isDirectory());
+    check(b.fs.existsSync(dir) and b.fs.statSync(dir).isDirectory());
 
-    const notes = join2(dir, "notes.txt");
-    b.fs.writeFileSync(.{ .string = notes }, b.JsValue.string("alpha\nbeta\n"), null);
-    const st1 = b.fs.statSync(at(notes));
-    check(b.fs.existsSync(at(notes)) and st1.isFile() and st1.getSize() == 11);
+    const notes = b.path.join(&.{ dir, "notes.txt" });
+    b.fs.writeFileSync(notes, "alpha\nbeta\n", null);
+    const st1 = b.fs.statSync(notes);
+    check(b.fs.existsSync(notes) and st1.isFile() and st1.getSize() == 11);
 
-    b.fs.appendFileSync(.{ .string = notes }, .{ .string = str("gamma\n") }, null);
-    const encoding: b.global_BufferEncoding = .{ .h = str("utf8").h };
-    const text = b.fs.readFileSyncOrBufferEncoding(.{ .string = notes }, .{ .global_BufferEncoding = encoding });
-    const st2 = b.fs.statSync(at(notes));
+    b.fs.appendFileSync(notes, "gamma\n", null);
+    const utf8 = b.JsString.from("utf8").as(b.global_BufferEncoding);
+    const text = b.fs.readFileSyncOrBufferEncoding(notes, utf8);
+    const st2 = b.fs.statSync(notes);
     check(text.eql("alpha\nbeta\ngamma\n") and st2.getSize() == 17);
 
-    const backup = join2(dir, "backup.txt");
-    const archive = join2(dir, "archive.txt");
-    b.fs.copyFileSync(at(notes), at(backup), .{});
-    check(b.fs.existsSync(at(backup)));
+    const backup = b.path.join(&.{ dir, "backup.txt" });
+    const archive = b.path.join(&.{ dir, "archive.txt" });
+    b.fs.copyFileSync(notes, backup, null);
+    check(b.fs.existsSync(backup));
 
-    b.fs.renameSync(at(backup), at(archive));
-    check(!b.fs.existsSync(at(backup)) and b.fs.existsSync(at(archive)));
+    b.fs.renameSync(backup, archive);
+    check(!b.fs.existsSync(backup) and b.fs.existsSync(archive));
 
-    const arch_text = b.fs.readFileSyncOrBufferEncoding(.{ .string = archive }, .{ .global_BufferEncoding = encoding });
-    var tbuf: [128]u8 = undefined;
-    check(arch_text.eql(text.copy(&tbuf)));
+    const arch_text = b.fs.readFileSyncOrBufferEncoding(archive, utf8);
+    check(b.jsSame(arch_text, text));
 
-    b.fs.unlinkSync(at(archive));
-    check(!b.fs.existsSync(at(archive)));
+    b.fs.unlinkSync(archive);
+    check(!b.fs.existsSync(archive));
 
-    const rm = b.fs.RmOptions.create();
-    rm.setRecursive(true);
-    rm.setForce(true);
-    b.fs.rmSync(at(dir), .{ .options = rm });
-    check(!b.fs.existsSync(at(dir)));
+    b.fs.rmSync(dir, .{ .recursive = true, .force = true });
+    check(!b.fs.existsSync(dir));
     check(true);
 
-    var dbuf: [128]u8 = undefined;
     var line_buf: [256]u8 = undefined;
-    println(std.fmt.bufPrint(&line_buf, "workspace={s}", .{dir.copy(&dbuf)}) catch "");
+    println(std.fmt.bufPrint(&line_buf, "workspace={f}", .{dir}) catch "");
     println(std.fmt.bufPrint(&line_buf, "size_before={d:.0} size_after={d:.0}", .{ st1.getSize(), st2.getSize() }) catch "");
     println(std.fmt.bufPrint(&line_buf, "PASS: temp_workspace ({d} checks)", .{passed}) catch "");
 }

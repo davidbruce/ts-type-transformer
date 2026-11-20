@@ -2,43 +2,26 @@ const std = @import("std");
 const dom = @import("dom");
 const df = @import("date_fns");
 
-var tmp_buf: [128]u8 = undefined;
-var line_buf: [128]u8 = undefined;
-
-fn day(d: df.Date) df.DateArg {
-    return .{ .Date = d };
-}
-
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
-    const el = doc.createElementWithString(tag, .{});
-    if (cls.len > 0) el.asElement().setClassName(cls);
-    if (text) |t| el.asNode().setTextContent(t);
+    const el = doc.createElementWithString(tag, null);
+    if (cls.len > 0) el.setClassName(cls);
+    if (text) |t| el.setTextContent(t);
     return el;
 }
 
-fn appendAndRelease(parent: dom.HTMLElement, child: dom.HTMLElement) void {
-    const res = parent.asNode().appendChild(child.asNode());
-    dom.jsRelease(res);
-    dom.jsRelease(child);
-}
-
 export fn start() void {
+    const scope = dom.JsScope.open();
+    defer scope.deinit();
+
     const doc = dom.getDocument();
-    defer dom.jsRelease(doc);
-    const app = doc.getElementById("app").?;
-    defer dom.jsRelease(app);
+    const app = doc.getElementById("app") orelse return;
 
     const head = makeEl(doc, "div", "head", null);
-    appendAndRelease(head, makeEl(doc, "h1", "", "Date-fns Relative Timeline (Zig)"));
-    appendAndRelease(head, makeEl(doc, "span", "badge", "Anchor 2024-03-15"));
-    appendAndRelease(app, head);
+    _ = head.appendChild(makeEl(doc, "h1", "", "Date-fns Relative Timeline (Zig)"));
+    _ = head.appendChild(makeEl(doc, "span", "badge", "Anchor 2024-03-15"));
+    _ = app.appendChild(head);
 
-    const anchor = df.parseISO("2024-03-15", .{});
-    defer df.jsRelease(anchor);
-    const opts = df.FormatDistanceOptions.create();
-    defer df.jsRelease(opts);
-    opts.setAddSuffix(true);
-
+    const anchor = df.parseISO("2024-03-15", null);
     const Entry = struct { iso: []const u8, title: []const u8 };
     const entries = [_]Entry{
         .{ .iso = "2024-01-10", .title = "Spec Draft" },
@@ -50,68 +33,53 @@ export fn start() void {
     };
 
     const tl_card = makeEl(doc, "div", "card", null);
-    appendAndRelease(tl_card, makeEl(doc, "div", "label", "Milestones Relative to 2024-03-15"));
+    _ = tl_card.appendChild(makeEl(doc, "div", "label", "Milestones Relative to 2024-03-15"));
     const timeline = makeEl(doc, "div", "timeline", null);
 
     const all_dates = df.JsArrayOf(df.DateArg).new();
-    defer df.jsRelease(all_dates);
+    var tmp_buf: [128]u8 = undefined;
+    var line_buf: [128]u8 = undefined;
 
     for (entries) |e| {
-        const d = df.parseISO(e.iso, .{});
-        defer df.jsRelease(d);
-        all_dates.push(day(d));
+        const d = df.parseISO(e.iso, null);
+        all_dates.push(d);
 
-        const same = df.isSameDay(day(d), day(anchor), .{});
+        const same = df.isSameDay(d, anchor, null);
         const row = makeEl(doc, "div", if (same) "milestone anchor" else "milestone", null);
 
-        const date_s = df.formatDate(day(d), "yyyy-MM-dd (EEE)", .{});
-        appendAndRelease(row, makeEl(doc, "span", "muted", date_s.copy(&tmp_buf)));
-        df.jsRelease(date_s);
-
-        appendAndRelease(row, makeEl(doc, "span", "title", e.title));
+        _ = row.appendChild(makeEl(doc, "span", "muted", df.formatDate(d, "yyyy-MM-dd (EEE)", null).copy(&tmp_buf)));
+        _ = row.appendChild(makeEl(doc, "span", "title", e.title));
 
         if (same) {
-            appendAndRelease(row, makeEl(doc, "span", "", "today (anchor)"));
+            _ = row.appendChild(makeEl(doc, "span", "", "today (anchor)"));
         } else {
-            const rel = df.formatDistance(day(d), day(anchor), .{ .options = opts });
-            appendAndRelease(row, makeEl(doc, "span", "", rel.copy(&tmp_buf)));
-            df.jsRelease(rel);
+            _ = row.appendChild(makeEl(doc, "span", "", df.formatDistance(d, anchor, .{ .addSuffix = true }).copy(&tmp_buf)));
         }
 
-        const strict = df.formatDistanceStrict(day(d), day(anchor), .{});
-        const strict_txt = strict.copy(&tmp_buf);
-        const cmp: i32 = @intFromFloat(df.compareAsc(day(d), day(anchor)));
-        const strict_full = std.fmt.bufPrint(&line_buf, "{s} \xC2\xB7 cmp {d}", .{ strict_txt, cmp }) catch strict_txt;
-        df.jsRelease(strict);
-        appendAndRelease(row, makeEl(doc, "span", "muted", strict_full));
+        const strict = df.formatDistanceStrict(d, anchor, null);
+        const cmp: i32 = @intFromFloat(df.compareAsc(d, anchor));
+        const strict_full = std.fmt.bufPrint(&line_buf, "{f} \xC2\xB7 cmp {d}", .{ strict, cmp }) catch "";
+        _ = row.appendChild(makeEl(doc, "span", "muted", strict_full));
 
-        const status = if (same) "ANCHOR" else if (df.isBefore(day(d), day(anchor))) "PAST" else if (df.isAfter(day(d), day(anchor))) "FUTURE" else "OTHER";
-        appendAndRelease(row, makeEl(doc, "span", "pill", status));
+        const status = if (same) "ANCHOR" else if (df.isBefore(d, anchor)) "PAST" else if (df.isAfter(d, anchor)) "FUTURE" else "OTHER";
+        _ = row.appendChild(makeEl(doc, "span", "pill", status));
 
-        appendAndRelease(timeline, row);
+        _ = timeline.appendChild(row);
     }
-    appendAndRelease(tl_card, timeline);
-    appendAndRelease(app, tl_card);
+    _ = tl_card.appendChild(timeline);
+    _ = app.appendChild(tl_card);
 
-    const earliest = df.min(all_dates, .{});
-    defer df.jsRelease(earliest);
-    const latest = df.max(all_dates, .{});
-    defer df.jsRelease(latest);
-    const total_span: i32 = @intFromFloat(df.differenceInCalendarDays(day(latest), day(earliest), .{}));
+    const earliest = df.min(all_dates, null);
+    const latest = df.max(all_dates, null);
+    const total_span: i32 = @intFromFloat(df.differenceInCalendarDays(latest, earliest, null));
 
     const sum_card = makeEl(doc, "div", "card", null);
-    appendAndRelease(sum_card, makeEl(doc, "div", "label", "Extremes & Total Span"));
+    _ = sum_card.appendChild(makeEl(doc, "div", "label", "Extremes & Total Span"));
     const summary = makeEl(doc, "div", "summary", null);
 
-    const e_s = df.formatDate(day(earliest), "yyyy-MM-dd", .{});
-    appendAndRelease(summary, makeEl(doc, "span", "", std.fmt.bufPrint(&line_buf, "Earliest: {s}", .{e_s.copy(&tmp_buf)}) catch ""));
-    df.jsRelease(e_s);
-
-    const l_s = df.formatDate(day(latest), "yyyy-MM-dd", .{});
-    appendAndRelease(summary, makeEl(doc, "span", "", std.fmt.bufPrint(&line_buf, "Latest: {s}", .{l_s.copy(&tmp_buf)}) catch ""));
-    df.jsRelease(l_s);
-
-    appendAndRelease(summary, makeEl(doc, "span", "", std.fmt.bufPrint(&line_buf, "Total Span: {d} days", .{total_span}) catch ""));
-    appendAndRelease(sum_card, summary);
-    appendAndRelease(app, sum_card);
+    _ = summary.appendChild(makeEl(doc, "span", "", std.fmt.bufPrint(&line_buf, "Earliest: {f}", .{df.formatDate(earliest, "yyyy-MM-dd", null)}) catch ""));
+    _ = summary.appendChild(makeEl(doc, "span", "", std.fmt.bufPrint(&line_buf, "Latest: {f}", .{df.formatDate(latest, "yyyy-MM-dd", null)}) catch ""));
+    _ = summary.appendChild(makeEl(doc, "span", "", std.fmt.bufPrint(&line_buf, "Total Span: {d} days", .{total_span}) catch ""));
+    _ = sum_card.appendChild(summary);
+    _ = app.appendChild(sum_card);
 }

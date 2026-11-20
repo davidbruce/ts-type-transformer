@@ -6,186 +6,178 @@ fn v3(x: f64, y: f64, z: f64) three.Vector3 {
     return three.Vector3.new(.{ .x = x, .y = y, .z = z });
 }
 
-fn addObj(parent: three.Object3D, child: three.Object3D) void {
-    _ = parent.add(three.JsArrayOf(three.Object3D).of(&.{child}));
+fn stdMat(hex: f64, rough: f64, metal: f64, flat: bool) three.MeshStandardMaterial {
+    return three.MeshStandardMaterial.new(.{
+        .color = hex,
+        .roughness = rough,
+        .metalness = metal,
+        .flatShading = flat,
+    });
 }
 
-fn stdMat(hex: f64, rough: f64, metal: f64, flat: bool) three.Material {
-    const mp = three.MeshStandardMaterialParameters.create();
-    mp.setColor(.{ .number = hex });
-    mp.setRoughness(rough);
-    mp.setMetalness(metal);
-    mp.setFlatShading(flat);
-    return three.MeshStandardMaterial.new(mp).asMaterial();
-}
+const App = struct {
+    renderer: three.WebGLRenderer = undefined,
+    scene: three.Scene = undefined,
+    camera: three.PerspectiveCamera = undefined,
+    inner_pivot: three.Group = undefined,
+    moon_pivot: three.Group = undefined,
+    outer_pivot: three.Group = undefined,
+    outer_station: three.Group = undefined,
+    moon: three.Mesh = undefined,
+    station_body: three.Mesh = undefined,
+    tilt_btn: dom.HTMLElement = undefined,
+    meta: dom.HTMLElement = undefined,
+    btns: [3]BtnCtx = undefined,
+    epoch: f64 = 0.6,
+    tilted: bool = false,
+};
 
-var g_renderer: three.WebGLRenderer = undefined;
-var g_scene: three.Scene = undefined;
-var g_camera: three.PerspectiveCamera = undefined;
-var g_inner_pivot: three.Group = undefined;
-var g_moon_pivot: three.Group = undefined;
-var g_outer_pivot: three.Group = undefined;
-var g_outer_station: three.Group = undefined;
-var g_moon: three.Mesh = undefined;
-var g_station_body: three.Mesh = undefined;
-var g_tilt_btn: dom.HTMLElement = undefined;
-var g_meta: dom.HTMLElement = undefined;
-var g_epoch: f64 = 0.6;
-var g_tilted: bool = false;
+const BtnCtx = struct { app: *App, id: usize };
 
-fn updateOrrery() void {
-    g_inner_pivot.asObject3D().getRotation().setY(g_epoch);
-    g_moon_pivot.asObject3D().getRotation().setY(g_epoch * 2.5);
-    g_outer_pivot.asObject3D().getRotation().setY(-g_epoch * 0.55);
-    g_outer_pivot.asObject3D().getRotation().setZ(if (g_tilted) 0.38 else 0.0);
-    g_station_body.asObject3D().getRotation().setY(g_epoch * 1.4);
+var g_app: App = .{};
 
-    g_scene.asObject3D().updateMatrixWorld(true);
-    const mpos = g_moon.asObject3D().getWorldPosition(v3(0.0, 0.0, 0.0));
-    const spos = g_outer_station.asObject3D().getWorldPosition(v3(0.0, 0.0, 0.0));
+fn updateOrrery(app: *App) void {
+    const scope = three.JsScope.open();
+    defer scope.deinit();
 
-    g_tilt_btn.asNode().setTextContent(if (g_tilted) "Outer Tilt: On" else "Outer Tilt: Off");
-    g_renderer.render(g_scene.asObject3D(), g_camera.asCamera());
+    app.inner_pivot.getRotation().setY(app.epoch);
+    app.moon_pivot.getRotation().setY(app.epoch * 2.5);
+    app.outer_pivot.getRotation().setY(-app.epoch * 0.55);
+    app.outer_pivot.getRotation().setZ(if (app.tilted) 0.38 else 0.0);
+    app.station_body.getRotation().setY(app.epoch * 1.4);
 
-    const deg: i32 = @intFromFloat(@round(g_epoch * 180.0 / std.math.pi));
+    app.scene.updateMatrixWorld(true);
+    const mpos = app.moon.getWorldPosition(v3(0.0, 0.0, 0.0));
+    const spos = app.outer_station.getWorldPosition(v3(0.0, 0.0, 0.0));
+
+    app.tilt_btn.setTextContent(if (app.tilted) "Outer Tilt: On" else "Outer Tilt: Off");
+    app.renderer.render(app.scene, app.camera);
+
+    const deg: i32 = @intFromFloat(@round(app.epoch * 180.0 / std.math.pi));
     var buf: [256]u8 = undefined;
     const msg = std.fmt.bufPrint(
         &buf,
         "epoch: {d} deg · moon world: ({d:.2}, {d:.2}, {d:.2}) · station world: ({d:.2}, {d:.2}, {d:.2})",
         .{ deg, mpos.getX(), mpos.getY(), mpos.getZ(), spos.getX(), spos.getY(), spos.getZ() },
     ) catch return;
-    g_meta.asNode().setTextContent(msg);
+    app.meta.setTextContent(msg);
 }
 
-const BTN_TAGS = [3]usize{ 0, 1, 2 };
-fn onBtn(ctx: ?*anyopaque, _: dom.PointerEvent) void {
-    const id = @as(*const usize, @ptrCast(@alignCast(ctx.?))).*;
-    if (id == 0) {
-        g_epoch += std.math.pi / 6.0;
-    } else if (id == 1) {
-        g_tilted = !g_tilted;
+fn onBtn(ctx: *const BtnCtx, _: dom.PointerEvent) void {
+    const app = ctx.app;
+    if (ctx.id == 0) {
+        app.epoch += std.math.pi / 6.0;
+    } else if (ctx.id == 1) {
+        app.tilted = !app.tilted;
     } else {
-        g_epoch = 0.6;
-        g_tilted = false;
+        app.epoch = 0.6;
+        app.tilted = false;
     }
-    updateOrrery();
+    updateOrrery(app);
 }
 
 export fn start() void {
+    const scope = three.JsScope.open();
+    defer scope.deinit();
+
     const doc = dom.getDocument();
     const width: f64 = 680.0;
     const height: f64 = 400.0;
 
-    const rp = three.WebGLRendererParameters.create();
-    rp.setAntialias(true);
-    rp.setPreserveDrawingBuffer(true);
-    g_renderer = three.WebGLRenderer.new(rp);
-    g_renderer.setPixelRatio(1.0);
-    g_renderer.setSize(width, height, .{});
-    _ = doc.getElementById("stage").?.asNode().appendChild(.{ .h = g_renderer.getDomElement().h });
+    g_app.renderer = three.WebGLRenderer.new(.{ .antialias = true, .preserveDrawingBuffer = true }).retain();
+    g_app.renderer.setPixelRatio(1.0);
+    g_app.renderer.setSize(width, height, null);
+    _ = doc.getElementById("stage").?.appendChild(g_app.renderer.getDomElement());
 
-    g_scene = three.Scene.new();
-    g_scene.setBackground(.{ .Color = three.Color.new(.{ .number = 0xf7f7f7 }) });
-    g_camera = three.PerspectiveCamera.new(.{ .fov = 42.0, .aspect = width / height, .near = 0.1, .far = 100.0 });
-    _ = g_camera.asObject3D().getPosition().set(5.6, 5.2, .{ .z = 7.6 });
-    const target = v3(0.0, -0.1, 0.0);
-    g_camera.asObject3D().lookAt(target);
+    g_app.scene = three.Scene.new().retain();
+    g_app.scene.setBackground(three.Color.new(0xf7f7f7));
+    g_app.camera = three.PerspectiveCamera.new(.{ .fov = 42.0, .aspect = width / height, .near = 0.1, .far = 100.0 }).retain();
+    _ = g_app.camera.getPosition().set(5.6, 5.2, 7.6);
+    g_app.camera.lookAt(v3(0.0, -0.1, 0.0));
 
-    addObj(g_scene.asObject3D(), three.AmbientLight.new(.{ .color = .{ .number = 0xffffff }, .intensity = 1.2 }).asObject3D());
-    const key = three.DirectionalLight.new(.{ .color = .{ .number = 0xffffff }, .intensity = 2.2 });
-    _ = key.asObject3D().getPosition().set(6.0, 10.0, .{ .z = 8.0 });
-    addObj(g_scene.asObject3D(), key.asObject3D());
-    const rim = three.DirectionalLight.new(.{ .color = .{ .number = 0xffffff }, .intensity = 0.9 });
-    _ = rim.asObject3D().getPosition().set(-7.0, 5.0, .{ .z = -6.0 });
-    addObj(g_scene.asObject3D(), rim.asObject3D());
+    const key = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 2.2 });
+    _ = key.getPosition().set(6.0, 10.0, 8.0);
+    const rim = three.DirectionalLight.new(.{ .color = 0xffffff, .intensity = 0.9 });
+    _ = rim.getPosition().set(-7.0, 5.0, -6.0);
 
-    const grid = three.GridHelper.new(.{
-        .size = 12.0,
-        .divisions = 12.0,
-        .color1 = .{ .number = 0x999999 },
-        .color2 = .{ .number = 0xe5e5e5 },
-    });
-    grid.asLineSegments().asLine().asObject3D().getPosition().setY(-1.5);
-    addObj(g_scene.asObject3D(), grid.asLineSegments().asLine().asObject3D());
+    const grid = three.GridHelper.new(.{ .size = 12.0, .divisions = 12.0, .color1 = 0x999999, .color2 = 0xe5e5e5 });
+    grid.getPosition().setY(-1.5);
 
     const pedestal = three.Mesh.new(.{
-        .geometry = three.CylinderGeometry.new(.{ .radiusTop = 0.55, .radiusBottom = 0.75, .height = 0.35, .radialSegments = 24.0 }).asBufferGeometry(),
-        .material = .{ .Material = stdMat(0x262626, 0.7, 0.05, false) },
+        .geometry = three.CylinderGeometry.new(.{ .radiusTop = 0.55, .radiusBottom = 0.75, .height = 0.35, .radialSegments = 24.0 }),
+        .material = stdMat(0x262626, 0.7, 0.05, false),
     });
-    pedestal.asObject3D().getPosition().setY(-1.3);
-    addObj(g_scene.asObject3D(), pedestal.asObject3D());
+    pedestal.getPosition().setY(-1.3);
 
     const core = three.Mesh.new(.{
-        .geometry = three.SphereGeometry.new(.{ .radius = 0.65, .widthSegments = 24.0, .heightSegments = 18.0 }).asBufferGeometry(),
-        .material = .{ .Material = stdMat(0x111111, 0.45, 0.2, false) },
+        .geometry = three.SphereGeometry.new(.{ .radius = 0.65, .widthSegments = 24.0, .heightSegments = 18.0 }),
+        .material = stdMat(0x111111, 0.45, 0.2, false),
     });
-    addObj(g_scene.asObject3D(), core.asObject3D());
 
-    g_inner_pivot = three.Group.new();
-    addObj(g_scene.asObject3D(), g_inner_pivot.asObject3D());
-    const tp1 = three.MeshBasicMaterialParameters.create();
-    tp1.setColor(.{ .number = 0x999999 });
+    g_app.inner_pivot = three.Group.new().retain();
     const inner_track = three.Mesh.new(.{
-        .geometry = three.TorusGeometry.new(.{ .radius = 2.1, .tube = 0.025, .radialSegments = 8.0, .tubularSegments = 64.0 }).asBufferGeometry(),
-        .material = .{ .Material = three.MeshBasicMaterial.new(tp1).asMaterial() },
+        .geometry = three.TorusGeometry.new(.{ .radius = 2.1, .tube = 0.025, .radialSegments = 8.0, .tubularSegments = 64.0 }),
+        .material = three.MeshBasicMaterial.new(.{ .color = 0x999999 }),
     });
-    inner_track.asObject3D().getRotation().setX(std.math.pi / 2.0);
-    addObj(g_inner_pivot.asObject3D(), inner_track.asObject3D());
+    inner_track.getRotation().setX(std.math.pi / 2.0);
 
     const inner_planet = three.Group.new();
-    _ = inner_planet.asObject3D().getPosition().set(2.1, 0.0, .{ .z = 0.0 });
-    addObj(g_inner_pivot.asObject3D(), inner_planet.asObject3D());
+    _ = inner_planet.getPosition().set(2.1, 0.0, 0.0);
 
     const planet = three.Mesh.new(.{
-        .geometry = three.SphereGeometry.new(.{ .radius = 0.36, .widthSegments = 20.0, .heightSegments = 16.0 }).asBufferGeometry(),
-        .material = .{ .Material = stdMat(0x555555, 0.55, 0.1, false) },
+        .geometry = three.SphereGeometry.new(.{ .radius = 0.36, .widthSegments = 20.0, .heightSegments = 16.0 }),
+        .material = stdMat(0x555555, 0.55, 0.1, false),
     });
-    addObj(inner_planet.asObject3D(), planet.asObject3D());
+    g_app.moon_pivot = three.Group.new().retain();
+    g_app.moon = three.Mesh.new(.{
+        .geometry = three.OctahedronGeometry.new(.{ .radius = 0.18, .detail = 0.0 }),
+        .material = stdMat(0xd4d4d4, 0.4, 0.1, true),
+    }).retain();
+    _ = g_app.moon.getPosition().set(0.75, 0.0, 0.0);
+    _ = g_app.moon_pivot.add(.{g_app.moon});
+    _ = inner_planet.add(.{ planet, g_app.moon_pivot });
+    _ = g_app.inner_pivot.add(.{ inner_track, inner_planet });
 
-    g_moon_pivot = three.Group.new();
-    addObj(inner_planet.asObject3D(), g_moon_pivot.asObject3D());
-    g_moon = three.Mesh.new(.{
-        .geometry = three.OctahedronGeometry.new(.{ .radius = 0.18, .detail = 0.0 }).asBufferGeometry(),
-        .material = .{ .Material = stdMat(0xd4d4d4, 0.4, 0.1, true) },
-    });
-    _ = g_moon.asObject3D().getPosition().set(0.75, 0.0, .{ .z = 0.0 });
-    addObj(g_moon_pivot.asObject3D(), g_moon.asObject3D());
-
-    g_outer_pivot = three.Group.new();
-    addObj(g_scene.asObject3D(), g_outer_pivot.asObject3D());
-    const tp2 = three.MeshBasicMaterialParameters.create();
-    tp2.setColor(.{ .number = 0xb5b5b5 });
+    g_app.outer_pivot = three.Group.new().retain();
     const outer_track = three.Mesh.new(.{
-        .geometry = three.TorusGeometry.new(.{ .radius = 3.8, .tube = 0.025, .radialSegments = 8.0, .tubularSegments = 80.0 }).asBufferGeometry(),
-        .material = .{ .Material = three.MeshBasicMaterial.new(tp2).asMaterial() },
+        .geometry = three.TorusGeometry.new(.{ .radius = 3.8, .tube = 0.025, .radialSegments = 8.0, .tubularSegments = 80.0 }),
+        .material = three.MeshBasicMaterial.new(.{ .color = 0xb5b5b5 }),
     });
-    outer_track.asObject3D().getRotation().setX(std.math.pi / 2.0);
-    addObj(g_outer_pivot.asObject3D(), outer_track.asObject3D());
+    outer_track.getRotation().setX(std.math.pi / 2.0);
 
-    g_outer_station = three.Group.new();
-    _ = g_outer_station.asObject3D().getPosition().set(3.8, 0.0, .{ .z = 0.0 });
-    addObj(g_outer_pivot.asObject3D(), g_outer_station.asObject3D());
+    g_app.outer_station = three.Group.new().retain();
+    _ = g_app.outer_station.getPosition().set(3.8, 0.0, 0.0);
 
-    g_station_body = three.Mesh.new(.{
-        .geometry = three.IcosahedronGeometry.new(.{ .radius = 0.42, .detail = 0.0 }).asBufferGeometry(),
-        .material = .{ .Material = stdMat(0x404040, 0.5, 0.1, true) },
-    });
-    addObj(g_outer_station.asObject3D(), g_station_body.asObject3D());
-
+    g_app.station_body = three.Mesh.new(.{
+        .geometry = three.IcosahedronGeometry.new(.{ .radius = 0.42, .detail = 0.0 }),
+        .material = stdMat(0x404040, 0.5, 0.1, true),
+    }).retain();
     const halo = three.Mesh.new(.{
-        .geometry = three.TorusGeometry.new(.{ .radius = 0.68, .tube = 0.06, .radialSegments = 10.0, .tubularSegments = 32.0 }).asBufferGeometry(),
-        .material = .{ .Material = stdMat(0x111111, 0.4, 0.1, false) },
+        .geometry = three.TorusGeometry.new(.{ .radius = 0.68, .tube = 0.06, .radialSegments = 10.0, .tubularSegments = 32.0 }),
+        .material = stdMat(0x111111, 0.4, 0.1, false),
     });
-    halo.asObject3D().getRotation().setX(0.8);
-    addObj(g_outer_station.asObject3D(), halo.asObject3D());
+    halo.getRotation().setX(0.8);
+    _ = g_app.outer_station.add(.{ g_app.station_body, halo });
+    _ = g_app.outer_pivot.add(.{ outer_track, g_app.outer_station });
 
-    g_tilt_btn = doc.getElementById("btn-tilt").?;
-    g_meta = doc.getElementById("meta").?;
+    _ = g_app.scene.add(.{
+        three.AmbientLight.new(.{ .color = 0xffffff, .intensity = 1.2 }),
+        key,
+        rim,
+        grid,
+        pedestal,
+        core,
+        g_app.inner_pivot,
+        g_app.outer_pivot,
+    });
+
+    g_app.tilt_btn = doc.getElementById("btn-tilt").?.retain();
+    g_app.meta = doc.getElementById("meta").?.retain();
 
     const ids = [3][]const u8{ "btn-step", "btn-tilt", "btn-reset" };
     for (ids, 0..) |id, i| {
-        const b = doc.getElementById(id).?;
-        b.addEventListener(.click, dom.JsListener(dom.PointerEvent).from(onBtn, @constCast(&BTN_TAGS[i])), .{});
+        g_app.btns[i] = .{ .app = &g_app, .id = i };
+        doc.getElementById(id).?.addEventListener(.click, .{ onBtn, &g_app.btns[i] }, null);
     }
-    updateOrrery();
+    updateOrrery(&g_app);
 }
