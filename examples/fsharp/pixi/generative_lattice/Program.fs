@@ -7,12 +7,15 @@ open Dom
 open type Dom.Globals
 open Pixi.Js
 
+let private strokeStyle w (c: int) : StrokeInput =
+    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = !^ (float c))))
+
 let private initOpts () =
     InitOptions.Create(
         width = 680.0,
         height = 400.0,
-        backgroundColor = U9.Case2 16777215.0,
-        preference = StringOrRendererPreferenceArray.String "webgl",
+        backgroundColor = !^ 16777215.0,
+        preference = !^ "webgl",
         preserveDrawingBuffer = true,
         antialias = true,
         autoStart = false
@@ -20,25 +23,25 @@ let private initOpts () =
 
 let main =
     async {
-        let app = Application.Create<obj> ()
+        let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
         let stageEl = document.getElementById "stage"
-        stageEl.appendChild (app.canvas :> Node) |> ignore
+        stageEl.appendChild app.canvas |> ignore
 
         let guides = Graphics.Create ()
         let rings = [| 42.0; 82.0; 122.0; 162.0 |]
         let ringColors = [| 0x111111; 0x555555; 0xa3a3a3; 0xe5e5e5 |]
 
         for r in rings do
-            guides.circle(340.0, 200.0, r).stroke (createObj [ "width" ==> 1.0; "color" ==> 0xe5e5e5 ]) |> ignore
+            guides.circle(340.0, 200.0, r).stroke (strokeStyle 1.0 0xe5e5e5) |> ignore
 
         for step in 0 .. 11 do
             let theta = float step * (2.0 * Math.PI / 12.0)
             let spokeM = Matrix.Create().rotate(theta)
             let dir = spokeM.apply<Point> (Point.Create (1.0, 0.0))
             guides.moveTo(340.0, 200.0).lineTo(340.0 + dir.x * 182.0, 200.0 + dir.y * 182.0) |> ignore
-        guides.stroke (createObj [ "width" ==> 1.0; "color" ==> 0xd4d4d4 ]) |> ignore
+        guides.stroke (strokeStyle 1.0 0xd4d4d4) |> ignore
         app.stage.addChild guides |> ignore
 
         let tiles = Graphics.Create ()
@@ -63,13 +66,13 @@ let main =
                     tiles.lineTo (pk.x, pk.y) |> ignore
                 tiles
                     .closePath()
-                    .fill(U9.Case2 (float ringColors[rIdx]))
-                    .stroke(createObj [ "width" ==> 1.2; "color" ==> 0x111111 ])
+                    .fill(color = !^ (float ringColors[rIdx]))
+                    .stroke(strokeStyle 1.2 0x111111)
                 |> ignore
         app.stage.addChild tiles |> ignore
 
         let centerDot = Graphics.Create ()
-        centerDot.circle(340.0, 200.0, 8.0).fill (U9.Case2 (float 0x111111)) |> ignore
+        centerDot.circle(340.0, 200.0, 8.0).fill (color = !^ (float 0x111111)) |> ignore
         app.stage.addChild centerDot |> ignore
 
         app.render ()

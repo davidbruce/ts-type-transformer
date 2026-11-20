@@ -40,61 +40,61 @@ let main () =
         )
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
-    (document.getElementById "stage").appendChild (renderer.domElement :> Dom.Node) |> ignore
+    (document.getElementById "stage").appendChild renderer.domElement |> ignore
 
-    let scene = Scene.Create<Object3DEventMap>()
-    scene.background <- ColorOrTexture.Color (Color.Create (ColorRepresentation.Number (float 0xf7f7f7)))
+    let scene = Scene.Create()
+    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
 
     let orthoCam = OrthographicCamera.Create(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0)
     let perspCam = PerspectiveCamera.Create(40.0, aspect, 0.1, 100.0)
 
-    scene.add (AmbientLight.Create(ColorRepresentation.Number (float 0xffffff), 1.25) :> Object3D<Object3DEventMap>) |> ignore
-    let keyLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 2.1)
+    scene.add (AmbientLight.Create(float 0xffffff, 1.25)) |> ignore
+    let keyLight = DirectionalLight.Create(float 0xffffff, 2.1)
     keyLight.position.set (8.0, 12.0, 6.0) |> ignore
-    scene.add (keyLight :> Object3D<Object3DEventMap>) |> ignore
-    let rimLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 0.9)
+    scene.add (keyLight) |> ignore
+    let rimLight = DirectionalLight.Create(float 0xffffff, 0.9)
     rimLight.position.set (-7.0, 6.0, -8.0) |> ignore
-    scene.add (rimLight :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (rimLight) |> ignore
 
     let plinth =
-        Mesh.Create<PlaneGeometry, MeshStandardMaterial, Object3DEventMap>(
+        Mesh.Create(
             PlaneGeometry.Create(8.6, 8.6),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0xe5e5e5),
+                    color = !^ (float 0xe5e5e5),
                     roughness = 0.85
                 )
             )
         )
     plinth.rotation.x <- -Math.PI / 2.0
     plinth.position.y <- -0.01
-    scene.add (plinth :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (plinth) |> ignore
 
     let grid =
         GridHelper.Create(
             9.0,
             10.0,
-            ColorRepresentation.Number (float 0x999999),
-            ColorRepresentation.Number (float 0xd4d4d4)
+            !^ (float 0x999999),
+            !^ (float 0xd4d4d4)
         )
-    scene.add (grid :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (grid) |> ignore
 
     let towerGeo = BoxGeometry.Create(0.54, 1.0, 0.54)
     let towerMat =
         MeshStandardMaterial.Create(
             MeshStandardMaterialParameters.Create(
-                color = ColorRepresentation.Number (float 0xffffff),
+                color = !^ (float 0xffffff),
                 roughness = 0.65,
                 metalness = 0.08
             )
         )
     let inst =
-        InstancedMesh.Create<BoxGeometry, MeshStandardMaterial, Object3DEventMap>(
+        InstancedMesh.Create(
             Some towerGeo,
             Some towerMat,
             100.0
         )
-    scene.add (inst :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (inst) |> ignore
 
     let camBtn = document.getElementById "btn-cam"
     let metaEl = document.getElementById "meta"
@@ -127,7 +127,7 @@ let main () =
                 idx <- idx + 1
 
         inst.instanceMatrix.needsUpdate <- true
-        if not (isNull (box inst.instanceColor)) then
+        if not (isNull inst.instanceColor) then
             inst.instanceColor.needsUpdate <- true
 
         let radius = 11.5
@@ -139,7 +139,7 @@ let main () =
         perspCam.lookAt (Vector3.Create(0.0, 0.9, 0.0))
 
         let activeCam: Camera = if useOrtho then (orthoCam :> Camera) else (perspCam :> Camera)
-        renderer.render (scene :> Object3D<Object3DEventMap>, activeCam)
+        renderer.render (scene, activeCam)
 
         let camName = if useOrtho then "Orthographic" else "Perspective"
         camBtn.textContent <- sprintf "Camera: %s" camName

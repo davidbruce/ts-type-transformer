@@ -14,8 +14,8 @@ let private mapOpts () =
         markerZoomAnimation = false
     )
 
-let private toPolygonPts (pts: LatLng list) =
-    ResizeArray (pts |> List.map PolylineSetLatLngsLatlngs.LatLng)
+let private toPolygonPts (pts: LatLng list) : ResizeArray<PolylineSetLatLngsLatlngs> =
+    ResizeArray [ for p in pts -> !^p ]
 
 let main () =
     let m = map (document.getElementById "map", mapOpts ())
@@ -39,7 +39,7 @@ let main () =
         ]
 
     let midPoly =
-        polygon<obj>(
+        polygon(
             toPolygonPts midRing,
             PolylineOptions.Create(
                 smoothFactor = 1.0,
@@ -50,7 +50,7 @@ let main () =
             )
         )
     let corePoly =
-        polygon<obj>(
+        polygon(
             toPolygonPts coreRing,
             PolylineOptions.Create(
                 smoothFactor = 1.0,
@@ -63,21 +63,21 @@ let main () =
 
     let paddedBounds = midPoly.getBounds().pad 0.18
     let hullRect =
-        rectangle<obj>(
+        rectangle(
             paddedBounds,
             PolylineOptions.Create(
                 smoothFactor = 1.0,
                 color = "#737373",
                 weight = 1.5,
-                dashArray = (StringOrNumberArray.String "4 4"),
+                dashArray = !^"4 4",
                 fillColor = "#efefef",
                 fillOpacity = 0.05
             )
         )
 
-    hullRect.addTo (MapOrLayerGroup.Map m) |> ignore
-    midPoly.addTo (MapOrLayerGroup.Map m) |> ignore
-    corePoly.addTo (MapOrLayerGroup.Map m) |> ignore
+    hullRect.addTo (!^m) |> ignore
+    midPoly.addTo (!^m) |> ignore
+    corePoly.addTo (!^m) |> ignore
 
     let coreBounds = corePoly.getBounds ()
     let midBounds = midPoly.getBounds ()
@@ -109,7 +109,7 @@ let main () =
             else
                 exterior <- exterior + 1
                 "#ffffff"
-        circleMarker<obj>(
+        circleMarker(
             pt,
             CircleMarkerOptions.Create(
                 radius = 6.0,
@@ -118,10 +118,10 @@ let main () =
                 fillColor = fillHex,
                 fillOpacity = 1.0
             )
-        ).addTo (MapOrLayerGroup.Map m)
+        ).addTo (!^m)
         |> ignore
 
-    m.fitBounds (LatLngBoundsExpression.LatLngBounds paddedBounds) |> ignore
+    m.fitBounds paddedBounds |> ignore
 
     let meta = document.getElementById "meta"
     meta.textContent <-

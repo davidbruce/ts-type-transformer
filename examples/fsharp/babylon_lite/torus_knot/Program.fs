@@ -9,7 +9,10 @@ open type Babylonjs.Lite.Globals
 let main =
     async {
         try
-            let canvas = (document.querySelector HTMLElementTagNameMapKeys.canvas).Value
+            let canvas =
+                match document.querySelector HTMLElementTagNameMapKeys.canvas with
+                | Some c -> c
+                | None -> failwith "Canvas not found"
             let! engine = createEngine canvas |> Async.AwaitPromise
             let scene = createSceneContext engine
             scene.clearColor <- GPUColorDict.Create(r = 0.05, g = 0.07, b = 0.11, a = 1.0)

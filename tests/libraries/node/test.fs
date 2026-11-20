@@ -29,7 +29,7 @@ check (path.sep = path.sep && path.delimiter = path.delimiter) "sep and delimite
 let join (a: string) (b: string) = path.join (a, b)
 
 // events
-let emitter = Events.EventEmitter.Create<obj> ()
+let emitter = Events.EventEmitter.Create ()
 let mutable calls = 0
 let mutable seen: string list = []
 let listener =
@@ -37,22 +37,22 @@ let listener =
         calls <- calls + 1
         seen <- seen @ [ args |> Seq.map string |> String.concat "," ])
 emitter.on ("ping", listener) |> ignore
-check (emitter.listenerCount (U2.Case1 "ping") = 1.0) "listenerCount"
-check (emitter.emit (U2.Case1 "ping", box "one", box "extra")) "emit with a listener is true"
+check (emitter.listenerCount "ping" = 1.0) "listenerCount"
+check (emitter.emit ("ping", box "one", box "extra")) "emit with a listener is true"
 check (calls = 1) "the listener ran"
 check (seen = [ "one,extra" ]) "the listener read all emitted arguments"
-check (not (emitter.emit (U2.Case1 "nobody"))) "emit without a listener is false"
-emitter.emit (U2.Case1 "ping", box "two") |> ignore
+check (not (emitter.emit "nobody")) "emit without a listener is false"
+emitter.emit ("ping", box "two") |> ignore
 check (calls = 2 && seen = [ "one,extra"; "two" ]) "twice"
 let mutable onceCalls = 0
 emitter.once ("once", NodeJS.AddListenerListener.Create(fun _ -> onceCalls <- onceCalls + 1)) |> ignore
-emitter.emit (U2.Case1 "once") |> ignore
-emitter.emit (U2.Case1 "once") |> ignore
+emitter.emit "once" |> ignore
+emitter.emit "once" |> ignore
 check (onceCalls = 1) "once"
-check (emitter.listenerCount (U2.Case1 "once") = 0.0) "once removes itself"
+check (emitter.listenerCount "once" = 0.0) "once removes itself"
 emitter.removeListener ("ping", listener) |> ignore
-check (emitter.listenerCount (U2.Case1 "ping") = 0.0) "removeListener"
-emitter.emit (U2.Case1 "ping", box "three") |> ignore
+check (emitter.listenerCount "ping" = 0.0) "removeListener"
+emitter.emit ("ping", box "three") |> ignore
 check (calls = 2) "removed listener is not called"
 check (emitter.eventNames().Count = 0) "eventNames"
 emitter.setMaxListeners 5.0 |> ignore

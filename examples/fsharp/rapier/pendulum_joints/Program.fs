@@ -2,6 +2,7 @@ module Program
 
 open System
 open Fable.Core
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Dimforge.Rapier3dCompat
@@ -41,7 +42,7 @@ let private drawRotatedBox
     let x2, y2 = corner hx hy
     let x3, y3 = corner (-hx) hy
 
-    ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String fillHex
+    ctx.fillStyle <- !^ fillHex
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
     ctx.lineTo (x1, y1)
@@ -50,7 +51,7 @@ let private drawRotatedBox
     ctx.closePath ()
     ctx.fill ()
 
-    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+    ctx.strokeStyle <- !^ "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
@@ -63,11 +64,11 @@ let private drawRotatedBox
 let private drawPivot (ctx: CanvasRenderingContext2D) (wx: float) (wy: float) =
     let cx = toCx wx
     let cy = toCy wy
-    ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#ffffff"
+    ctx.fillStyle <- !^ "#ffffff"
     ctx.beginPath ()
     ctx.arc (cx, cy, 4.0, 0.0, 2.0 * Math.PI)
     ctx.fill ()
-    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+    ctx.strokeStyle <- !^ "#111111"
     ctx.lineWidth <- 1.6
     ctx.beginPath ()
     ctx.arc (cx, cy, 4.0, 0.0, 2.0 * Math.PI)
@@ -77,73 +78,81 @@ let main () =
     async {
         do! Async.AwaitPromise (init ())
 
-        let canvas = unbox<HTMLCanvasElement> (document.getElementById "canvas")
+        let canvas =
+            match document.querySelector HTMLElementTagNameMapKeys.canvas with
+            | Some c -> c
+            | None -> failwith "Canvas not found"
         let ctx = canvas.getContext_2d ()
         let metaEl = document.getElementById "meta"
         let pauseBtn = document.getElementById "btn-pause"
 
         let mutable paused = false
         let mutable stepCount = 0
-        let mutable world: World = Unchecked.defaultof<World>
-        let mutable chainLinks: RigidBody array = [||]
-        let mutable armLink: RigidBody = Unchecked.defaultof<RigidBody>
-        let mutable armBob: RigidBody = Unchecked.defaultof<RigidBody>
         let trailAX = Array.zeroCreate<float> trailLen
         let trailAY = Array.zeroCreate<float> trailLen
         let trailBX = Array.zeroCreate<float> trailLen
         let trailBY = Array.zeroCreate<float> trailLen
         let mutable trailCount = 0
 
-        let buildScene () =
-            if not (isNull (box world)) then world.free ()
-            world <- World.Create (Vector.Create (0.0, -9.81, 0.0))
+        let createScene () =
+            let w = World.Create (Vector.Create (0.0, -9.81, 0.0))
 
-            let gantry = world.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (0.0, 6.2, 0.0))
-            world.createCollider (ColliderDesc.cuboid(6.0, 0.22, 0.6), gantry) |> ignore
+            let gantry = w.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (0.0, 6.2, 0.0))
+            w.createCollider (ColliderDesc.cuboid(6.0, 0.22, 0.6), gantry) |> ignore
 
             let zAxis = Vector.Create (0.0, 0.0, 1.0)
 
             // Assembly A: 3-link hanging pendulum at x = -2.2
-            let l1 = world.createRigidBody (RigidBodyDesc.dynamic().setTranslation (-2.8, 5.4, 0.0))
-            world.createCollider (ColliderDesc.cuboid(linkHx, linkHy, 0.2).setDensity(1.4), l1) |> ignore
-            let l2 = world.createRigidBody (RigidBodyDesc.dynamic().setTranslation (-3.3, 4.1, 0.0))
-            world.createCollider (ColliderDesc.cuboid(linkHx, linkHy, 0.2).setDensity(1.4), l2) |> ignore
-            let l3 = world.createRigidBody (RigidBodyDesc.dynamic().setTranslation (-3.8, 2.8, 0.0))
-            world.createCollider (ColliderDesc.cuboid(linkHx, linkHy, 0.2).setDensity(1.6), l3) |> ignore
+            let l1 = w.createRigidBody (RigidBodyDesc.dynamic().setTranslation (-2.8, 5.4, 0.0))
+            w.createCollider (ColliderDesc.cuboid(linkHx, linkHy, 0.2).setDensity(1.4), l1) |> ignore
+            let l2 = w.createRigidBody (RigidBodyDesc.dynamic().setTranslation (-3.3, 4.1, 0.0))
+            w.createCollider (ColliderDesc.cuboid(linkHx, linkHy, 0.2).setDensity(1.4), l2) |> ignore
+            let l3 = w.createRigidBody (RigidBodyDesc.dynamic().setTranslation (-3.8, 2.8, 0.0))
+            w.createCollider (ColliderDesc.cuboid(linkHx, linkHy, 0.2).setDensity(1.6), l3) |> ignore
 
-            world.createImpulseJoint (
+            w.createImpulseJoint (
                 JointData.revolute (Vector.Create (-2.2, -0.22, 0.0), Vector.Create (0.0, linkHy + 0.06, 0.0), zAxis),
                 gantry, l1, true
             ) |> ignore
-            world.createImpulseJoint (
+            w.createImpulseJoint (
                 JointData.revolute (Vector.Create (0.0, -linkHy - 0.06, 0.0), Vector.Create (0.0, linkHy + 0.06, 0.0), zAxis),
                 l1, l2, true
             ) |> ignore
-            world.createImpulseJoint (
+            w.createImpulseJoint (
                 JointData.revolute (Vector.Create (0.0, -linkHy - 0.06, 0.0), Vector.Create (0.0, linkHy + 0.06, 0.0), zAxis),
                 l2, l3, true
             ) |> ignore
             l3.applyImpulse (Vector.Create (-1.4, 0.0, 0.0), true)
-            chainLinks <- [| l1; l2; l3 |]
 
             // Assembly B: 2-body articulated swinging arm + heavy sphere bob at x = +2.3
-            armLink <- world.createRigidBody (RigidBodyDesc.dynamic().setTranslation (3.1, 5.2, 0.0))
-            world.createCollider (ColliderDesc.cuboid(0.14, 0.85, 0.2).setDensity(1.2), armLink) |> ignore
-            armBob <- world.createRigidBody (RigidBodyDesc.dynamic().setTranslation (3.8, 3.6, 0.0))
-            world.createCollider (ColliderDesc.ball(0.42).setDensity(3.0), armBob) |> ignore
+            let link = w.createRigidBody (RigidBodyDesc.dynamic().setTranslation (3.1, 5.2, 0.0))
+            w.createCollider (ColliderDesc.cuboid(0.14, 0.85, 0.2).setDensity(1.2), link) |> ignore
+            let bob = w.createRigidBody (RigidBodyDesc.dynamic().setTranslation (3.8, 3.6, 0.0))
+            w.createCollider (ColliderDesc.ball(0.42).setDensity(3.0), bob) |> ignore
 
-            world.createImpulseJoint (
+            w.createImpulseJoint (
                 JointData.revolute (Vector.Create (2.3, -0.22, 0.0), Vector.Create (0.0, 0.88, 0.0), zAxis),
-                gantry, armLink, true
+                gantry, link, true
             ) |> ignore
-            world.createImpulseJoint (
+            w.createImpulseJoint (
                 JointData.revolute (Vector.Create (0.0, -0.88, 0.0), Vector.Create (0.0, 0.72, 0.0), zAxis),
-                armLink, armBob, true
+                link, bob, true
             ) |> ignore
-            armBob.applyImpulse (Vector.Create (1.8, 0.2, 0.0), true)
+            bob.applyImpulse (Vector.Create (1.8, 0.2, 0.0), true)
 
             stepCount <- 0
             trailCount <- 0
+            (w, [| l1; l2; l3 |], link, bob)
+
+        let mutable (world, chainLinks, armLink, armBob) = createScene ()
+
+        let buildScene () =
+            world.free ()
+            let (w, links, link, bob) = createScene ()
+            world <- w
+            chainLinks <- links
+            armLink <- link
+            armBob <- bob
 
         let stepSim () =
             world.step ()
@@ -158,10 +167,10 @@ let main () =
             if trailCount < trailLen then trailCount <- trailCount + 1
 
         let render () =
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#ffffff"
+            ctx.fillStyle <- !^ "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#efefef"
+            ctx.strokeStyle <- !^ "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -180,7 +189,7 @@ let main () =
             drawRotatedBox ctx 0.0 6.2 0.0 0.0 0.0 1.0 6.0 0.22 "#efefef"
 
             // End-bob swing trails
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#b5b5b5"
+            ctx.fillStyle <- !^ "#b5b5b5"
             for i in 0 .. trailCount - 1 do
                 ctx.beginPath ()
                 ctx.arc (toCx trailAX.[i], toCy trailAY.[i], 1.6, 0.0, 2.0 * Math.PI)
@@ -204,11 +213,11 @@ let main () =
 
             let bCx = toCx bp.x
             let bCy = toCy bp.y
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#262626"
+            ctx.fillStyle <- !^ "#262626"
             ctx.beginPath ()
             ctx.arc (bCx, bCy, 0.42 * 46.0, 0.0, 2.0 * Math.PI)
             ctx.fill ()
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+            ctx.strokeStyle <- !^ "#111111"
             ctx.lineWidth <- 1.6
             ctx.beginPath ()
             ctx.arc (bCx, bCy, 0.42 * 46.0, 0.0, 2.0 * Math.PI)
@@ -227,7 +236,7 @@ let main () =
             let armR11 = 1.0 - 2.0 * (aq.x * aq.x + aq.z * aq.z)
             drawPivot ctx (ap.x - armR01 * 0.88) (ap.y - armR11 * 0.88)
 
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#555555"
+            ctx.fillStyle <- !^ "#555555"
             ctx.font <- "11px ui-monospace, monospace"
             ctx.fillText ("3-Link Revolute Chain", toCx -3.5, 36.0)
             ctx.fillText ("2-Body Bob Pendulum", toCx 1.1, 36.0)
@@ -237,7 +246,6 @@ let main () =
             metaEl.textContent <-
                 sprintf "5 revolute joints · chain_tip=(%.2f, %.2f) · bob=(%.2f, %.2f) · step=%d (%s)" pA.x pA.y bp.x bp.y stepCount pState
 
-        buildScene ()
         for _ in 1..20 do stepSim ()
         render ()
 

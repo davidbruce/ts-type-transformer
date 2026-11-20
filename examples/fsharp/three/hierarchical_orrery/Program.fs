@@ -2,6 +2,7 @@ module Program
 
 open System
 open Fable.Core
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Three
@@ -23,147 +24,147 @@ let main () =
     renderer.setSize (width, height)
 
     let stage = document.getElementById "stage"
-    stage.appendChild (renderer.domElement :> Dom.Node) |> ignore
+    stage.appendChild renderer.domElement |> ignore
 
-    let scene = Scene.Create<Object3DEventMap>()
-    scene.background <- ColorOrTexture.Color (Color.Create (ColorRepresentation.Number (float 0xf7f7f7)))
+    let scene = Scene.Create()
+    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
     camera.position.set (5.6, 5.2, 7.6) |> ignore
     camera.lookAt (Vector3.Create(0.0, -0.1, 0.0))
 
-    scene.add (AmbientLight.Create(ColorRepresentation.Number (float 0xffffff), 1.2) :> Object3D<Object3DEventMap>) |> ignore
-    let keyLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 2.2)
+    scene.add (AmbientLight.Create(float 0xffffff, 1.2)) |> ignore
+    let keyLight = DirectionalLight.Create(float 0xffffff, 2.2)
     keyLight.position.set (6.0, 10.0, 8.0) |> ignore
-    scene.add (keyLight :> Object3D<Object3DEventMap>) |> ignore
-    let rimLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 0.9)
+    scene.add (keyLight) |> ignore
+    let rimLight = DirectionalLight.Create(float 0xffffff, 0.9)
     rimLight.position.set (-7.0, 5.0, -6.0) |> ignore
-    scene.add (rimLight :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (rimLight) |> ignore
 
     let grid =
         GridHelper.Create(
             12.0,
             12.0,
-            ColorRepresentation.Number (float 0x999999),
-            ColorRepresentation.Number (float 0xe5e5e5)
+            !^ (float 0x999999),
+            !^ (float 0xe5e5e5)
         )
     grid.position.y <- -1.5
-    scene.add (grid :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (grid) |> ignore
 
     let pedestal =
-        Mesh.Create<CylinderGeometry, MeshStandardMaterial, Object3DEventMap>(
+        Mesh.Create(
             CylinderGeometry.Create(0.55, 0.75, 0.35, 24.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0x262626),
+                    color = !^ (float 0x262626),
                     roughness = 0.7
                 )
             )
         )
     pedestal.position.y <- -1.3
-    scene.add (pedestal :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (pedestal) |> ignore
 
     let core =
-        Mesh.Create<SphereGeometry, MeshStandardMaterial, Object3DEventMap>(
+        Mesh.Create(
             SphereGeometry.Create(0.65, 24.0, 18.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0x111111),
+                    color = !^ (float 0x111111),
                     roughness = 0.45,
                     metalness = 0.2
                 )
             )
         )
-    scene.add (core :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (core) |> ignore
 
-    let innerPivot = Group.Create<Object3DEventMap>()
-    scene.add (innerPivot :> Object3D<Object3DEventMap>) |> ignore
+    let innerPivot = Group.Create()
+    scene.add (innerPivot) |> ignore
 
     let innerTrack =
-        Mesh.Create<TorusGeometry, MeshBasicMaterial, Object3DEventMap>(
+        Mesh.Create(
             TorusGeometry.Create(2.1, 0.025, 8.0, 64.0),
             MeshBasicMaterial.Create(
-                MeshBasicMaterialParameters.Create(color = ColorRepresentation.Number (float 0x999999))
+                MeshBasicMaterialParameters.Create(color = !^ (float 0x999999))
             )
         )
     innerTrack.rotation.x <- Math.PI / 2.0
-    innerPivot.add (innerTrack :> Object3D<Object3DEventMap>) |> ignore
+    innerPivot.add (innerTrack) |> ignore
 
-    let innerPlanet = Group.Create<Object3DEventMap>()
+    let innerPlanet = Group.Create()
     innerPlanet.position.set (2.1, 0.0, 0.0) |> ignore
-    innerPivot.add (innerPlanet :> Object3D<Object3DEventMap>) |> ignore
+    innerPivot.add (innerPlanet) |> ignore
 
     let planetMesh =
-        Mesh.Create<SphereGeometry, MeshStandardMaterial, Object3DEventMap>(
+        Mesh.Create(
             SphereGeometry.Create(0.36, 20.0, 16.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0x555555),
+                    color = !^ (float 0x555555),
                     roughness = 0.55
                 )
             )
         )
-    innerPlanet.add (planetMesh :> Object3D<Object3DEventMap>) |> ignore
+    innerPlanet.add (planetMesh) |> ignore
 
-    let moonPivot = Group.Create<Object3DEventMap>()
-    innerPlanet.add (moonPivot :> Object3D<Object3DEventMap>) |> ignore
+    let moonPivot = Group.Create()
+    innerPlanet.add (moonPivot) |> ignore
 
     let moon =
-        Mesh.Create<OctahedronGeometry, MeshStandardMaterial, Object3DEventMap>(
+        Mesh.Create(
             OctahedronGeometry.Create(0.18, 0.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0xd4d4d4),
+                    color = !^ (float 0xd4d4d4),
                     roughness = 0.4,
                     flatShading = true
                 )
             )
         )
     moon.position.set (0.75, 0.0, 0.0) |> ignore
-    moonPivot.add (moon :> Object3D<Object3DEventMap>) |> ignore
+    moonPivot.add (moon) |> ignore
 
-    let outerPivot = Group.Create<Object3DEventMap>()
-    scene.add (outerPivot :> Object3D<Object3DEventMap>) |> ignore
+    let outerPivot = Group.Create()
+    scene.add (outerPivot) |> ignore
 
     let outerTrack =
-        Mesh.Create<TorusGeometry, MeshBasicMaterial, Object3DEventMap>(
+        Mesh.Create(
             TorusGeometry.Create(3.8, 0.025, 8.0, 80.0),
             MeshBasicMaterial.Create(
-                MeshBasicMaterialParameters.Create(color = ColorRepresentation.Number (float 0xb5b5b5))
+                MeshBasicMaterialParameters.Create(color = !^ (float 0xb5b5b5))
             )
         )
     outerTrack.rotation.x <- Math.PI / 2.0
-    outerPivot.add (outerTrack :> Object3D<Object3DEventMap>) |> ignore
+    outerPivot.add (outerTrack) |> ignore
 
-    let outerStation = Group.Create<Object3DEventMap>()
+    let outerStation = Group.Create()
     outerStation.position.set (3.8, 0.0, 0.0) |> ignore
-    outerPivot.add (outerStation :> Object3D<Object3DEventMap>) |> ignore
+    outerPivot.add (outerStation) |> ignore
 
     let stationBody =
-        Mesh.Create<IcosahedronGeometry, MeshStandardMaterial, Object3DEventMap>(
+        Mesh.Create(
             IcosahedronGeometry.Create(0.42, 0.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0x404040),
+                    color = !^ (float 0x404040),
                     roughness = 0.5,
                     flatShading = true
                 )
             )
         )
-    outerStation.add (stationBody :> Object3D<Object3DEventMap>) |> ignore
+    outerStation.add (stationBody) |> ignore
 
     let halo =
-        Mesh.Create<TorusGeometry, MeshStandardMaterial, Object3DEventMap>(
+        Mesh.Create(
             TorusGeometry.Create(0.68, 0.06, 10.0, 32.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0x111111),
+                    color = !^ (float 0x111111),
                     roughness = 0.4
                 )
             )
         )
     halo.rotation.x <- 0.8
-    outerStation.add (halo :> Object3D<Object3DEventMap>) |> ignore
+    outerStation.add (halo) |> ignore
 
     let tiltBtn = document.getElementById "btn-tilt"
     let metaEl = document.getElementById "meta"
@@ -178,7 +179,7 @@ let main () =
         let moonPos = moon.getWorldPosition (Vector3.Create ())
         let stationPos = outerStation.getWorldPosition (Vector3.Create ())
         tiltBtn.textContent <- if outerTilted then "Outer Tilt: On" else "Outer Tilt: Off"
-        renderer.render (scene :> Object3D<Object3DEventMap>, camera :> Camera)
+        renderer.render (scene, camera)
         let deg = int (Math.Round(epoch * 180.0 / Math.PI))
         metaEl.textContent <-
             sprintf

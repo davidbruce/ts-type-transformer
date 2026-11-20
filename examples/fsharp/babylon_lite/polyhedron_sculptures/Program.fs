@@ -9,7 +9,10 @@ open type Babylonjs.Lite.Globals
 let main =
     async {
         try
-            let canvas = (document.querySelector HTMLElementTagNameMapKeys.canvas).Value
+            let canvas =
+                match document.querySelector HTMLElementTagNameMapKeys.canvas with
+                | Some c -> c
+                | None -> failwith "Canvas not found"
             let! engine = createEngine canvas |> Async.AwaitPromise
             let scene = createSceneContext engine
             scene.clearColor <- GPUColorDict.Create(r = 0.05, g = 0.05, b = 0.05, a = 1.0)
@@ -45,28 +48,28 @@ let main =
             plinthMat.specularColor <- (0.30, 0.30, 0.30)
             plinthMat.specularPower <- 32.0
 
-            let sculptures = ResizeArray<Mesh>()
-            for i in 0..4 do
-                let fi = float i
-                let x = (fi - 2.0) * 2.25
-                let z = -Math.Abs(fi - 2.0) * 0.55
+            let sculptures =
+                [| for i in 0..4 ->
+                       let fi = float i
+                       let x = (fi - 2.0) * 2.25
+                       let z = -Math.Abs(fi - 2.0) * 0.55
 
-                let plinth = createCylinder (engine, CylinderOptions.Create(height = 1.1, diameter = 1.15, tessellation = 28.0))
-                plinth.position.set (x, 0.55, z)
-                plinth.material <- plinthMat
-                addToScene (scene, plinth)
+                       let plinth = createCylinder (engine, CylinderOptions.Create(height = 1.1, diameter = 1.15, tessellation = 28.0))
+                       plinth.position.set (x, 0.55, z)
+                       plinth.material <- plinthMat
+                       addToScene (scene, plinth)
 
-                let v = 0.90 - fi * 0.13
-                let polyMat = createStandardMaterial ()
-                polyMat.diffuseColor <- (v, v, v)
-                polyMat.specularColor <- (0.95, 0.95, 0.95)
-                polyMat.specularPower <- 18.0 + fi * 24.0
+                       let v = 0.90 - fi * 0.13
+                       let polyMat = createStandardMaterial ()
+                       polyMat.diffuseColor <- (v, v, v)
+                       polyMat.specularColor <- (0.95, 0.95, 0.95)
+                       polyMat.specularPower <- 18.0 + fi * 24.0
 
-                let mesh = createPolyhedron (engine, PolyhedronOptions.Create(``type`` = fi, size = 0.62, flat = true))
-                mesh.position.set (x, 2.05, z)
-                mesh.material <- polyMat
-                addToScene (scene, mesh)
-                sculptures.Add(mesh)
+                       let mesh = createPolyhedron (engine, PolyhedronOptions.Create(``type`` = fi, size = 0.62, flat = true))
+                       mesh.position.set (x, 2.05, z)
+                       mesh.material <- polyMat
+                       addToScene (scene, mesh)
+                       mesh |]
 
             let mutable elapsed = 0.0
 
@@ -77,12 +80,12 @@ let main =
                     let sx = Math.Sin(elapsed * 0.65) * 5.2
                     spot.position.set (sx, 6.2, 3.0)
                     spot.direction.set (-sx * 0.15, -1.0, -0.55)
-                    for i in 0 .. sculptures.Count - 1 do
+                    sculptures
+                    |> Array.iteri (fun i m ->
                         let fi = float i
-                        let m = sculptures.[i]
                         m.position.y <- 2.05 + Math.Sin(elapsed * 1.3 + fi * 1.1) * 0.18
                         m.rotation.y <- elapsed * (0.45 + 0.12 * fi)
-                        m.rotation.x <- Math.Sin(elapsed * 0.7 + fi) * 0.35
+                        m.rotation.x <- Math.Sin(elapsed * 0.7 + fi) * 0.35)
             )
 
             do! registerScene scene |> Async.AwaitPromise

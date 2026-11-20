@@ -1,79 +1,69 @@
 module Program
 
-open Fable.Core
 open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Marked
 open type Marked.Globals
 
-let el (tag: string) (cls: string) (txt: string option) =
+let private el (tag: string) (cls: string) (text: string) =
     let node = document.createElement tag
     if cls <> "" then node.className <- cls
-    match txt with
-    | Some t -> node.textContent <- t
-    | None -> ()
+    if text <> "" then node.textContent <- text
     node
 
-let unwrapHtml (r: StringOrPromise) =
+let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
+    let node = el tag cls ""
+    for ch in children do
+        node.appendChild ch |> ignore
+    node
+
+let private unwrapHtml (r: StringOrPromise) =
     match r with
     | StringOrPromise.String s -> s
     | StringOrPromise.Promise _ -> ""
 
-let app = document.getElementById "app"
+let private app = document.getElementById "app"
 
 let md =
     "# Wireframe Spec\n\n## Custom Pipeline\n\nParagraph with *italic* and **bold** and `code`.\n"
 
-let seen = ResizeArray<string>()
+let mutable seen: string list = []
 
-let ext = createEmpty<MarkedExtension<string, string>>
-ext.renderer <- Some (
-    MarkedExtensionRenderer.Create (
-        heading = RendererSpace.Create (fun args ->
-            let h = unbox<Tokens.Heading> args.[0]
-            U2.Case2 $"<h{int h.depth} class=\"wire-h\">§ {h.text}</h{int h.depth}>\n")
+let ext =
+    MarkedExtension.Create (
+        renderer =
+            MarkedExtensionRenderer.Create (
+                heading =
+                    RendererSpace.Create (fun args ->
+                        let h = unbox<Tokens.Heading> args.[0]
+                        !^ $"<h{int h.depth} class=\"wire-h\">§ {h.text}</h{int h.depth}>\n")
+            )
     )
-)
 
 let customInstance = Marked.Create ext
 let customTokens = customInstance.lexer md
 customInstance.walkTokens (
-    TokenArrayOrTokensList.TokensList customTokens,
+    !^customTokens,
     fun t ->
-        seen.Add (unbox<Tokens.Generic> t).``type``
-        U3.Case1 ()
+        seen <- (unbox<Tokens.Generic> t).``type`` :: seen
+        !^()
 ) |> ignore
-let customHtml =
-    customInstance.parser (ResizeArray [ for i in 0 .. int customTokens.length - 1 -> customTokens.[float i] ])
+let visited = List.rev seen
+let customHtml = customInstance.parser (ResizeArray customTokens)
 
-let head = el "div" "head" None
-head.appendChild (el "h1" "" (Some "Marked Custom Renderer & Walker (F#)")) |> ignore
-head.appendChild (el "span" "badge" (Some $"{seen.Count} tokens visited")) |> ignore
-app.appendChild head |> ignore
+app.appendChild (wrap "div" "head" [ el "h1" "" "Marked Custom Renderer & Walker (F#)"; el "span" "badge" $"{visited.Length} tokens visited" ]) |> ignore
 
-let grid = el "div" "grid" None
+let mkOutCard (lbl: string) (html: string) =
+    let slot = el "div" "md-out" ""
+    slot.innerHTML <- html
+    wrap "div" "card" [ el "div" "label" lbl; slot ]
 
-let defCard = el "div" "card" None
-defCard.appendChild (el "div" "label" (Some "Default Renderer")) |> ignore
-let defOut = el "div" "md-out" None
-defOut.innerHTML <- unwrapHtml (marked md)
-defCard.appendChild defOut |> ignore
+app.appendChild (wrap "div" "grid" [ mkOutCard "Default Renderer" (unwrapHtml (marked md)); mkOutCard "Custom Heading Renderer" customHtml ]) |> ignore
 
-let custCard = el "div" "card" None
-custCard.appendChild (el "div" "label" (Some "Custom Heading Renderer")) |> ignore
-let custOut = el "div" "md-out" None
-custOut.innerHTML <- customHtml
-custCard.appendChild custOut |> ignore
-
-grid.appendChild defCard |> ignore
-grid.appendChild custCard |> ignore
-app.appendChild grid |> ignore
-
-let walkCard = el "div" "card" None
-walkCard.appendChild (el "div" "label" (Some "Visited Tokens (walkTokens)")) |> ignore
-let strip = el "div" "tok-strip" None
-for kind in seen do
-    strip.appendChild (el "span" "tok-pill" (Some kind)) |> ignore
-walkCard.appendChild strip |> ignore
-app.appendChild walkCard |> ignore
+app.appendChild
+    (wrap "div" "card" [
+        el "div" "label" "Visited Tokens (walkTokens)"
+        wrap "div" "tok-strip" [ for kind in visited -> el "span" "tok-pill" kind ]
+    ])
+|> ignore

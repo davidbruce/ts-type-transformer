@@ -1,6 +1,5 @@
 module Program
 
-open Fable.Core
 open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
@@ -10,76 +9,65 @@ open Prosemirror.ProsemirrorState
 open Prosemirror.ProsemirrorView
 
 let private tagSpec (tag: string) : DOMOutputSpec =
-    DOMOutputSpec.Tuple (ResizeArray<obj> [ box tag; box 0 ])
+    !^(ResizeArray<obj> [ box tag; box 0 ])
 
 let private parseTag (tag: string) : TagParseRule =
-    let r = createEmpty<TagParseRule>
-    r.tag <- tag
-    r
+    TagParseRule.Create (tag = tag)
+
+let private parseTagWithLevel (tag: string) (level: int) : TagParseRule =
+    TagParseRule.Create (tag = tag, attrs = JsRecord.Create [ "level", box level ])
 
 let private buildSchema () : Schema<obj, obj> =
-    let docSpec = createEmpty<NodeSpec>
-    docSpec.content <- Some "block+"
+    let docSpec = NodeSpec.Create (content = "block+")
 
-    let levelAttr = createEmpty<AttributeSpec>
-    levelAttr.``default`` <- Some (box 2)
-    let h1Rule = parseTag "h1"
-    h1Rule.attrs <- Some (unbox (createObj [ "level" ==> 1 ]))
-    let h2Rule = parseTag "h2"
-    h2Rule.attrs <- Some (unbox (createObj [ "level" ==> 2 ]))
+    let levelAttr = AttributeSpec.Create (``default`` = box 2)
+    let headingSpec =
+        NodeSpec.Create (
+            attrs = JsRecord.Create [ "level", levelAttr ],
+            content = "inline*",
+            group = "block",
+            defining = true,
+            parseDOM = ResizeArray [ parseTagWithLevel "h1" 1; parseTagWithLevel "h2" 2 ],
+            toDOM = fun (n: ProsemirrorModel.Node) ->
+                let lvl = unbox<float> n.attrs.["level"] |> int
+                tagSpec (sprintf "h%d" lvl)
+        )
 
-    let headingSpec = createEmpty<NodeSpec>
-    headingSpec.attrs <- Some (unbox (createObj [ "level" ==> levelAttr ]))
-    headingSpec.content <- Some "inline*"
-    headingSpec.group <- Some "block"
-    headingSpec.defining <- Some true
-    headingSpec.parseDOM <- Some (ResizeArray [ h1Rule; h2Rule ])
-    headingSpec.toDOM <- Some (fun (n: ProsemirrorModel.Node) ->
-        let lvl = unbox<float> n.attrs.["level"] |> int
-        tagSpec (sprintf "h%d" lvl)
-    )
+    let paraSpec =
+        NodeSpec.Create (
+            content = "inline*",
+            group = "block",
+            parseDOM = ResizeArray [ parseTag "p" ],
+            toDOM = fun _ -> tagSpec "p"
+        )
 
-    let paraSpec = createEmpty<NodeSpec>
-    paraSpec.content <- Some "inline*"
-    paraSpec.group <- Some "block"
-    paraSpec.parseDOM <- Some (ResizeArray [ parseTag "p" ])
-    paraSpec.toDOM <- Some (fun _ -> tagSpec "p")
+    let quoteSpec =
+        NodeSpec.Create (
+            content = "block+",
+            group = "block",
+            defining = true,
+            parseDOM = ResizeArray [ parseTag "blockquote" ],
+            toDOM = fun _ -> tagSpec "blockquote"
+        )
 
-    let quoteSpec = createEmpty<NodeSpec>
-    quoteSpec.content <- Some "block+"
-    quoteSpec.group <- Some "block"
-    quoteSpec.defining <- Some true
-    quoteSpec.parseDOM <- Some (ResizeArray [ parseTag "blockquote" ])
-    quoteSpec.toDOM <- Some (fun _ -> tagSpec "blockquote")
+    let textSpec = NodeSpec.Create (group = "inline")
+    let strongSpec = MarkSpec.Create (parseDOM = ResizeArray [ !^(parseTag "strong") ], toDOM = fun _ _ -> tagSpec "strong")
+    let emSpec = MarkSpec.Create (parseDOM = ResizeArray [ !^(parseTag "em") ], toDOM = fun _ _ -> tagSpec "em")
+    let codeSpec = MarkSpec.Create (parseDOM = ResizeArray [ !^(parseTag "code") ], toDOM = fun _ _ -> tagSpec "code")
 
-    let textSpec = createEmpty<NodeSpec>
-    textSpec.group <- Some "inline"
-
-    let strongSpec = createEmpty<MarkSpec>
-    strongSpec.parseDOM <- Some (ResizeArray [ ParseRule.TagParseRule (parseTag "strong") ])
-    strongSpec.toDOM <- Some (fun _ _ -> tagSpec "strong")
-
-    let emSpec = createEmpty<MarkSpec>
-    emSpec.parseDOM <- Some (ResizeArray [ ParseRule.TagParseRule (parseTag "em") ])
-    emSpec.toDOM <- Some (fun _ _ -> tagSpec "em")
-
-    let codeSpec = createEmpty<MarkSpec>
-    codeSpec.parseDOM <- Some (ResizeArray [ ParseRule.TagParseRule (parseTag "code") ])
-    codeSpec.toDOM <- Some (fun _ _ -> tagSpec "code")
-
-    Schema.Create<obj, obj> (
+    Schema.Create (
         SchemaSpec.Create (
-            nodes = U2.Case1 (createObj [
-                "doc" ==> docSpec
-                "heading" ==> headingSpec
-                "paragraph" ==> paraSpec
-                "blockquote" ==> quoteSpec
-                "text" ==> textSpec
+            nodes = !^(JsRecord.Create [
+                "doc", docSpec
+                "heading", headingSpec
+                "paragraph", paraSpec
+                "blockquote", quoteSpec
+                "text", textSpec
             ]),
-            marks = U2.Case1 (createObj [
-                "strong" ==> strongSpec
-                "em" ==> emSpec
-                "code" ==> codeSpec
+            marks = !^(JsRecord.Create [
+                "strong", strongSpec
+                "em", emSpec
+                "code", codeSpec
             ])
         )
     )
@@ -101,26 +89,27 @@ let private changelogHtml =
     "<p>Edit directly above to watch HTML output update live.</p>"
 
 let private parseHtml (html: string) : ProsemirrorModel.Node =
-    let scratch = unbox<Dom.HTMLElement> (document.createElement "div")
+    let scratch = document.createElement HTMLElementTagNameMapKeys.div
     scratch.innerHTML <- html
     parser.parse (scratch :> Dom.Node)
 
 let mutable private roundTripStatus = "JSON Node.eq() pending"
 
 let private describeDoc (doc: ProsemirrorModel.Node) : string =
-    let lines = ResizeArray<string> ()
-    lines.Add (sprintf "doc(blocks=%d, nodeSize=%d)" (int doc.childCount) (int doc.nodeSize))
-    for i in 0 .. (int doc.childCount - 1) do
-        let b = doc.child i
-        let info =
-            if b.``type``.name = "heading" then sprintf "heading[level=%d]" (int (unbox<float> b.attrs.["level"]))
-            else b.``type``.name
-        lines.Add (sprintf "  [%d] %s (%d bytes): %s" i info (int b.nodeSize) b.textContent)
-    String.concat "\n" lines
+    [
+        yield sprintf "doc(blocks=%d, nodeSize=%d)" (int doc.childCount) (int doc.nodeSize)
+        for i in 0 .. (int doc.childCount - 1) do
+            let b = doc.child i
+            let info =
+                if b.``type``.name = "heading" then sprintf "heading[level=%d]" (int (unbox<float> b.attrs.["level"]))
+                else b.``type``.name
+            yield sprintf "  [%d] %s (%d bytes): %s" i info (int b.nodeSize) b.textContent
+    ]
+    |> String.concat "\n"
 
 let private refreshOutput (doc: ProsemirrorModel.Node) =
-    let scratch = unbox<Dom.HTMLElement> (document.createElement "div")
-    serializer.serializeFragment (doc.content, target = HTMLElementOrDocumentFragment.HTMLElement scratch) |> ignore
+    let scratch = document.createElement HTMLElementTagNameMapKeys.div
+    serializer.serializeFragment (doc.content, target = !^(scratch :> Dom.HTMLElement)) |> ignore
     let htmlOut = scratch.innerHTML
     let outEl = document.getElementById "output"
     outEl.textContent <-
@@ -133,23 +122,27 @@ let private refreshOutput (doc: ProsemirrorModel.Node) =
 
 let main () =
     let mountEl = document.getElementById "editor"
-    let mutable view: EditorView = null
+    let mutable view: EditorView option = None
 
     let initialState =
         EditorState.create (EditorStateConfig.Create (schema = schema, doc = parseHtml specHtml))
 
-    let props = createEmpty<DirectEditorProps>
-    props.state <- initialState
-    props.dispatchTransaction <- Some (fun (tr: Transaction) ->
-        if not (isNull view) then
-            let next = view.state.apply tr
-            view.updateState next
-            refreshOutput next.doc
-    )
+    let props =
+        DirectEditorProps.Create (
+            state = initialState,
+            dispatchTransaction = fun (tr: Transaction) ->
+                match view with
+                | Some v ->
+                    let next = v.state.apply tr
+                    v.updateState next
+                    refreshOutput next.doc
+                | None -> ()
+        )
 
-    view <- EditorView.Create ((mountEl :> Dom.Node), props)
+    let v = EditorView.Create ((mountEl :> Dom.Node), props)
+    view <- Some v
     roundTripStatus <- "Parsed Spec HTML via DOMParser"
-    refreshOutput view.state.doc
+    refreshOutput v.state.doc
 
     let wire (id: string) (fn: unit -> unit) =
         let el = document.getElementById id
@@ -158,19 +151,19 @@ let main () =
     wire "btn-0" (fun () ->
         roundTripStatus <- "Parsed Spec HTML via DOMParser"
         let st = EditorState.create (EditorStateConfig.Create (schema = schema, doc = parseHtml specHtml))
-        view.updateState st
+        v.updateState st
         refreshOutput st.doc
     )
 
     wire "btn-1" (fun () ->
         roundTripStatus <- "Parsed Changelog HTML via DOMParser"
         let st = EditorState.create (EditorStateConfig.Create (schema = schema, doc = parseHtml changelogHtml))
-        view.updateState st
+        v.updateState st
         refreshOutput st.doc
     )
 
     wire "btn-2" (fun () ->
-        let doc = view.state.doc
+        let doc = v.state.doc
         let json = doc.toJSON ()
         let rebuilt = schema.nodeFromJSON json
         let ok = doc.eq rebuilt
@@ -179,27 +172,27 @@ let main () =
     )
 
     wire "btn-3" (fun () ->
-        let st = view.state
+        let st = v.state
         let doc = st.doc
         if doc.childCount >= 2.0 then
             let insertPos = doc.child(0).nodeSize + doc.child(1).nodeSize - 1.0
-            let codeMark = schema.mark (StringOrMarkType.String "code")
+            let codeMark = schema.mark "code"
             let span = schema.text (" roundtrip()", ResizeArray [ codeMark ])
             let tr = st.tr
-            tr.insert (insertPos, FragmentOrNodeOrNodeArray.Node span) |> ignore
+            tr.insert (insertPos, span) |> ignore
             roundTripStatus <- sprintf "Inserted code span at pos %d" (int insertPos)
-            view.dispatch tr
+            v.dispatch tr
     )
 
     wire "btn-4" (fun () ->
-        let doc = view.state.doc
-        let scratch = unbox<Dom.HTMLElement> (document.createElement "div")
-        serializer.serializeFragment (doc.content, target = HTMLElementOrDocumentFragment.HTMLElement scratch) |> ignore
+        let doc = v.state.doc
+        let scratch = document.createElement HTMLElementTagNameMapKeys.div
+        serializer.serializeFragment (doc.content, target = !^(scratch :> Dom.HTMLElement)) |> ignore
         let reparsed = parser.parse (scratch :> Dom.Node)
         let ok = doc.eq reparsed
         roundTripStatus <- sprintf "DOM serializeFragment->parse eq() = %b" ok
         let st = EditorState.create (EditorStateConfig.Create (schema = schema, doc = reparsed))
-        view.updateState st
+        v.updateState st
         refreshOutput st.doc
     )
 

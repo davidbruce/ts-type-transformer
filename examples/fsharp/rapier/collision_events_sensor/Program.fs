@@ -2,6 +2,7 @@ module Program
 
 open System
 open Fable.Core
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Dimforge.Rapier3dCompat
@@ -35,7 +36,7 @@ let private drawRotatedBox
     let x2, y2 = corner hx hy
     let x3, y3 = corner (-hx) hy
 
-    ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String fillHex
+    ctx.fillStyle <- !^ fillHex
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
     ctx.lineTo (x1, y1)
@@ -44,7 +45,7 @@ let private drawRotatedBox
     ctx.closePath ()
     ctx.fill ()
 
-    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+    ctx.strokeStyle <- !^ "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
@@ -75,7 +76,10 @@ let main () =
     async {
         do! Async.AwaitPromise (init ())
 
-        let canvas = unbox<HTMLCanvasElement> (document.getElementById "canvas")
+        let canvas =
+            match document.querySelector HTMLElementTagNameMapKeys.canvas with
+            | Some c -> c
+            | None -> failwith "Canvas not found"
         let ctx = canvas.getContext_2d ()
         let metaEl = document.getElementById "meta"
         let pauseBtn = document.getElementById "btn-pause"
@@ -85,54 +89,60 @@ let main () =
         let mutable solidContacts = 0
         let mutable sensorCrossings = 0
         let mutable activeInSensor = 0
-        let mutable sensorHandle = 0.0
-        let mutable world: World = Unchecked.defaultof<World>
-        let mutable queue: EventQueue = Unchecked.defaultof<EventQueue>
-        let mutable bodies: RigidBody array = [||]
         let isBox = [| false; false; true; false; true; false |]
 
-        let addFixedRamp (cx: float) (cy: float) (hx: float) (hy: float) (theta: float) =
+        let addFixedRamp (w: World) (cx: float) (cy: float) (hx: float) (hy: float) (theta: float) =
             let desc = RigidBodyDesc.``fixed``().setTranslation(cx, cy, 0.0).setRotation(Rotation.Create(0.0, 0.0, sin (theta * 0.5), cos (theta * 0.5)))
-            let rb = world.createRigidBody desc
-            world.createCollider (ColliderDesc.cuboid(hx, hy, 1.0).setFriction(0.15).setRestitution(0.35), rb) |> ignore
+            let rb = w.createRigidBody desc
+            w.createCollider (ColliderDesc.cuboid(hx, hy, 1.0).setFriction(0.15).setRestitution(0.35), rb) |> ignore
 
-        let spawnBodies () =
+        let spawnBodies (w: World) =
             Array.init bodyCount (fun i ->
                 let x = -3.7 + float i * 0.52
                 let y = 5.4 + float (i % 3) * 0.58
-                let rb = world.createRigidBody (RigidBodyDesc.dynamic().setTranslation (x, y, 0.0))
+                let rb = w.createRigidBody (RigidBodyDesc.dynamic().setTranslation (x, y, 0.0))
                 let cd =
                     if isBox.[i] then ColliderDesc.cuboid (0.28, 0.28, 0.28)
                     else ColliderDesc.ball 0.32
                 let configured =
                     cd.setRestitution(0.35).setFriction(0.25).setActiveEvents(ActiveEvents.COLLISION_EVENTS)
-                world.createCollider (configured, rb) |> ignore
+                w.createCollider (configured, rb) |> ignore
                 rb
             )
 
-        let buildScene () =
-            if not (isNull (box queue)) then queue.free ()
-            if not (isNull (box world)) then world.free ()
-            world <- World.Create (Vector.Create (0.0, -9.81, 0.0))
-            queue <- EventQueue.Create true
+        let createScene () =
+            let w = World.Create (Vector.Create (0.0, -9.81, 0.0))
+            let q = EventQueue.Create true
 
-            addFixedRamp 0.0 -0.35 6.8 0.35 0.0
-            addFixedRamp -5.4 2.8 0.25 3.2 0.0
-            addFixedRamp 5.4 2.8 0.25 3.2 0.0
-            addFixedRamp -2.1 4.2 2.2 0.18 -0.36
-            addFixedRamp 1.8 2.6 2.2 0.18 0.36
+            addFixedRamp w 0.0 -0.35 6.8 0.35 0.0
+            addFixedRamp w -5.4 2.8 0.25 3.2 0.0
+            addFixedRamp w 5.4 2.8 0.25 3.2 0.0
+            addFixedRamp w -2.1 4.2 2.2 0.18 -0.36
+            addFixedRamp w 1.8 2.6 2.2 0.18 0.36
 
-            let sensorBody = world.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (0.0, 1.35, 0.0))
+            let sensorBody = w.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (0.0, 1.35, 0.0))
             let sensorDesc =
                 ColliderDesc.cuboid(1.85, 0.30, 1.2).setSensor(true).setActiveEvents(ActiveEvents.COLLISION_EVENTS)
-            let sensorCollider = world.createCollider (sensorDesc, sensorBody)
-            sensorHandle <- sensorCollider.handle
+            let sensorCollider = w.createCollider (sensorDesc, sensorBody)
+            let sHandle = sensorCollider.handle
 
-            bodies <- spawnBodies ()
+            let bs = spawnBodies w
             stepCount <- 0
             solidContacts <- 0
             sensorCrossings <- 0
             activeInSensor <- 0
+            (w, q, bs, sHandle)
+
+        let mutable (world, queue, bodies, sensorHandle) = createScene ()
+
+        let buildScene () =
+            queue.free ()
+            world.free ()
+            let (w, q, bs, sHandle) = createScene ()
+            world <- w
+            queue <- q
+            bodies <- bs
+            sensorHandle <- sHandle
 
         let stepSim () =
             world.step queue
@@ -149,10 +159,10 @@ let main () =
             )
 
         let render () =
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#ffffff"
+            ctx.fillStyle <- !^ "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#efefef"
+            ctx.strokeStyle <- !^ "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -173,17 +183,17 @@ let main () =
             let sw = 3.70 * 46.0
             let sh = 0.60 * 46.0
             if activeInSensor > 0 then
-                ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#efefef"
+                ctx.fillStyle <- !^ "#efefef"
                 ctx.fillRect (sx, sy, sw, sh)
-                ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+                ctx.strokeStyle <- !^ "#111111"
                 ctx.lineWidth <- 2.0
                 ctx.strokeRect (sx, sy, sw, sh)
             else
-                ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#737373"
+                ctx.strokeStyle <- !^ "#737373"
                 ctx.lineWidth <- 1.4
                 drawDashedRect ctx sx sy sw sh
 
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#555555"
+            ctx.fillStyle <- !^ "#555555"
             ctx.font <- "11px ui-monospace, monospace"
             ctx.fillText (sprintf "SENSOR GATE (%d inside)" activeInSensor, sx + 8.0, sy + 17.0)
 
@@ -203,11 +213,11 @@ let main () =
                 else
                     let cx = toCx p.x
                     let cy = toCy p.y
-                    ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#262626"
+                    ctx.fillStyle <- !^ "#262626"
                     ctx.beginPath ()
                     ctx.arc (cx, cy, 0.32 * 46.0, 0.0, 2.0 * Math.PI)
                     ctx.fill ()
-                    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+                    ctx.strokeStyle <- !^ "#111111"
                     ctx.lineWidth <- 1.5
                     ctx.beginPath ()
                     ctx.arc (cx, cy, 0.32 * 46.0, 0.0, 2.0 * Math.PI)
@@ -217,7 +227,6 @@ let main () =
             metaEl.textContent <-
                 sprintf "EventQueue · solid_contacts=%d · sensor_crossings=%d · inside=%d · step=%d (%s)" solidContacts sensorCrossings activeInSensor stepCount pState
 
-        buildScene ()
         for _ in 1..40 do stepSim ()
         render ()
 

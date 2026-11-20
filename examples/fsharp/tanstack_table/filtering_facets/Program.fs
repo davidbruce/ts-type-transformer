@@ -10,56 +10,52 @@ open type Tanstack.TableCore.Globals
 [<Import("storeReactivityBindings", "@tanstack/table-core/store-reactivity-bindings")>]
 let private storeReactivityBindings: unit -> TableReactivityBindings = jsNative
 
+type private ServiceRow =
+    { id: string
+      service: string
+      tier: string
+      region: string
+      requests: float
+      errors: float }
+
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
 let private features: TableFeatures =
-    unbox (
-        createObj [
-            "coreReactivityFeature" ==> storeReactivityBindings ()
-            "columnFilteringFeature" ==> columnFilteringFeature
-            "globalFilteringFeature" ==> globalFilteringFeature
-            "coreRowModel" ==> box (createCoreRowModel<TableFeatures, obj> ())
-            "filteredRowModel" ==> box (createFilteredRowModel<TableFeatures, obj> ())
-            "filterFns" ==> createObj [
-                "includesString" ==> box filterFn_includesString
-                "equalsString" ==> box filterFn_equalsString
-                "greaterThanOrEqualTo" ==> box filterFn_greaterThanOrEqualTo
-            ]
+    unbox {|
+        coreReactivityFeature = storeReactivityBindings ()
+        columnFilteringFeature = columnFilteringFeature
+        globalFilteringFeature = globalFilteringFeature
+        coreRowModel = box (createCoreRowModel<TableFeatures, ServiceRow> ())
+        filteredRowModel = box (createFilteredRowModel<TableFeatures, ServiceRow> ())
+        filterFns = JsRecord.Create [
+            "includesString", box filterFn_includesString
+            "equalsString", box filterFn_equalsString
+            "greaterThanOrEqualTo", box filterFn_greaterThanOrEqualTo
         ]
-    )
+    |}
 
-let private col (key: string) (header: string) (filterFn: string option) : obj =
+let private col (key: string) (header: string) (filterFn: string option) : ColumnDefBase_Core<TableFeatures, ServiceRow, CellData> =
     match filterFn with
-    | Some fnName -> createObj [ "accessorKey" ==> key; "header" ==> header; "filterFn" ==> fnName ]
-    | None -> createObj [ "accessorKey" ==> key; "header" ==> header ]
-
-let private svc (id: string) (service: string) (tier: string) (region: string) (requests: float) (errors: float) : obj =
-    createObj [
-        "id" ==> id
-        "service" ==> service
-        "tier" ==> tier
-        "region" ==> region
-        "requests" ==> requests
-        "errors" ==> errors
-    ]
+    | Some fnName -> unbox {| accessorKey = key; header = header; filterFn = fnName |}
+    | None -> unbox {| accessorKey = key; header = header |}
 
 let private data =
-    ResizeArray<obj> [
-        svc "S-01" "auth-gateway" "core" "CH" 620.0 2.0
-        svc "S-02" "session-cache" "core" "CH" 480.0 1.0
-        svc "S-03" "billing-ledger" "core" "DE" 510.0 6.0
-        svc "S-04" "oauth-signer" "core" "FR" 430.0 3.0
-        svc "S-05" "trace-ingestor" "edge" "DE" 290.0 8.0
-        svc "S-06" "cdn-router" "edge" "FR" 840.0 5.0
-        svc "S-07" "static-assets" "edge" "CH" 710.0 0.0
-        svc "S-08" "mail-relay" "batch" "DE" 140.0 7.0
-        svc "S-09" "report-export" "batch" "FR" 210.0 4.0
-        svc "S-10" "audit-auth-log" "core" "US" 360.0 9.0
+    ResizeArray [
+        { id = "S-01"; service = "auth-gateway"; tier = "core"; region = "CH"; requests = 620.0; errors = 2.0 }
+        { id = "S-02"; service = "session-cache"; tier = "core"; region = "CH"; requests = 480.0; errors = 1.0 }
+        { id = "S-03"; service = "billing-ledger"; tier = "core"; region = "DE"; requests = 510.0; errors = 6.0 }
+        { id = "S-04"; service = "oauth-signer"; tier = "core"; region = "FR"; requests = 430.0; errors = 3.0 }
+        { id = "S-05"; service = "trace-ingestor"; tier = "edge"; region = "DE"; requests = 290.0; errors = 8.0 }
+        { id = "S-06"; service = "cdn-router"; tier = "edge"; region = "FR"; requests = 840.0; errors = 5.0 }
+        { id = "S-07"; service = "static-assets"; tier = "edge"; region = "CH"; requests = 710.0; errors = 0.0 }
+        { id = "S-08"; service = "mail-relay"; tier = "batch"; region = "DE"; requests = 140.0; errors = 7.0 }
+        { id = "S-09"; service = "report-export"; tier = "batch"; region = "FR"; requests = 210.0; errors = 4.0 }
+        { id = "S-10"; service = "audit-auth-log"; tier = "core"; region = "US"; requests = 360.0; errors = 9.0 }
     ]
 
 let private columns =
-    ResizeArray<obj> [
+    ResizeArray [
         col "id" "ID" None
         col "service" "Service" None
         col "tier" "Tier" (Some "equalsString")
@@ -68,24 +64,22 @@ let private columns =
         col "errors" "Errors" (Some "greaterThanOrEqualTo")
     ]
 
-let private options: TableOptions_Core<TableFeatures, obj> =
-    unbox (
-        createObj [
-            "features" ==> features
-            "data" ==> data
-            "columns" ==> columns
-            "initialState" ==> createObj [
-                "columnFilters" ==> ResizeArray [
-                    ColumnFilter.Create("tier", box "core")
-                    ColumnFilter.Create("requests", box 400.0)
-                ]
+let private options =
+    TableOptions_Core.Create(
+        columns = columns,
+        features = features,
+        data = data,
+        initialState = TableState_All.Create(
+            columnFilters = ResizeArray [
+                ColumnFilter.Create("tier", box "core")
+                ColumnFilter.Create("requests", box 400.0)
             ]
-        ]
+        )
     )
 
-let private table = constructTable<TableFeatures, obj> options
+let private table = constructTable<TableFeatures, ServiceRow> options
 let private colFilt = unbox<Table_ColumnFiltering> table
-let private globFilt = unbox<Table_GlobalFiltering<TableFeatures, obj>> table
+let private globFilt = unbox<Table_GlobalFiltering<TableFeatures, ServiceRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
     let btn = document.getElementById id
@@ -93,50 +87,53 @@ let private wireBtn (id: string) (action: unit -> unit) =
 
 let private render (label: string) =
     let rows = table.getRowModel().rows
-    let sb = ResizeArray<string>()
-    sb.Add "<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>"
-    for r in rows do
-        let reqs: float = r.getValue "requests"
-        let errs: float = r.getValue "errors"
-        sb.Add "<tr>"
-        sb.Add (sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "id")))
-        sb.Add (sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "service")))
-        sb.Add (sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "tier")))
-        sb.Add (sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "region")))
-        sb.Add (sprintf "<td class=\"num\">%.0f</td>" reqs)
-        sb.Add (sprintf "<td class=\"num\">%.0f</td>" errs)
-        sb.Add "</tr>"
-    sb.Add "</tbody></table>"
+    let html =
+        [
+            yield "<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>"
+            for r in rows do
+                let reqs: float = r.getValue "requests"
+                let errs: float = r.getValue "errors"
+                yield "<tr>"
+                yield sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "id"))
+                yield sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "service"))
+                yield sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "tier"))
+                yield sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "region"))
+                yield sprintf "<td class=\"num\">%.0f</td>" reqs
+                yield sprintf "<td class=\"num\">%.0f</td>" errs
+                yield "</tr>"
+            yield "</tbody></table>"
+        ]
+        |> String.concat ""
     let wrap = document.getElementById "table-wrap"
-    wrap.innerHTML <- String.concat "" sb
+    wrap.innerHTML <- html
     let total = table.getCoreRowModel().rows.Count
     let meta = document.getElementById "meta"
     meta.textContent <- sprintf "%s · showing %d / %d services" label rows.Count total
 
 let main () =
     wireBtn "btn-0" (fun () ->
-        globFilt.setGlobalFilter (U2.Case1 (box ""))
-        colFilt.setColumnFilters (U2.Case1 (ResizeArray [ ColumnFilter.Create("tier", box "core"); ColumnFilter.Create("requests", box 400.0) ]))
+        globFilt.setGlobalFilter (!^ (box ""))
+        colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("tier", box "core"); ColumnFilter.Create("requests", box 400.0) ]))
         render "Filter: tier = core & requests >= 400"
     )
     wireBtn "btn-1" (fun () ->
-        globFilt.setGlobalFilter (U2.Case1 (box ""))
-        colFilt.setColumnFilters (U2.Case1 (ResizeArray<ColumnFilter> ()))
+        globFilt.setGlobalFilter (!^ (box ""))
+        colFilt.setColumnFilters (!^ (ResizeArray<ColumnFilter> ()))
         render "Filter: all services"
     )
     wireBtn "btn-2" (fun () ->
-        globFilt.setGlobalFilter (U2.Case1 (box ""))
-        colFilt.setColumnFilters (U2.Case1 (ResizeArray [ ColumnFilter.Create("tier", box "edge") ]))
+        globFilt.setGlobalFilter (!^ (box ""))
+        colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("tier", box "edge") ]))
         render "Filter: tier = edge"
     )
     wireBtn "btn-3" (fun () ->
-        colFilt.setColumnFilters (U2.Case1 (ResizeArray<ColumnFilter> ()))
-        globFilt.setGlobalFilter (U2.Case1 (box "auth"))
+        colFilt.setColumnFilters (!^ (ResizeArray<ColumnFilter> ()))
+        globFilt.setGlobalFilter (!^ (box "auth"))
         render "Global search: \"auth\""
     )
     wireBtn "btn-4" (fun () ->
-        globFilt.setGlobalFilter (U2.Case1 (box ""))
-        colFilt.setColumnFilters (U2.Case1 (ResizeArray [ ColumnFilter.Create("errors", box 5.0) ]))
+        globFilt.setGlobalFilter (!^ (box ""))
+        colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("errors", box 5.0) ]))
         render "Filter: errors >= 5"
     )
     render "Filter: tier = core & requests >= 400"

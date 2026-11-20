@@ -525,7 +525,12 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
     // By id: a namespace's `PixiMixins.ViewContainer` is not the `ViewContainer`.
     for d in doc.root_element().descendants().filter(|d| d.has_tag_name("interface") || d.has_tag_name("class") || d.has_tag_name("typeAlias")) {
         let name = d.attribute("id").unwrap_or(attr(d, "name")).to_string();
-        if elements(d).any(|m| m.attribute("name") == Some("[Symbol.iterator]")) {
+        let iter_src = if d.has_tag_name("typeAlias") {
+            elements(d).find(|c| !c.has_tag_name("typeParameter") && !c.has_tag_name("extends")).unwrap_or(d)
+        } else {
+            d
+        };
+        if elements(iter_src).any(|m| m.attribute("name") == Some("[Symbol.iterator]")) {
             g.iterable.insert(name.clone());
         }
         // A base declared elsewhere by its name (`Pt extends Float32Array`).
@@ -552,12 +557,13 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
         "// Generated.\nnamespace {ns}\n\nopen Fable.Core\n\n\
          /// A key of the map 'Map whose value has type 'V: `el.addEventListener (HTMLElementEventMapKeys.click, fun e -> ...)`.\n\
          [<Erase>]\ntype TypedKey<'Map, 'V> = TypedKey of string\n\n\
-         /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
+         /// A JavaScript symbol value.\n\
+         [<AllowNullLiteral>]\ntype JsSymbol = interface end\n\n\
          /// A JavaScript object used as a map: `{{ [key: string]: T }}` is `JsRecord<string, T>`.\n\
-         /// A value whose type F# cannot write, of type arguments it still takes.\n\
          [<AllowNullLiteral; Interface>]\ntype JsRecord<'Key, 'Value> =\n    [<EmitIndexer>] abstract Item: key: 'Key -> 'Value with get, set\n    [<Emit(\"{{}}\")>] static member Create () : JsRecord<'Key, 'Value> = jsNative\n    [<Emit(\"Object.fromEntries($0)\")>] static member Create (entries: seq<'Key * 'Value>) : JsRecord<'Key, 'Value> = jsNative\n\n\
          /// A JavaScript Error, where an API takes one: an F# exception is not an Error in JavaScript.\n\
          [<AutoOpen>]\nmodule JsErrors =\n    [<Emit(\"new Error($0)\")>]\n    let jsError (message: string) : exn = jsNative\n\n\
+         /// A JavaScript async iterator: `next ()` is a promise of the next value, or of None at the end.\n\
          [<AllowNullLiteral>]\ntype JsAsyncIterator<'T> =\n    \
          [<Emit(\"$0.next().then(r => r.done ? undefined : r.value)\")>] abstract next: unit -> JS.Promise<'T option>\n\n",
     );
@@ -1117,6 +1123,7 @@ impl Gen {
                 "number" => "float",
                 "boolean" => "bool",
                 "bigint" => "bigint",
+                "symbol" => "JsSymbol",
                 "void" | "undefined" => "unit",
                 _ => "obj",
             }
@@ -1168,8 +1175,14 @@ impl Gen {
                                 ext
                             }
                         }
-                        // A value from another file: nothing to refer to.
+                        // A value from another file or a dotted enum member (`ExtensionType.WebGLSystem`).
                         _ => {
+                            if let Some((enum_path, _)) = name.rsplit_once('.')
+                                && let Some(decl) = find_decl(n.document().root_element(), enum_path)
+                                && decl.has_tag_name("enum")
+                            {
+                                return type_path(enum_path);
+                            }
                             self.skip("reference to an undeclared value, bound as obj");
                             return "obj".into();
                         }
@@ -1233,34 +1246,7 @@ impl Gen {
                 format!("({})", parts.join(" * "))
             }
             // A call signature is one: an interface of only that is a function.
-            "functionType" | "call" => {
-                let own: Vec<String> = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
-                let depth = self.fn_params.len();
-                self.fn_params.extend(own);
-                // Optional arguments, or the rest of them (`...args`), as
-                // JavaScript calls it: a delegate's.
-                let t = if named(n, "parameter").any(|p| flag(p, "optional") || flag(p, "rest")) {
-                    self.function_delegate(n, owner)
-                } else {
-                    let mut parts: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
-                    if parts.is_empty() {
-                        parts.push("unit".into());
-                    }
-                    let ret = named(n, "returns").next().map(only_child);
-                    // A listener (one argument, any result): its result is
-                    // nothing JavaScript reads, as the model has it.
-                    let listener = named(n, "parameter").count() == 1 && super::model::listener_result(n);
-                    let ret = match ret {
-                        Some(_) if listener => "unit".to_string(),
-                        Some(r) => self.ty(r, owner),
-                        None => "unit".into(),
-                    };
-                    parts.push(ret);
-                    format!("({})", parts.join(" -> "))
-                };
-                self.fn_params.truncate(depth);
-                t
-            }
+            "functionType" | "call" => self.fn_type(n, owner),
             // An object with only properties is an anonymous record, unless it has
             // optional properties and enough fields that writing every `None` is
             // unwieldy — then it is hoisted to an interface with a ParamObject `Create`.
@@ -1422,6 +1408,35 @@ impl Gen {
         }
         out.push('\n');
         out
+    }
+
+    fn fn_type(&mut self, n: Node, owner: &str) -> String {
+        let own: Vec<String> = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
+        let depth = self.fn_params.len();
+        self.fn_params.extend(own);
+        // Optional arguments, or the rest of them (`...args`), as
+        // JavaScript calls it: a delegate's.
+        let t = if named(n, "parameter").any(|p| flag(p, "optional") || flag(p, "rest")) {
+            self.function_delegate(n, owner)
+        } else {
+            let mut parts: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
+            if parts.is_empty() {
+                parts.push("unit".into());
+            }
+            let ret = named(n, "returns").next().map(only_child);
+            // A listener (one argument, any result): its result is
+            // nothing JavaScript reads, as the model has it.
+            let listener = named(n, "parameter").count() == 1 && super::model::listener_result(n);
+            let ret = match ret {
+                Some(_) if listener => "unit".to_string(),
+                Some(r) => self.ty(r, owner),
+                None => "unit".into(),
+            };
+            parts.push(ret);
+            format!("({})", parts.join(" -> "))
+        };
+        self.fn_params.truncate(depth);
+        t
     }
 
     fn function_delegate(&mut self, n: Node, owner: &str) -> String {
@@ -1773,8 +1788,32 @@ impl Gen {
                 continue;
             }
             if flag(p, "rest") {
-                let element = if t.has_tag_name("array") { self.ty(only_child(t), owner) } else { "obj".into() };
-                out.push(format!("[<System.ParamArray>] {name}: {element}[]"));
+                let rest_array = t.has_tag_name("array")
+                    || (t.has_tag_name("ref")
+                        && t.attribute("to").is_none()
+                        && matches!(attr(t, "name"), "Array" | "ReadonlyArray")
+                        && elements(t).next().is_some());
+                if rest_array {
+                    out.push(format!("[<System.ParamArray>] {name}: {}[]", self.ty(only_child(t), owner)));
+                } else if t.has_tag_name("tuple")
+                    && !has_optional
+                    && named(t, "element").next().is_some()
+                    && !named(t, "element").any(|e| flag(e, "rest"))
+                {
+                    let mut tuple_opt = false;
+                    for (ei, elem) in named(t, "element").enumerate() {
+                        tuple_opt |= flag(elem, "optional");
+                        let ename = match elem.attribute("name").filter(|s| !s.is_empty() && *s != "_") {
+                            Some(s) => ident(s),
+                            None => format!("arg{}", ei + 1),
+                        };
+                        let et = self.ty(only_child(elem), owner);
+                        let et = if tuple_opt { strip_opt(&et) } else { et.as_str() };
+                        out.push(format!("{}{ename}: {et}", if tuple_opt { "?" } else { "" }));
+                    }
+                } else {
+                    out.push(format!("[<System.ParamArray>] {name}: obj[]"));
+                }
             } else {
                 let t = self.ty(t, owner);
                 let t = if optional { strip_opt(&t) } else { t.as_str() };
@@ -2029,14 +2068,64 @@ impl Gen {
             let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
             (format!("abstract {name}: {t}{}", if settable { " with get, set" } else { "" }), if settable { format!("member this.{name} with {get} and {set}") } else { format!("member this.{name} with {get}") }, Vec::new())
         };
-        let method_from = |g: &mut Gen, sig_node: Node, tps: &str, name: &str, emit: String, attr: &str| {
-            let params = g.params(sig_node, owner);
+        let method_from = |g: &mut Gen, sig_node: Node, initial_tps: &str, name: &str, emit: String, member_attr: &str| {
+            let mut params = g.params(sig_node, owner);
             let ret = g.returns(sig_node, owner);
-            let sig = if params.is_empty() { "unit".to_string() } else { params.join(" * ") };
-            let abstract_line = format!("{attr}abstract {name}{tps}: {sig} -> {ret}");
-            let ext = format!("[<Emit(\"{}\")>] member this.{name}{tps}({}): {ret} = jsNative", emit.replace('"', "\\\""), params.join(", "));
             let raw_name = sig_node.attribute("name").unwrap_or(raw);
             let overrides_base = g.inherited_methods.contains(raw_name);
+            let mut tps = initial_tps.to_string();
+            if m.has_tag_name("method") && tps.is_empty() && !overrides_base && g.split_rest != Some(false) {
+                let root = m.document().root_element();
+                let non_const: Vec<Node> = named(sig_node, "parameter").filter(|p| !p.has_attribute("const")).collect();
+                if let Some(&last_p) = non_const.last()
+                    && flag(last_p, "rest")
+                {
+                    let pt = only_child(last_p);
+                    let el = if pt.has_tag_name("array") {
+                        Some(only_child(pt))
+                    } else if pt.has_tag_name("ref")
+                        && pt.attribute("to").is_none()
+                        && matches!(attr(pt, "name"), "Array" | "ReadonlyArray")
+                    {
+                        elements(pt).next()
+                    } else {
+                        None
+                    };
+                    if let Some(el) = el
+                        && el.has_tag_name("ref")
+                        && matches!(attr(el, "kind"), "class" | "interface")
+                        && let Some(to) = el.attribute("to")
+                        && let Some(target_decl) = find_decl(root, to)
+                        && g.is_extended(target_decl)
+                    {
+                        let elem_ty = g.ty(el, owner);
+                        let valid = elem_ty != "obj"
+                            && !elem_ty.contains('\'')
+                            && !elem_ty.starts_with("ResizeArray<")
+                            && words(&elem_ty).iter().filter_map(|w| g.file_of.get(*w)).all(|f| *f <= g.current_file);
+                        if valid {
+                            let used_text = format!("{owner} {}", params.join(" "));
+                            let used_vars = collect_type_vars(&used_text);
+                            let tp = std::iter::once("TArg".to_string())
+                                .chain((1..).map(|i| format!("TArg{i}")))
+                                .find(|cand| !used_vars.contains(cand))
+                                .unwrap();
+                            let pname = match attr(last_p, "name") {
+                                "_" | "" => "arg".to_string(),
+                                s => ident(s),
+                            };
+                            if let Some(last) = params.last_mut() {
+                                *last = format!("[<System.ParamArray>] {pname}: '{tp}[]");
+                                let sp = if elem_ty.ends_with('>') { " " } else { "" };
+                                tps = format!("<'{tp} when '{tp} :> {elem_ty}{sp}>");
+                            }
+                        }
+                    }
+                }
+            }
+            let sig = if params.is_empty() { "unit".to_string() } else { params.join(" * ") };
+            let abstract_line = format!("{member_attr}abstract {name}{tps}: {sig} -> {ret}");
+            let ext = format!("[<Emit(\"{}\")>] member this.{name}{tps}({}): {ret} = jsNative", emit.replace('"', "\\\""), params.join(", "));
             let mut expanded = Vec::new();
             for ep in g.union_param_expansions(sig_node, owner, &params) {
                 let first_opt = ep.iter().position(|p| p.starts_with('?'));
@@ -2054,10 +2143,10 @@ impl Gen {
                     for arity in first_opt..=ep.len() {
                         let prefix: Vec<String> = ep[..arity].iter().map(|p| p.trim_start_matches('?').to_string()).collect();
                         let ep_sig = if prefix.is_empty() { "unit".to_string() } else { prefix.join(" * ") };
-                        expanded.push(format!("{attr}abstract {name}{tps}: {ep_sig} -> {ret}"));
+                        expanded.push(format!("{member_attr}abstract {name}{tps}: {ep_sig} -> {ret}"));
                     }
                 } else {
-                    expanded.push(format!("{attr}abstract {name}{tps}: {} -> {ret}", ep.join(" * ")));
+                    expanded.push(format!("{member_attr}abstract {name}{tps}: {} -> {ret}", ep.join(" * ")));
                 }
             }
             (abstract_line, ext, expanded)
@@ -2157,8 +2246,13 @@ impl Gen {
             Some(module) => format!("{indent}[<Import({js_name:?}, {module:?})>]\n"),
             _ => String::new(),
         };
+        let extend = if prefix.is_empty() { owner.clone() } else { format!("{}.{owner}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
+        if header != owner {
+            let qualified = if prefix.is_empty() { header.clone() } else { format!("{}.{header}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
+            self.constrained_owner.insert(extend.clone(), qualified);
+        }
         // A static member makes F# take it for a class unless told.
-        let factory = if d.has_tag_name("class") { None } else { self.factory(d, &owner) };
+        let factory = if d.has_tag_name("class") { FactoryResult::None } else { self.factory(d, &owner) };
         let kind = if factory.is_some() { "AllowNullLiteral; Interface" } else { "AllowNullLiteral" };
         self.out += &format!("{origin}{indent}[<{kind}>]\n{indent}type {header} =\n");
         let mut body = Vec::new();
@@ -2227,7 +2321,7 @@ impl Gen {
             }
         }
         // `[Symbol.iterator](): ArrayIterator<Node>`: a seq of Nodes, which Fable iterates by that method.
-        let iterator = elements(d).find(|m| m.attribute("name") == Some("[Symbol.iterator]") && !flag(*m, "static"));
+        let iterator = elements(src).find(|m| m.attribute("name") == Some("[Symbol.iterator]") && !flag(*m, "static"));
         // A type iterates as its ancestor does when that one is a seq already:
         // F# allows one seq per type (`HTMLCollectionOf<'T>` stays a seq of Elements).
         let mut todo: Vec<String> = self.bases.get(d.attribute("id").unwrap_or(attr(d, "name"))).cloned().unwrap_or_default();
@@ -2249,11 +2343,6 @@ impl Gen {
                 body.push(format!("{indent}    {line}\n"));
             }
         }
-        let extend = if prefix.is_empty() { owner.clone() } else { format!("{}.{owner}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
-        if header != owner {
-            let qualified = if prefix.is_empty() { header.clone() } else { format!("{}.{header}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
-            self.constrained_owner.insert(extend.clone(), qualified);
-        }
         let root = d.document().root_element();
         let mut inherited_methods: HashSet<String> = HashSet::new();
         for b in &seen {
@@ -2274,8 +2363,20 @@ impl Gen {
         self.inherited_methods = saved_inherited_methods;
         body.extend(self.redeclared(d, &left, &body, &owner, &extend, indent));
         body.extend(widen_methods);
-        if let Some((line, emit)) = factory {
-            body.push(format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({line}) : {owner} = jsNative\n"));
+        match factory {
+            FactoryResult::Inline { args, emit } => {
+                body.push(format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({args}) : {owner} = jsNative\n"));
+            }
+            FactoryResult::Extension { latest, args, emit } => {
+                if indent.is_empty() {
+                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({args}) : {owner} = jsNative\n");
+                    let lines = self.extensions.entry(latest).or_default().entry(extend.clone()).or_default();
+                    if !lines.contains(&ext) {
+                        lines.push(ext);
+                    }
+                }
+            }
+            FactoryResult::None => {}
         }
         if body.is_empty() {
             body.push(format!("{indent}    interface end\n"));
@@ -2283,27 +2384,29 @@ impl Gen {
         self.out += &body.concat();
         self.out += "\n";
         if d.has_tag_name("class") {
-            self.static_side(&name, &path, &statics, Some(&owner), indent);
+            self.static_side(&name, &path, &statics, Some(&owner), Some(d), indent);
         }
         self.cur_constrained = saved_constrained;
     }
 
-    // An options bag (only properties, its bases' too) is made with named
+    // An options bag (properties + optional methods, its bases' too) is made with named
     // arguments: `AddEventListenerOptions.Create (once = true)`, the object
     // they make, by Fable's ParamObject. Not where a value of its name has
-    // a `Create` (a class), nor where an argument would be of a later file.
-    fn factory(&mut self, d: Node, owner: &str) -> Option<(String, String)> {
+    // a `Create` (a class). When an argument refers to a later file, emits as an
+    // extension `Create` in that file instead.
+    fn factory(&mut self, d: Node, owner: &str) -> FactoryResult {
         let root = d.document().root_element();
         let raw = attr(d, "name");
         let constrained = d.attribute("id").is_some_and(|id| self.constrained.contains_key(id));
         if constrained || d.parent().is_some_and(|p| elements(p).any(|v| v.has_tag_name("var") && attr(v, "name") == raw)) {
-            return None;
+            return FactoryResult::None;
         }
-        // Own properties first, then each base's not declared again.
-        let mut props: Vec<Node> = Vec::new();
-        let mut todo = vec![d];
+        // Discover all members and bases first before mutating delegate/hoist caches.
+        let mut collected: Vec<(Node, HashMap<String, String>)> = Vec::new();
+        let mut seen_names: HashSet<String> = HashSet::new();
+        let mut todo: Vec<(Node, HashMap<String, String>)> = vec![(d, HashMap::new())];
         let mut seen = HashSet::new();
-        while let Some(t) = todo.pop() {
+        while let Some((t, outer)) = todo.pop() {
             if !seen.insert(t.attribute("id").unwrap_or(attr(t, "name")).to_string()) {
                 continue;
             }
@@ -2312,50 +2415,190 @@ impl Gen {
                 if m.has_tag_name("index") {
                     continue;
                 }
-                if !m.has_tag_name("property") || flag(m, "static") {
-                    return None;
+                let is_opt_method = m.has_tag_name("method")
+                    && !flag(m, "static")
+                    && flag(m, "optional")
+                    && named(m, "typeParameter").next().is_none()
+                    && !named(m, "parameter").any(|p| p.has_attribute("const"));
+                let is_prop = m.has_tag_name("property") && !flag(m, "static");
+                if !is_prop && !is_opt_method {
+                    return FactoryResult::None;
                 }
-                if !props.iter().any(|p| attr(*p, "name") == attr(m, "name")) {
-                    props.push(m);
+                let mname = attr(m, "name").to_string();
+                if seen_names.insert(mname) {
+                    collected.push((m, outer.clone()));
                 }
             }
             if !t.has_tag_name("typeAlias") {
                 for e in named(t, "extends") {
                     let r = only_child(e);
-                    match r.attribute("to").filter(|_| elements(r).next().is_none()).and_then(|to| find_decl(root, to)) {
-                        Some(b) if b.has_tag_name("interface") || (b.has_tag_name("typeAlias") && only_child_type(b).has_tag_name("object")) => todo.push(b),
-                        _ => return None,
+                    let Some(b) = r.attribute("to").and_then(|to| find_decl(root, to)) else {
+                        return FactoryResult::None;
+                    };
+                    if !(b.has_tag_name("interface") || (b.has_tag_name("typeAlias") && only_child_type(b).has_tag_name("object"))) {
+                        return FactoryResult::None;
                     }
+                    let bparams: Vec<Node> = named(b, "typeParameter").collect();
+                    let rargs: Vec<Node> = elements(r).collect();
+                    let mut map = HashMap::new();
+                    for (i, p) in bparams.iter().enumerate() {
+                        let raw_arg = if let Some(a) = rargs.get(i) {
+                            self.ty(*a, owner)
+                        } else if let Some(def) = named(*p, "default").next() {
+                            self.ty(only_child(def), owner)
+                        } else {
+                            return FactoryResult::None;
+                        };
+                        map.insert(attr(*p, "name").to_string(), subst_params(&raw_arg, &outer));
+                    }
+                    todo.push((b, map));
                 }
             }
         }
         let plain = |n: &str| !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '_') && !n.as_bytes()[0].is_ascii_digit();
-        if props.is_empty() || props.iter().any(|p| !plain(attr(*p, "name")) || attr(*p, "name") == "Create") {
-            return None;
+        if collected.is_empty() || collected.iter().any(|(m, _)| !plain(attr(*m, "name")) || attr(*m, "name") == "Create") {
+            return FactoryResult::None;
         }
-        let (required, optional): (Vec<Node>, Vec<Node>) = props.into_iter().partition(|p| !flag(*p, "optional") && !p.has_attribute("const"));
+        let own_tparams: HashSet<String> = named(d, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
+        let (required, optional): (Vec<_>, Vec<_>) =
+            collected.into_iter().partition(|(m, _)| m.has_tag_name("property") && !flag(*m, "optional") && !m.has_attribute("const"));
         let mut fixed = Vec::new();
         let mut args = Vec::new();
-        for p in required.iter().chain(&optional) {
-            if let Some(val) = const_js(*p) {
-                fixed.push(format!("{:?}: {val}", attr(*p, "name")));
+        for (m, map) in required.iter().chain(&optional) {
+            if let Some(val) = const_js(*m) {
+                fixed.push(format!("{:?}: {val}", attr(*m, "name")));
             }
-            let t = self.ty(only_child(*p), owner);
-            let is_opt = flag(*p, "optional") || p.has_attribute("const");
+            let raw_t = if m.has_tag_name("method") { self.fn_type(*m, owner) } else { self.ty(only_child(*m), owner) };
+            let t = subst_params(&raw_t, map);
+            if collect_type_vars(&t).iter().any(|v| !own_tparams.contains(v)) {
+                return FactoryResult::None;
+            }
+            let is_opt = m.has_tag_name("method") || flag(*m, "optional") || m.has_attribute("const");
             let q = if is_opt { "?" } else { "" };
             let t = if is_opt { strip_opt(&t) } else { t.as_str() };
-            args.push(format!("{q}{}: {t}", ident(attr(*p, "name"))));
+            args.push(format!("{q}{}: {t}", ident(attr(*m, "name"))));
         }
         let line = args.join(", ");
-        if words(&line).iter().filter_map(|w| self.file_of.get(*w)).any(|f| *f > self.current_file) {
-            return None;
-        }
         let emit = if fixed.is_empty() { "$0".to_string() } else { format!("Object.assign({{{}}}, $0)", fixed.join(", ")) };
-        Some((line, emit))
+        let latest = words(&line).iter().chain(words(owner).iter()).filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
+        if latest > self.current_file {
+            if self.cur_indent.is_empty() {
+                return FactoryResult::Extension { latest, args: line, emit };
+            }
+            return FactoryResult::None;
+        }
+        FactoryResult::Inline { args: line, emit }
+    }
+
+    // Resolves default type arguments for `tparams` on a signature (`<constructor>` or `<function>`).
+    // Returns `(ret_only_map, all_tparams_are_ret_only_with_defaults, all_defaults_with_constraint_fallback)`.
+    fn defaulted_tp_maps(&mut self, sig_node: Node, owner: &str, tparams: &[Node], constrained_flags: Option<&[Option<String>]>, allow_zero_arg_fallback: bool) -> (HashMap<String, String>, bool, Option<HashMap<String, String>>) {
+        let own_names: HashSet<&str> = if sig_node.has_tag_name("function") {
+            HashSet::new()
+        } else {
+            named(sig_node, "typeParameter").map(|p| attr(p, "name")).collect()
+        };
+        let tp_names: HashSet<String> = tparams.iter().map(|p| attr(*p, "name").to_string()).chain(own_names.iter().map(|s| (*s).to_string())).collect();
+        let mut in_params: HashSet<&str> = HashSet::new();
+        for p in named(sig_node, "parameter").filter(|p| !p.has_attribute("const")) {
+            for r in p.descendants().filter(|r| r.has_tag_name("ref") && attr(*r, "kind") == "typeParameter") {
+                in_params.insert(attr(r, "name"));
+            }
+        }
+        let resolve_one = |g: &mut Gen, i: usize, tp: Node, use_constraint: bool, acc: &HashMap<String, String>| -> Option<String> {
+            let name = attr(tp, "name");
+            if own_names.contains(name) {
+                return None;
+            }
+            let has_keyof = elements(tp).find(|c| c.has_tag_name("constraint")).is_some_and(|c| only_child(c).has_tag_name("keyof"));
+            if has_keyof {
+                return None;
+            }
+            let def_node = named(tp, "default").next().map(only_child).or_else(|| if use_constraint { named(tp, "constraint").next().map(only_child) } else { None })?;
+            let raw = subst_params(&g.ty(def_node, owner), acc);
+            let is_values_fn = sig_node.has_tag_name("function") && g.cur_indent.is_empty();
+            if !is_values_fn && words(&raw).iter().filter_map(|w| g.file_of.get(*w)).any(|f| *f > g.current_file) {
+                return None;
+            }
+            if collect_type_vars(&raw).iter().any(|v| tp_names.contains(v)) {
+                return None;
+            }
+            // Check F# constraint compatibility when F# keeps a `:>` constraint on this type parameter.
+            if let Some(c) = named(tp, "constraint").next().map(only_child) {
+                let has_fs_constraint = match constrained_flags {
+                    Some(cs) => cs.get(i).and_then(|x| x.as_ref()).is_some(),
+                    None => c.has_tag_name("ref") && matches!(attr(c, "kind"), "interface" | "class") && g.ty(c, "") != "obj",
+                };
+                if has_fs_constraint {
+                    if raw == "obj" {
+                        return None;
+                    }
+                    if let Some(cid) = c.attribute("to") {
+                        let ok = def_node.attribute("to") == Some(cid) || def_node.attribute("to").is_some_and(|did| g.reaches(did, cid));
+                        if !ok {
+                            return None;
+                        }
+                    }
+                }
+            }
+            Some(raw)
+        };
+        let mut all_def_only = HashMap::new();
+        let mut all_resolved = true;
+        for (i, &tp) in tparams.iter().enumerate() {
+            if let Some(ty) = resolve_one(self, i, tp, false, &all_def_only) {
+                all_def_only.insert(attr(tp, "name").to_string(), ty);
+            } else {
+                all_resolved = false;
+            }
+        }
+        let ret_only_map: HashMap<String, String> = all_def_only.iter().filter(|(k, _)| !in_params.contains(k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect();
+        let all_ret_only = all_resolved && ret_only_map.len() == tparams.len() && !tparams.is_empty();
+        let zero_arg_map = if !all_ret_only && allow_zero_arg_fallback && !tparams.is_empty() {
+            let mut m = HashMap::new();
+            let ok = tparams.iter().enumerate().all(|(i, &tp)| {
+                if let Some(ty) = resolve_one(self, i, tp, true, &m) {
+                    m.insert(attr(tp, "name").to_string(), ty);
+                    true
+                } else {
+                    false
+                }
+            });
+            ok.then_some(m)
+        } else {
+            None
+        };
+        (ret_only_map, all_ret_only, zero_arg_map)
+    }
+
+    // Formats `<'A, 'B when 'A :> Foo >` for a subset/all of a class's type parameters using `self.constrained`.
+    fn format_class_tps(&self, d: Node, skip: &HashMap<String, String>) -> String {
+        let cs = d.attribute("id").and_then(|id| self.constrained.get(id));
+        let mut ps = Vec::new();
+        let mut when = Vec::new();
+        for (i, tp) in named(d, "typeParameter").enumerate() {
+            let raw_name = attr(tp, "name");
+            if skip.contains_key(raw_name) {
+                continue;
+            }
+            let pname = format!("'{raw_name}");
+            ps.push(pname.clone());
+            if let Some(Some(c)) = cs.and_then(|cs| cs.get(i)) {
+                when.push(format!("{pname} :> {}", fable_builtin(c).unwrap_or_else(|| type_path(c))));
+            }
+        }
+        if ps.is_empty() {
+            String::new()
+        } else if when.is_empty() {
+            format!("<{}>", ps.join(", "))
+        } else {
+            let sp = if when.last().unwrap().ends_with('>') { " " } else { "" };
+            format!("<{} when {}{sp}>", ps.join(", "), when.join(" and "))
+        }
     }
 
     // A value with constructors and static members: a type for its shape and a global of that type.
-    fn static_side(&mut self, name: &str, path: &str, members: &[Node], instance: Option<&str>, indent: &str) {
+    fn static_side(&mut self, name: &str, path: &str, members: &[Node], instance: Option<&str>, class_node: Option<Node>, indent: &str) {
         let static_name = type_ident(&format!("{}Static", name.trim_matches('`')));
         self.out += &format!("{indent}[<AllowNullLiteral>]\n{indent}type {static_name} =\n");
         let mut lines = Vec::new();
@@ -2364,23 +2607,69 @@ impl Gen {
         for &m in members {
             if (m.has_tag_name("constructor") || m.has_tag_name("construct")) && let Some(inst) = instance {
                 let ret = inst.to_string();
-                let tps = self.type_params(m);
+                let own_tps = self.type_params(m);
                 let params = self.params(m, "");
-                let sig = format!("{} -> {ret}", if params.is_empty() { "unit".to_string() } else { params.join(" * ") });
-                let latest = words(&sig).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
-                if latest > self.current_file && indent.is_empty() {
-                    let ext = format!("        [<Emit(\"new $0($1...)\")>] member this.Create{tps}({}): {ret} = jsNative\n", params.join(", "));
-                    let lines = self.extensions.entry(latest).or_default().entry(static_name.clone()).or_default();
-                    if !lines.contains(&ext) {
-                        lines.push(ext);
+                let all_opt_or_rest = named(m, "parameter").filter(|p| !p.has_attribute("const")).all(|p| flag(p, "optional") || flag(p, "rest"));
+                let (ret_only_map, all_ret_only, zero_arg_map) = match class_node.filter(|_| own_tps.is_empty()) {
+                    Some(cd) => {
+                        let ctps: Vec<Node> = named(cd, "typeParameter").collect();
+                        if ctps.is_empty() {
+                            (HashMap::new(), false, None)
+                        } else {
+                            let cflags = cd.attribute("id").and_then(|id| self.constrained.get(id)).cloned();
+                            self.defaulted_tp_maps(m, "", &ctps, cflags.as_deref(), all_opt_or_rest && !params.is_empty())
+                        }
                     }
-                    continue;
-                }
-                let line = format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n");
-                self.marks.insert(line.trim().to_string(), super::marks(m));
-                push_member(&mut lines, line, &self.abbrevs, &self.marks);
-                for ep in self.union_param_expansions(m, "", &params) {
-                    ctor_extras.push(format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {} -> {ret}\n", ep.join(" * ")));
+                    None => (HashMap::new(), false, None),
+                };
+                let emit_ctor = |g: &mut Gen, lines: &mut Vec<String>, ctor_extras: &mut Vec<String>, tps: &str, cparams: &[String], cret: &str, expand: bool| {
+                    let sig = format!("{} -> {cret}", if cparams.is_empty() { "unit".to_string() } else { cparams.join(" * ") });
+                    let latest = words(&sig).iter().filter_map(|w| g.file_of.get(*w)).copied().max().unwrap_or(0);
+                    if latest > g.current_file && indent.is_empty() {
+                        let ext = format!("        [<Emit(\"new $0($1...)\")>] member this.Create{tps}({}): {cret} = jsNative\n", cparams.join(", "));
+                        let exts = g.extensions.entry(latest).or_default().entry(static_name.clone()).or_default();
+                        if !exts.contains(&ext) {
+                            exts.push(ext);
+                        }
+                        return;
+                    }
+                    let line = format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {sig}\n");
+                    g.marks.insert(line.trim().to_string(), super::marks(m));
+                    push_member(lines, line, &g.abbrevs, &g.marks);
+                    if expand {
+                        for ep in g.union_param_expansions(m, "", cparams) {
+                            ctor_extras.push(format!("{indent}    [<EmitConstructor>] abstract Create{tps}: {} -> {cret}\n", ep.join(" * ")));
+                        }
+                    }
+                };
+                if all_ret_only {
+                    // Rule A1: emit both a non-generic defaulted Create and an explicitly generic Create<...>.
+                    let cd = class_node.unwrap();
+                    let def_params: Vec<String> = params.iter().map(|p| subst_params(p, &ret_only_map)).collect();
+                    let def_ret = subst_params(&ret, &ret_only_map);
+                    emit_ctor(self, &mut lines, &mut ctor_extras, "", &def_params, &def_ret, true);
+                    let explicit_tps = self.format_class_tps(cd, &HashMap::new());
+                    emit_ctor(self, &mut lines, &mut ctor_extras, &explicit_tps, &params, &ret, true);
+                } else {
+                    // Rule A2: if all params are optional/rest and all class tps resolve, add a 0-arg defaulted Create.
+                    if let Some(zmap) = &zero_arg_map {
+                        let zret = subst_params(&ret, zmap);
+                        emit_ctor(self, &mut lines, &mut ctor_extras, "", &[], &zret, false);
+                    }
+                    // Rule B: drop return-only defaulted type params from the constructor return type.
+                    if !ret_only_map.is_empty() {
+                        let cd = class_node.unwrap();
+                        let bparams: Vec<String> = params.iter().map(|p| subst_params(p, &ret_only_map)).collect();
+                        let bret = subst_params(&ret, &ret_only_map);
+                        let rem_tps = if zero_arg_map.is_some() { self.format_class_tps(cd, &ret_only_map) } else { own_tps };
+                        emit_ctor(self, &mut lines, &mut ctor_extras, &rem_tps, &bparams, &bret, true);
+                    } else {
+                        let rem_tps = match (class_node, zero_arg_map.is_some()) {
+                            (Some(cd), true) => self.format_class_tps(cd, &HashMap::new()),
+                            _ => own_tps,
+                        };
+                        emit_ctor(self, &mut lines, &mut ctor_extras, &rem_tps, &params, &ret, true);
+                    }
                 }
             } else {
                 non_ctors.push(m);
@@ -2580,6 +2869,22 @@ impl Gen {
                     };
                     let tps = self.constrained_type_params(d);
                     let at_attr = self.at(&path, Some(&args));
+                    let fn_tparams: Vec<Node> = named(d, "typeParameter").collect();
+                    let (ret_only_map, all_ret_only, _) = if fn_tparams.is_empty() {
+                        (HashMap::new(), false, None)
+                    } else {
+                        self.defaulted_tp_maps(d, "", &fn_tparams, None, false)
+                    };
+                    if all_ret_only {
+                        let def_params: Vec<String> = params.iter().map(|p| subst_params(p, &ret_only_map)).collect();
+                        let def_ret = subst_params(&ret, &ret_only_map);
+                        let line = format!("{indent}    {at_attr} static member {name} ({}): {def_ret} = jsNative\n", def_params.join(", "));
+                        self.marks.insert(line.trim().to_string(), super::marks(d));
+                        push_member(functions, line, &self.abbrevs, &self.marks);
+                        for ep in self.union_param_expansions(d, "", &def_params) {
+                            func_extras.push(format!("{indent}    {at_attr} static member {name} ({}): {def_ret} = jsNative\n", ep.join(", ")));
+                        }
+                    }
                     let line = format!("{indent}    {at_attr} static member {name}{tps} ({}): {ret} = jsNative\n", params.join(", "));
                     self.marks.insert(line.trim().to_string(), super::marks(d));
                     push_member(functions, line, &self.abbrevs, &self.marks);
@@ -2659,7 +2964,7 @@ impl Gen {
                     let body = only_child(d);
                     if body.has_tag_name("object") {
                         let members: Vec<Node> = elements(body).collect();
-                        self.static_side(&name, &path, &members, None, indent);
+                        self.static_side(&name, &path, &members, None, None, indent);
                     } else {
                         let t = self.ty(body, "");
                         let value = format!("{indent}{}\n{indent}let {name}: {t} = jsNative\n\n", self.at(&path, None));
@@ -2795,7 +3100,20 @@ fn js_access(name: &str) -> String {
 // exception, as Fable catches it.
 fn fable_builtin(name: &str) -> Option<String> {
     match name {
-        "ArrayBuffer" | "ArrayBufferView" | "DataView" | "Date" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array" => Some(format!("JS.{name}")),
+        "ArrayBuffer"
+        | "ArrayBufferView"
+        | "DataView"
+        | "Date"
+        | "Int8Array"
+        | "Uint8Array"
+        | "Uint8ClampedArray"
+        | "Int16Array"
+        | "Uint16Array"
+        | "Int32Array"
+        | "Uint32Array"
+        | "Float32Array"
+        | "Float64Array"
+        | "BigInt64Array" => Some(format!("JS.{name}")),
         "Error" => Some("exn".into()),
         _ => None,
     }
@@ -3131,8 +3449,10 @@ fn member_key(line: &str) -> (String, Option<String>) {
             at
         };
         let params: Vec<String> = split_top(&inner[..close], ", ").into_iter().filter(|p| !p.trim().is_empty()).map(type_of).collect();
-        // F# tells no overloads apart by their constraints: the name alone.
-        return (format!("static {}", name.split('<').next().unwrap_or(name)), Some(params.join(", ")));
+        // Distinguish non-generic overloads from generic ones, ignoring constraint details.
+        let base_name = name.split('<').next().unwrap_or(name);
+        let generic = if name.contains('<') { "/g" } else { "" };
+        return (format!("static {base_name}{generic}"), Some(params.join(", ")));
     }
     // `abstract f: a: A * b: B -> R`: the types before its last arrow outside brackets.
     let Some(rest) = s.strip_prefix("abstract ") else { return (s.to_string(), None) };
@@ -3143,7 +3463,9 @@ fn member_key(line: &str) -> (String, Option<String>) {
     }
     let params = parts[..parts.len() - 1].join(" -> ");
     let types: Vec<String> = split_top(&params, " * ").into_iter().map(type_of).collect();
-    (format!("abstract {}", name.split('<').next().unwrap_or(name)), Some(types.join(" * ")))
+    let base_name = name.split('<').next().unwrap_or(name);
+    let generic = if name.contains('<') { "/g" } else { "" };
+    (format!("abstract {base_name}{generic}"), Some(types.join(" * ")))
 }
 
 // Fable's erased union of these types: `U2<A, B>` up to `U9`; more nest in
@@ -3165,6 +3487,18 @@ enum AliasForm {
     Interface,
     Delegate,
     Abbreviation(String),
+}
+
+enum FactoryResult {
+    None,
+    Inline { args: String, emit: String },
+    Extension { latest: usize, args: String, emit: String },
+}
+
+impl FactoryResult {
+    fn is_some(&self) -> bool {
+        !matches!(self, Self::None)
+    }
 }
 
 struct CallbackSig {
@@ -3194,35 +3528,55 @@ fn is_fn_type<'a>(mut t: &'a str, abbrevs: &'a HashMap<String, String>) -> bool 
     false
 }
 
+// Byte end offset of a type variable `'T` starting at byte index `i`, if `text[i..]` starts one.
+fn type_var_end(text: &str, i: usize) -> Option<usize> {
+    let after_word = text[..i].chars().last().is_some_and(|p| p.is_alphanumeric() || p == '_');
+    if after_word || !text[i..].starts_with('\'') {
+        return None;
+    }
+    let start = i + 1;
+    let end = text[start..]
+        .char_indices()
+        .take_while(|(_, c)| c.is_alphanumeric() || *c == '_')
+        .last()
+        .map_or(start, |(j, c)| start + j + c.len_utf8());
+    Some(end)
+}
+
 // `text` with each type parameter `'T` in `map` replaced by its type.
 fn subst_params(text: &str, map: &HashMap<String, String>) -> String {
     if map.is_empty() {
         return text.to_string();
     }
     let mut out = String::new();
-    let mut chars = text.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
-        let after_word = text[..i].chars().last().is_some_and(|p| p.is_alphanumeric() || p == '_');
-        if c == '\'' && !after_word {
-            let start = i + 1;
-            let mut end = start;
-            while let Some(&(j, n)) = chars.peek() {
-                if n.is_alphanumeric() || n == '_' {
-                    end = j + n.len_utf8();
-                    chars.next();
-                } else {
-                    break;
-                }
-            }
-            match map.get(&text[start..end]) {
-                Some(t) => out += t,
-                None => out += &text[i..end.max(start)],
-            }
-            continue;
+    let mut i = 0;
+    while i < text.len() {
+        if let Some(end) = type_var_end(text, i) {
+            out += map.get(&text[i + 1..end]).map_or(&text[i..end], String::as_str);
+            i = end;
+        } else {
+            let c = text[i..].chars().next().unwrap();
+            out.push(c);
+            i += c.len_utf8();
         }
-        out.push(c);
     }
     out
+}
+
+fn collect_type_vars(text: &str) -> HashSet<String> {
+    let mut vars = HashSet::new();
+    let mut i = 0;
+    while i < text.len() {
+        if let Some(end) = type_var_end(text, i) {
+            if end > i + 1 {
+                vars.insert(text[i + 1..end].to_string());
+            }
+            i = end;
+        } else {
+            i += text[i..].chars().next().unwrap().len_utf8();
+        }
+    }
+    vars
 }
 
 // An interface of only a call signature: a function type.

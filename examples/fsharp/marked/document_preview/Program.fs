@@ -5,27 +5,26 @@ open type Dom.Globals
 open Marked
 open type Marked.Globals
 
-let div (cls: string) =
-    let el = document.createElement "div"
-    el.className <- cls
-    el
+let private el (tag: string) (cls: string) (text: string) =
+    let node = document.createElement tag
+    if cls <> "" then node.className <- cls
+    if text <> "" then node.textContent <- text
+    node
 
-let unwrapHtml (r: StringOrPromise) =
+let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
+    let node = el tag cls ""
+    for ch in children do
+        node.appendChild ch |> ignore
+    node
+
+let private unwrapHtml (r: StringOrPromise) =
     match r with
     | StringOrPromise.String s -> s
     | StringOrPromise.Promise _ -> ""
 
-let app = document.getElementById "app"
+let private app = document.getElementById "app"
 
-let head = div "head"
-let title = document.createElement "h1"
-title.textContent <- "Marked Document Preview (F#)"
-let badge = document.createElement "span"
-badge.className <- "badge"
-badge.textContent <- "marked"
-head.appendChild title |> ignore
-head.appendChild badge |> ignore
-app.appendChild head |> ignore
+app.appendChild (wrap "div" "head" [ el "h1" "" "Marked Document Preview (F#)"; el "span" "badge" "marked" ]) |> ignore
 
 let markdownSrc =
     """# Marked Wireframe Spec
@@ -51,25 +50,12 @@ const ok: boolean = true;
 ---
 """
 
-let grid = div "grid"
-
-let srcCard = div "card"
-let srcLbl = div "label"
-srcLbl.textContent <- "Markdown Source"
-let srcPre = document.createElement "pre"
-srcPre.className <- "src"
-srcPre.textContent <- markdownSrc
-srcCard.appendChild srcLbl |> ignore
-srcCard.appendChild srcPre |> ignore
-
-let outCard = div "card"
-let outLbl = div "label"
-outLbl.textContent <- "Rendered HTML"
-let mdOut = div "md-out"
+let mdOut = el "div" "md-out" ""
 mdOut.innerHTML <- unwrapHtml (marked markdownSrc)
-outCard.appendChild outLbl |> ignore
-outCard.appendChild mdOut |> ignore
 
-grid.appendChild srcCard |> ignore
-grid.appendChild outCard |> ignore
-app.appendChild grid |> ignore
+app.appendChild
+    (wrap "div" "grid" [
+        wrap "div" "card" [ el "div" "label" "Markdown Source"; el "pre" "src" markdownSrc ]
+        wrap "div" "card" [ el "div" "label" "Rendered HTML"; mdOut ]
+    ])
+|> ignore

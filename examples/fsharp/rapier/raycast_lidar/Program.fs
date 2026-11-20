@@ -2,6 +2,7 @@ module Program
 
 open System
 open Fable.Core
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Dimforge.Rapier3dCompat
@@ -33,7 +34,7 @@ let private drawBox
     let x2, y2 = corner hx hy
     let x3, y3 = corner (-hx) hy
 
-    ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String fillHex
+    ctx.fillStyle <- !^ fillHex
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
     ctx.lineTo (x1, y1)
@@ -42,7 +43,7 @@ let private drawBox
     ctx.closePath ()
     ctx.fill ()
 
-    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+    ctx.strokeStyle <- !^ "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
@@ -56,11 +57,11 @@ let private drawCircle (ctx: CanvasRenderingContext2D) (wx: float) (wy: float) (
     let cx = toCx wx
     let cy = toCy wy
     let rp = r * 46.0
-    ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String fillHex
+    ctx.fillStyle <- !^ fillHex
     ctx.beginPath ()
     ctx.arc (cx, cy, rp, 0.0, 2.0 * Math.PI)
     ctx.fill ()
-    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+    ctx.strokeStyle <- !^ "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.arc (cx, cy, rp, 0.0, 2.0 * Math.PI)
@@ -70,7 +71,10 @@ let main () =
     async {
         do! Async.AwaitPromise (init ())
 
-        let canvas = unbox<HTMLCanvasElement> (document.getElementById "canvas")
+        let canvas =
+            match document.querySelector HTMLElementTagNameMapKeys.canvas with
+            | Some c -> c
+            | None -> failwith "Canvas not found"
         let ctx = canvas.getContext_2d ()
         let metaEl = document.getElementById "meta"
         let sweepBtn = document.getElementById "btn-sweep"
@@ -100,10 +104,10 @@ let main () =
         let mutable manualOffset = 0.0
 
         let render () =
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#ffffff"
+            ctx.fillStyle <- !^ "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#efefef"
+            ctx.strokeStyle <- !^ "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -141,7 +145,7 @@ let main () =
                 let dy = sin angle
                 let ray = Ray.Create (origin, Vector.Create (dx, dy, 0.0))
                 let hit = world.castRayAndGetNormal (ray, maxToi, true)
-                if not (isNull (box hit)) then
+                if not (isNull hit) then
                     hits <- hits + 1
                     let toi = hit.timeOfImpact
                     if toi < minToi then minToi <- toi
@@ -149,7 +153,7 @@ let main () =
                     let hx = toCx pt.x
                     let hy = toCy pt.y
 
-                    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#737373"
+                    ctx.strokeStyle <- !^ "#737373"
                     ctx.lineWidth <- 1.0
                     ctx.beginPath ()
                     ctx.moveTo (ox, oy)
@@ -157,19 +161,19 @@ let main () =
                     ctx.stroke ()
 
                     let n = hit.normal
-                    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+                    ctx.strokeStyle <- !^ "#111111"
                     ctx.lineWidth <- 1.4
                     ctx.beginPath ()
                     ctx.moveTo (hx, hy)
                     ctx.lineTo (toCx (pt.x + n.x * 0.45), toCy (pt.y + n.y * 0.45))
                     ctx.stroke ()
 
-                    ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+                    ctx.fillStyle <- !^ "#111111"
                     ctx.beginPath ()
                     ctx.arc (hx, hy, 2.8, 0.0, 2.0 * Math.PI)
                     ctx.fill ()
                 else
-                    ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#e5e5e5"
+                    ctx.strokeStyle <- !^ "#e5e5e5"
                     ctx.lineWidth <- 0.9
                     ctx.beginPath ()
                     ctx.moveTo (ox, oy)
@@ -177,11 +181,11 @@ let main () =
                     ctx.stroke ()
 
             // Emitter turret
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+            ctx.fillStyle <- !^ "#111111"
             ctx.beginPath ()
             ctx.arc (ox, oy, 6.0, 0.0, 2.0 * Math.PI)
             ctx.fill ()
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#ffffff"
+            ctx.strokeStyle <- !^ "#ffffff"
             ctx.lineWidth <- 1.5
             ctx.beginPath ()
             ctx.arc (ox, oy, 3.0, 0.0, 2.0 * Math.PI)

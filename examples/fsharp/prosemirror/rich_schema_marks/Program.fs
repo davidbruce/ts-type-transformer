@@ -1,6 +1,5 @@
 module Program
 
-open Fable.Core
 open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
@@ -10,77 +9,58 @@ open Prosemirror.ProsemirrorState
 open Prosemirror.ProsemirrorView
 
 let private tagSpec (tag: string) : DOMOutputSpec =
-    DOMOutputSpec.Tuple (ResizeArray<obj> [ box tag; box 0 ])
+    !^(ResizeArray<obj> [ box tag; box 0 ])
 
 let private buildSchema () : Schema<obj, obj> =
-    let docSpec = createEmpty<NodeSpec>
-    docSpec.content <- Some "block+"
+    let docSpec = NodeSpec.Create (content = "block+")
 
-    let levelAttr = createEmpty<AttributeSpec>
-    levelAttr.``default`` <- Some (box 2)
-    let headingSpec = createEmpty<NodeSpec>
-    headingSpec.attrs <- Some (unbox (createObj [ "level" ==> levelAttr ]))
-    headingSpec.content <- Some "inline*"
-    headingSpec.group <- Some "block"
-    headingSpec.defining <- Some true
-    headingSpec.toDOM <- Some (fun (n: ProsemirrorModel.Node) ->
-        let lvl = unbox<float> n.attrs.["level"] |> int
-        tagSpec (sprintf "h%d" lvl)
-    )
+    let levelAttr = AttributeSpec.Create (``default`` = box 2)
+    let headingSpec =
+        NodeSpec.Create (
+            attrs = JsRecord.Create [ "level", levelAttr ],
+            content = "inline*",
+            group = "block",
+            defining = true,
+            toDOM = fun (n: ProsemirrorModel.Node) ->
+                let lvl = unbox<float> n.attrs.["level"] |> int
+                tagSpec (sprintf "h%d" lvl)
+        )
 
-    let paraSpec = createEmpty<NodeSpec>
-    paraSpec.content <- Some "inline*"
-    paraSpec.group <- Some "block"
-    paraSpec.toDOM <- Some (fun _ -> tagSpec "p")
+    let paraSpec = NodeSpec.Create (content = "inline*", group = "block", toDOM = fun _ -> tagSpec "p")
+    let quoteSpec = NodeSpec.Create (content = "block+", group = "block", defining = true, toDOM = fun _ -> tagSpec "blockquote")
 
-    let quoteSpec = createEmpty<NodeSpec>
-    quoteSpec.content <- Some "block+"
-    quoteSpec.group <- Some "block"
-    quoteSpec.defining <- Some true
-    quoteSpec.toDOM <- Some (fun _ -> tagSpec "blockquote")
+    let codeBlockSpec =
+        NodeSpec.Create (
+            content = "text*",
+            marks = "",
+            group = "block",
+            code = true,
+            defining = true,
+            toDOM = fun _ -> !^(ResizeArray<obj> [ box "pre"; box [| box "code"; box 0 |] ])
+        )
 
-    let codeBlockSpec = createEmpty<NodeSpec>
-    codeBlockSpec.content <- Some "text*"
-    codeBlockSpec.marks <- Some ""
-    codeBlockSpec.group <- Some "block"
-    codeBlockSpec.code <- Some true
-    codeBlockSpec.defining <- Some true
-    codeBlockSpec.toDOM <- Some (fun _ ->
-        DOMOutputSpec.Tuple (ResizeArray<obj> [ box "pre"; box [| box "code"; box 0 |] ])
-    )
+    let hrSpec = NodeSpec.Create (group = "block", atom = true, toDOM = fun _ -> !^(ResizeArray<obj> [ box "hr" ]))
+    let textSpec = NodeSpec.Create (group = "inline")
 
-    let hrSpec = createEmpty<NodeSpec>
-    hrSpec.group <- Some "block"
-    hrSpec.atom <- Some true
-    hrSpec.toDOM <- Some (fun _ -> DOMOutputSpec.Tuple (ResizeArray<obj> [ box "hr" ]))
+    let strongSpec = MarkSpec.Create (toDOM = fun _ _ -> tagSpec "strong")
+    let emSpec = MarkSpec.Create (toDOM = fun _ _ -> tagSpec "em")
+    let codeSpec = MarkSpec.Create (toDOM = fun _ _ -> tagSpec "code")
 
-    let textSpec = createEmpty<NodeSpec>
-    textSpec.group <- Some "inline"
-
-    let strongSpec = createEmpty<MarkSpec>
-    strongSpec.toDOM <- Some (fun _ _ -> tagSpec "strong")
-
-    let emSpec = createEmpty<MarkSpec>
-    emSpec.toDOM <- Some (fun _ _ -> tagSpec "em")
-
-    let codeSpec = createEmpty<MarkSpec>
-    codeSpec.toDOM <- Some (fun _ _ -> tagSpec "code")
-
-    Schema.Create<obj, obj> (
+    Schema.Create (
         SchemaSpec.Create (
-            nodes = U2.Case1 (createObj [
-                "doc" ==> docSpec
-                "heading" ==> headingSpec
-                "paragraph" ==> paraSpec
-                "blockquote" ==> quoteSpec
-                "code_block" ==> codeBlockSpec
-                "horizontal_rule" ==> hrSpec
-                "text" ==> textSpec
+            nodes = !^(JsRecord.Create [
+                "doc", docSpec
+                "heading", headingSpec
+                "paragraph", paraSpec
+                "blockquote", quoteSpec
+                "code_block", codeBlockSpec
+                "horizontal_rule", hrSpec
+                "text", textSpec
             ]),
-            marks = U2.Case1 (createObj [
-                "strong" ==> strongSpec
-                "em" ==> emSpec
-                "code" ==> codeSpec
+            marks = !^(JsRecord.Create [
+                "strong", strongSpec
+                "em", emSpec
+                "code", codeSpec
             ])
         )
     )
@@ -88,18 +68,18 @@ let private buildSchema () : Schema<obj, obj> =
 let private schema = buildSchema ()
 
 let private p (children: ProsemirrorModel.Node list) =
-    schema.node (StringOrNodeType.String "paragraph", content = FragmentOrNodeOrNodeArray.Array (ResizeArray children))
+    schema.node (!^"paragraph", content = !^(ResizeArray children))
 
 let private buildInitialDoc () : ProsemirrorModel.Node =
     let h =
         schema.node (
-            StringOrNodeType.String "heading",
-            attrs = unbox (createObj [ "level" ==> 2 ]),
-            content = FragmentOrNodeOrNodeArray.Node (schema.text "ProseMirror Document Schema")
+            !^"heading",
+            attrs = JsRecord.Create [ "level", box 2 ],
+            content = !^(schema.text "ProseMirror Document Schema")
         )
-    let mStrong = schema.mark (StringOrMarkType.String "strong")
-    let mEm = schema.mark (StringOrMarkType.String "em")
-    let mCode = schema.mark (StringOrMarkType.String "code")
+    let mStrong = schema.mark "strong"
+    let mEm = schema.mark "em"
+    let mCode = schema.mark "code"
     let pMarks =
         p [
             schema.text "Inline marks compose cleanly: "
@@ -112,21 +92,18 @@ let private buildInitialDoc () : ProsemirrorModel.Node =
         ]
     let quote =
         schema.node (
-            StringOrNodeType.String "blockquote",
-            content = FragmentOrNodeOrNodeArray.Node (p [ schema.text "Every document conforms to a strict schema enforced on every transaction." ])
+            !^"blockquote",
+            content = !^(p [ schema.text "Every document conforms to a strict schema enforced on every transaction." ])
         )
     let codeBlock =
         schema.node (
-            StringOrNodeType.String "code_block",
-            content = FragmentOrNodeOrNodeArray.Node (schema.text "schema.node(\"paragraph\", null, [schema.text(\"typed\")])")
+            !^"code_block",
+            content = !^(schema.text "schema.node(\"paragraph\", null, [schema.text(\"typed\")])")
         )
     let pOutro =
         p [ schema.text "Select any text in this editor and click a toolbar action to toggle marks or switch block types." ]
 
-    schema.node (
-        StringOrNodeType.String "doc",
-        content = FragmentOrNodeOrNodeArray.Array (ResizeArray [ h; pMarks; quote; codeBlock; pOutro ])
-    )
+    schema.node (!^"doc", content = !^(ResizeArray [ h; pMarks; quote; codeBlock; pOutro ]))
 
 let mutable private dispatches = 0
 let mutable private lastAction = "Initialized schema with 7 node types & 3 marks"
@@ -150,20 +127,19 @@ let private targetRange (st: EditorState) : float * float =
         else
             (1.0, doc.content.size - 1.0)
 
-let private setActiveButton (markName: string) (id: string) (hasIt: bool) =
+let private setActiveButton (id: string) (hasIt: bool) =
     let btn = document.getElementById id
     if hasIt then btn.classList.add [| "active" |] else btn.classList.remove [| "active" |]
-    ignore markName
 
 let private updateMeta (st: EditorState) =
     let (fromPos, toPos) = targetRange st
     let doc = st.doc
-    let hasBold = doc.rangeHasMark (fromPos, toPos, MarkOrMarkType.MarkType schema.marks.["strong"])
-    let hasEm = doc.rangeHasMark (fromPos, toPos, MarkOrMarkType.MarkType schema.marks.["em"])
-    let hasCode = doc.rangeHasMark (fromPos, toPos, MarkOrMarkType.MarkType schema.marks.["code"])
-    setActiveButton "strong" "btn-0" hasBold
-    setActiveButton "em" "btn-1" hasEm
-    setActiveButton "code" "btn-2" hasCode
+    let hasBold = doc.rangeHasMark (fromPos, toPos, schema.marks.["strong"])
+    let hasEm = doc.rangeHasMark (fromPos, toPos, schema.marks.["em"])
+    let hasCode = doc.rangeHasMark (fromPos, toPos, schema.marks.["code"])
+    setActiveButton "btn-0" hasBold
+    setActiveButton "btn-1" hasEm
+    setActiveButton "btn-2" hasCode
 
     let blockName = st.selection.``$from``.parent.``type``.name
     let activeMarks =
@@ -181,35 +157,39 @@ let private createState () =
 
 let main () =
     let mountEl = document.getElementById "editor"
-    let mutable view: EditorView = null
+    let mutable view: EditorView option = None
 
-    let props = createEmpty<DirectEditorProps>
-    props.state <- createState ()
-    props.dispatchTransaction <- Some (fun (tr: Transaction) ->
-        if not (isNull view) then
-            dispatches <- dispatches + 1
-            let next = view.state.apply tr
-            view.updateState next
-            updateMeta view.state
-    )
+    let props =
+        DirectEditorProps.Create (
+            state = createState (),
+            dispatchTransaction = fun (tr: Transaction) ->
+                match view with
+                | Some v ->
+                    dispatches <- dispatches + 1
+                    let next = v.state.apply tr
+                    v.updateState next
+                    updateMeta v.state
+                | None -> ()
+        )
 
-    view <- EditorView.Create ((mountEl :> Dom.Node), props)
-    updateMeta view.state
+    let v = EditorView.Create ((mountEl :> Dom.Node), props)
+    view <- Some v
+    updateMeta v.state
 
     let toggleMark (markName: string) (label: string) =
-        let st = view.state
+        let st = v.state
         let (f, t) = targetRange st
         if t > f then
             let mType = schema.marks.[markName]
             let tr = st.tr
-            if st.doc.rangeHasMark (f, t, MarkOrMarkType.MarkType mType) then
-                tr.removeMark (f, t, MarkOrMarkType.MarkType mType) |> ignore
+            if st.doc.rangeHasMark (f, t, mType) then
+                tr.removeMark (f, t, mType) |> ignore
                 lastAction <- sprintf "Removed %s on [%d..%d]" label (int f) (int t)
             else
-                let m = schema.mark (StringOrMarkType.MarkType mType)
+                let m = schema.mark mType
                 tr.addMark (f, t, m) |> ignore
                 lastAction <- sprintf "Added %s on [%d..%d]" label (int f) (int t)
-            view.dispatch tr
+            v.dispatch tr
 
     let wire (id: string) (fn: unit -> unit) =
         let el = document.getElementById id
@@ -219,7 +199,7 @@ let main () =
     wire "btn-1" (fun () -> toggleMark "em" "italic")
     wire "btn-2" (fun () -> toggleMark "code" "code")
     wire "btn-3" (fun () ->
-        let st = view.state
+        let st = v.state
         let sel = st.selection
         let parentType = sel.``$from``.parent.``type``.name
         let tr = st.tr
@@ -227,16 +207,16 @@ let main () =
             tr.setBlockType (sel.from, Some sel.``to``, schema.nodes.["paragraph"]) |> ignore
             lastAction <- "Converted heading -> paragraph"
         else
-            tr.setBlockType (sel.from, Some sel.``to``, schema.nodes.["heading"], AttrsOrFn.Attrs (unbox (createObj [ "level" ==> 2 ]))) |> ignore
+            tr.setBlockType (sel.from, Some sel.``to``, schema.nodes.["heading"], JsRecord.Create [ "level", box 2 ]) |> ignore
             lastAction <- "Converted block -> heading[level=2]"
-        view.dispatch tr
+        v.dispatch tr
     )
     wire "btn-4" (fun () ->
         dispatches <- 0
         lastAction <- "Reset initial schema document"
         let fresh = createState ()
-        view.updateState fresh
-        updateMeta view.state
+        v.updateState fresh
+        updateMeta v.state
     )
 
 main ()

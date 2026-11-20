@@ -1,7 +1,6 @@
 module Program
 
 open System
-open Fable.Core
 open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
@@ -11,58 +10,49 @@ open Prosemirror.ProsemirrorState
 open Prosemirror.ProsemirrorView
 
 let private tagSpec (tag: string) : DOMOutputSpec =
-    DOMOutputSpec.Tuple (ResizeArray<obj> [ box tag; box 0 ])
+    !^(ResizeArray<obj> [ box tag; box 0 ])
 
 let private buildSchema () : Schema<obj, obj> =
-    let docSpec = createEmpty<NodeSpec>
-    docSpec.content <- Some "block+"
+    let docSpec = NodeSpec.Create (content = "block+")
 
-    let levelAttr = createEmpty<AttributeSpec>
-    levelAttr.``default`` <- Some (box 2)
-    let headingSpec = createEmpty<NodeSpec>
-    headingSpec.attrs <- Some (unbox (createObj [ "level" ==> levelAttr ]))
-    headingSpec.content <- Some "inline*"
-    headingSpec.group <- Some "block"
-    headingSpec.toDOM <- Some (fun (n: ProsemirrorModel.Node) ->
-        let lvl = unbox<float> n.attrs.["level"] |> int
-        tagSpec (sprintf "h%d" lvl)
-    )
+    let levelAttr = AttributeSpec.Create (``default`` = box 2)
+    let headingSpec =
+        NodeSpec.Create (
+            attrs = JsRecord.Create [ "level", levelAttr ],
+            content = "inline*",
+            group = "block",
+            toDOM = fun (n: ProsemirrorModel.Node) ->
+                let lvl = unbox<float> n.attrs.["level"] |> int
+                tagSpec (sprintf "h%d" lvl)
+        )
 
-    let paraSpec = createEmpty<NodeSpec>
-    paraSpec.content <- Some "inline*"
-    paraSpec.group <- Some "block"
-    paraSpec.toDOM <- Some (fun _ -> tagSpec "p")
+    let paraSpec = NodeSpec.Create (content = "inline*", group = "block", toDOM = fun _ -> tagSpec "p")
 
-    let codeBlockSpec = createEmpty<NodeSpec>
-    codeBlockSpec.content <- Some "text*"
-    codeBlockSpec.marks <- Some ""
-    codeBlockSpec.group <- Some "block"
-    codeBlockSpec.code <- Some true
-    codeBlockSpec.toDOM <- Some (fun _ ->
-        DOMOutputSpec.Tuple (ResizeArray<obj> [ box "pre"; box [| box "code"; box 0 |] ])
-    )
+    let codeBlockSpec =
+        NodeSpec.Create (
+            content = "text*",
+            marks = "",
+            group = "block",
+            code = true,
+            toDOM = fun _ -> !^(ResizeArray<obj> [ box "pre"; box [| box "code"; box 0 |] ])
+        )
 
-    let textSpec = createEmpty<NodeSpec>
-    textSpec.group <- Some "inline"
+    let textSpec = NodeSpec.Create (group = "inline")
+    let strongSpec = MarkSpec.Create (toDOM = fun _ _ -> tagSpec "strong")
+    let codeSpec = MarkSpec.Create (toDOM = fun _ _ -> tagSpec "code")
 
-    let strongSpec = createEmpty<MarkSpec>
-    strongSpec.toDOM <- Some (fun _ _ -> tagSpec "strong")
-
-    let codeSpec = createEmpty<MarkSpec>
-    codeSpec.toDOM <- Some (fun _ _ -> tagSpec "code")
-
-    Schema.Create<obj, obj> (
+    Schema.Create (
         SchemaSpec.Create (
-            nodes = U2.Case1 (createObj [
-                "doc" ==> docSpec
-                "heading" ==> headingSpec
-                "paragraph" ==> paraSpec
-                "code_block" ==> codeBlockSpec
-                "text" ==> textSpec
+            nodes = !^(JsRecord.Create [
+                "doc", docSpec
+                "heading", headingSpec
+                "paragraph", paraSpec
+                "code_block", codeBlockSpec
+                "text", textSpec
             ]),
-            marks = U2.Case1 (createObj [
-                "strong" ==> strongSpec
-                "code" ==> codeSpec
+            marks = !^(JsRecord.Create [
+                "strong", strongSpec
+                "code", codeSpec
             ])
         )
     )
@@ -70,27 +60,24 @@ let private buildSchema () : Schema<obj, obj> =
 let private schema = buildSchema ()
 
 let private p (t: string) =
-    schema.node (StringOrNodeType.String "paragraph", content = FragmentOrNodeOrNodeArray.Node (schema.text t))
+    schema.node (!^"paragraph", content = !^(schema.text t))
 
 let private buildInitialDoc () : ProsemirrorModel.Node =
     let h =
         schema.node (
-            StringOrNodeType.String "heading",
-            attrs = unbox (createObj [ "level" ==> 2 ]),
-            content = FragmentOrNodeOrNodeArray.Node (schema.text "Immutable State & View Decorations")
+            !^"heading",
+            attrs = JsRecord.Create [ "level", box 2 ],
+            content = !^(schema.text "Immutable State & View Decorations")
         )
     let p1 = p "A ProseMirror schema validates every document tree before state updates commit to the view."
     let p2 = p "Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema."
     let cb =
         schema.node (
-            StringOrNodeType.String "code_block",
-            content = FragmentOrNodeOrNodeArray.Node (schema.text "const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view")
+            !^"code_block",
+            content = !^(schema.text "const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view")
         )
     let p3 = p "Inline decorations highlight matching tokens while node decorations outline matching blocks in the view."
-    schema.node (
-        StringOrNodeType.String "doc",
-        content = FragmentOrNodeOrNodeArray.Array (ResizeArray [ h; p1; p2; cb; p3 ])
-    )
+    schema.node (!^"doc", content = !^(ResizeArray [ h; p1; p2; cb; p3 ]))
 
 let private computeDecorations (doc: ProsemirrorModel.Node) (query: string) : DecorationSet * int * int =
     let q = query.Trim().ToLowerInvariant()
@@ -139,21 +126,18 @@ let private makeSearchPlugin () : Plugin<string> =
         StateField.Create (
             (fun _ _ -> "state"),
             (fun (tr: Transaction) (prev: string) _ _ ->
-                let metaVal = tr.getMeta (StringOrPluginOrPluginKey.String "search")
-                if isNull metaVal then prev else unbox<string> metaVal
+                let metaVal = tr.getMeta "search"
+                if isNull metaVal then prev else string metaVal
             )
         )
-    let eProps = createEmpty<EditorProps<Plugin<string>>>
-    eProps.decorations <- Some (fun (st: EditorState) ->
-        let query = match searchKey.getState st with Some q -> q | None -> ""
-        let (dset, _, _) = computeDecorations st.doc query
-        Some (dset :> DecorationSource)
-    )
-    let pSpec = createEmpty<PluginSpec<string>>
-    pSpec.key <- Some (unbox searchKey)
-    pSpec.state <- Some field
-    pSpec.props <- Some eProps
-    Plugin.Create pSpec
+    let eProps =
+        EditorProps.Create (
+            decorations = fun (st: EditorState) ->
+                let query = match searchKey.getState st with Some q -> q | None -> ""
+                let (dset, _, _) = computeDecorations st.doc query
+                Some (dset :> DecorationSource)
+        )
+    Plugin.Create (PluginSpec.Create (key = unbox searchKey, state = field, props = eProps))
 
 let private syncMeta (st: EditorState) (activeBtnId: string) =
     let query = match searchKey.getState st with Some q -> q | None -> ""
@@ -170,7 +154,7 @@ let private syncMeta (st: EditorState) (activeBtnId: string) =
 
 let main () =
     let mountEl = document.getElementById "editor"
-    let mutable view: EditorView = null
+    let mutable view: EditorView option = None
     let mutable activeId = "btn-0"
 
     let state =
@@ -182,24 +166,28 @@ let main () =
             )
         )
 
-    let props = createEmpty<DirectEditorProps>
-    props.state <- state
-    props.dispatchTransaction <- Some (fun (tr: Transaction) ->
-        if not (isNull view) then
-            let next = view.state.apply tr
-            view.updateState next
-            syncMeta next activeId
-    )
+    let props =
+        DirectEditorProps.Create (
+            state = state,
+            dispatchTransaction = fun (tr: Transaction) ->
+                match view with
+                | Some v ->
+                    let next = v.state.apply tr
+                    v.updateState next
+                    syncMeta next activeId
+                | None -> ()
+        )
 
-    view <- EditorView.Create ((mountEl :> Dom.Node), props)
-    syncMeta view.state activeId
+    let v = EditorView.Create ((mountEl :> Dom.Node), props)
+    view <- Some v
+    syncMeta v.state activeId
 
     let bindQuery (btnId: string) (q: string) =
         let btn = document.getElementById btnId
         btn.addEventListener (HTMLElementEventMapKeys.click, fun _ ->
             activeId <- btnId
-            let tr = view.state.tr.setMeta (StringOrPluginOrPluginKey.String "search", box q)
-            view.dispatch tr
+            let tr = v.state.tr.setMeta ("search", box q)
+            v.dispatch tr
         )
 
     bindQuery "btn-0" "state"

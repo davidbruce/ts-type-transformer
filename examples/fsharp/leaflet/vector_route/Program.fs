@@ -18,7 +18,7 @@ let private mapOpts () =
 let private polyOpts color weight dash fillOpacity =
     let dashOpt =
         match dash with
-        | Some d -> Some (StringOrNumberArray.String d)
+        | Some d -> Some !^d
         | None -> None
     PolylineOptions.Create(
         smoothFactor = 1.0,
@@ -28,8 +28,8 @@ let private polyOpts color weight dash fillOpacity =
         fillOpacity = fillOpacity
     )
 
-let private toPolyPts (pts: LatLng list) =
-    ResizeArray (pts |> List.map PolylineNewLatlngs.LatLng)
+let private toPolyPts (pts: LatLng list) : ResizeArray<PolylineNewLatlngs> =
+    ResizeArray [ for p in pts -> !^p ]
 
 let main () =
     let m = map (document.getElementById "map", mapOpts ())
@@ -46,16 +46,13 @@ let main () =
 
     let gratOpts = polyOpts "#e5e5e5" 1.0 None 0.0
     for lat in [ 46.0; 48.0; 50.0; 52.0; 54.0 ] do
-        polyline<obj, obj>(toPolyPts [ latLng (lat, -2.0); latLng (lat, 17.0) ], gratOpts).addTo (MapOrLayerGroup.Map m)
-        |> ignore
+        polyline(toPolyPts [ latLng (lat, -2.0); latLng (lat, 17.0) ], gratOpts).addTo (!^m) |> ignore
     for lng in [ 0.0; 4.0; 8.0; 12.0; 16.0 ] do
-        polyline<obj, obj>(toPolyPts [ latLng (45.0, lng); latLng (55.0, lng) ], gratOpts).addTo (MapOrLayerGroup.Map m)
-        |> ignore
+        polyline(toPolyPts [ latLng (45.0, lng); latLng (55.0, lng) ], gratOpts).addTo (!^m) |> ignore
 
     let primaryPts = hubs |> Array.map snd |> Array.toList
-    let primaryLine =
-        polyline<obj, obj>(toPolyPts primaryPts, polyOpts "#111111" 3.0 None 0.0)
-    primaryLine.addTo (MapOrLayerGroup.Map m) |> ignore
+    let primaryLine = polyline(toPolyPts primaryPts, polyOpts "#111111" 3.0 None 0.0)
+    primaryLine.addTo (!^m) |> ignore
 
     let altPts =
         [
@@ -64,11 +61,9 @@ let main () =
             latLng (52.3676, 4.9041)
             snd hubs[5]
         ]
-    polyline<obj, obj>(toPolyPts altPts, polyOpts "#737373" 1.5 (Some "5 5") 0.0)
-        .addTo (MapOrLayerGroup.Map m)
-    |> ignore
+    polyline(toPolyPts altPts, polyOpts "#737373" 1.5 (Some "5 5") 0.0).addTo (!^m) |> ignore
 
-    let nodes = layerGroup<obj> ()
+    let nodes = layerGroup ()
     let nodeOpts =
         CircleMarkerOptions.Create(
             radius = 6.0,
@@ -78,16 +73,16 @@ let main () =
             fillOpacity = 1.0
         )
     for (name, pt) in hubs do
-        let cm = circleMarker<obj> (pt, nodeOpts)
-        cm.bindTooltip (LayerBindTooltipContent.String name) |> ignore
+        let cm = circleMarker (pt, nodeOpts)
+        cm.bindTooltip (!^name) |> ignore
         nodes.addLayer cm |> ignore
-    nodes.addTo (MapOrLayerGroup.Map m) |> ignore
+    nodes.addTo (!^m) |> ignore
 
-    m.fitBounds (LatLngBoundsExpression.LatLngBounds (primaryLine.getBounds ())) |> ignore
+    m.fitBounds (primaryLine.getBounds ()) |> ignore
 
     let mutable totalKm = 0.0
     for i in 0 .. hubs.Length - 2 do
-        totalKm <- totalKm + (snd hubs[i]).distanceTo (LatLngExpression.LatLng (snd hubs[i + 1])) / 1000.0
+        totalKm <- totalKm + (snd hubs[i]).distanceTo (snd hubs[i + 1]) / 1000.0
 
     let meta = document.getElementById "meta"
     meta.textContent <- sprintf "6 hubs · 2 routes · %.0f km total · EPSG:3857 vector SVG" totalKm

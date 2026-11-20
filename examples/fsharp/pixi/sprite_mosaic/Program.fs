@@ -6,12 +6,15 @@ open Dom
 open type Dom.Globals
 open Pixi.Js
 
+let private strokeStyle w (c: int) : StrokeInput =
+    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = !^ (float c))))
+
 let private initOpts () =
     InitOptions.Create(
         width = 680.0,
         height = 400.0,
-        backgroundColor = U9.Case2 16777215.0,
-        preference = StringOrRendererPreferenceArray.String "webgl",
+        backgroundColor = !^ 16777215.0,
+        preference = !^ "webgl",
         preserveDrawingBuffer = true,
         antialias = true,
         autoStart = false
@@ -19,16 +22,16 @@ let private initOpts () =
 
 let main =
     async {
-        let app = Application.Create<obj> ()
+        let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
         let stageEl = document.getElementById "stage"
-        stageEl.appendChild (app.canvas :> Node) |> ignore
+        stageEl.appendChild app.canvas |> ignore
 
         let frame = Graphics.Create ()
         frame
             .rect(32.0, 20.0, 616.0, 360.0)
-            .stroke(createObj [ "width" ==> 1.5; "color" ==> 0xd4d4d4 ])
+            .stroke(strokeStyle 1.5 0xd4d4d4)
         |> ignore
         app.stage.addChild frame |> ignore
 
@@ -37,7 +40,7 @@ let main =
 
         for row in 0 .. 5 do
             for col in 0 .. 9 do
-                let sprite = Sprite.Create (SpriteOptionsOrTexture.Texture whiteTex)
+                let sprite = Sprite.Create whiteTex
                 let idx = (row * 3 + col * 5) % shades.Length
                 sprite.width <- 52.0
                 sprite.height <- 48.0

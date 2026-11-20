@@ -27,11 +27,11 @@ let main () =
         |]
 
     let corridor =
-        polyline<obj, obj>(
-            ResizeArray (stations |> Array.map (fun (_, _, p) -> PolylineNewLatlngs.LatLng p) |> Array.toList),
+        polyline(
+            ResizeArray<PolylineNewLatlngs> [ for (_, _, p) in stations -> !^p ],
             PolylineOptions.Create(smoothFactor = 1.0, color = "#404040", weight = 2.5)
         )
-    corridor.addTo (MapOrLayerGroup.Map m) |> ignore
+    corridor.addTo (!^m) |> ignore
 
     let dotOpts =
         CircleMarkerOptions.Create(
@@ -43,27 +43,27 @@ let main () =
         )
 
     for (code, name, pt) in stations do
-        let cm = circleMarker<obj> (pt, dotOpts)
-        cm.bindTooltip (LayerBindTooltipContent.String (sprintf "%s · %s" code name)) |> ignore
-        cm.addTo (MapOrLayerGroup.Map m) |> ignore
+        let cm = circleMarker (pt, dotOpts)
+        cm.bindTooltip (!^ (sprintf "%s · %s" code name)) |> ignore
+        cm.addTo (!^m) |> ignore
 
         let icon =
             divIcon (
                 DivIconOptions.Create(
                     className = "mono-pin",
-                    html = StringOrElementOrBoolean.String (sprintf "<span>%s</span>" code),
-                    iconSize = PointExpression.Point (point (22.0, 22.0)),
-                    iconAnchor = PointExpression.Point (point (11.0, 11.0))
+                    html = !^ (sprintf "<span>%s</span>" code),
+                    iconSize = !^ (point (22.0, 22.0)),
+                    iconAnchor = !^ (point (11.0, 11.0))
                 )
             )
-        let mk = marker<obj>(pt, MarkerOptions.Create(icon = IconOrDivIcon.DivIcon icon))
-        mk.addTo (MapOrLayerGroup.Map m) |> ignore
+        let mk = marker(pt, MarkerOptions.Create(icon = !^icon))
+        mk.addTo (!^m) |> ignore
 
-    m.fitBounds (LatLngBoundsExpression.LatLngBounds (corridor.getBounds().pad 0.15)) |> ignore
+    m.fitBounds (corridor.getBounds().pad 0.15) |> ignore
 
     let (_, _, bernPt) = stations[2]
     let note = popup (bernPt, PopupOptions.Create(maxWidth = 220.0))
-    note.setContent (StringOrHTMLElementOrFn.String "03 Bern · 46.95N, 7.45E") |> ignore
+    note.setContent "03 Bern · 46.95N, 7.45E" |> ignore
     note.openOn m |> ignore
 
     let mutable clicks = 0
@@ -72,7 +72,7 @@ let main () =
             if ev.latlng.lat > 0.0 then
                 clicks <- clicks + 1
     m.on (EventedAddEventListenerTypeClick.Click, onClick) |> ignore
-    let payload = createObj [ "latlng" ==> bernPt ]
+    let payload = {| latlng = bernPt |}
     m.fire ("click", payload) |> ignore
     m.fire ("click", payload) |> ignore
 

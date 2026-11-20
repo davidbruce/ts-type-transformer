@@ -5,25 +5,31 @@ open type Dom.Globals
 open Marked
 open type Marked.Globals
 
-let el (tag: string) (cls: string) (txt: string option) =
+let private el (tag: string) (cls: string) (text: string) =
     let node = document.createElement tag
     if cls <> "" then node.className <- cls
-    match txt with
-    | Some t -> node.textContent <- t
-    | None -> ()
+    if text <> "" then node.textContent <- text
     node
 
-let unwrapHtml (r: StringOrPromise) =
+let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
+    let node = el tag cls ""
+    for ch in children do
+        node.appendChild ch |> ignore
+    node
+
+let private unwrapHtml (r: StringOrPromise) =
     match r with
     | StringOrPromise.String s -> s
     | StringOrPromise.Promise _ -> ""
 
-let app = document.getElementById "app"
+let private makeModeCard (title: string) (html: string) =
+    let slot = el "div" "md-out" ""
+    slot.innerHTML <- html
+    wrap "div" "card" [ el "div" "label" title; slot; el "pre" "html-raw" html ]
 
-let head = el "div" "head" None
-head.appendChild (el "h1" "" (Some "Marked Inline vs Block (F#)")) |> ignore
-head.appendChild (el "span" "badge" (Some "parse vs parseInline")) |> ignore
-app.appendChild head |> ignore
+let private app = document.getElementById "app"
+
+app.appendChild (wrap "div" "head" [ el "h1" "" "Marked Inline vs Block (F#)"; el "span" "badge" "parse vs parseInline" ]) |> ignore
 
 let snippets =
     [ "Hello **world** and *italics*"
@@ -32,29 +38,13 @@ let snippets =
       "~~strike~~ and **nested *em***" ]
 
 for s in snippets do
-    let row = el "div" "row-card" None
-    row.appendChild (el "div" "label" (Some "Markdown Snippet")) |> ignore
-    row.appendChild (el "pre" "src" (Some s)) |> ignore
-
-    let cols = el "div" "grid" None
-
-    let blockHtml = unwrapHtml (marked s)
-    let blockCard = el "div" "card" None
-    blockCard.appendChild (el "div" "label" (Some "Block (parse)")) |> ignore
-    let blockOut = el "div" "md-out" None
-    blockOut.innerHTML <- blockHtml
-    blockCard.appendChild blockOut |> ignore
-    blockCard.appendChild (el "pre" "html-raw" (Some blockHtml)) |> ignore
-
-    let inlHtml = unwrapHtml (parseInline.Invoke s)
-    let inlCard = el "div" "card" None
-    inlCard.appendChild (el "div" "label" (Some "Inline (parseInline)")) |> ignore
-    let inlOut = el "div" "md-out" None
-    inlOut.innerHTML <- inlHtml
-    inlCard.appendChild inlOut |> ignore
-    inlCard.appendChild (el "pre" "html-raw" (Some inlHtml)) |> ignore
-
-    cols.appendChild blockCard |> ignore
-    cols.appendChild inlCard |> ignore
-    row.appendChild cols |> ignore
-    app.appendChild row |> ignore
+    app.appendChild
+        (wrap "div" "row-card" [
+            el "div" "label" "Markdown Snippet"
+            el "pre" "src" s
+            wrap "div" "grid" [
+                makeModeCard "Block (parse)" (unwrapHtml (marked s))
+                makeModeCard "Inline (parseInline)" (unwrapHtml (parseInline.Invoke s))
+            ]
+        ])
+    |> ignore

@@ -36,32 +36,32 @@ let main () =
         )
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
-    (document.getElementById "stage").appendChild (renderer.domElement :> Dom.Node) |> ignore
+    (document.getElementById "stage").appendChild renderer.domElement |> ignore
 
-    let scene = Scene.Create<Object3DEventMap>()
-    scene.background <- ColorOrTexture.Color (Color.Create (ColorRepresentation.Number (float 0xf7f7f7)))
+    let scene = Scene.Create()
+    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
-    scene.add (AmbientLight.Create(ColorRepresentation.Number (float 0xffffff), 1.2) :> Object3D<Object3DEventMap>) |> ignore
-    let keyLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 2.2)
+    scene.add (AmbientLight.Create(float 0xffffff, 1.2)) |> ignore
+    let keyLight = DirectionalLight.Create(float 0xffffff, 2.2)
     keyLight.position.set (6.0, 10.0, 8.0) |> ignore
-    scene.add (keyLight :> Object3D<Object3DEventMap>) |> ignore
-    let rimLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 0.9)
+    scene.add (keyLight) |> ignore
+    let rimLight = DirectionalLight.Create(float 0xffffff, 0.9)
     rimLight.position.set (-7.0, 5.0, -6.0) |> ignore
-    scene.add (rimLight :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (rimLight) |> ignore
 
     let grid =
         GridHelper.Create(
             9.0,
             12.0,
-            ColorRepresentation.Number (float 0x999999),
-            ColorRepresentation.Number (float 0xe5e5e5)
+            !^ (float 0x999999),
+            !^ (float 0xe5e5e5)
         )
     grid.position.y <- -1.1
-    scene.add (grid :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (grid) |> ignore
 
-    let geo = BufferGeometry.Create<NormalBufferAttributes, BufferGeometryEventMap>()
+    let geo = BufferGeometry.Create()
     let vertCount = gridN * gridN
     let posAttr = Float32BufferAttribute.Create(float (vertCount * 3), 3.0)
 
@@ -85,39 +85,39 @@ let main () =
     let surfMat =
         MeshStandardMaterial.Create(
             MeshStandardMaterialParameters.Create(
-                color = ColorRepresentation.Number (float 0xb5b5b5),
+                color = !^ (float 0xb5b5b5),
                 roughness = 0.72,
                 metalness = 0.05,
                 flatShading = true
             )
         )
-    let surfaceMesh = Mesh.Create<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, MeshStandardMaterial, Object3DEventMap>(geo, surfMat)
-    scene.add (surfaceMesh :> Object3D<Object3DEventMap>) |> ignore
+    let surfaceMesh = Mesh.Create(geo, surfMat)
+    scene.add (surfaceMesh) |> ignore
 
     let wireMat =
         MeshBasicMaterial.Create(
             MeshBasicMaterialParameters.Create(
-                color = ColorRepresentation.Number (float 0x262626),
+                color = !^ (float 0x262626),
                 wireframe = true
             )
         )
-    let wireMesh = Mesh.Create<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, MeshBasicMaterial, Object3DEventMap>(geo, wireMat)
+    let wireMesh = Mesh.Create(geo, wireMat)
     wireMesh.position.y <- 0.015
-    scene.add (wireMesh :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (wireMesh) |> ignore
 
     let ptCount = (gridN / 2) * (gridN / 2)
-    let ptsGeo = BufferGeometry.Create<NormalBufferAttributes, BufferGeometryEventMap>()
+    let ptsGeo = BufferGeometry.Create()
     let ptsAttr = Float32BufferAttribute.Create(float (ptCount * 3), 3.0)
     ptsGeo.setAttribute ("position", ptsAttr :> BufferAttribute<BufferAttributeEventMap>) |> ignore
     let ptsMat =
         PointsMaterial.Create(
             PointsMaterialParameters.Create(
-                color = ColorRepresentation.Number (float 0x111111),
+                color = !^ (float 0x111111),
                 size = 0.14
             )
         )
-    let ptsObj = Points.Create<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, PointsMaterial, Object3DEventMap>(ptsGeo, ptsMat)
-    scene.add (ptsObj :> Object3D<Object3DEventMap>) |> ignore
+    let ptsObj = Points.Create(ptsGeo, ptsMat)
+    scene.add (ptsObj) |> ignore
 
     let wireBtn = document.getElementById "btn-wire"
     let metaEl = document.getElementById "meta"
@@ -152,7 +152,7 @@ let main () =
         camera.lookAt (Vector3.Create(0.0, 0.0, 0.0))
         wireMesh.visible <- overlayOn
         wireBtn.textContent <- if overlayOn then "Wireframe: On" else "Wireframe: Off"
-        renderer.render (scene :> Object3D<Object3DEventMap>, camera :> Camera)
+        renderer.render (scene, camera)
 
         let bb = geo.boundingBox
         metaEl.textContent <-

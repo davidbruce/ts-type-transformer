@@ -1,6 +1,5 @@
 module Program
 
-open Fable.Core
 open Node
 
 let mutable private passed = 0
@@ -28,17 +27,8 @@ let mutable dirCount = 0
 let mutable fileCount = 0
 let mutable totalBytes = 0.0
 
-let entryName (n: StringOrNonSharedBuffer) =
-    match n with
-    | StringOrNonSharedBuffer.String s -> s
-    | _ -> "?"
-
 let rec walk (dir: string) =
-    let entries =
-        Fs.readdirSync (dir, U2.Case1 {| encoding = None; withFileTypes = None; recursive = None |})
-        |> Seq.map entryName
-        |> Seq.sort
-    for name in entries do
+    for name in Fs.readdirSync dir |> Seq.sort do
         let full = path.join (dir, name)
         let st = Fs.statSync full
         if st.isDirectory () then

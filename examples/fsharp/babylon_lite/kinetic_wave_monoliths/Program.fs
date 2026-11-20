@@ -9,7 +9,10 @@ open type Babylonjs.Lite.Globals
 let main =
     async {
         try
-            let canvas = (document.querySelector HTMLElementTagNameMapKeys.canvas).Value
+            let canvas =
+                match document.querySelector HTMLElementTagNameMapKeys.canvas with
+                | Some c -> c
+                | None -> failwith "Canvas not found"
             let! engine = createEngine canvas |> Async.AwaitPromise
             let scene = createSceneContext engine
             scene.clearColor <- GPUColorDict.Create(r = 0.05, g = 0.05, b = 0.05, a = 1.0)
@@ -61,19 +64,19 @@ let main =
                         )
                     ))
 
-            let columns = ResizeArray<Mesh * float * float * float * float>()
-            for row in 0..5 do
-                for col in 0..5 do
-                    let fx = float col - 2.5
-                    let fz = float row - 2.5
-                    let x = fx * 1.15
-                    let z = fz * 1.15
-                    let dist = Math.Sqrt(fx * fx + fz * fz)
-                    let m = createBox (engine, BoxOptions.Create(width = 0.72, height = 1.0, depth = 0.72))
-                    m.position.set (x, 0.5, z)
-                    m.material <- colMats.[(row + col) % 4]
-                    addToScene (scene, m)
-                    columns.Add((m, x, z, dist, fx - fz))
+            let columns =
+                [ for row in 0..5 do
+                      for col in 0..5 do
+                          let fx = float col - 2.5
+                          let fz = float row - 2.5
+                          let x = fx * 1.15
+                          let z = fz * 1.15
+                          let dist = Math.Sqrt(fx * fx + fz * fz)
+                          let m = createBox (engine, BoxOptions.Create(width = 0.72, height = 1.0, depth = 0.72))
+                          m.position.set (x, 0.5, z)
+                          m.material <- colMats.[(row + col) % 4]
+                          addToScene (scene, m)
+                          yield (m, x, z, dist, fx - fz) ]
 
             let capProps =
                 CreatePbrMaterialProps.Create(
@@ -85,12 +88,12 @@ let main =
             setPbrEmissive (capProps, (0.16, 0.16, 0.16))
             let capMat = createPbrMaterial capProps
 
-            let capsules = ResizeArray<Mesh>()
-            for k in 0..3 do
-                let cap = createCapsule (engine, CapsuleOptions.Create(height = 1.15, radius = 0.22, tessellation = 20.0))
-                cap.material <- capMat
-                addToScene (scene, cap)
-                capsules.Add(cap)
+            let capsules =
+                [| for _ in 0..3 ->
+                       let cap = createCapsule (engine, CapsuleOptions.Create(height = 1.15, radius = 0.22, tessellation = 20.0))
+                       cap.material <- capMat
+                       addToScene (scene, cap)
+                       cap |]
 
             let mutable elapsed = 0.0
 
@@ -106,13 +109,13 @@ let main =
                         m.scaling.set (1.0, h, 1.0)
                         m.position.set (x, h * 0.5, z)
 
-                    for k in 0 .. capsules.Count - 1 do
+                    capsules
+                    |> Array.iteri (fun k cap ->
                         let fk = float k
                         let theta = elapsed * 0.7 + fk * (Math.PI / 2.0)
-                        let cap = capsules.[k]
                         cap.position.set (Math.Cos(theta) * 4.9, 2.6 + Math.Sin(elapsed * 1.6 + fk * 1.57) * 0.55, Math.Sin(theta) * 4.9)
                         cap.rotation.z <- Math.Sin(elapsed + fk) * 0.35
-                        cap.rotation.y <- -theta
+                        cap.rotation.y <- -theta)
 
                     light1.position.set (Math.Cos(elapsed * 0.65) * 5.2, 4.2, Math.Sin(elapsed * 0.65) * 5.2)
                     light2.position.set (Math.Cos(-elapsed * 0.52) * 5.2, 3.4, Math.Sin(-elapsed * 0.52) * 5.2)

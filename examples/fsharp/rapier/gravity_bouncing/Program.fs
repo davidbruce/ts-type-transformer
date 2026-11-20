@@ -2,6 +2,7 @@ module Program
 
 open System
 open Fable.Core
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Dimforge.Rapier3dCompat
@@ -31,7 +32,10 @@ let main () =
     async {
         do! Async.AwaitPromise (init ())
 
-        let canvas = unbox<HTMLCanvasElement> (document.getElementById "canvas")
+        let canvas =
+            match document.querySelector HTMLElementTagNameMapKeys.canvas with
+            | Some c -> c
+            | None -> failwith "Canvas not found"
         let ctx = canvas.getContext_2d ()
         let metaEl = document.getElementById "meta"
         let gravBtn = document.getElementById "btn-gravity"
@@ -40,39 +44,45 @@ let main () =
         let mutable earthGravity = true
         let mutable paused = false
         let mutable stepCount = 0
-        let mutable world: World = Unchecked.defaultof<World>
-        let mutable balls: RigidBody array = [||]
         let trailX = Array.init 5 (fun _ -> Array.zeroCreate<float> trailLen)
         let trailY = Array.init 5 (fun _ -> Array.zeroCreate<float> trailLen)
         let mutable trailCount = 0
 
-        let buildScene () =
-            if not (isNull (box world)) then world.free ()
+        let createScene () =
             let gy = if earthGravity then -9.81 else -1.62
-            world <- World.Create (Vector.Create (0.0, gy, 0.0))
+            let w = World.Create (Vector.Create (0.0, gy, 0.0))
 
-            let ground = world.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (0.0, -0.4, 0.0))
-            world.createCollider (ColliderDesc.cuboid (7.0, 0.4, 2.0), ground) |> ignore
+            let ground = w.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (0.0, -0.4, 0.0))
+            w.createCollider (ColliderDesc.cuboid (7.0, 0.4, 2.0), ground) |> ignore
 
-            let leftWall = world.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (-6.8, 3.5, 0.0))
-            world.createCollider (ColliderDesc.cuboid (0.25, 4.0, 2.0), leftWall) |> ignore
+            let leftWall = w.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (-6.8, 3.5, 0.0))
+            w.createCollider (ColliderDesc.cuboid (0.25, 4.0, 2.0), leftWall) |> ignore
 
-            let rightWall = world.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (6.8, 3.5, 0.0))
-            world.createCollider (ColliderDesc.cuboid (0.25, 4.0, 2.0), rightWall) |> ignore
+            let rightWall = w.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (6.8, 3.5, 0.0))
+            w.createCollider (ColliderDesc.cuboid (0.25, 4.0, 2.0), rightWall) |> ignore
 
-            balls <-
+            let bs =
                 Array.init 5 (fun i ->
                     let rb =
-                        world.createRigidBody (
+                        w.createRigidBody (
                             RigidBodyDesc.dynamic().setTranslation (xCoords.[i], 5.6, 0.0)
                         )
                     let cdesc =
                         ColliderDesc.ball(0.42).setRestitution(restitutions.[i]).setFriction(0.2).setDensity(1.2)
-                    world.createCollider (cdesc, rb) |> ignore
+                    w.createCollider (cdesc, rb) |> ignore
                     rb
                 )
             stepCount <- 0
             trailCount <- 0
+            (w, bs)
+
+        let mutable (world, balls) = createScene ()
+
+        let buildScene () =
+            world.free ()
+            let (w, bs) = createScene ()
+            world <- w
+            balls <- bs
 
         let stepSim () =
             world.step ()
@@ -85,11 +95,11 @@ let main () =
             if trailCount < trailLen then trailCount <- trailCount + 1
 
         let render () =
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#ffffff"
+            ctx.fillStyle <- !^ "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
             // Blueprint drafting grid
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#efefef"
+            ctx.strokeStyle <- !^ "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -105,9 +115,9 @@ let main () =
                 ctx.stroke ()
 
             // Ground slab & cross-hatch ticks
-            ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#f7f7f7"
+            ctx.fillStyle <- !^ "#f7f7f7"
             ctx.fillRect (0.0, 350.0, 680.0, 50.0)
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#d4d4d4"
+            ctx.strokeStyle <- !^ "#d4d4d4"
             ctx.lineWidth <- 1.0
             let mutable hx = -20.0
             while hx < 700.0 do
@@ -116,7 +126,7 @@ let main () =
                 ctx.lineTo (hx - 24.0, 400.0)
                 ctx.stroke ()
                 hx <- hx + 18.0
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+            ctx.strokeStyle <- !^ "#111111"
             ctx.lineWidth <- 1.5
             ctx.beginPath ()
             ctx.moveTo (0.0, 350.0)
@@ -124,7 +134,7 @@ let main () =
             ctx.stroke ()
 
             // Drop reference line & vertical guides
-            ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#d4d4d4"
+            ctx.strokeStyle <- !^ "#d4d4d4"
             ctx.lineWidth <- 1.0
             drawDashed ctx (toCx -5.0) (toCy 5.6) (toCx 5.0) (toCy 5.6) 40
             for i in 0..4 do
@@ -135,7 +145,7 @@ let main () =
             let mutable energySum = 0.0
             let mutable highestY = 0.0
             for i in 0..4 do
-                ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#b5b5b5"
+                ctx.fillStyle <- !^ "#b5b5b5"
                 for k in 0 .. trailCount - 1 do
                     let tx = toCx trailX.[i].[k]
                     let ty = toCy trailY.[i].[k]
@@ -153,12 +163,12 @@ let main () =
                 let cy = toCy p.y
                 let rPx = 0.42 * 46.0
 
-                ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String ballFills.[i]
+                ctx.fillStyle <- !^ ballFills.[i]
                 ctx.beginPath ()
                 ctx.arc (cx, cy, rPx, 0.0, 2.0 * Math.PI)
                 ctx.fill ()
 
-                ctx.strokeStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+                ctx.strokeStyle <- !^ "#111111"
                 ctx.lineWidth <- 1.6
                 ctx.beginPath ()
                 ctx.arc (cx, cy, rPx, 0.0, 2.0 * Math.PI)
@@ -166,12 +176,12 @@ let main () =
 
                 // Crisp inner ring detail
                 let hlColor = if i >= 3 then "#d4d4d4" else "#737373"
-                ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String hlColor
+                ctx.fillStyle <- !^ hlColor
                 ctx.beginPath ()
                 ctx.arc (cx - 5.0, cy - 5.0, 2.8, 0.0, 2.0 * Math.PI)
                 ctx.fill ()
 
-                ctx.fillStyle <- StringOrCanvasGradientOrCanvasPattern.String "#111111"
+                ctx.fillStyle <- !^ "#111111"
                 ctx.font <- "11px ui-monospace, monospace"
                 ctx.fillText (sprintf "e=%.2f" restitutions.[i], cx - 22.0, 368.0)
 
@@ -180,7 +190,6 @@ let main () =
             metaEl.textContent <-
                 sprintf "5 spheres · g=%s m/s² · max_y=%.2f m · ke=%.1f · step=%d (%s)" gMode highestY energySum stepCount pState
 
-        buildScene ()
         for _ in 1..28 do stepSim ()
         render ()
 

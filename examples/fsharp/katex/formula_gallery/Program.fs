@@ -5,24 +5,23 @@ open type Dom.Globals
 open Katex
 open type Katex.Globals
 
-let div (cls: string) =
-    let el = document.createElement "div"
-    el.className <- cls
-    el
+let private el (tag: string) (cls: string) (text: string) =
+    let node = document.createElement tag
+    if cls <> "" then node.className <- cls
+    if text <> "" then node.textContent <- text
+    node
 
-let app = document.getElementById "app"
+let private wrap (cls: string) (children: Dom.HTMLElement list) =
+    let node = el "div" cls ""
+    for ch in children do
+        node.appendChild ch |> ignore
+    node
 
-let head = div "head"
-let title = document.createElement "h1"
-title.textContent <- "KaTeX Formula Gallery (F#)"
-let badge = document.createElement "span"
-badge.className <- "badge"
-badge.textContent <- $"katex v{version}"
-head.appendChild title |> ignore
-head.appendChild badge |> ignore
-app.appendChild head |> ignore
+let private app = document.getElementById "app"
 
-let grid = div "grid"
+app.appendChild (wrap "head" [ el "h1" "" "KaTeX Formula Gallery (F#)"; el "span" "badge" $"katex v{version}" ]) |> ignore
+
+let grid = el "div" "grid" ""
 app.appendChild grid |> ignore
 
 let opts = KatexOptions.Create (displayMode = true)
@@ -35,15 +34,6 @@ let formulas =
       ("Fourier Transform", @"\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)e^{-2\pi i x \xi}\,dx") ]
 
 for (name, tex) in formulas do
-    let card = div "card"
-    let lbl = div "label"
-    lbl.textContent <- name
-    let src = document.createElement "pre"
-    src.className <- "tex"
-    src.textContent <- tex
-    let slot = div "slot"
+    let slot = el "div" "slot" ""
     render (tex, slot, opts)
-    card.appendChild lbl |> ignore
-    card.appendChild src |> ignore
-    card.appendChild slot |> ignore
-    grid.appendChild card |> ignore
+    grid.appendChild (wrap "card" [ el "div" "label" name; el "pre" "tex" tex; slot ]) |> ignore

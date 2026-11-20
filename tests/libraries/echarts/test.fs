@@ -125,7 +125,7 @@ chart.trigger<string> ("ping", box 1, box "a") |> ignore
 chart.trigger<string> ("ping", box 2, box "b") |> ignore
 check (fired = 2) "an event reaches its handler"
 check (seen = [ (1.0, "a"); (2.0, "b") ]) "it reads all triggered arguments"
-chart.off (U3.Case1 "ping") |> ignore
+chart.off "ping" |> ignore
 chart.trigger<string> ("ping", box 3) |> ignore
 check (fired = 2) "off"
 

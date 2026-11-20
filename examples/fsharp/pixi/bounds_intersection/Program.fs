@@ -6,27 +6,30 @@ open Dom
 open type Dom.Globals
 open Pixi.Js
 
+let private strokeStyle w (c: int) : StrokeInput =
+    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = !^ (float c))))
+
 let private initOpts () =
     InitOptions.Create(
         width = 680.0,
         height = 400.0,
-        backgroundColor = U9.Case2 16777215.0,
-        preference = StringOrRendererPreferenceArray.String "webgl",
+        backgroundColor = !^ 16777215.0,
+        preference = !^ "webgl",
         preserveDrawingBuffer = true,
         antialias = true,
         autoStart = false
     )
 
 let private mkRect x y w h =
-    Rectangle.Create(NumberOrString.Number x, NumberOrString.Number y, NumberOrString.Number w, NumberOrString.Number h)
+    Rectangle.Create(!^ x, !^ y, !^ w, !^ h)
 
 let main =
     async {
-        let app = Application.Create<obj> ()
+        let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
         let stageEl = document.getElementById "stage"
-        stageEl.appendChild (app.canvas :> Node) |> ignore
+        stageEl.appendChild app.canvas |> ignore
 
         let query = mkRect 190.0 105.0 260.0 170.0
         let padded = query.clone().pad(10.0, 10.0)
@@ -53,25 +56,25 @@ let main =
             hull.enlarge c |> ignore
             if query.containsRect c then
                 contained <- contained + 1
-                g.rect(c.x, c.y, c.width, c.height).fill (U9.Case2 (float 0x111111)) |> ignore
+                g.rect(c.x, c.y, c.width, c.height).fill (color = !^ (float 0x111111)) |> ignore
             elif query.intersects c then
                 intersecting <- intersecting + 1
                 g
                     .rect(c.x, c.y, c.width, c.height)
-                    .fill(U9.Case2 (float 0x737373))
-                    .stroke(createObj [ "width" ==> 2.0; "color" ==> 0x111111 ])
+                    .fill(color = !^ (float 0x737373))
+                    .stroke(strokeStyle 2.0 0x111111)
                 |> ignore
             else
                 disjoint <- disjoint + 1
                 g
                     .rect(c.x, c.y, c.width, c.height)
-                    .fill(U9.Case2 (float 0xe5e5e5))
-                    .stroke(createObj [ "width" ==> 1.0; "color" ==> 0xa3a3a3 ])
+                    .fill(color = !^ (float 0xe5e5e5))
+                    .stroke(strokeStyle 1.0 0xa3a3a3)
                 |> ignore
 
-        g.rect(hull.x, hull.y, hull.width, hull.height).stroke (createObj [ "width" ==> 1.5; "color" ==> 0xa3a3a3 ]) |> ignore
-        g.rect(padded.x, padded.y, padded.width, padded.height).stroke (createObj [ "width" ==> 1.0; "color" ==> 0x737373 ]) |> ignore
-        g.rect(query.x, query.y, query.width, query.height).stroke (createObj [ "width" ==> 2.5; "color" ==> 0x111111 ]) |> ignore
+        g.rect(hull.x, hull.y, hull.width, hull.height).stroke (strokeStyle 1.5 0xa3a3a3) |> ignore
+        g.rect(padded.x, padded.y, padded.width, padded.height).stroke (strokeStyle 1.0 0x737373) |> ignore
+        g.rect(query.x, query.y, query.width, query.height).stroke (strokeStyle 2.5 0x111111) |> ignore
 
         app.stage.addChild g |> ignore
         app.render ()

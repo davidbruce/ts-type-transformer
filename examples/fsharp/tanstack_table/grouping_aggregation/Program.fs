@@ -10,57 +10,53 @@ open type Tanstack.TableCore.Globals
 [<Import("storeReactivityBindings", "@tanstack/table-core/store-reactivity-bindings")>]
 let private storeReactivityBindings: unit -> TableReactivityBindings = jsNative
 
+type private HostRow =
+    { region: string
+      host: string
+      role: string
+      cpu: float
+      mem: float
+      nodes: float }
+
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
 let private features: TableFeatures =
-    unbox (
-        createObj [
-            "coreReactivityFeature" ==> storeReactivityBindings ()
-            "columnGroupingFeature" ==> columnGroupingFeature
-            "rowAggregationFeature" ==> rowAggregationFeature
-            "rowExpandingFeature" ==> rowExpandingFeature
-            "coreRowModel" ==> box (createCoreRowModel<TableFeatures, obj> ())
-            "groupedRowModel" ==> box (createGroupedRowModel<TableFeatures, obj> ())
-            "expandedRowModel" ==> box (createExpandedRowModel<TableFeatures, obj> ())
-            "aggregationFns" ==> createObj [
-                "sum" ==> box aggregationFn_sum
-                "mean" ==> box aggregationFn_mean
-                "count" ==> box aggregationFn_count
-            ]
+    unbox {|
+        coreReactivityFeature = storeReactivityBindings ()
+        columnGroupingFeature = columnGroupingFeature
+        rowAggregationFeature = rowAggregationFeature
+        rowExpandingFeature = rowExpandingFeature
+        coreRowModel = box (createCoreRowModel<TableFeatures, HostRow> ())
+        groupedRowModel = box (createGroupedRowModel<TableFeatures, HostRow> ())
+        expandedRowModel = box (createExpandedRowModel<TableFeatures, HostRow> ())
+        aggregationFns = JsRecord.Create [
+            "sum", box aggregationFn_sum
+            "mean", box aggregationFn_mean
+            "count", box aggregationFn_count
         ]
-    )
+    |}
 
-let private col (key: string) (header: string) (aggFn: string option) : obj =
+let private col (key: string) (header: string) (aggFn: string option) : ColumnDefBase_Core<TableFeatures, HostRow, CellData> =
     match aggFn with
-    | Some fnName -> createObj [ "accessorKey" ==> key; "header" ==> header; "aggregationFn" ==> fnName ]
-    | None -> createObj [ "accessorKey" ==> key; "header" ==> header ]
-
-let private hostRow (region: string) (host: string) (role: string) (cpu: float) (mem: float) : obj =
-    createObj [
-        "region" ==> region
-        "host" ==> host
-        "role" ==> role
-        "cpu" ==> cpu
-        "mem" ==> mem
-        "nodes" ==> 1.0
-    ]
+    | Some fnName -> unbox {| accessorKey = key; header = header; aggregationFn = fnName |}
+    | None -> unbox {| accessorKey = key; header = header |}
 
 let private data =
-    ResizeArray<obj> [
-        hostRow "CH" "zurich-api-01" "api" 72.0 64.0
-        hostRow "CH" "basel-db-01" "db" 58.0 128.0
-        hostRow "CH" "geneva-edge-01" "edge" 35.0 32.0
-        hostRow "DE" "munich-api-02" "api" 84.0 64.0
-        hostRow "DE" "berlin-db-02" "db" 66.0 128.0
-        hostRow "DE" "frankfurt-edge-02" "edge" 42.0 32.0
-        hostRow "FR" "paris-api-03" "api" 60.0 64.0
-        hostRow "FR" "lyon-db-03" "db" 48.0 128.0
-        hostRow "FR" "marseille-edge-03" "edge" 30.0 32.0
+    ResizeArray [
+        { region = "CH"; host = "zurich-api-01"; role = "api"; cpu = 72.0; mem = 64.0; nodes = 1.0 }
+        { region = "CH"; host = "basel-db-01"; role = "db"; cpu = 58.0; mem = 128.0; nodes = 1.0 }
+        { region = "CH"; host = "geneva-edge-01"; role = "edge"; cpu = 35.0; mem = 32.0; nodes = 1.0 }
+        { region = "DE"; host = "munich-api-02"; role = "api"; cpu = 84.0; mem = 64.0; nodes = 1.0 }
+        { region = "DE"; host = "berlin-db-02"; role = "db"; cpu = 66.0; mem = 128.0; nodes = 1.0 }
+        { region = "DE"; host = "frankfurt-edge-02"; role = "edge"; cpu = 42.0; mem = 32.0; nodes = 1.0 }
+        { region = "FR"; host = "paris-api-03"; role = "api"; cpu = 60.0; mem = 64.0; nodes = 1.0 }
+        { region = "FR"; host = "lyon-db-03"; role = "db"; cpu = 48.0; mem = 128.0; nodes = 1.0 }
+        { region = "FR"; host = "marseille-edge-03"; role = "edge"; cpu = 30.0; mem = 32.0; nodes = 1.0 }
     ]
 
 let private columns =
-    ResizeArray<obj> [
+    ResizeArray [
         col "region" "Region" None
         col "host" "Host" None
         col "role" "Role" None
@@ -69,22 +65,20 @@ let private columns =
         col "nodes" "Nodes (count)" (Some "count")
     ]
 
-let private options: TableOptions_Core<TableFeatures, obj> =
-    unbox (
-        createObj [
-            "features" ==> features
-            "data" ==> data
-            "columns" ==> columns
-            "initialState" ==> createObj [
-                "grouping" ==> ResizeArray [ "region" ]
-                "expanded" ==> true
-            ]
-        ]
+let private options =
+    TableOptions_Core.Create(
+        columns = columns,
+        features = features,
+        data = data,
+        initialState = TableState_All.Create(
+            grouping = ResizeArray [ "region" ],
+            expanded = !^true
+        )
     )
 
-let private table = constructTable<TableFeatures, obj> options
-let private grp = unbox<Table_ColumnGrouping<TableFeatures, obj>> table
-let private exp = unbox<Table_RowExpanding<TableFeatures, obj>> table
+let private table = constructTable<TableFeatures, HostRow> options
+let private grp = unbox<Table_ColumnGrouping<TableFeatures, HostRow>> table
+let private exp = unbox<Table_RowExpanding<TableFeatures, HostRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
     let btn = document.getElementById id
@@ -95,28 +89,31 @@ let private render () =
     let state: obj = (box table.store)?get ()
     let grpIds = unbox<ResizeArray<string>> state?grouping
     let grpCol = if grpIds.Count > 0 then grpIds.[0] else "none"
-    let sb = ResizeArray<string>()
-    sb.Add "<table><thead><tr><th>Group / Host</th><th>Region</th><th>Role</th><th class=\"num\">CPU %</th><th class=\"num\">Mem GB</th><th class=\"num\">Nodes</th></tr></thead><tbody>"
     let mutable groupCount = 0
-    for r in rows do
-        let rGrp = unbox<Row_ColumnGrouping> r
-        let rExp = unbox<Row_RowExpanding> r
-        let isGrp = rGrp.getIsGrouped ()
-        let cpu: float = r.getValue "cpu"
-        let mem: float = r.getValue "mem"
-        let nodes: float = r.getValue "nodes"
-        if isGrp then
-            groupCount <- groupCount + 1
-            let marker = if rExp.getIsExpanded () then "[-]" else "[+]"
-            let gVal = string (r.getValue<obj> grpCol)
-            sb.Add (sprintf "<tr class=\"group-row\"><td>%s %s=%s (%d)</td><td>%s</td><td>%s</td><td class=\"num\">%.1f</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td></tr>"
-                marker (escapeHtml grpCol) (escapeHtml gVal) r.subRows.Count (escapeHtml (string (r.getValue<obj> "region"))) (escapeHtml (string (r.getValue<obj> "role"))) cpu mem nodes)
-        else
-            sb.Add (sprintf "<tr><td class=\"child-indent\">%s</td><td>%s</td><td>%s</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td></tr>"
-                (escapeHtml (r.getValue<string> "host")) (escapeHtml (r.getValue<string> "region")) (escapeHtml (r.getValue<string> "role")) cpu mem nodes)
-    sb.Add "</tbody></table>"
+    let html =
+        [
+            yield "<table><thead><tr><th>Group / Host</th><th>Region</th><th>Role</th><th class=\"num\">CPU %</th><th class=\"num\">Mem GB</th><th class=\"num\">Nodes</th></tr></thead><tbody>"
+            for r in rows do
+                let rGrp = unbox<Row_ColumnGrouping> r
+                let rExp = unbox<Row_RowExpanding> r
+                let isGrp = rGrp.getIsGrouped ()
+                let cpu: float = r.getValue "cpu"
+                let mem: float = r.getValue "mem"
+                let nodes: float = r.getValue "nodes"
+                if isGrp then
+                    groupCount <- groupCount + 1
+                    let marker = if rExp.getIsExpanded () then "[-]" else "[+]"
+                    let gVal = string (r.getValue<obj> grpCol)
+                    yield sprintf "<tr class=\"group-row\"><td>%s %s=%s (%d)</td><td>%s</td><td>%s</td><td class=\"num\">%.1f</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td></tr>"
+                        marker (escapeHtml grpCol) (escapeHtml gVal) r.subRows.Count (escapeHtml (string (r.getValue<obj> "region"))) (escapeHtml (string (r.getValue<obj> "role"))) cpu mem nodes
+                else
+                    yield sprintf "<tr><td class=\"child-indent\">%s</td><td>%s</td><td>%s</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td></tr>"
+                        (escapeHtml (r.getValue<string> "host")) (escapeHtml (r.getValue<string> "region")) (escapeHtml (r.getValue<string> "role")) cpu mem nodes
+            yield "</tbody></table>"
+        ]
+        |> String.concat ""
     let wrap = document.getElementById "table-wrap"
-    wrap.innerHTML <- String.concat "" sb
+    wrap.innerHTML <- html
     let meta = document.getElementById "meta"
     meta.textContent <- sprintf "Grouped by %s · %d groups · %d visible rows" grpCol groupCount rows.Count
 
@@ -130,13 +127,15 @@ let main () =
         render ()
     )
     wireBtn "btn-2" (fun () ->
-        grp.setGrouping (U2.Case1 (ResizeArray [ "region" ]))
-        exp.setExpanded (U2.Case1 (ExpandedState.Bool true))
+        grp.setGrouping (!^ (ResizeArray [ "region" ]))
+        let expandAll : ExpandedState = !^true
+        exp.setExpanded (!^ expandAll)
         render ()
     )
     wireBtn "btn-3" (fun () ->
-        grp.setGrouping (U2.Case1 (ResizeArray [ "role" ]))
-        exp.setExpanded (U2.Case1 (ExpandedState.Bool true))
+        grp.setGrouping (!^ (ResizeArray [ "role" ]))
+        let expandAll : ExpandedState = !^true
+        exp.setExpanded (!^ expandAll)
         render ()
     )
     render ()

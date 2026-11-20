@@ -125,7 +125,7 @@ check (parent.children.Count = 0 && isNull (box child.parent)) "remove"
 let geometry = BoxGeometry.Create (2.0, 2.0, 2.0)
 check (geometry.parameters.width = 2.0) "BoxGeometry parameters"
 let material = MeshBasicMaterial.Create ()
-let mesh = Mesh.Create<BoxGeometry, MeshBasicMaterial, Object3DEventMap> (geometry, material)
+let mesh = Mesh.Create (geometry, material)
 check (mesh.isMesh && mesh.``type`` = "Mesh") "Mesh"
 check (obj.ReferenceEquals (mesh.geometry, geometry)) "mesh.geometry"
 check (material.isMeshBasicMaterial) "material"
@@ -136,7 +136,7 @@ let position =
     | WebGLAttributesGetAttribute.BufferAttribute a -> a
     | _ -> failwith "a position attribute is a BufferAttribute"
 check (position.count = 24.0 && position.itemSize = 3.0) "position attribute"
-check (geometry.hasAttribute (U3.Case1 "normal") && geometry.hasAttribute (U3.Case1 "uv")) "normal and uv attributes"
+check (geometry.hasAttribute "normal" && geometry.hasAttribute "uv") "normal and uv attributes"
 check (abs (position.getX 0.0) = 1.0) "a vertex of the box"
 geometry.computeBoundingBox ()
 check (geometry.boundingBox.max.x = 1.0 && geometry.boundingBox.min.z = -1.0) "computeBoundingBox"

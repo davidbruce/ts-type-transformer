@@ -2,6 +2,7 @@ module Program
 
 open System
 open Fable.Core
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Three
@@ -26,40 +27,40 @@ let main () =
     renderer.setSize (width, height)
 
     let stage = document.getElementById "stage"
-    stage.appendChild (renderer.domElement :> Dom.Node) |> ignore
+    stage.appendChild renderer.domElement |> ignore
 
-    let scene = Scene.Create<Object3DEventMap>()
-    scene.background <- ColorOrTexture.Color (Color.Create (ColorRepresentation.Number (float 0xf7f7f7)))
+    let scene = Scene.Create()
+    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
-    let ambient = AmbientLight.Create(ColorRepresentation.Number (float 0xffffff), 1.2)
-    scene.add (ambient :> Object3D<Object3DEventMap>) |> ignore
+    let ambient = AmbientLight.Create(float 0xffffff, 1.2)
+    scene.add (ambient) |> ignore
 
-    let keyLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 2.2)
+    let keyLight = DirectionalLight.Create(float 0xffffff, 2.2)
     keyLight.position.set (6.0, 10.0, 8.0) |> ignore
-    scene.add (keyLight :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (keyLight) |> ignore
 
-    let rimLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 0.9)
+    let rimLight = DirectionalLight.Create(float 0xffffff, 0.9)
     rimLight.position.set (-7.0, 5.0, -6.0) |> ignore
-    scene.add (rimLight :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (rimLight) |> ignore
 
     let grid =
         GridHelper.Create(
             12.0,
             12.0,
-            ColorRepresentation.Number (float 0x737373),
-            ColorRepresentation.Number (float 0xd4d4d4)
+            !^ (float 0x737373),
+            !^ (float 0xd4d4d4)
         )
     grid.position.y <- -1.2
-    scene.add (grid :> Object3D<Object3DEventMap>) |> ignore
+    scene.add (grid) |> ignore
 
-    let wireGroup = Group.Create<Object3DEventMap>()
-    scene.add (wireGroup :> Object3D<Object3DEventMap>) |> ignore
+    let wireGroup = Group.Create()
+    scene.add (wireGroup) |> ignore
 
     let lineMat =
         LineBasicMaterial.Create(
-            LineBasicMaterialParameters.Create(color = ColorRepresentation.Number (float 0x111111))
+            LineBasicMaterialParameters.Create(color = !^ (float 0x111111))
         )
 
     let addSolid
@@ -76,26 +77,26 @@ let main () =
         let mat =
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float hex),
+                    color = !^ (float hex),
                     roughness = rough,
                     metalness = metal,
                     flatShading = flat
                 )
             )
-        let mesh = Mesh.Create<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, MeshStandardMaterial, Object3DEventMap>(geo, mat)
+        let mesh = Mesh.Create(geo, mat)
         mesh.position.set (x, y, z) |> ignore
         mesh.rotation.set (0.25, 0.45, 0.0) |> ignore
-        scene.add (mesh :> Object3D<Object3DEventMap>) |> ignore
+        scene.add (mesh) |> ignore
 
         let edgesGeo = EdgesGeometry.Create(geo, edgeThresh)
         let segs =
-            LineSegments.Create<EdgesGeometry<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>>, LineBasicMaterial, Object3DEventMap>(
+            LineSegments.Create(
                 edgesGeo,
                 lineMat
             )
         segs.position.set (x, y, z) |> ignore
         segs.rotation.set (0.25, 0.45, 0.0) |> ignore
-        wireGroup.add (segs :> Object3D<Object3DEventMap>) |> ignore
+        wireGroup.add (segs) |> ignore
 
     addSolid (BoxGeometry.Create(1.45, 1.45, 1.45)) 0x262626 0.65 0.1 false -3.2 0.0 -0.6 1.0
     addSolid (IcosahedronGeometry.Create(0.95, 0.0)) 0xd4d4d4 0.55 0.08 true -1.55 0.1 0.55 1.0
@@ -115,7 +116,7 @@ let main () =
         camera.lookAt (Vector3.Create(0.0, 0.0, 0.0))
         wireGroup.visible <- wireVisible
         wireBtn.textContent <- wireButtonText ()
-        renderer.render (scene :> Object3D<Object3DEventMap>, camera :> Camera)
+        renderer.render (scene, camera)
         let deg = int (Math.Round(azimuth * 180.0 / Math.PI))
         let wLabel = if wireVisible then "on" else "off"
         metaEl.textContent <-

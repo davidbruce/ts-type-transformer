@@ -1,45 +1,41 @@
 module Program
 
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Katex
 open type Katex.Globals
 
-let div (cls: string) =
-    let el = document.createElement "div"
-    el.className <- cls
-    el
+let private el (tag: string) (cls: string) (text: string) =
+    let node = document.createElement tag
+    if cls <> "" then node.className <- cls
+    if text <> "" then node.textContent <- text
+    node
 
-let app = document.getElementById "app"
+let private wrap (cls: string) (children: Dom.HTMLElement list) =
+    let node = el "div" cls ""
+    for ch in children do
+        node.appendChild ch |> ignore
+    node
 
-let head = div "head"
-let title = document.createElement "h1"
-title.textContent <- "Output & Layout Options (F#)"
-let badge = document.createElement "span"
-badge.className <- "badge"
-badge.textContent <- "html | mathml | leqno | fleqn | maxSize | strict"
-head.appendChild title |> ignore
-head.appendChild badge |> ignore
-app.appendChild head |> ignore
+let private app = document.getElementById "app"
 
-let grid = div "grid"
+app.appendChild
+    (wrap "head" [ el "h1" "" "Output & Layout Options (F#)"; el "span" "badge" "html | mathml | leqno | fleqn | maxSize | strict" ])
+|> ignore
+
+let grid = el "div" "grid" ""
 app.appendChild grid |> ignore
 
 let addCard (name: string) (cls: string) (html: string) =
-    let card = div ("card " + cls)
-    let row = div "head"
-    let lbl = div "label"
-    lbl.textContent <- name
-    let sz = document.createElement "span"
-    sz.className <- "badge"
-    sz.textContent <- $"{html.Length} chars"
-    row.appendChild lbl |> ignore
-    row.appendChild sz |> ignore
-    let slot = div "slot"
+    let slot = el "div" "slot" ""
     slot.innerHTML <- html
-    card.appendChild row |> ignore
-    card.appendChild slot |> ignore
-    grid.appendChild card |> ignore
+    grid.appendChild
+        (wrap ("card " + cls) [
+            wrap "head" [ el "div" "label" name; el "span" "badge" $"{html.Length} chars" ]
+            slot
+        ])
+    |> ignore
 
 let oHtml = KatexOptions.Create (output = KatexOptionsOutput.Html)
 addCard "output: html" "mode-html" (renderToString (@"a^2 + b^2 = c^2", oHtml))
@@ -58,6 +54,6 @@ let oFleqn =
         displayMode = true,
         fleqn = true,
         maxSize = 2.0,
-        strict = StringOrBooleanOrStrictFunction.Bool false
+        strict = !^ false
     )
 addCard "fleqn + maxSize(2) + strict(false)" "" (renderToString (@"\text{café} + \rule{10em}{0.4em} + é", oFleqn))

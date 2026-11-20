@@ -2,6 +2,7 @@ module Program
 
 open System
 open Fable.Core
+open Fable.Core.JsInterop
 open Dom
 open type Dom.Globals
 open Three
@@ -21,30 +22,30 @@ let main () =
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
     let canvas = renderer.domElement
-    (document.getElementById "stage").appendChild (canvas :> Dom.Node) |> ignore
+    (document.getElementById "stage").appendChild canvas |> ignore
 
-    let scene = Scene.Create<Object3DEventMap>()
-    scene.background <- ColorOrTexture.Color (Color.Create (ColorRepresentation.Number (float 0xf7f7f7)))
+    let scene = Scene.Create()
+    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
-    scene.add (AmbientLight.Create(ColorRepresentation.Number (float 0xffffff), 1.2) :> Object3D<Object3DEventMap>) |> ignore
-    let keyLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 2.2)
+    scene.add (AmbientLight.Create(float 0xffffff, 1.2)) |> ignore
+    let keyLight = DirectionalLight.Create(float 0xffffff, 2.2)
     keyLight.position.set (6.0, 10.0, 8.0) |> ignore
-    scene.add (keyLight :> Object3D<Object3DEventMap>) |> ignore
-    let rimLight = DirectionalLight.Create(ColorRepresentation.Number (float 0xffffff), 0.9)
+    scene.add keyLight |> ignore
+    let rimLight = DirectionalLight.Create(float 0xffffff, 0.9)
     rimLight.position.set (-7.0, 5.0, -6.0) |> ignore
-    scene.add (rimLight :> Object3D<Object3DEventMap>) |> ignore
+    scene.add rimLight |> ignore
 
     let grid =
         GridHelper.Create(
             9.0,
             9.0,
-            ColorRepresentation.Number (float 0x999999),
-            ColorRepresentation.Number (float 0xd4d4d4)
+            !^ (float 0x999999),
+            !^ (float 0xd4d4d4)
         )
     grid.position.y <- -0.85
-    scene.add (grid :> Object3D<Object3DEventMap>) |> ignore
+    scene.add grid |> ignore
 
     let geos: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>[] =
         [|
@@ -69,28 +70,28 @@ let main () =
         let mat =
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = ColorRepresentation.Number (float 0xd4d4d4),
+                    color = !^ (float 0xd4d4d4),
                     roughness = 0.55,
                     metalness = 0.1,
                     flatShading = (i >= 4)
                 )
             )
         let m =
-            Mesh.Create<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, MeshStandardMaterial, Object3DEventMap>(
+            Mesh.Create(
                 geos.[i],
                 mat
             )
         m.name <- names.[i]
         m.position.set (float gx * 2.1, 0.0, float gz * 2.1) |> ignore
         m.rotation.set (0.2, 0.35 * float i, 0.0) |> ignore
-        scene.add (m :> Object3D<Object3DEventMap>) |> ignore
+        scene.add m |> ignore
         mats.Add mat
         meshes.Add (m :> Object3D<Object3DEventMap>)
 
     let box = Box3.Create(Vector3.Create(-0.5, -0.5, -0.5), Vector3.Create(0.5, 0.5, 0.5))
-    let boxHelper = Box3Helper.Create(box, ColorRepresentation.Number (float 0x111111))
+    let boxHelper = Box3Helper.Create(box, float 0x111111)
     boxHelper.visible <- false
-    scene.add (boxHelper :> Object3D<Object3DEventMap>) |> ignore
+    scene.add boxHelper |> ignore
 
     let raycaster = Raycaster.Create ()
     let metaEl = document.getElementById "meta"
@@ -115,11 +116,11 @@ let main () =
         else
             boxHelper.visible <- false
 
-        renderer.render (scene :> Object3D<Object3DEventMap>, camera :> Camera)
+        renderer.render (scene, camera)
         metaEl.textContent <- sprintf "picked: %s · 9 specimens · click canvas or buttons" lastHitInfo
 
     let castAtNdc (nx: float) (ny: float) =
-        raycaster.setFromCamera (Vector2.Create(nx, ny), camera :> Camera)
+        raycaster.setFromCamera (Vector2.Create(nx, ny), camera)
         let hits = raycaster.intersectObjects (meshes, false)
         if hits.Count > 0 then
             let hitObj = hits.[0].object

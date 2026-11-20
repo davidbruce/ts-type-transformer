@@ -1,7 +1,5 @@
 module Program
 
-open System
-open Fable.Core
 open Node
 
 let mutable private passed = 0
@@ -12,7 +10,7 @@ let private check (ok: bool) (what: string) =
     else
         failwithf "check failed: %s" what
 
-let emitter = Events.EventEmitter.Create<obj> ()
+let emitter = Events.EventEmitter.Create ()
 emitter.setMaxListeners 12.0 |> ignore
 check (emitter.getMaxListeners () = 12.0) "maxListeners"
 
@@ -25,7 +23,7 @@ let onMetric =
     NodeJS.AddListenerListener.Create(fun args ->
         metricCalls <- metricCalls + 1
         if args.Count > 0 then
-            metricSum <- metricSum + Convert.ToDouble(args.[0]))
+            metricSum <- metricSum + unbox<float> args.[0])
 
 let onOnce =
     NodeJS.AddListenerListener.Create(fun _ -> onceCalls <- onceCalls + 1)
@@ -37,23 +35,23 @@ emitter.on ("metric", onMetric) |> ignore
 emitter.once ("metric", onOnce) |> ignore
 emitter.on ("shutdown", onShutdown) |> ignore
 
-check (emitter.listenerCount (U2.Case1 "metric") = 2.0) "initial listenerCount"
+check (emitter.listenerCount "metric" = 2.0) "initial listenerCount"
 check (emitter.eventNames().Count = 2) "eventNames"
 
-let emitted1 = emitter.emit (U2.Case1 "metric", box 101.0, box "ok")
+let emitted1 = emitter.emit ("metric", box 101.0, box "ok")
 check (emitted1 && metricCalls = 1 && onceCalls = 1) "first metric emit"
-check (emitter.listenerCount (U2.Case1 "metric") = 1.0) "once removes itself"
+check (emitter.listenerCount "metric" = 1.0) "once removes itself"
 
-let emitted2 = emitter.emit (U2.Case1 "metric", box 202.0, box "ok")
+let emitted2 = emitter.emit ("metric", box 202.0, box "ok")
 check (emitted2 && metricCalls = 2 && metricSum = 303.0 && onceCalls = 1) "second metric emit"
 
-check (not (emitter.emit (U2.Case1 "idle"))) "idle emit false"
+check (not (emitter.emit "idle")) "idle emit false"
 
 emitter.removeListener ("metric", onMetric) |> ignore
-check (emitter.listenerCount (U2.Case1 "metric") = 0.0 && not (emitter.emit (U2.Case1 "metric", box 1.0))) "removeListener"
+check (emitter.listenerCount "metric" = 0.0 && not (emitter.emit ("metric", box 1.0))) "removeListener"
 check (metricCalls = 2) "metric count unchanged after remove"
 
-emitter.removeAllListeners (U2.Case1 "shutdown") |> ignore
+emitter.removeAllListeners "shutdown" |> ignore
 check (emitter.eventNames().Count = 0 && shutdownCalls = 0) "removeAllListeners"
 
 printfn "maxListeners=%.0f metricCalls=%d metricSum=%.0f" (emitter.getMaxListeners ()) metricCalls metricSum

@@ -17,7 +17,7 @@ let private mapOpts () =
 let main () =
     let m = map (document.getElementById "map", mapOpts ())
     let zurich = latLng (47.3769, 8.5417)
-    m.setView (LatLngExpression.LatLng zurich, 8.0) |> ignore
+    m.setView (zurich, 8.0) |> ignore
 
     let rings =
         [|
@@ -27,7 +27,7 @@ let main () =
             25000.0, "#111111", "#262626", 0.55
         |]
 
-    let mutable outerCircle : Circle<obj> = null
+    let mutable outerCircle : Circle<obj> option = None
     for (r, stroke, fill, op) in rings do
         let cOpts =
             CircleMarkerOptions.Create(
@@ -37,9 +37,9 @@ let main () =
                 fillColor = fill,
                 fillOpacity = op
             )
-        let c = circle<obj>(zurich, r, cOpts)
-        c.addTo (MapOrLayerGroup.Map m) |> ignore
-        if obj.ReferenceEquals (outerCircle, null) then outerCircle <- c
+        let c = circle (zurich, r, cOpts)
+        c.addTo (!^m) |> ignore
+        if outerCircle.IsNone then outerCircle <- Some c
 
     let beacons =
         [|
@@ -52,19 +52,18 @@ let main () =
 
     let mutable totalDistKm = 0.0
     for pt in beacons do
-        totalDistKm <- totalDistKm + zurich.distanceTo (LatLngExpression.LatLng pt) / 1000.0
+        totalDistKm <- totalDistKm + zurich.distanceTo pt / 1000.0
         let bRingOpts =
             CircleMarkerOptions.Create(
                 radius = 18000.0,
                 color = "#555555",
                 weight = 1.2,
-                dashArray = StringOrNumberArray.String "3 3",
+                dashArray = !^"3 3",
                 fillColor = "#737373",
                 fillOpacity = 0.18
             )
-        circle<obj>(pt, 18000.0, bRingOpts).addTo (MapOrLayerGroup.Map m)
-        |> ignore
-        circleMarker<obj>(
+        circle(pt, 18000.0, bRingOpts).addTo (!^m) |> ignore
+        circleMarker(
             pt,
             CircleMarkerOptions.Create(
                 radius = 4.5,
@@ -73,10 +72,12 @@ let main () =
                 fillColor = "#111111",
                 fillOpacity = 1.0
             )
-        ).addTo (MapOrLayerGroup.Map m)
+        ).addTo (!^m)
         |> ignore
 
-    m.fitBounds (LatLngBoundsExpression.LatLngBounds (outerCircle.getBounds ())) |> ignore
+    match outerCircle with
+    | Some c -> m.fitBounds (c.getBounds ()) |> ignore
+    | None -> ()
 
     let avgKm = totalDistKm / float beacons.Length
     let meta = document.getElementById "meta"

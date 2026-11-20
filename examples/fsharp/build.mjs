@@ -10,11 +10,27 @@ const rawArgs = process.argv.slice(2);
 const force = rawArgs.includes('--force');
 const filters = rawArgs.filter(a => a !== '--force');
 
-function isUpToDate(ex, outputPath) {
+function latestMtime(dir, ext) {
+  let latest = 0;
+  if (!fs.existsSync(dir)) return latest;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || (ext && !entry.name.endsWith(ext))) continue;
+    const mtime = fs.statSync(path.join(dir, entry.name)).mtimeMs;
+    if (mtime > latest) latest = mtime;
+  }
+  return latest;
+}
+
+function isUpToDate(ex, outputPath, demoDir, spec) {
   if (force || !fs.existsSync(outputPath)) return false;
+  const outMtime = fs.statSync(outputPath).mtimeMs;
   const srcPath = path.resolve(ROOT, ex.source);
-  if (!fs.existsSync(srcPath)) return false;
-  return fs.statSync(outputPath).mtimeMs >= fs.statSync(srcPath).mtimeMs;
+  if (!fs.existsSync(srcPath) || fs.statSync(srcPath).mtimeMs > outMtime) return false;
+  const fsprojPath = path.join(demoDir, 'App.fsproj');
+  if (fs.existsSync(fsprojPath) && fs.statSync(fsprojPath).mtimeMs > outMtime) return false;
+  if (latestMtime(path.join(bindingsDir, spec.outDir), '.fs') > outMtime) return false;
+  if (spec.needsDom && latestMtime(path.join(bindingsDir, 'Dom'), '.fs') > outMtime) return false;
+  return true;
 }
 
 const PACKAGES = {
@@ -52,7 +68,7 @@ const neededPkgs = [...new Set(selected.map(e => e.package))];
 const needsDom = neededPkgs.some(p => PACKAGES[p]?.needsDom);
 
 fs.mkdirSync(bindingsDir, { recursive: true });
-if (needsDom && !fs.existsSync(path.join(bindingsDir, 'Dom/Dom.fsproj'))) {
+if (needsDom && (force || !fs.existsSync(path.join(bindingsDir, 'Dom/Dom.fsproj')))) {
   execFileSync(tsrsProto, ['lib.dom.d.ts', '--config', cfg, '--config', domCfg, '--emit', 'fsharp', '--name', 'dom', '--out', bindingsDir], {
     cwd: ROOT,
     stdio: 'inherit',
@@ -63,7 +79,7 @@ for (const pkg of neededPkgs) {
   const spec = PACKAGES[pkg];
   if (!spec) throw new Error(`Unknown package spec: ${pkg}`);
   const outFsproj = path.join(bindingsDir, spec.outDir, `${spec.outDir}.fsproj`);
-  if (!fs.existsSync(outFsproj)) {
+  if (force || !fs.existsSync(outFsproj)) {
     const args = ['--from', fromDir];
     for (const n of spec.npm) args.push('--package', n);
     args.push('--config', cfg, '--emit', 'fsharp');
@@ -81,9 +97,10 @@ const fableBin =
   ].find(p => fs.existsSync(p)) ?? 'fable';
 
 for (const ex of selected) {
+  const spec = PACKAGES[ex.package];
   const demoDir = path.join(ROOT, path.dirname(ex.path));
   const outPath = path.join(demoDir, 'js/Program.mjs');
-  if (isUpToDate(ex, outPath)) continue;
+  if (isUpToDate(ex, outPath, demoDir, spec)) continue;
   console.log(`Building fsharp ${ex.id}...`);
   const fableArgs = ['App.fsproj', '-o', 'js', '--extension', '.mjs'];
   if (process.env.FABLE_NO_CACHE === '1') fableArgs.push('--noCache');

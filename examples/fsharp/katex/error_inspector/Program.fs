@@ -5,22 +5,21 @@ open type Dom.Globals
 open Katex
 open type Katex.Globals
 
-let div (cls: string) =
-    let el = document.createElement "div"
-    el.className <- cls
-    el
+let private el (tag: string) (cls: string) (text: string) =
+    let node = document.createElement tag
+    if cls <> "" then node.className <- cls
+    if text <> "" then node.textContent <- text
+    node
 
-let app = document.getElementById "app"
+let private wrap (cls: string) (children: Dom.HTMLElement list) =
+    let node = el "div" cls ""
+    for ch in children do
+        node.appendChild ch |> ignore
+    node
 
-let head = div "head"
-let title = document.createElement "h1"
-title.textContent <- "ParseError Inspector (F#)"
-let badge = document.createElement "span"
-badge.className <- "badge"
-badge.textContent <- "throwOnError: false vs true"
-head.appendChild title |> ignore
-head.appendChild badge |> ignore
-app.appendChild head |> ignore
+let private app = document.getElementById "app"
+
+app.appendChild (wrap "head" [ el "h1" "" "ParseError Inspector (F#)"; el "span" "badge" "throwOnError: false vs true" ]) |> ignore
 
 let lenientOpts = KatexOptions.Create (throwOnError = false, errorColor = "#555555")
 let strictOpts = KatexOptions.Create (throwOnError = true)
@@ -32,28 +31,15 @@ let badInputs =
       @"\sqrt{a + b" ]
 
 for tex in badInputs do
-    let row = div "row"
-    let left = div "cell mode-html"
-    let lLbl = div "label"
-    lLbl.textContent <- "throwOnError: false (#555555)"
-    let lOut = div "slot"
+    let lOut = el "div" "slot" ""
     lOut.innerHTML <- renderToString (tex, lenientOpts)
-    left.appendChild lLbl |> ignore
-    left.appendChild lOut |> ignore
+    let left = wrap "cell mode-html" [ el "div" "label" "throwOnError: false (#555555)"; lOut ]
 
-    let right = div "cell"
-    let rLbl = div "label"
-    rLbl.textContent <- "throwOnError: true (caught ParseError)"
-    let rOut = div "err"
     let msg =
         try
             renderToString (tex, strictOpts) |> ignore
             "(did not throw)"
         with ex -> ex.Message
-    rOut.textContent <- msg
-    right.appendChild rLbl |> ignore
-    right.appendChild rOut |> ignore
+    let right = wrap "cell" [ el "div" "label" "throwOnError: true (caught ParseError)"; el "div" "err" msg ]
 
-    row.appendChild left |> ignore
-    row.appendChild right |> ignore
-    app.appendChild row |> ignore
+    app.appendChild (wrap "row" [ left; right ]) |> ignore

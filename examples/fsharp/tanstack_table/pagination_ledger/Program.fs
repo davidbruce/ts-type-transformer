@@ -10,39 +10,42 @@ open type Tanstack.TableCore.Globals
 [<Import("storeReactivityBindings", "@tanstack/table-core/store-reactivity-bindings")>]
 let private storeReactivityBindings: unit -> TableReactivityBindings = jsNative
 
+type private LedgerRow =
+    { id: string
+      account: string
+      category: string
+      units: float
+      amount: float }
+
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
 let private features: TableFeatures =
-    unbox (
-        createObj [
-            "coreReactivityFeature" ==> storeReactivityBindings ()
-            "rowPaginationFeature" ==> rowPaginationFeature
-            "coreRowModel" ==> box (createCoreRowModel<TableFeatures, obj> ())
-            "paginatedRowModel" ==> box (createPaginatedRowModel<TableFeatures, obj> ())
-        ]
-    )
+    unbox {|
+        coreReactivityFeature = storeReactivityBindings ()
+        rowPaginationFeature = rowPaginationFeature
+        coreRowModel = box (createCoreRowModel<TableFeatures, LedgerRow> ())
+        paginatedRowModel = box (createPaginatedRowModel<TableFeatures, LedgerRow> ())
+    |}
 
-let private col (key: string) (header: string) : obj =
-    createObj [ "accessorKey" ==> key; "header" ==> header ]
+let private col (key: string) (header: string) : ColumnDefBase_Core<TableFeatures, LedgerRow, CellData> =
+    unbox {| accessorKey = key; header = header |}
 
 let private accounts = [| "ops-pool"; "clearing-ch"; "reserve-de" |]
 let private cats = [| "compute"; "storage"; "egress"; "audit" |]
 
 let private data =
-    ResizeArray<obj> [
-        for i in 0 .. 17 do
-            createObj [
-                "id" ==> sprintf "TX-%03d" (i + 1)
-                "account" ==> accounts.[i % 3]
-                "category" ==> cats.[i % 4]
-                "units" ==> float ((i * 7) % 19 + 4)
-                "amount" ==> float (((i * 37) % 90 + 15) * 12)
-            ]
+    ResizeArray [
+        for i in 0 .. 17 ->
+            { id = sprintf "TX-%03d" (i + 1)
+              account = accounts.[i % 3]
+              category = cats.[i % 4]
+              units = float ((i * 7) % 19 + 4)
+              amount = float (((i * 37) % 90 + 15) * 12) }
     ]
 
 let private columns =
-    ResizeArray<obj> [
+    ResizeArray [
         col "id" "Entry"
         col "account" "Account"
         col "category" "Category"
@@ -50,20 +53,22 @@ let private columns =
         col "amount" "Amount (CHF)"
     ]
 
-let private options: TableOptions_Core<TableFeatures, obj> =
-    unbox (
-        createObj [
-            "features" ==> features
-            "data" ==> data
-            "columns" ==> columns
-            "initialState" ==> createObj [
-                "pagination" ==> PaginationState.Create(0.0, 5.0)
-            ]
-        ]
+let private options =
+    TableOptions_Core.Create(
+        columns = columns,
+        features = features,
+        data = data,
+        initialState = TableState_All.Create(
+            pagination = PaginationState.Create(0.0, 5.0)
+        )
     )
 
-let private table = constructTable<TableFeatures, obj> options
-let private pag = unbox<Table_RowPagination<TableFeatures, obj>> table
+let private table = constructTable<TableFeatures, LedgerRow> options
+let private pag = unbox<Table_RowPagination<TableFeatures, LedgerRow>> table
+
+let private readPagination () : PaginationState =
+    let state: obj = (box table.store)?get ()
+    unbox state?pagination
 
 let private wireBtn (id: string) (action: unit -> unit) =
     let btn = document.getElementById id
@@ -71,23 +76,25 @@ let private wireBtn (id: string) (action: unit -> unit) =
 
 let private render () =
     let rows = table.getRowModel().rows
-    let sb = ResizeArray<string>()
-    sb.Add "<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>"
-    for r in rows do
-        let units: float = r.getValue "units"
-        let amount: float = r.getValue "amount"
-        sb.Add "<tr>"
-        sb.Add (sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "id")))
-        sb.Add (sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "account")))
-        sb.Add (sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "category")))
-        sb.Add (sprintf "<td class=\"num\">%.0f</td>" units)
-        sb.Add (sprintf "<td class=\"num\">%.0f</td>" amount)
-        sb.Add "</tr>"
-    sb.Add "</tbody></table>"
+    let html =
+        [
+            yield "<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>"
+            for r in rows do
+                let units: float = r.getValue "units"
+                let amount: float = r.getValue "amount"
+                yield "<tr>"
+                yield sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "id"))
+                yield sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "account"))
+                yield sprintf "<td>%s</td>" (escapeHtml (r.getValue<string> "category"))
+                yield sprintf "<td class=\"num\">%.0f</td>" units
+                yield sprintf "<td class=\"num\">%.0f</td>" amount
+                yield "</tr>"
+            yield "</tbody></table>"
+        ]
+        |> String.concat ""
     let wrap = document.getElementById "table-wrap"
-    wrap.innerHTML <- String.concat "" sb
-    let state: obj = (box table.store)?get ()
-    let pg: PaginationState = unbox state?pagination
+    wrap.innerHTML <- html
+    let pg = readPagination ()
     let pageCount = int (pag.getPageCount ())
     let total = table.getCoreRowModel().rows.Count
     let meta = document.getElementById "meta"
@@ -95,33 +102,31 @@ let private render () =
 
 let main () =
     wireBtn "btn-0" (fun () ->
-        let state: obj = (box table.store)?get ()
-        let pg: PaginationState = unbox state?pagination
+        let pg = readPagination ()
         if pg.pageIndex > 0.0 then
-            pag.setPageIndex (U2.Case1 (pg.pageIndex - 1.0))
+            pag.setPageIndex (!^ (pg.pageIndex - 1.0))
         render ()
     )
     wireBtn "btn-1" (fun () ->
-        let state: obj = (box table.store)?get ()
-        let pg: PaginationState = unbox state?pagination
+        let pg = readPagination ()
         let maxIdx = pag.getPageCount () - 1.0
         if pg.pageIndex < maxIdx then
-            pag.setPageIndex (U2.Case1 (pg.pageIndex + 1.0))
+            pag.setPageIndex (!^ (pg.pageIndex + 1.0))
         render ()
     )
     wireBtn "btn-2" (fun () ->
-        pag.setPageIndex (U2.Case1 0.0)
-        pag.setPageSize (U2.Case1 5.0)
+        pag.setPageIndex (!^ 0.0)
+        pag.setPageSize (!^ 5.0)
         render ()
     )
     wireBtn "btn-3" (fun () ->
-        pag.setPageIndex (U2.Case1 0.0)
-        pag.setPageSize (U2.Case1 6.0)
+        pag.setPageIndex (!^ 0.0)
+        pag.setPageSize (!^ 6.0)
         render ()
     )
     wireBtn "btn-4" (fun () ->
-        pag.setPageIndex (U2.Case1 0.0)
-        pag.setPageSize (U2.Case1 9.0)
+        pag.setPageIndex (!^ 0.0)
+        pag.setPageSize (!^ 9.0)
         render ()
     )
     render ()

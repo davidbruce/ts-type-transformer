@@ -1,6 +1,5 @@
 module Program
 
-open Fable.Core
 open Node
 
 let mutable private passed = 0
@@ -11,7 +10,7 @@ let private check (ok: bool) (what: string) =
     else
         failwithf "check failed: %s" what
 
-let bus = Events.EventEmitter.Create<obj> ()
+let bus = Events.EventEmitter.Create ()
 let mutable stages = 0
 let mutable doneCount = 0
 
@@ -29,18 +28,12 @@ Fs.mkdirSync (outDir, mkOpts) |> ignore
 Fs.writeFileSync (path.join (inDir, "a.log"), "100 OK\n")
 Fs.writeFileSync (path.join (inDir, "b.log"), "200 OK\n")
 Fs.writeFileSync (path.join (inDir, "c.log"), "300 OK\n")
-bus.emit (U2.Case1 "stage", box "seed") |> ignore
+bus.emit ("stage", box "seed") |> ignore
 check (stages = 1) "seed stage"
 
 // Stage 2: bundle
-let entryName (n: StringOrNonSharedBuffer) =
-    match n with
-    | StringOrNonSharedBuffer.String s -> s
-    | _ -> "?"
-
 let logs =
-    Fs.readdirSync (inDir, U2.Case1 {| encoding = None; withFileTypes = None; recursive = None |})
-    |> Seq.map entryName
+    Fs.readdirSync inDir
     |> Seq.sort
     |> List.ofSeq
 
@@ -51,7 +44,7 @@ for name in logs do
     let chunk: NonSharedBuffer = Fs.readFileSync (path.join (inDir, name))
     Fs.appendFileSync (combined, chunk.toString ())
 
-bus.emit (U2.Case1 "stage", box "bundle") |> ignore
+bus.emit ("stage", box "bundle") |> ignore
 check (stages = 2) "bundle stage"
 
 // Stage 3: verify
@@ -67,8 +60,8 @@ let enoentCaught =
         ex.Message.Contains("ENOENT")
 check enoentCaught "missing file raised ENOENT"
 
-bus.emit (U2.Case1 "stage", box "verify") |> ignore
-bus.emit (U2.Case1 "done", box combText.Length) |> ignore
+bus.emit ("stage", box "verify") |> ignore
+bus.emit ("done", box combText.Length) |> ignore
 check (stages = 3 && doneCount = 1) "pipeline completion events"
 
 let rm = Fs.RmOptions.Create(recursive = true, force = true)

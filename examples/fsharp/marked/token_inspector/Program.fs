@@ -5,55 +5,39 @@ open type Dom.Globals
 open Marked
 open type Marked.Globals
 
-let el (tag: string) (cls: string) (txt: string option) =
+let private el (tag: string) (cls: string) (text: string) =
     let node = document.createElement tag
     if cls <> "" then node.className <- cls
-    match txt with
-    | Some t -> node.textContent <- t
-    | None -> ()
+    if text <> "" then node.textContent <- text
     node
 
-let sanitizeRaw (raw: string) =
+let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
+    let node = el tag cls ""
+    for ch in children do
+        node.appendChild ch |> ignore
+    node
+
+let private sanitizeRaw (raw: string) =
     raw.Replace("\n", "↵")
 
-let app = document.getElementById "app"
+let private app = document.getElementById "app"
 
 let sample =
     "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n"
 
 let tokens = Lexer.lex sample
 
-let head = el "div" "head" None
-head.appendChild (el "h1" "" (Some "Marked Token Inspector (F#)")) |> ignore
-head.appendChild (el "span" "badge" (Some $"{int tokens.length} tokens")) |> ignore
-app.appendChild head |> ignore
+app.appendChild (wrap "div" "head" [ el "h1" "" "Marked Token Inspector (F#)"; el "span" "badge" $"{int tokens.length} tokens" ]) |> ignore
+app.appendChild (wrap "div" "card" [ el "div" "label" "Markdown Input"; el "pre" "src" sample ]) |> ignore
 
-let srcCard = el "div" "card" None
-srcCard.appendChild (el "div" "label" (Some "Markdown Input")) |> ignore
-srcCard.appendChild (el "pre" "src" (Some sample)) |> ignore
-app.appendChild srcCard |> ignore
+let tbl =
+    wrap "table" "tok-table" [
+        wrap "thead" "" [ wrap "tr" "" [ for col in [ "#"; "Type"; "Bytes"; "Raw Snippet" ] -> el "th" "" col ] ]
+        wrap "tbody" "" [
+            for i, tok in Seq.indexed tokens ->
+                let g = unbox<Tokens.Generic> tok
+                wrap "tr" "" [ el "td" "" (string i); el "td" "" g.``type``; el "td" "" (string g.raw.Length); el "td" "" (sanitizeRaw g.raw) ]
+        ]
+    ]
 
-let tblCard = el "div" "card" None
-tblCard.appendChild (el "div" "label" (Some "Lexer Token Stream")) |> ignore
-
-let table = el "table" "tok-table" None
-let thead = el "thead" "" None
-let hrow = el "tr" "" None
-for col in [ "#"; "Type"; "Bytes"; "Raw Snippet" ] do
-    hrow.appendChild (el "th" "" (Some col)) |> ignore
-thead.appendChild hrow |> ignore
-table.appendChild thead |> ignore
-
-let tbody = el "tbody" "" None
-for i in 0 .. int tokens.length - 1 do
-    let g = unbox<Tokens.Generic> tokens.[float i]
-    let tr = el "tr" "" None
-    tr.appendChild (el "td" "" (Some (string i))) |> ignore
-    tr.appendChild (el "td" "" (Some g.``type``)) |> ignore
-    tr.appendChild (el "td" "" (Some (string g.raw.Length))) |> ignore
-    tr.appendChild (el "td" "" (Some (sanitizeRaw g.raw))) |> ignore
-    tbody.appendChild tr |> ignore
-
-table.appendChild tbody |> ignore
-tblCard.appendChild table |> ignore
-app.appendChild tblCard |> ignore
+app.appendChild (wrap "div" "card" [ el "div" "label" "Lexer Token Stream"; tbl ]) |> ignore
