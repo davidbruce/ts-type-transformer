@@ -32,107 +32,104 @@ import prosemirror/areas/prosemirror_view/editor_view
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
-@external(javascript, "./app_ffi.mjs", "newCell")
-fn new_cell(v: a) -> Dynamic
-
-@external(javascript, "./app_ffi.mjs", "getCell")
-fn get_cell(c: Dynamic) -> a
-
-@external(javascript, "./app_ffi.mjs", "setCell")
-fn set_cell(c: Dynamic, v: a) -> Nil
-
 fn hole_spec(tag: String) -> t.DOMOutputSpec {
   t.DOMOutputSpecArray([dynamic.string(tag), dynamic.int(0)])
 }
 
 fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
-  let doc_spec = node_spec.create()
-  node_spec.set_content(doc_spec, Some("block+"))
+  let doc_spec =
+    node_spec.create()
+    |> node_spec.with_content("block+")
 
-  let lvl_spec = attribute_spec.create()
-  attribute_spec.set_default(lvl_spec, dynamic.int(2))
-  let h_attrs = mark_spec_attrs.create()
-  mark_spec_attrs.set_at(h_attrs, "level", lvl_spec)
+  let lvl_spec =
+    attribute_spec.create()
+    |> attribute_spec.with_default(dynamic.int(2))
+  let h_attrs =
+    mark_spec_attrs.create()
+    |> mark_spec_attrs.with_at("level", lvl_spec)
 
-  let heading_spec = node_spec.create()
-  node_spec.set_attrs(heading_spec, Some(h_attrs))
-  node_spec.set_content(heading_spec, Some("inline*"))
-  node_spec.set_group(heading_spec, Some("block"))
-  node_spec.set_defining(heading_spec, Some(True))
-  node_spec.set_to_dom(
-    heading_spec,
-    Some(fn(n) {
+  let heading_spec =
+    node_spec.create()
+    |> node_spec.with_attrs(h_attrs)
+    |> node_spec.with_content("inline*")
+    |> node_spec.with_group("block")
+    |> node_spec.with_defining(True)
+    |> node_spec.with_to_dom(fn(n) {
       let lvl = case decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int) {
         Ok(1) -> "h1"
         _ -> "h2"
       }
       hole_spec(lvl)
-    }),
-  )
+    })
 
-  let para_spec = node_spec.create()
-  node_spec.set_content(para_spec, Some("inline*"))
-  node_spec.set_group(para_spec, Some("block"))
-  node_spec.set_to_dom(para_spec, Some(fn(_) { hole_spec("p") }))
+  let para_spec =
+    node_spec.create()
+    |> node_spec.with_content("inline*")
+    |> node_spec.with_group("block")
+    |> node_spec.with_to_dom(fn(_) { hole_spec("p") })
 
-  let quote_spec = node_spec.create()
-  node_spec.set_content(quote_spec, Some("block+"))
-  node_spec.set_group(quote_spec, Some("block"))
-  node_spec.set_defining(quote_spec, Some(True))
-  node_spec.set_to_dom(quote_spec, Some(fn(_) { hole_spec("blockquote") }))
+  let quote_spec =
+    node_spec.create()
+    |> node_spec.with_content("block+")
+    |> node_spec.with_group("block")
+    |> node_spec.with_defining(True)
+    |> node_spec.with_to_dom(fn(_) { hole_spec("blockquote") })
 
-  let cb_spec = node_spec.create()
-  node_spec.set_content(cb_spec, Some("text*"))
-  node_spec.set_marks(cb_spec, Some(""))
-  node_spec.set_group(cb_spec, Some("block"))
-  node_spec.set_code(cb_spec, Some(True))
-  node_spec.set_defining(cb_spec, Some(True))
-  node_spec.set_to_dom(
-    cb_spec,
-    Some(fn(_) {
+  let cb_spec =
+    node_spec.create()
+    |> node_spec.with_content("text*")
+    |> node_spec.with_marks("")
+    |> node_spec.with_group("block")
+    |> node_spec.with_code(True)
+    |> node_spec.with_defining(True)
+    |> node_spec.with_to_dom(fn(_) {
       t.DOMOutputSpecArray([
         dynamic.string("pre"),
         dynamic.array([dynamic.string("code"), dynamic.int(0)]),
       ])
-    }),
-  )
+    })
 
-  let hr_spec = node_spec.create()
-  node_spec.set_group(hr_spec, Some("block"))
-  node_spec.set_atom(hr_spec, Some(True))
-  node_spec.set_to_dom(hr_spec, Some(fn(_) { t.DOMOutputSpecArray([dynamic.string("hr")]) }))
+  let hr_spec =
+    node_spec.create()
+    |> node_spec.with_group("block")
+    |> node_spec.with_atom(True)
+    |> node_spec.with_to_dom(fn(_) { t.DOMOutputSpecArray([dynamic.string("hr")]) })
 
-  let text_spec = node_spec.create()
-  node_spec.set_group(text_spec, Some("inline"))
+  let text_spec =
+    node_spec.create()
+    |> node_spec.with_group("inline")
 
-  let nodes = node_spec.create()
-  node_spec.set_at(nodes, "doc", pm_rt.dynamic(doc_spec))
-  node_spec.set_at(nodes, "heading", pm_rt.dynamic(heading_spec))
-  node_spec.set_at(nodes, "paragraph", pm_rt.dynamic(para_spec))
-  node_spec.set_at(nodes, "blockquote", pm_rt.dynamic(quote_spec))
-  node_spec.set_at(nodes, "code_block", pm_rt.dynamic(cb_spec))
-  node_spec.set_at(nodes, "horizontal_rule", pm_rt.dynamic(hr_spec))
-  node_spec.set_at(nodes, "text", pm_rt.dynamic(text_spec))
+  let nodes =
+    node_spec.create()
+    |> node_spec.with_at("doc", pm_rt.dynamic(doc_spec))
+    |> node_spec.with_at("heading", pm_rt.dynamic(heading_spec))
+    |> node_spec.with_at("paragraph", pm_rt.dynamic(para_spec))
+    |> node_spec.with_at("blockquote", pm_rt.dynamic(quote_spec))
+    |> node_spec.with_at("code_block", pm_rt.dynamic(cb_spec))
+    |> node_spec.with_at("horizontal_rule", pm_rt.dynamic(hr_spec))
+    |> node_spec.with_at("text", pm_rt.dynamic(text_spec))
 
   let make_mark = fn(tag: String) {
-    let m = mark_spec.create()
-    mark_spec.set_to_dom(m, Some(fn(_, _) { hole_spec(tag) }))
-    m
+    mark_spec.create()
+    |> mark_spec.with_to_dom(fn(_, _) { hole_spec(tag) })
   }
-  let marks = mark_spec.create()
-  mark_spec.set_at(marks, "strong", pm_rt.dynamic(make_mark("strong")))
-  mark_spec.set_at(marks, "em", pm_rt.dynamic(make_mark("em")))
-  mark_spec.set_at(marks, "code", pm_rt.dynamic(make_mark("code")))
+  let marks =
+    mark_spec.create()
+    |> mark_spec.with_at("strong", pm_rt.dynamic(make_mark("strong")))
+    |> mark_spec.with_at("em", pm_rt.dynamic(make_mark("em")))
+    |> mark_spec.with_at("code", pm_rt.dynamic(make_mark("code")))
 
-  let spec = schema_spec.create()
-  schema_spec.set_nodes(spec, pm_rt.dynamic(nodes))
-  schema_spec.set_marks(spec, pm_rt.dynamic(marks))
+  let spec =
+    schema_spec.create()
+    |> schema_spec.with_nodes(pm_rt.dynamic(nodes))
+    |> schema_spec.with_marks(pm_rt.dynamic(marks))
   schema.new(spec)
 }
 
 fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
-  let ha = attrs.create()
-  attrs.set_at(ha, "level", dynamic.int(2))
+  let ha =
+    attrs.create()
+    |> attrs.with_at("level", dynamic.int(2))
   let h =
     schema.node(
       sch,
@@ -201,10 +198,10 @@ fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
 }
 
 fn make_state(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.EditorState(Nil) {
-  let cfg = editor_state_config.create()
-  editor_state_config.set_schema(cfg, Some(sch))
-  editor_state_config.set_doc(cfg, Some(make_initial_doc(sch)))
-  editor_state.create(cfg)
+  editor_state_config.create()
+  |> editor_state_config.with_schema(sch)
+  |> editor_state_config.with_doc(make_initial_doc(sch))
+  |> editor_state.create
 }
 
 fn target_range(st: t.EditorState(Nil)) -> #(Float, Float) {
@@ -241,7 +238,7 @@ fn set_btn_active(doc, id: String, on: Bool) {
   }
 }
 
-fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_c, action_c) {
+fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_ref: pm_rt.Ref(Int), action_ref: pm_rt.Ref(String)) {
   let #(f, t) = target_range(st)
   let d = editor_state.get_doc(st)
   let marks = schema.get_marks(sch)
@@ -256,7 +253,7 @@ fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_c, action_c) {
   set_btn_active(doc, "btn-1", he)
   set_btn_active(doc, "btn-2", hc)
 
-  let bname = node_type.get_name(node.get_type(resolved_pos.get_parent(selection.get_from_new(editor_state.get_selection(st)))))
+  let bname = node_type.get_name(node.get_type(resolved_pos.get_parent(selection.get_dollar_from(editor_state.get_selection(st)))))
   let active =
     [
       case hb {
@@ -277,8 +274,8 @@ fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_c, action_c) {
     [] -> "none"
     _ -> string.join(active, ", ")
   }
-  let action: String = get_cell(action_c)
-  let dispatches: Int = get_cell(dispatches_c)
+  let action = pm_rt.ref_get(action_ref)
+  let dispatches = pm_rt.ref_get(dispatches_ref)
   let msg =
     action
     <> " · blocks="
@@ -311,31 +308,29 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 pub fn main() {
   let doc = core.get_document()
   let sch = build_schema()
-  let view_c = new_cell(None)
-  let dispatches_c = new_cell(0)
-  let action_c = new_cell("Initialized schema with 7 node types & 3 marks")
+  let view_ref = pm_rt.ref_new(None)
+  let dispatches_ref = pm_rt.ref_new(0)
+  let action_ref = pm_rt.ref_new("Initialized schema with 7 node types & 3 marks")
 
-  let props = direct_editor_props.create()
-  direct_editor_props.set_state(props, make_state(sch))
-  direct_editor_props.set_dispatch_transaction(
-    props,
-    Some(fn(tr) {
-      case get_cell(view_c) {
+  let props =
+    direct_editor_props.create()
+    |> direct_editor_props.with_state(make_state(sch))
+    |> direct_editor_props.with_dispatch_transaction(fn(tr) {
+      case pm_rt.ref_get(view_ref) {
         Some(v) -> {
-          set_cell(dispatches_c, get_cell(dispatches_c) + 1)
+          let _ = pm_rt.ref_update(dispatches_ref, fn(n) { n + 1 })
           let next = editor_state.apply(editor_view.get_state(v), tr)
           editor_view.update_state(v, next)
-          update_meta(sch, doc, next, dispatches_c, action_c)
+          update_meta(sch, doc, next, dispatches_ref, action_ref)
         }
         None -> Nil
       }
-    }),
-  )
+    })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
   let view = editor_view.new(Some(pm_rt.dynamic(mount)), props)
-  set_cell(view_c, Some(view))
-  update_meta(sch, doc, editor_view.get_state(view), dispatches_c, action_c)
+  pm_rt.ref_set(view_ref, Some(view))
+  update_meta(sch, doc, editor_view.get_state(view), dispatches_ref, action_ref)
 
   let toggle_mark = fn(mkey: String, label: String) {
     let st = editor_view.get_state(view)
@@ -347,12 +342,12 @@ pub fn main() {
         case node.range_has_mark(editor_state.get_doc(st), f, t, t.MarkOrMarkTypeMarkType(mt)) {
           True -> {
             let _ = transform.remove_mark(tr, f, t, Some(t.MarkOrMarkTypeMarkType(mt)))
-            set_cell(action_c, "Removed " <> label)
+            pm_rt.ref_set(action_ref, "Removed " <> label)
           }
           False -> {
             let m = schema.mark(sch, t.StringOrMarkTypeMarkType(mt), None)
             let _ = transform.add_mark(tr, f, t, m)
-            set_cell(action_c, "Added " <> label)
+            pm_rt.ref_set(action_ref, "Added " <> label)
           }
         }
         editor_view.get_dispatch(view)(tr)
@@ -367,30 +362,31 @@ pub fn main() {
   wire_btn(doc, "btn-3", fn() {
     let st = editor_view.get_state(view)
     let sel = editor_state.get_selection(st)
-    let pname = node_type.get_name(node.get_type(resolved_pos.get_parent(selection.get_from_new(sel))))
+    let pname = node_type.get_name(node.get_type(resolved_pos.get_parent(selection.get_dollar_from(sel))))
     let tr = editor_state.get_tr(st)
     let nodes = schema.get_nodes(sch)
     case pname == "heading" {
       True -> {
         let assert Some(pt) = schema_nodes.get_at(nodes, "paragraph")
         let _ = transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), pt, None)
-        set_cell(action_c, "Converted heading -> paragraph")
+        pm_rt.ref_set(action_ref, "Converted heading -> paragraph")
       }
       False -> {
         let assert Some(ht) = schema_nodes.get_at(nodes, "heading")
-        let ha = attrs.create()
-        attrs.set_at(ha, "level", dynamic.int(2))
+        let ha =
+          attrs.create()
+          |> attrs.with_at("level", dynamic.int(2))
         let _ = transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), ht, Some(pm_rt.dynamic(ha)))
-        set_cell(action_c, "Converted block -> heading[level=2]")
+        pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }
     }
     editor_view.get_dispatch(view)(tr)
   })
   wire_btn(doc, "btn-4", fn() {
-    set_cell(dispatches_c, 0)
-    set_cell(action_c, "Reset initial schema document")
+    pm_rt.ref_set(dispatches_ref, 0)
+    pm_rt.ref_set(action_ref, "Reset initial schema document")
     let fresh = make_state(sch)
     editor_view.update_state(view, fresh)
-    update_meta(sch, doc, fresh, dispatches_c, action_c)
+    update_meta(sch, doc, fresh, dispatches_ref, action_ref)
   })
 }

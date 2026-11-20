@@ -23,10 +23,12 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let inline_opts = katex_options.create()
-      katex_options.set_display_mode(inline_opts, Some(False))
-      let display_opts = katex_options.create()
-      katex_options.set_display_mode(display_opts, Some(True))
+      let inline_opts =
+        katex_options.create()
+        |> katex_options.with_display_mode(False)
+      let display_opts =
+        katex_options.create()
+        |> katex_options.with_display_mode(True)
 
       let items = [
         #("Basel Series", "\\sum_{k=1}^{n} \\frac{1}{k^2} = \\frac{\\pi^2}{6}"),

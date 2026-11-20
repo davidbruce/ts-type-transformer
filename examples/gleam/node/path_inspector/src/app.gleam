@@ -27,10 +27,11 @@ pub fn main() -> Nil {
   let p_name = parsed_path.get_name(parsed)
   let p_ext = parsed_path.get_ext(parsed)
 
-  let fmt = path_format.create()
-  path_format.set_dir(fmt, Some("/etc/service"))
-  path_format.set_name(fmt, Some("daemon"))
-  path_format.set_ext(fmt, Some(".conf"))
+  let fmt =
+    path_format.create()
+    |> path_format.with_dir("/etc/service")
+    |> path_format.with_name("daemon")
+    |> path_format.with_ext(".conf")
   let formatted = path.format(fmt)
 
   let passed =

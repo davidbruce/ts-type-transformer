@@ -45,7 +45,7 @@ pub fn main() {
   // A Group is an array of Pt: a list, and indexed.
   let square = group.new([pt(0.0, 0.0), pt(4.0, 0.0), pt(4.0, 4.0), pt(0.0, 4.0)])
   check(list_length(group.to_list(square)) == 4, "a list")
-  let assert Some(third) = group.get_at(square, 2.0)
+  let assert Some(third) = group.get_at(square, 2)
   check(pt.get_y(third) == 4.0, "indexed")
   check(pt.get_x(group.get_p1(square)) == 0.0, "getter")
   check(pt.to_string(group.centroid(square)) == "Pt(2, 2)", "centroid")

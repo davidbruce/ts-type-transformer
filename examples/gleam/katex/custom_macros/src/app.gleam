@@ -25,19 +25,20 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let macros = katex_options_macros.create()
-      katex_options_macros.set_at(macros, "\\RR", kr.dynamic("\\mathbb{R}"))
-      katex_options_macros.set_at(macros, "\\NN", kr.dynamic("\\mathbb{N}"))
-      katex_options_macros.set_at(macros, "\\dd", kr.dynamic("\\mathrm{d}"))
-      katex_options_macros.set_at(
-        macros,
-        "\\norm",
-        kr.dynamic("\\left\\| #1 \\right\\|"),
-      )
+      let macros =
+        katex_options_macros.create()
+        |> katex_options_macros.with_at("\\RR", kr.dynamic("\\mathbb{R}"))
+        |> katex_options_macros.with_at("\\NN", kr.dynamic("\\mathbb{N}"))
+        |> katex_options_macros.with_at("\\dd", kr.dynamic("\\mathrm{d}"))
+        |> katex_options_macros.with_at(
+          "\\norm",
+          kr.dynamic("\\left\\| #1 \\right\\|"),
+        )
 
-      let opts = katex_options.create()
-      katex_options.set_display_mode(opts, Some(True))
-      katex_options.set_macros(opts, Some(macros))
+      let opts =
+        katex_options.create()
+        |> katex_options.with_display_mode(True)
+        |> katex_options.with_macros(macros)
 
       let legend = document.create_element_div(doc, None)
       element.set_class_name(legend, "card")

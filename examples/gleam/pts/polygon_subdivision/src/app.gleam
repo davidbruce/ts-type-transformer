@@ -26,10 +26,11 @@ fn mk_pt(x: Float, y: Float) -> t.Pt(Nil) {
 }
 
 pub fn main() -> Nil {
-  let opts = canvas_space_options.create()
-  canvas_space_options.set_bgcolor(opts, Some("#ffffff"))
-  canvas_space_options.set_resize(opts, Some(True))
-  canvas_space_options.set_retina(opts, Some(True))
+  let opts =
+    canvas_space_options.create()
+    |> canvas_space_options.with_bgcolor("#ffffff")
+    |> canvas_space_options.with_resize(True)
+    |> canvas_space_options.with_retina(True)
 
   let cs =
     canvas_space.new(Some(t.StringOrElementString("#pt")), None)
@@ -41,10 +42,9 @@ pub fn main() -> Nil {
     "#404040", "#262626",
   ]
 
-  let player = i_player.create()
-  i_player.set_animate(
-    player,
-    Some(fn(time_ms, _ftime, _space) {
+  let player =
+    i_player.create()
+    |> i_player.with_animate(fn(time_ms, _ftime, _space) {
       let c = space.get_center(cs)
       let size = space.get_size(cs)
       let pointer = multi_touch_space.get_pointer(cs)
@@ -142,8 +142,7 @@ pub fn main() -> Nil {
         )
         |> canvas_form.circle_2(t.PtLikeIterableGroup(ring))
       Nil
-    }),
-  )
+    })
 
   let _ = space.add(cs, r.dynamic(player))
   let _ = multi_touch_space.bind_mouse(cs, Some(True), None)

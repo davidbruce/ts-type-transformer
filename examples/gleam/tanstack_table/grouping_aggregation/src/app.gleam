@@ -26,6 +26,7 @@ import tanstack_table_core/types as t
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
 
+// Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
 fn coerce(a: a) -> b
 
@@ -85,7 +86,7 @@ fn current_grp_col(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil)) -> St
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view, t.table_features_codec(), rt.codec_dynamic())
+  let get_rm = table_row_models_core.get_get_row_model(rows_view)
   let rows = row_model.get_rows(get_rm())
   let grp_col = current_grp_col(table)
 
@@ -93,16 +94,21 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
     list.map_fold(rows, 0, fn(acc, r) {
       let gv = row_row.get_get_value(coerce(r))
       let is_grp = tt.call_void_to_boolean_fn(row_column_grouping.get_get_is_grouped(coerce(r)))
-      let cpu: Float = coerce(tt.call_string_to_t_value_fn(gv, "cpu"))
-      let mem = int.to_string(float.round(coerce(tt.call_string_to_t_value_fn(gv, "mem"))))
-      let nodes = int.to_string(float.round(coerce(tt.call_string_to_t_value_fn(gv, "nodes"))))
+      let num_val = fn(k) -> Float {
+        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.float) {
+          Ok(n) -> n
+          Error(_) -> 0.0
+        }
+      }
       let str_val = fn(k) -> String {
-        let v = tt.call_string_to_t_value_fn(gv, k)
-        case decode.run(v, decode.string) {
+        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.string) {
           Ok(s) -> s
           Error(_) -> ""
         }
       }
+      let cpu = num_val("cpu")
+      let mem = int.to_string(float.round(num_val("mem")))
+      let nodes = int.to_string(float.round(num_val("nodes")))
       case is_grp {
         True -> {
           let is_exp = tt.call_void_to_boolean_fn(row_row_expanding.get_get_is_expanded(coerce(r)))
@@ -187,9 +193,9 @@ pub fn main() {
       #("columnGroupingFeature", rt.dynamic(tt.get_column_grouping_feature())),
       #("rowAggregationFeature", rt.dynamic(tt.get_row_aggregation_feature())),
       #("rowExpandingFeature", rt.dynamic(tt.get_row_expanding_feature())),
-      #("coreRowModel", rt.dynamic(tt.create_core_row_model(rt.codec_dynamic()))),
-      #("groupedRowModel", rt.dynamic(tt.create_grouped_row_model(rt.codec_dynamic()))),
-      #("expandedRowModel", rt.dynamic(tt.create_expanded_row_model(rt.codec_dynamic()))),
+      #("coreRowModel", rt.dynamic(tt.create_core_row_model())),
+      #("groupedRowModel", rt.dynamic(tt.create_grouped_row_model())),
+      #("expandedRowModel", rt.dynamic(tt.create_expanded_row_model())),
       #("aggregationFns", agg_fns),
     ])
   let data =

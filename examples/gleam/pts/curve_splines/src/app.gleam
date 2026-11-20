@@ -20,9 +20,6 @@ fn sin(x: Float) -> Float
 @external(javascript, "./app_ffi.mjs", "cos")
 fn cos(x: Float) -> Float
 
-@external(javascript, "./app_ffi.mjs", "abs")
-fn abs(x: Float) -> Float
-
 fn mk_pt(x: Float, y: Float) -> t.Pt(Nil) {
   let p = pt.make(2.0, None, None)
   pt.set_x(p, x)
@@ -30,28 +27,21 @@ fn mk_pt(x: Float, y: Float) -> t.Pt(Nil) {
   p
 }
 
-fn range_loop(i: Int, end: Int, acc: List(Int)) -> List(Int) {
-  case i >= end {
-    True -> list.reverse(acc)
-    False -> range_loop(i + 1, end, [i, ..acc])
-  }
-}
-
 pub fn main() -> Nil {
-  let opts = canvas_space_options.create()
-  canvas_space_options.set_bgcolor(opts, Some("#ffffff"))
-  canvas_space_options.set_resize(opts, Some(True))
-  canvas_space_options.set_retina(opts, Some(True))
+  let opts =
+    canvas_space_options.create()
+    |> canvas_space_options.with_bgcolor("#ffffff")
+    |> canvas_space_options.with_resize(True)
+    |> canvas_space_options.with_retina(True)
 
   let cs =
     canvas_space.new(Some(t.StringOrElementString("#pt")), None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 
-  let player = i_player.create()
-  i_player.set_animate(
-    player,
-    Some(fn(time_ms, _ftime, _space) {
+  let player =
+    i_player.create()
+    |> i_player.with_animate(fn(time_ms, _ftime, _space) {
       let size = space.get_size(cs)
       let c = space.get_center(cs)
       let pointer = multi_touch_space.get_pointer(cs)
@@ -75,7 +65,7 @@ pub fn main() -> Nil {
         |> canvas_form.line_2(t.PtLikeIterableGroup(base_line))
 
       let pts_list =
-        list.map(range_loop(0, count, []), fn(i) {
+        int.range(from: 0, to: count, with: [], run: fn(acc, i) {
           let fi = int.to_float(i)
           let u = fi /. int.to_float(count - 1)
           let x = w *. { 0.08 +. 0.84 *. u }
@@ -83,7 +73,7 @@ pub fn main() -> Nil {
             cy
             +. sin(time_ms *. 0.0014 +. fi *. 0.72) *. amp
             +. cos(time_ms *. 0.0009 -. fi *. 0.45) *. { amp *. 0.42 }
-          let dx = abs(x -. px)
+          let dx = float.absolute_value(x -. px)
           let y = case dx <. w *. 0.25 && { px >. 1.0 || py >. 1.0 } {
             True -> {
               let pull = 1.0 -. dx /. { w *. 0.25 }
@@ -91,8 +81,9 @@ pub fn main() -> Nil {
             }
             False -> y0
           }
-          mk_pt(x, y)
+          [mk_pt(x, y), ..acc]
         })
+        |> list.reverse
 
       let ctrls = group.new(pts_list)
       let bs = curve.bspline(t.GroupLikeGroup(ctrls), Some(12.0), None)
@@ -163,8 +154,7 @@ pub fn main() -> Nil {
           |> canvas_form.point_2(t.PtLikePt(p), Some(4.5), Some("circle"))
         Nil
       })
-    }),
-  )
+    })
 
   let _ = space.add(cs, r.dynamic(player))
   let _ = multi_touch_space.bind_mouse(cs, Some(True), None)

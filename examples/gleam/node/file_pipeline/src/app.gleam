@@ -7,24 +7,13 @@ import gleam/string
 import node/areas/events/event_emitter as events
 import node/areas/fs
 import node/areas/fs/rm_options
-import node/areas/fs/stats_base
+import node/areas/fs/stats
 import node/areas/main/buffer
 import node/areas/main/mkdir_options
 import node/areas/path
 import node/namespaces/node_js/event_emitter as emitter
 import node/runtime
 import node/types as t
-
-type Cell(a)
-
-@external(javascript, "./app_ffi.mjs", "newCell")
-fn new_cell(value: a) -> Cell(a)
-
-@external(javascript, "./app_ffi.mjs", "getCell")
-fn get_cell(cell: Cell(a)) -> a
-
-@external(javascript, "./app_ffi.mjs", "setCell")
-fn set_cell(cell: Cell(a), value: a) -> Nil
 
 fn check(ok: Bool, what: String) -> Int {
   case ok {
@@ -56,15 +45,20 @@ fn write_text(p: String, body: String) -> Nil {
 
 pub fn main() -> Nil {
   let bus = events.new(None)
-  let stages = new_cell(0)
-  let done_count = new_cell(0)
+  let stages = runtime.ref_new(0)
+  let done_count = runtime.ref_new(0)
 
   let ev_stage = runtime.dynamic("stage")
   let ev_done = runtime.dynamic("done")
-  let _ = emitter.on(bus, ev_stage, fn(_) { set_cell(stages, get_cell(stages) + 1) })
+  let _ =
+    emitter.on(bus, ev_stage, fn(_) {
+      let _ = runtime.ref_update(stages, fn(n) { n + 1 })
+      Nil
+    })
   let _ =
     emitter.once(bus, ev_done, fn(_) {
-      set_cell(done_count, get_cell(done_count) + 1)
+      let _ = runtime.ref_update(done_count, fn(n) { n + 1 })
+      Nil
     })
 
   let root = fs.mkdtemp_sync("/tmp/tsrs-node-pipe-", None)
@@ -79,7 +73,7 @@ pub fn main() -> Nil {
   write_text(path.join([in_dir, "b.log"]), "200 OK\n")
   write_text(path.join([in_dir, "c.log"]), "300 OK\n")
   let _ = emitter.emit(bus, ev_stage, [runtime.dynamic("seed")])
-  let passed = check(get_cell(stages) == 1, "seed stage")
+  let passed = check(runtime.ref_get(stages) == 1, "seed stage")
 
   // Stage 2: bundle
   let logs = list.sort(fs.readdir_sync(str(in_dir), None), string.compare)
@@ -97,7 +91,7 @@ pub fn main() -> Nil {
       acc + c
     })
   let _ = emitter.emit(bus, ev_stage, [runtime.dynamic("bundle")])
-  let passed = passed + check(get_cell(stages) == 2, "bundle stage")
+  let passed = passed + check(runtime.ref_get(stages) == 2, "bundle stage")
 
   // Stage 3: verify
   let comb_text = read_text(combined)
@@ -105,7 +99,7 @@ pub fn main() -> Nil {
   let passed =
     passed
     + check(
-      stats_base.get_size(st_comb, runtime.codec_float()) == 21.0
+      stats.get_size(st_comb) == 21.0
       && string.contains(comb_text, "200 OK"),
       "combined output verified",
     )
@@ -124,13 +118,14 @@ pub fn main() -> Nil {
   let passed =
     passed
     + check(
-      get_cell(stages) == 3 && get_cell(done_count) == 1,
+      runtime.ref_get(stages) == 3 && runtime.ref_get(done_count) == 1,
       "pipeline completion events",
     )
 
-  let rm = rm_options.create()
-  rm_options.set_recursive(rm, Some(True))
-  rm_options.set_force(rm, Some(True))
+  let rm =
+    rm_options.create()
+    |> rm_options.with_recursive(True)
+    |> rm_options.with_force(True)
   fs.rm_sync(str(root), Some(rm))
   let passed = passed + check(!fs.exists_sync(str(root)), "pipeline workspace removed")
 
@@ -142,9 +137,9 @@ pub fn main() -> Nil {
   )
   io.println(
     "stages="
-    <> int.to_string(get_cell(stages))
+    <> int.to_string(runtime.ref_get(stages))
     <> " done="
-    <> int.to_string(get_cell(done_count))
+    <> int.to_string(runtime.ref_get(done_count))
     <> " enoent="
     <> string.lowercase(bool.to_string(enoent_caught)),
   )

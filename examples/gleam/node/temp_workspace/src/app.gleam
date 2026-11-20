@@ -4,10 +4,10 @@ import gleam/io
 import gleam/option.{None, Some}
 import node/areas/fs
 import node/areas/fs/rm_options
+import node/areas/fs/stats
 import node/areas/fs/stats_base
 import node/areas/main/buffer
 import node/areas/path
-import node/runtime
 import node/types as t
 
 fn check(ok: Bool, what: String) -> Int {
@@ -46,7 +46,7 @@ pub fn main() -> Nil {
     None,
   )
   let st1 = fs.stat_sync(str(notes))
-  let s1 = stats_base.get_size(st1, runtime.codec_float())
+  let s1 = stats.get_size(st1)
   let passed =
     passed
     + check(
@@ -61,7 +61,7 @@ pub fn main() -> Nil {
   )
   let text = read_text(notes)
   let st2 = fs.stat_sync(str(notes))
-  let s2 = stats_base.get_size(st2, runtime.codec_float())
+  let s2 = stats.get_size(st2)
   let passed =
     passed
     + check(text == "alpha\nbeta\ngamma\n" && s2 == 17.0, "append and readBack")
@@ -83,9 +83,10 @@ pub fn main() -> Nil {
   fs.unlink_sync(str(archive))
   let passed = passed + check(!fs.exists_sync(str(archive)), "unlinkSync")
 
-  let rm = rm_options.create()
-  rm_options.set_recursive(rm, Some(True))
-  rm_options.set_force(rm, Some(True))
+  let rm =
+    rm_options.create()
+    |> rm_options.with_recursive(True)
+    |> rm_options.with_force(True)
   fs.rm_sync(str(dir), Some(rm))
   let passed =
     passed

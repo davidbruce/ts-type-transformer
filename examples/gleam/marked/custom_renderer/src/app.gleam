@@ -38,39 +38,36 @@ pub fn main() -> Nil {
       let strip = document.create_element_div(doc, None)
       element.set_class_name(strip, "tok-strip")
 
-      let renderer = marked_extension_renderer.create()
-      marked_extension_renderer.set_heading(
-        renderer,
-        Some(fn(args) {
-          let #(heading) = args
-          let tok = mr.dynamic(heading)
-          let d = int.to_string(float.round(field_float(tok, "depth")))
-          mt.BooleanOrRendererOutputRendererOutput(
-            "<h"
-            <> d
-            <> " class=\"wire-h\">§ "
-            <> field_string(tok, "text")
-            <> "</h"
-            <> d
-            <> ">\n",
-          )
-        }),
-        mr.codec_string(),
-        mr.codec_string(),
-      )
+      let renderer =
+        marked_extension_renderer.create()
+        |> marked_extension_renderer.with_heading(
+          fn(args) {
+            let #(heading) = args
+            let tok = mr.dynamic(heading)
+            let d = int.to_string(float.round(field_float(tok, "depth")))
+            mt.BooleanOrRendererOutputRendererOutput(
+              "<h"
+              <> d
+              <> " class=\"wire-h\">§ "
+              <> field_string(tok, "text")
+              <> "</h"
+              <> d
+              <> ">\n",
+            )
+          },
+          mr.codec_string(),
+        )
 
-      let ext = marked_extension.create()
-      marked_extension.set_renderer(ext, Some(renderer))
-      marked_extension.set_walk_tokens(
-        ext,
-        Some(fn(token) {
+      let ext =
+        marked_extension.create()
+        |> marked_extension.with_renderer(renderer)
+        |> marked_extension.with_walk_tokens(fn(token) {
           let pill = document.create_element_span(doc, None)
           element.set_class_name(pill, "tok-pill")
           node.set_text_content(pill, Some(field_string(token, "type")))
           let _ = node.append_child(strip, pill)
           None
-        }),
-      )
+        })
 
       let custom_m = marked_class.new([ext])
       let call = marked_parse_call_options_no_async.create()

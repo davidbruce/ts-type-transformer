@@ -88,8 +88,8 @@ pub fn main() {
     + check(get_set.invoke(shape.get_fill(r), t.string_or_canvas_gradient_codec()) == t.StringOrCanvasGradientString("red"), "the fill property")
     + check(node.get_parent(r) |> option.is_some, "the rect has a parent")
     + check(option.is_some(node.get_layer(r)), "the rect knows its layer")
-    + check(rect_config.get_fill(node.get_attrs_2(r, t.rect_config_codec())) == Some(t.StringOrCanvasGradientString("red")), "fill in the attrs")
-    + check(rect_config.get_id(node.get_attrs_2(r, t.rect_config_codec())) == Some("box"), "id in the attrs")
+    + check(rect_config.get_fill(node.get_attrs_2(r)) == Some(t.StringOrCanvasGradientString("red")), "fill in the attrs")
+    + check(rect_config.get_id(node.get_attrs_2(r)) == Some("box"), "id in the attrs")
 
   // A circle and a text, and a group holding both.
   let cc = circle_config.create()
@@ -157,7 +157,6 @@ pub fn main() {
     node.on_click(
       r,
       fn(_) { cell.set(clicks, cell.get(clicks) + 1) },
-      t.rect_config_codec(),
     )
   let _ = node.fire(r, "click", None, None)
   let _ = node.fire(r, "click", None, None)
@@ -169,7 +168,6 @@ pub fn main() {
     node.on_mouseover(
       c,
       fn(e) { cell.set(seen, "over " <> konva_type(e)) },
-      t.circle_config_codec(),
     )
   let _ = node.fire(c, "mouseover", None, None)
   let passed = passed + check(cell.get(seen) == "over mouseover", "the event object's type")

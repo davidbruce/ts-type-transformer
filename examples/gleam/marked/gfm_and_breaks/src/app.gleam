@@ -42,10 +42,12 @@ pub fn main() -> Nil {
 
       let gfm_src =
         "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n"
-      let gfm_on = marked_options_no_async.create()
-      marked_options_no_async.set_gfm(gfm_on, Some(True))
-      let gfm_off = marked_options_no_async.create()
-      marked_options_no_async.set_gfm(gfm_off, Some(False))
+      let gfm_on =
+        marked_options_no_async.create()
+        |> marked_options_no_async.with_gfm(True)
+      let gfm_off =
+        marked_options_no_async.create()
+        |> marked_options_no_async.with_gfm(False)
 
       let gfm_sec = document.create_element_div(doc, None)
       element.set_class_name(gfm_sec, "section")
@@ -69,10 +71,12 @@ pub fn main() -> Nil {
       let _ = node.append_child(app, gfm_sec)
 
       let breaks_src = "Line one\nLine two\nLine three"
-      let br_off = marked_options_no_async.create()
-      marked_options_no_async.set_breaks(br_off, Some(False))
-      let br_on = marked_options_no_async.create()
-      marked_options_no_async.set_breaks(br_on, Some(True))
+      let br_off =
+        marked_options_no_async.create()
+        |> marked_options_no_async.with_breaks(False)
+      let br_on =
+        marked_options_no_async.create()
+        |> marked_options_no_async.with_breaks(True)
 
       let br_sec = document.create_element_div(doc, None)
       element.set_class_name(br_sec, "section")

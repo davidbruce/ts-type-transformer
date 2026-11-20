@@ -12,12 +12,11 @@ import gleam/option.{None, Some}
 fn make_span(s_iso: String, e_iso: String) {
   let dc = dt.date_codec()
   let arg = dt.DateArgDateType
-  let s = df.parse_iso(s_iso, None, dc)
-  let e = df.parse_iso(e_iso, None, dc)
-  let span = interval.create()
-  interval.set_start(span, arg(s), dt.date_arg_codec(dc))
-  interval.set_end(span, arg(e), dt.date_arg_codec(dc))
-  span
+  let s = df.parse_iso(s_iso, None)
+  let e = df.parse_iso(e_iso, None)
+  interval.create()
+  |> interval.with_start(arg(s), dt.date_arg_codec(dc))
+  |> interval.with_end(arg(e), dt.date_arg_codec(dc))
 }
 
 pub fn main() -> Nil {
@@ -170,7 +169,7 @@ pub fn main() -> Nil {
         ],
         fn(p) {
           let #(iso, rule) = p
-          let probe = df.parse_iso(iso, None, dc)
+          let probe = df.parse_iso(iso, None)
           let clamped =
             df.clamp(
               arg(probe),

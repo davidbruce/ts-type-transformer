@@ -126,7 +126,7 @@ pub fn main() {
   // FINDING 10 (awkward): `addChild<U extends ContainerChild[]>(...children: U): U[0]` is
   // add_child(self, children: u, codec) with u the whole rest array, so a list and
   // a list codec; and what comes back is Container(Dynamic, Nil), not the child.
-  let _ = container.add_child(root, [box], runtime.codec_list(t.graphics_codec()))
+  let _ = container.add_child(root, [box])
   container.set_x(box, 30.0)
   container.set_y(box, 40.0)
   container.set_x(root, 100.0)
@@ -160,7 +160,7 @@ pub fn main() {
     + check(near(container.get_rotation(box), half_pi), "angle sets rotation")
 
   // Removing the child empties the parent.
-  let _ = container.remove_child(root, [box], runtime.codec_list(t.graphics_codec()))
+  let _ = container.remove_child(root, [box])
   let passed =
     passed
     + check(container.get_children(root, t.graphics_codec()) == [], "the child is removed")
@@ -179,7 +179,7 @@ pub fn main() {
 
   // Sprites: Texture.WHITE is one pixel.
   let white = texture.get_white()
-  let s = sprite.from_2(runtime.dynamic(white), None)
+  let s = sprite.from(runtime.dynamic(white), None)
   let passed =
     passed
     + check(texture.get_width(white) == 1.0 && texture.get_height(white) == 1.0, "the white texture is 1 by 1")
@@ -207,7 +207,7 @@ pub fn main() {
     let dot = graphics.new(None)
     let _ = graphics.circle(dot, 100.0, 50.0, 20.0)
     let _ = graphics.fill(dot, Some(runtime.dynamic(16_777_215.0)))
-    let _ = container.add_child(stage, [dot], runtime.codec_list(t.graphics_codec()))
+    let _ = container.add_child(stage, [dot])
     application.render(app)
     let passed =
       passed

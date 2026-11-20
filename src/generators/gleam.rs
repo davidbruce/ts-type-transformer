@@ -95,17 +95,12 @@ const KEYWORDS: &[&str] = &[
 
 // Types the bindings declare whatever the API: what a module of Gleam can
 // name of JavaScript's values. Not opaque types of the API.
-const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray", "Codec"];
-
-// The fixed values of every module of bindings.
-const OWN_VALUES: &[&str] = &[
-    "promise_then", "attempt", "js_error_message", "dynamic", "codec_float", "codec_string", "codec_bool", "codec_dynamic", "codec_option", "codec_list",
-];
+const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray", "Codec", "Ref"];
 
 // Types (and variants) and values are apart; a type's functions, constants,
 // upcasts and `to_list` are values named for it: `shape_area`.
 pub const NAMING: Naming = Naming {
-    reserved: || KEYWORDS.iter().chain(OWN).chain(OWN_VALUES).map(|k| k.to_string()).collect(),
+    reserved: || KEYWORDS.iter().chain(OWN).map(|k| k.to_string()).collect(),
     // An external `Promise` is Gleam's own; a class the API declares as
     // `Option` is not, and gives way.
     type_names: |candidate, _, kind, _| match kind {
@@ -133,7 +128,13 @@ pub const NAMING: Naming = Naming {
             out.extend(["get_at", "length"].map(String::from));
         }
         if c.js.is_some() {
-            out.extend(["from", "cast"].map(String::from));
+            let has = |target: &str| c.funcs.iter().any(|f| lower(&function_name(f, &f.name)) == target);
+            if parent(m, c).is_some() && !has("from") {
+                out.push("from".into());
+            }
+            if !has("cast") {
+                out.push("cast".into());
+            }
         }
         out.extend(secondary(m, c).iter().map(|a| lower(&format!("as_{}", snake(&upper(a))))));
         out
@@ -211,14 +212,25 @@ fn upper(name: &str) -> String {
     if out.starts_with(|c: char| c.is_ascii_uppercase()) { out } else { format!("X{out}") }
 }
 
+fn upper_variant(name: &str) -> String {
+    if name.contains('_') && name.chars().all(|c| !c.is_alphabetic() || c.is_uppercase()) {
+        let lowered = name.split('_').filter(|s| !s.is_empty()).map(str::to_lowercase).collect::<Vec<_>>().join("_");
+        upper(&lowered)
+    } else {
+        upper(name)
+    }
+}
+
 struct Gen<'m> {
     m: &'m Model,
     pkg: String,
     // Gleam's name of each type the model names, and of each union's or enum's variants.
     types: HashMap<String, String>,
     variants: HashMap<(String, usize), String>,
-    // Each callback, by the places of the type parameters it uses.
+    // Each callback, by the places of the type parameters it uses in Gleam, and those needing JS codecs.
     callbacks: HashMap<String, Vec<usize>>,
+    callback_codecs: HashMap<String, Vec<usize>>,
+    union_codecs: HashMap<String, Vec<usize>>,
     // Values given out, by module; and names no module's value may have.
     values: HashSet<(String, String)>,
     reserved_values: HashSet<String>,
@@ -235,14 +247,22 @@ struct Gen<'m> {
     // from, with the arguments it gives it.
     classes: HashMap<String, usize>,
     parents: HashMap<String, (String, Vec<Ty>)>,
+    // Class type parameters proven strictly class-bound across the entire model.
+    class_bound: HashMap<(String, usize), (String, Vec<Ty>)>,
     // Where a class's type is open, `Element(a)`, any subtype (a function's
     // parameters): the variables given out. None where it is closed,
     // `Element(Nil)`, that type and no more (what comes back, what a callback
     // is given, what a list or variant holds).
     open: RefCell<Option<usize>>,
-    // A function's own type parameters bound to a class (`T extends Node`):
+    // A function's own or class-bound type parameters bound to a class (`T extends Node`):
     // that class, open in the parameter's variable.
     bound: RefCell<HashMap<String, (String, Vec<Ty>)>>,
+    // Function type parameters constrained to concrete `$same` types (primitives or non-inherited opaque types).
+    fixed_params: RefCell<HashMap<String, Ty>>,
+    // Function type parameters constrained to `ArrayOf(Class)` (`U extends ContainerChild[]`).
+    bound_lists: RefCell<HashMap<String, (String, Vec<Ty>)>>,
+    // Recursion guard while expanding default type arguments in `class_type`.
+    expanding_defaults: RefCell<HashSet<String>>,
     skipped: BTreeMap<String, usize>,
 }
 
@@ -365,17 +385,39 @@ impl<'m> Gen<'m> {
         out
     }
 
-    // A class's type with its arguments (`Dynamic` for those not given) and
-    // its last, phantom one.
+    // A class's type with its arguments (using parameter defaults, or `Dynamic`
+    // when unavailable/cyclic) and its last, phantom one.
     fn class_type(&self, n: &str, args: &[Ty]) -> String {
         let count = self.classes[n];
-        let mut parts: Vec<String> = (0..count).map(|i| match args.get(i) {
-            Some(a) => self.closed(|| self.ty(a)),
-            None => {
-                self.note("Dynamic");
-                "Dynamic".to_string()
+        let cls = self.m.classes.iter().find(|c| c.name == n);
+        let mut parts: Vec<String> = Vec::with_capacity(count + 1);
+        let mut resolved: Vec<Ty> = Vec::with_capacity(count);
+        for i in 0..count {
+            if let Some(a) = args.get(i) {
+                resolved.push(a.clone());
+                parts.push(self.closed(|| self.ty(a)));
+                continue;
             }
-        }).collect();
+            if let Some(c) = cls
+                && let Some(tp) = c.type_params.get(i)
+                && let Some(def) = &tp.default
+                && !self.expanding_defaults.borrow().contains(n)
+            {
+                let def_sub = subst(def, &c.type_params[..i], &resolved);
+                let unresolved = c.type_params[i..].iter().any(|rem| mentions(&def_sub, &rem.name));
+                if !unresolved {
+                    self.expanding_defaults.borrow_mut().insert(n.to_string());
+                    let s = self.closed(|| self.ty(&def_sub));
+                    self.expanding_defaults.borrow_mut().remove(n);
+                    resolved.push(def_sub);
+                    parts.push(s);
+                    continue;
+                }
+            }
+            self.note("Dynamic");
+            resolved.push(Ty::Any);
+            parts.push("Dynamic".to_string());
+        }
         parts.push(self.phantom());
         format!("{}({})", self.gt(n), parts.join(", "))
     }
@@ -399,6 +441,19 @@ impl<'m> Gen<'m> {
             Ty::Generic(_, args) => args.iter().any(|a| self.shows(a, param)),
             _ => false,
         }
+    }
+
+    fn bound_class_ty(&self, class: &str, args: &[Ty], param: &str) -> String {
+        let tvar = Self::tvar(param);
+        let count = self.classes[class];
+        let mut parts: Vec<String> = (0..count)
+            .map(|i| match args.get(i) {
+                Some(a) if !matches!(a, Ty::Any) => self.closed(|| self.ty(a)),
+                _ => format!("{tvar}_a{i}"),
+            })
+            .collect();
+        parts.push(tvar);
+        format!("{}({})", self.gt(class), parts.join(", "))
     }
 
     // Gleam's type of a value.
@@ -429,16 +484,18 @@ impl<'m> Gen<'m> {
             }
             Ty::NamedUnion(n) if self.decodable(n) => self.bare(n),
             Ty::NamedUnion(_) => dynamic(),
-            Ty::Param(n) => match self.bound.borrow().get(n).cloned() {
-                Some((class, args)) => {
-                    let inner = self.closed(|| args.iter().map(|a| self.ty(a)).collect::<Vec<_>>());
-                    let mut parts = inner;
-                    parts.extend((parts.len()..self.classes[&class]).map(|_| "Dynamic".to_string()));
-                    parts.push(Self::tvar(n));
-                    format!("{}({})", self.gt(&class), parts.join(", "))
+            Ty::Param(n) => {
+                if let Some((class, args)) = self.bound.borrow().get(n).cloned() {
+                    return self.bound_class_ty(&class, &args, n);
                 }
-                None => Self::tvar(n),
-            },
+                if let Some(fixed_ty) = self.fixed_params.borrow().get(n).cloned() {
+                    return self.ty(&fixed_ty);
+                }
+                if let Some((class, args)) = self.bound_lists.borrow().get(n).cloned() {
+                    return format!("List({})", self.bound_class_ty(&class, &args, n));
+                }
+                Self::tvar(n)
+            }
             Ty::Generic(n, args) if self.classes.contains_key(n) => self.class_type(n, args),
             Ty::Generic(n, _) if self.m.unions.iter().any(|u| u.name == *n) && !self.decodable(n) => dynamic(),
             // A callback takes the type arguments it uses.
@@ -457,8 +514,10 @@ impl<'m> Gen<'m> {
     // A JavaScript expression that is `x`, JavaScript's value, as Gleam has it.
     fn to_gleam(&self, t: &Ty, x: &str) -> String {
         match t {
-            // A type parameter's values cross by the codec the function was given.
-            Ty::Param(n) if self.bound.borrow().contains_key(n) => x.to_string(),
+            // A type parameter's values cross by the codec the function was given,
+            // except when bound to a class, concrete `$same` type, or class list.
+            Ty::Param(n) if self.bound.borrow().contains_key(n) || self.fixed_params.borrow().contains_key(n) => x.to_string(),
+            Ty::Param(n) if self.bound_lists.borrow().contains_key(n) => format!("toList(Array.from({x} ?? []))"),
             Ty::Param(n) => format!("{}.to({x})", codec_var(n)),
             Ty::Void => format!("({x}, undefined)"),
             Ty::Nullable(inner, _) => format!("((v) => v == null ? new None() : new Some({}))({x})", self.to_gleam(inner, "v")),
@@ -479,10 +538,12 @@ impl<'m> Gen<'m> {
     // The codecs a generic union's or callback's conversions take, for the
     // type parameters they use: `, $same, $c_T`.
     fn codec_args(&self, n: &str, args: &[Ty]) -> String {
-        let used: Vec<usize> = match self.callbacks.get(n) {
-            Some(used) => used.clone(),
-            None => (0..args.len()).collect(),
-        };
+        let used: &[usize] = self
+            .callback_codecs
+            .get(n)
+            .or_else(|| self.union_codecs.get(n))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
         // Named without its arguments, it is of `Dynamic`: values as they are.
         used.iter().map(|&i| format!(", {}", args.get(i).map_or("$same".to_string(), |a| self.codec_expr(a)))).collect()
     }
@@ -490,7 +551,8 @@ impl<'m> Gen<'m> {
     // A JavaScript codec for values of `t`: how they cross each way.
     fn codec_expr(&self, t: &Ty) -> String {
         match t {
-            Ty::Param(n) if self.bound.borrow().contains_key(n) => "$same".into(),
+            Ty::Param(n) if self.bound.borrow().contains_key(n) || self.fixed_params.borrow().contains_key(n) => "$same".into(),
+            Ty::Param(n) if self.bound_lists.borrow().contains_key(n) => "{ to: (v) => toList(Array.from(v ?? [])), from: (v) => v.toArray() }".into(),
             Ty::Param(n) => codec_var(n),
             t if self.to_gleam(t, "v") == "v" && self.from_gleam(t, "v") == "v" => "$same".into(),
             t => format!("{{ to: (v) => {}, from: (v) => {} }}", self.to_gleam(t, "v"), self.from_gleam(t, "v")),
@@ -501,14 +563,16 @@ impl<'m> Gen<'m> {
     // option, list, tuple or promise, through a callback or a union. Not
     // inside a handle (`Box(t)`), which crosses as it is.
     fn crosses(&self, t: &Ty, p: &str) -> bool {
-        if self.bound.borrow().contains_key(p) {
+        if self.bound.borrow().contains_key(p) || self.fixed_params.borrow().contains_key(p) || self.bound_lists.borrow().contains_key(p) {
             return false;
         }
         match t {
             Ty::Param(n) => n == p,
-            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => self.crosses(inner, p),
-            Ty::Tuple(es) | Ty::Union(es) => es.iter().any(|e| self.crosses(e, p)),
-            Ty::Generic(n, args) if self.is_callback(n) || self.decodable(n) || n == "Promise" || n == "PromiseLike" => args.iter().any(|a| mentions(a, p)),
+            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) => self.crosses(inner, p),
+            Ty::Tuple(es) => es.iter().any(|e| self.crosses(e, p)),
+            Ty::Generic(n, args) if n == "Promise" || n == "PromiseLike" => args.first().is_some_and(|a| self.crosses(a, p)),
+            Ty::Generic(n, args) if self.is_callback(n) => self.callback_codecs.get(n).is_some_and(|used| used.iter().filter_map(|&i| args.get(i)).any(|a| self.crosses(a, p))),
+            Ty::Generic(n, args) if self.decodable(n) => self.union_codecs.get(n).is_some_and(|used| used.iter().filter_map(|&i| args.get(i)).any(|a| self.crosses(a, p))),
             _ => false,
         }
     }
@@ -517,7 +581,8 @@ impl<'m> Gen<'m> {
     #[allow(clippy::wrong_self_convention)]
     fn from_gleam(&self, t: &Ty, x: &str) -> String {
         match t {
-            Ty::Param(n) if self.bound.borrow().contains_key(n) => x.to_string(),
+            Ty::Param(n) if self.bound.borrow().contains_key(n) || self.fixed_params.borrow().contains_key(n) => x.to_string(),
+            Ty::Param(n) if self.bound_lists.borrow().contains_key(n) => format!("{x}.toArray()"),
             Ty::Param(n) => format!("{}.from({x})", codec_var(n)),
             Ty::Nullable(inner, undefined) => format!("((v) => v instanceof Some ? {} : {})({x})", self.from_gleam(inner, "v[0]"), if *undefined { "undefined" } else { "null" }),
             Ty::Array => format!("{x}.toArray()"),
@@ -538,19 +603,93 @@ impl<'m> Gen<'m> {
         if params.is_empty() { String::new() } else { format!("({})", params.iter().map(|p| Self::tvar(&p.name)).collect::<Vec<_>>().join(", ")) }
     }
 
+    fn is_fixed_opaque(&self, o: &str) -> bool {
+        !self.classes.contains_key(o)
+            && self.m.opaque.iter().any(|x| x == o)
+            && !OWN.contains(&o)
+            && o != "PromiseLike"
+            && self.m.opaque_arity.get(o).copied().unwrap_or(0) == 0
+    }
+
+    fn clear_fn_bounds(&self) {
+        self.bound.borrow_mut().clear();
+        self.fixed_params.borrow_mut().clear();
+        self.bound_lists.borrow_mut().clear();
+    }
+
+    fn setup_fn_bounds(&self, f: &Func, owner: Option<(&str, &[TParam])>) {
+        self.clear_fn_bounds();
+        let has_self = Class::has_self(f);
+        let class_param_names: HashSet<&str> = owner.map_or_else(HashSet::new, |(_, tps)| tps.iter().map(|p| p.name.as_str()).collect());
+        if let Some((owner_name, class_params)) = owner {
+            for (i, cp) in class_params.iter().enumerate() {
+                if !f.type_params.iter().any(|fp| fp.name == cp.name)
+                    && let Some(binding) = self.class_bound.get(&(owner_name.to_string(), i))
+                {
+                    self.bound.borrow_mut().insert(cp.name.clone(), binding.clone());
+                }
+            }
+        }
+        for p in &f.type_params {
+            if has_self && class_param_names.contains(p.name.as_str()) {
+                continue;
+            }
+            match &p.constraint {
+                Some(Ty::Obj(c)) if self.classes.contains_key(c) => {
+                    self.bound.borrow_mut().insert(p.name.clone(), (c.clone(), Vec::new()));
+                }
+                Some(Ty::Generic(c, args)) if self.classes.contains_key(c) => {
+                    self.bound.borrow_mut().insert(p.name.clone(), (c.clone(), args.clone()));
+                }
+                Some(Ty::Str) => {
+                    self.fixed_params.borrow_mut().insert(p.name.clone(), Ty::Str);
+                }
+                Some(Ty::Num) => {
+                    self.fixed_params.borrow_mut().insert(p.name.clone(), Ty::Num);
+                }
+                Some(Ty::Bool) => {
+                    self.fixed_params.borrow_mut().insert(p.name.clone(), Ty::Bool);
+                }
+                Some(Ty::Obj(o)) if self.is_fixed_opaque(o) => {
+                    self.fixed_params.borrow_mut().insert(p.name.clone(), Ty::Obj(o.clone()));
+                }
+                Some(Ty::ArrayOf(inner)) => {
+                    let elem = match &**inner {
+                        Ty::Obj(c) if self.classes.contains_key(c) => Some((c.clone(), Vec::new())),
+                        Ty::Generic(c, args) if self.classes.contains_key(c) => Some((c.clone(), args.clone())),
+                        Ty::Param(cp_name) => owner.and_then(|(_, tps)| {
+                            tps.iter().find(|tp| tp.name == *cp_name).and_then(|tp| match &tp.constraint {
+                                Some(Ty::Obj(c)) if self.classes.contains_key(c) => Some((c.clone(), Vec::new())),
+                                Some(Ty::Generic(c, args)) if self.classes.contains_key(c) => Some((c.clone(), args.clone())),
+                                _ => None,
+                            })
+                        }),
+                        _ => None,
+                    };
+                    if let Some(binding) = elem {
+                        self.bound_lists.borrow_mut().insert(p.name.clone(), binding);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn crossing_params(&self, f: &Func, owner: Option<(&str, &[TParam])>) -> Vec<TParam> {
+        let class_params: &[TParam] = owner.map_or(&[], |o| o.1);
+        let mut seen = HashSet::new();
+        let mut out = Vec::new();
+        for p in class_params.iter().chain(&f.type_params).filter(|p| seen.insert(p.name.clone())) {
+            if f.params.iter().map(|x| &x.1).chain([&f.ret]).any(|t| self.crosses(t, &p.name)) {
+                out.push(p.clone());
+            }
+        }
+        out
+    }
+
     // One external function, `name`, and its JavaScript.
     fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) {
-        // Its own type parameters bound to a class are that class's type, open
-        // in the parameter: `append_child(self: Node(a), node: Node(t)) -> Node(t)`.
-        *self.bound.borrow_mut() = f
-            .type_params
-            .iter()
-            .filter_map(|p| match &p.constraint {
-                Some(Ty::Obj(c)) if self.classes.contains_key(c) => Some((p.name.clone(), (c.clone(), Vec::new()))),
-                Some(Ty::Generic(c, args)) if self.classes.contains_key(c) => Some((p.name.clone(), (c.clone(), args.clone()))),
-                _ => None,
-            })
-            .collect();
+        self.setup_fn_bounds(f, owner);
         let mut params = Vec::new();
         let mut js_params = Vec::new();
         // A class's type is open in the parameters: any subtype.
@@ -577,14 +716,10 @@ impl<'m> Gen<'m> {
         }
         // A codec for each type parameter whose values cross: the class's, then the function's own.
         *self.open.borrow_mut() = None;
-        let class_params: &[TParam] = owner.map_or(&[], |o| o.1);
-        let mut seen = HashSet::new();
-        for p in class_params.iter().chain(&f.type_params).filter(|p| seen.insert(p.name.clone())) {
-            if f.params.iter().map(|x| &x.1).chain([&f.ret]).any(|t| self.crosses(t, &p.name)) {
-                self.note("Codec");
-                params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
-                js_params.push(codec_var(&p.name));
-            }
+        for p in self.crossing_params(f, owner) {
+            self.note("Codec");
+            params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
+            js_params.push(codec_var(&p.name));
         }
         for (position, literal) in &f.fixed {
             args.insert((*position).min(args.len()), literal.clone());
@@ -618,7 +753,7 @@ impl<'m> Gen<'m> {
         let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
         self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
         self.ffi += &format!("export function {js}({}) {{\n  {body}\n}}\n", js_params.join(", "));
-        self.bound.borrow_mut().clear();
+        self.clear_fn_bounds();
     }
 
     // A union as a custom type, and its conversions: told apart by its tests.
@@ -638,8 +773,139 @@ impl<'m> Gen<'m> {
         }
         to += &fallback.unwrap_or_else(|| format!("  throw new TypeError(\"not a {name}: \" + v);\n"));
         let from: String = u.parts.iter().zip(&variants).map(|(p, v)| format!("  if (u instanceof B.{v}) return {};\n", self.from_gleam(p, "u[0]"))).collect();
-        let codecs: String = u.type_params.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
+        let codecs: String = self.union_codecs[&u.name].iter().map(|&i| format!(", {}", codec_var(&u.type_params[i].name))).collect();
         self.ffi += &format!("export function {name}_to(v{codecs}) {{\n{to}}}\nexport function {name}_from(u{codecs}) {{\n{from}}}\n");
+    }
+
+    fn emit_specializations(&mut self, c: &'m Class) {
+        let mut chain = Vec::new();
+        let mut at = c.name.clone();
+        while let Some((p, _)) = self.parents.get(&at) {
+            chain.push(p.clone());
+            at = p.clone();
+        }
+        let mut planned = HashSet::new();
+        let mut specs: Vec<(String, Func)> = Vec::new();
+        for anc_name in chain {
+            let Some(anc) = self.m.classes.iter().find(|k| k.name == anc_name) else { continue };
+            if anc.type_params.is_empty() {
+                continue;
+            }
+            let Some(sub_args) = base_args(self.m, c, &anc.name) else { continue };
+            for f in anc.funcs.iter().filter(|f| Class::has_self(f)) {
+                let f_anc = with_self_args(f, anc);
+                let id = lower(&function_name(&f_anc, &f_anc.name));
+                if self.reserved_values.contains(&id) || self.values.contains(&(self.unit.clone(), id.clone())) || planned.contains(&id) {
+                    continue;
+                }
+                if f_anc.type_params.iter().any(|ftp| c.type_params.iter().any(|ctp| ctp.name == ftp.name)) {
+                    continue;
+                }
+                self.setup_fn_bounds(&f_anc, Some((&anc.name, &anc.type_params)));
+                let orig_codecs = self.crossing_params(&f_anc, Some((&anc.name, &anc.type_params))).len();
+                self.clear_fn_bounds();
+                let spec_f = map_types(&f_anc, &|t| subst(t, &anc.type_params, &sub_args));
+                self.setup_fn_bounds(&spec_f, Some((&c.name, &c.type_params)));
+                let spec_codecs = self.crossing_params(&spec_f, Some((&c.name, &c.type_params))).len();
+                self.clear_fn_bounds();
+                if spec_codecs < orig_codecs {
+                    planned.insert(id.clone());
+                    specs.push((id, spec_f));
+                }
+            }
+        }
+        for (id, spec_f) in specs {
+            let id = self.value_name(&id);
+            self.function(&id, &spec_f, Some((&c.name, &c.type_params)));
+        }
+    }
+
+    fn emit_with_builders(&mut self, c: &'m Class) {
+        if !c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) {
+            return;
+        }
+        for orig_f in &c.funcs {
+            if !Class::has_self(orig_f) {
+                continue;
+            }
+            let f = with_self_args(orig_f, c);
+            match &f.call {
+                Call::Set(js) if f.params.len() == 1 => {
+                    let fname = lower(&function_name(&f, &f.name));
+                    let Some(rest) = fname.strip_prefix("set_") else { continue };
+                    let with_id = lower(&format!("with_{rest}"));
+                    if self.reserved_values.contains(&with_id) || self.values.contains(&(self.unit.clone(), with_id.clone())) {
+                        continue;
+                    }
+                    let val_ty = match &f.params[0].1 {
+                        Ty::Nullable(inner, _) => (**inner).clone(),
+                        t => t.clone(),
+                    };
+                    let mut wf = f.clone();
+                    wf.params = vec![(f.params[0].0.clone(), val_ty.clone())];
+                    wf.ret = Ty::Void;
+                    self.setup_fn_bounds(&wf, Some((&c.name, &c.type_params)));
+                    *self.open.borrow_mut() = Some(0);
+                    let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
+                    let self_ty = self.class_type(&c.name, &own);
+                    let mut val_param = lower(&wf.params[0].0);
+                    while JS_RESERVED.contains(&val_param.as_str()) || val_param == "self" {
+                        val_param.push('_');
+                    }
+                    let val_ty_str = self.ty(&val_ty);
+                    let val_js = self.from_gleam(&val_ty, &val_param);
+                    *self.open.borrow_mut() = None;
+                    let mut params = vec![format!("self: {self_ty}"), format!("{val_param}: {val_ty_str}")];
+                    let mut js_params = vec!["self".to_string(), val_param.clone()];
+                    for p in self.crossing_params(&wf, Some((&c.name, &c.type_params))) {
+                        self.note("Codec");
+                        params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
+                        js_params.push(codec_var(&p.name));
+                    }
+                    let js_fn = if JS_RESERVED.contains(&with_id.as_str()) { format!("{with_id}_") } else { with_id.clone() };
+                    let with_id = self.value_name(&with_id);
+                    self.out += &format!("@external(javascript, \"{}\", \"{js_fn}\")\npub fn {with_id}({}) -> {self_ty}\n\n", self.own_ffi(), params.join(", "));
+                    self.ffi += &format!("export function {js_fn}({}) {{\n  self{} = {val_js};\n  return self;\n}}\n", js_params.join(", "), access(js));
+                    self.clear_fn_bounds();
+                }
+                Call::IndexSet if f.params.len() == 2 => {
+                    let with_id = "with_at".to_string();
+                    if self.reserved_values.contains(&with_id) || self.values.contains(&(self.unit.clone(), with_id.clone())) {
+                        continue;
+                    }
+                    let mut wf = f.clone();
+                    wf.ret = Ty::Void;
+                    self.setup_fn_bounds(&wf, Some((&c.name, &c.type_params)));
+                    *self.open.borrow_mut() = Some(0);
+                    let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
+                    let self_ty = self.class_type(&c.name, &own);
+                    let mut taken: HashSet<String> = HashSet::from(["self".to_string()]);
+                    let mut params = vec![format!("self: {self_ty}")];
+                    let mut js_params = vec!["self".to_string()];
+                    let mut arg_js = Vec::new();
+                    for (p, t) in &wf.params {
+                        let mut pid = lower(p);
+                        while JS_RESERVED.contains(&pid.as_str()) || !taken.insert(pid.clone()) {
+                            pid.push('_');
+                        }
+                        params.push(format!("{pid}: {}", self.ty(t)));
+                        js_params.push(pid.clone());
+                        arg_js.push(self.from_gleam(t, &pid));
+                    }
+                    *self.open.borrow_mut() = None;
+                    for p in self.crossing_params(&wf, Some((&c.name, &c.type_params))) {
+                        self.note("Codec");
+                        params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
+                        js_params.push(codec_var(&p.name));
+                    }
+                    let with_id = self.value_name(&with_id);
+                    self.out += &format!("@external(javascript, \"{}\", \"{with_id}\")\npub fn {with_id}({}) -> {self_ty}\n\n", self.own_ffi(), params.join(", "));
+                    self.ffi += &format!("export function {with_id}({}) {{\n  self[{}] = {};\n  return self;\n}}\n", js_params.join(", "), arg_js[0], arg_js[1]);
+                    self.clear_fn_bounds();
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -656,6 +922,10 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     let root_import = doc.root_element().attribute("import").map(str::to_string);
     let mut m = model(xml, "Gleam")?;
     take_secondary(&mut m);
+    // Give explicit methods priority over synthesized property setters when names collide.
+    for c in &mut m.classes {
+        c.funcs.sort_by_key(|f| matches!(f.call, Call::Set(_) | Call::StaticSet(_)));
+    }
     super::names::settle(&mut m, &NAMING);
     break_cycles(&mut m);
     let mut g = Gen {
@@ -664,6 +934,8 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         types: HashMap::new(),
         variants: HashMap::new(),
         callbacks: HashMap::new(),
+        callback_codecs: HashMap::new(),
+        union_codecs: HashMap::new(),
         values: HashSet::new(),
         reserved_values: HashSet::new(),
         unit: runtime_mod.clone(),
@@ -674,8 +946,12 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         home: HashMap::new(),
         classes: m.classes.iter().map(|c| (c.name.clone(), c.type_params.len())).collect(),
         parents: m.classes.iter().filter_map(|c| parent(&m, c).map(|p| (c.name.clone(), p))).collect(),
+        class_bound: HashMap::new(),
         open: RefCell::new(None),
         bound: RefCell::default(),
+        fixed_params: RefCell::default(),
+        bound_lists: RefCell::default(),
+        expanding_defaults: RefCell::default(),
         skipped: m.skipped.clone(),
     };
 
@@ -745,7 +1021,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     }
     for (e, members) in &m.num_enums {
         for (i, (member, _)) in members.iter().enumerate() {
-            variant_names.push((e.clone(), i, format!("{}{}", g.tname(e), upper(member))));
+            variant_names.push((e.clone(), i, format!("{}{}", g.tname(e), upper_variant(member))));
         }
     }
     for (owner, i, base) in variant_names {
@@ -759,7 +1035,21 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     }
     // What the FFI's own helpers are called in the runtime module.
     for reserved in [
-        "promise_then", "attempt", "js_error_message", "dynamic", "js_object", "js_get", "js_set", "js_has", "js_array", "js_to_list",
+        "promise_then",
+        "promise_try",
+        "attempt",
+        "js_error_message",
+        "dynamic",
+        "ref_new",
+        "ref_get",
+        "ref_set",
+        "ref_update",
+        "js_object",
+        "js_get",
+        "js_set",
+        "js_has",
+        "js_array",
+        "js_to_list",
     ] {
         g.values.insert((runtime_mod.clone(), reserved.into()));
     }
@@ -785,6 +1075,40 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
                     break;
                 }
             }
+        }
+    }
+    g.class_bound = compute_class_bound(&m, &g.classes, &g.parents);
+    // Compute exact crossing codec indices for callbacks and decodable unions.
+    for c in &m.callbacks {
+        g.callback_codecs.insert(c.name.clone(), Vec::new());
+    }
+    for u in m.unions.iter().filter(|u| u.decodable()) {
+        g.union_codecs.insert(u.name.clone(), Vec::new());
+    }
+    loop {
+        let mut changed = false;
+        for c in &m.callbacks {
+            let used: Vec<usize> = g.callbacks[&c.name]
+                .iter()
+                .copied()
+                .filter(|&i| c.params.iter().map(|x| &x.1).chain([&c.ret]).any(|t| g.crosses(t, &c.type_params[i].name)))
+                .collect();
+            if used != g.callback_codecs[&c.name] {
+                g.callback_codecs.insert(c.name.clone(), used);
+                changed = true;
+            }
+        }
+        for u in m.unions.iter().filter(|u| u.decodable()) {
+            let used: Vec<usize> = (0..u.type_params.len())
+                .filter(|&i| u.parts.iter().any(|p| g.crosses(p, &u.type_params[i].name)))
+                .collect();
+            if used != g.union_codecs[&u.name] {
+                g.union_codecs.insert(u.name.clone(), used);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
         }
     }
     let mut paths: HashMap<String, String> = HashMap::new();
@@ -839,6 +1163,21 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     g.out += "/// A JavaScript promise: `promise_then` gives its result to a function.\npub type Promise(a)\n\n\
               /// A JavaScript exception, or the reason a promise was rejected.\npub type JsError\n\n\
               @external(javascript, \"./runtime_ffi.mjs\", \"promise_then\")\npub fn promise_then(promise: Promise(a), then: fn(Result(a, JsError)) -> Nil) -> Nil\n\n\
+              /// Awaits `promise`, passing `Ok` values to `then` or `Error` to `on_error`.\n\
+              pub fn promise_try(promise: Promise(a), on_error: fn(JsError) -> Nil, then: fn(a) -> Nil) -> Nil {\n\
+                promise_then(promise, fn(res) {\n\
+                  case res {\n\
+                    Ok(v) -> then(v)\n\
+                    Error(e) -> on_error(e)\n\
+                  }\n\
+                })\n\
+              }\n\n\
+              /// A mutable JavaScript reference cell for stateful callbacks and animation loops.\n\
+              pub type Ref(a)\n\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"ref_new\")\npub fn ref_new(value: a) -> Ref(a)\n\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"ref_get\")\npub fn ref_get(cell: Ref(a)) -> a\n\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"ref_set\")\npub fn ref_set(cell: Ref(a), value: a) -> Nil\n\n\
+              @external(javascript, \"./runtime_ffi.mjs\", \"ref_update\")\npub fn ref_update(cell: Ref(a), f: fn(a) -> a) -> a\n\n\
               /// Runs `f`, and gives what it returned, or the exception it threw.\n\
               @external(javascript, \"./runtime_ffi.mjs\", \"attempt\")\npub fn attempt(f: fn() -> a) -> Result(a, JsError)\n\n\
               @external(javascript, \"./runtime_ffi.mjs\", \"js_error_message\")\npub fn js_error_message(error: JsError) -> String\n\n\
@@ -889,6 +1228,10 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
          // Where the API's names are: its module, or globals; with several packages, each one's.\n\
          export const PK = {{ {} }};\nexport const G = {};\n\n\
          export function promise_then(p, f) {{\n  Promise.resolve(p).then((v) => f(new Ok(v)), (e) => f(new GleamError(e)));\n}}\n\
+         export function ref_new(v) {{\n  return {{ v }};\n}}\n\
+         export function ref_get(c) {{\n  return c.v;\n}}\n\
+         export function ref_set(c, v) {{\n  c.v = v;\n}}\n\
+         export function ref_update(c, f) {{\n  c.v = f(c.v);\n  return c.v;\n}}\n\
          export function attempt(f) {{\n  try {{\n    return new Ok(f());\n  }} catch (e) {{\n    return new GleamError(e);\n  }}\n}}\n\
          export function js_error_message(e) {{\n  return String(e instanceof Error ? e.message : e?.message ?? e);\n}}\n\
          export function dynamic(v) {{\n  return v;\n}}\n\
@@ -955,7 +1298,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         let names: Vec<String> = (0..c.params.len()).map(|i| format!("a{i}")).collect();
         let into_gleam: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| g.to_gleam(t, a)).collect();
         let mut into_js: Vec<String> = c.params.iter().zip(&names).map(|((_, t), a)| g.from_gleam(t, a)).collect();
-        let codecs: String = used.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
+        let codecs: String = g.callback_codecs[&c.name].iter().map(|&i| format!(", {}", codec_var(&c.type_params[i].name))).collect();
         // The rest of the arguments: gathered into a list, and spread back.
         let mut gathered = names.clone();
         if c.rest {
@@ -980,14 +1323,34 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     }
     // Each type's codec, beside it. A handle crosses as it is; an enum, a
     // union or a callback converts, a generic one by its type parameters' codecs.
-    let mut codecs: Vec<(String, Vec<TParam>, bool, String)> = Vec::new();
-    codecs.extend(m.enums.iter().map(|e| (e.0.clone(), Vec::new(), true, types_mod.clone())));
-    codecs.extend(m.num_enums.iter().map(|e| (e.0.clone(), Vec::new(), true, types_mod.clone())));
-    codecs.extend(m.unions.iter().filter(|u| u.decodable()).map(|u| (u.name.clone(), u.type_params.clone(), true, types_mod.clone())));
-    codecs.extend(m.callbacks.iter().map(|c| (c.name.clone(), g.callbacks[&c.name].iter().map(|&i| c.type_params[i].clone()).collect(), true, types_mod.clone())));
+    struct CodecSpec {
+        name: String,
+        return_vars: Vec<TParam>,
+        param_vars: Vec<TParam>,
+        converts: bool,
+        unit: String,
+    }
+    let mut codecs: Vec<CodecSpec> = Vec::new();
+    codecs.extend(m.enums.iter().map(|e| CodecSpec { name: e.0.clone(), return_vars: Vec::new(), param_vars: Vec::new(), converts: true, unit: types_mod.clone() }));
+    codecs.extend(m.num_enums.iter().map(|e| CodecSpec { name: e.0.clone(), return_vars: Vec::new(), param_vars: Vec::new(), converts: true, unit: types_mod.clone() }));
+    codecs.extend(m.unions.iter().filter(|u| u.decodable()).map(|u| CodecSpec {
+        name: u.name.clone(),
+        return_vars: u.type_params.clone(),
+        param_vars: g.union_codecs[&u.name].iter().map(|&i| u.type_params[i].clone()).collect(),
+        converts: true,
+        unit: types_mod.clone(),
+    }));
+    codecs.extend(m.callbacks.iter().map(|c| CodecSpec {
+        name: c.name.clone(),
+        return_vars: g.callbacks[&c.name].iter().map(|&i| c.type_params[i].clone()).collect(),
+        param_vars: g.callback_codecs[&c.name].iter().map(|&i| c.type_params[i].clone()).collect(),
+        converts: true,
+        unit: types_mod.clone(),
+    }));
     for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike" && !resolved_opaque.contains_key(*o)) {
         let arity = m.opaque_arity.get(o).copied().unwrap_or(0);
-        codecs.push((o.clone(), (1..=arity).map(|i| TParam { name: format!("t{i}"), default: None, constraint: None }).collect(), false, types_mod.clone()));
+        let rvars = (1..=arity).map(|i| TParam { name: format!("t{i}"), default: None, constraint: None }).collect();
+        codecs.push(CodecSpec { name: o.clone(), return_vars: rvars, param_vars: Vec::new(), converts: false, unit: types_mod.clone() });
     }
     // Classes. A class with no class for a base is an opaque type, its last
     // parameter a phantom: `Node(a)`. One with a base is its base's type,
@@ -1027,20 +1390,20 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         }
         let mut params = c.type_params.clone();
         params.push(TParam { name: PHANTOM.into(), default: None, constraint: None });
-        codecs.push((c.name.clone(), params, false, types_mod.clone()));
+        codecs.push(CodecSpec { name: c.name.clone(), return_vars: params, param_vars: Vec::new(), converts: false, unit: types_mod.clone() });
     }
-    for (n, params, converts, unit) in codecs {
+    for CodecSpec { name: n, return_vars, param_vars, converts, unit } in codecs {
         g.switch(&unit);
         let name = g.tname(&n);
         let id = g.value_name(&format!("{}_codec", snake(&name)));
-        let vars = Gen::type_params(&params);
+        let vars = Gen::type_params(&return_vars);
         g.note("Codec");
         if !converts {
             g.out += &format!("@external(javascript, \"{}\", \"codec_same\")\npub fn {id}() -> Codec({name}{vars})\n\n", g.runtime_ffi());
             continue;
         }
-        let gleam_params: Vec<String> = params.iter().map(|p| format!("{}_codec: Codec({})", lower(&p.name), Gen::tvar(&p.name))).collect();
-        let js: String = params.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
+        let gleam_params: Vec<String> = param_vars.iter().map(|p| format!("{}_codec: Codec({})", lower(&p.name), Gen::tvar(&p.name))).collect();
+        let js: String = param_vars.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
         g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}({}) -> Codec({name}{vars})\n\n", g.own_ffi(), gleam_params.join(", "));
         g.ffi += &format!(
             "export function {id}({}) {{\n  return {{ to: (v) => {name}_to(v{js}), from: (u) => {name}_from(u{js}) }};\n}}\n",
@@ -1079,9 +1442,19 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
             let id = g.value_name(&function_name(&f, &f.name));
             g.function(&id, &f, Some((&c.name, &c.type_params)));
         }
+        // Populate class_bound for synthesized to_list / get_at helpers.
+        let populate_class_bound = |g: &Gen| {
+            g.clear_fn_bounds();
+            for (i, cp) in c.type_params.iter().enumerate() {
+                if let Some(binding) = g.class_bound.get(&(c.name.clone(), i)) {
+                    g.bound.borrow_mut().insert(cp.name.clone(), binding.clone());
+                }
+            }
+        };
         // What it iterates, or holds as a subclass of Array: a list.
         if let Some(elem) = c.iterates.as_ref().or(c.elements.as_ref()) {
             let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            populate_class_bound(&g);
             let id = g.value_name("to_list");
             let elem_ty = g.ty(&elem);
             let this = open(&g);
@@ -1096,16 +1469,18 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
             }
             g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}({}) -> List({elem_ty})\n\n", g.own_ffi(), params.join(", "));
             g.ffi += &format!("export function {id}({}) {{\n  return toList(Array.from(self, (v) => {}));\n}}\n", js_params.join(", "), g.to_gleam(&elem, "v"));
+            g.clear_fn_bounds();
         }
         // A subclass of Array has no class to inherit Array's members from:
         // its elements by index, and how many.
         if let Some(elem) = c.elements.as_ref() {
             let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            populate_class_bound(&g);
             let elem_ty = g.ty(&elem);
             g.note("Option");
             let (at, length) = (g.value_name("get_at"), g.value_name("length"));
             let this = open(&g);
-            let mut at_params = vec![format!("self: {this}"), "index: Float".to_string()];
+            let mut at_params = vec![format!("self: {this}"), "index: Int".to_string()];
             let mut at_js_params = vec!["self".to_string(), "i".to_string()];
             for p in &c.type_params {
                 if g.crosses(&elem, &p.name) {
@@ -1116,12 +1491,13 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
             }
             g.out += &format!("@external(javascript, \"{}\", \"{at}\")\npub fn {at}({}) -> Option({elem_ty})\n\n", g.own_ffi(), at_params.join(", "));
             let this = open(&g);
-            g.out += &format!("@external(javascript, \"{}\", \"{length}\")\npub fn {length}(self: {this}) -> Float\n\n", g.own_ffi());
+            g.out += &format!("@external(javascript, \"{}\", \"{length}\")\npub fn {length}(self: {this}) -> Int\n\n", g.own_ffi());
             g.ffi += &format!(
                 "export function {at}({}) {{\n  const v = self[i];\n  return v === undefined ? new None() : new Some({});\n}}\nexport function {length}(self) {{\n  return self.length;\n}}\n",
                 at_js_params.join(", "),
                 g.to_gleam(&elem, "v")
             );
+            g.clear_fn_bounds();
         }
         if c.iterates_async.is_some() {
             g.skip("async iteration");
@@ -1187,18 +1563,31 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
             let target = g.class_type(&c.name, &[]);
             let root = chain_root(&g, &c.name);
             if root != c.name {
-                let id = g.value_name("from");
+                let id = if g.values.contains(&(g.unit.clone(), "from".into())) {
+                    g.fresh_value("from_base")
+                } else {
+                    g.value_name("from")
+                };
                 *g.open.borrow_mut() = Some(0);
-                let from = g.class_type(&root, &[]);
+                let root_args: Vec<Ty> = (0..g.classes[&root]).map(|i| Ty::Param(format!("r_{i}"))).collect();
+                let from = g.class_type(&root, &root_args);
                 *g.open.borrow_mut() = None;
                 g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(value: {from}) -> Result({target}, Nil)\n\n", g.own_ffi());
                 g.ffi += &format!("export function {id}(v) {{\n  return {test} ? new Ok(v) : new GleamError(undefined);\n}}\n");
             }
-            let id = g.value_name("cast");
+            let id = if g.values.contains(&(g.unit.clone(), "cast".into())) {
+                g.fresh_value("cast_dynamic")
+            } else {
+                g.value_name("cast")
+            };
             g.note("Dynamic");
             g.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(value: Dynamic) -> Result({target}, Nil)\n\n", g.own_ffi());
             g.ffi += &format!("export function {id}(v) {{\n  return {test} ? new Ok(v) : new GleamError(undefined);\n}}\n");
         }
+        // Specialized primary-ancestor methods where substituting concrete generic args eliminates codecs.
+        g.emit_specializations(c);
+        // Fluent `with_<prop>` / `with_at` builders for option bags (`Call::Create`).
+        g.emit_with_builders(c);
     }
     for f in &m.funcs {
         match m.func_namespaces.get(&f.import) {
@@ -1345,7 +1734,7 @@ const JS_RESERVED: &[&str] = &[
 ];
 
 // The modules every library's bindings have.
-const OWN_RUNTIME: &[&str] = &["Promise", "JsError", "Codec"];
+const OWN_RUNTIME: &[&str] = &["Promise", "JsError", "Codec", "Ref"];
 
 // A class type's phantom parameter, where it is declared.
 const PHANTOM: &str = "sub";
@@ -1438,14 +1827,23 @@ fn relative(from: &str, to: &str) -> String {
 }
 
 // A function's name, as the model has it; a `$` method (`$add`, which
-// returns a new value where `add` changes this one) is `add_new`.
+// returns a new value where `add` changes this one) is `add_new`, while a `$`
+// property accessor (`$from`) is `get_dollar_from` / `set_dollar_from`.
 fn function_name(f: &Func, name: &str) -> String {
     let dollar = match &f.call {
-        Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => js.rsplit('.').next().is_some_and(|n| n.starts_with('$')),
+        Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::GetBound(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => js.rsplit('.').next().is_some_and(|n| n.starts_with('$')),
         _ => false,
     };
     if !dollar {
         return name.to_string();
+    }
+    let is_prop = matches!(&f.call, Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::StaticGet(_) | Call::StaticSet(_));
+    let is_set = matches!(&f.call, Call::Set(_) | Call::StaticSet(_));
+    if is_prop {
+        let stripped = if is_set { name.strip_prefix("set_") } else { name.strip_prefix("get_") }.unwrap_or(name);
+        let stem = stripped.trim_start_matches('_');
+        let prefix = if is_set { "set_dollar" } else { "get_dollar" };
+        return if stem.is_empty() { prefix.to_string() } else { format!("{prefix}_{stem}") };
     }
     let stem = name.trim_start_matches('_');
     match stem.strip_prefix("set_") {
@@ -1533,6 +1931,215 @@ fn mentions(t: &Ty, p: &str) -> bool {
         Ty::Tuple(es) | Ty::Union(es) | Ty::Generic(_, es) => es.iter().any(|e| mentions(e, p)),
         _ => false,
     }
+}
+
+// Whether `t` names any type parameter in `params`.
+fn mentions_any(t: &Ty, params: &[TParam]) -> bool {
+    params.iter().any(|p| mentions(t, &p.name))
+}
+
+fn is_chain_subtype(parents: &HashMap<String, (String, Vec<Ty>)>, sub: &str, base: &str) -> bool {
+    let mut at = sub;
+    loop {
+        if at == base {
+            return true;
+        }
+        let Some((p, _)) = parents.get(at) else { return false };
+        at = p;
+    }
+}
+
+fn effective_base_args(m: &Model, ty: &Ty, base: &str) -> Option<Vec<Ty>> {
+    let (name, args) = match ty {
+        Ty::Obj(n) => (n.as_str(), Vec::new()),
+        Ty::Generic(n, args) => (n.as_str(), args.clone()),
+        _ => return None,
+    };
+    if name == base {
+        return Some(args);
+    }
+    let cls = m.classes.iter().find(|c| c.name == name)?;
+    let bargs = base_args(m, cls, base)?;
+    Some(bargs.into_iter().map(|a| subst(&a, &cls.type_params, &args)).collect())
+}
+
+fn arg_satisfies(
+    m: &Model,
+    classes: &HashMap<String, usize>,
+    parents: &HashMap<String, (String, Vec<Ty>)>,
+    arg: &Ty,
+    base: &str,
+    cargs: &[Ty],
+    scope_tparams: &[TParam],
+) -> bool {
+    let concrete_check = |candidate: &Ty| -> bool {
+        if cargs.is_empty() {
+            return true;
+        }
+        let Some(eff) = effective_base_args(m, candidate, base) else { return false };
+        cargs.iter().enumerate().all(|(k, ca)| matches!(ca, Ty::Any) || eff.get(k) == Some(ca))
+    };
+    match arg {
+        Ty::Obj(x) | Ty::Generic(x, _) => classes.contains_key(x) && is_chain_subtype(parents, x, base) && concrete_check(arg),
+        Ty::Param(tp_name) => {
+            let mut cur = tp_name.as_str();
+            let mut seen = HashSet::new();
+            while seen.insert(cur) {
+                let Some(tp) = scope_tparams.iter().find(|p| p.name == cur) else { return false };
+                match &tp.constraint {
+                    Some(c @ (Ty::Obj(x) | Ty::Generic(x, _))) => {
+                        return classes.contains_key(x) && is_chain_subtype(parents, x, base) && concrete_check(c);
+                    }
+                    Some(Ty::Param(next)) => cur = next.as_str(),
+                    _ => return false,
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+struct ClassBoundQuery<'a> {
+    target_class: &'a str,
+    param_idx: usize,
+    base: &'a str,
+    cargs: &'a [Ty],
+    default_ok: bool,
+    m: &'a Model,
+    classes: &'a HashMap<String, usize>,
+    parents: &'a HashMap<String, (String, Vec<Ty>)>,
+}
+
+fn check_class_bound_ty(t: &Ty, q: &ClassBoundQuery<'_>, scope_tparams: &[TParam]) -> bool {
+    match t {
+        Ty::Obj(cn) if cn == q.target_class => q.default_ok,
+        Ty::Generic(cn, args) => {
+            if cn == q.target_class {
+                let ok = match args.get(q.param_idx) {
+                    Some(a) => arg_satisfies(q.m, q.classes, q.parents, a, q.base, q.cargs, scope_tparams),
+                    None => q.default_ok,
+                };
+                if !ok {
+                    return false;
+                }
+            }
+            args.iter().all(|a| check_class_bound_ty(a, q, scope_tparams))
+        }
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => check_class_bound_ty(inner, q, scope_tparams),
+        Ty::Tuple(es) | Ty::Union(es) => es.iter().all(|e| check_class_bound_ty(e, q, scope_tparams)),
+        _ => true,
+    }
+}
+
+// Identifies class type parameters that are strictly constrained to a class
+// across every instantiation in the model, so codecs can be omitted safely.
+fn compute_class_bound(
+    m: &Model,
+    classes: &HashMap<String, usize>,
+    parents: &HashMap<String, (String, Vec<Ty>)>,
+) -> HashMap<(String, usize), (String, Vec<Ty>)> {
+    let mut out = HashMap::new();
+    for c in &m.classes {
+        for (i, p) in c.type_params.iter().enumerate() {
+            let Some((base, cargs)) = (match &p.constraint {
+                Some(con @ Ty::Obj(base)) if classes.contains_key(base) && !mentions_any(con, &c.type_params) => Some((base.clone(), Vec::new())),
+                Some(con @ Ty::Generic(base, args)) if classes.contains_key(base) && !mentions_any(con, &c.type_params) => Some((base.clone(), args.clone())),
+                _ => None,
+            }) else {
+                continue;
+            };
+            let default_ok = match &p.default {
+                Some(def) => arg_satisfies(m, classes, parents, def, &base, &cargs, &c.type_params),
+                None => false,
+            };
+            // `from` and `cast` instantiate `class_type(&c.name, &[])`, which falls back
+            // to `Dynamic` when a parameter lacks a valid default.
+            if c.js.is_some() && !default_ok {
+                continue;
+            }
+            let query = ClassBoundQuery { target_class: &c.name, param_idx: i, base: &base, cargs: &cargs, default_ok, m, classes, parents };
+            let check = |t: &Ty, scope: &[TParam]| check_class_bound_ty(t, &query, scope);
+            let mut ok = true;
+            'classes: for c2 in &m.classes {
+                for tp in &c2.type_params {
+                    if tp.default.as_ref().is_some_and(|d| !check(d, &c2.type_params))
+                        || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &c2.type_params))
+                    {
+                        ok = false;
+                        break 'classes;
+                    }
+                }
+                for b in &c2.bases {
+                    if !check(b, &c2.type_params) {
+                        ok = false;
+                        break 'classes;
+                    }
+                }
+                for t in c2.iterates.iter().chain(&c2.iterates_async).chain(&c2.elements) {
+                    if !check(t, &c2.type_params) {
+                        ok = false;
+                        break 'classes;
+                    }
+                }
+                for f in &c2.funcs {
+                    let mut scope: Vec<TParam> = f.type_params.clone();
+                    scope.extend(c2.type_params.iter().cloned());
+                    if f.type_params.iter().any(|tp| {
+                        tp.default.as_ref().is_some_and(|d| !check(d, &scope))
+                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &scope))
+                    }) || f.params.iter().any(|(_, pt)| !check(pt, &scope))
+                        || !check(&f.ret, &scope)
+                    {
+                        ok = false;
+                        break 'classes;
+                    }
+                }
+            }
+            if ok {
+                for f in &m.funcs {
+                    if f.type_params.iter().any(|tp| {
+                        tp.default.as_ref().is_some_and(|d| !check(d, &f.type_params))
+                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &f.type_params))
+                    }) || f.params.iter().any(|(_, pt)| !check(pt, &f.type_params))
+                        || !check(&f.ret, &f.type_params)
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok {
+                for cb in &m.callbacks {
+                    if cb.type_params.iter().any(|tp| {
+                        tp.default.as_ref().is_some_and(|d| !check(d, &cb.type_params))
+                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &cb.type_params))
+                    }) || cb.params.iter().any(|(_, pt)| !check(pt, &cb.type_params))
+                        || !check(&cb.ret, &cb.type_params)
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok {
+                for u in &m.unions {
+                    if u.type_params.iter().any(|tp| {
+                        tp.default.as_ref().is_some_and(|d| !check(d, &u.type_params))
+                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &u.type_params))
+                    }) || u.parts.iter().any(|pt| !check(pt, &u.type_params))
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if ok {
+                out.insert((c.name.clone(), i), (base, cargs));
+            }
+        }
+    }
+    out
 }
 
 // A module's Gleam path: as given out, else as one would be (`areas/pb`

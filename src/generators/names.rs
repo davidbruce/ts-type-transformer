@@ -319,6 +319,7 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
     m.enums.iter_mut().for_each(|e| to(&mut e.0));
     m.num_enums.iter_mut().for_each(|e| to(&mut e.0));
     m.opaque.iter_mut().for_each(to);
+    m.opaque_names = std::mem::take(&mut m.opaque_names).into_iter().map(|(mut k, v)| (to(&mut k), (k, v)).1).collect();
     m.opaque_arity = std::mem::take(&mut m.opaque_arity).into_iter().map(|(mut k, v)| (to(&mut k), (k, v)).1).collect();
     m.synthetic = std::mem::take(&mut m.synthetic).into_iter().map(|mut k| (to(&mut k), k).1).collect();
     m.namespaced = std::mem::take(&mut m.namespaced).into_iter().map(|(mut k, v)| (to(&mut k), (k, v)).1).collect();

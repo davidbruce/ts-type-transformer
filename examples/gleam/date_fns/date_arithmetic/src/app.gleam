@@ -38,7 +38,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let dc = dt.date_codec()
       let day = dt.DateOrStringOrNumberDate
       let arg = dt.DateArgDateType
 
@@ -53,22 +52,23 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let base_d = df.parse_iso("2024-03-15", None, dc)
-      let jan31 = df.parse_iso("2024-01-31", None, dc)
-      let dur = duration.create()
-      duration.set_months(dur, Some(1.0))
-      duration.set_days(dur, Some(2.0))
+      let base_d = df.parse_iso("2024-03-15", None)
+      let jan31 = df.parse_iso("2024-01-31", None)
+      let dur =
+        duration.create()
+        |> duration.with_months(1.0)
+        |> duration.with_days(2.0)
 
       let ops = [
-        #("addDays(base, 3)", df.add_days(arg(base_d), 3.0, None, dc, dc), "yyyy-MM-dd"),
-        #("subDays(base, 15)", df.sub_days(arg(base_d), 15.0, None, dc, dc), "yyyy-MM-dd"),
-        #("addWeeks(base, 2)", df.add_weeks(arg(base_d), 2.0, None, dc, dc), "yyyy-MM-dd"),
-        #("addMonths(jan31, 1)", df.add_months(arg(jan31), 1.0, None, dc, dc), "yyyy-MM-dd"),
-        #("subMonths(base, 3)", df.sub_months(arg(base_d), 3.0, None, dc, dc), "yyyy-MM-dd"),
-        #("addYears(base, 1)", df.add_years(arg(base_d), 1.0, None, dc, dc), "yyyy-MM-dd"),
-        #("startOfWeek(base)", df.start_of_week(arg(base_d), None, dc, dc), "yyyy-MM-dd"),
-        #("endOfMonth(base)", df.end_of_month(arg(base_d), None, dc, dc), "yyyy-MM-dd HH:mm:ss"),
-        #("add(base, { months: 1, days: 2 })", df.add(arg(base_d), dur, None, dc, dc), "yyyy-MM-dd"),
+        #("addDays(base, 3)", df.add_days(arg(base_d), 3.0, None), "yyyy-MM-dd"),
+        #("subDays(base, 15)", df.sub_days(arg(base_d), 15.0, None), "yyyy-MM-dd"),
+        #("addWeeks(base, 2)", df.add_weeks(arg(base_d), 2.0, None), "yyyy-MM-dd"),
+        #("addMonths(jan31, 1)", df.add_months(arg(jan31), 1.0, None), "yyyy-MM-dd"),
+        #("subMonths(base, 3)", df.sub_months(arg(base_d), 3.0, None), "yyyy-MM-dd"),
+        #("addYears(base, 1)", df.add_years(arg(base_d), 1.0, None), "yyyy-MM-dd"),
+        #("startOfWeek(base)", df.start_of_week(arg(base_d), None), "yyyy-MM-dd"),
+        #("endOfMonth(base)", df.end_of_month(arg(base_d), None), "yyyy-MM-dd HH:mm:ss"),
+        #("add(base, { months: 1, days: 2 })", df.add(arg(base_d), dur, None), "yyyy-MM-dd"),
         #("base (immutable check)", base_d, "yyyy-MM-dd"),
       ]
 

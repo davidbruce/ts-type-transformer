@@ -57,8 +57,9 @@ pub fn main() -> Nil {
       element.set_class_name(grid, "grid")
       let _ = node.append_child(app, grid)
 
-      let o_html = katex_options.create()
-      katex_options.set_output(o_html, Some(kt.KatexOptionsOutputHtml))
+      let o_html =
+        katex_options.create()
+        |> katex_options.with_output(kt.KatexOptionsOutputHtml)
       add_card(
         doc,
         grid,
@@ -67,8 +68,9 @@ pub fn main() -> Nil {
         katex.render_to_string("a^2 + b^2 = c^2", Some(o_html)),
       )
 
-      let o_math = katex_options.create()
-      katex_options.set_output(o_math, Some(kt.KatexOptionsOutputMathml))
+      let o_math =
+        katex_options.create()
+        |> katex_options.with_output(kt.KatexOptionsOutputMathml)
       add_card(
         doc,
         grid,
@@ -77,8 +79,9 @@ pub fn main() -> Nil {
         katex.render_to_string("\\frac{1}{1 + x^2}", Some(o_math)),
       )
 
-      let o_both = katex_options.create()
-      katex_options.set_output(o_both, Some(kt.KatexOptionsOutputHtmlAndMathml))
+      let o_both =
+        katex_options.create()
+        |> katex_options.with_output(kt.KatexOptionsOutputHtmlAndMathml)
       add_card(
         doc,
         grid,
@@ -87,9 +90,10 @@ pub fn main() -> Nil {
         katex.render_to_string("\\sqrt{\\alpha + \\beta}", Some(o_both)),
       )
 
-      let o_leq = katex_options.create()
-      katex_options.set_display_mode(o_leq, Some(True))
-      katex_options.set_leqno(o_leq, Some(True))
+      let o_leq =
+        katex_options.create()
+        |> katex_options.with_display_mode(True)
+        |> katex_options.with_leqno(True)
       add_card(
         doc,
         grid,
@@ -101,14 +105,14 @@ pub fn main() -> Nil {
         ),
       )
 
-      let o_fl = katex_options.create()
-      katex_options.set_display_mode(o_fl, Some(True))
-      katex_options.set_fleqn(o_fl, Some(True))
-      katex_options.set_max_size(o_fl, Some(2.0))
-      katex_options.set_strict(
-        o_fl,
-        Some(kt.BooleanOrStringOrStrictFunctionBoolean(False)),
-      )
+      let o_fl =
+        katex_options.create()
+        |> katex_options.with_display_mode(True)
+        |> katex_options.with_fleqn(True)
+        |> katex_options.with_max_size(2.0)
+        |> katex_options.with_strict(
+          kt.BooleanOrStringOrStrictFunctionBoolean(False),
+        )
       add_card(
         doc,
         grid,

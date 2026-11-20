@@ -9,11 +9,18 @@ const rawArgs = process.argv.slice(2);
 const force = rawArgs.includes('--force');
 const filters = rawArgs.filter(a => a !== '--force');
 
-function isUpToDate(ex, outputPath) {
+function isUpToDate(ex, outputPath, demoDir) {
   if (force || !fs.existsSync(outputPath)) return false;
-  const srcPath = path.resolve(ROOT, ex.source);
-  if (!fs.existsSync(srcPath)) return false;
-  return fs.statSync(outputPath).mtimeMs >= fs.statSync(srcPath).mtimeMs;
+  const outMtime = fs.statSync(outputPath).mtimeMs;
+  const tomlPath = path.join(demoDir, 'gleam.toml');
+  if (fs.existsSync(tomlPath) && fs.statSync(tomlPath).mtimeMs > outMtime) return false;
+  const srcDir = path.join(demoDir, 'src');
+  if (!fs.existsSync(srcDir)) return false;
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (fs.statSync(path.join(srcDir, entry.name)).mtimeMs > outMtime) return false;
+  }
+  return true;
 }
 
 const PACKAGES = {
@@ -77,7 +84,7 @@ for (const ex of selected) {
   const spec = PACKAGES[ex.package];
   const demoDir = path.join(ROOT, path.dirname(ex.path));
   const outPath = path.join(demoDir, 'build/dev/javascript/app/app.mjs');
-  if (isUpToDate(ex, outPath)) continue;
+  if (isUpToDate(ex, outPath, demoDir)) continue;
   const pkgEntries = [];
   const reqEntries = [`gleam_stdlib = { version = ">= 1.0.0 and < 2.0.0" }`];
   if (spec.needsDom) {

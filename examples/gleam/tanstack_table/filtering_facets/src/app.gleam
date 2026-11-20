@@ -4,6 +4,7 @@ import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/list
@@ -22,6 +23,7 @@ import tanstack_table_core/types as t
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
 
+// Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
 fn coerce(a: a) -> b
 
@@ -60,10 +62,9 @@ fn svc_row(id: String, service: String, tier: String, region: String, reqs: Floa
 }
 
 fn filter_spec(id: String, value: Dynamic) -> t.ColumnFilter(Nil) {
-  let f = column_filter.create()
-  column_filter.set_id(f, id)
-  column_filter.set_value(f, value)
-  f
+  column_filter.create()
+  |> column_filter.with_id(id)
+  |> column_filter.with_value(value)
 }
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
@@ -75,16 +76,27 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: String) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view, t.table_features_codec(), rt.codec_dynamic())
-  let get_core = table_row_models_core.get_get_core_row_model(rows_view, t.table_features_codec(), rt.codec_dynamic())
+  let get_rm = table_row_models_core.get_get_row_model(rows_view)
+  let get_core = table_row_models_core.get_get_core_row_model(rows_view)
   let rows = row_model.get_rows(get_rm())
   let total = list.length(row_model.get_rows(get_core()))
 
   let body =
     list.map(rows, fn(r) {
       let gv = row_row.get_get_value(coerce(r))
-      let str_val = fn(k) -> String { coerce(tt.call_string_to_t_value_fn(gv, k)) }
-      let int_val = fn(k) -> String { int.to_string(float.round(coerce(tt.call_string_to_t_value_fn(gv, k)))) }
+      let str_val = fn(k) -> String {
+        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.string) {
+          Ok(s) -> s
+          Error(_) -> ""
+        }
+      }
+      let int_val = fn(k) -> String {
+        let num = case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.float) {
+          Ok(n) -> n
+          Error(_) -> 0.0
+        }
+        int.to_string(float.round(num))
+      }
       "<tr><td>"
       <> esc_html(str_val("id"))
       <> "</td><td>"
@@ -128,8 +140,8 @@ pub fn main() {
       #("coreReactivityFeature", rt.dynamic(store_reactivity_bindings())),
       #("columnFilteringFeature", rt.dynamic(tt.get_column_filtering_feature())),
       #("globalFilteringFeature", rt.dynamic(tt.get_global_filtering_feature())),
-      #("coreRowModel", rt.dynamic(tt.create_core_row_model(rt.codec_dynamic()))),
-      #("filteredRowModel", rt.dynamic(tt.create_filtered_row_model(rt.codec_dynamic()))),
+      #("coreRowModel", rt.dynamic(tt.create_core_row_model())),
+      #("filteredRowModel", rt.dynamic(tt.create_filtered_row_model())),
       #("filterFns", filter_fns),
     ])
   let data =

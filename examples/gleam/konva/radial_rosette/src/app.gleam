@@ -6,7 +6,6 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import konva/areas/main/circle
 import konva/areas/main/circle_config
-import konva/areas/main/container
 import konva/areas/main/layer
 import konva/areas/main/line
 import konva/areas/main/line_config
@@ -25,13 +24,6 @@ import konva/areas/main/text_config
 import konva/types as t
 
 const pi = 3.141592653589793
-
-fn range(from: Int, to: Int) -> List(Int) {
-  case from > to {
-    True -> []
-    False -> [from, ..range(from + 1, to)]
-  }
-}
 
 fn wrap_pi(x: Float) -> Float {
   let two_pi = 2.0 *. pi
@@ -63,51 +55,51 @@ fn make_circle(
   sw: Float,
   fill_opt: Option(String),
 ) -> t.GroupOrShape {
-  let cc = circle_config.create()
-  node_config.set_x(cc, Some(x))
-  node_config.set_y(cc, Some(y))
-  circle_config.set_radius(cc, Some(r))
-  shape_config.set_stroke(cc, Some(t.StringOrCanvasGradientString(stroke_col)))
-  shape_config.set_stroke_width(cc, Some(sw))
-  case fill_opt {
-    Some(f) -> shape_config.set_fill(cc, Some(t.StringOrCanvasGradientString(f)))
-    None -> Nil
+  let cc =
+    circle_config.create()
+    |> node_config.with_x(x)
+    |> node_config.with_y(y)
+    |> circle_config.with_radius(r)
+    |> shape_config.with_stroke(t.StringOrCanvasGradientString(stroke_col))
+    |> shape_config.with_stroke_width(sw)
+  let cc = case fill_opt {
+    Some(f) -> shape_config.with_fill(cc, t.StringOrCanvasGradientString(f))
+    None -> cc
   }
   t.GroupOrShapeShape(shape.widen(circle.new(Some(cc))))
 }
 
 fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
-  let lc = line_config.create()
-  line_config.set_points(lc, Some(t.LinePointsArray(pts)))
-  shape_config.set_stroke(lc, Some(t.StringOrCanvasGradientString(col)))
-  shape_config.set_stroke_width(lc, Some(sw))
-  t.GroupOrShapeShape(shape.widen(line.new(Some(lc), t.line_config_codec())))
+  let lc =
+    line_config.create()
+    |> line_config.with_points(t.LinePointsArray(pts))
+    |> shape_config.with_stroke(t.StringOrCanvasGradientString(col))
+    |> shape_config.with_stroke_width(sw)
+  t.GroupOrShapeShape(shape.widen(line.new(Some(lc))))
 }
 
 pub fn main() -> Nil {
   let cx = 340.0
   let cy = 200.0
 
-  let sc = stage_config.create()
-  stage_config.set_container(sc, Some(t.HTMLDivElementOrStringString("stage")))
-  node_config.set_width(sc, Some(680.0))
-  node_config.set_height(sc, Some(400.0))
+  let sc =
+    stage_config.create()
+    |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
+    |> node_config.with_width(680.0)
+    |> node_config.with_height(400.0)
   let stg = stage.new(sc)
 
   let l = layer.new(None)
   let _ = stage.add(stg, l, [])
 
-  let bg = rect_config.create()
-  node_config.set_x(bg, Some(0.0))
-  node_config.set_y(bg, Some(0.0))
-  node_config.set_width(bg, Some(680.0))
-  node_config.set_height(bg, Some(400.0))
-  shape_config.set_fill(bg, Some(t.StringOrCanvasGradientString("#ffffff")))
-  let _ = container.add(
-    l,
-    [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))],
-    t.group_or_shape_codec(),
-  )
+  let bg =
+    rect_config.create()
+    |> rect_config.with_x(0.0)
+    |> rect_config.with_y(0.0)
+    |> rect_config.with_width(680.0)
+    |> rect_config.with_height(400.0)
+    |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
+  let _ = layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))])
 
   let rings = [
     make_circle(cx, cy, 160.0, "#d4d4d4", 1.0, None),
@@ -116,21 +108,25 @@ pub fn main() -> Nil {
     make_circle(cx, cy, 52.0, "#111111", 1.5, Some("#f7f7f7")),
   ]
   let spokes =
-    list.map(range(0, 11), fn(i) {
+    int.range(from: 0, to: 12, with: [], run: fn(acc, i) {
       let a = int.to_float(i) *. pi /. 6.0
-      make_line(
-        [
-          cx +. 36.0 *. approx_cos(a),
-          cy +. 36.0 *. approx_sin(a),
-          cx +. 160.0 *. approx_cos(a),
-          cy +. 160.0 *. approx_sin(a),
-        ],
-        "#d4d4d4",
-        1.0,
-      )
+      [
+        make_line(
+          [
+            cx +. 36.0 *. approx_cos(a),
+            cy +. 36.0 *. approx_sin(a),
+            cx +. 160.0 *. approx_cos(a),
+            cy +. 160.0 *. approx_sin(a),
+          ],
+          "#d4d4d4",
+          1.0,
+        ),
+        ..acc
+      ]
     })
+    |> list.reverse
   let ticks =
-    list.map(range(0, 23), fn(i) {
+    int.range(from: 0, to: 24, with: [], run: fn(acc, i) {
       let a = int.to_float(i) *. pi /. 12.0
       let r0 = case i % 2 == 0 {
         True -> 148.0
@@ -140,65 +136,77 @@ pub fn main() -> Nil {
         True -> 2.0
         False -> 1.0
       }
-      make_line(
-        [
-          cx +. r0 *. approx_cos(a),
-          cy +. r0 *. approx_sin(a),
-          cx +. 166.0 *. approx_cos(a),
-          cy +. 166.0 *. approx_sin(a),
-        ],
-        "#111111",
-        sw,
-      )
+      [
+        make_line(
+          [
+            cx +. r0 *. approx_cos(a),
+            cy +. r0 *. approx_sin(a),
+            cx +. 166.0 *. approx_cos(a),
+            cy +. 166.0 *. approx_sin(a),
+          ],
+          "#111111",
+          sw,
+        ),
+        ..acc
+      ]
     })
+    |> list.reverse
   let petals =
-    list.map(range(0, 7), fn(i) {
-      let pc = rect_config.create()
-      node_config.set_x(pc, Some(cx))
-      node_config.set_y(pc, Some(cy))
-      node_config.set_width(pc, Some(18.0))
-      node_config.set_height(pc, Some(52.0))
-      node_config.set_offset_x(pc, Some(9.0))
-      node_config.set_offset_y(pc, Some(108.0))
-      node_config.set_rotation(pc, Some(int.to_float(i) *. 45.0))
+    int.range(from: 0, to: 8, with: [], run: fn(acc, i) {
       let fill_col = case i % 2 == 0 {
         True -> "#111111"
         False -> "#efefef"
       }
-      shape_config.set_fill(pc, Some(t.StringOrCanvasGradientString(fill_col)))
-      shape_config.set_stroke(pc, Some(t.StringOrCanvasGradientString("#111111")))
-      shape_config.set_stroke_width(pc, Some(1.5))
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(pc))))
+      let pc =
+        rect_config.create()
+        |> rect_config.with_x(cx)
+        |> rect_config.with_y(cy)
+        |> rect_config.with_width(18.0)
+        |> rect_config.with_height(52.0)
+        |> rect_config.with_offset_x(9.0)
+        |> rect_config.with_offset_y(108.0)
+        |> rect_config.with_rotation(int.to_float(i) *. 45.0)
+        |> rect_config.with_fill(t.StringOrCanvasGradientString(fill_col))
+        |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+        |> rect_config.with_stroke_width(1.5)
+      [t.GroupOrShapeShape(shape.widen(rect.new(Some(pc)))), ..acc]
     })
+    |> list.reverse
   let nodes =
-    list.map(range(0, 11), fn(i) {
+    int.range(from: 0, to: 12, with: [], run: fn(acc, i) {
       let a = int.to_float(i) *. pi /. 6.0
       let fill_col = case i % 2 == 0 {
         True -> "#111111"
         False -> "#ffffff"
       }
-      make_circle(
-        cx +. 125.0 *. approx_cos(a),
-        cy +. 125.0 *. approx_sin(a),
-        5.0,
-        "#111111",
-        1.5,
-        Some(fill_col),
-      )
+      [
+        make_circle(
+          cx +. 125.0 *. approx_cos(a),
+          cy +. 125.0 *. approx_sin(a),
+          5.0,
+          "#111111",
+          1.5,
+          Some(fill_col),
+        ),
+        ..acc
+      ]
     })
+    |> list.reverse
 
-  let cp = regular_polygon_config.create()
-  node_config.set_x(cp, Some(cx))
-  node_config.set_y(cp, Some(cy))
-  regular_polygon_config.set_sides(cp, 8.0)
-  regular_polygon_config.set_radius(cp, 26.0)
-  shape_config.set_fill(cp, Some(t.StringOrCanvasGradientString("#111111")))
+  let cp =
+    regular_polygon_config.create()
+    |> node_config.with_x(cx)
+    |> node_config.with_y(cy)
+    |> regular_polygon_config.with_sides(8.0)
+    |> regular_polygon_config.with_radius(26.0)
+    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
-  let cd = circle_config.create()
-  node_config.set_x(cd, Some(cx))
-  node_config.set_y(cd, Some(cy))
-  circle_config.set_radius(cd, Some(9.0))
-  shape_config.set_fill(cd, Some(t.StringOrCanvasGradientString("#ffffff")))
+  let cd =
+    circle_config.create()
+    |> node_config.with_x(cx)
+    |> node_config.with_y(cy)
+    |> circle_config.with_radius(9.0)
+    |> shape_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
 
   let compass =
     list.map(
@@ -210,35 +218,33 @@ pub fn main() -> Nil {
       ],
       fn(item) {
         let #(x, y, label) = item
-        let tc = text_config.create()
-        node_config.set_x(tc, Some(x))
-        node_config.set_y(tc, Some(y))
-        text_config.set_text(tc, Some(label))
-        text_config.set_font_size(tc, Some(11.0))
-        text_config.set_font_family(tc, Some("monospace"))
-        shape_config.set_fill(tc, Some(t.StringOrCanvasGradientString("#555555")))
+        let tc =
+          text_config.create()
+          |> node_config.with_x(x)
+          |> node_config.with_y(y)
+          |> text_config.with_text(label)
+          |> text_config.with_font_size(11.0)
+          |> text_config.with_font_family("monospace")
+          |> shape_config.with_fill(t.StringOrCanvasGradientString("#555555"))
         t.GroupOrShapeShape(shape.widen(text.new(Some(tc))))
       },
     )
 
-  let _ = container.add(l, rings, t.group_or_shape_codec())
-  let _ = container.add(l, spokes, t.group_or_shape_codec())
-  let _ = container.add(l, ticks, t.group_or_shape_codec())
-  let _ = container.add(l, petals, t.group_or_shape_codec())
-  let _ = container.add(l, nodes, t.group_or_shape_codec())
-  let _ = container.add(
-    l,
-    [
+  let _ = layer.add(l, rings)
+  let _ = layer.add(l, spokes)
+  let _ = layer.add(l, ticks)
+  let _ = layer.add(l, petals)
+  let _ = layer.add(l, nodes)
+  let _ =
+    layer.add(l, [
       t.GroupOrShapeShape(shape.widen(regular_polygon.new(Some(cp)))),
       t.GroupOrShapeShape(shape.widen(circle.new(Some(cd)))),
-    ],
-    t.group_or_shape_codec(),
-  )
-  let _ = container.add(l, compass, t.group_or_shape_codec())
+    ])
+  let _ = layer.add(l, compass)
 
   let _ = node.draw(l)
 
-  let count = int.to_string(list.length(container.get_children(l, t.group_or_shape_codec())))
+  let count = int.to_string(list.length(layer.get_children(l)))
   let doc = core.get_document()
   case document.get_element_by_id(doc, "meta") {
     None -> Nil

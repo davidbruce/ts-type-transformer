@@ -15,7 +15,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let dc = dt.date_codec()
       let day = dt.DateOrStringOrNumberDate
       let arg = dt.DateArgDateType
 
@@ -30,9 +29,10 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let anchor = df.parse_iso("2024-03-15", None, dc)
-      let opts = format_distance_options.create()
-      format_distance_options.set_add_suffix(opts, Some(True))
+      let anchor = df.parse_iso("2024-03-15", None)
+      let opts =
+        format_distance_options.create()
+        |> format_distance_options.with_add_suffix(True)
 
       let entries = [
         #("2024-01-10", "Spec Draft"),
@@ -43,7 +43,7 @@ pub fn main() -> Nil {
         #("2024-06-15", "Q2 Audit"),
       ]
       let milestones =
-        list.map(entries, fn(e) { #(df.parse_iso(e.0, None, dc), e.1) })
+        list.map(entries, fn(e) { #(df.parse_iso(e.0, None), e.1) })
 
       let tl_card = document.create_element_div(doc, None)
       element.set_class_name(tl_card, "card")
@@ -114,8 +114,8 @@ pub fn main() -> Nil {
       let _ = node.append_child(app, tl_card)
 
       let date_args = list.map(milestones, fn(item) { arg(item.0) })
-      let earliest = df.min(date_args, None, dc, dc)
-      let latest = df.max(date_args, None, dc, dc)
+      let earliest = df.min(date_args, None)
+      let latest = df.max(date_args, None)
       let span_days =
         int.to_string(
           float.round(df.difference_in_calendar_days(day(latest), day(earliest), None)),

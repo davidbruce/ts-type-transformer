@@ -438,24 +438,27 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let m = &mut b.model;
     // A constraint that is an opaque type nothing is known to extend
     // (`T extends ArrayBufferLike`) holds for no type: none.
-    let opaque: HashSet<String> = m.opaque.iter().cloned().collect();
-    let unconstrain = |ps: &mut Vec<TParam>| {
-        for p in ps.iter_mut() {
-            if matches!(&p.constraint, Some(Ty::Obj(n)) if opaque.contains(n)) {
-                let c = p.constraint.take();
-                if p.default.is_none() {
-                    p.default = c;
+    // Gleam retains opaque constraints so it can recognize `$same` opaque types like `Date`.
+    if target != "Gleam" {
+        let opaque: HashSet<String> = m.opaque.iter().cloned().collect();
+        let unconstrain = |ps: &mut Vec<TParam>| {
+            for p in ps.iter_mut() {
+                if matches!(&p.constraint, Some(Ty::Obj(n)) if opaque.contains(n)) {
+                    let c = p.constraint.take();
+                    if p.default.is_none() {
+                        p.default = c;
+                    }
                 }
             }
-        }
-    };
-    m.classes.iter_mut().for_each(|c| {
-        unconstrain(&mut c.type_params);
-        c.funcs.iter_mut().for_each(|f| unconstrain(&mut f.type_params));
-    });
-    m.funcs.iter_mut().for_each(|f| unconstrain(&mut f.type_params));
-    m.unions.iter_mut().for_each(|u| unconstrain(&mut u.type_params));
-    m.callbacks.iter_mut().for_each(|c| unconstrain(&mut c.type_params));
+        };
+        m.classes.iter_mut().for_each(|c| {
+            unconstrain(&mut c.type_params);
+            c.funcs.iter_mut().for_each(|f| unconstrain(&mut f.type_params));
+        });
+        m.funcs.iter_mut().for_each(|f| unconstrain(&mut f.type_params));
+        m.unions.iter_mut().for_each(|u| unconstrain(&mut u.type_params));
+        m.callbacks.iter_mut().for_each(|c| unconstrain(&mut c.type_params));
+    }
     b.problems.into_inner().result(b.model)
 }
 

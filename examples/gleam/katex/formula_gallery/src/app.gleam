@@ -27,8 +27,9 @@ pub fn main() -> Nil {
       element.set_class_name(grid, "grid")
       let _ = node.append_child(app, grid)
 
-      let opts = katex_options.create()
-      katex_options.set_display_mode(opts, Some(True))
+      let opts =
+        katex_options.create()
+        |> katex_options.with_display_mode(True)
 
       let formulas = [
         #("Euler's Identity", "e^{i\\pi} + 1 = 0"),

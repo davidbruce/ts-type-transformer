@@ -73,7 +73,7 @@ pub fn main() -> Nil {
       let _ = node.append_child(table, thead)
 
       let tbody = document.create_element_tbody(doc, None)
-      list.index_map(items, fn(tok, i) {
+      list.index_fold(items, Nil, fn(_, tok, i) {
         let kind = field_string(tok, "type")
         let raw = field_string(tok, "raw")
         let snip = string.replace(raw, "\n", "↵")

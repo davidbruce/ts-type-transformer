@@ -2,6 +2,7 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
 import three/areas/main/ambient_light
@@ -26,35 +27,39 @@ import three/areas/main/torus_geometry
 import three/areas/main/vector3
 import three/areas/main/web_gl_renderer
 import three/areas/main/web_gl_renderer_parameters
+import three/runtime as rt
 import three/types as t
 
-type Cell(a)
+const pi = 3.141592653589793
 
-@external(javascript, "./app_ffi.mjs", "coerce")
-fn coerce(a: a) -> b
+fn hex(value: Int) -> Float {
+  int.to_float(value)
+}
 
-@external(javascript, "./app_ffi.mjs", "newCell")
-fn new_cell(v: a) -> Cell(a)
+fn fmt2(x: Float) -> String {
+  let neg = x <. 0.0
+  let scaled = float.round(float.absolute_value(x) *. 100.0)
+  let whole = scaled / 100
+  let frac = scaled % 100
+  let frac_str = case frac < 10 {
+    True -> "0" <> int.to_string(frac)
+    False -> int.to_string(frac)
+  }
+  let sign = case neg && scaled > 0 {
+    True -> "-"
+    False -> ""
+  }
+  sign <> int.to_string(whole) <> "." <> frac_str
+}
 
-@external(javascript, "./app_ffi.mjs", "getCell")
-fn get_cell(c: Cell(a)) -> a
-
-@external(javascript, "./app_ffi.mjs", "setCell")
-fn set_cell(c: Cell(a), v: a) -> Nil
-
-@external(javascript, "./app_ffi.mjs", "roundInt")
-fn round_int(x: Float) -> Int
-
-@external(javascript, "./app_ffi.mjs", "fmt2")
-fn fmt2(x: Float) -> String
-
-fn std_mat(hex: Float, rough: Float, metal: Float, flat: Bool) -> t.MeshStandardMaterial(Nil) {
-  let mp = mesh_standard_material_parameters.create()
-  mesh_standard_material_parameters.set_color(mp, Some(t.ColorRepresentationNumber(hex)))
-  mesh_standard_material_parameters.set_roughness(mp, Some(rough))
-  mesh_standard_material_parameters.set_metalness(mp, Some(metal))
-  mesh_standard_material_parameters.set_flat_shading(mp, Some(flat))
-  mesh_standard_material.new(Some(mp))
+fn std_mat(color_hex: Int, rough: Float, metal: Float, flat: Bool) -> t.MeshStandardMaterial(Nil) {
+  mesh_standard_material_parameters.create()
+  |> mesh_standard_material_parameters.with_color(t.ColorRepresentationNumber(hex(color_hex)))
+  |> mesh_standard_material_parameters.with_roughness(rough)
+  |> mesh_standard_material_parameters.with_metalness(metal)
+  |> mesh_standard_material_parameters.with_flat_shading(flat)
+  |> Some
+  |> mesh_standard_material.new
 }
 
 fn fmt_v3(v: t.Vector3(Nil)) -> String {
@@ -65,11 +70,11 @@ pub fn main() {
   let doc = core.get_document()
   let width = 680.0
   let height = 400.0
-  let pi = 3.141592653589793
 
-  let rp = web_gl_renderer_parameters.create()
-  web_gl_renderer_parameters.set_antialias(rp, Some(True))
-  web_gl_renderer_parameters.set_preserve_drawing_buffer(rp, Some(True))
+  let rp =
+    web_gl_renderer_parameters.create()
+    |> web_gl_renderer_parameters.with_antialias(True)
+    |> web_gl_renderer_parameters.with_preserve_drawing_buffer(True)
   let renderer = web_gl_renderer.new(Some(rp))
   web_gl_renderer.set_pixel_ratio(renderer, 1.0)
   web_gl_renderer.set_size(renderer, width, height, None)
@@ -78,16 +83,16 @@ pub fn main() {
   let _ = dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
 
   let sc = scene.new()
-  scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(16_250_871.0))))))
+  scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))))))
   let cam = perspective_camera.new(Some(42.0), Some(width /. height), Some(0.1), Some(100.0))
   let _ = vector3.set(object3d.get_position(cam), 5.6, 5.2, Some(7.6))
   object3d.look_at(cam, vector3.new(Some(0.0), Some(-0.1), Some(0.0)))
 
-  let _ = object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(16_777_215.0)), Some(1.2))])
-  let key = directional_light.new(Some(t.ColorRepresentationNumber(16_777_215.0)), Some(2.2))
+  let _ = object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.2))])
+  let key = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(2.2))
   let _ = vector3.set(object3d.get_position(key), 6.0, 10.0, Some(8.0))
   let _ = object3d.add(sc, [key])
-  let rim = directional_light.new(Some(t.ColorRepresentationNumber(16_777_215.0)), Some(0.9))
+  let rim = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(0.9))
   let _ = vector3.set(object3d.get_position(rim), -7.0, 5.0, Some(-6.0))
   let _ = object3d.add(sc, [rim])
 
@@ -95,8 +100,8 @@ pub fn main() {
     grid_helper.new(
       Some(12.0),
       Some(12.0),
-      Some(t.ColorRepresentationNumber(10_066_329.0)),
-      Some(t.ColorRepresentationNumber(15_066_597.0)),
+      Some(t.ColorRepresentationNumber(hex(0x999999))),
+      Some(t.ColorRepresentationNumber(hex(0xe5e5e5))),
     )
   vector3.set_y(object3d.get_position(grid), -1.5)
   let _ = object3d.add(sc, [grid])
@@ -104,8 +109,7 @@ pub fn main() {
   let pedestal =
     mesh.new(
       Some(cylinder_geometry.new(Some(0.55), Some(0.75), Some(0.35), Some(24.0), None, None, None, None)),
-      Some(std_mat(2_500_134.0, 0.7, 0.05, False)),
-      t.cylinder_geometry_codec(),
+      Some(std_mat(0x262626, 0.7, 0.05, False)),
       t.mesh_standard_material_codec(),
     )
   vector3.set_y(object3d.get_position(pedestal), -1.3)
@@ -114,21 +118,20 @@ pub fn main() {
   let core_sphere =
     mesh.new(
       Some(sphere_geometry.new(Some(0.65), Some(24.0), Some(18.0), None, None, None, None)),
-      Some(std_mat(1_118_481.0, 0.45, 0.2, False)),
-      t.sphere_geometry_codec(),
+      Some(std_mat(0x111111, 0.45, 0.2, False)),
       t.mesh_standard_material_codec(),
     )
   let _ = object3d.add(sc, [core_sphere])
 
   let inner_pivot = group.new()
   let _ = object3d.add(sc, [inner_pivot])
-  let tp1 = mesh_basic_material_parameters.create()
-  mesh_basic_material_parameters.set_color(tp1, Some(t.ColorRepresentationNumber(10_066_329.0)))
+  let tp1 =
+    mesh_basic_material_parameters.create()
+    |> mesh_basic_material_parameters.with_color(t.ColorRepresentationNumber(hex(0x999999)))
   let inner_track =
     mesh.new(
       Some(torus_geometry.new(Some(2.1), Some(0.025), Some(8.0), Some(64.0), None, None, None)),
       Some(mesh_basic_material.new(Some(tp1))),
-      t.torus_geometry_codec(),
       t.mesh_basic_material_codec(),
     )
   euler.set_x(object3d.get_rotation(inner_track), pi /. 2.0)
@@ -140,8 +143,7 @@ pub fn main() {
   let planet =
     mesh.new(
       Some(sphere_geometry.new(Some(0.36), Some(20.0), Some(16.0), None, None, None, None)),
-      Some(std_mat(5_592_405.0, 0.55, 0.1, False)),
-      t.sphere_geometry_codec(),
+      Some(std_mat(0x555555, 0.55, 0.1, False)),
       t.mesh_standard_material_codec(),
     )
   let _ = object3d.add(inner_planet, [planet])
@@ -151,8 +153,7 @@ pub fn main() {
   let moon =
     mesh.new(
       Some(octahedron_geometry.new(Some(0.18), Some(0.0))),
-      Some(std_mat(13_948_116.0, 0.4, 0.1, True)),
-      t.octahedron_geometry_codec(),
+      Some(std_mat(0xd4d4d4, 0.4, 0.1, True)),
       t.mesh_standard_material_codec(),
     )
   let _ = vector3.set(object3d.get_position(moon), 0.75, 0.0, Some(0.0))
@@ -160,13 +161,13 @@ pub fn main() {
 
   let outer_pivot = group.new()
   let _ = object3d.add(sc, [outer_pivot])
-  let tp2 = mesh_basic_material_parameters.create()
-  mesh_basic_material_parameters.set_color(tp2, Some(t.ColorRepresentationNumber(11_908_533.0)))
+  let tp2 =
+    mesh_basic_material_parameters.create()
+    |> mesh_basic_material_parameters.with_color(t.ColorRepresentationNumber(hex(0xb5b5b5)))
   let outer_track =
     mesh.new(
       Some(torus_geometry.new(Some(3.8), Some(0.025), Some(8.0), Some(80.0), None, None, None)),
       Some(mesh_basic_material.new(Some(tp2))),
-      t.torus_geometry_codec(),
       t.mesh_basic_material_codec(),
     )
   euler.set_x(object3d.get_rotation(outer_track), pi /. 2.0)
@@ -178,8 +179,7 @@ pub fn main() {
   let station_body =
     mesh.new(
       Some(icosahedron_geometry.new(Some(0.42), Some(0.0))),
-      Some(std_mat(4_210_752.0, 0.5, 0.1, True)),
-      t.icosahedron_geometry_codec(),
+      Some(std_mat(0x404040, 0.5, 0.1, True)),
       t.mesh_standard_material_codec(),
     )
   let _ = object3d.add(outer_station, [station_body])
@@ -187,8 +187,7 @@ pub fn main() {
   let halo =
     mesh.new(
       Some(torus_geometry.new(Some(0.68), Some(0.06), Some(10.0), Some(32.0), None, None, None)),
-      Some(std_mat(1_118_481.0, 0.4, 0.1, False)),
-      t.torus_geometry_codec(),
+      Some(std_mat(0x111111, 0.4, 0.1, False)),
       t.mesh_standard_material_codec(),
     )
   euler.set_x(object3d.get_rotation(halo), 0.8)
@@ -196,12 +195,12 @@ pub fn main() {
 
   let assert Some(tilt_btn) = document.get_element_by_id(doc, "btn-tilt")
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
-  let epoch_cell = new_cell(0.6)
-  let tilt_cell = new_cell(False)
+  let epoch_ref = rt.ref_new(0.6)
+  let tilt_ref = rt.ref_new(False)
 
   let update_orrery = fn() {
-    let epoch = get_cell(epoch_cell)
-    let tilted = get_cell(tilt_cell)
+    let epoch = rt.ref_get(epoch_ref)
+    let tilted = rt.ref_get(tilt_ref)
     euler.set_y(object3d.get_rotation(inner_pivot), epoch)
     euler.set_y(object3d.get_rotation(moon_pivot), epoch *. 2.5)
     euler.set_y(object3d.get_rotation(outer_pivot), 0.0 -. epoch *. 0.55)
@@ -215,7 +214,7 @@ pub fn main() {
     dom_node.set_text_content(tilt_btn, Some(case tilted { True -> "Outer Tilt: On" False -> "Outer Tilt: Off" }))
     web_gl_renderer.render(renderer, sc, cam)
 
-    let deg = round_int(epoch *. 180.0 /. pi)
+    let deg = float.round(epoch *. 180.0 /. pi)
     dom_node.set_text_content(
       meta_el,
       Some("epoch: " <> int.to_string(deg) <> " deg · moon world: " <> fmt_v3(mpos) <> " · station world: " <> fmt_v3(spos)),
@@ -224,20 +223,20 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(coerce(b), fn(_) { cb() }, None)
+    html_element.add_event_listener_click(b, fn(_) { cb() }, None)
   }
 
   wire_click("btn-step", fn() {
-    set_cell(epoch_cell, get_cell(epoch_cell) +. pi /. 6.0)
+    let _ = rt.ref_update(epoch_ref, fn(e) { e +. pi /. 6.0 })
     update_orrery()
   })
   wire_click("btn-tilt", fn() {
-    set_cell(tilt_cell, !get_cell(tilt_cell))
+    let _ = rt.ref_update(tilt_ref, fn(t) { !t })
     update_orrery()
   })
   wire_click("btn-reset", fn() {
-    set_cell(epoch_cell, 0.6)
-    set_cell(tilt_cell, False)
+    rt.ref_set(epoch_ref, 0.6)
+    rt.ref_set(tilt_ref, False)
     update_orrery()
   })
 

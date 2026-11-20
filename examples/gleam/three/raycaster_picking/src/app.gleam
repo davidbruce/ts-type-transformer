@@ -5,6 +5,7 @@ import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/events/mouse_event
 import dom/areas/html/html_element
+import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -37,21 +38,8 @@ import three/areas/main/vector2
 import three/areas/main/vector3
 import three/areas/main/web_gl_renderer
 import three/areas/main/web_gl_renderer_parameters
+import three/runtime as rt
 import three/types as t
-
-type Cell(a)
-
-@external(javascript, "./app_ffi.mjs", "coerce")
-fn coerce(a: a) -> b
-
-@external(javascript, "./app_ffi.mjs", "newCell")
-fn new_cell(v: a) -> Cell(a)
-
-@external(javascript, "./app_ffi.mjs", "getCell")
-fn get_cell(c: Cell(a)) -> a
-
-@external(javascript, "./app_ffi.mjs", "setCell")
-fn set_cell(c: Cell(a), v: a) -> Nil
 
 @external(javascript, "./app_ffi.mjs", "sin")
 fn sin(x: Float) -> Float
@@ -59,8 +47,27 @@ fn sin(x: Float) -> Float
 @external(javascript, "./app_ffi.mjs", "cos")
 fn cos(x: Float) -> Float
 
-@external(javascript, "./app_ffi.mjs", "fmt2")
-fn fmt2(x: Float) -> String
+const pi = 3.141592653589793
+
+fn hex(value: Int) -> Float {
+  int.to_float(value)
+}
+
+fn fmt2(x: Float) -> String {
+  let neg = x <. 0.0
+  let scaled = float.round(float.absolute_value(x) *. 100.0)
+  let whole = scaled / 100
+  let frac = scaled % 100
+  let frac_str = case frac < 10 {
+    True -> "0" <> int.to_string(frac)
+    False -> int.to_string(frac)
+  }
+  let sign = case neg && scaled > 0 {
+    True -> "-"
+    False -> ""
+  }
+  sign <> int.to_string(whole) <> "." <> frac_str
+}
 
 type Specimen {
   Specimen(
@@ -82,11 +89,8 @@ fn find_by_id(specs: List(Specimen), target_id: Float, idx: Int) -> Option(#(Int
 }
 
 fn nth_specimen(specs: List(Specimen), idx: Int) -> Specimen {
-  case specs, idx {
-    [s, ..], 0 -> s
-    [_, ..rest], n -> nth_specimen(rest, n - 1)
-    [], _ -> panic as "index out of bounds"
-  }
+  let assert Ok(sp) = specs |> list.drop(idx) |> list.first
+  sp
 }
 
 fn fmt_v3(v: t.Vector3(Nil)) -> String {
@@ -97,11 +101,11 @@ pub fn main() {
   let doc = core.get_document()
   let width = 680.0
   let height = 400.0
-  let pi = 3.141592653589793
 
-  let rp = web_gl_renderer_parameters.create()
-  web_gl_renderer_parameters.set_antialias(rp, Some(True))
-  web_gl_renderer_parameters.set_preserve_drawing_buffer(rp, Some(True))
+  let rp =
+    web_gl_renderer_parameters.create()
+    |> web_gl_renderer_parameters.with_antialias(True)
+    |> web_gl_renderer_parameters.with_preserve_drawing_buffer(True)
   let renderer = web_gl_renderer.new(Some(rp))
   web_gl_renderer.set_pixel_ratio(renderer, 1.0)
   web_gl_renderer.set_size(renderer, width, height, None)
@@ -111,14 +115,14 @@ pub fn main() {
   let _ = dom_node.append_child(stage, canvas)
 
   let sc = scene.new()
-  scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(16_250_871.0))))))
+  scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))))))
   let cam = perspective_camera.new(Some(42.0), Some(width /. height), Some(0.1), Some(100.0))
 
-  let _ = object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(16_777_215.0)), Some(1.2))])
-  let key = directional_light.new(Some(t.ColorRepresentationNumber(16_777_215.0)), Some(2.2))
+  let _ = object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.2))])
+  let key = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(2.2))
   let _ = vector3.set(object3d.get_position(key), 6.0, 10.0, Some(8.0))
   let _ = object3d.add(sc, [key])
-  let rim = directional_light.new(Some(t.ColorRepresentationNumber(16_777_215.0)), Some(0.9))
+  let rim = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(0.9))
   let _ = vector3.set(object3d.get_position(rim), -7.0, 5.0, Some(-6.0))
   let _ = object3d.add(sc, [rim])
 
@@ -126,8 +130,8 @@ pub fn main() {
     grid_helper.new(
       Some(9.0),
       Some(9.0),
-      Some(t.ColorRepresentationNumber(10_066_329.0)),
-      Some(t.ColorRepresentationNumber(13_948_116.0)),
+      Some(t.ColorRepresentationNumber(hex(0x999999))),
+      Some(t.ColorRepresentationNumber(hex(0xd4d4d4))),
     )
   vector3.set_y(object3d.get_position(grid), -0.85)
   let _ = object3d.add(sc, [grid])
@@ -149,13 +153,15 @@ pub fn main() {
       let #(name, geo) = item
       let gx = int.to_float(i % 3 - 1)
       let gz = int.to_float(i / 3 - 1)
-      let mp = mesh_standard_material_parameters.create()
-      mesh_standard_material_parameters.set_color(mp, Some(t.ColorRepresentationNumber(13_948_116.0)))
-      mesh_standard_material_parameters.set_roughness(mp, Some(0.55))
-      mesh_standard_material_parameters.set_metalness(mp, Some(0.1))
-      mesh_standard_material_parameters.set_flat_shading(mp, Some(i >= 4))
-      let mat = mesh_standard_material.new(Some(mp))
-      let m = mesh.new(Some(geo), Some(mat), t.buffer_geometry_codec(), t.mesh_standard_material_codec())
+      let mat =
+        mesh_standard_material_parameters.create()
+        |> mesh_standard_material_parameters.with_color(t.ColorRepresentationNumber(hex(0xd4d4d4)))
+        |> mesh_standard_material_parameters.with_roughness(0.55)
+        |> mesh_standard_material_parameters.with_metalness(0.1)
+        |> mesh_standard_material_parameters.with_flat_shading(i >= 4)
+        |> Some
+        |> mesh_standard_material.new
+      let m = mesh.new(Some(geo), Some(mat), t.mesh_standard_material_codec())
       object3d.set_name(m, name)
       let _ = vector3.set(object3d.get_position(m), gx *. 2.1, 0.0, Some(gz *. 2.1))
       euler.set_x(object3d.get_rotation(m), 0.2)
@@ -166,18 +172,18 @@ pub fn main() {
 
   let mesh_objs = list.map(specs, fn(s) { s.obj })
   let bx = box3.new(Some(vector3.new(Some(-0.5), Some(-0.5), Some(-0.5))), Some(vector3.new(Some(0.5), Some(0.5), Some(0.5))))
-  let helper = box3_helper.new(bx, Some(t.ColorRepresentationNumber(1_118_481.0)))
+  let helper = box3_helper.new(bx, Some(t.ColorRepresentationNumber(hex(0x111111))))
   object3d.set_visible(helper, False)
   let _ = object3d.add(sc, [helper])
 
   let caster = raycaster.new(None, None, None, None)
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
-  let yaw_cell = new_cell(0.45)
-  let sel_cell = new_cell(-1)
-  let hit_cell = new_cell("none")
+  let yaw_ref = rt.ref_new(0.45)
+  let sel_ref = rt.ref_new(-1)
+  let hit_ref = rt.ref_new("none")
 
   let update_camera = fn() {
-    let yaw = get_cell(yaw_cell)
+    let yaw = rt.ref_get(yaw_ref)
     let r = 8.4
     let _ = vector3.set(object3d.get_position(cam), r *. sin(yaw), 5.1, Some(r *. cos(yaw)))
     object3d.look_at(cam, vector3.new(Some(0.0), Some(0.0), Some(0.0)))
@@ -186,13 +192,12 @@ pub fn main() {
   }
 
   let render_scene = fn() {
-    let sel = get_cell(sel_cell)
-    let _ =
-      list.index_map(specs, fn(s, i) {
-        let hex = case i == sel { True -> 1_118_481.0 False -> 13_948_116.0 }
-        let _ = color.set_hex(mesh_standard_material.get_color(s.mat), hex, None)
-        Nil
-      })
+    let sel = rt.ref_get(sel_ref)
+    list.index_fold(specs, Nil, fn(_, s, i) {
+      let col_hex = case i == sel { True -> hex(0x111111) False -> hex(0xd4d4d4) }
+      let _ = color.set_hex(mesh_standard_material.get_color(s.mat), col_hex, None)
+      Nil
+    })
     case sel >= 0 && sel < 9 {
       True -> {
         let target_sp = nth_specimen(specs, sel)
@@ -202,22 +207,22 @@ pub fn main() {
       False -> object3d.set_visible(helper, False)
     }
     web_gl_renderer.render(renderer, sc, cam)
-    dom_node.set_text_content(meta_el, Some("picked: " <> get_cell(hit_cell) <> " · 9 specimens · click canvas or buttons"))
+    dom_node.set_text_content(meta_el, Some("picked: " <> rt.ref_get(hit_ref) <> " · 9 specimens · click canvas or buttons"))
   }
 
   let cast_at_ndc = fn(nx: Float, ny: Float) {
     raycaster.set_from_camera(caster, vector2.new(Some(nx), Some(ny)), cam)
     case raycaster.intersect_objects(caster, mesh_objs, Some(False), None) {
       [first, ..] -> {
-        let hit_obj = intersection.get_object(first, t.object3d_codec())
+        let hit_obj = intersection.get_object(first)
         case find_by_id(specs, object3d.get_id(hit_obj), 0) {
           Some(#(idx, sp)) -> {
-            set_cell(sel_cell, idx)
+            rt.ref_set(sel_ref, idx)
             let _ = box3.set_from_object(bx, sp.obj, Some(True))
             let sz = box3.get_size(bx, vector3.new(None, None, None))
             let pt = intersection.get_point(first)
-            set_cell(
-              hit_cell,
+            rt.ref_set(
+              hit_ref,
               sp.name
               <> " at d="
               <> fmt2(intersection.get_distance(first))
@@ -232,14 +237,14 @@ pub fn main() {
             )
           }
           None -> {
-            set_cell(sel_cell, -1)
-            set_cell(hit_cell, "unknown")
+            rt.ref_set(sel_ref, -1)
+            rt.ref_set(hit_ref, "unknown")
           }
         }
       }
       [] -> {
-        set_cell(sel_cell, -1)
-        set_cell(hit_cell, "miss at ndc (" <> fmt2(nx) <> ", " <> fmt2(ny) <> ")")
+        rt.ref_set(sel_ref, -1)
+        rt.ref_set(hit_ref, "miss at ndc (" <> fmt2(nx) <> ", " <> fmt2(ny) <> ")")
       }
     }
     render_scene()
@@ -267,20 +272,20 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(coerce(b), fn(_) { cb() }, None)
+    html_element.add_event_listener_click(b, fn(_) { cb() }, None)
   }
 
   wire_click("btn-p0", fn() { pick_specimen(4) })
   wire_click("btn-p1", fn() { pick_specimen(0) })
   wire_click("btn-p2", fn() { pick_specimen(8) })
   wire_click("btn-orbit", fn() {
-    set_cell(yaw_cell, get_cell(yaw_cell) +. pi /. 4.0)
+    let _ = rt.ref_update(yaw_ref, fn(y) { y +. pi /. 4.0 })
     update_camera()
     render_scene()
   })
   wire_click("btn-clear", fn() {
-    set_cell(sel_cell, -1)
-    set_cell(hit_cell, "none")
+    rt.ref_set(sel_ref, -1)
+    rt.ref_set(hit_ref, "none")
     update_camera()
     render_scene()
   })

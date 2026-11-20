@@ -61,7 +61,7 @@ fn run() -> Int {
     + check(near(world.get_timestep(w), 1.0 /. 60.0, 0.000001), "default timestep")
 
   // A fixed ground: a wide slab with its top at y = 0.5.
-  let ground = world.create_rigid_body(w, rigid_body_desc.set_translation_2(rigid_body_desc.fixed(), 0.0, 0.0, 0.0))
+  let ground = world.create_rigid_body(w, rigid_body_desc.set_translation(rigid_body_desc.fixed(), 0.0, 0.0, 0.0))
   let ground_collider = world.create_collider(w, collider_desc.cuboid(10.0, 0.5, 10.0), Some(ground))
   let passed =
     passed
@@ -71,10 +71,11 @@ fn run() -> Int {
     + check(collider.shape_type(ground_collider) == collider.shape_type(world.get_collider(w, collider.get_handle(ground_collider))), "get_collider by handle")
 
   // A dynamic box, dropped from y = 5, with collision events on.
-  let box_desc = rigid_body_desc.set_translation_2(rigid_body_desc.dynamic_2(), 0.0, 5.0, 0.0)
+  let box_desc = rigid_body_desc.set_translation(rigid_body_desc.dynamic(), 0.0, 5.0, 0.0)
   let box_body = world.create_rigid_body(w, box_desc)
-  let box_shape = collider_desc.cuboid(0.5, 0.5, 0.5)
-  collider_desc.set_active_events(box_shape, t.ActiveEventsCOLLISIONEVENTS)
+  let box_shape =
+    collider_desc.cuboid(0.5, 0.5, 0.5)
+    |> collider_desc.set_active_events(t.ActiveEventsCollisionEvents)
   let box_collider = world.create_collider(w, box_shape, Some(box_body))
   let passed =
     passed

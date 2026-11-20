@@ -24,12 +24,14 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let lenient = katex_options.create()
-      katex_options.set_throw_on_error(lenient, Some(False))
-      katex_options.set_error_color(lenient, Some("#555555"))
+      let lenient =
+        katex_options.create()
+        |> katex_options.with_throw_on_error(False)
+        |> katex_options.with_error_color("#555555")
 
-      let strict = katex_options.create()
-      katex_options.set_throw_on_error(strict, Some(True))
+      let strict =
+        katex_options.create()
+        |> katex_options.with_throw_on_error(True)
 
       let bad_inputs = [
         "\\frac{1}{",

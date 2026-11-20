@@ -26,53 +26,51 @@ pub fn main() -> Nil {
     None -> Nil
     Some(box) -> {
       let chart = ec.init(Some(box), None, None)
-      let opt = raw.create()
-      unit.set_animation(opt, Some(False))
-      unit.set_at(opt, "backgroundColor", dynamic.string("#ffffff"))
-      unit.set_at(
-        opt,
-        "color",
-        dynamic.array(list.map(["#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4"], dynamic.string)),
-      )
-      unit.set_at(
-        opt,
-        "legend",
-        obj([
-          #("bottom", dynamic.float(8.0)),
-          #("textStyle", obj([#("color", dynamic.string("#111111"))])),
-        ]),
-      )
-      unit.set_at(opt, "tooltip", obj([#("trigger", dynamic.string("item"))]))
-      unit.set_at(
-        opt,
-        "series",
-        dynamic.array([
+      let opt =
+        raw.create()
+        |> unit.with_animation(False)
+        |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
+        |> unit.with_at(
+          "color",
+          dynamic.array(list.map(["#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4"], dynamic.string)),
+        )
+        |> unit.with_at(
+          "legend",
           obj([
-            #("type", dynamic.string("pie")),
-            #("name", dynamic.string("Subsystems")),
-            #("radius", dynamic.array([dynamic.string("44%"), dynamic.string("72%")])),
-            #("center", dynamic.array([dynamic.string("50%"), dynamic.string("46%")])),
-            #(
-              "itemStyle",
-              obj([
-                #("borderColor", dynamic.string("#ffffff")),
-                #("borderWidth", dynamic.float(2.0)),
-              ]),
-            ),
-            #("label", obj([#("color", dynamic.string("#111111"))])),
-            #(
-              "data",
-              dynamic.array([
-                slice("Runtime", 34.0),
-                slice("Bindings", 26.0),
-                slice("Glue", 18.0),
-                slice("Parser", 14.0),
-                slice("Tests", 8.0),
-              ]),
-            ),
+            #("bottom", dynamic.float(8.0)),
+            #("textStyle", obj([#("color", dynamic.string("#111111"))])),
           ]),
-        ]),
-      )
+        )
+        |> unit.with_at("tooltip", obj([#("trigger", dynamic.string("item"))]))
+        |> unit.with_at(
+          "series",
+          dynamic.array([
+            obj([
+              #("type", dynamic.string("pie")),
+              #("name", dynamic.string("Subsystems")),
+              #("radius", dynamic.array([dynamic.string("44%"), dynamic.string("72%")])),
+              #("center", dynamic.array([dynamic.string("50%"), dynamic.string("46%")])),
+              #(
+                "itemStyle",
+                obj([
+                  #("borderColor", dynamic.string("#ffffff")),
+                  #("borderWidth", dynamic.float(2.0)),
+                ]),
+              ),
+              #("label", obj([#("color", dynamic.string("#111111"))])),
+              #(
+                "data",
+                dynamic.array([
+                  slice("Runtime", 34.0),
+                  slice("Bindings", 26.0),
+                  slice("Glue", 18.0),
+                  slice("Parser", 14.0),
+                  slice("Tests", 8.0),
+                ]),
+              ),
+            ]),
+          ]),
+        )
       e_charts_type.set_option(chart, opt, None, None)
 
       case document.get_element_by_id(doc, "meta") {

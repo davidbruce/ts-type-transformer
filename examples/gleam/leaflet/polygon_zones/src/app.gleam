@@ -22,25 +22,26 @@ fn poly_opts(
   fill_color: String,
   fill_opacity: Float,
 ) -> t.PolylineOptions(Nil) {
-  let opts = polyline_options.create()
-  polyline_options.set_smooth_factor(opts, Some(1.0))
-  path_options.set_color(opts, Some(color))
-  path_options.set_weight(opts, Some(weight))
+  let opts =
+    polyline_options.create()
+    |> polyline_options.with_smooth_factor(1.0)
+    |> path_options.with_color(color)
+    |> path_options.with_weight(weight)
+    |> path_options.with_fill_color(fill_color)
+    |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) -> path_options.set_dash_array(opts, Some(t.StringOrNumberArrayString(d)))
-    None -> Nil
+    Some(d) -> path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    None -> opts
   }
-  path_options.set_fill_color(opts, Some(fill_color))
-  path_options.set_fill_opacity(opts, Some(fill_opacity))
-  opts
 }
 
 pub fn main() {
-  let m_opts = map_options.create()
-  map_options.set_attribution_control(m_opts, Some(False))
-  map_options.set_zoom_animation(m_opts, Some(False))
-  map_options.set_fade_animation(m_opts, Some(False))
-  map_options.set_marker_zoom_animation(m_opts, Some(False))
+  let m_opts =
+    map_options.create()
+    |> map_options.with_attribution_control(False)
+    |> map_options.with_zoom_animation(False)
+    |> map_options.with_fade_animation(False)
+    |> map_options.with_marker_zoom_animation(False)
   let m = leaflet.map(t.ContentString("map"), Some(m_opts))
 
   let mid_pts = [
@@ -102,12 +103,13 @@ pub fn main() {
             False -> #("#ffffff", #(c_cnt, m_cnt, e_cnt + 1))
           }
       }
-      let cm_opts = circle_marker_options.create()
-      circle_marker_options.set_radius(cm_opts, Some(6.0))
-      path_options.set_color(cm_opts, Some("#111111"))
-      path_options.set_weight(cm_opts, Some(2.0))
-      path_options.set_fill_color(cm_opts, Some(fill_hex))
-      path_options.set_fill_opacity(cm_opts, Some(1.0))
+      let cm_opts =
+        circle_marker_options.create()
+        |> circle_marker_options.with_radius(6.0)
+        |> path_options.with_color("#111111")
+        |> path_options.with_weight(2.0)
+        |> path_options.with_fill_color(fill_hex)
+        |> path_options.with_fill_opacity(1.0)
       let _ =
         layer.add_to(
           leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(cm_opts)),

@@ -43,86 +43,84 @@ pub fn main() -> Nil {
     None -> Nil
     Some(box) -> {
       let chart = ec.init(Some(box), None, None)
-      let opt = raw.create()
-      unit.set_animation(opt, Some(False))
-      unit.set_at(opt, "backgroundColor", dynamic.string("#ffffff"))
-      unit.set_at(
-        opt,
-        "legend",
-        obj([
-          #("top", dynamic.float(8.0)),
-          #("textStyle", obj([#("color", dynamic.string("#111111"))])),
-        ]),
-      )
-      unit.set_at(
-        opt,
-        "grid",
-        obj([
-          #("left", dynamic.float(48.0)),
-          #("right", dynamic.float(24.0)),
-          #("top", dynamic.float(48.0)),
-          #("bottom", dynamic.float(36.0)),
-        ]),
-      )
-      unit.set_at(opt, "xAxis", value_axis())
-      unit.set_at(opt, "yAxis", value_axis())
-      unit.set_at(
-        opt,
-        "series",
-        dynamic.array([
+      let opt =
+        raw.create()
+        |> unit.with_animation(False)
+        |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
+        |> unit.with_at(
+          "legend",
           obj([
-            #("type", dynamic.string("scatter")),
-            #("name", dynamic.string("Cluster A")),
-            #("symbol", dynamic.string("circle")),
-            #("symbolSize", dynamic.float(10.0)),
-            #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
-            #(
-              "data",
-              pts([
-                #(14.0, 22.0),
-                #(21.0, 31.0),
-                #(28.0, 27.0),
-                #(33.0, 42.0),
-                #(40.0, 48.0),
-                #(46.0, 53.0),
-                #(54.0, 61.0),
-                #(62.0, 59.0),
-                #(71.0, 74.0),
-                #(82.0, 85.0),
-              ]),
-            ),
+            #("top", dynamic.float(8.0)),
+            #("textStyle", obj([#("color", dynamic.string("#111111"))])),
           ]),
+        )
+        |> unit.with_at(
+          "grid",
           obj([
-            #("type", dynamic.string("scatter")),
-            #("name", dynamic.string("Cluster B")),
-            #("symbol", dynamic.string("rect")),
-            #("symbolSize", dynamic.float(10.0)),
-            #(
-              "itemStyle",
-              obj([
-                #("color", dynamic.string("#ffffff")),
-                #("borderColor", dynamic.string("#111111")),
-                #("borderWidth", dynamic.float(2.0)),
-              ]),
-            ),
-            #(
-              "data",
-              pts([
-                #(18.0, 64.0),
-                #(25.0, 72.0),
-                #(31.0, 68.0),
-                #(39.0, 79.0),
-                #(47.0, 65.0),
-                #(55.0, 81.0),
-                #(64.0, 77.0),
-                #(72.0, 88.0),
-                #(79.0, 82.0),
-                #(88.0, 92.0),
-              ]),
-            ),
+            #("left", dynamic.float(48.0)),
+            #("right", dynamic.float(24.0)),
+            #("top", dynamic.float(48.0)),
+            #("bottom", dynamic.float(36.0)),
           ]),
-        ]),
-      )
+        )
+        |> unit.with_at("xAxis", value_axis())
+        |> unit.with_at("yAxis", value_axis())
+        |> unit.with_at(
+          "series",
+          dynamic.array([
+            obj([
+              #("type", dynamic.string("scatter")),
+              #("name", dynamic.string("Cluster A")),
+              #("symbol", dynamic.string("circle")),
+              #("symbolSize", dynamic.float(10.0)),
+              #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
+              #(
+                "data",
+                pts([
+                  #(14.0, 22.0),
+                  #(21.0, 31.0),
+                  #(28.0, 27.0),
+                  #(33.0, 42.0),
+                  #(40.0, 48.0),
+                  #(46.0, 53.0),
+                  #(54.0, 61.0),
+                  #(62.0, 59.0),
+                  #(71.0, 74.0),
+                  #(82.0, 85.0),
+                ]),
+              ),
+            ]),
+            obj([
+              #("type", dynamic.string("scatter")),
+              #("name", dynamic.string("Cluster B")),
+              #("symbol", dynamic.string("rect")),
+              #("symbolSize", dynamic.float(10.0)),
+              #(
+                "itemStyle",
+                obj([
+                  #("color", dynamic.string("#ffffff")),
+                  #("borderColor", dynamic.string("#111111")),
+                  #("borderWidth", dynamic.float(2.0)),
+                ]),
+              ),
+              #(
+                "data",
+                pts([
+                  #(18.0, 64.0),
+                  #(25.0, 72.0),
+                  #(31.0, 68.0),
+                  #(39.0, 79.0),
+                  #(47.0, 65.0),
+                  #(55.0, 81.0),
+                  #(64.0, 77.0),
+                  #(72.0, 88.0),
+                  #(79.0, 82.0),
+                  #(88.0, 92.0),
+                ]),
+              ),
+            ]),
+          ]),
+        )
       e_charts_type.set_option(chart, opt, None, None)
 
       case document.get_element_by_id(doc, "meta") {

@@ -77,7 +77,7 @@ pub fn main() {
 
   // ---- column definitions from a column helper ----
   let helper = table.create_column_helper()
-  let accessor = column_helper.get_accessor(helper, t.table_features_codec(), runtime.codec_dynamic())
+  let accessor = column_helper.get_accessor(helper)
   let name_options = header_options.create()
   header_options.set_header(name_options, "Name")
   let name = accessor(runtime.dynamic("name"), runtime.dynamic(name_options))
@@ -89,7 +89,7 @@ pub fn main() {
     + check(field(name, ["accessorKey"], decode.string) == "name", "accessorKey")
     + check(field(name, ["header"], decode.string) == "Name", "header")
     + check(field(age, ["accessorKey"], decode.string) == "age", "a second column")
-  let columns = column_helper.get_columns(helper, t.table_features_codec(), runtime.codec_dynamic())
+  let columns = column_helper.get_columns(helper)
   let defs = columns([name, age])
   let passed = passed + check(list.length(defs) == 2, "columns() keeps the definitions")
 
@@ -186,7 +186,7 @@ pub fn main() {
   let feature_map = make_object.create()
   make_object.set_at(feature_map, "coreReactivityFeature", runtime.dynamic(bindings), runtime.codec_dynamic())
   make_object.set_at(feature_map, "rowSortingFeature", runtime.dynamic(table.get_row_sorting_feature()), runtime.codec_dynamic())
-  make_object.set_at(feature_map, "sortedRowModel", runtime.dynamic(table.create_sorted_row_model(runtime.codec_dynamic())), runtime.codec_dynamic())
+  make_object.set_at(feature_map, "sortedRowModel", runtime.dynamic(table.create_sorted_row_model()), runtime.codec_dynamic())
   let options = make_object.create()
   make_object.set_at(options, "features", runtime.dynamic(feature_map), runtime.codec_dynamic())
   make_object.set_at(options, "data", dynamic.array([person("bo", 30.0), person("al", 20.0), person("cy", 25.0)]), runtime.codec_dynamic())
@@ -200,7 +200,7 @@ pub fn main() {
     + check(field(runtime.dynamic(table_core_properties.get_options(tbl)), ["columns"], decode.list(decode.dynamic)) |> list.length == 2, "and the columns")
 
   // Core row model factory works directly and through getRowModel().
-  let core_model_fn = table.create_core_row_model(runtime.codec_dynamic())
+  let core_model_fn = table.create_core_row_model()
   let core_model = core_model_fn(tbl)()
   let name_of = fn(r) {
     field(row_core_properties.get_original(r, runtime.codec_dynamic()), ["name"], decode.string)
@@ -209,7 +209,7 @@ pub fn main() {
     passed
     + check(list.map(row_model.get_rows(core_model), name_of) == ["bo", "al", "cy"], "createCoreRowModel lists rows")
   let model_view: t.TableRowModelsCore(t.TableFeatures(Nil), dynamic.Dynamic, Nil) = coerce(tbl)
-  let get_row_model = table_row_models_core.get_get_row_model(model_view, t.table_features_codec(), runtime.codec_dynamic())
+  let get_row_model = table_row_models_core.get_get_row_model(model_view)
   let unsorted_model = get_row_model()
   let passed =
     passed

@@ -27,136 +27,134 @@ pub fn main() -> Nil {
       let radar = ec.init(Some(r_box), None, None)
       let gauge = ec.init(Some(g_box), None, None)
 
-      let r_opt = raw.create()
-      unit.set_animation(r_opt, Some(False))
-      unit.set_at(r_opt, "backgroundColor", dynamic.string("#ffffff"))
-      unit.set_at(
-        r_opt,
-        "legend",
-        obj([
-          #("bottom", dynamic.float(6.0)),
-          #("textStyle", obj([#("color", dynamic.string("#111111"))])),
-        ]),
-      )
-      unit.set_at(
-        r_opt,
-        "radar",
-        obj([
-          #("radius", dynamic.string("62%")),
-          #("axisName", obj([#("color", dynamic.string("#111111"))])),
-          #("splitLine", obj([#("lineStyle", obj([#("color", dynamic.string("#d4d4d4"))]))])),
-          #(
-            "splitArea",
-            obj([
-              #(
-                "areaStyle",
-                obj([#("color", dynamic.array([dynamic.string("#ffffff"), dynamic.string("#f7f7f7")]))]),
-              ),
-            ]),
-          ),
-          #("axisLine", obj([#("lineStyle", obj([#("color", dynamic.string("#b5b5b5"))]))])),
-          #(
-            "indicator",
-            dynamic.array([
-              ind("Throughput"),
-              ind("Memory"),
-              ind("Startup"),
-              ind("Type Safety"),
-              ind("Bundle"),
-            ]),
-          ),
-        ]),
-      )
-      unit.set_at(
-        r_opt,
-        "series",
-        dynamic.array([
+      let r_opt =
+        raw.create()
+        |> unit.with_animation(False)
+        |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
+        |> unit.with_at(
+          "legend",
           obj([
-            #("type", dynamic.string("radar")),
-            #(
-              "data",
-              dynamic.array([
-                obj([
-                  #("name", dynamic.string("WASM Target")),
-                  #("value", dynamic.array(list.map([92.0, 86.0, 88.0, 96.0, 84.0], dynamic.float))),
-                  #("lineStyle", obj([#("color", dynamic.string("#111111")), #("width", dynamic.float(2.0))])),
-                  #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
-                  #("areaStyle", obj([#("color", dynamic.string("rgba(17,17,17,0.12)"))])),
-                ]),
-                obj([
-                  #("name", dynamic.string("Baseline")),
-                  #("value", dynamic.array(list.map([70.0, 68.0, 74.0, 72.0, 66.0], dynamic.float))),
-                  #(
-                    "lineStyle",
-                    obj([
-                      #("color", dynamic.string("#737373")),
-                      #("width", dynamic.float(1.5)),
-                      #("type", dynamic.string("dashed")),
-                    ]),
-                  ),
-                  #("itemStyle", obj([#("color", dynamic.string("#737373"))])),
-                ]),
-              ]),
-            ),
+            #("bottom", dynamic.float(6.0)),
+            #("textStyle", obj([#("color", dynamic.string("#111111"))])),
           ]),
-        ]),
-      )
-      e_charts_type.set_option(radar, r_opt, None, None)
-
-      let g_opt = raw.create()
-      unit.set_animation(g_opt, Some(False))
-      unit.set_at(g_opt, "backgroundColor", dynamic.string("#ffffff"))
-      unit.set_at(
-        g_opt,
-        "series",
-        dynamic.array([
+        )
+        |> unit.with_at(
+          "radar",
           obj([
-            #("type", dynamic.string("gauge")),
-            #("min", dynamic.float(0.0)),
-            #("max", dynamic.float(100.0)),
+            #("radius", dynamic.string("62%")),
+            #("axisName", obj([#("color", dynamic.string("#111111"))])),
+            #("splitLine", obj([#("lineStyle", obj([#("color", dynamic.string("#d4d4d4"))]))])),
             #(
-              "progress",
-              obj([
-                #("show", dynamic.bool(True)),
-                #("width", dynamic.float(14.0)),
-                #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
-              ]),
-            ),
-            #(
-              "axisLine",
+              "splitArea",
               obj([
                 #(
-                  "lineStyle",
-                  obj([
-                    #("width", dynamic.float(14.0)),
-                    #("color", dynamic.array([dynamic.array([dynamic.float(1.0), dynamic.string("#e5e5e5")])])),
-                  ]),
+                  "areaStyle",
+                  obj([#("color", dynamic.array([dynamic.string("#ffffff"), dynamic.string("#f7f7f7")]))]),
                 ),
               ]),
             ),
-            #("axisTick", obj([#("lineStyle", obj([#("color", dynamic.string("#737373"))]))])),
-            #("splitLine", obj([#("lineStyle", obj([#("color", dynamic.string("#111111"))]))])),
-            #("axisLabel", obj([#("color", dynamic.string("#555555"))])),
-            #("pointer", obj([#("itemStyle", obj([#("color", dynamic.string("#111111"))]))])),
+            #("axisLine", obj([#("lineStyle", obj([#("color", dynamic.string("#b5b5b5"))]))])),
             #(
-              "detail",
-              obj([
-                #("valueAnimation", dynamic.bool(False)),
-                #("formatter", dynamic.string("{value}%")),
-                #("color", dynamic.string("#111111")),
-                #("fontSize", dynamic.float(22.0)),
-              ]),
-            ),
-            #("title", obj([#("color", dynamic.string("#555555")), #("fontSize", dynamic.float(12.0))])),
-            #(
-              "data",
+              "indicator",
               dynamic.array([
-                obj([#("value", dynamic.float(84.0)), #("name", dynamic.string("Score"))]),
+                ind("Throughput"),
+                ind("Memory"),
+                ind("Startup"),
+                ind("Type Safety"),
+                ind("Bundle"),
               ]),
             ),
           ]),
-        ]),
-      )
+        )
+        |> unit.with_at(
+          "series",
+          dynamic.array([
+            obj([
+              #("type", dynamic.string("radar")),
+              #(
+                "data",
+                dynamic.array([
+                  obj([
+                    #("name", dynamic.string("WASM Target")),
+                    #("value", dynamic.array(list.map([92.0, 86.0, 88.0, 96.0, 84.0], dynamic.float))),
+                    #("lineStyle", obj([#("color", dynamic.string("#111111")), #("width", dynamic.float(2.0))])),
+                    #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
+                    #("areaStyle", obj([#("color", dynamic.string("rgba(17,17,17,0.12)"))])),
+                  ]),
+                  obj([
+                    #("name", dynamic.string("Baseline")),
+                    #("value", dynamic.array(list.map([70.0, 68.0, 74.0, 72.0, 66.0], dynamic.float))),
+                    #(
+                      "lineStyle",
+                      obj([
+                        #("color", dynamic.string("#737373")),
+                        #("width", dynamic.float(1.5)),
+                        #("type", dynamic.string("dashed")),
+                      ]),
+                    ),
+                    #("itemStyle", obj([#("color", dynamic.string("#737373"))])),
+                  ]),
+                ]),
+              ),
+            ]),
+          ]),
+        )
+      e_charts_type.set_option(radar, r_opt, None, None)
+
+      let g_opt =
+        raw.create()
+        |> unit.with_animation(False)
+        |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
+        |> unit.with_at(
+          "series",
+          dynamic.array([
+            obj([
+              #("type", dynamic.string("gauge")),
+              #("min", dynamic.float(0.0)),
+              #("max", dynamic.float(100.0)),
+              #(
+                "progress",
+                obj([
+                  #("show", dynamic.bool(True)),
+                  #("width", dynamic.float(14.0)),
+                  #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
+                ]),
+              ),
+              #(
+                "axisLine",
+                obj([
+                  #(
+                    "lineStyle",
+                    obj([
+                      #("width", dynamic.float(14.0)),
+                      #("color", dynamic.array([dynamic.array([dynamic.float(1.0), dynamic.string("#e5e5e5")])])),
+                    ]),
+                  ),
+                ]),
+              ),
+              #("axisTick", obj([#("lineStyle", obj([#("color", dynamic.string("#737373"))]))])),
+              #("splitLine", obj([#("lineStyle", obj([#("color", dynamic.string("#111111"))]))])),
+              #("axisLabel", obj([#("color", dynamic.string("#555555"))])),
+              #("pointer", obj([#("itemStyle", obj([#("color", dynamic.string("#111111"))]))])),
+              #(
+                "detail",
+                obj([
+                  #("valueAnimation", dynamic.bool(False)),
+                  #("formatter", dynamic.string("{value}%")),
+                  #("color", dynamic.string("#111111")),
+                  #("fontSize", dynamic.float(22.0)),
+                ]),
+              ),
+              #("title", obj([#("color", dynamic.string("#555555")), #("fontSize", dynamic.float(12.0))])),
+              #(
+                "data",
+                dynamic.array([
+                  obj([#("value", dynamic.float(84.0)), #("name", dynamic.string("Score"))]),
+                ]),
+              ),
+            ]),
+          ]),
+        )
       e_charts_type.set_option(gauge, g_opt, None, None)
 
       case document.get_element_by_id(doc, "meta") {

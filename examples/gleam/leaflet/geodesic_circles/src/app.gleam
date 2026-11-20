@@ -16,20 +16,22 @@ import leaflet/areas/main/path_options
 import leaflet/types as t
 
 pub fn main() {
-  let m_opts = map_options.create()
-  map_options.set_attribution_control(m_opts, Some(False))
-  map_options.set_zoom_animation(m_opts, Some(False))
-  map_options.set_fade_animation(m_opts, Some(False))
-  map_options.set_marker_zoom_animation(m_opts, Some(False))
+  let m_opts =
+    map_options.create()
+    |> map_options.with_attribution_control(False)
+    |> map_options.with_zoom_animation(False)
+    |> map_options.with_fade_animation(False)
+    |> map_options.with_marker_zoom_animation(False)
   let m = leaflet.map(t.ContentString("map"), Some(m_opts))
 
   let zurich = leaflet.lat_lng(47.3769, 8.5417, None)
   let _ = map.set_view(m, t.LatLngExpressionLatLng(zurich), Some(8.0), None)
-  let outer_opts = circle_marker_options.create()
-  path_options.set_color(outer_opts, Some("#404040"))
-  path_options.set_weight(outer_opts, Some(1.5))
-  path_options.set_fill_color(outer_opts, Some("#d4d4d4"))
-  path_options.set_fill_opacity(outer_opts, Some(0.25))
+  let outer_opts =
+    circle_marker_options.create()
+    |> path_options.with_color("#404040")
+    |> path_options.with_weight(1.5)
+    |> path_options.with_fill_color("#d4d4d4")
+    |> path_options.with_fill_opacity(0.25)
   let outer_circle =
     leaflet.circle_with_radius(t.LatLngExpressionLatLng(zurich), 130_000.0, Some(outer_opts))
   let _ = layer.add_to(outer_circle, t.MapOrLayerGroupMap(m))
@@ -42,11 +44,12 @@ pub fn main() {
     ],
     fn(spec) {
       let #(r, stroke, fill, op) = spec
-      let opts = circle_marker_options.create()
-      path_options.set_color(opts, Some(stroke))
-      path_options.set_weight(opts, Some(1.5))
-      path_options.set_fill_color(opts, Some(fill))
-      path_options.set_fill_opacity(opts, Some(op))
+      let opts =
+        circle_marker_options.create()
+        |> path_options.with_color(stroke)
+        |> path_options.with_weight(1.5)
+        |> path_options.with_fill_color(fill)
+        |> path_options.with_fill_opacity(op)
       let _ =
         layer.add_to(
           leaflet.circle_with_radius(t.LatLngExpressionLatLng(zurich), r, Some(opts)),
@@ -68,24 +71,26 @@ pub fn main() {
     list.fold(beacons, 0.0, fn(acc, pt) {
       let d_km = lat_lng.distance_to(zurich, t.LatLngExpressionLatLng(pt)) /. 1000.0
 
-      let b_opts = circle_marker_options.create()
-      path_options.set_color(b_opts, Some("#555555"))
-      path_options.set_weight(b_opts, Some(1.2))
-      path_options.set_dash_array(b_opts, Some(t.StringOrNumberArrayString("3 3")))
-      path_options.set_fill_color(b_opts, Some("#737373"))
-      path_options.set_fill_opacity(b_opts, Some(0.18))
+      let b_opts =
+        circle_marker_options.create()
+        |> path_options.with_color("#555555")
+        |> path_options.with_weight(1.2)
+        |> path_options.with_dash_array(t.StringOrNumberArrayString("3 3"))
+        |> path_options.with_fill_color("#737373")
+        |> path_options.with_fill_opacity(0.18)
       let _ =
         layer.add_to(
           leaflet.circle_with_radius(t.LatLngExpressionLatLng(pt), 18_000.0, Some(b_opts)),
           t.MapOrLayerGroupMap(m),
         )
 
-      let d_opts = circle_marker_options.create()
-      circle_marker_options.set_radius(d_opts, Some(4.5))
-      path_options.set_color(d_opts, Some("#111111"))
-      path_options.set_weight(d_opts, Some(1.5))
-      path_options.set_fill_color(d_opts, Some("#111111"))
-      path_options.set_fill_opacity(d_opts, Some(1.0))
+      let d_opts =
+        circle_marker_options.create()
+        |> circle_marker_options.with_radius(4.5)
+        |> path_options.with_color("#111111")
+        |> path_options.with_weight(1.5)
+        |> path_options.with_fill_color("#111111")
+        |> path_options.with_fill_opacity(1.0)
       let _ =
         layer.add_to(
           leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(d_opts)),

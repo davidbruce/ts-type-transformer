@@ -22,98 +22,94 @@ pub fn main() -> Nil {
     None -> Nil
     Some(box) -> {
       let chart = ec.init(Some(box), None, None)
-      let opt = raw.create()
-      unit.set_animation(opt, Some(False))
-      unit.set_at(opt, "backgroundColor", dynamic.string("#ffffff"))
-      unit.set_at(
-        opt,
-        "legend",
-        obj([
-          #("top", dynamic.float(8.0)),
-          #("textStyle", obj([#("color", dynamic.string("#111111"))])),
-        ]),
-      )
-      unit.set_at(opt, "tooltip", obj([#("trigger", dynamic.string("axis"))]))
-      unit.set_at(
-        opt,
-        "grid",
-        obj([
-          #("left", dynamic.float(48.0)),
-          #("right", dynamic.float(24.0)),
-          #("top", dynamic.float(48.0)),
-          #("bottom", dynamic.float(36.0)),
-        ]),
-      )
-      unit.set_at(
-        opt,
-        "xAxis",
-        obj([
-          #("type", dynamic.string("category")),
-          #("boundaryGap", dynamic.bool(False)),
-          #(
-            "data",
-            dynamic.array(list.map(["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"], dynamic.string)),
-          ),
-          #(
-            "axisLine",
-            obj([#("lineStyle", obj([#("color", dynamic.string("#111111"))]))]),
-          ),
-          #("axisLabel", obj([#("color", dynamic.string("#555555"))])),
-        ]),
-      )
-      unit.set_at(
-        opt,
-        "yAxis",
-        obj([
-          #("type", dynamic.string("value")),
-          #("min", dynamic.float(0.0)),
-          #("max", dynamic.float(100.0)),
-          #(
-            "splitLine",
-            obj([#("lineStyle", obj([#("color", dynamic.string("#e5e5e5"))]))]),
-          ),
-          #("axisLabel", obj([#("color", dynamic.string("#555555"))])),
-        ]),
-      )
-      unit.set_at(
-        opt,
-        "series",
-        dynamic.array([
+      let opt =
+        raw.create()
+        |> unit.with_animation(False)
+        |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
+        |> unit.with_at(
+          "legend",
           obj([
-            #("type", dynamic.string("line")),
-            #("name", dynamic.string("Throughput")),
-            #("smooth", dynamic.bool(True)),
+            #("top", dynamic.float(8.0)),
+            #("textStyle", obj([#("color", dynamic.string("#111111"))])),
+          ]),
+        )
+        |> unit.with_at("tooltip", obj([#("trigger", dynamic.string("axis"))]))
+        |> unit.with_at(
+          "grid",
+          obj([
+            #("left", dynamic.float(48.0)),
+            #("right", dynamic.float(24.0)),
+            #("top", dynamic.float(48.0)),
+            #("bottom", dynamic.float(36.0)),
+          ]),
+        )
+        |> unit.with_at(
+          "xAxis",
+          obj([
+            #("type", dynamic.string("category")),
+            #("boundaryGap", dynamic.bool(False)),
             #(
               "data",
-              dynamic.array(list.map([28.0, 44.0, 39.0, 62.0, 58.0, 76.0, 81.0, 89.0], dynamic.float)),
+              dynamic.array(list.map(["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"], dynamic.string)),
             ),
             #(
-              "lineStyle",
-              obj([#("color", dynamic.string("#111111")), #("width", dynamic.float(2.0))]),
+              "axisLine",
+              obj([#("lineStyle", obj([#("color", dynamic.string("#111111"))]))]),
             ),
-            #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
-            #("areaStyle", obj([#("color", dynamic.string("rgba(17,17,17,0.12)"))])),
+            #("axisLabel", obj([#("color", dynamic.string("#555555"))])),
           ]),
+        )
+        |> unit.with_at(
+          "yAxis",
           obj([
-            #("type", dynamic.string("line")),
-            #("name", dynamic.string("Baseline")),
-            #("smooth", dynamic.bool(False)),
+            #("type", dynamic.string("value")),
+            #("min", dynamic.float(0.0)),
+            #("max", dynamic.float(100.0)),
             #(
-              "data",
-              dynamic.array(list.map([35.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0], dynamic.float)),
+              "splitLine",
+              obj([#("lineStyle", obj([#("color", dynamic.string("#e5e5e5"))]))]),
             ),
-            #(
-              "lineStyle",
-              obj([
-                #("color", dynamic.string("#737373")),
-                #("width", dynamic.float(1.5)),
-                #("type", dynamic.string("dashed")),
-              ]),
-            ),
-            #("itemStyle", obj([#("color", dynamic.string("#737373"))])),
+            #("axisLabel", obj([#("color", dynamic.string("#555555"))])),
           ]),
-        ]),
-      )
+        )
+        |> unit.with_at(
+          "series",
+          dynamic.array([
+            obj([
+              #("type", dynamic.string("line")),
+              #("name", dynamic.string("Throughput")),
+              #("smooth", dynamic.bool(True)),
+              #(
+                "data",
+                dynamic.array(list.map([28.0, 44.0, 39.0, 62.0, 58.0, 76.0, 81.0, 89.0], dynamic.float)),
+              ),
+              #(
+                "lineStyle",
+                obj([#("color", dynamic.string("#111111")), #("width", dynamic.float(2.0))]),
+              ),
+              #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
+              #("areaStyle", obj([#("color", dynamic.string("rgba(17,17,17,0.12)"))])),
+            ]),
+            obj([
+              #("type", dynamic.string("line")),
+              #("name", dynamic.string("Baseline")),
+              #("smooth", dynamic.bool(False)),
+              #(
+                "data",
+                dynamic.array(list.map([35.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0], dynamic.float)),
+              ),
+              #(
+                "lineStyle",
+                obj([
+                  #("color", dynamic.string("#737373")),
+                  #("width", dynamic.float(1.5)),
+                  #("type", dynamic.string("dashed")),
+                ]),
+              ),
+              #("itemStyle", obj([#("color", dynamic.string("#737373"))])),
+            ]),
+          ]),
+        )
       e_charts_type.set_option(chart, opt, None, None)
 
       case document.get_element_by_id(doc, "meta") {

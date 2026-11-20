@@ -23,6 +23,7 @@ import tanstack_table_core/types as t
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
 
+// Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
 fn coerce(a: a) -> b
 
@@ -71,16 +72,27 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view, t.table_features_codec(), rt.codec_dynamic())
-  let get_core = table_row_models_core.get_get_core_row_model(rows_view, t.table_features_codec(), rt.codec_dynamic())
+  let get_rm = table_row_models_core.get_get_row_model(rows_view)
+  let get_core = table_row_models_core.get_get_core_row_model(rows_view)
   let rows = row_model.get_rows(get_rm())
   let total = list.length(row_model.get_rows(get_core()))
 
   let body =
     list.map(rows, fn(r) {
       let gv = row_row.get_get_value(coerce(r))
-      let str_val = fn(k) -> String { coerce(tt.call_string_to_t_value_fn(gv, k)) }
-      let int_val = fn(k) -> String { int.to_string(float.round(coerce(tt.call_string_to_t_value_fn(gv, k)))) }
+      let str_val = fn(k) -> String {
+        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.string) {
+          Ok(s) -> s
+          Error(_) -> ""
+        }
+      }
+      let int_val = fn(k) -> String {
+        let num = case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.float) {
+          Ok(n) -> n
+          Error(_) -> 0.0
+        }
+        int.to_string(float.round(num))
+      }
       "<tr><td>"
       <> esc_html(str_val("id"))
       <> "</td><td>"
@@ -131,22 +143,24 @@ pub fn main() {
     rt.js_object([
       #("coreReactivityFeature", rt.dynamic(store_reactivity_bindings())),
       #("rowPaginationFeature", rt.dynamic(tt.get_row_pagination_feature())),
-      #("coreRowModel", rt.dynamic(tt.create_core_row_model(rt.codec_dynamic()))),
-      #("paginatedRowModel", rt.dynamic(tt.create_paginated_row_model(rt.codec_dynamic()))),
+      #("coreRowModel", rt.dynamic(tt.create_core_row_model())),
+      #("paginatedRowModel", rt.dynamic(tt.create_paginated_row_model())),
     ])
   let accounts = ["ops-pool", "clearing-ch", "reserve-de"]
   let cats = ["compute", "storage", "egress", "audit"]
   let rows =
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
-    |> list.map(fn(i) {
-      rt.js_object([
-        #("id", rt.dynamic("TX-" <> pad3(i + 1))),
-        #("account", rt.dynamic(at(accounts, i % 3))),
-        #("category", rt.dynamic(at(cats, i % 4))),
-        #("units", rt.dynamic(int.to_float({ i * 7 } % 19 + 4))),
-        #("amount", rt.dynamic(int.to_float({ { i * 37 } % 90 + 15 } * 12))),
-      ])
+    int.range(from: 0, to: 18, with: [], run: fn(acc, i) {
+      let item =
+        rt.js_object([
+          #("id", rt.dynamic("TX-" <> pad3(i + 1))),
+          #("account", rt.dynamic(at(accounts, i % 3))),
+          #("category", rt.dynamic(at(cats, i % 4))),
+          #("units", rt.dynamic(int.to_float({ i * 7 } % 19 + 4))),
+          #("amount", rt.dynamic(int.to_float({ { i * 37 } % 90 + 15 } * 12))),
+        ])
+      [item, ..acc]
     })
+    |> list.reverse
   let cols =
     rt.js_array([
       col_def("id", "Entry"),
@@ -155,9 +169,10 @@ pub fn main() {
       col_def("units", "Units"),
       col_def("amount", "Amount (CHF)"),
     ])
-  let init_pg = pagination_state.create()
-  pagination_state.set_page_index(init_pg, 0.0)
-  pagination_state.set_page_size(init_pg, 5.0)
+  let init_pg =
+    pagination_state.create()
+    |> pagination_state.with_page_index(0.0)
+    |> pagination_state.with_page_size(5.0)
   let init_state = rt.js_object([#("pagination", rt.dynamic(init_pg))])
   let options =
     rt.js_object([

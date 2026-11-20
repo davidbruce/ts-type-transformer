@@ -6,10 +6,10 @@ import gleam/option.{None, Some}
 import gleam/string
 import node/areas/fs
 import node/areas/fs/rm_options
+import node/areas/fs/stats
 import node/areas/fs/stats_base
 import node/areas/main/mkdir_options
 import node/areas/path
-import node/runtime
 import node/types as t
 
 fn check(ok: Bool, what: String) -> Int {
@@ -42,7 +42,7 @@ fn walk_dir(dir: String, counts: #(Int, Int, Float)) -> #(Int, Int, Float) {
       False, True -> #(
         dirs,
         files + 1,
-        bytes +. stats_base.get_size(st, runtime.codec_float()),
+        bytes +. stats.get_size(st),
       )
       False, False -> acc
     }
@@ -71,9 +71,10 @@ pub fn main() -> Nil {
 
   let #(dir_count, file_count, total_bytes) = walk_dir(root, #(0, 0, 0.0))
 
-  let rm = rm_options.create()
-  rm_options.set_recursive(rm, Some(True))
-  rm_options.set_force(rm, Some(True))
+  let rm =
+    rm_options.create()
+    |> rm_options.with_recursive(True)
+    |> rm_options.with_force(True)
   fs.rm_sync(str(root), Some(rm))
 
   let passed =

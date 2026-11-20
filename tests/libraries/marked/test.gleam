@@ -134,7 +134,6 @@ pub fn main() {
       t.BooleanOrRendererOutputRendererOutput("<h" <> int.to_string(float.round(field_float(token, "depth"))) <> " class=\"x\">" <> field_string(token, "text") <> "</h>\n")
     }),
     runtime.codec_string(),
-    runtime.codec_string(),
   )
   let ext = marked_extension.create()
   marked_extension.set_renderer(ext, Some(renderer))
@@ -154,8 +153,6 @@ pub fn main() {
       let assert Ok(text) = decode.run(first, decode.string)
       t.StringOrPromiseString(string.replace(text, "foo", "bar"))
     }),
-    runtime.codec_string(),
-    runtime.codec_string(),
   )
   let pre = marked_extension.create()
   marked_extension.set_hooks(pre, Some(hooks))

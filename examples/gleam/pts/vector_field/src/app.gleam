@@ -21,20 +21,20 @@ import pts/types as t
 fn sin(x: Float) -> Float
 
 pub fn main() -> Nil {
-  let opts = canvas_space_options.create()
-  canvas_space_options.set_bgcolor(opts, Some("#ffffff"))
-  canvas_space_options.set_resize(opts, Some(True))
-  canvas_space_options.set_retina(opts, Some(True))
+  let opts =
+    canvas_space_options.create()
+    |> canvas_space_options.with_bgcolor("#ffffff")
+    |> canvas_space_options.with_resize(True)
+    |> canvas_space_options.with_retina(True)
 
   let cs =
     canvas_space.new(Some(t.StringOrElementString("#pt")), None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 
-  let player = i_player.create()
-  i_player.set_animate(
-    player,
-    Some(fn(time, _ftime, _space) {
+  let player =
+    i_player.create()
+    |> i_player.with_animate(fn(time, _ftime, _space) {
       let pointer = multi_touch_space.get_pointer(cs)
       let bound = space.get_inner_bound(cs)
       let size = space.get_size(cs)
@@ -97,8 +97,7 @@ pub fn main() -> Nil {
           )),
         )
       Nil
-    }),
-  )
+    })
 
   let _ = space.add(cs, r.dynamic(player))
   let _ = multi_touch_space.bind_mouse(cs, Some(True), None)

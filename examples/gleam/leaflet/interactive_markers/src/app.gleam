@@ -24,11 +24,12 @@ import leaflet/runtime
 import leaflet/types as t
 
 pub fn main() {
-  let m_opts = map_options.create()
-  map_options.set_attribution_control(m_opts, Some(False))
-  map_options.set_zoom_animation(m_opts, Some(False))
-  map_options.set_fade_animation(m_opts, Some(False))
-  map_options.set_marker_zoom_animation(m_opts, Some(False))
+  let m_opts =
+    map_options.create()
+    |> map_options.with_attribution_control(False)
+    |> map_options.with_zoom_animation(False)
+    |> map_options.with_fade_animation(False)
+    |> map_options.with_marker_zoom_animation(False)
   let m = leaflet.map(t.ContentString("map"), Some(m_opts))
 
   let bern = leaflet.lat_lng(46.9480, 7.4474, None)
@@ -41,19 +42,21 @@ pub fn main() {
   ]
 
   let line_pts = list.map(stations, fn(s) { runtime.dynamic(s.2) })
-  let p_opts = polyline_options.create()
-  polyline_options.set_smooth_factor(p_opts, Some(1.0))
-  path_options.set_color(p_opts, Some("#404040"))
-  path_options.set_weight(p_opts, Some(2.5))
+  let p_opts =
+    polyline_options.create()
+    |> polyline_options.with_smooth_factor(1.0)
+    |> path_options.with_color("#404040")
+    |> path_options.with_weight(2.5)
   let corridor = leaflet.polyline(line_pts, Some(p_opts))
   let _ = layer.add_to(corridor, t.MapOrLayerGroupMap(m))
 
-  let dot_opts = circle_marker_options.create()
-  circle_marker_options.set_radius(dot_opts, Some(6.0))
-  path_options.set_color(dot_opts, Some("#111111"))
-  path_options.set_weight(dot_opts, Some(2.0))
-  path_options.set_fill_color(dot_opts, Some("#ffffff"))
-  path_options.set_fill_opacity(dot_opts, Some(1.0))
+  let dot_opts =
+    circle_marker_options.create()
+    |> circle_marker_options.with_radius(6.0)
+    |> path_options.with_color("#111111")
+    |> path_options.with_weight(2.0)
+    |> path_options.with_fill_color("#ffffff")
+    |> path_options.with_fill_opacity(1.0)
 
   let pin_size = t.PointExpressionPoint(leaflet.point(22.0, 22.0, None))
   let pin_anchor = t.PointExpressionPoint(leaflet.point(11.0, 11.0, None))
@@ -64,17 +67,18 @@ pub fn main() {
     let _ = layer.bind_tooltip(cm, t.LayerBindTooltipContentString(code <> " · " <> name), None)
     let _ = layer.add_to(cm, t.MapOrLayerGroupMap(m))
 
-    let d_opts = div_icon_options.create()
-    div_icon_options.set_class_name(d_opts, Some("mono-pin"))
-    div_icon_options.set_html(
-      d_opts,
-      Some(t.StringOrElementOrBooleanString("<span>" <> code <> "</span>")),
-    )
-    div_icon_options.set_icon_size(d_opts, Some(pin_size))
-    div_icon_options.set_icon_anchor(d_opts, Some(pin_anchor))
+    let d_opts =
+      div_icon_options.create()
+      |> div_icon_options.with_class_name("mono-pin")
+      |> div_icon_options.with_html(
+        t.StringOrElementOrBooleanString("<span>" <> code <> "</span>"),
+      )
+      |> div_icon_options.with_icon_size(pin_size)
+      |> div_icon_options.with_icon_anchor(pin_anchor)
 
-    let mk_opts = marker_options.create()
-    marker_options.set_icon(mk_opts, Some(t.IconOrDivIconDivIcon(leaflet.div_icon(Some(d_opts)))))
+    let mk_opts =
+      marker_options.create()
+      |> marker_options.with_icon(t.IconOrDivIconDivIcon(leaflet.div_icon(Some(d_opts))))
     let _ =
       layer.add_to(
         leaflet.marker(t.LatLngExpressionLatLng(pt), Some(mk_opts)),
@@ -90,8 +94,9 @@ pub fn main() {
       None,
     )
 
-  let pop_opts = popup_options.create()
-  popup_options.set_max_width(pop_opts, Some(220.0))
+  let pop_opts =
+    popup_options.create()
+    |> popup_options.with_max_width(220.0)
   let note = leaflet.popup(t.LatLngExpressionLatLng(bern), Some(pop_opts))
   let _ =
     div_overlay.set_content(

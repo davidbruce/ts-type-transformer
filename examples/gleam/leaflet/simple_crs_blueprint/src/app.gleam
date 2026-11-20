@@ -24,28 +24,29 @@ fn box_opts(
   fill_color: String,
   fill_opacity: Float,
 ) -> t.PolylineOptions(Nil) {
-  let opts = polyline_options.create()
-  polyline_options.set_smooth_factor(opts, Some(1.0))
-  path_options.set_color(opts, Some(color))
-  path_options.set_weight(opts, Some(weight))
+  let opts =
+    polyline_options.create()
+    |> polyline_options.with_smooth_factor(1.0)
+    |> path_options.with_color(color)
+    |> path_options.with_weight(weight)
+    |> path_options.with_fill_color(fill_color)
+    |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) -> path_options.set_dash_array(opts, Some(t.StringOrNumberArrayString(d)))
-    None -> Nil
+    Some(d) -> path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    None -> opts
   }
-  path_options.set_fill_color(opts, Some(fill_color))
-  path_options.set_fill_opacity(opts, Some(fill_opacity))
-  opts
 }
 
 pub fn main() {
-  let m_opts = map_options.create()
-  map_options.set_crs(m_opts, Some(crs.get_simple()))
-  map_options.set_min_zoom(m_opts, Some(-1.0))
-  map_options.set_max_zoom(m_opts, Some(3.0))
-  map_options.set_attribution_control(m_opts, Some(False))
-  map_options.set_zoom_animation(m_opts, Some(False))
-  map_options.set_fade_animation(m_opts, Some(False))
-  map_options.set_marker_zoom_animation(m_opts, Some(False))
+  let m_opts =
+    map_options.create()
+    |> map_options.with_crs(crs.get_simple())
+    |> map_options.with_min_zoom(-1.0)
+    |> map_options.with_max_zoom(3.0)
+    |> map_options.with_attribution_control(False)
+    |> map_options.with_zoom_animation(False)
+    |> map_options.with_fade_animation(False)
+    |> map_options.with_marker_zoom_animation(False)
   let m = leaflet.map(t.ContentString("map"), Some(m_opts))
 
   let grid_opts = box_opts("#e5e5e5", 1.0, None, "#ffffff", 0.0)
@@ -136,12 +137,13 @@ pub fn main() {
     )
   let _ = layer.add_to(spine, t.MapOrLayerGroupMap(m))
 
-  let col_opts = circle_marker_options.create()
-  circle_marker_options.set_radius(col_opts, Some(5.0))
-  path_options.set_color(col_opts, Some("#111111"))
-  path_options.set_weight(col_opts, Some(1.5))
-  path_options.set_fill_color(col_opts, Some("#111111"))
-  path_options.set_fill_opacity(col_opts, Some(1.0))
+  let col_opts =
+    circle_marker_options.create()
+    |> circle_marker_options.with_radius(5.0)
+    |> path_options.with_color("#111111")
+    |> path_options.with_weight(1.5)
+    |> path_options.with_fill_color("#111111")
+    |> path_options.with_fill_opacity(1.0)
 
   list.each(
     [

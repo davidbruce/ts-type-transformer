@@ -241,7 +241,7 @@ pub fn main() {
   let material = mesh_basic_material.new(None)
   mesh_basic_material.set_color(material, red)
   let cube =
-    mesh.new(Some(geometry), Some(material), t.box_geometry_codec(), t.mesh_basic_material_codec())
+    mesh.new(Some(geometry), Some(material), t.mesh_basic_material_codec())
   object3d.set_name(cube, "cube")
   let _ = object3d.add(parent, [cube])
   object3d.update_matrix_world(parent, Some(True))
@@ -268,7 +268,7 @@ pub fn main() {
     + check(near(intersection.get_distance(first), 9.0), "hit distance")
     + check(near(vector3.get_z(intersection.get_point(first)), 4.0), "hit point")
     + check(
-      object3d.get_name(intersection.get_object(first, t.object3d_codec())) == "cube",
+      object3d.get_name(intersection.get_object(first)) == "cube",
       "the hit object",
     )
   let miss = raycaster.new(Some(v3(20.0, 20.0, 13.0)), Some(v3(0.0, 0.0, -1.0)), None, None)

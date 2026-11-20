@@ -46,9 +46,9 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let ref_day = df.parse_iso("2024-03-15", None, dc)
-      let month_start = df.start_of_month(arg(ref_day), None, dc, dc)
-      let month_end = df.end_of_month(arg(ref_day), None, dc, dc)
+      let ref_day = df.parse_iso("2024-03-15", None)
+      let month_start = df.start_of_month(arg(ref_day), None)
+      let month_end = df.end_of_month(arg(ref_day), None)
       let offset = float.round(df.get_day(day(month_start), None))
 
       let metrics = document.create_element_div(doc, None)
@@ -107,9 +107,10 @@ pub fn main() -> Nil {
         Nil
       })
 
-      let span = interval.create()
-      interval.set_start(span, arg(month_start), dt.date_arg_codec(dc))
-      interval.set_end(span, arg(month_end), dt.date_arg_codec(dc))
+      let span =
+        interval.create()
+        |> interval.with_start(arg(month_start), dt.date_arg_codec(dc))
+        |> interval.with_end(arg(month_end), dt.date_arg_codec(dc))
       let days = df.each_day_of_interval(span, None, runtime.codec_dynamic())
 
       list.each(days, fn(d) {

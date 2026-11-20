@@ -4,6 +4,7 @@ import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/list
@@ -24,6 +25,7 @@ import tanstack_table_core/types as t
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
 
+// Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
 fn coerce(a: a) -> b
 
@@ -50,10 +52,9 @@ fn node_row(id: String, host: String, region: String, lat: Float, thr: Float, up
 }
 
 fn sort_spec(id: String, desc: Bool) -> t.ColumnSort(Nil) {
-  let cs = column_sort.create()
-  column_sort.set_id(cs, id)
-  column_sort.set_desc(cs, desc)
-  cs
+  column_sort.create()
+  |> column_sort.with_id(id)
+  |> column_sort.with_desc(desc)
 }
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
@@ -78,20 +79,34 @@ fn fmt2(val: Float) -> String {
   int.to_string(scaled / 100) <> "." <> pad <> int.to_string(frac)
 }
 
+fn decode_str(v: Dynamic, fallback: String) -> String {
+  case decode.run(v, decode.string) {
+    Ok(s) -> s
+    Error(_) -> fallback
+  }
+}
+
+fn decode_num(v: Dynamic) -> Float {
+  case decode.run(v, decode.float) {
+    Ok(n) -> n
+    Error(_) -> 0.0
+  }
+}
+
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: String) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view, t.table_features_codec(), rt.codec_dynamic())
+  let get_rm = table_row_models_core.get_get_row_model(rows_view)
   let rows = row_model.get_rows(get_rm())
 
   let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_leaf_cols = table_columns.get_get_all_leaf_columns(cols_view, t.table_features_codec(), rt.codec_dynamic())
+  let get_leaf_cols = table_columns.get_get_all_leaf_columns(cols_view)
   let cols = get_leaf_cols()
 
   let header_cells =
     list.map(cols, fn(col) {
       let cid = column_core_properties.get_id(col)
-      let hdr: String = case rt.js_get(rt.dynamic(column_core_properties.get_column_def(col)), "header") {
-        Some(h) -> coerce(h)
+      let hdr = case rt.js_get(rt.dynamic(column_core_properties.get_column_def(col)), "header") {
+        Some(h) -> decode_str(h, cid)
         None -> cid
       }
       let csort: t.ColumnRowSorting(t.TableFeatures(Nil), Dynamic, Nil) = coerce(col)
@@ -112,8 +127,8 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
   let body_rows =
     list.map(rows, fn(r) {
       let gv = row_row.get_get_value(coerce(r))
-      let str_val = fn(k) -> String { coerce(tt.call_string_to_t_value_fn(gv, k)) }
-      let num_val = fn(k) -> Float { coerce(tt.call_string_to_t_value_fn(gv, k)) }
+      let str_val = fn(k) { decode_str(tt.call_string_to_t_value_fn(gv, k), "") }
+      let num_val = fn(k) { decode_num(tt.call_string_to_t_value_fn(gv, k)) }
       let lat = fmt1(num_val("latency"))
       let thr = int.to_string(float.round(num_val("throughput")))
       let up = fmt2(num_val("uptime"))
@@ -139,7 +154,7 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
     None -> Nil
   }
   let top_host = case rows {
-    [first, ..] -> coerce(tt.call_string_to_t_value_fn(row_row.get_get_value(coerce(first)), "host"))
+    [first, ..] -> decode_str(tt.call_string_to_t_value_fn(row_row.get_get_value(coerce(first)), "host"), "-")
     [] -> "-"
   }
   let msg = label <> " · " <> int.to_string(list.length(rows)) <> " rows · top node: " <> top_host
@@ -160,8 +175,8 @@ pub fn main() {
     rt.js_object([
       #("coreReactivityFeature", rt.dynamic(store_reactivity_bindings())),
       #("rowSortingFeature", rt.dynamic(tt.get_row_sorting_feature())),
-      #("coreRowModel", rt.dynamic(tt.create_core_row_model(rt.codec_dynamic()))),
-      #("sortedRowModel", rt.dynamic(tt.create_sorted_row_model(rt.codec_dynamic()))),
+      #("coreRowModel", rt.dynamic(tt.create_core_row_model())),
+      #("sortedRowModel", rt.dynamic(tt.create_sorted_row_model())),
       #("sortFns", sort_fns),
     ])
   let data =

@@ -19,12 +19,11 @@ import leaflet/runtime
 import leaflet/types as t
 
 fn make_map_opts() -> t.MapOptions(Nil) {
-  let opts = map_options.create()
-  map_options.set_attribution_control(opts, Some(False))
-  map_options.set_zoom_animation(opts, Some(False))
-  map_options.set_fade_animation(opts, Some(False))
-  map_options.set_marker_zoom_animation(opts, Some(False))
-  opts
+  map_options.create()
+  |> map_options.with_attribution_control(False)
+  |> map_options.with_zoom_animation(False)
+  |> map_options.with_fade_animation(False)
+  |> map_options.with_marker_zoom_animation(False)
 }
 
 fn poly_opts(
@@ -33,16 +32,16 @@ fn poly_opts(
   dash: Option(String),
   fill_opacity: Float,
 ) -> t.PolylineOptions(Nil) {
-  let opts = polyline_options.create()
-  polyline_options.set_smooth_factor(opts, Some(1.0))
-  path_options.set_color(opts, Some(color))
-  path_options.set_weight(opts, Some(weight))
+  let opts =
+    polyline_options.create()
+    |> polyline_options.with_smooth_factor(1.0)
+    |> path_options.with_color(color)
+    |> path_options.with_weight(weight)
+    |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) -> path_options.set_dash_array(opts, Some(t.StringOrNumberArrayString(d)))
-    None -> Nil
+    Some(d) -> path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    None -> opts
   }
-  path_options.set_fill_opacity(opts, Some(fill_opacity))
-  opts
 }
 
 fn pair_distances_km(pts: List(t.LatLng(Nil))) -> Float {
@@ -116,12 +115,13 @@ pub fn main() {
   let _ = layer.add_to(alt_line, t.MapOrLayerGroupMap(m))
 
   let nodes = leaflet.layer_group(None, None)
-  let node_opts = circle_marker_options.create()
-  circle_marker_options.set_radius(node_opts, Some(6.0))
-  path_options.set_color(node_opts, Some("#111111"))
-  path_options.set_weight(node_opts, Some(2.0))
-  path_options.set_fill_color(node_opts, Some("#ffffff"))
-  path_options.set_fill_opacity(node_opts, Some(1.0))
+  let node_opts =
+    circle_marker_options.create()
+    |> circle_marker_options.with_radius(6.0)
+    |> path_options.with_color("#111111")
+    |> path_options.with_weight(2.0)
+    |> path_options.with_fill_color("#ffffff")
+    |> path_options.with_fill_opacity(1.0)
 
   list.each(hubs, fn(h) {
     let cm = leaflet.circle_marker(t.LatLngExpressionLatLng(h.1), Some(node_opts))

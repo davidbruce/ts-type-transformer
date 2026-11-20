@@ -13,7 +13,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let dc = dt.date_codec()
       let day = dt.DateOrStringOrNumberDate
       let arg = dt.DateArgDateType
 
@@ -28,8 +27,8 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let sample = df.parse_iso("2024-03-15T14:30:45", None, dc)
-      let parsed = df.parse("15/03/2024", "dd/MM/yyyy", arg(sample), None, dc, dc)
+      let sample = df.parse_iso("2024-03-15T14:30:45", None)
+      let parsed = df.parse("15/03/2024", "dd/MM/yyyy", arg(sample), None)
 
       let fmt_card = document.create_element_div(doc, None)
       element.set_class_name(fmt_card, "card")
@@ -104,8 +103,8 @@ pub fn main() -> Nil {
       let _ = node.append_child(vhead, vhrow)
       let _ = node.append_child(vtbl, vhead)
 
-      let good_iso = df.parse_iso("2024-03-15", None, dc)
-      let bad_iso = df.parse_iso("not-a-date", None, dc)
+      let good_iso = df.parse_iso("2024-03-15", None)
+      let bad_iso = df.parse_iso("not-a-date", None)
       let ok_good = df.is_valid(runtime.dynamic(good_iso)) && df.is_match("2024-03-15", "yyyy-MM-dd", None)
       let ok_bad = df.is_valid(runtime.dynamic(bad_iso)) && df.is_match("not-a-date", "yyyy-MM-dd", None)
       let ok_2024 = df.is_exists(2024.0, 1.0, 29.0)

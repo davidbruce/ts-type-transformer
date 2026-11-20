@@ -21,12 +21,12 @@ fn check(ok: Bool, what: String) -> Int {
 
 pub fn main() {
   // A Friday, local midnight: what parseISO gives for a date alone.
-  let friday = date_fns.parse_iso("2024-03-15", None, t.date_codec())
+  let friday = date_fns.parse_iso("2024-03-15", None)
   let day = t.DateOrStringOrNumberDate
   let arg = t.DateArgDateType
   let fmt = fn(d) { date_fns.format_date(day(d), "yyyy-MM-dd", None) }
   let add_days = fn(d, n) {
-    date_fns.add_days(arg(d), n, None, t.date_codec(), t.date_codec())
+    date_fns.add_days(arg(d), n, None)
   }
   let date_only = format_iso_options.create()
   iso_format_options.set_representation(date_only, Some(t.ISOStringRepresentationDate))
@@ -49,19 +49,19 @@ pub fn main() {
     + check(fmt(monday) == "2024-03-18", "add_days")
     + check(fmt(friday) == "2024-03-15", "the old date is unchanged")
     + check(date_fns.is_weekend(day(add_days(friday, 1.0)), None), "saturday is a weekend")
-    + check(fmt(date_fns.sub_days(arg(friday), 15.0, None, t.date_codec(), t.date_codec())) == "2024-02-29", "sub_days into a leap day")
-    + check(fmt(date_fns.add_months(arg(friday), 1.0, None, t.date_codec(), t.date_codec())) == "2024-04-15", "add_months")
-    + check(fmt(date_fns.next_friday(arg(friday), None, t.date_codec(), t.date_codec())) == "2024-03-22", "next_friday")
-  let first = date_fns.start_of_month(arg(friday), None, t.date_codec(), t.date_codec())
-  let last = date_fns.end_of_month(arg(friday), None, t.date_codec(), t.date_codec())
+    + check(fmt(date_fns.sub_days(arg(friday), 15.0, None)) == "2024-02-29", "sub_days into a leap day")
+    + check(fmt(date_fns.add_months(arg(friday), 1.0, None)) == "2024-04-15", "add_months")
+    + check(fmt(date_fns.next_friday(arg(friday), None)) == "2024-03-22", "next_friday")
+  let first = date_fns.start_of_month(arg(friday), None)
+  let last = date_fns.end_of_month(arg(friday), None)
   let passed =
     passed
     + check(date_fns.format_date(day(first), "d MMM yyyy", None) == "1 Mar 2024", "start_of_month")
     + check(date_fns.format_date(day(last), "yyyy-MM-dd HH:mm", None) == "2024-03-31 23:59", "end_of_month")
-    + check(fmt(date_fns.start_of_week(arg(friday), None, t.date_codec(), t.date_codec())) == "2024-03-10", "start_of_week (Sunday)")
-    + check(fmt(date_fns.start_of_year(arg(friday), None, t.date_codec(), t.date_codec())) == "2024-01-01", "start_of_year")
-    + check(date_fns.format_date(day(date_fns.set_hours(arg(friday), 13.0, None, t.date_codec(), t.date_codec())), "HH:mm", None) == "13:00", "set_hours")
-    + check(fmt(date_fns.set_month(arg(friday), 0.0, None, t.date_codec(), t.date_codec())) == "2024-01-15", "set_month")
+    + check(fmt(date_fns.start_of_week(arg(friday), None)) == "2024-03-10", "start_of_week (Sunday)")
+    + check(fmt(date_fns.start_of_year(arg(friday), None)) == "2024-01-01", "start_of_year")
+    + check(date_fns.format_date(day(date_fns.set_hours(arg(friday), 13.0, None)), "HH:mm", None) == "13:00", "set_hours")
+    + check(fmt(date_fns.set_month(arg(friday), 0.0, None)) == "2024-01-15", "set_month")
     + check(date_fns.difference_in_hours(day(add_days(friday, 1.0)), day(friday), None) == 24.0, "difference_in_hours")
 
   // Compared: dates, ISO strings and timestamps alike.
@@ -76,14 +76,14 @@ pub fn main() {
     + check(date_fns.compare_asc(day(friday), t.DateOrStringOrNumberNumber(time)) == -1.0, "compare_asc")
     + check(date_fns.format_distance(day(monday), day(friday), None) == "3 days", "format_distance")
     + check(date_fns.format_distance_strict(day(monday), day(friday), None) == "3 days", "format_distance_strict")
-  let latest = date_fns.max([arg(friday), arg(monday)], None, t.date_codec(), t.date_codec())
-  let earliest = date_fns.min([arg(friday), arg(monday)], None, t.date_codec(), t.date_codec())
+  let latest = date_fns.max([arg(friday), arg(monday)], None)
+  let earliest = date_fns.min([arg(friday), arg(monday)], None)
   let passed =
     passed
     + check(date_fns.get_time(day(latest)) == time, "max")
     + check(fmt(earliest) == "2024-03-15", "min")
     + check(date_fns.get_unix_time(day(monday)) == time /. 1000.0, "get_unix_time")
-    + check(date_fns.get_time(day(date_fns.from_unix_time(time /. 1000.0, None, t.date_codec()))) == time, "from_unix_time")
+    + check(date_fns.get_time(day(date_fns.from_unix_time(time /. 1000.0, None))) == time, "from_unix_time")
     + check(date_fns.format_iso(day(friday), Some(date_only)) == "2024-03-15", "format_iso date only")
 
   // An interval, made here, as a duration and as days.
@@ -107,14 +107,14 @@ pub fn main() {
   let later = duration.create()
   duration.set_months(later, Some(1.0))
   duration.set_days(later, Some(2.0))
-  let moved = date_fns.add(arg(friday), later, None, t.date_codec(), t.date_codec())
+  let moved = date_fns.add(arg(friday), later, None)
   let passed =
     passed
     + check(fmt(moved) == "2024-04-17", "add a duration")
-    + check(fmt(date_fns.sub(arg(friday), later, None, t.date_codec(), t.date_codec())) == "2024-02-13", "sub a duration")
+    + check(fmt(date_fns.sub(arg(friday), later, None)) == "2024-02-13", "sub a duration")
 
   // Nonsense is no date.
-  let bad = date_fns.parse_iso("not a date", None, t.date_codec())
+  let bad = date_fns.parse_iso("not a date", None)
   let passed =
     passed
     + check(!date_fns.is_valid(runtime.dynamic(bad)), "nonsense is no date")
