@@ -1,8 +1,7 @@
 #![no_main]
 
-use dom::ElementMethods;
+use prosemirror::prosemirror_model::SchemaSpec;
 use prosemirror::prosemirror_model::*;
-use prosemirror::prosemirror_model::{SchemaSpec, SchemaSpecMethods};
 use prosemirror::prosemirror_state::*;
 use prosemirror::prosemirror_view::*;
 use prosemirror::*;
@@ -10,64 +9,61 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 fn hole_spec(tag: &str) -> DOMOutputSpec {
-    DOMOutputSpec::Array(JsArray::from(vec![JsValue::from(tag), JsValue::from(0.0)]))
+    DOMOutputSpec::Array(JsArray::from([JsValue::from(tag), JsValue::from(0.0)]))
 }
 
 fn build_schema() -> Schema<JsValue, JsValue> {
-    let doc = NodeSpec::create();
-    doc.set_content(Some("block+"));
+    let doc = NodeSpec::default().with_content("block+");
 
-    let lvl = AttributeSpec::create();
-    lvl.set_default(JsValue::from(2.0));
-    let hattrs = MarkSpecAttrs::create();
+    let lvl = <AttributeSpec as Default>::default().with_default(2.0);
+    let hattrs = MarkSpecAttrs::default();
     hattrs.set_at("level", &lvl);
 
-    let heading = NodeSpec::create();
-    heading.set_attrs(Some(&hattrs));
-    heading.set_content(Some("inline*"));
-    heading.set_group(Some("block"));
-    heading.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|n: Node| {
-        let l = n.attrs().at("level").as_f64() as i32;
-        hole_spec(if l == 1 { "h1" } else { "h2" })
-    })));
+    let heading = NodeSpec::default()
+        .with_attrs(&hattrs)
+        .with_content("inline*")
+        .with_group("block")
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|n: Node| {
+            let l = n.attrs().at("level").as_f64() as i32;
+            hole_spec(if l == 1 { "h1" } else { "h2" })
+        }));
 
-    let para = NodeSpec::create();
-    para.set_content(Some("inline*"));
-    para.set_group(Some("block"));
-    para.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("p"))));
+    let para = NodeSpec::default()
+        .with_content("inline*")
+        .with_group("block")
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("p")));
 
-    let cblock = NodeSpec::create();
-    cblock.set_content(Some("text*"));
-    cblock.set_marks(Some(""));
-    cblock.set_group(Some("block"));
-    cblock.set_code(Some(true));
-    cblock.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|_: Node| {
-        let inner = JsArray::<JsValue>::from(vec![JsValue::from("code"), JsValue::from(0.0)]);
-        DOMOutputSpec::Array(JsArray::from(vec![JsValue::from("pre"), JsValue(inner.0)]))
-    })));
+    let cblock = NodeSpec::default()
+        .with_content("text*")
+        .with_marks("")
+        .with_group("block")
+        .with_code(true)
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| {
+            let inner = JsArray::<JsValue>::from([JsValue::from("code"), JsValue::from(0.0)]);
+            DOMOutputSpec::Array(JsArray::from([JsValue::from("pre"), JsValue::from(inner)]))
+        }));
 
-    let text = NodeSpec::create();
-    text.set_group(Some("inline"));
+    let text = NodeSpec::default().with_group("inline");
 
-    let nodes = NodeSpec::create();
-    nodes.set_at("doc", JsValue::from(&doc));
-    nodes.set_at("heading", JsValue::from(&heading));
-    nodes.set_at("paragraph", JsValue::from(&para));
-    nodes.set_at("code_block", JsValue::from(&cblock));
-    nodes.set_at("text", JsValue::from(&text));
+    let nodes = JsValue::object()
+        .with("doc", &doc)
+        .with("heading", &heading)
+        .with("paragraph", &para)
+        .with("code_block", &cblock)
+        .with("text", &text);
 
     let make_mark = |tag: &'static str| {
-        let m = MarkSpec::create();
-        m.set_to_dom(Some(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| hole_spec(tag))));
-        m
+        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| {
+            hole_spec(tag)
+        }))
     };
-    let marks = MarkSpec::create();
-    marks.set_at("strong", JsValue::from(&make_mark("strong")));
-    marks.set_at("code", JsValue::from(&make_mark("code")));
+    let marks = JsValue::object()
+        .with("strong", &make_mark("strong"))
+        .with("code", &make_mark("code"));
 
-    let spec = SchemaSpec::<JsValue, JsValue>::create();
-    spec.set_nodes(JsValue::from(&nodes));
-    spec.set_marks(JsValue::from(&marks));
+    let spec = SchemaSpec::<JsValue, JsValue>::default()
+        .with_nodes(nodes)
+        .with_marks(marks);
     Schema::new(&spec)
 }
 
@@ -76,7 +72,7 @@ fn p_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
 }
 
 fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
-    let ha = Attrs::create();
+    let ha = Attrs::default();
     ha.set_at("level", JsValue::from(2.0));
     let h = schema.node("heading", Some(&ha), schema.text("Immutable State & View Decorations", None), None);
     let cb = schema.node(
@@ -88,7 +84,7 @@ fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     schema.node(
         "doc",
         None,
-        JsArray::<Node>::from(vec![
+        JsArray::<Node>::from([
             h,
             p_node(schema, "A ProseMirror schema validates every document tree before state updates commit to the view."),
             p_node(schema, "Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema."),
@@ -105,10 +101,8 @@ fn compute_decorations(doc: &Node, raw_query: &str) -> (DecorationSet, usize, us
         return (DecorationSet::empty(), 0, 0);
     }
     let decos = JsArray::<Decoration>::new();
-    let inl_attr = DecorationAttrs::create();
-    inl_attr.set_class(Some("pm-match"));
-    let blk_attr = DecorationAttrs::create();
-    blk_attr.set_class(Some("pm-hit-block"));
+    let inl_attr = DecorationAttrs::default().with_class("pm-match");
+    let blk_attr = DecorationAttrs::default().with_class("pm-hit-block");
 
     let mut inl_hits = 0usize;
     let mut blk_hits = 0usize;
@@ -168,7 +162,7 @@ fn sync_meta(app: &AppState, st: &EditorState) {
     for (i, id) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
         app.doc
             .get_element_by_id(id)
-            .unwrap()
+            .expect("missing button")
             .set_class_name(if i == app.active_btn { "active" } else { "" });
     }
 }
@@ -183,55 +177,56 @@ pub extern "C" fn start() {
         key: key.clone(),
         view: None,
         doc: dom_doc.clone(),
-        meta: dom_doc.get_element_by_id("meta").unwrap(),
+        meta: dom_doc.get_element_by_id("meta").expect("missing #meta"),
         active_btn: 0,
     }));
 
-    let field = StateField::<JsValue>::create();
-    field.set_init(&StateFieldInit::new(|_, _| JsValue::from("state")));
-    field.set_apply(&StateFieldApply::new(|tr, prev: JsValue, _, _| {
-        let mv = tr.get_meta("search");
-        if mv.is_null() { prev } else { mv }
-    }));
+    let field = StateField::<JsValue>::default()
+        .with_init(&StateFieldInit::new(|_, _| JsValue::from("state")))
+        .with_apply(&StateFieldApply::new(|tr, prev: JsValue, _, _| {
+            let mv = tr.get_meta("search");
+            if mv.is_null() { prev } else { mv }
+        }));
 
-    let eprops = EditorProps::<Plugin<JsValue>>::create();
-    eprops.set_decorations(Some(&EditorPropsDecorations::<Plugin<JsValue>>::new({
-        let key = key.clone();
-        move |st: EditorState| {
-            let q = key
-                .get_state(&st)
-                .filter(|v| !v.is_null())
-                .map_or_else(String::new, |v| v.as_string());
-            let (dset, _, _) = compute_decorations(&st.doc(), &q);
-            Some(dset.into())
-        }
-    })));
-
-    let pspec = PluginSpec::<JsValue>::create();
-    pspec.set_key(Some(&key));
-    pspec.set_state(Some(&field));
-    pspec.set_props(Some(&eprops));
-
-    let scfg = EditorStateConfig::create();
-    scfg.set_schema(Some(&schema));
-    scfg.set_doc(Some(&make_initial_doc(&schema)));
-    scfg.set_plugins(Some(&JsArray::<Plugin<JsValue>>::from(vec![Plugin::new(&pspec)])));
-
-    let props = DirectEditorProps::create();
-    props.set_state(&EditorState::create(&scfg));
-    props.set_dispatch_transaction(Some(&TransactionFn::new({
-        let app = app.clone();
-        move |tr: Transaction| {
-            let view = app.borrow().view.clone();
-            if let Some(view) = view {
-                let next = view.state().apply(&tr);
-                view.update_state(&next);
-                sync_meta(&app.borrow(), &next);
+    let eprops = EditorProps::<Plugin<JsValue>>::default().with_decorations(
+        &EditorPropsDecorations::<Plugin<JsValue>>::new({
+            let key = key.clone();
+            move |st: EditorState| {
+                let q = key
+                    .get_state(&st)
+                    .filter(|v| !v.is_null())
+                    .map_or_else(String::new, |v| v.as_string());
+                let (dset, _, _) = compute_decorations(&st.doc(), &q);
+                Some(dset.into())
             }
-        }
-    })));
+        }),
+    );
 
-    let mount = dom_doc.get_element_by_id("editor").unwrap();
+    let pspec = PluginSpec::<JsValue>::default()
+        .with_key(&key)
+        .with_state(&field)
+        .with_props(&eprops);
+
+    let scfg = EditorStateConfig::default()
+        .with_schema(&schema)
+        .with_doc(&make_initial_doc(&schema))
+        .with_plugins(&JsArray::<Plugin<JsValue>>::from([Plugin::new(&pspec)]));
+
+    let props = DirectEditorProps::default()
+        .with_state(&EditorState::create(&scfg))
+        .with_dispatch_transaction(&TransactionFn::new({
+            let app = app.clone();
+            move |tr: Transaction| {
+                let view = app.borrow().view.clone();
+                if let Some(view) = view {
+                    let next = view.state().apply(&tr);
+                    view.update_state(&next);
+                    sync_meta(&app.borrow(), &next);
+                }
+            }
+        }));
+
+    let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
     let place = JsValue::from(&mount);
     let view = EditorView::new(Some(&place), &props);
     {
@@ -250,20 +245,19 @@ pub extern "C" fn start() {
     .iter()
     .enumerate()
     {
-        let btn = dom_doc.get_element_by_id(bid).unwrap();
+        let btn = dom_doc.get_element_by_id(bid).expect("missing button");
         let app_c = app.clone();
         let q = *query;
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
             let view = {
                 let mut st = app_c.borrow_mut();
                 st.active_btn = idx;
-                st.view.as_ref().unwrap().clone()
+                st.view.as_ref().expect("missing view").clone()
             };
             let tr = view.state().tr();
             tr.set_meta("search", q);
-            call_transaction_fn(&view.dispatch(), &tr);
+            view.dispatch().call(&tr);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 }

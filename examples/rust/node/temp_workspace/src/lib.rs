@@ -1,7 +1,6 @@
 #![no_main]
 
-use node::{fs, path};
-use node::*;
+use node::{GlobalBufferEncoding, JsValue, fs, path};
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -31,41 +30,39 @@ pub extern "C" fn start() {
     let mut c = Checks(0);
 
     let dir = fs::mkdtemp_sync("/tmp/tsrs-node-ws-", None);
-    c.check(fs::exists_sync(dir.as_str()) && fs::stat_sync(dir.as_str()).is_directory());
+    c.check(fs::exists_sync(&*dir) && fs::stat_sync(&*dir).is_directory());
 
     let notes = path::join([dir.as_str(), "notes.txt"]);
-    fs::write_file_sync(notes.as_str(), "alpha\nbeta\n", None);
-    let st1 = fs::stat_sync(notes.as_str());
-    c.check(fs::exists_sync(notes.as_str()) && st1.is_file() && st1.size() == 11.0);
+    fs::write_file_sync(&*notes, "alpha\nbeta\n", None);
+    let st1 = fs::stat_sync(&*notes);
+    c.check(fs::exists_sync(&*notes) && st1.is_file() && st1.size() == 11.0);
 
-    fs::append_file_sync(notes.as_str(), "gamma\n", None);
-    let utf8 = GlobalBufferEncoding(JsValue::from("utf8").0.clone());
-    let text = fs::read_file_sync_or_buffer_encoding(notes.as_str(), &utf8);
-    let st2 = fs::stat_sync(notes.as_str());
+    fs::append_file_sync(&*notes, "gamma\n", None);
+    let utf8 = JsValue::from("utf8").unchecked_into::<GlobalBufferEncoding>();
+    let text = fs::read_file_sync_or_buffer_encoding(&*notes, &utf8);
+    let st2 = fs::stat_sync(&*notes);
     c.check(text == "alpha\nbeta\ngamma\n" && st2.size() == 17.0);
 
     let backup = path::join([dir.as_str(), "backup.txt"]);
     let archive = path::join([dir.as_str(), "archive.txt"]);
-    fs::copy_file_sync(notes.as_str(), backup.as_str(), None);
-    c.check(fs::exists_sync(backup.as_str()));
+    fs::copy_file_sync(&*notes, &*backup, None);
+    c.check(fs::exists_sync(&*backup));
 
-    fs::rename_sync(backup.as_str(), archive.as_str());
-    c.check(!fs::exists_sync(backup.as_str()) && fs::exists_sync(archive.as_str()));
+    fs::rename_sync(&*backup, &*archive);
+    c.check(!fs::exists_sync(&*backup) && fs::exists_sync(&*archive));
 
-    let arch_text = fs::read_file_sync_or_buffer_encoding(archive.as_str(), &utf8);
+    let arch_text = fs::read_file_sync_or_buffer_encoding(&*archive, &utf8);
     c.check(arch_text == text);
 
-    fs::unlink_sync(archive.as_str());
-    c.check(!fs::exists_sync(archive.as_str()));
+    fs::unlink_sync(&*archive);
+    c.check(!fs::exists_sync(&*archive));
 
-    let rm = fs::RmOptions::create();
-    rm.set_recursive(Some(true));
-    rm.set_force(Some(true));
-    fs::rm_sync(dir.as_str(), Some(&rm));
-    c.check(!fs::exists_sync(dir.as_str()));
+    let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
+    fs::rm_sync(&*dir, Some(&rm));
+    c.check(!fs::exists_sync(&*dir));
     c.check(true);
 
-    println(&format!("workspace={}", dir));
+    println(&format!("workspace={dir}"));
     println(&format!(
         "size_before={:.0} size_after={:.0}",
         st1.size(),

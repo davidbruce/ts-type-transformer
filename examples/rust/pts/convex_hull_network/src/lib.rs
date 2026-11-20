@@ -1,30 +1,21 @@
 #![no_main]
 
-use pts::{
-    AnimateCallbackFn, CanvasFormMethods as _, CanvasSpace, CanvasSpaceMethods as _,
-    CanvasSpaceOptions, CanvasSpaceOptionsMethods as _, Create, Geom, Group, IPlayer,
-    IPlayerMethods as _, MultiTouchSpaceMethods as _, Polygon, Pt, SpaceMethods as _,
-    StringOrElement,
-};
+use pts::{AnimateCallbackFn, CanvasSpace, CanvasSpaceOptions, Create, Geom, Group, IPlayer, Polygon, Pt};
 
 fn mk_pt(x: f64, y: f64) -> Pt {
-    let p = Pt::make(2.0, None, None);
-    p.set_x(x);
-    p.set_y(y);
-    p
+    Pt::make(2.0, None, None).with_x(x).with_y(y)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let opts = CanvasSpaceOptions::create();
-    opts.set_bgcolor(Some("#ffffff"));
-    opts.set_resize(Some(true));
-    opts.set_retina(Some(true));
+    let opts = CanvasSpaceOptions::default()
+        .with_bgcolor("#ffffff")
+        .with_resize(true)
+        .with_retina(true);
 
-    let space = CanvasSpace::new(Some(StringOrElement::from("#pt")), None).setup(&opts);
+    let space = CanvasSpace::new("#pt", None).setup(&opts);
     let form = space.get_form();
 
-    let player = IPlayer::create();
     let anim = {
         let space = space.clone();
         AnimateCallbackFn::new(move |time_ms, _, _| {
@@ -98,7 +89,7 @@ pub extern "C" fn start() {
         })
     };
 
-    player.set_animate(Some(&anim));
+    let player = IPlayer::default().with_animate(&anim);
     space.add(&player);
     space.bind_mouse(None, None).bind_touch(None, None, None).play(None);
 }

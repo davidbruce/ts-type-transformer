@@ -1,7 +1,7 @@
 #![no_main]
 
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
-use katex::{KatexOptions, KatexOptionsMethods as _};
+use dom::{Document, HTMLElement};
+use katex::KatexOptions;
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,13 +15,13 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("KaTeX Formula Gallery (Rust)")));
@@ -30,8 +30,7 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let grid = make_el(&doc, "div", "grid", None);
-    let opts = KatexOptions::create();
-    opts.set_display_mode(Some(true));
+    let opts = KatexOptions::default().with_display_mode(true);
 
     let formulas = [
         ("Euler's Identity", r"e^{i\pi} + 1 = 0"),

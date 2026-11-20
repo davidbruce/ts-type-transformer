@@ -9,34 +9,34 @@ fn box_opts(
     fill_color: &str,
     fill_opacity: f64,
 ) -> PolylineOptions {
-    let opts = PolylineOptions::create();
-    opts.set_smooth_factor(Some(1.0));
-    opts.set_color(Some(color));
-    opts.set_weight(Some(weight));
+    let mut opts = PolylineOptions::default()
+        .with_smooth_factor(1.0)
+        .with_color(color)
+        .with_weight(weight)
+        .with_fill_color(fill_color)
+        .with_fill_opacity(fill_opacity);
     if let Some(d) = dash {
-        opts.set_dash_array(StringOrNumberArray::String(d.into()));
+        opts = opts.with_dash_array(d);
     }
-    opts.set_fill_color(Some(fill_color));
-    opts.set_fill_opacity(Some(fill_opacity));
     opts
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let m_opts = MapOptions::create();
-    m_opts.set_crs(Some(&crs::simple()));
-    m_opts.set_min_zoom(Some(-1.0));
-    m_opts.set_max_zoom(Some(3.0));
-    m_opts.set_attribution_control(Some(false));
-    m_opts.set_zoom_animation(Some(false));
-    m_opts.set_fade_animation(Some(false));
-    m_opts.set_marker_zoom_animation(Some(false));
+    let m_opts = MapOptions::default()
+        .with_crs(&crs::simple())
+        .with_min_zoom(-1.0)
+        .with_max_zoom(3.0)
+        .with_attribution_control(false)
+        .with_zoom_animation(false)
+        .with_fade_animation(false)
+        .with_marker_zoom_animation(false);
     let m = map("map", Some(&m_opts));
 
     let grid_opts = box_opts("#e5e5e5", 1.0, None, "#ffffff", 0.0);
     for i in 0..=5 {
         let r = (i * 20) as f64;
-        let line = JsArray::from(vec![
+        let line = JsArray::from([
             JsValue::from(&lat_lng(r, 0.0, None)),
             JsValue::from(&lat_lng(r, 160.0, None)),
         ]);
@@ -44,7 +44,7 @@ pub extern "C" fn start() {
     }
     for i in 0..=8 {
         let c = (i * 20) as f64;
-        let line = JsArray::from(vec![
+        let line = JsArray::from([
             JsValue::from(&lat_lng(0.0, c, None)),
             JsValue::from(&lat_lng(100.0, c, None)),
         ]);
@@ -65,26 +65,26 @@ pub extern "C" fn start() {
         rectangle(&b, Some(&box_opts("#404040", 1.5, None, fill, 0.85))).add_to(&m);
     }
 
-    let atrium = JsArray::from(vec![
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(50.0, 64.0, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(74.0, 80.0, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(50.0, 96.0, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(26.0, 80.0, None)),
+    let atrium = JsArray::<PolylineSetLatLngsLatlngs>::from([
+        lat_lng(50.0, 64.0, None),
+        lat_lng(74.0, 80.0, None),
+        lat_lng(50.0, 96.0, None),
+        lat_lng(26.0, 80.0, None),
     ]);
     polygon(atrium, Some(&box_opts("#111111", 2.0, None, "#555555", 0.35))).add_to(&m);
 
-    let spine = JsArray::from(vec![
+    let spine = JsArray::from([
         JsValue::from(&lat_lng(50.0, 12.0, None)),
         JsValue::from(&lat_lng(50.0, 148.0, None)),
     ]);
     polyline(spine, Some(&box_opts("#737373", 1.5, Some("4 4"), "#ffffff", 0.0))).add_to(&m);
 
-    let col_opts = CircleMarkerOptions::create();
-    col_opts.set_radius(Some(5.0));
-    col_opts.set_color(Some("#111111"));
-    col_opts.set_weight(Some(1.5));
-    col_opts.set_fill_color(Some("#111111"));
-    col_opts.set_fill_opacity(Some(1.0));
+    let col_opts = CircleMarkerOptions::default()
+        .with_radius(5.0)
+        .with_color("#111111")
+        .with_weight(1.5)
+        .with_fill_color("#111111")
+        .with_fill_opacity(1.0);
     for (r, c) in [
         (12.0, 16.0),
         (88.0, 16.0),

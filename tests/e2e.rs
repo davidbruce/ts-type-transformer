@@ -935,8 +935,6 @@ fn rust_cross_project_refs() {
     fs::write(
         out.join("test.rs"),
         "#![no_main]\n\
-         use base_lib::RenderingContextMethods as _;\n\
-         use app_lib::RenderingContextMethods as _;\n\
          #[link(wasm_import_module = \"env\")]\n\
          unsafe extern \"C\" { fn check(ok: i32, line: u32); }\n\
          fn assert_ok(ok: bool, line: u32) { unsafe { check(i32::from(ok), line); } }\n\

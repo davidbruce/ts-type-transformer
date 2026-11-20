@@ -1,7 +1,7 @@
 #![no_main]
 
-use date_fns::{Date, DateArg, Interval, IntervalMethods as _};
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
+use date_fns::{Date, DateArg, Interval};
+use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,22 +15,21 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 fn make_span(s_iso: &str, e_iso: &str) -> Interval<DateArg<Date>, DateArg<Date>> {
-    let s: Date = date_fns::parse_iso::<Date, Date>(s_iso, None);
-    let e: Date = date_fns::parse_iso::<Date, Date>(e_iso, None);
-    let span: Interval<DateArg<Date>, DateArg<Date>> = Interval::create();
-    span.set_start(DateArg::DateType(s));
-    span.set_end(DateArg::DateType(e));
-    span
+    let s: Date = date_fns::parse_iso(s_iso, None);
+    let e: Date = date_fns::parse_iso(e_iso, None);
+    Interval::default()
+        .with_start(DateArg::DateType(s))
+        .with_end(DateArg::DateType(e))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Date-fns Interval Overlap & Clamp (Rust)")));
@@ -122,7 +121,7 @@ pub extern "C" fn start() {
         ("2024-03-14", "Inside interval"),
         ("2024-03-28", "Clamped to end"),
     ] {
-        let probe: Date = date_fns::parse_iso::<Date, Date>(iso, None);
+        let probe: Date = date_fns::parse_iso(iso, None);
         let clamped = date_fns::clamp::<DateArg<Date>, Interval<DateArg<Date>, DateArg<Date>>, date_fns::ClampOptions<Date>>(
             DateArg::DateType(probe),
             sprint_a.clone(),

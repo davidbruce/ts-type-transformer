@@ -1,87 +1,80 @@
 #![no_main]
 
-use dom::{DocumentMethods, ElementMethods};
+use prosemirror::prosemirror_model::SchemaSpec;
 use prosemirror::prosemirror_model::*;
-use prosemirror::prosemirror_model::{SchemaSpec, SchemaSpecMethods};
 use prosemirror::prosemirror_state::*;
-use prosemirror::prosemirror_transform::*;
 use prosemirror::prosemirror_view::*;
 use prosemirror::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 fn hole_spec(tag: &str) -> DOMOutputSpec {
-    DOMOutputSpec::Array(JsArray::from(vec![JsValue::from(tag), JsValue::from(0.0)]))
+    DOMOutputSpec::Array(JsArray::from([JsValue::from(tag), JsValue::from(0.0)]))
 }
 
 fn tag_rule(tag: &str, level: i32) -> TagParseRule {
-    let r = TagParseRule::create();
-    r.set_tag(tag);
+    let mut r = TagParseRule::default().with_tag(tag);
     if level > 0 {
-        let a = Attrs::create();
+        let a = Attrs::default();
         a.set_at("level", JsValue::from(level as f64));
-        r.set_attrs(Some(&a));
+        r = r.with_attrs(&a);
     }
     r
 }
 
 fn build_schema() -> Schema<JsValue, JsValue> {
-    let doc = NodeSpec::create();
-    doc.set_content(Some("block+"));
+    let doc = NodeSpec::default().with_content("block+");
 
-    let lvl = AttributeSpec::create();
-    lvl.set_default(JsValue::from(2.0));
-    let hattrs = MarkSpecAttrs::create();
+    let lvl = <AttributeSpec as Default>::default().with_default(2.0);
+    let hattrs = MarkSpecAttrs::default();
     hattrs.set_at("level", &lvl);
 
-    let heading = NodeSpec::create();
-    heading.set_attrs(Some(&hattrs));
-    heading.set_content(Some("inline*"));
-    heading.set_group(Some("block"));
-    heading.set_defining(Some(true));
-    heading.set_parse_dom(Some(&JsArray::<TagParseRule>::from(vec![tag_rule("h1", 1), tag_rule("h2", 2)])));
-    heading.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|n: Node| {
-        let l = n.attrs().at("level").as_f64() as i32;
-        hole_spec(if l == 1 { "h1" } else { "h2" })
-    })));
+    let heading = NodeSpec::default()
+        .with_attrs(&hattrs)
+        .with_content("inline*")
+        .with_group("block")
+        .with_defining(true)
+        .with_parse_dom(&JsArray::<TagParseRule>::from([tag_rule("h1", 1), tag_rule("h2", 2)]))
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|n: Node| {
+            let l = n.attrs().at("level").as_f64() as i32;
+            hole_spec(if l == 1 { "h1" } else { "h2" })
+        }));
 
-    let para = NodeSpec::create();
-    para.set_content(Some("inline*"));
-    para.set_group(Some("block"));
-    para.set_parse_dom(Some(&JsArray::<TagParseRule>::from(vec![tag_rule("p", 0)])));
-    para.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("p"))));
+    let para = NodeSpec::default()
+        .with_content("inline*")
+        .with_group("block")
+        .with_parse_dom(&JsArray::<TagParseRule>::from([tag_rule("p", 0)]))
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("p")));
 
-    let quote = NodeSpec::create();
-    quote.set_content(Some("block+"));
-    quote.set_group(Some("block"));
-    quote.set_defining(Some(true));
-    quote.set_parse_dom(Some(&JsArray::<TagParseRule>::from(vec![tag_rule("blockquote", 0)])));
-    quote.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("blockquote"))));
+    let quote = NodeSpec::default()
+        .with_content("block+")
+        .with_group("block")
+        .with_defining(true)
+        .with_parse_dom(&JsArray::<TagParseRule>::from([tag_rule("blockquote", 0)]))
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("blockquote")));
 
-    let text = NodeSpec::create();
-    text.set_group(Some("inline"));
+    let text = NodeSpec::default().with_group("inline");
 
-    let nodes = NodeSpec::create();
-    nodes.set_at("doc", JsValue::from(&doc));
-    nodes.set_at("heading", JsValue::from(&heading));
-    nodes.set_at("paragraph", JsValue::from(&para));
-    nodes.set_at("blockquote", JsValue::from(&quote));
-    nodes.set_at("text", JsValue::from(&text));
+    let nodes = JsValue::object()
+        .with("doc", &doc)
+        .with("heading", &heading)
+        .with("paragraph", &para)
+        .with("blockquote", &quote)
+        .with("text", &text);
 
     let make_mark = |tag: &'static str| {
-        let m = MarkSpec::create();
-        m.set_parse_dom(Some(&JsArray::<ParseRule>::from(vec![ParseRule::TagParseRule(tag_rule(tag, 0))])));
-        m.set_to_dom(Some(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| hole_spec(tag))));
-        m
+        MarkSpec::default()
+            .with_parse_dom(&JsArray::<ParseRule>::from([tag_rule(tag, 0)]))
+            .with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| hole_spec(tag)))
     };
-    let marks = MarkSpec::create();
-    marks.set_at("strong", JsValue::from(&make_mark("strong")));
-    marks.set_at("em", JsValue::from(&make_mark("em")));
-    marks.set_at("code", JsValue::from(&make_mark("code")));
+    let marks = JsValue::object()
+        .with("strong", &make_mark("strong"))
+        .with("em", &make_mark("em"))
+        .with("code", &make_mark("code"));
 
-    let spec = SchemaSpec::<JsValue, JsValue>::create();
-    spec.set_nodes(JsValue::from(&nodes));
-    spec.set_marks(JsValue::from(&marks));
+    let spec = SchemaSpec::<JsValue, JsValue>::default()
+        .with_nodes(nodes)
+        .with_marks(marks);
     Schema::new(&spec)
 }
 
@@ -108,7 +101,7 @@ fn parse_html(dom_doc: &dom::Document, parser: &DOMParser, html: &str) -> Node {
 fn refresh_output(app: &AppState, doc: &Node) {
     let div = app.doc.create_element("div", None);
     app.serializer
-        .serialize_fragment(&doc.content(), None, HTMLElementOrDocumentFragment::HTMLElement(div.clone()));
+        .serialize_fragment(&doc.content(), None, div.clone());
     let html_out = div.inner_html();
 
     let nb = doc.child_count() as usize;
@@ -148,30 +141,30 @@ pub extern "C" fn start() {
         serializer,
         view: None,
         doc: dom_doc.clone(),
-        output: dom_doc.get_element_by_id("output").unwrap(),
-        meta: dom_doc.get_element_by_id("meta").unwrap(),
+        output: dom_doc.get_element_by_id("output").expect("missing #output"),
+        meta: dom_doc.get_element_by_id("meta").expect("missing #meta"),
         status: "Parsed Spec HTML via DOMParser".to_string(),
     }));
 
-    let scfg = EditorStateConfig::create();
-    scfg.set_schema(Some(&schema));
-    scfg.set_doc(Some(&initial_doc));
+    let scfg = EditorStateConfig::default()
+        .with_schema(&schema)
+        .with_doc(&initial_doc);
 
-    let props = DirectEditorProps::create();
-    props.set_state(&EditorState::create(&scfg));
-    props.set_dispatch_transaction(Some(&TransactionFn::new({
-        let app = app.clone();
-        move |tr: Transaction| {
-            let view = app.borrow().view.clone();
-            if let Some(view) = view {
-                let next = view.state().apply(&tr);
-                view.update_state(&next);
-                refresh_output(&app.borrow(), &next.doc());
+    let props = DirectEditorProps::default()
+        .with_state(&EditorState::create(&scfg))
+        .with_dispatch_transaction(&TransactionFn::new({
+            let app = app.clone();
+            move |tr: Transaction| {
+                let view = app.borrow().view.clone();
+                if let Some(view) = view {
+                    let next = view.state().apply(&tr);
+                    view.update_state(&next);
+                    refresh_output(&app.borrow(), &next.doc());
+                }
             }
-        }
-    })));
+        }));
 
-    let mount = dom_doc.get_element_by_id("editor").unwrap();
+    let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
     let place = JsValue::from(&mount);
     let view = EditorView::new(Some(&place), &props);
     {
@@ -181,10 +174,10 @@ pub extern "C" fn start() {
     }
 
     for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
-        let btn = dom_doc.get_element_by_id(bid).unwrap();
+        let btn = dom_doc.get_element_by_id(bid).expect("missing button");
         let app_c = app.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let view = app_c.borrow().view.as_ref().unwrap().clone();
+            let view = app_c.borrow().view.as_ref().expect("missing view").clone();
             let es = view.state();
             let doc = es.doc();
             match idx {
@@ -197,9 +190,9 @@ pub extern "C" fn start() {
                     }
                     .to_string();
                     let next_doc = parse_html(&st.doc, &st.parser, if idx == 0 { SPEC_HTML } else { CHANGELOG_HTML });
-                    let cfg = EditorStateConfig::create();
-                    cfg.set_schema(Some(&st.schema));
-                    cfg.set_doc(Some(&next_doc));
+                    let cfg = EditorStateConfig::default()
+                        .with_schema(&st.schema)
+                        .with_doc(&next_doc);
                     let next = EditorState::create(&cfg);
                     view.update_state(&next);
                     refresh_output(&st, &next.doc());
@@ -216,24 +209,24 @@ pub extern "C" fn start() {
                         let span = {
                             let mut st = app_c.borrow_mut();
                             st.status = format!("Inserted code span at pos {}", insert_pos as usize);
-                            let marks = JsArray::<Mark>::from(vec![st.schema.mark("code", None)]);
+                            let marks = JsArray::<Mark>::from([st.schema.mark("code", None)]);
                             st.schema.text(" roundtrip()", Some(&marks))
                         };
                         let tr = es.tr();
                         tr.insert(insert_pos, span);
-                        call_transaction_fn(&view.dispatch(), &tr);
+                        view.dispatch().call(&tr);
                     }
                 }
                 _ => {
                     let mut st = app_c.borrow_mut();
                     let div = st.doc.create_element("div", None);
                     st.serializer
-                        .serialize_fragment(&doc.content(), None, HTMLElementOrDocumentFragment::HTMLElement(div.clone()));
+                        .serialize_fragment(&doc.content(), None, div.clone());
                     let reparsed = st.parser.parse(&div, None);
                     st.status = format!("DOM serializeFragment->parse eq() = {}", doc.js_eq(&reparsed));
-                    let cfg = EditorStateConfig::create();
-                    cfg.set_schema(Some(&st.schema));
-                    cfg.set_doc(Some(&reparsed));
+                    let cfg = EditorStateConfig::default()
+                        .with_schema(&st.schema)
+                        .with_doc(&reparsed);
                     let next = EditorState::create(&cfg);
                     view.update_state(&next);
                     refresh_output(&st, &next.doc());
@@ -241,6 +234,5 @@ pub extern "C" fn start() {
             }
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 }

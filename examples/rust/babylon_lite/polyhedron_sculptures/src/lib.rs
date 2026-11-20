@@ -1,13 +1,10 @@
 #![no_main]
 
 use babylonjs_lite::{
-    CylinderOptions, CylinderOptionsMethods as _, DirectionalLightMethods as _,
-    EulerProxyMethods as _, GroundOptions, GroundOptionsMethods as _, HemisphericLightMethods as _,
-    JsTuple3, MeshMethods as _, NumberFn, ObservableVec3, ObservableVec3Methods as _,
-    PolyhedronOptions, PolyhedronOptionsMethods as _, SceneNodeMethods as _, SpotLightMethods,
-    StandardMaterialProps, StandardMaterialPropsMethods as _,
+    CylinderOptions, GroundOptions, JsTuple3, NumberFn, ObservableVec3, PolyhedronOptions,
+    StandardMaterialProps,
 };
-use dom::{GPUColorDict, GPUColorDictMethods as _, HTMLCanvasElement, ParentNodeMethods as _};
+use dom::{GPUColorDict, HTMLCanvasElement};
 
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
@@ -18,8 +15,8 @@ fn set_status_error(msg: &str) {
 
 fn mk_std(diff: f64, spec: f64, power: f64) -> StandardMaterialProps {
     let mat = babylonjs_lite::create_standard_material();
-    mat.set_diffuse_color(&JsTuple3::new(diff, diff, diff));
-    mat.set_specular_color(&JsTuple3::new(spec, spec, spec));
+    mat.set_diffuse_color([diff, diff, diff]);
+    mat.set_specular_color([spec, spec, spec]);
     mat.set_specular_power(power);
     mat
 }
@@ -41,11 +38,11 @@ pub extern "C" fn start() {
         };
 
         let scene = babylonjs_lite::create_scene_context(&engine, None);
-        let clear = GPUColorDict::create();
-        clear.set_r(0.05);
-        clear.set_g(0.05);
-        clear.set_b(0.05);
-        clear.set_a(1.0);
+        let clear = GPUColorDict::default()
+            .with_r(0.05)
+            .with_g(0.05)
+            .with_b(0.05)
+            .with_a(1.0);
         scene.set_clear_color(&clear);
 
         let camera = babylonjs_lite::create_arc_rotate_camera(
@@ -55,40 +52,41 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 1.6, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        let _ = babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
+        babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
 
         let hemi = babylonjs_lite::create_hemispheric_light(
-            Some(&JsTuple3::new(0.0, 1.0, 0.0)),
+            Some(&JsTuple3::from([0.0, 1.0, 0.0])),
             Some(0.42),
         );
-        hemi.set_diffuse_color(&JsTuple3::new(0.70, 0.70, 0.70));
-        hemi.set_ground_color(&JsTuple3::new(0.08, 0.08, 0.08));
+        hemi.set_diffuse_color([0.70, 0.70, 0.70]);
+        hemi.set_ground_color([0.08, 0.08, 0.08]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
         let spot = babylonjs_lite::create_spot_light(
-            &JsTuple3::new(0.0, 6.2, 3.0),
-            &JsTuple3::new(0.0, -1.0, -0.55),
+            [0.0, 6.2, 3.0],
+            [0.0, -1.0, -0.55],
             core::f64::consts::PI / 3.2,
             3.0,
             Some(26.0),
         );
-        spot.set_diffuse(&JsTuple3::new(1.0, 1.0, 1.0));
+        spot.set_diffuse([1.0, 1.0, 1.0]);
         spot.set_range(22.0);
         babylonjs_lite::add_to_scene(&scene, &spot);
 
-        let fill =
-            babylonjs_lite::create_directional_light(&JsTuple3::new(1.2, -1.5, -1.0), Some(0.65));
-        fill.set_diffuse(&JsTuple3::new(0.80, 0.80, 0.80));
+        let fill = babylonjs_lite::create_directional_light([1.2, -1.5, -1.0], Some(0.65));
+        fill.set_diffuse([0.80, 0.80, 0.80]);
         babylonjs_lite::add_to_scene(&scene, &fill);
 
-        let floor_opts = GroundOptions::create();
-        floor_opts.set_width(Some(18.0));
-        floor_opts.set_height(Some(18.0));
+        let floor_opts = GroundOptions::default().with_width(18.0).with_height(18.0);
         let floor = babylonjs_lite::create_ground(&engine, Some(&floor_opts));
         floor.set_material(&mk_std(0.10, 0.25, 24.0));
         babylonjs_lite::add_to_scene(&scene, &floor);
 
         let plinth_mat = mk_std(0.18, 0.30, 32.0);
+        let copts = CylinderOptions::default()
+            .with_height(1.1)
+            .with_diameter(1.15)
+            .with_tessellation(28.0);
         let mut poly_state: Vec<(ObservableVec3, _, f64, f64)> = Vec::with_capacity(5);
 
         for i in 0..5 {
@@ -96,20 +94,16 @@ pub extern "C" fn start() {
             let x = (fi - 2.0) * 2.25;
             let z = -(fi - 2.0).abs() * 0.55;
 
-            let copts = CylinderOptions::create();
-            copts.set_height(Some(1.1));
-            copts.set_diameter(Some(1.15));
-            copts.set_tessellation(Some(28.0));
             let plinth = babylonjs_lite::create_cylinder(&engine, Some(&copts));
             plinth.position().set(x, 0.55, z);
             plinth.set_material(&plinth_mat);
             babylonjs_lite::add_to_scene(&scene, &plinth);
 
             let v = 0.90 - fi * 0.13;
-            let popts = PolyhedronOptions::create();
-            popts.set_type(Some(fi));
-            popts.set_size(Some(0.62));
-            popts.set_flat(Some(true));
+            let popts = PolyhedronOptions::default()
+                .with_type(fi)
+                .with_size(0.62)
+                .with_flat(true);
             let mesh = babylonjs_lite::create_polyhedron(&engine, Some(&popts));
             mesh.position().set(x, 2.05, z);
             mesh.set_material(&mk_std(v, 0.95, 18.0 + fi * 24.0));
@@ -117,7 +111,7 @@ pub extern "C" fn start() {
             poly_state.push((mesh.position(), mesh.rotation(), x, z));
         }
 
-        let spot_pos = SpotLightMethods::position(&spot);
+        let spot_pos = spot.position();
         let spot_dir = spot.direction();
         let mut elapsed = 0.0;
 

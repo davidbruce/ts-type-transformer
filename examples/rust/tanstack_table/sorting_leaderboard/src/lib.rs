@@ -1,74 +1,56 @@
 #![no_main]
 
-use dom::ElementMethods;
 use std::cell::RefCell;
 use std::fmt::Write as _;
-use std::marker::PhantomData;
 use std::rc::Rc;
 use tanstack_table_core::*;
 
-fn obj(entries: &[(&str, &JsValue)]) -> MakeObjectMapResult<JsValue> {
-    let o = MakeObjectMapResult::<JsValue>::create();
-    for (k, v) in entries {
-        o.set_at(k, (*v).clone());
+fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsValue {
+    let mut o = JsValue::object()
+        .with("get", get)
+        .with("subscribe", AnyFunction::new(|_: JsValue| {}));
+    if let Some(mut set) = set {
+        o = o.with(
+            "set",
+            AnyFunction::new(move |args: JsValue| set(args.as_array::<JsValue>().get(0))),
+        );
     }
     o
 }
 
-fn as_array(v: &JsValue) -> JsArray<JsValue> {
-    let h = v.0.clone();
-    let id = h.0;
-    std::mem::forget(h);
-    JsArray::<JsValue>::from_handle(id)
-}
-
-fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsHandle {
-    let o = MakeObjectMapResult::<JsValue>::create();
-    o.set_at("get", get);
-    if let Some(mut set) = set {
-        o.set_at(
-            "set",
-            JsValue(AnyFunction::new(move |args: JsValue| set(as_array(&args).get(0))).0.clone()),
-        );
-    }
-    o.set_at("subscribe", JsValue(AnyFunction::new(|_: JsValue| {}).0.clone()));
-    o.0.clone()
-}
-
 fn make_reactivity() -> JsValue {
-    let bindings = TableReactivityBindings::create();
-    bindings.set_create_options_store(false);
-    bindings.set_wrap_external_atoms(false);
     let writable = TableReactivityBindingsCreateWritableAtom::new(|initial: JsValue, _| {
         let value = Rc::new(RefCell::new(initial));
         let (read, write) = (value.clone(), value);
         let get = ColumnColumnFilteringGetFilterValue::new(move || read.borrow().clone());
-        Atom(
-            atom(
-                JsValue(get.0.clone()),
-                Some(Box::new(move |v| {
-                    let prev = write.borrow().clone();
-                    *write.borrow_mut() = functional_update(Updater::T(v), prev);
-                })),
-            ),
-            PhantomData,
+        atom(
+            JsValue::from(&get),
+            Some(Box::new(move |v| {
+                let prev = write.borrow().clone();
+                *write.borrow_mut() = functional_update(Updater::T(v), prev);
+            })),
         )
+        .unchecked_into::<Atom<JsValue>>()
     });
-    bindings.set_create_writable_atom(&writable);
-    let readonly = TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| {
-        ReadonlyAtom(atom(JsValue(compute.0.clone()), None), PhantomData)
-    });
-    bindings.set_create_readonly_atom(&readonly);
-    let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
-    bindings.set_untrack(&untrack);
+    let readonly =
+        TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| {
+            atom(JsValue::from(&compute), None).unchecked_into::<ReadonlyAtom<JsValue>>()
+        });
+    let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| f.call());
     let run_it = FnFn::new(|f: VoidFn| {
-        call_void_fn(&f);
+        f.call();
     });
-    bindings.set_batch(&run_it);
-    bindings.set_schedule(&run_it);
     let noop = TableReactivityBindingsAddSubscription::new(|_| {});
-    bindings.set_add_subscription(&noop);
-    JsValue(bindings.0.clone())
+    let bindings = TableReactivityBindings::default()
+        .with_create_options_store(false)
+        .with_wrap_external_atoms(false)
+        .with_create_writable_atom(&writable)
+        .with_create_readonly_atom(&readonly)
+        .with_untrack(&untrack)
+        .with_batch(&run_it)
+        .with_schedule(&run_it)
+        .with_add_subscription(&noop);
+    JsValue::from(&bindings)
 }
 
 fn esc_html(s: &str, out: &mut String) {
@@ -83,28 +65,23 @@ fn esc_html(s: &str, out: &mut String) {
 }
 
 fn col_def(key: &str, hdr: &str) -> JsValue {
-    JsValue::from(&obj(&[
-        ("accessorKey", &JsValue::from(key)),
-        ("header", &JsValue::from(hdr)),
-    ]))
+    JsValue::object()
+        .with("accessorKey", key)
+        .with("header", hdr)
 }
 
 fn node_row(id: &str, host: &str, region: &str, lat: f64, thr: f64, up: f64) -> JsValue {
-    JsValue::from(&obj(&[
-        ("id", &JsValue::from(id)),
-        ("host", &JsValue::from(host)),
-        ("region", &JsValue::from(region)),
-        ("latency", &JsValue::from(lat)),
-        ("throughput", &JsValue::from(thr)),
-        ("uptime", &JsValue::from(up)),
-    ]))
+    JsValue::object()
+        .with("id", id)
+        .with("host", host)
+        .with("region", region)
+        .with("latency", lat)
+        .with("throughput", thr)
+        .with("uptime", up)
 }
 
 fn sort_spec(id: &str, desc: bool) -> ColumnSort {
-    let s = ColumnSort::create();
-    s.set_id(id);
-    s.set_desc(desc);
-    s
+    ColumnSort::default().with_id(id).with_desc(desc)
 }
 
 struct State {
@@ -114,21 +91,21 @@ struct State {
 }
 
 fn render(st: &State, label: &str) {
-    let rows = call_table_row_models_get_core_row_model(&st.table.get_row_model()).rows();
-    let cols = call_table_columns_get_all_columns(&st.table.get_all_leaf_columns());
+    let rows = st.table.get_row_model().call().rows();
+    let cols = st.table.get_all_leaf_columns().call();
 
     let mut html = String::from("<table><thead><tr>");
     for col in cols.iter() {
         let cid = col.id();
-        let hdr = MakeObjectMapResult::<JsValue>(col.column_def().0.clone(), PhantomData)
+        let hdr = js::unchecked_cast::<MakeObjectMapResult<JsValue>>(&col.column_def())
             .at("header")
-            .unwrap()
+            .expect("missing column header")
             .as_string();
         let is_num = cid == "latency" || cid == "throughput" || cid == "uptime";
         html.push_str(if is_num { "<th class=\"num\">" } else { "<th>" });
         esc_html(&hdr, &mut html);
-        let csort = ColumnRowSorting::<TableFeatures, JsValue>(col.0.clone(), PhantomData);
-        match call_column_row_sorting_get_is_sorted(&csort.get_is_sorted()) {
+        let csort: ColumnRowSorting<TableFeatures, JsValue> = js::unchecked_cast(&col);
+        match csort.get_is_sorted().call() {
             BooleanOrSortDirection::SortDirection(SortDirection::Asc) => html.push_str(" &#9650;"),
             BooleanOrSortDirection::SortDirection(SortDirection::Desc) => html.push_str(" &#9660;"),
             _ => {}
@@ -141,22 +118,22 @@ fn render(st: &State, label: &str) {
     for i in 0..rows.len() {
         let r = rows.get(i);
         let gv = r.get_value();
-        let host = call_string_to_t_value_fn(&gv, "host").as_string();
+        let host = gv.call("host").as_string();
         if i == 0 {
             top_host = host.clone();
         }
         html.push_str("<tr><td>");
-        esc_html(&call_string_to_t_value_fn(&gv, "id").as_string(), &mut html);
+        esc_html(&gv.call("id").as_string(), &mut html);
         html.push_str("</td><td>");
         esc_html(&host, &mut html);
         html.push_str("</td><td>");
-        esc_html(&call_string_to_t_value_fn(&gv, "region").as_string(), &mut html);
+        esc_html(&gv.call("region").as_string(), &mut html);
         let _ = write!(
             html,
             "</td><td class=\"num\">{:.1}</td><td class=\"num\">{:.0}</td><td class=\"num\">{:.2}%</td></tr>",
-            call_string_to_t_value_fn(&gv, "latency").as_f64(),
-            call_string_to_t_value_fn(&gv, "throughput").as_f64(),
-            call_string_to_t_value_fn(&gv, "uptime").as_f64(),
+            gv.call("latency").as_f64(),
+            gv.call("throughput").as_f64(),
+            gv.call("uptime").as_f64(),
         );
     }
     html.push_str("</tbody></table>");
@@ -168,20 +145,18 @@ fn render(st: &State, label: &str) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let sort_fns = obj(&[
-        ("alphanumeric", &JsValue(sort_fn_alphanumeric().0.clone())),
-        ("basic", &JsValue(sort_fn_basic().0.clone())),
-        ("text", &JsValue(sort_fn_text().0.clone())),
-    ]);
-    let features = obj(&[
-        ("coreReactivityFeature", &make_reactivity()),
-        ("rowSortingFeature", &JsValue(row_sorting_feature().0.clone())),
-        ("coreRowModel", &JsValue(create_core_row_model::<TableFeatures, JsValue>().0.clone())),
-        ("sortedRowModel", &JsValue(create_sorted_row_model::<TableFeatures, JsValue>().0.clone())),
-        ("sortFns", &JsValue::from(&sort_fns)),
-    ]);
+    let sort_fns = JsValue::object()
+        .with("alphanumeric", sort_fn_alphanumeric())
+        .with("basic", sort_fn_basic())
+        .with("text", sort_fn_text());
+    let features = JsValue::object()
+        .with("coreReactivityFeature", make_reactivity())
+        .with("rowSortingFeature", row_sorting_feature())
+        .with("coreRowModel", create_core_row_model::<TableFeatures, JsValue>())
+        .with("sortedRowModel", create_sorted_row_model::<TableFeatures, JsValue>())
+        .with("sortFns", sort_fns);
 
-    let data = JsArray::<JsValue>::from(vec![
+    let data = JsArray::<JsValue>::from([
         node_row("N-01", "eu-west-1a", "CH", 12.4, 4200.0, 99.98),
         node_row("N-02", "eu-west-1b", "CH", 8.7, 5100.0, 99.99),
         node_row("N-03", "eu-central-1a", "DE", 15.2, 3900.0, 99.91),
@@ -191,7 +166,7 @@ pub extern "C" fn start() {
         node_row("N-07", "us-east-1a", "US", 28.5, 7100.0, 99.94),
         node_row("N-08", "us-east-1b", "US", 21.0, 5900.0, 99.96),
     ]);
-    let cols = JsArray::<JsValue>::from(vec![
+    let cols = JsArray::<JsValue>::from([
         col_def("id", "Node"),
         col_def("host", "Host"),
         col_def("region", "Region"),
@@ -200,27 +175,27 @@ pub extern "C" fn start() {
         col_def("uptime", "Uptime %"),
     ]);
 
-    let init_sort = JsArray::<ColumnSort>::from(vec![sort_spec("region", false), sort_spec("latency", false)]);
-    let init_state = obj(&[("sorting", &JsValue(init_sort.0.clone()))]);
-    let opts = obj(&[
-        ("features", &JsValue::from(&features)),
-        ("data", &JsValue(data.0.clone())),
-        ("columns", &JsValue(cols.0.clone())),
-        ("initialState", &JsValue::from(&init_state)),
-    ]);
+    let init_sort = JsArray::<ColumnSort>::from([sort_spec("region", false), sort_spec("latency", false)]);
+    let init_state = JsValue::object().with("sorting", init_sort);
+    let opts = JsValue::object()
+        .with("features", features)
+        .with("data", data)
+        .with("columns", cols)
+        .with("initialState", init_state)
+        .unchecked_into::<TableOptionsCore<TableFeatures, JsValue>>();
 
     let doc = dom::document();
     let st = Rc::new(State {
-        table: construct_table(&TableOptionsCore::<TableFeatures, JsValue>(opts.0.clone(), PhantomData)),
-        wrap: doc.get_element_by_id("table-wrap").unwrap(),
-        meta: doc.get_element_by_id("meta").unwrap(),
+        table: construct_table(&opts),
+        wrap: doc.get_element_by_id("table-wrap").expect("missing #table-wrap"),
+        meta: doc.get_element_by_id("meta").expect("missing #meta"),
     });
 
     for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
-        let btn = doc.get_element_by_id(bid).unwrap();
+        let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let tsort = TableRowSorting::<TableFeatures, JsValue>(st_c.table.0.clone(), PhantomData);
+            let tsort: TableRowSorting<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             let (next, label) = match idx {
                 0 => (vec![sort_spec("region", false), sort_spec("latency", false)], "Sort: region asc, latency asc"),
                 1 => (vec![sort_spec("latency", false)], "Sort: latency asc"),
@@ -228,11 +203,10 @@ pub extern "C" fn start() {
                 3 => (vec![sort_spec("host", false)], "Sort: host asc"),
                 _ => (vec![], "Sort: unsorted (data order)"),
             };
-            call_table_row_sorting_set_sorting(&tsort.set_sorting(), Updater::T(JsArray::from(next)));
+            tsort.set_sorting().call(Updater::T(JsArray::from(next)));
             render(&st_c, label);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 
     render(&st, "Sort: region asc, latency asc");

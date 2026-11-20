@@ -3,33 +3,32 @@
 use konva::*;
 
 fn make_line(pts: [f64; 4]) -> GroupOrShape {
-    let arr: JsArray<f64> = pts.into_iter().collect();
-    let lc = LineConfig::create();
-    lc.set_points(LinePoints::Array(arr));
-    lc.set_stroke(StringOrCanvasGradient::String("#e5e5e5".to_string()));
-    lc.set_stroke_width(Some(1.0));
+    let lc = LineConfig::default()
+        .with_points(JsArray::from(pts))
+        .with_stroke("#e5e5e5")
+        .with_stroke_width(1.0);
     let ln = Line::<LineConfig>::new(Some(lc));
-    GroupOrShape::from(Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>())
+    Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let sc = StageConfig::create();
-    sc.set_container(HTMLDivElementOrString::String("stage".to_string()));
-    sc.set_width(Some(680.0));
-    sc.set_height(Some(400.0));
+    let sc = StageConfig::default()
+        .with_container("stage")
+        .with_width(680.0)
+        .with_height(400.0);
     let stage = Stage::new(&sc);
 
     let layer = Layer::new(None);
-    stage.add(&layer, Vec::<JsValue>::new());
+    stage.add(&layer, JsArray::<JsValue>::new());
 
-    let bg = RectConfig::create();
-    bg.set_x(Some(0.0));
-    bg.set_y(Some(0.0));
-    bg.set_width(Some(680.0));
-    bg.set_height(Some(400.0));
-    bg.set_fill(StringOrCanvasGradient::String("#ffffff".to_string()));
-    layer.add([GroupOrShape::from(&Rect::new(Some(&bg)))]);
+    let bg = RectConfig::default()
+        .with_x(0.0)
+        .with_y(0.0)
+        .with_width(680.0)
+        .with_height(400.0)
+        .with_fill("#ffffff");
+    layer.add([Rect::new(Some(&bg))]);
 
     for x in (40..=640).step_by(40) {
         let xf = x as f64;
@@ -41,116 +40,113 @@ pub extern "C" fn start() {
     }
 
     // Group A.
-    let gac = GroupConfig::create();
-    gac.set_x(Some(40.0));
-    gac.set_y(Some(55.0));
+    let gac = GroupConfig::default().with_x(40.0).with_y(55.0);
     let group_a = Group::new(Some(&gac));
-    let gab = RectConfig::create();
-    gab.set_width(Some(160.0));
-    gab.set_height(Some(120.0));
-    gab.set_fill(StringOrCanvasGradient::String("#f7f7f7".to_string()));
-    gab.set_stroke(StringOrCanvasGradient::String("#111111".to_string()));
-    gab.set_stroke_width(Some(1.5));
-    let gad = CircleConfig::create();
-    gad.set_x(Some(80.0));
-    gad.set_y(Some(60.0));
-    gad.set_radius(Some(24.0));
-    gad.set_fill(StringOrCanvasGradient::String("#111111".to_string()));
-    let gal = TextConfig::create();
-    gal.set_x(Some(12.0));
-    gal.set_y(Some(10.0));
-    gal.set_text(Some("Group A \u{00B7} 0\u{00B0}"));
-    gal.set_font_size(Some(11.0));
-    gal.set_font_family(Some("monospace"));
-    gal.set_fill(StringOrCanvasGradient::String("#111111".to_string()));
+    let gab = RectConfig::default()
+        .with_width(160.0)
+        .with_height(120.0)
+        .with_fill("#f7f7f7")
+        .with_stroke("#111111")
+        .with_stroke_width(1.5);
+    let gad = CircleConfig::default()
+        .with_x(80.0)
+        .with_y(60.0)
+        .with_radius(24.0)
+        .with_fill("#111111");
+    let gal = TextConfig::default()
+        .with_x(12.0)
+        .with_y(10.0)
+        .with_text("Group A \u{00B7} 0\u{00B0}")
+        .with_font_size(11.0)
+        .with_font_family("monospace")
+        .with_fill("#111111");
     group_a.add([
-        GroupOrShape::from(&Rect::new(Some(&gab))),
-        GroupOrShape::from(&Circle::new(Some(&gad))),
-        GroupOrShape::from(&Text::new(Some(&gal))),
+        GroupOrShape::from(Rect::new(Some(&gab))),
+        GroupOrShape::from(Circle::new(Some(&gad))),
+        GroupOrShape::from(Text::new(Some(&gal))),
     ]);
-    layer.add([GroupOrShape::from(&group_a)]);
+    layer.add([group_a]);
 
     // Group B.
-    let gbc = GroupConfig::create();
-    gbc.set_x(Some(340.0));
-    gbc.set_y(Some(75.0));
-    gbc.set_rotation(Some(24.0));
+    let gbc = GroupConfig::default()
+        .with_x(340.0)
+        .with_y(75.0)
+        .with_rotation(24.0);
     let group_b = Group::new(Some(&gbc));
-    let gbo = RectConfig::create();
-    gbo.set_width(Some(150.0));
-    gbo.set_height(Some(110.0));
-    gbo.set_fill(StringOrCanvasGradient::String("#efefef".to_string()));
-    gbo.set_stroke(StringOrCanvasGradient::String("#111111".to_string()));
-    gbo.set_stroke_width(Some(2.0));
-    let dash: JsArray<f64> = [4.0, 3.0].into_iter().collect();
-    let gbi = RectConfig::create();
-    gbi.set_x(Some(22.0));
-    gbi.set_y(Some(22.0));
-    gbi.set_width(Some(106.0));
-    gbi.set_height(Some(66.0));
-    gbi.set_fill(StringOrCanvasGradient::String("#ffffff".to_string()));
-    gbi.set_stroke(StringOrCanvasGradient::String("#555555".to_string()));
-    gbi.set_stroke_width(Some(1.5));
-    gbi.set_dash(Some(&dash));
-    let gbd = CircleConfig::create();
-    gbd.set_x(Some(75.0));
-    gbd.set_y(Some(55.0));
-    gbd.set_radius(Some(14.0));
-    gbd.set_fill(StringOrCanvasGradient::String("#404040".to_string()));
-    let gbl = TextConfig::create();
-    gbl.set_x(Some(10.0));
-    gbl.set_y(Some(8.0));
-    gbl.set_text(Some("Group B \u{00B7} 24\u{00B0}"));
-    gbl.set_font_size(Some(11.0));
-    gbl.set_font_family(Some("monospace"));
-    gbl.set_fill(StringOrCanvasGradient::String("#111111".to_string()));
+    let gbo = RectConfig::default()
+        .with_width(150.0)
+        .with_height(110.0)
+        .with_fill("#efefef")
+        .with_stroke("#111111")
+        .with_stroke_width(2.0);
+    let gbi = RectConfig::default()
+        .with_x(22.0)
+        .with_y(22.0)
+        .with_width(106.0)
+        .with_height(66.0)
+        .with_fill("#ffffff")
+        .with_stroke("#555555")
+        .with_stroke_width(1.5)
+        .with_dash([4.0, 3.0]);
+    let gbd = CircleConfig::default()
+        .with_x(75.0)
+        .with_y(55.0)
+        .with_radius(14.0)
+        .with_fill("#404040");
+    let gbl = TextConfig::default()
+        .with_x(10.0)
+        .with_y(8.0)
+        .with_text("Group B \u{00B7} 24\u{00B0}")
+        .with_font_size(11.0)
+        .with_font_family("monospace")
+        .with_fill("#111111");
     group_b.add([
-        GroupOrShape::from(&Rect::new(Some(&gbo))),
-        GroupOrShape::from(&Rect::new(Some(&gbi))),
-        GroupOrShape::from(&Circle::new(Some(&gbd))),
-        GroupOrShape::from(&Text::new(Some(&gbl))),
+        GroupOrShape::from(Rect::new(Some(&gbo))),
+        GroupOrShape::from(Rect::new(Some(&gbi))),
+        GroupOrShape::from(Circle::new(Some(&gbd))),
+        GroupOrShape::from(Text::new(Some(&gbl))),
     ]);
     layer.add([GroupOrShape::from(&group_b)]);
 
     // Group C + nested inner group.
-    let gcc = GroupConfig::create();
-    gcc.set_x(Some(495.0));
-    gcc.set_y(Some(55.0));
-    gcc.set_scale_x(Some(1.15));
-    gcc.set_scale_y(Some(1.15));
+    let gcc = GroupConfig::default()
+        .with_x(495.0)
+        .with_y(55.0)
+        .with_scale_x(1.15)
+        .with_scale_y(1.15);
     let group_c = Group::new(Some(&gcc));
-    let gco = RectConfig::create();
-    gco.set_width(Some(130.0));
-    gco.set_height(Some(110.0));
-    gco.set_fill(StringOrCanvasGradient::String("#ffffff".to_string()));
-    gco.set_stroke(StringOrCanvasGradient::String("#111111".to_string()));
-    gco.set_stroke_width(Some(2.0));
-    let gcl = TextConfig::create();
-    gcl.set_x(Some(8.0));
-    gcl.set_y(Some(8.0));
-    gcl.set_text(Some("Group C \u{00B7} 1.15x"));
-    gcl.set_font_size(Some(10.0));
-    gcl.set_font_family(Some("monospace"));
-    gcl.set_fill(StringOrCanvasGradient::String("#111111".to_string()));
+    let gco = RectConfig::default()
+        .with_width(130.0)
+        .with_height(110.0)
+        .with_fill("#ffffff")
+        .with_stroke("#111111")
+        .with_stroke_width(2.0);
+    let gcl = TextConfig::default()
+        .with_x(8.0)
+        .with_y(8.0)
+        .with_text("Group C \u{00B7} 1.15x")
+        .with_font_size(10.0)
+        .with_font_family("monospace")
+        .with_fill("#111111");
 
-    let icc = GroupConfig::create();
-    icc.set_x(Some(25.0));
-    icc.set_y(Some(25.0));
-    icc.set_rotation(Some(15.0));
+    let icc = GroupConfig::default()
+        .with_x(25.0)
+        .with_y(25.0)
+        .with_rotation(15.0);
     let inner_group = Group::new(Some(&icc));
-    let mc = CircleConfig::create();
-    mc.set_x(Some(40.0));
-    mc.set_y(Some(30.0));
-    mc.set_radius(Some(16.0));
-    mc.set_fill(StringOrCanvasGradient::String("#111111".to_string()));
+    let mc = CircleConfig::default()
+        .with_x(40.0)
+        .with_y(30.0)
+        .with_radius(16.0)
+        .with_fill("#111111");
     let marker = Circle::new(Some(&mc));
     inner_group.add([GroupOrShape::from(&marker)]);
     group_c.add([
-        GroupOrShape::from(&Rect::new(Some(&gco))),
-        GroupOrShape::from(&Text::new(Some(&gcl))),
-        GroupOrShape::from(&inner_group),
+        GroupOrShape::from(Rect::new(Some(&gco))),
+        GroupOrShape::from(Text::new(Some(&gcl))),
+        GroupOrShape::from(inner_group),
     ]);
-    layer.add([GroupOrShape::from(&group_c)]);
+    layer.add([group_c]);
 
     let abs = marker.get_absolute_position(None);
     let bbox = group_b.get_client_rect(None);
@@ -160,24 +156,24 @@ pub extern "C" fn start() {
     let bh = bbox.height().round() as i32;
     let strip_txt = format!("Marker abs=({ax}, {ay}) \u{00B7} Group B bbox={bw}x{bh}");
 
-    let strip = RectConfig::create();
-    strip.set_x(Some(28.0));
-    strip.set_y(Some(308.0));
-    strip.set_width(Some(624.0));
-    strip.set_height(Some(60.0));
-    strip.set_fill(StringOrCanvasGradient::String("#f7f7f7".to_string()));
-    strip.set_stroke(StringOrCanvasGradient::String("#111111".to_string()));
-    strip.set_stroke_width(Some(1.5));
-    let sum = TextConfig::create();
-    sum.set_x(Some(44.0));
-    sum.set_y(Some(331.0));
-    sum.set_text(Some(&strip_txt));
-    sum.set_font_size(Some(12.0));
-    sum.set_font_family(Some("monospace"));
-    sum.set_fill(StringOrCanvasGradient::String("#111111".to_string()));
+    let strip = RectConfig::default()
+        .with_x(28.0)
+        .with_y(308.0)
+        .with_width(624.0)
+        .with_height(60.0)
+        .with_fill("#f7f7f7")
+        .with_stroke("#111111")
+        .with_stroke_width(1.5);
+    let sum = TextConfig::default()
+        .with_x(44.0)
+        .with_y(331.0)
+        .with_text(strip_txt.as_str())
+        .with_font_size(12.0)
+        .with_font_family("monospace")
+        .with_fill("#111111");
     layer.add([
-        GroupOrShape::from(&Rect::new(Some(&strip))),
-        GroupOrShape::from(&Text::new(Some(&sum))),
+        GroupOrShape::from(Rect::new(Some(&strip))),
+        GroupOrShape::from(Text::new(Some(&sum))),
     ]);
 
     layer.draw();
@@ -185,5 +181,8 @@ pub extern "C" fn start() {
     let msg = format!(
         "Stage: 680x400 \u{00B7} Nested marker abs=({ax}, {ay}) \u{00B7} Rotated Group B rect={bw}x{bh}"
     );
-    dom::document().get_element_by_id("meta").unwrap().set_text_content(Some(&msg));
+    dom::document()
+        .get_element_by_id("meta")
+        .expect("missing #meta")
+        .set_text_content(Some(&msg));
 }

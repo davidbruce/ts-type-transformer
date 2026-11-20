@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use dom::NodeMethods as _;
 use three::*;
 
 fn tower_height(mode: usize, gx: usize, gz: usize) -> f64 {
@@ -35,7 +34,7 @@ fn layout_name(mode: usize) -> &'static str {
 
 struct AppState {
     renderer: WebGLRenderer,
-    scene: Scene<Object3DEventMap>,
+    scene: Scene,
     ortho_cam: OrthographicCamera,
     persp_cam: PerspectiveCamera,
     inst: InstancedMesh<BoxGeometry, MeshStandardMaterial, Object3DEventMap>,
@@ -52,7 +51,7 @@ fn render_city(st: &AppState) {
     let scale = Vector3::new(None, None, None);
     let mtx = Matrix4::new();
     let axis_y = Vector3::new(Some(0.0), Some(1.0), Some(0.0));
-    let col = Color::new(ColorRepresentation::Number(0xffffff as f64));
+    let col = Color::new(0xffffff as f64);
 
     let mut max_h = 0.0_f64;
     let mut idx = 0;
@@ -93,11 +92,9 @@ fn render_city(st: &AppState) {
     st.persp_cam.look_at(&target);
 
     if st.use_ortho {
-        st.renderer
-            .render(&Object3D::from(st.scene.clone()), &st.ortho_cam);
+        st.renderer.render(&st.scene, &st.ortho_cam);
     } else {
-        st.renderer
-            .render(&Object3D::from(st.scene.clone()), &st.persp_cam);
+        st.renderer.render(&st.scene, &st.persp_cam);
     }
 
     let cname = if st.use_ortho {
@@ -122,20 +119,18 @@ pub extern "C" fn start() {
     let height = 400.0;
     let aspect = width / height;
 
-    let rp = WebGLRendererParameters::create();
-    rp.set_antialias(Some(true));
-    rp.set_preserve_drawing_buffer(Some(true));
+    let rp = WebGLRendererParameters::default()
+        .with_antialias(true)
+        .with_preserve_drawing_buffer(true);
     let renderer = WebGLRenderer::new(Some(&rp));
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     doc.get_element_by_id("stage")
-        .unwrap()
+        .expect("missing #stage")
         .append_child(renderer.dom_element());
 
-    let scene = Scene::<Object3DEventMap>::new();
-    scene.set_background(ColorOrTexture::Color(Color::new(
-        ColorRepresentation::Number(0xf7f7f7 as f64),
-    )));
+    let scene = Scene::new();
+    scene.set_background(Color::new(0xf7f7f7 as f64));
     let ortho_cam = OrthographicCamera::new(
         Some(-5.4 * aspect),
         Some(5.4 * aspect),
@@ -146,45 +141,45 @@ pub extern "C" fn start() {
     );
     let persp_cam = PerspectiveCamera::new(Some(40.0), Some(aspect), Some(0.1), Some(100.0));
 
-    scene.add([Object3D::from(AmbientLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(1.25)))]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(2.1));
+    scene.add([AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.25))]);
+    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.1));
     key.position().set(8.0, 12.0, Some(6.0));
-    scene.add([Object3D::from(key)]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(0.9));
+    scene.add([key]);
+    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
     rim.position().set(-7.0, 6.0, Some(-8.0));
-    scene.add([Object3D::from(rim)]);
+    scene.add([rim]);
 
-    let pmp = MeshStandardMaterialParameters::create();
-    pmp.set_color(ColorRepresentation::Number(0xe5e5e5 as f64));
-    pmp.set_roughness(Some(0.85));
-    let plinth = Mesh::<PlaneGeometry, MeshStandardMaterial, Object3DEventMap>::new(
+    let pmp = MeshStandardMaterialParameters::default()
+        .with_color(0xe5e5e5 as f64)
+        .with_roughness(0.85);
+    let plinth = Mesh::<PlaneGeometry, MeshStandardMaterial>::new(
         Some(PlaneGeometry::new(Some(8.6), Some(8.6), None, None)),
         Some(MeshStandardMaterial::new(Some(&pmp))),
     );
     plinth.rotation().set_x(-std::f64::consts::FRAC_PI_2);
     plinth.position().set_y(-0.01);
-    scene.add([Object3D::from(plinth)]);
+    scene.add([plinth]);
 
     let grid = GridHelper::new(
         Some(9.0),
         Some(10.0),
-        ColorRepresentation::Number(0x999999 as f64),
-        ColorRepresentation::Number(0xd4d4d4 as f64),
+        0x999999 as f64,
+        0xd4d4d4 as f64,
     );
-    scene.add([Object3D::from(grid)]);
+    scene.add([grid]);
 
     let tgeo = BoxGeometry::new(Some(0.54), Some(1.0), Some(0.54), None, None, None);
-    let tmp = MeshStandardMaterialParameters::create();
-    tmp.set_color(ColorRepresentation::Number(0xffffff as f64));
-    tmp.set_roughness(Some(0.65));
-    tmp.set_metalness(Some(0.08));
+    let tmp = MeshStandardMaterialParameters::default()
+        .with_color(0xffffff as f64)
+        .with_roughness(0.65)
+        .with_metalness(0.08);
     let tmat = MeshStandardMaterial::new(Some(&tmp));
     let inst = InstancedMesh::<BoxGeometry, MeshStandardMaterial, Object3DEventMap>::new(
         Some(tgeo),
         Some(tmat),
         100.0,
     );
-    scene.add([Object3D::from(inst.clone())]);
+    scene.add([inst.clone()]);
 
     let st = Rc::new(RefCell::new(AppState {
         renderer,
@@ -192,15 +187,15 @@ pub extern "C" fn start() {
         ortho_cam,
         persp_cam,
         inst,
-        cam_btn: doc.get_element_by_id("btn-cam").unwrap(),
-        meta: doc.get_element_by_id("meta").unwrap(),
+        cam_btn: doc.get_element_by_id("btn-cam").expect("missing #btn-cam"),
+        meta: doc.get_element_by_id("meta").expect("missing #meta"),
         use_ortho: true,
         layout_mode: 0,
         cam_yaw: 0.785398,
     }));
 
     for (i, bid) in ["btn-cam", "btn-lay0", "btn-lay1", "btn-lay2", "btn-rot"].iter().enumerate() {
-        let btn = doc.get_element_by_id(bid).unwrap();
+        let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
             let mut s = st_c.borrow_mut();
@@ -214,7 +209,6 @@ pub extern "C" fn start() {
             render_city(&s);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 
     render_city(&st.borrow());

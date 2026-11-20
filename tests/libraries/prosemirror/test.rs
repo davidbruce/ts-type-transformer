@@ -6,7 +6,7 @@
 use bindings::prosemirror_model::*;
 // FINDING 17: the root and prosemirror_model both define `SchemaSpec` (and
 // its Methods trait): a glob import of both is ambiguous.
-use bindings::prosemirror_model::{SchemaSpec, SchemaSpecMethods};
+use bindings::prosemirror_model::SchemaSpec;
 use bindings::prosemirror_state::*;
 use bindings::prosemirror_transform::*;
 use bindings::prosemirror_view::*;

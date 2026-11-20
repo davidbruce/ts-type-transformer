@@ -5,12 +5,7 @@ use std::f64::consts::TAU;
 use std::rc::Rc;
 
 use dimforge_rapier3d_compat::*;
-use dom::{
-    CanvasDrawPathMethods as _, CanvasFillStrokeStylesMethods as _,
-    CanvasPathDrawingStylesMethods as _, CanvasPathMethods as _, CanvasRectMethods as _,
-    CanvasRenderingContext2D, CanvasTextDrawingStylesMethods as _, CanvasTextMethods as _,
-    FrameRequestCallback, HTMLCanvasElement, HTMLCanvasElementMethods as _, HTMLElement,
-};
+use dom::{CanvasRenderingContext2D, FrameRequestCallback, HTMLCanvasElement, HTMLElement};
 
 const BODY_COUNT: usize = 6;
 const IS_BOX: [bool; BODY_COUNT] = [false, false, true, false, true, false];
@@ -134,7 +129,7 @@ fn build_scene(st: &mut AppState) {
     let sc = world.create_collider(
         &ColliderDesc::cuboid(1.85, 0.30, 1.2)
             .set_sensor(true)
-            .set_active_events_2(ActiveEvents::COLLISIONEVENTS),
+            .set_active_events_2(ActiveEvents::CollisionEvents),
         Some(&sbody),
     );
     st.sensor_handle = sc.handle();
@@ -152,7 +147,7 @@ fn build_scene(st: &mut AppState) {
         world.create_collider(
             &cd.set_restitution_2(0.35)
                 .set_friction_2(0.25)
-                .set_active_events_2(ActiveEvents::COLLISIONEVENTS),
+                .set_active_events_2(ActiveEvents::CollisionEvents),
             Some(&rb),
         );
         st.bodies.push(rb);
@@ -349,7 +344,6 @@ pub extern "C" fn start() {
                 }
             });
             btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-            std::mem::forget(cb);
         }
 
         let raf_holder: Rc<RefCell<Option<FrameRequestCallback>>> = Rc::new(RefCell::new(None));
@@ -370,6 +364,5 @@ pub extern "C" fn start() {
         if let Some(ref cb) = *raf_holder.borrow() {
             dom::request_animation_frame(cb);
         }
-        std::mem::forget(raf_holder);
     });
 }

@@ -3,23 +3,22 @@
 use leaflet::*;
 
 fn make_map_opts() -> MapOptions {
-    let opts = MapOptions::create();
-    opts.set_attribution_control(Some(false));
-    opts.set_zoom_animation(Some(false));
-    opts.set_fade_animation(Some(false));
-    opts.set_marker_zoom_animation(Some(false));
-    opts
+    MapOptions::default()
+        .with_attribution_control(false)
+        .with_zoom_animation(false)
+        .with_fade_animation(false)
+        .with_marker_zoom_animation(false)
 }
 
 fn poly_opts(color: &str, weight: f64, dash: Option<&str>, fill_opacity: f64) -> PolylineOptions {
-    let opts = PolylineOptions::create();
-    opts.set_smooth_factor(Some(1.0));
-    opts.set_color(Some(color));
-    opts.set_weight(Some(weight));
+    let mut opts = PolylineOptions::default()
+        .with_smooth_factor(1.0)
+        .with_color(color)
+        .with_weight(weight)
+        .with_fill_opacity(fill_opacity);
     if let Some(d) = dash {
-        opts.set_dash_array(StringOrNumberArray::String(d.into()));
+        opts = opts.with_dash_array(d);
     }
-    opts.set_fill_opacity(Some(fill_opacity));
     opts
 }
 
@@ -38,25 +37,25 @@ pub extern "C" fn start() {
 
     let grat_opts = poly_opts("#e5e5e5", 1.0, None, 0.0);
     for lat in [46.0, 48.0, 50.0, 52.0, 54.0] {
-        let pts = JsArray::from(vec![
+        let pts = JsArray::from([
             JsValue::from(&lat_lng(lat, -2.0, None)),
             JsValue::from(&lat_lng(lat, 17.0, None)),
         ]);
         polyline(pts, Some(&grat_opts)).add_to(&m);
     }
     for lng in [0.0, 4.0, 8.0, 12.0, 16.0] {
-        let pts = JsArray::from(vec![
+        let pts = JsArray::from([
             JsValue::from(&lat_lng(45.0, lng, None)),
             JsValue::from(&lat_lng(55.0, lng, None)),
         ]);
         polyline(pts, Some(&grat_opts)).add_to(&m);
     }
 
-    let primary_pts = JsArray::from(hubs.iter().map(|(_, p)| JsValue::from(p)).collect::<Vec<_>>());
+    let primary_pts: JsArray<JsValue> = hubs.iter().map(|(_, p)| JsValue::from(p)).collect();
     let primary_line = polyline(primary_pts, Some(&poly_opts("#111111", 3.0, None, 0.0)));
     primary_line.add_to(&m);
 
-    let alt_pts = JsArray::from(vec![
+    let alt_pts = JsArray::from([
         JsValue::from(&hubs[0].1),
         JsValue::from(&lat_lng(50.8503, 4.3517, None)),
         JsValue::from(&lat_lng(52.3676, 4.9041, None)),
@@ -65,16 +64,16 @@ pub extern "C" fn start() {
     polyline(alt_pts, Some(&poly_opts("#737373", 1.5, Some("5 5"), 0.0))).add_to(&m);
 
     let nodes = layer_group(None, None);
-    let node_opts = CircleMarkerOptions::create();
-    node_opts.set_radius(Some(6.0));
-    node_opts.set_color(Some("#111111"));
-    node_opts.set_weight(Some(2.0));
-    node_opts.set_fill_color(Some("#ffffff"));
-    node_opts.set_fill_opacity(Some(1.0));
+    let node_opts = CircleMarkerOptions::default()
+        .with_radius(6.0)
+        .with_color("#111111")
+        .with_weight(2.0)
+        .with_fill_color("#ffffff")
+        .with_fill_opacity(1.0);
 
     for (name, pt) in &hubs {
         let cm = circle_marker(pt, Some(&node_opts));
-        cm.bind_tooltip(LayerBindTooltipContent::String((*name).into()), None);
+        cm.bind_tooltip(*name, None);
         nodes.add_layer(&cm);
     }
     nodes.add_to(&m);

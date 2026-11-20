@@ -9,41 +9,41 @@ fn poly_opts(
     fill_color: &str,
     fill_opacity: f64,
 ) -> PolylineOptions {
-    let opts = PolylineOptions::create();
-    opts.set_smooth_factor(Some(1.0));
-    opts.set_color(Some(color));
-    opts.set_weight(Some(weight));
+    let mut opts = PolylineOptions::default()
+        .with_smooth_factor(1.0)
+        .with_color(color)
+        .with_weight(weight)
+        .with_fill_color(fill_color)
+        .with_fill_opacity(fill_opacity);
     if let Some(d) = dash {
-        opts.set_dash_array(StringOrNumberArray::String(d.into()));
+        opts = opts.with_dash_array(d);
     }
-    opts.set_fill_color(Some(fill_color));
-    opts.set_fill_opacity(Some(fill_opacity));
     opts
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let m_opts = MapOptions::create();
-    m_opts.set_attribution_control(Some(false));
-    m_opts.set_zoom_animation(Some(false));
-    m_opts.set_fade_animation(Some(false));
-    m_opts.set_marker_zoom_animation(Some(false));
+    let m_opts = MapOptions::default()
+        .with_attribution_control(false)
+        .with_zoom_animation(false)
+        .with_fade_animation(false)
+        .with_marker_zoom_animation(false);
     let m = map("map", Some(&m_opts));
 
-    let mid_pts = JsArray::from(vec![
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(47.2, 7.6, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(48.0, 8.6, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(47.5, 9.7, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(46.8, 9.5, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(46.6, 8.4, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(46.9, 7.3, None)),
+    let mid_pts = JsArray::<PolylineSetLatLngsLatlngs>::from([
+        lat_lng(47.2, 7.6, None),
+        lat_lng(48.0, 8.6, None),
+        lat_lng(47.5, 9.7, None),
+        lat_lng(46.8, 9.5, None),
+        lat_lng(46.6, 8.4, None),
+        lat_lng(46.9, 7.3, None),
     ]);
 
-    let core_pts = JsArray::from(vec![
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(47.35, 8.2, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(47.55, 8.75, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(47.15, 9.0, None)),
-        PolylineSetLatLngsLatlngs::LatLng(lat_lng(46.95, 8.4, None)),
+    let core_pts = JsArray::<PolylineSetLatLngsLatlngs>::from([
+        lat_lng(47.35, 8.2, None),
+        lat_lng(47.55, 8.75, None),
+        lat_lng(47.15, 9.0, None),
+        lat_lng(46.95, 8.4, None),
     ]);
 
     let mid_poly = polygon(
@@ -93,12 +93,12 @@ pub extern "C" fn start() {
             exterior += 1;
             "#ffffff"
         };
-        let cm_opts = CircleMarkerOptions::create();
-        cm_opts.set_radius(Some(6.0));
-        cm_opts.set_color(Some("#111111"));
-        cm_opts.set_weight(Some(2.0));
-        cm_opts.set_fill_color(Some(fill_hex));
-        cm_opts.set_fill_opacity(Some(1.0));
+        let cm_opts = CircleMarkerOptions::default()
+            .with_radius(6.0)
+            .with_color("#111111")
+            .with_weight(2.0)
+            .with_fill_color(fill_hex)
+            .with_fill_opacity(1.0);
         circle_marker(pt, Some(&cm_opts)).add_to(&m);
     }
 

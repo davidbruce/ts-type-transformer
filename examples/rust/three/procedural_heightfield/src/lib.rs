@@ -3,7 +3,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use dom::NodeMethods as _;
 use three::*;
 
 const GRID_N: usize = 28;
@@ -29,12 +28,12 @@ fn wave_name(mode: usize) -> &'static str {
 
 struct AppState {
     renderer: WebGLRenderer,
-    scene: Scene<Object3DEventMap>,
+    scene: Scene,
     camera: PerspectiveCamera,
     geo: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
     pos_attr: Float32BufferAttribute,
     pts_attr: Float32BufferAttribute,
-    wire_mesh: Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, MeshBasicMaterial, Object3DEventMap>,
+    wire_mesh: Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, MeshBasicMaterial>,
     wire_btn: dom::HTMLElement,
     meta: dom::HTMLElement,
     tri_count: usize,
@@ -83,10 +82,9 @@ fn rebuild_field(st: &AppState) {
     } else {
         "Wireframe: Off"
     }));
-    st.renderer
-        .render(&Object3D::from(st.scene.clone()), &st.camera);
+    st.renderer.render(&st.scene, &st.camera);
 
-    let bb = st.geo.bounding_box().unwrap();
+    let bb = st.geo.bounding_box().expect("missing bounding box");
     let msg = format!(
         "profile: {} \u{00B7} {} vertices \u{00B7} {} triangles \u{00B7} y=[{:.2}, {:.2}] \u{00B7} wireframe: {}",
         wave_name(st.wave_mode),
@@ -105,38 +103,36 @@ pub extern "C" fn start() {
     let width = 680.0;
     let height = 400.0;
 
-    let rp = WebGLRendererParameters::create();
-    rp.set_antialias(Some(true));
-    rp.set_preserve_drawing_buffer(Some(true));
+    let rp = WebGLRendererParameters::default()
+        .with_antialias(true)
+        .with_preserve_drawing_buffer(true);
     let renderer = WebGLRenderer::new(Some(&rp));
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     doc.get_element_by_id("stage")
-        .unwrap()
+        .expect("missing #stage")
         .append_child(renderer.dom_element());
 
-    let scene = Scene::<Object3DEventMap>::new();
-    scene.set_background(ColorOrTexture::Color(Color::new(
-        ColorRepresentation::Number(0xf7f7f7 as f64),
-    )));
+    let scene = Scene::new();
+    scene.set_background(Color::new(0xf7f7f7 as f64));
     let camera = PerspectiveCamera::new(Some(42.0), Some(width / height), Some(0.1), Some(100.0));
 
-    scene.add([Object3D::from(AmbientLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(1.2)))]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(2.2));
+    scene.add([AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.2))]);
+    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.2));
     key.position().set(6.0, 10.0, Some(8.0));
-    scene.add([Object3D::from(key)]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(0.9));
+    scene.add([key]);
+    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
     rim.position().set(-7.0, 5.0, Some(-6.0));
-    scene.add([Object3D::from(rim)]);
+    scene.add([rim]);
 
     let grid = GridHelper::new(
         Some(9.0),
         Some(12.0),
-        ColorRepresentation::Number(0x999999 as f64),
-        ColorRepresentation::Number(0xe5e5e5 as f64),
+        0x999999 as f64,
+        0xe5e5e5 as f64,
     );
     grid.position().set_y(-1.1);
-    scene.add([Object3D::from(grid)]);
+    scene.add([grid]);
 
     let geo = BufferGeometry::<NormalBufferAttributes, BufferGeometryEventMap>::new();
     let pos_attr = Float32BufferAttribute::new(JsValue::from((GRID_N * GRID_N * 3) as f64), 3.0, None);
@@ -152,49 +148,43 @@ pub extern "C" fn start() {
         }
     }
     let tri_count = (GRID_N - 1) * (GRID_N - 1) * 2;
-    geo.set_attribute(
-        "position".to_string(),
-        WebGLAttributesGetAttribute::BufferAttribute(BufferAttribute::from(pos_attr.clone())),
-    );
-    geo.set_index_2(BufferAttributeOrNumberArray::Array(JsArray::from(idx_vec)));
+    geo.set_attribute("position".to_string(), BufferAttribute::from(pos_attr.clone()));
+    geo.set_index_2(JsArray::from(idx_vec));
 
-    let smp = MeshStandardMaterialParameters::create();
-    smp.set_color(ColorRepresentation::Number(0xb5b5b5 as f64));
-    smp.set_roughness(Some(0.72));
-    smp.set_metalness(Some(0.05));
-    smp.set_flat_shading(Some(true));
-    let surf = Mesh::<_, MeshStandardMaterial, Object3DEventMap>::new(
+    let smp = MeshStandardMaterialParameters::default()
+        .with_color(0xb5b5b5 as f64)
+        .with_roughness(0.72)
+        .with_metalness(0.05)
+        .with_flat_shading(true);
+    let surf = Mesh::<_, MeshStandardMaterial>::new(
         Some(geo.clone()),
         Some(MeshStandardMaterial::new(Some(&smp))),
     );
-    scene.add([Object3D::from(surf)]);
+    scene.add([surf]);
 
-    let wmp = MeshBasicMaterialParameters::create();
-    wmp.set_color(ColorRepresentation::Number(0x262626 as f64));
-    wmp.set_wireframe(Some(true));
-    let wire_mesh = Mesh::<_, MeshBasicMaterial, Object3DEventMap>::new(
+    let wmp = MeshBasicMaterialParameters::default()
+        .with_color(0x262626 as f64)
+        .with_wireframe(true);
+    let wire_mesh = Mesh::<_, MeshBasicMaterial>::new(
         Some(geo.clone()),
         Some(MeshBasicMaterial::new(Some(&wmp))),
     );
     wire_mesh.position().set_y(0.015);
-    scene.add([Object3D::from(wire_mesh.clone())]);
+    scene.add([wire_mesh.clone()]);
 
     let pt_count = (GRID_N / 2) * (GRID_N / 2);
     let pts_geo = BufferGeometry::<NormalBufferAttributes, BufferGeometryEventMap>::new();
     let pts_attr = Float32BufferAttribute::new(JsValue::from((pt_count * 3) as f64), 3.0, None);
-    pts_geo.set_attribute(
-        "position".to_string(),
-        WebGLAttributesGetAttribute::BufferAttribute(BufferAttribute::from(pts_attr.clone())),
-    );
-    let pmp = PointsMaterialParameters::create();
-    pmp.set_color(ColorRepresentation::Number(0x111111 as f64));
-    pmp.set_size(Some(0.14));
+    pts_geo.set_attribute("position".to_string(), BufferAttribute::from(pts_attr.clone()));
+    let pmp = PointsMaterialParameters::default()
+        .with_color(0x111111 as f64)
+        .with_size(0.14);
     let pts = Points::<
         BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
         PointsMaterial,
         Object3DEventMap,
     >::new(Some(pts_geo), Some(PointsMaterial::new(Some(&pmp))));
-    scene.add([Object3D::from(pts)]);
+    scene.add([pts]);
 
     let st = Rc::new(RefCell::new(AppState {
         renderer,
@@ -204,8 +194,8 @@ pub extern "C" fn start() {
         pos_attr,
         pts_attr,
         wire_mesh,
-        wire_btn: doc.get_element_by_id("btn-wire").unwrap(),
-        meta: doc.get_element_by_id("meta").unwrap(),
+        wire_btn: doc.get_element_by_id("btn-wire").expect("missing #btn-wire"),
+        meta: doc.get_element_by_id("meta").expect("missing #meta"),
         tri_count,
         wave_mode: 0,
         overlay_on: true,
@@ -213,7 +203,7 @@ pub extern "C" fn start() {
     }));
 
     for (i, bid) in ["btn-p0", "btn-p1", "btn-p2", "btn-wire", "btn-orbit"].iter().enumerate() {
-        let btn = doc.get_element_by_id(bid).unwrap();
+        let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
             let mut s = st_c.borrow_mut();
@@ -227,7 +217,6 @@ pub extern "C" fn start() {
             rebuild_field(&s);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 
     rebuild_field(&st.borrow());

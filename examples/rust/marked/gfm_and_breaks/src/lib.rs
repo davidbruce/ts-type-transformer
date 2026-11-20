@@ -1,7 +1,7 @@
 #![no_main]
 
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
-use marked::{MarkedOptions, MarkedOptionsMethods as _, StringOrPromise};
+use dom::{Document, HTMLElement};
+use marked::{MarkedOptions, StringOrPromise};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,7 +15,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 fn render_with(src: &str, opts: &MarkedOptions<String, String>) -> String {
@@ -38,7 +38,7 @@ fn make_pane(doc: &Document, title: &str, html: &str) -> HTMLElement {
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Marked GFM & Line Breaks (Rust)")));
@@ -46,10 +46,8 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let gfm_src = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n";
-    let gfm_on = MarkedOptions::<String, String>::create();
-    gfm_on.set_gfm(Some(true));
-    let gfm_off = MarkedOptions::<String, String>::create();
-    gfm_off.set_gfm(Some(false));
+    let gfm_on = MarkedOptions::<String, String>::default().with_gfm(true);
+    let gfm_off = MarkedOptions::<String, String>::default().with_gfm(false);
 
     let gfm_sec = make_el(&doc, "div", "section", None);
     append(&gfm_sec, make_el(&doc, "div", "label", Some("GitHub Flavored Markdown (gfm)")));
@@ -60,10 +58,8 @@ pub extern "C" fn start() {
     append(&app, gfm_sec);
 
     let breaks_src = "Line one\nLine two\nLine three";
-    let br_off = MarkedOptions::<String, String>::create();
-    br_off.set_breaks(Some(false));
-    let br_on = MarkedOptions::<String, String>::create();
-    br_on.set_breaks(Some(true));
+    let br_off = MarkedOptions::<String, String>::default().with_breaks(false);
+    let br_on = MarkedOptions::<String, String>::default().with_breaks(true);
 
     let br_sec = make_el(&doc, "div", "section", None);
     append(&br_sec, make_el(&doc, "div", "label", Some("Soft Line Breaks (breaks)")));

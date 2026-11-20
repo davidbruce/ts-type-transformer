@@ -1,7 +1,7 @@
 #![no_main]
 
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
-use katex::{KatexOptions, KatexOptionsMethods as _};
+use dom::{Document, HTMLElement};
+use katex::KatexOptions;
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,25 +15,24 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("ParseError Inspector (Rust)")));
     append(&head, make_el(&doc, "span", "badge", Some("throwOnError: false vs true")));
     append(&app, head);
 
-    let lenient = KatexOptions::create();
-    lenient.set_throw_on_error(Some(false));
-    lenient.set_error_color(Some("#555555"));
+    let lenient = KatexOptions::default()
+        .with_throw_on_error(false)
+        .with_error_color("#555555");
 
-    let strict = KatexOptions::create();
-    strict.set_throw_on_error(Some(true));
+    let strict = KatexOptions::default().with_throw_on_error(true);
 
     let bad_inputs = [
         r"\frac{1}{",

@@ -1,22 +1,20 @@
 #![no_main]
 
-use dom::NodeMethods as _;
 use pixi_js::*;
 
 fn build_opts() -> ApplicationInitOptions {
-    let opts = ApplicationInitOptions::create();
-    opts.set_width(Some(680.0));
-    opts.set_height(Some(400.0));
-    opts.set_background_color(Some(&JsValue::from(16777215.0)));
-    opts.set_preference(StringOrRendererPreferenceArray::String("webgl".into()));
-    opts.set_preserve_drawing_buffer(Some(true));
-    opts.set_antialias(Some(true));
-    opts.set_auto_start(Some(false));
-    opts
+    ApplicationInitOptions::default()
+        .with_width(680.0)
+        .with_height(400.0)
+        .with_background_color(16777215.0)
+        .with_preference("webgl")
+        .with_preserve_drawing_buffer(true)
+        .with_antialias(true)
+        .with_auto_start(false)
 }
 
 fn add<C: JsType, D: JsType>(parent: &Container<C>, child: D) {
-    parent.add_child(JsArray::<D>::from(vec![child]));
+    parent.add_child(JsArray::<D>::from([child]));
 }
 
 #[unsafe(no_mangle)]
@@ -35,12 +33,12 @@ pub extern "C" fn start() {
 
         let stage = app.stage();
 
-        let frame = Graphics::new(None::<GraphicsOptionsOrGraphicsContext>);
+        let frame = Graphics::new(JsNone);
         frame.rect(32.0, 20.0, 616.0, 360.0);
-        let ss = StrokeStyle::create();
-        ss.set_width(Some(1.5));
-        ss.set_color(Some(&JsValue::from(0xd4d4d4 as f64)));
-        frame.stroke(JsArray::from(vec![JsValue::from(&ss)]));
+        let ss = StrokeStyle::default()
+            .with_width(1.5)
+            .with_color(0xd4d4d4 as f64);
+        frame.stroke(JsArray::from([JsValue::from(ss)]));
         add(&stage, frame);
 
         let shades: [u32; 8] = [
@@ -51,7 +49,7 @@ pub extern "C" fn start() {
 
         for row in 0..6usize {
             for col in 0..10usize {
-                let sprite = Sprite::new(SpriteOptionsOrTexture::from(white.clone()));
+                let sprite = Sprite::new(white.clone());
                 let idx = (row * 3 + col * 5) % shades.len();
                 sprite.set_width(52.0);
                 sprite.set_height(48.0);

@@ -3,14 +3,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use dom::NodeMethods as _;
 use three::*;
 
 struct AppState {
     renderer: WebGLRenderer,
-    scene: Scene<Object3DEventMap>,
+    scene: Scene,
     camera: PerspectiveCamera,
-    wire_group: Group<Object3DEventMap>,
+    wire_group: Group,
     wire_btn: dom::HTMLElement,
     meta: dom::HTMLElement,
     wire_visible: bool,
@@ -18,8 +17,8 @@ struct AppState {
 }
 
 fn add_solid(
-    scene: &Scene<Object3DEventMap>,
-    wire_group: &Group<Object3DEventMap>,
+    scene: &Scene,
+    wire_group: &Group,
     geo: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
     hex: u32,
     rough: f64,
@@ -31,21 +30,20 @@ fn add_solid(
     thresh: f64,
     line_mat: &LineBasicMaterial,
 ) {
-    let mp = MeshStandardMaterialParameters::create();
-    mp.set_color(ColorRepresentation::Number(hex as f64));
-    mp.set_roughness(Some(rough));
-    mp.set_metalness(Some(metal));
-    mp.set_flat_shading(Some(flat));
+    let mp = MeshStandardMaterialParameters::default()
+        .with_color(hex as f64)
+        .with_roughness(rough)
+        .with_metalness(metal)
+        .with_flat_shading(flat);
     let mat = MeshStandardMaterial::new(Some(&mp));
 
     let mesh = Mesh::<
         BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
         MeshStandardMaterial,
-        Object3DEventMap,
     >::new(Some(geo.clone()), Some(mat));
     mesh.position().set(x, y, Some(z));
     mesh.rotation().set(0.25, 0.45, 0.0, None);
-    scene.add([Object3D::from(mesh)]);
+    scene.add([mesh]);
 
     let egeo = EdgesGeometry::new(Some(geo), Some(thresh));
     let segs = LineSegments::<
@@ -55,7 +53,7 @@ fn add_solid(
     >::new(Some(egeo), Some(line_mat.clone()));
     segs.position().set(x, y, Some(z));
     segs.rotation().set(0.25, 0.45, 0.0, None);
-    wire_group.add([Object3D::from(segs)]);
+    wire_group.add([segs]);
 }
 
 fn update_view(st: &AppState) {
@@ -70,8 +68,7 @@ fn update_view(st: &AppState) {
     } else {
         "Wireframes: Off"
     }));
-    st.renderer
-        .render(&Object3D::from(st.scene.clone()), &st.camera);
+    st.renderer.render(&st.scene, &st.camera);
 
     let deg = (st.azimuth * 180.0 / std::f64::consts::PI).round() as i32;
     let msg = format!(
@@ -88,51 +85,48 @@ pub extern "C" fn start() {
     let width = 680.0;
     let height = 400.0;
 
-    let rp = WebGLRendererParameters::create();
-    rp.set_antialias(Some(true));
-    rp.set_preserve_drawing_buffer(Some(true));
+    let rp = WebGLRendererParameters::default()
+        .with_antialias(true)
+        .with_preserve_drawing_buffer(true);
     let renderer = WebGLRenderer::new(Some(&rp));
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     doc.get_element_by_id("stage")
-        .unwrap()
+        .expect("missing #stage")
         .append_child(renderer.dom_element());
 
-    let scene = Scene::<Object3DEventMap>::new();
-    scene.set_background(ColorOrTexture::Color(Color::new(
-        ColorRepresentation::Number(0xf7f7f7 as f64),
-    )));
+    let scene = Scene::new();
+    scene.set_background(Color::new(0xf7f7f7 as f64));
     let camera = PerspectiveCamera::new(Some(42.0), Some(width / height), Some(0.1), Some(100.0));
 
-    let ambient = AmbientLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(1.2));
-    scene.add([Object3D::from(ambient)]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(2.2));
+    let ambient = AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.2));
+    scene.add([ambient]);
+    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.2));
     key.position().set(6.0, 10.0, Some(8.0));
-    scene.add([Object3D::from(key)]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(0.9));
+    scene.add([key]);
+    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
     rim.position().set(-7.0, 5.0, Some(-6.0));
-    scene.add([Object3D::from(rim)]);
+    scene.add([rim]);
 
     let grid = GridHelper::new(
         Some(12.0),
         Some(12.0),
-        ColorRepresentation::Number(0x737373 as f64),
-        ColorRepresentation::Number(0xd4d4d4 as f64),
+        0x737373 as f64,
+        0xd4d4d4 as f64,
     );
     grid.position().set_y(-1.2);
-    scene.add([Object3D::from(grid)]);
+    scene.add([grid]);
 
-    let wire_group = Group::<Object3DEventMap>::new();
-    scene.add([Object3D::from(wire_group.clone())]);
+    let wire_group = Group::new();
+    scene.add([wire_group.clone()]);
 
-    let lmp = LineBasicMaterialParameters::create();
-    lmp.set_color(ColorRepresentation::Number(0x111111 as f64));
+    let lmp = LineBasicMaterialParameters::default().with_color(0x111111 as f64);
     let line_mat = LineBasicMaterial::new(Some(&lmp));
 
     add_solid(
         &scene,
         &wire_group,
-        BufferGeometry::from(BoxGeometry::new(Some(1.45), Some(1.45), Some(1.45), None, None, None)),
+        BoxGeometry::new(Some(1.45), Some(1.45), Some(1.45), None, None, None).into(),
         0x262626,
         0.65,
         0.1,
@@ -146,7 +140,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        BufferGeometry::from(IcosahedronGeometry::new(Some(0.95), Some(0.0))),
+        IcosahedronGeometry::new(Some(0.95), Some(0.0)).into(),
         0xd4d4d4,
         0.55,
         0.08,
@@ -160,7 +154,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        BufferGeometry::from(TorusKnotGeometry::new(Some(0.72), Some(0.24), Some(96.0), Some(16.0), None, None)),
+        TorusKnotGeometry::new(Some(0.72), Some(0.24), Some(96.0), Some(16.0), None, None).into(),
         0x737373,
         0.45,
         0.15,
@@ -174,7 +168,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        BufferGeometry::from(OctahedronGeometry::new(Some(0.95), Some(0.0))),
+        OctahedronGeometry::new(Some(0.95), Some(0.0)).into(),
         0xefefef,
         0.5,
         0.05,
@@ -188,7 +182,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        BufferGeometry::from(TorusGeometry::new(Some(0.72), Some(0.23), Some(16.0), Some(48.0), None, None, None)),
+        TorusGeometry::new(Some(0.72), Some(0.23), Some(16.0), Some(48.0), None, None, None).into(),
         0x404040,
         0.55,
         0.12,
@@ -205,14 +199,14 @@ pub extern "C" fn start() {
         scene,
         camera,
         wire_group,
-        wire_btn: doc.get_element_by_id("btn-wire").unwrap(),
-        meta: doc.get_element_by_id("meta").unwrap(),
+        wire_btn: doc.get_element_by_id("btn-wire").expect("missing #btn-wire"),
+        meta: doc.get_element_by_id("meta").expect("missing #meta"),
         wire_visible: true,
         azimuth: 0.35,
     }));
 
     for (i, bid) in ["btn-wire", "btn-left", "btn-right", "btn-reset"].iter().enumerate() {
-        let btn = doc.get_element_by_id(bid).unwrap();
+        let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
             let mut s = st_c.borrow_mut();
@@ -228,7 +222,6 @@ pub extern "C" fn start() {
             update_view(&s);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 
     update_view(&st.borrow());

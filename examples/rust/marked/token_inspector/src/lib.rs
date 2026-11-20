@@ -1,7 +1,7 @@
 #![no_main]
 
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
-use marked::{Lexer, TokensListMethods as _, tokens::{self, GenericMethods as _}};
+use dom::{Document, HTMLElement};
+use marked::{Lexer, js, tokens};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,13 +15,13 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n";
@@ -53,7 +53,8 @@ pub extern "C" fn start() {
 
     let tbody = make_el(&doc, "tbody", "", None);
     for i in 0..count {
-        let g = tokens::Generic(list.at(i as f64).unwrap().0.clone());
+        let tok = list.at(i as f64).expect("missing token");
+        let g = js::unchecked_cast::<tokens::Generic>(&tok);
         let raw = g.raw();
         let snip = raw.replace('\n', "\u{21B5}");
         let idx_s = i.to_string();

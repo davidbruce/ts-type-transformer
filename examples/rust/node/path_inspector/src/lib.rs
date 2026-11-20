@@ -1,7 +1,6 @@
 #![no_main]
 
 use node::path;
-use node::*;
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -57,10 +56,10 @@ pub extern "C" fn start() {
             && parsed.ext() == ".gz",
     );
 
-    let fmt = path::FormatInputPathObject::create();
-    fmt.set_dir(Some("/etc/service"));
-    fmt.set_name(Some("daemon"));
-    fmt.set_ext(Some(".conf"));
+    let fmt = path::FormatInputPathObject::default()
+        .with_dir("/etc/service")
+        .with_name("daemon")
+        .with_ext(".conf");
     let formatted = path::format(&fmt);
     c.check(formatted == "/etc/service/daemon.conf");
 
@@ -69,8 +68,8 @@ pub extern "C" fn start() {
             && !path::matches_glob("/src/components/Button.css", "/src/**/*.tsx"),
     );
 
-    println(&format!("join={} norm={}", joined, norm));
-    println(&format!("resolve={} relative={} format={}", resolved, rel, formatted));
+    println(&format!("join={joined} norm={norm}"));
+    println(&format!("resolve={resolved} relative={rel} format={formatted}"));
     println(&format!(
         "parsed=(root={} dir={} base={} ext={})",
         parsed.root(),

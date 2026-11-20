@@ -96,7 +96,7 @@ pub fn load_project_ref(crate_or_toml: &Path, from_dir: &Path) -> Result<Project
                     continue;
                 }
                 let (name, arity) = match inside.split_once('<') {
-                    Some((n, args)) => (n.trim(), args.trim_end_matches('>').split(',').filter(|s| !s.trim().is_empty()).count()),
+                    Some((n, args)) => (n.trim(), count_top_level_args(args.strip_suffix('>').unwrap_or(args))),
                     None => (inside.trim(), 0),
                 };
                 if !matches!(name, "JsValue" | "Error" | "Date") && super::model::buffer_spec(name).is_none() {
@@ -116,6 +116,33 @@ pub fn load_project_ref(crate_or_toml: &Path, from_dir: &Path) -> Result<Project
     }
     let dep_path = relative_path(from_dir, crate_dir);
     Ok(ProjectRef { crate_name, dep_path, types })
+}
+
+fn count_top_level_args(s: &str) -> usize {
+    let mut depth = 0usize;
+    let mut count = 0usize;
+    let mut has_non_ws = false;
+    for b in s.bytes() {
+        match b {
+            b'<' | b'(' | b'[' => {
+                depth += 1;
+                has_non_ws = true;
+            }
+            b'>' | b')' | b']' => {
+                depth = depth.saturating_sub(1);
+                has_non_ws = true;
+            }
+            b',' if depth == 0 => {
+                count += usize::from(has_non_ws);
+                has_non_ws = false;
+            }
+            c if !c.is_ascii_whitespace() => {
+                has_non_ws = true;
+            }
+            _ => {}
+        }
+    }
+    count + usize::from(has_non_ws)
 }
 
 const KEYWORDS: &[&str] = &[
@@ -172,6 +199,15 @@ fn camel(name: &str) -> String {
         format!("{out}_")
     } else {
         out
+    }
+}
+
+fn camel_variant(name: &str) -> String {
+    if name.contains('_') && name.chars().all(|c| !c.is_alphabetic() || c.is_uppercase()) {
+        let lower_words = name.split('_').filter(|s| !s.is_empty()).map(str::to_lowercase).collect::<Vec<_>>().join("_");
+        camel(&lower_words)
+    } else {
+        camel(name)
     }
 }
 
@@ -284,8 +320,8 @@ fn param(t: &Ty, x: &str) -> (String, Vec<String>) {
         },
         // Any value that is one: `name_of(&shape)` where a Named is wanted.
         Ty::Obj(n) => (format!("&impl AsRef<{}>", tn(n)), vec![format!("AsRef::<{}>::as_ref({x}).lend().h", tn(n))]),
-        Ty::Array | Ty::ArrayOf(_) => into(ty(t)),
-        Ty::Tuple(es) if !(2..=4).contains(&es.len()) => into(ty(t)),
+        Ty::Generic(n, _) if !is_union(n) => (format!("&impl AsRef<{}>", ty(t)), vec![format!("AsRef::<{}>::as_ref({x}).lend().h", ty(t))]),
+        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => into(ty(t)),
         Ty::NamedUnion(n) | Ty::Generic(n, _) if is_union(n) => into(ty(t)),
         Ty::Any | Ty::Union(_) | Ty::NamedUnion(_) => into(VALUE.into()),
         // A value of a type parameter is passed as into a collection: by value.
@@ -392,9 +428,16 @@ fn function_name_as(f: &Func, name: &str) -> String {
         return ident(&s);
     }
     let is_set = matches!(&f.call, Call::Set(_) | Call::StaticSet(_));
+    let is_prop = matches!(&f.call, Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::StaticGet(_) | Call::StaticSet(_));
     let stem = if is_set { s.strip_prefix("set_").unwrap_or(&s) } else { &s }.trim_start_matches('_');
     let stem = if stem.is_empty() { "dollar" } else { stem };
-    ident(&if is_set { format!("set_{stem}_new") } else { format!("{stem}_new") })
+    ident(&if is_prop {
+        if is_set { format!("set_dollar_{stem}") } else { format!("dollar_{stem}") }
+    } else if is_set {
+        format!("set_{stem}_new")
+    } else {
+        format!("{stem}_new")
+    })
 }
 
 // Each function's Rust name, by the model's: `names::settle` made them apart.
@@ -407,14 +450,25 @@ fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>) -> HashMap<String, String
 // has a default and cannot be inferred from the arguments is two functions:
 // `name`, with the default, and `name_as::<T>`.
 fn function(f: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> Vec<String> {
+    function_raw(f, f, name, vis, imports, this)
+}
+
+fn function_raw(f: &Func, orig: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> Vec<String> {
     if hidden(f).is_empty() {
-        return vec![one_function(f, name, vis, imports, this)];
+        return vec![one_function_raw(f, Some(orig), name, vis, imports, this)];
     }
-    vec![one_function(&defaulted(f), name, vis, imports, this), one_function(f, &format!("{name}_as"), vis, imports, this)]
+    vec![
+        one_function_raw(&defaulted(f), Some(&defaulted(orig)), name, vis, imports, this),
+        one_function_raw(f, Some(orig), &format!("{name}_as"), vis, imports, this),
+    ]
 }
 
 fn one_function(f: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> String {
-    let p = parts(f, imports, this);
+    one_function_raw(f, None, name, vis, imports, this)
+}
+
+fn one_function_raw(f: &Func, orig: Option<&Func>, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> String {
+    let p = parts_with_raw(f, orig, imports, this);
     let generics = if p.generics.is_empty() { String::new() } else { format!("<{}>", p.generics.join(", ")) };
     let ret = if f.ret == Ty::Void { String::new() } else { format!(" -> {}", p.ret) };
     format!("{vis}fn {name}{generics}({}){ret} {{ {} }}", p.params.join(", "), p.body)
@@ -430,6 +484,11 @@ struct Parts {
 }
 
 fn parts(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> Parts {
+    parts_with_raw(f, None, imports, this)
+}
+
+fn parts_with_raw(f: &Func, orig: Option<&Func>, imports: &mut BTreeMap<String, String>, this: Option<&str>) -> Parts {
+    let orig = orig.unwrap_or(f);
     let mut raw_params: Vec<String> = Vec::new();
     let mut args: Vec<String> = Vec::new();
     if let Some(this) = this {
@@ -437,11 +496,16 @@ fn parts(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>) -
         args.push(this.into());
     }
     let mut params: Vec<String> = if this.is_some() { vec!["&self".into()] } else { Vec::new() };
-    for (i, (p, t)) in f.params.iter().enumerate() {
+    for (i, ((p, t), (_, orig_t))) in f.params.iter().zip(&orig.params).enumerate() {
         let p = ident(&snake(p));
-        let (written, lowered) = param(t, &p);
+        let (written, lowered) = if raw(orig_t) == raw(t) {
+            param(t, &p)
+        } else {
+            let w = if *t == Ty::Void { "()".into() } else { param(t, &p).0 };
+            (w, vec![format!("{p}.lend().h")])
+        };
         params.push(format!("{p}: {written}"));
-        raw_params.extend(raw(t).into_iter().enumerate().map(|(j, r)| format!("a{i}_{j}: {r}")));
+        raw_params.extend(raw(orig_t).into_iter().enumerate().map(|(j, r)| format!("a{i}_{j}: {r}")));
         args.extend(lowered);
     }
     let import = match &f.shared {
@@ -457,16 +521,21 @@ fn parts(f: &Func, imports: &mut BTreeMap<String, String>, this: Option<&str>) -
     let raw_name = if KEYWORDS.contains(&import.as_str()) { format!("{import}_") } else { import.clone() };
     imports.entry(import.clone()).or_insert_with(|| {
         let link = if raw_name != import { format!("#[link_name = \"{import}\"] ") } else { String::new() };
-        format!("    {link}pub fn {raw_name}({}) -> {};\n", raw_params.join(", "), raw_ret(&f.ret))
+        format!("    {link}pub fn {raw_name}({}) -> {};\n", raw_params.join(", "), raw_ret(&orig.ret))
     });
     let import = raw_name;
     let mut type_params: Vec<String> = f.type_params.iter().map(bound).collect();
     if f.params.iter().any(|p| matches!(p.1, Ty::Key(_))) {
         type_params.insert(0, "V: JsType".into());
     }
-    let body = match &f.ret {
-        Ty::Void => format!("unsafe {{ raw::{import}({}) }};", args.join(", ")),
-        t => format!("let r = unsafe {{ raw::{import}({}) }}; {}", args.join(", "), raise(t, "r")),
+    let body = if raw_ret(&orig.ret) == raw_ret(&f.ret) {
+        match &f.ret {
+            Ty::Void => format!("unsafe {{ raw::{import}({}) }};", args.join(", ")),
+            t => format!("let r = unsafe {{ raw::{import}({}) }}; {}", args.join(", "), raise(t, "r")),
+        }
+    } else {
+        let semi = if f.ret == Ty::Void { ";" } else { "" };
+        format!("let r = unsafe {{ raw::{import}({}) }}; <{}>::from_handle(r){semi}", args.join(", "), ty(&f.ret))
     };
     Parts { generics: type_params, params, ret: ty(&f.ret), body }
 }
@@ -638,9 +707,8 @@ fn defaulted(f: &Func) -> Func {
 const RUNTIME: &str = r#"// Generated. The runtime: handles, conversions, arrays, callbacks, promises.
 use core::ffi::c_void;
 use core::marker::PhantomData;
-use std::any::Any;
 use std::cell::RefCell;
-use std::future::{Future, IntoFuture};
+use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
@@ -713,6 +781,15 @@ impl Drop for JsHandle {
         }
     }
 }
+impl core::fmt::Debug for JsHandle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "JsHandle({})", self.0)
+    }
+}
+
+// Sentinel passed to optional union parameters to omit the argument (`None`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct JsNone;
 
 // A value lent to JavaScript for one call: an object's own handle, or a new
 // one for a number, flag or string, released after the call.
@@ -876,9 +953,9 @@ impl<T: FromJs> FromJs for Option<T> {
 // Declares a handle type, generic or not. `==` is whether two handles are
 // one JavaScript value.
 macro_rules! handle {
-    ($name:ident $(<$($p:ident),*>)?) => {
+    (@common $name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
         #[repr(transparent)]
-        pub struct $name $(<$($p),*>)? (pub $crate::runtime::JsHandle $(, pub core::marker::PhantomData<fn() -> ($($p,)*)>)?);
+        pub struct $name $(<$($p $(= $d)?),*>)? (pub $crate::runtime::JsHandle $(, pub core::marker::PhantomData<fn() -> ($($p,)*)>)?);
         impl $(<$($p),*>)? AsRef<$name $(<$($p),*>)?> for $name $(<$($p),*>)? {
             fn as_ref(&self) -> &Self {
                 self
@@ -910,12 +987,41 @@ macro_rules! handle {
             }
         }
     };
+    (@jsvalue $name:ident) => {
+        handle!(@common $name);
+        impl core::fmt::Debug for $name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "{}(#{})", stringify!($name), self.0 .0)
+            }
+        }
+    };
+    (@custom_debug $name:ident) => {
+        handle!(@common $name);
+        impl From<$name> for $crate::runtime::JsValue {
+            fn from(x: $name) -> Self {
+                $crate::runtime::JsValue(x.0)
+            }
+        }
+    };
+    ($name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
+        handle!(@common $name $(<$($p $(= $d)?),*>)?);
+        impl $(<$($p),*>)? From<$name $(<$($p),*>)?> for $crate::runtime::JsValue {
+            fn from(x: $name $(<$($p),*>)?) -> Self {
+                $crate::runtime::JsValue(x.0)
+            }
+        }
+        impl $(<$($p),*>)? core::fmt::Debug for $name $(<$($p),*>)? {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "{}(#{})", stringify!($name), self.0 .0)
+            }
+        }
+    };
 }
 pub(crate) use handle;
 
 // A JavaScript value of no particular type, made from a number, a flag, a
 // string, or any object: `f(42.0)`, `f("text")`, `f(&element)`.
-handle!(JsValue);
+handle!(@jsvalue JsValue);
 impl JsValue {
     pub fn object() -> Self {
         JsValue(JsHandle(unsafe { rt::js_object_new() }))
@@ -926,6 +1032,18 @@ impl JsValue {
     pub fn set(&self, key: &str, v: impl Into<JsValue>) {
         let v: JsValue = v.into();
         unsafe { rt::js_object_set(self.0 .0, key.as_ptr(), key.len(), v.0 .0) };
+    }
+    pub fn with(self, key: &str, v: impl Into<JsValue>) -> Self {
+        self.set(key, v);
+        self
+    }
+    pub fn unchecked_into<T: FromJs>(self) -> T {
+        let id = self.0 .0;
+        core::mem::forget(self);
+        T::from_handle(id)
+    }
+    pub fn unchecked_as<T: FromJs>(&self) -> T {
+        js::unchecked_cast(self)
     }
     pub fn has(&self, key: &str) -> bool {
         unsafe { rt::js_object_has(self.0 .0, key.as_ptr(), key.len()) != 0 }
@@ -989,6 +1107,21 @@ impl<T> AsRef<JsHandle> for JsArray<T> {
         &self.0
     }
 }
+impl<T> AsRef<JsArray<T>> for JsArray<T> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<T> PartialEq for JsArray<T> {
+    fn eq(&self, o: &Self) -> bool {
+        js::same(&self.0, &o.0)
+    }
+}
+impl<T> core::fmt::Debug for JsArray<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "JsArray(#{})", self.0 .0)
+    }
+}
 impl<T> From<JsArray<T>> for JsValue {
     fn from(a: JsArray<T>) -> Self {
         JsValue(a.0)
@@ -1016,6 +1149,9 @@ impl<T: JsType> JsArray<T> {
     }
     pub fn get(&self, i: usize) -> T {
         T::from_handle(unsafe { rt::js_array_get(self.0 .0, i as u32) })
+    }
+    pub fn try_get(&self, i: usize) -> Option<T> {
+        if i < self.len() { Some(self.get(i)) } else { None }
     }
     pub fn push(&self, v: impl Into<T>) {
         let v: T = v.into();
@@ -1074,6 +1210,36 @@ macro_rules! tuple {
                 $name(self.0.clone(), PhantomData)
             }
         }
+        impl<$($t),*> AsRef<JsHandle> for $name<$($t),*> {
+            fn as_ref(&self) -> &JsHandle {
+                &self.0
+            }
+        }
+        impl<$($t),*> AsRef<$name<$($t),*>> for $name<$($t),*> {
+            fn as_ref(&self) -> &Self {
+                self
+            }
+        }
+        impl<$($t),*> PartialEq for $name<$($t),*> {
+            fn eq(&self, o: &Self) -> bool {
+                js::same(&self.0, &o.0)
+            }
+        }
+        impl<$($t),*> core::fmt::Debug for $name<$($t),*> {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                write!(f, "{}(#{})", stringify!($name), self.0 .0)
+            }
+        }
+        impl<$($t),*> From<&$name<$($t),*>> for $name<$($t),*> {
+            fn from(t: &$name<$($t),*>) -> Self {
+                t.clone()
+            }
+        }
+        impl<$($t),*> From<$name<$($t),*>> for JsValue {
+            fn from(t: $name<$($t),*>) -> Self {
+                JsValue(t.0)
+            }
+        }
         impl<$($t),*> ToJs for $name<$($t),*> {
             fn lend(&self) -> Lent {
                 Lent::borrow(self.0 .0)
@@ -1099,6 +1265,36 @@ macro_rules! tuple {
 tuple!(JsTuple2; A get0 0, B get1 1);
 tuple!(JsTuple3; A get0 0, B get1 1, C get2 2);
 tuple!(JsTuple4; A get0 0, B get1 1, C get2 2, D get3 3);
+impl<A: JsType, B: JsType, A0: Into<A>, B0: Into<B>> From<(A0, B0)> for JsTuple2<A, B> {
+    fn from((a, b): (A0, B0)) -> Self {
+        JsTuple2::new(a, b)
+    }
+}
+impl<A: JsType, B: JsType, C: JsType, A0: Into<A>, B0: Into<B>, C0: Into<C>> From<(A0, B0, C0)> for JsTuple3<A, B, C> {
+    fn from((a, b, c): (A0, B0, C0)) -> Self {
+        JsTuple3::new(a, b, c)
+    }
+}
+impl<A: JsType, B: JsType, C: JsType, D: JsType, A0: Into<A>, B0: Into<B>, C0: Into<C>, D0: Into<D>> From<(A0, B0, C0, D0)> for JsTuple4<A, B, C, D> {
+    fn from((a, b, c, d): (A0, B0, C0, D0)) -> Self {
+        JsTuple4::new(a, b, c, d)
+    }
+}
+impl<T: JsType, A: Into<T>> From<[A; 2]> for JsTuple2<T, T> {
+    fn from([a, b]: [A; 2]) -> Self {
+        JsTuple2::new(a, b)
+    }
+}
+impl<T: JsType, A: Into<T>> From<[A; 3]> for JsTuple3<T, T, T> {
+    fn from([a, b, c]: [A; 3]) -> Self {
+        JsTuple3::new(a, b, c)
+    }
+}
+impl<T: JsType, A: Into<T>> From<[A; 4]> for JsTuple4<T, T, T, T> {
+    fn from([a, b, c, d]: [A; 4]) -> Self {
+        JsTuple4::new(a, b, c, d)
+    }
+}
 
 // A key of a map whose value has type V: `HTMLElementEventMap::CLICK`.
 pub struct JsKey<M, V> {
@@ -1118,11 +1314,23 @@ impl<M, V> Clone for JsKey<M, V> {
 impl<M, V> Copy for JsKey<M, V> {}
 
 // A closure kept for JavaScript to call, until released.
+#[repr(C)]
+struct ClosureHeader {
+    drop_fn: unsafe fn(*mut c_void),
+}
+#[repr(C)]
+struct Closure<F> {
+    drop_fn: unsafe fn(*mut c_void),
+    f: F,
+}
 pub(crate) fn closure<F: 'static>(f: F) -> *mut c_void {
-    Box::into_raw(Box::new(Box::new(f) as Box<dyn Any>)) as *mut c_void
+    unsafe fn drop_closure<F>(p: *mut c_void) {
+        drop(unsafe { Box::from_raw(p as *mut Closure<F>) });
+    }
+    Box::into_raw(Box::new(Closure { drop_fn: drop_closure::<F>, f })) as *mut c_void
 }
 pub(crate) unsafe fn closure_fn<'a, F: 'static>(ctx: *mut c_void) -> &'a mut F {
-    unsafe { (*(ctx as *mut Box<dyn Any>)).downcast_mut::<F>().unwrap() }
+    unsafe { &mut (*(ctx as *mut Closure<F>)).f }
 }
 
 // Forgets a callback when dropped: JavaScript calling it afterwards is an
@@ -1141,7 +1349,8 @@ pub trait JsCallback: AsRef<JsHandle> + Sized {
     fn release(self) {
         let ctx = unsafe { rt::js_callback_release(AsRef::<JsHandle>::as_ref(&self).0) };
         if ctx != 0 {
-            drop(unsafe { Box::from_raw(ctx as usize as *mut Box<dyn Any>) });
+            let p = ctx as usize as *mut c_void;
+            unsafe { ((*(p as *const ClosureHeader)).drop_fn)(p) };
         }
     }
 }
@@ -1156,6 +1365,21 @@ impl<E> Clone for JsListener<E> {
 impl<E> AsRef<JsHandle> for JsListener<E> {
     fn as_ref(&self) -> &JsHandle {
         &self.0
+    }
+}
+impl<E> AsRef<JsListener<E>> for JsListener<E> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<E> From<JsListener<E>> for JsValue {
+    fn from(x: JsListener<E>) -> Self {
+        JsValue(x.0)
+    }
+}
+impl<E> core::fmt::Debug for JsListener<E> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "JsListener(#{})", self.0 .0)
     }
 }
 impl<E> ToJs for JsListener<E> {
@@ -1188,7 +1412,7 @@ impl<E: JsType> JsListener<E> {
 }
 
 // A JavaScript exception, or the reason a promise was rejected.
-handle!(JsError);
+handle!(@custom_debug JsError);
 impl JsError {
     pub fn new(msg: &str) -> Self {
         JsError(JsHandle(unsafe { rt::js_error_new(msg.as_ptr(), msg.len()) }))
@@ -1208,10 +1432,25 @@ impl core::fmt::Debug for JsError {
         write!(f, "JsError({}: {:?})", self.name(), self.message())
     }
 }
+impl core::fmt::Display for JsError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}: {}", self.name(), self.message())
+    }
+}
+impl core::error::Error for JsError {}
 
 // What is not a type's: errors, handles, tasks.
 pub mod js {
     use super::*;
+
+    pub const NONE: JsNone = JsNone;
+
+    pub fn unchecked_cast<T: FromJs>(v: &impl AsRef<JsHandle>) -> T {
+        let h = v.as_ref().clone();
+        let id = h.0;
+        core::mem::forget(h);
+        T::from_handle(id)
+    }
 
     pub fn date_now() -> f64 {
         unsafe { rt::js_date_now() }
@@ -1296,6 +1535,26 @@ impl<T> Clone for JsPromise<T> {
         JsPromise(self.0.clone(), PhantomData)
     }
 }
+impl<T> AsRef<JsHandle> for JsPromise<T> {
+    fn as_ref(&self) -> &JsHandle {
+        &self.0
+    }
+}
+impl<T> AsRef<JsPromise<T>> for JsPromise<T> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<T> From<JsPromise<T>> for JsValue {
+    fn from(p: JsPromise<T>) -> Self {
+        JsValue(p.0)
+    }
+}
+impl<T> core::fmt::Debug for JsPromise<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "JsPromise(#{})", self.0 .0)
+    }
+}
 impl<T> ToJs for JsPromise<T> {
     fn lend(&self) -> Lent {
         Lent::borrow(self.0 .0)
@@ -1309,8 +1568,8 @@ impl<T> FromJs for JsPromise<T> {
 impl<T: JsType> JsPromise<T> {
     pub fn then<F: FnOnce(Result<T, JsError>) + 'static>(&self, f: F) {
         extern "C" fn settle<T: JsType, F: FnOnce(Result<T, JsError>) + 'static>(ctx: *mut c_void, ok: i32, v: u32) {
-            let mut b = unsafe { Box::from_raw(ctx as *mut Box<dyn Any>) };
-            let f = b.downcast_mut::<Option<F>>().unwrap().take().unwrap();
+            let mut b = unsafe { Box::from_raw(ctx as *mut Closure<Option<F>>) };
+            let f = b.f.take().unwrap();
             f(if ok != 0 { Ok(T::from_handle(v)) } else { Err(JsError(JsHandle(v))) })
         }
         unsafe { rt::js_promise_then(self.0 .0, settle::<T, F> as *const () as usize, closure(Some(f))) }
@@ -1553,7 +1812,21 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
     }
     for (model_name, members) in &m.num_enums {
         let name = def_name(model_name);
-        let all: Vec<(String, &String)> = members.iter().map(|(member, value)| (camel(&super::model::ident(member)), value)).collect();
+        let mut seen = HashSet::new();
+        let all: Vec<(String, &String)> = members
+            .iter()
+            .map(|(member, value)| {
+                let mut id = camel_variant(&super::model::ident(member));
+                if !seen.insert(id.clone()) {
+                    let mut i = 2;
+                    while !seen.insert(format!("{id}{i}")) {
+                        i += 1;
+                    }
+                    id = format!("{id}{i}");
+                }
+                (id, value)
+            })
+            .collect();
         // A value once a variant; a member of a value given already
         // (`ROTATE = 0` beside `LEFT = 0`) is a constant of that variant.
         let mut variants: Vec<(String, &String)> = Vec::new();
@@ -1687,7 +1960,11 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         }
     }
     for c in &m.callbacks {
-        let text = callback(&c.name, &c.type_params, &c.params, &c.ret, &mut imports);
+        let apply = m.funcs.iter().find(|f| {
+            f.call == Call::Apply
+                && f.params.first().is_some_and(|(_, t)| matches!(t, Ty::Obj(n) | Ty::Generic(n, _) if n == &c.name))
+        });
+        let text = callback(&c.name, &c.type_params, &c.params, &c.ret, apply, &mut imports);
         match module_of.get(&c.name) {
             Some(path) => *namespaces.entry(path.clone()).or_default() += &text,
             None => types_file += &text,
@@ -1723,13 +2000,15 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             Some(path) => namespaces.entry(path.clone()).or_default(),
             None => modules.entry(module_file(&c.module)).or_insert_with(|| PRELUDE.to_string()),
         };
-        let params: Vec<String> = c.type_params.iter().map(|p| p.name.clone()).collect();
         let (bounds, args) = (generics(&c.type_params), args_of(&c.type_params));
         let name = def_name(&c.name);
         let me = format!("{name}{args}");
         let own = &names[c.name.as_str()];
-        *out += &format!("\nhandle!({name}{});\n", if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) });
+        *out += &format!("\n{}\n", handle_decl(&c.name, &name, &c.type_params));
         *out += &format!("impl{bounds} Is<{me}> for {me} {{}}\n");
+        if let Some(f) = c.funcs.iter().find(|f| matches!(f.call, Call::Create(_)) && f.params.is_empty() && f.type_params.is_empty()) {
+            *out += &format!("impl{bounds} ::core::default::Default for {me} {{ fn default() -> Self {{ Self::{}() }} }}\n", own[&f.name]);
+        }
         // The trait of its own members.
         let mut trait_body = String::new();
         for f in c.funcs.iter().filter(|f| Class::has_self(f) && family_of(c, f).is_none()) {
@@ -1753,10 +2032,17 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         }
         *out += &format!("pub trait {name}Methods{bounds}: AsRef<JsHandle> {{\n{trait_body}}}\n");
         *out += &format!("impl{bounds} {name}Methods{args} for {me} {{}}\n{dispatch}");
-        // Statics, constants, a map's keys, and where two traits share a name, the one this type means.
+        // Statics, constants, a map's keys, inherent methods (own + inherited), fluent builders, and conversions.
         let mut inherent = String::new();
+        let mut inherent_taken: HashSet<String> = HashSet::new();
         for f in c.funcs.iter().filter(|f| !Class::has_self(f)) {
-            for item in function(&with_self_args(f, c), &own[&f.name], "pub ", &mut imports, None) {
+            let fname = &own[&f.name];
+            let f_self = with_self_args(f, c);
+            if !hidden(&f_self).is_empty() {
+                inherent_taken.insert(format!("{fname}_as"));
+            }
+            inherent_taken.insert(fname.clone());
+            for item in function(&f_self, fname, "pub ", &mut imports, None) {
                 inherent += &format!("    {item}\n");
             }
         }
@@ -1764,15 +2050,23 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             let t = if value.starts_with('"') { "&'static str" } else if value == "true" || value == "false" { "bool" } else { "f64" };
             // A whole number, decimal or hexadecimal, as an f64.
             let value = if t == "f64" && (value.starts_with("0x") || value.starts_with("0X")) { format!("{value}i64 as f64") } else if t == "f64" && !value.contains('.') && !value.contains('e') { format!("{value}.0") } else { value.clone() };
-            inherent += &format!("    pub const {}: {t} = {value};\n", snake(&super::model::ident(constant)).to_uppercase());
+            let cname = snake(&super::model::ident(constant)).to_uppercase();
+            inherent_taken.insert(cname.clone());
+            inherent += &format!("    pub const {cname}: {t} = {value};\n");
         }
         if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
             let mut seen = HashSet::new();
             for (i, (key, v)) in map.keys.iter().zip(&map.values).enumerate() {
                 let constant = snake(&super::model::ident(key)).to_uppercase();
                 let constant = if seen.insert(constant.clone()) { constant } else { format!("{constant}_{i}") };
+                inherent_taken.insert(constant.clone());
                 inherent += &format!("    pub const {constant}: JsKey<{name}, {}> = JsKey::new({i});\n", ty(v));
             }
+        }
+        // A subclass of Array, as the array it is.
+        if let Some(elem) = &c.elements {
+            inherent_taken.insert("as_array".into());
+            inherent += &format!("    pub fn as_array(&self) -> JsArray<{}> {{ JsArray::from_handle(crate::runtime::give(self)) }}\n", ty(elem));
         }
         let all = ancestors(&c.name);
         let mut holders: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -1783,34 +2077,146 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
                 }
             }
         }
-        for (method, hs) in holders.iter().filter(|(_, hs)| hs.len() > 1) {
+        let args_for = |h: &str, k: &Class| -> Vec<Ty> {
+            if h == c.name {
+                k.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect()
+            } else {
+                let b = base_args(m, c, h).unwrap_or_default();
+                (0..k.type_params.len()).map(|i| b.get(i).cloned().unwrap_or(Ty::Any)).collect()
+            }
+        };
+        for (method, hs) in &holders {
+            if inherent_taken.contains(method) {
+                continue;
+            }
             // The nearest holder: the type itself, then its nearest ancestor.
             let h = &hs[0];
             let k = class_of(h).unwrap();
-            let args = if *h == c.name { k.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect() } else { base_args(m, c, h).unwrap_or_default() };
+            let h_args = args_for(h, k);
             if let Some(g) = grouped[k.name.as_str()].iter().find(|g| g.name == *method) {
+                inherent_taken.insert(method.clone());
+                if g.members.iter().any(|f| f.params[g.at].1 == Ty::Str && !hidden(f).is_empty()) {
+                    inherent_taken.insert(format!("{method}_as"));
+                }
                 for item in g.methods("pub ", &mut imports, this) {
                     inherent += &format!("    {item}\n");
                 }
                 continue;
             }
-            for f in k.funcs.iter().filter(|f| Class::has_self(f) && names[k.name.as_str()][&f.name] == *method) {
-                let f = map_types(&with_self_args(f, k), &|t| subst(t, &k.type_params, &args));
-                for item in function(&f, method, "pub ", &mut imports, Some(this)) {
-                    inherent += &format!("    {item}\n");
+            for f0 in k.funcs.iter().filter(|f| Class::has_self(f) && names[k.name.as_str()][&f.name] == *method) {
+                let mut orig = with_self_args(f0, k);
+                if !c.type_params.is_empty() && !orig.type_params.is_empty() {
+                    orig = avoid_outer_type_params(&orig, &c.type_params, &k.type_params);
+                }
+                let f = map_types(&orig, &|t| subst(t, &k.type_params, &h_args));
+                inherent_taken.insert(method.clone());
+                let as_name = format!("{method}_as");
+                if !hidden(&f).is_empty() && !inherent_taken.contains(&as_name) && !holders.contains_key(&as_name) {
+                    inherent_taken.insert(as_name);
+                    for item in function_raw(&f, &orig, method, "pub ", &mut imports, Some(this)) {
+                        inherent += &format!("    {item}\n");
+                    }
+                } else {
+                    let f_def = if hidden(&f).is_empty() { f } else { defaulted(&f) };
+                    let o_def = if hidden(&orig).is_empty() { orig } else { defaulted(&orig) };
+                    inherent += &format!("    {}\n", one_function_raw(&f_def, Some(&o_def), method, "pub ", &mut imports, Some(this)));
                 }
             }
         }
-        // A subclass of Array, as the array it is.
-        if let Some(elem) = &c.elements {
-            inherent += &format!("    pub fn as_array(&self) -> JsArray<{}> {{ JsArray::from_handle(crate::runtime::give(self)) }}\n", ty(elem));
+        // Fluent `with_<prop>(self, v) -> Self` builders for single-arg property setters (own + inherited).
+        for (method, hs) in &holders {
+            let Some(stem) = method.strip_prefix("set_") else { continue };
+            if stem.is_empty() {
+                continue;
+            }
+            let with_name = ident(&format!("with_{stem}"));
+            if inherent_taken.contains(&with_name) || holders.contains_key(&with_name) || TAKEN.contains(&with_name.as_str()) {
+                continue;
+            }
+            let h = &hs[0];
+            let k = class_of(h).unwrap();
+            let matching: Vec<&Func> = k.funcs.iter().filter(|f| Class::has_self(f) && names[k.name.as_str()][&f.name] == *method).collect();
+            if matching.len() != 1 {
+                continue;
+            }
+            let f0 = matching[0];
+            if !matches!(f0.call, Call::Set(_)) || f0.params.len() != 1 || !f0.type_params.is_empty() || f0.ret != Ty::Void || !f0.fixed.is_empty() {
+                continue;
+            }
+            let h_args = args_for(h, k);
+            let orig = with_self_args(f0, k);
+            let f = map_types(&orig, &|t| subst(t, &k.type_params, &h_args));
+            let orig_t = &orig.params[0].1;
+            let (p_raw, t) = &f.params[0];
+            let p = ident(&snake(p_raw));
+            let (written, val_raw_args) = match t {
+                Ty::Nullable(inner, _) => {
+                    if matches!(**inner, Ty::Void | Ty::Key(_) | Ty::Mapped(_) | Ty::Nullable(..)) {
+                        continue;
+                    }
+                    let (w, inner_args) = param(inner, &p);
+                    let ra = if raw(orig_t) != raw(t) {
+                        vec![format!("{p}.lend().h")]
+                    } else {
+                        match &**inner {
+                            Ty::Num => vec!["1".into(), p.clone()],
+                            Ty::NumEnum(_) => vec!["1".into(), format!("{p} as i32 as f64")],
+                            Ty::Bool | Ty::Enum(_) => vec![format!("{p} as i32")],
+                            _ => inner_args,
+                        }
+                    };
+                    (w, ra)
+                }
+                _ => {
+                    if matches!(t, Ty::Void | Ty::Key(_) | Ty::Mapped(_)) {
+                        continue;
+                    }
+                    let (w, mut ra) = param(t, &p);
+                    if raw(orig_t) != raw(t) {
+                        ra = vec![format!("{p}.lend().h")];
+                    }
+                    (w, ra)
+                }
+            };
+            let (import, mut raw_params, mut call_args) = match &f.shared {
+                Some((shared, k_idx)) => (shared.clone(), vec!["this: u32".into(), "k: i32".into()], vec!["self.0 .0".into(), k_idx.to_string()]),
+                None => (f.import.clone(), vec!["this: u32".into()], vec!["self.0 .0".into()]),
+            };
+            call_args.extend(val_raw_args);
+            raw_params.extend(raw(orig_t).into_iter().enumerate().map(|(j, r)| format!("a0_{j}: {r}")));
+            let raw_name = if KEYWORDS.contains(&import.as_str()) { format!("{import}_") } else { import.clone() };
+            imports.entry(import.clone()).or_insert_with(|| {
+                let link = if raw_name != import { format!("#[link_name = \"{import}\"] ") } else { String::new() };
+                format!("    {link}pub fn {raw_name}({}) -> ();\n", raw_params.join(", "))
+            });
+            inherent_taken.insert(with_name.clone());
+            inherent += &format!("    pub fn {with_name}(self, {p}: {written}) -> Self {{ unsafe {{ raw::{raw_name}({}) }}; self }}\n", call_args.join(", "));
+        }
+        if !inherent_taken.contains("iter")
+            && let Some((k, elem)) = std::iter::once(c.name.as_str()).chain(all.iter().map(String::as_str)).find_map(|h| class_of(h).and_then(|k| k.iterates.as_ref().map(|e| (k, e))))
+        {
+            let h_args = args_for(&k.name, k);
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, k).ret;
+            let elem = subst(&elem, &k.type_params, &h_args);
+            inherent_taken.insert("iter".into());
+            inherent += &format!("    pub fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem));
+        }
+        if !inherent_taken.contains("iterate_async")
+            && let Some((k, elem)) = std::iter::once(c.name.as_str()).chain(all.iter().map(String::as_str)).find_map(|h| class_of(h).and_then(|k| k.iterates_async.as_ref().map(|e| (k, e))))
+        {
+            let h_args = args_for(&k.name, k);
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, k).ret;
+            let elem = subst(&elem, &k.type_params, &h_args);
+            inherent_taken.insert("iterate_async".into());
+            inherent += &format!("    pub fn iterate_async(&self) -> JsAsyncIterator<{}> {{ JsAsyncIterator::over({this}) }}\n", ty(&elem));
         }
         // Covariant upcast for generic handles: `Texture<BufferImageSource>::upcast::<TextureSource<JsValue>>()`.
-        if !c.type_params.is_empty() && !c.funcs.iter().any(|f| own[&f.name] == "upcast") && !holders.contains_key("upcast") {
+        if !c.type_params.is_empty() && !inherent_taken.contains("upcast") {
             let u_names: Vec<String> = (0..c.type_params.len()).map(|i| format!("U{i}_")).collect();
             let u_bounds: Vec<String> = u_names.iter().map(|u| format!("{u}: JsType")).collect();
             let wheres: Vec<String> = c.type_params.iter().zip(&u_names).map(|(p, u)| format!("{}: Is<{u}>", p.name)).collect();
             let u_args = u_names.join(", ");
+            inherent_taken.insert("upcast".into());
             inherent += &format!(
                 "    pub fn upcast<{}>(&self) -> {name}<{u_args}> where {} {{ {name}(self.0.clone(), core::marker::PhantomData) }}\n",
                 u_bounds.join(", "),
@@ -1819,10 +2225,11 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         }
         // Checked downcast: only a class has a constructor to test against.
         if c.js.is_some() {
-            let cast_name = if c.funcs.iter().any(|f| own[&f.name] == "cast") || holders.get("cast").is_some_and(|hs| hs.len() > 1) { "try_cast" } else { "cast" };
+            let cast_name = if inherent_taken.contains("cast") { "try_cast" } else { "cast" };
             let is_imp = format!("js_is__{}", c.name);
             imports.entry(is_imp.clone()).or_insert_with(|| format!("    pub fn {is_imp}(h: u32) -> i32;\n"));
             let opt = option();
+            inherent_taken.insert(cast_name.into());
             inherent += &format!(
                 "    pub fn {cast_name}(v: &impl AsRef<JsHandle>) -> {opt}<Self> {{ let h = v.as_ref().0; if h != 0 && unsafe {{ raw::{is_imp}(h) }} != 0 {{ let c = v.as_ref().clone(); core::mem::forget(c); Some(<Self>::from_handle(h)) }} else {{ None }} }}\n"
             );
@@ -2000,6 +2407,71 @@ fn is_subtype(m: &Model, a: &Ty, b: &Ty, depth: usize) -> bool {
     }
 }
 
+fn rename_tparam(f: &Func, old: &str, new: &str) -> Func {
+    let rep = &[TParam { name: old.to_string(), constraint: None, default: Some(Ty::Param(new.to_string())) }];
+    let mut out = map_types(f, &|t| subst(t, rep, &[]));
+    for tp in &mut out.type_params {
+        if tp.name == old {
+            tp.name = new.to_string();
+        }
+        if let Some(c) = &tp.constraint {
+            tp.constraint = Some(subst(c, rep, &[]));
+        }
+        if let Some(d) = &tp.default {
+            tp.default = Some(subst(d, rep, &[]));
+        }
+    }
+    out
+}
+
+fn avoid_outer_type_params(orig: &Func, outer: &[TParam], k_params: &[TParam]) -> Func {
+    let mut out = orig.clone();
+    for i in 0..out.type_params.len() {
+        let name = out.type_params[i].name.clone();
+        if outer.iter().any(|o| o.name == name) {
+            let mut candidate = format!("{name}_");
+            while outer.iter().any(|o| o.name == candidate) || k_params.iter().any(|p| p.name == candidate) || out.type_params.iter().any(|p| p.name == candidate) {
+                candidate.push('_');
+            }
+            out = rename_tparam(&out, &name, &candidate);
+        }
+    }
+    out
+}
+
+fn mentions_type(t: &Ty, name: &str) -> bool {
+    match t {
+        Ty::Obj(n) | Ty::NamedUnion(n) | Ty::Enum(n) | Ty::NumEnum(n) => n == name,
+        Ty::Generic(n, args) => n == name || args.iter().any(|a| mentions_type(a, name)),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => mentions_type(inner, name),
+        Ty::Tuple(args) | Ty::Union(args) => args.iter().any(|a| mentions_type(a, name)),
+        _ => false,
+    }
+}
+
+fn handle_decl(model_name: &str, rust_name: &str, type_params: &[TParam]) -> String {
+    if type_params.is_empty() {
+        return format!("handle!({rust_name});");
+    }
+    let mut defaults: Vec<Option<String>> = vec![None; type_params.len()];
+    for i in (0..type_params.len()).rev() {
+        let Some(d) = &type_params[i].default else { break };
+        if uses_key(d) || mentions_type(d, model_name) || type_params[i..].iter().any(|later| mentions(d, &later.name)) {
+            break;
+        }
+        defaults[i] = Some(ty(d));
+    }
+    let parts: Vec<String> = type_params
+        .iter()
+        .zip(defaults)
+        .map(|(p, d)| match d {
+            Some(d) => format!("{} = {d}", p.name),
+            None => p.name.clone(),
+        })
+        .collect();
+    format!("handle!({rust_name}<{}>);", parts.join(", "))
+}
+
 // A union as an enum: decoded from a handle by its tag, lent as its member,
 // and made from any member: `describe(42.0)`.
 fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<String, String>) -> String {
@@ -2030,13 +2502,21 @@ fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<String, String>)
     // A union is what each of its members is.
     let is_bounds: Vec<String> = u.parts.iter().map(|p| format!("{}: Is<B_>", ty(p))).collect();
     let is_params = std::iter::once("B_".to_string()).chain(u.type_params.iter().map(bound)).collect::<Vec<_>>().join(", ");
+    let debug_arms: String = u.parts.iter().map(|p| format!("{n}::{}(x) => f.debug_tuple({:?}).field(x).finish(), ", variant(p), variant(p))).collect();
+    let debug_where = if u.type_params.is_empty() {
+        String::new()
+    } else {
+        format!(" where {}", u.type_params.iter().map(|p| format!("{}: core::fmt::Debug", p.name)).collect::<Vec<_>>().join(", "))
+    };
     let mut out = format!(
         "pub enum {n}{bounds} {{ {} }}\n\
          impl{bounds} Clone for {n}{args} {{ fn clone(&self) -> Self {{ match self {{ {clone}}} }} }}\n\
          impl{bounds} ToJs for {n}{args} {{ fn lend(&self) -> Lent {{ match self {{ {lend}}} }} }}\n\
          impl{bounds} FromJs for {n}{args} {{ fn from_handle(h: u32) -> Self {{ match unsafe {{ raw::{import}_tag(h, {kind}) }} {{ {decode}_ => unreachable!() }} }} }}\n\
          impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n\
-         impl{bounds} Optional<{n}{args}> for {opt}<{n}{args}> {{ fn into_option(self) -> {opt}<{n}{args}> {{ self }} }}\n",
+         impl{bounds} Optional<{n}{args}> for {opt}<{n}{args}> {{ fn into_option(self) -> {opt}<{n}{args}> {{ self }} }}\n\
+         impl{bounds} Optional<{n}{args}> for JsNone {{ fn into_option(self) -> {opt}<{n}{args}> {{ None }} }}\n\
+         impl{bounds} core::fmt::Debug for {n}{args}{debug_where} {{ fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{ match self {{ {debug_arms}}} }} }}\n",
         variants.join(", "),
         is_bounds.join(", ")
     );
@@ -2083,7 +2563,7 @@ fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<String, String>)
 
 // A callback type, made from a closure: `CounterVisitF::new(|c: Counter| ..)`,
 // or for the length of a call, `CounterVisitF::scoped(|c| .., |f| counter.visit(f))`.
-fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &Ty, imports: &mut BTreeMap<String, String>) -> String {
+fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &Ty, apply: Option<&Func>, imports: &mut BTreeMap<String, String>) -> String {
     let import = name;
     let name = def_name(name);
     let (bounds, args) = (generics(type_params), args_of(type_params));
@@ -2103,6 +2583,23 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
     imports.insert(format!("{import}_from"), format!("    pub fn {import}_from(f: usize, ctx: *mut c_void) -> u32;\n"));
     let handle_params = if tps.is_empty() { String::new() } else { format!("<{}>", tps.join(", ")) };
     let is_self = if tps.is_empty() { format!("impl Is<{name}> for {name} {{}}\n") } else { String::new() };
+    let call_method = if let Some(apply) = apply.filter(|a| !a.params.is_empty()) {
+        let method_f = Func {
+            type_params: Vec::new(),
+            module: apply.module.clone(),
+            import: apply.import.clone(),
+            name: "call".into(),
+            call: Call::Method("call".into()),
+            params: apply.params[1..].to_vec(),
+            rest: apply.rest,
+            fixed: apply.fixed.clone(),
+            shared: apply.shared.clone(),
+            ret: apply.ret.clone(),
+        };
+        format!("\n    {}", one_function(&method_f, "call", "pub ", imports, Some("self.0 .0")))
+    } else {
+        String::new()
+    };
     format!(
         "handle!({name}{handle_params});\n{is_self}impl{bounds} JsCallback for {name}{args} {{}}\n\
          impl{bounds} {name}{args} {{\n    \
@@ -2111,7 +2608,7 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
          // For the length of `body`: its closure may borrow.\n    \
          pub fn scoped<F: {fn_bound}, R_>(mut f: F, body: impl FnOnce(&Self) -> R_) -> R_ {{\n        {}\n        \
          let made = Self::from_handle(unsafe {{ raw::{import}_from(call::<{2}> as *const () as usize, &mut f as *mut F as *mut core::ffi::c_void) }});\n        \
-         let _forget = crate::runtime::Forget(made.0 .0);\n        body(&made)\n    }}\n}}\n",
+         let _forget = crate::runtime::Forget(made.0 .0);\n        body(&made)\n    }}{call_method}\n}}\n",
         trampoline("unsafe { crate::runtime::closure_fn::<F>(ctx) }", " + 'static"),
         trampoline("unsafe { &mut *(ctx as *mut F) }", ""),
         turbofish.join(", ")

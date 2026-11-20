@@ -1,7 +1,6 @@
 #![no_main]
 
 use node::{fs, path};
-use node::*;
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -30,11 +29,11 @@ fn walk_dir(dir: &str, dirs: &mut u32, files: &mut u32, total_bytes: &mut f64) {
     let mut entries: Vec<String> = fs::readdir_sync(dir, None).iter().collect();
     entries.sort();
     for name in entries {
-        let full = path::join([dir, name.as_str()]);
-        let st = fs::stat_sync(full.as_str());
+        let full = path::join([dir, &name]);
+        let st = fs::stat_sync(&*full);
         if st.is_directory() {
             *dirs += 1;
-            walk_dir(full.as_str(), dirs, files, total_bytes);
+            walk_dir(&full, dirs, files, total_bytes);
         } else if st.is_file() {
             *files += 1;
             *total_bytes += st.size();
@@ -47,36 +46,35 @@ pub extern "C" fn start() {
     let mut c = Checks(0);
 
     let root = fs::mkdtemp_sync("/tmp/tsrs-node-tree-", None);
-    c.check(fs::exists_sync(root.as_str()));
+    c.check(fs::exists_sync(&*root));
 
-    let mk = fs::MakeDirectoryOptions::create();
-    mk.set_recursive(Some(true));
-    let _ = fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
-        path::join([root.as_str(), "src", "core"]).as_str(),
+    let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
+        &*path::join([root.as_str(), "src", "core"]),
         &mk,
     );
-    let _ = fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
-        path::join([root.as_str(), "src", "cli"]).as_str(),
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
+        &*path::join([root.as_str(), "src", "cli"]),
         &mk,
     );
-    let _ = fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
-        path::join([root.as_str(), "docs"]).as_str(),
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
+        &*path::join([root.as_str(), "docs"]),
         &mk,
     );
 
-    fs::write_file_sync(path::join([root.as_str(), "README.md"]).as_str(), "node tree demo", None);
+    fs::write_file_sync(&*path::join([root.as_str(), "README.md"]), "node tree demo", None);
     fs::write_file_sync(
-        path::join([root.as_str(), "src", "core", "engine.txt"]).as_str(),
+        &*path::join([root.as_str(), "src", "core", "engine.txt"]),
         "engine core module!\n",
         None,
     );
     fs::write_file_sync(
-        path::join([root.as_str(), "src", "cli", "args.txt"]).as_str(),
+        &*path::join([root.as_str(), "src", "cli", "args.txt"]),
         "cli args parser\n",
         None,
     );
     fs::write_file_sync(
-        path::join([root.as_str(), "docs", "guide.md"]).as_str(),
+        &*path::join([root.as_str(), "docs", "guide.md"]),
         "monochrome documentation\n",
         None,
     );
@@ -84,21 +82,19 @@ pub extern "C" fn start() {
     let mut dir_count = 0u32;
     let mut file_count = 0u32;
     let mut total_bytes = 0.0f64;
-    walk_dir(root.as_str(), &mut dir_count, &mut file_count, &mut total_bytes);
+    walk_dir(&root, &mut dir_count, &mut file_count, &mut total_bytes);
 
     c.check(dir_count == 4);
     c.check(file_count == 4);
     c.check(total_bytes == 75.0);
 
-    let rm = fs::RmOptions::create();
-    rm.set_recursive(Some(true));
-    rm.set_force(Some(true));
-    fs::rm_sync(root.as_str(), Some(&rm));
-    c.check(!fs::exists_sync(root.as_str()));
+    let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
+    fs::rm_sync(&*root, Some(&rm));
+    c.check(!fs::exists_sync(&*root));
     c.check(dir_count + file_count == 8);
     c.check(true);
 
-    println(&format!("root={}", root));
+    println(&format!("root={root}"));
     println(&format!(
         "dirs={} files={} total_bytes={:.0}",
         dir_count, file_count, total_bytes

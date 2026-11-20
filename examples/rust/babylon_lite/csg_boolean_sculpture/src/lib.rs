@@ -1,15 +1,10 @@
 #![no_main]
 
 use babylonjs_lite::{
-    BoxOptions, BoxOptionsMethods as _, ClearCoatProps, ClearCoatPropsMethods as _,
-    CreatePbrMaterialProps, CreatePbrMaterialPropsMethods as _, CylinderOptions,
-    CylinderOptionsMethods as _, DirectionalLightMethods as _, DiscOptions,
-    DiscOptionsMethods as _, EulerProxyMethods as _, GroundOptions, GroundOptionsMethods as _,
-    HemisphericLightMethods as _, JsTuple3, JsTuple4, MeshMethods as _, NumberFn,
-    ObservableVec3Methods as _, PbrMaterialProps, PointLightMethods as _, SceneNodeMethods as _,
-    SphereOptions, SphereOptionsMethods as _, TorusOptions, TorusOptionsMethods as _,
+    BoxOptions, ClearCoatProps, CreatePbrMaterialProps, CylinderOptions, DiscOptions,
+    GroundOptions, JsTuple3, NumberFn, PbrMaterialProps, SphereOptions, TorusOptions,
 };
-use dom::{GPUColorDict, GPUColorDictMethods as _, HTMLCanvasElement, ParentNodeMethods as _};
+use dom::{GPUColorDict, HTMLCanvasElement};
 
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
@@ -19,10 +14,10 @@ fn set_status_error(msg: &str) {
 }
 
 fn mk_pbr(v: f64, metallic: f64, roughness: f64) -> PbrMaterialProps {
-    let props = CreatePbrMaterialProps::create();
-    props.set_base_color_factor(Some(&JsTuple4::new(v, v, v, 1.0)));
-    props.set_metallic_factor(Some(metallic));
-    props.set_roughness_factor(Some(roughness));
+    let props = CreatePbrMaterialProps::default()
+        .with_base_color_factor([v, v, v, 1.0])
+        .with_metallic_factor(metallic)
+        .with_roughness_factor(roughness);
     babylonjs_lite::create_pbr_material(Some(&props))
 }
 
@@ -43,11 +38,11 @@ pub extern "C" fn start() {
         };
 
         let scene = babylonjs_lite::create_scene_context(&engine, None);
-        let clear = GPUColorDict::create();
-        clear.set_r(0.06);
-        clear.set_g(0.06);
-        clear.set_b(0.06);
-        clear.set_a(1.0);
+        let clear = GPUColorDict::default()
+            .with_r(0.06)
+            .with_g(0.06)
+            .with_b(0.06)
+            .with_a(1.0);
         scene.set_clear_color(&clear);
 
         let camera = babylonjs_lite::create_arc_rotate_camera(
@@ -57,50 +52,43 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 2.1, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        let _ = babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
+        babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
 
         let hemi = babylonjs_lite::create_hemispheric_light(
-            Some(&JsTuple3::new(0.0, 1.0, 0.2)),
+            Some(&JsTuple3::from([0.0, 1.0, 0.2])),
             Some(0.72),
         );
-        hemi.set_diffuse_color(&JsTuple3::new(0.85, 0.85, 0.85));
-        hemi.set_ground_color(&JsTuple3::new(0.14, 0.14, 0.14));
+        hemi.set_diffuse_color([0.85, 0.85, 0.85]);
+        hemi.set_ground_color([0.14, 0.14, 0.14]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
-        let dir =
-            babylonjs_lite::create_directional_light(&JsTuple3::new(-1.2, -2.0, -1.1), Some(2.1));
-        dir.set_diffuse(&JsTuple3::new(1.0, 1.0, 1.0));
+        let dir = babylonjs_lite::create_directional_light([-1.2, -2.0, -1.1], Some(2.1));
+        dir.set_diffuse([1.0, 1.0, 1.0]);
         babylonjs_lite::add_to_scene(&scene, &dir);
 
-        let key_light =
-            babylonjs_lite::create_point_light(&JsTuple3::new(3.2, 3.6, 2.4), Some(8.0));
-        key_light.set_diffuse(&JsTuple3::new(0.92, 0.92, 0.92));
+        let key_light = babylonjs_lite::create_point_light([3.2, 3.6, 2.4], Some(8.0));
+        key_light.set_diffuse([0.92, 0.92, 0.92]);
         key_light.set_range(14.0);
         babylonjs_lite::add_to_scene(&scene, &key_light);
 
-        let floor_opts = GroundOptions::create();
-        floor_opts.set_width(Some(16.0));
-        floor_opts.set_height(Some(16.0));
+        let floor_opts = GroundOptions::default().with_width(16.0).with_height(16.0);
         let floor = babylonjs_lite::create_ground(&engine, Some(&floor_opts));
         floor.set_material(&mk_pbr(0.09, 0.10, 0.88));
         babylonjs_lite::add_to_scene(&scene, &floor);
 
-        let disc_opts = DiscOptions::create();
-        disc_opts.set_radius(Some(2.6));
-        disc_opts.set_tessellation(Some(48.0));
+        let disc_opts = DiscOptions::default().with_radius(2.6).with_tessellation(48.0);
         let disc = babylonjs_lite::create_disc(&engine, Some(&disc_opts));
         disc.rotation().set_x(core::f64::consts::FRAC_PI_2);
         disc.position().set(0.0, 0.03, 0.0);
         disc.set_material(&mk_pbr(0.22, 0.25, 0.65));
         babylonjs_lite::add_to_scene(&scene, &disc);
 
-        let sbopts = BoxOptions::create();
-        sbopts.set_size(Some(2.1));
+        let sbopts = BoxOptions::default().with_size(2.1);
         let src_box = babylonjs_lite::create_box(&engine, &sbopts);
-        let copts = CylinderOptions::create();
-        copts.set_height(Some(3.0));
-        copts.set_diameter(Some(1.18));
-        copts.set_tessellation(Some(16.0));
+        let copts = CylinderOptions::default()
+            .with_height(3.0)
+            .with_diameter(1.18)
+            .with_tessellation(16.0);
         let cyl_y = babylonjs_lite::create_cylinder(&engine, Some(&copts));
         let cyl_x = babylonjs_lite::create_cylinder(&engine, Some(&copts));
         cyl_x.rotation().set_z(core::f64::consts::FRAC_PI_2);
@@ -118,24 +106,21 @@ pub extern "C" fn start() {
         let monolith = babylonjs_lite::create_mesh_from_csg(&engine, &s3, Some("monolith"));
         monolith.position().set(0.0, 2.15, 0.0);
 
-        let mprops = CreatePbrMaterialProps::create();
-        mprops.set_base_color_factor(Some(&JsTuple4::new(0.86, 0.86, 0.86, 1.0)));
-        mprops.set_metallic_factor(Some(0.65));
-        mprops.set_roughness_factor(Some(0.24));
-        let cc = ClearCoatProps::create();
-        cc.set_is_enabled(Some(true));
-        cc.set_intensity(Some(0.90));
-        cc.set_roughness(Some(0.10));
+        let mprops = CreatePbrMaterialProps::default()
+            .with_base_color_factor([0.86, 0.86, 0.86, 1.0])
+            .with_metallic_factor(0.65)
+            .with_roughness_factor(0.24);
+        let cc = ClearCoatProps::default()
+            .with_is_enabled(true)
+            .with_intensity(0.90)
+            .with_roughness(0.10);
         babylonjs_lite::set_pbr_clear_coat(&mprops, &cc);
         monolith.set_material(&babylonjs_lite::create_pbr_material(Some(&mprops)));
         babylonjs_lite::add_to_scene(&scene, &monolith);
 
-        let cbopts = BoxOptions::create();
-        cbopts.set_size(Some(0.82));
+        let cbopts = BoxOptions::default().with_size(0.82);
         let core_box = babylonjs_lite::create_box(&engine, &cbopts);
-        let csopts = SphereOptions::create();
-        csopts.set_diameter(Some(1.02));
-        csopts.set_segments(Some(14.0));
+        let csopts = SphereOptions::default().with_diameter(1.02).with_segments(14.0);
         let core_sphere = babylonjs_lite::create_sphere(&engine, Some(&csopts));
         let core_solid = babylonjs_lite::csg_intersect(
             &babylonjs_lite::create_csg_from_mesh(&core_box, None),
@@ -146,19 +131,19 @@ pub extern "C" fn start() {
         core.set_material(&mk_pbr(0.18, 0.85, 0.16));
         babylonjs_lite::add_to_scene(&scene, &core);
 
-        let otopts = TorusOptions::create();
-        otopts.set_diameter(Some(4.2));
-        otopts.set_thickness(Some(0.09));
-        otopts.set_tessellation(Some(48.0));
+        let otopts = TorusOptions::default()
+            .with_diameter(4.2)
+            .with_thickness(0.09)
+            .with_tessellation(48.0);
         let outer_ring = babylonjs_lite::create_torus(&engine, Some(&otopts));
         outer_ring.position().set(0.0, 2.15, 0.0);
         outer_ring.set_material(&mk_pbr(0.55, 0.80, 0.25));
         babylonjs_lite::add_to_scene(&scene, &outer_ring);
 
-        let itopts = TorusOptions::create();
-        itopts.set_diameter(Some(3.55));
-        itopts.set_thickness(Some(0.07));
-        itopts.set_tessellation(Some(48.0));
+        let itopts = TorusOptions::default()
+            .with_diameter(3.55)
+            .with_thickness(0.07)
+            .with_tessellation(48.0);
         let inner_ring = babylonjs_lite::create_torus(&engine, Some(&itopts));
         inner_ring.position().set(0.0, 2.15, 0.0);
         inner_ring.set_material(&mk_pbr(0.88, 0.40, 0.30));

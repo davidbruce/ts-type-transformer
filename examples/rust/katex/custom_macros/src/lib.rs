@@ -1,9 +1,7 @@
 #![no_main]
 
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
-use katex::{
-    JsValue, KatexOptions, KatexOptionsMacros, KatexOptionsMacrosMethods as _, KatexOptionsMethods as _,
-};
+use dom::{Document, HTMLElement};
+use katex::{JsValue, KatexOptions, KatexOptionsMacros};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -17,28 +15,28 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Custom Macros (Rust)")));
     append(&head, make_el(&doc, "span", "badge", Some(r"\RR, \NN, \dd, \norm")));
     append(&app, head);
 
-    let macros = KatexOptionsMacros::create();
-    macros.set_at(r"\RR", &JsValue::from(r"\mathbb{R}"));
-    macros.set_at(r"\NN", &JsValue::from(r"\mathbb{N}"));
-    macros.set_at(r"\dd", &JsValue::from(r"\mathrm{d}"));
-    macros.set_at(r"\norm", &JsValue::from(r"\left\| #1 \right\|"));
+    let macros = KatexOptionsMacros::default();
+    macros.set_at(r"\RR", JsValue::from(r"\mathbb{R}"));
+    macros.set_at(r"\NN", JsValue::from(r"\mathbb{N}"));
+    macros.set_at(r"\dd", JsValue::from(r"\mathrm{d}"));
+    macros.set_at(r"\norm", JsValue::from(r"\left\| #1 \right\|"));
 
-    let opts = KatexOptions::create();
-    opts.set_display_mode(Some(true));
-    opts.set_macros(Some(&macros));
+    let opts = KatexOptions::default()
+        .with_display_mode(true)
+        .with_macros(&macros);
 
     let legend = make_el(&doc, "div", "card", None);
     append(&legend, make_el(&doc, "div", "label", Some("Defined Macros")));

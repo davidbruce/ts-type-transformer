@@ -6,11 +6,11 @@ use std::rc::Rc;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let m_opts = MapOptions::create();
-    m_opts.set_attribution_control(Some(false));
-    m_opts.set_zoom_animation(Some(false));
-    m_opts.set_fade_animation(Some(false));
-    m_opts.set_marker_zoom_animation(Some(false));
+    let m_opts = MapOptions::default()
+        .with_attribution_control(false)
+        .with_zoom_animation(false)
+        .with_fade_animation(false)
+        .with_marker_zoom_animation(false);
     let m = map("map", Some(&m_opts));
 
     let stations = [
@@ -21,56 +21,44 @@ pub extern "C" fn start() {
         ("05", "Basel", lat_lng(47.5596, 7.5886, None)),
     ];
 
-    let line_pts = JsArray::from(
-        stations
-            .iter()
-            .map(|(_, _, p)| JsValue::from(p))
-            .collect::<Vec<_>>(),
-    );
-    let p_opts = PolylineOptions::create();
-    p_opts.set_smooth_factor(Some(1.0));
-    p_opts.set_color(Some("#404040"));
-    p_opts.set_weight(Some(2.5));
+    let line_pts: JsArray<JsValue> = stations.iter().map(|(_, _, p)| JsValue::from(p)).collect();
+    let p_opts = PolylineOptions::default()
+        .with_smooth_factor(1.0)
+        .with_color("#404040")
+        .with_weight(2.5);
     let corridor = polyline(line_pts, Some(&p_opts));
     corridor.add_to(&m);
 
-    let dot_opts = CircleMarkerOptions::create();
-    dot_opts.set_radius(Some(6.0));
-    dot_opts.set_color(Some("#111111"));
-    dot_opts.set_weight(Some(2.0));
-    dot_opts.set_fill_color(Some("#ffffff"));
-    dot_opts.set_fill_opacity(Some(1.0));
+    let dot_opts = CircleMarkerOptions::default()
+        .with_radius(6.0)
+        .with_color("#111111")
+        .with_weight(2.0)
+        .with_fill_color("#ffffff")
+        .with_fill_opacity(1.0);
 
-    let pin_size = PointExpression::Point(point(22.0, 22.0, None));
-    let pin_anchor = PointExpression::Point(point(11.0, 11.0, None));
+    let pin_size = point(22.0, 22.0, None);
+    let pin_anchor = point(11.0, 11.0, None);
 
     for (code, name, pt) in &stations {
         let cm = circle_marker(pt, Some(&dot_opts));
-        cm.bind_tooltip(
-            LayerBindTooltipContent::String(format!("{code} · {name}")),
-            None,
-        );
+        cm.bind_tooltip(format!("{code} · {name}"), None);
         cm.add_to(&m);
 
-        let d_opts = DivIconOptions::create();
-        d_opts.set_class_name(Some("mono-pin"));
-        d_opts.set_html(StringOrElementOrBoolean::String(format!("<span>{code}</span>")));
-        d_opts.set_icon_size(pin_size.clone());
-        d_opts.set_icon_anchor(pin_anchor.clone());
+        let d_opts = DivIconOptions::default()
+            .with_class_name("mono-pin")
+            .with_html(format!("<span>{code}</span>"))
+            .with_icon_size(pin_size.clone())
+            .with_icon_anchor(pin_anchor.clone());
 
-        let mk_opts = MarkerOptions::create();
-        mk_opts.set_icon(IconOrDivIcon::DivIcon(div_icon(Some(&d_opts))));
+        let mk_opts = MarkerOptions::default().with_icon(div_icon(Some(&d_opts)));
         marker(pt, Some(&mk_opts)).add_to(&m);
     }
 
     m.fit_bounds(&corridor.get_bounds().pad(0.15), None);
 
-    let pop_opts = PopupOptions::create();
-    pop_opts.set_max_width(Some(220.0));
+    let pop_opts = PopupOptions::default().with_max_width(220.0);
     let note = popup(&stations[2].2, Some(&pop_opts));
-    note.set_content(StringOrHTMLElementOrDivOverlayGetContentResult::String(
-        "03 Bern · 46.95N, 7.45E".into(),
-    ));
+    note.set_content("03 Bern · 46.95N, 7.45E");
     note.open_on(&m);
 
     let clicks = Rc::new(Cell::new(0usize));
@@ -87,8 +75,7 @@ pub extern "C" fn start() {
         &on_click,
         None,
     );
-    let data = LeafletMouseEvent::create();
-    data.set_latlng(&stations[2].2);
+    let data = LeafletMouseEvent::default().with_latlng(&stations[2].2);
     let payload = JsValue::from(&data);
     m.fire("click", Some(&payload), None);
     m.fire("click", Some(&payload), None);

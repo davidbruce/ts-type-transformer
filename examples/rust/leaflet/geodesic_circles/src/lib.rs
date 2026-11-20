@@ -4,11 +4,11 @@ use leaflet::*;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let m_opts = MapOptions::create();
-    m_opts.set_attribution_control(Some(false));
-    m_opts.set_zoom_animation(Some(false));
-    m_opts.set_fade_animation(Some(false));
-    m_opts.set_marker_zoom_animation(Some(false));
+    let m_opts = MapOptions::default()
+        .with_attribution_control(false)
+        .with_zoom_animation(false)
+        .with_fade_animation(false)
+        .with_marker_zoom_animation(false);
     let m = map("map", Some(&m_opts));
 
     let zurich = lat_lng(47.3769, 8.5417, None);
@@ -22,11 +22,11 @@ pub extern "C" fn start() {
 
     let mut outer_bounds = None;
     for (r, stroke, fill, op) in rings {
-        let c_opts = CircleMarkerOptions::create();
-        c_opts.set_color(Some(stroke));
-        c_opts.set_weight(Some(1.5));
-        c_opts.set_fill_color(Some(fill));
-        c_opts.set_fill_opacity(Some(op));
+        let c_opts = CircleMarkerOptions::default()
+            .with_color(stroke)
+            .with_weight(1.5)
+            .with_fill_color(fill)
+            .with_fill_opacity(op);
         let c = circle_with_radius(&zurich, r, Some(&c_opts));
         c.add_to(&m);
         if outer_bounds.is_none() {
@@ -46,20 +46,20 @@ pub extern "C" fn start() {
     for pt in &beacons {
         total_dist_km += zurich.distance_to(pt) / 1000.0;
 
-        let b_opts = CircleMarkerOptions::create();
-        b_opts.set_color(Some("#555555"));
-        b_opts.set_weight(Some(1.2));
-        b_opts.set_dash_array(StringOrNumberArray::String("3 3".into()));
-        b_opts.set_fill_color(Some("#737373"));
-        b_opts.set_fill_opacity(Some(0.18));
+        let b_opts = CircleMarkerOptions::default()
+            .with_color("#555555")
+            .with_weight(1.2)
+            .with_dash_array("3 3")
+            .with_fill_color("#737373")
+            .with_fill_opacity(0.18);
         circle_with_radius(pt, 18000.0, Some(&b_opts)).add_to(&m);
 
-        let d_opts = CircleMarkerOptions::create();
-        d_opts.set_radius(Some(4.5));
-        d_opts.set_color(Some("#111111"));
-        d_opts.set_weight(Some(1.5));
-        d_opts.set_fill_color(Some("#111111"));
-        d_opts.set_fill_opacity(Some(1.0));
+        let d_opts = CircleMarkerOptions::default()
+            .with_radius(4.5)
+            .with_color("#111111")
+            .with_weight(1.5)
+            .with_fill_color("#111111")
+            .with_fill_opacity(1.0);
         circle_marker(pt, Some(&d_opts)).add_to(&m);
     }
 

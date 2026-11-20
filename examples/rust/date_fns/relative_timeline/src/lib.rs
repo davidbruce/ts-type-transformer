@@ -1,7 +1,7 @@
 #![no_main]
 
-use date_fns::{Date, DateArg, FormatDistanceOptions, FormatDistanceOptionsMethods as _};
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
+use date_fns::{Date, DateArg, FormatDistanceOptions};
+use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,22 +15,21 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Date-fns Relative Timeline (Rust)")));
     append(&head, make_el(&doc, "span", "badge", Some("Anchor 2024-03-15")));
     append(&app, head);
 
-    let anchor: Date = date_fns::parse_iso::<Date, Date>("2024-03-15", None);
-    let opts = FormatDistanceOptions::create();
-    opts.set_add_suffix(Some(true));
+    let anchor: Date = date_fns::parse_iso("2024-03-15", None);
+    let opts = FormatDistanceOptions::default().with_add_suffix(true);
 
     let raw = [
         ("2024-01-10", "Spec Draft"),
@@ -47,7 +46,7 @@ pub extern "C" fn start() {
 
     let mut all_dates: Vec<DateArg<Date>> = Vec::new();
     for (iso, title) in raw {
-        let d: Date = date_fns::parse_iso::<Date, Date>(iso, None);
+        let d: Date = date_fns::parse_iso(iso, None);
         all_dates.push(DateArg::DateType(d.clone()));
 
         let same = date_fns::is_same_day(&d, &anchor, None);

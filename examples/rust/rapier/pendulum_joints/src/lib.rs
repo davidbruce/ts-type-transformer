@@ -5,12 +5,7 @@ use std::f64::consts::TAU;
 use std::rc::Rc;
 
 use dimforge_rapier3d_compat::*;
-use dom::{
-    CanvasDrawPathMethods as _, CanvasFillStrokeStylesMethods as _,
-    CanvasPathDrawingStylesMethods as _, CanvasPathMethods as _, CanvasRectMethods as _,
-    CanvasRenderingContext2D, CanvasTextDrawingStylesMethods as _, CanvasTextMethods as _,
-    FrameRequestCallback, HTMLCanvasElement, HTMLCanvasElementMethods as _, HTMLElement,
-};
+use dom::{CanvasRenderingContext2D, FrameRequestCallback, HTMLCanvasElement, HTMLElement};
 
 const TRAIL_LEN: usize = 36;
 const LINK_HX: f64 = 0.14;
@@ -345,7 +340,6 @@ pub extern "C" fn start() {
                 }
             });
             btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-            std::mem::forget(cb);
         }
 
         let raf_holder: Rc<RefCell<Option<FrameRequestCallback>>> = Rc::new(RefCell::new(None));
@@ -366,6 +360,5 @@ pub extern "C" fn start() {
         if let Some(ref cb) = *raf_holder.borrow() {
             dom::request_animation_frame(cb);
         }
-        std::mem::forget(raf_holder);
     });
 }

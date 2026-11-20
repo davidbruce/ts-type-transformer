@@ -3,10 +3,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use dom::DOMRectReadOnlyMethods as _;
-use dom::ElementMethods as _;
-use dom::MouseEventMethods as _;
-use dom::NodeMethods as _;
 use three::*;
 
 const NAMES: [&str; 9] = [
@@ -24,11 +20,11 @@ const NAMES: [&str; 9] = [
 struct AppState {
     renderer: WebGLRenderer,
     canvas: dom::HTMLCanvasElement,
-    scene: Scene<Object3DEventMap>,
+    scene: Scene,
     camera: PerspectiveCamera,
     mats: Vec<MeshStandardMaterial>,
-    meshes: Vec<Object3D<Object3DEventMap>>,
-    mesh_arr: JsArray<Object3D<Object3DEventMap>>,
+    meshes: Vec<Object3D>,
+    mesh_arr: JsArray<Object3D>,
     box3: Box3,
     helper: Box3Helper,
     raycaster: Raycaster,
@@ -60,8 +56,7 @@ fn render_scene(st: &AppState) {
     } else {
         st.helper.set_visible(false);
     }
-    st.renderer
-        .render(&Object3D::from(st.scene.clone()), &st.camera);
+    st.renderer.render(&st.scene, &st.camera);
     st.meta.set_text_content(Some(&format!(
         "picked: {} \u{00B7} 9 specimens \u{00B7} click canvas or buttons",
         st.hit_info
@@ -73,7 +68,7 @@ fn cast_at_ndc(st: &mut AppState, nx: f64, ny: f64) {
         .set_from_camera(&Vector2::new(Some(nx), Some(ny)), &st.camera);
     let hits = st
         .raycaster
-        .intersect_objects::<Object3D<Object3DEventMap>>(st.mesh_arr.clone(), Some(false), None);
+        .intersect_objects::<Object3D>(st.mesh_arr.clone(), Some(false), None);
     if hits.len() > 0 {
         let hit = hits.get(0);
         let hobj = hit.object();
@@ -118,39 +113,37 @@ pub extern "C" fn start() {
     let width = 680.0;
     let height = 400.0;
 
-    let rp = WebGLRendererParameters::create();
-    rp.set_antialias(Some(true));
-    rp.set_preserve_drawing_buffer(Some(true));
+    let rp = WebGLRendererParameters::default()
+        .with_antialias(true)
+        .with_preserve_drawing_buffer(true);
     let renderer = WebGLRenderer::new(Some(&rp));
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     let canvas: dom::HTMLCanvasElement = renderer.dom_element().into();
     doc.get_element_by_id("stage")
-        .unwrap()
+        .expect("missing #stage")
         .append_child(canvas.clone());
 
-    let scene = Scene::<Object3DEventMap>::new();
-    scene.set_background(ColorOrTexture::Color(Color::new(
-        ColorRepresentation::Number(0xf7f7f7 as f64),
-    )));
+    let scene = Scene::new();
+    scene.set_background(Color::new(0xf7f7f7 as f64));
     let camera = PerspectiveCamera::new(Some(42.0), Some(width / height), Some(0.1), Some(100.0));
 
-    scene.add([Object3D::from(AmbientLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(1.2)))]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(2.2));
+    scene.add([AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.2))]);
+    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.2));
     key.position().set(6.0, 10.0, Some(8.0));
-    scene.add([Object3D::from(key)]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::Number(0xffffff as f64)), Some(0.9));
+    scene.add([key]);
+    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
     rim.position().set(-7.0, 5.0, Some(-6.0));
-    scene.add([Object3D::from(rim)]);
+    scene.add([rim]);
 
     let grid = GridHelper::new(
         Some(9.0),
         Some(9.0),
-        ColorRepresentation::Number(0x999999 as f64),
-        ColorRepresentation::Number(0xd4d4d4 as f64),
+        0x999999 as f64,
+        0xd4d4d4 as f64,
     );
     grid.position().set_y(-0.85);
-    scene.add([Object3D::from(grid)]);
+    scene.add([grid]);
 
     let geos: Vec<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>> = vec![
         BoxGeometry::new(Some(1.05), Some(1.05), Some(1.05), None, None, None).into(),
@@ -169,17 +162,17 @@ pub extern "C" fn start() {
     for (i, geo) in geos.into_iter().enumerate() {
         let gx = (i % 3) as f64 - 1.0;
         let gz = (i / 3) as f64 - 1.0;
-        let mp = MeshStandardMaterialParameters::create();
-        mp.set_color(ColorRepresentation::Number(0xd4d4d4 as f64));
-        mp.set_roughness(Some(0.55));
-        mp.set_metalness(Some(0.1));
-        mp.set_flat_shading(Some(i >= 4));
+        let mp = MeshStandardMaterialParameters::default()
+            .with_color(0xd4d4d4 as f64)
+            .with_roughness(0.55)
+            .with_metalness(0.1)
+            .with_flat_shading(i >= 4);
         let mat = MeshStandardMaterial::new(Some(&mp));
-        let m = Mesh::<_, MeshStandardMaterial, Object3DEventMap>::new(Some(geo), Some(mat.clone()));
+        let m = Mesh::<_, MeshStandardMaterial>::new(Some(geo), Some(mat.clone()));
         m.set_name(NAMES[i]);
         m.position().set(gx * 2.1, 0.0, Some(gz * 2.1));
         m.rotation().set(0.2, 0.35 * i as f64, 0.0, None);
-        let mo = Object3D::from(m);
+        let mo: Object3D = m.into();
         scene.add([mo.clone()]);
         mats.push(mat);
         meshes.push(mo);
@@ -190,9 +183,9 @@ pub extern "C" fn start() {
         Some(&Vector3::new(Some(-0.5), Some(-0.5), Some(-0.5))),
         Some(&Vector3::new(Some(0.5), Some(0.5), Some(0.5))),
     );
-    let helper = Box3Helper::new(&box3, ColorRepresentation::Number(0x111111 as f64));
+    let helper = Box3Helper::new(&box3, 0x111111 as f64);
     helper.set_visible(false);
-    scene.add([Object3D::from(helper.clone())]);
+    scene.add([helper.clone()]);
 
     let st = Rc::new(RefCell::new(AppState {
         renderer,
@@ -205,7 +198,7 @@ pub extern "C" fn start() {
         box3,
         helper,
         raycaster: Raycaster::new(None, None, None, None),
-        meta: doc.get_element_by_id("meta").unwrap(),
+        meta: doc.get_element_by_id("meta").expect("missing #meta"),
         yaw: 0.45,
         selected: -1,
         hit_info: String::from("none"),
@@ -221,10 +214,9 @@ pub extern "C" fn start() {
         cast_at_ndc(&mut s, nx, ny);
     });
     canvas.add_event_listener(dom::HTMLElementEventMap::CLICK, &on_canvas, None);
-    std::mem::forget(on_canvas);
 
     for (i, bid) in ["btn-p0", "btn-p1", "btn-p2", "btn-orbit", "btn-clear"].iter().enumerate() {
-        let btn = doc.get_element_by_id(bid).unwrap();
+        let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
             let mut s = st_c.borrow_mut();
@@ -246,7 +238,6 @@ pub extern "C" fn start() {
             }
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 
     pick_specimen(&mut st.borrow_mut(), 4);

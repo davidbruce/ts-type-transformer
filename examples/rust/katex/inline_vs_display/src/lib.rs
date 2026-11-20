@@ -1,7 +1,7 @@
 #![no_main]
 
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
-use katex::{KatexOptions, KatexOptionsMethods as _};
+use dom::{Document, HTMLElement};
+use katex::KatexOptions;
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,23 +15,21 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Inline vs Display Mode (Rust)")));
     append(&head, make_el(&doc, "span", "badge", Some("displayMode: false vs true")));
     append(&app, head);
 
-    let inline_opts = KatexOptions::create();
-    inline_opts.set_display_mode(Some(false));
-    let display_opts = KatexOptions::create();
-    display_opts.set_display_mode(Some(true));
+    let inline_opts = KatexOptions::default().with_display_mode(false);
+    let display_opts = KatexOptions::default().with_display_mode(true);
 
     let items = [
         ("Basel Series", r"\sum_{k=1}^{n} \frac{1}{k^2} = \frac{\pi^2}{6}"),

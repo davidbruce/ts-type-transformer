@@ -1,7 +1,7 @@
 #![no_main]
 
+use prosemirror::prosemirror_model::SchemaSpec;
 use prosemirror::prosemirror_model::*;
-use prosemirror::prosemirror_model::{SchemaSpec, SchemaSpecMethods};
 use prosemirror::prosemirror_state::*;
 use prosemirror::prosemirror_transform::*;
 use prosemirror::prosemirror_view::*;
@@ -10,73 +10,68 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 fn hole_spec(tag: &str) -> DOMOutputSpec {
-    DOMOutputSpec::Array(JsArray::from(vec![JsValue::from(tag), JsValue::from(0.0)]))
+    DOMOutputSpec::Array(JsArray::from([JsValue::from(tag), JsValue::from(0.0)]))
 }
 
 fn build_schema() -> Schema<JsValue, JsValue> {
-    let doc = NodeSpec::create();
-    doc.set_content(Some("block+"));
+    let doc = NodeSpec::default().with_content("block+");
 
-    let lvl = AttributeSpec::create();
-    lvl.set_default(JsValue::from(2.0));
-    let hattrs = MarkSpecAttrs::create();
+    let lvl = <AttributeSpec as Default>::default().with_default(2.0);
+    let hattrs = MarkSpecAttrs::default();
     hattrs.set_at("level", &lvl);
 
-    let heading = NodeSpec::create();
-    heading.set_attrs(Some(&hattrs));
-    heading.set_content(Some("inline*"));
-    heading.set_group(Some("block"));
-    heading.set_defining(Some(true));
-    heading.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|n: Node| {
-        let l = n.attrs().at("level").as_f64() as i32;
-        hole_spec(if l == 1 { "h1" } else { "h2" })
-    })));
+    let heading = NodeSpec::default()
+        .with_attrs(&hattrs)
+        .with_content("inline*")
+        .with_group("block")
+        .with_defining(true)
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|n: Node| {
+            let l = n.attrs().at("level").as_f64() as i32;
+            hole_spec(if l == 1 { "h1" } else { "h2" })
+        }));
 
     let tag_node = |content: &str, group: Option<&str>, tag: &'static str, defining: bool| {
-        let s = NodeSpec::create();
-        s.set_content(Some(content));
+        let mut s = NodeSpec::default().with_content(content);
         if let Some(g) = group {
-            s.set_group(Some(g));
+            s = s.with_group(g);
         }
         if defining {
-            s.set_defining(Some(true));
+            s = s.with_defining(true);
         }
-        s.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(move |_: Node| hole_spec(tag))));
-        s
+        s.with_to_dom(&NodeToDOMOutputSpecFn::new(move |_: Node| hole_spec(tag)))
     };
 
-    let hr = NodeSpec::create();
-    hr.set_group(Some("block"));
-    hr.set_atom(Some(true));
-    hr.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(|_: Node| {
-        DOMOutputSpec::Array(JsArray::from(vec![JsValue::from("hr")]))
-    })));
+    let hr = NodeSpec::default()
+        .with_group("block")
+        .with_atom(true)
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| {
+            DOMOutputSpec::Array(JsArray::from(["hr"]))
+        }));
 
-    let text = NodeSpec::create();
-    text.set_group(Some("inline"));
+    let text = NodeSpec::default().with_group("inline");
 
-    let nodes = NodeSpec::create();
-    nodes.set_at("doc", JsValue::from(&doc));
-    nodes.set_at("heading", JsValue::from(&heading));
-    nodes.set_at("paragraph", JsValue::from(&tag_node("inline*", Some("block"), "p", false)));
-    nodes.set_at("blockquote", JsValue::from(&tag_node("block+", Some("block"), "blockquote", true)));
-    nodes.set_at("bullet_list", JsValue::from(&tag_node("list_item+", Some("block"), "ul", false)));
-    nodes.set_at("list_item", JsValue::from(&tag_node("paragraph block*", None, "li", true)));
-    nodes.set_at("horizontal_rule", JsValue::from(&hr));
-    nodes.set_at("text", JsValue::from(&text));
+    let nodes = JsValue::object()
+        .with("doc", &doc)
+        .with("heading", &heading)
+        .with("paragraph", &tag_node("inline*", Some("block"), "p", false))
+        .with("blockquote", &tag_node("block+", Some("block"), "blockquote", true))
+        .with("bullet_list", &tag_node("list_item+", Some("block"), "ul", false))
+        .with("list_item", &tag_node("paragraph block*", None, "li", true))
+        .with("horizontal_rule", &hr)
+        .with("text", &text);
 
     let make_mark = |tag: &'static str| {
-        let m = MarkSpec::create();
-        m.set_to_dom(Some(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| hole_spec(tag))));
-        m
+        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| {
+            hole_spec(tag)
+        }))
     };
-    let marks = MarkSpec::create();
-    marks.set_at("strong", JsValue::from(&make_mark("strong")));
-    marks.set_at("code", JsValue::from(&make_mark("code")));
+    let marks = JsValue::object()
+        .with("strong", &make_mark("strong"))
+        .with("code", &make_mark("code"));
 
-    let spec = SchemaSpec::<JsValue, JsValue>::create();
-    spec.set_nodes(JsValue::from(&nodes));
-    spec.set_marks(JsValue::from(&marks));
+    let spec = SchemaSpec::<JsValue, JsValue>::default()
+        .with_nodes(nodes)
+        .with_marks(marks);
     Schema::new(&spec)
 }
 
@@ -88,14 +83,14 @@ fn li_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
 }
 
 fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
-    let ha = Attrs::create();
+    let ha = Attrs::default();
     ha.set_at("level", JsValue::from(2.0));
     let h = schema.node("heading", Some(&ha), schema.text("Structural Transform Pipeline", None), None);
     let quote = schema.node("blockquote", None, p_node(schema, "Blockquote content can be lifted back to top-level document depth."), None);
     let ulist = schema.node(
         "bullet_list",
         None,
-        JsArray::<Node>::from(vec![
+        JsArray::<Node>::from([
             li_node(schema, "Split at cursor position"),
             li_node(schema, "Wrap range with blockquote"),
             li_node(schema, "Lift nested block to root"),
@@ -105,7 +100,7 @@ fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     schema.node(
         "doc",
         None,
-        JsArray::<Node>::from(vec![
+        JsArray::<Node>::from([
             h,
             p_node(schema, "ProseMirror transforms express structural edits as invertible steps."),
             p_node(schema, "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly."),
@@ -117,9 +112,9 @@ fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
 }
 
 fn make_state(schema: &Schema<JsValue, JsValue>) -> EditorState {
-    let cfg = EditorStateConfig::create();
-    cfg.set_schema(Some(schema));
-    cfg.set_doc(Some(&make_initial_doc(schema)));
+    let cfg = EditorStateConfig::default()
+        .with_schema(schema)
+        .with_doc(&make_initial_doc(schema));
     EditorState::create(&cfg)
 }
 
@@ -158,29 +153,29 @@ pub extern "C" fn start() {
     let app = Rc::new(RefCell::new(AppState {
         schema: build_schema(),
         view: None,
-        meta: dom_doc.get_element_by_id("meta").unwrap(),
+        meta: dom_doc.get_element_by_id("meta").expect("missing #meta"),
         total_steps: 0,
         note_counter: 0,
         last_op: "Initialized document structure".to_string(),
     }));
 
-    let props = DirectEditorProps::create();
-    props.set_state(&make_state(&app.borrow().schema));
-    props.set_dispatch_transaction(Some(&TransactionFn::new({
-        let app = app.clone();
-        move |tr: Transaction| {
-            let view = app.borrow().view.clone();
-            if let Some(view) = view {
-                let next = view.state().apply(&tr);
-                view.update_state(&next);
-                let mut st = app.borrow_mut();
-                st.total_steps += tr.steps().len();
-                update_meta(&st, &next.doc());
+    let props = DirectEditorProps::default()
+        .with_state(&make_state(&app.borrow().schema))
+        .with_dispatch_transaction(&TransactionFn::new({
+            let app = app.clone();
+            move |tr: Transaction| {
+                let view = app.borrow().view.clone();
+                if let Some(view) = view {
+                    let next = view.state().apply(&tr);
+                    view.update_state(&next);
+                    let mut st = app.borrow_mut();
+                    st.total_steps += tr.steps().len();
+                    update_meta(&st, &next.doc());
+                }
             }
-        }
-    })));
+        }));
 
-    let mount = dom_doc.get_element_by_id("editor").unwrap();
+    let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
     let place = JsValue::from(&mount);
     let view = EditorView::new(Some(&place), &props);
     {
@@ -190,10 +185,10 @@ pub extern "C" fn start() {
     }
 
     for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
-        let btn = dom_doc.get_element_by_id(bid).unwrap();
+        let btn = dom_doc.get_element_by_id(bid).expect("missing button");
         let app_c = app.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let view = app_c.borrow().view.as_ref().unwrap().clone();
+            let view = app_c.borrow().view.as_ref().expect("missing view").clone();
             let es = view.state();
             let doc = es.doc();
             match idx {
@@ -220,7 +215,7 @@ pub extern "C" fn start() {
                         let tr = es.tr();
                         tr.split(sp, None, None);
                         app_c.borrow_mut().last_op = format!("Split paragraph at pos {}", sp as usize);
-                        call_transaction_fn(&view.dispatch(), &tr);
+                        view.dispatch().call(&tr);
                     } else {
                         let mut st = app_c.borrow_mut();
                         st.last_op = "No splittable paragraph found".to_string();
@@ -228,11 +223,11 @@ pub extern "C" fn start() {
                     }
                 }
                 1 => {
-                    let qtype = app_c.borrow().schema.nodes().at("blockquote").unwrap();
+                    let qtype = app_c.borrow().schema.nodes().at("blockquote").expect("missing blockquote");
                     let sel = es.selection();
                     let mut found: Option<NodeRange> = None;
-                    if sel.from_new().depth() == 1.0 && sel.from_new().parent().type_().name() == "paragraph" {
-                        if let Some(r) = sel.from_new().block_range(Some(&sel.to_new()), None) {
+                    if sel.dollar_from().depth() == 1.0 && sel.dollar_from().parent().type_().name() == "paragraph" {
+                        if let Some(r) = sel.dollar_from().block_range(Some(&sel.dollar_to()), None) {
                             if find_wrapping(&r, &qtype, None, None).is_some() {
                                 found = Some(r);
                             }
@@ -258,7 +253,7 @@ pub extern "C" fn start() {
                             let tr = es.tr();
                             tr.wrap(&r, wrapped);
                             app_c.borrow_mut().last_op = format!("Wrapped block [{}..{}] in blockquote", r.start() as usize, r.end() as usize);
-                            call_transaction_fn(&view.dispatch(), &tr);
+                            view.dispatch().call(&tr);
                             return;
                         }
                     }
@@ -277,7 +272,7 @@ pub extern "C" fn start() {
                                     let tr = es.tr();
                                     tr.lift(&r, target);
                                     app_c.borrow_mut().last_op = format!("Lifted blockquote child to depth {}", target as usize);
-                                    call_transaction_fn(&view.dispatch(), &tr);
+                                    view.dispatch().call(&tr);
                                     return;
                                 }
                             }
@@ -297,8 +292,8 @@ pub extern "C" fn start() {
                         (st.schema.node("horizontal_rule", None, JsArray::<Node>::new(), None), p_node(&st.schema, &msg))
                     };
                     let tr = es.tr();
-                    tr.insert(doc.content().size(), JsArray::<Node>::from(vec![hr, note]));
-                    call_transaction_fn(&view.dispatch(), &tr);
+                    tr.insert(doc.content().size(), JsArray::<Node>::from([hr, note]));
+                    view.dispatch().call(&tr);
                 }
                 _ => {
                     let mut st = app_c.borrow_mut();
@@ -312,6 +307,5 @@ pub extern "C" fn start() {
             }
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 }

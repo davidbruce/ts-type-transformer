@@ -1,12 +1,10 @@
 #![no_main]
 
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
+use dom::{Document, HTMLElement};
 use marked::{
-    BooleanOrRendererOutput, JsArray, JsValue, Marked, MarkedExtension,
-    MarkedExtensionMethods as _, MarkedExtensionRenderer, MarkedExtensionRendererHeading,
-    MarkedExtensionRendererMethods as _, MarkedMethods as _, MarkedParseMethods as _,
-    ParserOutputOrPromise, StringOrPromise, TokenToVoidOrPromiseOrVoidOrPromiseArrayFn,
-    tokens::{self, GenericMethods as _, HeadingMethods as _},
+    BooleanOrRendererOutput, JsArray, JsValue, Marked, MarkedExtension, MarkedExtensionRenderer,
+    MarkedExtensionRendererHeading, ParserOutputOrPromise, StringOrPromise,
+    TokenToVoidOrPromiseOrVoidOrPromiseArrayFn, tokens,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -23,41 +21,40 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let md =
         "# Wireframe Spec\n\n## Custom Pipeline\n\nParagraph with *italic* and **bold** and `code`.\n";
 
     let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
-    let ext = MarkedExtension::<String, String>::create();
-    let renderer = MarkedExtensionRenderer::<String, String>::create();
     let heading = MarkedExtensionRendererHeading::<String, String>::new(|args: JsArray| {
-        let h = tokens::Heading(args.get(0).0.clone());
+        let h = args.get(0).unchecked_into::<tokens::Heading>();
         BooleanOrRendererOutput::RendererOutput(format!(
             "<h{0} class=\"wire-h\">\u{00A7} {1}</h{0}>\n",
             h.depth() as u32,
             h.text()
         ))
     });
-    renderer.set_heading(Some(&heading));
-    ext.set_renderer(Some(&renderer));
+    let renderer = MarkedExtensionRenderer::<String, String>::default().with_heading(&heading);
 
     let walk = TokenToVoidOrPromiseOrVoidOrPromiseArrayFn::new({
         let seen = seen.clone();
         move |t: JsValue| {
-            let g = tokens::Generic(t.0.clone());
+            let g = t.unchecked_into::<tokens::Generic>();
             seen.borrow_mut().push(g.type_());
             None
         }
     });
-    ext.set_walk_tokens(Some(&walk));
+    let ext = MarkedExtension::<String, String>::default()
+        .with_renderer(&renderer)
+        .with_walk_tokens(&walk);
 
     let custom_m = Marked::<String, String>::new(vec![ext]);
     let def_html = match marked::marked_with_opt_marked_options(md, None) {

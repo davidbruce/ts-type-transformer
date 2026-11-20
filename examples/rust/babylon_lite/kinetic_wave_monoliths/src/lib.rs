@@ -1,14 +1,10 @@
 #![no_main]
 
 use babylonjs_lite::{
-    BoxOptions, BoxOptionsMethods as _, CapsuleOptions, CapsuleOptionsMethods as _,
-    ClearCoatProps, ClearCoatPropsMethods as _, CreatePbrMaterialProps,
-    CreatePbrMaterialPropsMethods as _, DirectionalLightMethods as _, EulerProxyMethods as _,
-    GroundOptions, GroundOptionsMethods as _, HemisphericLightMethods as _, JsTuple3, JsTuple4,
-    MeshMethods as _, NumberFn, ObservableVec3Methods as _, PbrMaterialProps,
-    PointLightMethods as _, SceneNodeMethods as _,
+    BoxOptions, CapsuleOptions, ClearCoatProps, CreatePbrMaterialProps, GroundOptions, JsTuple3,
+    NumberFn, PbrMaterialProps,
 };
-use dom::{GPUColorDict, GPUColorDictMethods as _, HTMLCanvasElement, ParentNodeMethods as _};
+use dom::{GPUColorDict, HTMLCanvasElement};
 
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
@@ -18,10 +14,10 @@ fn set_status_error(msg: &str) {
 }
 
 fn mk_pbr(v: f64, metallic: f64, roughness: f64) -> PbrMaterialProps {
-    let props = CreatePbrMaterialProps::create();
-    props.set_base_color_factor(Some(&JsTuple4::new(v, v, v, 1.0)));
-    props.set_metallic_factor(Some(metallic));
-    props.set_roughness_factor(Some(roughness));
+    let props = CreatePbrMaterialProps::default()
+        .with_base_color_factor([v, v, v, 1.0])
+        .with_metallic_factor(metallic)
+        .with_roughness_factor(roughness);
     babylonjs_lite::create_pbr_material(Some(&props))
 }
 
@@ -42,11 +38,11 @@ pub extern "C" fn start() {
         };
 
         let scene = babylonjs_lite::create_scene_context(&engine, None);
-        let clear = GPUColorDict::create();
-        clear.set_r(0.05);
-        clear.set_g(0.05);
-        clear.set_b(0.05);
-        clear.set_a(1.0);
+        let clear = GPUColorDict::default()
+            .with_r(0.05)
+            .with_g(0.05)
+            .with_b(0.05)
+            .with_a(1.0);
         scene.set_clear_color(&clear);
 
         let camera = babylonjs_lite::create_arc_rotate_camera(
@@ -56,36 +52,36 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 1.4, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        let _ = babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
+        babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
 
         let hemi = babylonjs_lite::create_hemispheric_light(
-            Some(&JsTuple3::new(0.0, 1.0, 0.15)),
+            Some(&JsTuple3::from([0.0, 1.0, 0.15])),
             Some(0.55),
         );
-        hemi.set_diffuse_color(&JsTuple3::new(0.76, 0.76, 0.76));
-        hemi.set_ground_color(&JsTuple3::new(0.10, 0.10, 0.10));
+        hemi.set_diffuse_color([0.76, 0.76, 0.76]);
+        hemi.set_ground_color([0.10, 0.10, 0.10]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
         let dir =
-            babylonjs_lite::create_directional_light(&JsTuple3::new(-1.0, -2.2, -0.8), Some(1.35));
-        dir.set_diffuse(&JsTuple3::new(0.90, 0.90, 0.90));
+            babylonjs_lite::create_directional_light([-1.0, -2.2, -0.8], Some(1.35));
+        dir.set_diffuse([0.90, 0.90, 0.90]);
         babylonjs_lite::add_to_scene(&scene, &dir);
 
         let light1 =
-            babylonjs_lite::create_point_light(&JsTuple3::new(5.2, 4.2, 0.0), Some(10.0));
-        light1.set_diffuse(&JsTuple3::new(1.0, 1.0, 1.0));
+            babylonjs_lite::create_point_light([5.2, 4.2, 0.0], Some(10.0));
+        light1.set_diffuse([1.0, 1.0, 1.0]);
         light1.set_range(16.0);
         babylonjs_lite::add_to_scene(&scene, &light1);
 
         let light2 =
-            babylonjs_lite::create_point_light(&JsTuple3::new(-5.2, 3.4, 0.0), Some(7.5));
-        light2.set_diffuse(&JsTuple3::new(0.78, 0.78, 0.78));
+            babylonjs_lite::create_point_light([-5.2, 3.4, 0.0], Some(7.5));
+        light2.set_diffuse([0.78, 0.78, 0.78]);
         light2.set_range(16.0);
         babylonjs_lite::add_to_scene(&scene, &light2);
 
-        let floor_opts = GroundOptions::create();
-        floor_opts.set_width(Some(18.0));
-        floor_opts.set_height(Some(18.0));
+        let floor_opts = GroundOptions::default()
+            .with_width(18.0)
+            .with_height(18.0);
         let floor = babylonjs_lite::create_ground(&engine, Some(&floor_opts));
         floor.set_material(&mk_pbr(0.09, 0.10, 0.88));
         babylonjs_lite::add_to_scene(&scene, &floor);
@@ -98,10 +94,10 @@ pub extern "C" fn start() {
             mk_pbr(shades[3], 0.35, 0.36),
         ];
 
-        let bopts = BoxOptions::create();
-        bopts.set_width(Some(0.72));
-        bopts.set_height(Some(1.0));
-        bopts.set_depth(Some(0.72));
+        let bopts = BoxOptions::default()
+            .with_width(0.72)
+            .with_height(1.0)
+            .with_depth(0.72);
 
         let mut columns = Vec::with_capacity(36);
         for row in 0..6 {
@@ -125,22 +121,22 @@ pub extern "C" fn start() {
             }
         }
 
-        let cap_props = CreatePbrMaterialProps::create();
-        cap_props.set_base_color_factor(Some(&JsTuple4::new(0.92, 0.92, 0.92, 1.0)));
-        cap_props.set_metallic_factor(Some(0.50));
-        cap_props.set_roughness_factor(Some(0.15));
-        let cc = ClearCoatProps::create();
-        cc.set_is_enabled(Some(true));
-        cc.set_intensity(Some(1.0));
-        cc.set_roughness(Some(0.08));
+        let cap_props = CreatePbrMaterialProps::default()
+            .with_base_color_factor([0.92, 0.92, 0.92, 1.0])
+            .with_metallic_factor(0.50)
+            .with_roughness_factor(0.15);
+        let cc = ClearCoatProps::default()
+            .with_is_enabled(true)
+            .with_intensity(1.0)
+            .with_roughness(0.08);
         babylonjs_lite::set_pbr_clear_coat(&cap_props, &cc);
-        babylonjs_lite::set_pbr_emissive(&cap_props, &JsTuple3::new(0.16, 0.16, 0.16));
+        babylonjs_lite::set_pbr_emissive(&cap_props, [0.16, 0.16, 0.16]);
         let cap_mat = babylonjs_lite::create_pbr_material(Some(&cap_props));
 
-        let copts = CapsuleOptions::create();
-        copts.set_height(Some(1.15));
-        copts.set_radius(Some(0.22));
-        copts.set_tessellation(Some(20.0));
+        let copts = CapsuleOptions::default()
+            .with_height(1.15)
+            .with_radius(0.22)
+            .with_tessellation(20.0);
         let mut capsules = Vec::with_capacity(4);
         for _ in 0..4 {
             let cap = babylonjs_lite::create_capsule(&engine, Some(&copts));

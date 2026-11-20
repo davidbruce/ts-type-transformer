@@ -1,22 +1,17 @@
 #![no_main]
 
-use pts::{
-    AnimateCallbackFn, CanvasFormMethods as _, CanvasSpace, CanvasSpaceMethods as _,
-    CanvasSpaceOptions, CanvasSpaceOptionsMethods as _, Circle, Create, IPlayer, IPlayerMethods as _,
-    Line, MultiTouchSpaceMethods as _, Num, PtMethods as _, SpaceMethods as _, StringOrElement,
-};
+use pts::{AnimateCallbackFn, CanvasSpace, CanvasSpaceOptions, Circle, Create, IPlayer, Line, Num};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let opts = CanvasSpaceOptions::create();
-    opts.set_bgcolor(Some("#ffffff"));
-    opts.set_resize(Some(true));
-    opts.set_retina(Some(true));
+    let opts = CanvasSpaceOptions::default()
+        .with_bgcolor("#ffffff")
+        .with_resize(true)
+        .with_retina(true);
 
-    let space = CanvasSpace::new(Some(StringOrElement::from("#pt")), None).setup(&opts);
+    let space = CanvasSpace::new("#pt", None).setup(&opts);
     let form = space.get_form();
 
-    let player = IPlayer::create();
     let anim = {
         let space = space.clone();
         AnimateCallbackFn::new(move |time, _, _| {
@@ -37,10 +32,10 @@ pub extern "C" fn start() {
                 let alpha = 0.25 + 0.75 * t;
                 let color = format!("hsla(0, 0%, {light:.0}%, {alpha:.2})");
 
-                form.stroke_only(color.as_str(), Some(1.5 + 2.5 * t), None, None)
+                form.stroke_only(&*color, Some(1.5 + 2.5 * t), None, None)
                     .line_2(&seg);
                 let dot = Circle::from_center(&pt, 1.5 + 4.5 * t * t);
-                form.fill_only(color.as_str()).circle_2(&dot);
+                form.fill_only(&*color).circle_2(&dot);
             }
 
             let ring_radius = 18.0 + 6.0 * (time * 0.004).sin();
@@ -50,7 +45,7 @@ pub extern "C" fn start() {
         })
     };
 
-    player.set_animate(Some(&anim));
+    let player = IPlayer::default().with_animate(&anim);
     space.add(&player);
     space.bind_mouse(None, None).bind_touch(None, None, None).play(None);
 }

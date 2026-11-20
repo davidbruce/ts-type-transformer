@@ -1,7 +1,7 @@
 #![no_main]
 
-use date_fns::{Date, DateArg, Duration, DurationMethods as _};
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
+use date_fns::{Date, DateArg, Duration};
+use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,7 +15,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 fn day(d: &Date) -> DateArg<Date> {
@@ -40,18 +40,16 @@ fn add_kv(doc: &Document, row: &HTMLElement, label: &str, val: &str) {
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Date-fns Arithmetic & Durations (Rust)")));
     append(&head, make_el(&doc, "span", "badge", Some("Base 2024-03-15")));
     append(&app, head);
 
-    let base_d: Date = date_fns::parse_iso::<Date, Date>("2024-03-15", None);
-    let jan31: Date = date_fns::parse_iso::<Date, Date>("2024-01-31", None);
-    let dur = Duration::create();
-    dur.set_months(Some(1.0));
-    dur.set_days(Some(2.0));
+    let base_d: Date = date_fns::parse_iso("2024-03-15", None);
+    let jan31: Date = date_fns::parse_iso("2024-01-31", None);
+    let dur = Duration::default().with_months(1.0).with_days(2.0);
 
     let ops = [
         ("addDays(base, 3)", date_fns::add_days::<Date, Date>(day(&base_d), 3.0, None), "yyyy-MM-dd"),

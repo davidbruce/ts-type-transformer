@@ -1,74 +1,56 @@
 #![no_main]
 
-use dom::ElementMethods;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
-use std::marker::PhantomData;
 use std::rc::Rc;
 use tanstack_table_core::*;
 
-fn obj(entries: &[(&str, &JsValue)]) -> MakeObjectMapResult<JsValue> {
-    let o = MakeObjectMapResult::<JsValue>::create();
-    for (k, v) in entries {
-        o.set_at(k, (*v).clone());
+fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsValue {
+    let mut o = JsValue::object()
+        .with("get", get)
+        .with("subscribe", AnyFunction::new(|_: JsValue| {}));
+    if let Some(mut set) = set {
+        o = o.with(
+            "set",
+            AnyFunction::new(move |args: JsValue| set(args.as_array::<JsValue>().get(0))),
+        );
     }
     o
 }
 
-fn as_array(v: &JsValue) -> JsArray<JsValue> {
-    let h = v.0.clone();
-    let id = h.0;
-    std::mem::forget(h);
-    JsArray::<JsValue>::from_handle(id)
-}
-
-fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsHandle {
-    let o = MakeObjectMapResult::<JsValue>::create();
-    o.set_at("get", get);
-    if let Some(mut set) = set {
-        o.set_at(
-            "set",
-            JsValue(AnyFunction::new(move |args: JsValue| set(as_array(&args).get(0))).0.clone()),
-        );
-    }
-    o.set_at("subscribe", JsValue(AnyFunction::new(|_: JsValue| {}).0.clone()));
-    o.0.clone()
-}
-
 fn make_reactivity() -> JsValue {
-    let bindings = TableReactivityBindings::create();
-    bindings.set_create_options_store(false);
-    bindings.set_wrap_external_atoms(false);
     let writable = TableReactivityBindingsCreateWritableAtom::new(|initial: JsValue, _| {
         let value = Rc::new(RefCell::new(initial));
         let (read, write) = (value.clone(), value);
         let get = ColumnColumnFilteringGetFilterValue::new(move || read.borrow().clone());
-        Atom(
-            atom(
-                JsValue(get.0.clone()),
-                Some(Box::new(move |v| {
-                    let prev = write.borrow().clone();
-                    *write.borrow_mut() = functional_update(Updater::T(v), prev);
-                })),
-            ),
-            PhantomData,
+        atom(
+            JsValue::from(&get),
+            Some(Box::new(move |v| {
+                let prev = write.borrow().clone();
+                *write.borrow_mut() = functional_update(Updater::T(v), prev);
+            })),
         )
+        .unchecked_into::<Atom<JsValue>>()
     });
-    bindings.set_create_writable_atom(&writable);
-    let readonly = TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| {
-        ReadonlyAtom(atom(JsValue(compute.0.clone()), None), PhantomData)
-    });
-    bindings.set_create_readonly_atom(&readonly);
-    let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
-    bindings.set_untrack(&untrack);
+    let readonly =
+        TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| {
+            atom(JsValue::from(&compute), None).unchecked_into::<ReadonlyAtom<JsValue>>()
+        });
+    let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| f.call());
     let run_it = FnFn::new(|f: VoidFn| {
-        call_void_fn(&f);
+        f.call();
     });
-    bindings.set_batch(&run_it);
-    bindings.set_schedule(&run_it);
     let noop = TableReactivityBindingsAddSubscription::new(|_| {});
-    bindings.set_add_subscription(&noop);
-    JsValue(bindings.0.clone())
+    let bindings = TableReactivityBindings::default()
+        .with_create_options_store(false)
+        .with_wrap_external_atoms(false)
+        .with_create_writable_atom(&writable)
+        .with_create_readonly_atom(&readonly)
+        .with_untrack(&untrack)
+        .with_batch(&run_it)
+        .with_schedule(&run_it)
+        .with_add_subscription(&noop);
+    JsValue::from(&bindings)
 }
 
 fn esc_html(s: &str, out: &mut String) {
@@ -83,24 +65,20 @@ fn esc_html(s: &str, out: &mut String) {
 }
 
 fn col_def(key: &str, hdr: &str) -> JsValue {
-    JsValue::from(&obj(&[
-        ("accessorKey", &JsValue::from(key)),
-        ("header", &JsValue::from(hdr)),
-    ]))
+    JsValue::object()
+        .with("accessorKey", key)
+        .with("header", hdr)
 }
 
 fn task_row(id: &str, task: &str, owner: &str, zone: &str, cpu: f64, status: &str) -> JsValue {
-    JsValue::from(&obj(&[
-        ("id", &JsValue::from(id)),
-        ("task", &JsValue::from(task)),
-        ("owner", &JsValue::from(owner)),
-        ("zone", &JsValue::from(zone)),
-        ("cpu", &JsValue::from(cpu)),
-        ("status", &JsValue::from(status)),
-    ]))
+    JsValue::object()
+        .with("id", id)
+        .with("task", task)
+        .with("owner", owner)
+        .with("zone", zone)
+        .with("cpu", cpu)
+        .with("status", status)
 }
-
-use std::cell::RefCell;
 
 struct State {
     table: TableCore<TableFeatures, JsValue>,
@@ -111,22 +89,22 @@ struct State {
 }
 
 fn apply_vis(st: &State) {
-    let cv = ColumnVisibilityState::create();
+    let cv = ColumnVisibilityState::default();
     cv.set_at("zone", st.zone_vis.get());
     cv.set_at("owner", st.owner_vis.get());
-    let vis = TableColumnVisibility::<TableFeatures, JsValue>(st.table.0.clone(), PhantomData);
-    call_table_column_visibility_set_column_visibility(&vis.set_column_visibility(), Updater::T(cv));
+    let vis: TableColumnVisibility<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
+    vis.set_column_visibility().call(Updater::T(cv));
 }
 
 fn render(st: &State) {
-    let pin = TableColumnPinning::<TableFeatures, JsValue>(st.table.0.clone(), PhantomData);
-    let vis = TableColumnVisibility::<TableFeatures, JsValue>(st.table.0.clone(), PhantomData);
-    let sel = TableRowSelection::<TableFeatures, JsValue>(st.table.0.clone(), PhantomData);
+    let pin: TableColumnPinning<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
+    let vis: TableColumnVisibility<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
+    let sel: TableRowSelection<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
 
     let groups = [
-        (true, call_table_column_pinning_get_center_leaf_columns(&pin.get_start_visible_leaf_columns())),
-        (false, call_table_column_pinning_get_center_leaf_columns(&pin.get_center_visible_leaf_columns())),
-        (true, call_table_column_pinning_get_center_leaf_columns(&pin.get_end_visible_leaf_columns())),
+        (true, pin.get_start_visible_leaf_columns().call()),
+        (false, pin.get_center_visible_leaf_columns().call()),
+        (true, pin.get_end_visible_leaf_columns().call()),
     ];
 
     let mut col_ids = Vec::new();
@@ -134,9 +112,9 @@ fn render(st: &State) {
     for (pinned, grp) in &groups {
         for col in grp.iter() {
             let cid = col.id();
-            let hdr = MakeObjectMapResult::<JsValue>(col.column_def().0.clone(), PhantomData)
+            let hdr = js::unchecked_cast::<MakeObjectMapResult<JsValue>>(&col.column_def())
                 .at("header")
-                .unwrap()
+                .expect("missing column header")
                 .as_string();
             html.push_str(if cid == "cpu" { "<th class=\"num\">" } else { "<th>" });
             esc_html(&hdr, &mut html);
@@ -149,17 +127,17 @@ fn render(st: &State) {
     }
     html.push_str("</tr></thead><tbody>");
 
-    let rows = call_table_row_models_get_core_row_model(&st.table.get_row_model()).rows();
+    let rows = st.table.get_row_model().call().rows();
     for r in rows.iter() {
         let gv = r.get_value();
-        let is_sel = call_void_to_boolean_fn(&RowRowSelection(r.0.clone()).get_is_selected());
+        let is_sel = js::unchecked_cast::<RowRowSelection>(&r).get_is_selected().call();
         html.push_str(if is_sel { "<tr class=\"selected-row\"><td>&#9632;</td>" } else { "<tr><td>&#9633;</td>" });
         for cid in &col_ids {
             if cid == "cpu" {
-                let _ = write!(html, "<td class=\"num\">{:.0}%</td>", call_string_to_t_value_fn(&gv, "cpu").as_f64());
+                let _ = write!(html, "<td class=\"num\">{:.0}%</td>", gv.call("cpu").as_f64());
             } else {
                 html.push_str("<td>");
-                esc_html(&call_string_to_t_value_fn(&gv, cid).as_string(), &mut html);
+                esc_html(&gv.call(cid).as_string(), &mut html);
                 html.push_str("</td>");
             }
         }
@@ -168,9 +146,9 @@ fn render(st: &State) {
     html.push_str("</tbody></table>");
     st.wrap.set_inner_html(&html);
 
-    let vis_n = call_table_column_visibility_get_visible_flat_columns(&vis.get_visible_leaf_columns()).len();
-    let all_n = call_table_columns_get_all_columns(&st.table.get_all_leaf_columns()).len();
-    let sel_n = call_table_row_selection_get_filtered_selected_row_model(&sel.get_selected_row_model()).rows().len();
+    let vis_n = vis.get_visible_leaf_columns().call().len();
+    let all_n = st.table.get_all_leaf_columns().call().len();
+    let sel_n = sel.get_selected_row_model().call().rows().len();
     let msg = format!(
         "{vis_n} / {all_n} visible columns \u{00B7} start:id end:status pinned \u{00B7} {sel_n} / {} rows selected",
         rows.len()
@@ -180,15 +158,14 @@ fn render(st: &State) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let features = obj(&[
-        ("coreReactivityFeature", &make_reactivity()),
-        ("columnVisibilityFeature", &JsValue(column_visibility_feature().0.clone())),
-        ("columnPinningFeature", &JsValue(column_pinning_feature().0.clone())),
-        ("rowSelectionFeature", &JsValue(row_selection_feature().0.clone())),
-        ("coreRowModel", &JsValue(create_core_row_model::<TableFeatures, JsValue>().0.clone())),
-    ]);
+    let features = JsValue::object()
+        .with("coreReactivityFeature", make_reactivity())
+        .with("columnVisibilityFeature", column_visibility_feature())
+        .with("columnPinningFeature", column_pinning_feature())
+        .with("rowSelectionFeature", row_selection_feature())
+        .with("coreRowModel", create_core_row_model::<TableFeatures, JsValue>());
 
-    let data = JsArray::<JsValue>::from(vec![
+    let data = JsArray::<JsValue>::from([
         task_row("T-101", "ingest-wal-sync", "a.meyer", "eu-ch-1", 42.0, "running"),
         task_row("T-102", "index-compact", "b.rossi", "eu-ch-2", 68.0, "running"),
         task_row("T-103", "snapshot-verify", "c.keller", "eu-de-1", 15.0, "queued"),
@@ -197,7 +174,7 @@ pub extern "C" fn start() {
         task_row("T-106", "shard-rebalance", "f.novak", "eu-fr-2", 55.0, "running"),
         task_row("T-107", "backup-archive", "g.steiner", "eu-ch-1", 31.0, "ready"),
     ]);
-    let cols = JsArray::<JsValue>::from(vec![
+    let cols = JsArray::<JsValue>::from([
         col_def("id", "Task ID"),
         col_def("task", "Workload"),
         col_def("owner", "Owner"),
@@ -206,43 +183,42 @@ pub extern "C" fn start() {
         col_def("status", "Status"),
     ]);
 
-    let cv = ColumnVisibilityState::create();
+    let cv = ColumnVisibilityState::default();
     cv.set_at("zone", false);
-    let cp = ColumnPinningState::create();
-    cp.set_start(JsArray::from(vec![String::from("id")]));
-    cp.set_end(JsArray::from(vec![String::from("status")]));
-    let rs = RowSelectionState::create();
+    let cp = ColumnPinningState::default()
+        .with_start(["id"])
+        .with_end(["status"]);
+    let rs = RowSelectionState::default();
     rs.set_at("0", true);
     rs.set_at("2", true);
     rs.set_at("4", true);
 
-    let init_state = obj(&[
-        ("columnVisibility", &JsValue(cv.0.clone())),
-        ("columnPinning", &JsValue(cp.0.clone())),
-        ("rowSelection", &JsValue(rs.0.clone())),
-    ]);
-    let opts = obj(&[
-        ("features", &JsValue::from(&features)),
-        ("data", &JsValue(data.0.clone())),
-        ("columns", &JsValue(cols.0.clone())),
-        ("initialState", &JsValue::from(&init_state)),
-    ]);
+    let init_state = JsValue::object()
+        .with("columnVisibility", cv)
+        .with("columnPinning", cp)
+        .with("rowSelection", rs);
+    let opts = JsValue::object()
+        .with("features", features)
+        .with("data", data)
+        .with("columns", cols)
+        .with("initialState", init_state)
+        .unchecked_into::<TableOptionsCore<TableFeatures, JsValue>>();
 
     let doc = dom::document();
     let st = Rc::new(State {
-        table: construct_table(&TableOptionsCore::<TableFeatures, JsValue>(opts.0.clone(), PhantomData)),
-        wrap: doc.get_element_by_id("table-wrap").unwrap(),
-        meta: doc.get_element_by_id("meta").unwrap(),
+        table: construct_table(&opts),
+        wrap: doc.get_element_by_id("table-wrap").expect("missing #table-wrap"),
+        meta: doc.get_element_by_id("meta").expect("missing #meta"),
         zone_vis: Cell::new(false),
         owner_vis: Cell::new(true),
     });
 
     for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
-        let btn = doc.get_element_by_id(bid).unwrap();
+        let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let pin = TableColumnPinning::<TableFeatures, JsValue>(st_c.table.0.clone(), PhantomData);
-            let sel = TableRowSelection::<TableFeatures, JsValue>(st_c.table.0.clone(), PhantomData);
+            let pin: TableColumnPinning<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
+            let sel: TableRowSelection<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             match idx {
                 0 => {
                     st_c.zone_vis.set(!st_c.zone_vis.get());
@@ -252,27 +228,26 @@ pub extern "C" fn start() {
                     st_c.owner_vis.set(!st_c.owner_vis.get());
                     apply_vis(&st_c);
                 }
-                2 => call_table_row_selection_toggle_all_page_rows_selected(&sel.toggle_all_rows_selected(), Some(true), None),
-                3 => call_table_row_selection_toggle_all_page_rows_selected(&sel.toggle_all_rows_selected(), Some(false), None),
+                2 => sel.toggle_all_rows_selected().call(Some(true), None),
+                3 => sel.toggle_all_rows_selected().call(Some(false), None),
                 _ => {
                     st_c.zone_vis.set(false);
                     st_c.owner_vis.set(true);
                     apply_vis(&st_c);
-                    let reset_cp = ColumnPinningState::create();
-                    reset_cp.set_start(JsArray::from(vec![String::from("id")]));
-                    reset_cp.set_end(JsArray::from(vec![String::from("status")]));
-                    call_table_column_pinning_set_column_pinning(&pin.set_column_pinning(), Updater::T(reset_cp));
-                    let reset_rs = RowSelectionState::create();
+                    let reset_cp = ColumnPinningState::default()
+                        .with_start(["id"])
+                        .with_end(["status"]);
+                    pin.set_column_pinning().call(Updater::T(reset_cp));
+                    let reset_rs = RowSelectionState::default();
                     reset_rs.set_at("0", true);
                     reset_rs.set_at("2", true);
                     reset_rs.set_at("4", true);
-                    call_table_row_selection_set_row_selection(&sel.set_row_selection(), Updater::T(reset_rs));
+                    sel.set_row_selection().call(Updater::T(reset_rs));
                 }
             }
             render(&st_c);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
-        std::mem::forget(cb);
     }
 
     render(&st);

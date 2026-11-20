@@ -1,29 +1,27 @@
 #![no_main]
 
-use dom::NodeMethods as _;
 use pixi_js::*;
 
 fn build_opts() -> ApplicationInitOptions {
-    let opts = ApplicationInitOptions::create();
-    opts.set_width(Some(680.0));
-    opts.set_height(Some(400.0));
-    opts.set_background_color(Some(&JsValue::from(16777215.0)));
-    opts.set_preference(StringOrRendererPreferenceArray::String("webgl".into()));
-    opts.set_preserve_drawing_buffer(Some(true));
-    opts.set_antialias(Some(true));
-    opts.set_auto_start(Some(false));
-    opts
+    ApplicationInitOptions::default()
+        .with_width(680.0)
+        .with_height(400.0)
+        .with_background_color(16777215.0)
+        .with_preference("webgl")
+        .with_preserve_drawing_buffer(true)
+        .with_antialias(true)
+        .with_auto_start(false)
 }
 
 fn add<C: JsType, D: JsType>(parent: &Container<C>, child: D) {
-    parent.add_child(JsArray::<D>::from(vec![child]));
+    parent.add_child(JsArray::<D>::from([child]));
 }
 
 fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
-    let ss = StrokeStyle::create();
-    ss.set_width(Some(width));
-    ss.set_color(Some(&JsValue::from(color_hex as f64)));
-    g.stroke(JsArray::from(vec![JsValue::from(&ss)]));
+    let ss = StrokeStyle::default()
+        .with_width(width)
+        .with_color(color_hex as f64);
+    g.stroke(JsArray::from([JsValue::from(ss)]));
 }
 
 #[unsafe(no_mangle)]
@@ -45,7 +43,7 @@ pub extern "C" fn start() {
         let rings: [f64; 4] = [42.0, 82.0, 122.0, 162.0];
         let ring_colors: [u32; 4] = [0x111111, 0x555555, 0xa3a3a3, 0xe5e5e5];
 
-        let guides = Graphics::new(None::<GraphicsOptionsOrGraphicsContext>);
+        let guides = Graphics::new(JsNone);
         for &r in &rings {
             guides.circle(340.0, 200.0, r);
             stroke_g(&guides, 1.0, 0xe5e5e5);
@@ -64,7 +62,7 @@ pub extern "C" fn start() {
         stroke_g(&guides, 1.0, 0xd4d4d4);
         add(&stage, guides);
 
-        let tiles = Graphics::new(None::<GraphicsOptionsOrGraphicsContext>);
+        let tiles = Graphics::new(JsNone);
         for (r_idx, &radius) in rings.iter().enumerate() {
             let s = 8.0 + r_idx as f64 * 2.5;
             let corners = [(0.0, -s), (s * 0.72, 0.0), (0.0, s), (-s * 0.72, 0.0)];
@@ -94,7 +92,7 @@ pub extern "C" fn start() {
         }
         add(&stage, tiles);
 
-        let center_dot = Graphics::new(None::<GraphicsOptionsOrGraphicsContext>);
+        let center_dot = Graphics::new(JsNone);
         center_dot
             .circle(340.0, 200.0, 8.0)
             .fill(Some(&JsValue::from(0x111111 as f64)));

@@ -1,7 +1,7 @@
 #![no_main]
 
 use date_fns::{Date, DateArg};
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
+use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,20 +15,20 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Date-fns Format & Parse Cookbook (Rust)")));
     append(&head, make_el(&doc, "span", "badge", Some("2024-03-15T14:30:45")));
     append(&app, head);
 
-    let sample: Date = date_fns::parse_iso::<Date, Date>("2024-03-15T14:30:45", None);
+    let sample: Date = date_fns::parse_iso("2024-03-15T14:30:45", None);
     let parsed: Date = date_fns::parse::<Date, Date>("15/03/2024", "dd/MM/yyyy", DateArg::DateType(sample.clone()), None);
 
     let fmt_card = make_el(&doc, "div", "card", None);
@@ -82,8 +82,8 @@ pub extern "C" fn start() {
     append(&vhead, vhrow);
     append(&vtbl, vhead);
 
-    let good_iso: Date = date_fns::parse_iso::<Date, Date>("2024-03-15", None);
-    let bad_iso: Date = date_fns::parse_iso::<Date, Date>("not-a-date", None);
+    let good_iso: Date = date_fns::parse_iso("2024-03-15", None);
+    let bad_iso: Date = date_fns::parse_iso("not-a-date", None);
     let ok_good = date_fns::is_valid(&good_iso) && date_fns::is_match("2024-03-15", "yyyy-MM-dd", None);
     let ok_bad = date_fns::is_valid(&bad_iso) && date_fns::is_match("not-a-date", "yyyy-MM-dd", None);
     let ok_2024 = date_fns::is_exists(2024.0, 1.0, 29.0);

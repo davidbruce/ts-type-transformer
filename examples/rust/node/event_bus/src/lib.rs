@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use node::events::EventEmitter;
-use node::*;
+use node::{AnyArrayFn, JsArray, JsValue};
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -34,7 +34,7 @@ pub extern "C" fn start() {
     let mut c = Checks(0);
 
     let emitter = EventEmitter::<JsValue>::new(None);
-    let _ = emitter.set_max_listeners(12.0);
+    emitter.set_max_listeners(12.0);
     c.check(emitter.get_max_listeners() == 12.0);
 
     let metric_calls = Rc::new(Cell::new(0u32));
@@ -47,7 +47,7 @@ pub extern "C" fn start() {
         let metric_sum = metric_sum.clone();
         move |args: JsArray| {
             metric_calls.set(metric_calls.get() + 1);
-            if args.len() > 0 {
+            if !args.is_empty() {
                 *metric_sum.borrow_mut() += args.get(0).as_f64();
             }
         }
@@ -61,9 +61,9 @@ pub extern "C" fn start() {
         move |_: JsArray| shutdown_calls.set(shutdown_calls.get() + 1)
     });
 
-    let _ = emitter.on::<JsValue>("metric", &on_metric);
-    let _ = emitter.once::<JsValue>("metric", &on_once);
-    let _ = emitter.on::<JsValue>("shutdown", &on_shutdown);
+    emitter.on::<JsValue>("metric", &on_metric);
+    emitter.once::<JsValue>("metric", &on_once);
+    emitter.on::<JsValue>("shutdown", &on_shutdown);
 
     c.check(emitter.listener_count::<JsValue>("metric", None) == 2.0);
     c.check(emitter.event_names().len() == 2);
@@ -80,18 +80,17 @@ pub extern "C" fn start() {
             && once_calls.get() == 1,
     );
 
-    c.check(!emitter.emit::<JsValue>("idle", Vec::<JsValue>::new()));
+    c.check(!emitter.emit::<JsValue>("idle", JsArray::new()));
 
-    let _ = emitter.remove_listener::<JsValue>("metric", &on_metric);
+    emitter.remove_listener::<JsValue>("metric", &on_metric);
     c.check(
         emitter.listener_count::<JsValue>("metric", None) == 0.0
             && !emitter.emit::<JsValue>("metric", [JsValue::from(1.0)]),
     );
     c.check(metric_calls.get() == 2);
 
-    let shutdown_key = JsValue::from("shutdown");
-    let _ = emitter.remove_all_listeners::<JsValue>(Some(&shutdown_key));
-    c.check(emitter.event_names().len() == 0 && shutdown_calls.get() == 0);
+    emitter.remove_all_listeners::<JsValue>(Some(&JsValue::from("shutdown")));
+    c.check(emitter.event_names().is_empty() && shutdown_calls.get() == 0);
 
     println(&format!(
         "maxListeners={:.0} metricCalls={} metricSum={:.0}",

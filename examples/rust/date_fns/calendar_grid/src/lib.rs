@@ -1,7 +1,7 @@
 #![no_main]
 
-use date_fns::{Date, DateArg, Interval, IntervalMethods as _};
-use dom::{Document, DocumentMethods as _, ElementMethods as _, HTMLElement, NodeMethods};
+use date_fns::{Date, DateArg, Interval};
+use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -15,7 +15,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 }
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
-    let _ = NodeMethods::append_child(parent, child);
+    parent.append_child(child);
 }
 
 fn day(d: &Date) -> DateArg<Date> {
@@ -32,14 +32,14 @@ fn add_metric(doc: &Document, metrics: &HTMLElement, label: &str, val: &str) {
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
-    let app = doc.get_element_by_id("app").unwrap();
+    let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Date-fns Calendar Grid (Rust)")));
     append(&head, make_el(&doc, "span", "badge", Some("March 2024")));
     append(&app, head);
 
-    let ref_day: Date = date_fns::parse_iso::<Date, Date>("2024-03-15", None);
+    let ref_day: Date = date_fns::parse_iso("2024-03-15", None);
     let month_start: Date = date_fns::start_of_month::<Date, Date>(day(&ref_day), None);
     let month_end: Date = date_fns::end_of_month::<Date, Date>(day(&ref_day), None);
     let offset = date_fns::get_day(&month_start, None) as usize;
@@ -63,9 +63,9 @@ pub extern "C" fn start() {
         append(&grid, make_el(&doc, "div", "day-cell empty", None));
     }
 
-    let span: Interval<DateArg<Date>, DateArg<Date>> = Interval::create();
-    span.set_start(day(&month_start));
-    span.set_end(day(&month_end));
+    let span: Interval<DateArg<Date>, DateArg<Date>> = Interval::default()
+        .with_start(day(&month_start))
+        .with_end(day(&month_end));
     let days = date_fns::each_day_of_interval::<_, date_fns::EachDayOfIntervalOptions<Date>>(span, None);
     for i in 0..days.len() {
         let item = days.get(i);
