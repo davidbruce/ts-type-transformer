@@ -1,8 +1,6 @@
 #include "dom/dom.hpp"
 #include "date_fns/date_fns.hpp"
 
-using Day = date_fns::DateArg<date_fns::Date>;
-
 static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::string_view cls, std::string_view text) {
     dom::HTMLElement el = doc.createElement(tag);
     if (!cls.empty()) el.className(cls);
@@ -10,23 +8,17 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
     return el;
 }
 
-static ts::Value as_any(const date_fns::Date& d) {
-    ts::Value v;
-    static_cast<ts::Handle&>(v) = d;
-    return v;
-}
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
-
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Date-fns Format & Parse Cookbook (C++)"));
     head.appendChild(make_el(doc, "span", "badge", "2024-03-15T14:30:45"));
     app.appendChild(head);
 
-    date_fns::Date sample = date_fns::parseISO<date_fns::Date>("2024-03-15T14:30:45");
-    date_fns::Date parsed = date_fns::parse<date_fns::Date>("15/03/2024", "dd/MM/yyyy", Day(sample));
+    auto sample = date_fns::parseISO("2024-03-15T14:30:45");
+    auto parsed = date_fns::parse("15/03/2024", "dd/MM/yyyy", sample);
 
     dom::HTMLElement fmt_card = make_el(doc, "div", "card", "");
     fmt_card.appendChild(make_el(doc, "div", "label", "Format Tokens & ISO Output"));
@@ -81,8 +73,8 @@ extern "C" __attribute__((export_name("start"))) void start() {
     vtbl.appendChild(vhead);
 
     struct ValRow { const char* input; const char* check; bool ok; const char* pill; };
-    bool ok_good = date_fns::isValid(as_any(date_fns::parseISO<date_fns::Date>("2024-03-15"))) && date_fns::isMatch("2024-03-15", "yyyy-MM-dd");
-    bool ok_bad = date_fns::isValid(as_any(date_fns::parseISO<date_fns::Date>("not-a-date"))) && date_fns::isMatch("not-a-date", "yyyy-MM-dd");
+    bool ok_good = date_fns::isValid(date_fns::parseISO("2024-03-15")) && date_fns::isMatch("2024-03-15", "yyyy-MM-dd");
+    bool ok_bad = date_fns::isValid(date_fns::parseISO("not-a-date")) && date_fns::isMatch("not-a-date", "yyyy-MM-dd");
     bool ok_2024 = date_fns::isExists(2024, 1, 29);
     bool ok_2023 = date_fns::isExists(2023, 1, 29);
     ValRow vrows[] = {

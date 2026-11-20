@@ -205,6 +205,146 @@ fn ty_in(t: &Ty) -> String {
     }
 }
 
+fn is_adapted_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> bool {
+    match t {
+        Ty::NamedUnion(_) => true,
+        Ty::Generic(n, _) => is_union(n, unions),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::NamedUnion(_) | Ty::Tuple(_) => true,
+            Ty::Generic(n, _) => is_union(n, unions) || callbacks.contains(n.as_str()),
+            Ty::Obj(n) => callbacks.contains(n.as_str()),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+fn contains_param(t: &Ty) -> bool {
+    match t {
+        Ty::Param(_) => true,
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => contains_param(inner),
+        Ty::Tuple(es) | Ty::Union(es) => es.iter().any(contains_param),
+        Ty::Generic(_, args) => args.iter().any(contains_param),
+        _ => false,
+    }
+}
+
+// C++ type of a function/method parameter, using input adapters (`ts::In`/`ts::Opt`)
+// where ergonomic implicit conversions are needed.
+fn ty_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> String {
+    let wrap = |inner: String| {
+        if contains_param(t) {
+            format!("const std::type_identity_t<{inner}>&")
+        } else {
+            format!("const {inner}&")
+        }
+    };
+    match t {
+        Ty::NamedUnion(n) => wrap(format!("ts::In<{}>", tn(n))),
+        Ty::Generic(n, _) if is_union(n, unions) => wrap(format!("ts::In<{}>", ty_in(t))),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::NamedUnion(n) => wrap(format!("ts::Opt<{}>", tn(n))),
+            Ty::Generic(n, _) if is_union(n, unions) || callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner))),
+            Ty::Obj(n) if callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner))),
+            Ty::Tuple(_) => wrap(format!("ts::Opt<{}>", ty_in(inner))),
+            _ => ty_in(t),
+        },
+        _ => ty_in(t),
+    }
+}
+
+fn union_subsumed(sub_t: &Ty, sup_t: &Ty, unions: &[NamedUnion]) -> bool {
+    match (sub_t, sup_t) {
+        (Ty::NamedUnion(a), Ty::NamedUnion(b)) if a != b => {
+            let Some(ua) = unions.iter().find(|u| u.name == *a && u.type_params.is_empty()) else { return false; };
+            let Some(ub) = unions.iter().find(|u| u.name == *b && u.type_params.is_empty()) else { return false; };
+            (ua.parts.len() < ub.parts.len() || (ua.parts.len() == ub.parts.len() && a > b))
+                && ua.parts.iter().all(|p| ub.parts.contains(p))
+        }
+        (Ty::Nullable(a, _), Ty::Nullable(b, _)) => union_subsumed(a, b, unions),
+        _ => false,
+    }
+}
+
+fn func_subsumed_by(
+    sub: &Func,
+    sup: &Func,
+    sub_name: &str,
+    sup_name: &str,
+    unions: &[NamedUnion],
+    callbacks: &HashSet<&str>,
+) -> bool {
+    if sub_name != sup_name
+        || Class::has_self(sub) != Class::has_self(sup)
+        || sub.params.len() != sup.params.len()
+        || !sub.type_params.is_empty()
+        || !sup.type_params.is_empty()
+        || sub.fixed != sup.fixed
+        || sub.call != sup.call
+        || sub.rest != sup.rest
+        || ty_out(&sub.ret, unions) != ty_out(&sup.ret, unions)
+    {
+        return false;
+    }
+    let mut strict = false;
+    for ((_, st), (_, pt)) in sub.params.iter().zip(&sup.params) {
+        if ty_param(st, unions, callbacks) == ty_param(pt, unions, callbacks) {
+            continue;
+        }
+        if union_subsumed(st, pt, unions) {
+            strict = true;
+        } else {
+            return false;
+        }
+    }
+    strict
+}
+
+fn lower_param(t: &Ty, x: &str, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> Vec<String> {
+    if is_adapted_param(t, unions, callbacks) {
+        vec![format!("{x}.h")]
+    } else {
+        lower(t, x)
+    }
+}
+
+fn is_deducible(param: &str, t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> bool {
+    match t {
+        Ty::Param(n) => n == param,
+        Ty::ArrayOf(e) => is_deducible(param, e, unions, callbacks),
+        Ty::Tuple(es) => es.iter().any(|e| is_deducible(param, e, unions, callbacks)),
+        Ty::Nullable(inner, _) => {
+            !is_adapted_param(t, unions, callbacks) && is_deducible(param, inner, unions, callbacks)
+        }
+        Ty::Generic(n, args) if !is_union(n, unions) && !callbacks.contains(n.as_str()) => {
+            args.iter().any(|a| is_deducible(param, a, unions, callbacks))
+        }
+        _ => false,
+    }
+}
+
+fn head_func(params: &[TParam], defaults: bool) -> String {
+    head_with_extra(params, defaults, &[], &[])
+}
+
+fn head_with_extra(params: &[TParam], defaults: bool, extra_params: &[&str], extra_requires: &[String]) -> String {
+    if params.is_empty() && extra_params.is_empty() {
+        return String::new();
+    }
+    let mut ps: Vec<String> = params
+        .iter()
+        .map(|p| match &p.default {
+            Some(d) if defaults => format!("class {} = {}", p.name, ty_arg_for("", d)),
+            _ => format!("class {}", p.name),
+        })
+        .collect();
+    ps.extend(extra_params.iter().map(|s| (*s).to_string()));
+    let mut requires: Vec<String> = params.iter().filter_map(|p| constraint(&p.name, p.constraint.as_ref()?)).collect();
+    requires.extend(extra_requires.iter().cloned());
+    let requires = if requires.is_empty() { String::new() } else { format!(" requires ({})", requires.join(" && ")) };
+    format!("template <{}>{requires}\n", ps.join(", "))
+}
+
 thread_local! {
     // The unions of the model being generated that values can be decoded to.
     static DECODABLE: std::cell::RefCell<BTreeSet<String>> = const { std::cell::RefCell::new(BTreeSet::new()) };
@@ -439,7 +579,20 @@ struct Function {
 // `owner` is the class as written in a definition (`Box<T>`), with its template
 // head (`template <class T>`).
 #[allow(clippy::too_many_arguments)]
-fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place, unions: &[NamedUnion], wasm_module: &str, raw_prefix: &str) -> Function {
+fn build_function(
+    f: &Func,
+    name: &str,
+    owner: &str,
+    owner_head: &str,
+    place: Place,
+    unions: &[NamedUnion],
+    callbacks: &HashSet<&str>,
+    wasm_module: &str,
+    raw_prefix: &str,
+    params_slice: &[(String, Ty)],
+    rest_pack: Option<&str>,
+    omit_rest: bool,
+) -> Function {
     let mut raw_params: Vec<&str> = Vec::new();
     let mut args: Vec<String> = Vec::new();
     if Class::has_self(f) {
@@ -449,14 +602,27 @@ fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place,
     }
     let mut params = Vec::new();
     let mut refs = BTreeSet::new();
-    for (name, t) in &f.params {
+    for (pname, t) in params_slice {
         // `w_`; `h`, reserved, is already `h_`: two underscores are the implementation's.
-        let base = ident(name);
-        let name = if base.ends_with('_') { base } else { format!("{base}_") };
-        params.push(format!("{} {name}", ty_in(t)));
+        let base = ident(pname);
+        let pname = if base.ends_with('_') { base } else { format!("{base}_") };
+        params.push(format!("{} {pname}", ty_param(t, unions, callbacks)));
         raw_params.extend(raw(t));
-        args.extend(lower(t, &name));
+        args.extend(lower_param(t, &pname, unions, callbacks));
         named_types(t, &mut refs);
+    }
+    if omit_rest {
+        raw_params.push("uint32_t");
+        args.push("0".into());
+        if let Some((_, last_t)) = f.params.last() {
+            named_types(last_t, &mut refs);
+        }
+    } else if rest_pack.is_some() {
+        raw_params.push("uint32_t");
+        args.push("rest_arr__.h".into());
+        if let Some((_, last_t)) = f.params.last() {
+            named_types(last_t, &mut refs);
+        }
     }
     named_types(&f.ret, &mut refs);
     // A shared import takes the index of this function's fixed arguments after `self`.
@@ -472,31 +638,131 @@ fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place,
     let raw_symbol = raw_fn(raw_prefix, &import);
     let import_decl = format!("extern \"C\" {} {} {raw_symbol}({});\n", import_attr(wasm_module, &import), raw_ret(&f.ret), raw_params.join(", "));
     let call = format!("{raw_symbol}({})", args.join(", "));
-    let body = match &f.ret {
-        Ty::Void => format!("{call};"),
-        t => format!("auto r = {call}; return {};", raise(t, "r", unions)),
+    let fluent = place == Place::Member && matches!(f.call, Call::Set(_) | Call::IndexSet) && f.ret == Ty::Void;
+    let body_call = if fluent {
+        format!("{call}; return *this;")
+    } else {
+        match &f.ret {
+            Ty::Void => format!("{call};"),
+            t => format!("auto r = {call}; return {};", raise(t, "r", unions)),
+        }
     };
+    let body = if let Some(elem_ty) = rest_pack {
+        format!("auto rest_arr__ = ts::Array<{elem_ty}>::of(std::forward<R0__>(r0__), std::forward<Rest__>(rest__)...); {body_call}")
+    } else {
+        body_call
+    };
+
+    let has_key = params_slice.iter().any(|p| matches!(p.1, Ty::Key(_)));
     let mut type_params = f.type_params.clone();
-    if f.params.iter().any(|p| matches!(p.1, Ty::Key(_))) {
+    if has_key {
         type_params.insert(0, TParam { name: "V".into(), default: None, constraint: None });
     }
+    for (i, p) in type_params.iter_mut().enumerate() {
+        if !(has_key && i == 0)
+            && p.default.is_none()
+            && p.constraint.as_ref().and_then(|c| constraint(&p.name, c)).is_none()
+            && !params_slice.iter().any(|(_, t)| is_deducible(&p.name, t, unions, callbacks))
+        {
+            p.default = Some(Ty::Any);
+        }
+    }
+
+    if rest_pack.is_some() {
+        params.push("R0__&& r0__".into());
+        params.push("Rest__&&... rest__".into());
+    }
+    let extra_params: [&str; 2] = ["class R0__", "class... Rest__"];
+    let extra_requires = if let Some(elem_ty) = rest_pack {
+        vec![
+            format!("!(sizeof...(Rest__) == 0 && std::is_base_of_v<ts::Array<{elem_ty}>, std::decay_t<R0__>>)"),
+            format!("ts::rest_accepts<{elem_ty}, R0__>"),
+            format!("(ts::rest_accepts<{elem_ty}, Rest__> && ...)"),
+        ]
+    } else {
+        Vec::new()
+    };
+
     // Defaults where the function is first declared: in the class, or at a free function.
-    let (first, again) = (head(&type_params, true), head(&type_params, false));
-    let templated = !owner_head.is_empty() || !type_params.is_empty();
+    let (first, again) = if rest_pack.is_some() {
+        (
+            head_with_extra(&type_params, true, &extra_params, &extra_requires),
+            head_with_extra(&type_params, false, &extra_params, &extra_requires),
+        )
+    } else {
+        (head_func(&type_params, true), head_func(&type_params, false))
+    };
+    let templated = !owner_head.is_empty() || !type_params.is_empty() || rest_pack.is_some();
     let inline = if templated { "inline " } else { "" };
-    let (ret, params) = (ty_out(&f.ret, unions), params.join(", "));
+    let ret = if fluent { format!("const {owner}&") } else { ty_out(&f.ret, unions) };
+    let params_str = params.join(", ");
     let (decl, def) = match place {
-        Place::Member => (format!("    {}{ret} {name}({params}) const;\n", first.replace('\n', " ")), format!("{owner_head}{again}{inline}{ret} {owner}::{name}({params}) const {{ {body} }}\n")),
-        Place::Static => (format!("    {}static {ret} {name}({params});\n", first.replace('\n', " ")), format!("{owner_head}{again}{inline}{ret} {owner}::{name}({params}) {{ {body} }}\n")),
-        Place::Free if templated => (String::new(), format!("{first}inline {ret} {name}({params}) {{ {body} }}\n")),
-        Place::Free => (format!("{ret} {name}({params});\n"), format!("{ret} {name}({params}) {{ {body} }}\n")),
+        Place::Member => (
+            format!("    {}{ret} {name}({params_str}) const;\n", first.replace('\n', " ")),
+            format!("{owner_head}{again}{inline}{ret} {owner}::{name}({params_str}) const {{ {body} }}\n"),
+        ),
+        Place::Static => (
+            format!("    {}static {ret} {name}({params_str});\n", first.replace('\n', " ")),
+            format!("{owner_head}{again}{inline}{ret} {owner}::{name}({params_str}) {{ {body} }}\n"),
+        ),
+        Place::Free if templated => (String::new(), format!("{first}inline {ret} {name}({params_str}) {{ {body} }}\n")),
+        Place::Free => (
+            format!("{ret} {name}({params_str});\n"),
+            format!("{ret} {name}({params_str}) {{ {body} }}\n"),
+        ),
     };
     // With its template head: an overload constrained and one not are two,
     // the more constrained chosen where both fit (`merge<T extends Dictionary>`).
     // Its template parameters by place: C++ tells none apart by name.
-    let key = format!("{}{}{name}({})", again.replace('\n', " "), if place == Place::Static { "static " } else { "" }, f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
+    let again_key = head_func(&type_params, false);
+    let key = if let Some(elem_ty) = rest_pack {
+        format!(
+            "{}{}{name}({})|rest<{elem_ty}>",
+            again_key.replace('\n', " "),
+            if place == Place::Static { "static " } else { "" },
+            params_slice.iter().map(|p| ty_param(&p.1, unions, callbacks)).collect::<Vec<_>>().join(",")
+        )
+    } else {
+        format!(
+            "{}{}{name}({})",
+            again_key.replace('\n', " "),
+            if place == Place::Static { "static " } else { "" },
+            params_slice.iter().map(|p| ty_param(&p.1, unions, callbacks)).collect::<Vec<_>>().join(",")
+        )
+    };
     let key = rename_words(&key, &type_params.iter().enumerate().map(|(i, p)| (p.name.clone(), format!("${i}"))).collect());
     Function { import: import_decl, decl, def, templated, key, refs }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn function_variants(
+    f: &Func,
+    name: String,
+    zero_name: Option<String>,
+    owner: &str,
+    owner_head: &str,
+    place: Place,
+    unions: &[NamedUnion],
+    callbacks: &HashSet<&str>,
+    wasm_module: &str,
+    raw_prefix: &str,
+) -> Vec<Function> {
+    let mut out = vec![build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, &f.params, None, false)];
+    if f.rest
+        && let Some((_, last_t)) = f.params.last()
+        && matches!(last_t, Ty::Array | Ty::ArrayOf(_))
+    {
+        let elem_ty = match last_t {
+            Ty::Array => "ts::Value".to_string(),
+            Ty::ArrayOf(e) => ty_arg_for("", e),
+            _ => unreachable!(),
+        };
+        let fixed = &f.params[..f.params.len() - 1];
+        let zname = zero_name.as_deref().unwrap_or(&name);
+        out.push(build_function(f, zname, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, None, true));
+        out.push(build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, Some(&elem_ty), false));
+    }
+    out
 }
 
 // The declared types a type names: classes, callbacks, unions and maps.
@@ -541,6 +807,7 @@ const RUNTIME: &str = r#"// Generated.
 
 #define TS_IMPORT_MOD(mod, name) __attribute__((import_module(mod), import_name(#name)))
 #define TS_IMPORT(name) TS_IMPORT_MOD("env", name)
+#define TS_EXPORT(name) extern "C" __attribute__((export_name(#name)))
 
 extern "C" {
 TS_IMPORT(js_string_len) uint32_t ts_raw_js_string_len(uint32_t);
@@ -613,6 +880,14 @@ struct Handle {
     ~Handle() {
         if (h) ts_raw_js_release(h);
     }
+    explicit operator bool() const noexcept { return h != 0; }
+    bool is_null() const noexcept { return h == 0; }
+    template <class T>
+        requires std::derived_from<T, Handle>
+    T as() const {
+        if (h) ts_raw_js_retain(h);
+        return T(handle, h);
+    }
     // Whether two handles are one JavaScript value.
     friend bool operator==(const Handle& a, const Handle& b) { return a.h == b.h || ts_raw_js_equals(a.h, b.h) != 0; }
 };
@@ -658,6 +933,11 @@ inline uint32_t enum_to_handle(T x) { return ts_raw_js_from_number(double(int32_
 template <class T>
 inline T enum_from_handle(uint32_t h) { return T(int32_t(ts_raw_js_to_number(h))); }
 
+template <class U>
+struct In;
+template <class T>
+struct Opt;
+
 // A value lent to JavaScript as a handle, for one call: an object's own
 // handle, or a new one for a number, flag or string, released after the call.
 struct Arg {
@@ -667,6 +947,8 @@ struct Arg {
     Arg(std::string_view s) : h(ts_raw_js_from_string(s.data(), s.size())), own(true) {}
     Arg(const char* s) : Arg(std::string_view(s)) {}
     Arg(double x) : h(ts_raw_js_from_number(x)), own(true) {}
+    template <class I, std::enable_if_t<std::is_integral_v<I> && !std::is_same_v<I, bool>, int> = 0>
+    Arg(I x) : h(ts_raw_js_from_number(double(x))), own(true) {}
     Arg(bool x) : h(ts_raw_js_from_bool(x)), own(true) {}
     template <class H, std::enable_if_t<is_handle<H>, int> = 0>
     Arg(const H& v) : h(v.h) {}
@@ -680,6 +962,10 @@ struct Arg {
     Arg(const std::optional<T>& v) {
         if (v) take(Arg(*v));
     }
+    template <class U>
+    Arg(const In<U>& v);
+    template <class T>
+    Arg(const Opt<T>& v);
     Arg(const Arg&) = delete;
     Arg& operator=(const Arg&) = delete;
     ~Arg() {
@@ -743,6 +1029,16 @@ struct Array;
 // A JavaScript value of no particular type.
 struct Value : Handle {
     using Handle::Handle;
+    Value() = default;
+    Value(const Value&) = default;
+    Value(Value&&) = default;
+    Value& operator=(const Value&) = default;
+    Value& operator=(Value&&) = default;
+    template <class H>
+        requires (is_handle<H> && !std::same_as<std::decay_t<H>, Value>)
+    Value(const H& x) : Handle(handle, x.h) {
+        if (h) ts_raw_js_retain(h);
+    }
     static Value number(double x) { return {handle, ts_raw_js_from_number(x)}; }
     static Value boolean(bool x) { return {handle, ts_raw_js_from_bool(x)}; }
     static Value string(std::string_view s) { return {handle, ts_raw_js_from_string(s.data(), s.size())}; }
@@ -753,8 +1049,9 @@ struct Value : Handle {
     }
     Value get(std::string_view key) const { return {handle, ts_raw_js_object_get(h, key.data(), key.size())}; }
     template <class U>
-    void set(std::string_view key, const U& v) const {
+    const Value& set(std::string_view key, const U& v) const {
         ts_raw_js_object_set(h, key.data(), key.size(), Arg(v).h);
+        return *this;
     }
     bool has(std::string_view key) const { return ts_raw_js_object_has(h, key.data(), key.size()) != 0; }
     template <class T = Value>
@@ -762,7 +1059,6 @@ struct Value : Handle {
     double to_number() const { return ts_raw_js_to_number(h); }
     bool to_bool() const { return ts_raw_js_to_bool(h) != 0; }
     std::string to_string() const { return read_string(h); }
-    bool is_null() const { return h == 0; }
 };
 
 // The direct bases of a type, declared beside it in `ts_types.hpp`: what
@@ -773,6 +1069,14 @@ struct list {};
 template <class T>
 struct bases {
     using type = list<>;
+};
+template <class T>
+inline constexpr bool is_callback = false;
+template <class C>
+struct Scoped;
+template <class C>
+struct bases<Scoped<C>> {
+    using type = list<C>;
 };
 
 // TypeScript's `T extends U`, for a constraint. Anything extends `any`, and
@@ -803,6 +1107,212 @@ struct extends_t<std::variant<A...>, std::variant<B...>> : std::bool_constant<(e
 template <class T, class U>
 concept extends = extends_t<T, U>::value;
 
+template <class X>
+inline constexpr bool is_number_arg = std::is_arithmetic_v<std::decay_t<X>> && !std::is_same_v<std::decay_t<X>, bool>;
+template <class X>
+inline constexpr bool is_string_arg =
+    std::same_as<std::decay_t<X>, std::string> ||
+    std::same_as<std::decay_t<X>, std::string_view> ||
+    std::same_as<std::decay_t<X>, const char*> ||
+    std::same_as<std::decay_t<X>, char*>;
+template <class F>
+inline constexpr bool callable_candidate =
+    !is_handle<F> &&
+    !is_number_arg<F> &&
+    !std::same_as<std::decay_t<F>, bool> &&
+    !is_string_arg<F> &&
+    !std::is_enum_v<std::decay_t<F>> &&
+    !is_variant<std::decay_t<F>> &&
+    !is_optional<std::decay_t<F>>::value &&
+    !std::same_as<std::decay_t<F>, std::nullopt_t> &&
+    !std::same_as<std::decay_t<F>, std::nullptr_t>;
+
+template <class M, class X>
+constexpr bool in_match_v() {
+    using D = std::decay_t<X>;
+    if constexpr (is_variant<D>) {
+        return []<size_t... Is>(std::index_sequence<Is...>) {
+            return (in_match_v<M, const std::variant_alternative_t<Is, D>&>() && ...);
+        }(std::make_index_sequence<std::variant_size_v<D>>{});
+    } else if constexpr (is_variant<M>) {
+        return []<size_t... Is>(std::index_sequence<Is...>) {
+            return (in_match_v<std::variant_alternative_t<Is, M>, X>() || ...);
+        }(std::make_index_sequence<std::variant_size_v<M>>{});
+    } else if constexpr (std::same_as<M, double>) {
+        return is_number_arg<X>;
+    } else if constexpr (std::same_as<M, bool>) {
+        return std::same_as<D, bool>;
+    } else if constexpr (std::same_as<M, std::string>) {
+        return is_string_arg<X>;
+    } else if constexpr (std::is_enum_v<M>) {
+        return std::same_as<D, M>;
+    } else if constexpr (is_handle<X>) {
+        return std::same_as<M, Value> || std::same_as<M, Handle> || extends<D, M>;
+    } else if constexpr (is_callback<M> && callable_candidate<X>) {
+        return std::constructible_from<M, X>;
+    } else {
+        return false;
+    }
+}
+
+template <class U, class X>
+concept in_accepts = in_match_v<U, X>();
+
+template <class M, class X>
+uint32_t in_make_cb(X&& x) {
+    if constexpr (is_variant<M>) {
+        return [&]<class... Ms>(std::type_identity<std::variant<Ms...>>) -> uint32_t {
+            uint32_t res = 0;
+            bool done = false;
+            auto try_one = [&]<class Alt>() {
+                if constexpr (in_match_v<Alt, X>()) {
+                    if (!done) {
+                        res = in_make_cb<Alt>(std::forward<X>(x));
+                        done = true;
+                    }
+                }
+            };
+            (try_one.template operator()<Ms>(), ...);
+            return res;
+        }(std::type_identity<M>{});
+    } else if constexpr (is_callback<M> && std::constructible_from<M, X>) {
+        M cb(std::forward<X>(x));
+        return std::exchange(cb.h, 0);
+    } else {
+        return 0;
+    }
+}
+
+template <class U>
+struct In {
+    uint32_t h = 0;
+    bool own = false;
+    In(const In&) = delete;
+    In& operator=(const In&) = delete;
+    template <class X>
+        requires (!std::same_as<std::decay_t<X>, In> && in_accepts<U, X>)
+    In(X&& x) {
+        using D = std::decay_t<X>;
+        if constexpr (is_variant<D>) {
+            std::visit([this](const auto& v) {
+                In tmp(v);
+                h = tmp.h;
+                own = std::exchange(tmp.own, false);
+            }, x);
+        } else if constexpr (is_string_arg<D>) {
+            if constexpr (std::is_pointer_v<D>) {
+                std::string_view sv = x ? std::string_view(x) : std::string_view();
+                h = ts_raw_js_from_string(sv.data(), sv.size());
+            } else {
+                std::string_view sv(x);
+                h = ts_raw_js_from_string(sv.data(), sv.size());
+            }
+            own = true;
+        } else if constexpr (std::same_as<D, bool>) {
+            h = ts_raw_js_from_bool(x);
+            own = true;
+        } else if constexpr (is_number_arg<D>) {
+            h = ts_raw_js_from_number(double(x));
+            own = true;
+        } else if constexpr (std::is_enum_v<D>) {
+            h = enum_to_handle(x);
+            own = true;
+        } else if constexpr (is_handle<D>) {
+            h = x.h;
+            own = false;
+        } else {
+            h = in_make_cb<U>(std::forward<X>(x));
+            own = true;
+        }
+    }
+    ~In() {
+        if (own) ts_raw_js_release(h);
+    }
+};
+
+template <class T, class X>
+concept opt_elem_accepts =
+    (is_variant<T> && in_accepts<T, X>) ||
+    (!is_variant<T> && is_handle<X> && extends<std::decay_t<X>, T>) ||
+    (is_callback<T> && callable_candidate<X> && std::constructible_from<T, X>);
+
+template <class T>
+struct Opt {
+    uint32_t h = 0;
+    bool own = false;
+    Opt(const Opt&) = delete;
+    Opt& operator=(const Opt&) = delete;
+    Opt(std::nullopt_t) noexcept {}
+    template <class X>
+        requires opt_elem_accepts<T, const X&>
+    Opt(const std::optional<X>& o) {
+        if (o) init(*o);
+    }
+    template <class X>
+        requires (is_variant<T> && !std::same_as<std::decay_t<X>, Opt> && !is_optional<std::decay_t<X>>::value && !std::same_as<std::decay_t<X>, std::nullopt_t> && in_accepts<T, X>)
+    Opt(X&& x) {
+        In<T> tmp(std::forward<X>(x));
+        h = tmp.h;
+        own = std::exchange(tmp.own, false);
+    }
+    template <class H>
+        requires (!is_variant<T> && !std::same_as<std::decay_t<H>, Opt> && is_handle<H> && extends<std::decay_t<H>, T>)
+    Opt(const H& x) noexcept : h(x.h) {}
+    template <class F>
+        requires (is_callback<T> && callable_candidate<F> && std::constructible_from<T, F>)
+    Opt(F&& f) {
+        T cb(std::forward<F>(f));
+        h = std::exchange(cb.h, 0);
+        own = true;
+    }
+    ~Opt() {
+        if (own) ts_raw_js_release(h);
+    }
+
+  private:
+    template <class X>
+    void init(const X& x) {
+        if constexpr (is_variant<T>) {
+            In<T> tmp(x);
+            h = tmp.h;
+            own = std::exchange(tmp.own, false);
+        } else if constexpr (is_handle<X>) {
+            h = x.h;
+        } else {
+            T cb(x);
+            h = std::exchange(cb.h, 0);
+            own = true;
+        }
+    }
+};
+
+template <class U>
+inline Arg::Arg(const In<U>& v) : h(v.h) {}
+template <class T>
+inline Arg::Arg(const Opt<T>& v) : h(v.h) {}
+
+template <class Elem, class X>
+inline constexpr bool rest_accepts_v = [] {
+    using D = std::decay_t<X>;
+    if constexpr (std::same_as<Elem, Value>) {
+        return is_handle<X> || is_string_arg<X> || is_number_arg<X> || std::same_as<D, bool> || std::is_enum_v<D> || is_variant<D> || is_optional<D>::value;
+    } else if constexpr (is_variant<Elem>) {
+        return in_accepts<Elem, X>;
+    } else if constexpr (std::same_as<Elem, std::string>) {
+        return is_string_arg<X>;
+    } else if constexpr (std::same_as<Elem, double>) {
+        return is_number_arg<X>;
+    } else if constexpr (std::same_as<Elem, bool>) {
+        return std::same_as<D, bool>;
+    } else if constexpr (std::is_enum_v<Elem>) {
+        return std::same_as<D, Elem>;
+    } else {
+        return (is_handle<X> && extends<D, Elem>) || (is_callback<Elem> && callable_candidate<X> && std::constructible_from<Elem, X>);
+    }
+}();
+template <class Elem, class X>
+concept rest_accepts = rest_accepts_v<Elem, X>;
+
 template <class T>
 struct Iterator;
 struct IterationEnd {};
@@ -817,13 +1327,35 @@ struct Array : virtual Handle {
         for (const T& x : items) push(x);
     }
     static Array create() { return Array(handle, ts_raw_js_array_new()); }
+    template <class... Us>
+        requires (rest_accepts<T, Us> && ...)
+    static Array of(Us&&... xs) {
+        Array a = create();
+        (a.push(std::forward<Us>(xs)), ...);
+        return a;
+    }
     uint32_t size() const { return ts_raw_js_array_length(h); }
     T operator[](uint32_t i) const { return from_handle<T>(ts_raw_js_array_get(h, i)); }
+    void push(const T& v) const { ts_raw_js_array_push(h, Arg(v).h); }
     template <class U>
-        requires std::same_as<T, Value> || std::convertible_to<const U&, T>
-    void push(const U& v) const {
+        requires (!std::same_as<std::decay_t<U>, T> && (rest_accepts<T, U> || std::convertible_to<const U&, T>))
+    void push(U&& v) const {
         if constexpr (std::same_as<T, Value>) ts_raw_js_array_push(h, Arg(v).h);
-        else ts_raw_js_array_push(h, Arg(T(v)).h);
+        else if constexpr (is_variant<T>) ts_raw_js_array_push(h, In<T>(std::forward<U>(v)).h);
+        else if constexpr (std::same_as<T, std::string>) {
+            using D = std::decay_t<U>;
+            if constexpr (std::is_pointer_v<D>) {
+                std::string_view sv = v ? std::string_view(v) : std::string_view();
+                ts_raw_js_array_push(h, Arg(sv).h);
+            } else {
+                std::string_view sv(v);
+                ts_raw_js_array_push(h, Arg(sv).h);
+            }
+        } else if constexpr (std::same_as<T, double>) ts_raw_js_array_push(h, Arg(double(v)).h);
+        else if constexpr (std::same_as<T, bool>) ts_raw_js_array_push(h, Arg(bool(v)).h);
+        else if constexpr (std::is_enum_v<T>) ts_raw_js_array_push(h, Arg(T(v)).h);
+        else if constexpr (is_handle<std::decay_t<U>>) ts_raw_js_array_push(h, v.h);
+        else ts_raw_js_array_push(h, Arg(T(std::forward<U>(v))).h);
     }
     Iterator<T> begin() const;
     IterationEnd end() const { return {}; }
@@ -860,7 +1392,9 @@ struct [[nodiscard]] Result {
     Result(Error e) : v(std::in_place_index<1>, std::move(e)) {}
     explicit operator bool() const { return v.index() == 0; }
     T& operator*() { return std::get<0>(v); }
+    const T& operator*() const { return std::get<0>(v); }
     T* operator->() { return &std::get<0>(v); }
+    const T* operator->() const { return &std::get<0>(v); }
     const Error& error() const { return std::get<1>(v); }
 
   private:
@@ -978,10 +1512,35 @@ template <class... T>
 struct Tuple : Handle {
     Tuple() = default;
     Tuple(handle_t, uint32_t h) : Handle(handle, h) {}
-    explicit Tuple(const T&... xs) : Handle(handle, ts_raw_js_array_new()) { (ts_raw_js_array_push(h, Arg(xs).h), ...); }
+    Tuple(const Tuple&) = default;
+    Tuple(Tuple&&) = default;
+    Tuple& operator=(const Tuple&) = default;
+    Tuple& operator=(Tuple&&) = default;
+    Tuple(const T&... xs) requires (sizeof...(T) > 0) : Handle(handle, ts_raw_js_array_new()) { (ts_raw_js_array_push(h, Arg(xs).h), ...); }
     template <size_t I>
     std::tuple_element_t<I, std::tuple<T...>> get() const {
         return from_handle<std::tuple_element_t<I, std::tuple<T...>>>(ts_raw_js_array_get(h, I));
+    }
+};
+template <class... T>
+Tuple(const T&...) -> Tuple<T...>;
+
+template <class... Ts>
+struct Opt<Tuple<Ts...>> {
+    uint32_t h = 0;
+    bool own = false;
+    Opt(const Opt&) = delete;
+    Opt& operator=(const Opt&) = delete;
+    Opt(std::nullopt_t) noexcept {}
+    Opt(const Tuple<Ts...>& v) noexcept : h(v.h) {}
+    Opt(const std::optional<Tuple<Ts...>>& o) noexcept {
+        if (o) h = o->h;
+    }
+    Opt(const Ts&... xs) requires (sizeof...(Ts) > 0) : h(ts_raw_js_array_new()), own(true) {
+        (ts_raw_js_array_push(h, Arg(xs).h), ...);
+    }
+    ~Opt() {
+        if (own) ts_raw_js_release(h);
     }
 };
 
@@ -1010,18 +1569,30 @@ F& closure_fn(void* ctx) { return static_cast<ClosureOf<F>*>(static_cast<Closure
 // share the function: release one of them, once.
 struct Callback : virtual Handle {
     void release() {
-        if (uint32_t ctx = ts_raw_js_callback_release(h)) delete static_cast<Closure*>(reinterpret_cast<void*>(uintptr_t(ctx)));
-        static_cast<Handle&>(*this) = Handle();
+        if (h) {
+            if (uint32_t ctx = ts_raw_js_callback_release(h)) delete static_cast<Closure*>(reinterpret_cast<void*>(uintptr_t(ctx)));
+            static_cast<Handle&>(*this) = Handle();
+        }
     }
 };
 
 // A callback released when it goes out of scope.
 template <class C>
 struct Scoped : C {
+    Scoped() = default;
     template <class F>
-    Scoped(F f) : Handle(C(std::move(f))) {}
+        requires (!std::same_as<std::decay_t<F>, Scoped> && !is_handle<F> && std::constructible_from<C, F>)
+    Scoped(F&& f) : Handle(C(std::forward<F>(f))) {}
     Scoped(const Scoped&) = delete;
     Scoped& operator=(const Scoped&) = delete;
+    Scoped(Scoped&& o) noexcept : Handle(std::move(static_cast<Handle&>(o))), C() {}
+    Scoped& operator=(Scoped&& o) noexcept {
+        if (this != &o) {
+            this->release();
+            static_cast<Handle&>(*this) = std::move(static_cast<Handle&>(o));
+        }
+        return *this;
+    }
     ~Scoped() { this->release(); }
 };
 
@@ -1031,13 +1602,16 @@ template <class E>
 struct Listener : Callback {
     Listener() = default;
     Listener(handle_t, uint32_t h) : Handle(handle, h) {}
-    template <class F, std::enable_if_t<!is_handle<F>, int> = 0>
+    template <class F>
+        requires (callable_candidate<F> && std::invocable<F&, dep<F, E>>)
     Listener(F f) : Handle(handle, ts_raw_js_listener_from(reinterpret_cast<uintptr_t>(&call<F>), closure(std::move(f)))) {}
 
   private:
     template <class F>
     static void call(void* ctx, uint32_t ev) { closure_fn<F>(ctx)(E(handle, ev)); }
 };
+template <class E>
+inline constexpr bool is_callback<Listener<E>> = true;
 
 }  // namespace ts
 #endif
@@ -1193,6 +1767,11 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         text += &decoder_ext;
         out.push((path, text));
     }
+    // Per module: headers, and the definitions compiled once.
+    let mut modules: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut library: BTreeMap<String, (BTreeSet<String>, String)> = BTreeMap::new();
+    let callbacks: HashSet<&str> = m.callbacks.iter().map(|c| c.name.as_str()).collect();
+
     // A callback, made from a lambda. Its arguments are made only once the
     // lambda's type is known, so the types they name need not be complete yet.
     for c in &m.callbacks {
@@ -1208,26 +1787,76 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             Ty::Void => format!("{call};"),
             t => format!("return {};", lower_callback(t, &call)),
         };
+        let cb_args: Vec<String> = c.params.iter().map(|(_, t)| format!("ts::dep<F, {}>", ty_out(t, unions))).collect();
+        let arg_list = if cb_args.is_empty() { String::new() } else { format!(", {}", cb_args.join(", ")) };
+        let req = if c.ret == Ty::Void {
+            format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}>")
+        } else {
+            format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}> && !std::is_void_v<std::invoke_result_t<F&{arg_list}>>")
+        };
         let (name, ret) = (&c.name, raw_callback(&c.ret));
         let tpl = head(&c.type_params, false);
+        let owner = if c.type_params.is_empty() {
+            c.name.clone()
+        } else {
+            format!("{}<{}>", c.name, c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", "))
+        };
         let cb_from = format!("{name}_from");
         let cb_raw = raw_fn(&raw_prefix, &cb_from);
         let cb_attr = import_attr(wasm_module, &cb_from);
+        let mut cb_imports = BTreeSet::new();
+        cb_imports.insert(format!("extern \"C\" {cb_attr} uint32_t {cb_raw}(uintptr_t, void*);\n"));
+        let mut op_decls = String::new();
+        let mut op_header_defs = String::new();
+        let mut op_seen = BTreeSet::new();
+        for f in m.funcs.iter().filter(|f| {
+            f.call == Call::Apply
+                && f.params.first().is_some_and(|(_, t)| matches!(t, Ty::Obj(n) | Ty::Generic(n, _) if n == &c.name))
+        }) {
+            let mut op_f = f.clone();
+            op_f.call = Call::Invoke;
+            op_f.params = f.params[1..].to_vec();
+            op_f.type_params = f.type_params.get(c.type_params.len()..).unwrap_or(&[]).to_vec();
+            for func in function_variants(&op_f, "operator()".into(), None, &owner, &tpl, Place::Member, unions, &callbacks, wasm_module, &raw_prefix) {
+                if !op_seen.insert(func.key) {
+                    continue;
+                }
+                op_decls += &func.decl;
+                used.extend(func.refs);
+                for t in &op_f.type_params {
+                    param_types(std::slice::from_ref(t), &mut used);
+                }
+                if func.templated {
+                    op_header_defs += &func.def;
+                    cb_imports.insert(func.import);
+                } else {
+                    let lib = library.entry(f.module.clone()).or_default();
+                    lib.0.insert(func.import);
+                    lib.1 += &func.def;
+                }
+            }
+        }
+        used.remove(&c.name);
         let body = wrap_ns(
             ns,
             &format!(
                 "{tpl}struct {name} : ts::Callback {{\n{}    \
-                 template <class F, std::enable_if_t<!ts::is_handle<F>, int> = 0>\n    \
-                 {name}(F f) : ts::Handle(ts::handle, {cb_raw}(reinterpret_cast<uintptr_t>(&call<F>), ts::closure(std::move(f)))) {{}}\n\n  \
+                 template <class F>\n        requires ({req})\n    \
+                 {name}(F f) : ts::Handle(ts::handle, {cb_raw}(reinterpret_cast<uintptr_t>(&call<F>), ts::closure(std::move(f)))) {{}}\n\
+                 {op_decls}\n  \
                  private:\n    template <class F>\n    static {ret} call(void* ctx{raw_args}) {{ {result} }}\n}};\n",
                 constructors(name),
             ),
         );
-        let text = format!(
-            "// Generated.\n#pragma once\n{}extern \"C\" {cb_attr} uint32_t {cb_raw}(uintptr_t, void*);\n\n{body}\n{}",
+        let mut text = format!(
+            "// Generated.\n#pragma once\n{}{}\n{body}\n{}",
             include(&path, "ts_types.hpp"),
+            cb_imports.into_iter().collect::<String>(),
             includes(&path, &used)
         );
+        if !op_header_defs.is_empty() {
+            text += &format!("\n{}", wrap_ns(ns, &op_header_defs));
+        }
         out.push((path, text));
     }
 
@@ -1246,9 +1875,6 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         out
     };
     let member_names = |c: &Class| -> BTreeSet<String> { c.funcs.iter().filter(|f| Class::has_self(f)).map(|f| cpp_name(f, "create")).collect() };
-    // Per module: headers, and the definitions compiled once.
-    let mut modules: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut library: BTreeMap<String, (BTreeSet<String>, String)> = BTreeMap::new();
     for c in &m.classes {
         let base = &home[&c.name];
         let (decl_path, impl_path) = (format!("{base}.decl.hpp"), format!("{base}.hpp"));
@@ -1276,16 +1902,62 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         // A name the type declares itself hides its ancestors' overloads in C++,
         // where TypeScript merges them: `using Base::name;` brings them back, and
         // an own overload of the same signature still hides its base's.
+        let clashes_adapted = |bf: &Func, cf: &Func| -> bool {
+            if bf.params.len() != cf.params.len() {
+                return false;
+            }
+            let mut diff = false;
+            for ((_, bt), (_, ct)) in bf.params.iter().zip(&cf.params) {
+                let b_ty = ty_param(bt, unions, &callbacks);
+                let c_ty = ty_param(ct, unions, &callbacks);
+                if b_ty == c_ty {
+                    continue;
+                }
+                let b_ad = is_adapted_param(bt, unions, &callbacks);
+                let c_ad = is_adapted_param(ct, unions, &callbacks);
+                if (b_ad && c_ad) || (b_ad && *ct == Ty::Any) || (c_ad && *bt == Ty::Any) {
+                    diff = true;
+                } else {
+                    return false;
+                }
+            }
+            diff
+        };
         let mut usings = in_structs.get(&c.name).cloned().unwrap_or_default();
         for (name, hs) in &holders {
             let visible: Vec<&&String> = hs.iter().filter(|h| !hs.iter().any(|o| o != *h && ancestors(o).contains(**h))).collect();
             if own.contains(name) && visible.len() == 1 {
                 let h = visible[0];
-                let base = match base_args(m, c, h) {
-                    Some(args) if !args.is_empty() => ty_in(&Ty::Generic((*h).clone(), args)),
-                    _ => (*h).clone(),
+                let k = m.classes.iter().find(|k| k.name == **h).unwrap();
+                let args = base_args(m, c, h).unwrap_or_default();
+                let base_funcs: Vec<Func> = k
+                    .funcs
+                    .iter()
+                    .filter(|f| Class::has_self(f) && cpp_name(f, "create") == *name)
+                    .map(|f| map_types(&with_self_args(f, k), &|t| subst(t, &k.type_params, &args)))
+                    .collect();
+                let own_funcs: Vec<Func> = c
+                    .funcs
+                    .iter()
+                    .filter(|f| Class::has_self(f) && cpp_name(f, "create") == *name)
+                    .map(|f| with_self_args(f, c))
+                    .collect();
+                if base_funcs.iter().any(|bf| own_funcs.iter().any(|cf| clashes_adapted(bf, cf))) {
+                    for bf in base_funcs {
+                        if !own_funcs.iter().any(|cf| clashes_adapted(&bf, cf)) {
+                            again.push(bf);
+                        }
+                    }
+                    continue;
+                }
+                let base = match args.is_empty() {
+                    false => ty_in(&Ty::Generic((*h).clone(), args)),
+                    true => (*h).clone(),
                 };
                 usings += &format!("    using {base}::{};\n", ident(name));
+                if name == "invoke" {
+                    usings += &format!("    using {base}::operator();\n");
+                }
                 continue;
             }
             if visible.len() < 2 {
@@ -1310,29 +1982,59 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         let lib = library.entry(c.module.clone()).or_default();
         // C++ cannot overload a static member with a non-static one of the
         // same parameters, as TypeScript can: the static one says it is.
-        let signature = |f: &Func| format!("{}({})", cpp_name(f, ctor), f.params.iter().map(|p| ty_in(&p.1)).collect::<Vec<_>>().join(","));
-        let instance: BTreeSet<String> = c.funcs.iter().filter(|f| Class::has_self(f)).map(|f| signature(&with_self_args(f, c))).collect();
+        let sig_of = |name: &str, ps: &[(String, Ty)]| format!("{name}({})", ps.iter().map(|p| ty_param(&p.1, unions, &callbacks)).collect::<Vec<_>>().join(","));
+        let signature = |f: &Func| sig_of(&cpp_name(f, ctor), &f.params);
+        let mut instance = BTreeSet::new();
+        for f in c.funcs.iter().map(|f| with_self_args(f, c)).chain(again.iter().cloned()).filter(Class::has_self) {
+            instance.insert(signature(&f));
+            if f.rest && matches!(f.params.last().map(|p| &p.1), Some(Ty::Array | Ty::ArrayOf(_))) {
+                instance.insert(sig_of(&cpp_name(&f, ctor), &f.params[..f.params.len() - 1]));
+            }
+        }
         // The functions of the namespace it shares its name with, as its statics.
         let namespaced: Vec<Func> = class_statics.get(&c.name).cloned().unwrap_or_default();
-        for f in c.funcs.iter().map(|f| with_self_args(f, c)).chain(again).chain(namespaced) {
-            let place = if Class::has_self(&f) { Place::Member } else { Place::Static };
-            let name = if place == Place::Static && instance.contains(&signature(&f)) { format!("{}_static", cpp_name(&f, ctor)) } else { cpp_name(&f, ctor) };
-            let func = function(&f, name, &owner, &class_head, place, unions, wasm_module, &raw_prefix);
-            // Overloads TypeScript tells apart and C++ cannot are the same C++ function.
-            if !seen.insert(func.key) {
+        let all_funcs: Vec<Func> = c.funcs.iter().map(|f| with_self_args(f, c)).chain(again).chain(namespaced).collect();
+        for (idx, f) in all_funcs.iter().enumerate() {
+            let raw_name = cpp_name(f, ctor);
+            if all_funcs.iter().enumerate().any(|(j, g)| {
+                j != idx && func_subsumed_by(f, g, &raw_name, &cpp_name(g, ctor), unions, &callbacks)
+            }) {
                 continue;
             }
-            members += &func.decl;
-            used.extend(func.refs);
-            for t in &f.type_params {
-                param_types(std::slice::from_ref(t), &mut used);
-            }
-            if func.templated {
-                header_defs += &func.def;
-                header_imports.insert(func.import);
+            let place = if Class::has_self(f) { Place::Member } else { Place::Static };
+            let name = if place == Place::Static && instance.contains(&signature(f)) { format!("{raw_name}_static") } else { raw_name };
+            let zero_name = if place == Place::Static
+                && f.rest
+                && matches!(f.params.last().map(|p| &p.1), Some(Ty::Array | Ty::ArrayOf(_)))
+                && instance.contains(&sig_of(&name, &f.params[..f.params.len() - 1]))
+            {
+                Some(format!("{name}_static"))
             } else {
-                lib.1 += &func.def;
-                lib.0.insert(func.import);
+                None
+            };
+            let mut emit_names = vec![name];
+            if place == Place::Member && f.call == Call::Invoke && emit_names[0] == "invoke" {
+                emit_names.push("operator()".to_string());
+            }
+            for emit_name in emit_names {
+                for func in function_variants(f, emit_name, zero_name.clone(), &owner, &class_head, place, unions, &callbacks, wasm_module, &raw_prefix) {
+                    // Overloads TypeScript tells apart and C++ cannot are the same C++ function.
+                    if !seen.insert(func.key) {
+                        continue;
+                    }
+                    members += &func.decl;
+                    used.extend(func.refs);
+                    for t in &f.type_params {
+                        param_types(std::slice::from_ref(t), &mut used);
+                    }
+                    if func.templated {
+                        header_defs += &func.def;
+                        header_imports.insert(func.import);
+                    } else {
+                        lib.1 += &func.def;
+                        lib.0.insert(func.import);
+                    }
+                }
             }
         }
         for (name, value) in &c.consts {
@@ -1436,41 +2138,55 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     }
     let mut functions: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>, String, String)> = BTreeMap::new();
     let mut seen = BTreeSet::new();
-    for f in m.funcs.iter().filter(|f| !class_statics_of.contains(&f.import)) {
-        // A namespace's, by its own name in a namespace of it: `marked_ns::parseInline`.
-        let space = m.func_namespaces.get(&f.import).map(|(path, _, _, _)| {
-            let top = match &containers.get(&path[0]) {
-                Some(Container::Namespace(n)) => n.clone(),
-                _ => format!("{}_ns", ident(&path[0])),
-            };
-            let mut parts = vec![top];
-            for i in 1..path.len() {
-                parts.push(nested_name(&levels, &path[..i], &path[i]));
-            }
-            parts.join("::")
-        });
-        let name = m.func_namespaces.get(&f.import).map_or_else(|| cpp_name(f, "create"), |(_, own, _, _)| cpp_name_as(f, own, "create"));
-        let mut func = function(f, name, "", "", Place::Free, unions, wasm_module, &raw_prefix);
-        if let Some(space) = &space {
-            let wrap = |text: &str| if text.is_empty() { String::new() } else { format!("namespace {space} {{\n{text}}}\n") };
-            func.key = format!("{space}::{}", func.key);
-            func.decl = wrap(&func.decl);
-            func.def = wrap(&func.def);
-        }
-        if !seen.insert(func.key) {
+    let free_funcs: Vec<(Option<String>, String, &Func)> = m
+        .funcs
+        .iter()
+        .filter(|f| !class_statics_of.contains(&f.import))
+        .map(|f| {
+            // A namespace's, by its own name in a namespace of it: `marked_ns::parseInline`.
+            let space = m.func_namespaces.get(&f.import).map(|(path, _, _, _)| {
+                let top = match &containers.get(&path[0]) {
+                    Some(Container::Namespace(n)) => n.clone(),
+                    _ => format!("{}_ns", ident(&path[0])),
+                };
+                let mut parts = vec![top];
+                for i in 1..path.len() {
+                    parts.push(nested_name(&levels, &path[..i], &path[i]));
+                }
+                parts.join("::")
+            });
+            let name = m.func_namespaces.get(&f.import).map_or_else(|| cpp_name(f, "create"), |(_, own, _, _)| cpp_name_as(f, own, "create"));
+            (space, name, f)
+        })
+        .collect();
+    for (idx, (space, name, f)) in free_funcs.iter().enumerate() {
+        if free_funcs.iter().enumerate().any(|(j, (os, on, g))| {
+            j != idx && os == space && func_subsumed_by(f, g, name, on, unions, &callbacks)
+        }) {
             continue;
         }
-        let entry = functions.entry(f.module.clone()).or_default();
-        entry.1.extend(func.refs);
-        f.type_params.iter().for_each(|t| param_types(std::slice::from_ref(t), &mut entry.1));
-        entry.2 += &func.decl;
-        if func.templated {
-            entry.0.insert(func.import);
-            entry.3 += &func.def;
-        } else {
-            let lib = library.entry(f.module.clone()).or_default();
-            lib.0.insert(func.import);
-            lib.1 += &func.def;
+        for mut func in function_variants(f, name.clone(), None, "", "", Place::Free, unions, &callbacks, wasm_module, &raw_prefix) {
+            if let Some(space) = &space {
+                let wrap = |text: &str| if text.is_empty() { String::new() } else { format!("namespace {space} {{\n{text}}}\n") };
+                func.key = format!("{space}::{}", func.key);
+                func.decl = wrap(&func.decl);
+                func.def = wrap(&func.def);
+            }
+            if !seen.insert(func.key) {
+                continue;
+            }
+            let entry = functions.entry(f.module.clone()).or_default();
+            entry.1.extend(func.refs);
+            f.type_params.iter().for_each(|t| param_types(std::slice::from_ref(t), &mut entry.1));
+            entry.2 += &func.decl;
+            if func.templated {
+                entry.0.insert(func.import);
+                entry.3 += &func.def;
+            } else {
+                let lib = library.entry(f.module.clone()).or_default();
+                lib.0.insert(func.import);
+                lib.1 += &func.def;
+            }
         }
     }
     for (module, (imports, used, decls, defs)) in functions {
@@ -1713,7 +2429,7 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque:
                          std::vector<uint8_t> to_vector() const { std::vector<uint8_t> out(byte_length()); if (!out.empty()) read_bytes(out.data(), uint32_t(out.size())); return out; }\n";
             }
         }
-        format!("{}struct {name} : virtual ts::Handle {{\n{body}}};\n", head(params, false))
+        format!("{}struct {name} : virtual ts::Handle {{\n{body}}};\n", head(params, true))
     };
     // (name, declaration, what it needs declared first)
     let mut templates: Vec<(String, String, BTreeSet<String>)> = Vec::new();
@@ -1727,9 +2443,34 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque:
         let text = format!("{}struct {};\n", head(&c.type_params, true), c.name);
         if c.type_params.is_empty() { types += &text } else { template(&c.name, &c.type_params, text) }
     }
+    let mut cb_specs = String::new();
     for c in &m.callbacks {
-        let text = format!("{}struct {};\n", head(&c.type_params, true), c.name);
-        if c.type_params.is_empty() { types += &text } else { template(&c.name, &c.type_params, text) }
+        let decl = format!("{}struct {};\n", head(&c.type_params, true), c.name);
+        if c.type_params.is_empty() {
+            types += &decl;
+            cb_specs += &format!("template <>\ninline constexpr bool ts::is_callback<::{ns_prefix}{}> = true;\n", c.name);
+        } else {
+            let ps: Vec<String> = (0..c.type_params.len()).map(|i| format!("B{i}__")).collect();
+            let spec_head = format!("template <{}>\n", ps.iter().map(|p| format!("class {p}")).collect::<Vec<_>>().join(", "));
+            let spec_args = ps.join(", ");
+            let spec = format!(
+                "{spec_head}inline constexpr bool ts::is_callback<::{ns_prefix}{}<{spec_args}>> = true;\n",
+                c.name
+            );
+            let text = if let Some(pkg) = ns {
+                format!("{decl}}}  // namespace {pkg}\n{spec}namespace {pkg} {{\n")
+            } else {
+                format!("{decl}{spec}")
+            };
+            template(&c.name, &c.type_params, text);
+        }
+    }
+    if !cb_specs.is_empty() {
+        if let Some(pkg) = ns {
+            types += &format!("}}  // namespace {pkg}\n{cb_specs}namespace {pkg} {{\n");
+        } else {
+            types += &cb_specs;
+        }
     }
     // Types declared elsewhere: handles, generic or not.
     // Promises are the runtime's.
@@ -1742,7 +2483,7 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque:
             continue;
         }
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
-        let params: Vec<TParam> = (1..=arity).map(|i| TParam { name: format!("T{i}"), default: None, constraint: None }).collect();
+        let params: Vec<TParam> = (1..=arity).map(|i| TParam { name: format!("T{i}"), default: Some(Ty::Any), constraint: None }).collect();
         let mark = if is_builtin_cpp_type(name) { "" } else { "// external\n" };
         if params.is_empty() { types += &format!("{mark}{}", opaque(name, &params)) } else { template(name, &params, format!("{mark}{}", opaque(name, &params))) }
     }
@@ -1750,7 +2491,7 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque:
     // argument (`Interval<StartType = DateArg<Date>>`) or a member (`Box<T>`).
     for u in unions {
         let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions)).collect();
-        let mut text = format!("{}using {} = std::variant<{}>;\n", head(&u.type_params, false), u.name, parts.join(", "));
+        let mut text = format!("{}using {} = std::variant<{}>;\n", head(&u.type_params, true), u.name, parts.join(", "));
         // Defined with the union, used wherever one comes back.
         if u.decodable() {
             text += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false), union_type(u), u.name);
@@ -1783,25 +2524,35 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque:
     // What each type extends, for constraints: see `ts::bases`. After the
     // types its bases name, theirs first.
     for c in m.classes.iter().filter(|c| !c.bases.is_empty()) {
-        let args = if c.type_params.is_empty() { String::new() } else { format!("<{}>", c.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) };
         let base_list = c.bases.iter().map(ty_in).collect::<Vec<_>>().join(", ");
+        let tpl_head = if c.type_params.is_empty() {
+            String::new()
+        } else {
+            format!("template <{}>\n", c.type_params.iter().map(|p| format!("class {}", p.name)).collect::<Vec<_>>().join(", "))
+        };
+        let (spec_head, spec_args) = if c.type_params.is_empty() {
+            ("template <>\n".to_string(), String::new())
+        } else {
+            let ps: Vec<String> = (0..c.type_params.len()).map(|i| format!("B{i}__")).collect();
+            (
+                format!("template <{}>\n", ps.iter().map(|p| format!("class {p}")).collect::<Vec<_>>().join(", ")),
+                format!("<{}>", ps.join(", ")),
+            )
+        };
         let text = if let Some(pkg) = ns {
-            let tpl_head = if c.type_params.is_empty() {
-                String::new()
-            } else {
-                format!("template <{}>\n", c.type_params.iter().map(|p| format!("class {}", p.name)).collect::<Vec<_>>().join(", "))
-            };
-            let spec_head = if tpl_head.is_empty() { "template <>\n".to_string() } else { tpl_head.clone() };
             format!(
                 "{tpl_head}using ts_bases_of_{0}_ = ts::list<{base_list}>;\n\
                  }}  // namespace {pkg}\n\
-                 {spec_head}struct ts::bases<::{pkg}::{0}{args}> {{\n    using type = ::{pkg}::ts_bases_of_{0}_{args};\n}};\n\
+                 {spec_head}struct ts::bases<::{pkg}::{0}{spec_args}> {{\n    using type = ::{pkg}::ts_bases_of_{0}_{spec_args};\n}};\n\
                  namespace {pkg} {{\n",
                 c.name
             )
         } else {
-            let header = if c.type_params.is_empty() { "template <>\n".to_string() } else { head(&c.type_params, false) };
-            format!("{header}struct ts::bases<{}{args}> {{\n    using type = ts::list<{base_list}>;\n}};\n", c.name)
+            format!(
+                "{tpl_head}using ts_bases_of_{0}_ = ts::list<{base_list}>;\n\
+                 {spec_head}struct ts::bases<::{0}{spec_args}> {{\n    using type = ::ts_bases_of_{0}_{spec_args};\n}};\n",
+                c.name
+            )
         };
         let mut named = BTreeSet::new();
         c.bases.iter().for_each(|b| named_types(b, &mut named));

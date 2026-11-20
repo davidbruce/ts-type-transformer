@@ -43,12 +43,12 @@ static void draw_box(const dom::CanvasRenderingContext2D& ctx, double cx, double
         to_cy(cy + s * hx + c * hy),
         to_cy(cy + s * (-hx) + c * hy)
     };
-    ctx.fillStyle(std::string(fill_hex));
+    ctx.fillStyle(fill_hex);
     ctx.beginPath(); ctx.moveTo(xs[0], ys[0]);
     for (int i = 1; i < 4; i++) ctx.lineTo(xs[i], ys[i]);
     ctx.closePath(); ctx.fill();
 
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.5);
     ctx.beginPath(); ctx.moveTo(xs[0], ys[0]);
     for (int i = 1; i < 4; i++) ctx.lineTo(xs[i], ys[i]);
@@ -57,19 +57,19 @@ static void draw_box(const dom::CanvasRenderingContext2D& ctx, double cx, double
 
 static void draw_circle(const dom::CanvasRenderingContext2D& ctx, double wx, double wy, double r, const char* fill_hex) {
     double cx = to_cx(wx), cy = to_cy(wy), rp = r * 46.0;
-    ctx.fillStyle(std::string(fill_hex));
+    ctx.fillStyle(fill_hex);
     ctx.beginPath(); ctx.arc(cx, cy, rp, 0.0, TWO_PI); ctx.fill();
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.5);
     ctx.beginPath(); ctx.arc(cx, cy, rp, 0.0, TWO_PI); ctx.stroke();
 }
 
 static void render(const std::shared_ptr<AppState>& st) {
     const auto& ctx = st->ctx;
-    ctx.fillStyle(std::string("#ffffff"));
+    ctx.fillStyle("#ffffff");
     ctx.fillRect(0.0, 0.0, 680.0, 400.0);
 
-    ctx.strokeStyle(std::string("#efefef"));
+    ctx.strokeStyle("#efefef");
     ctx.lineWidth(1.0);
     for (int gx = -6; gx <= 6; gx++) {
         double x = to_cx(double(gx));
@@ -106,19 +106,19 @@ static void render(const std::shared_ptr<AppState>& st) {
             Vector pt = ray.pointAt(toi);
             double hx = to_cx(pt.x()), hy = to_cy(pt.y());
 
-            ctx.strokeStyle(std::string("#737373"));
+            ctx.strokeStyle("#737373");
             ctx.lineWidth(1.0);
             ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(hx, hy); ctx.stroke();
 
             Vector n = hit->normal();
-            ctx.strokeStyle(std::string("#111111"));
+            ctx.strokeStyle("#111111");
             ctx.lineWidth(1.4);
             ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(to_cx(pt.x() + n.x() * 0.45), to_cy(pt.y() + n.y() * 0.45)); ctx.stroke();
 
-            ctx.fillStyle(std::string("#111111"));
+            ctx.fillStyle("#111111");
             ctx.beginPath(); ctx.arc(hx, hy, 2.8, 0.0, TWO_PI); ctx.fill();
         } else {
-            ctx.strokeStyle(std::string("#e5e5e5"));
+            ctx.strokeStyle("#e5e5e5");
             ctx.lineWidth(0.9);
             ctx.beginPath();
             ctx.moveTo(ox, oy);
@@ -127,9 +127,9 @@ static void render(const std::shared_ptr<AppState>& st) {
         }
     }
 
-    ctx.fillStyle(std::string("#111111"));
+    ctx.fillStyle("#111111");
     ctx.beginPath(); ctx.arc(ox, oy, 6.0, 0.0, TWO_PI); ctx.fill();
-    ctx.strokeStyle(std::string("#ffffff"));
+    ctx.strokeStyle("#ffffff");
     ctx.lineWidth(1.5);
     ctx.beginPath(); ctx.arc(ox, oy, 3.0, 0.0, TWO_PI); ctx.stroke();
 
@@ -140,7 +140,7 @@ static void render(const std::shared_ptr<AppState>& st) {
         "37 rays \xC2\xB7 hits=%d/37 \xC2\xB7 nearest_toi=%.2f m \xC2\xB7 center=%ld deg (%s)",
         hits, min_toi, deg, st->auto_sweep ? "auto" : "manual"
     );
-    st->meta.textContent(std::string(mbuf));
+    st->meta.textContent(mbuf);
 }
 
 static ts::Task run_app() {
@@ -210,6 +210,6 @@ static ts::Task run_app() {
     dom::requestAnimationFrame(st->raf_cb);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     run_app();
 }

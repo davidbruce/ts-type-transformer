@@ -439,7 +439,16 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     // A constraint that is an opaque type nothing is known to extend
     // (`T extends ArrayBufferLike`) holds for no type: none.
     let opaque: HashSet<String> = m.opaque.iter().cloned().collect();
-    let unconstrain = |ps: &mut Vec<TParam>| ps.iter_mut().filter(|p| matches!(&p.constraint, Some(Ty::Obj(n)) if opaque.contains(n))).for_each(|p| p.constraint = None);
+    let unconstrain = |ps: &mut Vec<TParam>| {
+        for p in ps.iter_mut() {
+            if matches!(&p.constraint, Some(Ty::Obj(n)) if opaque.contains(n)) {
+                let c = p.constraint.take();
+                if p.default.is_none() {
+                    p.default = c;
+                }
+            }
+        }
+    };
     m.classes.iter_mut().for_each(|c| {
         unconstrain(&mut c.type_params);
         c.funcs.iter_mut().for_each(|f| unconstrain(&mut f.type_params));

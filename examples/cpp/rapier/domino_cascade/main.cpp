@@ -53,14 +53,14 @@ static void draw_rot_box(const dom::CanvasRenderingContext2D& ctx, double cx, do
         to_cy(cy + r10 * (-hx) + r11 * hy)
     };
 
-    ctx.fillStyle(std::string(fill_hex));
+    ctx.fillStyle(fill_hex);
     ctx.beginPath();
     ctx.moveTo(xs[0], ys[0]);
     for (int i = 1; i < 4; i++) ctx.lineTo(xs[i], ys[i]);
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.5);
     ctx.beginPath();
     ctx.moveTo(xs[0], ys[0]);
@@ -105,10 +105,10 @@ static void step_sim(const std::shared_ptr<AppState>& st) {
 
 static void render(const std::shared_ptr<AppState>& st) {
     const auto& ctx = st->ctx;
-    ctx.fillStyle(std::string("#ffffff"));
+    ctx.fillStyle("#ffffff");
     ctx.fillRect(0.0, 0.0, 680.0, 400.0);
 
-    ctx.strokeStyle(std::string("#efefef"));
+    ctx.strokeStyle("#efefef");
     ctx.lineWidth(1.0);
     for (int gx = -6; gx <= 6; gx++) {
         double x = to_cx(double(gx));
@@ -119,13 +119,13 @@ static void render(const std::shared_ptr<AppState>& st) {
         ctx.beginPath(); ctx.moveTo(0.0, y); ctx.lineTo(680.0, y); ctx.stroke();
     }
 
-    ctx.fillStyle(std::string("#f7f7f7"));
+    ctx.fillStyle("#f7f7f7");
     ctx.fillRect(0.0, 350.0, 680.0, 50.0);
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.5);
     ctx.beginPath(); ctx.moveTo(0.0, 350.0); ctx.lineTo(680.0, 350.0); ctx.stroke();
 
-    ctx.fillStyle(std::string("#b5b5b5"));
+    ctx.fillStyle("#b5b5b5");
     for (int i = 0; i < st->trail_count; i++) {
         ctx.beginPath();
         ctx.arc(to_cx(st->trail_x[i]), to_cy(st->trail_y[i]), 2.0, 0.0, TWO_PI);
@@ -143,17 +143,17 @@ static void render(const std::shared_ptr<AppState>& st) {
 
     Vector sp = st->striker.translation();
     double scx = to_cx(sp.x()), scy = to_cy(sp.y());
-    ctx.fillStyle(std::string("#262626"));
+    ctx.fillStyle("#262626");
     ctx.beginPath(); ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TWO_PI); ctx.fill();
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.6);
     ctx.beginPath(); ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TWO_PI); ctx.stroke();
-    ctx.fillStyle(std::string("#e5e5e5"));
+    ctx.fillStyle("#e5e5e5");
     ctx.beginPath(); ctx.arc(scx - 5.0, scy - 5.0, 2.5, 0.0, TWO_PI); ctx.fill();
 
     char cbuf[64];
     std::snprintf(cbuf, sizeof cbuf, "Dominoes toppled: %d / 9", toppled);
-    ctx.fillStyle(std::string("#555555"));
+    ctx.fillStyle("#555555");
     ctx.font("11px ui-monospace, monospace");
     ctx.fillText(cbuf, 18.0, 24.0);
 
@@ -163,7 +163,7 @@ static void render(const std::shared_ptr<AppState>& st) {
         "9 cuboids + striker sphere \xC2\xB7 toppled=%d/9 \xC2\xB7 striker_x=%.2f m \xC2\xB7 step=%d (%s)",
         toppled, sp.x(), st->step_count, st->paused ? "paused" : "running"
     );
-    st->meta.textContent(std::string(mbuf));
+    st->meta.textContent(mbuf);
 }
 
 static ts::Task run_app() {
@@ -213,6 +213,6 @@ static ts::Task run_app() {
     dom::requestAnimationFrame(st->raf_cb);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     run_app();
 }

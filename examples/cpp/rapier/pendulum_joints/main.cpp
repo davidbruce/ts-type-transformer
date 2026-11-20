@@ -53,14 +53,14 @@ static void draw_rot_box(const dom::CanvasRenderingContext2D& ctx, double cx, do
         to_cy(cy + r10 * (-hx) + r11 * hy)
     };
 
-    ctx.fillStyle(std::string(fill_hex));
+    ctx.fillStyle(fill_hex);
     ctx.beginPath();
     ctx.moveTo(xs[0], ys[0]);
     for (int i = 1; i < 4; i++) ctx.lineTo(xs[i], ys[i]);
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.5);
     ctx.beginPath();
     ctx.moveTo(xs[0], ys[0]);
@@ -71,9 +71,9 @@ static void draw_rot_box(const dom::CanvasRenderingContext2D& ctx, double cx, do
 
 static void draw_pivot(const dom::CanvasRenderingContext2D& ctx, double wx, double wy) {
     double cx = to_cx(wx), cy = to_cy(wy);
-    ctx.fillStyle(std::string("#ffffff"));
+    ctx.fillStyle("#ffffff");
     ctx.beginPath(); ctx.arc(cx, cy, 4.0, 0.0, TWO_PI); ctx.fill();
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.6);
     ctx.beginPath(); ctx.arc(cx, cy, 4.0, 0.0, TWO_PI); ctx.stroke();
 }
@@ -137,10 +137,10 @@ static void step_sim(const std::shared_ptr<AppState>& st) {
 
 static void render(const std::shared_ptr<AppState>& st) {
     const auto& ctx = st->ctx;
-    ctx.fillStyle(std::string("#ffffff"));
+    ctx.fillStyle("#ffffff");
     ctx.fillRect(0.0, 0.0, 680.0, 400.0);
 
-    ctx.strokeStyle(std::string("#efefef"));
+    ctx.strokeStyle("#efefef");
     ctx.lineWidth(1.0);
     for (int gx = -6; gx <= 6; gx++) {
         double x = to_cx(double(gx));
@@ -153,7 +153,7 @@ static void render(const std::shared_ptr<AppState>& st) {
 
     draw_rot_box(ctx, 0.0, 6.2, 0.0, 0.0, 0.0, 1.0, 6.0, 0.22, "#efefef");
 
-    ctx.fillStyle(std::string("#b5b5b5"));
+    ctx.fillStyle("#b5b5b5");
     for (int i = 0; i < st->trail_count; i++) {
         ctx.beginPath(); ctx.arc(to_cx(st->ax[i]), to_cy(st->ay[i]), 1.6, 0.0, TWO_PI); ctx.fill();
         ctx.beginPath(); ctx.arc(to_cx(st->bx[i]), to_cy(st->by[i]), 1.6, 0.0, TWO_PI); ctx.fill();
@@ -180,9 +180,9 @@ static void render(const std::shared_ptr<AppState>& st) {
     draw_rot_box(ctx, ap.x(), ap.y(), aq.x(), aq.y(), aq.z(), aq.w(), 0.14, 0.85, "#f7f7f7");
 
     double bcx = to_cx(bp.x()), bcy = to_cy(bp.y());
-    ctx.fillStyle(std::string("#262626"));
+    ctx.fillStyle("#262626");
     ctx.beginPath(); ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI); ctx.fill();
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.6);
     ctx.beginPath(); ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI); ctx.stroke();
 
@@ -194,7 +194,7 @@ static void render(const std::shared_ptr<AppState>& st) {
     double arm_r11 = 1.0 - 2.0 * (aq.x() * aq.x() + aq.z() * aq.z());
     draw_pivot(ctx, ap.x() - arm_r01 * 0.88, ap.y() - arm_r11 * 0.88);
 
-    ctx.fillStyle(std::string("#555555"));
+    ctx.fillStyle("#555555");
     ctx.font("11px ui-monospace, monospace");
     ctx.fillText("3-Link Revolute Chain", to_cx(-3.5), 36.0);
     ctx.fillText("2-Body Bob Pendulum", to_cx(1.1), 36.0);
@@ -205,7 +205,7 @@ static void render(const std::shared_ptr<AppState>& st) {
         "5 revolute joints \xC2\xB7 chain_tip=(%.2f, %.2f) \xC2\xB7 bob=(%.2f, %.2f) \xC2\xB7 step=%d (%s)",
         tip_x, tip_y, bp.x(), bp.y(), st->step_count, st->paused ? "paused" : "running"
     );
-    st->meta.textContent(std::string(mbuf));
+    st->meta.textContent(mbuf);
 }
 
 static ts::Task run_app() {
@@ -256,6 +256,6 @@ static ts::Task run_app() {
     dom::requestAnimationFrame(st->raf_cb);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     run_app();
 }

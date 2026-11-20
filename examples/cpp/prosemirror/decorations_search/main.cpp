@@ -11,17 +11,8 @@
 using namespace prosemirror;
 using Sch = Schema<ts::Value, ts::Value>;
 
-static ts::Value val_of(const ts::Handle& h) {
-    ts::Value v;
-    static_cast<ts::Handle&>(v) = h;
-    return v;
-}
-
 static DOMOutputSpec hole_spec(std::string_view tag) {
-    ts::Array<> a = ts::Array<>::create();
-    a.push(ts::Value::string(tag));
-    a.push(ts::Value::number(0));
-    return DOMOutputSpec(a);
+    return DOMOutputSpec(ts::Array<>::of(tag, 0));
 }
 
 static std::string to_lower_ascii(std::string s) {
@@ -30,88 +21,61 @@ static std::string to_lower_ascii(std::string s) {
 }
 
 static Sch make_schema() {
-    NodeSpec doc = NodeSpec::create();
-    doc.content("block+");
+    NodeSpec doc = NodeSpec::create().content("block+");
+    MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
-    AttributeSpec lvl = AttributeSpec::create();
-    lvl.default_(ts::Value::number(2));
-    MarkSpec_attrs hattrs = MarkSpec_attrs::create();
-    hattrs.set_at("level", lvl);
+    NodeSpec heading = NodeSpec::create()
+        .attrs(hattrs)
+        .content("inline*")
+        .group("block")
+        .toDOM([](Node n) {
+            int l = static_cast<int>(n.attrs().at("level").to_number());
+            return hole_spec(l == 1 ? "h1" : "h2");
+        });
 
-    NodeSpec heading = NodeSpec::create();
-    heading.attrs(hattrs);
-    heading.content("inline*");
-    heading.group("block");
-    heading.toDOM(Node_to_DOMOutputSpec_fn([](Node n) {
-        int l = static_cast<int>(n.attrs().at("level").to_number());
-        return hole_spec(l == 1 ? "h1" : "h2");
-    }));
+    NodeSpec para = NodeSpec::create()
+        .content("inline*")
+        .group("block")
+        .toDOM([](Node) { return hole_spec("p"); });
 
-    NodeSpec para = NodeSpec::create();
-    para.content("inline*");
-    para.group("block");
-    para.toDOM(Node_to_DOMOutputSpec_fn([](Node) { return hole_spec("p"); }));
+    NodeSpec cblock = NodeSpec::create()
+        .content("text*")
+        .marks("")
+        .group("block")
+        .code(true)
+        .toDOM([](Node) { return DOMOutputSpec(ts::Array<>::of("pre", ts::Array<>::of("code", 0))); });
 
-    NodeSpec cblock = NodeSpec::create();
-    cblock.content("text*");
-    cblock.marks("");
-    cblock.group("block");
-    cblock.code(true);
-    cblock.toDOM(Node_to_DOMOutputSpec_fn([](Node) {
-        ts::Array<> inner = ts::Array<>::create();
-        inner.push(ts::Value::string("code"));
-        inner.push(ts::Value::number(0));
-        ts::Array<> outer = ts::Array<>::create();
-        outer.push(ts::Value::string("pre"));
-        outer.push(val_of(inner));
-        return DOMOutputSpec(outer);
-    }));
+    NodeSpec text = NodeSpec::create().group("inline");
 
-    NodeSpec text = NodeSpec::create();
-    text.group("inline");
-
-    NodeSpec nodes = NodeSpec::create();
-    nodes.set_at("doc", val_of(doc));
-    nodes.set_at("heading", val_of(heading));
-    nodes.set_at("paragraph", val_of(para));
-    nodes.set_at("code_block", val_of(cblock));
-    nodes.set_at("text", val_of(text));
+    auto nodes = NodeSpec::create()
+        .set_at("doc", doc)
+        .set_at("heading", heading)
+        .set_at("paragraph", para)
+        .set_at("code_block", cblock)
+        .set_at("text", text);
 
     auto make_mark = [](const char* tag) {
-        MarkSpec m = MarkSpec::create();
-        m.toDOM(Mark_boolean_to_DOMOutputSpec_fn([tag](Mark, bool) { return hole_spec(tag); }));
-        return m;
+        return MarkSpec::create().toDOM([tag](Mark, bool) { return hole_spec(tag); });
     };
-    MarkSpec marks = MarkSpec::create();
-    marks.set_at("strong", val_of(make_mark("strong")));
-    marks.set_at("code", val_of(make_mark("code")));
+    auto marks = MarkSpec::create()
+        .set_at("strong", make_mark("strong"))
+        .set_at("code", make_mark("code"));
 
-    SchemaSpec<ts::Value, ts::Value> spec = SchemaSpec<ts::Value, ts::Value>::create();
-    spec.nodes(val_of(nodes));
-    spec.marks(val_of(marks));
-    return Sch::create(spec);
+    return Sch::create(SchemaSpec<ts::Value, ts::Value>::create().nodes(nodes).marks(marks));
 }
 
 static Node p_node(const Sch& schema, std::string_view t) {
-    return schema.node(string_or_NodeType(std::string("paragraph")), std::nullopt, Fragment_or_Node_or_Node_array(schema.text(t)));
+    return schema.node("paragraph", std::nullopt, schema.text(t));
 }
 
 static Node make_initial_doc(const Sch& schema) {
-    Attrs ha = Attrs::create();
-    ha.set_at("level", ts::Value::number(2));
-    Node h = schema.node(
-        string_or_NodeType(std::string("heading")), ha,
-        Fragment_or_Node_or_Node_array(schema.text("Immutable State & View Decorations"))
-    );
+    Attrs ha = Attrs::create().set_at("level", ts::Value::number(2));
+    Node h = schema.node("heading", ha, schema.text("Immutable State & View Decorations"));
     Node p1 = p_node(schema, "A ProseMirror schema validates every document tree before state updates commit to the view.");
     Node p2 = p_node(schema, "Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema.");
-    Node cb = schema.node(
-        string_or_NodeType(std::string("code_block")), std::nullopt,
-        Fragment_or_Node_or_Node_array(schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view"))
-    );
+    Node cb = schema.node("code_block", std::nullopt, schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view"));
     Node p3 = p_node(schema, "Inline decorations highlight matching tokens while node decorations outline matching blocks in the view.");
-    ts::Array<Node> blocks{ h, p1, p2, cb, p3 };
-    return schema.node(string_or_NodeType(std::string("doc")), std::nullopt, Fragment_or_Node_or_Node_array(blocks));
+    return schema.node("doc", std::nullopt, ts::Array<Node>{ h, p1, p2, cb, p3 });
 }
 
 struct DecoStats {
@@ -125,10 +89,8 @@ static DecoStats compute_decorations(Node doc, const std::string& raw_query) {
     if (q.empty()) return { DecorationSet::empty(), 0, 0 };
 
     ts::Array<Decoration> decos = ts::Array<Decoration>::create();
-    DecorationAttrs inl_attr = DecorationAttrs::create();
-    inl_attr.class_("pm-match");
-    DecorationAttrs blk_attr = DecorationAttrs::create();
-    blk_attr.class_("pm-hit-block");
+    DecorationAttrs inl_attr = DecorationAttrs::create().class_("pm-match");
+    DecorationAttrs blk_attr = DecorationAttrs::create().class_("pm-hit-block");
 
     int inl_hits = 0;
     int blk_hits = 0;
@@ -194,61 +156,58 @@ static void sync_meta(const std::shared_ptr<AppState>& app, EditorState st) {
     }
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     auto app = std::make_shared<AppState>();
     app->schema = make_schema();
     app->search_key = PluginKey<ts::Value>::create("search");
     app->doc = dom::get_document();
     app->meta = *app->doc.getElementById("meta");
 
-    StateField<ts::Value> field = StateField<ts::Value>::create();
-    field.init(StateField_init<ts::Value>([](EditorStateConfig, EditorState) { return ts::Value::string("state"); }));
-    field.apply(StateField_apply<ts::Value>([](Transaction tr, ts::Value prev, EditorState, EditorState) {
-        ts::Value mv = tr.getMeta(string_or_Plugin_or_PluginKey(std::string("search")));
-        return mv.is_null() ? prev : mv;
-    }));
+    StateField<ts::Value> field = StateField<ts::Value>::create()
+        .init([](EditorStateConfig, EditorState) { return ts::Value::string("state"); })
+        .apply([](Transaction tr, ts::Value prev, EditorState, EditorState) {
+            ts::Value mv = tr.getMeta("search");
+            return mv.is_null() ? prev : mv;
+        });
 
-    EditorProps<Plugin<ts::Value>> eprops = EditorProps<Plugin<ts::Value>>::create();
-    eprops.decorations(EditorProps_decorations<Plugin<ts::Value>>([app](EditorState st) -> std::optional<DecorationSource> {
-        auto qv = app->search_key.getState(st);
-        std::string q = (qv.has_value() && !qv->is_null()) ? qv->to_string() : "";
-        return DecorationSource(compute_decorations(st.doc(), q).set);
-    }));
+    EditorProps<Plugin<ts::Value>> eprops = EditorProps<Plugin<ts::Value>>::create()
+        .decorations([app](EditorState st) -> std::optional<DecorationSource> {
+            auto qv = app->search_key.getState(st);
+            std::string q = (qv.has_value() && !qv->is_null()) ? qv->to_string() : "";
+            return DecorationSource(compute_decorations(st.doc(), q).set);
+        });
 
-    PluginSpec<ts::Value> pspec = PluginSpec<ts::Value>::create();
-    pspec.key(app->search_key);
-    pspec.state(field);
-    pspec.props(eprops);
+    PluginSpec<ts::Value> pspec = PluginSpec<ts::Value>::create()
+        .key(app->search_key)
+        .state(field)
+        .props(eprops);
 
-    EditorStateConfig scfg = EditorStateConfig::create();
-    scfg.schema(app->schema);
-    scfg.doc(make_initial_doc(app->schema));
-    scfg.plugins(ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>::create(pspec) });
+    EditorStateConfig scfg = EditorStateConfig::create()
+        .schema(app->schema)
+        .doc(make_initial_doc(app->schema))
+        .plugins(ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>::create(pspec) });
 
-    DirectEditorProps props = DirectEditorProps::create();
-    props.state(EditorState::create(scfg));
-    props.dispatchTransaction(Transaction_fn([app](Transaction tr) {
-        if (app->view.h == 0) return;
-        EditorState next = app->view.state().apply(tr);
-        app->view.updateState(next);
-        sync_meta(app, next);
-    }));
+    DirectEditorProps props = DirectEditorProps::create()
+        .state(EditorState::create(scfg))
+        .dispatchTransaction([app](Transaction tr) {
+            if (!app->view) return;
+            EditorState next = app->view.state().apply(tr);
+            app->view.updateState(next);
+            sync_meta(app, next);
+        });
 
-    dom::HTMLElement mount = *app->doc.getElementById("editor");
-    app->view = EditorView::create(EditorView_new_place_or_dist_DOMNode(Node_2(mount)), props);
+    app->view = EditorView::create(app->doc.getElementById("editor")->as<Node_2>(), props);
     sync_meta(app, app->view.state());
 
     const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     const char* queries[5] = { "state", "schema", "transaction", "view", "" };
     for (int i = 0; i < 5; i++) {
-        dom::HTMLElement btn = *app->doc.getElementById(ids[i]);
         std::string q = queries[i];
-        ts::Listener<dom::PointerEvent> cb = [app, i, q](dom::PointerEvent) {
+        app->doc.getElementById(ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [app, i, q](dom::PointerEvent) {
             app->active_btn = i;
             Transaction tr = app->view.state().tr();
-            tr.setMeta(string_or_Plugin_or_PluginKey(std::string("search")), ts::Value::string(q));
-            call_Transaction_fn(app->view.dispatch(), tr);
-        };
-        btn.addEventListener(dom::HTMLElementEventMapKeys::click, cb);
+            tr.setMeta("search", ts::Value::string(q));
+            app->view.dispatch()(tr);
+        });
     }
 }

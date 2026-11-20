@@ -8,13 +8,7 @@ using namespace pts;
 
 static Pt mk_pt(double x, double y) {
     Pt p = Pt::make(2.0);
-    p.x(x);
-    p.y(y);
-    return p;
-}
-
-static Group mk_group2(const Pt& a, const Pt& b) {
-    return Group::create(ts::Array<Pt>{ a, b });
+    return p.x(x).y(y);
 }
 
 static const char* SHADES[9] = {
@@ -23,17 +17,17 @@ static const char* SHADES[9] = {
     "#737373", "#404040", "#262626"
 };
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    CanvasSpaceOptions opts = CanvasSpaceOptions::create();
-    opts.bgcolor("#ffffff");
-    opts.resize(true);
-    opts.retina(true);
+TS_EXPORT(start) void start() {
+    auto opts = CanvasSpaceOptions::create()
+        .bgcolor("#ffffff")
+        .resize(true)
+        .retina(true);
 
-    CanvasSpace space = CanvasSpace::create(std::string("#pt")).setup(opts);
-    CanvasForm<CanvasSpace> form = space.getForm();
+    auto space = CanvasSpace::create("#pt").setup(opts);
+    auto form = space.getForm();
 
-    IPlayer player = IPlayer::create();
-    player.animate(AnimateCallbackFn([space, form](double time_ms, double, Space) {
+    auto player = IPlayer::create();
+    player.animate([space, form](double time_ms, double, Space) {
         Pt c = space.center();
         Pt size = space.size();
         Pt pointer = space.pointer();
@@ -43,37 +37,37 @@ extern "C" __attribute__((export_name("start"))) void start() {
         double px_norm = (pointer.x() / std::max(1.0, size.x())) - 0.5;
         double t = Num::clamp(0.22 + 0.16 * std::sin(time_ms * 0.0012) + px_norm * 0.24, 0.10, 0.48);
 
-        Group poly = Polygon::fromCenter(PtLike(c), radius, 6.0);
-        poly.rotate2D(time_ms * 0.00035, PtLike(c));
-        Pt centroid = Polygon::centroid(PtLikeIterable(poly));
+        Group poly = Polygon::fromCenter(c, radius, 6.0);
+        poly.rotate2D(time_ms * 0.00035, c);
+        Pt centroid = Polygon::centroid(poly);
 
         for (int depth = 0; depth < 9; depth++) {
             double sw = depth == 0 ? 1.6 : 1.0;
-            form.fill(CanvasForm_fill_c(std::string(SHADES[depth])))
-                .stroke(CanvasForm_fill_c(std::string("#111111")), sw)
-                .polygon(PtLikeIterable(poly));
+            form.fill(SHADES[depth])
+                .stroke("#111111", sw)
+                .polygon(poly);
             if (depth == 0) {
                 for (Pt pt : poly) {
-                    form.strokeOnly(CanvasForm_fill_c(std::string("#d4d4d4")), 1.0)
-                        .line(PtLikeIterable(mk_group2(centroid, pt)));
-                    form.fillOnly(CanvasForm_fill_c(std::string("#111111")))
-                        .point(PtLike(pt), 3.5, "circle");
+                    form.strokeOnly("#d4d4d4", 1.0)
+                        .line(Group::create(centroid, pt));
+                    form.fillOnly("#111111")
+                        .point(pt, 3.5, "circle");
                 }
             }
-            poly = Polygon::midpoints(PtIterable(poly), true, t);
+            poly = Polygon::midpoints(poly, true, t);
         }
 
-        form.strokeOnly(CanvasForm_fill_c(std::string("#ffffff")), 1.5)
-            .line(PtLikeIterable(mk_group2(mk_pt(c.x() - 10.0, c.y()), mk_pt(c.x() + 10.0, c.y()))));
-        form.strokeOnly(CanvasForm_fill_c(std::string("#ffffff")), 1.5)
-            .line(PtLikeIterable(mk_group2(mk_pt(c.x(), c.y() - 10.0), mk_pt(c.x(), c.y() + 10.0))));
-        form.fill(CanvasForm_fill_c(std::string("#ffffff")))
-            .stroke(CanvasForm_fill_c(std::string("#111111")), 1.5)
-            .point(PtLike(centroid), 5.0, "circle");
+        form.strokeOnly("#ffffff", 1.5)
+            .line(Group::create(mk_pt(c.x() - 10.0, c.y()), mk_pt(c.x() + 10.0, c.y())));
+        form.strokeOnly("#ffffff", 1.5)
+            .line(Group::create(mk_pt(c.x(), c.y() - 10.0), mk_pt(c.x(), c.y() + 10.0)));
+        form.fill("#ffffff")
+            .stroke("#111111", 1.5)
+            .point(centroid, 5.0, "circle");
 
-        Group ring = Circle::fromCenter(PtLike(pointer), 10.0);
-        form.strokeOnly(CanvasForm_fill_c(std::string("#737373")), 1.5).circle(PtLikeIterable(ring));
-    }));
+        Group ring = Circle::fromCenter(pointer, 10.0);
+        form.strokeOnly("#737373", 1.5).circle(ring);
+    });
 
     space.add(player);
     space.bindMouse().bindTouch().play();

@@ -9,112 +9,77 @@ using namespace prosemirror;
 using namespace prosemirror::prosemirror_transform;
 using Sch = Schema<ts::Value, ts::Value>;
 
-static ts::Value val_of(const ts::Handle& h) {
-    ts::Value v;
-    static_cast<ts::Handle&>(v) = h;
-    return v;
-}
-
 static DOMOutputSpec hole_spec(std::string_view tag) {
-    ts::Array<> a = ts::Array<>::create();
-    a.push(ts::Value::string(tag));
-    a.push(ts::Value::number(0));
-    return DOMOutputSpec(a);
+    return DOMOutputSpec(ts::Array<>::of(tag, 0));
 }
 
 static Sch make_schema() {
-    NodeSpec doc = NodeSpec::create();
-    doc.content("block+");
+    NodeSpec doc = NodeSpec::create().content("block+");
+    MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
-    AttributeSpec lvl = AttributeSpec::create();
-    lvl.default_(ts::Value::number(2));
-    MarkSpec_attrs hattrs = MarkSpec_attrs::create();
-    hattrs.set_at("level", lvl);
-
-    NodeSpec heading = NodeSpec::create();
-    heading.attrs(hattrs);
-    heading.content("inline*");
-    heading.group("block");
-    heading.defining(true);
-    heading.toDOM(Node_to_DOMOutputSpec_fn([](Node n) {
-        int l = static_cast<int>(n.attrs().at("level").to_number());
-        return hole_spec(l == 1 ? "h1" : "h2");
-    }));
+    NodeSpec heading = NodeSpec::create()
+        .attrs(hattrs)
+        .content("inline*")
+        .group("block")
+        .defining(true)
+        .toDOM([](Node n) {
+            int l = static_cast<int>(n.attrs().at("level").to_number());
+            return hole_spec(l == 1 ? "h1" : "h2");
+        });
 
     auto tag_node = [](const char* content, const char* group, const char* tag, bool defining = false) {
-        NodeSpec s = NodeSpec::create();
-        s.content(content);
+        NodeSpec s = NodeSpec::create().content(content).toDOM([tag](Node) { return hole_spec(tag); });
         if (group) s.group(group);
         if (defining) s.defining(true);
-        s.toDOM(Node_to_DOMOutputSpec_fn([tag](Node) { return hole_spec(tag); }));
         return s;
     };
 
-    NodeSpec hr = NodeSpec::create();
-    hr.group("block");
-    hr.atom(true);
-    hr.toDOM(Node_to_DOMOutputSpec_fn([](Node) {
-        ts::Array<> a = ts::Array<>::create();
-        a.push(ts::Value::string("hr"));
-        return DOMOutputSpec(a);
-    }));
+    NodeSpec hr = NodeSpec::create()
+        .group("block")
+        .atom(true)
+        .toDOM([](Node) { return DOMOutputSpec(ts::Array<>::of("hr")); });
 
-    NodeSpec text = NodeSpec::create();
-    text.group("inline");
+    NodeSpec text = NodeSpec::create().group("inline");
 
-    NodeSpec nodes = NodeSpec::create();
-    nodes.set_at("doc", val_of(doc));
-    nodes.set_at("heading", val_of(heading));
-    nodes.set_at("paragraph", val_of(tag_node("inline*", "block", "p")));
-    nodes.set_at("blockquote", val_of(tag_node("block+", "block", "blockquote", true)));
-    nodes.set_at("bullet_list", val_of(tag_node("list_item+", "block", "ul")));
-    nodes.set_at("list_item", val_of(tag_node("paragraph block*", nullptr, "li", true)));
-    nodes.set_at("horizontal_rule", val_of(hr));
-    nodes.set_at("text", val_of(text));
+    auto nodes = NodeSpec::create()
+        .set_at("doc", doc)
+        .set_at("heading", heading)
+        .set_at("paragraph", tag_node("inline*", "block", "p"))
+        .set_at("blockquote", tag_node("block+", "block", "blockquote", true))
+        .set_at("bullet_list", tag_node("list_item+", "block", "ul"))
+        .set_at("list_item", tag_node("paragraph block*", nullptr, "li", true))
+        .set_at("horizontal_rule", hr)
+        .set_at("text", text);
 
     auto make_mark = [](const char* tag) {
-        MarkSpec m = MarkSpec::create();
-        m.toDOM(Mark_boolean_to_DOMOutputSpec_fn([tag](Mark, bool) { return hole_spec(tag); }));
-        return m;
+        return MarkSpec::create().toDOM([tag](Mark, bool) { return hole_spec(tag); });
     };
-    MarkSpec marks = MarkSpec::create();
-    marks.set_at("strong", val_of(make_mark("strong")));
-    marks.set_at("code", val_of(make_mark("code")));
+    auto marks = MarkSpec::create()
+        .set_at("strong", make_mark("strong"))
+        .set_at("code", make_mark("code"));
 
-    SchemaSpec<ts::Value, ts::Value> spec = SchemaSpec<ts::Value, ts::Value>::create();
-    spec.nodes(val_of(nodes));
-    spec.marks(val_of(marks));
-    return Sch::create(spec);
+    return Sch::create(SchemaSpec<ts::Value, ts::Value>::create().nodes(nodes).marks(marks));
 }
 
 static Node p_node(const Sch& schema, std::string_view t) {
-    return schema.node(string_or_NodeType(std::string("paragraph")), std::nullopt, Fragment_or_Node_or_Node_array(schema.text(t)));
+    return schema.node("paragraph", std::nullopt, schema.text(t));
 }
 static Node li_node(const Sch& schema, std::string_view t) {
-    return schema.node(string_or_NodeType(std::string("list_item")), std::nullopt, Fragment_or_Node_or_Node_array(p_node(schema, t)));
+    return schema.node("list_item", std::nullopt, p_node(schema, t));
 }
 
 static Node make_initial_doc(const Sch& schema) {
-    Attrs ha = Attrs::create();
-    ha.set_at("level", ts::Value::number(2));
-    Node h = schema.node(
-        string_or_NodeType(std::string("heading")), ha,
-        Fragment_or_Node_or_Node_array(schema.text("Structural Transform Pipeline"))
-    );
+    Attrs ha = Attrs::create().set_at("level", ts::Value::number(2));
+    Node h = schema.node("heading", ha, schema.text("Structural Transform Pipeline"));
     Node p1 = p_node(schema, "ProseMirror transforms express structural edits as invertible steps.");
     Node p2 = p_node(schema, "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly.");
-    Node quote = schema.node(
-        string_or_NodeType(std::string("blockquote")), std::nullopt,
-        Fragment_or_Node_or_Node_array(p_node(schema, "Blockquote content can be lifted back to top-level document depth."))
-    );
-    ts::Array<Node> lis{
+    Node quote = schema.node("blockquote", std::nullopt, p_node(schema, "Blockquote content can be lifted back to top-level document depth."));
+    Node ulist = schema.node("bullet_list", std::nullopt, ts::Array<Node>{
         li_node(schema, "Split at cursor position"),
         li_node(schema, "Wrap range with blockquote"),
         li_node(schema, "Lift nested block to root"),
-    };
-    Node ulist = schema.node(string_or_NodeType(std::string("bullet_list")), std::nullopt, Fragment_or_Node_or_Node_array(lis));
-    ts::Array<Node> blocks{ h, p1, p2, quote, ulist };
-    return schema.node(string_or_NodeType(std::string("doc")), std::nullopt, Fragment_or_Node_or_Node_array(blocks));
+    });
+    return schema.node("doc", std::nullopt, ts::Array<Node>{ h, p1, p2, quote, ulist });
 }
 
 struct AppState {
@@ -128,10 +93,7 @@ struct AppState {
 };
 
 static EditorState make_state(const Sch& schema) {
-    EditorStateConfig cfg = EditorStateConfig::create();
-    cfg.schema(schema);
-    cfg.doc(make_initial_doc(schema));
-    return EditorState::create(cfg);
+    return EditorState::create(EditorStateConfig::create().schema(schema).doc(make_initial_doc(schema)));
 }
 
 static void update_meta(const std::shared_ptr<AppState>& app, Node doc) {
@@ -150,30 +112,28 @@ static void update_meta(const std::shared_ptr<AppState>& app, Node doc) {
     app->meta.textContent(buf);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     auto app = std::make_shared<AppState>();
     app->schema = make_schema();
     app->doc = dom::get_document();
     app->meta = *app->doc.getElementById("meta");
 
-    DirectEditorProps props = DirectEditorProps::create();
-    props.state(make_state(app->schema));
-    props.dispatchTransaction(Transaction_fn([app](Transaction tr) {
-        if (app->view.h == 0) return;
-        app->total_steps += static_cast<int>(tr.steps().size());
-        EditorState next = app->view.state().apply(tr);
-        app->view.updateState(next);
-        update_meta(app, next.doc());
-    }));
+    DirectEditorProps props = DirectEditorProps::create()
+        .state(make_state(app->schema))
+        .dispatchTransaction([app](Transaction tr) {
+            if (!app->view) return;
+            app->total_steps += static_cast<int>(tr.steps().size());
+            EditorState next = app->view.state().apply(tr);
+            app->view.updateState(next);
+            update_meta(app, next.doc());
+        });
 
-    dom::HTMLElement mount = *app->doc.getElementById("editor");
-    app->view = EditorView::create(EditorView_new_place_or_dist_DOMNode(Node_2(mount)), props);
+    app->view = EditorView::create(app->doc.getElementById("editor")->as<Node_2>(), props);
     update_meta(app, app->view.state().doc());
 
     const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (int i = 0; i < 5; i++) {
-        dom::HTMLElement btn = *app->doc.getElementById(ids[i]);
-        ts::Listener<dom::PointerEvent> cb = [app, i](dom::PointerEvent) {
+        app->doc.getElementById(ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [app, i](dom::PointerEvent) {
             EditorState st = app->view.state();
             Node doc = st.doc();
             if (i == 0) {
@@ -200,7 +160,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
                     Transaction tr = st.tr();
                     tr.split(*split_pos);
                     app->last_op = "Split paragraph node";
-                    call_Transaction_fn(app->view.dispatch(), tr);
+                    app->view.dispatch()(tr);
                 } else {
                     app->last_op = "No splittable paragraph found";
                     update_meta(app, doc);
@@ -232,7 +192,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
                         Transaction tr = st.tr();
                         tr.wrap(*found, *wrapped);
                         app->last_op = "Wrapped paragraph block in blockquote";
-                        call_Transaction_fn(app->view.dispatch(), tr);
+                        app->view.dispatch()(tr);
                         return;
                     }
                 }
@@ -252,7 +212,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
                                 Transaction tr = st.tr();
                                 tr.lift(*r, *target);
                                 app->last_op = "Lifted blockquote child to root depth";
-                                call_Transaction_fn(app->view.dispatch(), tr);
+                                app->view.dispatch()(tr);
                                 return;
                             }
                         }
@@ -263,14 +223,14 @@ extern "C" __attribute__((export_name("start"))) void start() {
                 update_meta(app, doc);
             } else if (i == 3) {
                 app->note_counter++;
-                Node hr = app->schema.node(string_or_NodeType(std::string("horizontal_rule")));
+                Node hr = app->schema.node("horizontal_rule");
                 char msg[128];
                 std::snprintf(msg, sizeof msg, "Appended structural section #%d at doc offset %d.",
                               app->note_counter, static_cast<int>(doc.content().size()));
                 Transaction tr = st.tr();
-                tr.insert(doc.content().size(), Fragment_or_Node_or_Node_array(ts::Array<Node>{ hr, p_node(app->schema, msg) }));
+                tr.insert(doc.content().size(), ts::Array<Node>{ hr, p_node(app->schema, msg) });
                 app->last_op = "Inserted horizontal_rule + note";
-                call_Transaction_fn(app->view.dispatch(), tr);
+                app->view.dispatch()(tr);
             } else {
                 app->total_steps = 0;
                 app->note_counter = 0;
@@ -279,7 +239,6 @@ extern "C" __attribute__((export_name("start"))) void start() {
                 app->view.updateState(fresh);
                 update_meta(app, fresh.doc());
             }
-        };
-        btn.addEventListener(dom::HTMLElementEventMapKeys::click, cb);
+        });
     }
 }

@@ -8,19 +8,17 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
     return el;
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Inline vs Display Mode (C++)"));
     head.appendChild(make_el(doc, "span", "badge", "displayMode: false vs true"));
     app.appendChild(head);
 
-    katex::KatexOptions inline_opts = katex::KatexOptions::create();
-    inline_opts.displayMode(false);
-    katex::KatexOptions display_opts = katex::KatexOptions::create();
-    display_opts.displayMode(true);
+    auto inline_opts = katex::KatexOptions::create().displayMode(false);
+    auto display_opts = katex::KatexOptions::create().displayMode(true);
 
     struct Item { const char* name; const char* tex; };
     const Item items[] = {

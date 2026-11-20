@@ -9,37 +9,38 @@ using namespace leaflet;
 static PolylineOptions poly_opts(const char* color, double weight, const char* dash, const char* fill_color, double fill_opacity) {
     PolylineOptions opts = PolylineOptions::create();
     opts.smoothFactor(1.0);
-    opts.color(std::string(color));
+    opts.color(color);
     opts.weight(weight);
     if (dash != nullptr) {
-        opts.dashArray(string_or_number_array(std::string(dash)));
+        opts.dashArray(dash);
     }
-    opts.fillColor(std::string(fill_color));
+    opts.fillColor(fill_color);
     opts.fillOpacity(fill_opacity);
     return opts;
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     MapOptions m_opts = MapOptions::create();
     m_opts.attributionControl(false);
     m_opts.zoomAnimation(false);
     m_opts.fadeAnimation(false);
     m_opts.markerZoomAnimation(false);
-    Map m = leaflet::map(Content(std::string("map")), m_opts);
+    Map m = leaflet::map("map", m_opts);
 
-    ts::Array<Polyline_setLatLngs_latlngs> mid_pts = ts::Array<Polyline_setLatLngs_latlngs>::create();
-    mid_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(47.2, 7.6)));
-    mid_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(48.0, 8.6)));
-    mid_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(47.5, 9.7)));
-    mid_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(46.8, 9.5)));
-    mid_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(46.6, 8.4)));
-    mid_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(46.9, 7.3)));
-
-    ts::Array<Polyline_setLatLngs_latlngs> core_pts = ts::Array<Polyline_setLatLngs_latlngs>::create();
-    core_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(47.35, 8.2)));
-    core_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(47.55, 8.75)));
-    core_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(47.15, 9.0)));
-    core_pts.push(Polyline_setLatLngs_latlngs(leaflet::latLng(46.95, 8.4)));
+    auto mid_pts = ts::Array<Polyline_setLatLngs_latlngs>::of(
+        leaflet::latLng(47.2, 7.6),
+        leaflet::latLng(48.0, 8.6),
+        leaflet::latLng(47.5, 9.7),
+        leaflet::latLng(46.8, 9.5),
+        leaflet::latLng(46.6, 8.4),
+        leaflet::latLng(46.9, 7.3)
+    );
+    auto core_pts = ts::Array<Polyline_setLatLngs_latlngs>::of(
+        leaflet::latLng(47.35, 8.2),
+        leaflet::latLng(47.55, 8.75),
+        leaflet::latLng(47.15, 9.0),
+        leaflet::latLng(46.95, 8.4)
+    );
 
     Polygon<> mid_poly = leaflet::polygon(mid_pts, poly_opts("#404040", 2.0, nullptr, "#d4d4d4", 0.55));
     Polygon<> core_poly = leaflet::polygon(core_pts, poly_opts("#111111", 2.5, nullptr, "#404040", 0.75));
@@ -47,7 +48,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
     LatLngBounds mid_bounds = mid_poly.getBounds();
     LatLngBounds core_bounds = core_poly.getBounds();
     LatLngBounds padded = mid_bounds.pad(0.18);
-    Rectangle<> hull_rect = leaflet::rectangle(LatLngBoundsExpression(padded), poly_opts("#737373", 1.5, "4 4", "#efefef", 0.05));
+    Rectangle<> hull_rect = leaflet::rectangle(padded, poly_opts("#737373", 1.5, "4 4", "#efefef", 0.05));
 
     hull_rect.addTo(m);
     mid_poly.addTo(m);
@@ -81,14 +82,14 @@ extern "C" __attribute__((export_name("start"))) void start() {
         }
         CircleMarkerOptions cm_opts = CircleMarkerOptions::create();
         cm_opts.radius(6.0);
-        cm_opts.color(std::string("#111111"));
+        cm_opts.color("#111111");
         cm_opts.weight(2.0);
-        cm_opts.fillColor(std::string(fill_hex));
+        cm_opts.fillColor(fill_hex);
         cm_opts.fillOpacity(1.0);
         leaflet::circleMarker(pt, cm_opts).addTo(m);
     }
 
-    m.fitBounds(LatLngBoundsExpression(padded));
+    m.fitBounds(padded);
 
     char buf[160];
     std::snprintf(

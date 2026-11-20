@@ -2,76 +2,46 @@
 #include "echarts/echarts.hpp"
 
 static ts::Value slice(const char* name, double val) {
-    ts::Value d = ts::Value::object();
-    d.set("name", std::string(name));
-    d.set("value", val);
-    return d;
+    return ts::Value::object().set("name", name).set("value", val);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
-    dom::HTMLElement box = *doc.getElementById("chart");
-    echarts::ECharts chart = echarts::init(box);
+    echarts::ECharts chart = echarts::init(*doc.getElementById("chart"));
 
-    ts::Array<> palette = ts::Array<>::create();
-    for (const char* hex : { "#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4" }) {
-        palette.push(ts::Value::string(hex));
-    }
+    auto palette = ts::Array<>::of("#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4");
+    auto legend = ts::Value::object().set("bottom", 8).set("textStyle", ts::Value::object().set("color", "#111111"));
+    auto tooltip = ts::Value::object().set("trigger", "item");
 
-    ts::Value leg_ts = ts::Value::object();
-    leg_ts.set("color", std::string("#111111"));
-    ts::Value legend = ts::Value::object();
-    legend.set("bottom", 8.0);
-    legend.set("textStyle", leg_ts);
+    auto data = ts::Array<>::of(
+        slice("Runtime", 34),
+        slice("Bindings", 26),
+        slice("Glue", 18),
+        slice("Parser", 14),
+        slice("Tests", 8)
+    );
 
-    ts::Value tooltip = ts::Value::object();
-    tooltip.set("trigger", std::string("item"));
+    auto series = ts::Array<>::of(
+        ts::Value::object()
+            .set("type", "pie")
+            .set("name", "Subsystems")
+            .set("radius", ts::Array<>::of("44%", "72%"))
+            .set("center", ts::Array<>::of("50%", "46%"))
+            .set("itemStyle", ts::Value::object().set("borderColor", "#ffffff").set("borderWidth", 2))
+            .set("label", ts::Value::object().set("color", "#111111"))
+            .set("data", data)
+    );
 
-    ts::Array<> radius = ts::Array<>::create();
-    radius.push(ts::Value::string("44%"));
-    radius.push(ts::Value::string("72%"));
-
-    ts::Array<> center = ts::Array<>::create();
-    center.push(ts::Value::string("50%"));
-    center.push(ts::Value::string("46%"));
-
-    ts::Value item_style = ts::Value::object();
-    item_style.set("borderColor", std::string("#ffffff"));
-    item_style.set("borderWidth", 2.0);
-
-    ts::Value lbl = ts::Value::object();
-    lbl.set("color", std::string("#111111"));
-
-    ts::Array<> data = ts::Array<>::create();
-    data.push(slice("Runtime", 34));
-    data.push(slice("Bindings", 26));
-    data.push(slice("Glue", 18));
-    data.push(slice("Parser", 14));
-    data.push(slice("Tests", 8));
-
-    ts::Value s0 = ts::Value::object();
-    s0.set("type", std::string("pie"));
-    s0.set("name", std::string("Subsystems"));
-    s0.set("radius", radius);
-    s0.set("center", center);
-    s0.set("itemStyle", item_style);
-    s0.set("label", lbl);
-    s0.set("data", data);
-
-    ts::Array<> series = ts::Array<>::create();
-    series.push(s0);
-
-    echarts::EChartsCoreOption opt = echarts::EChartsCoreOption::create();
+    auto opt = echarts::EChartsCoreOption::create();
     opt.animation(false);
-    opt.set_at("backgroundColor", ts::Value::string("#ffffff"));
-    opt.set_at("color", ts::Value::of(palette));
-    opt.set_at("legend", legend);
-    opt.set_at("tooltip", tooltip);
-    opt.set_at("series", ts::Value::of(series));
+    opt.set_at("backgroundColor", ts::Value::string("#ffffff"))
+        .set_at("color", palette)
+        .set_at("legend", legend)
+        .set_at("tooltip", tooltip)
+        .set_at("series", series);
     chart.setOption(opt);
 
-    dom::HTMLElement meta = *doc.getElementById("meta");
-    meta.textContent(
+    doc.getElementById("meta")->textContent(
         "Canvas: " + std::to_string(static_cast<int>(chart.getWidth())) + "x" +
         std::to_string(static_cast<int>(chart.getHeight())) + " \xC2\xB7 5 monochrome segments \xC2\xB7 Total 100"
     );

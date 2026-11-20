@@ -8,18 +8,17 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
     return el;
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "KaTeX Formula Gallery (C++)"));
-    head.appendChild(make_el(doc, "span", "badge", std::string("katex v") + katex::get_version()));
+    head.appendChild(make_el(doc, "span", "badge", "katex v" + katex::get_version()));
     app.appendChild(head);
 
-    dom::HTMLElement grid = make_el(doc, "div", "grid", "");
-    katex::KatexOptions opts = katex::KatexOptions::create();
-    opts.displayMode(true);
+    auto grid = make_el(doc, "div", "grid", "");
+    auto opts = katex::KatexOptions::create().displayMode(true);
 
     struct Entry { const char* name; const char* tex; };
     const Entry formulas[] = {

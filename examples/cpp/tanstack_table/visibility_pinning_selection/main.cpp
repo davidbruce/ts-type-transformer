@@ -15,53 +15,32 @@ using RowT = Row_Core<TableFeatures, Obj>;
 using ColT = Column_Core<TableFeatures, Obj, V>;
 using ColP = Column_CoreProperties<TableFeatures, Obj, V>;
 
-static V val(const ts::Handle& h) {
-    V v;
-    static_cast<ts::Handle&>(v) = h;
-    return v;
-}
-template <class T>
-static T as(const ts::Handle& h) {
-    T t;
-    static_cast<ts::Handle&>(t) = h;
-    return t;
-}
-static V str_v(std::string_view s) { return V::string(s); }
-static V apply_upd(const ts::Handle& u, V old) {
-    return functionalUpdate<V>(Updater<V>(std::in_place_index<0>, val(u)), old);
-}
-
 static V unsub_obj() {
-    Obj sub = Obj::create();
-    sub.set_at("unsubscribe", val(void_fn([] {})));
-    return val(sub);
+    return Obj::create().set_at("unsubscribe", void_fn([] {}));
 }
 static V w_atom(V initial) {
     auto state = std::make_shared<V>(initial);
-    Obj atom = Obj::create();
-    atom.set_at("get", val(void_to_T_fn<V>([state] { return *state; })));
-    atom.set_at("set", val(Updater_fn2<V>([state](V u) { *state = apply_upd(u, *state); return V(); })));
-    atom.set_at("subscribe", val(Updater_fn2<V>([](V) { return unsub_obj(); })));
-    return val(atom);
+    return Obj::create()
+        .set_at("get", void_to_T_fn<V>([state] { return *state; }))
+        .set_at("set", Updater_fn2<V>([state](V u) { *state = functionalUpdate<V>(u, *state); return V(); }))
+        .set_at("subscribe", Updater_fn2<V>([](V) { return unsub_obj(); }));
 }
 static V r_atom(void_to_T_fn<V> compute) {
-    Obj atom = Obj::create();
-    atom.set_at("get", val(void_to_T_fn<V>([compute] { return call_void_to_T_fn<V>(compute); })));
-    atom.set_at("subscribe", val(Updater_fn2<V>([](V) { return unsub_obj(); })));
-    return val(atom);
+    return Obj::create()
+        .set_at("get", void_to_T_fn<V>([compute] { return compute(); }))
+        .set_at("subscribe", Updater_fn2<V>([](V) { return unsub_obj(); }));
 }
 static V make_reactivity() {
-    TableReactivityBindings r = TableReactivityBindings::create();
-    r.createOptionsStore(false);
-    r.wrapExternalAtoms(false);
-    r.addSubscription(TableReactivityBindings_addSubscription([](Subscription) {}));
-    r.unmount(void_fn([] {}));
-    r.createWritableAtom(TableReactivityBindings_createWritableAtom([](V init, std::optional<TableAtomOptions<V>>) { return w_atom(init); }));
-    r.createReadonlyAtom(TableReactivityBindings_createReadonlyAtom([](void_to_T_fn<V> fn, std::optional<TableAtomOptions<V>>) { return r_atom(fn); }));
-    r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return call_void_to_T_fn<V>(fn); }));
-    r.batch(fn_fn([](void_fn fn) { call_void_fn(fn); }));
-    r.schedule(fn_fn([](void_fn fn) { call_void_fn(fn); }));
-    return val(r);
+    return TableReactivityBindings::create()
+        .createOptionsStore(false)
+        .wrapExternalAtoms(false)
+        .addSubscription([](Subscription) {})
+        .unmount([] {})
+        .createWritableAtom([](V init, std::optional<TableAtomOptions<V>>) { return w_atom(init); })
+        .createReadonlyAtom([](void_to_T_fn<V> fn, std::optional<TableAtomOptions<V>>) { return r_atom(fn); })
+        .untrack([](void_to_T_fn<V> fn) { return fn(); })
+        .batch([](void_fn fn) { fn(); })
+        .schedule([](void_fn fn) { fn(); });
 }
 
 static std::string esc_html(const std::string& s) {
@@ -76,20 +55,16 @@ static std::string esc_html(const std::string& s) {
     return out;
 }
 static Obj col_def(const char* key, const char* hdr) {
-    Obj c = Obj::create();
-    c.set_at("accessorKey", str_v(key));
-    c.set_at("header", str_v(hdr));
-    return c;
+    return Obj::create().set_at("accessorKey", V::string(key)).set_at("header", V::string(hdr));
 }
 static Obj task_row(const char* id, const char* task, const char* owner, const char* zone, double cpu, const char* status) {
-    Obj r = Obj::create();
-    r.set_at("id", str_v(id));
-    r.set_at("task", str_v(task));
-    r.set_at("owner", str_v(owner));
-    r.set_at("zone", str_v(zone));
-    r.set_at("cpu", V::number(cpu));
-    r.set_at("status", str_v(status));
-    return r;
+    return Obj::create()
+        .set_at("id", V::string(id))
+        .set_at("task", V::string(task))
+        .set_at("owner", V::string(owner))
+        .set_at("zone", V::string(zone))
+        .set_at("cpu", V::number(cpu))
+        .set_at("status", V::string(status));
 }
 
 struct AppState {
@@ -101,23 +76,23 @@ struct AppState {
 };
 
 static void render(const std::shared_ptr<AppState>& st) {
-    auto pin = as<Table_ColumnPinning<TableFeatures, Obj>>(st->table);
-    auto vis = as<Table_ColumnVisibility<TableFeatures, Obj>>(st->table);
-    auto sel = as<Table_RowSelection<TableFeatures, Obj>>(st->table);
+    auto pin = st->table.as<Table_ColumnPinning<TableFeatures, Obj>>();
+    auto vis = st->table.as<Table_ColumnVisibility<TableFeatures, Obj>>();
+    auto sel = st->table.as<Table_RowSelection<TableFeatures, Obj>>();
 
     ts::Array<ColT> groups[3] = {
-        call_Table_ColumnPinning_getCenterLeafColumns(pin.getStartVisibleLeafColumns()),
-        call_Table_ColumnPinning_getCenterLeafColumns(pin.getCenterVisibleLeafColumns()),
-        call_Table_ColumnPinning_getCenterLeafColumns(pin.getEndVisibleLeafColumns()),
+        pin.getStartVisibleLeafColumns()(),
+        pin.getCenterVisibleLeafColumns()(),
+        pin.getEndVisibleLeafColumns()(),
     };
 
     std::vector<std::string> col_ids;
     std::string html = "<table><thead><tr><th>Sel</th>";
     for (int g = 0; g < 3; g++) {
         for (uint32_t j = 0; j < groups[g].size(); j++) {
-            ColP cp = as<ColP>(groups[g][j]);
+            ColP cp = groups[g][j].as<ColP>();
             std::string cid = cp.id();
-            std::string hdr = as<Obj>(cp.columnDef()).at("header").to_string();
+            std::string hdr = cp.columnDef().as<Obj>().at("header").to_string();
             col_ids.push_back(cid);
             html += (cid == "cpu") ? "<th class=\"num\">" : "<th>";
             html += esc_html(hdr);
@@ -127,18 +102,18 @@ static void render(const std::shared_ptr<AppState>& st) {
     }
     html += "</tr></thead><tbody>";
 
-    ts::Array<RowT> rows = call_Table_RowModels_getCoreRowModel(st->table.getRowModel()).rows();
+    ts::Array<RowT> rows = st->table.getRowModel()().rows();
     char nbuf[96];
     for (uint32_t i = 0; i < rows.size(); i++) {
         RowT r = rows[i];
-        bool is_sel = call_void_to_boolean_fn(as<Row_RowSelection>(r).getIsSelected());
+        bool is_sel = r.as<Row_RowSelection>().getIsSelected()();
         html += is_sel ? "<tr class=\"selected-row\"><td>&#9632;</td>" : "<tr><td>&#9633;</td>";
         for (const std::string& cid : col_ids) {
             if (cid == "cpu") {
-                std::snprintf(nbuf, sizeof nbuf, "%.0f", call_string_to_TValue_fn(r.getValue(), "cpu").to_number());
+                std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue()("cpu").to_number());
                 html += std::string("<td class=\"num\">") + nbuf + "%</td>";
             } else {
-                html += "<td>" + esc_html(call_string_to_TValue_fn(r.getValue(), cid).to_string()) + "</td>";
+                html += "<td>" + esc_html(r.getValue()(cid).to_string()) + "</td>";
             }
         }
         html += "</tr>";
@@ -146,9 +121,9 @@ static void render(const std::shared_ptr<AppState>& st) {
     html += "</tbody></table>";
     st->wrap.innerHTML(html);
 
-    size_t vis_n = call_Table_ColumnVisibility_getVisibleFlatColumns(vis.getVisibleLeafColumns()).size();
-    size_t all_n = call_Table_Columns_getAllColumns(as<Table_Columns<TableFeatures, Obj>>(st->table).getAllLeafColumns()).size();
-    size_t sel_n = call_Table_RowSelection_getFilteredSelectedRowModel(sel.getSelectedRowModel()).rows().size();
+    size_t vis_n = vis.getVisibleLeafColumns()().size();
+    size_t all_n = st->table.as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns()().size();
+    size_t sel_n = sel.getSelectedRowModel()().rows().size();
     std::snprintf(
         nbuf, sizeof nbuf,
         "%zu / %zu visible columns \xC2\xB7 start:id end:status pinned \xC2\xB7 %zu / %zu rows selected",
@@ -158,22 +133,18 @@ static void render(const std::shared_ptr<AppState>& st) {
 }
 
 static void apply_vis(const std::shared_ptr<AppState>& st) {
-    ColumnVisibilityState cv = ColumnVisibilityState::create();
-    cv.set_at("zone", st->zone_vis);
-    cv.set_at("owner", st->owner_vis);
-    call_Table_ColumnVisibility_setColumnVisibility(
-        as<Table_ColumnVisibility<TableFeatures, Obj>>(st->table).setColumnVisibility(),
-        Updater<ColumnVisibilityState>(cv)
+    st->table.as<Table_ColumnVisibility<TableFeatures, Obj>>().setColumnVisibility()(
+        ColumnVisibilityState::create().set_at("zone", st->zone_vis).set_at("owner", st->owner_vis)
     );
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    Obj features = Obj::create();
-    features.set_at("coreReactivityFeature", make_reactivity());
-    features.set_at("columnVisibilityFeature", val(get_columnVisibilityFeature()));
-    features.set_at("columnPinningFeature", val(get_columnPinningFeature()));
-    features.set_at("rowSelectionFeature", val(get_rowSelectionFeature()));
-    features.set_at("coreRowModel", val(createCoreRowModel<TableFeatures, Obj>()));
+TS_EXPORT(start) void start() {
+    auto features = Obj::create()
+        .set_at("coreReactivityFeature", make_reactivity())
+        .set_at("columnVisibilityFeature", get_columnVisibilityFeature())
+        .set_at("columnPinningFeature", get_columnPinningFeature())
+        .set_at("rowSelectionFeature", get_rowSelectionFeature())
+        .set_at("coreRowModel", createCoreRowModel<TableFeatures, Obj>());
 
     ts::Array<Obj> data{
         task_row("T-101", "ingest-wal-sync", "a.meyer", "eu-ch-1", 42, "running"),
@@ -193,32 +164,26 @@ extern "C" __attribute__((export_name("start"))) void start() {
         col_def("status", "Status"),
     };
 
-    ColumnVisibilityState cv = ColumnVisibilityState::create();
-    cv.set_at("zone", false);
+    auto cv = ColumnVisibilityState::create().set_at("zone", false);
+    auto cp = ColumnPinningState::create()
+        .start(ts::Array<std::string>{ "id" })
+        .end(ts::Array<std::string>{ "status" });
+    auto rs = RowSelectionState::create().set_at("0", true).set_at("2", true).set_at("4", true);
 
-    ColumnPinningState cp = ColumnPinningState::create();
-    cp.start(ts::Array<std::string>{ "id" });
-    cp.end(ts::Array<std::string>{ "status" });
+    auto init_state = Obj::create()
+        .set_at("columnVisibility", cv)
+        .set_at("columnPinning", cp)
+        .set_at("rowSelection", rs);
 
-    RowSelectionState rs = RowSelectionState::create();
-    rs.set_at("0", true);
-    rs.set_at("2", true);
-    rs.set_at("4", true);
-
-    Obj init_state = Obj::create();
-    init_state.set_at("columnVisibility", val(cv));
-    init_state.set_at("columnPinning", val(cp));
-    init_state.set_at("rowSelection", val(rs));
-
-    Obj opts = Obj::create();
-    opts.set_at("features", val(features));
-    opts.set_at("data", val(data));
-    opts.set_at("columns", val(cols));
-    opts.set_at("initialState", val(init_state));
+    auto opts = Obj::create()
+        .set_at("features", features)
+        .set_at("data", data)
+        .set_at("columns", cols)
+        .set_at("initialState", init_state);
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(as<TableOptions_Core<TableFeatures, Obj>>(opts)),
+        constructTable<TableFeatures, Obj>(opts.as<TableOptions_Core<TableFeatures, Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
         false,
@@ -227,10 +192,9 @@ extern "C" __attribute__((export_name("start"))) void start() {
 
     const char* btn_ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (int i = 0; i < 5; i++) {
-        dom::HTMLElement btn = *doc.getElementById(btn_ids[i]);
-        ts::Listener<dom::PointerEvent> on_click = [st, i](dom::PointerEvent) {
-            auto pin = as<Table_ColumnPinning<TableFeatures, Obj>>(st->table);
-            auto sel = as<Table_RowSelection<TableFeatures, Obj>>(st->table);
+        doc.getElementById(btn_ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
+            auto pin = st->table.as<Table_ColumnPinning<TableFeatures, Obj>>();
+            auto sel = st->table.as<Table_RowSelection<TableFeatures, Obj>>();
             if (i == 0) {
                 st->zone_vis = !st->zone_vis;
                 apply_vis(st);
@@ -238,26 +202,24 @@ extern "C" __attribute__((export_name("start"))) void start() {
                 st->owner_vis = !st->owner_vis;
                 apply_vis(st);
             } else if (i == 2) {
-                call_Table_RowSelection_toggleAllPageRowsSelected(sel.toggleAllRowsSelected(), true, std::nullopt);
+                sel.toggleAllRowsSelected()(true, std::nullopt);
             } else if (i == 3) {
-                call_Table_RowSelection_toggleAllPageRowsSelected(sel.toggleAllRowsSelected(), false, std::nullopt);
+                sel.toggleAllRowsSelected()(false, std::nullopt);
             } else if (i == 4) {
                 st->zone_vis = false;
                 st->owner_vis = true;
                 apply_vis(st);
-                ColumnPinningState reset_cp = ColumnPinningState::create();
-                reset_cp.start(ts::Array<std::string>{ "id" });
-                reset_cp.end(ts::Array<std::string>{ "status" });
-                call_Table_ColumnPinning_setColumnPinning(pin.setColumnPinning(), Updater<ColumnPinningState>(reset_cp));
-                RowSelectionState reset_rs = RowSelectionState::create();
-                reset_rs.set_at("0", true);
-                reset_rs.set_at("2", true);
-                reset_rs.set_at("4", true);
-                call_Table_RowSelection_setRowSelection(sel.setRowSelection(), Updater<RowSelectionState>(reset_rs));
+                pin.setColumnPinning()(
+                    ColumnPinningState::create()
+                        .start(ts::Array<std::string>{ "id" })
+                        .end(ts::Array<std::string>{ "status" })
+                );
+                sel.setRowSelection()(
+                    RowSelectionState::create().set_at("0", true).set_at("2", true).set_at("4", true)
+                );
             }
             render(st);
-        };
-        btn.addEventListener(dom::HTMLElementEventMapKeys::click, on_click);
+        });
     }
 
     render(st);

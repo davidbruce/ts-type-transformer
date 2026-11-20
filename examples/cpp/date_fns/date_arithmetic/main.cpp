@@ -1,8 +1,6 @@
 #include "dom/dom.hpp"
 #include "date_fns/date_fns.hpp"
 
-using Day = date_fns::DateArg<date_fns::Date>;
-
 static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::string_view cls, std::string_view text) {
     dom::HTMLElement el = doc.createElement(tag);
     if (!cls.empty()) el.className(cls);
@@ -21,32 +19,30 @@ static void add_kv(dom::Document doc, dom::HTMLElement row, std::string_view lab
     row.appendChild(box);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Date-fns Arithmetic & Durations (C++)"));
     head.appendChild(make_el(doc, "span", "badge", "Base 2024-03-15"));
     app.appendChild(head);
 
-    date_fns::Date base_d = date_fns::parseISO<date_fns::Date>("2024-03-15");
-    date_fns::Date jan31 = date_fns::parseISO<date_fns::Date>("2024-01-31");
-    date_fns::Duration dur = date_fns::Duration::create();
-    dur.months(1.0);
-    dur.days(2.0);
+    auto base_d = date_fns::parseISO("2024-03-15");
+    auto jan31 = date_fns::parseISO("2024-01-31");
+    auto dur = date_fns::Duration::create().months(1.0).days(2.0);
 
     struct OpRow { const char* name; date_fns::Date res; const char* fmt; };
     OpRow ops[] = {
-        { "addDays(base, 3)", date_fns::addDays<date_fns::Date>(Day(base_d), 3.0), "yyyy-MM-dd" },
-        { "subDays(base, 15)", date_fns::subDays<date_fns::Date>(Day(base_d), 15.0), "yyyy-MM-dd" },
-        { "addWeeks(base, 2)", date_fns::addWeeks<date_fns::Date>(Day(base_d), 2.0), "yyyy-MM-dd" },
-        { "addMonths(jan31, 1)", date_fns::addMonths<date_fns::Date>(Day(jan31), 1.0), "yyyy-MM-dd" },
-        { "subMonths(base, 3)", date_fns::subMonths<date_fns::Date>(Day(base_d), 3.0), "yyyy-MM-dd" },
-        { "addYears(base, 1)", date_fns::addYears<date_fns::Date>(Day(base_d), 1.0), "yyyy-MM-dd" },
-        { "startOfWeek(base)", date_fns::startOfWeek<date_fns::Date>(Day(base_d)), "yyyy-MM-dd" },
-        { "endOfMonth(base)", date_fns::endOfMonth<date_fns::Date>(Day(base_d)), "yyyy-MM-dd HH:mm:ss" },
-        { "add(base, { months: 1, days: 2 })", date_fns::add<date_fns::Date>(Day(base_d), dur), "yyyy-MM-dd" },
+        { "addDays(base, 3)", date_fns::addDays(base_d, 3.0), "yyyy-MM-dd" },
+        { "subDays(base, 15)", date_fns::subDays(base_d, 15.0), "yyyy-MM-dd" },
+        { "addWeeks(base, 2)", date_fns::addWeeks(base_d, 2.0), "yyyy-MM-dd" },
+        { "addMonths(jan31, 1)", date_fns::addMonths(jan31, 1.0), "yyyy-MM-dd" },
+        { "subMonths(base, 3)", date_fns::subMonths(base_d, 3.0), "yyyy-MM-dd" },
+        { "addYears(base, 1)", date_fns::addYears(base_d, 1.0), "yyyy-MM-dd" },
+        { "startOfWeek(base)", date_fns::startOfWeek(base_d), "yyyy-MM-dd" },
+        { "endOfMonth(base)", date_fns::endOfMonth(base_d), "yyyy-MM-dd HH:mm:ss" },
+        { "add(base, { months: 1, days: 2 })", date_fns::add(base_d, dur), "yyyy-MM-dd" },
         { "base (immutable check)", base_d, "yyyy-MM-dd" },
     };
 

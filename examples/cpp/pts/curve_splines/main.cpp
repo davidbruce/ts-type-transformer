@@ -8,26 +8,20 @@ using namespace pts;
 
 static Pt mk_pt(double x, double y) {
     Pt p = Pt::make(2.0);
-    p.x(x);
-    p.y(y);
-    return p;
+    return p.x(x).y(y);
 }
 
-static Group mk_group2(const Pt& a, const Pt& b) {
-    return Group::create(ts::Array<Pt>{ a, b });
-}
+TS_EXPORT(start) void start() {
+    auto opts = CanvasSpaceOptions::create()
+        .bgcolor("#ffffff")
+        .resize(true)
+        .retina(true);
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    CanvasSpaceOptions opts = CanvasSpaceOptions::create();
-    opts.bgcolor("#ffffff");
-    opts.resize(true);
-    opts.retina(true);
+    auto space = CanvasSpace::create("#pt").setup(opts);
+    auto form = space.getForm();
 
-    CanvasSpace space = CanvasSpace::create(std::string("#pt")).setup(opts);
-    CanvasForm<CanvasSpace> form = space.getForm();
-
-    IPlayer player = IPlayer::create();
-    player.animate(AnimateCallbackFn([space, form](double time_ms, double, Space) {
+    auto player = IPlayer::create();
+    player.animate([space, form](double time_ms, double, Space) {
         Pt size = space.size();
         Pt c = space.center();
         Pt pointer = space.pointer();
@@ -36,10 +30,10 @@ extern "C" __attribute__((export_name("start"))) void start() {
         double amp = h * 0.24;
         int count = 11;
 
-        form.strokeOnly(CanvasForm_fill_c(std::string("#e5e5e5")), 1.0)
-            .line(PtLikeIterable(mk_group2(mk_pt(w * 0.06, c.y()), mk_pt(w * 0.94, c.y()))));
+        form.strokeOnly("#e5e5e5", 1.0)
+            .line(Group::create(mk_pt(w * 0.06, c.y()), mk_pt(w * 0.94, c.y())));
 
-        ts::Array<Pt> arr = ts::Array<Pt>::create();
+        auto arr = ts::Array<Pt>::create();
         for (int i = 0; i < count; i++) {
             double u = double(i) / double(count - 1);
             double x = w * (0.08 + 0.84 * u);
@@ -56,28 +50,28 @@ extern "C" __attribute__((export_name("start"))) void start() {
         }
 
         Group ctrls = Group::create(arr);
-        Group bs = Curve::bspline(GroupLike(ctrls), 12.0);
-        Group card = Curve::cardinal(PtLikeIterable(ctrls), 12.0, 0.35);
-        Group cr = Curve::catmullRom(PtLikeIterable(ctrls), 12.0);
+        Group bs = Curve::bspline(ctrls, 12.0);
+        Group card = Curve::cardinal(ctrls, 12.0, 0.35);
+        Group cr = Curve::catmullRom(ctrls, 12.0);
 
         uint32_t cr_len = cr.size();
         for (uint32_t i = 0; i < cr_len; i += 3) {
             Pt p = cr[i];
-            form.strokeOnly(CanvasForm_fill_c(std::string("#d4d4d4")), 1.0)
-                .line(PtLikeIterable(mk_group2(mk_pt(p.x(), c.y()), p)));
+            form.strokeOnly("#d4d4d4", 1.0)
+                .line(Group::create(mk_pt(p.x(), c.y()), p));
         }
 
-        form.strokeOnly(CanvasForm_fill_c(std::string("#d4d4d4")), 1.0).line(PtLikeIterable(ctrls));
-        form.strokeOnly(CanvasForm_fill_c(std::string("#b5b5b5")), 2.0).line(PtLikeIterable(bs));
-        form.strokeOnly(CanvasForm_fill_c(std::string("#555555")), 1.8).line(PtLikeIterable(card));
-        form.strokeOnly(CanvasForm_fill_c(std::string("#111111")), 2.6).line(PtLikeIterable(cr));
+        form.strokeOnly("#d4d4d4", 1.0).line(ctrls);
+        form.strokeOnly("#b5b5b5", 2.0).line(bs);
+        form.strokeOnly("#555555", 1.8).line(card);
+        form.strokeOnly("#111111", 2.6).line(cr);
 
         for (Pt p : ctrls) {
-            form.fill(CanvasForm_fill_c(std::string("#ffffff")))
-                .stroke(CanvasForm_fill_c(std::string("#111111")), 1.5)
-                .point(PtLike(p), 4.5, "circle");
+            form.fill("#ffffff")
+                .stroke("#111111", 1.5)
+                .point(p, 4.5, "circle");
         }
-    }));
+    });
 
     space.add(player);
     space.bindMouse().bindTouch().play();

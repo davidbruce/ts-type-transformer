@@ -8,7 +8,7 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
     return el;
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
     dom::HTMLElement app = *doc.getElementById("app");
 

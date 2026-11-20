@@ -1,8 +1,7 @@
 #include "dom/dom.hpp"
 #include "date_fns/date_fns.hpp"
 
-using Day = date_fns::DateArg<date_fns::Date>;
-using Span = date_fns::Interval<Day, Day>;
+using Span = date_fns::Interval<date_fns::DateArg<>, date_fns::DateArg<>>;
 
 static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::string_view cls, std::string_view text) {
     dom::HTMLElement el = doc.createElement(tag);
@@ -12,23 +11,22 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
 }
 
 static Span make_span(std::string_view s_iso, std::string_view e_iso) {
-    Span span = Span::create();
-    span.start(Day(date_fns::parseISO<date_fns::Date>(s_iso)));
-    span.end(Day(date_fns::parseISO<date_fns::Date>(e_iso)));
-    return span;
+    return Span::create()
+        .start(date_fns::parseISO(s_iso))
+        .end(date_fns::parseISO(e_iso));
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Date-fns Interval Overlap & Clamp (C++)"));
     head.appendChild(make_el(doc, "span", "badge", "March 2024 \xC2\xB7 31 days"));
     app.appendChild(head);
 
     Span win_span = make_span("2024-03-01", "2024-03-31");
-    ts::Array<date_fns::Date_or_string_or_number> month_days = date_fns::eachDayOfInterval<Span>(win_span);
+    auto month_days = date_fns::eachDayOfInterval(win_span);
 
     Span sprint_a = make_span("2024-03-08", "2024-03-18");
     struct Track { const char* name; Span span; bool is_ref; };
@@ -100,8 +98,8 @@ extern "C" __attribute__((export_name("start"))) void start() {
     };
     dom::HTMLElement tbody = make_el(doc, "tbody", "", "");
     for (const auto& p : probes) {
-        date_fns::Date pd = date_fns::parseISO<date_fns::Date>(p.iso);
-        date_fns::Date_or_string_or_number clamped = date_fns::clamp<Day, Span>(Day(pd), sprint_a);
+        auto pd = date_fns::parseISO(p.iso);
+        auto clamped = date_fns::clamp(pd, sprint_a);
         dom::HTMLElement tr = make_el(doc, "tr", "", "");
         tr.appendChild(make_el(doc, "td", "", p.iso));
         tr.appendChild(make_el(doc, "td", "", date_fns::formatDate(clamped, "yyyy-MM-dd")));

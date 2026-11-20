@@ -53,12 +53,12 @@ static void draw_rot_box(const dom::CanvasRenderingContext2D& ctx, double cx, do
         to_cy(cy + r10 * (-hx) + r11 * hy)
     };
 
-    ctx.fillStyle(std::string(fill_hex));
+    ctx.fillStyle(fill_hex);
     ctx.beginPath(); ctx.moveTo(xs[0], ys[0]);
     for (int i = 1; i < 4; i++) ctx.lineTo(xs[i], ys[i]);
     ctx.closePath(); ctx.fill();
 
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.5);
     ctx.beginPath(); ctx.moveTo(xs[0], ys[0]);
     for (int i = 1; i < 4; i++) ctx.lineTo(xs[i], ys[i]);
@@ -127,10 +127,10 @@ static void step_sim(const std::shared_ptr<AppState>& st) {
 
 static void render(const std::shared_ptr<AppState>& st) {
     const auto& ctx = st->ctx;
-    ctx.fillStyle(std::string("#ffffff"));
+    ctx.fillStyle("#ffffff");
     ctx.fillRect(0.0, 0.0, 680.0, 400.0);
 
-    ctx.strokeStyle(std::string("#efefef"));
+    ctx.strokeStyle("#efefef");
     ctx.lineWidth(1.0);
     for (int gx = -6; gx <= 6; gx++) {
         double x = to_cx(double(gx));
@@ -143,13 +143,13 @@ static void render(const std::shared_ptr<AppState>& st) {
 
     double sx = to_cx(-1.85), sy = to_cy(1.65), sw = 3.70 * 46.0, sh = 0.60 * 46.0;
     if (st->active_in_sensor > 0) {
-        ctx.fillStyle(std::string("#efefef"));
+        ctx.fillStyle("#efefef");
         ctx.fillRect(sx, sy, sw, sh);
-        ctx.strokeStyle(std::string("#111111"));
+        ctx.strokeStyle("#111111");
         ctx.lineWidth(2.0);
         ctx.strokeRect(sx, sy, sw, sh);
     } else {
-        ctx.strokeStyle(std::string("#737373"));
+        ctx.strokeStyle("#737373");
         ctx.lineWidth(1.4);
         draw_segs(ctx, sx, sy, sx + sw, sy, 14);
         draw_segs(ctx, sx + sw, sy, sx + sw, sy + sh, 4);
@@ -159,7 +159,7 @@ static void render(const std::shared_ptr<AppState>& st) {
 
     char gcap[64];
     std::snprintf(gcap, sizeof gcap, "SENSOR GATE (%d inside)", st->active_in_sensor);
-    ctx.fillStyle(std::string("#555555"));
+    ctx.fillStyle("#555555");
     ctx.font("11px ui-monospace, monospace");
     ctx.fillText(gcap, sx + 8.0, sy + 17.0);
 
@@ -176,9 +176,9 @@ static void render(const std::shared_ptr<AppState>& st) {
             draw_rot_box(ctx, p.x(), p.y(), q.x(), q.y(), q.z(), q.w(), 0.28, 0.28, "#d4d4d4");
         } else {
             double cx = to_cx(p.x()), cy = to_cy(p.y());
-            ctx.fillStyle(std::string("#262626"));
+            ctx.fillStyle("#262626");
             ctx.beginPath(); ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TWO_PI); ctx.fill();
-            ctx.strokeStyle(std::string("#111111"));
+            ctx.strokeStyle("#111111");
             ctx.lineWidth(1.5);
             ctx.beginPath(); ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TWO_PI); ctx.stroke();
         }
@@ -190,7 +190,7 @@ static void render(const std::shared_ptr<AppState>& st) {
         "EventQueue \xC2\xB7 solid_contacts=%d \xC2\xB7 sensor_crossings=%d \xC2\xB7 inside=%d \xC2\xB7 step=%d (%s)",
         st->solid_contacts, st->sensor_crossings, st->active_in_sensor, st->step_count, st->paused ? "paused" : "running"
     );
-    st->meta.textContent(std::string(mbuf));
+    st->meta.textContent(mbuf);
 }
 
 static ts::Task run_app() {
@@ -256,6 +256,6 @@ static ts::Task run_app() {
     dom::requestAnimationFrame(st->raf_cb);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     run_app();
 }

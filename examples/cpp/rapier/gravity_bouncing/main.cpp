@@ -81,10 +81,10 @@ static void step_sim(const std::shared_ptr<AppState>& st) {
 
 static void render(const std::shared_ptr<AppState>& st) {
     const auto& ctx = st->ctx;
-    ctx.fillStyle(std::string("#ffffff"));
+    ctx.fillStyle("#ffffff");
     ctx.fillRect(0.0, 0.0, 680.0, 400.0);
 
-    ctx.strokeStyle(std::string("#efefef"));
+    ctx.strokeStyle("#efefef");
     ctx.lineWidth(1.0);
     for (int gx = -6; gx <= 6; gx++) {
         double x = to_cx(double(gx));
@@ -95,17 +95,17 @@ static void render(const std::shared_ptr<AppState>& st) {
         ctx.beginPath(); ctx.moveTo(0.0, y); ctx.lineTo(680.0, y); ctx.stroke();
     }
 
-    ctx.fillStyle(std::string("#f7f7f7"));
+    ctx.fillStyle("#f7f7f7");
     ctx.fillRect(0.0, 350.0, 680.0, 50.0);
-    ctx.strokeStyle(std::string("#d4d4d4"));
+    ctx.strokeStyle("#d4d4d4");
     for (double hx = -20.0; hx < 700.0; hx += 18.0) {
         ctx.beginPath(); ctx.moveTo(hx, 350.0); ctx.lineTo(hx - 24.0, 400.0); ctx.stroke();
     }
-    ctx.strokeStyle(std::string("#111111"));
+    ctx.strokeStyle("#111111");
     ctx.lineWidth(1.5);
     ctx.beginPath(); ctx.moveTo(0.0, 350.0); ctx.lineTo(680.0, 350.0); ctx.stroke();
 
-    ctx.strokeStyle(std::string("#d4d4d4"));
+    ctx.strokeStyle("#d4d4d4");
     ctx.lineWidth(1.0);
     draw_dashed(ctx, to_cx(-5.0), to_cy(5.6), to_cx(5.0), to_cy(5.6), 40);
     for (int i = 0; i < 5; i++) {
@@ -116,7 +116,7 @@ static void render(const std::shared_ptr<AppState>& st) {
     double energy = 0.0, max_y = 0.0;
     ctx.font("11px ui-monospace, monospace");
     for (int i = 0; i < 5; i++) {
-        ctx.fillStyle(std::string("#b5b5b5"));
+        ctx.fillStyle("#b5b5b5");
         for (int k = 0; k < st->trail_count; k++) {
             ctx.beginPath();
             ctx.arc(to_cx(st->trail_x[i][k]), to_cy(st->trail_y[i][k]), 1.6, 0.0, TWO_PI);
@@ -128,18 +128,18 @@ static void render(const std::shared_ptr<AppState>& st) {
         if (p.y() > max_y) max_y = p.y();
 
         double cx = to_cx(p.x()), cy = to_cy(p.y()), rpx = 0.42 * 46.0;
-        ctx.fillStyle(std::string(BALL_HEX[i]));
+        ctx.fillStyle(BALL_HEX[i]);
         ctx.beginPath(); ctx.arc(cx, cy, rpx, 0.0, TWO_PI); ctx.fill();
-        ctx.strokeStyle(std::string("#111111"));
+        ctx.strokeStyle("#111111");
         ctx.lineWidth(1.6);
         ctx.beginPath(); ctx.arc(cx, cy, rpx, 0.0, TWO_PI); ctx.stroke();
 
-        ctx.fillStyle(std::string(i >= 3 ? "#d4d4d4" : "#737373"));
+        ctx.fillStyle(i >= 3 ? "#d4d4d4" : "#737373");
         ctx.beginPath(); ctx.arc(cx - 5.0, cy - 5.0, 2.8, 0.0, TWO_PI); ctx.fill();
 
         char rbuf[16];
         std::snprintf(rbuf, sizeof rbuf, "e=%.2f", RESTITUTIONS[i]);
-        ctx.fillStyle(std::string("#111111"));
+        ctx.fillStyle("#111111");
         ctx.fillText(rbuf, cx - 22.0, 368.0);
     }
 
@@ -150,7 +150,7 @@ static void render(const std::shared_ptr<AppState>& st) {
         st->earth ? "Earth (-9.81)" : "Moon (-1.62)",
         max_y, energy, st->step_count, st->paused ? "paused" : "running"
     );
-    st->meta.textContent(std::string(mbuf));
+    st->meta.textContent(mbuf);
 }
 
 static ts::Task run_app() {
@@ -210,6 +210,6 @@ static ts::Task run_app() {
     dom::requestAnimationFrame(st->raf_cb);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     run_app();
 }

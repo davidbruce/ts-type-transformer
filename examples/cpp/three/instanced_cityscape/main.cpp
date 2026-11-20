@@ -98,10 +98,10 @@ static void render_city(const std::shared_ptr<AppState>& st) {
     std::snprintf(buf, sizeof buf,
                   "100 InstancedMesh towers \xC2\xB7 layout: %s \xC2\xB7 peak height: %.2f \xC2\xB7 camera: %s",
                   layout_name(st->layout_mode), max_h, cname);
-    st->meta.textContent(std::string(buf));
+    st->meta.textContent(buf);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
     double width = 680.0, height = 400.0, aspect = width / height;
 
@@ -114,36 +114,30 @@ extern "C" __attribute__((export_name("start"))) void start() {
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
     Scene<> scene = Scene<>::create();
-    scene.background(Color_or_Texture(Color::create(ColorRepresentation(double(0xf7f7f7)))));
+    scene.background(Color::create(0xf7f7f7));
     OrthographicCamera ortho_cam = OrthographicCamera::create(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0);
     PerspectiveCamera persp_cam = PerspectiveCamera::create(40.0, aspect, 0.1, 100.0);
 
-    scene.add({AmbientLight::create(ColorRepresentation(double(0xffffff)), 1.25)});
-    DirectionalLight key = DirectionalLight::create(ColorRepresentation(double(0xffffff)), 2.1);
+    DirectionalLight key = DirectionalLight::create(0xffffff, 2.1);
     key.position().set(8.0, 12.0, 6.0);
-    scene.add({key});
-    DirectionalLight rim = DirectionalLight::create(ColorRepresentation(double(0xffffff)), 0.9);
+    DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
     rim.position().set(-7.0, 6.0, -8.0);
-    scene.add({rim});
 
-    MeshStandardMaterialParameters pmp = MeshStandardMaterialParameters::create();
-    pmp.color(ColorRepresentation(double(0xe5e5e5)));
-    pmp.roughness(0.85);
-    Mesh<> plinth = Mesh<>::create(PlaneGeometry::create(8.6, 8.6), Material_or_Material_array(MeshStandardMaterial::create(pmp)));
+    Mesh<> plinth = Mesh<>::create(
+        PlaneGeometry::create(8.6, 8.6),
+        MeshStandardMaterial::create(MeshStandardMaterialParameters::create().color(0xe5e5e5).roughness(0.85))
+    );
     plinth.rotation().x(-M_PI / 2.0);
     plinth.position().y(-0.01);
-    scene.add({plinth});
 
-    GridHelper grid = GridHelper::create(9.0, 10.0, ColorRepresentation(double(0x999999)), ColorRepresentation(double(0xd4d4d4)));
-    scene.add({grid});
+    GridHelper grid = GridHelper::create(9.0, 10.0, 0x999999, 0xd4d4d4);
 
-    BoxGeometry tgeo = BoxGeometry::create(0.54, 1.0, 0.54);
-    MeshStandardMaterialParameters tmp = MeshStandardMaterialParameters::create();
-    tmp.color(ColorRepresentation(double(0xffffff)));
-    tmp.roughness(0.65);
-    tmp.metalness(0.08);
-    InstancedMesh<> inst = InstancedMesh<>::create(tgeo, Material_or_Material_array(MeshStandardMaterial::create(tmp)), 100.0);
-    scene.add({inst});
+    InstancedMesh<> inst = InstancedMesh<>::create(
+        BoxGeometry::create(0.54, 1.0, 0.54),
+        MeshStandardMaterial::create(MeshStandardMaterialParameters::create().color(0xffffff).roughness(0.65).metalness(0.08)),
+        100.0
+    );
+    scene.add(AmbientLight::create(0xffffff, 1.25), key, rim, plinth, grid, inst);
 
     auto st = std::make_shared<AppState>(AppState{
         renderer, scene, ortho_cam, persp_cam, inst,
@@ -154,14 +148,12 @@ extern "C" __attribute__((export_name("start"))) void start() {
 
     const char* ids[5] = { "btn-cam", "btn-lay0", "btn-lay1", "btn-lay2", "btn-rot" };
     for (int i = 0; i < 5; i++) {
-        dom::HTMLElement btn = *doc.getElementById(ids[i]);
-        ts::Listener<dom::PointerEvent> cb = [st, i](dom::PointerEvent) {
+        doc.getElementById(ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
             if (i == 0) st->use_ortho = !st->use_ortho;
             else if (i >= 1 && i <= 3) st->layout_mode = i - 1;
             else st->cam_yaw += M_PI / 4.0;
             render_city(st);
-        };
-        btn.addEventListener(dom::HTMLElementEventMapKeys::click, cb);
+        });
     }
     render_city(st);
 }

@@ -24,23 +24,24 @@ static void add_solid(const std::shared_ptr<AppState>& st,
                       uint32_t hex, double rough, double metal, bool flat,
                       double x, double y, double z, double thresh,
                       const LineBasicMaterial& line_mat) {
-    MeshStandardMaterialParameters mp = MeshStandardMaterialParameters::create();
-    mp.color(ColorRepresentation(double(hex)));
-    mp.roughness(rough);
-    mp.metalness(metal);
-    mp.flatShading(flat);
-    MeshStandardMaterial mat = MeshStandardMaterial::create(mp);
+    MeshStandardMaterial mat = MeshStandardMaterial::create(
+        MeshStandardMaterialParameters::create()
+            .color(hex)
+            .roughness(rough)
+            .metalness(metal)
+            .flatShading(flat)
+    );
 
-    Mesh<> mesh = Mesh<>::create(geo, Material_or_Material_array(mat));
+    Mesh<> mesh = Mesh<>::create(geo, mat);
     mesh.position().set(x, y, z);
     mesh.rotation().set(0.25, 0.45, 0.0);
-    st->scene.add({mesh});
+    st->scene.add(mesh);
 
-    EdgesGeometry<> egeo = EdgesGeometry<>::create(std::optional<BufferGeometry<>>(geo), thresh);
-    LineSegments<> segs = LineSegments<>::create(egeo, Material_or_Material_array(line_mat));
+    EdgesGeometry<> egeo = EdgesGeometry<>::create(geo, thresh);
+    LineSegments<> segs = LineSegments<>::create(egeo, line_mat);
     segs.position().set(x, y, z);
     segs.rotation().set(0.25, 0.45, 0.0);
-    st->wire_group.add({segs});
+    st->wire_group.add(segs);
 }
 
 static void update_view(const std::shared_ptr<AppState>& st) {
@@ -56,10 +57,10 @@ static void update_view(const std::shared_ptr<AppState>& st) {
     std::snprintf(buf, sizeof buf,
                   "5 monochrome solids \xC2\xB7 EdgesGeometry wireframes: %s \xC2\xB7 azimuth: %ld deg \xC2\xB7 680x400 WebGL",
                   st->wire_visible ? "on" : "off", deg);
-    st->meta.textContent(std::string(buf));
+    st->meta.textContent(buf);
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
+TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
     double width = 680.0, height = 400.0;
 
@@ -72,23 +73,19 @@ extern "C" __attribute__((export_name("start"))) void start() {
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
     Scene<> scene = Scene<>::create();
-    scene.background(Color_or_Texture(Color::create(ColorRepresentation(double(0xf7f7f7)))));
+    scene.background(Color::create(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
 
-    scene.add({AmbientLight::create(ColorRepresentation(double(0xffffff)), 1.2)});
-    DirectionalLight key = DirectionalLight::create(ColorRepresentation(double(0xffffff)), 2.2);
+    DirectionalLight key = DirectionalLight::create(0xffffff, 2.2);
     key.position().set(6.0, 10.0, 8.0);
-    scene.add({key});
-    DirectionalLight rim = DirectionalLight::create(ColorRepresentation(double(0xffffff)), 0.9);
+    DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
     rim.position().set(-7.0, 5.0, -6.0);
-    scene.add({rim});
 
-    GridHelper grid = GridHelper::create(12.0, 12.0, ColorRepresentation(double(0x737373)), ColorRepresentation(double(0xd4d4d4)));
+    GridHelper grid = GridHelper::create(12.0, 12.0, 0x737373, 0xd4d4d4);
     grid.position().y(-1.2);
-    scene.add({grid});
 
     Group<> wire_group = Group<>::create();
-    scene.add({wire_group});
+    scene.add(AmbientLight::create(0xffffff, 1.2), key, rim, grid, wire_group);
 
     auto st = std::make_shared<AppState>(AppState{
         renderer, scene, camera, wire_group,
@@ -98,7 +95,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
     });
 
     LineBasicMaterialParameters lmp = LineBasicMaterialParameters::create();
-    lmp.color(ColorRepresentation(double(0x111111)));
+    lmp.color(0x111111);
     LineBasicMaterial line_mat = LineBasicMaterial::create(lmp);
 
     add_solid(st, BoxGeometry::create(1.45, 1.45, 1.45), 0x262626, 0.65, 0.1, false, -3.2, 0.0, -0.6, 1.0, line_mat);
@@ -109,15 +106,13 @@ extern "C" __attribute__((export_name("start"))) void start() {
 
     const char* ids[4] = { "btn-wire", "btn-left", "btn-right", "btn-reset" };
     for (int i = 0; i < 4; i++) {
-        dom::HTMLElement btn = *doc.getElementById(ids[i]);
-        ts::Listener<dom::PointerEvent> cb = [st, i](dom::PointerEvent) {
+        doc.getElementById(ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
             if (i == 0) st->wire_visible = !st->wire_visible;
             else if (i == 1) st->azimuth -= M_PI / 6.0;
             else if (i == 2) st->azimuth += M_PI / 6.0;
             else { st->azimuth = 0.35; st->wire_visible = true; }
             update_view(st);
-        };
-        btn.addEventListener(dom::HTMLElementEventMapKeys::click, cb);
+        });
     }
     update_view(st);
 }

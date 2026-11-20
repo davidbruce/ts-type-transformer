@@ -9,16 +9,9 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
     return el;
 }
 
-template <class T>
-static T as_tok(const ts::Value& v) {
-    T t;
-    static_cast<ts::Handle&>(t) = v;
-    return t;
-}
-
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
     std::string md =
         "# Wireframe Spec\n\n"
@@ -28,22 +21,23 @@ extern "C" __attribute__((export_name("start"))) void start() {
     std::vector<std::string> visited;
 
     using Mk = marked::Marked<std::string, std::string>;
-    marked::MarkedExtension<std::string, std::string> ext = marked::MarkedExtension<std::string, std::string>::create();
-    marked::MarkedExtension_renderer<std::string, std::string> rend = marked::MarkedExtension_renderer<std::string, std::string>::create();
-    rend.heading(marked::MarkedExtension_renderer_heading<std::string, std::string>([](ts::Tuple<marked::Tokens_Heading> args) {
-        marked::Tokens_Heading h = args.get<0>();
-        std::string d = std::to_string(int(h.depth()));
+    auto rend = marked::MarkedExtension_renderer<std::string, std::string>::create();
+    rend.heading([](ts::Tuple<marked::Tokens_Heading> args) {
+        auto h = args.get<0>();
+        auto d = std::to_string(int(h.depth()));
         return std::string("<h") + d + " class=\"wire-h\">\xC2\xA7 " + h.text() + "</h" + d + ">\n";
-    }));
-    ext.renderer(rend);
-    ext.walkTokens(marked::Token_to_void_or_Promise_or_void_or_Promise_array_fn([&](ts::Value token) {
-        visited.push_back(as_tok<marked::Tokens_Generic>(token).type());
-        return marked::void_or_Promise_or_void_or_Promise_array(std::in_place_index<1>, ts::Array<>());
-    }));
+    });
+    ts::Scoped<marked::Token_to_void_or_Promise_or_void_or_Promise_array_fn> on_token = [&](ts::Value token) {
+        visited.push_back(token.as<marked::Tokens_Generic>().type());
+        return ts::Array<>();
+    };
+    auto ext = marked::MarkedExtension<std::string, std::string>::create()
+        .renderer(rend)
+        .walkTokens(on_token);
 
-    Mk custom_m = Mk::create({ ext });
+    Mk custom_m = Mk::create(ext);
     std::string def_html = marked::marked(md, marked::marked_options_no_async::create());
-    std::string cust_html = std::get<std::string>(custom_m.parse().invoke(md));
+    std::string cust_html = std::get<std::string>(custom_m.parse()(md));
 
     dom::HTMLElement head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Marked Custom Renderer & Walker (C++)"));

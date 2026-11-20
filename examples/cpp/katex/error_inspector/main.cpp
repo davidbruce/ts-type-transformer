@@ -8,21 +8,21 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
     return el;
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "ParseError Inspector (C++)"));
     head.appendChild(make_el(doc, "span", "badge", "throwOnError: false vs true"));
     app.appendChild(head);
 
-    katex::KatexOptions lenient = katex::KatexOptions::create();
-    lenient.throwOnError(false);
-    lenient.errorColor("#555555");
+    auto lenient = katex::KatexOptions::create()
+        .throwOnError(false)
+        .errorColor("#555555");
 
-    katex::KatexOptions strict = katex::KatexOptions::create();
-    strict.throwOnError(true);
+    auto strict = katex::KatexOptions::create()
+        .throwOnError(true);
 
     const char* bad_inputs[] = {
         "\\frac{1}{",
@@ -42,12 +42,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
         dom::HTMLElement right = make_el(doc, "div", "cell", "");
         right.appendChild(make_el(doc, "div", "label", "throwOnError: true (caught ParseError)"));
         ts::Result<std::string> res = ts::attempt([&] { return katex::renderToString(tex, strict); });
-        std::string msg = "(did not throw)";
-        if (!res) {
-            katex::ParseError pe;
-            static_cast<ts::Handle&>(pe) = res.error();
-            msg = pe.message();
-        }
+        std::string msg = res ? "(did not throw)" : res.error().message();
         right.appendChild(make_el(doc, "div", "err", msg));
 
         row.appendChild(left);

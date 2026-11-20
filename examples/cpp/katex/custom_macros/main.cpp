@@ -8,24 +8,24 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
     return el;
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Custom Macros (C++)"));
     head.appendChild(make_el(doc, "span", "badge", "\\RR, \\NN, \\dd, \\norm"));
     app.appendChild(head);
 
-    katex::KatexOptions_macros macros = katex::KatexOptions_macros::create();
-    macros.set_at("\\RR", ts::Value::string("\\mathbb{R}"));
-    macros.set_at("\\NN", ts::Value::string("\\mathbb{N}"));
-    macros.set_at("\\dd", ts::Value::string("\\mathrm{d}"));
-    macros.set_at("\\norm", ts::Value::string("\\left\\| #1 \\right\\|"));
+    auto macros = katex::KatexOptions_macros::create()
+        .set_at("\\RR", ts::Value::string("\\mathbb{R}"))
+        .set_at("\\NN", ts::Value::string("\\mathbb{N}"))
+        .set_at("\\dd", ts::Value::string("\\mathrm{d}"))
+        .set_at("\\norm", ts::Value::string("\\left\\| #1 \\right\\|"));
 
-    katex::KatexOptions opts = katex::KatexOptions::create();
-    opts.displayMode(true);
-    opts.macros(macros);
+    auto opts = katex::KatexOptions::create()
+        .displayMode(true)
+        .macros(macros);
 
     dom::HTMLElement legend = make_el(doc, "div", "card", "");
     legend.appendChild(make_el(doc, "div", "label", "Defined Macros"));

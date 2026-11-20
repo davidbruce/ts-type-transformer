@@ -18,17 +18,16 @@ static dom::HTMLElement make_result_card(dom::Document doc, std::string_view lab
     return card;
 }
 
-extern "C" __attribute__((export_name("start"))) void start() {
-    dom::Document doc = dom::get_document();
-    dom::HTMLElement app = *doc.getElementById("app");
+TS_EXPORT(start) void start() {
+    auto doc = dom::get_document();
+    auto app = *doc.getElementById("app");
 
-    dom::HTMLElement head = make_el(doc, "div", "head", "");
+    auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Marked Inline vs Block (C++)"));
     head.appendChild(make_el(doc, "span", "badge", "parse vs parseInline"));
     app.appendChild(head);
 
-    using Mk = marked::Marked<std::string, std::string>;
-    Mk md = Mk::create(ts::Array<marked::MarkedExtension<std::string, std::string>>::create());
+    auto md = marked::Marked<std::string, std::string>::create();
 
     const char* snippets[] = {
         "Hello **world** and *italics*",
@@ -43,8 +42,8 @@ extern "C" __attribute__((export_name("start"))) void start() {
         row.appendChild(make_el(doc, "pre", "src", s));
 
         dom::HTMLElement grid = make_el(doc, "div", "grid", "");
-        std::string block_html = std::get<std::string>(md.parse().invoke(s));
-        std::string inl_html = std::get<std::string>(md.parseInline().invoke(s));
+        std::string block_html = std::get<std::string>(md.parse()(s));
+        std::string inl_html = std::get<std::string>(md.parseInline()(s));
         grid.appendChild(make_result_card(doc, "Block (parse)", block_html));
         grid.appendChild(make_result_card(doc, "Inline (parseInline)", inl_html));
         row.appendChild(grid);
