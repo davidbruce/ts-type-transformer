@@ -1,4 +1,6 @@
 #include "node/node.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 TS_IMPORT(print) void host_print(const char* ptr, uint32_t len);
 
@@ -8,61 +10,43 @@ static double g_metric_sum = 0.0;
 static int g_once_calls = 0;
 static int g_shutdown_calls = 0;
 
-static void check(int ok) {
+static void check(bool ok) {
     if (!ok) __builtin_trap();
     g_passed++;
 }
 
-static void emit(const char* s) {
-    host_print(s, ts_strlen(s));
-}
-
-static void emit_int(int n) {
-    char buf[24];
-    int i = 0;
-    if (n == 0) {
-        buf[i++] = '0';
-    } else {
-        char rev[24];
-        int r = 0;
-        if (n < 0) {
-            emit("-");
-            n = -n;
-        }
-        while (n > 0) {
-            rev[r++] = (char)('0' + (n % 10));
-            n /= 10;
-        }
-        while (r > 0) buf[i++] = rev[--r];
-    }
-    host_print(buf, (uint32_t)i);
+static void emitf(const char* fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (n > 0) host_print(buf, (uint32_t)(n < (int)sizeof buf ? n : (int)sizeof buf - 1));
 }
 
 static void on_metric(void* ctx, JsArray args) {
     (void)ctx;
+    js_scope_open();
     g_metric_calls++;
     if (JsArray_length(args) > 0) {
-        JsValue v = JsArray_get(args, 0);
-        g_metric_sum += js_to_number(v);
-        js_release(v);
+        g_metric_sum += js_to_number(JsArray_get(args, 0));
     }
+    js_scope_close();
 }
 
 static void on_once(void* ctx, JsArray args) {
-    (void)ctx;
-    (void)args;
+    (void)ctx; (void)args;
     g_once_calls++;
 }
 
 static void on_shutdown(void* ctx, JsArray args) {
-    (void)ctx;
-    (void)args;
+    (void)ctx; (void)args;
     g_shutdown_calls++;
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    EventEmitter raw_emitter = EventEmitter_new((EventEmitterOptions){ 0 });
-    NodeJS_EventEmitter emitter = EventEmitter_as_NodeJS_EventEmitter(raw_emitter);
+    js_scope_open();
+    EventEmitter emitter = EventEmitter_new();
 
     NodeJS_EventEmitter_setMaxListeners(emitter, 12.0);
     check(NodeJS_EventEmitter_getMaxListeners(emitter) == 12.0);
@@ -76,48 +60,31 @@ __attribute__((export_name("start"))) void start(void) {
     NodeJS_EventEmitter_on(emitter, "shutdown", shutdown_cb);
 
     check(NodeJS_EventEmitter_listenerCount(emitter, "metric") == 2.0);
-    JsArray names1 = NodeJS_EventEmitter_eventNames(emitter);
-    check(JsArray_length(names1) == 2);
-    js_release(names1);
+    check(JsArray_length(EventEmitter_eventNames(emitter)) == 2);
 
     JsArray args1 = JsArray_new();
-    JsValue n1 = js_number(101.0);
-    JsValue s1 = js_string("ok");
-    JsArray_push(args1, n1);
-    JsArray_push(args1, s1);
-    bool emitted1 = NodeJS_EventEmitter_emit(emitter, "metric", args1);
-    js_release(s1); js_release(n1); js_release(args1);
-    check(emitted1 && g_metric_calls == 1 && g_once_calls == 1);
+    js_push_num(args1, 101.0);
+    js_push_str(args1, "ok");
+    check(EventEmitter_emit(emitter, "metric", args1) && g_metric_calls == 1 && g_once_calls == 1);
     check(NodeJS_EventEmitter_listenerCount(emitter, "metric") == 1.0);
 
     JsArray args2 = JsArray_new();
-    JsValue n2 = js_number(202.0);
-    JsValue s2 = js_string("ok");
-    JsArray_push(args2, n2);
-    JsArray_push(args2, s2);
-    bool emitted2 = NodeJS_EventEmitter_emit(emitter, "metric", args2);
-    js_release(s2); js_release(n2); js_release(args2);
-    check(emitted2 && g_metric_calls == 2 && g_metric_sum == 303.0 && g_once_calls == 1);
+    js_push_num(args2, 202.0);
+    js_push_str(args2, "ok");
+    check(EventEmitter_emit(emitter, "metric", args2) && g_metric_calls == 2 && g_metric_sum == 303.0 && g_once_calls == 1);
 
     JsArray empty_args = JsArray_new();
-    check(!NodeJS_EventEmitter_emit(emitter, "idle", empty_args));
+    check(!EventEmitter_emit(emitter, "idle", empty_args));
 
-    NodeJS_EventEmitter_removeListener(emitter, "metric", metric_cb);
-    check(NodeJS_EventEmitter_listenerCount(emitter, "metric") == 0.0 && !NodeJS_EventEmitter_emit(emitter, "metric", empty_args));
+    EventEmitter_removeListener(emitter, "metric", metric_cb);
+    check(NodeJS_EventEmitter_listenerCount(emitter, "metric") == 0.0 && !EventEmitter_emit(emitter, "metric", empty_args));
     check(g_metric_calls == 2);
 
-    NodeJS_EventEmitter_removeAllListeners(emitter, "shutdown");
-    JsArray names2 = NodeJS_EventEmitter_eventNames(emitter);
-    check(JsArray_length(names2) == 0 && g_shutdown_calls == 0);
-    js_release(names2);
-    js_release(empty_args);
+    EventEmitter_removeAllListeners(emitter, "shutdown");
+    check(JsArray_length(EventEmitter_eventNames(emitter)) == 0 && g_shutdown_calls == 0);
 
-    emit("maxListeners="); emit_int((int)NodeJS_EventEmitter_getMaxListeners(emitter));
-    emit(" metricCalls="); emit_int(g_metric_calls);
-    emit(" metricSum="); emit_int((int)g_metric_sum); emit("\n");
-    emit("onceCalls="); emit_int(g_once_calls); emit(" shutdownCalls="); emit_int(g_shutdown_calls); emit("\n");
-    emit("PASS: event_bus ("); emit_int(g_passed); emit(" checks)\n");
-
-    js_release(shutdown_cb); js_release(once_cb); js_release(metric_cb);
-    js_release(raw_emitter);
+    emitf("maxListeners=%d metricCalls=%d metricSum=%d\nonceCalls=%d shutdownCalls=%d\nPASS: event_bus (%d checks)\n",
+        (int)NodeJS_EventEmitter_getMaxListeners(emitter),
+        g_metric_calls, (int)g_metric_sum, g_once_calls, g_shutdown_calls, g_passed);
+    js_scope_close();
 }

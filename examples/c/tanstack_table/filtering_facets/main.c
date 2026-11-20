@@ -1,3 +1,5 @@
+#include <stdarg.h>
+#include <stdio.h>
 #include "dom/dom.h"
 #include "tanstack_table_core/tanstack_table_core.h"
 
@@ -19,25 +21,27 @@ static JsValue atom_get(void* ctx) {
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
+    js_scope_open();
     JsValue next = functionalUpdate(updater, a->value);
     js_retain(next);
+    if (a->value.h != 0) js_release(a->value);
     a->value = next;
+    js_scope_close();
     return NONE;
 }
 static void no_unsub(void* ctx) { (void)ctx; }
 static JsValue atom_sub(void* ctx, JsValue obs) {
-    (void)ctx;
-    (void)obs;
-    RowData_map sub = makeObjectMap();
-    RowData_map_set_at(sub, "unsubscribe", (JsValue){ void_fn_from(no_unsub, 0).h });
-    return (JsValue){ sub.h };
+    (void)ctx; (void)obs;
+    JsValue sub = js_object();
+    js_set_val(sub, "unsubscribe", void_fn_from(no_unsub, NULL));
+    return sub;
 }
 static JsValue make_atom(AtomState* a) {
-    RowData_map atom = makeObjectMap();
-    RowData_map_set_at(atom, "get", (JsValue){ void_to_any_fn_from(atom_get, a).h });
-    if (!a->is_ro) RowData_map_set_at(atom, "set", (JsValue){ Updater_fn2_from(atom_set, a).h });
-    RowData_map_set_at(atom, "subscribe", (JsValue){ Updater_fn2_from(atom_sub, 0).h });
-    return (JsValue){ atom.h };
+    JsValue atom = js_object();
+    js_set_val(atom, "get", void_to_any_fn_from(atom_get, a));
+    if (!a->is_ro) js_set_val(atom, "set", Updater_fn2_from(atom_set, a));
+    js_set_val(atom, "subscribe", Updater_fn2_from(atom_sub, NULL));
+    return atom;
 }
 static Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
     (void)ctx; (void)opts;
@@ -63,119 +67,111 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, 0));
-    TableReactivityBindings_set_unmount(r, void_fn_from(unmount_cb, 0));
-    TableReactivityBindings_set_batch(r, fn_fn_from(batch_cb, 0));
-    TableReactivityBindings_set_schedule(r, fn_fn_from(batch_cb, 0));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, 0));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, 0));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, 0));
+    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
+    TableReactivityBindings_set_unmount(r, void_fn_from(unmount_cb, NULL));
+    TableReactivityBindings_set_batch(r, fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_schedule(r, fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
     return r;
 }
 
-typedef struct {
-    char buf[16384];
-    int pos;
-} StrBuf;
-
-static void sb_str(StrBuf* s, const char* txt) {
-    while (*txt && s->pos < 16380) s->buf[s->pos++] = *txt++;
-}
-static void sb_int(StrBuf* s, int val) {
-    char tmp[24];
-    int n = 0;
-    if (val == 0) tmp[n++] = '0';
-    while (val > 0) {
-        tmp[n++] = (char)('0' + (val % 10));
-        val /= 10;
+typedef struct { char* p; char* end; } HtmlOut;
+__attribute__((format(printf, 2, 3)))
+static void html_fmt(HtmlOut* o, const char* fmt, ...) {
+    if (o->p >= o->end) return;
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(o->p, (size_t)(o->end - o->p), fmt, ap);
+    va_end(ap);
+    if (n > 0) {
+        ptrdiff_t rem = o->end - o->p - 1;
+        o->p += (n <= rem) ? n : rem;
     }
-    for (int i = n - 1; i >= 0 && s->pos < 16380; i--) s->buf[s->pos++] = tmp[i];
 }
-static void sb_js_esc(StrBuf* s, JsString jstr) {
+static void html_esc(HtmlOut* o, const char* s) {
+    for (; *s && o->p < o->end - 1; s++) {
+        if (*s == '&') html_fmt(o, "&amp;");
+        else if (*s == '<') html_fmt(o, "&lt;");
+        else if (*s == '>') html_fmt(o, "&gt;");
+        else *o->p++ = *s;
+    }
+    if (o->p < o->end) *o->p = 0;
+}
+static void html_js_esc(HtmlOut* o, JsString jstr) {
     char tmp[128];
-    uint32_t len = JsString_copy(jstr, tmp, sizeof tmp);
-    if (len >= sizeof tmp) len = sizeof tmp - 1;
-    for (uint32_t i = 0; i < len; i++) {
-        char c = tmp[i];
-        if (c == '&') sb_str(s, "&amp;");
-        else if (c == '<') sb_str(s, "&lt;");
-        else if (c == '>') sb_str(s, "&gt;");
-        else if (s->pos < 16380) s->buf[s->pos++] = c;
-    }
+    uint32_t len = JsString_copy(jstr, tmp, sizeof tmp - 1);
+    tmp[len < sizeof tmp ? len : sizeof tmp - 1] = 0;
+    html_esc(o, tmp);
 }
 
 static JsValue col_def(const char* key, const char* header, const char* filter_fn) {
-    RowData_map c = makeObjectMap();
-    RowData_map_set_at(c, "accessorKey", js_string(key));
-    RowData_map_set_at(c, "header", js_string(header));
-    if (filter_fn) RowData_map_set_at(c, "filterFn", js_string(filter_fn));
-    return (JsValue){ c.h };
+    JsValue c = js_object();
+    js_set_str(c, "accessorKey", key);
+    js_set_str(c, "header", header);
+    if (filter_fn) js_set_str(c, "filterFn", filter_fn);
+    return c;
 }
 static JsValue svc_row(const char* id, const char* service, const char* tier, const char* region, double reqs, double errs) {
-    RowData_map r = makeObjectMap();
-    RowData_map_set_at(r, "id", js_string(id));
-    RowData_map_set_at(r, "service", js_string(service));
-    RowData_map_set_at(r, "tier", js_string(tier));
-    RowData_map_set_at(r, "region", js_string(region));
-    RowData_map_set_at(r, "requests", js_number(reqs));
-    RowData_map_set_at(r, "errors", js_number(errs));
-    return (JsValue){ r.h };
+    JsValue r = js_object();
+    js_set_str(r, "id", id);
+    js_set_str(r, "service", service);
+    js_set_str(r, "tier", tier);
+    js_set_str(r, "region", region);
+    js_set_num(r, "requests", reqs);
+    js_set_num(r, "errors", errs);
+    return r;
 }
 static JsValue filter_spec(const char* id, JsValue value) {
-    RowData_map f = makeObjectMap();
-    RowData_map_set_at(f, "id", js_string(id));
-    RowData_map_set_at(f, "value", value);
-    return (JsValue){ f.h };
+    JsValue f = js_object();
+    js_set_str(f, "id", id);
+    js_set_val(f, "value", value);
+    return f;
 }
 
 static Table_Core g_table;
 static Document g_doc;
 
 static void render(const char* label) {
+    js_scope_open();
     RowModel rm = call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
     RowModel core = call_void_to_RowModel_fn(Table_RowModels_Core_get_getCoreRowModel((Table_RowModels_Core){ g_table.h }));
     JsArray_Row_Core rows = RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Row_Core_length(rows);
     uint32_t ntotal = JsArray_Row_Core_length(RowModel_get_rows(core));
 
-    static StrBuf sb;
-    sb.pos = 0;
-    sb_str(&sb, "<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>");
+    static char html[16384];
+    HtmlOut out = { html, html + sizeof html };
+    html_fmt(&out, "<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>");
     for (uint32_t i = 0; i < nrows; i++) {
         Row_Core row = JsArray_Row_Core_get(rows, i);
-        string_fn gv = Row_Row_get_getValue((Row_Row){ row.h });
-        sb_str(&sb, "<tr><td>");
-        sb_js_esc(&sb, js_to_string(call_string_fn(gv, "id")));
-        sb_str(&sb, "</td><td>");
-        sb_js_esc(&sb, js_to_string(call_string_fn(gv, "service")));
-        sb_str(&sb, "</td><td>");
-        sb_js_esc(&sb, js_to_string(call_string_fn(gv, "tier")));
-        sb_str(&sb, "</td><td>");
-        sb_js_esc(&sb, js_to_string(call_string_fn(gv, "region")));
-        sb_str(&sb, "</td><td class=\"num\">");
-        sb_int(&sb, (int)(js_to_number(call_string_fn(gv, "requests")) + 0.5));
-        sb_str(&sb, "</td><td class=\"num\">");
-        sb_int(&sb, (int)(js_to_number(call_string_fn(gv, "errors")) + 0.5));
-        sb_str(&sb, "</td></tr>");
+        string_fn gv = Row_Core_get_getValue(row);
+        html_fmt(&out, "<tr><td>");
+        html_js_esc(&out, js_to_string(call_string_fn(gv, "id")));
+        html_fmt(&out, "</td><td>");
+        html_js_esc(&out, js_to_string(call_string_fn(gv, "service")));
+        html_fmt(&out, "</td><td>");
+        html_js_esc(&out, js_to_string(call_string_fn(gv, "tier")));
+        html_fmt(&out, "</td><td>");
+        html_js_esc(&out, js_to_string(call_string_fn(gv, "region")));
+        html_fmt(&out, "</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
+                 (int)(js_to_number(call_string_fn(gv, "requests")) + 0.5),
+                 (int)(js_to_number(call_string_fn(gv, "errors")) + 0.5));
     }
-    sb_str(&sb, "</tbody></table>");
-    sb.buf[sb.pos] = 0;
-    Element_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), sb.buf);
+    html_fmt(&out, "</tbody></table>");
+    HTMLElement_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), html);
 
-    sb.pos = 0;
-    sb_str(&sb, label);
-    sb_str(&sb, " \xC2\xB7 showing ");
-    sb_int(&sb, (int)nrows);
-    sb_str(&sb, " / ");
-    sb_int(&sb, (int)ntotal);
-    sb_str(&sb, " services");
-    sb.buf[sb.pos] = 0;
-    Node_set_textContent(Document_getElementById(g_doc, "meta"), sb.buf);
+    char meta[256];
+    snprintf(meta, sizeof meta, "%s \xC2\xB7 showing %u / %u services", label, nrows, ntotal);
+    HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
+    js_scope_close();
 }
 
 static const int BTN_IDS[5] = { 0, 1, 2, 3, 4 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
+    js_scope_open();
     int idx = *(const int*)ctx;
     Table_ColumnFiltering cf = { g_table.h };
     Table_GlobalFiltering gf = { g_table.h };
@@ -185,75 +181,77 @@ static void on_click(void* ctx, PointerEvent ev) {
         call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
         JsArray_push(filters, filter_spec("tier", js_string("core")));
         JsArray_push(filters, filter_spec("requests", js_number(400.0)));
-        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), (JsValue){ filters.h });
+        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
         label = "Filter: tier = core & requests >= 400";
     } else if (idx == 1) {
         call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
-        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), (JsValue){ filters.h });
+        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
         label = "Filter: all services";
     } else if (idx == 2) {
         call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
         JsArray_push(filters, filter_spec("tier", js_string("edge")));
-        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), (JsValue){ filters.h });
+        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
         label = "Filter: tier = edge";
     } else if (idx == 3) {
-        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), (JsValue){ filters.h });
+        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
         call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string("auth"));
         label = "Global search: \"auth\"";
     } else if (idx == 4) {
         call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
         JsArray_push(filters, filter_spec("errors", js_number(5.0)));
-        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), (JsValue){ filters.h });
+        call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
         label = "Filter: errors >= 5";
     }
     render(label);
+    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    RowData_map filter_fns = makeObjectMap();
-    RowData_map_set_at(filter_fns, "includesString", (JsValue){ get_filterFn_includesString().h });
-    RowData_map_set_at(filter_fns, "equalsString", (JsValue){ get_filterFn_equalsString().h });
-    RowData_map_set_at(filter_fns, "greaterThanOrEqualTo", (JsValue){ get_filterFn_greaterThanOrEqualTo().h });
+    js_scope_open();
+    JsValue filter_fns = js_object();
+    js_set_val(filter_fns, "includesString", get_filterFn_includesString());
+    js_set_val(filter_fns, "equalsString", get_filterFn_equalsString());
+    js_set_val(filter_fns, "greaterThanOrEqualTo", get_filterFn_greaterThanOrEqualTo());
 
-    RowData_map features = makeObjectMap();
-    RowData_map_set_at(features, "coreReactivityFeature", (JsValue){ make_reactivity().h });
-    RowData_map_set_at(features, "columnFilteringFeature", (JsValue){ get_columnFilteringFeature().h });
-    RowData_map_set_at(features, "globalFilteringFeature", (JsValue){ get_globalFilteringFeature().h });
-    RowData_map_set_at(features, "coreRowModel", (JsValue){ createCoreRowModel().h });
-    RowData_map_set_at(features, "filteredRowModel", (JsValue){ createFilteredRowModel().h });
-    RowData_map_set_at(features, "filterFns", (JsValue){ filter_fns.h });
+    JsValue features = js_object();
+    js_set_val(features, "coreReactivityFeature", make_reactivity());
+    js_set_val(features, "columnFilteringFeature", get_columnFilteringFeature());
+    js_set_val(features, "globalFilteringFeature", get_globalFilteringFeature());
+    js_set_val(features, "coreRowModel", createCoreRowModel());
+    js_set_val(features, "filteredRowModel", createFilteredRowModel());
+    js_set_val(features, "filterFns", filter_fns);
 
     JsArray data = JsArray_new();
-    JsArray_push(data, svc_row("S-01", "auth-gateway", "core", "CH", 620, 2));
-    JsArray_push(data, svc_row("S-02", "session-cache", "core", "CH", 480, 1));
-    JsArray_push(data, svc_row("S-03", "billing-ledger", "core", "DE", 510, 6));
-    JsArray_push(data, svc_row("S-04", "oauth-signer", "core", "FR", 430, 3));
-    JsArray_push(data, svc_row("S-05", "trace-ingestor", "edge", "DE", 290, 8));
-    JsArray_push(data, svc_row("S-06", "cdn-router", "edge", "FR", 840, 5));
-    JsArray_push(data, svc_row("S-07", "static-assets", "edge", "CH", 710, 0));
-    JsArray_push(data, svc_row("S-08", "mail-relay", "batch", "DE", 140, 7));
-    JsArray_push(data, svc_row("S-09", "report-export", "batch", "FR", 210, 4));
-    JsArray_push(data, svc_row("S-10", "audit-auth-log", "core", "US", 360, 9));
+    js_push_val(data, svc_row("S-01", "auth-gateway", "core", "CH", 620, 2));
+    js_push_val(data, svc_row("S-02", "session-cache", "core", "CH", 480, 1));
+    js_push_val(data, svc_row("S-03", "billing-ledger", "core", "DE", 510, 6));
+    js_push_val(data, svc_row("S-04", "oauth-signer", "core", "FR", 430, 3));
+    js_push_val(data, svc_row("S-05", "trace-ingestor", "edge", "DE", 290, 8));
+    js_push_val(data, svc_row("S-06", "cdn-router", "edge", "FR", 840, 5));
+    js_push_val(data, svc_row("S-07", "static-assets", "edge", "CH", 710, 0));
+    js_push_val(data, svc_row("S-08", "mail-relay", "batch", "DE", 140, 7));
+    js_push_val(data, svc_row("S-09", "report-export", "batch", "FR", 210, 4));
+    js_push_val(data, svc_row("S-10", "audit-auth-log", "core", "US", 360, 9));
 
     JsArray cols = JsArray_new();
-    JsArray_push(cols, col_def("id", "ID", 0));
-    JsArray_push(cols, col_def("service", "Service", 0));
-    JsArray_push(cols, col_def("tier", "Tier", "equalsString"));
-    JsArray_push(cols, col_def("region", "Region", 0));
-    JsArray_push(cols, col_def("requests", "Req/s", "greaterThanOrEqualTo"));
-    JsArray_push(cols, col_def("errors", "Errors", "greaterThanOrEqualTo"));
+    js_push_val(cols, col_def("id", "ID", NULL));
+    js_push_val(cols, col_def("service", "Service", NULL));
+    js_push_val(cols, col_def("tier", "Tier", "equalsString"));
+    js_push_val(cols, col_def("region", "Region", NULL));
+    js_push_val(cols, col_def("requests", "Req/s", "greaterThanOrEqualTo"));
+    js_push_val(cols, col_def("errors", "Errors", "greaterThanOrEqualTo"));
 
     JsArray init_filters = JsArray_new();
-    JsArray_push(init_filters, filter_spec("tier", js_string("core")));
-    JsArray_push(init_filters, filter_spec("requests", js_number(400.0)));
-    RowData_map init_state = makeObjectMap();
-    RowData_map_set_at(init_state, "columnFilters", (JsValue){ init_filters.h });
+    js_push_val(init_filters, filter_spec("tier", js_string("core")));
+    js_push_val(init_filters, filter_spec("requests", js_number(400.0)));
+    JsValue init_state = js_object();
+    js_set_val(init_state, "columnFilters", init_filters);
 
-    RowData_map opts = makeObjectMap();
-    RowData_map_set_at(opts, "features", (JsValue){ features.h });
-    RowData_map_set_at(opts, "data", (JsValue){ data.h });
-    RowData_map_set_at(opts, "columns", (JsValue){ cols.h });
-    RowData_map_set_at(opts, "initialState", (JsValue){ init_state.h });
+    JsValue opts = js_object();
+    js_set_val(opts, "features", features);
+    js_set_val(opts, "data", data);
+    js_set_val(opts, "columns", cols);
+    js_set_val(opts, "initialState", init_state);
 
     g_table = constructTable((TableOptions_Core){ opts.h });
     js_retain(g_table);
@@ -266,4 +264,5 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
     render("Filter: tier = core & requests >= 400");
+    js_scope_close();
 }

@@ -2,25 +2,21 @@
 #include "marked/marked.h"
 
 static HTMLElement make_el(Document doc, const char* tag, const char* cls, const char* text) {
-    HTMLElement el = Document_createElement(doc, tag, (ElementCreationOptions){ 0 });
-    if (cls && cls[0]) Element_set_className(el, cls);
-    if (text) Node_set_textContent(el, text);
+    HTMLElement el = Document_createElement(doc, tag);
+    if (cls && cls[0]) HTMLElement_set_className(el, cls);
+    if (text) HTMLElement_set_textContent(el, text);
     return el;
 }
 
-static void append_and_release(HTMLElement parent, HTMLElement child) {
-    js_release(Node_appendChild(parent, child));
-    js_release(child);
-}
-
 __attribute__((export_name("start"))) void start(void) {
+    js_scope_open();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
     HTMLElement head = make_el(doc, "div", "head", 0);
-    append_and_release(head, make_el(doc, "h1", 0, "Marked Document Preview (C)"));
-    append_and_release(head, make_el(doc, "span", "badge", "marked"));
-    append_and_release(app, head);
+    HTMLElement_appendChild(head, make_el(doc, "h1", 0, "Marked Document Preview (C)"));
+    HTMLElement_appendChild(head, make_el(doc, "span", "badge", "marked"));
+    HTMLElement_appendChild(app, head);
 
     const char* markdown_src =
         "# Marked Wireframe Spec\n\n"
@@ -41,24 +37,18 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement grid = make_el(doc, "div", "grid", 0);
 
     HTMLElement src_card = make_el(doc, "div", "card", 0);
-    append_and_release(src_card, make_el(doc, "div", "label", "Markdown Source"));
-    append_and_release(src_card, make_el(doc, "pre", "src", markdown_src));
+    HTMLElement_appendChild(src_card, make_el(doc, "div", "label", "Markdown Source"));
+    HTMLElement_appendChild(src_card, make_el(doc, "pre", "src", markdown_src));
 
     HTMLElement out_card = make_el(doc, "div", "card", 0);
-    append_and_release(out_card, make_el(doc, "div", "label", "Rendered HTML"));
+    HTMLElement_appendChild(out_card, make_el(doc, "div", "label", "Rendered HTML"));
     HTMLElement md_out = make_el(doc, "div", "md-out", 0);
+    HTMLElement_set_innerHTML(md_out, marked(markdown_src, (marked_options_no_async){ 0 }));
 
-    JsString html = marked(markdown_src, (marked_options_no_async){ 0 });
-    static char html_buf[8192];
-    JsString_copy(html, html_buf, sizeof(html_buf));
-    js_release(html);
-    Element_set_innerHTML(md_out, html_buf);
+    HTMLElement_appendChild(out_card, md_out);
+    HTMLElement_appendChild(grid, src_card);
+    HTMLElement_appendChild(grid, out_card);
+    HTMLElement_appendChild(app, grid);
 
-    append_and_release(out_card, md_out);
-    append_and_release(grid, src_card);
-    append_and_release(grid, out_card);
-    append_and_release(app, grid);
-
-    js_release(app);
-    js_release(doc);
+    js_scope_close();
 }

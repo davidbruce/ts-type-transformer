@@ -378,6 +378,7 @@ export function createRuntime(getInstance, options = {{}}) {{
   // own; the slot is freed when its count reaches zero. Zero is null.
   const objs = [null];
   const refs = [0];
+  const gens = [0];
   const free = [];
   let live = 0;
   const ref = v => {{
@@ -386,15 +387,16 @@ export function createRuntime(getInstance, options = {{}}) {{
     const h = free.length ? free.pop() : objs.length;
     objs[h] = v;
     refs[h] = 1;
+    if (gens[h] === undefined) gens[h] = 0;
     live++;
     return h;
   }};
-  // Open scopes: each holds the handles given to wasm while it is innermost,
-  // released when it closes.
+  // Open scopes: each holds (handle, generation) pairs given to wasm while it
+  // is innermost, released when it closes unless already freed.
   const scopes = [];
   const put = v => {{
     const h = ref(v);
-    if (h !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(h);
+    if (h !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(h, gens[h]);
     return h;
   }};
   const release = h => {{
@@ -402,6 +404,7 @@ export function createRuntime(getInstance, options = {{}}) {{
     if (!(refs[h] > 0)) return fail(new Error(`handle ${{h}} released twice`));
     if (--refs[h] === 0) {{
       live--;
+      gens[h]++;
       if (CHECK) objs[h] = RELEASED;
       else {{
         objs[h] = undefined;
@@ -429,8 +432,10 @@ export function createRuntime(getInstance, options = {{}}) {{
   const unchecked = options.unchecked ?? (e => console.error('Uncaught in a wasm call:', e));
   const fail = e => {{
     if (error !== 0) {{
-      const old = objs[error];
-      release(error);
+      const oldH = error;
+      const old = objs[oldH];
+      error = 0;
+      release(oldH);
       unchecked(old);
     }}
     const mine = (error = ref(e));
@@ -473,6 +478,7 @@ export function createRuntime(getInstance, options = {{}}) {{
   // most strings a program passes are its literals, passed again and again.
   const seen = new Map();
   const str = (ptr, len) => {{
+    if (len === -1) return text(ptr >>> 0);
     const m = mem();
     const key = ptr * 65536 + len;
     const e = seen.get(key);
@@ -594,7 +600,13 @@ export function createRuntime(getInstance, options = {{}}) {{
     js_retain: guard(h => {{ if (h !== 0 && get(h) !== undefined) refs[h]++; }}),
     js_release: release,
     js_scope_open: () => {{ scopes.push([]); }},
-    js_scope_close: () => {{ (scopes.pop() ?? []).forEach(release); }},
+    js_scope_close: () => {{
+      const s = scopes.pop();
+      if (!s) return;
+      for (let i = 0; i < s.length; i += 2) {{
+        if (gens[s[i]] === s[i + 1]) release(s[i]);
+      }}
+    }},
     // References wasm holds.
     js_live: () => live,
     // Iteration: an iterator over a value, and its next value, or -1 at the end.
@@ -605,7 +617,7 @@ export function createRuntime(getInstance, options = {{}}) {{
     js_async_iterator_next: guard(it => put(Promise.resolve(get(it).next()).then(r => (r.done ? undefined : r.value)))),
     // Whether an exception waits to be taken; the exception, which wasm now holds, or 0.
     js_has_error: () => (error !== 0 ? 1 : 0),
-    js_take_error: () => {{ const e = error; error = 0; if (e !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(e); return e; }},
+    js_take_error: () => {{ const e = error; error = 0; if (e !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(e, gens[e]); return e; }},
     js_error_message: guard(h => {{ const e = get(h); return put(String(e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e ? e.message : e))); }}),
     js_error_name: guard(h => {{ const e = get(h); return put(String(e instanceof Error ? e.name : (e && typeof e === 'object' && 'name' in e ? e.name : typeof e))); }}),
     js_error_stack: guard(h => {{ const e = get(h); return put(String(e && typeof e === 'object' && e.stack != null ? e.stack : '')); }}),

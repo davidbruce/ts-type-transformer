@@ -247,11 +247,12 @@ fn zig(fixture: &str) {
     print!("{}", skipped(&model.skipped));
 }
 
-// The WASI SDK's clang++, which has a C++ standard library for wasm32.
-fn wasi_clang() -> Option<PathBuf> {
-    let from_env = env::var_os("WASI_SDK_PATH").map(|p| PathBuf::from(p).join("bin/clang++"));
+// A WASI SDK compiler binary (`clang` or `clang++`), with C/C++ standard libraries for wasm32.
+fn wasi_tool(bin: &str) -> Option<PathBuf> {
+    let rel = format!("bin/{bin}");
+    let from_env = env::var_os("WASI_SDK_PATH").map(|p| PathBuf::from(p).join(&rel));
     let from_home = env::var_os("HOME").and_then(|h| {
-        let mut sdks: Vec<PathBuf> = fs::read_dir(PathBuf::from(h).join(".wasi-sdk")).ok()?.filter_map(|e| e.ok()).map(|e| e.path().join("bin/clang++")).collect();
+        let mut sdks: Vec<PathBuf> = fs::read_dir(PathBuf::from(h).join(".wasi-sdk")).ok()?.filter_map(|e| e.ok()).map(|e| e.path().join(&rel)).collect();
         sdks.sort();
         sdks.pop()
     });
@@ -262,9 +263,18 @@ fn wasi_clang() -> Option<PathBuf> {
     found
 }
 
+fn wasi_clang() -> Option<PathBuf> {
+    wasi_tool("clang++")
+}
+
+fn wasi_clang_c() -> Option<PathBuf> {
+    wasi_tool("clang")
+}
+
 // No `--allow-undefined`: the imports are declared as such, and anything else
 // missing is a link error rather than an import that fails when the page loads.
 const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Werror", "-Wl,--export-table", "-Wl,--strip-debug"];
+const CLANG_WASI_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c23", "-O1", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Werror", "-Wl,--export-table", "-Wl,--strip-debug"];
 
 // Writes the C++ bindings, compiles their definitions once, each module in
 // parallel, and links them with the program.
@@ -3204,8 +3214,8 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
                 run(Command::new(fable).current_dir(&out).args(["App.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
             }
             "c" => {
-                let Some([clang]) = tools(["clang"]) else { return false };
-                run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("app.wasm")).arg(out.join("main.c")));
+                let Some(clang) = wasi_clang_c() else { return false };
+                run(Command::new(clang).args(CLANG_WASI_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("app.wasm")).arg(out.join("main.c")));
             }
             "cpp" => {
                 let Some(clang) = wasi_clang() else { return false };

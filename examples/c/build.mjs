@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -33,20 +34,34 @@ const PACKAGES = {
   prosemirror: { npm: ['prosemirror-model', 'prosemirror-transform', 'prosemirror-state', 'prosemirror-view'], needsDom: true, outDir: 'prosemirror', name: 'prosemirror' },
 };
 
+function findWasiClangC() {
+  if (process.env.WASI_SDK_PATH) {
+    const p = path.join(process.env.WASI_SDK_PATH, 'bin/clang');
+    if (fs.existsSync(p)) return p;
+  }
+  const dir = path.join(os.homedir(), '.wasi-sdk');
+  if (fs.existsSync(dir)) {
+    const entries = fs.readdirSync(dir).sort();
+    while (entries.length > 0) {
+      const p = path.join(dir, entries.pop(), 'bin/clang');
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  throw new Error('WASI SDK clang not found (set WASI_SDK_PATH)');
+}
+
+const clangC = findWasiClangC();
 const CLANG_WASM = [
-  '--target=wasm32',
-  '-std=c11',
-  '-pedantic',
-  '-nostdlib',
-  '-ffreestanding',
+  '--target=wasm32-wasip1',
+  '-mexec-model=reactor',
+  '-std=c23',
   '-O1',
   '-Wall',
   '-Wextra',
   '-Wno-unused-parameter',
   '-Werror',
-  '-Wl,--no-entry',
-  '-Wl,--allow-undefined',
   '-Wl,--export-table',
+  '-Wl,--strip-debug',
 ];
 
 const tsrsProto =
@@ -93,7 +108,7 @@ for (const ex of selected) {
   const outPath = path.join(demoDir, 'app.wasm');
   if (isUpToDate(ex, outPath)) continue;
   console.log(`Building c ${ex.id}...`);
-  execFileSync('clang', [...CLANG_WASM, '-I', bindingsDir, '-o', outPath, path.join(demoDir, 'main.c')], {
+  execFileSync(clangC, [...CLANG_WASM, '-I', bindingsDir, '-o', outPath, path.join(demoDir, 'main.c')], {
     stdio: 'inherit',
   });
 }

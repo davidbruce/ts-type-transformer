@@ -1,50 +1,33 @@
 #include "dom/dom.h"
 #include "leaflet/leaflet.h"
+#include <stdio.h>
 
 static LatLngExpression E(LatLng ll) { return LatLngExpression_of_LatLng(ll); }
 
 static MapOptions make_map_opts(void) {
     MapOptions opts = MapOptions_create();
-    MapOptions_set_attributionControl(opts, js_some_bool(false));
-    MapOptions_set_zoomAnimation(opts, js_some_bool(false));
-    MapOptions_set_fadeAnimation(opts, js_some_bool(false));
-    MapOptions_set_markerZoomAnimation(opts, js_some_bool(false));
+    MapOptions_set_attributionControl(opts, false);
+    MapOptions_set_zoomAnimation(opts, false);
+    MapOptions_set_fadeAnimation(opts, false);
+    MapOptions_set_markerZoomAnimation(opts, false);
     return opts;
 }
 
 static PolylineOptions make_poly_opts(const char* color, double weight, const char* dash, double fill_opacity) {
     PolylineOptions opts = PolylineOptions_create();
-    PolylineOptions_set_smoothFactor(opts, js_some_double(1.0));
-    PathOptions_set_color(opts, color);
-    PathOptions_set_weight(opts, js_some_double(weight));
+    PolylineOptions_set_smoothFactor(opts, 1.0);
+    PolylineOptions_set_color(opts, color);
+    PolylineOptions_set_weight(opts, weight);
     if (dash != 0) {
-        PathOptions_set_dashArray(opts, string_or_number_array_of_string(JsString_from(dash)));
+        PolylineOptions_set_dashArray(opts, string_or_number_array_of(dash));
     }
-    PathOptions_set_fillOpacity(opts, js_some_double(fill_opacity));
+    PolylineOptions_set_fillOpacity(opts, fill_opacity);
     return opts;
 }
 
-static int append_str(char* buf, int pos, const char* s) {
-    while (*s) buf[pos++] = *s++;
-    return pos;
-}
-
-static int append_int(char* buf, int pos, int val) {
-    if (val == 0) {
-        buf[pos++] = '0';
-        return pos;
-    }
-    char tmp[16];
-    int n = 0;
-    while (val > 0) {
-        tmp[n++] = (char)('0' + (val % 10));
-        val /= 10;
-    }
-    for (int i = n - 1; i >= 0; i--) buf[pos++] = tmp[i];
-    return pos;
-}
-
 __attribute__((export_name("start"))) void start(void) {
+    js_scope_open();
+
     Map_2 m = map("map", make_map_opts());
 
     const char* hub_names[6] = { "London", "Paris", "Zurich", "Munich", "Prague", "Berlin" };
@@ -63,44 +46,42 @@ __attribute__((export_name("start"))) void start(void) {
         JsArray_LatLngExpression pts = JsArray_LatLngExpression_new();
         JsArray_LatLngExpression_push(pts, E(latLng(lats[i], -2.0)));
         JsArray_LatLngExpression_push(pts, E(latLng(lats[i], 17.0)));
-        Layer_addTo(polyline(pts, grat_opts), m);
+        Polyline_addTo(polyline(pts, grat_opts), m);
     }
     static const double lngs[5] = { 0.0, 4.0, 8.0, 12.0, 16.0 };
     for (int i = 0; i < 5; i++) {
         JsArray_LatLngExpression pts = JsArray_LatLngExpression_new();
         JsArray_LatLngExpression_push(pts, E(latLng(45.0, lngs[i])));
         JsArray_LatLngExpression_push(pts, E(latLng(55.0, lngs[i])));
-        Layer_addTo(polyline(pts, grat_opts), m);
+        Polyline_addTo(polyline(pts, grat_opts), m);
     }
 
     JsArray_LatLngExpression primary_pts = JsArray_LatLngExpression_new();
-    for (int i = 0; i < 6; i++) {
-        JsArray_LatLngExpression_push(primary_pts, E(hubs[i]));
-    }
+    for (int i = 0; i < 6; i++) JsArray_LatLngExpression_push(primary_pts, E(hubs[i]));
     Polyline primary_line = polyline(primary_pts, make_poly_opts("#111111", 3.0, 0, 0.0));
-    Layer_addTo(primary_line, m);
+    Polyline_addTo(primary_line, m);
 
     JsArray_LatLngExpression alt_pts = JsArray_LatLngExpression_new();
     JsArray_LatLngExpression_push(alt_pts, E(hubs[0]));
     JsArray_LatLngExpression_push(alt_pts, E(latLng(50.8503, 4.3517)));
     JsArray_LatLngExpression_push(alt_pts, E(latLng(52.3676, 4.9041)));
     JsArray_LatLngExpression_push(alt_pts, E(hubs[5]));
-    Layer_addTo(polyline(alt_pts, make_poly_opts("#737373", 1.5, "5 5", 0.0)), m);
+    Polyline_addTo(polyline(alt_pts, make_poly_opts("#737373", 1.5, "5 5", 0.0)), m);
 
-    LayerGroup nodes = layerGroup((JsArray_Layer){ 0 });
+    LayerGroup nodes = layerGroup();
     CircleMarkerOptions node_opts = CircleMarkerOptions_create();
-    CircleMarkerOptions_set_radius(node_opts, js_some_double(6.0));
-    PathOptions_set_color(node_opts, "#111111");
-    PathOptions_set_weight(node_opts, js_some_double(2.0));
-    PathOptions_set_fillColor(node_opts, "#ffffff");
-    PathOptions_set_fillOpacity(node_opts, js_some_double(1.0));
+    CircleMarkerOptions_set_radius(node_opts, 6.0);
+    CircleMarkerOptions_set_color(node_opts, "#111111");
+    CircleMarkerOptions_set_weight(node_opts, 2.0);
+    CircleMarkerOptions_set_fillColor(node_opts, "#ffffff");
+    CircleMarkerOptions_set_fillOpacity(node_opts, 1.0);
 
     for (int i = 0; i < 6; i++) {
         CircleMarker cm = circleMarker(E(hubs[i]), node_opts);
-        Layer_bindTooltip(cm, Content_of_string(JsString_from(hub_names[i])));
+        CircleMarker_bindTooltip(cm, Content_of(hub_names[i]));
         LayerGroup_addLayer(nodes, cm);
     }
-    Layer_addTo(nodes, m);
+    LayerGroup_addTo(nodes, m);
 
     Map_2_fitBounds(m, LatLngBoundsExpression_of_LatLngBounds(Polyline_getBounds(primary_line)));
 
@@ -110,13 +91,8 @@ __attribute__((export_name("start"))) void start(void) {
     }
 
     char buf[160];
-    int p = 0;
-    p = append_str(buf, p, "6 hubs · 2 routes · ");
-    p = append_int(buf, p, (int)(total_km + 0.5));
-    p = append_str(buf, p, " km total · EPSG:3857 vector SVG");
-    buf[p] = '\0';
-
-    Document doc = get_document();
-    HTMLElement meta = Document_getElementById(doc, "meta");
-    if (meta.h != 0) Node_set_textContent(meta, buf);
+    snprintf(buf, sizeof buf, "6 hubs · 2 routes · %d km total · EPSG:3857 vector SVG", (int)(total_km + 0.5));
+    HTMLElement meta = Document_getElementById(get_document(), "meta");
+    if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
+    js_scope_close();
 }

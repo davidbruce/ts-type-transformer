@@ -2,35 +2,29 @@
 #include "katex/katex.h"
 
 static HTMLElement make_el(Document doc, const char* tag, const char* cls, const char* text) {
-    HTMLElement el = Document_createElement(doc, tag, (ElementCreationOptions){ 0 });
-    if (cls && cls[0]) Element_set_className(el, cls);
-    if (text) Node_set_textContent(el, text);
+    HTMLElement el = Document_createElement(doc, tag);
+    if (cls && cls[0]) HTMLElement_set_className(el, cls);
+    if (text) HTMLElement_set_textContent(el, text);
     return el;
 }
 
-static void append_and_release(HTMLElement parent, HTMLElement child) {
-    js_release(Node_appendChild(parent, child));
-    js_release(child);
-}
-
 __attribute__((export_name("start"))) void start(void) {
+    js_scope_open();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
     HTMLElement head = make_el(doc, "div", "head", 0);
     HTMLElement title = make_el(doc, "h1", 0, "KaTeX Formula Gallery (C)");
-    JsString ver = get_version();
     char badge_buf[64] = "katex v";
-    JsString_copy(ver, badge_buf + 7, sizeof(badge_buf) - 7);
-    js_release(ver);
+    JsString_copy(get_version(), badge_buf + 7, sizeof(badge_buf) - 7);
     HTMLElement badge = make_el(doc, "span", "badge", badge_buf);
-    append_and_release(head, title);
-    append_and_release(head, badge);
-    append_and_release(app, head);
+    HTMLElement_appendChild(head, title);
+    HTMLElement_appendChild(head, badge);
+    HTMLElement_appendChild(app, head);
 
     HTMLElement grid = make_el(doc, "div", "grid", 0);
     KatexOptions opts = KatexOptions_create();
-    KatexOptions_set_displayMode(opts, js_some_bool(true));
+    KatexOptions_set_displayMode(opts, true);
 
     const char* names[] = {
         "Euler's Identity",
@@ -49,18 +43,14 @@ __attribute__((export_name("start"))) void start(void) {
 
     for (int i = 0; i < 5; i++) {
         HTMLElement card = make_el(doc, "div", "card", 0);
-        HTMLElement lbl = make_el(doc, "div", "label", names[i]);
-        HTMLElement src = make_el(doc, "pre", "tex", texs[i]);
+        HTMLElement_appendChild(card, make_el(doc, "div", "label", names[i]));
+        HTMLElement_appendChild(card, make_el(doc, "pre", "tex", texs[i]));
         HTMLElement slot = make_el(doc, "div", "slot", 0);
         render(texs[i], slot, opts);
-        append_and_release(card, lbl);
-        append_and_release(card, src);
-        append_and_release(card, slot);
-        append_and_release(grid, card);
+        HTMLElement_appendChild(card, slot);
+        HTMLElement_appendChild(grid, card);
     }
 
-    append_and_release(app, grid);
-    js_release(opts);
-    js_release(app);
-    js_release(doc);
+    HTMLElement_appendChild(app, grid);
+    js_scope_close();
 }

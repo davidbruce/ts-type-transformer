@@ -1,9 +1,10 @@
+#include <stdarg.h>
+#include <stdio.h>
 #include "dom/dom.h"
 #include "tanstack_table_core/tanstack_table_core.h"
 
 static const JsValue NONE = { 0 };
-static JsValue get_prop(JsValue obj, const char* key) { return RowData_map_get_at((RowData_map){ obj.h }, key); }
-static JsValue store_state(JsValue tbl) { return functionalUpdate(get_prop(get_prop(tbl, "store"), "get"), NONE); }
+static JsValue store_state(JsValue tbl) { return functionalUpdate(js_get_prop(js_get_prop(tbl, "store"), "get"), NONE); }
 
 typedef struct {
     JsValue value;
@@ -21,25 +22,27 @@ static JsValue atom_get(void* ctx) {
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
+    js_scope_open();
     JsValue next = functionalUpdate(updater, a->value);
     js_retain(next);
+    if (a->value.h != 0) js_release(a->value);
     a->value = next;
+    js_scope_close();
     return NONE;
 }
 static void no_unsub(void* ctx) { (void)ctx; }
 static JsValue atom_sub(void* ctx, JsValue obs) {
-    (void)ctx;
-    (void)obs;
-    RowData_map sub = makeObjectMap();
-    RowData_map_set_at(sub, "unsubscribe", (JsValue){ void_fn_from(no_unsub, 0).h });
-    return (JsValue){ sub.h };
+    (void)ctx; (void)obs;
+    JsValue sub = js_object();
+    js_set_val(sub, "unsubscribe", void_fn_from(no_unsub, NULL));
+    return sub;
 }
 static JsValue make_atom(AtomState* a) {
-    RowData_map atom = makeObjectMap();
-    RowData_map_set_at(atom, "get", (JsValue){ void_to_any_fn_from(atom_get, a).h });
-    if (!a->is_ro) RowData_map_set_at(atom, "set", (JsValue){ Updater_fn2_from(atom_set, a).h });
-    RowData_map_set_at(atom, "subscribe", (JsValue){ Updater_fn2_from(atom_sub, 0).h });
-    return (JsValue){ atom.h };
+    JsValue atom = js_object();
+    js_set_val(atom, "get", void_to_any_fn_from(atom_get, a));
+    if (!a->is_ro) js_set_val(atom, "set", Updater_fn2_from(atom_set, a));
+    js_set_val(atom, "subscribe", Updater_fn2_from(atom_sub, NULL));
+    return atom;
 }
 static Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
     (void)ctx; (void)opts;
@@ -65,115 +68,100 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, 0));
-    TableReactivityBindings_set_unmount(r, void_fn_from(unmount_cb, 0));
-    TableReactivityBindings_set_batch(r, fn_fn_from(batch_cb, 0));
-    TableReactivityBindings_set_schedule(r, fn_fn_from(batch_cb, 0));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, 0));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, 0));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, 0));
+    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
+    TableReactivityBindings_set_unmount(r, void_fn_from(unmount_cb, NULL));
+    TableReactivityBindings_set_batch(r, fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_schedule(r, fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
     return r;
 }
 
-typedef struct {
-    char buf[16384];
-    int pos;
-} StrBuf;
-
-static void sb_str(StrBuf* s, const char* txt) {
-    while (*txt && s->pos < 16380) s->buf[s->pos++] = *txt++;
-}
-static void sb_int(StrBuf* s, int val) {
-    char tmp[24];
-    int n = 0;
-    if (val == 0) tmp[n++] = '0';
-    while (val > 0) {
-        tmp[n++] = (char)('0' + (val % 10));
-        val /= 10;
+typedef struct { char* p; char* end; } HtmlOut;
+__attribute__((format(printf, 2, 3)))
+static void html_fmt(HtmlOut* o, const char* fmt, ...) {
+    if (o->p >= o->end) return;
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(o->p, (size_t)(o->end - o->p), fmt, ap);
+    va_end(ap);
+    if (n > 0) {
+        ptrdiff_t rem = o->end - o->p - 1;
+        o->p += (n <= rem) ? n : rem;
     }
-    for (int i = n - 1; i >= 0 && s->pos < 16380; i--) s->buf[s->pos++] = tmp[i];
 }
-static void sb_js_esc(StrBuf* s, JsString jstr) {
+static void html_js_esc(HtmlOut* o, JsString jstr) {
     char tmp[128];
-    uint32_t len = JsString_copy(jstr, tmp, sizeof tmp);
-    if (len >= sizeof tmp) len = sizeof tmp - 1;
-    for (uint32_t i = 0; i < len; i++) {
-        char c = tmp[i];
-        if (c == '&') sb_str(s, "&amp;");
-        else if (c == '<') sb_str(s, "&lt;");
-        else if (c == '>') sb_str(s, "&gt;");
-        else if (s->pos < 16380) s->buf[s->pos++] = c;
+    uint32_t len = JsString_copy(jstr, tmp, sizeof tmp - 1);
+    tmp[len < sizeof tmp ? len : sizeof tmp - 1] = 0;
+    for (uint32_t i = 0; tmp[i] && o->p < o->end - 1; i++) {
+        if (tmp[i] == '&') html_fmt(o, "&amp;");
+        else if (tmp[i] == '<') html_fmt(o, "&lt;");
+        else if (tmp[i] == '>') html_fmt(o, "&gt;");
+        else *o->p++ = tmp[i];
     }
+    if (o->p < o->end) *o->p = 0;
 }
 
 static JsValue col_def(const char* key, const char* header) {
-    RowData_map c = makeObjectMap();
-    RowData_map_set_at(c, "accessorKey", js_string(key));
-    RowData_map_set_at(c, "header", js_string(header));
-    return (JsValue){ c.h };
+    JsValue c = js_object();
+    js_set_str(c, "accessorKey", key);
+    js_set_str(c, "header", header);
+    return c;
 }
 
 static Table_Core g_table;
 static Document g_doc;
 
 static void render(void) {
+    js_scope_open();
     RowModel rm = call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
     RowModel core = call_void_to_RowModel_fn(Table_RowModels_Core_get_getCoreRowModel((Table_RowModels_Core){ g_table.h }));
     JsArray_Row_Core rows = RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Row_Core_length(rows);
     uint32_t ntotal = JsArray_Row_Core_length(RowModel_get_rows(core));
 
-    static StrBuf sb;
-    sb.pos = 0;
-    sb_str(&sb, "<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>");
+    static char html[16384];
+    HtmlOut out = { html, html + sizeof html };
+    html_fmt(&out, "<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>");
     for (uint32_t i = 0; i < nrows; i++) {
         Row_Core row = JsArray_Row_Core_get(rows, i);
-        string_fn gv = Row_Row_get_getValue((Row_Row){ row.h });
-        sb_str(&sb, "<tr><td>");
-        sb_js_esc(&sb, js_to_string(call_string_fn(gv, "id")));
-        sb_str(&sb, "</td><td>");
-        sb_js_esc(&sb, js_to_string(call_string_fn(gv, "account")));
-        sb_str(&sb, "</td><td>");
-        sb_js_esc(&sb, js_to_string(call_string_fn(gv, "category")));
-        sb_str(&sb, "</td><td class=\"num\">");
-        sb_int(&sb, (int)(js_to_number(call_string_fn(gv, "units")) + 0.5));
-        sb_str(&sb, "</td><td class=\"num\">");
-        sb_int(&sb, (int)(js_to_number(call_string_fn(gv, "amount")) + 0.5));
-        sb_str(&sb, "</td></tr>");
+        string_fn gv = Row_Core_get_getValue(row);
+        html_fmt(&out, "<tr><td>");
+        html_js_esc(&out, js_to_string(call_string_fn(gv, "id")));
+        html_fmt(&out, "</td><td>");
+        html_js_esc(&out, js_to_string(call_string_fn(gv, "account")));
+        html_fmt(&out, "</td><td>");
+        html_js_esc(&out, js_to_string(call_string_fn(gv, "category")));
+        html_fmt(&out, "</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
+                 (int)(js_to_number(call_string_fn(gv, "units")) + 0.5),
+                 (int)(js_to_number(call_string_fn(gv, "amount")) + 0.5));
     }
-    sb_str(&sb, "</tbody></table>");
-    sb.buf[sb.pos] = 0;
-    Element_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), sb.buf);
+    html_fmt(&out, "</tbody></table>");
+    HTMLElement_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), html);
 
-    JsValue state = store_state((JsValue){ g_table.h });
-    JsValue pg = get_prop(state, "pagination");
-    int page_idx = (int)(js_to_number(get_prop(pg, "pageIndex")) + 0.5);
-    int page_size = (int)(js_to_number(get_prop(pg, "pageSize")) + 0.5);
+    JsValue state = store_state(js_value(g_table));
+    JsValue pg = js_get_prop(state, "pagination");
+    int page_idx = (int)(js_to_number(js_get_prop(pg, "pageIndex")) + 0.5);
+    int page_size = (int)(js_to_number(js_get_prop(pg, "pageSize")) + 0.5);
     int page_count = (int)(call_void_to_number_fn(Table_RowPagination_get_getPageCount((Table_RowPagination){ g_table.h })) + 0.5);
 
-    sb.pos = 0;
-    sb_str(&sb, "Page ");
-    sb_int(&sb, page_idx + 1);
-    sb_str(&sb, " / ");
-    sb_int(&sb, page_count);
-    sb_str(&sb, " \xC2\xB7 pageSize ");
-    sb_int(&sb, page_size);
-    sb_str(&sb, " \xC2\xB7 showing ");
-    sb_int(&sb, (int)nrows);
-    sb_str(&sb, " of ");
-    sb_int(&sb, (int)ntotal);
-    sb_str(&sb, " rows");
-    sb.buf[sb.pos] = 0;
-    Node_set_textContent(Document_getElementById(g_doc, "meta"), sb.buf);
+    char meta[256];
+    snprintf(meta, sizeof meta, "Page %d / %d \xC2\xB7 pageSize %d \xC2\xB7 showing %u of %u rows",
+             page_idx + 1, page_count, page_size, nrows, ntotal);
+    HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
+    js_scope_close();
 }
 
 static const int BTN_IDS[5] = { 0, 1, 2, 3, 4 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
+    js_scope_open();
     int idx = *(const int*)ctx;
     Table_RowPagination pag = { g_table.h };
-    JsValue pg = get_prop(store_state((JsValue){ g_table.h }), "pagination");
-    int page_idx = (int)(js_to_number(get_prop(pg, "pageIndex")) + 0.5);
+    JsValue pg = js_get_prop(store_state(js_value(g_table)), "pagination");
+    int page_idx = (int)(js_to_number(js_get_prop(pg, "pageIndex")) + 0.5);
     int page_count = (int)(call_void_to_number_fn(Table_RowPagination_get_getPageCount(pag)) + 0.5);
 
     if (idx == 0) {
@@ -186,54 +174,51 @@ static void on_click(void* ctx, PointerEvent ev) {
         call_Table_RowPagination_setPageIndex(Table_RowPagination_get_setPageSize(pag), js_number((double)new_sz));
     }
     render();
+    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
+    js_scope_open();
     static const char* accounts[3] = { "ops-pool", "clearing-ch", "reserve-de" };
     static const char* cats[4] = { "compute", "storage", "egress", "audit" };
 
-    RowData_map features = makeObjectMap();
-    RowData_map_set_at(features, "coreReactivityFeature", (JsValue){ make_reactivity().h });
-    RowData_map_set_at(features, "rowPaginationFeature", (JsValue){ get_rowPaginationFeature().h });
-    RowData_map_set_at(features, "coreRowModel", (JsValue){ createCoreRowModel().h });
-    RowData_map_set_at(features, "paginatedRowModel", (JsValue){ createPaginatedRowModel().h });
+    JsValue features = js_object();
+    js_set_val(features, "coreReactivityFeature", make_reactivity());
+    js_set_val(features, "rowPaginationFeature", get_rowPaginationFeature());
+    js_set_val(features, "coreRowModel", createCoreRowModel());
+    js_set_val(features, "paginatedRowModel", createPaginatedRowModel());
 
     JsArray data = JsArray_new();
     for (int i = 0; i < 18; i++) {
         char id_buf[16];
-        int num = i + 1;
-        id_buf[0] = 'T'; id_buf[1] = 'X'; id_buf[2] = '-';
-        id_buf[3] = (char)('0' + (num / 100) % 10);
-        id_buf[4] = (char)('0' + (num / 10) % 10);
-        id_buf[5] = (char)('0' + (num % 10));
-        id_buf[6] = 0;
-        RowData_map row = makeObjectMap();
-        RowData_map_set_at(row, "id", js_string(id_buf));
-        RowData_map_set_at(row, "account", js_string(accounts[i % 3]));
-        RowData_map_set_at(row, "category", js_string(cats[i % 4]));
-        RowData_map_set_at(row, "units", js_number((double)((i * 7) % 19 + 4)));
-        RowData_map_set_at(row, "amount", js_number((double)(((i * 37) % 90 + 15) * 12)));
-        JsArray_push(data, (JsValue){ row.h });
+        snprintf(id_buf, sizeof id_buf, "TX-%03d", i + 1);
+        JsValue row = js_object();
+        js_set_str(row, "id", id_buf);
+        js_set_str(row, "account", accounts[i % 3]);
+        js_set_str(row, "category", cats[i % 4]);
+        js_set_num(row, "units", (double)((i * 7) % 19 + 4));
+        js_set_num(row, "amount", (double)(((i * 37) % 90 + 15) * 12));
+        js_push_val(data, row);
     }
 
     JsArray cols = JsArray_new();
-    JsArray_push(cols, col_def("id", "Entry"));
-    JsArray_push(cols, col_def("account", "Account"));
-    JsArray_push(cols, col_def("category", "Category"));
-    JsArray_push(cols, col_def("units", "Units"));
-    JsArray_push(cols, col_def("amount", "Amount (CHF)"));
+    js_push_val(cols, col_def("id", "Entry"));
+    js_push_val(cols, col_def("account", "Account"));
+    js_push_val(cols, col_def("category", "Category"));
+    js_push_val(cols, col_def("units", "Units"));
+    js_push_val(cols, col_def("amount", "Amount (CHF)"));
 
-    RowData_map pg = makeObjectMap();
-    RowData_map_set_at(pg, "pageIndex", js_number(0.0));
-    RowData_map_set_at(pg, "pageSize", js_number(5.0));
-    RowData_map init_state = makeObjectMap();
-    RowData_map_set_at(init_state, "pagination", (JsValue){ pg.h });
+    JsValue pg = js_object();
+    js_set_num(pg, "pageIndex", 0.0);
+    js_set_num(pg, "pageSize", 5.0);
+    JsValue init_state = js_object();
+    js_set_val(init_state, "pagination", pg);
 
-    RowData_map opts = makeObjectMap();
-    RowData_map_set_at(opts, "features", (JsValue){ features.h });
-    RowData_map_set_at(opts, "data", (JsValue){ data.h });
-    RowData_map_set_at(opts, "columns", (JsValue){ cols.h });
-    RowData_map_set_at(opts, "initialState", (JsValue){ init_state.h });
+    JsValue opts = js_object();
+    js_set_val(opts, "features", features);
+    js_set_val(opts, "data", data);
+    js_set_val(opts, "columns", cols);
+    js_set_val(opts, "initialState", init_state);
 
     g_table = constructTable((TableOptions_Core){ opts.h });
     js_retain(g_table);
@@ -246,4 +231,5 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
     render();
+    js_scope_close();
 }
