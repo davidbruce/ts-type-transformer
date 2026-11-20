@@ -8,31 +8,31 @@ open type Leaflet.Globals
 
 let private mapOpts () =
     MapOptions.Create(
-        crs = Some CRS.Simple,
-        minZoom = Some -1.0,
-        maxZoom = Some 3.0,
-        attributionControl = Some false,
-        zoomAnimation = Some false,
-        fadeAnimation = Some false,
-        markerZoomAnimation = Some false
+        crs = CRS.Simple,
+        minZoom = -1.0,
+        maxZoom = 3.0,
+        attributionControl = false,
+        zoomAnimation = false,
+        fadeAnimation = false,
+        markerZoomAnimation = false
     )
 
 let private boxOpts color weight dash fillColor fillOp =
     let dashOpt =
         match dash with
-        | Some d -> Some (Some (StringOrNumberArray.String d))
+        | Some d -> Some (StringOrNumberArray.String d)
         | None -> None
     PolylineOptions.Create(
-        smoothFactor = Some 1.0,
-        color = Some color,
-        weight = Some weight,
+        smoothFactor = 1.0,
+        color = color,
+        weight = weight,
         ?dashArray = dashOpt,
-        fillColor = Some fillColor,
-        fillOpacity = Some fillOp
+        fillColor = fillColor,
+        fillOpacity = fillOp
     )
 
 let main () =
-    let m = map (unbox<HTMLElement> (document.getElementById "map"), mapOpts ())
+    let m = map (document.getElementById "map", mapOpts ())
 
     let gridOpts = boxOpts "#e5e5e5" 1.0 None "#ffffff" 0.0
     for r in [ 0.0; 20.0; 40.0; 60.0; 80.0; 100.0 ] do
@@ -83,11 +83,11 @@ let main () =
 
     let colOpts =
         CircleMarkerOptions.Create(
-            radius = Some 5.0,
-            color = Some "#111111",
-            weight = Some 1.5,
-            fillColor = Some "#111111",
-            fillOpacity = Some 1.0
+            radius = 5.0,
+            color = "#111111",
+            weight = 1.5,
+            fillColor = "#111111",
+            fillOpacity = 1.0
         )
     for (r, c) in [ (12.0, 16.0); (88.0, 16.0); (12.0, 80.0); (88.0, 80.0); (12.0, 144.0); (88.0, 144.0) ] do
         circleMarker<obj>(latLng (r, c), colOpts).addTo (MapOrLayerGroup.Map m) |> ignore

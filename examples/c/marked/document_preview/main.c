@@ -50,8 +50,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     JsString html = marked(markdown_src, (marked_options_no_async){ 0 });
     static char html_buf[8192];
-    uint32_t n = JsString_copy(html, html_buf, sizeof(html_buf) - 1);
-    html_buf[n] = '\0';
+    JsString_copy(html, html_buf, sizeof(html_buf));
     js_release(html);
     Element_set_innerHTML(md_out, html_buf);
 

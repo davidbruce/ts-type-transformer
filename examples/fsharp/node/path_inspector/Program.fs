@@ -31,7 +31,7 @@ check (path.isAbsolute "/srv/app" && not (path.isAbsolute "src/app")) "path.isAb
 let parsed = path.parse "/srv/app/archive.tar.gz"
 check (parsed.root = "/" && parsed.dir = "/srv/app" && parsed.``base`` = "archive.tar.gz" && parsed.name = "archive.tar" && parsed.ext = ".gz") "path.parse"
 
-let formatted = path.format (path.FormatInputPathObject.Create(dir = Some "/etc/service", name = Some "daemon", ext = Some ".conf"))
+let formatted = path.format (path.FormatInputPathObject.Create(dir = "/etc/service", name = "daemon", ext = ".conf"))
 check (formatted = "/etc/service/daemon.conf") "path.format"
 
 check (path.matchesGlob ("/src/components/Button.tsx", "/src/**/*.tsx") && not (path.matchesGlob ("/src/components/Button.css", "/src/**/*.tsx"))) "path.matchesGlob"

@@ -60,7 +60,7 @@ function collectCpp(dir, out = []) {
 }
 
 const clangxx = findWasiClang();
-const CLANGXX_WASM = ['--target=wasm32-wasip1', '-mexec-model=reactor', '-std=c++20', '-fno-exceptions', '-O1', '-Wall', '-Werror', '-Wl,--export-table', '-Wl,--strip-debug'];
+const CLANGXX_WASM = ['--target=wasm32-wasip1', '-mexec-model=reactor', '-std=c++20', '-fno-exceptions', '-O1', '-Wall', '-Wextra', '-Wno-unused-parameter', '-Werror', '-Wl,--export-table', '-Wl,--strip-debug'];
 const CLANGXX_OBJ = CLANGXX_WASM.filter(f => !f.startsWith('-Wl,') && !f.startsWith('-mexec-model'));
 
 const tsrsProto =

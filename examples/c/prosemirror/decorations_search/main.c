@@ -178,7 +178,8 @@ static DecorationSet compute_decos(Node_3 doc, const char* query, int* out_inlin
             if (Node_3_get_isText(ch)) {
                 JsString js = Node_3_get_textContent(ch);
                 char txt[1024];
-                int tlen = (int)JsString_copy(js, txt, sizeof txt - 1);
+                uint32_t ulen = JsString_copy(js, txt, sizeof txt);
+                int tlen = (int)(ulen < sizeof txt ? ulen : sizeof txt - 1);
                 js_release(js);
                 int at = find_ci(txt, tlen, query, qlen, 0);
                 while (at >= 0) {
@@ -220,7 +221,7 @@ static DecorationSource search_decos(void* ctx, EditorState st) {
     char qbuf[64] = { 0 };
     if (qv.h != 0) {
         JsString qs = { qv.h };
-        JsString_copy(qs, qbuf, sizeof qbuf - 1);
+        JsString_copy(qs, qbuf, sizeof qbuf);
     }
     DecorationSet dset = compute_decos(EditorState_get_doc(st), qbuf, 0, 0);
     return DecorationSet_as_DecorationSource(dset);
@@ -231,7 +232,7 @@ static void sync_meta(EditorState st) {
     char qbuf[64] = { 0 };
     if (qv.h != 0) {
         JsString qs = { qv.h };
-        JsString_copy(qs, qbuf, sizeof qbuf - 1);
+        JsString_copy(qs, qbuf, sizeof qbuf);
     }
     int inl = 0, blk = 0;
     DecorationSet dset = compute_decos(EditorState_get_doc(st), qbuf, &inl, &blk);
@@ -307,7 +308,7 @@ __attribute__((export_name("start"))) void start(void) {
     DirectEditorProps_set_dispatchTransaction(props, Transaction_fn_from(on_dispatch, 0));
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = EditorView_new((dist_DOMNode){ mount.h }, props);
+    g_view = EditorView_new(AS_Node(mount), props);
     js_retain(g_view);
     sync_meta(EditorView_get_state(g_view));
 

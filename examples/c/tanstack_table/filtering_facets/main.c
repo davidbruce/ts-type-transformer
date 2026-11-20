@@ -13,7 +13,7 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->is_ro) return call_void_fn((void_fn){ a->derive.h });
+    if (a->is_ro) return call_void_to_any_fn((void_to_any_fn){ a->derive.h });
     js_retain(a->value);
     return a->value;
 }
@@ -24,7 +24,7 @@ static JsValue atom_set(void* ctx, JsValue updater) {
     a->value = next;
     return NONE;
 }
-static JsValue no_unsub(void* ctx) { (void)ctx; return NONE; }
+static void no_unsub(void* ctx) { (void)ctx; }
 static JsValue atom_sub(void* ctx, JsValue obs) {
     (void)ctx;
     (void)obs;
@@ -34,7 +34,7 @@ static JsValue atom_sub(void* ctx, JsValue obs) {
 }
 static JsValue make_atom(AtomState* a) {
     RowData_map atom = makeObjectMap();
-    RowData_map_set_at(atom, "get", (JsValue){ void_fn_from(atom_get, a).h });
+    RowData_map_set_at(atom, "get", (JsValue){ void_to_any_fn_from(atom_get, a).h });
     if (!a->is_ro) RowData_map_set_at(atom, "set", (JsValue){ Updater_fn2_from(atom_set, a).h });
     RowData_map_set_at(atom, "subscribe", (JsValue){ Updater_fn2_from(atom_sub, 0).h });
     return (JsValue){ atom.h };
@@ -46,7 +46,7 @@ static Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
     js_retain(initial);
     return (Atom){ make_atom(a).h };
 }
-static ReadonlyAtom create_readonly(void* ctx, void_fn fn, TableAtomOptions opts) {
+static ReadonlyAtom create_readonly(void* ctx, void_to_any_fn fn, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     AtomState* a = &atoms[atom_count++];
     a->is_ro = true;
@@ -56,15 +56,15 @@ static ReadonlyAtom create_readonly(void* ctx, void_fn fn, TableAtomOptions opts
 }
 static void add_sub(void* ctx, Subscription s) { (void)ctx; (void)s; }
 static void unmount_cb(void* ctx) { (void)ctx; }
-static void batch_cb(void* ctx, Column_ColumnGrouping_toggleGrouping fn) { (void)ctx; call_Column_ColumnGrouping_toggleGrouping(fn); }
-static JsValue untrack_cb(void* ctx, void_fn fn) { (void)ctx; return call_void_fn(fn); }
+static void batch_cb(void* ctx, void_fn fn) { (void)ctx; call_void_fn(fn); }
+static JsValue untrack_cb(void* ctx, void_to_any_fn fn) { (void)ctx; return call_void_to_any_fn(fn); }
 
 static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
     TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, 0));
-    TableReactivityBindings_set_unmount(r, Column_ColumnGrouping_toggleGrouping_from(unmount_cb, 0));
+    TableReactivityBindings_set_unmount(r, void_fn_from(unmount_cb, 0));
     TableReactivityBindings_set_batch(r, fn_fn_from(batch_cb, 0));
     TableReactivityBindings_set_schedule(r, fn_fn_from(batch_cb, 0));
     TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, 0));
@@ -93,8 +93,8 @@ static void sb_int(StrBuf* s, int val) {
 }
 static void sb_js_esc(StrBuf* s, JsString jstr) {
     char tmp[128];
-    uint32_t len = JsString_copy(jstr, tmp, sizeof tmp - 1);
-    tmp[len] = 0;
+    uint32_t len = JsString_copy(jstr, tmp, sizeof tmp);
+    if (len >= sizeof tmp) len = sizeof tmp - 1;
     for (uint32_t i = 0; i < len; i++) {
         char c = tmp[i];
         if (c == '&') sb_str(s, "&amp;");

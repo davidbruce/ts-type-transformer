@@ -40,8 +40,7 @@ static uint32_t append_i32(char* dst, uint32_t pos, uint32_t cap, int32_t v) {
 }
 
 static void copy_and_release(JsString s, char* buf, uint32_t cap) {
-    uint32_t n = JsString_copy(s, buf, cap - 1);
-    buf[n] = '\0';
+    JsString_copy(s, buf, cap);
     js_release(s);
 }
 

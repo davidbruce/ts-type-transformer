@@ -521,7 +521,7 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module: &str, raw_
         Ty::Void if call.is_empty() => String::new(),
         _ if union_ret.is_some_and(|(n, _)| decodable(n)) => {
             let (n, optional) = union_ret.unwrap();
-            if optional { format!("uint32_t h = {call}; if (h) return {n}_from_handle(h); {n} none = {{ -1 }}; return none;") } else { format!("return {n}_from_handle({call});") }
+            if optional { format!("uint32_t h = {call}; if (h) return {n}_from_handle(h); {n} none = {{ .tag = -1 }}; return none;") } else { format!("return {n}_from_handle({call});") }
         }
         Ty::Void => format!("{call};"),
         Ty::Num => format!("return {call};"),
@@ -852,16 +852,17 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     }
     let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
     let raw_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}_") };
-    let mut resolved_opaque: HashMap<String, usize> = HashMap::new();
+    let mut resolved_opaque: HashMap<String, (usize, String)> = HashMap::new();
     for name in &m.opaque {
         if matches!(name.as_str(), "Error" | "Date" | "Promise") || super::model::buffer_spec(name).is_some() {
             continue;
         }
-        if let Some((idx, _)) = refs.iter().enumerate().find(|(_, r)| r.structs.contains(name)) {
-            resolved_opaque.insert(name.clone(), idx);
+        let orig = m.opaque_names.get(name).map(String::as_str).unwrap_or(name.as_str());
+        if let Some((idx, _)) = refs.iter().enumerate().find(|(_, r)| r.structs.contains(orig)) {
+            resolved_opaque.insert(name.clone(), (idx, orig.to_string()));
         }
     }
-    let used_refs: BTreeSet<usize> = resolved_opaque.values().copied().collect();
+    let used_refs: BTreeSet<usize> = resolved_opaque.values().map(|(i, _)| *i).collect();
     let as_macro = |base: &str| -> String {
         if pkg_name != "bindings" && (is_builtin_c_type(base) || resolved_opaque.contains_key(base)) {
             format!("AS_{pkg_name}_{base}")
@@ -911,10 +912,15 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     }
     // Every object is an opaque handle; the struct keeps the types apart.
     for name in &m.opaque {
-        if resolved_opaque.contains_key(name)
-            || matches!(name.as_str(), "Error" | "Date" | "Promise")
+        if matches!(name.as_str(), "Error" | "Date" | "Promise")
             || super::model::buffer_spec(name).is_some()
         {
+            continue;
+        }
+        if let Some((_, orig)) = resolved_opaque.get(name) {
+            if orig != name {
+                types += &format!("#ifndef TS_DEFINED_{name}\n#define TS_DEFINED_{name}\ntypedef {orig} {name};\n#endif\n");
+            }
             continue;
         }
         types += &format!("#ifndef TS_DEFINED_{name}\n#define TS_DEFINED_{name}\n/* external */\ntypedef struct {{ uint32_t h; }} {name};\n#endif\n");

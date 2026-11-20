@@ -160,16 +160,16 @@ let private syncMeta (st: EditorState) (activeBtnId: string) =
     let (dset, inlineHits, blockHits) = computeDecorations st.doc query
     let decoTotal = dset.find().Count
     let qDisp = if query.Length = 0 then "(none)" else sprintf "\"%s\"" query
-    let meta = unbox<Dom.HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <-
         sprintf "Query: %s · inline matches=%d · highlighted blocks=%d · decorations=%d"
             qDisp inlineHits blockHits decoTotal
     for id in [ "btn-0"; "btn-1"; "btn-2"; "btn-3"; "btn-4" ] do
-        let b = unbox<Dom.HTMLElement> (document.getElementById id)
+        let b = document.getElementById id
         if id = activeBtnId then b.classList.add [| "active" |] else b.classList.remove [| "active" |]
 
 let main () =
-    let mountEl = unbox<Dom.HTMLElement> (document.getElementById "editor")
+    let mountEl = document.getElementById "editor"
     let mutable view: EditorView = null
     let mutable activeId = "btn-0"
 
@@ -191,11 +191,11 @@ let main () =
             syncMeta next activeId
     )
 
-    view <- EditorView.Create (unbox<dist_DOMNode> mountEl, props)
+    view <- EditorView.Create ((mountEl :> Dom.Node), props)
     syncMeta view.state activeId
 
     let bindQuery (btnId: string) (q: string) =
-        let btn = unbox<Dom.HTMLElement> (document.getElementById btnId)
+        let btn = document.getElementById btnId
         btn.addEventListener (HTMLElementEventMapKeys.click, fun _ ->
             activeId <- btnId
             let tr = view.state.tr.setMeta (StringOrPluginOrPluginKey.String "search", box q)

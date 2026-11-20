@@ -15,8 +15,7 @@ static void append_and_release(HTMLElement parent, HTMLElement child) {
 
 static HTMLElement make_pane(Document doc, const char* title, JsString html) {
     static char buf[4096];
-    uint32_t n = JsString_copy(html, buf, sizeof(buf) - 1);
-    buf[n] = '\0';
+    JsString_copy(html, buf, sizeof(buf));
 
     HTMLElement card = make_el(doc, "div", "card", 0);
     append_and_release(card, make_el(doc, "div", "label", title));

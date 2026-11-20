@@ -40,9 +40,9 @@ static void bump(Counter* counter) {
     Element_setAttribute(counter->box, counter->attribute, digits);
 }
 
-static void on_click(void* ctx, PointerEvent ev) { bump(ctx); }
+static void on_click(void* ctx, PointerEvent ev) { (void)ev; bump(ctx); }
 
-static void on_ping(void* ctx, Event ev) { bump(ctx); }
+static void on_ping(void* ctx, Event ev) { (void)ev; bump(ctx); }
 
 static Counter clicks, pings;
 

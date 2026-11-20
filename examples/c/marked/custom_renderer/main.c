@@ -20,8 +20,7 @@ static JsValue walk_token_cb(void* ctx, JsValue token) {
     (void)ctx;
     if (walked_count < 64) {
         JsString t = Tokens_Generic_get_type((Tokens_Generic){ token.h });
-        uint32_t n = JsString_copy(t, walked_types[walked_count], sizeof(walked_types[0]) - 1);
-        walked_types[walked_count][n] = '\0';
+        JsString_copy(t, walked_types[walked_count], sizeof(walked_types[0]));
         js_release(t);
         walked_count++;
     }
@@ -35,8 +34,8 @@ static JsValue render_heading(void* ctx, JsTuple_Tokens_Heading args) {
     if (depth < 1 || depth > 6) depth = 1;
     JsString text = Tokens_Heading_get_text(h);
     char text_buf[128];
-    uint32_t n = JsString_copy(text, text_buf, sizeof(text_buf) - 1);
-    text_buf[n] = '\0';
+    uint32_t n = JsString_copy(text, text_buf, sizeof(text_buf));
+    if (n >= sizeof(text_buf)) n = sizeof(text_buf) - 1;
     js_release(text);
     js_release(h);
 
@@ -101,16 +100,14 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement def_card = make_el(doc, "div", "card", 0);
     append_and_release(def_card, make_el(doc, "div", "label", "Default Renderer"));
     HTMLElement def_out = make_el(doc, "div", "md-out", 0);
-    uint32_t dn = JsString_copy(def_html, html_buf, sizeof(html_buf) - 1);
-    html_buf[dn] = '\0';
+    JsString_copy(def_html, html_buf, sizeof(html_buf));
     Element_set_innerHTML(def_out, html_buf);
     append_and_release(def_card, def_out);
 
     HTMLElement cust_card = make_el(doc, "div", "card", 0);
     append_and_release(cust_card, make_el(doc, "div", "label", "Custom Heading Renderer"));
     HTMLElement cust_out = make_el(doc, "div", "md-out", 0);
-    uint32_t cn = JsString_copy(custom_html, html_buf, sizeof(html_buf) - 1);
-    html_buf[cn] = '\0';
+    JsString_copy(custom_html, html_buf, sizeof(html_buf));
     Element_set_innerHTML(cust_out, html_buf);
     append_and_release(cust_card, cust_out);
 

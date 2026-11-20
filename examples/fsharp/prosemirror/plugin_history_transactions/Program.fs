@@ -90,15 +90,15 @@ let private redoStack = Stack<Step array> ()
 let private updateMeta (st: EditorState) =
     let edits = match auditKey.getState st with Some n -> n | None -> 0
     let lockLabel = if readOnlyLocked then "LOCKED" else "OPEN"
-    let meta = unbox<Dom.HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <-
         sprintf "%s · edits=%d · undoDepth=%d · redoDepth=%d · lock=%s · blocked=%d · blocks=%d"
             lastAction edits undoStack.Count redoStack.Count lockLabel blockedCount (int st.doc.childCount)
-    let lockBtn = unbox<Dom.HTMLElement> (document.getElementById "btn-4")
+    let lockBtn = document.getElementById "btn-4"
     if readOnlyLocked then lockBtn.classList.add [| "active" |] else lockBtn.classList.remove [| "active" |]
 
 let main () =
-    let mountEl = unbox<Dom.HTMLElement> (document.getElementById "editor")
+    let mountEl = document.getElementById "editor"
     let mutable view: EditorView = null
 
     let field =
@@ -150,11 +150,11 @@ let main () =
             updateMeta view.state
     )
 
-    view <- EditorView.Create (unbox<dist_DOMNode> mountEl, props)
+    view <- EditorView.Create ((mountEl :> Dom.Node), props)
     updateMeta view.state
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = unbox<Dom.HTMLElement> (document.getElementById id)
+        let el = document.getElementById id
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () ->

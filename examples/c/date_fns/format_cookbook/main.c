@@ -15,8 +15,7 @@ static void append_and_release(HTMLElement parent, HTMLElement child) {
 
 static void add_fmt_row(Document doc, HTMLElement tbody, const char* api, JsString out, const char* note) {
     static char buf[256];
-    uint32_t n = JsString_copy(out, buf, sizeof(buf) - 1);
-    buf[n] = '\0';
+    JsString_copy(out, buf, sizeof(buf));
     js_release(out);
 
     HTMLElement tr = make_el(doc, "tr", 0, 0);

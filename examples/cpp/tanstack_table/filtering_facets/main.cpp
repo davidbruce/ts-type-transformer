@@ -29,7 +29,7 @@ static V apply_upd(const ts::Handle& u, V old) {
 
 static V unsub_obj() {
     Obj sub = Obj::create();
-    sub.set_at("unsubscribe", val(Column_ColumnGrouping_toggleGrouping([] {})));
+    sub.set_at("unsubscribe", val(void_fn([] {})));
     return val(sub);
 }
 static V w_atom(V initial) {
@@ -51,12 +51,12 @@ static V make_reactivity() {
     r.createOptionsStore(false);
     r.wrapExternalAtoms(false);
     r.addSubscription(TableReactivityBindings_addSubscription([](Subscription) {}));
-    r.unmount(Column_ColumnGrouping_toggleGrouping([] {}));
+    r.unmount(void_fn([] {}));
     r.createWritableAtom(TableReactivityBindings_createWritableAtom([](V init, std::optional<TableAtomOptions<V>>) { return w_atom(init); }));
     r.createReadonlyAtom(TableReactivityBindings_createReadonlyAtom([](void_to_T_fn<V> fn, std::optional<TableAtomOptions<V>>) { return r_atom(fn); }));
     r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return call_void_to_T_fn<V>(fn); }));
-    r.batch(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }));
-    r.schedule(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }));
+    r.batch(fn_fn([](void_fn fn) { call_void_fn(fn); }));
+    r.schedule(fn_fn([](void_fn fn) { call_void_fn(fn); }));
     return val(r);
 }
 

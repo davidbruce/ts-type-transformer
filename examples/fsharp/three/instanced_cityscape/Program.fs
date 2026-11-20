@@ -36,7 +36,7 @@ let main () =
 
     let renderer =
         WebGLRenderer.Create(
-            WebGLRendererParameters.Create(antialias = Some true, preserveDrawingBuffer = Some true)
+            WebGLRendererParameters.Create(antialias = true, preserveDrawingBuffer = true)
         )
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
@@ -126,9 +126,9 @@ let main () =
                 inst.setColorAt (float idx, col) |> ignore
                 idx <- idx + 1
 
-        inst.instanceMatrix?needsUpdate <- true
+        inst.instanceMatrix.needsUpdate <- true
         if not (isNull (box inst.instanceColor)) then
-            inst.instanceColor?needsUpdate <- true
+            inst.instanceColor.needsUpdate <- true
 
         let radius = 11.5
         let cx = radius * cos camYaw
@@ -148,7 +148,7 @@ let main () =
                 (layoutName layoutMode) maxH camName
 
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = unbox<Dom.HTMLElement> (document.getElementById id)
+        let b = document.getElementById id
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wireClick "btn-cam" (fun () ->

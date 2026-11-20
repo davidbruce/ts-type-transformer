@@ -8,14 +8,14 @@ open type Leaflet.Globals
 
 let private mapOpts () =
     MapOptions.Create(
-        attributionControl = Some false,
-        zoomAnimation = Some false,
-        fadeAnimation = Some false,
-        markerZoomAnimation = Some false
+        attributionControl = false,
+        zoomAnimation = false,
+        fadeAnimation = false,
+        markerZoomAnimation = false
     )
 
 let main () =
-    let m = map (unbox<HTMLElement> (document.getElementById "map"), mapOpts ())
+    let m = map (document.getElementById "map", mapOpts ())
 
     let stations =
         [|
@@ -29,17 +29,17 @@ let main () =
     let corridor =
         polyline<obj, obj>(
             ResizeArray (stations |> Array.map (fun (_, _, p) -> PolylineNewLatlngs.LatLng p) |> Array.toList),
-            PolylineOptions.Create(smoothFactor = Some 1.0, color = Some "#404040", weight = Some 2.5)
+            PolylineOptions.Create(smoothFactor = 1.0, color = "#404040", weight = 2.5)
         )
     corridor.addTo (MapOrLayerGroup.Map m) |> ignore
 
     let dotOpts =
         CircleMarkerOptions.Create(
-            radius = Some 6.0,
-            color = Some "#111111",
-            weight = Some 2.0,
-            fillColor = Some "#ffffff",
-            fillOpacity = Some 1.0
+            radius = 6.0,
+            color = "#111111",
+            weight = 2.0,
+            fillColor = "#ffffff",
+            fillOpacity = 1.0
         )
 
     for (code, name, pt) in stations do
@@ -50,19 +50,19 @@ let main () =
         let icon =
             divIcon (
                 DivIconOptions.Create(
-                    className = Some "mono-pin",
-                    html = Some (StringOrElementOrBoolean.String (sprintf "<span>%s</span>" code)),
-                    iconSize = Some (PointExpression.Point (point (22.0, 22.0))),
-                    iconAnchor = Some (PointExpression.Point (point (11.0, 11.0)))
+                    className = "mono-pin",
+                    html = StringOrElementOrBoolean.String (sprintf "<span>%s</span>" code),
+                    iconSize = PointExpression.Point (point (22.0, 22.0)),
+                    iconAnchor = PointExpression.Point (point (11.0, 11.0))
                 )
             )
-        let mk = marker<obj>(pt, MarkerOptions.Create(icon = Some (IconOrDivIcon.DivIcon icon)))
+        let mk = marker<obj>(pt, MarkerOptions.Create(icon = IconOrDivIcon.DivIcon icon))
         mk.addTo (MapOrLayerGroup.Map m) |> ignore
 
     m.fitBounds (LatLngBoundsExpression.LatLngBounds (corridor.getBounds().pad 0.15)) |> ignore
 
     let (_, _, bernPt) = stations[2]
-    let note = popup (bernPt, PopupOptions.Create(maxWidth = Some 220.0))
+    let note = popup (bernPt, PopupOptions.Create(maxWidth = 220.0))
     note.setContent (StringOrHTMLElementOrFn.String "03 Bern · 46.95N, 7.45E") |> ignore
     note.openOn m |> ignore
 

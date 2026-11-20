@@ -1496,10 +1496,11 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
     for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.iter().any(|r| r.0 == n.as_str()) && *n != "Error" && *n != "Date" && super::model::buffer_spec(n).is_none()) {
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
         if arity == 0 && !m.namespaced.contains_key(name.as_str()) {
-            let rn = rust_type(name);
+            let orig = m.opaque_names.get(name).map(String::as_str).unwrap_or(name.as_str());
+            let rn_orig = rust_type(orig);
             for (idx, r) in refs.iter().enumerate() {
-                if let Some(&(0, is_handle)) = r.types.get(&rn) {
-                    resolved_opaque.insert(name.clone(), (idx, format!("::{}::{rn}", r.crate_name), is_handle));
+                if let Some(&(0, is_handle)) = r.types.get(&rn_orig) {
+                    resolved_opaque.insert(name.clone(), (idx, format!("::{}::{rn_orig}", r.crate_name), is_handle));
                     break;
                 }
             }
@@ -1579,27 +1580,35 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         );
     }
     let mut used_refs: BTreeSet<usize> = BTreeSet::new();
+    let mut impl_refs: HashSet<String> = HashSet::new();
     // Types declared elsewhere: resolve against referenced crates where possible, else opaque handles.
     for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.iter().any(|r| r.0 == n.as_str())) {
         if let Some((ref_idx, qualified, is_handle)) = resolved_opaque.get(name) {
             used_refs.insert(*ref_idx);
             let ref_crate = &refs[*ref_idx].crate_name;
             let short = qualified.trim_start_matches("::");
-            types_file += &format!(
-                "pub use {qualified};\n\
-                 impl crate::runtime::ToJs for {qualified} {{\n\
-                 \x20   fn lend(&self) -> crate::runtime::Lent {{ let (h, owned) = ::{ref_crate}::ToJs::lend(self).into_raw(); crate::runtime::Lent::from_raw(h, owned) }}\n\
-                 }}\n\
-                 impl crate::runtime::FromJs for {qualified} {{\n\
-                 \x20   fn from_handle(h: u32) -> Self {{ <{qualified} as ::{ref_crate}::FromJs>::from_handle(h) }}\n\
-                 }}\n\
-                 impl From<{qualified}> for crate::runtime::JsValue {{ fn from(x: {qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(&x))) }} }}\n\
-                 impl From<&{qualified}> for crate::runtime::JsValue {{ fn from(x: &{qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(x))) }} }}\n"
-            );
-            if *is_handle {
-                types_file += &format!("impl crate::runtime::Is<{qualified}> for {qualified} {{}}\n");
+            let local_name = def_name(name);
+            let reexport = if short == format!("{ref_crate}::{local_name}") {
+                format!("pub use {qualified};\n")
+            } else {
+                format!("pub use {qualified} as {local_name};\n")
+            };
+            types_file += &reexport;
+            if impl_refs.insert(qualified.clone()) {
+                types_file += &format!(
+                    "impl crate::runtime::ToJs for {qualified} {{\n\
+                     \x20   fn lend(&self) -> crate::runtime::Lent {{ let (h, owned) = ::{ref_crate}::ToJs::lend(self).into_raw(); crate::runtime::Lent::from_raw(h, owned) }}\n\
+                     }}\n\
+                     impl crate::runtime::FromJs for {qualified} {{\n\
+                     \x20   fn from_handle(h: u32) -> Self {{ <{qualified} as ::{ref_crate}::FromJs>::from_handle(h) }}\n\
+                     }}\n\
+                     impl From<{qualified}> for crate::runtime::JsValue {{ fn from(x: {qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(&x))) }} }}\n\
+                     impl From<&{qualified}> for crate::runtime::JsValue {{ fn from(x: &{qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(x))) }} }}\n"
+                );
+                if *is_handle {
+                    types_file += &format!("impl crate::runtime::Is<{qualified}> for {qualified} {{}}\n");
+                }
             }
-            let _ = short;
             continue;
         }
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
@@ -1894,18 +1903,18 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
     let tops: BTreeSet<&String> = namespaces.keys().filter_map(|k| k.first()).collect();
     for top in tops {
         let mut text = PRELUDE.to_string();
-        fn nest(at: &[String], namespaces: &BTreeMap<Vec<String>, String>, depth: usize, text: &mut String) {
+        fn nest(at: &[String], namespaces: &BTreeMap<Vec<String>, String>, text: &mut String) {
             *text += namespaces.get(at).map(String::as_str).unwrap_or_default();
             let children: BTreeSet<&String> = namespaces.keys().filter(|k| k.len() > at.len() && k[..at.len()] == *at).map(|k| &k[at.len()]).collect();
             for child in children {
                 let mut path = at.to_vec();
                 path.push(child.clone());
                 *text += &format!("\npub mod {child} {{\n{}", PRELUDE.replace("// Generated.\n#![allow(unused_imports)]\n", "#[allow(unused_imports)]\nuse crate::*;\n"));
-                nest(&path, namespaces, depth + 1, text);
+                nest(&path, namespaces, text);
                 *text += "}\n";
             }
         }
-        nest(std::slice::from_ref(top), &namespaces, 0, &mut text);
+        nest(std::slice::from_ref(top), &namespaces, &mut text);
         lib += &format!("pub mod {top};\n");
         out.push((format!("src/{top}.rs"), text));
     }
@@ -2063,7 +2072,7 @@ fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<String, String>)
         if sub_impls.len() <= 40 {
             for (sub, v, target) in sub_impls {
                 out += &format!(
-                    "impl From<{sub}> for {n} {{ fn from(x: {sub}) -> Self {{ {n}::{v}(<{target}>::from_handle(x.0 .0)) }} }}\n\
+                    "impl From<{sub}> for {n} {{ fn from(x: {sub}) -> Self {{ let h = x.0 .0; core::mem::forget(x); {n}::{v}(<{target}>::from_handle(h)) }} }}\n\
                      impl From<&{sub}> for {n} {{ fn from(x: &{sub}) -> Self {{ {n}::{v}(<{target}>::from_handle(crate::runtime::give(x))) }} }}\n"
                 );
             }

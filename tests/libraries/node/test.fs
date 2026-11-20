@@ -24,7 +24,7 @@ check (path.resolve ("/a/b", "../c") = "/a/c") "path.resolve"
 check (path.relative ("/a/b", "/a/c/d") = "../c/d") "path.relative"
 let parsed = path.parse "/home/u/file.txt"
 check (parsed.root = "/" && parsed.dir = "/home/u" && parsed.``base`` = "file.txt" && parsed.ext = ".txt" && parsed.name = "file") "path.parse"
-check (path.format (path.FormatInputPathObject.Create (dir = Some "/d", name = Some "n", ext = Some ".e")) = "/d/n.e") "path.format"
+check (path.format (path.FormatInputPathObject.Create (dir = "/d", name = "n", ext = ".e")) = "/d/n.e") "path.format"
 check (path.sep = path.sep && path.delimiter = path.delimiter) "sep and delimiter are bound"
 let join (a: string) (b: string) = path.join (a, b)
 
@@ -86,7 +86,7 @@ Fs.renameSync (file, join dir "renamed.txt")
 check (not (Fs.existsSync file) && Fs.existsSync (join dir "renamed.txt")) "renameSync"
 Fs.unlinkSync (join dir "renamed.txt")
 check (not (Fs.existsSync (join dir "renamed.txt"))) "unlinkSync"
-let rm = Fs.RmOptions.Create (recursive = Some true, force = Some true)
+let rm = Fs.RmOptions.Create (recursive = true, force = true)
 Fs.rmSync (dir, rm)
 check (not (Fs.existsSync dir)) "rmSync recursive"
 

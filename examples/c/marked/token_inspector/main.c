@@ -81,16 +81,15 @@ __attribute__((export_name("start"))) void start(void) {
 
         JsString kind = Tokens_Generic_get_type(g);
         char kind_buf[64];
-        uint32_t kn = JsString_copy(kind, kind_buf, sizeof(kind_buf) - 1);
-        kind_buf[kn] = '\0';
+        JsString_copy(kind, kind_buf, sizeof(kind_buf));
         js_release(kind);
 
         JsString raw = Tokens_Generic_get_raw(g);
         uint32_t raw_len = JsString_len(raw);
         static char raw_buf[512];
         static char snip_buf[1024];
-        uint32_t rn = JsString_copy(raw, raw_buf, sizeof(raw_buf) - 1);
-        raw_buf[rn] = '\0';
+        uint32_t rn = JsString_copy(raw, raw_buf, sizeof(raw_buf));
+        if (rn >= sizeof(raw_buf)) rn = sizeof(raw_buf) - 1;
         js_release(raw);
 
         uint32_t sp = 0;

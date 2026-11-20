@@ -78,7 +78,7 @@ let private pin = unbox<Table_ColumnPinning<TableFeatures, obj>> table
 let private sel = unbox<Table_RowSelection<TableFeatures, obj>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = unbox<HTMLElement> (document.getElementById id)
+    let btn = document.getElementById id
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render () =
@@ -112,11 +112,11 @@ let private render () =
                 sb.Add (sprintf "<td>%s</td>" (escapeHtml (string (r.getValue<obj> cid))))
         sb.Add "</tr>"
     sb.Add "</tbody></table>"
-    let wrap = unbox<HTMLElement> (document.getElementById "table-wrap")
+    let wrap = document.getElementById "table-wrap"
     wrap.innerHTML <- String.concat "" sb
     let visCount = vis.getVisibleLeafColumns().Count
     let selCount = sel.getSelectedRowModel().rows.Count
-    let meta = unbox<HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <- sprintf "%d / %d visible columns · start:id end:status pinned · %d / %d rows selected" visCount (table.getAllLeafColumns().Count) selCount rows.Count
 
 let main () =

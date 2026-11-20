@@ -80,7 +80,7 @@ let private table = constructTable<TableFeatures, obj> options
 let private tableSort = unbox<Table_RowSorting<TableFeatures, obj>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = unbox<HTMLElement> (document.getElementById id)
+    let btn = document.getElementById id
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render (label: string) =
@@ -112,10 +112,10 @@ let private render (label: string) =
         sb.Add (sprintf "<td class=\"num\">%.2f%%</td>" uptime)
         sb.Add "</tr>"
     sb.Add "</tbody></table>"
-    let wrap = unbox<HTMLElement> (document.getElementById "table-wrap")
+    let wrap = document.getElementById "table-wrap"
     wrap.innerHTML <- String.concat "" sb
     let topHost = if rows.Count > 0 then rows.[0].getValue<string> "host" else "-"
-    let meta = unbox<HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <- sprintf "%s · %d rows · top node: %s" label rows.Count topHost
 
 let main () =

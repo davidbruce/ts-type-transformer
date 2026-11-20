@@ -49,7 +49,7 @@ static V apply_update(const ts::Handle& update, V old) {
 // and impl.mjs hands over neither. Atoms are made here: objects of get/set/subscribe.
 static V unsubscribe_object() {
     Obj sub = Obj::create();
-    sub.set_at("unsubscribe", val(Column_ColumnGrouping_toggleGrouping([] {})));
+    sub.set_at("unsubscribe", val(void_fn([] {})));
     return val(sub);
 }
 static V writable_atom(V initial) {
@@ -77,8 +77,8 @@ static V reactivity() {
     r.createWritableAtom(TableReactivityBindings_createWritableAtom([](V initial, std::optional<TableAtomOptions<V>>) { return writable_atom(initial); }));
     r.createReadonlyAtom(TableReactivityBindings_createReadonlyAtom([](void_to_T_fn<V> compute, std::optional<TableAtomOptions<V>>) { return readonly_atom(compute); }));
     r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return call_void_to_T_fn<V>(fn); }));
-    r.batch(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }));
-    r.schedule(fn_fn([](Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }));
+    r.batch(fn_fn([](void_fn fn) { call_void_fn(fn); }));
+    r.schedule(fn_fn([](void_fn fn) { call_void_fn(fn); }));
     return val(r);
 }
 

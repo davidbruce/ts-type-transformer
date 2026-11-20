@@ -14,8 +14,7 @@ static void append_and_release(HTMLElement parent, HTMLElement child) {
 }
 
 static void copy_and_release(JsString s, char* buf, uint32_t cap) {
-    uint32_t n = JsString_copy(s, buf, cap - 1);
-    buf[n] = '\0';
+    JsString_copy(s, buf, cap);
     js_release(s);
 }
 

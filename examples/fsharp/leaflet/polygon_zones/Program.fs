@@ -8,17 +8,17 @@ open type Leaflet.Globals
 
 let private mapOpts () =
     MapOptions.Create(
-        attributionControl = Some false,
-        zoomAnimation = Some false,
-        fadeAnimation = Some false,
-        markerZoomAnimation = Some false
+        attributionControl = false,
+        zoomAnimation = false,
+        fadeAnimation = false,
+        markerZoomAnimation = false
     )
 
 let private toPolygonPts (pts: LatLng list) =
     ResizeArray (pts |> List.map PolylineSetLatLngsLatlngs.LatLng)
 
 let main () =
-    let m = map (unbox<HTMLElement> (document.getElementById "map"), mapOpts ())
+    let m = map (document.getElementById "map", mapOpts ())
 
     let midRing =
         [
@@ -42,22 +42,22 @@ let main () =
         polygon<obj>(
             toPolygonPts midRing,
             PolylineOptions.Create(
-                smoothFactor = Some 1.0,
-                color = Some "#404040",
-                weight = Some 2.0,
-                fillColor = Some "#d4d4d4",
-                fillOpacity = Some 0.55
+                smoothFactor = 1.0,
+                color = "#404040",
+                weight = 2.0,
+                fillColor = "#d4d4d4",
+                fillOpacity = 0.55
             )
         )
     let corePoly =
         polygon<obj>(
             toPolygonPts coreRing,
             PolylineOptions.Create(
-                smoothFactor = Some 1.0,
-                color = Some "#111111",
-                weight = Some 2.5,
-                fillColor = Some "#404040",
-                fillOpacity = Some 0.75
+                smoothFactor = 1.0,
+                color = "#111111",
+                weight = 2.5,
+                fillColor = "#404040",
+                fillOpacity = 0.75
             )
         )
 
@@ -66,12 +66,12 @@ let main () =
         rectangle<obj>(
             paddedBounds,
             PolylineOptions.Create(
-                smoothFactor = Some 1.0,
-                color = Some "#737373",
-                weight = Some 1.5,
-                dashArray = Some (StringOrNumberArray.String "4 4"),
-                fillColor = Some "#efefef",
-                fillOpacity = Some 0.05
+                smoothFactor = 1.0,
+                color = "#737373",
+                weight = 1.5,
+                dashArray = (StringOrNumberArray.String "4 4"),
+                fillColor = "#efefef",
+                fillOpacity = 0.05
             )
         )
 
@@ -112,11 +112,11 @@ let main () =
         circleMarker<obj>(
             pt,
             CircleMarkerOptions.Create(
-                radius = Some 6.0,
-                color = Some "#111111",
-                weight = Some 2.0,
-                fillColor = Some fillHex,
-                fillOpacity = Some 1.0
+                radius = 6.0,
+                color = "#111111",
+                weight = 2.0,
+                fillColor = fillHex,
+                fillOpacity = 1.0
             )
         ).addTo (MapOrLayerGroup.Map m)
         |> ignore

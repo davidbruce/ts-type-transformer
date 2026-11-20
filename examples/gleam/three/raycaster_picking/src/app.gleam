@@ -12,6 +12,7 @@ import three/areas/main/ambient_light
 import three/areas/main/box3
 import three/areas/main/box3_helper
 import three/areas/main/box_geometry
+import three/areas/main/buffer_geometry
 import three/areas/main/color
 import three/areas/main/cone_geometry
 import three/areas/main/cylinder_geometry
@@ -132,15 +133,15 @@ pub fn main() {
   let _ = object3d.add(sc, [grid])
 
   let defs: List(#(String, t.BufferGeometry(t.NormalBufferAttributes(Nil), t.BufferGeometryEventMap(Nil), Nil))) = [
-    #("Box", coerce(box_geometry.new(Some(1.05), Some(1.05), Some(1.05), None, None, None))),
-    #("Cone", coerce(cone_geometry.new(Some(0.62), Some(1.25), Some(20.0), None, None, None, None))),
-    #("Cylinder", coerce(cylinder_geometry.new(Some(0.48), Some(0.48), Some(1.2), Some(24.0), None, None, None, None))),
-    #("Sphere", coerce(sphere_geometry.new(Some(0.62), Some(24.0), Some(18.0), None, None, None, None))),
-    #("Octahedron", coerce(octahedron_geometry.new(Some(0.68), Some(0.0)))),
-    #("Dodecahedron", coerce(dodecahedron_geometry.new(Some(0.62), Some(0.0)))),
-    #("Torus", coerce(torus_geometry.new(Some(0.5), Some(0.18), Some(14.0), Some(36.0), None, None, None))),
-    #("Icosahedron", coerce(icosahedron_geometry.new(Some(0.64), Some(0.0)))),
-    #("Tetrahedron", coerce(tetrahedron_geometry.new(Some(0.72), Some(0.0)))),
+    #("Box", buffer_geometry.upcast(box_geometry.new(Some(1.05), Some(1.05), Some(1.05), None, None, None))),
+    #("Cone", buffer_geometry.upcast(cone_geometry.new(Some(0.62), Some(1.25), Some(20.0), None, None, None, None))),
+    #("Cylinder", buffer_geometry.upcast(cylinder_geometry.new(Some(0.48), Some(0.48), Some(1.2), Some(24.0), None, None, None, None))),
+    #("Sphere", buffer_geometry.upcast(sphere_geometry.new(Some(0.62), Some(24.0), Some(18.0), None, None, None, None))),
+    #("Octahedron", buffer_geometry.upcast(octahedron_geometry.new(Some(0.68), Some(0.0)))),
+    #("Dodecahedron", buffer_geometry.upcast(dodecahedron_geometry.new(Some(0.62), Some(0.0)))),
+    #("Torus", buffer_geometry.upcast(torus_geometry.new(Some(0.5), Some(0.18), Some(14.0), Some(36.0), None, None, None))),
+    #("Icosahedron", buffer_geometry.upcast(icosahedron_geometry.new(Some(0.64), Some(0.0)))),
+    #("Tetrahedron", buffer_geometry.upcast(tetrahedron_geometry.new(Some(0.72), Some(0.0)))),
   ]
 
   let specs =

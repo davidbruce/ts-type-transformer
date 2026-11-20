@@ -102,8 +102,7 @@ struct AppState {
 fn parse_html(dom_doc: &dom::Document, parser: &DOMParser, html: &str) -> Node {
     let div = dom_doc.create_element("div", None);
     div.set_inner_html(html);
-    let dn = Node2(JsValue::from(&div).0);
-    parser.parse(&dn, None)
+    parser.parse(&div, None)
 }
 
 fn refresh_output(app: &AppState, doc: &Node) {
@@ -230,8 +229,7 @@ pub extern "C" fn start() {
                     let div = st.doc.create_element("div", None);
                     st.serializer
                         .serialize_fragment(&doc.content(), None, HTMLElementOrDocumentFragment::HTMLElement(div.clone()));
-                    let dn = Node2(JsValue::from(&div).0);
-                    let reparsed = st.parser.parse(&dn, None);
+                    let reparsed = st.parser.parse(&div, None);
                     st.status = format!("DOM serializeFragment->parse eq() = {}", doc.js_eq(&reparsed));
                     let cfg = EditorStateConfig::create();
                     cfg.set_schema(Some(&st.schema));

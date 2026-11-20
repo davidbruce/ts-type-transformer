@@ -397,14 +397,23 @@ fn union_members<'a>(root: Node<'a, 'a>, r: Node<'a, 'a>) -> Option<Vec<Node<'a,
     body.has_tag_name("union").then(|| elements(body).collect())
 }
 
+fn strip_opt(t: &str) -> &str {
+    t.strip_suffix(" option").unwrap_or(t)
+}
+
+fn add_opt(t: String) -> String {
+    if t.ends_with(" option") { t } else { format!("{t} option") }
+}
+
 fn ident(name: &str) -> String {
     const KEYWORDS: &[&str] = &[
-        "abstract", "and", "as", "assert", "base", "begin", "checked", "class", "component", "const", "constraint", "default", "delegate", "do", "done",
-        "downcast", "downto", "elif", "else", "end", "event", "exception", "extern", "false", "finally", "fixed", "for", "fun", "function", "global",
-        "if", "in", "include", "inherit", "inline", "interface", "internal", "lazy", "let", "match", "member", "mixin", "mod", "module", "mutable",
-        "namespace", "new", "null", "of", "open", "or", "override", "params", "private", "process", "protected", "public", "pure", "rec", "return",
-        "sealed", "select", "sig", "static", "struct", "tailcall", "then", "to", "trait", "true", "try", "type", "upcast", "use", "val", "virtual",
-        "void", "when", "while", "with", "yield",
+        "abstract", "and", "as", "asr", "assert", "atomic", "base", "begin", "break", "checked", "class", "component", "const", "constraint", "constructor",
+        "continue", "default", "delegate", "do", "done", "downcast", "downto", "eager", "elif", "else", "end", "event", "exception", "extern", "external",
+        "false", "finally", "fixed", "for", "fun", "function", "functor", "global", "if", "in", "include", "inherit", "inline", "interface", "internal",
+        "land", "lazy", "let", "lor", "lsl", "lsr", "lxor", "match", "measure", "member", "method", "mixin", "mod", "module", "mutable", "namespace", "new",
+        "null", "object", "of", "open", "or", "override", "parallel", "params", "private", "process", "protected", "public", "pure", "rec", "recursive",
+        "return", "sealed", "select", "sig", "static", "struct", "tailcall", "then", "to", "trait", "true", "try", "type", "upcast", "use", "val",
+        "virtual", "void", "volatile", "when", "while", "with", "yield",
     ];
     let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') && !name.as_bytes()[0].is_ascii_digit();
     if KEYWORDS.contains(&name) || !plain { format!("``{name}``") } else { name.to_string() }
@@ -520,8 +529,8 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
             g.iterable.insert(name.clone());
         }
         // A base declared elsewhere by its name (`Pt extends Float32Array`).
-        let bases = named(d, "extends").filter_map(|e| elements(e).next()).map(|r| r.attribute("to").unwrap_or(attr(r, "name")).to_string()).collect();
-        g.bases.entry(name).or_insert_with(Vec::new).extend::<Vec<String>>(bases);
+        let bases: Vec<String> = named(d, "extends").filter_map(|e| elements(e).next()).map(|r| r.attribute("to").unwrap_or(attr(r, "name")).to_string()).collect();
+        g.bases.entry(name).or_default().extend(bases);
     }
     g.constrained = constrained_interfaces(doc.root_element(), &g.bases);
     let (plan, units) = file_plan(doc.root_element());
@@ -643,6 +652,32 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
         }
         out
     };
+    let mut base_links: HashMap<&str, Vec<&str>> = HashMap::new();
+    let mut method_names: HashMap<&str, HashSet<&str>> = HashMap::new();
+    for d in elements(root).filter(|d| d.has_tag_name("interface") || d.has_tag_name("class") || d.has_tag_name("typeAlias")) {
+        let key = d.attribute("id").or_else(|| d.attribute("name")).unwrap_or_default();
+        if key.is_empty() {
+            continue;
+        }
+        if !d.has_tag_name("typeAlias") {
+            let bases: Vec<&str> = named(d, "extends")
+                .flat_map(|e| e.descendants())
+                .filter(|r| r.has_tag_name("ref"))
+                .filter_map(|r| r.attribute("to"))
+                .collect();
+            if !bases.is_empty() {
+                base_links.insert(key, bases);
+            }
+        }
+        let src = if d.has_tag_name("typeAlias") { only_child_type(d) } else { d };
+        let ms: HashSet<&str> = elements(src)
+            .filter(|m| !flag(*m, "static") && (m.has_tag_name("method") || (m.has_tag_name("property") && !flag(*m, "optional") && only_child(*m).has_tag_name("functionType"))))
+            .filter_map(|m| m.attribute("name"))
+            .collect();
+        if !ms.is_empty() {
+            method_names.insert(key, ms);
+        }
+    }
     for d in elements(root) {
         if d.attribute("module").is_none() || d.has_tag_name("var") || d.has_tag_name("function") {
             continue;
@@ -651,7 +686,7 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
         let m = m.as_str();
         modules.insert(m.to_string());
         let target = |r: Node| -> Vec<String> {
-            r.attribute("to").map(|n| through(n)).unwrap_or_default().iter().filter_map(|n| units.get(n.as_str()).or_else(|| home.get(n.as_str()))).filter(|t| t.as_str() != m).cloned().collect()
+            r.attribute("to").map(through).unwrap_or_default().iter().filter_map(|n| units.get(n.as_str()).or_else(|| home.get(n.as_str()))).filter(|t| t.as_str() != m).cloned().collect()
         };
         // An alias has no fixed place: it goes where its parts are (`alias_files`).
         let hard_scope: Vec<Node> = match d.tag_name().name() {
@@ -661,6 +696,36 @@ fn file_plan(root: Node) -> (Vec<Vec<String>>, HashMap<String, String>) {
         };
         for scope in &hard_scope {
             hard.entry(m.to_string()).or_default().extend(scope.descendants().filter(|r| r.has_tag_name("ref")).flat_map(target));
+        }
+        // An interface overriding an inherited member whose signature mentions a `*.base`
+        // type (e.g. `Document.getElementById -> HTMLElement` overriding `NonElementParentNode`)
+        // cannot live as an extension in a later file without being shadowed by the base.
+        if d.has_tag_name("interface") || d.has_tag_name("class") {
+            let key = d.attribute("id").or_else(|| d.attribute("name")).unwrap_or_default();
+            let mut inherited = HashSet::new();
+            let mut seen_b = HashSet::new();
+            let mut todo_b = base_links.get(key).cloned().unwrap_or_default();
+            while let Some(b) = todo_b.pop() {
+                if seen_b.insert(b) {
+                    if let Some(ms) = method_names.get(b) {
+                        inherited.extend(ms.iter().copied());
+                    }
+                    if let Some(next_b) = base_links.get(b) {
+                        todo_b.extend(next_b.iter().copied());
+                    }
+                }
+            }
+            for mem in elements(d).filter(|mem| !flag(*mem, "static") && (mem.has_tag_name("method") || (mem.has_tag_name("property") && !flag(*mem, "optional") && only_child(*mem).has_tag_name("functionType")))) {
+                if let Some(mname) = mem.attribute("name")
+                    && inherited.contains(mname)
+                {
+                    for t in mem.descendants().filter(|r| r.has_tag_name("ref")).flat_map(target) {
+                        if t.ends_with(".base") {
+                            hard.entry(m.to_string()).or_default().insert(t);
+                        }
+                    }
+                }
+            }
         }
         soft.entry(m.to_string()).or_default().extend(d.descendants().filter(|r| r.has_tag_name("ref")).flat_map(target));
     }
@@ -1203,16 +1268,20 @@ impl Gen {
                 let props: Vec<Node> = elements(n).collect();
                 let has_opt = props.iter().any(|m| flag(*m, "optional"));
                 let plain = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_') && !s.as_bytes()[0].is_ascii_digit();
-                if !self.probing && has_opt && props.len() >= 4 && props.iter().all(|m| plain(attr(*m, "name")) && attr(*m, "name") != "Create") {
-                    if let Some(hoisted) = self.hoist_object(n, &props, owner) {
-                        return hoisted;
-                    }
+                if !self.probing
+                    && has_opt
+                    && props.len() >= 4
+                    && props.iter().all(|m| plain(attr(*m, "name")) && attr(*m, "name") != "Create")
+                    && let Some(hoisted) = self.hoist_object(n, &props, owner)
+                {
+                    return hoisted;
                 }
                 let fields: Vec<String> = props
                     .iter()
                     .map(|m| {
                         let t = self.ty(only_child(*m), owner);
-                        format!("{}: {t}{}", ident(attr(*m, "name")), if flag(*m, "optional") { " option" } else { "" })
+                        let t = if flag(*m, "optional") { add_opt(t) } else { t };
+                        format!("{}: {t}", ident(attr(*m, "name")))
                     })
                     .collect();
                 format!("{{| {} |}}", fields.join("; "))
@@ -1554,14 +1623,14 @@ impl Gen {
             let mut req_args = Vec::new();
             let mut opt_args = Vec::new();
             for (raw, fname, t, opt, ro, fixed) in &fields {
-                let prop_ty = if *opt { format!("{t} option") } else { t.clone() };
+                let prop_ty = if *opt { add_opt(t.clone()) } else { t.clone() };
                 let acc = if !*ro && prop_ty != "unit" { " with get, set" } else { "" };
                 def += &format!("{indent}    abstract {fname}: {prop_ty}{acc}\n");
                 if let Some(val) = fixed {
                     fixed_entries.push(format!("{raw:?}: {val}"));
                 }
                 if *opt || fixed.is_some() {
-                    opt_args.push(format!("?{fname}: {t}"));
+                    opt_args.push(format!("?{fname}: {}", strip_opt(t)));
                 } else {
                     req_args.push(format!("{fname}: {t}"));
                 }
@@ -1707,7 +1776,9 @@ impl Gen {
                 let element = if t.has_tag_name("array") { self.ty(only_child(t), owner) } else { "obj".into() };
                 out.push(format!("[<System.ParamArray>] {name}: {element}[]"));
             } else {
-                out.push(format!("{}{name}: {}", if optional { "?" } else { "" }, self.ty(t, owner)));
+                let t = self.ty(t, owner);
+                let t = if optional { strip_opt(&t) } else { t.as_str() };
+                out.push(format!("{}{name}: {t}", if optional { "?" } else { "" }));
             }
         }
         out
@@ -1887,11 +1958,12 @@ impl Gen {
     fn members(&mut self, members: &[Node], owner: &str, extend: &str, indent: &str) -> Vec<String> {
         let mut lines: Vec<String> = Vec::new();
         let mut extras: Vec<String> = Vec::new();
+        let getters: HashSet<&str> = members.iter().filter(|m| m.has_tag_name("get") || m.has_tag_name("property")).map(|m| attr(*m, "name")).collect();
         let setters: HashSet<&str> = members.iter().filter(|m| m.has_tag_name("set")).map(|m| attr(*m, "name")).collect();
         for &m in members {
             let raw = m.attribute("name").unwrap_or_default();
             // `[Symbol.iterator]` makes the type a seq: see `interface`.
-            if raw == "[Symbol.iterator]" || m.has_tag_name("set") {
+            if raw == "[Symbol.iterator]" || (m.has_tag_name("set") && getters.contains(raw)) {
                 continue;
             }
             let fn_prop = m.has_tag_name("property") && !flag(m, "optional") && only_child(m).has_tag_name("functionType");
@@ -2005,15 +2077,21 @@ impl Gen {
                 }
             }
             "property" => {
-                let mut t = self.ty(only_child(m), owner);
-                if flag(m, "optional") {
-                    t += " option";
-                }
+                let t = self.ty(only_child(m), owner);
+                let t = if flag(m, "optional") { add_opt(t) } else { t };
                 property(&name, &t, !flag(m, "readonly"), &js)
             }
             "get" => {
                 let t = self.returns(m, owner);
                 property(&name, &t, has_setter, &js)
+            }
+            "set" => {
+                let t = named(m, "parameter").next().map(|p| self.ty(only_child(p), owner)).unwrap_or("obj".into());
+                if t == "unit" {
+                    return None;
+                }
+                let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
+                (format!("abstract {name}: {t} with set"), format!("member this.{name} with {set}"), Vec::new())
             }
             "method" => match self.fixed(m, 1) {
                 Some((suffix, args)) => {
@@ -2182,10 +2260,11 @@ impl Gen {
             if let Some(bd) = find_decl(root, b) {
                 let bsrc = if bd.has_tag_name("typeAlias") { only_child_type(bd) } else { bd };
                 for bm in elements(bsrc) {
-                    if !flag(bm, "static") && (bm.has_tag_name("method") || (bm.has_tag_name("property") && !flag(bm, "optional") && only_child(bm).has_tag_name("functionType"))) {
-                        if let Some(n) = bm.attribute("name") {
-                            inherited_methods.insert(n.to_string());
-                        }
+                    if !flag(bm, "static")
+                        && (bm.has_tag_name("method") || (bm.has_tag_name("property") && !flag(bm, "optional") && only_child(bm).has_tag_name("functionType")))
+                        && let Some(n) = bm.attribute("name")
+                    {
+                        inherited_methods.insert(n.to_string());
                     }
                 }
             }
@@ -2262,7 +2341,9 @@ impl Gen {
                 fixed.push(format!("{:?}: {val}", attr(*p, "name")));
             }
             let t = self.ty(only_child(*p), owner);
-            let q = if flag(*p, "optional") || p.has_attribute("const") { "?" } else { "" };
+            let is_opt = flag(*p, "optional") || p.has_attribute("const");
+            let q = if is_opt { "?" } else { "" };
+            let t = if is_opt { strip_opt(&t) } else { t.as_str() };
             args.push(format!("{q}{}: {t}", ident(attr(*p, "name"))));
         }
         let line = args.join(", ");
@@ -2281,8 +2362,8 @@ impl Gen {
         let mut ctor_extras = Vec::new();
         let mut non_ctors = Vec::new();
         for &m in members {
-            if (m.has_tag_name("constructor") || m.has_tag_name("construct")) && instance.is_some() {
-                let ret = instance.unwrap().to_string();
+            if (m.has_tag_name("constructor") || m.has_tag_name("construct")) && let Some(inst) = instance {
+                let ret = inst.to_string();
                 let tps = self.type_params(m);
                 let params = self.params(m, "");
                 let sig = format!("{} -> {ret}", if params.is_empty() { "unit".to_string() } else { params.join(" * ") });
@@ -2318,7 +2399,7 @@ impl Gen {
         }
         self.out += &lines.concat();
         self.out += "\n";
-        let value = format!("{indent}{}\n{indent}let {name}: {static_name} = jsNative\n\n", self.at(&path, None));
+        let value = format!("{indent}{}\n{indent}let {name}: {static_name} = jsNative\n\n", self.at(path, None));
         if indent.is_empty() {
             self.values += &value;
         } else {
@@ -2835,7 +2916,7 @@ fn push_member(lines: &mut Vec<String>, line: String, abbrevs: &HashMap<String, 
         let (h, t) = member_key(l);
         h == head && t.map(|t| expand(&t, abbrevs)) == types
     };
-    let Some(at) = lines.iter().position(|l| same(l)) else {
+    let Some(at) = lines.iter().position(same) else {
         lines.push(line);
         return;
     };
@@ -2955,7 +3036,7 @@ fn member_name(line: &str) -> Option<(usize, &str)> {
     }
     let rest = s.strip_prefix("abstract ").or_else(|| s.strip_prefix("static member "))?;
     let start = line.len() - rest.len();
-    let len = if rest.starts_with("``") { rest[2..].find("``")? + 4 } else { rest.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(rest.len()) };
+    let len = if let Some(after) = rest.strip_prefix("``") { after.find("``")? + 4 } else { rest.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(rest.len()) };
     Some((start, &line[start..start + len]))
 }
 
@@ -3273,6 +3354,7 @@ fn package_modules(xml: &str) -> Option<String> {
     for d in &packaged {
         members.entry(segments(d.attribute("import").unwrap())).or_default().push(*d);
     }
+    #[allow(clippy::too_many_arguments)]
     fn module_text(at: &[String], members: &BTreeMap<Vec<String>, Vec<Node>>, module_names: &BTreeMap<Vec<String>, Vec<String>>, ids: &HashMap<String, String>, merged: &HashSet<NodeId>, own: &dyn Fn(Node) -> String, import: &str, out: &mut String) {
         let names = module_names.get(at).cloned().unwrap_or_else(|| at.to_vec());
         let name = names.last().cloned().unwrap_or_default();

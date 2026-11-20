@@ -126,7 +126,7 @@ let mutable private lastOp = "Initialized document structure"
 let private updateMeta (doc: ProsemirrorModel.Node) =
     let names =
         [ for i in 0 .. (int doc.childCount - 1) -> doc.child(i).``type``.name ]
-    let meta = unbox<Dom.HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <-
         sprintf "%s · blocks=%d · outline=[%s] · totalSteps=%d · nodeSize=%d"
             lastOp (int doc.childCount) (String.concat " · " names) totalSteps (int doc.nodeSize)
@@ -135,7 +135,7 @@ let private createState () =
     EditorState.create (EditorStateConfig.Create (schema = schema, doc = buildInitialDoc ()))
 
 let main () =
-    let mountEl = unbox<Dom.HTMLElement> (document.getElementById "editor")
+    let mountEl = document.getElementById "editor"
     let mutable view: EditorView = null
 
     let props = createEmpty<DirectEditorProps>
@@ -148,11 +148,11 @@ let main () =
             updateMeta next.doc
     )
 
-    view <- EditorView.Create (unbox<dist_DOMNode> mountEl, props)
+    view <- EditorView.Create ((mountEl :> Dom.Node), props)
     updateMeta view.state.doc
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = unbox<Dom.HTMLElement> (document.getElementById id)
+        let el = document.getElementById id
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () ->

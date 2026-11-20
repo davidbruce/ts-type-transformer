@@ -257,8 +257,9 @@ pub struct Model {
     pub maps: Vec<KeyMap>,
     pub shared: Vec<Shared>,
     pub funcs: Vec<Func>,
-    // Types declared elsewhere: handles with no members.
+    // Types declared elsewhere: handles with no members, and their original external names before collision renaming.
     pub opaque: Vec<String>,
+    pub opaque_names: BTreeMap<String, String>,
     // How many type arguments those that are generic take.
     pub opaque_arity: BTreeMap<String, usize>,
     // What the generator does not bind yet, by reason.
@@ -389,7 +390,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let mut b = Builder {
         target,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -460,6 +461,8 @@ fn external(key: &str) -> &str {
 fn join(prefix: &str, name: &str) -> String {
     if prefix.is_empty() { name.to_string() } else { format!("{prefix}.{name}") }
 }
+
+type Sig = (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty);
 
 impl<'a> Builder<'a> {
     fn skip(&mut self, why: &str) {
@@ -575,10 +578,8 @@ impl<'a> Builder<'a> {
     // The type of an alias. Its type parameters come first; only where generics
     // are kept can it have any.
     fn alias_body(&self, d: Node<'a, 'a>) -> Node<'a, 'a> {
-        if !self.generics {
-            if let Some(p) = named(d, "typeParameter").next() {
-                self.unsupported(p);
-            }
+        if !self.generics && let Some(p) = named(d, "typeParameter").next() {
+            self.unsupported(p);
         }
         elements(d).find(|c| !c.has_tag_name("typeParameter") && !c.has_tag_name("extends")).unwrap_or_else(|| only_child(d))
     }
@@ -869,7 +870,7 @@ impl<'a> Builder<'a> {
             None => Vec::new(),
         };
         if segments.is_empty() {
-            return (parts.len() > 1).then(|| (parts, 1, None));
+            return (parts.len() > 1).then_some((parts, 1, None));
         }
         let same = |a: &str, b: &str| a.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).eq(b.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase));
         let depth = segments.len();
@@ -941,10 +942,12 @@ impl<'a> Builder<'a> {
         if matches!(tag, "ancestor") {
             // A base from another file is still a type to convert to.
             let key = self.ref_key(m);
+            let out = self.type_ident(&key);
             if !self.decls.contains_key(&key) {
-                self.opaque.insert(self.type_ident(&key));
+                self.model.opaque_names.insert(out.clone(), ident(external(&key)));
+                self.opaque.insert(out.clone());
             }
-            return c.ancestors.push(self.type_ident(&key));
+            return c.ancestors.push(out);
         }
         // A direct base, when inheritance is kept: members stay on the type that declares them.
         if tag == "extends" {
@@ -967,12 +970,14 @@ impl<'a> Builder<'a> {
                     return;
                 }
                 // Where generics are erased, a generic base is the base without its arguments.
-                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(self.type_ident(name)) } else { self.reference(base, &owner) };
+                let out = self.type_ident(name);
+                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(out.clone()) } else { self.reference(base, &owner) };
                 if !self.decls.contains_key(name) {
-                    self.opaque.insert(self.type_ident(name));
+                    self.model.opaque_names.insert(out.clone(), ident(external(name)));
+                    self.opaque.insert(out.clone());
                 }
                 c.bases.push(t);
-                return c.ancestors.push(self.type_ident(name));
+                return c.ancestors.push(out);
             }
             return self.skip("generic base");
         }
@@ -1159,7 +1164,7 @@ impl<'a> Builder<'a> {
     }
 
     // A callback's signature: its own type parameters (`<T>(x: T) => T`) are untyped values.
-    fn callback_signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
+    fn callback_signature(&mut self, n: Node<'a, 'a>, owner: &str) -> Sig {
         self.erased = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
         let mut sig = self.signature(n, owner);
         self.erased.clear();
@@ -1171,7 +1176,7 @@ impl<'a> Builder<'a> {
         sig
     }
 
-    fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty) {
+    fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> Sig {
         // Type parameters left after `generics = "erase"` range over a map's keys.
         self.keyed.clear();
         self.key_strings.clear();
@@ -1475,7 +1480,6 @@ impl<'a> Builder<'a> {
                     let (members, parts): (Vec<Node>, Vec<Ty>) = members.into_iter().zip(parts).filter(|(_, p)| if kept.contains(p) { false } else { kept.push(p.clone()); true }).unzip();
                     // `X | any` is any.
                     if parts.contains(&Ty::Any) {
-                        self.skip("union with an any member, which is any");
                         return Ty::Any;
                     }
                     if let [only] = parts.as_slice() {
@@ -1510,18 +1514,22 @@ impl<'a> Builder<'a> {
             }
             ("class" | "interface", declared) if self.generics && elements(n).next().is_some() => {
                 let args: Vec<Ty> = elements(n).map(|a| self.ty(a, owner)).collect();
+                let out = self.type_ident(&key);
                 if declared.is_none() {
-                    self.opaque.insert(self.type_ident(&key));
-                    let arity = self.model.opaque_arity.entry(self.type_ident(&key)).or_default();
+                    self.model.opaque_names.insert(out.clone(), ident(external(&key)));
+                    self.opaque.insert(out.clone());
+                    let arity = self.model.opaque_arity.entry(out.clone()).or_default();
                     *arity = (*arity).max(args.len());
                 }
-                Ty::Generic(self.type_ident(&key), args)
+                Ty::Generic(out, args)
             }
             ("class" | "interface", Some(_)) => Ty::Obj(self.type_ident(&key)),
             // Declared in another library: a handle, by name. An alias may be of anything, and a handle can hold anything.
             ("class" | "interface" | "typeAlias", None) => {
-                self.opaque.insert(self.type_ident(&key));
-                Ty::Obj(self.type_ident(&key))
+                let out = self.type_ident(&key);
+                self.model.opaque_names.insert(out.clone(), ident(external(&key)));
+                self.opaque.insert(out.clone());
+                Ty::Obj(out)
             }
             _ => Ty::Any,
         }

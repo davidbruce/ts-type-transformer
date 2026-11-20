@@ -103,9 +103,9 @@ ext.renderer <- Some (
             U2.Case2 (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
     )
 )
-ext.walkTokens <- Some (Some (fun (t: Token) ->
+ext.walkTokens <- Some (fun (t: Token) ->
     seen.Add (unbox<Tokens.Generic> t).``type``
-    U3.Case1 ()))
+    U3.Case1 ())
 let m2 = Marked.Create ext
 check (not (isNull (box m2)) && seen.Count = 0) "an instance with an extension"
 let customTokens = m2.lexer "# Hi"

@@ -6,7 +6,7 @@ open type Dom.Globals
 open Echarts
 open type Echarts.Globals
 
-let private chart = init (unbox<HTMLElement> (document.getElementById "chart"))
+let private chart = init (document.getElementById "chart")
 
 let private opt = createEmpty<EChartsCoreOption>
 opt?animation <- false

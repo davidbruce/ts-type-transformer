@@ -223,9 +223,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
     }));
 
     dom::HTMLElement mount = *app->doc.getElementById("editor");
-    dist_DOMNode place;
-    static_cast<ts::Handle&>(place) = mount;
-    app->view = EditorView::create(EditorView_new_place_or_dist_DOMNode(place), props);
+    app->view = EditorView::create(EditorView_new_place_or_dist_DOMNode(Node_2(mount)), props);
     update_meta(app, app->view.state());
 
     auto toggle_mark = [app](const char* name, const char* label) {

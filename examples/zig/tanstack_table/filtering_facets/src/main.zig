@@ -14,7 +14,7 @@ var atom_count: usize = 0;
 
 fn atomGet(ctx: ?*anyopaque) tt.JsValue {
     const a: *AtomState = @ptrCast(@alignCast(ctx.?));
-    if (a.is_ro) return tt.callVoidFn(.{ .h = a.derive.h });
+    if (a.is_ro) return tt.callVoidToAnyFn(.{ .h = a.derive.h });
     _ = tt.jsRetain(a.value);
     return a.value;
 }
@@ -25,9 +25,7 @@ fn atomSet(ctx: ?*anyopaque, updater: tt.JsValue) tt.JsValue {
     a.value = next;
     return NONE;
 }
-fn noUnsub(_: ?*anyopaque) tt.JsValue {
-    return NONE;
-}
+fn noUnsub(_: ?*anyopaque) void {}
 fn atomSub(_: ?*anyopaque, _: tt.JsValue) tt.JsValue {
     const sub = tt.makeObjectMap();
     sub.setAt("unsubscribe", .{ .h = tt.void_fn.from(noUnsub, null).h });
@@ -35,7 +33,7 @@ fn atomSub(_: ?*anyopaque, _: tt.JsValue) tt.JsValue {
 }
 fn makeAtom(a: *AtomState) tt.JsValue {
     const atom = tt.makeObjectMap();
-    atom.setAt("get", .{ .h = tt.void_fn.from(atomGet, a).h });
+    atom.setAt("get", .{ .h = tt.void_to_any_fn.from(atomGet, a).h });
     if (!a.is_ro) atom.setAt("set", .{ .h = tt.Updater_fn2.from(atomSet, a).h });
     atom.setAt("subscribe", .{ .h = tt.Updater_fn2.from(atomSub, null).h });
     return .{ .h = atom.h };
@@ -47,7 +45,7 @@ fn createWritable(_: ?*anyopaque, initial: tt.JsValue, _: ?tt.TableAtomOptions) 
     _ = tt.jsRetain(initial);
     return .{ .h = makeAtom(a).h };
 }
-fn createReadonly(_: ?*anyopaque, fn_v: tt.void_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
+fn createReadonly(_: ?*anyopaque, fn_v: tt.void_to_any_fn, _: ?tt.TableAtomOptions) tt.ReadonlyAtom {
     const a = &atoms[atom_count];
     atom_count += 1;
     a.* = .{ .derive = .{ .h = fn_v.h }, .is_ro = true };
@@ -56,11 +54,11 @@ fn createReadonly(_: ?*anyopaque, fn_v: tt.void_fn, _: ?tt.TableAtomOptions) tt.
 }
 fn addSub(_: ?*anyopaque, _: tt.Subscription) void {}
 fn unmountCb(_: ?*anyopaque) void {}
-fn batchCb(_: ?*anyopaque, fn_v: tt.Column_ColumnGrouping_toggleGrouping) void {
-    tt.callColumnColumnGroupingToggleGrouping(fn_v);
+fn batchCb(_: ?*anyopaque, fn_v: tt.void_fn) void {
+    tt.callVoidFn(fn_v);
 }
-fn untrackCb(_: ?*anyopaque, fn_v: tt.void_fn) tt.JsValue {
-    return tt.callVoidFn(fn_v);
+fn untrackCb(_: ?*anyopaque, fn_v: tt.void_to_any_fn) tt.JsValue {
+    return tt.callVoidToAnyFn(fn_v);
 }
 
 fn makeReactivity() tt.TableReactivityBindings {
@@ -68,7 +66,7 @@ fn makeReactivity() tt.TableReactivityBindings {
     r.setCreateOptionsStore(false);
     r.setWrapExternalAtoms(false);
     r.setAddSubscription(tt.TableReactivityBindings_addSubscription.from(addSub, null));
-    r.setUnmount(tt.Column_ColumnGrouping_toggleGrouping.from(unmountCb, null));
+    r.setUnmount(tt.void_fn.from(unmountCb, null));
     r.setBatch(tt.fn_fn.from(batchCb, null));
     r.setSchedule(tt.fn_fn.from(batchCb, null));
     r.setUntrack(tt.TableReactivityBindings_untrack.from(untrackCb, null));

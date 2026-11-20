@@ -9,30 +9,30 @@ open type Leaflet.Globals
 
 let private mapOpts () =
     MapOptions.Create(
-        attributionControl = Some false,
-        zoomAnimation = Some false,
-        fadeAnimation = Some false,
-        markerZoomAnimation = Some false
+        attributionControl = false,
+        zoomAnimation = false,
+        fadeAnimation = false,
+        markerZoomAnimation = false
     )
 
 let private polyOpts color weight dash fillOpacity =
     let dashOpt =
         match dash with
-        | Some d -> Some (Some (StringOrNumberArray.String d))
+        | Some d -> Some (StringOrNumberArray.String d)
         | None -> None
     PolylineOptions.Create(
-        smoothFactor = Some 1.0,
-        color = Some color,
-        weight = Some weight,
+        smoothFactor = 1.0,
+        color = color,
+        weight = weight,
         ?dashArray = dashOpt,
-        fillOpacity = Some fillOpacity
+        fillOpacity = fillOpacity
     )
 
 let private toPolyPts (pts: LatLng list) =
     ResizeArray (pts |> List.map PolylineNewLatlngs.LatLng)
 
 let main () =
-    let m = map (unbox<HTMLElement> (document.getElementById "map"), mapOpts ())
+    let m = map (document.getElementById "map", mapOpts ())
 
     let hubs =
         [|
@@ -71,11 +71,11 @@ let main () =
     let nodes = layerGroup<obj> ()
     let nodeOpts =
         CircleMarkerOptions.Create(
-            radius = Some 6.0,
-            color = Some "#111111",
-            weight = Some 2.0,
-            fillColor = Some "#ffffff",
-            fillOpacity = Some 1.0
+            radius = 6.0,
+            color = "#111111",
+            weight = 2.0,
+            fillColor = "#ffffff",
+            fillOpacity = 1.0
         )
     for (name, pt) in hubs do
         let cm = circleMarker<obj> (pt, nodeOpts)

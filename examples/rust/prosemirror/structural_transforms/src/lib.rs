@@ -256,12 +256,7 @@ pub extern "C" fn start() {
                     if let Some(r) = found {
                         if let Some(wrapped) = find_wrapping(&r, &qtype, None, None) {
                             let tr = es.tr();
-                            let w = JsArray::<CanSplitTypesAfter>::from_handle({
-                                let h = wrapped.0.0;
-                                std::mem::forget(wrapped);
-                                h
-                            });
-                            tr.wrap(&r, w);
+                            tr.wrap(&r, wrapped);
                             app_c.borrow_mut().last_op = format!("Wrapped block [{}..{}] in blockquote", r.start() as usize, r.end() as usize);
                             call_transaction_fn(&view.dispatch(), &tr);
                             return;

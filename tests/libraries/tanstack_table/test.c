@@ -40,7 +40,7 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->readonly) return call_void_fn((void_fn){ a->derive.h });
+    if (a->readonly) return call_void_to_any_fn((void_to_any_fn){ a->derive.h });
     js_retain(a->value);
     return a->value;
 }
@@ -50,7 +50,7 @@ static JsValue atom_set(void* ctx, JsValue updater) {
     a->value = next;
     return NONE;
 }
-static JsValue no_unsubscribe(void* ctx) { return NONE; }
+static void no_unsubscribe(void* ctx) { (void)ctx; }
 static JsValue atom_subscribe(void* ctx, JsValue observer) {
     RowData_map subscription = makeObjectMap();
     RowData_map_set_at(subscription, "unsubscribe", (JsValue){ void_fn_from(no_unsubscribe, 0).h });
@@ -59,7 +59,7 @@ static JsValue atom_subscribe(void* ctx, JsValue observer) {
 
 static JsValue make_atom(AtomState* a) {
     RowData_map atom = makeObjectMap();
-    RowData_map_set_at(atom, "get", (JsValue){ void_fn_from(atom_get, a).h });
+    RowData_map_set_at(atom, "get", (JsValue){ void_to_any_fn_from(atom_get, a).h });
     if (!a->readonly) RowData_map_set_at(atom, "set", (JsValue){ Updater_fn2_from(atom_set, a).h });
     RowData_map_set_at(atom, "subscribe", (JsValue){ Updater_fn2_from(atom_subscribe, 0).h });
     return (JsValue){ atom.h };
@@ -71,7 +71,7 @@ static Atom create_writable(void* ctx, JsValue initial, TableAtomOptions options
     js_retain(initial);
     return (Atom){ make_atom(a).h };
 }
-static ReadonlyAtom create_readonly(void* ctx, void_fn fn, TableAtomOptions options) {
+static ReadonlyAtom create_readonly(void* ctx, void_to_any_fn fn, TableAtomOptions options) {
     AtomState* a = &atoms[atom_count++];
     a->readonly = true;
     a->derive = (JsValue){ fn.h };
@@ -80,8 +80,8 @@ static ReadonlyAtom create_readonly(void* ctx, void_fn fn, TableAtomOptions opti
 }
 static void add_subscription(void* ctx, Subscription s) {}
 static void unmount(void* ctx) {}
-static void batch(void* ctx, Column_ColumnGrouping_toggleGrouping fn) { call_Column_ColumnGrouping_toggleGrouping(fn); }
-static JsValue untrack(void* ctx, void_fn fn) { return call_void_fn(fn); }
+static void batch(void* ctx, void_fn fn) { call_void_fn(fn); }
+static JsValue untrack(void* ctx, void_to_any_fn fn) { return call_void_to_any_fn(fn); }
 
 // ---- the table ----
 
@@ -138,9 +138,9 @@ __attribute__((export_name("run"))) void run(void) {
     JsValue five = js_number(5);
     CHECK(js_to_number(functionalUpdate(five, NONE)) == 5);
     CHECK(isFunction(five) == false);
-    CHECK(isFunction((JsValue){ void_fn_from(atom_get, &atoms[255]).h }));
+    CHECK(isFunction((JsValue){ void_to_any_fn_from(atom_get, &atoms[255]).h }));
     atoms[255].value = js_number(9);
-    CHECK(js_to_number(functionalUpdate((JsValue){ void_fn_from(atom_get, &atoms[255]).h }, NONE)) == 9);
+    CHECK(js_to_number(functionalUpdate((JsValue){ void_to_any_fn_from(atom_get, &atoms[255]).h }, NONE)) == 9);
     CHECK(stateSlicesEqual(js_number(1), js_number(1)) && !stateSlicesEqual(js_number(1), js_number(2)));
     CHECK(stateSlicesEqual(sort_by("a", false), sort_by("a", false)));
     CHECK(!stateSlicesEqual(sort_by("a", false), sort_by("a", true)));
@@ -153,7 +153,7 @@ __attribute__((export_name("run"))) void run(void) {
     TableReactivityBindings_set_createOptionsStore(reactivity, true);
     TableReactivityBindings_set_wrapExternalAtoms(reactivity, false);
     TableReactivityBindings_set_addSubscription(reactivity, TableReactivityBindings_addSubscription_from(add_subscription, 0));
-    TableReactivityBindings_set_unmount(reactivity, Column_ColumnGrouping_toggleGrouping_from((Column_ColumnGrouping_toggleGrouping_fn)unmount, 0));
+    TableReactivityBindings_set_unmount(reactivity, void_fn_from(unmount, 0));
     TableReactivityBindings_set_batch(reactivity, fn_fn_from(batch, 0));
     TableReactivityBindings_set_schedule(reactivity, fn_fn_from(batch, 0));
     TableReactivityBindings_set_untrack(reactivity, TableReactivityBindings_untrack_from(untrack, 0));

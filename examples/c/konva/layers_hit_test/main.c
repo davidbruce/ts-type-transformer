@@ -139,8 +139,7 @@ __attribute__((export_name("start"))) void start(void) {
     char hit_buf[64];
     if (hit.h != 0) {
         JsString hid = js_to_string(GetSet_invoke(Node_2_get_id(hit)));
-        uint32_t n = JsString_copy(hid, hit_buf, sizeof(hit_buf) - 1);
-        hit_buf[n] = '\0';
+        JsString_copy(hid, hit_buf, sizeof(hit_buf));
     } else {
         append_cstr(hit_buf, 0, sizeof(hit_buf), "none");
     }

@@ -71,7 +71,7 @@ bus.emit (U2.Case1 "stage", box "verify") |> ignore
 bus.emit (U2.Case1 "done", box combText.Length) |> ignore
 check (stages = 3 && doneCount = 1) "pipeline completion events"
 
-let rm = Fs.RmOptions.Create(recursive = Some true, force = Some true)
+let rm = Fs.RmOptions.Create(recursive = true, force = true)
 Fs.rmSync (root, rm)
 check (not (Fs.existsSync root)) "pipeline workspace removed"
 

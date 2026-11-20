@@ -34,8 +34,8 @@ let main () =
         let canvas = unbox<HTMLCanvasElement> (document.getElementById "canvas")
         let ctx = canvas.getContext_2d ()
         let metaEl = document.getElementById "meta"
-        let gravBtn = unbox<HTMLElement> (document.getElementById "btn-gravity")
-        let pauseBtn = unbox<HTMLElement> (document.getElementById "btn-pause")
+        let gravBtn = document.getElementById "btn-gravity"
+        let pauseBtn = document.getElementById "btn-pause"
 
         let mutable earthGravity = true
         let mutable paused = false
@@ -185,7 +185,7 @@ let main () =
         render ()
 
         let wireClick (id: string) (fn: unit -> unit) =
-            let b = unbox<HTMLElement> (document.getElementById id)
+            let b = document.getElementById id
             b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
         wireClick "btn-gravity" (fun () ->

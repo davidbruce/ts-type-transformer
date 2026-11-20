@@ -66,7 +66,7 @@ let private table = constructTable<TableFeatures, obj> options
 let private pag = unbox<Table_RowPagination<TableFeatures, obj>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = unbox<HTMLElement> (document.getElementById id)
+    let btn = document.getElementById id
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render () =
@@ -84,13 +84,13 @@ let private render () =
         sb.Add (sprintf "<td class=\"num\">%.0f</td>" amount)
         sb.Add "</tr>"
     sb.Add "</tbody></table>"
-    let wrap = unbox<HTMLElement> (document.getElementById "table-wrap")
+    let wrap = document.getElementById "table-wrap"
     wrap.innerHTML <- String.concat "" sb
     let state: obj = (box table.store)?get ()
     let pg: PaginationState = unbox state?pagination
     let pageCount = int (pag.getPageCount ())
     let total = table.getCoreRowModel().rows.Count
-    let meta = unbox<HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <- sprintf "Page %d / %d · pageSize %.0f · showing %d of %d rows" (int pg.pageIndex + 1) pageCount pg.pageSize rows.Count total
 
 let main () =

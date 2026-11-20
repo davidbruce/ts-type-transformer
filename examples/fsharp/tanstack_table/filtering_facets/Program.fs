@@ -88,7 +88,7 @@ let private colFilt = unbox<Table_ColumnFiltering> table
 let private globFilt = unbox<Table_GlobalFiltering<TableFeatures, obj>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = unbox<HTMLElement> (document.getElementById id)
+    let btn = document.getElementById id
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render (label: string) =
@@ -107,10 +107,10 @@ let private render (label: string) =
         sb.Add (sprintf "<td class=\"num\">%.0f</td>" errs)
         sb.Add "</tr>"
     sb.Add "</tbody></table>"
-    let wrap = unbox<HTMLElement> (document.getElementById "table-wrap")
+    let wrap = document.getElementById "table-wrap"
     wrap.innerHTML <- String.concat "" sb
     let total = table.getCoreRowModel().rows.Count
-    let meta = unbox<HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <- sprintf "%s · showing %d / %d services" label rows.Count total
 
 let main () =

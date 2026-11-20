@@ -6,6 +6,7 @@ import gleam/int
 import gleam/option.{None, Some}
 import three/areas/main/ambient_light
 import three/areas/main/box_geometry
+import three/areas/main/buffer_geometry
 import three/areas/main/color
 import three/areas/main/directional_light
 import three/areas/main/edges_geometry
@@ -134,11 +135,11 @@ pub fn main() {
   line_basic_material_parameters.set_color(lmp, Some(t.ColorRepresentationNumber(1_118_481.0)))
   let line_mat = line_basic_material.new(Some(lmp))
 
-  add_solid(sc, wire_grp, coerce(box_geometry.new(Some(1.45), Some(1.45), Some(1.45), None, None, None)), 2_500_134.0, 0.65, 0.1, False, -3.2, 0.0, -0.6, 1.0, line_mat)
-  add_solid(sc, wire_grp, coerce(icosahedron_geometry.new(Some(0.95), Some(0.0))), 13_948_116.0, 0.55, 0.08, True, -1.55, 0.1, 0.55, 1.0, line_mat)
-  add_solid(sc, wire_grp, coerce(torus_knot_geometry.new(Some(0.72), Some(0.24), Some(96.0), Some(16.0), None, None)), 7_566_195.0, 0.45, 0.15, False, 0.0, 0.25, -0.2, 24.0, line_mat)
-  add_solid(sc, wire_grp, coerce(octahedron_geometry.new(Some(0.95), Some(0.0))), 15_724_527.0, 0.5, 0.05, True, 1.6, 0.1, 0.55, 1.0, line_mat)
-  add_solid(sc, wire_grp, coerce(torus_geometry.new(Some(0.72), Some(0.23), Some(16.0), Some(48.0), None, None, None)), 4_210_752.0, 0.55, 0.12, False, 3.2, 0.05, -0.5, 22.0, line_mat)
+  add_solid(sc, wire_grp, buffer_geometry.upcast(box_geometry.new(Some(1.45), Some(1.45), Some(1.45), None, None, None)), 2_500_134.0, 0.65, 0.1, False, -3.2, 0.0, -0.6, 1.0, line_mat)
+  add_solid(sc, wire_grp, buffer_geometry.upcast(icosahedron_geometry.new(Some(0.95), Some(0.0))), 13_948_116.0, 0.55, 0.08, True, -1.55, 0.1, 0.55, 1.0, line_mat)
+  add_solid(sc, wire_grp, buffer_geometry.upcast(torus_knot_geometry.new(Some(0.72), Some(0.24), Some(96.0), Some(16.0), None, None)), 7_566_195.0, 0.45, 0.15, False, 0.0, 0.25, -0.2, 24.0, line_mat)
+  add_solid(sc, wire_grp, buffer_geometry.upcast(octahedron_geometry.new(Some(0.95), Some(0.0))), 15_724_527.0, 0.5, 0.05, True, 1.6, 0.1, 0.55, 1.0, line_mat)
+  add_solid(sc, wire_grp, buffer_geometry.upcast(torus_geometry.new(Some(0.72), Some(0.23), Some(16.0), Some(48.0), None, None, None)), 4_210_752.0, 0.55, 0.12, False, 3.2, 0.05, -0.5, 22.0, line_mat)
 
   let assert Some(wire_btn) = document.get_element_by_id(doc, "btn-wire")
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")

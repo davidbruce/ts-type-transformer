@@ -87,7 +87,7 @@ let private grp = unbox<Table_ColumnGrouping<TableFeatures, obj>> table
 let private exp = unbox<Table_RowExpanding<TableFeatures, obj>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = unbox<HTMLElement> (document.getElementById id)
+    let btn = document.getElementById id
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render () =
@@ -115,9 +115,9 @@ let private render () =
             sb.Add (sprintf "<tr><td class=\"child-indent\">%s</td><td>%s</td><td>%s</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td></tr>"
                 (escapeHtml (r.getValue<string> "host")) (escapeHtml (r.getValue<string> "region")) (escapeHtml (r.getValue<string> "role")) cpu mem nodes)
     sb.Add "</tbody></table>"
-    let wrap = unbox<HTMLElement> (document.getElementById "table-wrap")
+    let wrap = document.getElementById "table-wrap"
     wrap.innerHTML <- String.concat "" sb
-    let meta = unbox<HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <- sprintf "Grouped by %s · %d groups · %d visible rows" grpCol groupCount rows.Count
 
 let main () =

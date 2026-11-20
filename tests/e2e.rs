@@ -221,7 +221,7 @@ fn write_fsharp(c: &Case, bindings: &generators::fsharp::Output) {
     .unwrap();
 }
 
-const CLANG_WASM: &[&str] = &["--target=wasm32", "-std=c11", "-pedantic", "-nostdlib", "-ffreestanding", "-O1", "-Wall", "-Werror", "-Wl,--no-entry", "-Wl,--allow-undefined", "-Wl,--export-table"];
+const CLANG_WASM: &[&str] = &["--target=wasm32", "-std=c11", "-pedantic", "-nostdlib", "-ffreestanding", "-O1", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Werror", "-Wl,--no-entry", "-Wl,--allow-undefined", "-Wl,--export-table"];
 const ZIG_WASM: &[&str] = &["build-exe", "test.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic", "--export-table", "-O", "ReleaseSmall"];
 
 fn c(fixture: &str) {
@@ -264,7 +264,7 @@ fn wasi_clang() -> Option<PathBuf> {
 
 // No `--allow-undefined`: the imports are declared as such, and anything else
 // missing is a link error rather than an import that fails when the page loads.
-const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Werror", "-Wl,--export-table", "-Wl,--strip-debug"];
+const CLANGXX_WASM: &[&str] = &["--target=wasm32-wasip1", "-mexec-model=reactor", "-std=c++20", "-fno-exceptions", "-O1", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Werror", "-Wl,--export-table", "-Wl,--strip-debug"];
 
 // Writes the C++ bindings, compiles their definitions once, each module in
 // parallel, and links them with the program.

@@ -25,7 +25,8 @@ static void sb_int(StrBuf* s, int val) {
 }
 static void sb_js(StrBuf* s, JsString js) {
     char tmp[128];
-    uint32_t len = JsString_copy(js, tmp, sizeof tmp - 1);
+    uint32_t len = JsString_copy(js, tmp, sizeof tmp);
+    if (len >= sizeof tmp) len = sizeof tmp - 1;
     for (uint32_t i = 0; i < len && s->pos < 16380; i++) s->buf[s->pos++] = tmp[i];
     js_release(js);
 }
@@ -260,10 +261,10 @@ static void on_click(void* ctx, PointerEvent ev) {
             }
         }
         if (range.h != 0) {
-            JsArray_findWrapping_result wrappers = findWrapping(range, quote_type, (Attrs){ 0 });
+            JsArray_canSplit_typesAfter wrappers = findWrapping(range, quote_type, (Attrs){ 0 });
             if (wrappers.h != 0) {
                 Transaction tr = EditorState_get_tr(st);
-                Transform_wrap(tr, range, (JsArray_canSplit_typesAfter){ wrappers.h });
+                Transform_wrap(tr, range, wrappers);
                 g_last_op = "Wrapped paragraph block in blockquote";
                 call_Transaction_fn(EditorView_get_dispatch(g_view), tr);
                 return;
@@ -330,7 +331,7 @@ __attribute__((export_name("start"))) void start(void) {
     DirectEditorProps_set_dispatchTransaction(props, Transaction_fn_from(on_dispatch, 0));
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = EditorView_new((dist_DOMNode){ mount.h }, props);
+    g_view = EditorView_new(AS_Node(mount), props);
     js_retain(g_view);
     update_meta(EditorState_get_doc(EditorView_get_state(g_view)));
 

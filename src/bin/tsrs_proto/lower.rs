@@ -557,6 +557,8 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
 // generator can tell which one a value is: `typeof:string`, `array`,
 // `instanceof:HTMLElement`, `has:once`, or `tag:circle` when one property
 // (`discriminant`) tells them all apart.
+type PropShapes = Vec<(String, bool, Option<String>)>;
+
 fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
     // An enum's values are all strings, or all numbers: that tells it apart.
     fn enums(decls: &[Decl], out: &mut HashMap<String, &'static str>) {
@@ -581,7 +583,7 @@ fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
     };
     walk(decls, &mut |t, _| {
         let Type::Union(parts) = t else { return true };
-        let shapes: Vec<Option<Vec<(String, bool, Option<String>)>>> = parts.iter().map(|p| front.object_shape(p)).collect();
+        let shapes: Vec<Option<PropShapes>> = parts.iter().map(|p| front.object_shape(p)).collect();
         let discriminant = discriminant_of(&shapes);
         let tests: Vec<Option<Test>> = parts
             .iter()
@@ -605,8 +607,8 @@ fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
 }
 
 // A property every member has, required, with a different literal value in each.
-fn discriminant_of(shapes: &[Option<Vec<(String, bool, Option<String>)>>]) -> Option<String> {
-    let shapes: Vec<&Vec<(String, bool, Option<String>)>> = shapes.iter().map(|s| s.as_ref()).collect::<Option<_>>()?;
+fn discriminant_of(shapes: &[Option<PropShapes>]) -> Option<String> {
+    let shapes: Vec<&PropShapes> = shapes.iter().map(|s| s.as_ref()).collect::<Option<_>>()?;
     let first = shapes.first()?;
     first.iter().map(|f| &f.0).find(|name| {
         let mut values = HashSet::new();
@@ -615,7 +617,7 @@ fn discriminant_of(shapes: &[Option<Vec<(String, bool, Option<String>)>>]) -> Op
 }
 
 // A required property of member `i` that no other member has.
-fn unique_property(shapes: &[Option<Vec<(String, bool, Option<String>)>>], i: usize) -> Option<String> {
+fn unique_property(shapes: &[Option<PropShapes>], i: usize) -> Option<String> {
     let own = shapes[i].as_ref()?;
     own.iter()
         .filter(|f| !f.1)
@@ -807,7 +809,7 @@ fn arm_names(parts: &[Type]) -> Vec<Option<String>> {
         return vec![None; parts.len()];
     }
     let props = |ms: &Vec<Member>| ms.iter().filter(|m| m.kind == MemberKind::Property).map(|m| (m.name.clone(), m.optional, m.constant.clone())).collect::<Vec<_>>();
-    let shapes: Vec<Option<Vec<(String, bool, Option<String>)>>> = objects.iter().map(|o| o.map(props)).collect();
+    let shapes: Vec<Option<PropShapes>> = objects.iter().map(|o| o.map(props)).collect();
     // The property most of them fix, if two do.
     let mut fixed: Vec<(String, usize)> = Vec::new();
     for f in shapes.iter().flatten().flatten().filter(|f| f.2.is_some()) {
@@ -1079,6 +1081,8 @@ fn flatten(front: &mut Front, decls: &mut [Decl]) {
 // has every required property of a pure-property interface (like Three's
 // `Vector3` and `Vector3Like`, or Pixi's `Point` and `PointData`), record it
 // as an inherited interface so nominal targets allow the conversion.
+type ClassShape = (HashMap<String, (bool, bool, Type)>, HashSet<String>, HashSet<String>);
+
 fn structural_extends(decls: &mut [Decl], flattened: bool) {
     fn type_eq(a: &Type, b: &Type) -> bool {
         match (a, b) {
@@ -1141,7 +1145,7 @@ fn structural_extends(decls: &mut [Decl], flattened: bool) {
     }
 
     // Collect effective properties, methods, and nominal ancestors of each class in this scope.
-    let collect_class = |idx: usize| -> (HashMap<String, (bool, bool, Type)>, HashSet<String>, HashSet<String>) {
+    let collect_class = |idx: usize| -> ClassShape {
         let mut props: HashMap<String, (bool, bool, Type)> = HashMap::new();
         let mut methods: HashSet<String> = HashSet::new();
         let mut bases: HashSet<String> = HashSet::new();
@@ -2383,12 +2387,21 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         let mut best: HashMap<String, Vec<String>> = HashMap::new();
         let mut order: Vec<String> = Vec::new();
         let mut sample: HashMap<String, Type> = HashMap::new();
+        let mut opt_members: HashMap<String, HashSet<String>> = HashMap::new();
         walk(&mut decls[start..], &mut |t, path| {
             if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
                 *uses.entry(hoist_key(t)).or_default() += 1;
             }
             if matches!(t, Type::Object(_) | Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
                 let key = hoist_key(t);
+                if let Type::Object(ms) = t {
+                    let entry = opt_members.entry(key.clone()).or_default();
+                    for m in ms {
+                        if m.optional && m.ty.as_ref().is_some_and(|ty| matches!(ty, Type::Nullable(..))) {
+                            entry.insert(m.name.clone());
+                        }
+                    }
+                }
                 if !sample.contains_key(&key) {
                     order.push(key.clone());
                     sample.insert(key.clone(), t.clone());
@@ -2427,15 +2440,15 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
             }
             let key = hoist_key(t);
             let (name, args) = by_key
-                .entry(key)
+                .entry(key.clone())
                 .or_insert_with(|| {
-                    let shared = uses.get(&hoist_key(t)).is_some_and(|n| *n > 1);
-                    let mut at = best.get(&hoist_key(t)).map_or_else(|| path.join(sep), |p| p.join(sep));
-                    if let Some(w) = apart.get(&hoist_key(t)) {
+                    let shared = uses.get(&key).is_some_and(|n| *n > 1);
+                    let mut at = best.get(&key).map_or_else(|| path.join(sep), |p| p.join(sep));
+                    if let Some(w) = apart.get(&key) {
                         at = format!("{at}{sep}{w}");
                     // Its declaration's name only, which that has (`type ExpandedState
                     // = true | Record<string, boolean>`): by what it is.
-                    } else if best.get(&hoist_key(t)).map_or(path.len(), Vec::len) == 1 && names.contains(&at) {
+                    } else if best.get(&key).map_or(path.len(), Vec::len) == 1 && names.contains(&at) {
                         at = format!("{at}{sep}{}", kind_word(t));
                     }
                     // A shared callback by what it takes, if that is short; else where it is first.
@@ -2452,9 +2465,18 @@ fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let args = free.into_iter().map(Type::Ref).collect();
                     let body = std::mem::replace(t, Type::This);
                     added.push(match body {
-                        Type::Object(members) => Decl::Interface(Interface {
-                            name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], ancestor_syms: vec![], members, class: None, synthetic: true, js_name: None,
-                        }),
+                        Type::Object(mut members) => {
+                            if let Some(opts) = opt_members.get(&key) {
+                                for m in &mut members {
+                                    if !m.optional && opts.contains(&m.name) && m.ty.as_ref().is_some_and(|ty| matches!(ty, Type::Nullable(..))) {
+                                        m.optional = true;
+                                    }
+                                }
+                            }
+                            Decl::Interface(Interface {
+                                name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], ancestor_syms: vec![], members, class: None, synthetic: true, js_name: None,
+                            })
+                        }
                         ty => Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty, computed: false, synthetic: true }),
                     });
                     (name, args)
@@ -2613,12 +2635,20 @@ fn differences(first: &Type, t: &Type, sep: &str) -> Vec<String> {
     out
 }
 
-// An inline type's key when hoisted: one `any` is another, whyever erased.
+// An inline type's key when hoisted: one `any` is another, whyever erased,
+// and an already-nullable property (`attrs: Attrs | null` vs `attrs?: Attrs | null`)
+// is treated as optional in the key so identical shapes share one struct.
 fn hoist_key(t: &Type) -> String {
     let mut t = t.clone();
     visit(&mut t, &mut |x| {
         if matches!(x, Type::Erased(_)) {
             *x = Type::prim("any");
+        } else if let Type::Object(members) = x {
+            for m in members {
+                if !m.optional && m.ty.as_ref().is_some_and(|ty| matches!(ty, Type::Nullable(..))) {
+                    m.optional = true;
+                }
+            }
         }
         true
     });
@@ -2630,10 +2660,15 @@ fn hoist_key(t: &Type) -> String {
 // few words to say it.
 fn callback_name(s: &Signature, sep: &str) -> Option<String> {
     let mut parts: Vec<String> = s.this.iter().chain(s.params.iter().map(|p| &p.ty)).map(describe).collect::<Option<_>>()?;
-    if parts.is_empty() {
+    let no_params = parts.is_empty();
+    if no_params {
         parts.push("void".into());
     }
-    let says_nothing = |t: &Type| matches!(t, Type::Erased(_)) || matches!(t, Type::Primitive(p) if matches!(p.as_str(), "void" | "undefined" | "any" | "unknown"));
+    let says_nothing = |t: &Type| {
+        !no_params
+            && (matches!(t, Type::Erased(_)) || matches!(t, Type::Primitive(p) if matches!(p.as_str(), "void" | "undefined" | "any" | "unknown")))
+            || no_params && matches!(t, Type::Primitive(p) if matches!(p.as_str(), "void" | "undefined"))
+    };
     if let Some(ret) = s.ret.as_ref().filter(|r| !says_nothing(r)) {
         parts.push("to".into());
         parts.push(describe(ret)?);

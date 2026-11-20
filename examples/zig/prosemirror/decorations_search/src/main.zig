@@ -263,7 +263,7 @@ export fn start() void {
     props.setDispatchTransaction(pm.Transaction_fn.from(onDispatch, null));
 
     const mount = g_doc.getElementById("editor").?;
-    g_view = view_mod.EditorView.new(.{ .dist_DOMNode = .{ .h = mount.h } }, props);
+    g_view = view_mod.EditorView.new(.{ .Node_2 = mount.asNode() }, props);
     _ = pm.jsRetain(g_view);
     syncMeta(g_view.getState());
 

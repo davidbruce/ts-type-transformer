@@ -6,8 +6,8 @@ open type Dom.Globals
 open Echarts
 open type Echarts.Globals
 
-let private radar = init (unbox<HTMLElement> (document.getElementById "chart-radar"))
-let private gauge = init (unbox<HTMLElement> (document.getElementById "chart-gauge"))
+let private radar = init (document.getElementById "chart-radar")
+let private gauge = init (document.getElementById "chart-gauge")
 
 let private radarOpt = createEmpty<EChartsCoreOption>
 radarOpt?animation <- false

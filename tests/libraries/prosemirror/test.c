@@ -238,7 +238,7 @@ __attribute__((export_name("run"))) void run(void) {
     DirectEditorProps props = DirectEditorProps_create();
     DirectEditorProps_set_state(props, view_state);
     DirectEditorProps_set_dispatchTransaction(props, Transaction_fn_from(on_dispatch, 0));
-    view = EditorView_new((dist_DOMNode){ element("stage").h }, props);
+    view = EditorView_new((Node_2){ element("stage").h }, props);
     CHECK(view.h != 0 && !EditorView_get_isDestroyed(view));
     CHECK(EditorView_get_editable(view));
     CHECK(EditorView_get_dom(view).h != 0);

@@ -235,9 +235,7 @@ extern "C" __attribute__((export_name("start"))) void start() {
     }));
 
     dom::HTMLElement mount = *app->doc.getElementById("editor");
-    dist_DOMNode place;
-    static_cast<ts::Handle&>(place) = mount;
-    app->view = EditorView::create(EditorView_new_place_or_dist_DOMNode(place), props);
+    app->view = EditorView::create(EditorView_new_place_or_dist_DOMNode(Node_2(mount)), props);
     sync_meta(app, app->view.state());
 
     const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };

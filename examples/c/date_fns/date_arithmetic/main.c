@@ -43,8 +43,7 @@ static void format_signed(int32_t v, char* buf, uint32_t cap) {
 static void add_op_row(Document doc, HTMLElement tbody, const char* op_name, Date res, Date base_d, const char* fmt, bool release_res) {
     static char out_buf[64];
     JsString s = formatDate_with_Date(res, fmt, (FormatDateOptions){ 0 });
-    uint32_t n = JsString_copy(s, out_buf, sizeof(out_buf) - 1);
-    out_buf[n] = '\0';
+    JsString_copy(s, out_buf, sizeof(out_buf));
     js_release(s);
 
     int32_t dd = (int32_t)differenceInCalendarDays_with_Date_and_Date(res, base_d, (DifferenceInCalendarDaysOptions){ 0 });
@@ -125,15 +124,13 @@ __attribute__((export_name("start"))) void start(void) {
 
     char dur_buf[64];
     JsString d_words = formatDuration(dur);
-    uint32_t dn = JsString_copy(d_words, dur_buf, sizeof(dur_buf) - 1);
-    dur_buf[dn] = '\0';
+    JsString_copy(d_words, dur_buf, sizeof(dur_buf));
     js_release(d_words);
     add_kv(doc, srow, "formatDuration(dur)", dur_buf);
 
     char iso_buf[64];
     JsString d_iso = formatISODuration(dur);
-    uint32_t in_len = JsString_copy(d_iso, iso_buf, sizeof(iso_buf) - 1);
-    iso_buf[in_len] = '\0';
+    JsString_copy(d_iso, iso_buf, sizeof(iso_buf));
     js_release(d_iso);
     add_kv(doc, srow, "formatISODuration(dur)", iso_buf);
 

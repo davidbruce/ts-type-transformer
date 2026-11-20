@@ -32,9 +32,6 @@ import prosemirror/areas/prosemirror_view/editor_view
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
-@external(javascript, "./app_ffi.mjs", "coerce")
-fn coerce(a: a) -> b
-
 @external(javascript, "./app_ffi.mjs", "newCell")
 fn new_cell(v: a) -> Dynamic
 
@@ -356,7 +353,7 @@ pub fn main() {
         case prosemirror_transform.find_wrapping(r, qtype, None, None) {
           Some(wrapped) -> {
             let tr = editor_state.get_tr(st)
-            let _ = transform.wrap(tr, r, list.map(wrapped, coerce))
+            let _ = transform.wrap(tr, r, wrapped)
             set_cell(op_c, "Wrapped block [" <> int.to_string(float.round(node_range.get_start(r))) <> ".." <> int.to_string(float.round(node_range.get_end(r))) <> "] in blockquote")
             editor_view.get_dispatch(view)(tr)
           }

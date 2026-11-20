@@ -8,14 +8,14 @@ open type Leaflet.Globals
 
 let private mapOpts () =
     MapOptions.Create(
-        attributionControl = Some false,
-        zoomAnimation = Some false,
-        fadeAnimation = Some false,
-        markerZoomAnimation = Some false
+        attributionControl = false,
+        zoomAnimation = false,
+        fadeAnimation = false,
+        markerZoomAnimation = false
     )
 
 let main () =
-    let m = map (unbox<HTMLElement> (document.getElementById "map"), mapOpts ())
+    let m = map (document.getElementById "map", mapOpts ())
     let zurich = latLng (47.3769, 8.5417)
     m.setView (LatLngExpression.LatLng zurich, 8.0) |> ignore
 
@@ -31,11 +31,11 @@ let main () =
     for (r, stroke, fill, op) in rings do
         let cOpts =
             CircleMarkerOptions.Create(
-                radius = Some r,
-                color = Some stroke,
-                weight = Some 1.5,
-                fillColor = Some fill,
-                fillOpacity = Some op
+                radius = r,
+                color = stroke,
+                weight = 1.5,
+                fillColor = fill,
+                fillOpacity = op
             )
         let c = circle<obj>(zurich, r, cOpts)
         c.addTo (MapOrLayerGroup.Map m) |> ignore
@@ -55,23 +55,23 @@ let main () =
         totalDistKm <- totalDistKm + zurich.distanceTo (LatLngExpression.LatLng pt) / 1000.0
         let bRingOpts =
             CircleMarkerOptions.Create(
-                radius = Some 18000.0,
-                color = Some "#555555",
-                weight = Some 1.2,
-                dashArray = Some (StringOrNumberArray.String "3 3"),
-                fillColor = Some "#737373",
-                fillOpacity = Some 0.18
+                radius = 18000.0,
+                color = "#555555",
+                weight = 1.2,
+                dashArray = StringOrNumberArray.String "3 3",
+                fillColor = "#737373",
+                fillOpacity = 0.18
             )
         circle<obj>(pt, 18000.0, bRingOpts).addTo (MapOrLayerGroup.Map m)
         |> ignore
         circleMarker<obj>(
             pt,
             CircleMarkerOptions.Create(
-                radius = Some 4.5,
-                color = Some "#111111",
-                weight = Some 1.5,
-                fillColor = Some "#111111",
-                fillOpacity = Some 1.0
+                radius = 4.5,
+                color = "#111111",
+                weight = 1.5,
+                fillColor = "#111111",
+                fillOpacity = 1.0
             )
         ).addTo (MapOrLayerGroup.Map m)
         |> ignore

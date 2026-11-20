@@ -438,6 +438,7 @@ struct Function {
 
 // `owner` is the class as written in a definition (`Box<T>`), with its template
 // head (`template <class T>`).
+#[allow(clippy::too_many_arguments)]
 fn function(f: &Func, name: String, owner: &str, owner_head: &str, place: Place, unions: &[NamedUnion], wasm_module: &str, raw_prefix: &str) -> Function {
     let mut raw_params: Vec<&str> = Vec::new();
     let mut args: Vec<String> = Vec::new();
@@ -1057,12 +1058,15 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
 
     let unions = &m.unions;
     DECODABLE.with(|d| *d.borrow_mut() = unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect());
-    let resolved_opaque: HashMap<String, usize> = m
+    let resolved_opaque: HashMap<String, (usize, String)> = m
         .opaque
         .iter()
         .filter(|n| !is_builtin_cpp_type(n))
         .filter(|n| m.opaque_arity.get(*n).copied().unwrap_or(0) == 0)
-        .filter_map(|n| refs.iter().enumerate().find(|(_, r)| r.types.contains(n.as_str())).map(|(i, _)| (n.clone(), i)))
+        .filter_map(|n| {
+            let orig = m.opaque_names.get(n).map(String::as_str).unwrap_or(n.as_str());
+            refs.iter().enumerate().find(|(_, r)| r.types.contains(orig)).map(|(i, _)| ((*n).clone(), (i, orig.to_string())))
+        })
         .collect();
     RESOLVED_REF.with(|r| *r.borrow_mut() = resolved_opaque.keys().cloned().collect());
     // A constructor is named as its class, and hides nothing.
@@ -1539,7 +1543,7 @@ fn fnv1a_hex(s: &str) -> String {
     format!("{h:016x}")
 }
 
-fn decoder_guard_id(u: &NamedUnion, m: &Model, pkg_name: &str, resolved_opaque: &HashMap<String, usize>, refs: &[ProjectRef]) -> String {
+fn decoder_guard_id(u: &NamedUnion, m: &Model, pkg_name: &str, resolved_opaque: &HashMap<String, (usize, String)>, refs: &[ProjectRef]) -> String {
     let unions = &m.unions;
     let aliases: HashMap<&str, String> = unions
         .iter()
@@ -1588,8 +1592,8 @@ fn decoder_guard_id(u: &NamedUnion, m: &Model, pkg_name: &str, resolved_opaque: 
             let is_std = matches!(tok, "std" | "variant" | "string" | "optional" | "double" | "bool" | "ts" | "Array" | "Tuple" | "Value" | "Promise" | "PromiseLike");
             if preceded_by_colon || is_std {
                 canonical.push_str(tok);
-            } else if let Some(&idx) = resolved_opaque.get(tok) {
-                canonical += &format!("::{}::{tok}", refs[idx].pkg_name);
+            } else if let Some((idx, orig)) = resolved_opaque.get(tok) {
+                canonical += &format!("::{}::{orig}", refs[*idx].pkg_name);
             } else if pkg_name != "bindings" && local_types.contains(tok) {
                 canonical += &format!("::{pkg_name}::{tok}");
             } else {
@@ -1613,13 +1617,13 @@ fn union_type(u: &NamedUnion) -> String {
 // `ts_types.hpp`: every type declared, so a struct may name any of them
 // before it is defined. A template comes after what its defaults and
 // constraints name.
-fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque: &HashMap<String, usize>) -> String {
+fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque: &HashMap<String, (usize, String)>) -> String {
     let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
     let raw_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}_") };
     let ns: Option<&str> = (pkg_name != "bindings").then_some(pkg_name);
     let ns_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}::") };
     let inc_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}/") };
-    let used_refs: BTreeSet<usize> = resolved_opaque.values().copied().collect();
+    let used_refs: BTreeSet<usize> = resolved_opaque.values().map(|(i, _)| *i).collect();
 
     let unions = &m.unions;
     let mut types = format!("// Generated.\n#pragma once\n#include \"{inc_prefix}ts_runtime.hpp\"\n");
@@ -1733,8 +1737,8 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque:
         types += &format!("template <class T = void>\nusing {name} = ts::Promise<T>;\n");
     }
     for name in m.opaque.iter().filter(|n| !matches!(n.as_str(), "Promise" | "PromiseLike")) {
-        if let Some(&idx) = resolved_opaque.get(name) {
-            types += &format!("using {name} = ::{}::{name};\n", refs[idx].pkg_name);
+        if let Some((idx, orig)) = resolved_opaque.get(name) {
+            types += &format!("using {name} = ::{}::{orig};\n", refs[*idx].pkg_name);
             continue;
         }
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);

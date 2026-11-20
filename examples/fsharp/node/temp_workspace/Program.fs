@@ -38,7 +38,7 @@ check (archBuf.toString () = text) "archive matches notes"
 Fs.unlinkSync archive
 check (not (Fs.existsSync archive)) "unlinkSync"
 
-let rm = Fs.RmOptions.Create(recursive = Some true, force = Some true)
+let rm = Fs.RmOptions.Create(recursive = true, force = true)
 Fs.rmSync (dir, rm)
 check (not (Fs.existsSync dir)) "rmSync recursive"
 check (true) "workspace cleanup verified"

@@ -514,6 +514,7 @@ impl<'m> Gen<'m> {
     }
 
     // A JavaScript expression that is `x`, Gleam's value, as JavaScript has it.
+    #[allow(clippy::wrong_self_convention)]
     fn from_gleam(&self, t: &Ty, x: &str) -> String {
         match t {
             Ty::Param(n) if self.bound.borrow().contains_key(n) => x.to_string(),
@@ -766,14 +767,21 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     // Each area's modules: `areas/main` is `bindings/areas/main` (its
     // functions) and `bindings/types/areas_main` (its classes).
     let mut resolved_opaque: HashMap<String, usize> = HashMap::new();
+    let mut ref_aliases: HashMap<String, (String, String)> = HashMap::new();
     for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike") {
         let gname = g.tname(o);
+        let orig = m.opaque_names.get(o).map(String::as_str).unwrap_or(o.as_str());
+        let ref_gname = upper(orig);
         if m.opaque_arity.get(o).copied().unwrap_or(0) == 0 {
             for (idx, r) in refs.iter().enumerate() {
-                if r.classes.contains(&gname) {
+                if r.classes.contains(&ref_gname) {
+                    let mod_path = format!("{}/types", r.package_name);
                     resolved_opaque.insert(o.clone(), idx);
                     g.classes.insert(o.clone(), 0);
-                    g.home.insert(gname.clone(), format!("{}/types", r.package_name));
+                    g.home.insert(gname.clone(), mod_path.clone());
+                    if gname != ref_gname {
+                        ref_aliases.insert(gname.clone(), (mod_path, ref_gname));
+                    }
                     break;
                 }
             }
@@ -1292,7 +1300,16 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
                 } else {
                     ""
                 };
-                format!("import {module}.{{{}}}{suffix}\n", ts.iter().map(|t| format!("type {t}")).collect::<Vec<_>>().join(", "))
+                format!(
+                    "import {module}.{{{}}}{suffix}\n",
+                    ts.iter()
+                        .map(|t| match ref_aliases.get(*t) {
+                            Some((ref_mod, orig)) if ref_mod == module => format!("type {orig} as {t}"),
+                            _ => format!("type {t}"),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             })
             .collect();
         files.push((format!("{path}.gleam"), format!("// Generated. Bindings for Gleam's JavaScript target.\n{imports}\n{}", unit.out)));

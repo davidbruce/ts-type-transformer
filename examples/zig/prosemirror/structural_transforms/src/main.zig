@@ -248,7 +248,7 @@ fn onClick(ctx: ?*anyopaque, _: dom.PointerEvent) void {
         if (found) |r| {
             if (tr_mod.findWrapping(r, qtype, null, .{})) |wrapped| {
                 const tr = st.getTr();
-                _ = tr.asTransform().wrap(r, .{ .h = wrapped.h });
+                _ = tr.asTransform().wrap(r, wrapped);
                 g_last_op = "Wrapped paragraph block in blockquote";
                 pm.callTransactionFn(g_view.getDispatch(), tr);
                 return;
@@ -312,7 +312,7 @@ export fn start() void {
     props.setDispatchTransaction(pm.Transaction_fn.from(onDispatch, null));
 
     const mount = g_doc.getElementById("editor").?;
-    g_view = view_mod.EditorView.new(.{ .dist_DOMNode = .{ .h = mount.h } }, props);
+    g_view = view_mod.EditorView.new(.{ .Node_2 = mount.asNode() }, props);
     _ = pm.jsRetain(g_view);
     updateMeta(g_view.getState().getDoc());
 

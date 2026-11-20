@@ -166,7 +166,7 @@ pub fn main() {
     atom(runtime.dynamic(compute), None) |> readonly_atom_of
   })
   reactivity.set_untrack(bindings, fn(f) { table.call_void_to_t_fn(f, runtime.codec_dynamic()) })
-  let run_it = fn(f) { table.call_column_column_grouping_toggle_grouping(f) }
+  let run_it = fn(f) { table.call_void_fn(f) }
   reactivity.set_batch(bindings, run_it)
   reactivity.set_schedule(bindings, run_it)
   reactivity.set_add_subscription(bindings, fn(_) { Nil })

@@ -54,7 +54,7 @@ check (dirCount = 4) "dir count = 4"
 check (fileCount = 4) "file count = 4"
 check (totalBytes = 75.0) "total bytes = 75"
 
-let rm = Fs.RmOptions.Create(recursive = Some true, force = Some true)
+let rm = Fs.RmOptions.Create(recursive = true, force = true)
 Fs.rmSync (root, rm)
 check (not (Fs.existsSync root)) "tree cleaned up"
 check (dirCount + fileCount = 8) "total entries = 8"

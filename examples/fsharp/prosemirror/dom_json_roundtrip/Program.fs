@@ -103,7 +103,7 @@ let private changelogHtml =
 let private parseHtml (html: string) : ProsemirrorModel.Node =
     let scratch = unbox<Dom.HTMLElement> (document.createElement "div")
     scratch.innerHTML <- html
-    parser.parse (unbox<DOMNode> scratch)
+    parser.parse (scratch :> Dom.Node)
 
 let mutable private roundTripStatus = "JSON Node.eq() pending"
 
@@ -122,17 +122,17 @@ let private refreshOutput (doc: ProsemirrorModel.Node) =
     let scratch = unbox<Dom.HTMLElement> (document.createElement "div")
     serializer.serializeFragment (doc.content, target = HTMLElementOrDocumentFragment.HTMLElement scratch) |> ignore
     let htmlOut = scratch.innerHTML
-    let outEl = unbox<Dom.HTMLElement> (document.getElementById "output")
+    let outEl = document.getElementById "output"
     outEl.textContent <-
         sprintf "SERIALIZED HTML (DOMSerializer):\n%s\n\nDOCUMENT AST & JSON ROUND-TRIP:\n%s\n\nROUND-TRIP STATUS: %s"
             htmlOut (describeDoc doc) roundTripStatus
-    let meta = unbox<Dom.HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <-
         sprintf "%s · blocks=%d · nodeSize=%d · htmlBytes=%d"
             roundTripStatus (int doc.childCount) (int doc.nodeSize) htmlOut.Length
 
 let main () =
-    let mountEl = unbox<Dom.HTMLElement> (document.getElementById "editor")
+    let mountEl = document.getElementById "editor"
     let mutable view: EditorView = null
 
     let initialState =
@@ -147,12 +147,12 @@ let main () =
             refreshOutput next.doc
     )
 
-    view <- EditorView.Create (unbox<dist_DOMNode> mountEl, props)
+    view <- EditorView.Create ((mountEl :> Dom.Node), props)
     roundTripStatus <- "Parsed Spec HTML via DOMParser"
     refreshOutput view.state.doc
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = unbox<Dom.HTMLElement> (document.getElementById id)
+        let el = document.getElementById id
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () ->
@@ -195,7 +195,7 @@ let main () =
         let doc = view.state.doc
         let scratch = unbox<Dom.HTMLElement> (document.createElement "div")
         serializer.serializeFragment (doc.content, target = HTMLElementOrDocumentFragment.HTMLElement scratch) |> ignore
-        let reparsed = parser.parse (unbox<DOMNode> scratch)
+        let reparsed = parser.parse (scratch :> Dom.Node)
         let ok = doc.eq reparsed
         roundTripStatus <- sprintf "DOM serializeFragment->parse eq() = %b" ok
         let st = EditorState.create (EditorStateConfig.Create (schema = schema, doc = reparsed))

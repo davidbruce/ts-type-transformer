@@ -6,8 +6,8 @@ TS_IMPORT(check) void check(int ok, int line);
 
 static int calls;
 static void on_value(void* ctx, double value) { *(double*)ctx = value; calls++; }
-static double fold(void* ctx, double total, JsString label) { return total * 2 + JsString_len(label); }
-static bool is_five(void* ctx, Counter c) { return Counter_get_count(c) == 5; }
+static double fold(void* ctx, double total, JsString label) { (void)ctx; return total * 2 + JsString_len(label); }
+static bool is_five(void* ctx, Counter c) { (void)ctx; return Counter_get_count(c) == 5; }
 static void bump(void* ctx) { (*(int*)ctx)++; }
 
 static bool str_eq(JsString s, const char* expected) {
@@ -23,8 +23,9 @@ static bool str_eq(JsString s, const char* expected) {
 // What the promises settled with, checked by `finish`.
 static double awaited;
 static bool reason_ok;
-static void on_delayed(void* ctx, bool ok, JsValue v) { if (ok) awaited = js_to_number(v); }
+static void on_delayed(void* ctx, bool ok, JsValue v) { (void)ctx; if (ok) awaited = js_to_number(v); }
 static void on_rejected(void* ctx, bool ok, JsValue v) {
+    (void)ctx;
     if (ok) return;
     JsString m = js_error_message(v);
     reason_ok = str_eq(m, "nope");
@@ -35,6 +36,7 @@ static void on_rejected(void* ctx, bool ok, JsValue v) {
 static double ticks;
 static JsIterator tick_it;
 static void on_tick(void* ctx, bool ok, JsValue v) {
+    (void)ctx;
     if (!ok || v.h == 0) {
         js_release(tick_it);
         return;
@@ -48,7 +50,7 @@ static void on_tick(void* ctx, bool ok, JsValue v) {
 // A union argument arrives as a lent handle.
 static int ids_seen;
 static bool first_is_one;
-static void on_id(void* ctx, JsValue id) { first_is_one |= ids_seen++ == 0 && js_to_number(id) == 1; }
+static void on_id(void* ctx, JsValue id) { (void)ctx; first_is_one |= ids_seen++ == 0 && js_to_number(id) == 1; }
 
 __attribute__((export_name("finish"))) void finish(void) {
     CHECK(ticks == 6);

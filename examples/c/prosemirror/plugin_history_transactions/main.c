@@ -278,7 +278,7 @@ __attribute__((export_name("start"))) void start(void) {
     DirectEditorProps_set_dispatchTransaction(props, Transaction_fn_from(on_dispatch, 0));
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = EditorView_new((dist_DOMNode){ mount.h }, props);
+    g_view = EditorView_new(AS_Node(mount), props);
     js_retain(g_view);
     update_meta(EditorView_get_state(g_view));
 

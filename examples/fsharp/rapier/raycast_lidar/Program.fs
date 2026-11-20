@@ -73,7 +73,7 @@ let main () =
         let canvas = unbox<HTMLCanvasElement> (document.getElementById "canvas")
         let ctx = canvas.getContext_2d ()
         let metaEl = document.getElementById "meta"
-        let sweepBtn = unbox<HTMLElement> (document.getElementById "btn-sweep")
+        let sweepBtn = document.getElementById "btn-sweep"
 
         let world = World.Create (Vector.Create (0.0, 0.0, 0.0))
 
@@ -195,7 +195,7 @@ let main () =
         render ()
 
         let wireClick (id: string) (fn: unit -> unit) =
-            let b = unbox<HTMLElement> (document.getElementById id)
+            let b = document.getElementById id
             b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
         wireClick "btn-sweep" (fun () ->

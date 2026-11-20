@@ -32,7 +32,7 @@ let main () =
 
     let renderer =
         WebGLRenderer.Create(
-            WebGLRendererParameters.Create(antialias = Some true, preserveDrawingBuffer = Some true)
+            WebGLRendererParameters.Create(antialias = true, preserveDrawingBuffer = true)
         )
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
@@ -142,8 +142,8 @@ let main () =
                 ptsAttr.setXYZ (float pi, x, y, z) |> ignore
                 pi <- pi + 1
 
-        posAttr?needsUpdate <- true
-        ptsAttr?needsUpdate <- true
+        posAttr.needsUpdate <- true
+        ptsAttr.needsUpdate <- true
         geo.computeVertexNormals ()
         geo.computeBoundingBox ()
 
@@ -166,7 +166,7 @@ let main () =
                 (if overlayOn then "on" else "off")
 
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = unbox<Dom.HTMLElement> (document.getElementById id)
+        let b = document.getElementById id
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wireClick "btn-p0" (fun () ->

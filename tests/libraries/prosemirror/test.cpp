@@ -242,9 +242,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
     HTMLElement stage = test_page::element("stage");
     // FINDING 23: HTMLElement is an empty struct in this package set (lib.dom is
     // not bound here), so the rendered DOM cannot be read from C++; and the
-    // place the view mounts in, `dist_DOMNode` (also empty), takes no conversion
+    // place the view mounts in, `Node_2` (also empty), takes no conversion
     // from an HTMLElement: the handle is rewrapped.
-    dist_DOMNode place;
+    Node_2 place;
     static_cast<ts::Handle&>(place) = stage;
     EditorView view = EditorView::create(EditorView_new_place_or_dist_DOMNode(place), props);
     view_ref = &view;

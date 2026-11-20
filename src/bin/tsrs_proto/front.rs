@@ -28,8 +28,8 @@ pub struct Front<'c> {
     // where its name must give way: `readline` for node's `Key`.
     pub origin_of_name: HashMap<String, String>,
     lib_path: String,
-    // Merged symbols already converted, by kind and fully qualified name.
-    seen: HashSet<String>,
+    // Merged symbols already converted, by declaration kind and symbol identity.
+    seen: HashSet<(Kind, P<Symbol>)>,
     // Declarations exported under another name than their own, by their own.
     // What a symbol is exported as, when not its own name.
     exported_as: HashMap<P<Symbol>, String>,
@@ -142,9 +142,8 @@ impl<'c> Front<'c> {
     fn first_time(&mut self, node: P<Node>) -> Option<(P<Symbol>, Vec<P<Node>>)> {
         let sym = self.c.get_symbol_of_declaration_exported(node)?;
         let sym = self.c.get_merged_symbol_exported(sym);
-        let fqn = self.c.get_fully_qualified_name_exported(sym);
         let kind = node.kind();
-        if !self.seen.insert(format!("{kind:?}:{fqn}")) {
+        if !self.seen.insert((kind, sym)) {
             return None;
         }
         Some((sym, sym.declarations().iter().copied().filter(|d| d.kind() == kind).collect()))
@@ -1229,6 +1228,7 @@ impl<'c> Front<'c> {
     // ones (`DeepKeys<T>` through every property of every property) stop, at
     // a depth or once one conversion has made too many, as an `any` that
     // says so.
+    #[allow(clippy::wrong_self_convention)]
     pub fn from_type(&mut self, t: P<CType>) -> Type {
         if self.depth == 0 {
             self.budget = BUDGET;
@@ -1267,6 +1267,7 @@ impl<'c> Front<'c> {
         out
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn from_type_at(&mut self, t: P<CType>) -> Type {
         let f = t.flags();
         let skip = self.skip_alias.take();
@@ -1431,6 +1432,7 @@ impl<'c> Front<'c> {
         self.erased("unknown type kind")
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn from_object(&mut self, t: P<CType>) -> Type {
         let of = t.object_flags();
         if of.intersects(ObjectFlags::Reference)
@@ -1525,7 +1527,7 @@ impl<'c> Front<'c> {
         if !["length", "slice", "indexOf", "concat", "push"].iter().all(|n| names.contains(*n)) {
             return None;
         }
-        let info = self.c.get_index_infos_of_type_exported(t).into_iter().find(|i| i.key_type().flags().intersects(TypeFlags::Number))?;
+        let info = self.c.get_index_infos_of_type_exported(t).iter().find(|i| i.key_type().flags().intersects(TypeFlags::Number))?;
         self.count("widened: array-like object -> array");
         Some(Type::Array(Box::new(self.from_type(info.value_type()))))
     }
@@ -1759,6 +1761,7 @@ impl<'c> Front<'c> {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn from_signature(&mut self, sig: P<CSignature>) -> Signature {
         let mut out = Signature::default();
         let bound = self.key_binding.as_ref().map(|b| b.0);

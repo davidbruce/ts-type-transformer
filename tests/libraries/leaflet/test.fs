@@ -77,13 +77,13 @@ check (clicks = 2) "off removes it"
 // Paths with options: a polyline's bounds are those of its points.
 // FINDING 20 (still open): `Create (color = ..., weight = ...)` alone is ambiguous with PathOptions.Create; naming
 // a field only PolylineOptions has (smoothFactor) selects it.
-let style = PolylineOptions.Create (smoothFactor = Some 1.0, color = Some "red", weight = Some 5.0)
+let style = PolylineOptions.Create (smoothFactor = 1.0, color = "red", weight = 5.0)
 let line =
     Leaflet.polyline<obj, obj> (ResizeArray [ PolylineNewLatlngs.LatLng london; PolylineNewLatlngs.LatLng paris ], style)
 line.addTo (MapOrLayerGroup.Map m) |> ignore
 check (m.hasLayer line) "a polyline on the map"
 check (line.getBounds().contains (U5.Case1 paris)) "polyline bounds contain its points"
-check (line.options.color = Some (Some "red")) "the polyline's options"
+check (line.options.color = Some "red") "the polyline's options"
 check (line.getLatLngs().Count = 2) "getLatLngs"
 let ring = Leaflet.rectangle<obj> (LatLngBoundsExpression.LatLngBounds bounds)
 check (ring.getBounds().contains (U5.Case1 london)) "a rectangle's bounds"

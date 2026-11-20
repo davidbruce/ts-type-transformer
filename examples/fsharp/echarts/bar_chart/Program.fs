@@ -6,7 +6,7 @@ open type Dom.Globals
 open Echarts
 open type Echarts.Globals
 
-let private boxEl = unbox<HTMLElement> (document.getElementById "chart")
+let private boxEl = document.getElementById "chart"
 let private chart = init boxEl
 
 let private opt = createEmpty<EChartsCoreOption>

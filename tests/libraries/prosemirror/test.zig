@@ -215,7 +215,7 @@ export fn run() void {
     const props = pv.DirectEditorProps.create();
     props.setState(state0);
     props.setDispatchTransaction(b.Transaction_fn.from(onDispatch, null));
-    view = pv.EditorView.new(.{ .dist_DOMNode = .{ .h = b.test_page.element("stage").h } }, props);
+    view = pv.EditorView.new(.{ .Node_2 = .{ .h = b.test_page.element("stage").h } }, props);
     expect(view.getState().getDoc().eq(doc), @src());
     expect(view.getEditable() and !view.getComposing(), @src());
 

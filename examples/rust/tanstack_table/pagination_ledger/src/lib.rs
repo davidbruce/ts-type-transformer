@@ -61,8 +61,8 @@ fn make_reactivity() -> JsValue {
     bindings.set_create_readonly_atom(&readonly);
     let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
     bindings.set_untrack(&untrack);
-    let run_it = FnFn::new(|f: ColumnColumnGroupingToggleGrouping| {
-        call_column_column_grouping_toggle_grouping(&f);
+    let run_it = FnFn::new(|f: VoidFn| {
+        call_void_fn(&f);
     });
     bindings.set_batch(&run_it);
     bindings.set_schedule(&run_it);

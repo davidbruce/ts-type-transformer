@@ -109,8 +109,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement cell = make_el(doc, "div", cls, 0);
         JsString day_str = formatDate_with_Date(d, "d", (FormatDateOptions){ 0 });
         char day_buf[8];
-        uint32_t dn = JsString_copy(day_str, day_buf, sizeof(day_buf) - 1);
-        day_buf[dn] = '\0';
+        JsString_copy(day_str, day_buf, sizeof(day_buf));
         js_release(day_str);
         append_and_release(cell, make_el(doc, "span", "day-num", day_buf));
 
@@ -119,8 +118,7 @@ __attribute__((export_name("start"))) void start(void) {
         } else {
             JsString sub_str = formatDate_with_Date(d, "EEE", (FormatDateOptions){ 0 });
             char sub_buf[16];
-            uint32_t sn = JsString_copy(sub_str, sub_buf, sizeof(sub_buf) - 1);
-            sub_buf[sn] = '\0';
+            JsString_copy(sub_str, sub_buf, sizeof(sub_buf));
             js_release(sub_str);
             append_and_release(cell, make_el(doc, "span", "sub", sub_buf));
         }

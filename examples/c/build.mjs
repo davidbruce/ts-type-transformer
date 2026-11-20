@@ -41,6 +41,8 @@ const CLANG_WASM = [
   '-ffreestanding',
   '-O1',
   '-Wall',
+  '-Wextra',
+  '-Wno-unused-parameter',
   '-Werror',
   '-Wl,--no-entry',
   '-Wl,--allow-undefined',

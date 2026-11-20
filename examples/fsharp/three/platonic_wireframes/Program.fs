@@ -18,8 +18,8 @@ let main () =
 
     let rendererParams =
         WebGLRendererParameters.Create(
-            antialias = Some true,
-            preserveDrawingBuffer = Some true
+            antialias = true,
+            preserveDrawingBuffer = true
         )
     let renderer = WebGLRenderer.Create rendererParams
     renderer.setPixelRatio 1.0
@@ -87,7 +87,7 @@ let main () =
         mesh.rotation.set (0.25, 0.45, 0.0) |> ignore
         scene.add (mesh :> Object3D<Object3DEventMap>) |> ignore
 
-        let edgesGeo = EdgesGeometry.Create(Some geo, edgeThresh)
+        let edgesGeo = EdgesGeometry.Create(geo, edgeThresh)
         let segs =
             LineSegments.Create<EdgesGeometry<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>>, LineBasicMaterial, Object3DEventMap>(
                 edgesGeo,
@@ -104,9 +104,9 @@ let main () =
     addSolid (TorusGeometry.Create(0.72, 0.23, 16.0, 48.0)) 0x404040 0.55 0.12 false 3.2 0.05 -0.5 22.0
 
     let metaEl = document.getElementById "meta"
-    let wireBtn = unbox<Dom.HTMLElement> (document.getElementById "btn-wire")
+    let wireBtn = document.getElementById "btn-wire"
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = unbox<Dom.HTMLElement> (document.getElementById id)
+        let b = document.getElementById id
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     let updateView () =

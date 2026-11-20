@@ -15,8 +15,8 @@ let main () =
 
     let rendererParams =
         WebGLRendererParameters.Create(
-            antialias = Some true,
-            preserveDrawingBuffer = Some true
+            antialias = true,
+            preserveDrawingBuffer = true
         )
     let renderer = WebGLRenderer.Create rendererParams
     renderer.setPixelRatio 1.0
@@ -186,7 +186,7 @@ let main () =
                 deg moonPos.x moonPos.y moonPos.z stationPos.x stationPos.y stationPos.z
 
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = unbox<Dom.HTMLElement> (document.getElementById id)
+        let b = document.getElementById id
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wireClick "btn-step" (fun () ->

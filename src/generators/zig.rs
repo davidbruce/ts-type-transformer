@@ -122,7 +122,7 @@ fn method_name(name: &str) -> String {
 // What the runtime declares at the top of every file.
 const RUNTIME_NAMES: &[&str] = &[
     "JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback",
-    "jsTakeError", "jsErrorMessage", "jsErrorName", "jsErrorStack", "jsErrorNew", "jsDateNow", "jsEnumOf", "jsSame", "jsTry", "JsScope", "jsTake",
+    "jsTakeError", "jsErrorMessage", "jsErrorName", "jsErrorStack", "jsErrorNew", "jsDateNow", "jsEnumOf", "jsSame", "jsHasError", "jsTry", "JsScope", "jsTake",
 ];
 
 // Types and functions share a file's namespace, and the root's that
@@ -139,10 +139,19 @@ pub const NAMING: Naming = Naming {
     func_name: |_, name, _| Some(method_name(name)),
     funcs_flat: false,
     nests: true,
-    members: |c, _| {
+    members: |c, m| {
         let mut own = vec!["h".to_string(), "Methods".to_string(), "Key".to_string(), "Type".to_string()];
         own.extend(c.consts.iter().map(|(n, _)| n.clone()));
-        own.extend(c.ancestors.iter().map(|a| format!("as{a}")));
+        let mut todo: Vec<&str> = c.ancestors.iter().map(String::as_str).collect();
+        let mut seen: HashSet<&str> = HashSet::new();
+        while let Some(a) = todo.pop() {
+            if a != c.name && seen.insert(a) {
+                own.push(format!("as{a}"));
+                if let Some(ac) = m.classes.iter().find(|k| k.name == a) {
+                    todo.extend(ac.ancestors.iter().map(String::as_str));
+                }
+            }
+        }
         // Its own `iterate`, where it declares none.
         let declares = |n: &str| c.funcs.iter().any(|f| f.name == n);
         if c.iterates_async.is_some() && !declares("iterateAsync") {
@@ -351,6 +360,7 @@ fn lower_arg(name: &str, t: &Ty) -> String {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion], wasm_module: &str) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
@@ -432,7 +442,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
         _ => typed(&f.ret, false).replace("KEY", &key),
     };
     let body = match &f.ret {
-        Ty::NamedUnion(n) if union.is_some_and(|u| u.decodable()) => format!("return {n}.fromHandle({call});"),
+        Ty::NamedUnion(n) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; if (h == 0 and jsHasError()) return undefined; return {n}.fromHandle(h);"),
         Ty::Nullable(inner, _) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; return if (h == 0) null else {}.fromHandle(h);", typed(inner, false)),
         Ty::Nullable(..) if union.is_some() => format!("return .{{ .h = {call} }};"),
         Ty::Nullable(inner, _) if **inner == Ty::Num => format!("return jsTake(?f64, {call});"),
@@ -442,8 +452,8 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
         Ty::Void => format!("{call};"),
         Ty::Num => format!("return {call};"),
         Ty::Bool => format!("return {call} != 0;"),
-        Ty::Enum(_) => format!("return @enumFromInt({call});"),
-        Ty::NumEnum(_) => format!("return @enumFromInt(@as(i32, @intFromFloat({call})));"),
+        Ty::Enum(_) => format!("const r = {call}; if (jsHasError()) return undefined; return @enumFromInt(r);"),
+        Ty::NumEnum(_) => format!("const r = {call}; if (jsHasError()) return undefined; return @enumFromInt(@as(i32, @intFromFloat(r)));"),
         Ty::Nullable(..) => format!("const h = {call}; return if (h == 0) null else .{{ .h = h }};"),
         _ => format!("return .{{ .h = {call} }};"),
     };
@@ -494,7 +504,9 @@ pub const JsString = extern struct {
     h: u32,
     pub fn from(s: []const u8) JsString { return .{ .h = raw.js_from_string(s.ptr, s.len) }; }
     pub fn len(self: JsString) usize { return raw.js_string_len(self.h); }
-    pub fn read(self: JsString, buf: []u8) []u8 { const n = self.len(); raw.js_string_read(self.h, buf.ptr); return buf[0..n]; }
+    pub fn read(self: JsString, buf: []u8) []u8 { const n = raw.js_string_copy(self.h, buf.ptr, buf.len); if (n > buf.len) @trap(); return buf[0..@min(n, buf.len)]; }
+    // As much as fits in buf, releasing this JsString handle.
+    pub fn take(self: JsString, buf: []u8) []u8 { const n = raw.js_string_take(self.h, buf.ptr, buf.len); if (n > buf.len) raw.js_release(self.h); return buf[0..@min(n, buf.len)]; }
     // As much as fits in buf.
     pub fn copy(self: JsString, buf: []u8) []u8 { const n = raw.js_string_copy(self.h, buf.ptr, buf.len); return buf[0..@min(n, buf.len)]; }
     // A copy the caller owns.
@@ -524,6 +536,7 @@ pub fn jsRetain(x: anytype) @TypeOf(x) { raw.js_retain(x.h); return x; }
 pub fn jsSame(a: anytype, b: anytype) bool { return a.h == b.h or raw.js_equals(a.h, b.h) != 0; }
 // What a call returned, or error.JsException if it threw; the exception is
 // then `jsTakeError()`: `const el = try b.jsTry(doc.querySelector(text));`.
+pub fn jsHasError() bool { return raw.js_has_error() != 0; }
 pub fn jsTry(value: anytype) error{JsException}!@TypeOf(value) { return if (raw.js_has_error() != 0) error.JsException else value; }
 // The exception a call threw, taken. A call that throws returns a zero value,
 // and an exception not taken by the time control returns to JavaScript is
@@ -660,6 +673,7 @@ const RUNTIME_EXTERNS: &str = "    extern \"env\" fn js_string_len(h: u32) usize
     extern \"env\" fn js_take_error() u32;
     extern \"env\" fn js_has_error() i32;
     extern \"env\" fn js_string_copy(h: u32, ptr: [*]u8, cap: usize) usize;
+    extern \"env\" fn js_string_take(h: u32, ptr: [*]u8, cap: usize) usize;
     extern \"env\" fn js_string_equals(h: u32, ptr: [*]const u8, len: usize) i32;
     extern \"env\" fn js_scope_open() void;
     extern \"env\" fn js_scope_close() void;
@@ -699,14 +713,15 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         return Err(problems.into_messages());
     }
     let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
-    let mut resolved_opaque: HashMap<String, usize> = HashMap::new();
+    let mut resolved_opaque: HashMap<String, (usize, String)> = HashMap::new();
     let mut used_refs: BTreeSet<usize> = BTreeSet::new();
     for name in &m.opaque {
         if matches!(name.as_str(), "Promise" | "Error" | "Date") || super::model::buffer_spec(name).is_some() {
             continue;
         }
-        if let Some((idx, _)) = refs.iter().enumerate().find(|(_, r)| r.types.contains(name)) {
-            resolved_opaque.insert(name.clone(), idx);
+        let orig = m.opaque_names.get(name).map(String::as_str).unwrap_or(name.as_str());
+        if let Some((idx, _)) = refs.iter().enumerate().find(|(_, r)| r.types.contains(orig)) {
+            resolved_opaque.insert(name.clone(), (idx, orig.to_string()));
         }
     }
     // File -> (declarations, externs, names it declares).
@@ -835,9 +850,9 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
                 );
             }
             types.0 += "};\n";
-        } else if let Some(&idx) = resolved_opaque.get(name) {
-            used_refs.insert(idx);
-            types.0 += &format!("pub const {name} = @import(\"{}\").{name};\n", refs[idx].pkg_name);
+        } else if let Some((idx, orig)) = resolved_opaque.get(name) {
+            used_refs.insert(*idx);
+            types.0 += &format!("pub const {name} = @import(\"{}\").{orig};\n", refs[*idx].pkg_name);
         } else {
             types.0 += &format!("// external\npub const {name} = extern struct {{ h: u32 }};\n");
         }
@@ -938,6 +953,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
                 refs.insert(from.to_string());
             }
         }
+        refs.extend(ancestors[c.name.as_str()].iter().map(|a| a.name.clone()));
         refs.extend(c.ancestors.iter().cloned());
         c.iterates.iter().chain(&c.elements).for_each(|t| type_refs(t, refs));
         if c.iterates_async.is_some() {
@@ -969,8 +985,12 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             let arms: Vec<String> = keys.iter().zip(&map.values).map(|(k, v)| format!(".{k} => {}", typed(v, false))).collect();
             *out += &format!("    pub fn Type(comptime key: Key) type {{ return switch (key) {{ {} }}; }}\n", arms.join(", "));
         }
-        for a in &c.ancestors {
-            *out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);
+        let mut seen_as: Vec<String> = Vec::new();
+        for a in ancestors[c.name.as_str()].iter().map(|a| a.name.clone()).chain(c.ancestors.iter().cloned()) {
+            if a != c.name && !seen_as.contains(&a) {
+                seen_as.push(a.clone());
+                *out += &format!("    pub fn {}(self: {}) {a} {{ return .{{ .h = self.h }}; }}\n", ident(&format!("as{a}")), c.name);
+            }
         }
         let own_names = &class_names[c.name.as_str()];
         // Checked downcast: only a class has a constructor to test against.
@@ -981,7 +1001,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         }
         let inherited = |f: &Func| if Class::has_self(f) { homes.get(&(c.name.as_str(), f.name.as_str())).copied() } else { None };
         let shared = |f: &Func| shares.contains(c.name.as_str()) && Class::has_self(f) && inherited(f).is_none();
-        if c.funcs.iter().any(|f| shared(f)) {
+        if c.funcs.iter().any(&shared) {
             *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
             for f in c.funcs.iter().filter(|f| shared(f)) {
                 func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions, wasm_module);

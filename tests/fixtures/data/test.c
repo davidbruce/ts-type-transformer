@@ -14,7 +14,7 @@ static bool str_eq(JsString s, const char* expected) {
     return true;
 }
 
-static JsValue doubled(void* ctx, JsValue value) { return js_number(js_to_number(value) * 2); }
+static JsValue doubled(void* ctx, JsValue value) { (void)ctx; return js_number(js_to_number(value) * 2); }
 
 __attribute__((export_name("run"))) void run(void) {
     // Option objects: built here, read by JavaScript.

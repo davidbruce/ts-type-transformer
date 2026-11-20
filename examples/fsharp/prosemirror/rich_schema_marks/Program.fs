@@ -151,7 +151,7 @@ let private targetRange (st: EditorState) : float * float =
             (1.0, doc.content.size - 1.0)
 
 let private setActiveButton (markName: string) (id: string) (hasIt: bool) =
-    let btn = unbox<Dom.HTMLElement> (document.getElementById id)
+    let btn = document.getElementById id
     if hasIt then btn.classList.add [| "active" |] else btn.classList.remove [| "active" |]
     ignore markName
 
@@ -171,7 +171,7 @@ let private updateMeta (st: EditorState) =
           if hasEm then yield "em"
           if hasCode then yield "code" ]
     let marksText = if activeMarks.IsEmpty then "none" else String.concat ", " activeMarks
-    let meta = unbox<Dom.HTMLElement> (document.getElementById "meta")
+    let meta = document.getElementById "meta"
     meta.textContent <-
         sprintf "%s · blocks=%d · nodeSize=%d · range=[%d..%d] · block=%s · marks=[%s] · dispatches=%d"
             lastAction (int doc.childCount) (int doc.nodeSize) (int fromPos) (int toPos) blockName marksText dispatches
@@ -180,7 +180,7 @@ let private createState () =
     EditorState.create (EditorStateConfig.Create (schema = schema, doc = buildInitialDoc ()))
 
 let main () =
-    let mountEl = unbox<Dom.HTMLElement> (document.getElementById "editor")
+    let mountEl = document.getElementById "editor"
     let mutable view: EditorView = null
 
     let props = createEmpty<DirectEditorProps>
@@ -193,7 +193,7 @@ let main () =
             updateMeta view.state
     )
 
-    view <- EditorView.Create (unbox<dist_DOMNode> mountEl, props)
+    view <- EditorView.Create ((mountEl :> Dom.Node), props)
     updateMeta view.state
 
     let toggleMark (markName: string) (label: string) =
@@ -212,7 +212,7 @@ let main () =
             view.dispatch tr
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = unbox<Dom.HTMLElement> (document.getElementById id)
+        let el = document.getElementById id
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () -> toggleMark "strong" "bold")

@@ -32,9 +32,6 @@ import prosemirror/areas/prosemirror_view/editor_view
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
-@external(javascript, "./app_ffi.mjs", "coerce")
-fn coerce(a: a) -> b
-
 @external(javascript, "./app_ffi.mjs", "newCell")
 fn new_cell(v: a) -> Dynamic
 
@@ -135,7 +132,7 @@ const changelog_html = "<h2>Release 1.4 Notes</h2><p>Added <strong>typed binding
 fn parse_html(doc, parser, html: String) -> t.Node(Nil) {
   let div = document.create_element_div(doc, None)
   element.set_inner_html(div, html)
-  dom_parser.parse(parser, coerce(div), None)
+  dom_parser.parse(parser, div, None)
 }
 
 fn describe_doc(d: t.Node(Nil)) -> String {
@@ -162,7 +159,7 @@ fn describe_doc(d: t.Node(Nil)) -> String {
 
 fn refresh_output(doc, serializer, d: t.Node(Nil), status_c) {
   let div = document.create_element_div(doc, None)
-  let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(coerce(div))))
+  let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
   let html_out = element.get_inner_html(div)
   let status: String = get_cell(status_c)
   let full =
@@ -277,8 +274,8 @@ pub fn main() {
   wire_btn(doc, "btn-4", fn() {
     let d = editor_state.get_doc(editor_view.get_state(view))
     let div = document.create_element_div(doc, None)
-    let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(coerce(div))))
-    let reparsed = dom_parser.parse(parser, coerce(div), None)
+    let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
+    let reparsed = dom_parser.parse(parser, div, None)
     set_cell(status_c, "DOM serializeFragment->parse eq() = " <> string.lowercase(bool.to_string(node.eq(d, reparsed))))
     let c = editor_state_config.create()
     editor_state_config.set_schema(c, Some(sch))
