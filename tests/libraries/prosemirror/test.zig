@@ -231,7 +231,7 @@ export fn run() void {
     const typed = view.getState().getTr().insertText("!", .{ .from = 14, .to = 14 });
     props.setState(view.getState());
     view.update(props);
-    b.callTransactionFn(view.getDispatch(), typed);
+    view.getDispatch().call(typed);
     expect(dispatched == 1, @src());
     expect(view.getState().getDoc().child(1).getTextContent().eql("wo!rld"), @src());
 

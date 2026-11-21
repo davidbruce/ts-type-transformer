@@ -44,13 +44,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(marked("~~x~~", plain) == "<p>~~x~~</p>\n");
     CHECK(marked("~~x~~", marked_options_no_async::create()) == "<p><del>x</del></p>\n");
 
-    // The function-typed consts are called through call_<Callback>.
-    TokensList viaConst = call_string_MarkedOptions_to_TokensList_fn(marked_ns::get_lexer(), "# T\n\npara", std::nullopt);
+    // The function-typed consts are called via operator().
+    TokensList viaConst = marked_ns::get_lexer()("# T\n\npara", std::nullopt);
     CHECK(viaConst.length() == 3);
     CHECK(std::holds_alternative<Tokens_Heading>(*viaConst.at(0)));
     ts::Array<Token> tokenArray;
     static_cast<ts::Handle&>(tokenArray) = viaConst;
-    ts::Value out = call_Token_array_MarkedOptions_to_ParserOutput_fn(marked_ns::get_parser(), tokenArray, std::nullopt);
+    ts::Value out = marked_ns::get_parser()(tokenArray, std::nullopt);
     CHECK(out.to_string() == "<h1>T</h1>\n<p>para</p>\n");
     using Mk = Marked<std::string, std::string>;
     Mk md = Mk::create(ts::Array<MarkedExtension<std::string, std::string>>::create());
@@ -121,7 +121,6 @@ extern "C" __attribute__((export_name("run"))) void run() {
     walker.walkTokens(Token_to_void_or_Promise_or_void_or_Promise_array_fn([&](const Token& token) {
         visited++;
         (void)token;
-        return void_or_Promise_or_void_or_Promise_array(std::in_place_index<1>, ts::Array<>());
     }));
     Mk walked = Mk::create({walker});
     CHECK(std::get<std::string>(walked.parse().invoke("# a *b*")) == "<h1>a <em>b</em></h1>\n");

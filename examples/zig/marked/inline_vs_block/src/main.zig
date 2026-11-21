@@ -1,17 +1,15 @@
 const dom = @import("dom");
 const m = @import("marked");
 
-var html_buf: [2048]u8 = undefined;
-
-fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
+fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
-    if (text) |t| el.setTextContent(t);
+    if (@TypeOf(text) != @TypeOf(null)) el.setTextContent(text);
     return el;
 }
 
 fn makeResultCard(doc: dom.Document, title: []const u8, val: m.JsValue) dom.HTMLElement {
-    const html = val.as(m.JsString).copy(&html_buf);
+    const html = val.as(m.JsString);
     const card = makeEl(doc, "div", "card", null);
     _ = card.appendChild(makeEl(doc, "div", "label", title));
     const out = makeEl(doc, "div", "md-out", null);
@@ -33,7 +31,7 @@ export fn start() void {
     _ = head.appendChild(makeEl(doc, "span", "badge", "parse vs parseInline"));
     _ = app.appendChild(head);
 
-    const inst = m.Marked.new(&.{});
+    const inst = m.Marked.new(.{});
     const parse_fn = inst.getParse();
     const inline_fn = inst.getParseInline();
 

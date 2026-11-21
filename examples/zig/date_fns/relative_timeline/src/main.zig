@@ -2,10 +2,10 @@ const std = @import("std");
 const dom = @import("dom");
 const df = @import("date_fns");
 
-fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
+fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
-    if (text) |t| el.setTextContent(t);
+    if (@TypeOf(text) != @TypeOf(null)) el.setTextContent(text);
     return el;
 }
 
@@ -37,7 +37,6 @@ export fn start() void {
     const timeline = makeEl(doc, "div", "timeline", null);
 
     const all_dates = df.JsArrayOf(df.DateArg).new();
-    var tmp_buf: [128]u8 = undefined;
     var line_buf: [128]u8 = undefined;
 
     for (entries) |e| {
@@ -47,13 +46,13 @@ export fn start() void {
         const same = df.isSameDay(d, anchor, null);
         const row = makeEl(doc, "div", if (same) "milestone anchor" else "milestone", null);
 
-        _ = row.appendChild(makeEl(doc, "span", "muted", df.formatDate(d, "yyyy-MM-dd (EEE)", null).copy(&tmp_buf)));
+        _ = row.appendChild(makeEl(doc, "span", "muted", df.formatDate(d, "yyyy-MM-dd (EEE)", null)));
         _ = row.appendChild(makeEl(doc, "span", "title", e.title));
 
         if (same) {
             _ = row.appendChild(makeEl(doc, "span", "", "today (anchor)"));
         } else {
-            _ = row.appendChild(makeEl(doc, "span", "", df.formatDistance(d, anchor, .{ .addSuffix = true }).copy(&tmp_buf)));
+            _ = row.appendChild(makeEl(doc, "span", "", df.formatDistance(d, anchor, .{ .addSuffix = true })));
         }
 
         const strict = df.formatDistanceStrict(d, anchor, null);

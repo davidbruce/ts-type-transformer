@@ -32,7 +32,7 @@ fn handler(comptime f: b.Function.Fn) b.TimerHandler {
 
 fn after(ms: f64, comptime f: b.Function.Fn) f64 {
     pending += 1;
-    return b.setTimeout(handler(f), ms, b.JsArray.new());
+    return b.setTimeout(handler(f), .{ .timeout = ms });
 }
 
 // Timeouts.
@@ -165,7 +165,7 @@ export fn run() void {
     _ = after(0, onZero);
     // No delay given is the same as none.
     pending += 1;
-    _ = b.setTimeout(handler(onNoDelay), null, b.JsArray.new());
+    _ = b.setTimeout(handler(onNoDelay), .{});
     // A later timeout is not run before an earlier one.
     _ = after(30, onLate);
     // A timeout of 40 ms runs once, no sooner than that.
@@ -183,10 +183,10 @@ export fn run() void {
 
     // An interval ticks until cleared.
     pending += 1;
-    interval_id = b.setInterval(handler(onTick), 10, b.JsArray.new());
+    interval_id = b.setInterval(handler(onTick), .{ .timeout = 10 });
     expect(interval_id > 0 and interval_id != id, @src());
     // One cleared at once never ticks.
-    const dead = b.setInterval(handler(onDeadTick), 5, b.JsArray.new());
+    const dead = b.setInterval(handler(onDeadTick), .{ .timeout = 5 });
     b.clearInterval(dead);
 
     // Frames: two in a row; a cancelled one never comes.

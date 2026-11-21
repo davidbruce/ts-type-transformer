@@ -28,7 +28,7 @@ static ts::Task run_app() {
 
     dom::Document doc = dom::get_document();
     if (auto stage_el = doc.getElementById("stage")) {
-        stage_el->appendChild(app.canvas().as<dom::Node>());
+        stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
     Container<ts::Value> stage = app.stage();
@@ -77,7 +77,7 @@ static ts::Task run_app() {
     g.rect(query.x(), query.y(), query.width(), query.height());
     stroke_g(g, 2.5, 0x111111);
 
-    stage.addChild(ts::Array<>::of(g));
+    stage.addChild(g);
     app.render();
 
     char buf[160];

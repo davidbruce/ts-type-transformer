@@ -255,7 +255,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(!view.composing());
 
     // pasteText makes the view dispatch a transaction itself; view.dispatch is a
-    // function value, called with call_Transaction_fn.
+    // function value, called directly via operator().
     CHECK(dispatched == 0);
     view.pasteText("pasted");
     CHECK(dispatched >= 1);
@@ -264,7 +264,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     int before = dispatched;
     Transaction bang = view.state().tr();
     bang.insertText("!", 1);
-    call_Transaction_fn(view.dispatch(), bang);
+    view.dispatch()(bang);
     CHECK(dispatched == before + 1);
     CHECK(current.doc().textContent().find("!") != std::string::npos);
     CHECK(view.state().doc().textContent().find("!") != std::string::npos);

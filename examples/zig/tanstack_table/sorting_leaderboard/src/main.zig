@@ -133,9 +133,9 @@ fn render(app: *App, label: []const u8) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
     const rows = rm.getRows();
-    const cols = app.table.as(tt.Table_Columns).getGetAllLeafColumns().call();
+    const cols = app.table.as(tt.Table_Columns).getAllLeafColumns().call();
 
     var w = std.Io.Writer.fixed(&html_buf);
     w.writeAll("<table><thead><tr>") catch return;
@@ -148,7 +148,7 @@ fn render(app: *App, label: []const u8) void {
         w.writeAll(if (is_num) "<th class=\"num\">" else "<th>") catch return;
         const hdr = getProp(cp.getColumnDef().as(tt.JsValue), "header").toString().copy(&tmp_buf);
         appendEsc(&w, hdr) catch return;
-        const sd = col.as(tt.Column_RowSorting).getGetIsSorted().call();
+        const sd = col.as(tt.Column_RowSorting).getIsSorted().call();
         if (sd == .string) {
             if (sd.string.eql("asc")) {
                 w.writeAll(" &#9650;") catch return;
@@ -165,7 +165,7 @@ fn render(app: *App, label: []const u8) void {
     var top_host: []const u8 = "-";
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getGetValue();
+        const gv = row.as(tt.Row_Row).getValue();
         w.writeAll("<tr><td>") catch return;
         appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;

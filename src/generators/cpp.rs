@@ -561,6 +561,54 @@ struct Function {
     refs: BTreeSet<String>,
 }
 
+fn mentions_param(t: &Ty, name: &str) -> bool {
+    match t {
+        Ty::Param(n) => n == name,
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => mentions_param(inner, name),
+        Ty::Tuple(es) | Ty::Union(es) => es.iter().any(|e| mentions_param(e, name)),
+        Ty::Generic(_, args) => args.iter().any(|a| mentions_param(a, name)),
+        _ => false,
+    }
+}
+
+struct RestPackInfo {
+    elem_ty: String,
+    drop_tparam: Option<String>,
+    constraint_ty: Option<Ty>,
+}
+
+fn rest_pack_info(f: &Func) -> Option<RestPackInfo> {
+    if !f.rest {
+        return None;
+    }
+    let (_, last_t) = f.params.last()?;
+    match last_t {
+        Ty::Array => Some(RestPackInfo { elem_ty: "ts::Value".into(), drop_tparam: None, constraint_ty: None }),
+        Ty::ArrayOf(e) => Some(RestPackInfo { elem_ty: ty_arg_for("", e), drop_tparam: None, constraint_ty: None }),
+        Ty::Param(p) => {
+            let tp = f.type_params.iter().find(|tp| tp.name == *p)?;
+            let c_ty = tp.constraint.as_ref()?;
+            let elem_ty = match c_ty {
+                Ty::Array => "ts::Value".to_string(),
+                Ty::ArrayOf(e) => ty_arg_for("", e),
+                _ => return None,
+            };
+            let rest_free = f.params[..f.params.len() - 1].iter().all(|(_, t)| !mentions_param(t, p))
+                && !mentions_param(&f.ret, p)
+                && f.type_params
+                    .iter()
+                    .filter(|other| other.name != *p)
+                    .all(|other| !other.constraint.as_ref().is_some_and(|t| mentions_param(t, p)) && !other.default.as_ref().is_some_and(|t| mentions_param(t, p)));
+            rest_free.then(|| RestPackInfo {
+                elem_ty,
+                drop_tparam: Some(p.clone()),
+                constraint_ty: Some(c_ty.clone()),
+            })
+        }
+        _ => None,
+    }
+}
+
 // `owner` is the class as written in a definition (`Box<T>`), with its template
 // head (`template <class T>`).
 #[allow(clippy::too_many_arguments)]
@@ -578,6 +626,8 @@ fn build_function(
     exact_params: &HashSet<usize>,
     rest_pack: Option<&str>,
     omit_rest: bool,
+    drop_tparam: Option<&str>,
+    rest_constraint_ty: Option<&Ty>,
 ) -> Function {
     let mut raw_params: Vec<&str> = Vec::new();
     let mut args: Vec<String> = Vec::new();
@@ -603,11 +653,17 @@ fn build_function(
         if let Some((_, last_t)) = f.params.last() {
             named_types(last_t, &mut refs);
         }
+        if let Some(ct) = rest_constraint_ty {
+            named_types(ct, &mut refs);
+        }
     } else if rest_pack.is_some() {
         raw_params.push("uint32_t");
         args.push("rest_arr__.h".into());
         if let Some((_, last_t)) = f.params.last() {
             named_types(last_t, &mut refs);
+        }
+        if let Some(ct) = rest_constraint_ty {
+            named_types(ct, &mut refs);
         }
     }
     named_types(&f.ret, &mut refs);
@@ -641,6 +697,9 @@ fn build_function(
 
     let has_key = params_slice.iter().any(|p| matches!(p.1, Ty::Key(_)));
     let mut type_params = f.type_params.clone();
+    if let Some(drop) = drop_tparam {
+        type_params.retain(|p| p.name != drop);
+    }
     if has_key {
         type_params.insert(0, TParam { name: "V".into(), default: None, constraint: None });
     }
@@ -660,11 +719,8 @@ fn build_function(
     }
     let extra_params: [&str; 2] = ["class R0__", "class... Rest__"];
     let extra_requires = if let Some(elem_ty) = rest_pack {
-        vec![
-            format!("!(sizeof...(Rest__) == 0 && std::is_base_of_v<ts::Array<{elem_ty}>, std::decay_t<R0__>>)"),
-            format!("ts::rest_accepts<{elem_ty}, R0__>"),
-            format!("(ts::rest_accepts<{elem_ty}, Rest__> && ...)"),
-        ]
+        let check_extends = if drop_tparam.is_some() { "true" } else { "false" };
+        vec![format!("ts::rest_pack<{elem_ty}, {check_extends}, R0__, Rest__...>")]
     } else {
         Vec::new()
     };
@@ -734,20 +790,44 @@ fn function_variants(
     raw_prefix: &str,
     exact_params: &HashSet<usize>,
 ) -> Vec<Function> {
-    let mut out = vec![build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, &f.params, exact_params, None, false)];
-    if f.rest
-        && let Some((_, last_t)) = f.params.last()
-        && matches!(last_t, Ty::Array | Ty::ArrayOf(_))
-    {
-        let elem_ty = match last_t {
-            Ty::Array => "ts::Value".to_string(),
-            Ty::ArrayOf(e) => ty_arg_for("", e),
-            _ => unreachable!(),
-        };
+    let mut out = vec![build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, &f.params, exact_params, None, false, None, None)];
+    if let Some(rp) = rest_pack_info(f) {
         let fixed = &f.params[..f.params.len() - 1];
         let zname = zero_name.as_deref().unwrap_or(&name);
-        out.push(build_function(f, zname, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, exact_params, None, true));
-        out.push(build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, exact_params, Some(&elem_ty), false));
+        out.push(build_function(
+            f,
+            zname,
+            owner,
+            owner_head,
+            place,
+            unions,
+            callbacks,
+            wasm_module,
+            raw_prefix,
+            fixed,
+            exact_params,
+            None,
+            true,
+            rp.drop_tparam.as_deref(),
+            rp.constraint_ty.as_ref(),
+        ));
+        out.push(build_function(
+            f,
+            &name,
+            owner,
+            owner_head,
+            place,
+            unions,
+            callbacks,
+            wasm_module,
+            raw_prefix,
+            fixed,
+            exact_params,
+            Some(&rp.elem_ty),
+            false,
+            rp.drop_tparam.as_deref(),
+            rp.constraint_ty.as_ref(),
+        ));
     }
     out
 }
@@ -929,7 +1009,9 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     // Per module: headers, and the definitions compiled once.
     let mut modules: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut library: BTreeMap<String, (BTreeSet<String>, String)> = BTreeMap::new();
+    let mut extra_lib_headers: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let callbacks: HashSet<&str> = m.callbacks.iter().map(|c| c.name.as_str()).collect();
+    let mut callback_apply_imports: HashSet<String> = HashSet::new();
 
     // A callback, made from a lambda. Its arguments are made only once the
     // lambda's type is known, so the types they name need not be complete yet.
@@ -942,16 +1024,24 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         let raw_args: String = c.params.iter().enumerate().map(|(i, (_, t))| format!(", {} a{i}", raw_ret(t))).collect();
         let args: Vec<String> = c.params.iter().enumerate().map(|(i, (_, t))| raise_callback(t, &format!("a{i}"), unions)).collect();
         let call = format!("ts::closure_fn<F>(ctx)({})", args.join(", "));
-        let result = match &c.ret {
-            Ty::Void => format!("{call};"),
-            t => format!("return {};", lower_callback(t, &call)),
-        };
         let cb_args: Vec<String> = c.params.iter().map(|(_, t)| format!("ts::dep<F, {}>", ty_out(t, unions))).collect();
         let arg_list = if cb_args.is_empty() { String::new() } else { format!(", {}", cb_args.join(", ")) };
-        let req = if c.ret == Ty::Void {
-            format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}>")
-        } else {
-            format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}> && !std::is_void_v<std::invoke_result_t<F&{arg_list}>>")
+        let (req, result) = match &c.ret {
+            Ty::Void => (
+                format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}>"),
+                format!("{call};"),
+            ),
+            Ty::Nullable(inner, _) => {
+                let absent = if matches!(**inner, Ty::Bool | Ty::Enum(_)) { "-1" } else { "0" };
+                (
+                    format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}>"),
+                    format!("if constexpr (std::is_void_v<std::invoke_result_t<F&{arg_list}>>) {{ {call}; return {absent}; }} else {{ return {}; }}", lower_callback(&c.ret, &call)),
+                )
+            }
+            t => (
+                format!("ts::callable_candidate<F> && std::invocable<F&{arg_list}> && !std::is_void_v<std::invoke_result_t<F&{arg_list}>>"),
+                format!("return {};", lower_callback(t, &call)),
+            ),
         };
         let (name, ret) = (&c.name, raw_ret(&c.ret));
         let tpl = head(&c.type_params, false);
@@ -972,6 +1062,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             f.call == Call::Apply
                 && f.params.first().is_some_and(|(_, t)| matches!(t, Ty::Obj(n) | Ty::Generic(n, _) if n == &c.name))
         }) {
+            callback_apply_imports.insert(f.import.clone());
             let mut op_f = f.clone();
             op_f.call = Call::Invoke;
             op_f.params = f.params[1..].to_vec();
@@ -992,6 +1083,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
                     let lib = library.entry(f.module.clone()).or_default();
                     lib.0.insert(func.import);
                     lib.1 += &func.def;
+                    extra_lib_headers.entry(f.module.clone()).or_default().insert(path.clone());
                 }
             }
         }
@@ -1062,6 +1154,11 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         // where TypeScript merges them: `using Base::name;` brings them back, and
         // an own overload of the same signature still hides its base's.
         let clashes_adapted = |bf: &Func, cf: &Func| -> bool {
+            if bf.rest && cf.rest && bf.params.len() == cf.params.len()
+                && rest_pack_info(bf).map(|r| r.elem_ty) != rest_pack_info(cf).map(|r| r.elem_ty)
+            {
+                return true;
+            }
             if bf.params.len() != cf.params.len() {
                 return false;
             }
@@ -1152,7 +1249,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         let mut instance = BTreeSet::new();
         for f in c.funcs.iter().map(|f| with_self_args(f, c)).chain(again.iter().cloned()).filter(Class::has_self) {
             instance.insert(signature(&f));
-            if f.rest && matches!(f.params.last().map(|p| &p.1), Some(Ty::Array | Ty::ArrayOf(_))) {
+            if rest_pack_info(&f).is_some() {
                 instance.insert(sig_of(&cpp_name(&f, ctor), &f.params[..f.params.len() - 1]));
             }
         }
@@ -1184,8 +1281,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             let place = if Class::has_self(f) { Place::Member } else { Place::Static };
             let name = if place == Place::Static && instance.contains(&signature(f)) { format!("{raw_name}_static") } else { raw_name };
             let zero_name = if place == Place::Static
-                && f.rest
-                && matches!(f.params.last().map(|p| &p.1), Some(Ty::Array | Ty::ArrayOf(_)))
+                && rest_pack_info(f).is_some()
                 && instance.contains(&sig_of(&name, &f.params[..f.params.len() - 1]))
             {
                 Some(format!("{name}_static"))
@@ -1327,7 +1423,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     let free_funcs: Vec<(Option<String>, String, &Func)> = m
         .funcs
         .iter()
-        .filter(|f| !class_statics_of.contains(&f.import))
+        .filter(|f| !class_statics_of.contains(&f.import) && !callback_apply_imports.contains(&f.import))
         .map(|f| {
             // A namespace's, by its own name in a namespace of it: `marked_ns::parseInline`.
             let space = m.func_namespaces.get(&f.import).map(|(path, _, _, _)| {
@@ -1403,7 +1499,9 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     // The definitions of each module: a translation unit to compile once.
     for (module, (imports, defs)) in library {
         let path = format!("{module}.cpp");
-        let headers: String = modules[&module].iter().map(|h| include(&path, h)).collect();
+        let mut header_set: BTreeSet<String> = modules.get(&module).into_iter().flatten().cloned().collect();
+        header_set.extend(extra_lib_headers.remove(&module).into_iter().flatten());
+        let headers: String = header_set.into_iter().map(|h| include(&path, &h)).collect();
         let body = wrap_ns(ns, &defs);
         out.push((path, format!("// Generated. The module's definitions: compile once, and link with the program.\n{headers}\n{}\n{body}", imports.into_iter().collect::<String>())));
     }
@@ -1835,7 +1933,10 @@ fn lower_callback(t: &Ty, x: &str) -> String {
         Ty::Bool => format!("({x} ? 1 : 0)"),
         Ty::Enum(_) => format!("int32_t({x})"),
         Ty::Nullable(inner, _) if **inner == Ty::Bool => format!("[](std::optional<bool> v) {{ return v ? int32_t(*v) : -1; }}({x})"),
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("[](auto v) {{ return v ? int32_t(*v) : -1; }}({x})"),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => {
+            let Ty::Enum(e) = &**inner else { unreachable!() };
+            format!("[](std::optional<{}> v) {{ return v ? int32_t(*v) : -1; }}({x})", tn(e))
+        }
         _ => format!("ts::Arg({x}).give()"),
     }
 }

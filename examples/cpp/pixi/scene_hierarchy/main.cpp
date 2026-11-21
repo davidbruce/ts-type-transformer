@@ -29,7 +29,7 @@ static ts::Task run_app() {
 
     dom::Document doc = dom::get_document();
     if (auto stage_el = doc.getElementById("stage")) {
-        stage_el->appendChild(app.canvas().as<dom::Node>());
+        stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
     Container<ts::Value> stage = app.stage();
@@ -68,17 +68,17 @@ static ts::Task run_app() {
         stroke_g(sat_orb, 2.0, 0x111111);
         sat_orb.x(-32.0);
 
-        sub.addChild(ts::Array<>::of(sub_bar, sat_box, sat_orb));
-        arm.addChild(ts::Array<>::of(arm_bar, sub));
-        root.addChild(ts::Array<>::of(arm));
+        sub.addChild(sub_bar, sat_box, sat_orb);
+        arm.addChild(arm_bar, sub);
+        root.addChild(arm);
     }
 
     Graphics hub = Graphics::create();
     hub.circle(0.0, 0.0, 18.0).fill(0x111111);
     hub.circle(0.0, 0.0, 7.0).fill(0xffffff);
-    root.addChild(ts::Array<>::of(hub));
+    root.addChild(hub);
 
-    stage.addChild(ts::Array<>::of(guide, root));
+    stage.addChild(guide, root);
     app.render();
 
     Bounds rb = root.getBounds();

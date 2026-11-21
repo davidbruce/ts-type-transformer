@@ -36,8 +36,8 @@ export fn start() void {
     const stage = kv.Stage.new(.{ .container = "stage", .width = 680, .height = 400 });
     const bg_layer = kv.Layer.new(null);
     const fg_layer = kv.Layer.new(null);
-    _ = stage.add(bg_layer, &.{});
-    _ = stage.add(fg_layer, &.{});
+    _ = stage.add(bg_layer, .{});
+    _ = stage.add(fg_layer, .{});
 
     // Layer 1: Blueprint Grid.
     _ = bg_layer.add(.{kv.Rect.new(.{ .x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff" })});

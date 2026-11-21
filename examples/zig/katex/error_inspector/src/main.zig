@@ -2,8 +2,6 @@ const std = @import("std");
 const dom = @import("dom");
 const katex = @import("katex");
 
-var html_buf: [65536]u8 = undefined;
-
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
@@ -45,7 +43,7 @@ export fn start() void {
         const left = makeEl(doc, "div", "cell mode-html", null);
         _ = left.appendChild(makeEl(doc, "div", "label", "throwOnError: false (#555555)"));
         const l_slot = makeEl(doc, "div", "slot", null);
-        l_slot.setInnerHTML(katex.renderToString(tex, lenient).copy(&html_buf));
+        l_slot.setInnerHTML(katex.renderToString(tex, lenient));
         _ = left.appendChild(l_slot);
         _ = row.appendChild(left);
 

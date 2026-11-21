@@ -127,8 +127,8 @@ fn render(app: *App) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
-    const core = app.table.as(tt.Table_RowModels_Core).getGetCoreRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
+    const core = app.table.as(tt.Table_RowModels_Core).getCoreRowModel().call();
     const rows = rm.getRows();
     const nrows = rows.len();
     const ntotal = core.getRows().len();
@@ -137,7 +137,7 @@ fn render(app: *App) void {
     w.writeAll("<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>") catch return;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getGetValue();
+        const gv = row.as(tt.Row_Row).getValue();
         w.writeAll("<tr><td>") catch return;
         appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
@@ -155,7 +155,7 @@ fn render(app: *App) void {
     const pg = getProp(storeState(app.table), "pagination");
     const page_idx: i32 = @intFromFloat(@round(getProp(pg, "pageIndex").toNumber()));
     const page_sz: i32 = @intFromFloat(@round(getProp(pg, "pageSize").toNumber()));
-    const page_cnt: i32 = @intFromFloat(@round(app.table.as(tt.Table_RowPagination).getGetPageCount().call()));
+    const page_cnt: i32 = @intFromFloat(@round(app.table.as(tt.Table_RowPagination).getPageCount().call()));
     const m = std.fmt.bufPrint(&meta_buf, "Page {d} / {d} · pageSize {d} · showing {d} of {d} rows", .{
         page_idx + 1, page_cnt, page_sz, nrows, ntotal,
     }) catch "Page";
@@ -170,7 +170,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
     const pag = app.table.as(tt.Table_RowPagination);
     const pg = getProp(storeState(app.table), "pagination");
     const page_idx: f64 = getProp(pg, "pageIndex").toNumber();
-    const max_idx: f64 = pag.getGetPageCount().call() - 1.0;
+    const max_idx: f64 = pag.getPageCount().call() - 1.0;
 
     if (ctx.id == 0) {
         if (page_idx > 0.0) pag.getSetPageIndex().call(page_idx - 1.0);

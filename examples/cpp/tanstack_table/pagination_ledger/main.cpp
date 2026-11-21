@@ -62,10 +62,10 @@ struct AppState {
 
 static PaginationState current_page(const TableT& table) {
     V store_v = functionalUpdate<V>(
-        table.as<Table_CoreProperties<TableFeatures, Obj>>().store().as<Obj>().at("get"),
+        table.unsafe_as<Table_CoreProperties<TableFeatures, Obj>>().store().unsafe_as<Obj>().at("get"),
         V()
     );
-    return store_v.as<Obj>().at("pagination").as<PaginationState>();
+    return store_v.unsafe_as<Obj>().at("pagination").unsafe_as<PaginationState>();
 }
 
 static void render(const std::shared_ptr<AppState>& st) {
@@ -90,7 +90,7 @@ static void render(const std::shared_ptr<AppState>& st) {
     PaginationState pg = current_page(st->table);
     int page_idx = int(pg.pageIndex() + 0.5);
     int page_sz = int(pg.pageSize() + 0.5);
-    int page_cnt = int(st->table.as<Table_RowPagination<TableFeatures, Obj>>().getPageCount()() + 0.5);
+    int page_cnt = int(st->table.unsafe_as<Table_RowPagination<TableFeatures, Obj>>().getPageCount()() + 0.5);
     std::snprintf(
         nbuf, sizeof nbuf,
         "Page %d / %d \xC2\xB7 pageSize %d \xC2\xB7 showing %zu of %zu rows",
@@ -142,7 +142,7 @@ TS_EXPORT(start) void start() {
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(opts.as<TableOptions_Core<TableFeatures, Obj>>()),
+        constructTable<TableFeatures, Obj>(opts.unsafe_as<TableOptions_Core<TableFeatures, Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
     });
@@ -150,7 +150,7 @@ TS_EXPORT(start) void start() {
     const char* btn_ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (int i = 0; i < 5; i++) {
         doc.getElementById(btn_ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
-            auto pag = st->table.as<Table_RowPagination<TableFeatures, Obj>>();
+            auto pag = st->table.unsafe_as<Table_RowPagination<TableFeatures, Obj>>();
             PaginationState pg = current_page(st->table);
             double idx = pg.pageIndex();
             double max_idx = pag.getPageCount()() - 1.0;

@@ -146,7 +146,7 @@ TS_EXPORT(start) void start() {
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(opts.as<TableOptions_Core<TableFeatures, Obj>>()),
+        constructTable<TableFeatures, Obj>(opts.unsafe_as<TableOptions_Core<TableFeatures, Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
     });
@@ -154,8 +154,8 @@ TS_EXPORT(start) void start() {
     const char* btn_ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (int i = 0; i < 5; i++) {
         doc.getElementById(btn_ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
-            auto cf = st->table.as<Table_ColumnFiltering>();
-            auto gf = st->table.as<Table_GlobalFiltering<TableFeatures, Obj>>();
+            auto cf = st->table.unsafe_as<Table_ColumnFiltering>();
+            auto gf = st->table.unsafe_as<Table_GlobalFiltering<TableFeatures, Obj>>();
             ts::Array<ColumnFilter> next = ts::Array<ColumnFilter>::create();
             std::string label = "Filter: all services";
             if (i == 0) {

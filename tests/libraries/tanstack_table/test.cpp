@@ -65,7 +65,7 @@ static V writable_atom(V initial) {
 }
 static V readonly_atom(void_to_T_fn<V> compute) {
     Obj atom = Obj::create();
-    atom.set_at("get", val(void_to_T_fn<V>([compute] { return call_void_to_T_fn<V>(compute); })));
+    atom.set_at("get", val(void_to_T_fn<V>([compute] { return compute(); })));
     atom.set_at("subscribe", val(Updater_fn2<V>([](V) { return unsubscribe_object(); })));
     return val(atom);
 }
@@ -76,9 +76,9 @@ static V reactivity() {
     r.addSubscription(TableReactivityBindings_addSubscription([](Subscription) {}));
     r.createWritableAtom(TableReactivityBindings_createWritableAtom([](V initial, std::optional<TableAtomOptions<V>>) { return writable_atom(initial); }));
     r.createReadonlyAtom(TableReactivityBindings_createReadonlyAtom([](void_to_T_fn<V> compute, std::optional<TableAtomOptions<V>>) { return readonly_atom(compute); }));
-    r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return call_void_to_T_fn<V>(fn); }));
-    r.batch(fn_fn([](void_fn fn) { call_void_fn(fn); }));
-    r.schedule(fn_fn([](void_fn fn) { call_void_fn(fn); }));
+    r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return fn(); }));
+    r.batch(fn_fn([](void_fn fn) { fn(); }));
+    r.schedule(fn_fn([](void_fn fn) { fn(); }));
     return val(r);
 }
 
@@ -132,48 +132,48 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(table.h != 0);
 
     // The row model: three rows, by index as ids.
-    Model model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
+    Model model = table.getRowModel()();
     CHECK(model.rows().size() == 3);
     CHECK(ids(model.rows()) == "Cy#0,Al#1,Bo#2");
-    CHECK(call_Table_RowModels_getCoreRowModel(table.getCoreRowModel()).rows().size() == 3);
+    CHECK(table.getCoreRowModel()().rows().size() == 3);
 
     // Rows: the original data, and cell values by column id.
     auto first = as<RowP>(model.rows()[0]);
     CHECK(first.original().at("name").to_string() == "Cy");
     CHECK(first.original().at("age").to_number() == 30);
-    CHECK(call_string_to_TValue_fn(model.rows()[0].getValue(), "name").to_string() == "Cy");
-    CHECK(call_string_to_TValue_fn(model.rows()[1].getValue(), "age").to_number() == 25);
-    CHECK(call_string_to_TValue_fn(model.rows()[2].getValue(), "team").to_string() == "red");
+    CHECK(model.rows()[0].getValue()("name").to_string() == "Cy");
+    CHECK(model.rows()[1].getValue()("age").to_number() == 25);
+    CHECK(model.rows()[2].getValue()("team").to_string() == "red");
 
     // The cells of a row, one per column, ids from row and column.
-    auto cells = call_Row_Row_getAllCells(model.rows()[0].getAllCells());
+    auto cells = model.rows()[0].getAllCells()();
     CHECK(cells.size() == 3);
     using CellP = Cell_CoreProperties<TableFeatures, RowData_map, V>;
     CHECK(as<CellP>(cells[1]).id() == "Cy#0_age");
 
     // Columns.
-    auto all = call_Table_Columns_getAllColumns(table.getAllColumns());
+    auto all = table.getAllColumns()();
     CHECK(all.size() == 3);
-    CHECK(call_Table_Columns_getAllColumns(table.getAllLeafColumns()).h != 0);
-    auto agec = call_Table_Columns_getColumn(table.getColumn(), "age");
+    CHECK(table.getAllLeafColumns()().h != 0);
+    auto agec = table.getColumn()("age");
     CHECK(agec.has_value());
     auto age = as<ColP>(*agec);
     CHECK(age.id() == "age");
-    CHECK(!call_Table_Columns_getColumn(table.getColumn(), "nope").has_value());
+    CHECK(!table.getColumn()("nope").has_value());
 
     // Header groups: one row of three headers.
-    CHECK(call_Table_Headers_getFooterGroups(table.getHeaderGroups()).size() == 1);
+    CHECK(table.getHeaderGroups()().size() == 1);
 
     // Sorting: an ascending sort on age puts Al (25), Cy (30), Bo (41) in order.
-    auto sorted = as<ColSort>(*call_Table_Columns_getColumn(table.getColumn(), "age"));
-    auto isSorted = [&](const ColSort& c) { return call_Column_RowSorting_getIsSorted(c.getIsSorted()); };
+    auto sorted = as<ColSort>(*table.getColumn()("age"));
+    auto isSorted = [&](const ColSort& c) { return c.getIsSorted()(); };
     auto notSorted = [&](const ColSort& c) {
         auto r = isSorted(c);
         return std::holds_alternative<bool>(r) && !std::get<bool>(r);
     };
     CHECK(notSorted(sorted));
-    call_Column_RowSorting_toggleSorting(sorted.toggleSorting(), false, std::nullopt);
-    model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
+    sorted.toggleSorting()(false, std::nullopt);
+    model = table.getRowModel()();
     CHECK(ids(model.rows()) == "Al#1,Cy#0,Bo#2");
     CHECK(std::get<SortDirection>(isSorted(sorted)) == SortDirection::asc);
 
@@ -182,22 +182,22 @@ extern "C" __attribute__((export_name("run"))) void run() {
     by_name.id("name");
     by_name.desc(true);
     ts::Array<ColumnSort> state{by_name};
-    call_Table_RowSorting_setSorting(as<TabSort>(table).setSorting(), Updater<ts::Array<ColumnSort>>(state));
-    model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
+    as<TabSort>(table).setSorting()(Updater<ts::Array<ColumnSort>>(state));
+    model = table.getRowModel()();
     CHECK(ids(model.rows()) == "Cy#0,Bo#2,Al#1");
     CHECK(notSorted(sorted));
-    auto byName = as<ColSort>(*call_Table_Columns_getColumn(table.getColumn(), "name"));
+    auto byName = as<ColSort>(*table.getColumn()("name"));
     CHECK(std::get<SortDirection>(isSorted(byName)) == SortDirection::desc);
     // The unsorted model is still the data's order.
-    CHECK(ids(call_Table_RowModels_getCoreRowModel(table.getCoreRowModel()).rows()) == "Cy#0,Al#1,Bo#2");
+    CHECK(ids(table.getCoreRowModel()().rows()) == "Cy#0,Al#1,Bo#2");
 
     // A sort by a text column, ascending.
     ColumnSort team = ColumnSort::create();
     team.id("team");
     team.desc(false);
     ts::Array<ColumnSort> by_team{team};
-    call_Table_RowSorting_setSorting(as<TabSort>(table).setSorting(), Updater<ts::Array<ColumnSort>>(by_team));
-    model = call_Table_RowModels_getCoreRowModel(table.getRowModel());
-    CHECK(call_string_to_TValue_fn(model.rows()[0].getValue(), "team").to_string() == "blue");
+    as<TabSort>(table).setSorting()(Updater<ts::Array<ColumnSort>>(by_team));
+    model = table.getRowModel()();
+    CHECK(model.rows()[0].getValue()("team").to_string() == "blue");
     CHECK(ids(model.rows()).substr(0, 5) == "Al#1,");
 }

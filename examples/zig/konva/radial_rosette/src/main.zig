@@ -13,7 +13,7 @@ export fn start() void {
 
     const stage = kv.Stage.new(.{ .container = "stage", .width = 680, .height = 400 });
     const layer = kv.Layer.new(null);
-    _ = stage.add(layer, &.{});
+    _ = stage.add(layer, .{});
 
     _ = layer.add(.{kv.Rect.new(.{ .x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff" })});
 

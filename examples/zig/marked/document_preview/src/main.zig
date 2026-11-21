@@ -1,8 +1,6 @@
 const dom = @import("dom");
 const m = @import("marked");
 
-var html_buf: [8192]u8 = undefined;
-
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
@@ -47,7 +45,7 @@ export fn start() void {
     const out_card = makeEl(doc, "div", "card", null);
     _ = out_card.appendChild(makeEl(doc, "div", "label", "Rendered HTML"));
     const md_out = makeEl(doc, "div", "md-out", null);
-    md_out.setInnerHTML(m.marked(markdown_src, .{}).copy(&html_buf));
+    md_out.setInnerHTML(m.marked(markdown_src, .{}));
 
     _ = out_card.appendChild(md_out);
     _ = grid.appendChild(src_card);

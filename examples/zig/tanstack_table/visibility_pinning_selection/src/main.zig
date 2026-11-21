@@ -142,9 +142,9 @@ fn render(app: *App) void {
     const sel = app.table.as(tt.Table_RowSelection);
 
     const groups = [3]tt.JsArrayOf(tt.Column_Core){
-        pin.getGetStartVisibleLeafColumns().call(),
-        pin.getGetCenterVisibleLeafColumns().call(),
-        pin.getGetEndVisibleLeafColumns().call(),
+        pin.getStartVisibleLeafColumns().call(),
+        pin.getCenterVisibleLeafColumns().call(),
+        pin.getEndVisibleLeafColumns().call(),
     };
 
     var ncol: usize = 0;
@@ -169,13 +169,13 @@ fn render(app: *App) void {
     }
     w.writeAll("</tr></thead><tbody>") catch return;
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
     const rows = rm.getRows();
     const nrows = rows.len();
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getGetValue();
-        const is_sel = row.as(tt.Row_RowSelection).getGetIsSelected().call();
+        const gv = row.as(tt.Row_Row).getValue();
+        const is_sel = row.as(tt.Row_RowSelection).getIsSelected().call();
         w.writeAll(if (is_sel) "<tr class=\"selected-row\"><td>&#9632;</td>" else "<tr><td>&#9633;</td>") catch return;
         for (0..ncol) |c| {
             const cid = col_ids_buf[c][0..col_lens[c]];
@@ -192,9 +192,9 @@ fn render(app: *App) void {
     w.writeAll("</tbody></table>") catch return;
     app.wrap.setInnerHTML(w.buffered());
 
-    const vis_n = vis.getGetVisibleLeafColumns().call().len();
-    const all_n = app.table.as(tt.Table_Columns).getGetAllLeafColumns().call().len();
-    const sel_n = sel.getGetSelectedRowModel().call().getRows().len();
+    const vis_n = vis.getVisibleLeafColumns().call().len();
+    const all_n = app.table.as(tt.Table_Columns).getAllLeafColumns().call().len();
+    const sel_n = sel.getSelectedRowModel().call().getRows().len();
     const m = std.fmt.bufPrint(&meta_buf, "{d} / {d} visible columns · start:id end:status pinned · {d} / {d} rows selected", .{
         vis_n, all_n, sel_n, nrows,
     }) catch "Layout";

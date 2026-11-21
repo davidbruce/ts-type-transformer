@@ -156,6 +156,17 @@ fn method_name(name: &str) -> String {
     out
 }
 
+fn zig_func_name(name: &str, f: &Func) -> String {
+    if matches!(f.call, Call::Get(_) | Call::GetBound(_) | Call::StaticGet(_))
+        && let Some(rest) = name.strip_prefix("get_")
+        && rest.starts_with("get")
+        && rest.as_bytes().get(3).is_some_and(u8::is_ascii_uppercase)
+    {
+        return method_name(rest);
+    }
+    method_name(name)
+}
+
 // What the runtime declares at the top of every file.
 const RUNTIME_NAMES: &[&str] = &[
     "JsValue", "JsString", "JsArray", "JsArrayOf", "JsTuple", "JsIteratorOf", "JsListener", "Lent", "jsRelease", "jsRetain", "jsLiveHandles", "jsForgetCallback",
@@ -182,7 +193,7 @@ pub const NAMING: Naming = Naming {
     values_of: |_, _, _, _| Vec::new(),
     types_apart: false,
     overloads: false,
-    func_name: |_, name, _| Some(method_name(name)),
+    func_name: |_, name, f| Some(zig_func_name(name, f)),
     funcs_flat: false,
     nests: true,
     members: |c, m| {
@@ -212,7 +223,7 @@ pub const NAMING: Naming = Naming {
 
 // Each function's Zig name, by the model's: `names::settle` made them apart.
 fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>) -> HashMap<String, String> {
-    funcs.map(|f| (f.name.clone(), method_name(&f.name))).collect()
+    funcs.map(|f| (f.name.clone(), zig_func_name(&f.name, f))).collect()
 }
 
 // Parameters get a suffix: Zig forbids shadowing a declaration in scope.
@@ -461,7 +472,16 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
     // Trailing optional parameters are accepted via `options: anytype` (supporting
     // `.{}`, `null`, `.{ .field = val }`, or a direct single value / struct literal).
     let setter = matches!(f.call, Call::Set(_) | Call::StaticSet(_) | Call::IndexSet);
-    let optional = if setter { 0 } else { f.params.iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, true))).count() };
+    let rest_opt = !setter
+        && f.rest
+        && matches!(f.params.last().map(|p| &p.1), Some(Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)));
+    let optional = if setter {
+        0
+    } else {
+        let before_rest = if rest_opt { f.params.len() - 1 } else { f.params.len() };
+        let opt_before = f.params[..before_rest].iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, true))).count();
+        opt_before + usize::from(rest_opt)
+    };
     // A lone parameter stays one: `orUnit(s)`, `orUnit(null)`.
     let optional = if optional == f.params.len() && optional == 1 { 0 } else { optional };
     let first_optional = f.params.len() - optional;
@@ -470,19 +490,29 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
     let mut pre = String::new();
     for (i, (name, t)) in f.params.iter().enumerate() {
         let id = param(name);
+        let is_rest_param = rest_opt && i == f.params.len() - 1;
+        let effective_t = if is_rest_param && !matches!(t, Ty::Nullable(..)) {
+            Ty::Nullable(Box::new(t.clone()), true)
+        } else {
+            t.clone()
+        };
         if i >= first_optional {
-            let Ty::Nullable(inner, _) = t else { unreachable!() };
+            let inner = match t {
+                Ty::Nullable(inner, _) => inner.as_ref(),
+                other => other,
+            };
             if optional == 1 {
                 let inner_ty = typed(inner, true);
                 let inner_ty = if key.is_empty() { inner_ty } else { inner_ty.replace("KEY", &key) };
                 let unwrap = format!("Lent.singleOpt({inner_ty}, {name:?}, options)");
-                if is_lent_ty(t) {
-                    pre += &format!("const lent_{id} = {}; defer lent_{id}.done(); ", lent_expr(&unwrap, t, &key));
+                if is_lent_ty(&effective_t) {
+                    pre += &format!("const lent_{id} = {}; defer lent_{id}.done(); ", lent_expr(&unwrap, &effective_t, &key));
+                } else if *inner == Ty::Str {
+                    unpack += &format!("const str_{id} = Lent.optStr({unwrap}); ");
                 } else {
-                    let val_expr = match &**inner {
+                    let val_expr = match inner {
                         Ty::Num => format!("Lent.optNum({unwrap})"),
                         Ty::Bool => format!("Lent.optBool({unwrap})"),
-                        Ty::Str => format!("Lent.optStr({unwrap})"),
                         Ty::Enum(n) | Ty::NumEnum(n) => format!("Lent.optEnum({n}, {unwrap})"),
                         _ => unreachable!(),
                     };
@@ -492,13 +522,14 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
                 allowed.push(format!("{name:?}"));
                 let field_expr = format!("@field(options, {name:?})");
                 let cond = format!("comptime Lent.hasOpt(@TypeOf(options), {name:?})");
-                if is_lent_ty(t) {
-                    pre += &format!("const lent_{id}: Lent = if ({cond}) {} else Lent.none; defer lent_{id}.done(); ", lent_expr(&field_expr, t, &key));
+                if is_lent_ty(&effective_t) {
+                    pre += &format!("const lent_{id}: Lent = if ({cond}) {} else Lent.none; defer lent_{id}.done(); ", lent_expr(&field_expr, &effective_t, &key));
+                } else if *inner == Ty::Str {
+                    unpack += &format!("const str_{id}: Lent.OptStrArg = if ({cond}) Lent.optStr({field_expr}) else .{{ .ptr = null, .len = 0 }}; ");
                 } else {
-                    let line = match &**inner {
+                    let line = match inner {
                         Ty::Num => format!("const {id}: ?f64 = if ({cond}) Lent.optNum({field_expr}) else null; "),
                         Ty::Bool => format!("const {id}: ?bool = if ({cond}) Lent.optBool({field_expr}) else null; "),
-                        Ty::Str => format!("const {id}: ?[]const u8 = if ({cond}) Lent.optStr({field_expr}) else null; "),
                         Ty::Enum(n) | Ty::NumEnum(n) => format!("const {id}: ?{n} = if ({cond}) Lent.optEnum({n}, {field_expr}) else null; "),
                         _ => unreachable!(),
                     };
@@ -507,15 +538,21 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
             }
         } else if matches!(t, Ty::Key(_)) {
             params.push(format!("comptime {id}: {}", typed(t, true).replace("KEY", &key)));
-        } else if is_lent_ty(t) {
+        } else if *t == Ty::Str {
             params.push(format!("{id}: anytype"));
-            pre += &format!("const lent_{id} = {}; defer lent_{id}.done(); ", lent_expr(&id, t, &key));
+            unpack += &format!("const str_{id} = Lent.str({id}); ");
+        } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
+            params.push(format!("{id}: anytype"));
+            unpack += &format!("const str_{id} = Lent.optStr({id}); ");
+        } else if is_lent_ty(&effective_t) {
+            params.push(format!("{id}: anytype"));
+            pre += &format!("const lent_{id} = {}; defer lent_{id}.done(); ", lent_expr(&id, &effective_t, &key));
         } else {
             params.push(format!("{id}: {}", typed(t, true).replace("KEY", &key)));
         }
         if *t == Ty::Str {
             raw_params.extend(["[*]const u8".to_string(), "usize".to_string()]);
-            args.extend([format!("{id}.ptr"), format!("{id}.len")]);
+            args.extend([format!("str_{id}.ptr"), format!("str_{id}.len")]);
         } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_))) {
             // An optional number: whether it is there, and the number.
             let value = if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Num) { format!("{id} orelse 0") } else { format!("if ({id}) |v| @floatFromInt(@intFromEnum(v)) else 0") };
@@ -523,10 +560,10 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
             args.extend([format!("@intFromBool({id} != null)"), value]);
         } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
             raw_params.extend(["?[*]const u8".to_string(), "usize".to_string()]);
-            args.extend([format!("if ({id}) |v| v.ptr else null"), format!("if ({id}) |v| v.len else 0")]);
+            args.extend([format!("str_{id}.ptr"), format!("str_{id}.len")]);
         } else {
             raw_params.push(raw(t).to_string());
-            args.push(lower_arg(&id, t));
+            args.push(lower_arg(&id, &effective_t));
         }
     }
     if optional > 1 {
@@ -836,6 +873,7 @@ pub fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     }
     // A callback is made from a function and a context pointer passed back to it.
     // Supports stateless `fn (...) R`, typed ctx `fn (*T, ...) R`, or legacy `fn (?*anyopaque, ...) R`.
+    let mut cb_apply_imports: HashSet<String> = HashSet::new();
     for c in &m.callbacks {
         let mut params = vec!["?*anyopaque".to_string()];
         params.extend(c.params.iter().map(|(_, t)| callback_param_ty(t, &m.unions)));
@@ -885,6 +923,7 @@ pub fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             c.name
         );
         if let Some(apply_f) = m.funcs.iter().find(|f| f.call == Call::Apply && matches!(f.params.first(), Some((_, Ty::Obj(n))) if n == &c.name)) {
+            cb_apply_imports.insert(apply_f.import.clone());
             for p in &apply_f.params[1..] {
                 type_refs(&p.1, types_uses);
             }
@@ -1203,8 +1242,9 @@ pub fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         }
         *out += "};\n";
     }
-    let top_names = names_of(m.funcs.iter());
-    for f in &m.funcs {
+    let top_funcs: Vec<&Func> = m.funcs.iter().filter(|f| !cb_apply_imports.contains(&f.import)).collect();
+    let top_names = names_of(top_funcs.iter().copied());
+    for f in top_funcs {
         let refs = uses.entry(f.module.clone()).or_default();
         f.params.iter().for_each(|p| type_refs(&p.1, refs));
         type_refs(&f.ret, refs);
@@ -1224,7 +1264,8 @@ pub fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     let func_paths: HashMap<&String, Vec<String>> = m
         .funcs
         .iter()
-        .filter_map(|f| m.func_namespaces.get(&f.import).map(|(path, own, _, _)| (&top_names[&f.name], path.iter().cloned().chain([method_name(own)]).collect())))
+        .filter(|f| !cb_apply_imports.contains(&f.import))
+        .filter_map(|f| m.func_namespaces.get(&f.import).map(|(path, own, _, _)| (&top_names[&f.name], path.iter().cloned().chain([zig_func_name(own, f)]).collect())))
         .collect();
     for (file, (body, externs, names)) in &files {
         let own: HashSet<&str> = names.iter().map(String::as_str).collect();

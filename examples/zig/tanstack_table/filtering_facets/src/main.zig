@@ -132,8 +132,8 @@ fn render(app: *App, label: []const u8) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
-    const core = app.table.as(tt.Table_RowModels_Core).getGetCoreRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
+    const core = app.table.as(tt.Table_RowModels_Core).getCoreRowModel().call();
     const rows = rm.getRows();
     const nrows = rows.len();
     const ntotal = core.getRows().len();
@@ -142,7 +142,7 @@ fn render(app: *App, label: []const u8) void {
     w.writeAll("<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>") catch return;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getGetValue();
+        const gv = row.as(tt.Row_Row).getValue();
         w.writeAll("<tr><td>") catch return;
         appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;

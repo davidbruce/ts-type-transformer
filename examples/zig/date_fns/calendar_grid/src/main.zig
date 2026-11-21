@@ -2,10 +2,10 @@ const std = @import("std");
 const dom = @import("dom");
 const df = @import("date_fns");
 
-fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
+fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
-    if (text) |t| el.setTextContent(t);
+    if (@TypeOf(text) != @TypeOf(null)) el.setTextContent(text);
     return el;
 }
 
@@ -61,11 +61,11 @@ export fn start() void {
         const cls = if (is_ref) "day-cell today" else if (is_wknd) "day-cell weekend" else "day-cell";
 
         const cell = makeEl(doc, "div", cls, null);
-        _ = cell.appendChild(makeEl(doc, "span", "day-num", df.formatDate(d, "d", null).copy(&tmp_buf)));
+        _ = cell.appendChild(makeEl(doc, "span", "day-num", df.formatDate(d, "d", null)));
         if (is_ref) {
             _ = cell.appendChild(makeEl(doc, "span", "sub", "REF"));
         } else {
-            _ = cell.appendChild(makeEl(doc, "span", "sub", df.formatDate(d, "EEE", null).copy(&tmp_buf)));
+            _ = cell.appendChild(makeEl(doc, "span", "sub", df.formatDate(d, "EEE", null)));
         }
         _ = grid.appendChild(cell);
     }

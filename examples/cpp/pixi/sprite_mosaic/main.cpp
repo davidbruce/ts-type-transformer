@@ -20,7 +20,7 @@ static ts::Task run_app() {
 
     dom::Document doc = dom::get_document();
     if (auto stage_el = doc.getElementById("stage")) {
-        stage_el->appendChild(app.canvas().as<dom::Node>());
+        stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
     Container<ts::Value> stage = app.stage();
@@ -31,7 +31,7 @@ static ts::Task run_app() {
     ss.width(1.5);
     ss.color(0xd4d4d4);
     frame.stroke(ts::Array<>::of(ss));
-    stage.addChild(ts::Array<>::of(frame));
+    stage.addChild(frame);
 
     static constexpr int shades[8] = {
         0x111111, 0x262626, 0x404040, 0x555555,
@@ -50,7 +50,7 @@ static ts::Task run_app() {
             sprite.rotation((double(col) - 4.5) * 0.04 + (double(row) - 2.5) * 0.03);
             sprite.alpha(0.65 + 0.35 * double((col + row) % 3) / 2.0);
             sprite.tint(shades[idx]);
-            stage.addChild(ts::Array<>::of(sprite));
+            stage.addChild(sprite);
         }
     }
 

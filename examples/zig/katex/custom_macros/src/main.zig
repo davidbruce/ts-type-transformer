@@ -1,8 +1,6 @@
 const dom = @import("dom");
 const katex = @import("katex");
 
-var html_buf: [65536]u8 = undefined;
-
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
@@ -52,7 +50,7 @@ export fn start() void {
         _ = card.appendChild(makeEl(doc, "div", "label", e.name));
         _ = card.appendChild(makeEl(doc, "pre", "tex", e.tex));
         const slot = makeEl(doc, "div", "slot", null);
-        slot.setInnerHTML(katex.renderToString(e.tex, opts).copy(&html_buf));
+        slot.setInnerHTML(katex.renderToString(e.tex, opts));
         _ = card.appendChild(slot);
         _ = grid.appendChild(card);
     }

@@ -196,7 +196,7 @@ TS_EXPORT(start) void start() {
             sync_meta(app, next);
         });
 
-    app->view = EditorView::create(app->doc.getElementById("editor")->as<Node_2>(), props);
+    app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     sync_meta(app, app->view.state());
 
     const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };

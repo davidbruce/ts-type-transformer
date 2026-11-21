@@ -142,7 +142,7 @@ fn render(app: *App) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getGetRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
     const rows = rm.getRows();
     const nrows = rows.len();
 
@@ -157,14 +157,14 @@ fn render(app: *App) void {
     var groups: usize = 0;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getGetValue();
-        const is_grp = row.as(tt.Row_ColumnGrouping).getGetIsGrouped().call();
+        const gv = row.as(tt.Row_Row).getValue();
+        const is_grp = row.as(tt.Row_ColumnGrouping).getIsGrouped().call();
         const cpu = gv.call("cpu").toNumber();
         const mem = gv.call("mem").toNumber();
         const nodes = gv.call("nodes").toNumber();
         if (is_grp) {
             groups += 1;
-            const is_exp = row.as(tt.Row_RowExpanding).getGetIsExpanded().call();
+            const is_exp = row.as(tt.Row_RowExpanding).getIsExpanded().call();
             const sub_n = row.as(tt.Row_CoreProperties).getSubRows().len();
             w.writeAll("<tr class=\"group-row\"><td>") catch return;
             w.writeAll(if (is_exp) "[-] " else "[+] ") catch return;

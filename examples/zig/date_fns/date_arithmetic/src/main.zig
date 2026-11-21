@@ -2,10 +2,10 @@ const std = @import("std");
 const dom = @import("dom");
 const df = @import("date_fns");
 
-fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
+fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
-    if (text) |t| el.setTextContent(t);
+    if (@TypeOf(text) != @TypeOf(null)) el.setTextContent(text);
     return el;
 }
 
@@ -17,7 +17,6 @@ fn fmtSigned(v: i32, buf: []u8) []const u8 {
 }
 
 fn addOpRow(doc: dom.Document, tbody: dom.HTMLElement, name: []const u8, res: df.Date, base_d: df.Date, fmt: []const u8) void {
-    var out_buf: [128]u8 = undefined;
     var dd_buf: [24]u8 = undefined;
     var dh_buf: [24]u8 = undefined;
     const dd: i32 = @intFromFloat(df.differenceInCalendarDays(res, base_d, null));
@@ -27,13 +26,13 @@ fn addOpRow(doc: dom.Document, tbody: dom.HTMLElement, name: []const u8, res: df
     const td_op = makeEl(doc, "td", "", null);
     _ = td_op.appendChild(makeEl(doc, "code", "", name));
     _ = tr.appendChild(td_op);
-    _ = tr.appendChild(makeEl(doc, "td", "", df.formatDate(res, fmt, null).copy(&out_buf)));
+    _ = tr.appendChild(makeEl(doc, "td", "", df.formatDate(res, fmt, null)));
     _ = tr.appendChild(makeEl(doc, "td", "", fmtSigned(dd, &dd_buf)));
     _ = tr.appendChild(makeEl(doc, "td", "", fmtSigned(dh, &dh_buf)));
     _ = tbody.appendChild(tr);
 }
 
-fn addKv(doc: dom.Document, row: dom.HTMLElement, label: []const u8, val: []const u8) void {
+fn addKv(doc: dom.Document, row: dom.HTMLElement, label: []const u8, val: anytype) void {
     const box = makeEl(doc, "div", "kv", null);
     _ = box.appendChild(makeEl(doc, "span", "label", label));
     _ = box.appendChild(makeEl(doc, "strong", "", val));
@@ -88,8 +87,8 @@ export fn start() void {
     const srow = makeEl(doc, "div", "summary-row", null);
 
     var tmp_buf: [128]u8 = undefined;
-    addKv(doc, srow, "formatDuration(dur)", df.formatDuration(dur, null).copy(&tmp_buf));
-    addKv(doc, srow, "formatISODuration(dur)", df.formatISODuration(dur).copy(&tmp_buf));
+    addKv(doc, srow, "formatDuration(dur)", df.formatDuration(dur, null));
+    addKv(doc, srow, "formatISODuration(dur)", df.formatISODuration(dur));
     addKv(doc, srow, "hoursToMinutes(2)", std.fmt.bufPrint(&tmp_buf, "{d} min", .{@as(i32, @intFromFloat(df.hoursToMinutes(2)))}) catch "");
     addKv(doc, srow, "daysToWeeks(14)", std.fmt.bufPrint(&tmp_buf, "{d} wk", .{@as(i32, @intFromFloat(df.daysToWeeks(14)))}) catch "");
     _ = footer.appendChild(srow);

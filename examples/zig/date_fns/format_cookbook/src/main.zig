@@ -1,20 +1,19 @@
 const dom = @import("dom");
 const df = @import("date_fns");
 
-fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
+fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
-    if (text) |t| el.setTextContent(t);
+    if (@TypeOf(text) != @TypeOf(null)) el.setTextContent(text);
     return el;
 }
 
 fn addFmtRow(doc: dom.Document, tbody: dom.HTMLElement, api: []const u8, out: df.JsString, note: []const u8) void {
-    var str_buf: [256]u8 = undefined;
     const tr = makeEl(doc, "tr", "", null);
     const td_api = makeEl(doc, "td", "", null);
     _ = td_api.appendChild(makeEl(doc, "code", "", api));
     _ = tr.appendChild(td_api);
-    _ = tr.appendChild(makeEl(doc, "td", "", out.copy(&str_buf)));
+    _ = tr.appendChild(makeEl(doc, "td", "", out));
     _ = tr.appendChild(makeEl(doc, "td", "", note));
     _ = tbody.appendChild(tr);
 }

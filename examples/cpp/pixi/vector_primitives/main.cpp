@@ -27,7 +27,7 @@ static ts::Task run_app() {
 
     dom::Document doc = dom::get_document();
     if (auto stage_el = doc.getElementById("stage")) {
-        stage_el->appendChild(app.canvas().as<dom::Node>());
+        stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
     Container<ts::Value> stage = app.stage();
@@ -71,7 +71,7 @@ static ts::Task run_app() {
     diamond_g.fill(0xb5b5b5);
     stroke_g(diamond_g, 1.5, 0x111111);
 
-    stage.addChild(ts::Array<>::of(grid, rect_g, round_g, circle_g, ellipse_g, poly_g, star_g, diamond_g));
+    stage.addChild(grid, rect_g, round_g, circle_g, ellipse_g, poly_g, star_g, diamond_g);
     app.render();
 
     if (auto meta = doc.getElementById("meta")) {

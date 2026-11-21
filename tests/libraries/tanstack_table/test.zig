@@ -118,7 +118,7 @@ export fn run() void {
     const helper = b.createColumnHelper();
     expect(helper.getAccessor().h != 0 and helper.getDisplay().h != 0, @src());
     const column = b.ColumnHelper_accessor_column_header_string.create();
-    const def = b.callColumnHelperAccessor(helper.getAccessor(), .{ .string = b.JsString.from("age") }, .{ .ColumnHelper_accessor_column_header_string = column });
+    const def = helper.getAccessor().call(.{ .string = b.JsString.from("age") }, .{ .ColumnHelper_accessor_column_header_string = column });
     expect(def.h != 0, @src());
     const keyed: b.TableOptions_Core_defaultColumn_accessorKey = .{ .h = def.h };
     expect(keyed.getAccessorKey().toString().eql("age"), @src());

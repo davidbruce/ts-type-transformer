@@ -2,8 +2,6 @@ const std = @import("std");
 const dom = @import("dom");
 const katex = @import("katex");
 
-var html_buf: [65536]u8 = undefined;
-
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
@@ -22,7 +20,7 @@ fn addCard(doc: dom.Document, grid: dom.HTMLElement, label: []const u8, cls: []c
     _ = row.appendChild(makeEl(doc, "span", "badge", len_txt));
     _ = card.appendChild(row);
     const slot = makeEl(doc, "div", "slot", null);
-    slot.setInnerHTML(html.copy(&html_buf));
+    slot.setInnerHTML(html);
     _ = card.appendChild(slot);
     _ = grid.appendChild(card);
 }

@@ -95,7 +95,7 @@ struct Handle {
     bool is_null() const noexcept { return h == 0; }
     template <class T>
         requires std::derived_from<T, Handle>
-    T as() const {
+    T unsafe_as() const {
         if (h) ts_raw_js_retain(h);
         return T(handle, h);
     }
@@ -161,6 +161,7 @@ struct Arg {
     Arg(const std::string& s) : h(ts_raw_js_from_string(s.data(), s.size())), own(true) {}
     Arg(std::string_view s) : h(ts_raw_js_from_string(s.data(), s.size())), own(true) {}
     Arg(const char* s) : Arg(std::string_view(s)) {}
+    Arg(std::nullopt_t) noexcept {}
     Arg(double x) : h(ts_raw_js_from_number(x)), own(true) {}
     template <class I, std::enable_if_t<std::is_integral_v<I> && !std::is_same_v<I, bool>, int> = 0>
     Arg(I x) : h(ts_raw_js_from_number(double(x))), own(true) {}
@@ -258,6 +259,15 @@ struct Value : Handle {
     Value(const H& x) : Handle(handle, x.h) {
         if (h) ts_raw_js_retain(h);
     }
+    Value(double x) : Handle(handle, ts_raw_js_from_number(x)) {}
+    template <class I>
+        requires (std::is_integral_v<I> && !std::same_as<I, bool>)
+    Value(I x) : Handle(handle, ts_raw_js_from_number(double(x))) {}
+    Value(bool x) : Handle(handle, ts_raw_js_from_bool(x)) {}
+    Value(std::string_view s) : Handle(handle, ts_raw_js_from_string(s.data(), s.size())) {}
+    Value(const std::string& s) : Value(std::string_view(s)) {}
+    Value(const char* s) : Value(s ? std::string_view(s) : std::string_view()) {}
+    Value(std::nullptr_t) = delete;
     static Value number(double x) { return {handle, ts_raw_js_from_number(x)}; }
     static Value boolean(bool x) { return {handle, ts_raw_js_from_bool(x)}; }
     static Value string(std::string_view s) { return {handle, ts_raw_js_from_string(s.data(), s.size())}; }
@@ -570,6 +580,12 @@ inline constexpr bool rest_accepts_v = [] {
 }();
 template <class Elem, class X>
 concept rest_accepts = rest_accepts_v<Elem, X>;
+
+template <class Elem, bool CheckExtends, class R0, class... Rest>
+concept rest_pack =
+    !(sizeof...(Rest) == 0 && (std::is_base_of_v<Array<Elem>, std::decay_t<R0>> || (CheckExtends && extends<std::decay_t<R0>, Array<Elem>>)))
+    && rest_accepts<Elem, R0>
+    && (rest_accepts<Elem, Rest> && ...);
 
 template <class T>
 struct Iterator;

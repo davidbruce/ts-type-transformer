@@ -92,10 +92,10 @@ export fn run() void {
     const inner = head.getTokens().get(0).Tokens_Text;
     expect(inner.getText().eql("Head"), @src());
 
-    // marked.lexer and marked.parser are function values: called through their call functions.
-    const lexed = b.callStringMarkedOptionsToTokensListFn(b.marked_ns.getLexer_2(), "# T\n\ntext", .{});
+    // marked.lexer and marked.parser are function values: called directly via .call(...).
+    const lexed = b.marked_ns.getLexer_2().call("# T\n\ntext", .{});
     expect(lexed.getLength() == 3, @src());
-    const rendered = b.callTokenArrayMarkedOptionsFn(b.marked_ns.getParser_2(), lexed.as(b.JsArrayOf(b.Token)), .{});
+    const rendered = b.marked_ns.getParser_2().call(lexed.as(b.JsArrayOf(b.Token)), .{});
     expect(has(.{ .h = rendered.h }, "<h1>T</h1>") and has(.{ .h = rendered.h }, "<p>text</p>"), @src());
 
     // lexInline.

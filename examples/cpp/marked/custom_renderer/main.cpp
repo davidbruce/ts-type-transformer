@@ -33,7 +33,6 @@ TS_EXPORT(start) void start() {
             if constexpr (std::is_same_v<X, marked::Tokens_Generic>) visited.push_back(x.type());
             else visited.push_back(std::string(X::type));
         }, token);
-        return ts::Array<>();
     };
     auto ext = marked::MarkedExtension<std::string, std::string>::create()
         .renderer(rend)

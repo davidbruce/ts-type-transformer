@@ -9,7 +9,43 @@ use ts_type_transformer::generators;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Condvar, Mutex, OnceLock};
 use std::{env, fs};
+
+fn max_jobs() -> usize {
+    env::var("TSRS_MAX_JOBS").ok().and_then(|s| s.parse().ok()).unwrap_or(10).max(1)
+}
+
+struct Semaphore {
+    available: Mutex<usize>,
+    wake: Condvar,
+}
+
+struct Permit<'a>(&'a Semaphore);
+
+impl Drop for Permit<'_> {
+    fn drop(&mut self) {
+        let mut avail = self.0.available.lock().unwrap();
+        *avail += 1;
+        self.0.wake.notify_one();
+    }
+}
+
+impl Semaphore {
+    fn acquire(&self) -> Permit<'_> {
+        let mut avail = self.available.lock().unwrap();
+        while *avail == 0 {
+            avail = self.wake.wait(avail).unwrap();
+        }
+        *avail -= 1;
+        Permit(self)
+    }
+}
+
+fn job_slot() -> Permit<'static> {
+    static JOBS: OnceLock<Semaphore> = OnceLock::new();
+    JOBS.get_or_init(|| Semaphore { available: Mutex::new(max_jobs()), wake: Condvar::new() }).acquire()
+}
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -20,6 +56,7 @@ fn config(target: &str) -> PathBuf {
 }
 
 fn run(cmd: &mut Command) -> String {
+    let _slot = job_slot();
     let out = cmd.output().unwrap_or_else(|e| panic!("cannot run {cmd:?}: {e}"));
     let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(out.status.success(), "{cmd:?} failed:\n{text}");
@@ -44,6 +81,7 @@ fn lower_with(input: &Path, target: Option<&str>, configs: &[PathBuf], overrides
     for o in overrides {
         cmd.args(["--set", o]);
     }
+    let _slot = job_slot();
     let out = cmd.output().expect("run tsrs_proto");
     assert!(out.status.success(), "{cmd:?} failed:\n{}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8(out.stdout).unwrap()
@@ -62,6 +100,7 @@ fn lower_packages(dir: &Path, target: &str) -> String {
     for n in &names {
         cmd.args(["--package", n]);
     }
+    let _slot = job_slot();
     let out = cmd.output().expect("run tsrs_proto");
     assert!(out.status.success(), "{cmd:?} failed:\n{}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8(out.stdout).unwrap()
@@ -295,7 +334,7 @@ fn compile_cpp_bindings(clang: &Path, out: &Path, model: &generators::model::Mod
     let objects: Vec<PathBuf> = sources.iter().map(|s| out.join("obj").join(s.replace('/', "_")).with_extension("o")).collect();
     fs::create_dir_all(out.join("obj")).unwrap();
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(max_jobs());
     std::thread::scope(|scope| {
         for _ in 0..threads {
             scope.spawn(|| {
@@ -1385,6 +1424,260 @@ pub fn main() {
     let said = String::from_utf8_lossy(&bad.stderr).to_string() + &String::from_utf8_lossy(&bad.stdout);
     assert!(!bad.status.success(), "wrong key/listener should not compile:\n{said}");
     assert_eq!(said.matches("Type mismatch").count(), 2, "expected 2 type mismatches:\n{said}");
+}
+
+#[test]
+fn cpp_stage3e_ergonomics() {
+    let Some(clang) = wasi_clang() else { return };
+    let Some([node]) = tools(["node"]) else { return };
+    let out = root().join("target/e2e/cpp-stage3e");
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(&out).unwrap();
+    let dts = out.join("api.d.ts");
+    fs::write(
+        &dts,
+        r#"export class Base {
+    id: number;
+    constructor(id: number);
+}
+export class Sub extends Base {
+    tag: string;
+    constructor(id: number, tag: string);
+}
+export class Container<C = unknown> {
+    constructor();
+    addChild<U extends C[]>(...children: U): number;
+}
+export class SpecialContainer extends Container<Base> {
+    constructor();
+    addChild<U extends Sub[]>(...children: U): number;
+}
+export type NullableStrCb = (x: number) => string | undefined;
+export type NullableBoolCb = (x: number) => boolean | undefined;
+export type InvokeCb = (s: string) => number;
+export declare const namedFn: InvokeCb;
+export declare function runStrCb(cb: NullableStrCb, x: number): string;
+export declare function runBoolCb(cb: NullableBoolCb, x: number): string;
+export declare function echoVal(v: unknown): string;
+export declare function makeSubAsBase(): Base;
+"#,
+    )
+    .unwrap();
+    fs::write(
+        out.join("impl.mjs"),
+        r#"class Base { constructor(id) { this.id = id; } }
+class Sub extends Base { constructor(id, tag) { super(id); this.tag = tag; } }
+class Container {
+    addChild(...children) { return children.reduce((s, c) => s + (c?.id ?? 0), 0); }
+}
+class SpecialContainer extends Container {
+    addChild(...children) { return 1000 + children.reduce((s, c) => s + (c?.id ?? 0), 0); }
+}
+export const root = {
+    Base,
+    Sub,
+    Container,
+    SpecialContainer,
+    namedFn: (s) => s.length,
+    runStrCb: (cb, x) => {
+        const r = cb(x);
+        return r === undefined ? "undef" : `str:${r}`;
+    },
+    runBoolCb: (cb, x) => {
+        const r = cb(x);
+        return r === undefined ? "undef" : `bool:${r}`;
+    },
+    echoVal: (v) => `${typeof v}:${String(v)}`,
+    makeSubAsBase: () => new Sub(99, "sub99"),
+};
+"#,
+    )
+    .unwrap();
+    let xml = lower(&dts, Some("cpp"), &[]);
+    fs::write(out.join("api.xml"), &xml).unwrap();
+    let model = model(&xml, "C++");
+
+    let bindings_dir = out.join("bindings");
+    let cpp_files = generators::cpp::files(&model).unwrap();
+    if let Some((_, funcs_hpp)) = cpp_files.iter().find(|(p, _)| p == "areas/main/functions.hpp") {
+        assert!(!funcs_hpp.contains("call_InvokeCb") && !funcs_hpp.contains("call_NullableStrCb"), "unexpected call_* in functions.hpp:\n{funcs_hpp}");
+    }
+    let sources: Vec<String> = cpp_files.iter().map(|f| f.0.clone()).filter(|p| p.ends_with(".cpp")).collect();
+    write_files(&bindings_dir, cpp_files);
+    let flags: Vec<&str> = CLANGXX_WASM.iter().filter(|f| !f.starts_with("-Wl,") && !f.starts_with("-mexec-model")).copied().collect();
+    let mut objects = Vec::new();
+    for src in &sources {
+        let obj = out.join("obj").join(src.replace('/', "_")).with_extension("o");
+        fs::create_dir_all(obj.parent().unwrap()).unwrap();
+        run(Command::new(&clang).args(&flags).arg("-c").arg("-I").arg(&bindings_dir).arg(bindings_dir.join(src)).arg("-o").arg(&obj));
+        objects.push(obj);
+    }
+
+    fs::write(
+        out.join("test.cpp"),
+        r#"#include "bindings.hpp"
+#include <optional>
+#include <string>
+
+extern "C" TS_IMPORT(check) void check(int32_t ok, uint32_t line);
+#define CHECK(ok) check((ok) ? 1 : 0, __LINE__)
+
+extern "C" __attribute__((export_name("run"))) void run() {
+    Base b1 = Base::create(3.0);
+    Sub s1 = Sub::create(4.0, "s1");
+    Sub s2 = Sub::create(5.0, "s2");
+    Container<Base> c = Container<Base>::create();
+    CHECK(c.addChild() == 0.0);
+    CHECK(c.addChild(s1) == 4.0);
+    CHECK(c.addChild(b1, s1, s2) == 12.0);
+    CHECK(c.addChild(ts::Array<Base>::of(b1, s2)) == 8.0);
+    CHECK(c.addChild(ts::Array<Sub>::of(s1, s2)) == 9.0);
+
+    SpecialContainer sc = SpecialContainer::create();
+    CHECK(sc.addChild() == 1000.0);
+    CHECK(sc.addChild(s1) == 1004.0);
+    CHECK(sc.addChild(s1, s2) == 1009.0);
+    CHECK(sc.addChild(ts::Array<Sub>::of(s1, s2)) == 1009.0);
+
+    CHECK(runStrCb([](double) {}, 1.0) == "undef");
+    CHECK(runStrCb([](double) { return std::nullopt; }, 2.0) == "undef");
+    CHECK(runStrCb([](double x) { return std::string("n=") + std::to_string(int(x)); }, 7.0) == "str:n=7");
+
+    CHECK(runBoolCb([](double) {}, 1.0) == "undef");
+    CHECK(runBoolCb([](double) { return std::nullopt; }, 2.0) == "undef");
+    CHECK(runBoolCb([](double x) { return x > 5.0; }, 7.0) == "bool:true");
+
+    std::string owned = "cpp";
+    CHECK(echoVal(2.5) == "number:2.5");
+    CHECK(echoVal(42) == "number:42");
+    CHECK(echoVal(true) == "boolean:true");
+    CHECK(echoVal(std::string_view("sv")) == "string:sv");
+    CHECK(echoVal(owned) == "string:cpp");
+    CHECK(echoVal("lit") == "string:lit");
+
+    CHECK(makeSubAsBase().unsafe_as<Sub>().tag() == "sub99");
+    CHECK(get_namedFn()("hello!") == 6.0);
+}
+"#,
+    )
+    .unwrap();
+    run(Command::new(&clang).args(CLANGXX_WASM).arg("-I").arg(&bindings_dir).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.cpp")).args(&objects));
+    let used = generators::wasm::imports(&fs::read(out.join("test.wasm")).unwrap());
+    fs::write(out.join("glue.mjs"), generators::wasm::glue(&model, Some(&used))).unwrap();
+    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+    assert!(report.contains("23 checks passed"), "{report}");
+}
+
+#[test]
+fn zig_stage3e_ergonomics() {
+    let Some([zig, node]) = tools(["zig", "node"]) else { return };
+    let out = root().join("target/e2e/zig-stage3e");
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(&out).unwrap();
+    let dts = out.join("api.d.ts");
+    fs::write(
+        &dts,
+        r#"export declare function makeStr(s: string): string;
+export declare function takeRequired(s: string): string;
+export declare function takeNonTrailing(s: string | null, n: number): string;
+export declare function takeSingleOpt(n: number, s?: string): string;
+export declare function takeMultiOpt(n: number, a?: string, b?: boolean): string;
+export declare function restOnly(...xs: number[]): number;
+export declare function restAfterReq(head: number, ...xs: number[]): number;
+export declare function restAfterOpt(scale?: number, ...xs: number[]): number;
+export interface TableLike {
+    getRowModel: () => number;
+    get: () => number;
+}
+export declare const applyFn: (x: number) => number;
+export declare function makeTable(): TableLike;
+"#,
+    )
+    .unwrap();
+    fs::write(
+        out.join("impl.mjs"),
+        r#"export const root = {
+    makeStr: (s) => s,
+    takeRequired: (s) => `req:${s}`,
+    takeNonTrailing: (s, n) => `nt:${s === null ? "null" : s}:${n}`,
+    takeSingleOpt: (n, s) => `so:${n}:${s === undefined ? "undef" : s}`,
+    takeMultiOpt: (n, a, b) => `mo:${n}:${a === undefined ? "undef" : a}:${b === undefined ? "undef" : b}`,
+    restOnly: (...xs) => xs.reduce((a, b) => a + b, 0),
+    restAfterReq: (head, ...xs) => xs.reduce((a, b) => a + b, head * 10),
+    restAfterOpt: (scale = 1, ...xs) => scale * xs.reduce((a, b) => a + b, 0),
+    applyFn: (x) => x * 2,
+    makeTable: () => ({ getRowModel: () => 42, get: () => 7 }),
+};
+"#,
+    )
+    .unwrap();
+    let xml = lower(&dts, Some("zig"), &[]);
+    fs::write(out.join("api.xml"), &xml).unwrap();
+    let model = model(&xml, "Zig");
+
+    let zig_files = generators::zig::files(&model).unwrap();
+    let areas_main = zig_files.iter().find(|(p, _)| p == "areas/main.zig").map(|(_, s)| s.as_str()).unwrap();
+    let bindings_zig = zig_files.iter().find(|(p, _)| p == "bindings.zig").map(|(_, s)| s.as_str()).unwrap();
+    assert!(areas_main.contains("pub fn getRowModel("), "missing getRowModel:\n{areas_main}");
+    assert!(!areas_main.contains("getGetRowModel"), "unexpected getGetRowModel:\n{areas_main}");
+    assert!(areas_main.contains("pub fn getGet("), "property `get` should stay getGet:\n{areas_main}");
+    assert!(!bindings_zig.contains("pub const call"), "unexpected call* in bindings.zig:\n{bindings_zig}");
+    write_files(&out, zig_files);
+
+    fs::write(
+        out.join("test.zig"),
+        r#"const b = @import("bindings.zig");
+extern "env" fn check(ok: i32, line: u32) void;
+fn expect(ok: bool, line: u32) void { check(@intFromBool(ok), line); }
+
+pub export fn run() void {
+    const scope = b.JsScope.open();
+    defer scope.deinit();
+
+    const js = b.makeStr("hello-zig");
+    const opt_js: ?b.JsString = js;
+    const none_js: ?b.JsString = null;
+
+    expect(b.takeRequired(js).eql("req:hello-zig"), @src().line);
+    expect(b.takeRequired("lit").eql("req:lit"), @src().line);
+
+    expect(b.takeNonTrailing(js, 1).eql("nt:hello-zig:1"), @src().line);
+    expect(b.takeNonTrailing(opt_js, 2).eql("nt:hello-zig:2"), @src().line);
+    expect(b.takeNonTrailing(none_js, 3).eql("nt:null:3"), @src().line);
+    expect(b.takeNonTrailing(null, 4).eql("nt:null:4"), @src().line);
+
+    expect(b.takeSingleOpt(5, js).eql("so:5:hello-zig"), @src().line);
+    expect(b.takeSingleOpt(6, .{ .s = js }).eql("so:6:hello-zig"), @src().line);
+    expect(b.takeSingleOpt(7, null).eql("so:7:undef"), @src().line);
+
+    expect(b.takeMultiOpt(8, .{ .a = js, .b = true }).eql("mo:8:hello-zig:true"), @src().line);
+    expect(b.takeMultiOpt(9, .{}).eql("mo:9:undef:undef"), @src().line);
+
+    expect(b.restOnly(null) == 0, @src().line);
+    expect(b.restOnly(.{}) == 0, @src().line);
+    expect(b.restOnly(.{ 1, 2, 3 }) == 6, @src().line);
+
+    expect(b.restAfterReq(10, null) == 100, @src().line);
+    expect(b.restAfterReq(10, .{}) == 100, @src().line);
+    expect(b.restAfterReq(10, .{ 2, 3 }) == 105, @src().line);
+
+    expect(b.restAfterOpt(.{}) == 0, @src().line);
+    expect(b.restAfterOpt(.{ .scale = 3, .xs = .{ 4, 5 } }) == 27, @src().line);
+
+    const tbl = b.makeTable();
+    expect(tbl.getRowModel().call() == 42, @src().line);
+    expect(tbl.getGet().call() == 7, @src().line);
+
+    expect(b.getApplyFn().call(21) == 42, @src().line);
+}
+"#,
+    )
+    .unwrap();
+    run(Command::new(&zig).current_dir(&out).args(ZIG_WASM));
+    let used = generators::wasm::imports(&fs::read(out.join("test.wasm")).unwrap());
+    fs::write(out.join("glue.mjs"), generators::wasm::glue(&model, Some(&used))).unwrap();
+    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+    assert!(report.contains("22 checks passed"), "{report}");
 }
 
 fn setup_ref_fixture(name: &str, target: &str) -> (PathBuf, PathBuf) {
@@ -3666,7 +3959,7 @@ mod examples {
         if !done.exists() || objects.iter().any(|o| !o.exists()) {
             fs::create_dir_all(&cache_dir).unwrap();
             let next = std::sync::atomic::AtomicUsize::new(0);
-            let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+            let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(max_jobs());
             std::thread::scope(|scope| {
                 for _ in 0..threads {
                     scope.spawn(|| {

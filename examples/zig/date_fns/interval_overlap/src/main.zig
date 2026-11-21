@@ -8,10 +8,10 @@ fn makeSpan(s_iso: []const u8, e_iso: []const u8) df.Interval {
     });
 }
 
-fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
+fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) dom.HTMLElement {
     const el = doc.createElementWithString(tag, null);
     if (cls.len > 0) el.setClassName(cls);
-    if (text) |t| el.setTextContent(t);
+    if (@TypeOf(text) != @TypeOf(null)) el.setTextContent(text);
     return el;
 }
 
@@ -44,13 +44,12 @@ export fn start() void {
     _ = gantt_card.appendChild(makeEl(doc, "div", "label", "31-Day Gantt & Overlap Matrix (dark = active, grey = overlaps Sprint A)"));
     const gantt = makeEl(doc, "div", "gantt", null);
 
-    var tmp_buf: [64]u8 = undefined;
     const ghead = makeEl(doc, "div", "gantt-head", null);
     _ = ghead.appendChild(makeEl(doc, "div", "", "Track"));
     const hslots = makeEl(doc, "div", "slots", null);
     for (0..day_count) |i| {
         const d = month_days.get(i).Date;
-        _ = hslots.appendChild(makeEl(doc, "div", "slot-lbl", df.formatDate(d, "d", null).copy(&tmp_buf)));
+        _ = hslots.appendChild(makeEl(doc, "div", "slot-lbl", df.formatDate(d, "d", null)));
     }
     _ = ghead.appendChild(hslots);
     _ = ghead.appendChild(makeEl(doc, "div", "", "vs Ref"));
@@ -61,7 +60,7 @@ export fn start() void {
         const meta = makeEl(doc, "div", "track-meta", null);
         _ = meta.appendChild(makeEl(doc, "span", "track-name", t.name));
         const dur = df.intervalToDuration(t.span, null);
-        _ = meta.appendChild(makeEl(doc, "span", "track-dur", df.formatDuration(dur, null).copy(&tmp_buf)));
+        _ = meta.appendChild(makeEl(doc, "span", "track-dur", df.formatDuration(dur, null)));
         _ = row.appendChild(meta);
 
         const slots = makeEl(doc, "div", "slots", null);
@@ -107,7 +106,7 @@ export fn start() void {
         const clamped = df.clamp(pd, sprint_a, null);
         const tr = makeEl(doc, "tr", "", null);
         _ = tr.appendChild(makeEl(doc, "td", "", p.iso));
-        _ = tr.appendChild(makeEl(doc, "td", "", df.formatDate(clamped, "yyyy-MM-dd", null).copy(&tmp_buf)));
+        _ = tr.appendChild(makeEl(doc, "td", "", df.formatDate(clamped, "yyyy-MM-dd", null)));
         _ = tr.appendChild(makeEl(doc, "td", "", p.rule));
         _ = tbody.appendChild(tr);
     }

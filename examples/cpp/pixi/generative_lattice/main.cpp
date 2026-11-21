@@ -28,7 +28,7 @@ static ts::Task run_app() {
 
     dom::Document doc = dom::get_document();
     if (auto stage_el = doc.getElementById("stage")) {
-        stage_el->appendChild(app.canvas().as<dom::Node>());
+        stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
     Container<ts::Value> stage = app.stage();
@@ -79,7 +79,7 @@ static ts::Task run_app() {
     Graphics center_dot = Graphics::create();
     center_dot.circle(340.0, 200.0, 8.0).fill(0x111111);
 
-    stage.addChild(ts::Array<>::of(guides, tiles, center_dot));
+    stage.addChild(guides, tiles, center_dot);
     app.render();
 
     if (auto meta = doc.getElementById("meta")) {

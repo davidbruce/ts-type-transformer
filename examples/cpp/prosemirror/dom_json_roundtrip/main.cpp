@@ -94,7 +94,7 @@ struct AppState {
 static Node parse_html(const std::shared_ptr<AppState>& app, const char* html) {
     dom::HTMLElement div = app->doc.createElement("div");
     div.innerHTML(html);
-    return app->parser.parse(div.as<Node_2>());
+    return app->parser.parse(div.unsafe_as<Node_2>());
 }
 
 static void refresh_output(const std::shared_ptr<AppState>& app, Node doc) {
@@ -152,7 +152,7 @@ TS_EXPORT(start) void start() {
             refresh_output(app, next.doc());
         });
 
-    app->view = EditorView::create(app->doc.getElementById("editor")->as<Node_2>(), props);
+    app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     app->status = "Parsed Spec HTML via DOMParser";
     refresh_output(app, app->view.state().doc());
 
@@ -186,7 +186,7 @@ TS_EXPORT(start) void start() {
             } else {
                 dom::HTMLElement div = app->doc.createElement("div");
                 app->serializer.serializeFragment(doc.content(), DOMSerializer_serializeFragment_options::create(), div);
-                Node reparsed = app->parser.parse(div.as<Node_2>());
+                Node reparsed = app->parser.parse(div.unsafe_as<Node_2>());
                 bool ok = doc.eq(reparsed);
                 app->status = ok ? "DOM serializeFragment->parse eq() = true" : "DOM serializeFragment->parse eq() = false";
                 auto cfg = EditorStateConfig::create().schema(app->schema).doc(reparsed);

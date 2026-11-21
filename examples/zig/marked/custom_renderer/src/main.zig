@@ -59,7 +59,7 @@ export fn start() void {
         .walkTokens = .{ walkToken, &walk },
     });
 
-    const custom_m = m.Marked.new(&.{ext});
+    const custom_m = m.Marked.new(.{ext});
     const def_html = m.marked(md, .{});
     const cust_str = custom_m.getParse().invoke2(md, null).as(m.JsString);
 
@@ -71,19 +71,18 @@ export fn start() void {
     _ = head.appendChild(makeEl(doc, "span", "badge", badge_txt));
     _ = app.appendChild(head);
 
-    var html_buf: [4096]u8 = undefined;
     const grid = makeEl(doc, "div", "grid", null);
 
     const def_card = makeEl(doc, "div", "card", null);
     _ = def_card.appendChild(makeEl(doc, "div", "label", "Default Renderer"));
     const def_out = makeEl(doc, "div", "md-out", null);
-    def_out.setInnerHTML(def_html.copy(&html_buf));
+    def_out.setInnerHTML(def_html);
     _ = def_card.appendChild(def_out);
 
     const cust_card = makeEl(doc, "div", "card", null);
     _ = cust_card.appendChild(makeEl(doc, "div", "label", "Custom Heading Renderer"));
     const cust_out = makeEl(doc, "div", "md-out", null);
-    cust_out.setInnerHTML(cust_str.copy(&html_buf));
+    cust_out.setInnerHTML(cust_str);
     _ = cust_card.appendChild(cust_out);
 
     _ = grid.appendChild(def_card);

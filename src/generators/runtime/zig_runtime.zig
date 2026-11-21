@@ -636,12 +636,35 @@ pub const Lent = struct {
         @compileError("expected bool or null, got " ++ @typeName(T_));
     }
 
-    pub fn optStr(v: anytype) ?[]const u8 {
+    pub const StrArg = struct { ptr: [*]const u8, len: usize };
+    pub const OptStrArg = struct { ptr: ?[*]const u8, len: usize };
+
+    pub fn str(v: anytype) StrArg {
         const T_ = @TypeOf(v);
-        if (T_ == @TypeOf(null)) return null;
-        if (@typeInfo(T_) == .optional) return if (v) |x| optStr(x) else null;
-        if (comptime isStr(T_)) return v;
-        @compileError("expected string or null, got " ++ @typeName(T_));
+        if (comptime isStr(T_)) {
+            const s: []const u8 = v;
+            return .{ .ptr = s.ptr, .len = s.len };
+        }
+        if (comptime hasDecl(T_, "_is_js_string")) {
+            if (v.h == 0) return .{ .ptr = "".ptr, .len = 0 };
+            return .{ .ptr = @ptrFromInt(v.h), .len = ~@as(usize, 0) };
+        }
+        @compileError("expected string or JsString, got " ++ @typeName(T_));
+    }
+
+    pub fn optStr(v: anytype) OptStrArg {
+        const T_ = @TypeOf(v);
+        if (T_ == @TypeOf(null)) return .{ .ptr = null, .len = 0 };
+        if (@typeInfo(T_) == .optional) return if (v) |x| optStr(x) else .{ .ptr = null, .len = 0 };
+        if (comptime isStr(T_)) {
+            const s: []const u8 = v;
+            return .{ .ptr = s.ptr, .len = s.len };
+        }
+        if (comptime hasDecl(T_, "_is_js_string")) {
+            if (v.h == 0) return .{ .ptr = null, .len = 0 };
+            return .{ .ptr = @ptrFromInt(v.h), .len = ~@as(usize, 0) };
+        }
+        @compileError("expected string, JsString, or null, got " ++ @typeName(T_));
     }
 
     pub fn optEnum(comptime E_: type, v: anytype) ?E_ {

@@ -78,18 +78,18 @@ struct AppState {
 static void render(const std::shared_ptr<AppState>& st, const std::string& label) {
     RowModel<TableFeatures, Obj> rm = st->table.getRowModel()();
     ts::Array<RowT> rows = rm.rows();
-    ts::Array<ColT> cols = st->table.as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns()();
+    ts::Array<ColT> cols = st->table.unsafe_as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns()();
 
     std::string html = "<table><thead><tr>";
     for (uint32_t i = 0; i < cols.size(); i++) {
         ColT col = cols[i];
-        ColP cp = col.as<ColP>();
+        ColP cp = col.unsafe_as<ColP>();
         std::string cid = cp.id();
-        std::string hdr = cp.columnDef().as<Obj>().at("header").to_string();
+        std::string hdr = cp.columnDef().unsafe_as<Obj>().at("header").to_string();
         bool is_num = (cid == "latency" || cid == "throughput" || cid == "uptime");
         html += is_num ? "<th class=\"num\">" : "<th>";
         html += esc_html(hdr);
-        auto sd = col.as<Column_RowSorting<TableFeatures, Obj>>().getIsSorted()();
+        auto sd = col.unsafe_as<Column_RowSorting<TableFeatures, Obj>>().getIsSorted()();
         if (std::holds_alternative<SortDirection>(sd)) {
             html += (std::get<SortDirection>(sd) == SortDirection::asc) ? " &#9650;" : " &#9660;";
         }
@@ -163,7 +163,7 @@ TS_EXPORT(start) void start() {
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(opts.as<TableOptions_Core<TableFeatures, Obj>>()),
+        constructTable<TableFeatures, Obj>(opts.unsafe_as<TableOptions_Core<TableFeatures, Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
     });
@@ -186,7 +186,7 @@ TS_EXPORT(start) void start() {
                 next = ts::Array<ColumnSort>{ sort_spec("host", false) };
                 label = "Sort: host asc";
             }
-            st->table.as<Table_RowSorting<TableFeatures, Obj>>().setSorting()(next);
+            st->table.unsafe_as<Table_RowSorting<TableFeatures, Obj>>().setSorting()(next);
             render(st, label);
         });
     }
