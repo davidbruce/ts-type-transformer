@@ -96,7 +96,7 @@ check strictFails "strict error throws"
 let mutable asked: string list = []
 let decide (ctx: TrustContext) =
     match ctx with
-    | TrustContext.TrustContextHref h ->
+    | TrustContext.Href h ->
         asked <- asked @ [ h.command + " " + h.url ]
         h.url.StartsWith "https://example.com"
     | _ -> false

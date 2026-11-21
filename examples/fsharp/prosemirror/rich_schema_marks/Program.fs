@@ -128,7 +128,7 @@ let private targetRange (st: EditorState) : float * float =
             (1.0, doc.content.size - 1.0)
 
 let private setActiveButton (id: string) (hasIt: bool) =
-    let btn = document.getElementById id
+    let btn = (document.getElementById id).Value
     if hasIt then btn.classList.add [| "active" |] else btn.classList.remove [| "active" |]
 
 let private updateMeta (st: EditorState) =
@@ -147,7 +147,7 @@ let private updateMeta (st: EditorState) =
           if hasEm then yield "em"
           if hasCode then yield "code" ]
     let marksText = if activeMarks.IsEmpty then "none" else String.concat ", " activeMarks
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <-
         sprintf "%s · blocks=%d · nodeSize=%d · range=[%d..%d] · block=%s · marks=[%s] · dispatches=%d"
             lastAction (int doc.childCount) (int doc.nodeSize) (int fromPos) (int toPos) blockName marksText dispatches
@@ -156,7 +156,7 @@ let private createState () =
     EditorState.create (EditorStateConfig.Create (schema = schema, doc = buildInitialDoc ()))
 
 let main () =
-    let mountEl = document.getElementById "editor"
+    let mountEl = (document.getElementById "editor").Value
     let mutable view: EditorView option = None
 
     let props =
@@ -192,7 +192,7 @@ let main () =
             v.dispatch tr
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = document.getElementById id
+        let el = (document.getElementById id).Value
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () -> toggleMark "strong" "bold")

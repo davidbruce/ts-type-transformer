@@ -27,7 +27,7 @@ let private makePane (title: string) (html: string) =
     rendered.innerHTML <- html
     wrap "div" "card" [ el "div" "label" title; rendered; el "pre" "html-raw" html ]
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 app.appendChild (wrap "div" "head" [ el "h1" "" "Marked GFM & Line Breaks (F#)"; el "span" "badge" "MarkedOptions" ]) |> ignore
 

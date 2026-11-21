@@ -27,7 +27,7 @@ let private makeModeCard (title: string) (html: string) =
     slot.innerHTML <- html
     wrap "div" "card" [ el "div" "label" title; slot; el "pre" "html-raw" html ]
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 app.appendChild (wrap "div" "head" [ el "h1" "" "Marked Inline vs Block (F#)"; el "span" "badge" "parse vs parseInline" ]) |> ignore
 

@@ -20,19 +20,19 @@ let wait (p: JS.Promise<'T>) = Async.AwaitPromise p
 
 // Headers built directly.
 let headers = Headers.Create (ResizeArray [ ("X-One", "1"); ("Content-Type", "text/plain") ])
-check (headers.get "x-one" = "1") "header names are case-insensitive"
+check (headers.get "x-one" = Some "1") "header names are case-insensitive"
 check (headers.has "Content-Type") "has"
 headers.append ("X-One", "2")
-check (headers.get "X-One" = "1, 2") "append joins values"
+check (headers.get "X-One" = Some "1, 2") "append joins values"
 headers.set ("X-One", "3")
-check (headers.get "X-One" = "3") "set replaces"
+check (headers.get "X-One" = Some "3") "set replaces"
 headers.delete "X-One"
 check (not (headers.has "X-One")) "delete"
-check (isNull (headers.get "X-One")) "a missing header is null"
+check (headers.get "X-One").IsNone "a missing header is null"
 let names = [ for (k, _) in headers -> k ]
 check (names = [ "content-type" ]) "headers iterate, names lower-cased"
 let copied = Headers.Create headers
-check (copied.get "content-type" = "text/plain") "Headers from Headers"
+check (copied.get "content-type" = Some "text/plain") "Headers from Headers"
 
 // A Request built directly.
 let request =
@@ -46,7 +46,7 @@ let request =
 // FINDING 4: RequestInit has no Create (Bindings.13.network.fs:20, a plain class, not Interface + ParamObject), so the init is made with createEmpty and field assignment.
 check (request.url = "https://example.com/api?q=1") "request url"
 check (request.``method`` = "POST") "request method"
-check (request.headers.get "content-type" = "text/plain") "request headers"
+check (request.headers.get "content-type" = Some "text/plain") "request headers"
 check (request.mode = RequestMode.Cors) "default request mode"
 check (not request.bodyUsed) "no body used"
 let again = request.clone ()
@@ -60,13 +60,13 @@ let made = Response.Create (!^ "hello body", ResponseInit.Create (status = 201.0
 check (made.status = 201.0) "response status"
 check (made.statusText = "Made") "statusText"
 check made.ok "201 is ok"
-check (made.headers.get "x-made" = "yes") "response headers"
+check (made.headers.get "x-made" = Some "yes") "response headers"
 check (made.``type`` = ResponseType.Default) "response type"
 let failure = Response.Create (!^ "nope", ResponseInit.Create (status = 404.0))
 check (not failure.ok) "404 is not ok"
 check (Response.error().``type`` = ResponseType.Error) "Response.error"
 let redirect = Response.redirect ("https://example.com/there", 301.0)
-check (redirect.status = 301.0 && redirect.headers.get "location" = "https://example.com/there") "Response.redirect"
+check (redirect.status = 301.0 && redirect.headers.get "location" = Some "https://example.com/there") "Response.redirect"
 
 // Blob made directly.
 let blob = Blob.Create (ResizeArray [ BlobPart.String "ab"; BlobPart.String "cde" ])
@@ -108,7 +108,7 @@ async {
     // Response.json.
     let payload = createObj [ "name" ==> "ada"; "tags" ==> [| "a"; "b" |]; "n" ==> 3 ]
     let jsonResponse = Response.json payload
-    check (jsonResponse.headers.get "content-type" = "application/json") "Response.json content type"
+    check (jsonResponse.headers.get "content-type" = Some "application/json") "Response.json content type"
     let! parsed = wait (jsonResponse.json ())
     check (parsed?name = "ada" && parsed?n = 3) "Response.json body"
     check ((parsed?tags: string[]).Length = 2) "Response.json array"
@@ -129,7 +129,7 @@ async {
     let formBody = FormData.Create ()
     formBody.append ("k", "v")
     let! fromForm = wait ((Request.Create ("https://example.com/f", (let i = createEmpty<RequestInit> in i.``method`` <- Some "POST"; i.body <- Some (BodyInit.FormData formBody); i))).formData ())
-    check (match fromForm.get "k" with FormDataEntryValue.String v -> v = "v" | _ -> false) "request FormData body"
+    check (match fromForm.get "k" with Some (FormDataEntryValue.String v) -> v = "v" | _ -> false) "request FormData body"
 
     // fetch of a page file.
     let! response = wait (fetch "./index.html")
@@ -139,7 +139,7 @@ async {
     check (response.``type`` = ResponseType.Basic) "same-origin response is basic"
     check (response.url.EndsWith "/index.html") "response url"
     check (not response.redirected) "not redirected"
-    check ((response.headers.get "content-type").StartsWith "text/html") "content-type"
+    check ((response.headers.get "content-type").Value.StartsWith "text/html") "content-type"
     let! body = wait (response.text ())
     check (body.Contains "<body") "page text has a body"
     check (body.Contains "<title>") "page text has a title"

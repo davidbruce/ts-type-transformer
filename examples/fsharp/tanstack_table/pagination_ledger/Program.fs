@@ -71,7 +71,7 @@ let private readPagination () : PaginationState =
     unbox state?pagination
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = document.getElementById id
+    let btn = (document.getElementById id).Value
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render () =
@@ -92,12 +92,12 @@ let private render () =
             yield "</tbody></table>"
         ]
         |> String.concat ""
-    let wrap = document.getElementById "table-wrap"
+    let wrap = (document.getElementById "table-wrap").Value
     wrap.innerHTML <- html
     let pg = readPagination ()
     let pageCount = int (pag.getPageCount ())
     let total = table.getCoreRowModel().rows.Count
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "Page %d / %d · pageSize %.0f · showing %d of %d rows" (int pg.pageIndex + 1) pageCount pg.pageSize rows.Count total
 
 let main () =

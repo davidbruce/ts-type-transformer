@@ -24,7 +24,7 @@ let private makeSpan (sIso: string) (eIso: string) : Interval<DateArg<JS.Date>, 
     let e: JS.Date = parseISO eIso
     Interval.Create (!^s, !^e)
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 app.appendChild (wrap "div" "head" [ el "h1" "" "Date-fns Interval Overlap & Clamp (F#)"; el "span" "badge" "March 2024 · 31 days" ]) |> ignore
 

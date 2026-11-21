@@ -111,17 +111,17 @@ let private refreshOutput (doc: ProsemirrorModel.Node) =
     let scratch = document.createElement HTMLElementTagNameMapKeys.div
     serializer.serializeFragment (doc.content, target = !^(scratch :> Dom.HTMLElement)) |> ignore
     let htmlOut = scratch.innerHTML
-    let outEl = document.getElementById "output"
+    let outEl = (document.getElementById "output").Value
     outEl.textContent <-
         sprintf "SERIALIZED HTML (DOMSerializer):\n%s\n\nDOCUMENT AST & JSON ROUND-TRIP:\n%s\n\nROUND-TRIP STATUS: %s"
             htmlOut (describeDoc doc) roundTripStatus
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <-
         sprintf "%s · blocks=%d · nodeSize=%d · htmlBytes=%d"
             roundTripStatus (int doc.childCount) (int doc.nodeSize) htmlOut.Length
 
 let main () =
-    let mountEl = document.getElementById "editor"
+    let mountEl = (document.getElementById "editor").Value
     let mutable view: EditorView option = None
 
     let initialState =
@@ -145,7 +145,7 @@ let main () =
     refreshOutput v.state.doc
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = document.getElementById id
+        let el = (document.getElementById id).Value
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () ->

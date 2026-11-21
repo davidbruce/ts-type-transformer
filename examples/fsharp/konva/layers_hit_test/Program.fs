@@ -117,7 +117,7 @@ fgLayer.draw () |> ignore
 
 let private pt = Vector2d.Create (250.0, 160.0)
 let private hit = stage.getIntersection pt
-let private hitId = if isNull hit then "none" else hit.id.Invoke ()
+let private hitId = match hit with Some h -> h.id.Invoke () | None -> "none"
 
 // Crosshair marker at (250, 160) & foreground label.
 addTo fgLayer (
@@ -159,5 +159,5 @@ addTo fgLayer (
 
 fgLayer.draw () |> ignore
 
-let private meta = document.getElementById "meta"
+let private meta = (document.getElementById "meta").Value
 meta.textContent <- sprintf "Layers: %d · card-a zIndex=%d · hit@(250,160)=%s · clicks=%d" (stage.getLayers().Count) cardAZ hitId clicks

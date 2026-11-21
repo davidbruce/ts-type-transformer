@@ -139,10 +139,10 @@ check (position.count = 24.0 && position.itemSize = 3.0) "position attribute"
 check (geometry.hasAttribute "normal" && geometry.hasAttribute "uv") "normal and uv attributes"
 check (abs (position.getX 0.0) = 1.0) "a vertex of the box"
 geometry.computeBoundingBox ()
-check (geometry.boundingBox.max.x = 1.0 && geometry.boundingBox.min.z = -1.0) "computeBoundingBox"
+check (geometry.boundingBox.Value.max.x = 1.0 && geometry.boundingBox.Value.min.z = -1.0) "computeBoundingBox"
 geometry.computeBoundingSphere ()
-check (near geometry.boundingSphere.radius (sqrt 3.0)) "computeBoundingSphere"
-check (geometry.index.count = 36.0) "index: 12 triangles"
+check (near geometry.boundingSphere.Value.radius (sqrt 3.0)) "computeBoundingSphere"
+check (geometry.index.Value.count = 36.0) "index: 12 triangles"
 
 // A ray cast: from in front of the box toward it.
 mesh.position.set (0.0, 0.0, -5.0) |> ignore

@@ -138,5 +138,5 @@ let private rects = layer.find<Node<NodeConfig>> "Rect"
 let private arrows = layer.find<Node<NodeConfig>> "Arrow"
 let private jsonLen = layer.toJSON().Length
 
-let private meta = document.getElementById "meta"
+let private meta = (document.getElementById "meta").Value
 meta.textContent <- sprintf "Pipeline diagram · %d rects · %d arrows · JSON %d bytes" rects.Count arrows.Count jsonLen

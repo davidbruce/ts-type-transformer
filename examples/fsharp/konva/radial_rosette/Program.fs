@@ -136,5 +136,5 @@ for lx, ly, label in [ (516.0, 194.0, "0°"); (332.0, 376.0, "90°"); (140.0, 19
 
 layer.draw () |> ignore
 
-let private meta = document.getElementById "meta"
+let private meta = (document.getElementById "meta").Value
 meta.textContent <- sprintf "Stage: 680x400 · Procedural rosette · %d shapes on layer" (layer.getChildren().Count)

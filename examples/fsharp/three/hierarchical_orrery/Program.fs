@@ -23,11 +23,11 @@ let main () =
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
 
-    let stage = document.getElementById "stage"
+    let stage = (document.getElementById "stage").Value
     stage.appendChild renderer.domElement |> ignore
 
     let scene = Scene.Create()
-    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
+    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
     camera.position.set (5.6, 5.2, 7.6) |> ignore
@@ -166,8 +166,8 @@ let main () =
     halo.rotation.x <- 0.8
     outerStation.add (halo) |> ignore
 
-    let tiltBtn = document.getElementById "btn-tilt"
-    let metaEl = document.getElementById "meta"
+    let tiltBtn = (document.getElementById "btn-tilt").Value
+    let metaEl = (document.getElementById "meta").Value
 
     let updateOrrery () =
         innerPivot.rotation.y <- epoch
@@ -187,7 +187,7 @@ let main () =
                 deg moonPos.x moonPos.y moonPos.z stationPos.x stationPos.y stationPos.z
 
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = document.getElementById id
+        let b = (document.getElementById id).Value
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wireClick "btn-step" (fun () ->

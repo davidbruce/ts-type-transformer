@@ -26,7 +26,7 @@ let main =
         let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
-        let stageEl = document.getElementById "stage"
+        let stageEl = (document.getElementById "stage").Value
         stageEl.appendChild app.canvas |> ignore
 
         let guide = Graphics.Create ()
@@ -81,7 +81,7 @@ let main =
         app.render ()
 
         let rb = root.getBounds ()
-        let meta = document.getElementById "meta"
+        let meta = (document.getElementById "meta").Value
         meta.textContent <- sprintf "3 primary arms · 6 nested satellites · bounds %.1fx%.1f · 680x400 WebGL" rb.width rb.height
     }
 

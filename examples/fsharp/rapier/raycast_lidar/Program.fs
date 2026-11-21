@@ -75,9 +75,9 @@ let main () =
             match document.querySelector HTMLElementTagNameMapKeys.canvas with
             | Some c -> c
             | None -> failwith "Canvas not found"
-        let ctx = canvas.getContext_2d ()
-        let metaEl = document.getElementById "meta"
-        let sweepBtn = document.getElementById "btn-sweep"
+        let ctx = (canvas.getContext_2d ()).Value
+        let metaEl = (document.getElementById "meta").Value
+        let sweepBtn = (document.getElementById "btn-sweep").Value
 
         let world = World.Create (Vector.Create (0.0, 0.0, 0.0))
 
@@ -144,8 +144,9 @@ let main () =
                 let dx = cos angle
                 let dy = sin angle
                 let ray = Ray.Create (origin, Vector.Create (dx, dy, 0.0))
-                let hit = world.castRayAndGetNormal (ray, maxToi, true)
-                if not (isNull hit) then
+                let hitOpt = world.castRayAndGetNormal (ray, maxToi, true)
+                match hitOpt with
+                | Some hit ->
                     hits <- hits + 1
                     let toi = hit.timeOfImpact
                     if toi < minToi then minToi <- toi
@@ -172,7 +173,7 @@ let main () =
                     ctx.beginPath ()
                     ctx.arc (hx, hy, 2.8, 0.0, 2.0 * Math.PI)
                     ctx.fill ()
-                else
+                | None ->
                     ctx.strokeStyle <- !^ "#e5e5e5"
                     ctx.lineWidth <- 0.9
                     ctx.beginPath ()
@@ -199,7 +200,7 @@ let main () =
         render ()
 
         let wireClick (id: string) (fn: unit -> unit) =
-            let b = document.getElementById id
+            let b = (document.getElementById id).Value
             b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
         wireClick "btn-sweep" (fun () ->

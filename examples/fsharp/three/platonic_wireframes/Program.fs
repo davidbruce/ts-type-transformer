@@ -26,11 +26,11 @@ let main () =
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
 
-    let stage = document.getElementById "stage"
+    let stage = (document.getElementById "stage").Value
     stage.appendChild renderer.domElement |> ignore
 
     let scene = Scene.Create()
-    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
+    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
@@ -104,10 +104,10 @@ let main () =
     addSolid (OctahedronGeometry.Create(0.95, 0.0)) 0xefefef 0.5 0.05 true 1.6 0.1 0.55 1.0
     addSolid (TorusGeometry.Create(0.72, 0.23, 16.0, 48.0)) 0x404040 0.55 0.12 false 3.2 0.05 -0.5 22.0
 
-    let metaEl = document.getElementById "meta"
-    let wireBtn = document.getElementById "btn-wire"
+    let metaEl = (document.getElementById "meta").Value
+    let wireBtn = (document.getElementById "btn-wire").Value
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = document.getElementById id
+        let b = (document.getElementById id).Value
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     let updateView () =

@@ -36,10 +36,10 @@ let main () =
             match document.querySelector HTMLElementTagNameMapKeys.canvas with
             | Some c -> c
             | None -> failwith "Canvas not found"
-        let ctx = canvas.getContext_2d ()
-        let metaEl = document.getElementById "meta"
-        let gravBtn = document.getElementById "btn-gravity"
-        let pauseBtn = document.getElementById "btn-pause"
+        let ctx = (canvas.getContext_2d ()).Value
+        let metaEl = (document.getElementById "meta").Value
+        let gravBtn = (document.getElementById "btn-gravity").Value
+        let pauseBtn = (document.getElementById "btn-pause").Value
 
         let mutable earthGravity = true
         let mutable paused = false
@@ -194,7 +194,7 @@ let main () =
         render ()
 
         let wireClick (id: string) (fn: unit -> unit) =
-            let b = document.getElementById id
+            let b = (document.getElementById id).Value
             b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
         wireClick "btn-gravity" (fun () ->

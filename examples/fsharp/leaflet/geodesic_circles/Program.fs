@@ -15,7 +15,7 @@ let private mapOpts () =
     )
 
 let main () =
-    let m = map (document.getElementById "map", mapOpts ())
+    let m = map ((document.getElementById "map").Value, mapOpts ())
     let zurich = latLng (47.3769, 8.5417)
     m.setView (zurich, 8.0) |> ignore
 
@@ -80,7 +80,7 @@ let main () =
     | None -> ()
 
     let avgKm = totalDistKm / float beacons.Length
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "4 concentric rings (25–130 km) · 5 regional beacons (avg %.1f km)" avgKm
 
 main ()

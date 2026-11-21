@@ -77,11 +77,11 @@ async {
     target.setAttribute ("data-x", "1")
     do! waitFor "attribute records" (fun () -> attrRecords.Count = 3)
     check (attrRecords.[0].``type`` = MutationRecordType.Attributes) "record type attributes"
-    check (attrRecords.[0].attributeName = "title") "attributeName"
-    check (isNull attrRecords.[0].oldValue) "old value of a new attribute is null"
-    check (attrRecords.[1].oldValue = "one") "attributeOldValue"
-    check (attrRecords.[2].attributeName = "data-x") "filtered attribute seen"
-    check (attrRecords |> Seq.forall (fun r -> r.attributeName <> "data-other")) "the filter hid other attributes"
+    check (attrRecords.[0].attributeName = Some "title") "attributeName"
+    check attrRecords.[0].oldValue.IsNone "old value of a new attribute is null"
+    check (attrRecords.[1].oldValue = Some "one") "attributeOldValue"
+    check (attrRecords.[2].attributeName = Some "data-x") "filtered attribute seen"
+    check (attrRecords |> Seq.forall (fun r -> r.attributeName <> Some "data-other")) "the filter hid other attributes"
 
     // ---- characterData ----
     let text = document.createTextNode "before"
@@ -92,7 +92,7 @@ async {
     text.data <- "after"
     do! waitFor "characterData record" (fun () -> dataRecords.Count = 1)
     check (dataRecords.[0].``type`` = MutationRecordType.CharacterData) "record type characterData"
-    check (dataRecords.[0].oldValue = "before") "characterDataOldValue"
+    check (dataRecords.[0].oldValue = Some "before") "characterDataOldValue"
     check (text.data = "after") "the data changed"
 
     // ---- subtree ----
@@ -155,7 +155,9 @@ async {
     let visible = div "visible"
     visible.style.width <- "50px"
     visible.style.height <- "50px"
-    document.body.insertBefore (visible, document.body.firstChild) |> ignore
+    match document.body.firstChild with
+    | Some first -> document.body.insertBefore (visible, first) |> ignore
+    | None -> document.body.insertBefore (visible, null) |> ignore
     let hits = ResizeArray<IntersectionObserverEntry>()
     // FINDING 7: IntersectionObserverInit.threshold is typed VibratePattern (Bindings.10.core.fs:4363), a float | float[] union named for another API; usable (`!^ 0.0`), but the name is wrong.
     let intersection = IntersectionObserver.Create ((fun entries _ -> hits.AddRange entries), IntersectionObserverInit.Create (threshold = !^ 0.0))

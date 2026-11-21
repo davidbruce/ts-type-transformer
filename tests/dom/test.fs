@@ -24,14 +24,14 @@ box.id <- "made-by-fsharp"
 box.textContent <- "hello from fsharp"
 box.classList.add "box"
 body.appendChild box |> ignore
-check (obj.ReferenceEquals(document.getElementById "made-by-fsharp", box)) "getElementById"
+check (match document.getElementById "made-by-fsharp" with Some el -> obj.ReferenceEquals(el, box) | None -> false) "getElementById"
 check (box.classList.contains "box") "classList"
 
 // Read an element that was already in the page, and copy its text.
-let seed = document.getElementById "seed"
+let seed = (document.getElementById "seed").Value
 check (seed.textContent = "seed text") "textContent"
-check (seed.getAttribute "data-x" = "42") "getAttribute"
-check (isNull (seed.getAttribute "data-missing")) "missing attribute is null"
+check (seed.getAttribute "data-x" = Some "42") "getAttribute"
+check (seed.getAttribute "data-missing").IsNone "missing attribute is null"
 let copy = document.createElement "p"
 copy.textContent <- seed.textContent
 box.appendChild copy |> ignore

@@ -76,15 +76,15 @@ let private redoStack = Stack<Step array> ()
 let private updateMeta (st: EditorState) =
     let edits = match auditKey.getState st with Some n -> n | None -> 0
     let lockLabel = if readOnlyLocked then "LOCKED" else "OPEN"
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <-
         sprintf "%s · edits=%d · undoDepth=%d · redoDepth=%d · lock=%s · blocked=%d · blocks=%d"
             lastAction edits undoStack.Count redoStack.Count lockLabel blockedCount (int st.doc.childCount)
-    let lockBtn = document.getElementById "btn-4"
+    let lockBtn = (document.getElementById "btn-4").Value
     if readOnlyLocked then lockBtn.classList.add [| "active" |] else lockBtn.classList.remove [| "active" |]
 
 let main () =
-    let mountEl = document.getElementById "editor"
+    let mountEl = (document.getElementById "editor").Value
     let mutable view: EditorView option = None
 
     let field =
@@ -146,7 +146,7 @@ let main () =
     updateMeta v.state
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = document.getElementById id
+        let el = (document.getElementById id).Value
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () ->

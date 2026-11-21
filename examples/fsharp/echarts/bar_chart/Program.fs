@@ -8,7 +8,7 @@ open type Echarts.Globals
 let private setChartOption (chart: ECharts) (opt: obj) =
     chart.setOption (unbox<EChartsCoreOption> opt, false)
 
-let private chart = init (document.getElementById "chart")
+let private chart = init ((document.getElementById "chart").Value)
 
 setChartOption chart {|
     animation = false
@@ -39,5 +39,5 @@ setChartOption chart {|
     |]
 |}
 
-let private metaEl = document.getElementById "meta"
+let private metaEl = (document.getElementById "meta").Value
 metaEl.textContent <- sprintf "Canvas: %dx%d · 6 bars · Monochrome #111111" (int (chart.getWidth ())) (int (chart.getHeight ()))

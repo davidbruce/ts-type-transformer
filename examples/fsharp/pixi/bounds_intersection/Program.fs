@@ -28,7 +28,7 @@ let main =
         let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
-        let stageEl = document.getElementById "stage"
+        let stageEl = (document.getElementById "stage").Value
         stageEl.appendChild app.canvas |> ignore
 
         let query = mkRect 190.0 105.0 260.0 170.0
@@ -79,7 +79,7 @@ let main =
         app.stage.addChild g |> ignore
         app.render ()
 
-        let meta = document.getElementById "meta"
+        let meta = (document.getElementById "meta").Value
         meta.textContent <-
             sprintf
                 "query 260x170 · %d contained · %d intersecting · %d disjoint · enlarged hull %.0fx%.0f"

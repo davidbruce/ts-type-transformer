@@ -22,9 +22,9 @@ let main () =
     async {
         do! Async.AwaitPromise (init ())
 
-        let metaEl = document.getElementById "meta"
-        let statusEl = document.getElementById "status"
-        let pauseBtn = document.getElementById "btn-pause"
+        let metaEl = (document.getElementById "meta").Value
+        let statusEl = (document.getElementById "status").Value
+        let pauseBtn = (document.getElementById "btn-pause").Value
 
         let mutable paused = false
         let mutable stepCount = 0
@@ -111,7 +111,7 @@ let main () =
         updateMeta ()
 
         let wireClick (id: string) (fn: unit -> unit) =
-            (document.getElementById id).addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
+            (document.getElementById id).Value.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
         wireClick "btn-launch" (fun () ->
             shotIdx <- shotIdx + 1

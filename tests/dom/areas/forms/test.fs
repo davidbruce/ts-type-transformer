@@ -53,7 +53,7 @@ check (name.value = "Ada") "text value from markup"
 check (name.``type`` = "text") "input type"
 name.value <- "Grace Hopper"
 check (name.value = "Grace Hopper") "set text value"
-check (name.getAttribute "value" = "Ada") "attribute is the default, not the value"
+check (name.getAttribute "value" = Some "Ada") "attribute is the default, not the value"
 check (name.defaultValue = "Ada") "defaultValue"
 check name.required "required property"
 check (age.valueAsNumber = 36.0) "valueAsNumber"
@@ -82,7 +82,7 @@ check (color.value = "b") "selectedIndex sets value"
 check (color.options.item(2.0).Value.selected) "option selected"
 color.value <- "r"
 check (color.selectedIndex = 0.0) "value sets selectedIndex"
-check ((color.item 0.0).text = "Red") "option text"
+check ((color.item 0.0).Value.text = "Red") "option text"
 let extra = Option.Create ("Violet", "v")
 color.add extra
 check (color.options.length = 4.0) "option added"
@@ -146,11 +146,11 @@ let str (v: FormDataEntryValue) =
     | FormDataEntryValue.String s -> s
     | FormDataEntryValue.File f -> f.name
 
-check (str (data.get "name") = "Ada") "FormData text"
-check (str (data.get "age") = "36") "FormData number"
-check (str (data.get "agree") = "yes") "FormData checked box"
-check (str (data.get "color") = "g") "FormData select"
-check (str (data.get "bio") = "line one\nline two") "FormData textarea"
+check (str ((data.get "name").Value) = "Ada") "FormData text"
+check (str ((data.get "age").Value) = "36") "FormData number"
+check (str ((data.get "agree").Value) = "yes") "FormData checked box"
+check (str ((data.get "color").Value) = "g") "FormData select"
+check (str ((data.get "bio").Value) = "line one\nline two") "FormData textarea"
 check (data.has "code") "FormData has an empty text field"
 agree.``checked`` <- false
 let data2 = FormData.Create form
@@ -159,10 +159,10 @@ data2.append ("extra", "1")
 data2.append ("extra", "2")
 check ((data2.getAll "extra").Count = 2) "FormData getAll"
 data2.set ("extra", "3")
-check (str (data2.get "extra") = "3" && (data2.getAll "extra").Count = 1) "FormData set"
+check (str ((data2.get "extra").Value) = "3" && (data2.getAll "extra").Count = 1) "FormData set"
 data2.delete "extra"
 check (not (data2.has "extra")) "FormData delete"
-check (isNull (box (data2.get "missing"))) "FormData get of a missing name is null"
+check (data2.get "missing").IsNone "FormData get of a missing name is null"
 let keys = [ for k in data2.keys () -> k ]
 check (keys.Length = 5 && List.head keys = "name") "FormData keys iterate"
 

@@ -142,7 +142,7 @@ let main =
             do! registerScene scene |> Async.AwaitPromise
             do! startEngine engine |> Async.AwaitPromise
         with ex ->
-            (document.getElementById "status").textContent <- $"WebGPU / Babylon Lite error: {ex.Message}"
+            (document.getElementById "status").Value.textContent <- $"WebGPU / Babylon Lite error: {ex.Message}"
     }
 
 Async.StartImmediate main

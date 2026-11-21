@@ -35,7 +35,7 @@ check (box1.style.getPropertyValue "background-color" = "") "removed"
 check (box1.style.cssText.Contains "color: red") "cssText"
 box1.style.cssText <- "width: 120px; height: 40px"
 check (box1.style.color = "") "cssText replaces everything"
-check (box1.getAttribute "style" = "width: 120px; height: 40px;") "style attribute reflects"
+check (box1.getAttribute "style" = Some "width: 120px; height: 40px;") "style attribute reflects"
 box1.style.display <- "block"
 box1.style.padding <- "5px"
 
@@ -55,19 +55,20 @@ check (computed.fontSize <> "2em" && computed.fontSize.EndsWith "px") "computed 
 let styleEl: HTMLStyleElement = document.createElement HTMLElementTagNameMapKeys.style
 styleEl.textContent <- ".big { font-size: 30px; } .red { color: red; } #box.marked { border-left: 7px solid black; }"
 document.head.appendChild styleEl |> ignore
-let sheet = styleEl.sheet
-check (not (isNull sheet)) "sheet exists once attached"
+let sheetOpt = styleEl.sheet
+check sheetOpt.IsSome "sheet exists once attached"
+let sheet = sheetOpt.Value
 check (sheet.cssRules.length = 3.0) "three rules parsed"
-let rule = sheet.cssRules.item 0.0 :?> CSSStyleRule
+let rule = (sheet.cssRules.item 0.0).Value :?> CSSStyleRule
 check (rule.selectorText = ".big") "selectorText"
 check (rule.style.fontSize = "30px") "rule style"
 check (rule.cssText.StartsWith ".big") "rule cssText"
 check (rule.``type`` = rule.STYLE_RULE) "rule type"
-check (same rule.parentStyleSheet sheet) "parentStyleSheet"
+check (same rule.parentStyleSheet.Value sheet) "parentStyleSheet"
 rule.style.fontSize <- "31px"
 check (rule.style.getPropertyValue "font-size" = "31px") "rule style set"
 rule.selectorText <- ".bigger"
-check ((sheet.cssRules.item 0.0).cssText.StartsWith ".bigger") "selectorText set"
+check ((sheet.cssRules.item 0.0).Value.cssText.StartsWith ".bigger") "selectorText set"
 rule.selectorText <- ".big"
 rule.style.fontSize <- "30px"
 
@@ -75,7 +76,7 @@ rule.style.fontSize <- "30px"
 let at = sheet.insertRule (".hidden { display: none; }", 1.0)
 check (at = 1.0) "insertRule returns the index"
 check (sheet.cssRules.length = 4.0) "four rules"
-check ((sheet.cssRules.item 1.0 :?> CSSStyleRule).selectorText = ".hidden") "inserted at the index"
+check (((sheet.cssRules.item 1.0).Value :?> CSSStyleRule).selectorText = ".hidden") "inserted at the index"
 sheet.deleteRule 1.0
 check (sheet.cssRules.length = 3.0) "deleteRule"
 let rules = [ for r in sheet.cssRules -> r.cssText ]
@@ -129,9 +130,9 @@ check (changes = 0) "no change fired"
 
 // A media rule inside a sheet.
 sheet.insertRule ("@media (min-width: 1px) { .m { width: 11px } }", 0.0) |> ignore
-let mediaRule = sheet.cssRules.item 0.0 :?> CSSMediaRule
+let mediaRule = (sheet.cssRules.item 0.0).Value :?> CSSMediaRule
 check (mediaRule.cssRules.length = 1.0) "media rule holds a rule"
-check ((mediaRule.cssRules.item 0.0 :?> CSSStyleRule).selectorText = ".m") "nested rule"
+check (((mediaRule.cssRules.item 0.0).Value :?> CSSStyleRule).selectorText = ".m") "nested rule"
 let m: HTMLDivElement = document.createElement HTMLElementTagNameMapKeys.div
 m.className <- "m"
 document.body.appendChild m |> ignore

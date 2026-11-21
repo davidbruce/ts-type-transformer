@@ -137,5 +137,5 @@ addShape layer (
 
 layer.draw () |> ignore
 
-let private meta = document.getElementById "meta"
+let private meta = (document.getElementById "meta").Value
 meta.textContent <- sprintf "Stage: 680x400 · Nested marker abs=(%d, %d) · Rotated Group B rect=%dx%d" (int (round absPos.x)) (int (round absPos.y)) (int (round bbox.width)) (int (round bbox.height))

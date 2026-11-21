@@ -20,7 +20,7 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
 let private sanitizeRaw (raw: string) =
     raw.Replace("\n", "↵")
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 let sample =
     "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n"

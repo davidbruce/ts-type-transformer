@@ -73,7 +73,7 @@ let private table = constructTable<TableFeatures, NodeRow> options
 let private tableSort = unbox<Table_RowSorting<TableFeatures, NodeRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = document.getElementById id
+    let btn = (document.getElementById id).Value
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render (label: string) =
@@ -108,10 +108,10 @@ let private render (label: string) =
             yield "</tbody></table>"
         ]
         |> String.concat ""
-    let wrap = document.getElementById "table-wrap"
+    let wrap = (document.getElementById "table-wrap").Value
     wrap.innerHTML <- html
     let topHost = if rows.Count > 0 then rows.[0].getValue<string> "host" else "-"
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "%s · %d rows · top node: %s" label rows.Count topHost
 
 let main () =

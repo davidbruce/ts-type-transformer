@@ -19,7 +19,7 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
         node.appendChild ch |> ignore
     node
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 app.appendChild (wrap "div" "head" [ el "h1" "" "Date-fns Relative Timeline (F#)"; el "span" "badge" "Anchor 2024-03-15" ]) |> ignore
 

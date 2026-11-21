@@ -173,5 +173,5 @@ addCaption 558.0 325.0 "Text"
 
 layer.draw () |> ignore
 
-let private meta = document.getElementById "meta"
+let private meta = (document.getElementById "meta").Value
 meta.textContent <- sprintf "Stage: 680x400 · 7 primitive types · %d layer children" (layer.getChildren().Count)

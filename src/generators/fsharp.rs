@@ -325,7 +325,16 @@ impl Gen {
     // the name (GeoJSON's `Point` beside leaflet's).
     fn external_name(&self, name: &str) -> String {
         let flat = name.replace('.', "_");
-        if self.declared.contains(name) || self.declared.contains(&flat) { format!("External.{}", type_ident(&flat)) } else { type_ident(&flat) }
+        let ti = type_ident(&flat);
+        let shadows_core = matches!(
+            ti.as_str(),
+            "Map" | "ReadonlyMap" | "Set" | "ReadonlySet" | "WeakMap" | "WeakSet" | "List" | "Seq" | "Option" | "Result" | "Choice" | "Async" | "Task"
+        );
+        if shadows_core || self.declared.contains(name) || self.declared.contains(&flat) {
+            format!("External.{ti}")
+        } else {
+            ti
+        }
     }
 }
 
@@ -932,7 +941,7 @@ impl Gen {
     // or that it declares already, it inherits.
     fn redeclared(&mut self, d: Node, left: &[Node], body: &[String], owner: &str, extend: &str, indent: &str) -> Vec<String> {
         let root = d.document().root_element();
-        let mut own: HashSet<String> = body.iter().filter_map(|l| member_name(l)).map(|(_, n)| n.to_string()).collect();
+        let mut own: HashSet<(String, &'static str)> = body.iter().filter_map(|l| redeclared_key(l)).collect();
         let mut out = Vec::new();
         let mut todo: Vec<(Node, HashMap<String, String>)> = Vec::new();
         for r in left {
@@ -962,8 +971,8 @@ impl Gen {
             (self.extensions, self.skipped) = saved;
             for line in lines {
                 let again = subst_params(&line, &map);
-                let Some((_, name)) = member_name(&again) else { continue };
-                if again != line && own.insert(name.to_string()) {
+                let Some(key) = redeclared_key(&again) else { continue };
+                if again != line && own.insert(key) {
                     out.push(again);
                 }
             }
@@ -1131,6 +1140,9 @@ impl Gen {
                 // Declared here (`to`), or elsewhere, though one declared here may have its name.
                 let to = n.attribute("to");
                 let name = to.unwrap_or_else(|| n.attribute("qualified").unwrap_or(attr(n, "name")));
+                if to.is_none() && matches!(name, "Promise" | "PromiseLike") && elements(n).count() == 1 {
+                    return format!("JS.Promise<{}>", self.out_ty(only_child(n), owner));
+                }
                 if let Some(kept) = to.and_then(|t| self.alias_kept.get(t)).cloned() {
                     let args: Vec<Node> = elements(n).collect();
                     let args: Vec<String> = kept.iter().filter_map(|&i| args.get(i)).map(|a| self.ty(*a, owner)).collect();
@@ -1151,7 +1163,10 @@ impl Gen {
                 } else {
                     match (name, args.len()) {
                         ("Array" | "ReadonlyArray", 1) => "ResizeArray".into(),
-                        ("Promise" | "PromiseLike", 1) => "JS.Promise".into(),
+                        ("Map" | "ReadonlyMap", 2) if !is_base(n) => "JS.Map".into(),
+                        ("Set" | "ReadonlySet", 1) if !is_base(n) => "JS.Set".into(),
+                        ("WeakMap", 2) if !is_base(n) => "JS.WeakMap".into(),
+                        ("WeakSet", 1) if !is_base(n) => "JS.WeakSet".into(),
                         // Built-ins Fable has: its types, which have their members.
                         // Their buffer argument (`Uint8Array<ArrayBufferLike>`) it does not take.
                         // Not as a base: an interface cannot inherit them (`Pt extends Float32Array`).
@@ -1303,6 +1318,22 @@ impl Gen {
                 self.problems.element(T, n);
                 "obj".into()
             }
+        }
+    }
+
+    // Type in an output position (return value, read-only getter, Promise element, top-level var):
+    // `| null` (`absent="null"`) becomes `option` rather than bare nullable / `System.Nullable`.
+    fn out_ty(&mut self, n: Node, owner: &str) -> String {
+        match n.tag_name().name() {
+            "nullable" => add_opt(self.out_ty(only_child(n), owner)),
+            "ref"
+                if n.attribute("to").is_none()
+                    && matches!(n.attribute("qualified").unwrap_or(attr(n, "name")), "Promise" | "PromiseLike")
+                    && elements(n).count() == 1 =>
+            {
+                format!("JS.Promise<{}>", self.out_ty(only_child(n), owner))
+            }
+            _ => self.ty(n, owner),
         }
     }
 
@@ -1721,7 +1752,7 @@ impl Gen {
         } else {
             let string_tags: Vec<&str> = props
                 .iter()
-                .filter_map(|m| m.attribute("const").filter(|_| only_child(*m).attribute("name") == Some("string")))
+                .filter_map(|m| m.attribute("const").filter(|_| matches!(only_child(*m).attribute("name"), Some("string" | "boolean"))))
                 .collect();
             let mut rname = self.pick_hoist_name(n, &string_tags);
             let tp_suffix = if tparams.is_empty() { String::new() } else { format!("<{}>", tparams.join(", ")) };
@@ -2239,7 +2270,7 @@ impl Gen {
 
     fn returns(&mut self, n: Node, owner: &str) -> String {
         self.enter_keyed(n);
-        named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or("unit".into())
+        named(n, "returns").next().map(|r| self.out_ty(only_child(r), owner)).unwrap_or("unit".into())
     }
 
     // The members of one side of a type, as `abstract` lines. A member that
@@ -2287,16 +2318,18 @@ impl Gen {
                 self.split_rest = None;
                 both
             } else {
-                self.member(m, owner, setters.contains(raw)).into_iter().collect()
+                self.member(m, owner, setters.contains(raw))
             };
             for (line, ext, exp) in pairs {
                 // The latest file a type in the member is declared in.
                 let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
                 if !self.hoisting && latest > self.current_file && indent.is_empty() {
-                    let lines = self.extensions.entry(latest).or_default().entry(extend.to_string()).or_default();
-                    let ext = format!("        {ext}\n");
-                    if !lines.contains(&ext) {
-                        lines.push(ext);
+                    if !ext.is_empty() {
+                        let lines = self.extensions.entry(latest).or_default().entry(extend.to_string()).or_default();
+                        let ext = format!("        {ext}\n");
+                        if !lines.contains(&ext) {
+                            lines.push(ext);
+                        }
                     }
                     continue;
                 }
@@ -2316,8 +2349,8 @@ impl Gen {
         lines
     }
 
-    // One member, as an `abstract` line, an extension member, and any union-expanded overloads.
-    fn member(&mut self, m: Node, owner: &str, has_setter: bool) -> Option<(String, String, Vec<String>)> {
+    // One member, as `abstract` line(s), an extension member, and any union-expanded overloads.
+    fn member(&mut self, m: Node, owner: &str, has_setter: bool) -> Vec<(String, String, Vec<String>)> {
         let raw = m.attribute("name").unwrap_or_default();
         let name = ident(raw);
         let js = js_access(m.attribute("jsName").unwrap_or(raw));
@@ -2327,12 +2360,25 @@ impl Gen {
         }
         let (tps, m_constrained) = self.constrained_type_params_with_names(m);
         self.cur_constrained.extend(m_constrained);
-        let property = |name: &str, t: &str, settable: bool, js: &str| {
+        let property = |name: &str, t: &str, settable: bool, null_set: bool, js: &str| {
             // A `unit` cannot be set (`static protoInitialize: void`).
             let settable = settable && t != "unit";
-            let get = format!("[<Emit(\"$0{}\")>] get (): {t} = jsNative", js.replace('"', "\\\""));
-            let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
-            (format!("abstract {name}: {t}{}", if settable { " with get, set" } else { "" }), if settable { format!("member this.{name} with {get} and {set}") } else { format!("member this.{name} with {get}") }, Vec::new())
+            let js_esc = js.replace('"', "\\\"");
+            let get = format!("[<Emit(\"$0{js_esc}\")>] get (): {t} = jsNative");
+            let set_emit = if null_set { format!("$0{js_esc} = ($1 ?? null)") } else { format!("$0{js_esc} = $1") };
+            let set = format!("[<Emit(\"{set_emit}\")>] set (v: {t}) = jsNative");
+            if settable && null_set {
+                vec![
+                    (format!("abstract {name}: {t} with get"), format!("member this.{name} with {get} and {set}"), Vec::new()),
+                    (format!("[<Emit(\"{set_emit}\")>] abstract {name}: {t} with set"), String::new(), Vec::new()),
+                ]
+            } else {
+                vec![(
+                    format!("abstract {name}: {t}{}", if settable { " with get, set" } else { "" }),
+                    if settable { format!("member this.{name} with {get} and {set}") } else { format!("member this.{name} with {get}") },
+                    Vec::new(),
+                )]
+            }
         };
         let method_from = |g: &mut Gen, sig_node: Node, initial_tps: &str, name: &str, emit: String, member_attr: &str| {
             let mut params = g.params(sig_node, owner);
@@ -2417,7 +2463,7 @@ impl Gen {
             }
             (abstract_line, ext, expanded)
         };
-        let res: Option<(String, String, Vec<String>)> = match m.tag_name().name() {
+        let res: Vec<(String, String, Vec<String>)> = match m.tag_name().name() {
             "property" if !flag(m, "optional") && only_child(m).has_tag_name("functionType") => {
                 let fn_node = only_child(m);
                 for p in named(fn_node, "typeParameter") {
@@ -2425,7 +2471,7 @@ impl Gen {
                 }
                 let (fn_tps, fn_constrained) = self.constrained_type_params_with_names(fn_node);
                 self.cur_constrained.extend(fn_constrained);
-                Some(match self.fixed(fn_node, 1) {
+                vec![match self.fixed(fn_node, 1) {
                     Some((suffix, args)) => {
                         let emit = format!("$0{js}({args})");
                         let fixed_name = ident(&format!("{raw}_{suffix}"));
@@ -2433,27 +2479,32 @@ impl Gen {
                         method_from(self, fn_node, &fn_tps, &fixed_name, emit, &attr)
                     }
                     None => method_from(self, fn_node, &fn_tps, &name, format!("$0{js}($1...)"), ""),
-                })
+                }]
             }
             "property" => {
-                let t = self.ty(only_child(m), owner);
-                let t = if flag(m, "optional") { add_opt(t) } else { t };
-                Some(property(&name, &t, !flag(m, "readonly"), &js))
+                let child = only_child(m);
+                let opt = flag(m, "optional");
+                let t = self.out_ty(child, owner);
+                let t = if opt { add_opt(t) } else { t };
+                let null_set = !opt && is_absent_null(child);
+                property(&name, &t, !flag(m, "readonly"), null_set, &js)
             }
             "get" => {
+                let ret_child = named(m, "returns").next().map(only_child);
                 let t = self.returns(m, owner);
-                Some(property(&name, &t, has_setter, &js))
+                let null_set = has_setter && ret_child.is_some_and(is_absent_null);
+                property(&name, &t, has_setter, null_set, &js)
             }
             "set" => {
                 let t = named(m, "parameter").next().map(|p| self.ty(only_child(p), owner)).unwrap_or("obj".into());
                 if t == "unit" {
-                    None
+                    Vec::new()
                 } else {
                     let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
-                    Some((format!("abstract {name}: {t} with set"), format!("member this.{name} with {set}"), Vec::new()))
+                    vec![(format!("abstract {name}: {t} with set"), format!("member this.{name} with {set}"), Vec::new())]
                 }
             }
-            "method" => Some(match self.fixed(m, 1) {
+            "method" => vec![match self.fixed(m, 1) {
                 Some((suffix, args)) => {
                     let emit = format!("$0{js}({args})");
                     let fixed_name = ident(&format!("{raw}_{suffix}"));
@@ -2461,9 +2512,9 @@ impl Gen {
                     method_from(self, m, &tps, &fixed_name, emit, &attr)
                 }
                 None => method_from(self, m, &tps, &name, format!("$0{js}($1...)"), ""),
-            }),
-            "call" => Some(method_from(self, m, &tps, "Invoke", "$0($1...)".into(), "[<Emit(\"$0($1...)\")>] ")),
-            "construct" | "constructor" => Some(method_from(self, m, &tps, "Create", "new $0($1...)".into(), "[<EmitConstructor>] ")),
+            }],
+            "call" => vec![method_from(self, m, &tps, "Invoke", "$0($1...)".into(), "[<Emit(\"$0($1...)\")>] ")],
+            "construct" | "constructor" => vec![method_from(self, m, &tps, "Create", "new $0($1...)".into(), "[<EmitConstructor>] ")],
             "index" => {
                 let key = named(m, "parameter").next().map(|p| self.ty(only_child(p), owner)).unwrap_or("string".into());
                 let value = self.returns(m, owner);
@@ -2475,11 +2526,11 @@ impl Gen {
                 } else {
                     format!("member this.Item with {get}")
                 };
-                Some((abstract_line, ext, Vec::new()))
+                vec![(abstract_line, ext, Vec::new())]
             }
             _ => {
                 self.problems.element(T, m);
-                None
+                Vec::new()
             }
         };
         self.cur_constrained = saved_constrained;
@@ -2652,8 +2703,10 @@ impl Gen {
             let qualified = if prefix.is_empty() { header.clone() } else { format!("{}.{header}", prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
             self.constrained_owner.insert(extend.clone(), qualified);
         }
+        let decl_id = d.attribute("id").unwrap_or(attr(d, "name"));
+        let is_base = self.extended_bases.contains(decl_id);
         // A static member makes F# take it for a class unless told.
-        let factory = if d.has_tag_name("class") { FactoryResult::None } else { self.factory(d, &owner) };
+        let factory = if d.has_tag_name("class") { FactoryResult::None } else { self.factory(d, &owner, &extend, is_base) };
         let kind = if factory.is_some() { "AllowNullLiteral; Interface" } else { "AllowNullLiteral" };
         self.out += &format!("{origin}{indent}[<{kind}>]\n{indent}type {header} =\n");
         let mut body = Vec::new();
@@ -2761,8 +2814,6 @@ impl Gen {
         }
         self.inherited_methods = saved_inherited_methods;
 
-        let decl_id = d.attribute("id").unwrap_or(attr(d, "name"));
-        let is_base = self.extended_bases.contains(decl_id);
         let depth = self.inheritance_depth(decl_id);
         let disambiguated = |args: &str| {
             let mut sentinel = "_base".to_string();
@@ -2774,9 +2825,9 @@ impl Gen {
         };
         match factory {
             FactoryResult::Inline { args, emit } => {
-                if is_base && indent.is_empty() && !self.in_globals {
+                if is_base && !self.in_globals {
                     let bargs = disambiguated(&args);
-                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({bargs}) : {owner} = jsNative\n");
+                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({bargs}) : {extend} = jsNative\n");
                     let lines = self.factories.entry(self.current_file).or_default().entry(depth).or_default().entry(extend.clone()).or_default();
                     if !lines.contains(&ext) {
                         lines.push(ext);
@@ -2786,9 +2837,9 @@ impl Gen {
                 }
             }
             FactoryResult::Extension { latest, args, emit } => {
-                if indent.is_empty() && !self.in_globals {
+                if !self.in_globals {
                     let fargs = if is_base { disambiguated(&args) } else { args };
-                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({fargs}) : {owner} = jsNative\n");
+                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({fargs}) : {extend} = jsNative\n");
                     let lines = self.factories.entry(latest).or_default().entry(depth).or_default().entry(extend.clone()).or_default();
                     if !lines.contains(&ext) {
                         lines.push(ext);
@@ -2813,12 +2864,29 @@ impl Gen {
     // they make, by Fable's ParamObject. Not where a value of its name has
     // a `Create` (a class). When an argument refers to a later file, emits as an
     // extension `Create` in that file instead.
-    fn factory(&mut self, d: Node, owner: &str) -> FactoryResult {
+    fn factory(&mut self, d: Node, owner: &str, extend: &str, is_base: bool) -> FactoryResult {
+        let initial_owner = if is_base && !self.in_globals { extend } else { owner };
+        match self.factory_build(d, initial_owner, extend) {
+            Some((latest, line, emit)) if latest > self.current_file => {
+                if !self.in_globals && initial_owner != extend {
+                    let Some((ext_latest, ext_line, ext_emit)) = self.factory_build(d, extend, extend) else {
+                        return FactoryResult::None;
+                    };
+                    return FactoryResult::Extension { latest: ext_latest.max(self.current_file + 1), args: ext_line, emit: ext_emit };
+                }
+                FactoryResult::Extension { latest, args: line, emit }
+            }
+            Some((_, line, emit)) => FactoryResult::Inline { args: line, emit },
+            None => FactoryResult::None,
+        }
+    }
+
+    fn factory_build(&mut self, d: Node, owner: &str, extend: &str) -> Option<(usize, String, String)> {
         let root = d.document().root_element();
         let raw = attr(d, "name");
         let constrained = d.attribute("id").is_some_and(|id| self.constrained.contains_key(id));
         if constrained || d.parent().is_some_and(|p| elements(p).any(|v| v.has_tag_name("var") && attr(v, "name") == raw)) {
-            return FactoryResult::None;
+            return None;
         }
         // Discover all members and bases first before mutating delegate/hoist caches.
         let mut collected: Vec<(Node, HashMap<String, String>)> = Vec::new();
@@ -2841,7 +2909,7 @@ impl Gen {
                     && !named(m, "parameter").any(|p| p.has_attribute("const"));
                 let is_prop = m.has_tag_name("property") && !flag(m, "static");
                 if !is_prop && !is_opt_method {
-                    return FactoryResult::None;
+                    return None;
                 }
                 let mname = attr(m, "name").to_string();
                 if seen_names.insert(mname) {
@@ -2851,11 +2919,9 @@ impl Gen {
             if !t.has_tag_name("typeAlias") {
                 for e in named(t, "extends") {
                     let r = only_child(e);
-                    let Some(b) = r.attribute("to").and_then(|to| find_decl(root, to)) else {
-                        return FactoryResult::None;
-                    };
+                    let b = r.attribute("to").and_then(|to| find_decl(root, to))?;
                     if !(b.has_tag_name("interface") || (b.has_tag_name("typeAlias") && only_child_type(b).has_tag_name("object"))) {
-                        return FactoryResult::None;
+                        return None;
                     }
                     let bparams: Vec<Node> = named(b, "typeParameter").collect();
                     let rargs: Vec<Node> = elements(r).collect();
@@ -2866,7 +2932,7 @@ impl Gen {
                         } else if let Some(def) = named(*p, "default").next() {
                             self.ty(only_child(def), owner)
                         } else {
-                            return FactoryResult::None;
+                            return None;
                         };
                         map.insert(attr(*p, "name").to_string(), subst_params(&raw_arg, &outer));
                     }
@@ -2876,7 +2942,7 @@ impl Gen {
         }
         let plain = |n: &str| !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '_') && !n.as_bytes()[0].is_ascii_digit();
         if collected.is_empty() || collected.iter().any(|(m, _)| !plain(attr(*m, "name")) || attr(*m, "name") == "Create") {
-            return FactoryResult::None;
+            return None;
         }
         let own_tparams: HashSet<String> = named(d, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
         let (required, optional): (Vec<_>, Vec<_>) =
@@ -2890,7 +2956,7 @@ impl Gen {
             let raw_t = if m.has_tag_name("method") { self.fn_type(*m, owner) } else { self.ty(only_child(*m), owner) };
             let t = subst_params(&raw_t, map);
             if collect_type_vars(&t).iter().any(|v| !own_tparams.contains(v)) {
-                return FactoryResult::None;
+                return None;
             }
             let is_opt = m.has_tag_name("method") || flag(*m, "optional") || m.has_attribute("const");
             let q = if is_opt { "?" } else { "" };
@@ -2899,14 +2965,8 @@ impl Gen {
         }
         let line = args.join(", ");
         let emit = if fixed.is_empty() { "$0".to_string() } else { format!("Object.assign({{{}}}, $0)", fixed.join(", ")) };
-        let latest = words(&line).iter().chain(words(owner).iter()).filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
-        if latest > self.current_file {
-            if self.cur_indent.is_empty() {
-                return FactoryResult::Extension { latest, args: line, emit };
-            }
-            return FactoryResult::None;
-        }
-        FactoryResult::Inline { args: line, emit }
+        let latest = words(&line).iter().chain(words(extend).iter()).filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
+        Some((latest, line, emit))
     }
 
     // Resolves default type arguments for `tparams` on a signature (`<constructor>` or `<function>`).
@@ -3136,7 +3196,8 @@ impl Gen {
                 self.current_file = if d.has_tag_name("typeAlias") { self.file_of.get(raw).copied().unwrap_or(0) } else { self.file_of.get(&format!("module:{unit}")).copied().unwrap_or(0) };
             }
             let start = self.out.len();
-            let prev_globals = std::mem::replace(&mut self.in_globals, indent.is_empty() && !d.has_attribute("module"));
+            let next_globals = if indent.is_empty() { !d.has_attribute("module") } else { self.in_globals };
+            let prev_globals = std::mem::replace(&mut self.in_globals, next_globals);
             let prev_indent = std::mem::replace(&mut self.cur_indent, indent.to_string());
             let prev_prefix = std::mem::replace(&mut self.cur_prefix, prefix.to_string());
             self.decl(d, raw, &name, &path, prefix, indent, &mut functions, &mut func_extras);
@@ -3391,7 +3452,7 @@ impl Gen {
                         let members: Vec<Node> = elements(body).collect();
                         self.static_side(&name, &path, &members, None, None, indent);
                     } else {
-                        let t = self.ty(body, "");
+                        let t = self.out_ty(body, "");
                         let value = format!("{indent}{}\n{indent}let {name}: {t} = jsNative\n\n", self.at(&path, None));
                         if indent.is_empty() {
                             self.values += &value;
@@ -3417,8 +3478,14 @@ impl Gen {
         let mut untested = 0;
         for m in &members {
             let payload = self.ty(*m, "");
-            let mut case = if m.has_tag_name("object") && !payload.starts_with("{|") && payload != "obj" {
-                payload.rsplit('.').next().unwrap_or(&payload).split('<').next().unwrap_or(&payload).to_string()
+            let mut case = if m.has_tag_name("object") {
+                tag_case_name(*m).unwrap_or_else(|| {
+                    if !payload.starts_with("{|") && payload != "obj" {
+                        payload.rsplit('.').next().unwrap_or(&payload).split('<').next().unwrap_or(&payload).to_string()
+                    } else {
+                        case_name(*m)
+                    }
+                })
             } else {
                 case_name(*m)
             };
@@ -3592,6 +3659,44 @@ fn case_test(test: &str, discriminant: Option<&str>) -> Option<String> {
     })
 }
 
+fn is_absent_null(n: Node) -> bool {
+    n.has_tag_name("nullable") && attr(n, "absent") == "null"
+}
+
+fn redeclared_key(line: &str) -> Option<(String, &'static str)> {
+    let (_, name) = member_name(line)?;
+    let trimmed = line.trim_end();
+    let acc = if trimmed.ends_with(" with get") {
+        "get"
+    } else if trimmed.ends_with(" with set") {
+        "set"
+    } else {
+        ""
+    };
+    Some((name.to_string(), acc))
+}
+
+fn tag_case_name(m: Node) -> Option<String> {
+    let test = m.attribute("test")?;
+    let raw = if let Some(v) = test.strip_prefix("tag:") {
+        v
+    } else if let Some(rest) = test.strip_prefix("tag_has:") {
+        rest.rsplit_once(':')?.0
+    } else if let Some(p) = test.strip_prefix("has:") {
+        p
+    } else {
+        return None;
+    };
+    let mut case = pascal(raw);
+    if case.is_empty() {
+        return None;
+    }
+    if !case.as_bytes()[0].is_ascii_alphabetic() {
+        case.insert(0, 'C');
+    }
+    Some(case)
+}
+
 // The name of a union case, from its member: `String`, `Widget`, `Array`.
 fn case_name(m: Node) -> String {
     let raw = match m.tag_name().name() {
@@ -3604,7 +3709,7 @@ fn case_name(m: Node) -> String {
         "array" => "Array".into(),
         "tuple" => "Tuple".into(),
         "functionType" => "Function".into(),
-        "object" => "Object".into(),
+        "object" => tag_case_name(m).unwrap_or_else(|| "Object".into()),
         t => t.to_string(),
     };
     let mut case: String = raw.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();

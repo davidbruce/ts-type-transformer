@@ -40,10 +40,10 @@ let main () =
         )
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
-    (document.getElementById "stage").appendChild renderer.domElement |> ignore
+    (document.getElementById "stage").Value.appendChild renderer.domElement |> ignore
 
     let scene = Scene.Create()
-    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
+    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
 
     let orthoCam = OrthographicCamera.Create(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0)
     let perspCam = PerspectiveCamera.Create(40.0, aspect, 0.1, 100.0)
@@ -96,8 +96,8 @@ let main () =
         )
     scene.add (inst) |> ignore
 
-    let camBtn = document.getElementById "btn-cam"
-    let metaEl = document.getElementById "meta"
+    let camBtn = (document.getElementById "btn-cam").Value
+    let metaEl = (document.getElementById "meta").Value
 
     let pos = Vector3.Create ()
     let rotQ = Quaternion.Create ()
@@ -127,8 +127,9 @@ let main () =
                 idx <- idx + 1
 
         inst.instanceMatrix.needsUpdate <- true
-        if not (isNull inst.instanceColor) then
-            inst.instanceColor.needsUpdate <- true
+        match inst.instanceColor with
+        | Some color -> color.needsUpdate <- true
+        | None -> ()
 
         let radius = 11.5
         let cx = radius * cos camYaw
@@ -148,7 +149,7 @@ let main () =
                 (layoutName layoutMode) maxH camName
 
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = document.getElementById id
+        let b = (document.getElementById id).Value
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wireClick "btn-cam" (fun () ->

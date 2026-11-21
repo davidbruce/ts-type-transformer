@@ -82,7 +82,7 @@ let private colFilt = unbox<Table_ColumnFiltering> table
 let private globFilt = unbox<Table_GlobalFiltering<TableFeatures, ServiceRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = document.getElementById id
+    let btn = (document.getElementById id).Value
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render (label: string) =
@@ -104,10 +104,10 @@ let private render (label: string) =
             yield "</tbody></table>"
         ]
         |> String.concat ""
-    let wrap = document.getElementById "table-wrap"
+    let wrap = (document.getElementById "table-wrap").Value
     wrap.innerHTML <- html
     let total = table.getCoreRowModel().rows.Count
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "%s · showing %d / %d services" label rows.Count total
 
 let main () =

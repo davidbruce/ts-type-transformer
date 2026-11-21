@@ -18,7 +18,7 @@ let private toPolygonPts (pts: LatLng list) : ResizeArray<PolylineSetLatLngsLatl
     ResizeArray [ for p in pts -> !^p ]
 
 let main () =
-    let m = map (document.getElementById "map", mapOpts ())
+    let m = map ((document.getElementById "map").Value, mapOpts ())
 
     let midRing =
         [
@@ -123,7 +123,7 @@ let main () =
 
     m.fitBounds paddedBounds |> ignore
 
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <-
         sprintf "2 nested polygons · 1 padded hull · probes: %d core · %d sector · %d exterior" inCore inMid exterior
 

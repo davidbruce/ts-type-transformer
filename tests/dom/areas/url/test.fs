@@ -79,31 +79,31 @@ check (not (URL.canParse "/relative")) "canParse a relative path without base"
 check (URL.canParse ("/relative", "https://example.com")) "canParse with base"
 check (not (URL.canParse "http://")) "canParse empty host"
 check (not (URL.canParse "")) "canParse empty"
-check (isNull (URL.parse "nonsense")) "parse failure is null"
-check ((URL.parse "https://ok.test/x").pathname = "/x") "parse"
+check (URL.parse "nonsense").IsNone "parse failure is null"
+check ((URL.parse "https://ok.test/x").Value.pathname = "/x") "parse"
 check (throws (fun () -> URL.Create "not a url" |> ignore)) "the constructor throws on a bad URL"
 
 // searchParams is live: it follows the URL's search.
 let sp = u.searchParams
-check (sp.get "x" = "1" && sp.get "y" = "two") "searchParams read"
+check (sp.get "x" = Some "1" && sp.get "y" = Some "two") "searchParams read"
 check (sp.size = 2.0) "searchParams size"
 sp.append ("z", "3 4")
 check (u.search = "?x=1&y=two&z=3+4") "appending updates the URL"
 u.search <- "?k=v"
-check (sp.get "k" = "v" && not (sp.has "x")) "setting search updates the params"
+check (sp.get "k" = Some "v" && not (sp.has "x")) "setting search updates the params"
 
 // URLSearchParams on their own.
 let p = URLSearchParams.Create "b=2&a=1&a=3&c=%20spaced%26"
-check (p.get "a" = "1") "get returns the first"
+check (p.get "a" = Some "1") "get returns the first"
 check ((List.ofSeq (p.getAll "a")) = [ "1"; "3" ]) "getAll"
-check (isNull (p.get "nope")) "get of a missing key is null"
-check (p.get "c" = " spaced&") "percent-decoding"
+check (p.get "nope").IsNone "get of a missing key is null"
+check (p.get "c" = Some " spaced&") "percent-decoding"
 check (p.has "b" && not (p.has "z")) "has"
 check (p.has ("a", "3") && not (p.has ("a", "9"))) "has with a value"
 p.append ("a", "4")
 check (p.getAll("a").Count = 3) "append"
 p.set ("a", "only")
-check (p.getAll("a").Count = 1 && p.get "a" = "only") "set collapses"
+check (p.getAll("a").Count = 1 && p.get "a" = Some "only") "set collapses"
 p.delete "b"
 check (not (p.has "b")) "delete"
 p.append ("b", "x")
@@ -133,7 +133,7 @@ let fromParams = URLSearchParams.Create fromPairs
 fromParams.append ("r", "3")
 check (fromParams.toString () = "p=1&q=2&r=3" && fromPairs.size = 2.0) "from another, a copy"
 check ((URLSearchParams.Create ()).size = 0.0) "empty"
-check ((URLSearchParams.Create "?lead=1").get "lead" = "1") "a leading ? is dropped"
+check ((URLSearchParams.Create "?lead=1").get "lead" = Some "1") "a leading ? is dropped"
 
 // Encoding of reserved characters when set through the URL.
 let e = URL.Create "https://example.com/"

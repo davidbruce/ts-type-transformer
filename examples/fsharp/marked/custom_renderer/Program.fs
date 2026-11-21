@@ -23,7 +23,7 @@ let private unwrapHtml (r: StringOrPromise) =
     | StringOrPromise.String s -> s
     | StringOrPromise.Promise _ -> ""
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 let md =
     "# Wireframe Spec\n\n## Custom Pipeline\n\nParagraph with *italic* and **bold** and `code`.\n"

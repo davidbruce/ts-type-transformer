@@ -18,7 +18,7 @@ let private wrap (cls: string) (children: Dom.HTMLElement list) =
         node.appendChild ch |> ignore
     node
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 app.appendChild
     (wrap "head" [ el "h1" "" "Output & Layout Options (F#)"; el "span" "badge" "html | mathml | leqno | fleqn | maxSize | strict" ])

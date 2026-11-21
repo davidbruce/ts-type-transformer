@@ -32,7 +32,7 @@ let private toPolyPts (pts: LatLng list) : ResizeArray<PolylineNewLatlngs> =
     ResizeArray [ for p in pts -> !^p ]
 
 let main () =
-    let m = map (document.getElementById "map", mapOpts ())
+    let m = map ((document.getElementById "map").Value, mapOpts ())
 
     let hubs =
         [|
@@ -84,7 +84,7 @@ let main () =
     for i in 0 .. hubs.Length - 2 do
         totalKm <- totalKm + (snd hubs[i]).distanceTo (snd hubs[i + 1]) / 1000.0
 
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "6 hubs · 2 routes · %.0f km total · EPSG:3857 vector SVG" totalKm
 
 main ()

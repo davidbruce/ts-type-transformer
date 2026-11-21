@@ -29,7 +29,7 @@ async {
     let ground = world.createRigidBody (RigidBodyDesc.``fixed``().setTranslation (0.0, 0.0, 0.0))
     check (ground.isFixed () && not (ground.isDynamic ())) "a fixed body"
     let groundShape = world.createCollider (ColliderDesc.cuboid(10.0, 0.5, 10.0), ground)
-    check (groundShape.parent().handle = ground.handle) "the collider's parent"
+    check (groundShape.parent().Value.handle = ground.handle) "the collider's parent"
 
     let ball = world.createRigidBody (RigidBodyDesc.dynamic().setTranslation (0.0, 5.0, 0.0))
     check (ball.isDynamic () && ball.bodyType () = RigidBodyType.Dynamic) "a dynamic body"
@@ -77,15 +77,14 @@ async {
     world.step ()
     let ray = Ray.Create (Vector.Create (5.0, 10.0, 0.0), Vector.Create (0.0, -1.0, 0.0))
     check (near (ray.pointAt 2.0).y 8.0 1e-6) "Ray.pointAt"
-    // FINDING 15: castRay returns null when nothing is hit, but is typed RayColliderHit, not an option
     let hit = world.castRay (ray, 100.0, true)
-    check (not (isNull (box hit))) "the ray hits"
-    check (near hit.timeOfImpact 9.5 1e-3) "time of impact: the top of the ground"
-    check (hit.collider.handle = groundShape.handle) "the collider hit"
+    check hit.IsSome "the ray hits"
+    check (near hit.Value.timeOfImpact 9.5 1e-3) "time of impact: the top of the ground"
+    check (hit.Value.collider.handle = groundShape.handle) "the collider hit"
     let miss = world.castRay (Ray.Create (Vector.Create (50.0, 10.0, 0.0), Vector.Create (0.0, -1.0, 0.0)), 100.0, true)
-    check (isNull (box miss)) "a ray that misses"
+    check miss.IsNone "a ray that misses"
     let toi = groundShape.castRayAndGetNormal (ray, 100.0, true)
-    check (near toi.normal.y 1.0 1e-6) "the normal of the ground's top"
+    check (near toi.Value.normal.y 1.0 1e-6) "the normal of the ground's top"
 
     // Removing a body.
     world.removeRigidBody ball

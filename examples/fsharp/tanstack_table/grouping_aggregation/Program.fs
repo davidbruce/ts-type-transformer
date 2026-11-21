@@ -81,7 +81,7 @@ let private grp = unbox<Table_ColumnGrouping<TableFeatures, HostRow>> table
 let private exp = unbox<Table_RowExpanding<TableFeatures, HostRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = document.getElementById id
+    let btn = (document.getElementById id).Value
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render () =
@@ -112,9 +112,9 @@ let private render () =
             yield "</tbody></table>"
         ]
         |> String.concat ""
-    let wrap = document.getElementById "table-wrap"
+    let wrap = (document.getElementById "table-wrap").Value
     wrap.innerHTML <- html
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "Grouped by %s · %d groups · %d visible rows" grpCol groupCount rows.Count
 
 let main () =

@@ -104,7 +104,7 @@ check (all.x <= 10.0 && all.right >= 220.0 && all.bottom >= 115.0) "the stage's 
 check (obj.ReferenceEquals (stage.getChildAt 2, sprite)) "getChildAt"
 check (stage.getChildIndex (box) = 0.0) "getChildIndex"
 stage.removeChild sprite |> ignore
-check (stage.children.Count = 2 && isNull sprite.parent) "removeChild"
+check (stage.children.Count = 2 && sprite.parent.IsNone) "removeChild"
 stage.removeChildren () |> ignore
 check (stage.children.Count = 0) "removeChildren"
 

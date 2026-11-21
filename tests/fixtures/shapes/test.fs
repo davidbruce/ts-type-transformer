@@ -49,16 +49,16 @@ check (s.label (StringOrNumber.Number 7.0) = "number:7") "union number"
 check (s.measureExact {| exact = true |} = 9.0) "overload named for its literal"
 check (s.measure {| exact = false |} = "9") "overload keeping the name"
 
-// Nullable with `null`: the type's own null.
-check (isNull s.parent) "null"
-check (obj.ReferenceEquals(big.parent, s)) "non-null"
-big.parent <- null
-check (isNull big.parent) "set null"
+// Nullable with `null`: return/getter is `option`; parameters keep `null`.
+check s.parent.IsNone "null"
+check (obj.ReferenceEquals(big.parent.Value, s)) "non-null"
+big.parent <- None
+check big.parent.IsNone "set null"
 
 // Global functions.
 check (totalArea (s, Shape.unit ()) = 10.0) "function"
-check (obj.ReferenceEquals(largest (s, null), s)) "null argument"
-check (obj.ReferenceEquals(largest (Shape.unit (), s), s)) "nullable result"
+check (obj.ReferenceEquals(largest(s, null).Value, s)) "null argument"
+check (obj.ReferenceEquals(largest(Shape.unit (), s).Value, s)) "nullable result"
 
 // Nullable with `undefined`: an option.
 check ((orUnit None).area () = 1.0) "undefined argument"

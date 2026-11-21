@@ -17,7 +17,7 @@ let canvas: HTMLCanvasElement = document.createElement HTMLElementTagNameMapKeys
 canvas.width <- 100.0
 canvas.height <- 80.0
 document.body.appendChild canvas |> ignore
-let ctx = canvas.getContext_2d ()
+let ctx = (canvas.getContext_2d ()).Value
 
 // One pixel as (r, g, b, a).
 let pixel (x: float) (y: float) =

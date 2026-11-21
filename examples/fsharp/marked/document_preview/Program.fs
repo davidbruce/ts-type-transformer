@@ -22,7 +22,7 @@ let private unwrapHtml (r: StringOrPromise) =
     | StringOrPromise.String s -> s
     | StringOrPromise.Promise _ -> ""
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 app.appendChild (wrap "div" "head" [ el "h1" "" "Marked Document Preview (F#)"; el "span" "badge" "marked" ]) |> ignore
 

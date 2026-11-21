@@ -22,10 +22,10 @@ let main () =
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
     let canvas = renderer.domElement
-    (document.getElementById "stage").appendChild canvas |> ignore
+    (document.getElementById "stage").Value.appendChild canvas |> ignore
 
     let scene = Scene.Create()
-    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
+    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
@@ -94,7 +94,7 @@ let main () =
     scene.add boxHelper |> ignore
 
     let raycaster = Raycaster.Create ()
-    let metaEl = document.getElementById "meta"
+    let metaEl = (document.getElementById "meta").Value
 
     let updateCamera () =
         let radius = 8.4
@@ -157,7 +157,7 @@ let main () =
         castAtNdc proj.x proj.y
 
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = document.getElementById id
+        let b = (document.getElementById id).Value
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     canvas.addEventListener (

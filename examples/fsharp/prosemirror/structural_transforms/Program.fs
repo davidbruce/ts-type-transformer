@@ -96,7 +96,7 @@ let mutable private lastOp = "Initialized document structure"
 let private updateMeta (doc: ProsemirrorModel.Node) =
     let names =
         [ for i in 0 .. (int doc.childCount - 1) -> doc.child(i).``type``.name ]
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <-
         sprintf "%s · blocks=%d · outline=[%s] · totalSteps=%d · nodeSize=%d"
             lastOp (int doc.childCount) (String.concat " · " names) totalSteps (int doc.nodeSize)
@@ -105,7 +105,7 @@ let private createState () =
     EditorState.create (EditorStateConfig.Create (schema = schema, doc = buildInitialDoc ()))
 
 let main () =
-    let mountEl = document.getElementById "editor"
+    let mountEl = (document.getElementById "editor").Value
     let mutable view: EditorView option = None
 
     let props =
@@ -126,7 +126,7 @@ let main () =
     updateMeta v.state.doc
 
     let wire (id: string) (fn: unit -> unit) =
-        let el = document.getElementById id
+        let el = (document.getElementById id).Value
         el.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wire "btn-0" (fun () ->
@@ -161,25 +161,26 @@ let main () =
         let doc = st.doc
         let quoteType = schema.nodes.["blockquote"]
         let wrapRange =
-            let rSel = st.selection.``$from``.blockRange st.selection.``$to``
-            if not (isNull rSel) && not (isNull (ProsemirrorTransform.findWrapping (rSel, quoteType))) && st.selection.``$from``.depth = 1.0 && st.selection.``$from``.parent.``type``.name = "paragraph" then
+            match st.selection.``$from``.blockRange st.selection.``$to`` with
+            | Some rSel when (ProsemirrorTransform.findWrapping (rSel, quoteType)).IsSome && st.selection.``$from``.depth = 1.0 && st.selection.``$from``.parent.``type``.name = "paragraph" ->
                 Some rSel
-            else
+            | _ ->
                 let mutable pos = 0.0
                 let mutable found: NodeRange option = None
                 for i in 0 .. (int doc.childCount - 1) do
                     let ch = doc.child i
                     if found.IsNone && ch.``type``.name = "paragraph" then
                         let rp = doc.resolve (pos + 1.0)
-                        let r = rp.blockRange rp
-                        if not (isNull r) && not (isNull (ProsemirrorTransform.findWrapping (r, quoteType))) then
+                        match rp.blockRange rp with
+                        | Some r when (ProsemirrorTransform.findWrapping (r, quoteType)).IsSome ->
                             found <- Some r
+                        | _ -> ()
                     pos <- pos + ch.nodeSize
                 found
         match wrapRange with
         | Some range ->
-            let wrappers = ProsemirrorTransform.findWrapping (range, quoteType)
-            if not (isNull wrappers) then
+            match ProsemirrorTransform.findWrapping (range, quoteType) with
+            | Some wrappers ->
                 let wrapSpecs =
                     ResizeArray [
                         for w in wrappers -> {| ``type`` = w.``type``; attrs = if isNull w.attrs then None else Some w.attrs |}
@@ -188,6 +189,7 @@ let main () =
                 tr.wrap (range, wrapSpecs) |> ignore
                 lastOp <- sprintf "Wrapped block [%d..%d] in blockquote" (int range.start) (int range.``end``)
                 v.dispatch tr
+            | None -> ()
         | None ->
             lastOp <- "No top-level paragraph left to wrap"
             updateMeta doc
@@ -202,15 +204,16 @@ let main () =
             let ch = doc.child i
             if not lifted && ch.``type``.name = "blockquote" && ch.childCount > 0.0 then
                 let rp = doc.resolve (pos + 2.0)
-                let range = rp.blockRange rp
-                if not (isNull range) then
+                match rp.blockRange rp with
+                | Some range ->
                     let target = ProsemirrorTransform.liftTarget range
-                    if target.HasValue then
+                    if target.IsSome then
                         let tr = st.tr
                         tr.lift (range, target.Value) |> ignore
                         lastOp <- sprintf "Lifted blockquote child to target depth %d" (int target.Value)
                         v.dispatch tr
                         lifted <- true
+                | None -> ()
             pos <- pos + ch.nodeSize
         if not lifted then
             lastOp <- "No blockquote left to lift"

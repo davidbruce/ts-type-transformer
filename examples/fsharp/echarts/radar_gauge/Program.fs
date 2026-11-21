@@ -8,8 +8,8 @@ open type Echarts.Globals
 let private setChartOption (chart: ECharts) (opt: obj) =
     chart.setOption (unbox<EChartsCoreOption> opt, false)
 
-let private radar = init (document.getElementById "chart-radar")
-let private gauge = init (document.getElementById "chart-gauge")
+let private radar = init ((document.getElementById "chart-radar").Value)
+let private gauge = init ((document.getElementById "chart-gauge").Value)
 
 setChartOption radar {|
     animation = false
@@ -72,5 +72,5 @@ setChartOption gauge {|
     |]
 |}
 
-let private metaEl = document.getElementById "meta"
+let private metaEl = (document.getElementById "meta").Value
 metaEl.textContent <- sprintf "Radar: %dx%d · Gauge: %dx%d · Score 84%%" (int (radar.getWidth ())) (int (radar.getHeight ())) (int (gauge.getWidth ())) (int (gauge.getHeight ()))

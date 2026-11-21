@@ -75,7 +75,7 @@ let private isColVisible (cv: obj) (key: string) : bool =
     if isNull cv || jsTypeof (cv?(key)) <> "boolean" then true else unbox<bool> cv?(key)
 
 let private wireBtn (id: string) (action: unit -> unit) =
-    let btn = document.getElementById id
+    let btn = (document.getElementById id).Value
     btn.addEventListener (HTMLElementEventMapKeys.click, fun _ -> action ())
 
 let private render () =
@@ -114,11 +114,11 @@ let private render () =
         ]
         |> String.concat ""
 
-    let wrap = document.getElementById "table-wrap"
+    let wrap = (document.getElementById "table-wrap").Value
     wrap.innerHTML <- html
     let visCount = vis.getVisibleLeafColumns().Count
     let selCount = sel.getSelectedRowModel().rows.Count
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "%d / %d visible columns · start:id end:status pinned · %d / %d rows selected" visCount (table.getAllLeafColumns().Count) selCount rows.Count
 
 let main () =

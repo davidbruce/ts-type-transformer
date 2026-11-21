@@ -21,52 +21,52 @@ check (sessionStorage.length = 0.0) "session starts empty"
 
 // Set, get, overwrite.
 localStorage.setItem ("name", "ada")
-check (localStorage.getItem "name" = "ada") "getItem"
+check (localStorage.getItem "name" = Some "ada") "getItem"
 check (localStorage.length = 1.0) "length 1"
 localStorage.setItem ("name", "grace")
-check (localStorage.getItem "name" = "grace") "overwrite"
+check (localStorage.getItem "name" = Some "grace") "overwrite"
 check (localStorage.length = 1.0) "overwrite keeps the length"
-check (isNull (localStorage.getItem "missing")) "a missing key is null"
+check (localStorage.getItem "missing").IsNone "a missing key is null"
 
 // Several keys: key(i) lists them.
 localStorage.setItem ("b", "2")
 localStorage.setItem ("c", "3")
 check (localStorage.length = 3.0) "length 3"
-let keys = [ for i in 0..2 -> localStorage.key (float i) ] |> List.sort
+let keys = [ for i in 0..2 -> (localStorage.key (float i)).Value ] |> List.sort
 check (keys = [ "b"; "c"; "name" ]) "key(i) names every key"
-check (isNull (localStorage.key 3.0)) "key out of range is null"
+check (localStorage.key 3.0).IsNone "key out of range is null"
 
 // Values are strings.
 localStorage.setItem ("n", string 42)
-check (localStorage.getItem "n" = "42") "numbers stored as text"
-check (float (localStorage.getItem "n") + 1.0 = 43.0) "read back as a number"
+check (localStorage.getItem "n" = Some "42") "numbers stored as text"
+check (float (localStorage.getItem "n").Value + 1.0 = 43.0) "read back as a number"
 localStorage.setItem ("empty", "")
-check (localStorage.getItem "empty" = "") "an empty string is not null"
+check (localStorage.getItem "empty" = Some "") "an empty string is not null"
 localStorage.setItem ("unicode", "héllo 世界")
-check (localStorage.getItem "unicode" = "héllo 世界") "unicode round trip"
+check (localStorage.getItem "unicode" = Some "héllo 世界") "unicode round trip"
 let big = System.String('x', 100000)
 localStorage.setItem ("big", big)
-check (localStorage.getItem("big").Length = 100000) "a long value"
+check ((localStorage.getItem "big").Value.Length = 100000) "a long value"
 
 // Property-style access.
 check (string localStorage.["name"] = "grace") "indexer read"
 localStorage.["viaIndexer"] <- box "yes"
-check (localStorage.getItem "viaIndexer" = "yes") "indexer write"
+check (localStorage.getItem "viaIndexer" = Some "yes") "indexer write"
 
 // Removal.
 localStorage.removeItem "b"
-check (isNull (localStorage.getItem "b")) "removeItem"
+check (localStorage.getItem "b").IsNone "removeItem"
 localStorage.removeItem "never-set"
-check (localStorage.getItem "c" = "3") "other keys survive"
+check (localStorage.getItem "c" = Some "3") "other keys survive"
 
 // The two stores are separate.
 sessionStorage.setItem ("name", "session-ada")
-check (sessionStorage.getItem "name" = "session-ada") "session getItem"
-check (localStorage.getItem "name" = "grace") "local unchanged by session"
+check (sessionStorage.getItem "name" = Some "session-ada") "session getItem"
+check (localStorage.getItem "name" = Some "grace") "local unchanged by session"
 check (sessionStorage.length = 1.0) "session length"
 sessionStorage.removeItem "name"
-check (isNull (sessionStorage.getItem "name")) "session removeItem"
-check (localStorage.getItem "name" = "grace") "local survives session removal"
+check (sessionStorage.getItem "name").IsNone "session removeItem"
+check (localStorage.getItem "name" = Some "grace") "local survives session removal"
 check (not (same localStorage sessionStorage)) "distinct objects"
 
 // A JSON value kept as a string.
@@ -78,7 +78,7 @@ let record =
           "nested" ==> createObj [ "ok" ==> true; "ratio" ==> 0.5 ]
           "none" ==> null ]
 localStorage.setItem ("record", JS.JSON.stringify record)
-let raw = localStorage.getItem "record"
+let raw = (localStorage.getItem "record").Value
 check (raw.Contains "\"name\":\"Ada\"") "stored as JSON text"
 let loaded = JS.JSON.parse raw
 check (loaded?id = 7) "JSON number"
@@ -89,12 +89,12 @@ check (isNull loaded?none) "JSON null"
 // Updated and stored again.
 loaded?id <- 8
 localStorage.setItem ("record", JS.JSON.stringify loaded)
-check ((JS.JSON.parse (localStorage.getItem "record"))?id = 8) "JSON updated"
+check ((JS.JSON.parse (localStorage.getItem "record").Value)?id = 8) "JSON updated"
 
 // A list of items, stored as one string.
 let items = [| "one"; "two"; "three" |]
 sessionStorage.setItem ("items", JS.JSON.stringify items)
-let back: string[] = JS.JSON.parse (sessionStorage.getItem "items") |> unbox
+let back: string[] = JS.JSON.parse (sessionStorage.getItem "items").Value |> unbox
 check (back.Length = 3 && back.[2] = "three") "an array round trip"
 
 // Quota: a store refuses an enormous value.
@@ -104,12 +104,12 @@ try
 with _ ->
     refused <- true
 check refused "setItem past the quota throws"
-check (isNull (localStorage.getItem "huge")) "the refused value is not stored"
+check (localStorage.getItem "huge").IsNone "the refused value is not stored"
 
 // Clear.
 localStorage.clear ()
 check (localStorage.length = 0.0) "clear empties local"
-check (isNull (localStorage.getItem "name")) "clear removes values"
+check (localStorage.getItem "name").IsNone "clear removes values"
 check (sessionStorage.length = 1.0) "clear leaves session alone"
 sessionStorage.clear ()
 check (sessionStorage.length = 0.0) "clear empties session"

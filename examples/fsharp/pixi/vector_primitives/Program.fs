@@ -25,7 +25,7 @@ let main =
         let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
-        let stageEl = document.getElementById "stage"
+        let stageEl = (document.getElementById "stage").Value
         stageEl.appendChild app.canvas |> ignore
 
         let grid = Graphics.Create ()
@@ -87,7 +87,7 @@ let main =
         app.stage.addChild diamondG |> ignore
 
         app.render ()
-        let meta = document.getElementById "meta"
+        let meta = (document.getElementById "meta").Value
         meta.textContent <- "7 vector primitives · rect · roundRect · circle · ellipse · regularPoly · star · path · 680x400 WebGL"
     }
 

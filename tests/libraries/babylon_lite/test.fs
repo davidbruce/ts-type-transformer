@@ -67,7 +67,7 @@ check (knot.positions.length > 0 && knot.indices.length > 0) "torus knot typed a
 let tree = createAccessibilityTree ()
 let node = addAccessibilityNode (tree, AccessibilityNodeOptions.Create(tag = AccessibilityTag.Create(name = "hero", role = "button")))
 check (tree.roots.Count = 1 && not tree.disposed) "accessibility tree roots"
-check (node.tag.name = Some "hero" && node.tag.role = Some "button") "accessibility node tag"
+check (node.tag.Value.name = Some "hero" && node.tag.Value.role = Some "button") "accessibility node tag"
 
 // Quaternion -> Euler tuple conversion.
 let (ex, ey, ez) = quatToEulerXYZTuple (0.0, 0.0, 0.0, 1.0)

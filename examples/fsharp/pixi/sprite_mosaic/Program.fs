@@ -25,7 +25,7 @@ let main =
         let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
-        let stageEl = document.getElementById "stage"
+        let stageEl = (document.getElementById "stage").Value
         stageEl.appendChild app.canvas |> ignore
 
         let frame = Graphics.Create ()
@@ -52,7 +52,7 @@ let main =
                 app.stage.addChild sprite |> ignore
 
         app.render ()
-        let meta = document.getElementById "meta"
+        let meta = (document.getElementById "meta").Value
         meta.textContent <- "60 Texture.WHITE sprites · 10x6 mosaic · 8 monochrome tints · 680x400 WebGL"
     }
 

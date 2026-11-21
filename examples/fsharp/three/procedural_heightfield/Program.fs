@@ -36,10 +36,10 @@ let main () =
         )
     renderer.setPixelRatio 1.0
     renderer.setSize (width, height)
-    (document.getElementById "stage").appendChild renderer.domElement |> ignore
+    (document.getElementById "stage").Value.appendChild renderer.domElement |> ignore
 
     let scene = Scene.Create()
-    scene.background <- ColorOrTexture.Color (Color.Create (float 0xf7f7f7))
+    scene.background <- Some (ColorOrTexture.Color (Color.Create (float 0xf7f7f7)))
 
     let camera = PerspectiveCamera.Create(42.0, width / height, 0.1, 100.0)
 
@@ -119,8 +119,8 @@ let main () =
     let ptsObj = Points.Create(ptsGeo, ptsMat)
     scene.add (ptsObj) |> ignore
 
-    let wireBtn = document.getElementById "btn-wire"
-    let metaEl = document.getElementById "meta"
+    let wireBtn = (document.getElementById "btn-wire").Value
+    let metaEl = (document.getElementById "meta").Value
 
     let rebuildField () =
         let span = 7.6
@@ -154,7 +154,7 @@ let main () =
         wireBtn.textContent <- if overlayOn then "Wireframe: On" else "Wireframe: Off"
         renderer.render (scene, camera)
 
-        let bb = geo.boundingBox
+        let bb = geo.boundingBox.Value
         metaEl.textContent <-
             sprintf
                 "profile: %s · %d vertices · %d triangles · y=[%.2f, %.2f] · wireframe: %s"
@@ -166,7 +166,7 @@ let main () =
                 (if overlayOn then "on" else "off")
 
     let wireClick (id: string) (fn: unit -> unit) =
-        let b = document.getElementById id
+        let b = (document.getElementById id).Value
         b.addEventListener (HTMLElementEventMapKeys.click, fun _ -> fn ())
 
     wireClick "btn-p0" (fun () ->

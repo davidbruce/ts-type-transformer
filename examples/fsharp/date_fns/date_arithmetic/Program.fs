@@ -22,7 +22,7 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
 let private signed (v: int) =
     if v > 0 then sprintf "+%d" v else sprintf "%d" v
 
-let private app = document.getElementById "app"
+let private app = (document.getElementById "app").Value
 
 app.appendChild (wrap "div" "head" [ el "h1" "" "Date-fns Arithmetic & Durations (F#)"; el "span" "badge" "Base 2024-03-15" ]) |> ignore
 

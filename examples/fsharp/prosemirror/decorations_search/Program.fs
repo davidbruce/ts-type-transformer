@@ -144,16 +144,16 @@ let private syncMeta (st: EditorState) (activeBtnId: string) =
     let (dset, inlineHits, blockHits) = computeDecorations st.doc query
     let decoTotal = dset.find().Count
     let qDisp = if query.Length = 0 then "(none)" else sprintf "\"%s\"" query
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <-
         sprintf "Query: %s · inline matches=%d · highlighted blocks=%d · decorations=%d"
             qDisp inlineHits blockHits decoTotal
     for id in [ "btn-0"; "btn-1"; "btn-2"; "btn-3"; "btn-4" ] do
-        let b = document.getElementById id
+        let b = (document.getElementById id).Value
         if id = activeBtnId then b.classList.add [| "active" |] else b.classList.remove [| "active" |]
 
 let main () =
-    let mountEl = document.getElementById "editor"
+    let mountEl = (document.getElementById "editor").Value
     let mutable view: EditorView option = None
     let mutable activeId = "btn-0"
 
@@ -183,7 +183,7 @@ let main () =
     syncMeta v.state activeId
 
     let bindQuery (btnId: string) (q: string) =
-        let btn = document.getElementById btnId
+        let btn = (document.getElementById btnId).Value
         btn.addEventListener (HTMLElementEventMapKeys.click, fun _ ->
             activeId <- btnId
             let tr = v.state.tr.setMeta ("search", box q)

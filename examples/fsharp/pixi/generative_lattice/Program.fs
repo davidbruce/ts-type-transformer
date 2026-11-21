@@ -26,7 +26,7 @@ let main =
         let app = Application.Create ()
         do! Async.AwaitPromise (app.init (initOpts ()))
 
-        let stageEl = document.getElementById "stage"
+        let stageEl = (document.getElementById "stage").Value
         stageEl.appendChild app.canvas |> ignore
 
         let guides = Graphics.Create ()
@@ -76,7 +76,7 @@ let main =
         app.stage.addChild centerDot |> ignore
 
         app.render ()
-        let meta = document.getElementById "meta"
+        let meta = (document.getElementById "meta").Value
         meta.textContent <- "48 matrix-transformed diamond tiles · 4 rings · 12 radial spokes · 680x400 WebGL"
     }
 

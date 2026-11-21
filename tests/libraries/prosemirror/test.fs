@@ -60,7 +60,7 @@ check (doc.textContent = "onetwo words") "the doc's text"
 check (doc.nodeSize = 18.0 && doc.content.size = 16.0) "nodeSize"
 check (doc.child(1).textContent = "two words") "child"
 check (doc.textBetween (0.0, doc.content.size, " ") = "one two words") "textBetween"
-check (doc.nodeAt(1.0).isText) "nodeAt"
+check ((doc.nodeAt 1.0).Value.isText) "nodeAt"
 check (doc.eq (schema.nodeFromJSON json)) "equal documents"
 check (doc.resolve(3.0).parent.``type``.name = "paragraph") "resolve"
 check (doc.resolve(3.0).parentOffset = 2.0) "parentOffset"
@@ -137,7 +137,7 @@ props.dispatchTransaction <-
     Some (fun (tr: Transaction) ->
         dispatched <- dispatched + 1
         view.updateState (view.state.apply tr))
-view <- EditorView.Create (EditorViewNewPlace.EditorViewNewPlace1 (EditorViewNewPlace1.Create (TestPage.element "stage")), props)
+view <- EditorView.Create (EditorViewNewPlace.Mount (EditorViewNewPlace1.Create (TestPage.element "stage")), props)
 check (view.state.doc.eq doc) "the view shows the document"
 check (not view.isDestroyed) "not destroyed"
 view.dispatch (view.state.tr.insertText ("Q", 1.0))

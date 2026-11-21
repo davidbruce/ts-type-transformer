@@ -35,7 +35,7 @@ let private toPolyPts (pts: LatLng list) : ResizeArray<PolylineNewLatlngs> =
     ResizeArray [ for p in pts -> !^p ]
 
 let main () =
-    let m = map (document.getElementById "map", mapOpts ())
+    let m = map ((document.getElementById "map").Value, mapOpts ())
 
     let gridOpts = boxOpts "#e5e5e5" 1.0 None "#ffffff" 0.0
     for r in [ 0.0; 20.0; 40.0; 60.0; 80.0; 100.0 ] do
@@ -80,7 +80,7 @@ let main () =
     m.fitBounds (latLngBounds (latLng (0.0, 0.0), latLng (100.0, 160.0))) |> ignore
 
     let px = m.latLngToContainerPoint (latLng (50.0, 80.0))
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "CRS.Simple 100x160 plan · 4 studio rooms + atrium · center @ (%.0f, %.0f) px" px.x px.y
 
 main ()

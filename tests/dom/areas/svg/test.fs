@@ -23,7 +23,7 @@ svg.setAttribute ("width", "200")
 svg.setAttribute ("height", "100")
 svg.setAttribute ("viewBox", "0 0 400 200")
 document.body.appendChild svg |> ignore
-check (svg.namespaceURI = SVGNS) "namespaceURI"
+check (svg.namespaceURI = Some SVGNS) "namespaceURI"
 check (svg.localName = "svg") "localName"
 check (svg.tagName = "svg") "tagName is lower case in SVG"
 check (svg.isConnected) "svg is in the page"
@@ -32,7 +32,7 @@ check (svg.isConnected) "svg is in the page"
 // FINDING 8: createElementNS (ns, name) is ambiguous: two overloads of the same shape (Bindings.10.core.fs:4744-4745,
 // `namespaceURI` + ElementCreationOptions and `namespace` + StringOrElementCreationOptions); named arguments pick one.
 let viaNS = document.createElementNS (namespaceURI = SVGNS, qualifiedName = "g")
-check (viaNS.namespaceURI = SVGNS && viaNS.localName = "g") "createElementNS"
+check (viaNS.namespaceURI = Some SVGNS && viaNS.localName = "g") "createElementNS"
 
 // Lengths and the viewBox.
 check (svg.width.baseVal.value = 200.0) "width baseVal"
@@ -44,7 +44,7 @@ svg.setAttribute ("viewBox", "10 20 300 150")
 check (vb.x = 10.0 && vb.y = 20.0 && vb.width = 300.0 && vb.height = 150.0) "viewBox is live"
 svg.setAttribute ("viewBox", "0 0 400 200")
 svg.width.baseVal.valueAsString <- "300px"
-check (svg.getAttribute "width" = "300px") "setting a length writes the attribute"
+check (svg.getAttribute "width" = Some "300px") "setting a length writes the attribute"
 check (svg.width.baseVal.value = 300.0) "and reads back"
 svg.setAttribute ("width", "200")
 
@@ -59,16 +59,16 @@ rect.setAttribute ("id", "r")
 svg.appendChild rect |> ignore
 check (rect.x.baseVal.value = 20.0 && rect.y.baseVal.value = 30.0) "rect x, y"
 check (rect.width.baseVal.value = 100.0 && rect.height.baseVal.value = 50.0) "rect size"
-check (rect.getAttribute "fill" = "tomato") "rect fill"
+check (rect.getAttribute "fill" = Some "tomato") "rect fill"
 let bbox = rect.getBBox ()
 check (bbox.x = 20.0 && bbox.y = 30.0 && bbox.width = 100.0 && bbox.height = 50.0) "rect getBBox"
-check (same (document.getElementById "r") rect) "found by id from the document"
-check (same rect.parentNode svg) "parent is the svg"
+check (same (document.getElementById "r").Value rect) "found by id from the document"
+check (same rect.parentNode.Value svg) "parent is the svg"
 check (same (svg.querySelector<Element> "rect").Value rect) "querySelector in the svg"
 
 // A length set through the bindings changes the attribute and the box.
 rect.width.baseVal.value <- 150.0
-check (rect.getAttribute "width" = "150") "length value writes the attribute"
+check (rect.getAttribute "width" = Some "150") "length value writes the attribute"
 check ((rect.getBBox ()).width = 150.0) "bbox follows"
 rect.width.baseVal.valueAsString <- "10%"
 check (rect.width.baseVal.unitType = 2.0) "a percentage length"
@@ -114,7 +114,7 @@ check (path.isPointInFill (DOMPointInit.Create (x = 100.0, y = 15.0))) "inside t
 path.setAttribute ("d", "M 0 0 H 50")
 check (near (path.getTotalLength ()) 50.0) "changing d changes the length"
 path.pathLength.baseVal <- 10.0
-check (path.getAttribute "pathLength" = "10") "pathLength animated number"
+check (path.getAttribute "pathLength" = Some "10") "pathLength animated number"
 
 // A group, with a transform, and text.
 let g = document.createElementNS_svg SVGElementTagNameMapKeys.g
@@ -129,10 +129,10 @@ let t = g.transform.baseVal.getItem 0.0
 check (t.``type`` = 2.0) "a translate transform"
 check (t.matrix.e = 100.0 && t.matrix.f = 50.0) "translate matrix"
 check ((g.getBBox ()).width = 20.0) "group bbox in its own coordinates"
-let ctm = inner.getCTM ()
+let ctm = (inner.getCTM ()).Value
 check (near ctm.a 0.5 && near ctm.d 0.5) "CTM carries the viewBox scale: 200px for 400 units"
 check (near ctm.e 50.0 && near ctm.f 25.0) "CTM carries the translate, scaled"
-let screen = inner.getScreenCTM ()
+let screen = (inner.getScreenCTM ()).Value
 check (near screen.a 0.5 && near screen.d 0.5) "screen CTM has the same scale"
 let origin = (svg.getBoundingClientRect ())
 check (near screen.e (origin.left + 50.0) && near screen.f (origin.top + 25.0)) "screen CTM places the translate on the page"
@@ -150,7 +150,7 @@ check (text.getComputedTextLength () > 10.0) "getComputedTextLength"
 // The svg's own bookkeeping.
 check (svg.children.length = 6.0) "six children"
 check ((svg.getBoundingClientRect ()).width = 200.0) "rendered at 200px wide"
-check (same (svg.getElementById "r") rect) "SVGSVGElement.getElementById"
+check (same (svg.getElementById "r").Value rect) "SVGSVGElement.getElementById"
 let pt = svg.createSVGPoint ()
 pt.x <- 5.0
 pt.y <- 6.0
@@ -170,6 +170,6 @@ check (svg.style.getPropertyValue "background" <> "") "style on SVG"
 // Removal.
 svg.removeChild circle |> ignore
 check (svg.children.length = 5.0) "removeChild"
-check (isNull circle.parentNode) "the circle is detached"
+check circle.parentNode.IsNone "the circle is detached"
 
 printfn "%d checks passed" passed

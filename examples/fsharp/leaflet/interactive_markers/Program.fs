@@ -15,7 +15,7 @@ let private mapOpts () =
     )
 
 let main () =
-    let m = map (document.getElementById "map", mapOpts ())
+    let m = map ((document.getElementById "map").Value, mapOpts ())
 
     let stations =
         [|
@@ -76,7 +76,7 @@ let main () =
     m.fire ("click", payload) |> ignore
     m.fire ("click", payload) |> ignore
 
-    let meta = document.getElementById "meta"
+    let meta = (document.getElementById "meta").Value
     meta.textContent <- sprintf "%d DivIcon stations · popup open (Bern) · %d synthetic clicks dispatched" stations.Length clicks
 
 main ()

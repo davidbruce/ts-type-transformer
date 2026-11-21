@@ -1015,6 +1015,169 @@ fn fsharp_cross_project_refs() {
     run(Command::new(fable).current_dir(&out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
 }
 
+#[test]
+fn fsharp_stage3c_ergonomics() {
+    let Some([fable, node]) = tools(["fable", "node"]) else { return };
+    let out = root().join("target/e2e/fsharp-stage3c");
+    let _ = fs::remove_dir_all(&out);
+    let pkg_dir = out.join("node_modules/stage3c");
+    fs::create_dir_all(&pkg_dir).unwrap();
+    fs::write(pkg_dir.join("package.json"), "{ \"name\": \"stage3c\", \"type\": \"module\", \"exports\": { \".\": { \"types\": \"./index.d.ts\", \"default\": \"./index.mjs\" } } }\n").unwrap();
+    fs::write(
+        pkg_dir.join("index.d.ts"),
+        r#"export interface Widget {
+    readonly parent: Widget | null;
+    label: string | null;
+    score: number | null;
+    get activeNull(): Widget | null;
+    set activeNull(v: Widget | null);
+    labelWasNull(): boolean;
+    scoreWasNull(): boolean;
+    activeNullWasNull(): boolean;
+    findNull(hit: boolean): Widget | null;
+    fetchNull(hit: boolean): Promise<Widget | null>;
+    accept(w: Widget | null, n: number | null): { wNull: boolean; nNull: boolean };
+    tags: Set<string>;
+    counts: Map<string, number>;
+}
+export declare const active: Widget | null;
+export declare const activeMissing: Widget | null;
+export declare function makeWidget(): Widget;
+export declare namespace Ui {
+    export interface BaseCfg {
+        x?: number;
+    }
+    export interface SubCfg extends BaseCfg {
+        y?: number;
+    }
+}
+export type Action =
+    | { kind: "addRun"; count: number }
+    | { kind: "reset"; force: boolean };
+export declare function describeAction(a: Action): string;
+"#,
+    )
+    .unwrap();
+    let impl_js = r#"function make(parent) {
+    return {
+        parent,
+        _label: null,
+        get label() { return this._label; },
+        set label(v) { this._label = v; },
+        labelWasNull() { return this._label === null; },
+        _score: null,
+        get score() { return this._score; },
+        set score(v) { this._score = v; },
+        scoreWasNull() { return this._score === null; },
+        _activeNull: null,
+        get activeNull() { return this._activeNull; },
+        set activeNull(v) { this._activeNull = v; },
+        activeNullWasNull() { return this._activeNull === null; },
+        findNull(hit) { return hit ? make(null) : null; },
+        fetchNull(hit) { return Promise.resolve(hit ? make(null) : null); },
+        accept(w, n) { return { wNull: w === null, nNull: n === null }; },
+        tags: new Set(["a", "b"]),
+        counts: new Map([["k", 7]]),
+    };
+}
+export function makeWidget() {
+    return make(make(null));
+}
+export const active = makeWidget();
+export const activeMissing = null;
+export function describeAction(a) {
+    return a.kind === "addRun" ? `run:${a.count}` : `reset:${a.force}`;
+}
+"#;
+    fs::write(pkg_dir.join("index.mjs"), impl_js).unwrap();
+    let xml = lower_packages(&out, "fsharp");
+    fs::write(out.join("api.xml"), &xml).unwrap();
+    let bindings = generators::fsharp::module(&xml).unwrap();
+    let prelude = bindings.files.iter().find(|(n, _)| n.ends_with(".Prelude.fs")).map(|(_, s)| s.clone()).unwrap();
+    assert!(!prelude.contains("type Map"), "Prelude must not shadow F# Map:\n{prelude}");
+    assert!(!prelude.contains("type Set"), "Prelude must not shadow F# Set:\n{prelude}");
+    let dir = out.join("bindings");
+    fs::create_dir_all(&dir).unwrap();
+    for (name, content) in &bindings.files {
+        fs::write(dir.join(name), content).unwrap();
+    }
+    fs::write(dir.join("Bindings.fsproj"), bindings.fsproj()).unwrap();
+    fs::write(
+        out.join("Test.fs"),
+        r#"module Test
+open System
+open Fable.Core
+open Bindings
+
+let check ok msg = if not ok then failwithf "failed: %s" msg
+
+let w = Globals.makeWidget ()
+check w.parent.IsSome "readonly parent | null is Some"
+check (match w.parent with Some p -> p.parent.IsNone | None -> false) "null readonly parent is None"
+check (w.findNull(true).IsSome && w.findNull(false).IsNone) "findNull returns option"
+check (active.IsSome && activeMissing.IsNone) "top-level var | null is option"
+
+check w.label.IsNone "rw string | null starts None"
+w.label <- Some "hi"
+check (w.label = Some "hi" && not (w.labelWasNull ())) "rw string | null set Some"
+w.label <- None
+check (w.label.IsNone && w.labelWasNull ()) "rw string | null set None passes null"
+
+check w.score.IsNone "rw number | null starts None"
+w.score <- Some 3.5
+check (w.score = Some 3.5 && not (w.scoreWasNull ())) "rw number | null set Some"
+w.score <- None
+check (w.score.IsNone && w.scoreWasNull ()) "rw number | null set None passes null"
+
+check w.activeNull.IsNone "accessor get/set | null starts None"
+w.activeNull <- Some w
+check (w.activeNull.IsSome && not (w.activeNullWasNull ())) "accessor set Some"
+w.activeNull <- None
+check (w.activeNull.IsNone && w.activeNullWasNull ()) "accessor set None passes null"
+
+let accepted = w.accept (null, Nullable ())
+check (accepted.wNull && accepted.nNull) "input params keep null and System.Nullable"
+
+let fmap = Map.ofList [ ("ok", 1) ]
+let fset = Set.ofList [ "ok" ]
+check (fmap.["ok"] = 1 && fset.Contains "ok" && w.tags.size = 2 && w.counts.get "k" = 7.0) "JS.Map/JS.Set and F# Map/Set coexist"
+
+let baseCfg = Ui.BaseCfg.Create (x = 5.0)
+let subCfg = Ui.SubCfg.Create (x = 10.0)
+check (baseCfg.x = Some 5.0 && subCfg.x = Some 10.0) "namespaced Factories resolve without dummy params"
+
+let r1 = Globals.describeAction (Action.AddRun (ActionAddRun.Create (count = 3.0)))
+let r2 = Globals.describeAction (Action.Reset (ActionReset.Create (force = true)))
+check (r1 = "run:3" && r2 = "reset:true") "tag-named object union cases"
+
+w.fetchNull(true).``then``(fun a ->
+    w.fetchNull(false).``then``(fun b ->
+        check (a.IsSome && b.IsNone) "Promise<T | null> -> JS.Promise<T option>"
+        printfn "all stage3c checks passed"
+    )
+) |> ignore
+"#,
+    )
+    .unwrap();
+    fs::write(
+        out.join("Test.fsproj"),
+        r#"<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="bindings/Bindings.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Test.fs" />
+  </ItemGroup>
+</Project>
+"#,
+    )
+    .unwrap();
+    run(Command::new(fable).current_dir(&out).args(["Test.fsproj", "-o", "js", "--extension", ".mjs", "--noCache"]));
+    let report = run(Command::new(node).arg(root().join("tests/run_fable.mjs")).arg(pkg_dir.join("index.mjs")).arg(out.join("js/Test.mjs")));
+    assert!(report.contains("all stage3c checks passed"), "{report}");
+}
+
 fn setup_ref_fixture(name: &str, target: &str) -> (PathBuf, PathBuf) {
     let out = root().join("target/e2e").join(name);
     let _ = fs::remove_dir_all(&out);
