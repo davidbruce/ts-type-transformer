@@ -5,12 +5,9 @@
 //                   [--emit c|cpp|zig|fsharp --out <dir> [--glue-for <module.wasm>]]
 //        tsrs_proto --default-config
 
-mod config;
 mod emit;
-mod front;
-mod ir;
-mod lower;
-mod xml;
+
+use ts_type_transformer::{config, front, lower, xml};
 
 use std::path::Path;
 use std::sync::Arc;

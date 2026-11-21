@@ -304,11 +304,7 @@ impl Class {
 // case, and that is not reserved on Windows: `foo` after `Foo` is `foo_2`.
 pub fn file_name(path: &str, taken: &mut HashMap<String, String>) -> String {
     let (dir, name) = path.rsplit_once('/').map_or(("", path), |(d, n)| (d, n));
-    let reserved = |n: &str| {
-        let n = n.to_ascii_uppercase();
-        matches!(n.as_str(), "CON" | "PRN" | "AUX" | "NUL") || (n.len() == 4 && (n.starts_with("COM") || n.starts_with("LPT")) && n.as_bytes()[3].is_ascii_digit())
-    };
-    let mut candidate = if reserved(name) { format!("{name}_") } else { name.to_string() };
+    let mut candidate = if crate::config::reserved(name) { format!("{name}_") } else { name.to_string() };
     let mut n = 2;
     loop {
         let full = if dir.is_empty() { candidate.clone() } else { format!("{dir}/{candidate}") };
@@ -334,8 +330,29 @@ pub fn ident(name: &str) -> String {
     s
 }
 
+#[derive(Clone, Copy)]
+pub struct ModelOptions<'a> {
+    pub target: &'a str,
+    pub counted: bool,
+    pub generics: bool,
+    pub overloading: bool,
+    pub retain_opaque_constraints: bool,
+}
+
+impl<'a> ModelOptions<'a> {
+    pub fn for_target(target: &'a str) -> Self {
+        Self {
+            target,
+            counted: matches!(target, "C++" | "Rust"),
+            generics: matches!(target, "C++" | "Rust" | "Gleam"),
+            overloading: target == "C++",
+            retain_opaque_constraints: target == "Gleam",
+        }
+    }
+}
+
 struct Builder<'a> {
-    target: &'a str,
+    opts: ModelOptions<'a>,
     // Several packages bound together: each is a module of its declarations.
     multi: bool,
     // Each top-level namespace's own name in its package, by its name.
@@ -386,11 +403,15 @@ struct Builder<'a> {
 
 // The model of the XML for a target, or what the target cannot express.
 pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
+    model_with_options(xml, ModelOptions::for_target(target))
+}
+
+pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Vec<String>> {
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let mut b = Builder {
-        target,
+        opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: target == "C++" || target == "Rust", packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -399,7 +420,7 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
         bad: None,
         problems: Default::default(),
         module: String::new(),
-        generics: matches!(target, "C++" | "Rust" | "Gleam"),
+        generics: opts.generics,
         last_type_params: Vec::new(),
         folders: HashMap::new(),
         folder_names: HashMap::new(),
@@ -438,8 +459,8 @@ pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     let m = &mut b.model;
     // A constraint that is an opaque type nothing is known to extend
     // (`T extends ArrayBufferLike`) holds for no type: none.
-    // Gleam retains opaque constraints so it can recognize `$same` opaque types like `Date`.
-    if target != "Gleam" {
+    // Targets such as Gleam retain opaque constraints so `$same` opaque types like `Date` are recognized.
+    if !opts.retain_opaque_constraints {
         let opaque: HashSet<String> = m.opaque.iter().cloned().collect();
         let unconstrain = |ps: &mut Vec<TParam>| {
             for p in ps.iter_mut() {
@@ -584,7 +605,7 @@ impl<'a> Builder<'a> {
 
     // Notes an element the target has no form for.
     fn unsupported(&self, n: Node) {
-        self.problems.borrow_mut().element(self.target, n);
+        self.problems.borrow_mut().element(self.opts.target, n);
     }
 
     // The type of an alias. Its type parameters come first; only where generics
@@ -1039,7 +1060,7 @@ impl<'a> Builder<'a> {
         if tag == "call" || tag == "construct" && !is_static {
             let (params, rest, fixed, ret) = self.signature(m, &owner);
             let (base, call) = if tag == "call" { ("invoke", Call::Invoke) } else { ("construct", Call::Construct) };
-            let name = if self.target == "C++" { base.to_string() } else {
+            let name = if self.opts.overloading { base.to_string() } else {
                 // Named for the marks it has that its siblings do not all have
                 // (`invoke_async`); the first without any is `invoke`, which
                 // none before it took.
@@ -1094,7 +1115,7 @@ impl<'a> Builder<'a> {
         }
         let (raw_name, key) = (symbol.unwrap_or(raw_name), raw_name);
         // A target with overloading keeps one name for all of a method's overloads.
-        let overloading = self.target == "C++";
+        let overloading = self.opts.overloading;
         let unique = |base: String, names: &mut HashSet<String>| {
             if overloading {
                 return base;
@@ -1750,4 +1771,56 @@ impl Model {
         }
         out
     }
+}
+
+// What each import reaches, for a page to check against the real API:
+// `export const bindings = [[import, kind, owner, member, class], ...]`, the
+// owner being where its class's constructor is (`HTMLElement`), or, for an
+// interface no constructor is of (`GlobalEventHandlers`), `interface:` its
+// name; and `implementers`, the constructors of each class's or interface's
+// descendants (Chrome has `AbstractRange`'s members on `Range`'s prototype).
+pub fn manifest(m: &Model) -> String {
+    let kind = |c: &Call| match c {
+        Call::Method(_) => "method",
+        Call::Get(_) | Call::GetBound(_) => "get",
+        Call::Set(_) => "set",
+        Call::New(_) => "new",
+        Call::Static(_) => "static",
+        Call::StaticGet(_) => "staticGet",
+        Call::StaticSet(_) => "staticSet",
+        Call::Create(_) => "create",
+        Call::Invoke => "invoke",
+        Call::Construct => "construct",
+        Call::IndexGet => "indexGet",
+        Call::IndexSet => "indexSet",
+        Call::Apply => "invoke",
+    };
+    let member = |c: &Call| match c {
+        Call::Method(n) | Call::Get(n) | Call::GetBound(n) | Call::Set(n) | Call::New(n) | Call::Static(n) | Call::StaticGet(n) | Call::StaticSet(n) => n.clone(),
+        _ => String::new(),
+    };
+    let json = |s: &str| format!("{s:?}");
+    let mut out = String::from("// Generated. What each import reaches.\nexport const bindings = [\n");
+    for c in &m.classes {
+        let owner = c.js.clone().unwrap_or_else(|| format!("interface:{}", c.name));
+        for f in &c.funcs {
+            out += &format!("  [{}, {}, {}, {}, {}],\n", json(&f.import), json(kind(&f.call)), json(&owner), json(&member(&f.call)), json(&c.name));
+        }
+    }
+    for f in &m.funcs {
+        out += &format!("  [{}, {}, \"\", {}, \"\"],\n", json(&f.import), json(kind(&f.call)), json(&member(&f.call)));
+    }
+    out += "];\nexport const implementers = {\n";
+    let mut by: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for c in m.classes.iter().filter(|c| c.js.is_some()) {
+        for a in c.ancestors.iter().chain(std::iter::once(&c.name)) {
+            by.entry(a.as_str()).or_default().push(c.js.as_deref().unwrap());
+        }
+    }
+    for c in &m.classes {
+        let js = by.get(c.name.as_str()).cloned().unwrap_or_default();
+        out += &format!("  {}: [{}],\n", json(&c.name), js.iter().map(|j| json(j)).collect::<Vec<_>>().join(", "));
+    }
+    out += "};\n";
+    out
 }

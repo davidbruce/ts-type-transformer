@@ -516,8 +516,9 @@ export async function ensureTargetBindings({
   fs.mkdirSync(bindingsDir, { recursive: true });
   const domDir = path.join(bindingsDir, domDirName);
   const domSentinelPath = path.join(domDir, domSentinel);
+  const domMetaPath = path.join(domDir, 'tsrs-meta.toml');
 
-  if (needsDom && (force || !fs.existsSync(domSentinelPath))) {
+  if (needsDom && (force || !fs.existsSync(domSentinelPath) || !fs.existsSync(domMetaPath))) {
     if (force) {
       fs.rmSync(domDir, { recursive: true, force: true });
     }
@@ -535,7 +536,8 @@ export async function ensureTargetBindings({
     const pkgDir = path.join(bindingsDir, spec.outDir);
     const sentinelRel = typeof pkgSentinel === 'function' ? pkgSentinel(spec) : pkgSentinel;
     const pkgSentinelPath = path.join(pkgDir, sentinelRel);
-    if (force || !fs.existsSync(pkgSentinelPath)) {
+    const pkgMetaPath = path.join(pkgDir, 'tsrs-meta.toml');
+    if (force || !fs.existsSync(pkgSentinelPath) || !fs.existsSync(pkgMetaPath)) {
       if (force) {
         fs.rmSync(pkgDir, { recursive: true, force: true });
       }

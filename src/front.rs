@@ -565,12 +565,12 @@ impl<'c> Front<'c> {
         let origin = module.map(|m| m.trim_start_matches("node:").to_string()).or(file).filter(|o| !o.is_empty());
         if let Some(origin) = origin {
             for d in &out[before..] {
-                self.origin_of_name.insert(decl_name(d).to_string(), origin.clone());
+                self.origin_of_name.insert(d.name().to_string(), origin.clone());
             }
         }
         if let Some(package) = package {
             for d in &out[before..] {
-                self.package_of_name.insert(decl_name(d).to_string(), package.clone());
+                self.package_of_name.insert(d.name().to_string(), package.clone());
             }
         }
     }
@@ -1912,17 +1912,6 @@ fn anonymous_name(node: P<Node>) -> String {
     let stem = if stem == "index" { parts.next().unwrap_or(stem) } else { stem };
     let name: String = stem.chars().map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' }).collect();
     if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) { format!("_{name}") } else { name }
-}
-
-fn decl_name(d: &Decl) -> &str {
-    match d {
-        Decl::Interface(i) => &i.name,
-        Decl::Alias(a) => &a.name,
-        Decl::Function(f) => &f.name,
-        Decl::Var(v) => &v.name,
-        Decl::Enum(e) => &e.name,
-        Decl::Namespace(n) => &n.name,
-    }
 }
 
 // A destructured parameter's name, `{ years, months }: Duration`: its type's,

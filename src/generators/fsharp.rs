@@ -2,7 +2,7 @@
 // optional parameters and unions; needs literals and type-level expressions gone.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use roxmltree::{Document, Node, NodeId};
 
@@ -20,88 +20,18 @@ pub struct ProjectRef {
     pub types: HashMap<String, (usize, bool, Option<String>)>,
 }
 
-/// Loads a previously generated F# binding project (`.fsproj` file or directory
-/// containing one) so another generated binding project can reference its types
+/// Loads a previously generated F# binding project (via `tsrs-meta.toml`)
+/// so another generated binding project can reference its types
 /// directly instead of emitting opaque stubs.
 pub fn load_project_ref(fsproj_or_dir: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
-    let fsproj = if fsproj_or_dir.is_dir() {
-        let mut found: Vec<PathBuf> = std::fs::read_dir(fsproj_or_dir)
-            .map_err(|e| format!("{}: {e}", fsproj_or_dir.display()))?
-            .filter_map(Result::ok)
-            .map(|e| e.path())
-            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("fsproj"))
-            .collect();
-        found.sort();
-        match found.as_slice() {
-            [only] => only.clone(),
-            [] => return Err(format!("{}: no .fsproj file found", fsproj_or_dir.display())),
-            _ => return Err(format!("{}: multiple .fsproj files found; pass the .fsproj path explicitly", fsproj_or_dir.display())),
-        }
-    } else {
-        fsproj_or_dir.to_path_buf()
-    };
-    let proj_dir = fsproj.parent().unwrap_or_else(|| Path::new("."));
-    let content = std::fs::read_to_string(&fsproj).map_err(|e| format!("{}: {e}", fsproj.display()))?;
-    let mut compile_files = Vec::new();
-    for line in content.lines() {
-        let t = line.trim();
-        if let Some(rest) = t.strip_prefix("<Compile Include=\"")
-            && let Some(file) = rest.split('"').next()
-        {
-            compile_files.push(file.to_string());
-        }
-    }
-    let mut namespace = fsproj.file_stem().and_then(|s| s.to_str()).unwrap_or("Bindings").to_string();
-    let mut types: HashMap<String, (usize, bool, Option<String>)> = HashMap::new();
-    for file in &compile_files {
-        // Skip Prelude files so opaque external stubs in a referenced project are not re-exported.
-        if file.ends_with(".Prelude.fs") || file == "Prelude.fs" {
-            continue;
-        }
-        let path = proj_dir.join(file);
-        let Ok(src) = std::fs::read_to_string(&path) else { continue };
-        let lines: Vec<&str> = src.lines().collect();
-        for (i, &line) in lines.iter().enumerate() {
-            if let Some(rest) = line.strip_prefix("namespace rec ").or_else(|| line.strip_prefix("namespace ")) {
-                let ns = rest.trim();
-                if !ns.is_empty() {
-                    namespace = ns.to_string();
-                }
-                continue;
-            }
-            let Some(rest) = line.strip_prefix("type ") else { continue };
-            let Some((lhs, rhs)) = rest.split_once('=') else { continue };
-            let lhs = lhs.trim();
-            let (raw_name, arity) = match lhs.find('<') {
-                Some(lt) => {
-                    let n = lhs[..lt].trim();
-                    let inside = &lhs[lt + 1..];
-                    let inside = inside.split(" when ").next().unwrap_or(inside).trim_end_matches('>').trim();
-                    let count = if inside.is_empty() { 0 } else { inside.split(',').count() };
-                    (n, count)
-                }
-                None => (lhs, 0),
-            };
-            if raw_name.is_empty() || raw_name == "Globals" {
-                continue;
-            }
-            let rhs = rhs.trim();
-            let (is_interface, abbrev) = if rhs == "interface end" {
-                (true, None)
-            } else if !rhs.is_empty() {
-                // Single-line type abbreviation (`type Foo = float` or `type Foo = U2<...>`).
-                (false, Some(rhs.to_string()))
-            } else {
-                // Multi-line type: interface unless its body starts with union/enum cases `|`.
-                let first_body = lines[i + 1..].iter().map(|l| l.trim()).find(|l| !l.is_empty());
-                let is_iface = first_body.is_some_and(|b| !b.starts_with('|'));
-                (is_iface, None)
-            };
-            types.entry(raw_name.to_string()).or_insert((arity, is_interface, abbrev));
-        }
-    }
-    let include_path = relative_path(from_dir, &fsproj);
-    Ok(ProjectRef { include_path, namespace, types })
+    let loaded = super::pkg_meta::load(fsproj_or_dir, from_dir, "fsharp")?;
+    let fsproj_name = loaded.meta.entry.unwrap_or_else(|| format!("{}.fsproj", loaded.meta.package));
+    let include_path = relative_path(from_dir, &loaded.root_dir.join(fsproj_name));
+    Ok(ProjectRef {
+        include_path,
+        namespace: loaded.meta.package,
+        types: loaded.meta.fsharp_types.into_iter().collect(),
+    })
 }
 
 pub struct Output {
@@ -113,6 +43,8 @@ pub struct Output {
     pub project_refs: Vec<String>,
     // What the generator does not bind yet, by reason.
     pub skipped: BTreeMap<String, usize>,
+    // Machine-readable package metadata (`tsrs-meta.toml`).
+    pub meta_toml: String,
 }
 
 impl Output {
@@ -637,7 +569,50 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
     let global_delegates = std::mem::take(&mut g.global_delegates);
     files.push((format!("{ns}.Values.fs"), format!("// Generated.\nnamespace {ns}\n\nopen Fable.Core\n\n{global_delegates}{globals}[<AutoOpen>]\nmodule Values =\n    let private _values = ()\n\n{values}")));
     let project_refs = g.used_refs.iter().map(|&i| g.refs[i].include_path.clone()).collect();
-    g.problems.result(Output { name: ns, files, project_refs, skipped: g.skipped })
+    let mut fsharp_types: BTreeMap<String, (usize, bool, Option<String>)> = BTreeMap::new();
+    for (file, src) in &files {
+        if file.ends_with(".Prelude.fs") || file == "Prelude.fs" {
+            continue;
+        }
+        let lines: Vec<&str> = src.lines().collect();
+        for (i, &line) in lines.iter().enumerate() {
+            let Some(rest) = line.strip_prefix("type ") else { continue };
+            let Some((lhs, rhs)) = rest.split_once('=') else { continue };
+            let lhs = lhs.trim();
+            let (raw_name, arity) = match lhs.find('<') {
+                Some(lt) => {
+                    let n = lhs[..lt].trim();
+                    let inside = &lhs[lt + 1..];
+                    let inside = inside.split(" when ").next().unwrap_or(inside).trim_end_matches('>').trim();
+                    let count = if inside.is_empty() { 0 } else { inside.split(',').count() };
+                    (n, count)
+                }
+                None => (lhs, 0),
+            };
+            if raw_name.is_empty() || raw_name == "Globals" {
+                continue;
+            }
+            let rhs = rhs.trim();
+            let (is_interface, abbrev) = if rhs == "interface end" {
+                (true, None)
+            } else if !rhs.is_empty() {
+                (false, Some(rhs.to_string()))
+            } else {
+                let first_body = lines[i + 1..].iter().map(|l| l.trim()).find(|l| !l.is_empty());
+                let is_iface = first_body.is_some_and(|b| !b.starts_with('|'));
+                (is_iface, None)
+            };
+            fsharp_types.entry(raw_name.to_string()).or_insert((arity, is_interface, abbrev));
+        }
+    }
+    let meta = super::pkg_meta::PkgMeta {
+        target: "fsharp".into(),
+        package: ns.clone(),
+        entry: Some(format!("{ns}.fsproj")),
+        fsharp_types,
+        ..Default::default()
+    };
+    g.problems.result(Output { name: ns, files, project_refs, skipped: g.skipped, meta_toml: meta.to_toml() })
 }
 
 // The files of types, in the order F# must see them: one per module, each
@@ -3782,17 +3757,7 @@ fn type_word(t: Node) -> Option<String> {
 
 // `async` as `Async`, `no-cache` as `NoCache`.
 fn pascal(word: &str) -> String {
-    let mut out = String::new();
-    let mut up = true;
-    for c in word.chars() {
-        if c.is_alphanumeric() {
-            if up { out.extend(c.to_uppercase()) } else { out.push(c) }
-            up = false;
-        } else {
-            up = true;
-        }
-    }
-    out
+    super::case::pascal_alnum(word)
 }
 
 // Where in a member line its name is, and the name.

@@ -234,6 +234,19 @@ pub enum Decl {
     Namespace(Namespace),
 }
 
+impl Decl {
+    pub fn name(&self) -> &str {
+        match self {
+            Decl::Interface(i) => &i.name,
+            Decl::Alias(a) => &a.name,
+            Decl::Function(f) => &f.name,
+            Decl::Var(v) => &v.name,
+            Decl::Enum(e) => &e.name,
+            Decl::Namespace(n) => &n.name,
+        }
+    }
+}
+
 impl Type {
     pub fn prim(name: &str) -> Type {
         Type::Primitive(name.to_string())

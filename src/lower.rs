@@ -340,7 +340,8 @@ fn collect_names(decls: &[Decl], out: &mut Vec<String>) {
     for d in decls {
         match d {
             Decl::Namespace(n) => collect_names(&n.decls, out),
-            d => out.extend(decl_name(d).map(str::to_string)),
+            Decl::Function(_) | Decl::Var(_) => {}
+            d => out.push(d.name().to_string()),
         }
     }
 }
@@ -456,7 +457,10 @@ fn absorb_enums(decls: &mut [Decl]) {
 
 fn collect_declared_names(decls: &[Decl], prefix: &str, sep: &str, out: &mut HashSet<String>) {
     for d in decls {
-        if let Some(name) = decl_name(d) {
+        if let Some(name) = match d {
+            Decl::Function(_) | Decl::Var(_) => None,
+            _ => Some(d.name()),
+        } {
             out.insert(name.to_string());
             if !prefix.is_empty() {
                 out.insert(format!("{prefix}_{name}"));
@@ -924,7 +928,7 @@ pub fn pascal_types(decls: &mut [Decl]) {
     collect(decls, &mut taken, &mut generated);
     let mut renames = Vec::new();
     for old in generated {
-        let pascal: String = old.split('_').filter(|p| !p.is_empty()).map(|p| p[..1].to_uppercase() + &p[1..]).collect();
+        let pascal = crate::generators::case::pascal_underscore(&old);
         if pascal == old || pascal.is_empty() {
             continue;
         }
@@ -2120,8 +2124,10 @@ fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
     // itself a string union gives its name to the enum.
     let mut names: HashSet<String> = HashSet::new();
     for d in decls.iter() {
-        if !matches!(d, Decl::Alias(a) if string_union(&a.ty).is_some()) {
-            names.extend(decl_name(d).map(str::to_string));
+        if !matches!(d, Decl::Alias(a) if string_union(&a.ty).is_some())
+            && !matches!(d, Decl::Function(_) | Decl::Var(_))
+        {
+            names.insert(d.name().to_string());
         }
     }
     // `f<K extends "a" | "b">(key: K)`: without literal types K has no meaning
@@ -2314,7 +2320,7 @@ fn unique(base: String, taken: &mut HashSet<String>) -> String {
 
 // A name too long to keep: its start and a hash of it.
 fn hashed(base: &str) -> String {
-    let hash = base.bytes().fold(0xcbf29ce484222325u64, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+    let hash = crate::fnv1a64(base);
     let mut cut = 48;
     while !base.is_char_boundary(cut) {
         cut -= 1;
@@ -2677,16 +2683,6 @@ fn callback_name(s: &Signature, sep: &str) -> Option<String> {
     Some(parts.join(sep))
 }
 
-fn decl_name(d: &Decl) -> Option<&str> {
-    Some(match d {
-        Decl::Interface(i) => &i.name,
-        Decl::Alias(a) => &a.name,
-        Decl::Enum(e) => &e.name,
-        Decl::Namespace(n) => &n.name,
-        Decl::Function(_) | Decl::Var(_) => return None,
-    })
-}
-
 fn collect_bodies(decls: &[Decl], out: &mut HashSet<*const Type>) {
     for d in decls {
         match d {
@@ -2966,16 +2962,11 @@ fn signature_marks(s: &Signature) -> Vec<String> {
     out.into_iter().map(|w| name_part(&w)).filter(|w| seen.insert(w.clone())).collect()
 }
 
-// Each overload's marks the others do not all have: what to name it by.
-fn own_marks(sigs: &[&Signature]) -> Vec<Vec<String>> {
-    sigs.iter().map(|s| s.marks.iter().filter(|m| sigs.iter().any(|t| !t.marks.contains(m))).cloned().collect()).collect()
-}
-
 // Names for overloads that share their fixed values. The one with no marks
 // of its own (the first, without marks) takes `base`, the others are named
 // for theirs, `merge_Dictionary`, else as `family_names_from` names them.
 fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut HashSet<String>, o: Options) -> Vec<String> {
-    let own = own_marks(sigs);
+    let own = crate::generators::own_marks(&sigs.iter().map(|s| s.marks.clone()).collect::<Vec<_>>());
     let plain = own.iter().position(Vec::is_empty).unwrap_or(0);
     let order: Vec<usize> = std::iter::once(plain).chain((0..sigs.len()).filter(|&i| i != plain)).collect();
     let ordered: Vec<&Signature> = order.iter().map(|&i| sigs[i]).collect();

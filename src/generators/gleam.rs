@@ -27,10 +27,9 @@ use std::path::Path;
 
 use roxmltree::Document;
 
-use super::js::{access, global, js_test};
-use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, model, subst, walk, with_self_args};
+use super::js::{access, call_expr, global, js_test};
+use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, mentions, model_with_options, subst, walk, with_self_args};
 use super::names::{Kind, Naming};
-use super::relative_path;
 
 #[derive(Clone, Debug)]
 pub struct ProjectRef {
@@ -40,53 +39,15 @@ pub struct ProjectRef {
     pub classes: HashSet<String>,
 }
 
-/// Loads a previously generated Gleam binding package (directory or `gleam.toml`)
+/// Loads a previously generated Gleam binding package (via `tsrs-meta.toml`)
 /// so another generated package can import its class types directly.
 pub fn load_project_ref(pkg_or_toml: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
-    let pkg_dir = if pkg_or_toml.is_file() {
-        pkg_or_toml.parent().unwrap_or_else(|| Path::new("."))
-    } else {
-        pkg_or_toml
-    };
-    let toml_path = pkg_dir.join("gleam.toml");
-    let toml_src = std::fs::read_to_string(&toml_path).map_err(|e| format!("{}: {e}", toml_path.display()))?;
-    let mut package_name = None;
-    for line in toml_src.lines().map(str::trim) {
-        if let Some(rest) = line.strip_prefix("name")
-            && let Some((_, val)) = rest.split_once('=')
-        {
-            package_name = Some(val.trim().trim_matches('"').to_string());
-            break;
-        }
-    }
-    let package_name = package_name.ok_or_else(|| format!("{}: missing package name", toml_path.display()))?;
-    let types_path = {
-        let primary = pkg_dir.join("src").join(&package_name).join("types.gleam");
-        if primary.exists() { primary } else { pkg_dir.join("src/bindings/types.gleam") }
-    };
-    let src = std::fs::read_to_string(&types_path).unwrap_or_default();
-    let mut raw_classes = HashSet::new();
-    let mut tag_markers = HashSet::new();
-    for line in src.lines().map(str::trim) {
-        let rest = line.strip_prefix("pub type ").or_else(|| line.strip_prefix("pub opaque type "));
-        let Some(rest) = rest else { continue };
-        let Some((lhs, rhs)) = rest.split_once('(') else { continue };
-        let Some((params, after)) = rhs.split_once(')') else { continue };
-        if params.trim() != PHANTOM {
-            continue;
-        }
-        let name = lhs.trim();
-        if let Some((_, target)) = after.split_once('=')
-            && let Some(tag_call) = target.split(&format!("{name}Tag(")).nth(1)
-            && tag_call.starts_with(PHANTOM)
-        {
-            tag_markers.insert(format!("{name}Tag"));
-        }
-        raw_classes.insert(name.to_string());
-    }
-    let classes = raw_classes.into_iter().filter(|n| !tag_markers.contains(n)).collect();
-    let dep_path = relative_path(from_dir, pkg_dir);
-    Ok(ProjectRef { package_name, dep_path, classes })
+    let loaded = super::pkg_meta::load(pkg_or_toml, from_dir, "gleam")?;
+    Ok(ProjectRef {
+        package_name: loaded.meta.package,
+        dep_path: loaded.rel_dir,
+        classes: loaded.meta.types.into_iter().collect(),
+    })
 }
 
 const KEYWORDS: &[&str] = &[
@@ -99,6 +60,14 @@ const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Resul
 
 // Types (and variants) and values are apart; a type's functions, constants,
 // upcasts and `to_list` are values named for it: `shape_area`.
+pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::ModelOptions {
+    target: "Gleam",
+    counted: false,
+    generics: true,
+    overloading: false,
+    retain_opaque_constraints: true,
+};
+
 pub const NAMING: Naming = Naming {
     reserved: || KEYWORDS.iter().chain(OWN).map(|k| k.to_string()).collect(),
     // An external `Promise` is Gleam's own; a class the API declares as
@@ -148,6 +117,7 @@ pub struct Output {
     pub skipped: BTreeMap<String, usize>,
     // What each binding reaches, for a page to check (`wasm::manifest`).
     pub manifest: String,
+    pub meta_toml: String,
 }
 
 impl Output {
@@ -171,25 +141,7 @@ impl Output {
 
 // `getElementById` -> `get_element_by_id`, `HTMLElement` -> `html_element`.
 fn snake(name: &str) -> String {
-    let chars: Vec<char> = name.chars().collect();
-    let mut out = String::new();
-    for (i, &c) in chars.iter().enumerate() {
-        if c.is_uppercase() {
-            let prev = i.checked_sub(1).map(|j| chars[j]);
-            let next = chars.get(i + 1);
-            let after_word = prev.is_some_and(|p| p.is_lowercase() || (p.is_ascii_digit() && next.is_some_and(|n| n.is_lowercase())));
-            let ends_acronym = prev.is_some_and(|p| p.is_uppercase()) && next.is_some_and(|n| n.is_lowercase());
-            if (after_word || ends_acronym) && !out.is_empty() && !out.ends_with('_') {
-                out.push('_');
-            }
-            out.extend(c.to_lowercase());
-        } else if c.is_ascii_alphanumeric() {
-            out.push(c);
-        } else if !out.ends_with('_') {
-            out.push('_');
-        }
-    }
-    out
+    super::case::snake_case_alnum(name)
 }
 
 // A Gleam name for a value: snake_case, starting with a letter, not a keyword.
@@ -201,24 +153,12 @@ fn lower(name: &str) -> String {
 
 // A Gleam name for a type or a variant: UpperCamelCase, letters and digits only.
 fn upper(name: &str) -> String {
-    let out: String = name
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|s| !s.is_empty())
-        .map(|s| {
-            let mut cs = s.chars();
-            cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
-        })
-        .collect();
+    let out = super::case::pascal_ascii_alnum(name);
     if out.starts_with(|c: char| c.is_ascii_uppercase()) { out } else { format!("X{out}") }
 }
 
 fn upper_variant(name: &str) -> String {
-    if name.contains('_') && name.chars().all(|c| !c.is_alphabetic() || c.is_uppercase()) {
-        let lowered = name.split('_').filter(|s| !s.is_empty()).map(str::to_lowercase).collect::<Vec<_>>().join("_");
-        upper(&lowered)
-    } else {
-        upper(name)
-    }
+    super::case::screaming_to_pascal(name, upper)
 }
 
 struct Gen<'m> {
@@ -724,26 +664,7 @@ impl<'m> Gen<'m> {
         for (position, literal) in &f.fixed {
             args.insert((*position).min(args.len()), literal.clone());
         }
-        let (first, second) = (args.first().cloned().unwrap_or_default(), args.get(1).cloned().unwrap_or_default());
-        let list = args.join(", ");
-        let call = match &f.call {
-            Call::Method(js) => format!("self{}({list})", access(js)),
-            Call::Get(p) => format!("self{}", access(p)),
-            Call::GetBound(p) => format!("((v) => typeof v === \"function\" ? v.bind(self) : v)(self{})", access(p)),
-            Call::Set(p) => format!("self{} = {list}", access(p)),
-            Call::New(path) => format!("new ({})({list})", global(path)),
-            Call::Static(path) => format!("{}({list})", global(path)),
-            Call::StaticGet(path) => global(path),
-            // A top-level variable is assigned where it is: a module's cannot be.
-            Call::StaticSet(path) if !path.contains('.') && !path.contains("::") => format!("globalThis{} = {list}", access(path)),
-            Call::StaticSet(path) => format!("{} = {list}", global(path)),
-            Call::Create(literal) => format!("({literal})"),
-            Call::Invoke => format!("self({list})"),
-            Call::Construct => format!("new self({list})"),
-            Call::IndexGet => format!("self[{first}]"),
-            Call::IndexSet => format!("self[{first}] = {second}"),
-            Call::Apply => format!("({first})({})", args.get(1..).unwrap_or_default().join(", ")),
-        };
+        let call = call_expr(&f.call, "self", &args);
         let body = match &f.ret {
             Ty::Void => format!("{call};\n  return undefined;"),
             t => format!("return {};", self.to_gleam(t, &call)),
@@ -920,7 +841,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     let types_mod = format!("{pkg}/types");
     let doc = Document::parse(xml).map_err(|e| vec![format!("not well-formed XML: {e}")])?;
     let root_import = doc.root_element().attribute("import").map(str::to_string);
-    let mut m = model(xml, "Gleam")?;
+    let mut m = model_with_options(xml, MODEL_OPTIONS)?;
     take_secondary(&mut m);
     // Give explicit methods priority over synthesized property setters when names collide.
     for c in &mut m.classes {
@@ -1160,52 +1081,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     }
 
     // The runtime: what every module may use.
-    g.out += "/// A JavaScript promise: `promise_then` gives its result to a function.\npub type Promise(a)\n\n\
-              /// A JavaScript exception, or the reason a promise was rejected.\npub type JsError\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"promise_then\")\npub fn promise_then(promise: Promise(a), then: fn(Result(a, JsError)) -> Nil) -> Nil\n\n\
-              /// Awaits `promise`, passing `Ok` values to `then` or `Error` to `on_error`.\n\
-              pub fn promise_try(promise: Promise(a), on_error: fn(JsError) -> Nil, then: fn(a) -> Nil) -> Nil {\n\
-                promise_then(promise, fn(res) {\n\
-                  case res {\n\
-                    Ok(v) -> then(v)\n\
-                    Error(e) -> on_error(e)\n\
-                  }\n\
-                })\n\
-              }\n\n\
-              /// A mutable JavaScript reference cell for stateful callbacks and animation loops.\n\
-              pub type Ref(a)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"ref_new\")\npub fn ref_new(value: a) -> Ref(a)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"ref_get\")\npub fn ref_get(cell: Ref(a)) -> a\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"ref_set\")\npub fn ref_set(cell: Ref(a), value: a) -> Nil\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"ref_update\")\npub fn ref_update(cell: Ref(a), f: fn(a) -> a) -> a\n\n\
-              /// Runs `f`, and gives what it returned, or the exception it threw.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"attempt\")\npub fn attempt(f: fn() -> a) -> Result(a, JsError)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"js_error_message\")\npub fn js_error_message(error: JsError) -> String\n\n\
-              /// Any value, untyped: what a value of no particular type is made from.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"dynamic\")\npub fn dynamic(value: a) -> Dynamic\n\n\
-              /// A plain JavaScript object from key-value entries.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"js_object\")\npub fn js_object(entries: List(#(String, Dynamic))) -> Dynamic\n\n\
-              /// Reads a property from a JavaScript object.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"js_get\")\npub fn js_get(object: Dynamic, key: String) -> Option(Dynamic)\n\n\
-              /// Sets a property on a JavaScript object.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"js_set\")\npub fn js_set(object: Dynamic, key: String, value: Dynamic) -> Nil\n\n\
-              /// Whether a JavaScript object has its own property `key`.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"js_has\")\npub fn js_has(object: Dynamic, key: String) -> Bool\n\n\
-              /// A plain JavaScript array from a Gleam list.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"js_array\")\npub fn js_array(items: List(Dynamic)) -> Dynamic\n\n\
-              /// Reads a JavaScript array into a Gleam list.\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"js_to_list\")\npub fn js_to_list(array: Dynamic) -> List(Dynamic)\n\n\
-              /// How a type's values cross between Gleam and JavaScript: what a generic\n\
-              /// function takes for each type parameter whose values cross (`box_value(b,\n\
-              /// codec_float())`). Each type has one: `shape_codec()`, `mode_codec()`.\n\
-              pub type Codec(a)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_same\")\npub fn codec_float() -> Codec(Float)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_same\")\npub fn codec_string() -> Codec(String)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_same\")\npub fn codec_bool() -> Codec(Bool)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_same\")\npub fn codec_dynamic() -> Codec(Dynamic)\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_option\")\npub fn codec_option(of: Codec(a)) -> Codec(Option(a))\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_list\")\npub fn codec_list(of: Codec(a)) -> Codec(List(a))\n\n\
-              @external(javascript, \"./runtime_ffi.mjs\", \"codec_tuple2\")\npub fn codec_tuple2(a: Codec(a), b: Codec(b)) -> Codec(#(a, b))\n\n";
+    g.out += include_str!("runtime/gleam_runtime.gleam");
     g.note("Dynamic");
     g.note("Option");
     // The modules the program reaches: not a type-only one (node's `stream/iter`).
@@ -1227,32 +1103,10 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         "{imports}\n\
          // Where the API's names are: its module, or globals; with several packages, each one's.\n\
          export const PK = {{ {} }};\nexport const G = {};\n\n\
-         export function promise_then(p, f) {{\n  Promise.resolve(p).then((v) => f(new Ok(v)), (e) => f(new GleamError(e)));\n}}\n\
-         export function ref_new(v) {{\n  return {{ v }};\n}}\n\
-         export function ref_get(c) {{\n  return c.v;\n}}\n\
-         export function ref_set(c, v) {{\n  c.v = v;\n}}\n\
-         export function ref_update(c, f) {{\n  c.v = f(c.v);\n  return c.v;\n}}\n\
-         export function attempt(f) {{\n  try {{\n    return new Ok(f());\n  }} catch (e) {{\n    return new GleamError(e);\n  }}\n}}\n\
-         export function js_error_message(e) {{\n  return String(e instanceof Error ? e.message : e?.message ?? e);\n}}\n\
-         export function dynamic(v) {{\n  return v;\n}}\n\
-         export function js_object(entries) {{\n  return Object.fromEntries(entries.toArray());\n}}\n\
-         export function js_get(o, k) {{\n  const v = o?.[k];\n  return v === undefined ? new None() : new Some(v);\n}}\n\
-         export function js_set(o, k, v) {{\n  o[k] = v;\n}}\n\
-         export function js_has(o, k) {{\n  return o != null && Object.prototype.hasOwnProperty.call(o, k);\n}}\n\
-         export function js_array(items) {{\n  return items.toArray();\n}}\n\
-         export function js_to_list(a) {{\n  return toList(Array.from(a ?? []));\n}}\n\
-         // Codecs: how a type parameter's values cross, each way.\n\
-         export const $same = {{ to: (v) => v, from: (v) => v }};\n\
-         export function codec_same() {{\n  return $same;\n}}\n\
-         export function codec_option(c) {{\n  return {{ to: (v) => (v == null ? new None() : new Some(c.to(v))), from: (v) => (v instanceof Some ? c.from(v[0]) : undefined) }};\n}}\n\
-         export function codec_list(c) {{\n  return {{ to: (v) => toList(Array.from(v ?? [], (x) => c.to(x))), from: (v) => v.toArray().map((x) => c.from(x)) }};\n}}\n\
-         export function codec_tuple2(a, b) {{\n  return {{ to: (v) => [a.to(v[0]), b.to(v[1])], from: (v) => [a.from(v[0]), b.from(v[1])] }};\n}}\n\
-         // A Gleam function made a JavaScript function, the same one each time: one\n\
-         // listener added and removed is one function.\n\
-         const $wrapped = new WeakMap();\n\
-         export function $wrap(f, make) {{\n  if (typeof f !== \"function\") return f;\n  let w = $wrapped.get(f);\n  if (!w) $wrapped.set(f, (w = make(f)));\n  return w;\n}}\n",
+         {}",
         modules.join(", "),
-        root_import.as_ref().map_or("globalThis".to_string(), |r| format!("PK[{r:?}]"))
+        root_import.as_ref().map_or("globalThis".to_string(), |r| format!("PK[{r:?}]")),
+        include_str!("runtime/gleam_runtime_ffi.mjs")
     );
 
     // The types that may refer to each other: externals, enums, unions, callbacks.
@@ -1721,7 +1575,14 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         files.push((format!("{path}_ffi.mjs"), format!("{header}{}", unit.ffi)));
     }
     let project_refs = used_refs.iter().map(|&i| (refs[i].package_name.clone(), refs[i].dep_path.clone())).collect();
-    Ok(Output { name: pkg.to_string(), files, project_refs, skipped: g.skipped, manifest: super::wasm::manifest(&m) })
+    let meta_classes: Vec<String> = m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| g.tname(&c.name)).collect();
+    let meta = super::pkg_meta::PkgMeta {
+        target: "gleam".into(),
+        package: pkg.to_string(),
+        types: meta_classes,
+        ..Default::default()
+    };
+    Ok(Output { name: pkg.to_string(), files, project_refs, skipped: g.skipped, manifest: super::model::manifest(&m), meta_toml: meta.to_toml() })
 }
 
 // What JavaScript reserves, as a function's name.
@@ -1830,10 +1691,7 @@ fn relative(from: &str, to: &str) -> String {
 // returns a new value where `add` changes this one) is `add_new`, while a `$`
 // property accessor (`$from`) is `get_dollar_from` / `set_dollar_from`.
 fn function_name(f: &Func, name: &str) -> String {
-    let dollar = match &f.call {
-        Call::Method(js) | Call::Static(js) | Call::Get(js) | Call::GetBound(js) | Call::Set(js) | Call::StaticGet(js) | Call::StaticSet(js) => js.rsplit('.').next().is_some_and(|n| n.starts_with('$')),
-        _ => false,
-    };
+    let dollar = super::case::has_dollar_js_name(&f.call);
     if !dollar {
         return name.to_string();
     }
@@ -1920,16 +1778,6 @@ fn generic_args(t: &Ty) -> &[Ty] {
     match t {
         Ty::Generic(_, args) => args,
         _ => &[],
-    }
-}
-
-// Whether `t` names type parameter `p` anywhere.
-fn mentions(t: &Ty, p: &str) -> bool {
-    match t {
-        Ty::Param(n) => n == p,
-        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => mentions(inner, p),
-        Ty::Tuple(es) | Ty::Union(es) | Ty::Generic(_, es) => es.iter().any(|e| mentions(e, p)),
-        _ => false,
     }
 }
 

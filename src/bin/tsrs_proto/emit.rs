@@ -1,6 +1,5 @@
 // `--emit`: bindings from the XML, written to a directory.
 
-use std::collections::HashSet;
 use std::path::Path;
 
 use ts_type_transformer::generators::{self, c, cpp, fsharp, gleam, rust, wasm, zig};
@@ -72,12 +71,7 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
                 .map(|r| c::load_project_ref(Path::new(r), dest))
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| vec![e])?;
-            let extra_reserved: Vec<String> = loaded.iter().flat_map(|r| r.all_names.iter().cloned()).collect();
-            let ref_structs: HashSet<String> = loaded
-                .iter()
-                .flat_map(|r| r.structs.iter().chain(r.external_structs.iter()).cloned())
-                .collect();
-            let model = wasm::model_with_reserved(xml, "C", &extra_reserved, &ref_structs)?;
+            let model = c::model_with_refs(xml, &loaded)?;
             let mut out = c::files_named(&model, pkg_name, &loaded)?;
             push_glue(&model, &mut out);
             Ok(out)
@@ -88,7 +82,7 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
                 .map(|r| cpp::load_project_ref(Path::new(r), dest))
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| vec![e])?;
-            let model = wasm::model(xml, "C++")?;
+            let model = wasm::model_with(xml, cpp::MODEL_OPTIONS, &cpp::NAMING, &[])?;
             let mut out = cpp::files_named(&model, pkg_name, &loaded)?;
             push_glue(&model, &mut out);
             Ok(out)
@@ -99,7 +93,7 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
                 .map(|r| zig::load_project_ref(Path::new(r), dest))
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| vec![e])?;
-            let model = wasm::model(xml, "Zig")?;
+            let model = wasm::model_with(xml, zig::MODEL_OPTIONS, &zig::NAMING, &[])?;
             let mut out = zig::files_named(&model, pkg_name, &loaded)?;
             push_glue(&model, &mut out);
             Ok(out)
@@ -110,7 +104,7 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
                 .map(|r| rust::load_project_ref(Path::new(r), dest))
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| vec![e])?;
-            let model = wasm::model(xml, "Rust")?;
+            let model = wasm::model_with(xml, rust::MODEL_OPTIONS, &rust::NAMING, &[])?;
             let mut out = rust::files_named(&model, pkg_name, &loaded)?;
             push_glue(&model, &mut out);
             Ok(out)
@@ -127,8 +121,10 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
             }
             let fsproj_name = m.fsproj_name();
             let fsproj = m.fsproj();
+            let meta_toml = m.meta_toml;
             let mut files = m.files;
             files.push((fsproj_name, fsproj));
+            files.push((generators::pkg_meta::META_FILE.into(), meta_toml));
             Ok(files)
         }
         "gleam" => {
@@ -142,8 +138,10 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
                 eprintln!("not bound: {n} x {why}");
             }
             let toml = m.gleam_toml();
+            let meta_toml = m.meta_toml;
             let mut files: Files = m.files.into_iter().map(|(p, c)| (format!("src/{p}"), c)).collect();
             files.push(("gleam.toml".into(), toml));
+            files.push((generators::pkg_meta::META_FILE.into(), meta_toml));
             Ok(files)
         }
         other => Err(vec![format!("unknown target `{other}`: c, cpp, zig, rust, fsharp or gleam")]),

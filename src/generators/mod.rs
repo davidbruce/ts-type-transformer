@@ -3,12 +3,14 @@
 // construct the config should have lowered is an error, not a guess.
 
 pub mod c;
+pub mod case;
 pub mod cpp;
 pub mod fsharp;
 pub mod gleam;
 pub mod js;
 pub mod model;
 pub mod names;
+pub mod pkg_meta;
 pub mod rust;
 pub mod wasm;
 pub mod zig;

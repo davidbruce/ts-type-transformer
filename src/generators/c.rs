@@ -26,105 +26,18 @@ fn is_builtin_c_type(name: &str) -> bool {
         || name.starts_with("JsTuple_")
 }
 
-fn collect_c_header_functions(dir: &Path, out: &mut Vec<String>) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
-    for entry in entries.flatten() {
-        let p = entry.path();
-        if p.is_dir() {
-            collect_c_header_functions(&p, out);
-        } else if p.file_name().and_then(|s| s.to_str()) == Some("functions.h")
-            && let Ok(src) = std::fs::read_to_string(&p)
-        {
-            for line in src.lines().map(str::trim) {
-                if let Some(rest) = line.strip_prefix("static inline ")
-                    && let Some((head, _)) = rest.split_once('(')
-                    && let Some(name) = head.split_whitespace().last()
-                    && !name.is_empty()
-                {
-                    out.push(name.to_string());
-                } else if let Some(rest) = line.strip_prefix("#define ")
-                    && let Some((name, _)) = rest.split_once('(')
-                {
-                    let name = name.trim();
-                    if !name.is_empty() && !name.contains("__") {
-                        out.push(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Loads a previously generated C binding directory (or `bindings.h`/`ts_types.h`)
+/// Loads a previously generated C binding directory (via `tsrs-meta.toml`)
 /// so another generated C package can `#include` its `ts_types.h` and reserve
 /// its global C identifiers against collisions.
 pub fn load_project_ref(dir_or_header: &Path, from_dir: &Path) -> Result<ProjectRef, String> {
-    let root_dir = if dir_or_header.is_file() {
-        dir_or_header.parent().unwrap_or_else(|| Path::new("."))
-    } else {
-        dir_or_header
-    };
-    let types_path = root_dir.join("ts_types.h");
-    let src = std::fs::read_to_string(&types_path).map_err(|e| format!("{}: {e}", types_path.display()))?;
-    let pkg_name = super::snake_package_name(root_dir.file_name().and_then(|s| s.to_str()).unwrap_or("bindings"));
-    let rel_dir = super::relative_path(from_dir, root_dir);
-    let ts_types_include = format!("{rel_dir}/ts_types.h");
-    let pkg_umbrella = root_dir.join(format!("{pkg_name}.h"));
-    let umbrella_include = if pkg_umbrella.is_file() {
-        format!("{rel_dir}/{pkg_name}.h")
-    } else {
-        format!("{rel_dir}/bindings.h")
-    };
-
-    let mut structs = HashSet::new();
-    let mut external_structs = HashSet::new();
-    let mut all_names = Vec::new();
-    let mut prev_is_external = false;
-    for line in src.lines().map(str::trim) {
-        if line == "/* external */" {
-            prev_is_external = true;
-            continue;
-        }
-        if let Some(name) = line.strip_prefix("typedef struct { uint32_t h; } ").and_then(|r| r.strip_suffix(';')).map(str::trim) {
-            if !is_builtin_c_type(name) {
-                if prev_is_external {
-                    external_structs.insert(name.to_string());
-                } else {
-                    structs.insert(name.to_string());
-                }
-                all_names.push(name.to_string());
-            }
-        } else if line.starts_with("typedef enum {")
-            && let Some((inner, rhs)) = line.strip_prefix("typedef enum {").unwrap_or("").split_once("} ")
-            && let Some(name) = rhs.strip_suffix(';').map(str::trim)
-            && !is_builtin_c_type(name)
-        {
-            all_names.push(name.to_string());
-            for item in inner.split(',') {
-                let id = item.split('=').next().unwrap_or("").trim();
-                if !id.is_empty() {
-                    all_names.push(id.to_string());
-                }
-            }
-        } else if line.starts_with("typedef struct { int32_t tag;")
-            && let Some((_, rhs)) = line.rsplit_once("} ")
-            && let Some(name) = rhs.strip_suffix(';').map(str::trim)
-            && !is_builtin_c_type(name)
-        {
-            all_names.push(name.to_string());
-        } else if line.starts_with("typedef ")
-            && let Some((_, after)) = line.split_once("(*")
-            && let Some(fn_name) = after.split(')').next()
-            && let Some(name) = fn_name.strip_suffix("_fn")
-            && !is_builtin_c_type(name)
-        {
-            all_names.push(name.to_string());
-        }
-        prev_is_external = false;
-    }
-    collect_c_header_functions(root_dir, &mut all_names);
-    all_names.sort();
-    all_names.dedup();
+    let loaded = super::pkg_meta::load(dir_or_header, from_dir, "c")?;
+    let entry = loaded.meta.entry.as_deref().unwrap_or("bindings.h");
+    let pkg_name = loaded.meta.package;
+    let ts_types_include = format!("{}/ts_types.h", loaded.rel_dir);
+    let umbrella_include = format!("{}/{entry}", loaded.rel_dir);
+    let structs = loaded.meta.structs.into_iter().collect();
+    let external_structs = loaded.meta.external_structs.into_iter().collect();
+    let all_names = loaded.meta.types;
     Ok(ProjectRef { pkg_name, ts_types_include, umbrella_include, structs, external_structs, all_names })
 }
 
@@ -174,6 +87,35 @@ fn ident(name: &str) -> String {
 
 // C has one namespace: a type, its helpers (`AS_Shape`, `Id_from_handle`,
 // `Mode_fill`) and every function (`Shape_area`) are identifiers in it.
+pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::ModelOptions {
+    target: "C",
+    counted: false,
+    generics: false,
+    overloading: false,
+    retain_opaque_constraints: false,
+};
+
+pub fn model_with_refs(xml: &str, refs: &[ProjectRef]) -> Result<Model, Vec<String>> {
+    let mut m = super::model::model_with_options(xml, MODEL_OPTIONS)?;
+    let ref_structs: HashSet<&str> = refs
+        .iter()
+        .flat_map(|r| r.structs.iter().chain(r.external_structs.iter()).map(String::as_str))
+        .collect();
+    let opaque_kept: HashSet<&str> = m.opaque.iter().map(String::as_str).filter(|o| ref_structs.contains(*o)).collect();
+    let extra_reserved: Vec<String> = refs
+        .iter()
+        .flat_map(|r| r.all_names.iter())
+        .filter(|r| {
+            let base = r.strip_prefix("AS_").unwrap_or(r.as_str());
+            !opaque_kept.contains(base)
+        })
+        .cloned()
+        .collect();
+    super::names::settle_with(&mut m, &NAMING, &extra_reserved);
+    super::wasm::share_imports(&mut m);
+    Ok(m)
+}
+
 pub const NAMING: Naming = Naming {
     reserved: || KEYWORDS.iter().chain(LIBC_NAMES).map(|k| (*k).to_string()).chain(identifiers(RUNTIME)).collect(),
     type_names: |candidate, name, kind, m| {
@@ -233,13 +175,12 @@ pub const NAMING: Naming = Naming {
 };
 
 fn raw(t: &Ty) -> &'static str {
-    match t {
-        Ty::Void => "void",
-        Ty::Num | Ty::NumEnum(_) => "double",
-        Ty::Bool | Ty::Enum(_) => "int32_t",
-        // An optional flag or enum is -1 when absent.
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::Bool | Ty::Enum(_)) => "int32_t",
-        _ => "uint32_t",
+    use super::wasm::AbiSlot::*;
+    match super::wasm::ret_abi(t) {
+        Void => "void",
+        F64 => "double",
+        I32 => "int32_t",
+        U32 => "uint32_t",
     }
 }
 
@@ -605,170 +546,7 @@ fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module: &str, raw_
     *out += &format!("static inline {} {name}({}) {{ {pre}{body} }}\n", typed(&f.ret, false), void(&params));
 }
 
-const RUNTIME: &str = "// Generated.
-#pragma once
-#ifndef TS_RUNTIME_H
-#define TS_RUNTIME_H
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#define TS_IMPORT_MOD(mod, name) __attribute__((import_module(mod), import_name(#name)))
-#define TS_IMPORT(name) TS_IMPORT_MOD(\"env\", name)
-
-// `name__N`, by the number of arguments: how trailing optional arguments are left out.
-// An empty call counts as none: `orUnit()` (C23, or C11 without -pedantic).
-#define TS_COUNT(...) TS_COUNT_(0 __VA_OPT__(,) __VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
-#define TS_COUNT_(z, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, n, ...) n
-#define TS_PASTE(name, n) TS_PASTE_(name, n)
-#define TS_PASTE_(name, n) name##__##n
-#define TS_CALL(name, ...) TS_PASTE(name, TS_COUNT(__VA_ARGS__))(__VA_ARGS__)
-
-// Handles to JavaScript values. Zero is null.
-typedef struct { uint32_t h; } JsValue;
-typedef struct { uint32_t h; } JsString;
-typedef struct { uint32_t h; } JsArray;
-static inline uint32_t ts_strlen(const char* s) { uint32_t n = 0; while (s[n]) n++; return n; }
-typedef struct { const char* ptr; uint32_t len; } TsStr;
-static inline TsStr ts_str_id(TsStr s) { return s; }
-static inline TsStr ts_str_c(const char* s) { return (TsStr){ s, s ? ts_strlen(s) : 0 }; }
-static inline TsStr ts_str_js(JsString s) { return (TsStr){ (const char*)(uintptr_t)s.h, 0xFFFFFFFFu }; }
-#define TS_STR(x) _Generic((x), TsStr: ts_str_id, JsString: ts_str_js, default: ts_str_c)(x)
-TS_IMPORT(js_string_len) uint32_t ts_raw_js_string_len(uint32_t);
-TS_IMPORT(js_string_read) void ts_raw_js_string_read(uint32_t, char*);
-TS_IMPORT(js_from_number) uint32_t ts_raw_js_from_number(double);
-TS_IMPORT(js_from_bool) uint32_t ts_raw_js_from_bool(int32_t);
-TS_IMPORT(js_from_string) uint32_t ts_raw_js_from_string(const char*, uint32_t);
-TS_IMPORT(js_to_number) double ts_raw_js_to_number(uint32_t);
-TS_IMPORT(js_to_bool) int32_t ts_raw_js_to_bool(uint32_t);
-TS_IMPORT(js_equals) int32_t ts_raw_js_equals(uint32_t, uint32_t);
-TS_IMPORT(js_array_new) uint32_t ts_raw_js_array_new(void);
-TS_IMPORT(js_array_length) uint32_t ts_raw_js_array_length(uint32_t);
-TS_IMPORT(js_array_get) uint32_t ts_raw_js_array_get(uint32_t, uint32_t);
-TS_IMPORT(js_array_push) void ts_raw_js_array_push(uint32_t, uint32_t);
-TS_IMPORT(js_object_new) uint32_t ts_raw_js_object_new(void);
-TS_IMPORT(js_object_get) uint32_t ts_raw_js_object_get(uint32_t, const char*, uint32_t);
-TS_IMPORT(js_object_set) void ts_raw_js_object_set(uint32_t, const char*, uint32_t, uint32_t);
-TS_IMPORT(js_object_has) int32_t ts_raw_js_object_has(uint32_t, const char*, uint32_t);
-TS_IMPORT(js_retain) void ts_raw_js_retain(uint32_t);
-TS_IMPORT(js_release) void ts_raw_js_release(uint32_t);
-TS_IMPORT(js_live) uint32_t ts_raw_js_live(void);
-TS_IMPORT(js_callback_release) uint32_t ts_raw_js_callback_release(uint32_t);
-
-// An optional number or flag: `has` says whether `value` is there.
-typedef struct { bool has; double value; } JsOptionalDouble;
-typedef struct { bool has; bool value; } JsOptionalBool;
-static inline JsOptionalDouble js_some_double(double x) { return (JsOptionalDouble){ true, x }; }
-static inline JsOptionalBool js_some_bool(bool x) { return (JsOptionalBool){ true, x }; }
-static inline JsOptionalDouble js_none_double(void) { return (JsOptionalDouble){ false, 0 }; }
-static inline JsOptionalBool js_none_bool(void) { return (JsOptionalBool){ false, false }; }
-static inline JsOptionalDouble ts_opt_double_id(JsOptionalDouble x) { return x; }
-static inline JsOptionalBool ts_opt_bool_id(JsOptionalBool x) { return x; }
-#define TS_OPT_DOUBLE(x) _Generic((x), JsOptionalDouble: ts_opt_double_id, default: js_some_double)(x)
-#define TS_OPT_BOOL(x) _Generic((x), JsOptionalBool: ts_opt_bool_id, default: js_some_bool)(x)
-
-// A handle a function returns is the caller's: release it when done with it.
-// Arguments, and a callback's arguments, are lent: retain one to keep it.
-// What a callback returns is given to JavaScript: retain a handle to return it and keep it.
-#define js_release(x) ts_raw_js_release((x).h)
-#define js_retain(x) ts_raw_js_retain((x).h)
-TS_IMPORT(js_take_error) uint32_t ts_raw_js_take_error(void);
-TS_IMPORT(js_error_message) uint32_t ts_raw_js_error_message(uint32_t);
-TS_IMPORT(js_error_name) uint32_t ts_raw_js_error_name(uint32_t);
-TS_IMPORT(js_error_stack) uint32_t ts_raw_js_error_stack(uint32_t);
-TS_IMPORT(js_error_new) uint32_t ts_raw_js_error_new(const char*, uint32_t);
-TS_IMPORT(js_date_new) uint32_t ts_raw_js_date_new(double);
-TS_IMPORT(js_date_now) double ts_raw_js_date_now(void);
-TS_IMPORT(js_date_time) double ts_raw_js_date_time(uint32_t);
-TS_IMPORT(js_date_to_iso_string) uint32_t ts_raw_js_date_to_iso_string(uint32_t);
-TS_IMPORT(js_bytes_len) uint32_t ts_raw_js_bytes_len(uint32_t);
-TS_IMPORT(js_bytes_read) uint32_t ts_raw_js_bytes_read(uint32_t, uint32_t, void*, uint32_t);
-TS_IMPORT(js_bytes_write) uint32_t ts_raw_js_bytes_write(uint32_t, uint32_t, const void*, uint32_t);
-TS_IMPORT(js_bytes_new) uint32_t ts_raw_js_bytes_new(uint32_t, const void*, uint32_t);
-TS_IMPORT(js_bytes_buffer) uint32_t ts_raw_js_bytes_buffer(uint32_t);
-TS_IMPORT(js_bytes_offset) uint32_t ts_raw_js_bytes_offset(uint32_t);
-TS_IMPORT(js_has_error) int32_t ts_raw_js_has_error(void);
-// Whether two handles are one JavaScript value.
-static inline bool ts_same(uint32_t a, uint32_t b) { return a == b || ts_raw_js_equals(a, b) != 0; }
-#define js_same(a, b) ts_same((a).h, (b).h)
-// Whether the last call threw: its exception waits to be taken.
-static inline bool js_failed(void) { return ts_raw_js_has_error() != 0; }
-// The exception a call threw, taken, or a null handle. A call that throws
-// returns a zero value, and an exception not taken by the time control
-// returns to JavaScript is reported there.
-static inline JsValue js_take_error(void) { return (JsValue){ ts_raw_js_take_error() }; }
-// An exception's message, name or stack, the caller's to release.
-static inline JsString js_error_message(JsValue e) { return (JsString){ ts_raw_js_error_message(e.h) }; }
-static inline JsString js_error_name(JsValue e) { return (JsString){ ts_raw_js_error_name(e.h) }; }
-static inline JsString js_error_stack(JsValue e) { return (JsString){ ts_raw_js_error_stack(e.h) }; }
-static inline JsValue js_error_new(const char* message) { return (JsValue){ ts_raw_js_error_new(message, ts_strlen(message)) }; }
-static inline double js_date_now(void) { return ts_raw_js_date_now(); }
-// A JavaScript iterator: see `X_iterate`.
-typedef struct { uint32_t h; } JsIterator;
-TS_IMPORT(js_iterate) uint32_t ts_raw_js_iterate(uint32_t);
-TS_IMPORT(js_iterator_next) uint32_t ts_raw_js_iterator_next(uint32_t);
-TS_IMPORT(js_async_iterate) uint32_t ts_raw_js_async_iterate(uint32_t);
-TS_IMPORT(js_async_iterator_next) uint32_t ts_raw_js_async_iterator_next(uint32_t);
-// A scope: every handle a function returns while it is the innermost open
-// scope is released when it closes. Retain one to keep it.
-TS_IMPORT(js_scope_open) void js_scope_open(void);
-TS_IMPORT(js_scope_close) void js_scope_close(void);
-// How many JavaScript values wasm holds handles to.
-static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
-// Forgets a callback made with `X_from`, and returns its context. Its handle is released as any other.
-#define js_forget_callback(x) ((void*)(uintptr_t)ts_raw_js_callback_release((x).h))
-static inline uint32_t JsString_len(JsString s) { return ts_raw_js_string_len(s.h); }
-static inline void JsString_read(JsString s, char* buf) { ts_raw_js_string_read(s.h, buf); }
-TS_IMPORT(js_string_copy) uint32_t ts_raw_js_string_copy(uint32_t, char*, uint32_t);
-TS_IMPORT(js_string_equals) int32_t ts_raw_js_string_equals(uint32_t, const char*, uint32_t);
-// Copies at most cap - 1 bytes and a terminating NUL; returns the string's whole length in bytes.
-static inline uint32_t JsString_copy(JsString s, char* buf, uint32_t cap) {
-    if (cap == 0) return JsString_len(s);
-    uint32_t n = ts_raw_js_string_copy(s.h, buf, cap - 1);
-    buf[n < cap - 1 ? n : cap - 1] = 0;
-    return n;
-}
-// Compares in JavaScript, without copying.
-static inline bool ts_string_equals(JsString s, TsStr text) { return ts_raw_js_string_equals(s.h, text.ptr, text.len) != 0; }
-#define JsString_equals(s, text) ts_string_equals((s), TS_STR(text))
-static inline JsValue js_number(double x) { return (JsValue){ ts_raw_js_from_number(x) }; }
-static inline JsValue js_bool(bool x) { return (JsValue){ ts_raw_js_from_bool(x) }; }
-static inline JsValue js_string(const char* s) { return (JsValue){ ts_raw_js_from_string(s, ts_strlen(s)) }; }
-static inline JsString JsString_from(const char* s) { return (JsString){ ts_raw_js_from_string(s, ts_strlen(s)) }; }
-static inline double js_to_number(JsValue v) { return ts_raw_js_to_number(v.h); }
-static inline bool js_to_bool(JsValue v) { return ts_raw_js_to_bool(v.h) != 0; }
-static inline JsString js_to_string(JsValue v) { return (JsString){ v.h }; }
-static inline bool js_equals(JsValue a, JsValue b) { return ts_raw_js_equals(a.h, b.h) != 0; }
-static inline JsArray JsArray_new(void) { return (JsArray){ ts_raw_js_array_new() }; }
-static inline uint32_t JsArray_length(JsArray a) { return ts_raw_js_array_length(a.h); }
-static inline JsValue JsArray_get(JsArray a, uint32_t i) { return (JsValue){ ts_raw_js_array_get(a.h, i) }; }
-static inline void JsArray_push(JsArray a, JsValue v) { ts_raw_js_array_push(a.h, v.h); }
-static inline JsValue js_object(void) { return (JsValue){ ts_raw_js_object_new() }; }
-static inline JsValue js_object_get(JsValue o, const char* key) { return (JsValue){ ts_raw_js_object_get(o.h, key, ts_strlen(key)) }; }
-static inline void js_object_set(JsValue o, const char* key, JsValue v) { ts_raw_js_object_set(o.h, key, ts_strlen(key), v.h); }
-static inline bool js_object_has(JsValue o, const char* key) { return ts_raw_js_object_has(o.h, key, ts_strlen(key)) != 0; }
-static inline JsArray js_to_array(JsValue v) { return (JsArray){ v.h }; }
-#define js_value(x) ((JsValue){ (x).h })
-static inline JsValue ts_get_prop(uint32_t o, const char* k) { return (JsValue){ ts_raw_js_object_get(o, k, ts_strlen(k)) }; }
-static inline void ts_set_str(uint32_t o, const char* k, TsStr v) { uint32_t h = ts_raw_js_from_string(v.ptr, v.len); ts_raw_js_object_set(o, k, ts_strlen(k), h); ts_raw_js_release(h); }
-static inline void ts_set_num(uint32_t o, const char* k, double v) { uint32_t h = ts_raw_js_from_number(v); ts_raw_js_object_set(o, k, ts_strlen(k), h); ts_raw_js_release(h); }
-static inline void ts_set_bool(uint32_t o, const char* k, bool v) { uint32_t h = ts_raw_js_from_bool(v); ts_raw_js_object_set(o, k, ts_strlen(k), h); ts_raw_js_release(h); }
-static inline void ts_set_val(uint32_t o, const char* k, uint32_t v) { ts_raw_js_object_set(o, k, ts_strlen(k), v); }
-#define js_get_prop(o, k) ts_get_prop((o).h, (k))
-#define js_set_str(o, k, v) ts_set_str((o).h, (k), TS_STR(v))
-#define js_set_num(o, k, v) ts_set_num((o).h, (k), (v))
-#define js_set_bool(o, k, v) ts_set_bool((o).h, (k), (v))
-#define js_set_val(o, k, v) ts_set_val((o).h, (k), (v).h)
-static inline void ts_push_str(uint32_t a, TsStr v) { uint32_t h = ts_raw_js_from_string(v.ptr, v.len); ts_raw_js_array_push(a, h); ts_raw_js_release(h); }
-static inline void ts_push_num(uint32_t a, double v) { uint32_t h = ts_raw_js_from_number(v); ts_raw_js_array_push(a, h); ts_raw_js_release(h); }
-static inline void ts_push_bool(uint32_t a, bool v) { uint32_t h = ts_raw_js_from_bool(v); ts_raw_js_array_push(a, h); ts_raw_js_release(h); }
-static inline void ts_push_val(uint32_t a, uint32_t v) { ts_raw_js_array_push(a, v); }
-#define js_push_str(a, v) ts_push_str((a).h, TS_STR(v))
-#define js_push_num(a, v) ts_push_num((a).h, (v))
-#define js_push_bool(a, v) ts_push_bool((a).h, (v))
-#define js_push_val(a, v) ts_push_val((a).h, (v).h)
-
-#endif
-";
+const RUNTIME: &str = include_str!("runtime/c_runtime.h");
 
 // What an argument left out is: `undefined`, as each type says it.
 fn absent(t: &Ty) -> Option<String> {
@@ -1038,6 +816,9 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             raw_fn(&raw_prefix, "js_enum_index"),
         );
     }
+    let mut meta_structs: Vec<String> = Vec::new();
+    let mut meta_external_structs: Vec<String> = Vec::new();
+    let mut all_names: Vec<String> = Vec::new();
     for (name, values) in &m.enums {
         let mut seen = std::collections::HashSet::new();
         // `E_absent`, -1, is an optional enum that is not there.
@@ -1057,8 +838,19 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             })
             .collect();
         types += &format!("typedef enum {{ {absent} = -1, {} }} {name};\n", members.join(", "));
+        if !is_builtin_c_type(name) {
+            all_names.push(name.clone());
+            all_names.push(absent);
+            all_names.extend(members);
+        }
     }
     for (name, members) in &m.num_enums {
+        if !is_builtin_c_type(name) {
+            all_names.push(name.clone());
+            for (member, _) in members {
+                all_names.push(format!("{name}_{member}"));
+            }
+        }
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{name}_{member} = {value}")).collect();
         types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
     }
@@ -1075,9 +867,17 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             }
             continue;
         }
+        if !is_builtin_c_type(name) {
+            meta_external_structs.push(name.clone());
+            all_names.push(name.clone());
+        }
         types += &format!("#ifndef TS_DEFINED_{name}\n#define TS_DEFINED_{name}\n/* external */\ntypedef struct {{ uint32_t h; }} {name};\n#endif\n");
     }
     for name in m.classes.iter().map(|c| &c.name).chain(m.callbacks.iter().map(|c| &c.name)) {
+        if !is_builtin_c_type(name) {
+            meta_structs.push(name.clone());
+            all_names.push(name.clone());
+        }
         types += &format!("typedef struct {{ uint32_t h; }} {name};\n");
     }
     for name in &m.opaque {
@@ -1193,7 +993,17 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         let cname = first.rsplit_once("} ").and_then(|(_, r)| r.strip_suffix(';')).unwrap_or("JsContainer").trim();
         types += &format!("#ifndef TS_DEFINED_{cname}_T\n#define TS_DEFINED_{cname}_T\n{first}\n#endif\n");
     }
-    let unions: Vec<(String, String)> = m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| union_type(u, m, wasm_module, &raw_prefix)).collect();
+    let unions: Vec<(String, String)> = m
+        .unions
+        .iter()
+        .filter(|u| u.decodable() && u.type_params.is_empty())
+        .map(|u| {
+            if !is_builtin_c_type(&u.name) {
+                all_names.push(u.name.clone());
+            }
+            union_type(u, m, wasm_module, &raw_prefix)
+        })
+        .collect();
     for (decl, _) in &unions {
         types += decl;
     }
@@ -1398,6 +1208,22 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, &earlier, overloads, &descendants, &as_macro);
     }
     for (module, body) in functions {
+        for line in body.lines().map(str::trim) {
+            if let Some(rest) = line.strip_prefix("static inline ")
+                && let Some((head, _)) = rest.split_once('(')
+                && let Some(name) = head.split_whitespace().last()
+                && !name.is_empty()
+            {
+                all_names.push(name.to_string());
+            } else if let Some(rest) = line.strip_prefix("#define ")
+                && let Some((name, _)) = rest.split_once('(')
+            {
+                let name = name.trim();
+                if !name.is_empty() && !name.contains("__") {
+                    all_names.push(name.to_string());
+                }
+            }
+        }
         let path = format!("{}.h", super::model::file_name(&format!("{module}/functions"), &mut taken));
         out.push((path.clone(), header(&module, &[], body)));
         modules.entry(module).or_default().push(path);
@@ -1414,6 +1240,17 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     if pkg_name != "bindings" {
         out.push((format!("{pkg_name}.h"), all));
     }
+    let entry = if pkg_name != "bindings" { format!("{pkg_name}.h") } else { "bindings.h".into() };
+    let meta = super::pkg_meta::PkgMeta {
+        target: "c".into(),
+        package: pkg_name.to_string(),
+        entry: Some(entry),
+        types: all_names,
+        structs: meta_structs,
+        external_structs: meta_external_structs,
+        ..Default::default()
+    };
+    out.push((super::pkg_meta::META_FILE.into(), meta.to_toml()));
     Ok(out)
 }
 
