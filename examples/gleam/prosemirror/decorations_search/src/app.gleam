@@ -3,13 +3,14 @@ import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import prosemirror/areas/main/mark_spec_attrs
+import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/mark_spec
@@ -348,8 +349,7 @@ pub fn main() {
       let #(btn_id, query) = pair
       case document.get_element_by_id(doc, btn_id) {
         Some(btn) ->
-          html_element.add_event_listener_click(
-            btn,
+          html_element.add_event_listener(btn, ev.click,
             fn(_) {
               pm_rt.ref_set(active_ref, btn_id)
               let tr = editor_state.get_tr(editor_view.get_state(view))

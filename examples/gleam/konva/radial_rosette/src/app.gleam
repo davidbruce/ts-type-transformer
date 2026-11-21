@@ -4,23 +4,21 @@ import dom/areas/core/node as dom_node
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import konva/areas/main/circle
-import konva/areas/main/circle_config
-import konva/areas/main/layer
-import konva/areas/main/line
-import konva/areas/main/line_config
-import konva/areas/main/node
-import konva/areas/main/node_config
-import konva/areas/main/rect
-import konva/areas/main/rect_config
-import konva/areas/main/regular_polygon
-import konva/areas/main/regular_polygon_config
-import konva/areas/main/shape
-import konva/areas/main/shape_config
-import konva/areas/main/stage
-import konva/areas/main/stage_config
-import konva/areas/main/text
-import konva/areas/main/text_config
+import konva/circle
+import konva/circle_config
+import konva/layer
+import konva/line
+import konva/line_config
+import konva/node
+import konva/rect
+import konva/rect_config
+import konva/regular_polygon
+import konva/regular_polygon_config
+import konva/shape
+import konva/stage
+import konva/stage_config
+import konva/text
+import konva/text_config
 import konva/types as t
 
 const pi = 3.141592653589793
@@ -57,13 +55,13 @@ fn make_circle(
 ) -> t.GroupOrShape {
   let cc =
     circle_config.create()
-    |> node_config.with_x(x)
-    |> node_config.with_y(y)
+    |> circle_config.with_x(x)
+    |> circle_config.with_y(y)
     |> circle_config.with_radius(r)
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString(stroke_col))
-    |> shape_config.with_stroke_width(sw)
+    |> circle_config.with_stroke(t.StringOrCanvasGradientString(stroke_col))
+    |> circle_config.with_stroke_width(sw)
   let cc = case fill_opt {
-    Some(f) -> shape_config.with_fill(cc, t.StringOrCanvasGradientString(f))
+    Some(f) -> circle_config.with_fill(cc, t.StringOrCanvasGradientString(f))
     None -> cc
   }
   t.GroupOrShapeShape(shape.widen(circle.new(Some(cc))))
@@ -73,8 +71,8 @@ fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
   let lc =
     line_config.create()
     |> line_config.with_points(t.LinePointsArray(pts))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString(col))
-    |> shape_config.with_stroke_width(sw)
+    |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
+    |> line_config.with_stroke_width(sw)
   t.GroupOrShapeShape(shape.widen(line.new(Some(lc))))
 }
 
@@ -85,8 +83,8 @@ pub fn main() -> Nil {
   let sc =
     stage_config.create()
     |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
-    |> node_config.with_width(680.0)
-    |> node_config.with_height(400.0)
+    |> stage_config.with_width(680.0)
+    |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
   let l = layer.new(None)
@@ -195,18 +193,18 @@ pub fn main() -> Nil {
 
   let cp =
     regular_polygon_config.create()
-    |> node_config.with_x(cx)
-    |> node_config.with_y(cy)
+    |> regular_polygon_config.with_x(cx)
+    |> regular_polygon_config.with_y(cy)
     |> regular_polygon_config.with_sides(8.0)
     |> regular_polygon_config.with_radius(26.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
   let cd =
     circle_config.create()
-    |> node_config.with_x(cx)
-    |> node_config.with_y(cy)
+    |> circle_config.with_x(cx)
+    |> circle_config.with_y(cy)
     |> circle_config.with_radius(9.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
+    |> circle_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
 
   let compass =
     list.map(
@@ -220,12 +218,12 @@ pub fn main() -> Nil {
         let #(x, y, label) = item
         let tc =
           text_config.create()
-          |> node_config.with_x(x)
-          |> node_config.with_y(y)
+          |> text_config.with_x(x)
+          |> text_config.with_y(y)
           |> text_config.with_text(label)
           |> text_config.with_font_size(11.0)
           |> text_config.with_font_family("monospace")
-          |> shape_config.with_fill(t.StringOrCanvasGradientString("#555555"))
+          |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
         t.GroupOrShapeShape(shape.widen(text.new(Some(tc))))
       },
     )

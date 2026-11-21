@@ -1,9 +1,9 @@
 // KaTeX from Gleam, in Node: TeX rendered to HTML and MathML, with options,
 // and a ParseError for bad input. Every check must hold.
-import bindings/areas/main as katex
-import bindings/areas/main/katex_options
-import bindings/areas/main/katex_options_macros
-import bindings/areas/main/parse_error
+import bindings as katex
+import bindings/katex_options
+import bindings/katex_options_macros
+import bindings/parse_error
 import bindings/runtime
 import bindings/types as t
 import gleam/int

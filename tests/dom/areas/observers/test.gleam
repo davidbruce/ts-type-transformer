@@ -19,6 +19,7 @@ import bindings/areas/core/resize_observer
 import bindings/areas/core/resize_observer_entry
 import bindings/areas/core/resize_observer_size
 import bindings/areas/html/html_element
+import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/areas/css/css_style_declaration_base as decl
 import bindings/types as t
 import cell
@@ -70,7 +71,7 @@ pub fn main() {
   let body = document.get_body(doc)
 
   // ---- take_records: what happened, with no callback ----
-  let target = document.create_element_div(doc, None)
+  let target = document.create_element(doc, tag.div, None)
   node.append_child(body, target)
   let text = document.create_text_node(doc, "abc")
   node.append_child(target, text)
@@ -86,7 +87,7 @@ pub fn main() {
   mutation_observer.observe(watcher, target, Some(all))
   check(mutation_observer.take_records(watcher) == [], "nothing happened yet")
 
-  let child = document.create_element_span(doc, None)
+  let child = document.create_element(doc, tag.span, None)
   node.append_child(target, child)
   element.set_attribute(target, "data-a", "1")
   element.set_attribute(target, "data-a", "2")
@@ -116,9 +117,9 @@ pub fn main() {
   let scope = mutation_observer_init.create()
   flag(scope, mutation_observer_init.set_child_list)
   mutation_observer.observe(observer, target, Some(scope))
-  let grandchild_host = document.create_element_div(doc, None)
+  let grandchild_host = document.create_element(doc, tag.div, None)
   node.append_child(target, grandchild_host)
-  node.append_child(grandchild_host, document.create_element_i(doc, None))
+  node.append_child(grandchild_host, document.create_element(doc, tag.i, None))
   element.set_attribute(target, "data-a", "3")
   mutation_observer.disconnect(watcher)
 
@@ -153,7 +154,7 @@ pub fn main() {
 fn resize(check, count, body, late) -> Nil {
   let doc = dom.get_document()
   check(cell.get(late) == 0, "a disconnected observer never delivers")
-  let box = document.create_element_div(doc, None)
+  let box = document.create_element(doc, tag.div, None)
   element.set_attribute(box, "style", "width: 50px; height: 30px; background: #ccc")
   node.append_child(body, box)
   let sizes = cell.new([])
@@ -198,9 +199,9 @@ fn resize(check, count, body, late) -> Nil {
 fn intersect(check, count, body) -> Nil {
   let doc = dom.get_document()
   let seen = cell.new([])
-  let in_view = document.create_element_div(doc, None)
+  let in_view = document.create_element(doc, tag.div, None)
   element.set_attribute(in_view, "style", "width: 40px; height: 40px")
-  let far = document.create_element_div(doc, None)
+  let far = document.create_element(doc, tag.div, None)
   element.set_attribute(far, "style", "position: absolute; top: 20000px; left: 0; width: 40px; height: 40px")
   node.append_child(body, in_view)
   node.append_child(body, far)
@@ -235,7 +236,7 @@ fn timeout(check, count) -> Nil {
   let signal = abort_signal.timeout(40.0)
   check(!abort_signal.get_aborted(signal), "not aborted at once")
   let heard = cell.new(0)
-  abort_signal.add_event_listener(
+  abort_signal.add_event_listener_with_string(
     signal,
     "abort",
     t.EventListenerOrEventListenerObjectEventListener(fn(_) { cell.set(heard, cell.get(heard) + 1) }),

@@ -10,6 +10,8 @@ import bindings/areas/css/css_style_declaration_base as style
 import bindings/areas/events/event
 import bindings/areas/html/html_collection_base as collection
 import bindings/areas/html/html_element
+import bindings/areas/html/html_element_event_map as ev
+import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/types as t
 import cell
 import gleam/int
@@ -32,7 +34,7 @@ pub fn main() {
 
   // Create an element and put it in the page. A div is an HTMLElement, an
   // Element and a Node: each one's functions take it as it is.
-  let box = document.create_element_div(doc, None)
+  let box = document.create_element(doc, tag.div, None)
   element.set_id(box, "made-by-gleam")
   element.set_text_content(box, Some("hello from gleam"))
   dom_token_list.add(element.get_class_list(box), ["box"])
@@ -49,14 +51,14 @@ pub fn main() {
   check(element.get_text_content(seed) == "seed text", "textContent")
   check(element.get_attribute(seed, "data-x") == Some("42"), "getAttribute")
   check(element.get_attribute(seed, "data-missing") == None, "missing attribute")
-  let copy = document.create_element_p(doc, None)
+  let copy = document.create_element(doc, tag.p, None)
   element.set_text_content(copy, Some(element.get_text_content(seed)))
   node.append_child(box, copy)
 
   // A listener called by real clicks, then removed: the same function value
   // is the same JavaScript function.
   let clicks = cell.new(0)
-  let button = document.create_element_button(doc, None)
+  let button = document.create_element(doc, tag.button, None)
   element.set_text_content(button, Some("press"))
   node.append_child(box, button)
   let on_click = fn(_) {
@@ -64,11 +66,11 @@ pub fn main() {
     element.set_attribute(box, "data-count", int.to_string(cell.get(clicks)))
   }
   // A typed key selects the event type: the listener of "click" takes a PointerEvent.
-  html_element.add_event_listener_click(button, on_click, None)
+  html_element.add_event_listener(button, ev.click, on_click, None)
   html_element.click(button)
   html_element.click(button)
   check(cell.get(clicks) == 2, "listener called")
-  html_element.remove_event_listener_click(button, on_click, None)
+  html_element.remove_event_listener(button, ev.click, on_click, None)
   html_element.click(button)
   check(cell.get(clicks) == 2, "listener removed")
 
@@ -80,7 +82,7 @@ pub fn main() {
   }
   let once = add_event_listener_options.create()
   add_event_listener_options.set_once(once, Some(True))
-  html_element.add_event_listener(
+  html_element.add_event_listener_with_string(
     box,
     "ping",
     t.EventListenerOrEventListenerObjectEventListener(on_ping),
@@ -94,9 +96,9 @@ pub fn main() {
   style.set_property(html_element.get_style(box), "color", Some("red"), None)
   check(collection.get_length(element.get_children(box)) == 2.0, "children")
   // A union of a Node and a string: a span and a text.
-  let holder = document.create_element_section(doc, None)
+  let holder = document.create_element(doc, tag.section, None)
   element.append(holder, [
-    t.NodeOrStringNode(node.upcast(document.create_element_span(doc, None))),
+    t.NodeOrStringNode(node.upcast(document.create_element(doc, tag.span, None))),
     t.NodeOrStringString("tail"),
   ])
   check(element.get_text_content(holder) == "tail", "append a node and a string")

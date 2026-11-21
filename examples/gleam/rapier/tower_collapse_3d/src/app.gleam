@@ -1,33 +1,35 @@
-import babylonjs_lite/areas/main as b
-import babylonjs_lite/areas/main/box_options
-import babylonjs_lite/areas/main/create_pbr_material_props
-import babylonjs_lite/areas/main/directional_light
-import babylonjs_lite/areas/main/ground_options
-import babylonjs_lite/areas/main/hemispheric_light
-import babylonjs_lite/areas/main/mesh
-import babylonjs_lite/areas/main/observable_quat
-import babylonjs_lite/areas/main/observable_vec3
-import babylonjs_lite/areas/main/scene_context
-import babylonjs_lite/areas/main/scene_node
-import babylonjs_lite/areas/main/sphere_options
+import babylonjs_lite as b
+import babylonjs_lite/box_options
+import babylonjs_lite/create_pbr_material_props
+import babylonjs_lite/directional_light
+import babylonjs_lite/ground_options
+import babylonjs_lite/hemispheric_light
+import babylonjs_lite/mesh
+import babylonjs_lite/observable_quat
+import babylonjs_lite/observable_vec3
+import babylonjs_lite/scene_context
+import babylonjs_lite/scene_node
+import babylonjs_lite/sphere_options
 import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
-import dimforge_rapier3d_compat/areas/main as rapier
-import dimforge_rapier3d_compat/areas/main/collider_desc
-import dimforge_rapier3d_compat/areas/main/rigid_body
-import dimforge_rapier3d_compat/areas/main/rigid_body_desc
-import dimforge_rapier3d_compat/areas/main/rotation
-import dimforge_rapier3d_compat/areas/main/vector
-import dimforge_rapier3d_compat/areas/main/vector3
-import dimforge_rapier3d_compat/areas/main/world
+import dimforge_rapier3d_compat as rapier
+import dimforge_rapier3d_compat/collider_desc
+import dimforge_rapier3d_compat/rigid_body
+import dimforge_rapier3d_compat/rigid_body_desc
+import dimforge_rapier3d_compat/rotation
+import dimforge_rapier3d_compat/vector
+import dimforge_rapier3d_compat/vector3
+import dimforge_rapier3d_compat/world
 import dimforge_rapier3d_compat/runtime as rp_rt
 import dimforge_rapier3d_compat/types as rt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
@@ -291,7 +293,7 @@ pub fn main() -> Nil {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(btn) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(btn, fn(_) { cb() }, None)
+    html_element.add_event_listener(btn, ev.click, fn(_) { cb() }, None)
   }
 
   wire_click("btn-launch", fn() {
@@ -345,7 +347,7 @@ pub fn main() -> Nil {
     update_meta()
   })
 
-  case document.query_selector_canvas(doc) {
+  case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
       let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }

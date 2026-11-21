@@ -5,6 +5,7 @@ import bindings/areas/core/element
 import bindings/areas/core/node
 import bindings/areas/core/validity_state
 import bindings/areas/html/html_collection_base as collection
+import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/areas/html/html_form_element as form
 import bindings/areas/html/html_input_element as input
 import bindings/areas/html/html_option_element as option_el
@@ -29,12 +30,12 @@ pub fn main() {
   let doc = dom.get_document()
   let body = document.get_body(doc)
 
-  let the_form = document.create_element_form(doc, None)
+  let the_form = document.create_element(doc, tag.form, None)
   form.set_name(the_form, "signup")
   node.append_child(body, the_form)
 
   // A text input: value, default value, attributes.
-  let user = document.create_element_input(doc, None)
+  let user = document.create_element(doc, tag.input, None)
   input.set_type(user, "text")
   input.set_name(user, "user")
   input.set_default_value(user, "anon")
@@ -53,7 +54,7 @@ pub fn main() {
   )
 
   // A number input.
-  let age = document.create_element_input(doc, None)
+  let age = document.create_element(doc, tag.input, None)
   input.set_type(age, "number")
   input.set_name(age, "age")
   input.set_min(age, "0")
@@ -77,7 +78,7 @@ pub fn main() {
   check(input.check_validity(age), "in range is valid")
 
   // A checkbox.
-  let agree = document.create_element_input(doc, None)
+  let agree = document.create_element(doc, tag.input, None)
   input.set_type(agree, "checkbox")
   input.set_name(agree, "agree")
   node.append_child(the_form, agree)
@@ -88,10 +89,10 @@ pub fn main() {
   check(!input.get_default_checked(agree), "default unchecked")
 
   // A select with options.
-  let color = document.create_element_select(doc, None)
+  let color = document.create_element(doc, tag.select, None)
   select.set_name(color, "color")
   list.each([#("red", "Red"), #("green", "Green"), #("blue", "Blue")], fn(c) {
-    let o = document.create_element_option(doc, None)
+    let o = document.create_element(doc, tag.option, None)
     option_el.set_value(o, c.0)
     option_el.set_text(o, c.1)
     node.append_child(color, o)
@@ -119,7 +120,7 @@ pub fn main() {
   select.set_selected_index(color, 0.0)
 
   // A textarea.
-  let notes = document.create_element_textarea(doc, None)
+  let notes = document.create_element(doc, tag.textarea, None)
   textarea.set_name(notes, "notes")
   textarea.set_value(notes, "hello world")
   node.append_child(the_form, notes)
@@ -155,7 +156,7 @@ pub fn main() {
   check(list.length(form_data.to_list(data)) == 5, "FormData entries")
 
   // Required and pattern validation.
-  let code = document.create_element_input(doc, None)
+  let code = document.create_element(doc, tag.input, None)
   input.set_type(code, "text")
   input.set_name(code, "code")
   input.set_required(code, True)
@@ -182,7 +183,7 @@ pub fn main() {
   check(input.check_validity(code), "cleared custom error")
 
   // An email input flags a type mismatch.
-  let mail = document.create_element_input(doc, None)
+  let mail = document.create_element(doc, tag.input, None)
   input.set_type(mail, "email")
   input.set_value(mail, "not an email")
   check(validity_state.get_type_mismatch(input.get_validity(mail)), "email type mismatch")

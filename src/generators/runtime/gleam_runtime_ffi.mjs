@@ -1,3 +1,8 @@
+import { Key } from "./runtime.mjs";
+
+export function $key(raw) {
+  return new Key(raw);
+}
 export function promise_then(p, f) {
   Promise.resolve(p).then((v) => f(new Ok(v)), (e) => f(new GleamError(e)));
 }

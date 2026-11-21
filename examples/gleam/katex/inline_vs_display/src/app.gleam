@@ -2,21 +2,22 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/list
 import gleam/option.{None, Some}
-import katex/areas/main as katex
-import katex/areas/main/katex_options
+import katex as katex
+import katex/katex_options
 
 pub fn main() -> Nil {
   let doc = core.get_document()
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let head = document.create_element_div(doc, None)
+      let head = document.create_element(doc, tag.div, None)
       element.set_class_name(head, "head")
-      let title = document.create_element_h1(doc, None)
+      let title = document.create_element(doc, tag.h1, None)
       node.set_text_content(title, Some("Inline vs Display Mode (Gleam)"))
-      let badge = document.create_element_span(doc, None)
+      let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("displayMode: false vs true"))
       let _ = node.append_child(head, title)
@@ -39,7 +40,7 @@ pub fn main() -> Nil {
 
       list.each(items, fn(item) {
         let #(name, tex) = item
-        let row = document.create_element_div(doc, None)
+        let row = document.create_element(doc, tag.div, None)
         element.set_class_name(row, "row")
         list.each(
           [
@@ -48,12 +49,12 @@ pub fn main() -> Nil {
           ],
           fn(pair) {
             let #(label, opts) = pair
-            let cell = document.create_element_div(doc, None)
+            let cell = document.create_element(doc, tag.div, None)
             element.set_class_name(cell, "cell")
-            let lbl = document.create_element_div(doc, None)
+            let lbl = document.create_element(doc, tag.div, None)
             element.set_class_name(lbl, "label")
             node.set_text_content(lbl, Some(label))
-            let slot = document.create_element_div(doc, None)
+            let slot = document.create_element(doc, tag.div, None)
             element.set_class_name(slot, "slot")
             element.set_inner_html(slot, katex.render_to_string(tex, Some(opts)))
             let _ = node.append_child(cell, lbl)

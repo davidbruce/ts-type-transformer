@@ -4,38 +4,36 @@ import dom/areas/core/node as dom_node
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
-import konva/areas/main/circle
-import konva/areas/main/circle_config
-import konva/areas/main/layer
-import konva/areas/main/node
-import konva/areas/main/node_config
-import konva/areas/main/rect
-import konva/areas/main/rect_config
-import konva/areas/main/regular_polygon
-import konva/areas/main/regular_polygon_config
-import konva/areas/main/ring
-import konva/areas/main/ring_config
-import konva/areas/main/shape
-import konva/areas/main/shape_config
-import konva/areas/main/stage
-import konva/areas/main/stage_config
-import konva/areas/main/star
-import konva/areas/main/star_config
-import konva/areas/main/text
-import konva/areas/main/text_config
-import konva/areas/main/wedge
-import konva/areas/main/wedge_config
+import konva/circle
+import konva/circle_config
+import konva/layer
+import konva/node
+import konva/rect
+import konva/rect_config
+import konva/regular_polygon
+import konva/regular_polygon_config
+import konva/ring
+import konva/ring_config
+import konva/shape
+import konva/stage
+import konva/stage_config
+import konva/star
+import konva/star_config
+import konva/text
+import konva/text_config
+import konva/wedge
+import konva/wedge_config
 import konva/types as t
 
 fn add_caption(l: t.Layer(Nil), x: Float, y: Float, label: String) -> Nil {
   let tc =
     text_config.create()
-    |> node_config.with_x(x)
-    |> node_config.with_y(y)
+    |> text_config.with_x(x)
+    |> text_config.with_y(y)
     |> text_config.with_text(label)
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#555555"))
+    |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
   let _ = layer.add(l, [t.GroupOrShapeShape(shape.widen(text.new(Some(tc))))])
   Nil
 }
@@ -44,8 +42,8 @@ pub fn main() -> Nil {
   let sc =
     stage_config.create()
     |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
-    |> node_config.with_width(680.0)
-    |> node_config.with_height(400.0)
+    |> stage_config.with_width(680.0)
+    |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
   let l = layer.new(None)
@@ -82,55 +80,55 @@ pub fn main() -> Nil {
 
   let cc =
     circle_config.create()
-    |> node_config.with_x(415.0)
-    |> node_config.with_y(93.0)
+    |> circle_config.with_x(415.0)
+    |> circle_config.with_y(93.0)
     |> circle_config.with_radius(40.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#404040"))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke_width(2.0)
+    |> circle_config.with_fill(t.StringOrCanvasGradientString("#404040"))
+    |> circle_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> circle_config.with_stroke_width(2.0)
 
   let pc =
     regular_polygon_config.create()
-    |> node_config.with_x(575.0)
-    |> node_config.with_y(93.0)
+    |> regular_polygon_config.with_x(575.0)
+    |> regular_polygon_config.with_y(93.0)
     |> regular_polygon_config.with_sides(6.0)
     |> regular_polygon_config.with_radius(42.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#efefef"))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke_width(2.0)
+    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString("#efefef"))
+    |> regular_polygon_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> regular_polygon_config.with_stroke_width(2.0)
 
   // Row 2: Star, Ring, Wedge, Framed Text.
   let st =
     star_config.create()
-    |> node_config.with_x(95.0)
-    |> node_config.with_y(268.0)
+    |> star_config.with_x(95.0)
+    |> star_config.with_y(268.0)
     |> star_config.with_num_points(5.0)
     |> star_config.with_inner_radius(19.0)
     |> star_config.with_outer_radius(44.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#737373"))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke_width(2.0)
+    |> star_config.with_fill(t.StringOrCanvasGradientString("#737373"))
+    |> star_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> star_config.with_stroke_width(2.0)
 
   let rc =
     ring_config.create()
-    |> node_config.with_x(250.0)
-    |> node_config.with_y(268.0)
+    |> ring_config.with_x(250.0)
+    |> ring_config.with_y(268.0)
     |> ring_config.with_inner_radius(22.0)
     |> ring_config.with_outer_radius(42.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#d4d4d4"))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke_width(2.0)
+    |> ring_config.with_fill(t.StringOrCanvasGradientString("#d4d4d4"))
+    |> ring_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> ring_config.with_stroke_width(2.0)
 
   let wc =
     wedge_config.create()
-    |> node_config.with_x(415.0)
-    |> node_config.with_y(268.0)
+    |> wedge_config.with_x(415.0)
+    |> wedge_config.with_y(268.0)
     |> wedge_config.with_radius(44.0)
     |> wedge_config.with_angle(270.0)
-    |> node_config.with_rotation(-90.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#555555"))
-    |> shape_config.with_stroke_width(1.0)
+    |> wedge_config.with_rotation(-90.0)
+    |> wedge_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> wedge_config.with_stroke(t.StringOrCanvasGradientString("#555555"))
+    |> wedge_config.with_stroke_width(1.0)
 
   let tf =
     rect_config.create()
@@ -144,12 +142,12 @@ pub fn main() -> Nil {
 
   let txt =
     text_config.create()
-    |> node_config.with_x(514.0)
-    |> node_config.with_y(240.0)
+    |> text_config.with_x(514.0)
+    |> text_config.with_y(240.0)
     |> text_config.with_text("KONVA 2D\nMonochrome\nScene Graph")
     |> text_config.with_font_size(13.0)
     |> text_config.with_font_family("monospace")
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
   let _ =
     layer.add(l, [

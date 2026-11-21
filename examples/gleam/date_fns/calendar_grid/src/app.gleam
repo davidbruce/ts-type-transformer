@@ -1,23 +1,24 @@
-import date_fns/areas/main as df
-import date_fns/areas/main/interval
+import date_fns as df
+import date_fns/interval
 import date_fns/runtime
 import date_fns/types as dt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 
 fn add_metric(doc, metrics, label: String, val: String) -> Nil {
-  let m = document.create_element_div(doc, None)
+  let m = document.create_element(doc, tag.div, None)
   element.set_class_name(m, "metric")
-  let lbl = document.create_element_div(doc, None)
+  let lbl = document.create_element(doc, tag.div, None)
   element.set_class_name(lbl, "label")
   node.set_text_content(lbl, Some(label))
-  let v = document.create_element_div(doc, None)
+  let v = document.create_element(doc, tag.div, None)
   element.set_class_name(v, "val")
   node.set_text_content(v, Some(val))
   let _ = node.append_child(m, lbl)
@@ -35,11 +36,11 @@ pub fn main() -> Nil {
       let day = dt.DateOrStringOrNumberDate
       let arg = dt.DateArgDateType
 
-      let head = document.create_element_div(doc, None)
+      let head = document.create_element(doc, tag.div, None)
       element.set_class_name(head, "head")
-      let h1 = document.create_element_h1(doc, None)
+      let h1 = document.create_element(doc, tag.h1, None)
       node.set_text_content(h1, Some("Date-fns Calendar Grid (Gleam)"))
-      let badge = document.create_element_span(doc, None)
+      let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("March 2024"))
       let _ = node.append_child(head, h1)
@@ -51,7 +52,7 @@ pub fn main() -> Nil {
       let month_end = df.end_of_month(arg(ref_day), None)
       let offset = float.round(df.get_day(day(month_start), None))
 
-      let metrics = document.create_element_div(doc, None)
+      let metrics = document.create_element(doc, tag.div, None)
       element.set_class_name(metrics, "metrics")
       add_metric(
         doc,
@@ -83,17 +84,17 @@ pub fn main() -> Nil {
       )
       let _ = node.append_child(app, metrics)
 
-      let card = document.create_element_div(doc, None)
+      let card = document.create_element(doc, tag.div, None)
       element.set_class_name(card, "card")
-      let lbl = document.create_element_div(doc, None)
+      let lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(lbl, "label")
       node.set_text_content(lbl, Some("March 2024 — Reference 2024-03-15"))
       let _ = node.append_child(card, lbl)
 
-      let grid = document.create_element_div(doc, None)
+      let grid = document.create_element(doc, tag.div, None)
       element.set_class_name(grid, "cal-grid")
       list.each(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], fn(dow) {
-        let el = document.create_element_div(doc, None)
+        let el = document.create_element(doc, tag.div, None)
         element.set_class_name(el, "dow")
         node.set_text_content(el, Some(dow))
         let _ = node.append_child(grid, el)
@@ -101,7 +102,7 @@ pub fn main() -> Nil {
       })
 
       list.each(list.repeat(Nil, offset), fn(_) {
-        let empty = document.create_element_div(doc, None)
+        let empty = document.create_element(doc, tag.div, None)
         element.set_class_name(empty, "day-cell empty")
         let _ = node.append_child(grid, empty)
         Nil
@@ -121,12 +122,12 @@ pub fn main() -> Nil {
           False, True -> "day-cell weekend"
           False, False -> "day-cell"
         }
-        let cell = document.create_element_div(doc, None)
+        let cell = document.create_element(doc, tag.div, None)
         element.set_class_name(cell, cls)
-        let day_num = document.create_element_span(doc, None)
+        let day_num = document.create_element(doc, tag.span, None)
         element.set_class_name(day_num, "day-num")
         node.set_text_content(day_num, Some(df.format_date(d, "d", None)))
-        let sub = document.create_element_span(doc, None)
+        let sub = document.create_element(doc, tag.span, None)
         element.set_class_name(sub, "sub")
         let sub_txt = case is_ref {
           True -> "REF"

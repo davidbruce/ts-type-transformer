@@ -2,6 +2,7 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/float
@@ -9,8 +10,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import prosemirror/areas/main/mark_spec_attrs
-import prosemirror/areas/main/schema_nodes
+import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
@@ -201,7 +201,7 @@ fn update_meta(doc, d: t.Node(Nil), steps_ref: pm_rt.Ref(Int), op_ref: pm_rt.Ref
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener_click(btn, fn(_) { action() }, None)
+    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
     None -> Nil
   }
 }
@@ -324,7 +324,7 @@ pub fn main() {
   wire_btn(doc, "btn-1", fn() {
     let st = editor_view.get_state(view)
     let d = editor_state.get_doc(st)
-    let assert Some(qtype) = schema_nodes.get_at(schema.get_nodes(sch), "blockquote")
+    let assert Some(qtype) = schema.nodes_get_at(schema.get_nodes(sch), "blockquote")
     let sel = editor_state.get_selection(st)
     let sf = selection.get_dollar_from(sel)
     let from_sel = case resolved_pos.get_depth(sf) == 1.0 && node_type.get_name(node.get_type(resolved_pos.get_parent(sf))) == "paragraph" {

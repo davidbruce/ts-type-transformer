@@ -12,6 +12,7 @@ import bindings/areas/css/css_style_properties as props
 import bindings/areas/css/css_style_rule
 import bindings/areas/css/css_style_sheet
 import bindings/areas/html/html_element
+import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/areas/html/html_style_element
 import bindings/areas/media/media_query_list
 import cell
@@ -35,7 +36,7 @@ pub fn main() {
   let head = document.get_head(doc)
 
   // Inline style: set, get, remove.
-  let box = document.create_element_div(doc, None)
+  let box = document.create_element(doc, tag.div, None)
   element.set_id(box, "box")
   node.append_child(body, box)
   let style = html_element.get_style(box)
@@ -76,7 +77,7 @@ pub fn main() {
   check(html_element.get_offset_height(box) == 40.0, "offsetHeight")
 
   // A style element and its sheet.
-  let sheet_el = document.create_element_style(doc, None)
+  let sheet_el = document.create_element(doc, tag.style, None)
   element.set_text_content(
     sheet_el,
     Some(".big { font-size: 30px; } .big.bold { font-weight: 700; } p { margin: 0; }"),
@@ -99,7 +100,7 @@ pub fn main() {
   check(list.length(texts) == 3, "rules as a list")
 
   // Class-driven computed style.
-  let target = document.create_element_div(doc, None)
+  let target = document.create_element(doc, tag.div, None)
   node.append_child(body, target)
   check(props.get_font_size(dom.get_computed_style(target, None)) == "16px", "default font size")
   dom_token_list.add(element.get_class_list(target), ["big"])

@@ -1,11 +1,11 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings/areas/main as b
+import bindings as b
 import bindings/types as t
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
-import bindings/areas/main/named
-import bindings/areas/main/shape
+import bindings/named
+import bindings/shape
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {

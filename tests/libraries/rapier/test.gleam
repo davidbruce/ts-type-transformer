@@ -1,16 +1,16 @@
 // Rapier (3D, WebAssembly build) from Gleam, in Node: init is awaited, then a
 // world with gravity, bodies falling onto a fixed ground, stepped, with rays
 // and collision events. Every check must hold.
-import bindings/areas/main as rapier
-import bindings/areas/main/collider
-import bindings/areas/main/collider_desc
-import bindings/areas/main/event_queue
-import bindings/areas/main/ray
-import bindings/areas/main/ray_collider_hit
-import bindings/areas/main/rigid_body
-import bindings/areas/main/rigid_body_desc
-import bindings/areas/main/vector
-import bindings/areas/main/world
+import bindings as rapier
+import bindings/collider
+import bindings/collider_desc
+import bindings/event_queue
+import bindings/ray
+import bindings/ray_collider_hit
+import bindings/rigid_body
+import bindings/rigid_body_desc
+import bindings/vector
+import bindings/world
 import bindings/runtime
 import bindings/types as t
 import cell

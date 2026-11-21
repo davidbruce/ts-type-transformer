@@ -13,12 +13,14 @@ import bindings/areas/css/css_style_properties as props
 import bindings/areas/svg/svg_animated_length as animated
 import bindings/areas/svg/svg_animated_rect
 import bindings/areas/svg/svg_circle_element
+import bindings/areas/svg/svg_element_tag_name_map as svg_tag
 import bindings/areas/svg/svg_geometry_element
 import bindings/areas/svg/svg_graphics_element
 import bindings/areas/svg/svg_length
 import bindings/areas/svg/svg_rect_element
 import bindings/areas/svg/svgsvg_element
 import bindings/areas/html/html_collection_base as collection
+import bindings/areas/html/html_element_tag_name_map as tag
 import cell
 import gleam/float
 import gleam/int
@@ -44,7 +46,7 @@ pub fn main() {
   let body = document.get_body(doc)
 
   // The <svg> root, in the page.
-  let svg = document.create_element_ns_svg_svg(doc)
+  let svg = document.create_element_ns_svg(doc, svg_tag.svg)
   element.set_attribute(svg, "width", "200")
   element.set_attribute(svg, "height", "100")
   element.set_attribute(svg, "viewBox", "0 0 400 200")
@@ -62,7 +64,7 @@ pub fn main() {
   check(dom_rect_read_only.get_width(svg_animated_rect.get_anim_val(svgsvg_element.get_view_box(svg))) == 400.0, "animVal viewBox")
 
   // A rect with attributes, and its animated lengths.
-  let rect = document.create_element_ns_svg_rect(doc)
+  let rect = document.create_element_ns_svg(doc, svg_tag.rect)
   element.set_attribute(rect, "x", "10")
   element.set_attribute(rect, "y", "20")
   element.set_attribute(rect, "width", "100")
@@ -100,10 +102,10 @@ pub fn main() {
       && dom_rect_read_only.get_width(box) == 100.0 && dom_rect_read_only.get_height(box) == 50.0,
     "rect bbox",
   )
-  let group = document.create_element_ns_svg_g(doc)
+  let group = document.create_element_ns_svg(doc, svg_tag.g)
   element.set_attribute(group, "transform", "translate(20 30)")
   node.append_child(svg, group)
-  let circle = document.create_element_ns_svg_circle(doc)
+  let circle = document.create_element_ns_svg(doc, svg_tag.circle)
   element.set_attribute(circle, "cx", "150")
   element.set_attribute(circle, "cy", "60")
   element.set_attribute(circle, "r", "30")
@@ -132,7 +134,7 @@ pub fn main() {
   check(near(dom_rect_read_only.get_width(on_screen), 50.0) && near(dom_rect_read_only.get_height(on_screen), 25.0), "client rect is in screen pixels")
 
   // A path: length, points along it, hit tests.
-  let path = document.create_element_ns_svg_path(doc)
+  let path = document.create_element_ns_svg(doc, svg_tag.path)
   element.set_attribute(path, "d", "M0 0 L100 0 L100 100 Z")
   element.set_attribute(path, "fill", "blue")
   element.set_attribute(path, "stroke", "black")
@@ -164,15 +166,15 @@ pub fn main() {
   check(element.get_namespace_uri(made) == Some(svg_ns), "createElementNS namespace")
   check(svg_circle_element.from(made) |> is_ok, "an Element made as a circle is an SVGCircleElement")
   check(svg_rect_element.from(made) |> is_error, "but not an SVGRectElement")
-  check(svg_rect_element.from(document.create_element_div(doc, None)) |> is_error, "an HTML div is no SVGRectElement")
+  check(svg_rect_element.from(document.create_element(doc, tag.div, None)) |> is_error, "an HTML div is no SVGRectElement")
   let html_circle = document.create_element_ns(doc, Some("http://www.w3.org/1999/xhtml"), "circle", None)
   check(svg_circle_element.from(html_circle) |> is_error, "the same name in the HTML namespace is not SVG")
   check(svgsvg_element.from(svg) |> is_ok, "the root downcasts")
 
   // Tree, classes and styles apply to SVG as to HTML.
   check(collection.get_length(element.get_children(svg)) == 3.0, "svg has three children")
-  check(element.matches(rect, "svg > rect[fill=red]"), "selector matches")
-  let assert Some(found) = element.query_selector(svg, "g > circle")
+  check(element.matches_with_string(rect, "svg > rect[fill=red]"), "selector matches")
+  let assert Some(found) = element.query_selector_element(svg, "g > circle")
   check(element.get_attribute(found, "r") == Some("30"), "querySelector finds the circle")
   dom_token_list.add(element.get_class_list(rect), ["hot", "big"])
   check(element.get_attribute(rect, "class") == Some("hot big"), "classList on SVG")

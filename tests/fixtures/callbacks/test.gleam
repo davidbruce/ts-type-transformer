@@ -1,5 +1,5 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings/areas/main as b
+import bindings as b
 import bindings/runtime as r
 import bindings/types as t
 import cell
@@ -7,8 +7,8 @@ import gleam/int
 import gleam/io
 import gleam/option.{None, Some}
 import gleam/string
-import bindings/areas/main/counter
-import bindings/areas/main/scaler
+import bindings/counter
+import bindings/scaler
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {

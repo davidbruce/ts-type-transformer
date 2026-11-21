@@ -5,7 +5,7 @@
 // FINDING 12: Texture.WHITE is Texture(BufferImageSource(Nil), Nil), which no
 // function taking a Texture(TextureSource(Dynamic, Nil), Nil) accepts; a sprite is
 // made with Sprite.from through a Dynamic instead.
-import bindings/areas/main/application_init_options
+import bindings/application_init_options
 import bindings/areas/pixi_js/application
 import bindings/areas/pixi_js/bounds
 import bindings/areas/pixi_js/container

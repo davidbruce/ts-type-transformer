@@ -20,7 +20,7 @@ import bindings/areas/konva/stage_config
 import bindings/areas/konva/text
 import bindings/areas/konva/text_config
 import bindings/areas/konva/vector2d
-import bindings/areas/main/node_get_absolute_position_result as pos
+import bindings/node_get_absolute_position_result as pos
 import bindings/runtime
 import bindings/types as t
 import cell

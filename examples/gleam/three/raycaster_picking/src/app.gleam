@@ -5,39 +5,40 @@ import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/events/mouse_event
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import three/areas/main/ambient_light
-import three/areas/main/box3
-import three/areas/main/box3_helper
-import three/areas/main/box_geometry
-import three/areas/main/buffer_geometry
-import three/areas/main/color
-import three/areas/main/cone_geometry
-import three/areas/main/cylinder_geometry
-import three/areas/main/directional_light
-import three/areas/main/dodecahedron_geometry
-import three/areas/main/euler
-import three/areas/main/grid_helper
-import three/areas/main/icosahedron_geometry
-import three/areas/main/intersection
-import three/areas/main/mesh
-import three/areas/main/mesh_standard_material
-import three/areas/main/mesh_standard_material_parameters
-import three/areas/main/object3d
-import three/areas/main/octahedron_geometry
-import three/areas/main/perspective_camera
-import three/areas/main/raycaster
-import three/areas/main/scene
-import three/areas/main/sphere_geometry
-import three/areas/main/tetrahedron_geometry
-import three/areas/main/torus_geometry
-import three/areas/main/vector2
-import three/areas/main/vector3
-import three/areas/main/web_gl_renderer
-import three/areas/main/web_gl_renderer_parameters
+import three/ambient_light
+import three/box3
+import three/box3_helper
+import three/box_geometry
+import three/buffer_geometry
+import three/color
+import three/cone_geometry
+import three/cylinder_geometry
+import three/directional_light
+import three/dodecahedron_geometry
+import three/euler
+import three/grid_helper
+import three/icosahedron_geometry
+import three/intersection
+import three/mesh
+import three/mesh_standard_material
+import three/mesh_standard_material_parameters
+import three/object3d
+import three/octahedron_geometry
+import three/perspective_camera
+import three/raycaster
+import three/scene
+import three/sphere_geometry
+import three/tetrahedron_geometry
+import three/torus_geometry
+import three/vector2
+import three/vector3
+import three/web_gl_renderer
+import three/web_gl_renderer_parameters
 import three/runtime as rt
 import three/types as t
 
@@ -258,12 +259,11 @@ pub fn main() {
     cast_at_ndc(vector3.get_x(proj), vector3.get_y(proj))
   }
 
-  html_element.add_event_listener_click(
-    canvas,
-    fn(ev) {
+  html_element.add_event_listener(canvas, ev.click,
+    fn(e) {
       let rect = element.get_bounding_client_rect(canvas)
-      let nx = { { mouse_event.get_client_x(ev) -. dom_rect_read_only.get_left(rect) } /. dom_rect_read_only.get_width(rect) } *. 2.0 -. 1.0
-      let ny = 0.0 -. { { mouse_event.get_client_y(ev) -. dom_rect_read_only.get_top(rect) } /. dom_rect_read_only.get_height(rect) } *. 2.0 +. 1.0
+      let nx = { { mouse_event.get_client_x(e) -. dom_rect_read_only.get_left(rect) } /. dom_rect_read_only.get_width(rect) } *. 2.0 -. 1.0
+      let ny = 0.0 -. { { mouse_event.get_client_y(e) -. dom_rect_read_only.get_top(rect) } /. dom_rect_read_only.get_height(rect) } *. 2.0 +. 1.0
       update_camera()
       cast_at_ndc(nx, ny)
     },
@@ -272,7 +272,7 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(b, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
   }
 
   wire_click("btn-p0", fn() { pick_specimen(4) })

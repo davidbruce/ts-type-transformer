@@ -2,31 +2,32 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
-import three/areas/main/ambient_light
-import three/areas/main/color
-import three/areas/main/cylinder_geometry
-import three/areas/main/directional_light
-import three/areas/main/euler
-import three/areas/main/grid_helper
-import three/areas/main/group
-import three/areas/main/icosahedron_geometry
-import three/areas/main/mesh
-import three/areas/main/mesh_basic_material
-import three/areas/main/mesh_basic_material_parameters
-import three/areas/main/mesh_standard_material
-import three/areas/main/mesh_standard_material_parameters
-import three/areas/main/object3d
-import three/areas/main/octahedron_geometry
-import three/areas/main/perspective_camera
-import three/areas/main/scene
-import three/areas/main/sphere_geometry
-import three/areas/main/torus_geometry
-import three/areas/main/vector3
-import three/areas/main/web_gl_renderer
-import three/areas/main/web_gl_renderer_parameters
+import three/ambient_light
+import three/color
+import three/cylinder_geometry
+import three/directional_light
+import three/euler
+import three/grid_helper
+import three/group
+import three/icosahedron_geometry
+import three/mesh
+import three/mesh_basic_material
+import three/mesh_basic_material_parameters
+import three/mesh_standard_material
+import three/mesh_standard_material_parameters
+import three/object3d
+import three/octahedron_geometry
+import three/perspective_camera
+import three/scene
+import three/sphere_geometry
+import three/torus_geometry
+import three/vector3
+import three/web_gl_renderer
+import three/web_gl_renderer_parameters
 import three/runtime as rt
 import three/types as t
 
@@ -223,7 +224,7 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(b, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
   }
 
   wire_click("btn-step", fn() {

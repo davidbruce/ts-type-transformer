@@ -2,20 +2,21 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/option.{None, Some}
-import marked/areas/main as marked
-import marked/areas/main/marked_options_no_async
+import marked as marked
+import marked/marked_options_no_async
 
 fn make_pane(doc, title: String, html: String) {
-  let card = document.create_element_div(doc, None)
+  let card = document.create_element(doc, tag.div, None)
   element.set_class_name(card, "card")
-  let lbl = document.create_element_div(doc, None)
+  let lbl = document.create_element(doc, tag.div, None)
   element.set_class_name(lbl, "label")
   node.set_text_content(lbl, Some(title))
-  let out = document.create_element_div(doc, None)
+  let out = document.create_element(doc, tag.div, None)
   element.set_class_name(out, "md-out")
   element.set_inner_html(out, html)
-  let raw = document.create_element_pre(doc, None)
+  let raw = document.create_element(doc, tag.pre, None)
   element.set_class_name(raw, "html-raw")
   node.set_text_content(raw, Some(html))
   let _ = node.append_child(card, lbl)
@@ -29,11 +30,11 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let head = document.create_element_div(doc, None)
+      let head = document.create_element(doc, tag.div, None)
       element.set_class_name(head, "head")
-      let title = document.create_element_h1(doc, None)
+      let title = document.create_element(doc, tag.h1, None)
       node.set_text_content(title, Some("Marked GFM & Line Breaks (Gleam)"))
-      let badge = document.create_element_span(doc, None)
+      let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("MarkedOptions"))
       let _ = node.append_child(head, title)
@@ -49,12 +50,12 @@ pub fn main() -> Nil {
         marked_options_no_async.create()
         |> marked_options_no_async.with_gfm(False)
 
-      let gfm_sec = document.create_element_div(doc, None)
+      let gfm_sec = document.create_element(doc, tag.div, None)
       element.set_class_name(gfm_sec, "section")
-      let gfm_lbl = document.create_element_div(doc, None)
+      let gfm_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(gfm_lbl, "label")
       node.set_text_content(gfm_lbl, Some("GitHub Flavored Markdown (gfm)"))
-      let gfm_grid = document.create_element_div(doc, None)
+      let gfm_grid = document.create_element(doc, tag.div, None)
       element.set_class_name(gfm_grid, "grid")
       let _ =
         node.append_child(
@@ -78,12 +79,12 @@ pub fn main() -> Nil {
         marked_options_no_async.create()
         |> marked_options_no_async.with_breaks(True)
 
-      let br_sec = document.create_element_div(doc, None)
+      let br_sec = document.create_element(doc, tag.div, None)
       element.set_class_name(br_sec, "section")
-      let br_lbl = document.create_element_div(doc, None)
+      let br_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(br_lbl, "label")
       node.set_text_content(br_lbl, Some("Soft Line Breaks (breaks)"))
-      let br_grid = document.create_element_div(doc, None)
+      let br_grid = document.create_element(doc, tag.div, None)
       element.set_class_name(br_grid, "grid")
       let _ =
         node.append_child(

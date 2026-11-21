@@ -2,33 +2,34 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
-import three/areas/main/ambient_light
-import three/areas/main/box3
-import three/areas/main/buffer_attribute
-import three/areas/main/buffer_geometry
-import three/areas/main/color
-import three/areas/main/directional_light
-import three/areas/main/float32_buffer_attribute
-import three/areas/main/grid_helper
-import three/areas/main/mesh
-import three/areas/main/mesh_basic_material
-import three/areas/main/mesh_basic_material_parameters
-import three/areas/main/mesh_standard_material
-import three/areas/main/mesh_standard_material_parameters
-import three/areas/main/object3d
-import three/areas/main/perspective_camera
-import three/areas/main/points
-import three/areas/main/points_material
-import three/areas/main/points_material_parameters
-import three/areas/main/scene
-import three/areas/main/vector3
-import three/areas/main/web_gl_renderer
-import three/areas/main/web_gl_renderer_parameters
+import three/ambient_light
+import three/box3
+import three/buffer_attribute
+import three/buffer_geometry
+import three/color
+import three/directional_light
+import three/float32_buffer_attribute
+import three/grid_helper
+import three/mesh
+import three/mesh_basic_material
+import three/mesh_basic_material_parameters
+import three/mesh_standard_material
+import three/mesh_standard_material_parameters
+import three/object3d
+import three/perspective_camera
+import three/points
+import three/points_material
+import three/points_material_parameters
+import three/scene
+import three/vector3
+import three/web_gl_renderer
+import three/web_gl_renderer_parameters
 import three/runtime as rt
 import three/types as t
 
@@ -247,7 +248,7 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(b, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
   }
 
   wire_click("btn-p0", fn() {

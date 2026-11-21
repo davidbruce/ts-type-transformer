@@ -6,24 +6,22 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import konva/areas/main/arrow
-import konva/areas/main/arrow_config
-import konva/areas/main/container
-import konva/areas/main/group
-import konva/areas/main/group_config
-import konva/areas/main/layer
-import konva/areas/main/line
-import konva/areas/main/line_config
-import konva/areas/main/node
-import konva/areas/main/node_config
-import konva/areas/main/rect
-import konva/areas/main/rect_config
-import konva/areas/main/shape
-import konva/areas/main/shape_config
-import konva/areas/main/stage
-import konva/areas/main/stage_config
-import konva/areas/main/text
-import konva/areas/main/text_config
+import konva/arrow
+import konva/arrow_config
+import konva/container
+import konva/group
+import konva/group_config
+import konva/layer
+import konva/line
+import konva/line_config
+import konva/node
+import konva/rect
+import konva/rect_config
+import konva/shape
+import konva/stage
+import konva/stage_config
+import konva/text
+import konva/text_config
 import konva/types as t
 
 fn stage_box(
@@ -35,8 +33,8 @@ fn stage_box(
 ) -> t.GroupOrShape {
   let gc =
     group_config.create()
-    |> node_config.with_x(x)
-    |> node_config.with_y(95.0)
+    |> group_config.with_x(x)
+    |> group_config.with_y(95.0)
   let g = group.new(Some(gc))
 
   let rc =
@@ -50,22 +48,22 @@ fn stage_box(
 
   let t1 =
     text_config.create()
-    |> node_config.with_x(12.0)
-    |> node_config.with_y(16.0)
+    |> text_config.with_x(12.0)
+    |> text_config.with_y(16.0)
     |> text_config.with_text(title)
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_style("bold")
     |> text_config.with_font_family("monospace")
-    |> shape_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
+    |> text_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
 
   let t2 =
     text_config.create()
-    |> node_config.with_x(12.0)
-    |> node_config.with_y(38.0)
+    |> text_config.with_x(12.0)
+    |> text_config.with_y(38.0)
     |> text_config.with_text(sub)
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
-    |> shape_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
+    |> text_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
 
   let _ =
     group.add(g, [
@@ -82,9 +80,9 @@ fn make_arrow(pts: List(Float)) -> t.GroupOrShape {
     |> line_config.with_points(t.LinePointsArray(pts))
     |> arrow_config.with_pointer_length(8.0)
     |> arrow_config.with_pointer_width(8.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke_width(2.0)
+    |> arrow_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> arrow_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> arrow_config.with_stroke_width(2.0)
   t.GroupOrShapeShape(shape.widen(arrow.new(Some(ac))))
 }
 
@@ -92,8 +90,8 @@ pub fn main() -> Nil {
   let sc =
     stage_config.create()
     |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
-    |> node_config.with_width(680.0)
-    |> node_config.with_height(400.0)
+    |> stage_config.with_width(680.0)
+    |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
   let l = layer.new(None)
@@ -112,9 +110,9 @@ pub fn main() -> Nil {
     |> line_config.with_points(
       t.LinePointsArray([589.0, 163.0, 589.0, 212.0, 91.0, 212.0, 91.0, 168.0]),
     )
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#737373"))
-    |> shape_config.with_stroke_width(1.5)
-    |> shape_config.with_dash([6.0, 4.0])
+    |> line_config.with_stroke(t.StringOrCanvasGradientString("#737373"))
+    |> line_config.with_stroke_width(1.5)
+    |> line_config.with_dash([6.0, 4.0])
 
   let bar =
     rect_config.create()
@@ -129,12 +127,12 @@ pub fn main() -> Nil {
 
   let btxt =
     text_config.create()
-    |> node_config.with_x(180.0)
-    |> node_config.with_y(278.0)
+    |> text_config.with_x(180.0)
+    |> text_config.with_y(278.0)
     |> text_config.with_text("Shared DOM & Package Handle Runtime")
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
   let _ =
     layer.add(l, [

@@ -1,22 +1,22 @@
 // @babylonjs/lite from Gleam, in Node: vectors, cameras, lights, materials,
 // procedural mesh buffers, accessibility tree, and math tuples. Every check must hold.
-import bindings/areas/main
-import bindings/areas/main/accessibility_node
-import bindings/areas/main/accessibility_node_options
-import bindings/areas/main/accessibility_tag
-import bindings/areas/main/accessibility_tree
-import bindings/areas/main/arc_rotate_camera
-import bindings/areas/main/create_pbr_material_props
-import bindings/areas/main/directional_light
-import bindings/areas/main/hemispheric_light
-import bindings/areas/main/pbr_material_props
-import bindings/areas/main/point_light
-import bindings/areas/main/shader_material
-import bindings/areas/main/sphere_mesh_data
-import bindings/areas/main/sphere_options
-import bindings/areas/main/torus_knot_data
-import bindings/areas/main/torus_knot_options
-import bindings/areas/main/vec3
+import bindings as main
+import bindings/accessibility_node
+import bindings/accessibility_node_options
+import bindings/accessibility_tag
+import bindings/accessibility_tree
+import bindings/arc_rotate_camera
+import bindings/create_pbr_material_props
+import bindings/directional_light
+import bindings/hemispheric_light
+import bindings/pbr_material_props
+import bindings/point_light
+import bindings/shader_material
+import bindings/sphere_mesh_data
+import bindings/sphere_options
+import bindings/torus_knot_data
+import bindings/torus_knot_options
+import bindings/vec3
 import gleam/float
 import gleam/int
 import gleam/io

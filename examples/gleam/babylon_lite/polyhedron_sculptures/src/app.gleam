@@ -1,16 +1,16 @@
-import babylonjs_lite/areas/main as b
-import babylonjs_lite/areas/main/cylinder_options
-import babylonjs_lite/areas/main/directional_light
-import babylonjs_lite/areas/main/euler_proxy
-import babylonjs_lite/areas/main/ground_options
-import babylonjs_lite/areas/main/hemispheric_light
-import babylonjs_lite/areas/main/mesh
-import babylonjs_lite/areas/main/observable_vec3
-import babylonjs_lite/areas/main/polyhedron_options
-import babylonjs_lite/areas/main/scene_context
-import babylonjs_lite/areas/main/scene_node
-import babylonjs_lite/areas/main/spot_light
-import babylonjs_lite/areas/main/standard_material_props
+import babylonjs_lite as b
+import babylonjs_lite/cylinder_options
+import babylonjs_lite/directional_light
+import babylonjs_lite/euler_proxy
+import babylonjs_lite/ground_options
+import babylonjs_lite/hemispheric_light
+import babylonjs_lite/mesh
+import babylonjs_lite/observable_vec3
+import babylonjs_lite/polyhedron_options
+import babylonjs_lite/scene_context
+import babylonjs_lite/scene_node
+import babylonjs_lite/spot_light
+import babylonjs_lite/standard_material_props
 import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
 import dom/areas/core
@@ -19,6 +19,7 @@ import dom/areas/core/node
 import dom/areas/core/performance
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
@@ -50,7 +51,7 @@ fn mk_std(
 pub fn main() -> Nil {
   let doc = core.get_document()
   let status = document.get_element_by_id(doc, "status")
-  case document.query_selector_canvas(doc) {
+  case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
       let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }

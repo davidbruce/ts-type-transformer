@@ -1,15 +1,12 @@
 // marked from Gleam, in Node: Markdown to HTML, inline Markdown, the lexer's
 // tokens, and a Marked instance with options and an extension.
-import bindings/areas/main as marked
-import bindings/areas/main/lexer
-import bindings/areas/main/marked as marked_class
-import bindings/areas/main/marked_extension
-import bindings/areas/main/marked_extension_hooks
-import bindings/areas/main/marked_extension_renderer
-import bindings/areas/main/marked_options_no_async
-import bindings/areas/main/marked_parse
-import bindings/areas/main/marked_parse_call_options_no_async
-import bindings/areas/main/tokens_list
+import bindings as marked
+import bindings/lexer
+import bindings/marked as marked_class
+import bindings/marked_extension
+import bindings/marked_extension_renderer
+import bindings/marked_options_no_async
+import bindings/tokens_list
 import bindings/namespaces/tokens/generic as token_generic
 import bindings/namespaces/tokens/heading as token_heading
 import bindings/namespaces/tokens/paragraph as token_paragraph
@@ -111,12 +108,12 @@ pub fn main() {
   let instance = marked_class.new([])
   let parse = marked_class.get_parse(instance)
   let parse_inline = marked_class.get_parse_inline(instance)
-  let call = marked_parse_call_options_no_async.create()
+  let call = marked_class.parse_call_options_no_async_create()
   let passed =
     passed
-    + check(marked_parse.invoke(parse, "## Two", call, runtime.codec_string()) == "<h2>Two</h2>\n", "parse")
-    + check(marked_parse.invoke(parse_inline, "**bold** `code`", call, runtime.codec_string()) == "<strong>bold</strong> <code>code</code>", "parseInline")
-    + check(marked_parse.invoke(parse_inline, "# not a heading", call, runtime.codec_string()) == "# not a heading", "parseInline has no blocks")
+    + check(marked_class.parse_invoke(parse, "## Two", call, runtime.codec_string()) == "<h2>Two</h2>\n", "parse")
+    + check(marked_class.parse_invoke(parse_inline, "**bold** `code`", call, runtime.codec_string()) == "<strong>bold</strong> <code>code</code>", "parseInline")
+    + check(marked_class.parse_invoke(parse_inline, "# not a heading", call, runtime.codec_string()) == "# not a heading", "parseInline has no blocks")
 
   // The lexer: tokens, their types and fields.
   let tokens = lexer.lex("# Head\n\nSome *text*.\n\n- one\n- two\n", None)
@@ -150,8 +147,8 @@ pub fn main() {
   let inst = marked_class.new([soft])
   let passed =
     passed
-    + check(has(marked_parse.invoke(marked_class.get_parse(inst), "a\nb", call, runtime.codec_string()), "a<br>b"), "an instance with breaks")
-    + check(!has(marked_parse.invoke(parse, "a\nb", call, runtime.codec_string()), "<br>"), "a plain instance is unchanged")
+    + check(has(marked_class.parse_invoke(marked_class.get_parse(inst), "a\nb", call, runtime.codec_string()), "a<br>b"), "an instance with breaks")
+    + check(!has(marked_class.parse_invoke(parse, "a\nb", call, runtime.codec_string()), "<br>"), "a plain instance is unchanged")
 
   // A renderer function: called with the heading's token.
   let rendered = cell.new([])
@@ -169,15 +166,15 @@ pub fn main() {
   let ext = marked_extension.create()
   marked_extension.set_renderer(ext, Some(renderer))
   let with_renderer = marked_class.new([ext])
-  let heading_html = marked_parse.invoke(marked_class.get_parse(with_renderer), "# Hi\n\n## There", call, runtime.codec_string())
+  let heading_html = marked_class.parse_invoke(marked_class.get_parse(with_renderer), "# Hi\n\n## There", call, runtime.codec_string())
   let passed =
     passed
     + check(heading_html == "<h1 class=\"x\">Hi</h>\n<h2 class=\"x\">There</h>\n", "a renderer's output is used")
     + check(list.reverse(cell.get(rendered)) == [#("Hi", 1.0), #("There", 2.0)], "a renderer gets its token")
 
   // A preprocess hook: the markdown arrives as the one argument.
-  let hooks = marked_extension_hooks.create()
-  marked_extension_hooks.set_preprocess(
+  let hooks = marked_extension.hooks_create()
+  marked_extension.hooks_set_preprocess(
     hooks,
     Some(fn(args) {
       let assert [first] = args
@@ -191,7 +188,7 @@ pub fn main() {
   let passed =
     passed
     + check(
-      marked_parse.invoke(marked_class.get_parse(preprocessed), "foo *foo*", call, runtime.codec_string()) == "<p>bar <em>bar</em></p>\n",
+      marked_class.parse_invoke(marked_class.get_parse(preprocessed), "foo *foo*", call, runtime.codec_string()) == "<p>bar <em>bar</em></p>\n",
       "a preprocess hook",
     )
 
@@ -206,7 +203,7 @@ pub fn main() {
     }),
   )
   let walked = marked_class.new([walker])
-  let _ = marked_parse.invoke(marked_class.get_parse(walked), "# A\n\n*b*", call, runtime.codec_string())
+  let _ = marked_class.parse_invoke(marked_class.get_parse(walked), "# A\n\n*b*", call, runtime.codec_string())
   let kinds = list.reverse(cell.get(seen))
   let passed =
     passed

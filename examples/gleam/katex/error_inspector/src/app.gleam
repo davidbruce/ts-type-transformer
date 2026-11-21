@@ -2,10 +2,11 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/list
 import gleam/option.{None, Some}
-import katex/areas/main as katex
-import katex/areas/main/katex_options
+import katex as katex
+import katex/katex_options
 import katex/runtime as kr
 
 pub fn main() -> Nil {
@@ -13,11 +14,11 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let head = document.create_element_div(doc, None)
+      let head = document.create_element(doc, tag.div, None)
       element.set_class_name(head, "head")
-      let title = document.create_element_h1(doc, None)
+      let title = document.create_element(doc, tag.h1, None)
       node.set_text_content(title, Some("ParseError Inspector (Gleam)"))
-      let badge = document.create_element_span(doc, None)
+      let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("throwOnError: false vs true"))
       let _ = node.append_child(head, title)
@@ -41,15 +42,15 @@ pub fn main() -> Nil {
       ]
 
       list.each(bad_inputs, fn(tex) {
-        let row = document.create_element_div(doc, None)
+        let row = document.create_element(doc, tag.div, None)
         element.set_class_name(row, "row")
 
-        let left = document.create_element_div(doc, None)
+        let left = document.create_element(doc, tag.div, None)
         element.set_class_name(left, "cell mode-html")
-        let l_lbl = document.create_element_div(doc, None)
+        let l_lbl = document.create_element(doc, tag.div, None)
         element.set_class_name(l_lbl, "label")
         node.set_text_content(l_lbl, Some("throwOnError: false (#555555)"))
-        let l_slot = document.create_element_div(doc, None)
+        let l_slot = document.create_element(doc, tag.div, None)
         element.set_class_name(l_slot, "slot")
         element.set_inner_html(
           l_slot,
@@ -58,15 +59,15 @@ pub fn main() -> Nil {
         let _ = node.append_child(left, l_lbl)
         let _ = node.append_child(left, l_slot)
 
-        let right = document.create_element_div(doc, None)
+        let right = document.create_element(doc, tag.div, None)
         element.set_class_name(right, "cell")
-        let r_lbl = document.create_element_div(doc, None)
+        let r_lbl = document.create_element(doc, tag.div, None)
         element.set_class_name(r_lbl, "label")
         node.set_text_content(
           r_lbl,
           Some("throwOnError: true (caught ParseError)"),
         )
-        let r_err = document.create_element_div(doc, None)
+        let r_err = document.create_element(doc, tag.div, None)
         element.set_class_name(r_err, "err")
         let msg = case
           kr.attempt(fn() { katex.render_to_string(tex, Some(strict)) })

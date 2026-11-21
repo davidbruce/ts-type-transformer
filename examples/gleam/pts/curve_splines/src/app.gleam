@@ -2,15 +2,13 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
-import pts/areas/main/canvas_form
-import pts/areas/main/canvas_space
-import pts/areas/main/canvas_space_options
-import pts/areas/main/curve
-import pts/areas/main/group
-import pts/areas/main/i_player
-import pts/areas/main/multi_touch_space
-import pts/areas/main/pt
-import pts/areas/main/space
+import pts/canvas_form
+import pts/canvas_space
+import pts/canvas_space_options
+import pts/curve
+import pts/group
+import pts/i_player
+import pts/pt
 import pts/runtime as r
 import pts/types as t
 
@@ -42,9 +40,9 @@ pub fn main() -> Nil {
   let player =
     i_player.create()
     |> i_player.with_animate(fn(time_ms, _ftime, _space) {
-      let size = space.get_size(cs)
-      let c = space.get_center(cs)
-      let pointer = multi_touch_space.get_pointer(cs)
+      let size = canvas_space.get_size(cs)
+      let c = canvas_space.get_center(cs)
+      let pointer = canvas_space.get_pointer(cs)
       let w = float.max(120.0, pt.get_x(size))
       let h = float.max(120.0, pt.get_y(size))
       let cy = pt.get_y(c)
@@ -156,9 +154,9 @@ pub fn main() -> Nil {
       })
     })
 
-  let _ = space.add(cs, r.dynamic(player))
-  let _ = multi_touch_space.bind_mouse(cs, Some(True), None)
-  let _ = multi_touch_space.bind_touch(cs, Some(True), None, None)
-  let _ = space.play(cs, None)
+  let _ = canvas_space.add(cs, r.dynamic(player))
+  let _ = canvas_space.bind_mouse(cs, Some(True), None)
+  let _ = canvas_space.bind_touch(cs, Some(True), None, None)
+  let _ = canvas_space.play(cs, None)
   Nil
 }

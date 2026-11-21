@@ -6,7 +6,7 @@ import node/areas/fs
 import node/areas/fs/rm_options
 import node/areas/fs/stats
 import node/areas/fs/stats_base
-import node/areas/main/buffer
+import node/buffer
 import node/areas/path
 import node/types as t
 

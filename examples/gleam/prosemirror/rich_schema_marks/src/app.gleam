@@ -3,6 +3,7 @@ import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/float
@@ -10,9 +11,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import prosemirror/areas/main/mark_spec_attrs
-import prosemirror/areas/main/schema_marks
-import prosemirror/areas/main/schema_nodes
+import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
@@ -242,9 +241,9 @@ fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_ref: pm_rt.Ref(Int),
   let #(f, t) = target_range(st)
   let d = editor_state.get_doc(st)
   let marks = schema.get_marks(sch)
-  let assert Some(ms) = schema_marks.get_at(marks, "strong")
-  let assert Some(me) = schema_marks.get_at(marks, "em")
-  let assert Some(mc) = schema_marks.get_at(marks, "code")
+  let assert Some(ms) = schema.marks_get_at(marks, "strong")
+  let assert Some(me) = schema.marks_get_at(marks, "em")
+  let assert Some(mc) = schema.marks_get_at(marks, "code")
   let hb = node.range_has_mark(d, f, t, t.MarkOrMarkTypeMarkType(ms))
   let he = node.range_has_mark(d, f, t, t.MarkOrMarkTypeMarkType(me))
   let hc = node.range_has_mark(d, f, t, t.MarkOrMarkTypeMarkType(mc))
@@ -300,7 +299,7 @@ fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_ref: pm_rt.Ref(Int),
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener_click(btn, fn(_) { action() }, None)
+    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
     None -> Nil
   }
 }
@@ -337,7 +336,7 @@ pub fn main() {
     let #(f, t) = target_range(st)
     case t >. f {
       True -> {
-        let assert Some(mt) = schema_marks.get_at(schema.get_marks(sch), mkey)
+        let assert Some(mt) = schema.marks_get_at(schema.get_marks(sch), mkey)
         let tr = editor_state.get_tr(st)
         case node.range_has_mark(editor_state.get_doc(st), f, t, t.MarkOrMarkTypeMarkType(mt)) {
           True -> {
@@ -367,12 +366,12 @@ pub fn main() {
     let nodes = schema.get_nodes(sch)
     case pname == "heading" {
       True -> {
-        let assert Some(pt) = schema_nodes.get_at(nodes, "paragraph")
+        let assert Some(pt) = schema.nodes_get_at(nodes, "paragraph")
         let _ = transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), pt, None)
         pm_rt.ref_set(action_ref, "Converted heading -> paragraph")
       }
       False -> {
-        let assert Some(ht) = schema_nodes.get_at(nodes, "heading")
+        let assert Some(ht) = schema.nodes_get_at(nodes, "heading")
         let ha =
           attrs.create()
           |> attrs.with_at("level", dynamic.int(2))

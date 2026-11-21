@@ -6,22 +6,20 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
-import konva/areas/main/circle
-import konva/areas/main/circle_config
-import konva/areas/main/layer
-import konva/areas/main/line
-import konva/areas/main/line_config
-import konva/areas/main/node
-import konva/areas/main/node_config
-import konva/areas/main/rect
-import konva/areas/main/rect_config
-import konva/areas/main/shape
-import konva/areas/main/shape_config
-import konva/areas/main/stage
-import konva/areas/main/stage_config
-import konva/areas/main/text
-import konva/areas/main/text_config
-import konva/areas/main/vector2d
+import konva/circle
+import konva/circle_config
+import konva/layer
+import konva/line
+import konva/line_config
+import konva/node
+import konva/rect
+import konva/rect_config
+import konva/shape
+import konva/stage
+import konva/stage_config
+import konva/text
+import konva/text_config
+import konva/vector2d
 import konva/runtime
 import konva/types as t
 
@@ -29,8 +27,8 @@ fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
   let lc =
     line_config.create()
     |> line_config.with_points(t.LinePointsArray(pts))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString(col))
-    |> shape_config.with_stroke_width(sw)
+    |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
+    |> line_config.with_stroke_width(sw)
   t.GroupOrShapeShape(shape.widen(line.new(Some(lc))))
 }
 
@@ -53,8 +51,8 @@ pub fn main() -> Nil {
   let sc =
     stage_config.create()
     |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
-    |> node_config.with_width(680.0)
-    |> node_config.with_height(400.0)
+    |> stage_config.with_width(680.0)
+    |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
   let bg_layer = layer.new(None)
@@ -96,12 +94,12 @@ pub fn main() -> Nil {
 
   let l1 =
     text_config.create()
-    |> node_config.with_x(32.0)
-    |> node_config.with_y(32.0)
+    |> text_config.with_x(32.0)
+    |> text_config.with_y(32.0)
     |> text_config.with_text("Layer 1: Blueprint Grid (z=0)")
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#737373"))
+    |> text_config.with_fill(t.StringOrCanvasGradientString("#737373"))
 
   let _ = layer.add(bg_layer, vlines)
   let _ = layer.add(bg_layer, hlines)
@@ -117,11 +115,11 @@ pub fn main() -> Nil {
   let card_c = make_card("card-c", 310.0, 170.0, "#ffffff")
   let bc =
     circle_config.create()
-    |> node_config.with_id("badge")
-    |> node_config.with_x(555.0)
-    |> node_config.with_y(135.0)
+    |> circle_config.with_id("badge")
+    |> circle_config.with_x(555.0)
+    |> circle_config.with_y(135.0)
     |> circle_config.with_radius(38.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> circle_config.with_fill(t.StringOrCanvasGradientString("#111111"))
   let _ =
     layer.add(fg_layer, [
       t.GroupOrShapeShape(shape.widen(card_a)),
@@ -159,21 +157,21 @@ pub fn main() -> Nil {
 
   let dc =
     circle_config.create()
-    |> node_config.with_x(250.0)
-    |> node_config.with_y(160.0)
+    |> circle_config.with_x(250.0)
+    |> circle_config.with_y(160.0)
     |> circle_config.with_radius(7.0)
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-    |> shape_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
-    |> shape_config.with_stroke_width(2.0)
+    |> circle_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
+    |> circle_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> circle_config.with_stroke_width(2.0)
 
   let l2 =
     text_config.create()
-    |> node_config.with_x(32.0)
-    |> node_config.with_y(354.0)
+    |> text_config.with_x(32.0)
+    |> text_config.with_y(354.0)
     |> text_config.with_text("Layer 2: Elevated Stack (z=1) · Probe (250,160)")
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
-    |> shape_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
   let _ =
     layer.add(fg_layer, [

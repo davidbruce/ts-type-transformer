@@ -4,13 +4,13 @@ import dom/areas/core/node as dom_node
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
-import pixi_js/areas/main/application
-import pixi_js/areas/main/application_init_options
-import pixi_js/areas/main/container
-import pixi_js/areas/main/graphics
-import pixi_js/areas/main/matrix
-import pixi_js/areas/main/point
-import pixi_js/areas/main/point_data
+import pixi_js/application
+import pixi_js/application_init_options
+import pixi_js/container
+import pixi_js/graphics
+import pixi_js/matrix
+import pixi_js/point
+import pixi_js/point_data
 import pixi_js/runtime
 import pixi_js/types as t
 

@@ -1,10 +1,10 @@
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node
-import echarts/areas/main as ec
-import echarts/areas/main/e_charts_core_option as raw
-import echarts/areas/main/e_charts_type
-import echarts/areas/main/ec_unit_option as unit
+import echarts as ec
+import echarts/e_charts_core_option as raw
+import echarts/e_charts_type
+import echarts/ec_unit_option as unit
 import echarts/runtime
 import gleam/dynamic.{type Dynamic}
 import gleam/float

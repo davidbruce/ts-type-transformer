@@ -5,14 +5,14 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import leaflet/areas/main as leaflet
-import leaflet/areas/main/circle_marker_options
-import leaflet/areas/main/layer
-import leaflet/areas/main/map
-import leaflet/areas/main/map_options
-import leaflet/areas/main/path_options
-import leaflet/areas/main/point
-import leaflet/areas/main/polyline_options
+import leaflet as leaflet
+import leaflet/circle_marker_options
+import leaflet/layer
+import leaflet/map
+import leaflet/map_options
+import leaflet/path_options
+import leaflet/point
+import leaflet/polyline_options
 import leaflet/namespaces/crs
 import leaflet/runtime
 import leaflet/types as t

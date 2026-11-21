@@ -3,6 +3,7 @@ import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/float
@@ -10,15 +11,15 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import tanstack_table_core/areas/main as tt
-import tanstack_table_core/areas/main/column_core_properties
-import tanstack_table_core/areas/main/column_row_sorting
-import tanstack_table_core/areas/main/column_sort
-import tanstack_table_core/areas/main/row_model
-import tanstack_table_core/areas/main/row_row
-import tanstack_table_core/areas/main/table_columns
-import tanstack_table_core/areas/main/table_row_models_core
-import tanstack_table_core/areas/main/table_row_sorting
+import tanstack_table_core as tt
+import tanstack_table_core/column_core_properties
+import tanstack_table_core/column_row_sorting
+import tanstack_table_core/column_sort
+import tanstack_table_core/row_model
+import tanstack_table_core/row_row
+import tanstack_table_core/table_columns
+import tanstack_table_core/table_row_models_core
+import tanstack_table_core/table_row_sorting
 import tanstack_table_core/runtime as rt
 import tanstack_table_core/types as t
 
@@ -59,7 +60,7 @@ fn sort_spec(id: String, desc: Bool) -> t.ColumnSort(Nil) {
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener_click(btn, fn(_) { action() }, None)
+    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
     None -> Nil
   }
 }

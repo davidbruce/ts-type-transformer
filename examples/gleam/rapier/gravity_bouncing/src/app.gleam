@@ -1,9 +1,9 @@
-import dimforge_rapier3d_compat/areas/main as rapier
-import dimforge_rapier3d_compat/areas/main/collider_desc
-import dimforge_rapier3d_compat/areas/main/rigid_body
-import dimforge_rapier3d_compat/areas/main/rigid_body_desc
-import dimforge_rapier3d_compat/areas/main/vector
-import dimforge_rapier3d_compat/areas/main/world
+import dimforge_rapier3d_compat as rapier
+import dimforge_rapier3d_compat/collider_desc
+import dimforge_rapier3d_compat/rigid_body
+import dimforge_rapier3d_compat/rigid_body_desc
+import dimforge_rapier3d_compat/vector
+import dimforge_rapier3d_compat/world
 import dimforge_rapier3d_compat/runtime as rp_rt
 import dimforge_rapier3d_compat/types as rt
 import dom/areas/canvas/canvas_rendering_context2d as ctx2d
@@ -12,7 +12,9 @@ import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import dom/types.{type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString}
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
@@ -107,7 +109,7 @@ pub fn main() {
   let rest_labels = ["e=0.00", "e=0.35", "e=0.60", "e=0.80", "e=0.95"]
 
   let doc = core.get_document()
-  let assert Some(canvas) = document.query_selector_canvas(doc)
+  let assert Some(canvas) = document.query_selector(doc, tag.canvas)
   let assert Some(ctx) = html_canvas_element.get_context_2d(canvas, None)
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
   let assert Some(grav_btn) = document.get_element_by_id(doc, "btn-gravity")
@@ -309,7 +311,7 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(b, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
   }
 
   wire_click("btn-gravity", fn() {

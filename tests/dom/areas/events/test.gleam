@@ -19,6 +19,8 @@ import bindings/areas/events/keyboard_event_init
 import bindings/areas/events/mouse_event
 import bindings/areas/events/mouse_event_init
 import bindings/areas/html/html_element
+import bindings/areas/html/html_element_event_map as ev
+import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/runtime
 import bindings/types as t
 import cell
@@ -59,11 +61,11 @@ pub fn main() {
   }
 
   // outer > inner > leaf
-  let outer = document.create_element(doc, "div", None)
+  let outer = document.create_element(doc, tag.div, None)
   element.set_id(outer, "outer")
-  let inner = document.create_element(doc, "div", None)
+  let inner = document.create_element(doc, tag.div, None)
   element.set_id(inner, "inner")
-  let leaf = document.create_element(doc, "button", None)
+  let leaf = document.create_element(doc, tag.button, None)
   element.set_id(leaf, "leaf")
   node.append_child(inner, leaf)
   node.append_child(outer, inner)
@@ -227,7 +229,7 @@ pub fn main() {
   // A signal is itself a target: its abort event is heard.
   let c2 = abort_controller.new()
   let aborts = cell.new(0)
-  abort_signal.add_event_listener(
+  abort_signal.add_event_listener_with_string(
     abort_controller.get_signal(c2),
     "abort",
     t.EventListenerOrEventListenerObjectEventListener(fn(_) { cell.set(aborts, cell.get(aborts) + 1) }),
@@ -325,11 +327,11 @@ pub fn main() {
   // A real click is heard by a typed listener, and removed.
   let clicks = cell.new(0)
   let on_click = fn(_) { cell.set(clicks, cell.get(clicks) + 1) }
-  html_element.add_event_listener_click(leaf, on_click, None)
+  html_element.add_event_listener(leaf, ev.click, on_click, None)
   html_element.click(leaf)
   html_element.click(leaf)
   check(cell.get(clicks) == 2, "click listener")
-  html_element.remove_event_listener_click(leaf, on_click, None)
+  html_element.remove_event_listener(leaf, ev.click, on_click, None)
   html_element.click(leaf)
   check(cell.get(clicks) == 2, "click listener removed")
 

@@ -3,11 +3,11 @@ import bindings/runtime as r
 import bindings/types as t
 import gleam/io
 import gleam/option.{None, Some}
-import bindings/areas/main/geom
-import bindings/areas/main/group
-import bindings/areas/main/line
-import bindings/areas/main/num
-import bindings/areas/main/pt
+import bindings/geom
+import bindings/group
+import bindings/line
+import bindings/num
+import bindings/pt
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {

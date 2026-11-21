@@ -56,7 +56,9 @@ const KEYWORDS: &[&str] = &[
 
 // Types the bindings declare whatever the API: what a module of Gleam can
 // name of JavaScript's values. Not opaque types of the API.
-const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray", "Codec", "Ref"];
+const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Result", "Nil", "Int", "Float", "String", "Bool", "BitArray", "Codec", "Ref", "Key"];
+const OPAQUE_BUILTINS: &[&str] = &["Promise", "PromiseLike"];
+const MAX_INHERITED_ALIASES: usize = 40_000;
 
 // Types (and variants) and values are apart; a type's functions, constants,
 // upcasts and `to_list` are values named for it: `shape_area`.
@@ -74,7 +76,7 @@ pub const NAMING: Naming = Naming {
     // An external `Promise` is Gleam's own; a class the API declares as
     // `Option` is not, and gives way.
     type_names: |candidate, _, kind, _| match kind {
-        Kind::Opaque if OWN.contains(&candidate) || candidate == "PromiseLike" => Vec::new(),
+        Kind::Opaque if OPAQUE_BUILTINS.contains(&candidate) => Vec::new(),
         // A class's marker for the phantom of its subtypes.
         Kind::Class => vec![upper(candidate), format!("{}Tag", upper(candidate))],
         _ => vec![upper(candidate)],
@@ -181,6 +183,7 @@ struct Gen<'m> {
     out: String,
     ffi: String,
     used: RefCell<BTreeSet<String>>,
+    used_key_ctor: bool,
     units: BTreeMap<String, Unit>,
     // The module each Gleam type is declared in.
     home: HashMap<String, String>,
@@ -202,6 +205,8 @@ struct Gen<'m> {
     fixed_params: RefCell<HashMap<String, Ty>>,
     // Function type parameters constrained to `ArrayOf(Class)` (`U extends ContainerChild[]`).
     bound_lists: RefCell<HashMap<String, (String, Vec<Ty>)>>,
+    // Type variables allocated for `Ty::Key(map)` / `Ty::Mapped(map)` within a single signature.
+    key_vars: RefCell<HashMap<String, String>>,
     // Recursion guard while expanding default type arguments in `class_type`.
     expanding_defaults: RefCell<HashSet<String>>,
     skipped: BTreeMap<String, usize>,
@@ -212,6 +217,23 @@ struct Unit {
     out: String,
     ffi: String,
     used: BTreeSet<String>,
+    used_key_ctor: bool,
+}
+
+#[derive(Clone)]
+struct EmittedMethod {
+    gleam_name: String,
+    js_name: String,
+    ffi_path: String,
+    func: Func,
+}
+
+#[derive(Clone)]
+struct EmittedWith {
+    gleam_name: String,
+    js_name: String,
+    ffi_path: String,
+    func: Func,
 }
 
 impl<'m> Gen<'m> {
@@ -262,15 +284,22 @@ impl<'m> Gen<'m> {
 
     // Writes to another module from here on.
     fn switch(&mut self, unit: &str) {
-        let done = Unit { out: std::mem::take(&mut self.out), ffi: std::mem::take(&mut self.ffi), used: self.used.take() };
+        let done = Unit {
+            out: std::mem::take(&mut self.out),
+            ffi: std::mem::take(&mut self.ffi),
+            used: self.used.take(),
+            used_key_ctor: std::mem::take(&mut self.used_key_ctor),
+        };
         let was = self.units.entry(std::mem::replace(&mut self.unit, unit.to_string())).or_default();
         was.out += &done.out;
         was.ffi += &done.ffi;
         was.used.extend(done.used);
+        was.used_key_ctor |= done.used_key_ctor;
         let next = self.units.remove(unit).unwrap_or_default();
         self.out = next.out;
         self.ffi = next.ffi;
         *self.used.borrow_mut() = next.used;
+        self.used_key_ctor = next.used_key_ctor;
     }
 
     // The module's own JavaScript, as an external names it.
@@ -375,13 +404,23 @@ impl<'m> Gen<'m> {
     fn shows(&self, t: &Ty, param: &str) -> bool {
         match t {
             Ty::Param(n) => n == param,
-            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) => self.shows(inner, param),
+            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => self.shows(inner, param),
             Ty::Tuple(es) => es.iter().any(|e| self.shows(e, param)),
             Ty::Generic(n, _) if self.m.unions.iter().any(|u| u.name == *n) && !self.decodable(n) => false,
             Ty::Generic(n, args) if self.callbacks.contains_key(n) => self.callbacks[n].iter().filter_map(|&i| args.get(i)).any(|a| self.shows(a, param)),
             Ty::Generic(_, args) => args.iter().any(|a| self.shows(a, param)),
             _ => false,
         }
+    }
+
+    fn key_var(&self, map: &str) -> String {
+        let mut vars = self.key_vars.borrow_mut();
+        if let Some(v) = vars.get(map) {
+            return v.clone();
+        }
+        let v = format!("kv_{}", vars.len());
+        vars.insert(map.to_string(), v.clone());
+        v
     }
 
     fn bound_class_ty(&self, class: &str, args: &[Ty], param: &str) -> String {
@@ -408,7 +447,18 @@ impl<'m> Gen<'m> {
             Ty::Num => "Float".into(),
             Ty::Bool => "Bool".into(),
             Ty::Str => "String".into(),
-            Ty::Any | Ty::Union(_) | Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => dynamic(),
+            Ty::Any | Ty::Union(_) => dynamic(),
+            Ty::Key(map) => {
+                self.note("Key");
+                let map_ty = self.closed(|| self.bare(map));
+                let v = self.key_var(map);
+                format!("Key({map_ty}, {v})")
+            }
+            Ty::Mapped(map) => self.key_var(map),
+            Ty::Listener(inner) => {
+                let ev = self.closed(|| self.ty(inner));
+                format!("fn({ev}) -> Nil")
+            }
             Ty::Array => format!("List({})", dynamic()),
             Ty::ArrayOf(e) => format!("List({})", self.ty(e)),
             Ty::Tuple(es) => format!("#({})", es.iter().map(|e| self.ty(e)).collect::<Vec<_>>().join(", ")),
@@ -461,6 +511,16 @@ impl<'m> Gen<'m> {
             Ty::Param(n) if self.bound_lists.borrow().contains_key(n) => format!("toList(Array.from({x} ?? []))"),
             Ty::Param(n) => format!("{}.to({x})", codec_var(n)),
             Ty::Void => format!("({x}, undefined)"),
+            Ty::Key(_) => format!("$key({x})"),
+            Ty::Mapped(_) => x.to_string(),
+            Ty::Listener(inner) => {
+                let conv = self.from_gleam(inner, "a0");
+                if conv == "a0" {
+                    x.to_string()
+                } else {
+                    format!("(typeof {x} === \"function\" ? (a0) => {x}({conv}) : {x})")
+                }
+            }
             Ty::Nullable(inner, _) => format!("((v) => v == null ? new None() : new Some({}))({x})", self.to_gleam(inner, "v")),
             Ty::Array => format!("toList(Array.from({x} ?? []))"),
             Ty::ArrayOf(e) => format!("toList(Array.from({x} ?? [], (v) => {}))", self.to_gleam(e, "v")),
@@ -509,7 +569,7 @@ impl<'m> Gen<'m> {
         }
         match t {
             Ty::Param(n) => n == p,
-            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) => self.crosses(inner, p),
+            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => self.crosses(inner, p),
             Ty::Tuple(es) => es.iter().any(|e| self.crosses(e, p)),
             Ty::Generic(n, args) if n == "Promise" || n == "PromiseLike" => args.first().is_some_and(|a| self.crosses(a, p)),
             Ty::Generic(n, args) if self.is_callback(n) => self.callback_codecs.get(n).is_some_and(|used| used.iter().filter_map(|&i| args.get(i)).any(|a| self.crosses(a, p))),
@@ -525,6 +585,16 @@ impl<'m> Gen<'m> {
             Ty::Param(n) if self.bound.borrow().contains_key(n) || self.fixed_params.borrow().contains_key(n) => x.to_string(),
             Ty::Param(n) if self.bound_lists.borrow().contains_key(n) => format!("{x}.toArray()"),
             Ty::Param(n) => format!("{}.from({x})", codec_var(n)),
+            Ty::Key(_) => format!("{x}.raw"),
+            Ty::Mapped(_) => x.to_string(),
+            Ty::Listener(inner) => {
+                let conv = self.to_gleam(inner, "e");
+                if conv == "e" {
+                    x.to_string()
+                } else {
+                    format!("$wrap({x}, (f) => (e) => f({conv}))")
+                }
+            }
             Ty::Nullable(inner, undefined) => format!("((v) => v instanceof Some ? {} : {})({x})", self.from_gleam(inner, "v[0]"), if *undefined { "undefined" } else { "null" }),
             Ty::Array => format!("{x}.toArray()"),
             Ty::ArrayOf(e) => format!("{x}.toArray().map((v) => {})", self.from_gleam(e, "v")),
@@ -547,8 +617,7 @@ impl<'m> Gen<'m> {
     fn is_fixed_opaque(&self, o: &str) -> bool {
         !self.classes.contains_key(o)
             && self.m.opaque.iter().any(|x| x == o)
-            && !OWN.contains(&o)
-            && o != "PromiseLike"
+            && !OPAQUE_BUILTINS.contains(&o)
             && self.m.opaque_arity.get(o).copied().unwrap_or(0) == 0
     }
 
@@ -556,6 +625,7 @@ impl<'m> Gen<'m> {
         self.bound.borrow_mut().clear();
         self.fixed_params.borrow_mut().clear();
         self.bound_lists.borrow_mut().clear();
+        self.key_vars.borrow_mut().clear();
     }
 
     fn setup_fn_bounds(&self, f: &Func, owner: Option<(&str, &[TParam])>) {
@@ -628,8 +698,8 @@ impl<'m> Gen<'m> {
         out
     }
 
-    // One external function, `name`, and its JavaScript.
-    fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) {
+    // One external function, `name`, and its JavaScript; returns its JS export name.
+    fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) -> String {
         self.setup_fn_bounds(f, owner);
         let mut params = Vec::new();
         let mut js_params = Vec::new();
@@ -684,6 +754,7 @@ impl<'m> Gen<'m> {
         self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
         self.ffi += &format!("export function {js}({}) {{\n  {body}\n}}\n", js_params.join(", "));
         self.clear_fn_bounds();
+        js
     }
 
     // A union as a custom type, and its conversions: told apart by its tests.
@@ -750,9 +821,143 @@ impl<'m> Gen<'m> {
         }
     }
 
-    fn emit_with_builders(&mut self, c: &'m Class) {
-        if !c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) {
+    fn inherited_spec_crossing(
+        &self,
+        f_anc: &Func,
+        anc: &Class,
+        spec_f: &Func,
+        c: &Class,
+        sub_args: &[Ty],
+    ) -> Option<Vec<TParam>> {
+        if f_anc.type_params.iter().any(|ftp| {
+            c.type_params.iter().any(|ctp| ctp.name == ftp.name)
+                || anc.type_params.iter().any(|atp| atp.name == ftp.name)
+                || ftp.constraint.as_ref().is_some_and(|t| mentions_any(t, &anc.type_params))
+                || ftp.default.as_ref().is_some_and(|t| mentions_any(t, &anc.type_params))
+        }) {
+            return None;
+        }
+        self.setup_fn_bounds(f_anc, Some((&anc.name, &anc.type_params)));
+        let orig_crossing = self.crossing_params(f_anc, Some((&anc.name, &anc.type_params)));
+        self.clear_fn_bounds();
+
+        self.setup_fn_bounds(spec_f, Some((&c.name, &c.type_params)));
+        let spec_crossing = self.crossing_params(spec_f, Some((&c.name, &c.type_params)));
+        if spec_crossing.len() != orig_crossing.len() {
+            self.clear_fn_bounds();
+            return None;
+        }
+        let mut expected_names = Vec::with_capacity(orig_crossing.len());
+        for p in &orig_crossing {
+            if f_anc.type_params.iter().any(|fp| fp.name == p.name) {
+                expected_names.push(p.name.clone());
+            } else if let Some(idx) = anc.type_params.iter().position(|ap| ap.name == p.name) {
+                let Some(Ty::Param(cp_name)) = sub_args.get(idx) else {
+                    self.clear_fn_bounds();
+                    return None;
+                };
+                if !c.type_params.iter().any(|cp| cp.name == *cp_name)
+                    || self.bound.borrow().contains_key(cp_name)
+                    || self.fixed_params.borrow().contains_key(cp_name)
+                    || self.bound_lists.borrow().contains_key(cp_name)
+                {
+                    self.clear_fn_bounds();
+                    return None;
+                }
+                expected_names.push(cp_name.clone());
+            } else {
+                self.clear_fn_bounds();
+                return None;
+            }
+        }
+        let spec_names: Vec<String> = spec_crossing.iter().map(|p| p.name.clone()).collect();
+        self.clear_fn_bounds();
+        (spec_names == expected_names).then_some(spec_crossing)
+    }
+
+    fn emit_alias_decl(
+        &mut self,
+        c: &'m Class,
+        own: &[Ty],
+        spec_f: &Func,
+        spec_crossing: &[TParam],
+        gleam_name: &str,
+        js_name: &str,
+        ffi_path: &str,
+        return_self: bool,
+    ) {
+        self.setup_fn_bounds(spec_f, Some((&c.name, &c.type_params)));
+        *self.open.borrow_mut() = Some(0);
+        let self_ty = self.class_type(&c.name, own);
+        let mut params = vec![format!("self: {self_ty}")];
+        let mut taken: HashSet<String> = HashSet::from(["self".to_string()]);
+        for (p, t) in &spec_f.params {
+            let mut id = lower(p);
+            while JS_RESERVED.contains(&id.as_str()) || !taken.insert(id.clone()) {
+                id.push('_');
+            }
+            params.push(format!("{id}: {}", self.ty(t)));
+        }
+        *self.open.borrow_mut() = None;
+        for p in spec_crossing {
+            self.note("Codec");
+            params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
+        }
+        let ret = if return_self { self_ty } else { self.ty(&spec_f.ret) };
+        self.clear_fn_bounds();
+        self.values.insert((self.unit.clone(), gleam_name.to_string()));
+        let rel_ffi = relative(&self.unit, ffi_path);
+        self.out += &format!("@external(javascript, \"{rel_ffi}\", \"{js_name}\")\npub fn {gleam_name}({}) -> {ret}\n\n", params.join(", "));
+    }
+
+    fn emit_inherited_aliases(
+        &mut self,
+        c: &'m Class,
+        emitted_methods: &HashMap<String, Vec<EmittedMethod>>,
+        emitted_withs: &HashMap<String, Vec<EmittedWith>>,
+        emit_all_inherited: bool,
+    ) {
+        let mut chain = Vec::new();
+        let mut at = c.name.clone();
+        while let Some((p, _)) = self.parents.get(&at) {
+            chain.push(p.clone());
+            at = p.clone();
+        }
+        if chain.is_empty() {
             return;
+        }
+        let c_is_bag = c.funcs.iter().any(|f| matches!(f.call, Call::Create(_)));
+        let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
+        for anc_name in chain {
+            let Some(anc) = self.m.classes.iter().find(|k| k.name == anc_name) else { continue };
+            let Some(sub_args) = (if anc.type_params.is_empty() { Some(Vec::new()) } else { base_args(self.m, c, &anc.name) }) else { continue };
+            if c_is_bag && let Some(withs) = emitted_withs.get(&anc.name) {
+                for ew in withs {
+                    if self.reserved_values.contains(&ew.gleam_name) || self.values.contains(&(self.unit.clone(), ew.gleam_name.clone())) {
+                        continue;
+                    }
+                    let spec_wf = map_types(&ew.func, &|t| subst(t, &anc.type_params, &sub_args));
+                    let Some(spec_crossing) = self.inherited_spec_crossing(&ew.func, anc, &spec_wf, c, &sub_args) else { continue };
+                    self.emit_alias_decl(c, &own, &spec_wf, &spec_crossing, &ew.gleam_name, &ew.js_name, &ew.ffi_path, true);
+                }
+            }
+            if emit_all_inherited && let Some(methods) = emitted_methods.get(&anc.name) {
+                for em in methods {
+                    if self.reserved_values.contains(&em.gleam_name) || self.values.contains(&(self.unit.clone(), em.gleam_name.clone())) {
+                        continue;
+                    }
+                    let spec_f = map_types(&em.func, &|t| subst(t, &anc.type_params, &sub_args));
+                    let Some(spec_crossing) = self.inherited_spec_crossing(&em.func, anc, &spec_f, c, &sub_args) else { continue };
+                    self.emit_alias_decl(c, &own, &spec_f, &spec_crossing, &em.gleam_name, &em.js_name, &em.ffi_path, spec_f.returns_this);
+                }
+            }
+        }
+    }
+
+    fn emit_with_builders(&mut self, c: &'m Class, prefix: Option<&str>) -> Vec<EmittedWith> {
+        let mut emitted = Vec::new();
+        if !c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) {
+            return emitted;
         }
         for orig_f in &c.funcs {
             if !Class::has_self(orig_f) {
@@ -763,10 +968,24 @@ impl<'m> Gen<'m> {
                 Call::Set(js) if f.params.len() == 1 => {
                     let fname = lower(&function_name(&f, &f.name));
                     let Some(rest) = fname.strip_prefix("set_") else { continue };
-                    let with_id = lower(&format!("with_{rest}"));
-                    if self.reserved_values.contains(&with_id) || self.values.contains(&(self.unit.clone(), with_id.clone())) {
-                        continue;
-                    }
+                    let with_base = match prefix {
+                        Some(p) => lower(&format!("{p}_with_{rest}")),
+                        None => lower(&format!("with_{rest}")),
+                    };
+                    let with_id = match prefix {
+                        Some(_) => {
+                            if self.reserved_values.contains(&with_base) {
+                                continue;
+                            }
+                            self.fresh_value(&with_base)
+                        }
+                        None => {
+                            if self.reserved_values.contains(&with_base) || self.values.contains(&(self.unit.clone(), with_base.clone())) {
+                                continue;
+                            }
+                            self.value_name(&with_base)
+                        }
+                    };
                     let val_ty = match &f.params[0].1 {
                         Ty::Nullable(inner, _) => (**inner).clone(),
                         t => t.clone(),
@@ -793,16 +1012,37 @@ impl<'m> Gen<'m> {
                         js_params.push(codec_var(&p.name));
                     }
                     let js_fn = if JS_RESERVED.contains(&with_id.as_str()) { format!("{with_id}_") } else { with_id.clone() };
-                    let with_id = self.value_name(&with_id);
                     self.out += &format!("@external(javascript, \"{}\", \"{js_fn}\")\npub fn {with_id}({}) -> {self_ty}\n\n", self.own_ffi(), params.join(", "));
                     self.ffi += &format!("export function {js_fn}({}) {{\n  self{} = {val_js};\n  return self;\n}}\n", js_params.join(", "), access(js));
                     self.clear_fn_bounds();
+                    if prefix.is_none() {
+                        emitted.push(EmittedWith {
+                            gleam_name: with_id,
+                            js_name: js_fn,
+                            ffi_path: format!("{}_ffi.mjs", self.unit),
+                            func: wf,
+                        });
+                    }
                 }
                 Call::IndexSet if f.params.len() == 2 => {
-                    let with_id = "with_at".to_string();
-                    if self.reserved_values.contains(&with_id) || self.values.contains(&(self.unit.clone(), with_id.clone())) {
-                        continue;
-                    }
+                    let with_base = match prefix {
+                        Some(p) => lower(&format!("{p}_with_at")),
+                        None => "with_at".to_string(),
+                    };
+                    let with_id = match prefix {
+                        Some(_) => {
+                            if self.reserved_values.contains(&with_base) {
+                                continue;
+                            }
+                            self.fresh_value(&with_base)
+                        }
+                        None => {
+                            if self.reserved_values.contains(&with_base) || self.values.contains(&(self.unit.clone(), with_base.clone())) {
+                                continue;
+                            }
+                            self.value_name(&with_base)
+                        }
+                    };
                     let mut wf = f.clone();
                     wf.ret = Ty::Void;
                     self.setup_fn_bounds(&wf, Some((&c.name, &c.type_params)));
@@ -828,14 +1068,23 @@ impl<'m> Gen<'m> {
                         params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
                         js_params.push(codec_var(&p.name));
                     }
-                    let with_id = self.value_name(&with_id);
-                    self.out += &format!("@external(javascript, \"{}\", \"{with_id}\")\npub fn {with_id}({}) -> {self_ty}\n\n", self.own_ffi(), params.join(", "));
-                    self.ffi += &format!("export function {with_id}({}) {{\n  self[{}] = {};\n  return self;\n}}\n", js_params.join(", "), arg_js[0], arg_js[1]);
+                    let js_fn = if JS_RESERVED.contains(&with_id.as_str()) { format!("{with_id}_") } else { with_id.clone() };
+                    self.out += &format!("@external(javascript, \"{}\", \"{js_fn}\")\npub fn {with_id}({}) -> {self_ty}\n\n", self.own_ffi(), params.join(", "));
+                    self.ffi += &format!("export function {js_fn}({}) {{\n  self[{}] = {};\n  return self;\n}}\n", js_params.join(", "), arg_js[0], arg_js[1]);
                     self.clear_fn_bounds();
+                    if prefix.is_none() {
+                        emitted.push(EmittedWith {
+                            gleam_name: with_id,
+                            js_name: js_fn,
+                            ffi_path: format!("{}_ffi.mjs", self.unit),
+                            func: wf,
+                        });
+                    }
                 }
                 _ => {}
             }
         }
+        emitted
     }
 }
 
@@ -872,6 +1121,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         out: String::new(),
         ffi: String::new(),
         used: RefCell::default(),
+        used_key_ctor: false,
         units: BTreeMap::new(),
         home: HashMap::new(),
         classes: m.classes.iter().map(|c| (c.name.clone(), c.type_params.len())).collect(),
@@ -881,6 +1131,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         bound: RefCell::default(),
         fixed_params: RefCell::default(),
         bound_lists: RefCell::default(),
+        key_vars: RefCell::default(),
         expanding_defaults: RefCell::default(),
         skipped: m.skipped.clone(),
     };
@@ -924,7 +1175,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     for (e, _) in &m.num_enums {
         name_type(e, &mut g);
     }
-    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike") {
+    for o in m.opaque.iter().filter(|o| !OPAQUE_BUILTINS.contains(&o.as_str())) {
         name_type(o, &mut g);
     }
     g.types.insert("PromiseLike".into(), "Promise".into());
@@ -984,11 +1235,11 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         g.values.insert((runtime_mod.clone(), reserved.into()));
     }
 
-    // Each area's modules: `areas/main` is `bindings/areas/main` (its
-    // functions) and `bindings/types/areas_main` (its classes).
+    // Each area's modules: `areas/main` is `{pkg}` (its functions)
+    // and `{pkg}/<class>` (its classes).
     let mut resolved_opaque: HashMap<String, usize> = HashMap::new();
     let mut ref_aliases: HashMap<String, (String, String)> = HashMap::new();
-    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike") {
+    for o in m.opaque.iter().filter(|o| !OPAQUE_BUILTINS.contains(&o.as_str())) {
         let gname = g.tname(o);
         let orig = m.opaque_names.get(o).map(String::as_str).unwrap_or(o.as_str());
         let ref_gname = upper(orig);
@@ -1045,18 +1296,21 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
     let mut taken: HashSet<String> = HashSet::from([runtime_mod.clone(), types_mod.clone()]);
     let areas: BTreeSet<&String> = m.classes.iter().map(|c| &c.module).chain(m.funcs.iter().map(|f| &f.module)).collect();
     for area in areas {
-        let segments: Vec<String> = area.split('/').filter(|s| !s.is_empty()).map(lower).collect();
-        let mut path = format!("{pkg}/{}", segments.join("/"));
+        let base = if *area == "areas/main" {
+            pkg.to_string()
+        } else {
+            let segments: Vec<String> = area.split('/').filter(|s| !s.is_empty()).map(lower).collect();
+            format!("{pkg}/{}", segments.join("/"))
+        };
+        let mut path = base.clone();
         let mut n = 2;
         while !taken.insert(path.clone()) {
-            path = format!("{pkg}/{}_{n}", segments.join("/"));
+            path = format!("{base}_{n}");
             n += 1;
         }
         paths.insert(area.clone(), path);
     }
-    // Each class's module, in its area's: `bindings/areas/main/shape`.
-    let mut class_paths: HashMap<String, String> = HashMap::new();
-    for c in &m.classes {
+    let assign_class_path = |c: &Class, taken: &mut HashSet<String>, class_paths: &mut HashMap<String, String>| {
         // A namespace's class by its own name: `ns.Node`'s is `namespaces/ns/node`.
         let own = m.namespaced.get(&c.name).map(|p| {
             let depth = m.namespace_modules.get(&c.name).map_or(1, |(_, d)| *d).min(p.len() - 1);
@@ -1076,6 +1330,171 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
             n += 1;
         }
         class_paths.insert(c.name.clone(), path);
+    };
+    // Step A: assign module paths for all non-synthetic classes.
+    let mut class_paths: HashMap<String, String> = HashMap::new();
+    for c in &m.classes {
+        if !m.synthetic.contains(&c.name) {
+            assign_class_path(c, &mut taken, &mut class_paths);
+        }
+    }
+    // Step B: fold eligible synthetic micro-modules into their sole owning class/area module.
+    let mut has_subclasses: HashSet<String> = g.parents.values().map(|(p, _)| p.clone()).collect();
+    for c in &m.classes {
+        has_subclasses.extend(secondary(&m, c));
+    }
+    let mut type_edges: HashMap<String, HashSet<String>> = HashMap::new();
+    for u in &m.unions {
+        let entry = type_edges.entry(u.name.clone()).or_default();
+        for p in &u.parts {
+            collect_ty_names(p, entry);
+        }
+        for tp in &u.type_params {
+            if let Some(d) = &tp.default {
+                collect_ty_names(d, entry);
+            }
+            if let Some(ct) = &tp.constraint {
+                collect_ty_names(ct, entry);
+            }
+        }
+    }
+    for cb in &m.callbacks {
+        let entry = type_edges.entry(cb.name.clone()).or_default();
+        for (_, pt) in &cb.params {
+            collect_ty_names(pt, entry);
+        }
+        collect_ty_names(&cb.ret, entry);
+        for tp in &cb.type_params {
+            if let Some(d) = &tp.default {
+                collect_ty_names(d, entry);
+            }
+            if let Some(ct) = &tp.constraint {
+                collect_ty_names(ct, entry);
+            }
+        }
+    }
+    for sc in m.classes.iter().filter(|c| m.synthetic.contains(&c.name)) {
+        let entry = type_edges.entry(sc.name.clone()).or_default();
+        for f in &sc.funcs {
+            for (_, pt) in &f.params {
+                collect_ty_names(pt, entry);
+            }
+            collect_ty_names(&f.ret, entry);
+            for tp in &f.type_params {
+                if let Some(d) = &tp.default {
+                    collect_ty_names(d, entry);
+                }
+                if let Some(ct) = &tp.constraint {
+                    collect_ty_names(ct, entry);
+                }
+            }
+        }
+        for tp in &sc.type_params {
+            if let Some(d) = &tp.default {
+                collect_ty_names(d, entry);
+            }
+            if let Some(ct) = &tp.constraint {
+                collect_ty_names(ct, entry);
+            }
+        }
+    }
+    let mut syn_class_users: HashMap<String, HashSet<String>> = HashMap::new();
+    for c in m.classes.iter().filter(|c| !m.synthetic.contains(&c.name)) {
+        let mut seeds = HashSet::new();
+        for b in &c.bases {
+            collect_ty_names(b, &mut seeds);
+        }
+        for t in c.iterates.iter().chain(&c.iterates_async).chain(&c.elements) {
+            collect_ty_names(t, &mut seeds);
+        }
+        for tp in &c.type_params {
+            if let Some(d) = &tp.default {
+                collect_ty_names(d, &mut seeds);
+            }
+            if let Some(ct) = &tp.constraint {
+                collect_ty_names(ct, &mut seeds);
+            }
+        }
+        for f in &c.funcs {
+            for (_, pt) in &f.params {
+                collect_ty_names(pt, &mut seeds);
+            }
+            collect_ty_names(&f.ret, &mut seeds);
+            for tp in &f.type_params {
+                if let Some(d) = &tp.default {
+                    collect_ty_names(d, &mut seeds);
+                }
+                if let Some(ct) = &tp.constraint {
+                    collect_ty_names(ct, &mut seeds);
+                }
+            }
+        }
+        for s in reachable_synthetics(seeds, &type_edges, &m.synthetic) {
+            syn_class_users.entry(s).or_default().insert(c.name.clone());
+        }
+    }
+    let mut syn_area_users: HashMap<String, HashSet<String>> = HashMap::new();
+    for f in &m.funcs {
+        let mut seeds = HashSet::new();
+        for (_, pt) in &f.params {
+            collect_ty_names(pt, &mut seeds);
+        }
+        collect_ty_names(&f.ret, &mut seeds);
+        for tp in &f.type_params {
+            if let Some(d) = &tp.default {
+                collect_ty_names(d, &mut seeds);
+            }
+            if let Some(ct) = &tp.constraint {
+                collect_ty_names(ct, &mut seeds);
+            }
+        }
+        let unit = func_unit(&m, &paths, pkg, f);
+        for s in reachable_synthetics(seeds, &type_edges, &m.synthetic) {
+            syn_area_users.entry(s).or_default().insert(unit.clone());
+        }
+    }
+    let mut folded: HashMap<String, (String, String)> = HashMap::new();
+    for c in &m.classes {
+        let eligible = m.synthetic.contains(&c.name)
+            && c.js.is_none()
+            && c.bases.is_empty()
+            && !m.maps.iter().any(|k| k.name == c.name)
+            && !m.namespaced.contains_key(&c.name)
+            && !has_subclasses.contains(&c.name)
+            && c.iterates.is_none()
+            && c.iterates_async.is_none()
+            && c.elements.is_none()
+            && c.funcs.len() <= 20;
+        if !eligible {
+            continue;
+        }
+        let empty = HashSet::new();
+        let class_users = syn_class_users.get(&c.name).unwrap_or(&empty);
+        let area_users = syn_area_users.get(&c.name).unwrap_or(&empty);
+        if area_users.is_empty() && !class_users.is_empty() {
+            if let Some(owner) = class_users.iter().find(|&owner| class_users.iter().all(|u| is_chain_subtype(&g.parents, u, owner))) {
+                let cname_snake = snake(&g.tname(&c.name));
+                let owner_snake = snake(&g.tname(owner));
+                let prefix = if let Some(rem) = c.name.strip_prefix(&format!("{owner}_")).map(|r| r.trim_start_matches('_')).filter(|r| !r.is_empty()) {
+                    lower(rem)
+                } else if let Some(rem) = cname_snake.strip_prefix(&format!("{owner_snake}_")).filter(|r| !r.is_empty()) {
+                    lower(rem)
+                } else {
+                    lower(&g.tname(&c.name))
+                };
+                folded.insert(c.name.clone(), (class_paths[owner].clone(), prefix));
+            }
+        } else if class_users.is_empty() && area_users.len() == 1 {
+            let area_unit = area_users.iter().next().unwrap().clone();
+            let prefix = lower(&g.tname(&c.name));
+            folded.insert(c.name.clone(), (area_unit, prefix));
+        }
+    }
+    // Step C: assign module paths for remaining non-folded synthetic classes.
+    for c in &m.classes {
+        if m.synthetic.contains(&c.name) && !folded.contains_key(&c.name) {
+            assign_class_path(c, &mut taken, &mut class_paths);
+        }
     }
     for o in OWN_RUNTIME {
         g.home.insert(o.to_string(), runtime_mod.clone());
@@ -1085,7 +1504,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         g.home.insert(format!("{}Tag", g.tname(&c.name)), types_mod.clone());
     }
     let others = m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)).chain(m.callbacks.iter().map(|c| &c.name)).chain(m.unions.iter().map(|u| &u.name)).chain(&m.opaque);
-    for n in others.filter(|n| !OWN.contains(&n.as_str()) && *n != "PromiseLike" && !resolved_opaque.contains_key(*n)) {
+    for n in others.filter(|n| !OPAQUE_BUILTINS.contains(&n.as_str()) && !resolved_opaque.contains_key(*n)) {
         g.home.insert(g.tname(n), types_mod.clone());
     }
 
@@ -1120,7 +1539,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
 
     // The types that may refer to each other: externals, enums, unions, callbacks.
     g.switch(&types_mod);
-    for o in m.opaque.iter().filter(|o| !OWN.contains(&o.as_str()) && *o != "PromiseLike" && !resolved_opaque.contains_key(*o)) {
+    for o in m.opaque.iter().filter(|o| !OPAQUE_BUILTINS.contains(&o.as_str()) && !resolved_opaque.contains_key(*o)) {
         let arity = m.opaque_arity.get(o).copied().unwrap_or(0);
         let params = if arity == 0 { String::new() } else { format!("({})", (1..=arity).map(|i| format!("t{i}")).collect::<Vec<_>>().join(", ")) };
         g.out += &format!("pub type {}{params}\n\n", g.tname(o));
@@ -1273,8 +1692,13 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
             js.trim_start_matches(", ")
         );
     }
-    // A class's functions, in its own module.
+    // Pass 1: non-folded classes, each in its own module.
+    let mut emitted_methods: HashMap<String, Vec<EmittedMethod>> = HashMap::new();
+    let mut emitted_withs: HashMap<String, Vec<EmittedWith>> = HashMap::new();
     for c in &m.classes {
+        if folded.contains_key(&c.name) {
+            continue;
+        }
         g.switch(&class_paths[&c.name]);
         let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
         // The class's type, open (any subtype) or closed.
@@ -1285,26 +1709,28 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
             t
         };
         for (constant, value) in &c.consts {
-            let gleam = if value.starts_with('"') {
-                value.clone()
-            } else if value == "true" || value == "false" {
-                upper(value)
-            } else if let Ok(n) = value.parse::<f64>() {
-                format!("{n:?}")
-            } else if let Some(hex) = value.strip_prefix("0x").or(value.strip_prefix("0X")) {
-                format!("{:?}", i64::from_str_radix(hex, 16).unwrap_or(0) as f64)
-            } else {
+            let Some(gleam) = gleam_const_literal(value) else {
                 g.skip("constant of another kind");
                 continue;
             };
             let id = g.value_name(constant);
             g.out += &format!("pub const {id} = {gleam}\n\n");
         }
+        let mut cls_methods = Vec::new();
         for f in &c.funcs {
             let f = with_self_args(f, c);
             let id = g.value_name(&function_name(&f, &f.name));
-            g.function(&id, &f, Some((&c.name, &c.type_params)));
+            let js_name = g.function(&id, &f, Some((&c.name, &c.type_params)));
+            if Class::has_self(&f) {
+                cls_methods.push(EmittedMethod {
+                    gleam_name: id,
+                    js_name,
+                    ffi_path: format!("{}_ffi.mjs", class_paths[&c.name]),
+                    func: f,
+                });
+            }
         }
+        emitted_methods.insert(c.name.clone(), cls_methods);
         // Populate class_bound for synthesized to_list / get_at helpers.
         let populate_class_bound = |g: &Gen| {
             g.clear_fn_bounds();
@@ -1450,24 +1876,82 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         // Specialized primary-ancestor methods where substituting concrete generic args eliminates codecs.
         g.emit_specializations(c);
         // Fluent `with_<prop>` / `with_at` builders for option bags (`Call::Create`).
-        g.emit_with_builders(c);
-    }
-    for f in &m.funcs {
-        match m.func_namespaces.get(&f.import) {
-            // A namespace's by its own name, in its module (a nested one's
-            // in a module of it): `geometry.distance`, `deep.twice`.
-            Some((path, own, module, depth)) => {
-                let unit = std::iter::once(module_path(&paths, pkg, module)).chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
-                g.switch(&unit);
-                let id = g.fresh_value(&function_name(f, own));
-                g.function(&id, f, None);
-            }
-            None => {
-                g.switch(&paths[&f.module]);
-                let id = g.value_name(&function_name(f, &f.name));
-                g.function(&id, f, None);
+        let cls_withs = g.emit_with_builders(c, None);
+        emitted_withs.insert(c.name.clone(), cls_withs);
+        // Pure Gleam Key constants for KeyMap interfaces (`keyed_params = "map"`).
+        if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
+            let map_ty = g.closed(|| g.bare(&map.name));
+            for (raw, val) in map.keys.iter().zip(&map.values) {
+                let id = g.fresh_value(raw);
+                let val_ty = g.closed(|| g.ty(val));
+                g.note("Key");
+                g.used_key_ctor = true;
+                g.out += &format!("pub const {id}: Key({map_ty}, {val_ty}) = Key({raw:?})\n\n");
             }
         }
+    }
+    // Top-level and namespaced functions.
+    for f in &m.funcs {
+        let unit = func_unit(&m, &paths, pkg, f);
+        g.switch(&unit);
+        let id = match m.func_namespaces.get(&f.import) {
+            Some((_, own, _, _)) => g.fresh_value(&function_name(f, own)),
+            None => g.value_name(&function_name(f, &f.name)),
+        };
+        g.function(&id, f, None);
+    }
+    // Pass 3: folded single-owner synthetic option bags / result structs.
+    for c in &m.classes {
+        let Some((target_unit, prefix)) = folded.get(&c.name) else { continue };
+        g.switch(target_unit);
+        let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
+        let open = |g: &Gen| {
+            *g.open.borrow_mut() = Some(0);
+            let t = g.class_type(&c.name, &own);
+            *g.open.borrow_mut() = None;
+            t
+        };
+        for (constant, value) in &c.consts {
+            let Some(gleam) = gleam_const_literal(value) else {
+                g.skip("constant of another kind");
+                continue;
+            };
+            let id = g.fresh_value(&format!("{prefix}_{}", lower(constant)));
+            g.out += &format!("pub const {id} = {gleam}\n\n");
+        }
+        for f in &c.funcs {
+            let f = with_self_args(f, c);
+            let id = g.fresh_value(&format!("{prefix}_{}", lower(&function_name(&f, &f.name))));
+            g.function(&id, &f, Some((&c.name, &c.type_params)));
+        }
+        let id = g.fresh_value(&format!("{prefix}_upcast"));
+        let (this, closed) = (open(&g), g.class_type(&c.name, &own));
+        g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
+        g.emit_with_builders(c, Some(prefix));
+    }
+    // Pass 2: zero-JS primary-chain inherited method & `with_*` builder aliases.
+    // Emitted after own functions and folded synthetics so inherited aliases never shadow them.
+    let total_inst_aliases: usize = m
+        .classes
+        .iter()
+        .filter(|c| !folded.contains_key(&c.name))
+        .map(|c| {
+            let mut sum = 0;
+            let mut at = c.name.clone();
+            while let Some((p, _)) = g.parents.get(&at) {
+                sum += emitted_methods.get(p).map_or(0, Vec::len);
+                at = p.clone();
+            }
+            sum
+        })
+        .sum();
+    let emit_all_inherited = total_inst_aliases <= MAX_INHERITED_ALIASES;
+    for c in &m.classes {
+        if folded.contains_key(&c.name) {
+            continue;
+        }
+        g.switch(&class_paths[&c.name]);
+        g.emit_inherited_aliases(c, &emitted_methods, &emitted_withs, emit_all_inherited);
     }
     g.switch("");
 
@@ -1517,6 +2001,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
 
     // Each module: what it imports of the others, of Gleam's, and its JavaScript's.
     let mut files = Vec::new();
+    let has_types_ffi = g.units.get(&types_mod).is_some_and(|u| !u.ffi.is_empty());
     let ref_by_mod: HashMap<String, usize> = refs.iter().enumerate().map(|(i, r)| (format!("{}/types", r.package_name), i)).collect();
     let mut used_refs: BTreeSet<usize> = BTreeSet::new();
     // Not a module with nothing in it (one whose aliases all gave way).
@@ -1552,16 +2037,17 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
                 } else {
                     ""
                 };
-                format!(
-                    "import {module}.{{{}}}{suffix}\n",
-                    ts.iter()
-                        .map(|t| match ref_aliases.get(*t) {
-                            Some((ref_mod, orig)) if ref_mod == module => format!("type {orig} as {t}"),
-                            _ => format!("type {t}"),
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+                let mut items: Vec<String> = ts
+                    .iter()
+                    .map(|t| match ref_aliases.get(*t) {
+                        Some((ref_mod, orig)) if ref_mod == module => format!("type {orig} as {t}"),
+                        _ => format!("type {t}"),
+                    })
+                    .collect();
+                if unit.used_key_ctor && *module == runtime_mod {
+                    items.push("Key".to_string());
+                }
+                format!("import {module}.{{{}}}{suffix}\n", items.join(", "))
             })
             .collect();
         files.push((format!("{path}.gleam"), format!("// Generated. Bindings for Gleam's JavaScript target.\n{imports}\n{}", unit.out)));
@@ -1576,7 +2062,10 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
              import {{ Ok, Error as GleamError, toList }} from \"{prelude}gleam.mjs\";\n"
         );
         if path != runtime_mod {
-            header += &format!("import {{ $wrap, $same, $trim, PK, G }} from \"{}\";\nimport * as $T from \"{}\";\n", relative(&path, &format!("{pkg}/runtime_ffi.mjs")), relative(&path, &format!("{pkg}/types_ffi.mjs")));
+            header += &format!("import {{ $key, $wrap, $same, $trim, PK, G }} from \"{}\";\n", relative(&path, &format!("{pkg}/runtime_ffi.mjs")));
+            if has_types_ffi && unit.ffi.contains("$T.") {
+                header += &format!("import * as $T from \"{}\";\n", relative(&path, &format!("{pkg}/types_ffi.mjs")));
+            }
         }
         if path == types_mod {
             header += "import * as B from \"./types.mjs\";\n";
@@ -1604,7 +2093,7 @@ const JS_RESERVED: &[&str] = &[
 ];
 
 // The modules every library's bindings have.
-const OWN_RUNTIME: &[&str] = &["Promise", "JsError", "Codec", "Ref"];
+const OWN_RUNTIME: &[&str] = &["Promise", "JsError", "Codec", "Ref", "Key"];
 
 // A class type's phantom parameter, where it is declared.
 const PHANTOM: &str = "sub";
@@ -1806,18 +2295,45 @@ fn is_chain_subtype(parents: &HashMap<String, (String, Vec<Ty>)>, sub: &str, bas
     }
 }
 
+fn resolve_default_args(tparams: &[TParam], args: &[Ty]) -> Vec<Ty> {
+    let mut resolved = Vec::with_capacity(tparams.len());
+    for (i, tp) in tparams.iter().enumerate() {
+        if let Some(a) = args.get(i) {
+            resolved.push(a.clone());
+            continue;
+        }
+        if let Some(def) = &tp.default {
+            let def_sub = subst(def, &tparams[..i], &resolved);
+            let unresolved = tparams[i..].iter().any(|rem| mentions(&def_sub, &rem.name));
+            if !unresolved {
+                resolved.push(def_sub);
+                continue;
+            }
+        }
+        resolved.push(Ty::Any);
+    }
+    resolved
+}
+
 fn effective_base_args(m: &Model, ty: &Ty, base: &str) -> Option<Vec<Ty>> {
     let (name, args) = match ty {
         Ty::Obj(n) => (n.as_str(), Vec::new()),
         Ty::Generic(n, args) => (n.as_str(), args.clone()),
         _ => return None,
     };
+    let Some(cls) = m.classes.iter().find(|c| c.name == name) else {
+        return (name == base).then_some(args);
+    };
+    let resolved = resolve_default_args(&cls.type_params, &args);
     if name == base {
-        return Some(args);
+        return Some(resolved);
     }
-    let cls = m.classes.iter().find(|c| c.name == name)?;
     let bargs = base_args(m, cls, base)?;
-    Some(bargs.into_iter().map(|a| subst(&a, &cls.type_params, &args)).collect())
+    let subbed: Vec<Ty> = bargs.into_iter().map(|a| subst(&a, &cls.type_params, &resolved)).collect();
+    Some(match m.classes.iter().find(|c| c.name == base) {
+        Some(base_cls) => resolve_default_args(&base_cls.type_params, &subbed),
+        None => subbed,
+    })
 }
 
 fn arg_satisfies(
@@ -1838,6 +2354,11 @@ fn arg_satisfies(
     };
     match arg {
         Ty::Obj(x) | Ty::Generic(x, _) => classes.contains_key(x) && is_chain_subtype(parents, x, base) && concrete_check(arg),
+        Ty::Mapped(map_name) => m
+            .maps
+            .iter()
+            .find(|k| k.name == *map_name)
+            .is_some_and(|km| !km.values.is_empty() && km.values.iter().all(|v| arg_satisfies(m, classes, parents, v, base, cargs, scope_tparams))),
         Ty::Param(tp_name) => {
             let mut cur = tp_name.as_str();
             let mut seen = HashSet::new();
@@ -1858,48 +2379,103 @@ fn arg_satisfies(
 }
 
 struct ClassBoundQuery<'a> {
-    target_class: &'a str,
-    param_idx: usize,
     base: &'a str,
     cargs: &'a [Ty],
-    default_ok: bool,
     m: &'a Model,
     classes: &'a HashMap<String, usize>,
     parents: &'a HashMap<String, (String, Vec<Ty>)>,
 }
 
-fn check_class_bound_ty(t: &Ty, q: &ClassBoundQuery<'_>, scope_tparams: &[TParam]) -> bool {
+#[derive(Clone, Copy)]
+enum BoundTarget<'a> {
+    Class(&'a str, usize),
+    Alias(&'a str, usize, &'a [TParam]),
+}
+
+fn check_bound_arg(
+    q: &ClassBoundQuery<'_>,
+    arg: &Ty,
+    scope_tparams: &[TParam],
+    owner_alias: Option<(&str, &[TParam])>,
+    needed_aliases: &mut Vec<(String, usize)>,
+) -> bool {
+    if arg_satisfies(q.m, q.classes, q.parents, arg, q.base, q.cargs, scope_tparams) {
+        return true;
+    }
+    if let Some((alias_name, alias_tps)) = owner_alias
+        && let Ty::Param(tp_name) = arg
+        && let Some(idx) = alias_tps.iter().position(|p| p.name == *tp_name)
+    {
+        needed_aliases.push((alias_name.to_string(), idx));
+        return true;
+    }
+    false
+}
+
+fn check_bound_target(
+    target: BoundTarget<'_>,
+    q: &ClassBoundQuery<'_>,
+    t: &Ty,
+    scope_tparams: &[TParam],
+    owner_alias: Option<(&str, &[TParam])>,
+    needed_aliases: &mut Vec<(String, usize)>,
+) -> bool {
     match t {
-        Ty::Obj(cn) | Ty::Generic(cn, _) if q.classes.contains_key(cn) && is_chain_subtype(q.parents, cn, q.target_class) => {
-            let Some(eff) = effective_base_args(q.m, t, q.target_class) else {
+        Ty::Obj(cn) | Ty::Generic(cn, _) if matches!(target, BoundTarget::Class(tc, _) if q.classes.contains_key(cn) && is_chain_subtype(q.parents, cn, tc)) => {
+            let BoundTarget::Class(tc, idx) = target else { unreachable!() };
+            let Some(eff) = effective_base_args(q.m, t, tc) else {
                 return false;
             };
-            let ok = match eff.get(q.param_idx) {
-                Some(a) => arg_satisfies(q.m, q.classes, q.parents, a, q.base, q.cargs, scope_tparams),
-                None => q.default_ok,
+            let ok = match eff.get(idx) {
+                Some(a) => check_bound_arg(q, a, scope_tparams, owner_alias, needed_aliases),
+                None => false,
             };
             if !ok {
                 return false;
             }
             if let Ty::Generic(_, args) = t {
-                args.iter().all(|a| check_class_bound_ty(a, q, scope_tparams))
+                args.iter().all(|a| check_bound_target(target, q, a, scope_tparams, owner_alias, needed_aliases))
             } else {
                 true
             }
         }
-        Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().all(|a| check_class_bound_ty(a, q, scope_tparams)),
-        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => check_class_bound_ty(inner, q, scope_tparams),
+        Ty::Obj(an) | Ty::Generic(an, _) if matches!(target, BoundTarget::Alias(ta, _, _) if an == ta) => {
+            let BoundTarget::Alias(_, idx, atps) = target else { unreachable!() };
+            let args = generic_args(t);
+            let resolved = resolve_default_args(atps, args);
+            let ok = match resolved.get(idx) {
+                Some(a) => check_bound_arg(q, a, scope_tparams, owner_alias, needed_aliases),
+                None => false,
+            };
+            if !ok {
+                return false;
+            }
+            args.iter().all(|a| check_bound_target(target, q, a, scope_tparams, owner_alias, needed_aliases))
+        }
+        Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => {
+            args.iter().all(|a| check_bound_target(target, q, a, scope_tparams, owner_alias, needed_aliases))
+        }
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => {
+            check_bound_target(target, q, inner, scope_tparams, owner_alias, needed_aliases)
+        }
         _ => true,
     }
 }
 
 // Identifies class type parameters that are strictly constrained to a class
-// across every instantiation in the model, so codecs can be omitted safely.
+// across every instantiation in the model (including via hoisted callback/union aliases),
+// so codecs can be omitted safely.
 fn compute_class_bound(
     m: &Model,
     classes: &HashMap<String, usize>,
     parents: &HashMap<String, (String, Vec<Ty>)>,
 ) -> HashMap<(String, usize), (String, Vec<Ty>)> {
+    let alias_tparams: HashMap<&str, &[TParam]> = m
+        .callbacks
+        .iter()
+        .map(|cb| (cb.name.as_str(), cb.type_params.as_slice()))
+        .chain(m.unions.iter().map(|u| (u.name.as_str(), u.type_params.as_slice())))
+        .collect();
     let mut out = HashMap::new();
     for c in &m.classes {
         for (i, p) in c.type_params.iter().enumerate() {
@@ -1910,88 +2486,113 @@ fn compute_class_bound(
             }) else {
                 continue;
             };
-            let default_ok = match &p.default {
-                Some(def) => arg_satisfies(m, classes, parents, def, &base, &cargs, &c.type_params),
-                None => false,
-            };
-            let query = ClassBoundQuery { target_class: &c.name, param_idx: i, base: &base, cargs: &cargs, default_ok, m, classes, parents };
+            let query = ClassBoundQuery { base: &base, cargs: &cargs, m, classes, parents };
+            let mut needed_aliases: Vec<(String, usize)> = Vec::new();
             // `from` and `cast` on `c` or any runtime-constructible subclass instantiate
             // defaults (falling back to `Dynamic`), so every such subclass must satisfy `c`'s bound.
-            if m.classes.iter().any(|sub| sub.js.is_some() && is_chain_subtype(parents, &sub.name, &c.name) && !check_class_bound_ty(&Ty::Obj(sub.name.clone()), &query, &[])) {
+            if m.classes.iter().any(|sub| {
+                sub.js.is_some()
+                    && is_chain_subtype(parents, &sub.name, &c.name)
+                    && !check_bound_target(BoundTarget::Class(&c.name, i), &query, &Ty::Obj(sub.name.clone()), &[], None, &mut needed_aliases)
+            }) {
                 continue;
             }
-            let check = |t: &Ty, scope: &[TParam]| check_class_bound_ty(t, &query, scope);
+            let mut checked_aliases: HashSet<(String, usize)> = HashSet::new();
+            let mut pending: Vec<BoundTarget<'_>> = vec![BoundTarget::Class(&c.name, i)];
             let mut ok = true;
-            'classes: for c2 in &m.classes {
-                for tp in &c2.type_params {
-                    if tp.default.as_ref().is_some_and(|d| !check(d, &c2.type_params))
-                        || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &c2.type_params))
+            while let Some(target) = pending.pop() {
+                needed_aliases.clear();
+                'classes: for c2 in &m.classes {
+                    for tp in &c2.type_params {
+                        if tp.default.as_ref().is_some_and(|d| !check_bound_target(target, &query, d, &c2.type_params, None, &mut needed_aliases))
+                            || tp.constraint.as_ref().is_some_and(|ct| !check_bound_target(target, &query, ct, &c2.type_params, None, &mut needed_aliases))
+                        {
+                            ok = false;
+                            break 'classes;
+                        }
+                    }
+                    for b in &c2.bases {
+                        if !check_bound_target(target, &query, b, &c2.type_params, None, &mut needed_aliases) {
+                            ok = false;
+                            break 'classes;
+                        }
+                    }
+                    for t in c2.iterates.iter().chain(&c2.iterates_async).chain(&c2.elements) {
+                        if !check_bound_target(target, &query, t, &c2.type_params, None, &mut needed_aliases) {
+                            ok = false;
+                            break 'classes;
+                        }
+                    }
+                    for f in &c2.funcs {
+                        let mut scope: Vec<TParam> = f.type_params.clone();
+                        scope.extend(c2.type_params.iter().cloned());
+                        if f.type_params.iter().any(|tp| {
+                            tp.default.as_ref().is_some_and(|d| !check_bound_target(target, &query, d, &scope, None, &mut needed_aliases))
+                                || tp.constraint.as_ref().is_some_and(|ct| !check_bound_target(target, &query, ct, &scope, None, &mut needed_aliases))
+                        }) || f.params.iter().any(|(_, pt)| !check_bound_target(target, &query, pt, &scope, None, &mut needed_aliases))
+                            || !check_bound_target(target, &query, &f.ret, &scope, None, &mut needed_aliases)
+                        {
+                            ok = false;
+                            break 'classes;
+                        }
+                    }
+                }
+                if ok {
+                    for f in &m.funcs {
+                        let owner = if matches!(f.call, Call::Apply)
+                            && let Some((_, Ty::Obj(cb) | Ty::Generic(cb, _))) = f.params.first()
+                            && alias_tparams.contains_key(cb.as_str())
+                        {
+                            Some((cb.as_str(), f.type_params.as_slice()))
+                        } else {
+                            None
+                        };
+                        if f.type_params.iter().any(|tp| {
+                            tp.default.as_ref().is_some_and(|d| !check_bound_target(target, &query, d, &f.type_params, None, &mut needed_aliases))
+                                || tp.constraint.as_ref().is_some_and(|ct| !check_bound_target(target, &query, ct, &f.type_params, None, &mut needed_aliases))
+                        }) || f.params.iter().any(|(_, pt)| !check_bound_target(target, &query, pt, &f.type_params, owner, &mut needed_aliases))
+                            || !check_bound_target(target, &query, &f.ret, &f.type_params, owner, &mut needed_aliases)
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if ok {
+                    for cb in &m.callbacks {
+                        let owner = Some((cb.name.as_str(), cb.type_params.as_slice()));
+                        if cb.type_params.iter().any(|tp| {
+                            tp.default.as_ref().is_some_and(|d| !check_bound_target(target, &query, d, &cb.type_params, None, &mut needed_aliases))
+                                || tp.constraint.as_ref().is_some_and(|ct| !check_bound_target(target, &query, ct, &cb.type_params, None, &mut needed_aliases))
+                        }) || cb.params.iter().any(|(_, pt)| !check_bound_target(target, &query, pt, &cb.type_params, owner, &mut needed_aliases))
+                            || !check_bound_target(target, &query, &cb.ret, &cb.type_params, owner, &mut needed_aliases)
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if ok {
+                    for u in &m.unions {
+                        let owner = Some((u.name.as_str(), u.type_params.as_slice()));
+                        if u.type_params.iter().any(|tp| {
+                            tp.default.as_ref().is_some_and(|d| !check_bound_target(target, &query, d, &u.type_params, None, &mut needed_aliases))
+                                || tp.constraint.as_ref().is_some_and(|ct| !check_bound_target(target, &query, ct, &u.type_params, None, &mut needed_aliases))
+                        }) || u.parts.iter().any(|pt| !check_bound_target(target, &query, pt, &u.type_params, owner, &mut needed_aliases))
+                        {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if !ok {
+                    break;
+                }
+                for (an, aidx) in needed_aliases.drain(..) {
+                    if let Some((&an_ref, &atps)) = alias_tparams.get_key_value(an.as_str())
+                        && checked_aliases.insert((an, aidx))
                     {
-                        ok = false;
-                        break 'classes;
-                    }
-                }
-                for b in &c2.bases {
-                    if !check(b, &c2.type_params) {
-                        ok = false;
-                        break 'classes;
-                    }
-                }
-                for t in c2.iterates.iter().chain(&c2.iterates_async).chain(&c2.elements) {
-                    if !check(t, &c2.type_params) {
-                        ok = false;
-                        break 'classes;
-                    }
-                }
-                for f in &c2.funcs {
-                    let mut scope: Vec<TParam> = f.type_params.clone();
-                    scope.extend(c2.type_params.iter().cloned());
-                    if f.type_params.iter().any(|tp| {
-                        tp.default.as_ref().is_some_and(|d| !check(d, &scope))
-                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &scope))
-                    }) || f.params.iter().any(|(_, pt)| !check(pt, &scope))
-                        || !check(&f.ret, &scope)
-                    {
-                        ok = false;
-                        break 'classes;
-                    }
-                }
-            }
-            if ok {
-                for f in &m.funcs {
-                    if f.type_params.iter().any(|tp| {
-                        tp.default.as_ref().is_some_and(|d| !check(d, &f.type_params))
-                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &f.type_params))
-                    }) || f.params.iter().any(|(_, pt)| !check(pt, &f.type_params))
-                        || !check(&f.ret, &f.type_params)
-                    {
-                        ok = false;
-                        break;
-                    }
-                }
-            }
-            if ok {
-                for cb in &m.callbacks {
-                    if cb.type_params.iter().any(|tp| {
-                        tp.default.as_ref().is_some_and(|d| !check(d, &cb.type_params))
-                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &cb.type_params))
-                    }) || cb.params.iter().any(|(_, pt)| !check(pt, &cb.type_params))
-                        || !check(&cb.ret, &cb.type_params)
-                    {
-                        ok = false;
-                        break;
-                    }
-                }
-            }
-            if ok {
-                for u in &m.unions {
-                    if u.type_params.iter().any(|tp| {
-                        tp.default.as_ref().is_some_and(|d| !check(d, &u.type_params))
-                            || tp.constraint.as_ref().is_some_and(|ct| !check(ct, &u.type_params))
-                    }) || u.parts.iter().any(|pt| !check(pt, &u.type_params))
-                    {
-                        ok = false;
-                        break;
+                        pending.push(BoundTarget::Alias(an_ref, aidx, atps));
                     }
                 }
             }
@@ -2003,8 +2604,83 @@ fn compute_class_bound(
     out
 }
 
-// A module's Gleam path: as given out, else as one would be (`areas/pb`
-// where only a namespace of the package's has functions).
+// A module's Gleam path: as given out, with `areas/main` mapped to pkg root.
 fn module_path(paths: &HashMap<String, String>, pkg: &str, module: &str) -> String {
-    paths.get(module).cloned().unwrap_or_else(|| format!("{pkg}/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/")))
+    paths.get(module).cloned().unwrap_or_else(|| {
+        if module == "areas/main" {
+            pkg.to_string()
+        } else {
+            format!("{pkg}/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/"))
+        }
+    })
+}
+
+fn func_unit(m: &Model, paths: &HashMap<String, String>, pkg: &str, f: &Func) -> String {
+    match m.func_namespaces.get(&f.import) {
+        Some((path, _, module, depth)) => std::iter::once(module_path(paths, pkg, module))
+            .chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s))))
+            .collect::<Vec<_>>()
+            .join("/"),
+        None => paths[&f.module].clone(),
+    }
+}
+
+fn gleam_const_literal(value: &str) -> Option<String> {
+    if value.starts_with('"') {
+        Some(value.to_string())
+    } else if value == "true" || value == "false" {
+        Some(upper(value))
+    } else if let Ok(n) = value.parse::<f64>() {
+        Some(format!("{n:?}"))
+    } else if let Some(hex) = value.strip_prefix("0x").or(value.strip_prefix("0X")) {
+        Some(format!("{:?}", i64::from_str_radix(hex, 16).unwrap_or(0) as f64))
+    } else {
+        None
+    }
+}
+
+fn collect_ty_names(t: &Ty, out: &mut HashSet<String>) {
+    match t {
+        Ty::Obj(n) | Ty::NamedUnion(n) | Ty::Key(n) | Ty::Mapped(n) => {
+            out.insert(n.clone());
+        }
+        Ty::Generic(n, args) => {
+            out.insert(n.clone());
+            for a in args {
+                collect_ty_names(a, out);
+            }
+        }
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => collect_ty_names(inner, out),
+        Ty::Tuple(es) | Ty::Union(es) => {
+            for e in es {
+                collect_ty_names(e, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn reachable_synthetics(seeds: HashSet<String>, type_edges: &HashMap<String, HashSet<String>>, synthetic: &HashSet<String>) -> HashSet<String> {
+    let mut visited = HashSet::new();
+    let mut todo: Vec<String> = seeds.into_iter().collect();
+    let mut out = HashSet::new();
+    while let Some(n) = todo.pop() {
+        if !visited.insert(n.clone()) {
+            continue;
+        }
+        let is_syn = synthetic.contains(&n);
+        if is_syn {
+            out.insert(n.clone());
+        }
+        if (is_syn || type_edges.contains_key(&n))
+            && let Some(next) = type_edges.get(&n)
+        {
+            for tgt in next {
+                if !visited.contains(tgt) {
+                    todo.push(tgt.clone());
+                }
+            }
+        }
+    }
+    out
 }

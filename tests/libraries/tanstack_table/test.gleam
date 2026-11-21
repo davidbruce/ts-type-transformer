@@ -5,21 +5,19 @@
 // constructor, so the reactivity's atoms are plain objects taken as Atoms by an
 // identity @external to runtime_ffi.mjs's `dynamic`; so are the table options
 // object and the table's TableRowSorting view (`coerce`).
-import bindings/areas/main as table
-import bindings/areas/main/column_helper
-import bindings/areas/main/column_helper_accessor_column_header_string as header_options
-import bindings/areas/main/core_features
-import bindings/areas/main/column_sort
-import bindings/areas/main/get_function_name_info_result as name_info
-import bindings/areas/main/make_object_map_result as make_object
-import bindings/areas/main/row_core_properties
-import bindings/areas/main/row_model
-import bindings/areas/main/table_core_properties
-import bindings/areas/main/table_reactivity_bindings as reactivity
-import bindings/areas/main/table_row_models_core
-import bindings/areas/main/table_row_sorting
-import bindings/areas/main/table_features
-import bindings/areas/main/table_options_core
+import bindings as table
+import bindings/column_helper
+import bindings/column_helper_accessor_column_header_string as header_options
+import bindings/core_features
+import bindings/column_sort
+import bindings/row_core_properties
+import bindings/row_model
+import bindings/table_core_properties
+import bindings/table_reactivity_bindings as reactivity
+import bindings/table_row_models_core
+import bindings/table_row_sorting
+import bindings/table_features
+import bindings/table_options_core
 import bindings/runtime
 import bindings/types as t
 import cell
@@ -103,9 +101,9 @@ pub fn main() {
   let info = table.get_function_name_info("row_getValue", None)
   let passed =
     passed
-    + check(name_info.get_fn_key(info) == "getValue", "fn key")
-    + check(name_info.get_fn_name(info) == "row.getValue", "fn name")
-    + check(name_info.get_parent_name(info) == "row", "parent name")
+    + check(table.get_function_name_info_result_get_fn_key(info) == "getValue", "fn key")
+    + check(table.get_function_name_info_result_get_fn_name(info) == "row.getValue", "fn name")
+    + check(table.get_function_name_info_result_get_parent_name(info) == "row", "parent name")
     + check(
       table.functional_update(t.UpdaterT(9.0), 3.0, runtime.codec_float()) == 9.0,
       "functional_update with a value",
@@ -149,13 +147,13 @@ pub fn main() {
   reactivity.set_create_options_store(bindings, False)
   reactivity.set_wrap_external_atoms(bindings, False)
   let atom = fn(get: dynamic.Dynamic, set: option.Option(fn(dynamic.Dynamic) -> Nil)) {
-    let o = make_object.create()
-    make_object.set_at(o, "get", get, runtime.codec_dynamic())
+    let o = table.make_object_map_result_create()
+    table.make_object_map_result_set_at(o, "get", get, runtime.codec_dynamic())
     case set {
-      Some(f) -> make_object.set_at(o, "set", runtime.dynamic(f), runtime.codec_dynamic())
+      Some(f) -> table.make_object_map_result_set_at(o, "set", runtime.dynamic(f), runtime.codec_dynamic())
       None -> Nil
     }
-    make_object.set_at(o, "subscribe", runtime.dynamic(fn(_) { Nil }), runtime.codec_dynamic())
+    table.make_object_map_result_set_at(o, "subscribe", runtime.dynamic(fn(_) { Nil }), runtime.codec_dynamic())
     runtime.dynamic(o)
   }
   reactivity.set_create_writable_atom(bindings, fn(initial, _) {
@@ -178,25 +176,25 @@ pub fn main() {
   reactivity.set_add_subscription(bindings, fn(_) { Nil })
 
   let person = fn(name: String, age: Float) {
-    let o = make_object.create()
-    make_object.set_at(o, "name", dynamic.string(name), runtime.codec_dynamic())
-    make_object.set_at(o, "age", dynamic.float(age), runtime.codec_dynamic())
+    let o = table.make_object_map_result_create()
+    table.make_object_map_result_set_at(o, "name", dynamic.string(name), runtime.codec_dynamic())
+    table.make_object_map_result_set_at(o, "age", dynamic.float(age), runtime.codec_dynamic())
     runtime.dynamic(o)
   }
   let column = fn(key: String, header: String) {
-    let o = make_object.create()
-    make_object.set_at(o, "accessorKey", dynamic.string(key), runtime.codec_dynamic())
-    make_object.set_at(o, "header", dynamic.string(header), runtime.codec_dynamic())
+    let o = table.make_object_map_result_create()
+    table.make_object_map_result_set_at(o, "accessorKey", dynamic.string(key), runtime.codec_dynamic())
+    table.make_object_map_result_set_at(o, "header", dynamic.string(header), runtime.codec_dynamic())
     runtime.dynamic(o)
   }
-  let feature_map = make_object.create()
-  make_object.set_at(feature_map, "coreReactivityFeature", runtime.dynamic(bindings), runtime.codec_dynamic())
-  make_object.set_at(feature_map, "rowSortingFeature", runtime.dynamic(table.get_row_sorting_feature()), runtime.codec_dynamic())
-  make_object.set_at(feature_map, "sortedRowModel", runtime.dynamic(table.create_sorted_row_model()), runtime.codec_dynamic())
-  let options = make_object.create()
-  make_object.set_at(options, "features", runtime.dynamic(feature_map), runtime.codec_dynamic())
-  make_object.set_at(options, "data", dynamic.array([person("bo", 30.0), person("al", 20.0), person("cy", 25.0)]), runtime.codec_dynamic())
-  make_object.set_at(options, "columns", dynamic.array([column("name", "Name"), column("age", "Age")]), runtime.codec_dynamic())
+  let feature_map = table.make_object_map_result_create()
+  table.make_object_map_result_set_at(feature_map, "coreReactivityFeature", runtime.dynamic(bindings), runtime.codec_dynamic())
+  table.make_object_map_result_set_at(feature_map, "rowSortingFeature", runtime.dynamic(table.get_row_sorting_feature()), runtime.codec_dynamic())
+  table.make_object_map_result_set_at(feature_map, "sortedRowModel", runtime.dynamic(table.create_sorted_row_model()), runtime.codec_dynamic())
+  let options = table.make_object_map_result_create()
+  table.make_object_map_result_set_at(options, "features", runtime.dynamic(feature_map), runtime.codec_dynamic())
+  table.make_object_map_result_set_at(options, "data", dynamic.array([person("bo", 30.0), person("al", 20.0), person("cy", 25.0)]), runtime.codec_dynamic())
+  table.make_object_map_result_set_at(options, "columns", dynamic.array([column("name", "Name"), column("age", "Age")]), runtime.codec_dynamic())
   let tbl = table.construct_table(coerce(options))
   let initial = table_core_properties.get_initial_state(tbl)
   let passed =

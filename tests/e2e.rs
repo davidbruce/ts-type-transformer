@@ -458,7 +458,7 @@ fn gleam_rejects_what_is_not_a_subtype() {
     let c = case_in("shapes", "gleam", "shapes-gleam-wrong");
     let bindings = generators::gleam::module(&c.xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
     write_gleam_project(&c.out, &bindings);
-    let wrong = "import bindings/areas/main as b\nimport bindings/areas/main/shape\n\n\
+    let wrong = "import bindings as b\nimport bindings/shape\n\n\
                  // A string where a Named is wanted (`adopt<T extends Named>`).\n\
                  pub fn not_named() {\n  b.adopt(\"text\")\n}\n\n\
                  // A Named where a Shape is wanted.\n\
@@ -1178,6 +1178,215 @@ w.fetchNull(true).``then``(fun a ->
     assert!(report.contains("all stage3c checks passed"), "{report}");
 }
 
+#[test]
+fn gleam_stage3d_ergonomics() {
+    let Some([gleam, node]) = tools(["gleam", "node"]) else { return };
+    let out = root().join("target/e2e/gleam-stage3d");
+    let _ = fs::remove_dir_all(&out);
+    let pkg_dir = out.join("node_modules/stage3d");
+    fs::create_dir_all(&pkg_dir).unwrap();
+    fs::write(pkg_dir.join("package.json"), "{ \"name\": \"stage3d\", \"type\": \"module\", \"exports\": { \".\": { \"types\": \"./index.d.ts\", \"default\": \"./index.mjs\" } } }\n").unwrap();
+    fs::write(
+        pkg_dir.join("index.d.ts"),
+        r#"export interface PingEvent {
+    ping: number;
+}
+export interface DoneEvent {
+    done: boolean;
+}
+export interface EventMap {
+    ping: PingEvent;
+    done: DoneEvent;
+}
+export class BaseEl {
+    baseId(): string;
+    chain(note: string): this;
+    on<K extends keyof EventMap>(ev: K, fn: (e: EventMap[K]) => void): void;
+    off<K extends keyof EventMap>(ev: K, fn: (e: EventMap[K]) => void): void;
+}
+export class BoxEl extends BaseEl {
+    width(): number;
+    getPos(): { x: number; y: number };
+}
+export class LabelEl extends BaseEl {
+    text(): string;
+}
+export interface TagMap {
+    box: BoxEl;
+    label: LabelEl;
+}
+export class Factory {
+    constructor();
+    create<K extends keyof TagMap>(tag: K): TagMap[K];
+    create(tag: string): BaseEl;
+}
+export interface BaseOpts {
+    baseFlag?: boolean;
+}
+export interface DerivedOpts extends BaseOpts {
+    ownSize?: number;
+}
+export declare function useOpts(opts: DerivedOpts): string;
+export declare function configure(opts: { label?: string; count?: number }): string;
+"#,
+    )
+    .unwrap();
+    fs::write(
+        pkg_dir.join("index.mjs"),
+        r#"export class BaseEl {
+    constructor() { this._listeners = new Map(); this._note = ""; }
+    baseId() { return "base:" + this._note; }
+    chain(note) { this._note = note; return this; }
+    on(ev, fn) {
+        if (!this._listeners.has(ev)) this._listeners.set(ev, []);
+        this._listeners.get(ev).push(fn);
+    }
+    off(ev, fn) {
+        const list = this._listeners.get(ev) || [];
+        this._listeners.set(ev, list.filter(f => f !== fn));
+    }
+    emit(ev, payload) {
+        for (const f of (this._listeners.get(ev) || [])) f(payload);
+    }
+}
+export class BoxEl extends BaseEl {
+    width() { return 120; }
+    getPos() { return { x: 10, y: 25 }; }
+}
+export class LabelEl extends BaseEl {
+    text() { return "lbl"; }
+}
+export class Factory {
+    create(tag) {
+        if (tag === "box") return new BoxEl();
+        if (tag === "label") return new LabelEl();
+        return new BaseEl();
+    }
+}
+export function useOpts(opts) {
+    return `${Boolean(opts.baseFlag)}:${opts.ownSize ?? 0}`;
+}
+export function configure(opts) {
+    return `${opts.label ?? ""}:${opts.count ?? 0}`;
+}
+"#,
+    )
+    .unwrap();
+    let xml = lower_packages(&out, "gleam");
+    fs::write(out.join("api.xml"), &xml).unwrap();
+    let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+
+    assert!(!bindings.files.iter().any(|(p, _)| p.contains("areas/main")), "dropped /areas/main/:\n{:?}", bindings.files.iter().map(|(p, _)| p).collect::<Vec<_>>());
+    assert!(!bindings.files.iter().any(|(p, _)| p.ends_with("box_el_get_pos_result.gleam")), "folded class synthetic");
+    assert!(!bindings.files.iter().any(|(p, _)| p.ends_with("configure_opts.gleam")), "folded area synthetic");
+    let tag_map_gl = bindings.files.iter().find(|(p, _)| p == "bindings/tag_map.gleam").map(|(_, s)| s.as_str()).unwrap();
+    assert!(tag_map_gl.contains("pub const box: Key(") && tag_map_gl.contains("= Key(\"box\")"), "KeyMap const:\n{tag_map_gl}");
+    let box_el_gl = bindings.files.iter().find(|(p, _)| p == "bindings/box_el.gleam").map(|(_, s)| s.as_str()).unwrap();
+    let box_el_ffi = bindings.files.iter().find(|(p, _)| p == "bindings/box_el_ffi.mjs").map(|(_, s)| s.as_str()).unwrap();
+    assert!(box_el_gl.contains("@external(javascript, \"./base_el_ffi.mjs\", \"base_id\")"), "inherited alias:\n{box_el_gl}");
+    assert!(!box_el_ffi.contains("export function base_id"), "zero duplicate JS:\n{box_el_ffi}");
+
+    write_gleam_project(&out, &bindings);
+    fs::write(out.join("src/emit_ffi.mjs"), "export function emit_ping(target, ping) { target.emit('ping', { ping }); }\n").unwrap();
+    fs::write(
+        out.join("src/check.gleam"),
+        r#"import bindings as b
+import bindings/base_el
+import bindings/box_el
+import bindings/derived_opts
+import bindings/event_map
+import bindings/factory
+import bindings/ping_event
+import bindings/tag_map
+import cell
+import gleam/io
+
+@external(javascript, "./emit_ffi.mjs", "emit_ping")
+fn emit_ping(target: a, ping: Float) -> Nil
+
+fn check(ok: Bool, msg: String) -> Nil {
+  case ok {
+    True -> Nil
+    False -> panic as msg
+  }
+}
+
+pub fn main() {
+  let f = factory.new()
+  let bx = factory.create(f, tag_map.box)
+  check(box_el.width(bx) == 120.0, "keyed create")
+  let plain = factory.create_with_string(f, "other")
+  check(base_el.base_id(plain) == "base:", "string overload fallback")
+
+  let bx2 = box_el.chain(bx, "hi")
+  check(box_el.base_id(bx2) == "base:hi", "inherited base_id & returns_this")
+
+  let hits = cell.new(0.0)
+  let on_ping = fn(e) { cell.set(hits, cell.get(hits) +. ping_event.get_ping(e)) }
+  box_el.on(bx, event_map.ping, on_ping)
+  emit_ping(bx, 7.0)
+  check(cell.get(hits) == 7.0, "keyed listener called with PingEvent")
+  box_el.off(bx, event_map.ping, on_ping)
+  emit_ping(bx, 5.0)
+  check(cell.get(hits) == 7.0, "keyed listener removed by function identity")
+
+  let dopts =
+    derived_opts.create()
+    |> derived_opts.with_base_flag(True)
+    |> derived_opts.with_own_size(42.0)
+  check(b.use_opts(dopts) == "true:42", "inherited with_* builders")
+
+  let pos = box_el.get_pos(bx)
+  check(box_el.get_pos_result_get_x(pos) == 10.0 && box_el.get_pos_result_get_y(pos) == 25.0, "folded class synthetic")
+
+  let cfg =
+    b.configure_opts_create()
+    |> b.configure_opts_with_label("hi")
+    |> b.configure_opts_with_count(3.0)
+  check(b.configure(cfg) == "hi:3", "folded area synthetic")
+
+  io.println("stage3d checks passed")
+}
+"#,
+    )
+    .unwrap();
+    run(Command::new(&gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
+    let report = run(Command::new(node).arg(root().join("tests/run_gleam.mjs")).arg(out.join("node_modules/stage3d/index.mjs")).arg(out.join("build/dev/javascript/check/check.mjs")));
+    assert!(report.contains("stage3d checks passed"), "{report}");
+
+    // Negative type-check: wrong KeyMap key or wrong event payload type must be rejected by Gleam.
+    fs::write(
+        out.join("src/check.gleam"),
+        r#"import bindings/box_el
+import bindings/done_event
+import bindings/event_map
+import bindings/factory
+import bindings/tag_map
+
+pub fn wrong_key() {
+  factory.create(factory.new(), event_map.ping)
+}
+
+pub fn wrong_listener() {
+  let bx = factory.create(factory.new(), tag_map.box)
+  box_el.on(bx, event_map.ping, fn(e) {
+    let _ = done_event.get_done(e)
+    Nil
+  })
+}
+
+pub fn main() {
+  Nil
+}
+"#,
+    )
+    .unwrap();
+    let bad = Command::new(&gleam).current_dir(&out).arg("build").output().unwrap();
+    let said = String::from_utf8_lossy(&bad.stderr).to_string() + &String::from_utf8_lossy(&bad.stdout);
+    assert!(!bad.status.success(), "wrong key/listener should not compile:\n{said}");
+    assert_eq!(said.matches("Type mismatch").count(), 2, "expected 2 type mismatches:\n{said}");
+}
+
 fn setup_ref_fixture(name: &str, target: &str) -> (PathBuf, PathBuf) {
     let out = root().join("target/e2e").join(name);
     let _ = fs::remove_dir_all(&out);
@@ -1527,12 +1736,12 @@ fn gleam_cross_project_refs() {
     fs::write(
         out.join("src/check.gleam"),
         "import gleam/io\n\
-         import base_lib/areas/main as base\n\
-         import base_lib/areas/main/surface\n\
-         import base_lib/areas/main/rendering_context as base_ctx\n\
+         import base_lib as base\n\
+         import base_lib/surface\n\
+         import base_lib/rendering_context as base_ctx\n\
          import base_lib/types as base_types\n\
-         import app_lib/areas/main as app\n\
-         import app_lib/areas/main/rendering_context as app_ctx\n\
+         import app_lib as app\n\
+         import app_lib/rendering_context as app_ctx\n\
          import app_lib/types as app_types\n\n\
          pub fn main() {\n\
            let s = base.make_surface(640.0, 480.0)\n\

@@ -1,10 +1,10 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings/areas/main as b
+import bindings as b
 import bindings/types as t
 import gleam/io
-import bindings/areas/main/badge
-import bindings/areas/main/figure
-import bindings/areas/main/point
+import bindings/badge
+import bindings/figure
+import bindings/point
 
 
 fn check(ok: Bool, what: String) -> Nil {

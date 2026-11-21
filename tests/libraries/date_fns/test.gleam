@@ -1,10 +1,10 @@
 // date-fns from Gleam, in Node: dates made, moved, compared and formatted.
 // Every check must hold.
-import bindings/areas/main as date_fns
-import bindings/areas/main/duration
-import bindings/areas/main/format_iso_options
-import bindings/areas/main/interval
-import bindings/areas/main/iso_format_options
+import bindings as date_fns
+import bindings/duration
+import bindings/format_iso_options
+import bindings/interval
+import bindings/iso_format_options
 import bindings/runtime
 import bindings/types as t
 import gleam/int

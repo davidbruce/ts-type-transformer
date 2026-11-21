@@ -9,6 +9,7 @@ import bindings/areas/core/document
 import bindings/areas/core/node
 import bindings/areas/canvas/canvas_gradient
 import bindings/areas/html/html_canvas_element as canvas_el
+import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/runtime
 import bindings/types as t
 import cell
@@ -55,7 +56,7 @@ pub fn main() {
   let doc = dom.get_document()
   let body = document.get_body(doc)
 
-  let canvas = document.create_element_canvas(doc, None)
+  let canvas = document.create_element(doc, tag.canvas, None)
   canvas_el.set_width(canvas, 100.0)
   canvas_el.set_height(canvas, 60.0)
   node.append_child(body, canvas)

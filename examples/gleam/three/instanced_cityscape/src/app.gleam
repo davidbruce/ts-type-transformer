@@ -2,31 +2,32 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
 import gleam/result
-import three/areas/main/ambient_light
-import three/areas/main/box_geometry
-import three/areas/main/buffer_attribute
-import three/areas/main/color
-import three/areas/main/directional_light
-import three/areas/main/euler
-import three/areas/main/grid_helper
-import three/areas/main/instanced_mesh
-import three/areas/main/matrix4
-import three/areas/main/mesh
-import three/areas/main/mesh_standard_material
-import three/areas/main/mesh_standard_material_parameters
-import three/areas/main/object3d
-import three/areas/main/orthographic_camera
-import three/areas/main/perspective_camera
-import three/areas/main/plane_geometry
-import three/areas/main/quaternion
-import three/areas/main/scene
-import three/areas/main/vector3
-import three/areas/main/web_gl_renderer
-import three/areas/main/web_gl_renderer_parameters
+import three/ambient_light
+import three/box_geometry
+import three/buffer_attribute
+import three/color
+import three/directional_light
+import three/euler
+import three/grid_helper
+import three/instanced_mesh
+import three/matrix4
+import three/mesh
+import three/mesh_standard_material
+import three/mesh_standard_material_parameters
+import three/object3d
+import three/orthographic_camera
+import three/perspective_camera
+import three/plane_geometry
+import three/quaternion
+import three/scene
+import three/vector3
+import three/web_gl_renderer
+import three/web_gl_renderer_parameters
 import three/runtime as rt
 import three/types as t
 
@@ -226,7 +227,7 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener_click(b, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
   }
 
   wire_click("btn-cam", fn() {

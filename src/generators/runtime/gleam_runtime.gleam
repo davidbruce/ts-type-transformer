@@ -67,6 +67,11 @@ pub fn js_array(items: List(Dynamic)) -> Dynamic
 @external(javascript, "./runtime_ffi.mjs", "js_to_list")
 pub fn js_to_list(array: Dynamic) -> List(Dynamic)
 
+/// A typed key into a map of named values (such as DOM tag or event maps).
+pub type Key(map, value) {
+  Key(raw: String)
+}
+
 /// How a type's values cross between Gleam and JavaScript: what a generic
 /// function takes for each type parameter whose values cross (`box_value(b,
 /// codec_float())`). Each type has one: `shape_codec()`, `mode_codec()`.

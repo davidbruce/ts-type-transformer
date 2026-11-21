@@ -3,14 +3,14 @@ import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
-import prosemirror/areas/main/editor_state_apply_transaction_result as apply_res
-import prosemirror/areas/main/mark_spec_attrs
+import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
@@ -183,7 +183,7 @@ fn update_meta(
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener_click(btn, fn(_) { action() }, None)
+    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
     None -> Nil
   }
 }
@@ -246,7 +246,7 @@ pub fn main() {
       case pm_rt.ref_get(view_ref) {
         Some(v) -> {
           let res = editor_state.apply_transaction(editor_view.get_state(v), tr)
-          case apply_res.get_transactions(res) {
+          case editor_state.apply_transaction_result_get_transactions(res) {
             [] -> Nil
             _ -> {
               case transform.get_doc_changed(tr) {
@@ -273,7 +273,7 @@ pub fn main() {
                 }
                 False -> Nil
               }
-              editor_view.update_state(v, apply_res.get_state(res))
+              editor_view.update_state(v, editor_state.apply_transaction_result_get_state(res))
             }
           }
           update_meta(doc, audit_key, editor_view.get_state(v), undo_ref, redo_ref, locked_ref, blocked_ref, action_ref)

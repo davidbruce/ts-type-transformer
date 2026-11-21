@@ -3,6 +3,8 @@ import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
+import dom/areas/html/html_element_event_map as ev
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/bool
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
@@ -11,7 +13,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import prosemirror/areas/main/mark_spec_attrs
+import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/dom_parser
@@ -128,7 +130,7 @@ const spec_html = "<h2>DOMParser &amp; JSON Serialization</h2><p>ProseMirror con
 const changelog_html = "<h2>Release 1.4 Notes</h2><p>Added <strong>typed bindings</strong> for <code>DOMParser</code> and <em>DOMSerializer</em>.</p><blockquote><p>All round-trips verified with Node.eq().</p></blockquote><p>Edit directly above to watch HTML output update live.</p>"
 
 fn parse_html(doc, parser, html: String) -> t.Node(Nil) {
-  let div = document.create_element_div(doc, None)
+  let div = document.create_element(doc, tag.div, None)
   element.set_inner_html(div, html)
   dom_parser.parse(parser, div, None)
 }
@@ -156,7 +158,7 @@ fn describe_doc(d: t.Node(Nil)) -> String {
 }
 
 fn refresh_output(doc, serializer, d: t.Node(Nil), status_ref: pm_rt.Ref(String)) {
-  let div = document.create_element_div(doc, None)
+  let div = document.create_element(doc, tag.div, None)
   let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
   let html_out = element.get_inner_html(div)
   let status = pm_rt.ref_get(status_ref)
@@ -187,7 +189,7 @@ fn refresh_output(doc, serializer, d: t.Node(Nil), status_ref: pm_rt.Ref(String)
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener_click(btn, fn(_) { action() }, None)
+    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
     None -> Nil
   }
 }
@@ -272,7 +274,7 @@ pub fn main() {
 
   wire_btn(doc, "btn-4", fn() {
     let d = editor_state.get_doc(editor_view.get_state(view))
-    let div = document.create_element_div(doc, None)
+    let div = document.create_element(doc, tag.div, None)
     let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
     let reparsed = dom_parser.parse(parser, div, None)
     pm_rt.ref_set(status_ref, "DOM serializeFragment->parse eq() = " <> string.lowercase(bool.to_string(node.eq(d, reparsed))))

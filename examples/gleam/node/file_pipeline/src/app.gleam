@@ -8,8 +8,8 @@ import node/areas/events/event_emitter as events
 import node/areas/fs
 import node/areas/fs/rm_options
 import node/areas/fs/stats
-import node/areas/main/buffer
-import node/areas/main/mkdir_options
+import node/buffer
+import node/mkdir_options
 import node/areas/path
 import node/namespaces/node_js/event_emitter as emitter
 import node/runtime

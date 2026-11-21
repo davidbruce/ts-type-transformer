@@ -1,24 +1,23 @@
 // three.js from Gleam, in Node: vector, matrix, quaternion, euler and colour
 // maths, boxes and spheres, a scene graph with world positions, a mesh, a
 // ray cast, and geometry attributes. Every check must hold.
-import bindings/areas/main/box3
-import bindings/areas/main/box_geometry
-import bindings/areas/main/box_geometry_parameters
-import bindings/areas/main/buffer_attribute
-import bindings/areas/main/buffer_geometry
-import bindings/areas/main/color
-import bindings/areas/main/euler
-import bindings/areas/main/group
-import bindings/areas/main/intersection
-import bindings/areas/main/matrix4
-import bindings/areas/main/mesh
-import bindings/areas/main/mesh_basic_material
-import bindings/areas/main/normal_buffer_attributes
-import bindings/areas/main/object3d
-import bindings/areas/main/quaternion
-import bindings/areas/main/raycaster
-import bindings/areas/main/sphere
-import bindings/areas/main/vector3
+import bindings/box3
+import bindings/box_geometry
+import bindings/buffer_attribute
+import bindings/buffer_geometry
+import bindings/color
+import bindings/euler
+import bindings/group
+import bindings/intersection
+import bindings/matrix4
+import bindings/mesh
+import bindings/mesh_basic_material
+import bindings/normal_buffer_attributes
+import bindings/object3d
+import bindings/quaternion
+import bindings/raycaster
+import bindings/sphere
+import bindings/vector3
 import bindings/runtime
 import bindings/types as t
 import gleam/dynamic/decode
@@ -250,7 +249,7 @@ pub fn main() {
     passed
     + check(object3d.get_type(cube) == "Mesh", "mesh type")
     + check(box_geometry.get_type(geometry) == "BoxGeometry", "geometry type")
-    + check(box_geometry_parameters.get_width(params) == 2.0, "geometry parameters")
+    + check(box_geometry.parameters_get_width(params) == 2.0, "geometry parameters")
     + check(color.get_hex(mesh_basic_material.get_color(material), None) == 16_711_680.0, "material colour")
     + check(
       color.get_hex(mesh_basic_material.get_color(mesh.get_material(cube, t.mesh_basic_material_codec())), None) == 16_711_680.0,

@@ -1,10 +1,10 @@
 // Names that would be one Gleam identifier, each given its own. Every check must hold.
-import bindings/areas/main as b
+import bindings as b
 import gleam/io
-import bindings/areas/main/gizmo
-import bindings/areas/main/ns_node
-import bindings/areas/main/point
-import bindings/areas/main/shape
+import bindings/gizmo
+import bindings/ns_node
+import bindings/point
+import bindings/shape
 import bindings/namespaces/ns
 import bindings/namespaces/ns/node
 

@@ -6,7 +6,7 @@ import bindings/areas/prosemirror_model/attrs
 import bindings/areas/prosemirror_model/fragment
 import bindings/areas/prosemirror_model/mark
 import bindings/areas/prosemirror_model/mark_spec
-import bindings/areas/main/mark_spec_attrs
+import bindings/mark_spec_attrs
 import bindings/areas/prosemirror_model/attribute_spec
 import bindings/areas/prosemirror_model/mark_type
 import bindings/areas/prosemirror_model/node
@@ -15,11 +15,6 @@ import bindings/areas/prosemirror_model/node_type
 import bindings/areas/prosemirror_model/resolved_pos
 import bindings/areas/prosemirror_model/schema
 import bindings/areas/prosemirror_model/schema_spec
-import bindings/areas/main/schema_marks
-import bindings/areas/main/schema_nodes
-import bindings/areas/main/editor_state_apply_transaction_result as applied
-import bindings/areas/main/editor_view_coords_at_pos_result as coords
-import bindings/areas/main/editor_view_new_place_object as place_obj
 import bindings/areas/prosemirror_state as pstate
 import bindings/areas/prosemirror_state/editor_state
 import bindings/areas/prosemirror_state/editor_state_config
@@ -105,13 +100,13 @@ pub fn main() {
   schema_spec.set_nodes(spec, runtime.dynamic(nodes))
   schema_spec.set_marks(spec, runtime.dynamic(marks))
   let sch = schema.new(spec)
-  let assert Some(paragraph_type) = schema_nodes.get_at(schema.get_nodes(sch), "paragraph")
-  let assert Some(strong) = schema_marks.get_at(schema.get_marks(sch), "strong")
+  let assert Some(paragraph_type) = schema.nodes_get_at(schema.get_nodes(sch), "paragraph")
+  let assert Some(strong) = schema.marks_get_at(schema.get_marks(sch), "strong")
   let passed =
     check(node_type.get_name(schema.get_top_node_type(sch)) == "doc", "the top node is doc")
     + check(node_type.get_name(paragraph_type) == "paragraph", "a node type by name")
     + check(mark_type.get_name(strong) == "strong", "a mark type by name")
-    + check(option.is_none(schema_nodes.get_at(schema.get_nodes(sch), "nothing")), "an unknown node type")
+    + check(option.is_none(schema.nodes_get_at(schema.get_nodes(sch), "nothing")), "an unknown node type")
 
   // ---- Nodes from JSON ----
   let text_json = fn(text, marks) {
@@ -301,9 +296,9 @@ pub fn main() {
   let accepted = editor_state.apply_transaction(p3, allowed)
   let passed =
     passed
-    + check(node.get_text_content(editor_state.get_doc(applied.get_state(refused))) == node.get_text_content(editor_state.get_doc(p3)), "a blocked transaction changes nothing")
-    + check(applied.get_transactions(refused) == [], "and is not applied")
-    + check(node.get_text_content(editor_state.get_doc(applied.get_state(accepted))) == "#?!HelloWorld", "an allowed one is")
+    + check(node.get_text_content(editor_state.get_doc(editor_state.apply_transaction_result_get_state(refused))) == node.get_text_content(editor_state.get_doc(p3)), "a blocked transaction changes nothing")
+    + check(editor_state.apply_transaction_result_get_transactions(refused) == [], "and is not applied")
+    + check(node.get_text_content(editor_state.get_doc(editor_state.apply_transaction_result_get_state(accepted))) == "#?!HelloWorld", "an allowed one is")
     + check(cell.get(seen) >= 2, "the filter was asked")
 
   // ---- An editor view on the page's #stage ----
@@ -321,7 +316,7 @@ pub fn main() {
       None -> Nil
     }
   }))
-  let place = place_obj.create() |> place_obj.with_mount(test_page.element("stage"))
+  let place = editor_view.new_place_object_create() |> editor_view.new_place_object_with_mount(test_page.element("stage"))
   let view = editor_view.new(Some(t.EditorViewNewPlaceOrDistDOMNodeEditorViewNewPlaceObject(place)), props)
   cell.set(view_cell, Some(view))
   let at_one = editor_view.coords_at_pos(view, 1.0, None)
@@ -330,8 +325,8 @@ pub fn main() {
     + check(node.eq(editor_state.get_doc(editor_view.get_state(view)), doc), "the view shows the doc")
     + check(editor_view.get_editable(view), "editable")
     + check(!editor_view.get_is_destroyed(view), "not destroyed")
-    + check(coords.get_bottom(at_one) >. coords.get_top(at_one), "coordinates of a position have a height")
-    + check(coords.get_left(at_one) >=. 0.0, "and a place")
+    + check(editor_view.coords_at_pos_result_get_bottom(at_one) >. editor_view.coords_at_pos_result_get_top(at_one), "coordinates of a position have a height")
+    + check(editor_view.coords_at_pos_result_get_left(at_one) >=. 0.0, "and a place")
   let typing = editor_state.get_tr(editor_view.get_state(view))
   let _ = transaction.insert_text(typing, "Oh ", Some(1.0), Some(1.0))
   editor_view.update_state(view, editor_state.apply(editor_view.get_state(view), typing))

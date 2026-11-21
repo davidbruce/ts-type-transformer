@@ -4,10 +4,10 @@ import dom/areas/core/node as dom_node
 import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
-import pixi_js/areas/main/application
-import pixi_js/areas/main/application_init_options
-import pixi_js/areas/main/container
-import pixi_js/areas/main/graphics
+import pixi_js/application
+import pixi_js/application_init_options
+import pixi_js/container
+import pixi_js/graphics
 import pixi_js/runtime
 import pixi_js/types as t
 

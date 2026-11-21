@@ -1,17 +1,15 @@
 import gleam/float
 import gleam/list
 import gleam/option.{None, Some}
-import pts/areas/main/canvas_form
-import pts/areas/main/canvas_space
-import pts/areas/main/canvas_space_options
-import pts/areas/main/circle
-import pts/areas/main/group
-import pts/areas/main/i_player
-import pts/areas/main/multi_touch_space
-import pts/areas/main/num
-import pts/areas/main/polygon
-import pts/areas/main/pt
-import pts/areas/main/space
+import pts/canvas_form
+import pts/canvas_space
+import pts/canvas_space_options
+import pts/circle
+import pts/group
+import pts/i_player
+import pts/num
+import pts/polygon
+import pts/pt
 import pts/runtime as r
 import pts/types as t
 
@@ -45,9 +43,9 @@ pub fn main() -> Nil {
   let player =
     i_player.create()
     |> i_player.with_animate(fn(time_ms, _ftime, _space) {
-      let c = space.get_center(cs)
-      let size = space.get_size(cs)
-      let pointer = multi_touch_space.get_pointer(cs)
+      let c = canvas_space.get_center(cs)
+      let size = canvas_space.get_size(cs)
+      let pointer = canvas_space.get_pointer(cs)
       let min_dim = float.min(pt.get_x(size), pt.get_y(size))
       let radius = float.max(80.0, min_dim *. 0.40)
 
@@ -144,9 +142,9 @@ pub fn main() -> Nil {
       Nil
     })
 
-  let _ = space.add(cs, r.dynamic(player))
-  let _ = multi_touch_space.bind_mouse(cs, Some(True), None)
-  let _ = multi_touch_space.bind_touch(cs, Some(True), None, None)
-  let _ = space.play(cs, None)
+  let _ = canvas_space.add(cs, r.dynamic(player))
+  let _ = canvas_space.bind_mouse(cs, Some(True), None)
+  let _ = canvas_space.bind_touch(cs, Some(True), None, None)
+  let _ = canvas_space.play(cs, None)
   Nil
 }

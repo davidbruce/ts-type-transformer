@@ -1,10 +1,11 @@
-import date_fns/areas/main as df
-import date_fns/areas/main/duration
+import date_fns as df
+import date_fns/duration
 import date_fns/types as dt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
@@ -19,12 +20,12 @@ fn fmt_signed(v: Float) -> String {
 }
 
 fn add_kv(doc, row, label: String, val: String) -> Nil {
-  let box = document.create_element_div(doc, None)
+  let box = document.create_element(doc, tag.div, None)
   element.set_class_name(box, "kv")
-  let lbl = document.create_element_span(doc, None)
+  let lbl = document.create_element(doc, tag.span, None)
   element.set_class_name(lbl, "label")
   node.set_text_content(lbl, Some(label))
-  let s = document.create_element_div(doc, None)
+  let s = document.create_element(doc, tag.div, None)
   element.set_class_name(s, "val")
   node.set_text_content(s, Some(val))
   let _ = node.append_child(box, lbl)
@@ -41,11 +42,11 @@ pub fn main() -> Nil {
       let day = dt.DateOrStringOrNumberDate
       let arg = dt.DateArgDateType
 
-      let head = document.create_element_div(doc, None)
+      let head = document.create_element(doc, tag.div, None)
       element.set_class_name(head, "head")
-      let h1 = document.create_element_h1(doc, None)
+      let h1 = document.create_element(doc, tag.h1, None)
       node.set_text_content(h1, Some("Date-fns Arithmetic & Durations (Gleam)"))
-      let badge = document.create_element_span(doc, None)
+      let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("Base 2024-03-15"))
       let _ = node.append_child(head, h1)
@@ -72,18 +73,18 @@ pub fn main() -> Nil {
         #("base (immutable check)", base_d, "yyyy-MM-dd"),
       ]
 
-      let card = document.create_element_div(doc, None)
+      let card = document.create_element(doc, tag.div, None)
       element.set_class_name(card, "card")
-      let lbl = document.create_element_div(doc, None)
+      let lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(lbl, "label")
       node.set_text_content(lbl, Some("Immutable Date Stepping"))
       let _ = node.append_child(card, lbl)
 
-      let tbl = document.create_element_table(doc, None)
-      let thead = document.create_element_thead(doc, None)
-      let hrow = document.create_element_tr(doc, None)
+      let tbl = document.create_element(doc, tag.table, None)
+      let thead = document.create_element(doc, tag.thead, None)
+      let hrow = document.create_element(doc, tag.tr, None)
       list.each(["Operation", "Result", "Δ Days (vs base)", "Δ Hours"], fn(h) {
-        let th = document.create_element_th(doc, None)
+        let th = document.create_element(doc, tag.th, None)
         node.set_text_content(th, Some(h))
         let _ = node.append_child(hrow, th)
         Nil
@@ -91,22 +92,22 @@ pub fn main() -> Nil {
       let _ = node.append_child(thead, hrow)
       let _ = node.append_child(tbl, thead)
 
-      let tbody = document.create_element_tbody(doc, None)
+      let tbody = document.create_element(doc, tag.tbody, None)
       list.each(ops, fn(item) {
         let #(name, res, fmt) = item
-        let tr = document.create_element_tr(doc, None)
-        let td_op = document.create_element_td(doc, None)
-        let code = document.create_element_code(doc, None)
+        let tr = document.create_element(doc, tag.tr, None)
+        let td_op = document.create_element(doc, tag.td, None)
+        let code = document.create_element(doc, tag.code, None)
         node.set_text_content(code, Some(name))
         let _ = node.append_child(td_op, code)
-        let td_res = document.create_element_td(doc, None)
+        let td_res = document.create_element(doc, tag.td, None)
         node.set_text_content(td_res, Some(df.format_date(day(res), fmt, None)))
-        let td_dd = document.create_element_td(doc, None)
+        let td_dd = document.create_element(doc, tag.td, None)
         node.set_text_content(
           td_dd,
           Some(fmt_signed(df.difference_in_calendar_days(day(res), day(base_d), None))),
         )
-        let td_dh = document.create_element_td(doc, None)
+        let td_dh = document.create_element(doc, tag.td, None)
         node.set_text_content(
           td_dh,
           Some(fmt_signed(df.difference_in_hours(day(res), day(base_d), None))),
@@ -122,14 +123,14 @@ pub fn main() -> Nil {
       let _ = node.append_child(card, tbl)
       let _ = node.append_child(app, card)
 
-      let footer = document.create_element_div(doc, None)
+      let footer = document.create_element(doc, tag.div, None)
       element.set_class_name(footer, "card")
-      let f_lbl = document.create_element_div(doc, None)
+      let f_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(f_lbl, "label")
       node.set_text_content(f_lbl, Some("Duration & Unit Conversions"))
       let _ = node.append_child(footer, f_lbl)
 
-      let srow = document.create_element_div(doc, None)
+      let srow = document.create_element(doc, tag.div, None)
       element.set_class_name(srow, "summary-row")
       add_kv(doc, srow, "formatDuration(dur)", df.format_duration(dur, None))
       add_kv(doc, srow, "formatISODuration(dur)", df.format_iso_duration(dur))

@@ -1,10 +1,10 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings/areas/main as b
+import bindings as b
 import bindings/namespaces/geometry
 import bindings/types as t
 import gleam/io
-import bindings/areas/main/clock
-import bindings/areas/main/settings
+import bindings/clock
+import bindings/settings
 import bindings/namespaces/geometry/deep
 import bindings/namespaces/geometry/point
 

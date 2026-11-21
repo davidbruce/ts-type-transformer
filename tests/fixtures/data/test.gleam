@@ -1,19 +1,15 @@
 // Calls the generated Gleam bindings; every check must hold.
-import bindings/areas/main as b
+import bindings as b
 import bindings/runtime as r
 import bindings/types as t
 import gleam/io
 import gleam/option.{None, Some}
-import bindings/areas/main/area_size
-import bindings/areas/main/box
-import bindings/areas/main/item
-import bindings/areas/main/lookup_table
-import bindings/areas/main/norm_point
-import bindings/areas/main/options
-import bindings/areas/main/patch_changes
-import bindings/areas/main/pipe
-import bindings/areas/main/source
-import bindings/areas/main/tagged
+import bindings/box
+import bindings/item
+import bindings/options
+import bindings/pipe
+import bindings/source
+import bindings/tagged
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -38,27 +34,27 @@ pub fn main() {
   check(options.get_height(d) == None && options.get_title(d) == None, "missing")
 
   // Partial<Options>, Pick<Options, ...>, keyof Options.
-  let changes = patch_changes.create()
-  patch_changes.set_width(changes, Some(9.0))
+  let changes = b.patch_changes_create()
+  b.patch_changes_set_width(changes, Some(9.0))
   let patched = b.patch(d, changes)
   check(options.get_width(patched) == 9.0, "Partial")
-  let size = area_size.create()
-  area_size.set_width(size, 3.0)
+  let size = b.area_size_create()
+  b.area_size_set_width(size, 3.0)
   check(b.area(size) == 9.0, "Pick")
   check(b.field() == t.FieldResultTitle, "keyof")
 
   // Record<string, number>: an index.
-  let table = lookup_table.create()
-  lookup_table.set_at(table, "a", 7.0)
+  let table = b.lookup_table_create()
+  b.lookup_table_set_at(table, "a", 7.0)
   check(b.lookup(table, "a") == 7.0 && b.lookup(table, "b") == -1.0, "Record")
-  check(lookup_table.get_at(table, "a") == Some(7.0) && lookup_table.get_at(table, "b") == None, "index")
+  check(b.lookup_table_get_at(table, "a") == Some(7.0) && b.lookup_table_get_at(table, "b") == None, "index")
 
   // An intersection, and an inline object type.
   let tagged = tagged.create()
   tagged.set_name(tagged, "x")
   tagged.set_id(tagged, 5.0)
   check(b.show(tagged) == "x#5", "intersection")
-  check(norm_point.get_x(b.origin()) == 0.0, "inline object")
+  check(b.norm_point_get_x(b.origin()) == 0.0, "inline object")
 
   // Arrays are lists, tuples tuples.
   check(b.range(4.0) == [0.0, 1.0, 2.0, 3.0], "array")

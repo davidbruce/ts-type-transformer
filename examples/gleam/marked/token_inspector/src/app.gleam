@@ -2,12 +2,13 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
+import dom/areas/html/html_element_tag_name_map as tag
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import marked/areas/main/lexer
-import marked/areas/main/tokens_list
+import marked/lexer
+import marked/tokens_list
 import marked/namespaces/tokens/blockquote as token_blockquote
 import marked/namespaces/tokens/br as token_br
 import marked/namespaces/tokens/checkbox as token_checkbox
@@ -71,11 +72,11 @@ pub fn main() -> Nil {
       let toks = lexer.lex(sample, None)
       let items = tokens_list.to_list(toks)
 
-      let head = document.create_element_div(doc, None)
+      let head = document.create_element(doc, tag.div, None)
       element.set_class_name(head, "head")
-      let title = document.create_element_h1(doc, None)
+      let title = document.create_element(doc, tag.h1, None)
       node.set_text_content(title, Some("Marked Token Inspector (Gleam)"))
-      let badge = document.create_element_span(doc, None)
+      let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(
         badge,
@@ -85,31 +86,31 @@ pub fn main() -> Nil {
       let _ = node.append_child(head, badge)
       let _ = node.append_child(app, head)
 
-      let src_card = document.create_element_div(doc, None)
+      let src_card = document.create_element(doc, tag.div, None)
       element.set_class_name(src_card, "card")
-      let src_lbl = document.create_element_div(doc, None)
+      let src_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(src_lbl, "label")
       node.set_text_content(src_lbl, Some("Markdown Input"))
-      let src_pre = document.create_element_pre(doc, None)
+      let src_pre = document.create_element(doc, tag.pre, None)
       element.set_class_name(src_pre, "src")
       node.set_text_content(src_pre, Some(sample))
       let _ = node.append_child(src_card, src_lbl)
       let _ = node.append_child(src_card, src_pre)
       let _ = node.append_child(app, src_card)
 
-      let tbl_card = document.create_element_div(doc, None)
+      let tbl_card = document.create_element(doc, tag.div, None)
       element.set_class_name(tbl_card, "card")
-      let tbl_lbl = document.create_element_div(doc, None)
+      let tbl_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(tbl_lbl, "label")
       node.set_text_content(tbl_lbl, Some("Lexer Token Stream"))
       let _ = node.append_child(tbl_card, tbl_lbl)
 
-      let table = document.create_element_table(doc, None)
+      let table = document.create_element(doc, tag.table, None)
       element.set_class_name(table, "tok-table")
-      let thead = document.create_element_thead(doc, None)
-      let hrow = document.create_element_tr(doc, None)
+      let thead = document.create_element(doc, tag.thead, None)
+      let hrow = document.create_element(doc, tag.tr, None)
       list.each(["#", "Type", "Bytes", "Raw Snippet"], fn(col) {
-        let th = document.create_element_th(doc, None)
+        let th = document.create_element(doc, tag.th, None)
         node.set_text_content(th, Some(col))
         let _ = node.append_child(hrow, th)
         Nil
@@ -117,11 +118,11 @@ pub fn main() -> Nil {
       let _ = node.append_child(thead, hrow)
       let _ = node.append_child(table, thead)
 
-      let tbody = document.create_element_tbody(doc, None)
+      let tbody = document.create_element(doc, tag.tbody, None)
       list.index_fold(items, Nil, fn(_, tok, i) {
         let #(kind, raw) = token_kind_raw(tok)
         let snip = string.replace(raw, "\n", "↵")
-        let tr = document.create_element_tr(doc, None)
+        let tr = document.create_element(doc, tag.tr, None)
 
         list.each(
           [
@@ -131,7 +132,7 @@ pub fn main() -> Nil {
             snip,
           ],
           fn(cell_txt) {
-            let td = document.create_element_td(doc, None)
+            let td = document.create_element(doc, tag.td, None)
             node.set_text_content(td, Some(cell_txt))
             let _ = node.append_child(tr, td)
             Nil

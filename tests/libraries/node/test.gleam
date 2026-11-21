@@ -4,8 +4,8 @@ import bindings/areas/events/event_emitter as events
 import bindings/areas/fs as fs
 import bindings/areas/fs/rm_options
 import bindings/areas/fs/stats_base
-import bindings/areas/main/buffer
-import bindings/areas/main/mkdir_options
+import bindings/buffer
+import bindings/mkdir_options
 import bindings/areas/path
 import bindings/areas/path/format_input_path_object as path_format
 import bindings/areas/path/parsed_path

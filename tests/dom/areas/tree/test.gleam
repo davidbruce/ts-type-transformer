@@ -11,6 +11,7 @@ import bindings/areas/core/node_list
 import bindings/areas/core/node_list_of
 import bindings/areas/core/tree_walker
 import bindings/areas/html/html_collection_base as collection
+import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/types as t
 import cell
 import gleam/int
@@ -32,10 +33,10 @@ pub fn main() {
   let body = document.get_body(doc)
 
   // A list built from elements and text.
-  let list_el = document.create_element(doc, "ul", None)
+  let list_el = document.create_element(doc, tag.ul, None)
   element.set_id(list_el, "list")
   list.each(["one", "two", "three"], fn(word) {
-    let item = document.create_element(doc, "li", None)
+    let item = document.create_element(doc, tag.li, None)
     node.append_child(item, document.create_text_node(doc, word))
     element.set_attribute(item, "data-word", word)
     node.append_child(list_el, item)
@@ -66,11 +67,11 @@ pub fn main() {
   let assert Some(next) = element.get_next_element_sibling(two)
   check(node.is_same_node(three, Some(next)), "next element sibling")
   check(node.contains(body, Some(two)), "body contains")
-  check(element.matches(two, "li[data-word=two]"), "matches")
-  check(!element.matches(two, "li.nope"), "does not match")
-  let assert Some(up) = element.closest(two, "ul")
+  check(element.matches_with_string(two, "li[data-word=two]"), "matches")
+  check(!element.matches_with_string(two, "li.nope"), "does not match")
+  let assert Some(up) = element.closest(two, tag.ul)
   check(element.get_id(up) == "list", "closest")
-  check(option.is_none(element.closest(two, "table")), "closest none")
+  check(option.is_none(element.closest(two, tag.table)), "closest none")
 
   // Moved: appending a node that is in the tree moves it.
   node.append_child(list_el, two)
@@ -79,7 +80,7 @@ pub fn main() {
   check(element.get_text_content(list_el) == "onethreetwo", "order after move")
 
   // insertBefore puts a node ahead of another.
-  let zero0 = document.create_element(doc, "li", None)
+  let zero0 = document.create_element(doc, tag.li, None)
   element.set_text_content(zero0, Some("start"))
   node.insert_before(list_el, zero0, Some(first_el))
   let assert Some(head) = element.get_first_element_child(list_el)
@@ -88,7 +89,7 @@ pub fn main() {
   check(element.get_child_element_count(list_el) == 3.0, "removeChild")
 
   // Removed and replaced.
-  let zero = document.create_element(doc, "li", None)
+  let zero = document.create_element(doc, tag.li, None)
   element.set_text_content(zero, Some("zero"))
   node.replace_child(list_el, zero, first_el)
   check(option.is_none(node.get_parent_node(first_el)), "replaced node has no parent")
@@ -100,7 +101,7 @@ pub fn main() {
   // A fragment's children move in at once; it is left empty.
   let fragment = document.create_document_fragment(doc)
   list.each(["a", "b"], fn(word) {
-    let item = document.create_element(doc, "li", None)
+    let item = document.create_element(doc, tag.li, None)
     element.set_text_content(item, Some(word))
     node.append_child(fragment, item)
   })
@@ -121,9 +122,9 @@ pub fn main() {
   )
 
   // Markup parsed and written.
-  let host = document.create_element(doc, "div", None)
+  let host = document.create_element(doc, tag.div, None)
   element.set_inner_html(host, "<p class=\"x\">hi <b>there</b></p>")
-  let assert Some(b) = element.query_selector(host, "b")
+  let assert Some(b) = element.query_selector_element(host, "b")
   check(element.get_text_content(b) == "there", "querySelector")
   check(
     element.get_inner_html(host) == "<p class=\"x\">hi <b>there</b></p>",
@@ -137,7 +138,7 @@ pub fn main() {
   dom_token_list.remove(element.get_class_list(p), ["x"])
   check(element.get_class_name(p) == "y", "classList remove")
   check(
-    node_list_of.to_list(element.query_selector_all(host, "p, b"), t.element_codec()) |> list.length == 2,
+    node_list_of.to_list(element.query_selector_all_element(host, "p, b"), t.element_codec()) |> list.length == 2,
     "querySelectorAll",
   )
 
