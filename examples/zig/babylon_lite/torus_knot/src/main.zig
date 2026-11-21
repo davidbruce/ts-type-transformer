@@ -7,6 +7,7 @@ const App = struct {
     engine: b.EngineContext = undefined,
     knot_rot: b.EulerProxy = undefined,
     orb_pos: b.ObservableVec3 = undefined,
+    orb_light_pos: b.ObservableVec3 = undefined,
     elapsed: f64 = 0.0,
 };
 
@@ -25,9 +26,13 @@ fn setStatusError(err: b.JsValue) void {
 
 fn onBeforeRender(app: *App, delta_ms: f64) void {
     app.elapsed += delta_ms * 0.001;
-    app.knot_rot.setY(app.elapsed * 0.48);
-    app.knot_rot.setX(@sin(app.elapsed * 0.5) * 0.25);
-    app.orb_pos.set(@cos(app.elapsed * 0.9) * 3.8, 1.5 + @sin(app.elapsed * 1.3) * 0.75, @sin(app.elapsed * 0.9) * 3.8);
+    app.knot_rot.setY(app.elapsed * 0.55);
+    app.knot_rot.setX(@sin(app.elapsed * 0.4) * 0.25);
+    const x = @cos(app.elapsed * 0.9) * 2.8;
+    const y = 2.0 + @sin(app.elapsed * 1.8) * 0.45;
+    const z = @sin(app.elapsed * 0.9) * 2.8;
+    app.orb_pos.set(x, y, z);
+    app.orb_light_pos.set(x, y, z);
 }
 
 fn onStarted(ok: bool, val: b.JsValue) void {
@@ -54,18 +59,26 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     app.engine = val.as(b.EngineContext).retain();
 
     const scene = b.createSceneContext(app.engine, null);
-    scene.setClearColor(.{ .r = 0.04, .g = 0.06, .b = 0.11, .a = 1.0 });
+    scene.setClearColor(.{ .r = 0.05, .g = 0.07, .b = 0.11, .a = 1.0 });
 
-    const camera = b.createArcRotateCamera(std.math.pi / 3.0, std.math.pi / 2.8, 9.5, b.vec3(0.0, 1.4, 0.0));
+    const camera = b.createArcRotateCamera(std.math.pi / 4.0, std.math.pi / 3.0, 8.5, b.vec3(0.0, 1.6, 0.0));
     b.addToScene(scene, camera);
     _ = b.attachControl(camera, app.canvas, .{ .scene = scene });
 
     const hemi = b.createHemisphericLight(.{ .direction = .{ 0.0, 1.0, 0.2 }, .intensity = 0.75 });
+    hemi.setDiffuseColor(.{ 0.75, 0.85, 1.0 });
+    hemi.setGroundColor(.{ 0.12, 0.14, 0.22 });
     b.addToScene(scene, hemi);
 
-    const dir = b.createDirectionalLight(.{ -1.0, -2.0, -1.0 }, .{ .intensity = 1.8 });
+    const dir = b.createDirectionalLight(.{ -1.0, -2.0, -1.2 }, .{ .intensity = 2.2 });
     dir.setDiffuse(.{ 1.0, 0.96, 0.90 });
     b.addToScene(scene, dir);
+
+    const orb_light = b.createPointLight(.{ 2.8, 1.6, 0.0 }, .{ .intensity = 8.0 });
+    orb_light.setDiffuse(.{ 1.0, 0.45, 0.35 });
+    orb_light.setRange(12.0);
+    b.addToScene(scene, orb_light);
+    app.orb_light_pos = orb_light.getPosition().retain();
 
     const knot = b.createTorusKnot(app.engine, .{
         .radius = 1.15,
@@ -75,9 +88,9 @@ fn onEngine(app: *App, ok: bool, val: b.JsValue) void {
     });
     knot.getPosition().set(0.0, 2.0, 0.0);
     knot.setMaterial(b.createPbrMaterial(.{
-        .baseColorFactor = .{ 0.35, 0.76, 1.0, 1.0 },
-        .metallicFactor = 0.4,
-        .roughnessFactor = 0.25,
+        .baseColorFactor = .{ 0.18, 0.78, 0.95, 1.0 },
+        .metallicFactor = 0.75,
+        .roughnessFactor = 0.22,
     }));
     b.addToScene(scene, knot);
     app.knot_rot = knot.getRotation().retain();

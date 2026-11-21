@@ -88,33 +88,8 @@ pub extern "C" fn start() {
         .with_y(135.0)
         .with_radius(38.0)
         .with_fill("#111111");
-    fg_layer.add([
-        GroupOrShape::from(&card_a),
-        GroupOrShape::from(card_b),
-        GroupOrShape::from(card_c),
-        GroupOrShape::from(Circle::new(Some(&bc))),
-    ]);
-
-    card_a.move_to_top();
-    let card_a_z = card_a.get_z_index() as i32;
-
-    let clicks = Rc::new(Cell::new(0));
-    let on_click = KonvaEventListener::<Node<RectConfig>, dom::PointerEvent>::new({
-        let clicks = clicks.clone();
-        move |_| clicks.set(clicks.get() + 1)
-    });
-    card_a.on_click(&on_click);
-    card_a.fire("click", None, None);
-    card_a.fire("click", None, None);
-
-    bg_layer.draw();
-    fg_layer.draw();
-
-    let pt = Vector2d::default().with_x(250.0).with_y(160.0);
-    let hit_id = stage
-        .get_intersection(&pt)
-        .map_or_else(|| "none".to_string(), |s| s.id().invoke());
-
+    let gc = GroupConfig::default().with_listening(false);
+    let overlay = Group::new(Some(&gc));
     let dc = CircleConfig::default()
         .with_x(250.0)
         .with_y(160.0)
@@ -129,21 +104,59 @@ pub extern "C" fn start() {
         .with_font_size(12.0)
         .with_font_family("monospace")
         .with_fill("#111111");
-    fg_layer.add([
+    overlay.add([
         GroupOrShape::from(Circle::new(Some(&dc))),
         make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5),
         make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5),
         GroupOrShape::from(Text::new(Some(&l2))),
     ]);
+
+    fg_layer.add([
+        GroupOrShape::from(&card_a),
+        GroupOrShape::from(&card_b),
+        GroupOrShape::from(&card_c),
+        GroupOrShape::from(Circle::new(Some(&bc))),
+        GroupOrShape::from(&overlay),
+    ]);
+
+    card_a.move_to_top();
+    overlay.move_to_top();
+    bg_layer.draw();
     fg_layer.draw();
 
-    let msg = format!(
-        "Layers: {} \u{00B7} card-a zIndex={card_a_z} \u{00B7} hit@(250,160)={hit_id} \u{00B7} clicks={}",
-        stage.get_layers().len(),
-        clicks.get()
-    );
-    dom::document()
-        .get_element_by_id("meta")
-        .expect("missing #meta")
-        .set_text_content(Some(&msg));
+    let clicks = Rc::new(Cell::new(0usize));
+    for (card, card_id) in [(&card_a, "card-a"), (&card_b, "card-b"), (&card_c, "card-c")] {
+        let on_click = KonvaEventListener::<Node<RectConfig>, dom::PointerEvent>::new({
+            let stage = stage.clone();
+            let fg_layer = fg_layer.clone();
+            let overlay = overlay.clone();
+            let card = card.clone();
+            let clicks = clicks.clone();
+            move |_| {
+                card.move_to_top();
+                overlay.move_to_top();
+                fg_layer.draw();
+                let n = clicks.get() + 1;
+                clicks.set(n);
+                let z = card.get_z_index() as i32;
+
+                let pt = Vector2d::default().with_x(250.0).with_y(160.0);
+                let hit_id = stage
+                    .get_intersection(&pt)
+                    .map_or_else(|| "none".to_string(), |s| s.id().invoke());
+
+                let msg = format!(
+                    "Layers: {} \u{00B7} top={card_id} (z={z}) \u{00B7} hit@(250,160)={hit_id} \u{00B7} clicks={n}",
+                    stage.get_layers().len()
+                );
+                if let Some(meta) = dom::document().get_element_by_id("meta") {
+                    meta.set_text_content(Some(&msg));
+                }
+            }
+        });
+        card.on_click(&on_click);
+    }
+
+    card_a.fire("click", None, None);
+    card_a.fire("click", None, None);
 }

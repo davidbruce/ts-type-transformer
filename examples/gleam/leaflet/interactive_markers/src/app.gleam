@@ -1,6 +1,8 @@
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
+import gleam/float
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import leaflet as leaflet
@@ -105,21 +107,68 @@ pub fn main() {
     )
   let _ = popup.open_on(note, m)
 
+  let fmt2 = fn(v: Float) -> String {
+    let neg = v <. 0.0
+    let av = case neg {
+      True -> 0.0 -. v
+      False -> v
+    }
+    let scaled = float.round(av *. 100.0)
+    let whole = int.to_string(scaled / 100)
+    let frac = scaled % 100
+    let frac_s = case frac < 10 {
+      True -> "0" <> int.to_string(frac)
+      False -> int.to_string(frac)
+    }
+    case neg {
+      True -> "-" <> whole <> "." <> frac_s
+      False -> whole <> "." <> frac_s
+    }
+  }
+
+  let clicks = runtime.ref_new(0)
   let _ =
     evented.on_with_evented_add_event_listener_type_click(
       m,
       t.EventedAddEventListenerTypeClickClick,
       fn(ev) {
-        case lat_lng.get_lat(leaflet_mouse_event.get_latlng(ev)) >. 0.0 {
-          True ->
+        let ll = leaflet_mouse_event.get_latlng(ev)
+        let lat = lat_lng.get_lat(ll)
+        let lng = lat_lng.get_lng(ll)
+        case lat >. 0.0 {
+          True -> {
+            let n = runtime.ref_update(clicks, fn(c) { c + 1 })
+            let coords = fmt2(lat) <> "N, " <> fmt2(lng) <> "E"
+            case n > 2 {
+              True -> {
+                let _ = div_overlay.set_lat_lng(note, t.LatLngExpressionLatLng(ll))
+                let _ =
+                  div_overlay.set_content(
+                    note,
+                    t.StringOrHTMLElementOrDivOverlayGetContentResultString(
+                      "Click #" <> int.to_string(n) <> " · " <> coords,
+                    ),
+                  )
+                let _ = popup.open_on(note, m)
+                Nil
+              }
+              False -> Nil
+            }
             case document.get_element_by_id(core.get_document(), "meta") {
               Some(meta) ->
                 dom_node.set_text_content(
                   meta,
-                  Some("5 DivIcon stations · popup open (Bern) · synthetic click listener verified"),
+                  Some(
+                    "5 DivIcon stations · clicks="
+                    <> int.to_string(n)
+                    <> " · last click ("
+                    <> coords
+                    <> ")",
+                  ),
                 )
               None -> Nil
             }
+          }
           False -> Nil
         }
       },
@@ -128,6 +177,7 @@ pub fn main() {
 
   let payload = leaflet_mouse_event.create()
   leaflet_mouse_event.set_latlng(payload, bern)
+  let _ = evented.fire(m, "click", Some(runtime.dynamic(payload)), None)
   let _ = evented.fire(m, "click", Some(runtime.dynamic(payload)), None)
   Nil
 }

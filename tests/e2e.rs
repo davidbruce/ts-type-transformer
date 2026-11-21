@@ -553,7 +553,7 @@ fn xml_follows_the_schema() {
     let out = root().join("target/e2e/schema");
     fs::create_dir_all(&out).unwrap();
     let mut inputs: Vec<PathBuf> = ["shapes", "callbacks", "data", "globals", "unions", "pts", "exports"].iter().map(|f| root().join("tests/fixtures").join(f).join("api.d.ts")).collect();
-    inputs.extend(["tests/bench/api.d.ts", "examples/lowering.d.ts", "examples/features.d.ts"].map(|p| root().join(p)));
+    inputs.extend(["tests/bench/api.d.ts", "tests/fixtures/lowering.d.ts", "tests/fixtures/features.d.ts"].map(|p| root().join(p)));
     inputs.push(PathBuf::from("lib.es5.d.ts"));
     // Text that XML cannot hold as it is: a control character, a line break, an empty name.
     let odd = out.join("odd.d.ts");
@@ -2129,7 +2129,7 @@ fn fsharp_checks_constraints() {
 #[test]
 fn lowered_constructs_are_absent() {
     use generators::{attr, elements, flag, path};
-    let inputs = ["tests/fixtures/shapes/api.d.ts", "examples/lowering.d.ts", "examples/features.d.ts", "lib.es5.d.ts"];
+    let inputs = ["tests/fixtures/shapes/api.d.ts", "tests/fixtures/lowering.d.ts", "tests/fixtures/features.d.ts", "lib.es5.d.ts"];
     for target in ["fsharp", "ocaml", "rust", "c", "zig", "cpp"] {
         for input in inputs {
             // A bare `lib.*.d.ts` name selects a bundled library.
@@ -3110,6 +3110,61 @@ fn webworker_bindings_and_worker() {
     }
 }
 
+#[test]
+fn wasm_runtime_wasi_fd_write() {
+    let Some([node]) = tools(["node"]) else { return };
+    let dir = root().join("target/e2e/wasi_fd_write");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let xml = lower(&root().join("tests/fixtures/shapes/api.d.ts"), Some("c"), &[]);
+    let m = model(&xml, "C");
+    fs::write(dir.join("glue.mjs"), generators::wasm::glue(&m, None)).unwrap();
+    fs::write(
+        dir.join("test.mjs"),
+        "import assert from 'node:assert/strict';\n\
+         import { createRuntime } from './glue.mjs';\n\
+         const logs = [];\n\
+         const errs = [];\n\
+         const origLog = console.log;\n\
+         const origErr = console.error;\n\
+         console.log = (...a) => logs.push(a.join(' '));\n\
+         console.error = (...a) => errs.push(a.join(' '));\n\
+         try {\n\
+           const memory = new WebAssembly.Memory({ initial: 1 });\n\
+           const rt = createRuntime(() => ({ exports: { memory } }));\n\
+           const u8 = new Uint8Array(memory.buffer);\n\
+           const dv = new DataView(memory.buffer);\n\
+           const enc = new TextEncoder();\n\
+           const s1 = enc.encode('hello ');\n\
+           const s2 = enc.encode('wasi\\n');\n\
+           u8.set(s1, 1024);\n\
+           u8.set(s2, 1040);\n\
+           dv.setUint32(64, 1024, true);\n\
+           dv.setUint32(68, s1.length, true);\n\
+           dv.setUint32(72, 1040, true);\n\
+           dv.setUint32(76, s2.length, true);\n\
+           assert.equal(rt.wasi.fd_write(1, 64, 2, 128), 0);\n\
+           assert.equal(dv.getUint32(128, true), 11);\n\
+           const e1 = enc.encode('err \\u2014 line\\npart');\n\
+           u8.set(e1, 2048);\n\
+           dv.setUint32(160, 2048, true);\n\
+           dv.setUint32(164, e1.length, true);\n\
+           assert.equal(rt.wasi.fd_write(2, 160, 1, 176), 0);\n\
+           assert.equal(dv.getUint32(176, true), e1.length);\n\
+           assert.equal(rt.wasi.proc_exit(0), 0);\n\
+           assert.equal(rt.wasi.fd_close(3), 0);\n\
+         } finally {\n\
+           console.log = origLog;\n\
+           console.error = origErr;\n\
+         }\n\
+         assert.deepEqual(logs, ['hello wasi']);\n\
+         assert.deepEqual(errs, ['err \\u2014 line', 'part']);\n",
+    )
+    .unwrap();
+    run(Command::new(node).arg(dir.join("test.mjs")));
+}
+
 // ---- real libraries ----
 //
 // The libraries in tests/libraries/package.json, installed by
@@ -3859,14 +3914,16 @@ mod examples {
                 }
             }
         }
-        let cv_src = root().join("examples/code_viewer.mjs");
-        if cv_src.exists() {
-            let bytes = fs::read(&cv_src).unwrap();
-            let dst = target_root.join("code_viewer.mjs");
-            if fs::read(&dst).ok().as_deref() != Some(bytes.as_slice()) {
-                let tmp = target_root.join(".code_viewer.mjs.tmp");
-                fs::write(&tmp, bytes).unwrap();
-                fs::rename(&tmp, &dst).unwrap();
+        for file in ["code_viewer.mjs", "target_gallery.mjs"] {
+            let src = root().join("examples").join(file);
+            if src.exists() {
+                let bytes = fs::read(&src).unwrap();
+                let dst = target_root.join(file);
+                if fs::read(&dst).ok().as_deref() != Some(bytes.as_slice()) {
+                    let tmp = target_root.join(format!(".{file}.tmp"));
+                    fs::write(&tmp, bytes).unwrap();
+                    fs::rename(&tmp, &dst).unwrap();
+                }
             }
         }
         target_root

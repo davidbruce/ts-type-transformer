@@ -64,9 +64,26 @@ pub extern "C" fn start() {
     let clicks = Rc::new(Cell::new(0usize));
     let on_click = LeafletMouseEventHandlerFn::new({
         let clicks = clicks.clone();
+        let m_cb = m.clone();
+        let note_cb = note.clone();
         move |ev: LeafletMouseEvent| {
-            if ev.latlng().lat() > 0.0 {
-                clicks.set(clicks.get() + 1);
+            let ll = ev.latlng();
+            let lat = ll.lat();
+            let lng = ll.lng();
+            if lat > 0.0 {
+                let n = clicks.get() + 1;
+                clicks.set(n);
+                if n > 2 {
+                    note_cb.set_lat_lng(&ll);
+                    note_cb.set_content(&format!("Click #{n} · {lat:.2}N, {lng:.2}E"));
+                    note_cb.open_on(&m_cb);
+                }
+                if let Some(meta) = dom::document().get_element_by_id("meta") {
+                    let text = format!(
+                        "5 DivIcon stations · clicks={n} · last click ({lat:.2}N, {lng:.2}E)"
+                    );
+                    meta.set_text_content(Some(&text));
+                }
             }
         }
     });
@@ -79,13 +96,4 @@ pub extern "C" fn start() {
     let payload = JsValue::from(&data);
     m.fire("click", Some(&payload), None);
     m.fire("click", Some(&payload), None);
-
-    if let Some(meta) = dom::document().get_element_by_id("meta") {
-        let text = format!(
-            "{} DivIcon stations · popup open (Bern) · {} synthetic clicks dispatched",
-            stations.len(),
-            clicks.get()
-        );
-        meta.set_text_content(Some(&text));
-    }
 }

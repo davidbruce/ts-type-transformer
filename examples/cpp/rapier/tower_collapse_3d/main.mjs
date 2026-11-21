@@ -5,7 +5,6 @@ import { makeEnv as babylonEnv } from '../../bindings/babylonjs_lite/glue.mjs';
 import { makeEnv as rapierEnv } from '../../bindings/dimforge_rapier3d_compat/glue.mjs';
 
 let instance;
-const wasi = new Proxy({}, { get: () => () => 0 });
 const rt = createRuntime(() => instance);
 const dom = domEnv(() => instance, { runtime: rt });
 const babylon = babylonEnv(() => instance, { runtime: rt, modules: { '@babylonjs/lite': babylonLite } });
@@ -16,7 +15,7 @@ const bytes = await (await fetch('./app.wasm')).arrayBuffer();
   dom: dom.$pkg,
   babylonjs_lite: babylon.$pkg,
   dimforge_rapier3d_compat: rp.$pkg,
-  wasi_snapshot_preview1: wasi,
+  wasi_snapshot_preview1: rt.wasi,
 }));
 instance.exports._initialize?.();
 instance.exports.start();

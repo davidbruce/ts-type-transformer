@@ -5,12 +5,27 @@
 static Leaflet_LatLngExpression E(Leaflet_LatLng ll) { return Leaflet_LatLngExpression_of_Leaflet_LatLng(ll); }
 
 static int g_clicks = 0;
+static Leaflet_Map g_map = { 0 };
+static Leaflet_Popup g_note = { 0 };
 
 static void on_click(void* ctx, LeafletMouseEvent e) {
     (void)ctx;
     js_scope_open();
-    if (Leaflet_LatLng_get_lat(LeafletMouseEvent_get_latlng(e)) > 0.0) {
+    Leaflet_LatLng ll = LeafletMouseEvent_get_latlng(e);
+    double lat = Leaflet_LatLng_get_lat(ll);
+    double lng = Leaflet_LatLng_get_lng(ll);
+    if (lat > 0.0) {
         g_clicks++;
+        char text[160];
+        if (g_clicks > 2) {
+            snprintf(text, sizeof text, "Click #%d \xC2\xB7 %.2fN, %.2fE", g_clicks, lat, lng);
+            Leaflet_Popup_setLatLng(g_note, E(ll));
+            Leaflet_Popup_setContent(g_note, Leaflet_Content_of(text));
+            Leaflet_Popup_openOn(g_note, g_map);
+        }
+        snprintf(text, sizeof text, "5 DivIcon stations \xC2\xB7 clicks=%d \xC2\xB7 last click (%.2fN, %.2fE)", g_clicks, lat, lng);
+        HTMLElement meta = Document_getElementById(get_document(), "meta");
+        if (meta.h != 0) HTMLElement_set_textContent(meta, text);
     }
     js_scope_close();
 }
@@ -83,16 +98,16 @@ __attribute__((export_name("start"))) void start(void) {
     Leaflet_Popup_setContent(note, Leaflet_Content_of("03 Bern · 46.95N, 7.45E"));
     Leaflet_Popup_openOn(note, m);
 
+    g_map = m;
+    js_retain(g_map);
+    g_note = note;
+    js_retain(g_note);
+
     LeafletMouseEventHandlerFn handler = LeafletMouseEventHandlerFn_from(on_click, 0);
     Leaflet_Map_on_with_Evented_addEventListener_type_click(m, Leaflet_Evented_addEventListener_type_click_click, handler, (JsValue){ 0 });
     LeafletMouseEvent data = LeafletMouseEvent_create();
     LeafletMouseEvent_set_latlng(data, pts[2]);
     Leaflet_Map_fire(m, "click", js_value(data));
     Leaflet_Map_fire(m, "click", js_value(data));
-
-    char buf[160];
-    snprintf(buf, sizeof buf, "5 DivIcon stations · popup open (Bern) · %d synthetic clicks dispatched", g_clicks);
-    HTMLElement meta = Document_getElementById(get_document(), "meta");
-    if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
     js_scope_close();
 }

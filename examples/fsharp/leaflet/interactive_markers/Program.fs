@@ -69,14 +69,18 @@ let main () =
     let mutable clicks = 0
     let onClick: LeafletMouseEventHandlerFn =
         fun (ev: LeafletMouseEvent) ->
-            if ev.latlng.lat > 0.0 then
+            let ll = ev.latlng
+            if ll.lat > 0.0 then
                 clicks <- clicks + 1
+                if clicks > 2 then
+                    (note :> DivOverlay).setLatLng ll |> ignore
+                    note.setContent (sprintf "Click #%d · %.2fN, %.2fE" clicks ll.lat ll.lng) |> ignore
+                    note.openOn m |> ignore
+                let meta = (document.getElementById "meta").Value
+                meta.textContent <- sprintf "%d DivIcon stations · clicks=%d · last click (%.2fN, %.2fE)" stations.Length clicks ll.lat ll.lng
     m.on (EventedAddEventListenerTypeClick.Click, onClick) |> ignore
     let payload = {| latlng = bernPt |}
     m.fire ("click", payload) |> ignore
     m.fire ("click", payload) |> ignore
-
-    let meta = (document.getElementById "meta").Value
-    meta.textContent <- sprintf "%d DivIcon stations · popup open (Bern) · %d synthetic clicks dispatched" stations.Length clicks
 
 main ()

@@ -33,18 +33,29 @@ static void no_unsub(void* ctx) { (void)ctx; }
 static JsValue atom_sub(void* ctx, JsValue obs) {
     (void)ctx; (void)obs;
     JsValue sub = js_object();
-    js_set_val(sub, "unsubscribe", Table_void_fn_from(no_unsub, NULL));
+    Table_void_fn unsub = Table_void_fn_from(no_unsub, NULL);
+    js_set_val(sub, "unsubscribe", unsub);
+    js_release(unsub);
     return sub;
 }
 static JsValue make_atom(AtomState* a) {
     JsValue atom = js_object();
-    js_set_val(atom, "get", Table_void_to_any_fn_from(atom_get, a));
-    if (!a->is_ro) js_set_val(atom, "set", Table_Updater_fn2_from(atom_set, a));
-    js_set_val(atom, "subscribe", Table_Updater_fn2_from(atom_sub, NULL));
+    Table_void_to_any_fn get_fn = Table_void_to_any_fn_from(atom_get, a);
+    js_set_val(atom, "get", get_fn);
+    js_release(get_fn);
+    if (!a->is_ro) {
+        Table_Updater_fn2 set_fn = Table_Updater_fn2_from(atom_set, a);
+        js_set_val(atom, "set", set_fn);
+        js_release(set_fn);
+    }
+    Table_Updater_fn2 sub_fn = Table_Updater_fn2_from(atom_sub, NULL);
+    js_set_val(atom, "subscribe", sub_fn);
+    js_release(sub_fn);
     return atom;
 }
 static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
     (void)ctx; (void)opts;
+    if (atom_count >= (int)(sizeof(atoms) / sizeof(atoms[0]))) __builtin_trap();
     AtomState* a = &atoms[atom_count++];
     a->value = initial;
     js_retain(initial);
@@ -52,6 +63,7 @@ static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions o
 }
 static Table_ReadonlyAtom create_readonly(void* ctx, Table_void_to_any_fn fn, TableAtomOptions opts) {
     (void)ctx; (void)opts;
+    if (atom_count >= (int)(sizeof(atoms) / sizeof(atoms[0]))) __builtin_trap();
     AtomState* a = &atoms[atom_count++];
     a->is_ro = true;
     a->derive = (JsValue){ fn.h };

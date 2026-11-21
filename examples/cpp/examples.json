@@ -14,7 +14,7 @@
     {
       "id": "pts/polygon_subdivision",
       "package": "pts",
-      "title": "Pts \u2014 Polygon Subdivision",
+      "title": "Polygon Subdivision",
       "description": "Recursive 9-level Polygon.midpoints subdivision with rotating spokes and live centroid marker",
       "path": "./pts/polygon_subdivision/index.html",
       "source": "./pts/polygon_subdivision/main.cpp",
@@ -23,7 +23,7 @@
     {
       "id": "pts/curve_splines",
       "package": "pts",
-      "title": "Pts \u2014 Spline Curves",
+      "title": "Spline Curves",
       "description": "Interactive Catmull-Rom, Cardinal, and B-spline ribbons sharing an 11-point control wave",
       "path": "./pts/curve_splines/index.html",
       "source": "./pts/curve_splines/main.cpp",
@@ -32,7 +32,7 @@
     {
       "id": "pts/circle_intersections",
       "package": "pts",
-      "title": "Pts \u2014 Circle Intersections",
+      "title": "Circle Intersections",
       "description": "Real-time Circle.intersectCircle2D nodes and Line.perpendicularFromPt chord projections",
       "path": "./pts/circle_intersections/index.html",
       "source": "./pts/circle_intersections/main.cpp",
@@ -41,7 +41,7 @@
     {
       "id": "pts/convex_hull_network",
       "package": "pts",
-      "title": "Pts \u2014 Convex Hull & Network",
+      "title": "Convex Hull & Network",
       "description": "Harmonic radial point cloud with live Polygon.convexHull, Polygon.network chords, and Geom.boundingBox",
       "path": "./pts/convex_hull_network/index.html",
       "source": "./pts/convex_hull_network/main.cpp",
@@ -59,7 +59,7 @@
     {
       "id": "babylon_lite/pbr_material_matrix",
       "package": "babylon_lite",
-      "title": "Babylon Lite \u2014 PBR Material Matrix",
+      "title": "PBR Material Matrix",
       "description": "5x5 monochrome metallic-roughness PBR sphere grid with orbiting studio point light",
       "path": "./babylon_lite/pbr_material_matrix/index.html",
       "source": "./babylon_lite/pbr_material_matrix/main.cpp",
@@ -68,7 +68,7 @@
     {
       "id": "babylon_lite/polyhedron_sculptures",
       "package": "babylon_lite",
-      "title": "Babylon Lite \u2014 Polyhedron Sculptures",
+      "title": "Polyhedron Sculptures",
       "description": "Five Platonic and Archimedean polyhedra on plinths under a sweeping spotlight",
       "path": "./babylon_lite/polyhedron_sculptures/index.html",
       "source": "./babylon_lite/polyhedron_sculptures/main.cpp",
@@ -77,7 +77,7 @@
     {
       "id": "babylon_lite/csg_boolean_sculpture",
       "package": "babylon_lite",
-      "title": "Babylon Lite \u2014 CSG Boolean Sculpture",
+      "title": "CSG Boolean Sculpture",
       "description": "Constructive solid geometry cube carved by orthogonal cylinders with clearcoat finish and gimbal rings",
       "path": "./babylon_lite/csg_boolean_sculpture/index.html",
       "source": "./babylon_lite/csg_boolean_sculpture/main.cpp",
@@ -86,7 +86,7 @@
     {
       "id": "babylon_lite/kinetic_wave_monoliths",
       "package": "babylon_lite",
-      "title": "Babylon Lite \u2014 Kinetic Wave Monoliths",
+      "title": "Kinetic Wave Monoliths",
       "description": "6x6 undulating architectural monolith field with orbiting clearcoat capsules and dual point lights",
       "path": "./babylon_lite/kinetic_wave_monoliths/index.html",
       "source": "./babylon_lite/kinetic_wave_monoliths/main.cpp",
@@ -275,7 +275,7 @@
     {
       "id": "konva/shapes_gallery",
       "package": "konva",
-      "title": "Konva \u2014 Geometric Primitives",
+      "title": "Geometric Primitives",
       "description": "Monochrome Rect, Circle, RegularPolygon, Star, Ring, Wedge, and Text shapes on a single Konva Layer.",
       "path": "./konva/shapes_gallery/index.html",
       "source": "./konva/shapes_gallery/main.cpp",
@@ -284,7 +284,7 @@
     {
       "id": "konva/groups_transforms",
       "package": "konva",
-      "title": "Konva \u2014 Nested Groups & Transforms",
+      "title": "Nested Groups & Transforms",
       "description": "Nested Konva Groups with translation, rotation, scaling, getAbsolutePosition(), and getClientRect().",
       "path": "./konva/groups_transforms/index.html",
       "source": "./konva/groups_transforms/main.cpp",
@@ -293,7 +293,7 @@
     {
       "id": "konva/wireframe_diagram",
       "package": "konva",
-      "title": "Konva \u2014 Wireframe Architecture Diagram",
+      "title": "Wireframe Architecture Diagram",
       "description": "System pipeline boxes connected with Konva Arrows, dashed Lines, selectors, and toJSON() inspection.",
       "path": "./konva/wireframe_diagram/index.html",
       "source": "./konva/wireframe_diagram/main.cpp",
@@ -302,7 +302,7 @@
     {
       "id": "konva/radial_rosette",
       "package": "konva",
-      "title": "Konva \u2014 Parametric Radial Rosette",
+      "title": "Parametric Radial Rosette",
       "description": "Procedurally generated concentric rings, radial spokes, rotated petals, and perimeter ticks.",
       "path": "./konva/radial_rosette/index.html",
       "source": "./konva/radial_rosette/main.cpp",
@@ -311,7 +311,7 @@
     {
       "id": "konva/layers_hit_test",
       "package": "konva",
-      "title": "Konva \u2014 Multi-Layer Z-Order & Hit Test",
+      "title": "Multi-Layer Z-Order & Hit Test",
       "description": "Two stacked Konva Layers with z-order elevation, findOne(), synthetic click events, and stage.getIntersection().",
       "path": "./konva/layers_hit_test/index.html",
       "source": "./konva/layers_hit_test/main.cpp",
@@ -320,7 +320,7 @@
     {
       "id": "pixi/vector_primitives",
       "package": "pixi",
-      "title": "PixiJS \u2014 Vector Primitives",
+      "title": "Vector Primitives",
       "description": "Monochrome Graphics rect, roundRect, circle, ellipse, regularPoly, star, and stroke outlines on WebGL.",
       "path": "./pixi/vector_primitives/index.html",
       "source": "./pixi/vector_primitives/main.cpp",
@@ -329,7 +329,7 @@
     {
       "id": "pixi/sprite_mosaic",
       "package": "pixi",
-      "title": "PixiJS \u2014 Tinted Sprite Mosaic",
+      "title": "Tinted Sprite Mosaic",
       "description": "40 Texture.WHITE hardware-accelerated Sprites arranged in an 8x5 monochrome greyscale grid.",
       "path": "./pixi/sprite_mosaic/index.html",
       "source": "./pixi/sprite_mosaic/main.cpp",
@@ -338,7 +338,7 @@
     {
       "id": "pixi/scene_hierarchy",
       "package": "pixi",
-      "title": "PixiJS \u2014 Nested Container Hierarchy",
+      "title": "Nested Container Hierarchy",
       "description": "Nested PixiJS Containers with translation, rotation, scaling, Matrix transforms, and local bounds.",
       "path": "./pixi/scene_hierarchy/index.html",
       "source": "./pixi/scene_hierarchy/main.cpp",
@@ -347,7 +347,7 @@
     {
       "id": "pixi/generative_lattice",
       "package": "pixi",
-      "title": "PixiJS \u2014 Generative Isometric Lattice",
+      "title": "Generative Isometric Lattice",
       "description": "Procedural monochrome isometric grid rendered with PixiJS Graphics polygons and wireframe lines.",
       "path": "./pixi/generative_lattice/index.html",
       "source": "./pixi/generative_lattice/main.cpp",
@@ -356,7 +356,7 @@
     {
       "id": "pixi/bounds_intersection",
       "package": "pixi",
-      "title": "PixiJS \u2014 Bounds & Hit Containment",
+      "title": "Bounds & Hit Containment",
       "description": "PixiJS Rectangle intersection, padding, and Point/Graphics containsPoint() hit testing visualized on WebGL.",
       "path": "./pixi/bounds_intersection/index.html",
       "source": "./pixi/bounds_intersection/main.cpp",
@@ -365,7 +365,7 @@
     {
       "id": "leaflet/vector_route",
       "package": "leaflet",
-      "title": "Leaflet \u2014 Vector Route & Graticule",
+      "title": "Vector Route & Graticule",
       "description": "Trans-European polyline route and dashed alternate corridor over monochrome graticule and waypoint circleMarkers.",
       "path": "./leaflet/vector_route/index.html",
       "source": "./leaflet/vector_route/main.cpp",
@@ -374,7 +374,7 @@
     {
       "id": "leaflet/polygon_zones",
       "package": "leaflet",
-      "title": "Leaflet \u2014 Nested Polygon Zones",
+      "title": "Nested Polygon Zones",
       "description": "Concentric Hull Rectangle, concave sector Polygon, core Polygon, and bounds.contains() probe classification.",
       "path": "./leaflet/polygon_zones/index.html",
       "source": "./leaflet/polygon_zones/main.cpp",
@@ -383,7 +383,7 @@
     {
       "id": "leaflet/geodesic_circles",
       "package": "leaflet",
-      "title": "Leaflet \u2014 Metric Geodesic Circles",
+      "title": "Metric Geodesic Circles",
       "description": "Concentric metric-radius circles centered on Zurich with regional coverage zones and beacon distance calculation.",
       "path": "./leaflet/geodesic_circles/index.html",
       "source": "./leaflet/geodesic_circles/main.cpp",
@@ -392,7 +392,7 @@
     {
       "id": "leaflet/simple_crs_blueprint",
       "package": "leaflet",
-      "title": "Leaflet \u2014 Simple CRS Blueprint",
+      "title": "Simple CRS Blueprint",
       "description": "Architectural floorplan in non-geographic L.CRS.Simple projection with structural rooms, atrium polygon, and coordinate projection.",
       "path": "./leaflet/simple_crs_blueprint/index.html",
       "source": "./leaflet/simple_crs_blueprint/main.cpp",
@@ -401,7 +401,7 @@
     {
       "id": "leaflet/interactive_markers",
       "package": "leaflet",
-      "title": "Leaflet \u2014 DivIcon Pins & Events",
+      "title": "DivIcon Pins & Events",
       "description": "Custom DivIcon station markers, tooltips, opened monochrome popup, and synthetic click event listener dispatch.",
       "path": "./leaflet/interactive_markers/index.html",
       "source": "./leaflet/interactive_markers/main.cpp",
@@ -410,7 +410,7 @@
     {
       "id": "tanstack_table/sorting_leaderboard",
       "package": "tanstack_table",
-      "title": "TanStack Table \u2014 Multi-Column Sorting Leaderboard",
+      "title": "Multi-Column Sorting Leaderboard",
       "description": "8 compute nodes with multi-column sorting (region + latency), sort direction badges, and live toolbar controls.",
       "path": "./tanstack_table/sorting_leaderboard/index.html",
       "source": "./tanstack_table/sorting_leaderboard/main.cpp",
@@ -419,7 +419,7 @@
     {
       "id": "tanstack_table/filtering_facets",
       "package": "tanstack_table",
-      "title": "TanStack Table \u2014 Column & Global Filtering",
+      "title": "Column & Global Filtering",
       "description": "10 telemetry services with column filters (equalsString, greaterThanOrEqualTo) and global substring search.",
       "path": "./tanstack_table/filtering_facets/index.html",
       "source": "./tanstack_table/filtering_facets/main.cpp",
@@ -428,7 +428,7 @@
     {
       "id": "tanstack_table/pagination_ledger",
       "package": "tanstack_table",
-      "title": "TanStack Table \u2014 Client-Side Paginated Ledger",
+      "title": "Client-Side Paginated Ledger",
       "description": "18 settlement entries paginated client-side with next/prev navigation and dynamic page sizes.",
       "path": "./tanstack_table/pagination_ledger/index.html",
       "source": "./tanstack_table/pagination_ledger/main.cpp",
@@ -437,7 +437,7 @@
     {
       "id": "tanstack_table/grouping_aggregation",
       "package": "tanstack_table",
-      "title": "TanStack Table \u2014 Grouping & Aggregation",
+      "title": "Grouping & Aggregation",
       "description": "9 cluster hosts grouped by region or role with mean CPU, sum Memory, and count rollups plus row expansion.",
       "path": "./tanstack_table/grouping_aggregation/index.html",
       "source": "./tanstack_table/grouping_aggregation/main.cpp",
@@ -446,7 +446,7 @@
     {
       "id": "tanstack_table/visibility_pinning_selection",
       "package": "tanstack_table",
-      "title": "TanStack Table \u2014 Visibility, Pinning & Row Selection",
+      "title": "Visibility, Pinning & Row Selection",
       "description": "7 cluster tasks demonstrating column visibility toggles, start/end pinning, and multi-row selection.",
       "path": "./tanstack_table/visibility_pinning_selection/index.html",
       "source": "./tanstack_table/visibility_pinning_selection/main.cpp",
@@ -455,7 +455,7 @@
     {
       "id": "prosemirror/rich_schema_marks",
       "package": "prosemirror",
-      "title": "ProseMirror \u2014 Rich Schema & Inline Mark Toolbar",
+      "title": "Rich Schema & Inline Mark Toolbar",
       "description": "Custom document schema (heading, paragraph, blockquote, code_block, hr) with strong, em, code marks and setBlockType toolbar.",
       "path": "./prosemirror/rich_schema_marks/index.html",
       "source": "./prosemirror/rich_schema_marks/main.cpp",
@@ -464,7 +464,7 @@
     {
       "id": "prosemirror/structural_transforms",
       "package": "prosemirror",
-      "title": "ProseMirror \u2014 Block Structure & Transform Operations",
+      "title": "Block Structure & Transform Operations",
       "description": "Structural Transform operations: split, wrap in blockquote, lift nested content, and insert divider + note blocks.",
       "path": "./prosemirror/structural_transforms/index.html",
       "source": "./prosemirror/structural_transforms/main.cpp",
@@ -473,7 +473,7 @@
     {
       "id": "prosemirror/decorations_search",
       "package": "prosemirror",
-      "title": "ProseMirror \u2014 Search Highlighting & Decorations Plugin",
+      "title": "Search Highlighting & Decorations Plugin",
       "description": "Plugin StateField tracking search queries and rendering Decoration.inline token highlights plus Decoration.node block outlines.",
       "path": "./prosemirror/decorations_search/index.html",
       "source": "./prosemirror/decorations_search/main.cpp",
@@ -482,7 +482,7 @@
     {
       "id": "prosemirror/plugin_history_transactions",
       "package": "prosemirror",
-      "title": "ProseMirror \u2014 Plugin Filter & Step-Inversion Undo/Redo",
+      "title": "Plugin Filter & Step-Inversion Undo/Redo",
       "description": "Custom history stack via Step.invert() alongside a StateField revision counter and filterTransaction read-only lock.",
       "path": "./prosemirror/plugin_history_transactions/index.html",
       "source": "./prosemirror/plugin_history_transactions/main.cpp",
@@ -491,7 +491,7 @@
     {
       "id": "prosemirror/dom_json_roundtrip",
       "package": "prosemirror",
-      "title": "ProseMirror \u2014 DOMSerializer, DOMParser & JSON Round-Trip",
+      "title": "DOMSerializer, DOMParser & JSON Round-Trip",
       "description": "HTML parsing with DOMParser.fromSchema, live DOMSerializer HTML output, AST inspection, and Node.toJSON / Node.fromJSON verification.",
       "path": "./prosemirror/dom_json_roundtrip/index.html",
       "source": "./prosemirror/dom_json_roundtrip/main.cpp",
@@ -500,7 +500,7 @@
     {
       "id": "three/platonic_wireframes",
       "package": "three",
-      "title": "Three.js \u2014 Platonic & Parametric Solids",
+      "title": "Platonic & Parametric Solids",
       "description": "Architectural arc of Box, Icosahedron, TorusKnot, Octahedron, and Torus solids with EdgesGeometry wireframe overlays and camera orbit controls.",
       "path": "./three/platonic_wireframes/index.html",
       "source": "./three/platonic_wireframes/main.cpp",
@@ -509,7 +509,7 @@
     {
       "id": "three/hierarchical_orrery",
       "package": "three",
-      "title": "Three.js \u2014 Hierarchical Scene Graph Orrery",
+      "title": "Hierarchical Scene Graph Orrery",
       "description": "Nested Group hierarchy (central core, inner planet + moon pivot, outer station + tilted halo) with live getWorldPosition readouts.",
       "path": "./three/hierarchical_orrery/index.html",
       "source": "./three/hierarchical_orrery/main.cpp",
@@ -518,7 +518,7 @@
     {
       "id": "three/procedural_heightfield",
       "package": "three",
-      "title": "Three.js \u2014 Procedural BufferGeometry Heightfield",
+      "title": "Procedural BufferGeometry Heightfield",
       "description": "28x28 indexed BufferGeometry surface with Float32BufferAttribute positions, computeVertexNormals, wireframe overlay, and Points cloud.",
       "path": "./three/procedural_heightfield/index.html",
       "source": "./three/procedural_heightfield/main.cpp",
@@ -527,7 +527,7 @@
     {
       "id": "three/instanced_cityscape",
       "package": "three",
-      "title": "Three.js \u2014 InstancedMesh Matrix & Isometric Ortho",
+      "title": "InstancedMesh Matrix & Isometric Ortho",
       "description": "100-tower monochrome cityscape via single InstancedMesh (Matrix4.compose + setColorAt) with Orthographic and Perspective camera switching.",
       "path": "./three/instanced_cityscape/index.html",
       "source": "./three/instanced_cityscape/main.cpp",
@@ -536,7 +536,7 @@
     {
       "id": "three/raycaster_picking",
       "package": "three",
-      "title": "Three.js \u2014 Interactive Raycaster & Box3 Inspector",
+      "title": "Interactive Raycaster & Box3 Inspector",
       "description": "3x3 monochrome specimen grid with click and button Raycaster picking, dynamic Box3 bounding volume, and Box3Helper wireframe.",
       "path": "./three/raycaster_picking/index.html",
       "source": "./three/raycaster_picking/main.cpp",
@@ -545,7 +545,7 @@
     {
       "id": "rapier/gravity_bouncing",
       "package": "rapier",
-      "title": "Rapier 3D \u2014 Gravity & Restitution",
+      "title": "Gravity & Restitution",
       "description": "Five 3D spheres with graduated restitution coefficients bouncing under Earth or Moon gravity",
       "path": "./rapier/gravity_bouncing/index.html",
       "source": "./rapier/gravity_bouncing/main.cpp",
@@ -554,7 +554,7 @@
     {
       "id": "rapier/domino_cascade",
       "package": "rapier",
-      "title": "Rapier 3D \u2014 Domino Cascade",
+      "title": "Domino Cascade",
       "description": "Impulse-launched striker ball toppling nine dynamic cuboids rendered from live 3D quaternions",
       "path": "./rapier/domino_cascade/index.html",
       "source": "./rapier/domino_cascade/main.cpp",
@@ -563,7 +563,7 @@
     {
       "id": "rapier/pendulum_joints",
       "package": "rapier",
-      "title": "Rapier 3D \u2014 Revolute Joint Pendulums",
+      "title": "Revolute Joint Pendulums",
       "description": "Multi-link hanging pendulum chain and offset articulated arm coupled by JointData.revolute",
       "path": "./rapier/pendulum_joints/index.html",
       "source": "./rapier/pendulum_joints/main.cpp",
@@ -572,7 +572,7 @@
     {
       "id": "rapier/raycast_lidar",
       "package": "rapier",
-      "title": "Rapier 3D \u2014 Raycast Lidar Scanner",
+      "title": "Raycast Lidar Scanner",
       "description": "37-ray castRayAndGetNormal fan scanning static boxes, ramps, and spheres with surface normals",
       "path": "./rapier/raycast_lidar/index.html",
       "source": "./rapier/raycast_lidar/main.cpp",
@@ -581,7 +581,7 @@
     {
       "id": "rapier/collision_events_sensor",
       "package": "rapier",
-      "title": "Rapier 3D \u2014 Collision Events & Sensor Gate",
+      "title": "Collision Events & Sensor Gate",
       "description": "EventQueue.drainCollisionEvents tracking live contacts and sensor-gate crossings on angled ramps",
       "path": "./rapier/collision_events_sensor/index.html",
       "source": "./rapier/collision_events_sensor/main.cpp",
@@ -590,8 +590,10 @@
     {
       "id": "rapier/tower_collapse_3d",
       "package": "rapier",
-      "extraPackages": ["babylon_lite"],
-      "title": "Rapier 3D + Babylon Lite \u2014 3D Tower Collapse",
+      "extraPackages": [
+        "babylon_lite"
+      ],
+      "title": "3D Tower Collapse (Babylon Lite)",
       "description": "18-block 3D alternating Jenga tower struck by a heavy wrecking sphere rendered in Babylon Lite WebGPU",
       "path": "./rapier/tower_collapse_3d/index.html",
       "source": "./rapier/tower_collapse_3d/main.cpp",
@@ -600,8 +602,10 @@
     {
       "id": "rapier/billiards_break_3d",
       "package": "rapier",
-      "extraPackages": ["babylon_lite"],
-      "title": "Rapier 3D + Babylon Lite \u2014 3D Pool Break",
+      "extraPackages": [
+        "babylon_lite"
+      ],
+      "title": "3D Pool Break (Babylon Lite)",
       "description": "Walled 3D billiards arena with 10 racked PBR spheres and high-speed cue ball break in Babylon Lite WebGPU",
       "path": "./rapier/billiards_break_3d/index.html",
       "source": "./rapier/billiards_break_3d/main.cpp",
@@ -610,8 +614,10 @@
     {
       "id": "rapier/domino_spiral_3d",
       "package": "rapier",
-      "extraPackages": ["babylon_lite"],
-      "title": "Rapier 3D + Babylon Lite \u2014 3D Domino Spiral & Ramp",
+      "extraPackages": [
+        "babylon_lite"
+      ],
+      "title": "3D Domino Spiral & Ramp (Babylon Lite)",
       "description": "Tilted 3D launch ramp, marble, 14 quaternion-oriented spiral dominoes, and 3 target cylinders in Babylon Lite WebGPU",
       "path": "./rapier/domino_spiral_3d/index.html",
       "source": "./rapier/domino_spiral_3d/main.cpp",
@@ -620,7 +626,7 @@
     {
       "id": "node/path_inspector",
       "package": "node",
-      "title": "Node \u2014 Path Inspector",
+      "title": "Path Inspector",
       "description": "POSIX path joining, normalization, resolution, relative diffs, parsing, formatting, and glob matching via node:path",
       "path": "./node/path_inspector/main.mjs",
       "source": "./node/path_inspector/main.cpp",
@@ -630,7 +636,7 @@
     {
       "id": "node/event_bus",
       "package": "node",
-      "title": "Node \u2014 Event Bus",
+      "title": "Event Bus",
       "description": "EventEmitter pub/sub dispatch, once listeners, listener counts, removal, and max-listener limits via node:events",
       "path": "./node/event_bus/main.mjs",
       "source": "./node/event_bus/main.cpp",
@@ -640,7 +646,7 @@
     {
       "id": "node/temp_workspace",
       "package": "node",
-      "title": "Node \u2014 Temp Workspace",
+      "title": "Temp Workspace",
       "description": "Temporary directory lifecycle with writeFileSync, appendFileSync, readFileSync, statSync, copy, rename, unlink, and rmSync",
       "path": "./node/temp_workspace/main.mjs",
       "source": "./node/temp_workspace/main.cpp",
@@ -650,7 +656,7 @@
     {
       "id": "node/directory_tree",
       "package": "node",
-      "title": "Node \u2014 Directory Tree",
+      "title": "Directory Tree",
       "description": "Recursive directory creation, multi-level readdirSync traversal, statSync classification, and byte-size tallying",
       "path": "./node/directory_tree/main.mjs",
       "source": "./node/directory_tree/main.cpp",
@@ -660,7 +666,7 @@
     {
       "id": "node/file_pipeline",
       "package": "node",
-      "title": "Node \u2014 File Pipeline",
+      "title": "File Pipeline",
       "description": "Combined path, fs, and EventEmitter build pipeline with stage telemetry, log bundling, and ENOENT error handling",
       "path": "./node/file_pipeline/main.mjs",
       "source": "./node/file_pipeline/main.cpp",

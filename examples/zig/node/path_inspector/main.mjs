@@ -4,7 +4,6 @@ import * as events from 'node:events';
 import { createRuntime, makeEnv as nodeEnv } from '../../bindings/node/glue.mjs';
 
 let instance;
-const wasi = new Proxy({}, { get: () => () => 0 });
 const rt = createRuntime(() => instance);
 const nodeMod = nodeEnv(() => instance, { runtime: rt, modules: { fs, path, events } });
 const bytes = fs.readFileSync(new URL('./app.wasm', import.meta.url));
@@ -16,7 +15,7 @@ const bytes = fs.readFileSync(new URL('./app.wasm', import.meta.url));
     },
   },
   node: nodeMod.$pkg,
-  wasi_snapshot_preview1: wasi,
+  wasi_snapshot_preview1: rt.wasi,
 }));
 instance.exports._initialize?.();
 instance.exports.start();

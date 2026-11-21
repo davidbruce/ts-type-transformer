@@ -2,19 +2,42 @@ const std = @import("std");
 const dom = @import("dom");
 const lf = @import("leaflet");
 
-fn onClick(clicks: *u32, e: lf.LeafletMouseEvent) void {
+const State = struct {
+    clicks: u32 = 0,
+    map: lf.Map = .{ .h = 0 },
+    note: lf.Popup = .{ .h = 0 },
+};
+
+var g_state: State = .{};
+
+fn onClick(st: *State, e: lf.LeafletMouseEvent) void {
     const scope = lf.JsScope.open();
     defer scope.deinit();
-    if (e.getLatlng().getLat() > 0.0) {
-        clicks.* += 1;
+    const ll = e.getLatlng();
+    const lat = ll.getLat();
+    const lng = ll.getLng();
+    if (lat <= 0.0) return;
+    st.clicks += 1;
+    var buf: [160]u8 = undefined;
+    if (st.clicks > 2) {
+        const pop_msg = std.fmt.bufPrint(&buf, "Click #{d} \xC2\xB7 {d:.2}N, {d:.2}E", .{ st.clicks, lat, lng }) catch "Click";
+        _ = st.note.setLatLng(ll);
+        _ = st.note.setContent(pop_msg);
+        _ = st.note.openOn(st.map);
+    }
+    const msg = std.fmt.bufPrint(
+        &buf,
+        "5 DivIcon stations \xC2\xB7 clicks={d} \xC2\xB7 last click ({d:.2}N, {d:.2}E)",
+        .{ st.clicks, lat, lng },
+    ) catch "5 DivIcon stations";
+    if (dom.getDocument().getElementById("meta")) |meta| {
+        meta.setTextContent(msg);
     }
 }
 
 export fn start() void {
     const scope = lf.JsScope.open();
     defer scope.deinit();
-
-    var clicks: u32 = 0;
 
     const m = lf.map("map", .{
         .attributionControl = false,
@@ -71,19 +94,11 @@ export fn start() void {
     _ = note.setContent("03 Bern · 46.95N, 7.45E");
     _ = note.openOn(m);
 
-    _ = m.onWithCanvasAddEventListenerTypeClick(.click, .{ onClick, &clicks }, null);
+    g_state.map = m.retain();
+    g_state.note = note.retain();
+
+    _ = m.onWithCanvasAddEventListenerTypeClick(.click, .{ onClick, &g_state }, null);
     const payload = lf.LeafletMouseEvent.init(.{ .latlng = pts[2] });
     _ = m.fire("click", .{ .data = payload });
     _ = m.fire("click", .{ .data = payload });
-
-    var buf: [160]u8 = undefined;
-    const msg = std.fmt.bufPrint(
-        &buf,
-        "5 DivIcon stations · popup open (Bern) · {d} synthetic clicks dispatched",
-        .{clicks},
-    ) catch "5 DivIcon stations";
-
-    if (dom.getDocument().getElementById("meta")) |meta| {
-        meta.setTextContent(msg);
-    }
 }

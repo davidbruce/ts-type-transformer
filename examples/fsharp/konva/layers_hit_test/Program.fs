@@ -95,8 +95,8 @@ let private makeCard idVal x y fillHex =
     r
 
 let private cardA = makeCard "card-a" 110.0 80.0 "#efefef"
-let private _cardB = makeCard "card-b" 210.0 125.0 "#404040"
-let private _cardC = makeCard "card-c" 310.0 170.0 "#ffffff"
+let private cardB = makeCard "card-b" 210.0 125.0 "#404040"
+let private cardC = makeCard "card-c" 310.0 170.0 "#ffffff"
 
 addTo fgLayer (
     Circle.Create(
@@ -104,24 +104,11 @@ addTo fgLayer (
     ).asShape ()
 )
 
-cardA.moveToTop () |> ignore
-let private cardAZ = int (cardA.getZIndex ())
+// Crosshair marker at (250, 160) & foreground label in a non-listening overlay group.
+let private overlay = Group.Create (GroupConfig.Create (listening = false))
 
-let mutable clicks = 0
-cardA.on_click (fun _ -> clicks <- clicks + 1) |> ignore
-cardA.fire "click" |> ignore
-cardA.fire "click" |> ignore
-
-bgLayer.draw () |> ignore
-fgLayer.draw () |> ignore
-
-let private pt = Vector2d.Create (250.0, 160.0)
-let private hit = stage.getIntersection pt
-let private hitId = match hit with Some h -> h.id.Invoke () | None -> "none"
-
-// Crosshair marker at (250, 160) & foreground label.
-addTo fgLayer (
-    Circle.Create(
+overlay.add (
+    !^((Circle.Create(
         CircleConfig.Create (
             x = 250.0,
             y = 160.0,
@@ -130,22 +117,24 @@ addTo fgLayer (
             stroke = !^"#111111",
             strokeWidth = 2.0
         )
-    ).asShape ()
-)
+    )).asShape ())
+) |> ignore
 
 for (pts: float list) in [ [ 238.0; 160.0; 262.0; 160.0 ]; [ 250.0; 148.0; 250.0; 172.0 ] ] do
-    addLineTo fgLayer (
-        Line.Create (
-            LineConfig.Create (
-                points = !^(ResizeArray pts),
-                stroke = !^"#111111",
-                strokeWidth = 1.5
-            )
+    overlay.add (
+        !^(
+            (Line.Create (
+                LineConfig.Create (
+                    points = !^(ResizeArray pts),
+                    stroke = !^"#111111",
+                    strokeWidth = 1.5
+                )
+            )).asShape ()
         )
-    )
+    ) |> ignore
 
-addTo fgLayer (
-    Text.Create(
+overlay.add (
+    !^((Text.Create(
         TextConfig.Create (
             x = 32.0,
             y = 354.0,
@@ -154,10 +143,31 @@ addTo fgLayer (
             fontFamily = "monospace",
             fill = !^"#111111"
         )
-    ).asShape ()
-)
+    )).asShape ())
+) |> ignore
 
+fgLayer.add (!^overlay) |> ignore
+
+cardA.moveToTop () |> ignore
+overlay.moveToTop () |> ignore
+bgLayer.draw () |> ignore
 fgLayer.draw () |> ignore
 
-let private meta = (document.getElementById "meta").Value
-meta.textContent <- sprintf "Layers: %d · card-a zIndex=%d · hit@(250,160)=%s · clicks=%d" (stage.getLayers().Count) cardAZ hitId clicks
+let mutable clicks = 0
+let private handleClick (card: Rect) (cardId: string) =
+    card.moveToTop () |> ignore
+    overlay.moveToTop () |> ignore
+    fgLayer.draw () |> ignore
+    clicks <- clicks + 1
+    let z = int (card.getZIndex ())
+    let pt = Vector2d.Create (250.0, 160.0)
+    let hit = stage.getIntersection pt
+    let hitId = match hit with Some h -> h.id.Invoke () | None -> "none"
+    let meta = (document.getElementById "meta").Value
+    meta.textContent <- sprintf "Layers: %d · top=%s (z=%d) · hit@(250,160)=%s · clicks=%d" (stage.getLayers().Count) cardId z hitId clicks
+
+for (card, cardId) in [ (cardA, "card-a"); (cardB, "card-b"); (cardC, "card-c") ] do
+    card.on_click (fun _ -> handleClick card cardId) |> ignore
+
+cardA.fire "click" |> ignore
+cardA.fire "click" |> ignore

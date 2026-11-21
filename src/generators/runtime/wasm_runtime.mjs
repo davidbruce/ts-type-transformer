@@ -329,5 +329,96 @@ export function createRuntime(getInstance, options = {}) {
     }),
   };
   const trim = a => { let n = a.length; while (n > 0 && a[n - 1] === undefined) n--; if (n < a.length) a.length = n; return a; };
-  return { ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, trim, env };
+  const wasiDec = { 1: new TextDecoder(), 2: new TextDecoder() };
+  const wasiBuf = { 1: '', 2: '' };
+  let wasiFlushScheduled = false;
+  const flushWasiBuf = () => {
+    wasiFlushScheduled = false;
+    for (const fd of [1, 2]) {
+      wasiBuf[fd] += wasiDec[fd].decode();
+      if (wasiBuf[fd]) {
+        if (fd === 1) console.log(wasiBuf[fd]);
+        else console.error(wasiBuf[fd]);
+        wasiBuf[fd] = '';
+      }
+    }
+  };
+  const wasiEmit = (fd, chunk) => {
+    wasiBuf[fd] += chunk;
+    const lines = wasiBuf[fd].split('\n');
+    wasiBuf[fd] = lines.pop() ?? '';
+    for (const line of lines) {
+      if (fd === 1) console.log(line);
+      else console.error(line);
+    }
+    if (wasiBuf[fd] && !wasiFlushScheduled) {
+      wasiFlushScheduled = true;
+      queueMicrotask(flushWasiBuf);
+    }
+  };
+  const wasiBase = {
+    fd_write: (fd, iovs, iovsLen, nwrittenPtr) => {
+      const m = mem();
+      const dv = new DataView(m.buffer, m.byteOffset, m.byteLength);
+      const baseOff = iovs >>> 0;
+      const count = iovsLen >>> 0;
+      const outPtr = nwrittenPtr >>> 0;
+      let written = 0;
+      let out = '';
+      for (let i = 0; i < count; i++) {
+        const entry = baseOff + i * 8;
+        const ptr = dv.getUint32(entry, true);
+        const len = dv.getUint32(entry + 4, true);
+        if (len > 0) {
+          if (fd === 1 || fd === 2) out += wasiDec[fd].decode(m.subarray(ptr, ptr + len), { stream: true });
+          written += len;
+        }
+      }
+      if ((fd === 1 || fd === 2) && out) wasiEmit(fd, out);
+      if (outPtr) dv.setUint32(outPtr, written >>> 0, true);
+      return 0;
+    },
+    proc_exit: code => {
+      flushWasiBuf();
+      if (code !== 0) throw new Error(`WASI proc_exit(${code})`);
+      return 0;
+    },
+    clock_time_get: (_id, _precision, outPtr) => {
+      const ptr = outPtr >>> 0;
+      if (ptr) {
+        const m = mem();
+        new DataView(m.buffer, m.byteOffset, m.byteLength).setBigUint64(ptr, BigInt(Date.now()) * 1000000n, true);
+      }
+      return 0;
+    },
+    random_get: (ptr, len) => {
+      const p = ptr >>> 0;
+      const n = len >>> 0;
+      const m = mem();
+      const view = m.subarray(p, p + n);
+      const cryptoObj = globalThis.crypto;
+      if (cryptoObj?.getRandomValues) {
+        for (let off = 0; off < view.length; off += 65536) {
+          cryptoObj.getRandomValues(view.subarray(off, Math.min(off + 65536, view.length)));
+        }
+      }
+      return 0;
+    },
+    environ_sizes_get: (countPtr, bufSizePtr) => {
+      const m = mem();
+      const dv = new DataView(m.buffer, m.byteOffset, m.byteLength);
+      if (countPtr >>> 0) dv.setUint32(countPtr >>> 0, 0, true);
+      if (bufSizePtr >>> 0) dv.setUint32(bufSizePtr >>> 0, 0, true);
+      return 0;
+    },
+    args_sizes_get: (countPtr, bufSizePtr) => {
+      const m = mem();
+      const dv = new DataView(m.buffer, m.byteOffset, m.byteLength);
+      if (countPtr >>> 0) dv.setUint32(countPtr >>> 0, 0, true);
+      if (bufSizePtr >>> 0) dv.setUint32(bufSizePtr >>> 0, 0, true);
+      return 0;
+    },
+  };
+  const wasi = new Proxy(wasiBase, { get: (t, k) => (k in t ? t[k] : () => 0) });
+  return { ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, trim, env, wasi };
 }

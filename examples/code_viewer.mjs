@@ -61,6 +61,25 @@ export function langFromSource(targetId, sourcePath) {
   return targetId || 'text';
 }
 
+export function getDrawerTabs(targetId, item) {
+  const srcRel = item.source.replace(/^\.\//, '');
+  const srcLabel = srcRel.split('/').pop() || 'Source';
+  const tabs = [{ id: 'source', label: srcLabel, relPath: srcRel }];
+  if (item.kind === 'browser') {
+    const dir = item.path.replace(/^\.\//, '').replace(/\/[^/]+$/, '');
+    if (targetId !== 'fsharp') {
+      tabs.push({ id: 'glue', label: 'main.mjs', relPath: `${dir}/main.mjs` });
+    }
+    tabs.push({ id: 'html', label: 'index.html', relPath: item.path.replace(/^\.\//, '') });
+  } else if (item.path) {
+    const runnerRel = item.path.replace(/^\.\//, '');
+    if (runnerRel !== srcRel && /\.[cm]?js$/.test(runnerRel)) {
+      tabs.push({ id: 'runner', label: runnerRel.split('/').pop() || 'main.mjs', relPath: runnerRel });
+    }
+  }
+  return tabs;
+}
+
 const KEYWORDS = {
   c: new Set([
     'auto', 'break', 'case', 'const', 'continue', 'default', 'do', 'else', 'enum',
@@ -156,14 +175,8 @@ const isIdentStart = c => /[A-Za-z_]/.test(c);
 const isIdentCont = c => /[A-Za-z0-9_]/.test(c);
 const isHexDigit = c => /[0-9a-fA-F_]/.test(c);
 
-function tokenize(source, lang) {
-  const kws = KEYWORDS[lang] ?? KEYWORDS.js;
-  const tys = TYPES[lang] ?? new Set();
-  const tokens = [];
-  const n = source.length;
-  let i = 0;
-
-  const push = (cls, text) => {
+function makePush(tokens) {
+  return (cls, text) => {
     if (!text) return;
     const prev = tokens[tokens.length - 1];
     if (prev && prev.cls === cls) {
@@ -172,6 +185,226 @@ function tokenize(source, lang) {
       tokens.push({ cls, text });
     }
   };
+}
+
+function tokenizeCss(source) {
+  const tokens = [];
+  const push = makePush(tokens);
+  const n = source.length;
+  let i = 0;
+  let braceDepth = 0;
+
+  while (i < n) {
+    const ch = source[i];
+    const next = source[i + 1] ?? '';
+
+    if (ch === '/' && next === '*') {
+      let j = i + 2;
+      while (j < n && !(source[j] === '*' && source[j + 1] === '/')) j++;
+      if (j + 1 < n) j += 2;
+      push('cv-cmt', source.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (ch === '"' || ch === '\'') {
+      let j = i + 1;
+      while (j < n && source[j] !== ch) {
+        if (source[j] === '\\' && j + 1 < n) j += 2;
+        else j++;
+      }
+      if (source[j] === ch) j++;
+      push('cv-str', source.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (ch === '@') {
+      let j = i + 1;
+      while (j < n && /[A-Za-z0-9_-]/.test(source[j])) j++;
+      push(j > i + 1 ? 'cv-kw' : 'cv-op', source.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (ch === '#' && braceDepth > 0 && /[0-9a-fA-F]/.test(next)) {
+      let j = i + 1;
+      while (j < n && /[0-9a-fA-F]/.test(source[j])) j++;
+      push('cv-num', source.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (/[0-9]/.test(ch)) {
+      let j = i + 1;
+      while (j < n && /[0-9.]/.test(source[j])) j++;
+      while (j < n && /[A-Za-z%]/.test(source[j])) j++;
+      push('cv-num', source.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (/[A-Za-z_-]/.test(ch)) {
+      let j = i + 1;
+      while (j < n && /[A-Za-z0-9_-]/.test(source[j])) j++;
+      const word = source.slice(i, j);
+      let k = j;
+      while (k < n && (source[k] === ' ' || source[k] === '\t')) k++;
+      if (braceDepth > 0 && source[k] === ':') {
+        push('cv-ty', word);
+      } else if (word.startsWith('--')) {
+        push('cv-attr', word);
+      } else {
+        push(braceDepth === 0 ? 'cv-kw' : null, word);
+      }
+      i = j;
+      continue;
+    }
+
+    if (ch === '{') braceDepth++;
+    else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
+
+    if ('{}:;,()>+~*'.includes(ch)) {
+      push('cv-op', ch);
+      i++;
+      continue;
+    }
+
+    let j = i + 1;
+    while (j < n && !'/"\'@#{}:;,()>+~*0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-'.includes(source[j])) {
+      j++;
+    }
+    push(null, source.slice(i, j));
+    i = j;
+  }
+
+  return tokens;
+}
+
+function tokenizeHtml(source) {
+  const tokens = [];
+  const push = makePush(tokens);
+  const n = source.length;
+  let i = 0;
+
+  while (i < n) {
+    const ch = source[i];
+    if (source.startsWith('<!--', i)) {
+      const end = source.indexOf('-->', i + 4);
+      const j = end === -1 ? n : end + 3;
+      push('cv-cmt', source.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (ch === '<' && source[i + 1] === '!') {
+      const end = source.indexOf('>', i + 2);
+      const j = end === -1 ? n : end + 1;
+      push('cv-attr', source.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (ch === '<' && /[A-Za-z/?]/.test(source[i + 1] ?? '')) {
+      const isClosing = source[i + 1] === '/';
+      if (isClosing) {
+        push('cv-op', '</');
+        i += 2;
+      } else {
+        push('cv-op', '<');
+        i += 1;
+      }
+
+      let tagEnd = i;
+      while (tagEnd < n && /[A-Za-z0-9:-]/.test(source[tagEnd])) tagEnd++;
+      const tagName = source.slice(i, tagEnd).toLowerCase();
+      if (tagEnd > i) {
+        push('cv-kw', source.slice(i, tagEnd));
+        i = tagEnd;
+      }
+
+      let selfClosed = false;
+      let closedTag = false;
+      while (i < n) {
+        const tch = source[i];
+        if (/\s/.test(tch)) {
+          let j = i + 1;
+          while (j < n && /\s/.test(source[j])) j++;
+          push(null, source.slice(i, j));
+          i = j;
+        } else if (tch === '/' && source[i + 1] === '>') {
+          push('cv-op', '/>');
+          i += 2;
+          selfClosed = true;
+          closedTag = true;
+          break;
+        } else if (tch === '>') {
+          push('cv-op', '>');
+          i += 1;
+          closedTag = true;
+          break;
+        } else if (tch === '=') {
+          push('cv-op', '=');
+          i += 1;
+        } else if (tch === '"' || tch === '\'') {
+          let j = i + 1;
+          while (j < n && source[j] !== tch) j++;
+          if (source[j] === tch) j++;
+          push('cv-str', source.slice(i, j));
+          i = j;
+        } else if (/[A-Za-z0-9_:-]/.test(tch)) {
+          let j = i + 1;
+          while (j < n && /[A-Za-z0-9_:-]/.test(source[j])) j++;
+          push('cv-ty', source.slice(i, j));
+          i = j;
+        } else {
+          push(null, tch);
+          i += 1;
+        }
+      }
+
+      if (closedTag && !isClosing && !selfClosed && (tagName === 'script' || tagName === 'style')) {
+        const closeMatch = new RegExp(`</${tagName}(?=[\\s>/])`, 'i').exec(source.slice(i));
+        const innerEnd = closeMatch ? i + closeMatch.index : n;
+        if (innerEnd > i) {
+          const inner = source.slice(i, innerEnd);
+          for (const tok of tokenize(inner, tagName === 'script' ? 'js' : 'css')) {
+            push(tok.cls, tok.text);
+          }
+          i = innerEnd;
+        }
+      }
+      continue;
+    }
+
+    if (ch === '&') {
+      const ent = /^&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]+);/.exec(source.slice(i, i + 16));
+      if (ent) {
+        push('cv-num', ent[0]);
+        i += ent[0].length;
+        continue;
+      }
+    }
+
+    let j = i + 1;
+    while (j < n && source[j] !== '<' && source[j] !== '&') j++;
+    push(null, source.slice(i, j));
+    i = j;
+  }
+
+  return tokens;
+}
+
+function tokenize(source, lang) {
+  if (lang === 'html') return tokenizeHtml(source);
+  if (lang === 'css') return tokenizeCss(source);
+  const kws = KEYWORDS[lang] ?? KEYWORDS.js;
+  const tys = TYPES[lang] ?? new Set();
+  const tokens = [];
+  const n = source.length;
+  let i = 0;
+
+  const push = makePush(tokens);
 
   while (i < n) {
     const ch = source[i];

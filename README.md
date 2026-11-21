@@ -36,5 +36,9 @@ A bare `lib.*.d.ts` name is one of TypeScript's own lib files. `--lib es2020,dom
 
 `cargo test` compiles the generated bindings with each language's toolchain and runs them in Node, and the DOM bindings in headless Chrome. A missing toolchain (`fable`, `gleam`, `clang`, `zig`, the WASI SDK, `rustc` with `wasm32-unknown-unknown`, `node`, Chrome, `xmllint`) skips its tests; `mise.toml` pins the versions used.
 
+## Examples Showcase
+
+The [`examples/`](examples/README.md) directory includes 438 demos across 6 languages (C, C++20, Zig, Rust, Gleam, F#) and 14 libraries, with a Vite dev showcase that compiles examples on demand (`cd examples && npm install && npm run dev`).
+
 ## Notes
 If things are going well, it would be interesting to go further and test some server side APIs, such as Deno and Playwright.

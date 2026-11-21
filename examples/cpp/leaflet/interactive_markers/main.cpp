@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <memory>
 #include <string>
 
 #include "dom/dom.hpp"
@@ -70,26 +71,37 @@ TS_EXPORT(start) void start() {
     note.setContent("03 Bern · 46.95N, 7.45E");
     note.openOn(m);
 
-    int clicks = 0;
-    {
-        ts::Scoped<LeafletMouseEventHandlerFn> on_click = [&](LeafletMouseEvent ev) {
-            if (ev.latlng().lat() > 0.0) clicks++;
-        };
-        m.on(Evented_addEventListener_type_click::click, on_click);
-        LeafletMouseEvent payload = LeafletMouseEvent::create();
-        payload.latlng(stations[2].pt);
-        m.fire("click", payload);
-        m.fire("click", payload);
-        m.off(Evented_addEventListener_type_click::click, on_click);
-    }
-
-    char buf[160];
-    std::snprintf(
-        buf, sizeof(buf),
-        "5 DivIcon stations · popup open (Bern) · %d synthetic clicks dispatched",
-        clicks
-    );
-    if (auto meta = dom::get_document().getElementById("meta")) {
-        meta->textContent(buf);
-    }
+    struct ClickState {
+        int clicks = 0;
+        Map m;
+        Popup note;
+    };
+    auto st = std::make_shared<ClickState>(ClickState{ 0, m, note });
+    LeafletMouseEventHandlerFn on_click([st](LeafletMouseEvent ev) {
+        LatLng ll = ev.latlng();
+        double lat = ll.lat();
+        double lng = ll.lng();
+        if (lat <= 0.0) return;
+        st->clicks++;
+        char buf[160];
+        if (st->clicks > 2) {
+            std::snprintf(buf, sizeof(buf), "Click #%d \xC2\xB7 %.2fN, %.2fE", st->clicks, lat, lng);
+            st->note.setLatLng(ll);
+            st->note.setContent(buf);
+            st->note.openOn(st->m);
+        }
+        std::snprintf(
+            buf, sizeof(buf),
+            "5 DivIcon stations \xC2\xB7 clicks=%d \xC2\xB7 last click (%.2fN, %.2fE)",
+            st->clicks, lat, lng
+        );
+        if (auto meta = dom::get_document().getElementById("meta")) {
+            meta->textContent(buf);
+        }
+    });
+    m.on(Evented_addEventListener_type_click::click, on_click);
+    LeafletMouseEvent payload = LeafletMouseEvent::create();
+    payload.latlng(stations[2].pt);
+    m.fire("click", payload);
+    m.fire("click", payload);
 }

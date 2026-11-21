@@ -2,6 +2,14 @@
   "name": "tsrs-examples",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "c",
+    "cpp",
+    "zig",
+    "rust",
+    "gleam",
+    "fsharp"
+  ],
   "scripts": {
     "dev": "vite",
     "setup": "node build.mjs",

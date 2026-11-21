@@ -2,11 +2,41 @@
 #include "konva/konva.h"
 #include <stdio.h>
 
+static Konva_Stage g_stage = { 0 };
+static Konva_Layer g_fg_layer = { 0 };
+static Konva_Group g_overlay = { 0 };
+static Konva_Rect g_cards[3] = { { 0 }, { 0 }, { 0 } };
+static const char* g_card_ids[3] = { "card-a", "card-b", "card-c" };
+static const int g_card_indices[3] = { 0, 1, 2 };
 static int32_t g_clicks = 0;
+
 static void on_card_click(void* ctx, KonvaEventObject e) {
-    (void)ctx;
     (void)e;
+    js_scope_open();
+    int idx = *(const int*)ctx;
+    Konva_Rect card = g_cards[idx];
+    Konva_Rect_moveToTop(card);
+    Konva_Group_moveToTop(g_overlay);
+    Konva_Layer_draw(g_fg_layer);
     g_clicks++;
+    int z = (int)Konva_Rect_getZIndex(card);
+
+    Konva_Vector2d pt = Konva_Vector2d_create();
+    Konva_Vector2d_set_x(pt, 250);
+    Konva_Vector2d_set_y(pt, 160);
+    Konva_Shape hit = Konva_Stage_getIntersection(g_stage, pt);
+    char hit_buf[64] = "none";
+    if (hit.h != 0) {
+        JsString_copy(js_to_string(Konva_GetSet_invoke(Konva_Shape_get_id(hit))), hit_buf, sizeof hit_buf);
+    }
+
+    int layers = (int)JsArray_Konva_Layer_length(Konva_Stage_getLayers(g_stage));
+    char meta[192];
+    snprintf(meta, sizeof meta, "Layers: %d \xC2\xB7 top=%s (z=%d) \xC2\xB7 hit@(250,160)=%s \xC2\xB7 clicks=%d",
+        layers, g_card_ids[idx], z, hit_buf, (int)g_clicks);
+    HTMLElement meta_el = Document_getElementById(get_document(), "meta");
+    if (meta_el.h != 0) HTMLElement_set_textContent(meta_el, meta);
+    js_scope_close();
 }
 
 static Konva_Line make_line(double x1, double y1, double x2, double y2, const char* color, double width) {
@@ -94,30 +124,11 @@ __attribute__((export_name("start"))) void start(void) {
     Konva_CircleConfig_set_fill(bc, Konva_string_or_CanvasGradient_of("#111111"));
     Konva_Circle badge = Konva_Circle_new(bc);
 
-    Konva_Node fg_arr[4] = { AS_Konva_Node(card_a), AS_Konva_Node(card_b), AS_Konva_Node(card_c), AS_Konva_Node(badge) };
-    Konva_Layer_add(fg_layer, JsArray_Konva_Node_from(fg_arr, 4));
-
-    Konva_Rect_moveToTop(card_a);
-    int card_a_z = (int)Konva_Rect_getZIndex(card_a);
-
-    Konva_Rect_on_click(card_a, KonvaEventListener_from(on_card_click, 0));
-    Konva_Rect_fire(card_a, "click");
-    Konva_Rect_fire(card_a, "click");
-
-    Konva_Layer_draw(bg_layer);
-    Konva_Layer_draw(fg_layer);
-
-    Konva_Vector2d pt = Konva_Vector2d_create();
-    Konva_Vector2d_set_x(pt, 250);
-    Konva_Vector2d_set_y(pt, 160);
-    Konva_Shape hit = Konva_Stage_getIntersection(stage, pt);
-    char hit_buf[64] = "none";
-    if (hit.h != 0) {
-        JsString_copy(js_to_string(Konva_GetSet_invoke(Konva_Shape_get_id(hit))), hit_buf, sizeof hit_buf);
-    }
-
-    // Crosshair & foreground label.
-    JsArray_Konva_Node overlay = JsArray_Konva_Node_new();
+    // Crosshair & foreground label (non-listening overlay group kept above raised cards).
+    Konva_GroupConfig gc = Konva_GroupConfig_create();
+    Konva_GroupConfig_set_listening(gc, false);
+    Konva_Group overlay = Konva_Group_new(gc);
+    JsArray_Konva_Node overlay_items = JsArray_Konva_Node_new();
     Konva_CircleConfig dc = Konva_CircleConfig_create();
     Konva_CircleConfig_set_x(dc, 250);
     Konva_CircleConfig_set_y(dc, 160);
@@ -125,9 +136,9 @@ __attribute__((export_name("start"))) void start(void) {
     Konva_CircleConfig_set_fill(dc, Konva_string_or_CanvasGradient_of("#ffffff"));
     Konva_CircleConfig_set_stroke(dc, Konva_string_or_CanvasGradient_of("#111111"));
     Konva_CircleConfig_set_strokeWidth(dc, 2);
-    JsArray_Konva_Node_push(overlay, AS_Konva_Node(Konva_Circle_new(dc)));
-    JsArray_Konva_Node_push(overlay, AS_Konva_Node(make_line(238, 160, 262, 160, "#111111", 1.5)));
-    JsArray_Konva_Node_push(overlay, AS_Konva_Node(make_line(250, 148, 250, 172, "#111111", 1.5)));
+    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(Konva_Circle_new(dc)));
+    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(make_line(238, 160, 262, 160, "#111111", 1.5)));
+    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(make_line(250, 148, 250, 172, "#111111", 1.5)));
 
     Konva_TextConfig l2 = Konva_TextConfig_create();
     Konva_TextConfig_set_x(l2, 32);
@@ -136,14 +147,28 @@ __attribute__((export_name("start"))) void start(void) {
     Konva_TextConfig_set_fontSize(l2, 12);
     Konva_TextConfig_set_fontFamily(l2, "monospace");
     Konva_TextConfig_set_fill(l2, Konva_string_or_CanvasGradient_of("#111111"));
-    JsArray_Konva_Node_push(overlay, AS_Konva_Node(Konva_Text_new(l2)));
-    Konva_Layer_add(fg_layer, overlay);
+    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(Konva_Text_new(l2)));
+    Konva_Group_add(overlay, overlay_items);
+
+    Konva_Node fg_arr[5] = { AS_Konva_Node(card_a), AS_Konva_Node(card_b), AS_Konva_Node(card_c), AS_Konva_Node(badge), AS_Konva_Node(overlay) };
+    Konva_Layer_add(fg_layer, JsArray_Konva_Node_from(fg_arr, 5));
+
+    Konva_Rect_moveToTop(card_a);
+    Konva_Group_moveToTop(overlay);
+    Konva_Layer_draw(bg_layer);
     Konva_Layer_draw(fg_layer);
 
-    int layers = (int)JsArray_Konva_Layer_length(Konva_Stage_getLayers(stage));
-    char meta[192];
-    snprintf(meta, sizeof meta, "Layers: %d \xC2\xB7 card-a zIndex=%d \xC2\xB7 hit@(250,160)=%s \xC2\xB7 clicks=%d",
-        layers, card_a_z, hit_buf, (int)g_clicks);
-    HTMLElement_set_textContent(Document_getElementById(get_document(), "meta"), meta);
+    g_stage = stage; js_retain(g_stage);
+    g_fg_layer = fg_layer; js_retain(g_fg_layer);
+    g_overlay = overlay; js_retain(g_overlay);
+    g_cards[0] = card_a; js_retain(g_cards[0]);
+    g_cards[1] = card_b; js_retain(g_cards[1]);
+    g_cards[2] = card_c; js_retain(g_cards[2]);
+
+    for (int i = 0; i < 3; i++) {
+        Konva_Rect_on_click(g_cards[i], KonvaEventListener_from(on_card_click, (void*)&g_card_indices[i]));
+    }
+    Konva_Rect_fire(card_a, "click");
+    Konva_Rect_fire(card_a, "click");
     js_scope_close();
 }

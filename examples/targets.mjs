@@ -469,6 +469,9 @@ export function createTargetViteConfig(targetRoot, targetId) {
           if (id === '/code_viewer.mjs') {
             return path.join(examplesRoot, 'code_viewer.mjs');
           }
+          if (id === '/target_gallery.mjs') {
+            return path.join(examplesRoot, 'target_gallery.mjs');
+          }
           return null;
         },
         configureServer(server) {
@@ -477,10 +480,11 @@ export function createTargetViteConfig(targetRoot, targetId) {
             if (req.method === 'GET' && url.pathname === '/__api/status') {
               return sendJson(res, 200, { target: getTargetStatus(examplesRoot, TARGET.id) });
             }
-            if (req.method === 'GET' && url.pathname === '/code_viewer.mjs') {
+            if (req.method === 'GET' && (url.pathname === '/code_viewer.mjs' || url.pathname === '/target_gallery.mjs')) {
+              const file = url.pathname.slice(1);
               res.statusCode = 200;
               res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-              res.end(fs.readFileSync(path.join(examplesRoot, 'code_viewer.mjs'), 'utf8'));
+              res.end(fs.readFileSync(path.join(examplesRoot, file), 'utf8'));
               return;
             }
             const pathname = normalizeHtmlPathname(req.url);
@@ -621,8 +625,13 @@ export async function runTargetBuild({
   const cfg = path.resolve(root, `../targets/${cfgName}`);
   const domCfg = path.resolve(root, '../modules/dom.toml');
   const bindingsDir = path.join(root, 'bindings');
+  const sharedExamplesDir = path.resolve(root, '..');
   const fallbackFrom = path.resolve(root, '../../target/libraries');
-  const fromDir = fs.existsSync(path.join(root, 'node_modules/pts')) ? root : fallbackFrom;
+  const fromDir = fs.existsSync(path.join(root, 'node_modules/pts'))
+    ? root
+    : fs.existsSync(path.join(sharedExamplesDir, 'node_modules/pts'))
+      ? sharedExamplesDir
+      : fallbackFrom;
 
   await ensureTargetBindings({
     targetRoot: root,

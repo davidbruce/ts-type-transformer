@@ -411,6 +411,34 @@
         gap: 6px;
         flex-shrink: 0;
       }
+      .drawer-tabs {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .drawer-tab {
+        appearance: none;
+        background: var(--bg);
+        color: var(--muted);
+        border: 1px solid #c4c4c4;
+        border-radius: 3px;
+        padding: 3px 9px;
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .drawer-tab:hover {
+        color: var(--text);
+        border-color: var(--border-strong);
+      }
+      .drawer-tab.active {
+        background: var(--inv-bg);
+        color: var(--inv-text);
+        border-color: var(--border-strong);
+      }
       #source-code {
         margin: 0;
         padding: 10px 0;
@@ -480,6 +508,7 @@
                   <button id="close-source" class="btn" type="button">Close</button>
                 </div>
               </div>
+              <div id="source-tabs" class="drawer-tabs" role="tablist"></div>
               <pre id="source-code"></pre>
             </aside>
           </div>
@@ -487,7 +516,7 @@
       </div>
     </div>
     <script type="module">
-      import { langFromSource, renderCode } from './code_viewer.mjs';
+      import { getDrawerTabs, langFromSource, renderCode } from './code_viewer.mjs';
 
       const TARGET_META = [
         { id: 'c', shortLabel: 'C' },
@@ -521,6 +550,7 @@
       const nodeSourceEl = document.getElementById('node-source');
       const sourceDrawerEl = document.getElementById('source-drawer');
       const sourcePathEl = document.getElementById('source-path');
+      const sourceTabsEl = document.getElementById('source-tabs');
       const sourceCodeEl = document.getElementById('source-code');
       const viewSourceBtn = document.getElementById('view-source-btn');
       const copySourceBtn = document.getElementById('copy-source');
@@ -588,6 +618,7 @@
       let currentTarget = null;
       let currentItem = null;
       let activeSeq = 0;
+      let drawerSeq = 0;
       let activeLoadCleanup = null;
 
       function updateSummaryAndCounts() {
@@ -863,14 +894,39 @@
         };
       }
 
-      viewSourceBtn.addEventListener('click', async () => {
-        if (!currentItem || !currentTarget) return;
-        sourcePathEl.textContent = `${currentTarget}/${currentItem.source.replace(/^\.\//, '')}`;
+      async function loadDrawerTab(targetId, tabs, tab) {
+        const seq = ++drawerSeq;
+        for (const btn of sourceTabsEl.querySelectorAll('.drawer-tab')) {
+          const isActive = btn.dataset.tabId === tab.id;
+          btn.classList.toggle('active', isActive);
+          btn.setAttribute('aria-selected', String(isActive));
+        }
+        sourcePathEl.textContent = `${targetId}/${tab.relPath}`;
         sourceCodeEl.classList.remove('cv-code');
         sourceCodeEl.textContent = 'Loading...';
+        delete sourceCodeEl.dataset.rawSource;
+        const srcText = await (await fetch(targetRelPath(targetId, tab.relPath))).text();
+        if (seq !== drawerSeq) return;
+        renderCode(sourceCodeEl, srcText, langFromSource(targetId, tab.relPath));
+      }
+
+      viewSourceBtn.addEventListener('click', async () => {
+        if (!currentItem || !currentTarget) return;
+        const targetId = currentTarget;
+        const tabs = getDrawerTabs(targetId, currentItem);
+        sourceTabsEl.innerHTML = '';
+        for (const tab of tabs) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.role = 'tab';
+          btn.className = 'drawer-tab';
+          btn.dataset.tabId = tab.id;
+          btn.textContent = tab.label;
+          btn.addEventListener('click', () => loadDrawerTab(targetId, tabs, tab));
+          sourceTabsEl.appendChild(btn);
+        }
         sourceDrawerEl.hidden = false;
-        const srcText = await (await fetch(targetRelPath(currentTarget, currentItem.source))).text();
-        renderCode(sourceCodeEl, srcText, langFromSource(currentTarget, currentItem.source));
+        await loadDrawerTab(targetId, tabs, tabs[0]);
       });
 
       copySourceBtn.addEventListener('click', async () => {

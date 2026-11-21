@@ -1,3 +1,5 @@
+#include <array>
+#include <memory>
 #include <string>
 
 #include "dom/dom.hpp"
@@ -86,28 +88,10 @@ TS_EXPORT(start) void start() {
     bc.y(135);
     bc.radius(38);
     bc.fill("#111111");
-    fg_layer.add(card_a, card_b, card_c, Circle::create(bc));
-
-    card_a.moveToTop();
-    int card_a_z = static_cast<int>(card_a.getZIndex());
-
-    int clicks = 0;
-    {
-        ts::Scoped<KonvaEventListener<Node<RectConfig>, PointerEvent>> on_click =
-            [&](KonvaEventObject<PointerEvent, Node<RectConfig>>) { clicks++; };
-        card_a.on_click(on_click);
-        card_a.fire("click");
-        card_a.fire("click");
-    }
-
-    bg_layer.draw();
-    fg_layer.draw();
-
-    Vector2d pt = Vector2d::create();
-    pt.x(250);
-    pt.y(160);
-    auto hit = stage.getIntersection(pt);
-    std::string hit_id = hit ? hit->id()() : std::string("none");
+    // Non-listening crosshair & label overlay kept above raised cards.
+    GroupConfig gc = GroupConfig::create();
+    gc.listening(false);
+    Group overlay = Group::create(gc);
 
     CircleConfig dc = CircleConfig::create();
     dc.x(250);
@@ -116,18 +100,60 @@ TS_EXPORT(start) void start() {
     dc.fill("#ffffff");
     dc.stroke("#111111");
     dc.strokeWidth(2);
-    fg_layer.add(
+    overlay.add(
         Circle::create(dc),
         make_line(238, 160, 262, 160, "#111111", 1.5),
         make_line(250, 148, 250, 172, "#111111", 1.5),
         make_label(32, 354, "Layer 2: Elevated Stack (z=1) \xC2\xB7 Probe (250,160)", "#111111")
     );
+
+    fg_layer.add(card_a, card_b, card_c, Circle::create(bc), overlay);
+
+    card_a.moveToTop();
+    overlay.moveToTop();
+    bg_layer.draw();
     fg_layer.draw();
 
-    dom::get_document().getElementById("meta")->textContent(
-        "Layers: " + std::to_string(stage.getLayers().size()) +
-        " \xC2\xB7 card-a zIndex=" + std::to_string(card_a_z) +
-        " \xC2\xB7 hit@(250,160)=" + hit_id +
-        " \xC2\xB7 clicks=" + std::to_string(clicks)
-    );
+    struct ClickState {
+        Stage stage;
+        Layer fg_layer;
+        Group overlay;
+        std::array<Rect, 3> cards;
+        std::array<const char*, 3> ids;
+        int clicks = 0;
+    };
+    auto st = std::make_shared<ClickState>(ClickState{
+        stage, fg_layer, overlay, { card_a, card_b, card_c }, { "card-a", "card-b", "card-c" }, 0
+    });
+
+    for (size_t i = 0; i < st->cards.size(); i++) {
+        KonvaEventListener<Node<RectConfig>, PointerEvent> on_click(
+            [st, i](KonvaEventObject<PointerEvent, Node<RectConfig>>) {
+                st->cards[i].moveToTop();
+                st->overlay.moveToTop();
+                st->fg_layer.draw();
+                st->clicks++;
+                int z = static_cast<int>(st->cards[i].getZIndex());
+
+                Vector2d pt = Vector2d::create();
+                pt.x(250);
+                pt.y(160);
+                auto hit = st->stage.getIntersection(pt);
+                std::string hit_id = hit ? hit->id()() : std::string("none");
+
+                if (auto meta = dom::get_document().getElementById("meta")) {
+                    meta->textContent(
+                        "Layers: " + std::to_string(st->stage.getLayers().size()) +
+                        " \xC2\xB7 top=" + st->ids[i] + " (z=" + std::to_string(z) + ")" +
+                        " \xC2\xB7 hit@(250,160)=" + hit_id +
+                        " \xC2\xB7 clicks=" + std::to_string(st->clicks)
+                    );
+                }
+            }
+        );
+        st->cards[i].on_click(on_click);
+    }
+
+    card_a.fire("click");
+    card_a.fire("click");
 }
