@@ -168,6 +168,7 @@ const RUNTIME_NAMES: &[&str] = &[
 pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::ModelOptions {
     target: "Zig",
     counted: false,
+    trap_uncaught: false,
     generics: false,
     overloading: false,
     retain_opaque_constraints: false,

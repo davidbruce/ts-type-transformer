@@ -54,7 +54,7 @@ const KEYWORDS: &[&str] = &[
 ];
 
 // Method names a handle type already has, from the traits every one implements.
-const TAKEN: &[&str] = &["clone", "as_ref", "eq", "ne", "into", "lend", "release", "iter", "iterate_async", "as_array"];
+const TAKEN: &[&str] = &["clone", "as_ref", "eq", "ne", "into", "lend", "release", "iter", "iterate_async", "as_array", "default", "deref"];
 
 // A value's name: a keyword gets a trailing underscore.
 fn ident(name: &str) -> String {
@@ -589,6 +589,7 @@ fn rust_type(n: &str) -> String {
 pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::ModelOptions {
     target: "Rust",
     counted: true,
+    trap_uncaught: true,
     generics: true,
     overloading: false,
     retain_opaque_constraints: false,
@@ -636,6 +637,91 @@ pub const NAMING: Naming = Naming {
 fn rust_function(f: &Func, name: &str) -> String {
     let base = function_name_as(f, name);
     if TAKEN.contains(&base.as_str()) { format!("js_{base}") } else { base }
+}
+
+fn valid_with_param(t: &Ty) -> bool {
+    match t {
+        Ty::Nullable(inner, _) => !matches!(**inner, Ty::Void | Ty::Key(_) | Ty::Mapped(_) | Ty::Nullable(..)),
+        _ => !matches!(t, Ty::Void | Ty::Key(_) | Ty::Mapped(_)),
+    }
+}
+
+fn setter_for_with<'a>(k: &'a Class, method: &str, names: &HashMap<&str, HashMap<String, String>>) -> Option<(&'a Func, String)> {
+    let stem = method.strip_prefix("set_")?;
+    if stem.is_empty() {
+        return None;
+    }
+    let k_names = &names[k.name.as_str()];
+    let matching: Vec<&Func> = k.funcs.iter().filter(|f| Class::has_self(f) && k_names[&f.name] == method).collect();
+    if matching.len() != 1 {
+        return None;
+    }
+    let f0 = matching[0];
+    if !matches!(f0.call, Call::Set(_))
+        || f0.params.len() != 1
+        || !f0.type_params.is_empty()
+        || f0.ret != Ty::Void
+        || !f0.fixed.is_empty()
+        || !valid_with_param(&f0.params[0].1)
+    {
+        return None;
+    }
+    Some((f0, ident(&format!("with_{stem}"))))
+}
+
+fn with_setter_item(
+    f: &Func,
+    orig: &Func,
+    with_name: &str,
+    vis: &str,
+    where_sized: &str,
+    imports: &mut BTreeMap<String, String>,
+) -> Option<String> {
+    let orig_t = &orig.params[0].1;
+    let (p_raw, t) = &f.params[0];
+    if !valid_with_param(t) {
+        return None;
+    }
+    let p = ident(&snake(p_raw));
+    let (written, val_raw_args) = match t {
+        Ty::Nullable(inner, _) => {
+            let (w, inner_args) = param(inner, &p);
+            let ra = if raw(orig_t) != raw(t) {
+                vec![format!("{p}.lend().h")]
+            } else {
+                match &**inner {
+                    Ty::Num => vec!["1".into(), p.clone()],
+                    Ty::NumEnum(_) => vec!["1".into(), format!("{p} as i32 as f64")],
+                    Ty::Bool | Ty::Enum(_) => vec![format!("{p} as i32")],
+                    _ => inner_args,
+                }
+            };
+            (w, ra)
+        }
+        _ => {
+            let (w, mut ra) = param(t, &p);
+            if raw(orig_t) != raw(t) {
+                ra = vec![format!("{p}.lend().h")];
+            }
+            (w, ra)
+        }
+    };
+    let this_expr = "AsRef::<JsHandle>::as_ref(&self).0";
+    let (import, mut raw_params, mut call_args) = match &f.shared {
+        Some((shared, k_idx)) => (shared.clone(), vec!["this: u32".into(), "k: i32".into()], vec![this_expr.into(), k_idx.to_string()]),
+        None => (f.import.clone(), vec!["this: u32".into()], vec![this_expr.into()]),
+    };
+    call_args.extend(val_raw_args);
+    raw_params.extend(raw(orig_t).into_iter().enumerate().map(|(j, r)| format!("a0_{j}: {r}")));
+    let raw_name = if KEYWORDS.contains(&import.as_str()) { format!("{import}_") } else { import.clone() };
+    imports.entry(import.clone()).or_insert_with(|| {
+        let link = if raw_name != import { format!("#[link_name = \"{import}\"] ") } else { String::new() };
+        format!("    {link}pub fn {raw_name}({}) -> ();\n", raw_params.join(", "))
+    });
+    Some(format!(
+        "    {vis}fn {with_name}(self, {p}: {written}) -> Self{where_sized} {{ unsafe {{ raw::{raw_name}({}) }}; self }}\n",
+        call_args.join(", ")
+    ))
 }
 
 // What every file of the crate starts with.
@@ -943,6 +1029,46 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
     // The family a member is one overload of.
     let family_of = |c: &Class, f: &Func| grouped[c.name.as_str()].iter().find(|g| g.members.iter().any(|o| o.name == f.name));
     let member_names = |c: &Class| -> BTreeSet<String> { c.funcs.iter().filter(|f| Class::has_self(f)).map(|f| family_of(c, f).map_or_else(|| names[c.name.as_str()][&f.name].clone(), |g| g.name.clone())).collect() };
+    // Precompute every `{Class}Methods` trait's method set (including `*_as`, `iter`, `with_*`).
+    let mut trait_names: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut trait_with_entries: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    for k in &m.classes {
+        let mnames = member_names(k);
+        let mut tset: HashSet<String> = mnames.iter().cloned().collect();
+        for g in &grouped[k.name.as_str()] {
+            if g.members.iter().any(|f| f.params[g.at].1 == Ty::Str && !hidden(f).is_empty()) {
+                tset.insert(format!("{}_as", g.name));
+            }
+        }
+        for f in k.funcs.iter().filter(|f| Class::has_self(f) && family_of(k, f).is_none()) {
+            let method = &names[k.name.as_str()][&f.name];
+            if !hidden(&with_self_args(f, k)).is_empty() {
+                tset.insert(format!("{method}_as"));
+            }
+        }
+        if k.iterates.is_some() {
+            tset.insert("iter".into());
+        }
+        if k.iterates_async.is_some() {
+            tset.insert("iterate_async".into());
+        }
+        let mut withs = Vec::new();
+        let mut seen_with = HashSet::new();
+        for method in &mnames {
+            if let Some((_, with_name)) = setter_for_with(k, method, &names)
+                && !tset.contains(&with_name)
+                && !TAKEN.contains(&with_name.as_str())
+                && seen_with.insert(with_name.clone())
+            {
+                withs.push((method.clone(), with_name));
+            }
+        }
+        for (_, w) in &withs {
+            tset.insert(w.clone());
+        }
+        trait_names.insert(k.name.clone(), tset);
+        trait_with_entries.insert(k.name.clone(), withs);
+    }
     let this = "AsRef::<JsHandle>::as_ref(self).0";
     let mut modules: BTreeMap<String, String> = BTreeMap::new();
     for c in &m.classes {
@@ -959,7 +1085,41 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         if let Some(f) = c.funcs.iter().find(|f| matches!(f.call, Call::Create(_)) && f.params.is_empty() && f.type_params.is_empty()) {
             *out += &format!("impl{bounds} ::core::default::Default for {me} {{ fn default() -> Self {{ Self::{}() }} }}\n", own[&f.name]);
         }
-        // The trait of its own members.
+        let all = ancestors(&c.name);
+        let primary_base: Option<&String> = c.ancestors.iter().find(|a| {
+            *a != &c.name
+                && !ancestors(a).contains(&c.name)
+                && (class_of(a).is_some()
+                    || (m.opaque.contains(*a)
+                        && !RUNTIME_TYPES.iter().any(|r| r.0 == a.as_str())
+                        && resolved_opaque.get(*a).is_none_or(|x| x.2)))
+        });
+        let primary_target = primary_base.map(|p| {
+            if let Some(kp) = class_of(p) {
+                if kp.type_params.is_empty() {
+                    tn(p)
+                } else {
+                    let b = base_args(m, c, p).unwrap_or_default();
+                    let s = (0..kp.type_params.len()).map(|i| b.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", ");
+                    format!("{}<{s}>", tn(p))
+                }
+            } else {
+                let arity = m.opaque_arity.get(p).copied().unwrap_or(0);
+                if arity == 0 {
+                    tn(p)
+                } else {
+                    let b = base_args(m, c, p).unwrap_or_default();
+                    let s = (0..arity).map(|i| b.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", ");
+                    format!("{}<{s}>", tn(p))
+                }
+            }
+        });
+        if let Some(ref target) = primary_target {
+            *out += &format!(
+                "impl{bounds} ::core::ops::Deref for {me} {{ type Target = {target}; fn deref(&self) -> &Self::Target {{ unsafe {{ &*(self as *const Self as *const Self::Target) }} }} }}\n"
+            );
+        }
+        // The trait of its own members (including fluent `with_<prop>` builders).
         let mut trait_body = String::new();
         for f in c.funcs.iter().filter(|f| Class::has_self(f) && family_of(c, f).is_none()) {
             for item in function(&with_self_args(f, c), &own[&f.name], "", &mut imports, Some(this)) {
@@ -980,9 +1140,19 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         if let Some(elem) = &c.iterates_async {
             trait_body += &format!("    fn iterate_async(&self) -> JsAsyncIterator<{}> {{ JsAsyncIterator::over({this}) }}\n", ty(elem));
         }
+        if let Some(withs) = trait_with_entries.get(&c.name) {
+            for (method, with_name) in withs {
+                if let Some((f0, _)) = setter_for_with(c, method, &names) {
+                    let orig = with_self_args(f0, c);
+                    if let Some(item) = with_setter_item(&orig, &orig, with_name, "", " where Self: Sized", &mut imports) {
+                        trait_body += &item;
+                    }
+                }
+            }
+        }
         *out += &format!("pub trait {name}Methods{bounds}: AsRef<JsHandle> {{\n{trait_body}}}\n");
         *out += &format!("impl{bounds} {name}Methods{args} for {me} {{}}\n{dispatch}");
-        // Statics, constants, a map's keys, inherent methods (own + inherited), fluent builders, and conversions.
+        // Statics, constants, a map's keys, non-primary/colliding/own inherent methods, and conversions.
         let mut inherent = String::new();
         let mut inherent_taken: HashSet<String> = HashSet::new();
         for f in c.funcs.iter().filter(|f| !Class::has_self(f)) {
@@ -1018,7 +1188,6 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             inherent_taken.insert("as_array".into());
             inherent += &format!("    pub fn as_array(&self) -> JsArray<{}> {{ JsArray::from_handle(crate::runtime::give(self)) }}\n", ty(elem));
         }
-        let all = ancestors(&c.name);
         let mut holders: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for h in std::iter::once(c.name.clone()).chain(all.iter().cloned()) {
             if let Some(k) = class_of(&h) {
@@ -1035,6 +1204,40 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
                 (0..k.type_params.len()).map(|i| b.get(i).cloned().unwrap_or(Ty::Any)).collect()
             }
         };
+        let mut primary_covered: HashSet<String> = HashSet::new();
+        let mut primary_args: Vec<Ty> = Vec::new();
+        let mut primary_kp: Option<&Class> = None;
+        if let Some(p) = primary_base
+            && let Some(kp) = class_of(p)
+        {
+            primary_covered.insert(p.clone());
+            primary_covered.extend(ancestors(p));
+            let b = base_args(m, c, p).unwrap_or_default();
+            primary_args = (0..kp.type_params.len()).map(|i| b.get(i).cloned().unwrap_or(Ty::Any)).collect();
+            primary_kp = Some(kp);
+        }
+        let specialized_vs_primary = |h: &str, k: &Class, h_args: &[Ty]| -> bool {
+            if h == c.name || !primary_covered.contains(h) || k.type_params.is_empty() {
+                return false;
+            }
+            let Some(kp) = primary_kp else { return false };
+            let via_raw = if h == kp.name {
+                Some(primary_args.clone())
+            } else {
+                base_args(m, kp, h).map(|v| v.into_iter().map(|t| subst(&t, &kp.type_params, &primary_args)).collect())
+            };
+            let Some(via_raw) = via_raw else { return false };
+            let via: Vec<Ty> = (0..k.type_params.len()).map(|i| via_raw.get(i).cloned().unwrap_or(Ty::Any)).collect();
+            via != h_args
+        };
+        let mut trait_counts: HashMap<String, usize> = HashMap::new();
+        for h in std::iter::once(c.name.as_str()).chain(all.iter().map(String::as_str)) {
+            if let Some(tset) = trait_names.get(h) {
+                for n in tset {
+                    *trait_counts.entry(n.clone()).or_insert(0) += 1;
+                }
+            }
+        }
         let self_ty = if c.type_params.is_empty() {
             Ty::Obj(c.name.clone())
         } else {
@@ -1048,18 +1251,28 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             let h = &hs[0];
             let k = class_of(h).unwrap();
             let h_args = args_for(h, k);
+            let collision = trait_counts.get(method).copied().unwrap_or(0) > 1;
             if let Some(g) = grouped[k.name.as_str()].iter().find(|g| g.name == *method) {
+                let has_returns_this = h != &c.name && g.members.iter().all(|f| f.returns_this);
+                if h != &c.name && primary_covered.contains(h) && !collision && !has_returns_this && !specialized_vs_primary(h, k, &h_args) {
+                    continue;
+                }
                 inherent_taken.insert(method.clone());
                 if g.members.iter().any(|f| f.params[g.at].1 == Ty::Str && !hidden(f).is_empty()) {
                     inherent_taken.insert(format!("{method}_as"));
                 }
-                let ret_self = (h != &c.name && g.members.iter().all(|f| f.returns_this)).then_some(&self_ty);
+                let ret_self = has_returns_this.then_some(&self_ty);
                 for item in g.methods("pub ", &mut imports, this, ret_self) {
                     inherent += &format!("    {item}\n");
                 }
                 continue;
             }
-            for f0 in k.funcs.iter().filter(|f| Class::has_self(f) && names[k.name.as_str()][&f.name] == *method) {
+            let matching: Vec<&Func> = k.funcs.iter().filter(|f| Class::has_self(f) && names[k.name.as_str()][&f.name] == *method).collect();
+            let has_returns_this = h != &c.name && matching.iter().any(|f| f.returns_this);
+            if h != &c.name && primary_covered.contains(h) && !collision && !has_returns_this && !specialized_vs_primary(h, k, &h_args) {
+                continue;
+            }
+            for f0 in matching {
                 let mut orig = with_self_args(f0, k);
                 if !c.type_params.is_empty() && !orig.type_params.is_empty() {
                     orig = avoid_outer_type_params(&orig, &c.type_params, &k.type_params);
@@ -1082,92 +1295,49 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
                 }
             }
         }
-        // Fluent `with_<prop>(self, v) -> Self` builders for single-arg property setters (own + inherited).
+        // Inherent `with_<prop>(self, v) -> Self` only for own/non-primary/colliding/specialized setters.
         for (method, hs) in &holders {
-            let Some(stem) = method.strip_prefix("set_") else { continue };
-            if stem.is_empty() {
-                continue;
-            }
-            let with_name = ident(&format!("with_{stem}"));
+            let h = &hs[0];
+            let k = class_of(h).unwrap();
+            let Some((f0, with_name)) = setter_for_with(k, method, &names) else { continue };
             if inherent_taken.contains(&with_name) || holders.contains_key(&with_name) || TAKEN.contains(&with_name.as_str()) {
                 continue;
             }
-            let h = &hs[0];
-            let k = class_of(h).unwrap();
-            let matching: Vec<&Func> = k.funcs.iter().filter(|f| Class::has_self(f) && names[k.name.as_str()][&f.name] == *method).collect();
-            if matching.len() != 1 {
-                continue;
-            }
-            let f0 = matching[0];
-            if !matches!(f0.call, Call::Set(_)) || f0.params.len() != 1 || !f0.type_params.is_empty() || f0.ret != Ty::Void || !f0.fixed.is_empty() {
-                continue;
-            }
             let h_args = args_for(h, k);
+            let collision = trait_counts.get(&with_name).copied().unwrap_or(0) > 1;
+            if h != &c.name && primary_covered.contains(h) && !collision && !specialized_vs_primary(h, k, &h_args) {
+                continue;
+            }
             let orig = with_self_args(f0, k);
             let f = map_types(&orig, &|t| subst(t, &k.type_params, &h_args));
-            let orig_t = &orig.params[0].1;
-            let (p_raw, t) = &f.params[0];
-            let p = ident(&snake(p_raw));
-            let (written, val_raw_args) = match t {
-                Ty::Nullable(inner, _) => {
-                    if matches!(**inner, Ty::Void | Ty::Key(_) | Ty::Mapped(_) | Ty::Nullable(..)) {
-                        continue;
-                    }
-                    let (w, inner_args) = param(inner, &p);
-                    let ra = if raw(orig_t) != raw(t) {
-                        vec![format!("{p}.lend().h")]
-                    } else {
-                        match &**inner {
-                            Ty::Num => vec!["1".into(), p.clone()],
-                            Ty::NumEnum(_) => vec!["1".into(), format!("{p} as i32 as f64")],
-                            Ty::Bool | Ty::Enum(_) => vec![format!("{p} as i32")],
-                            _ => inner_args,
-                        }
-                    };
-                    (w, ra)
-                }
-                _ => {
-                    if matches!(t, Ty::Void | Ty::Key(_) | Ty::Mapped(_)) {
-                        continue;
-                    }
-                    let (w, mut ra) = param(t, &p);
-                    if raw(orig_t) != raw(t) {
-                        ra = vec![format!("{p}.lend().h")];
-                    }
-                    (w, ra)
-                }
-            };
-            let (import, mut raw_params, mut call_args) = match &f.shared {
-                Some((shared, k_idx)) => (shared.clone(), vec!["this: u32".into(), "k: i32".into()], vec!["self.0 .0".into(), k_idx.to_string()]),
-                None => (f.import.clone(), vec!["this: u32".into()], vec!["self.0 .0".into()]),
-            };
-            call_args.extend(val_raw_args);
-            raw_params.extend(raw(orig_t).into_iter().enumerate().map(|(j, r)| format!("a0_{j}: {r}")));
-            let raw_name = if KEYWORDS.contains(&import.as_str()) { format!("{import}_") } else { import.clone() };
-            imports.entry(import.clone()).or_insert_with(|| {
-                let link = if raw_name != import { format!("#[link_name = \"{import}\"] ") } else { String::new() };
-                format!("    {link}pub fn {raw_name}({}) -> ();\n", raw_params.join(", "))
-            });
-            inherent_taken.insert(with_name.clone());
-            inherent += &format!("    pub fn {with_name}(self, {p}: {written}) -> Self {{ unsafe {{ raw::{raw_name}({}) }}; self }}\n", call_args.join(", "));
+            if let Some(item) = with_setter_item(&f, &orig, &with_name, "pub ", "", &mut imports) {
+                inherent_taken.insert(with_name);
+                inherent += &item;
+            }
         }
         if !inherent_taken.contains("iter")
             && let Some((k, elem)) = std::iter::once(c.name.as_str()).chain(all.iter().map(String::as_str)).find_map(|h| class_of(h).and_then(|k| k.iterates.as_ref().map(|e| (k, e))))
         {
             let h_args = args_for(&k.name, k);
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, k).ret;
-            let elem = subst(&elem, &k.type_params, &h_args);
-            inherent_taken.insert("iter".into());
-            inherent += &format!("    pub fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem));
+            let collision = trait_counts.get("iter").copied().unwrap_or(0) > 1;
+            if k.name == c.name || !primary_covered.contains(&k.name) || collision || specialized_vs_primary(&k.name, k, &h_args) {
+                let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, k).ret;
+                let elem = subst(&elem, &k.type_params, &h_args);
+                inherent_taken.insert("iter".into());
+                inherent += &format!("    pub fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem));
+            }
         }
         if !inherent_taken.contains("iterate_async")
             && let Some((k, elem)) = std::iter::once(c.name.as_str()).chain(all.iter().map(String::as_str)).find_map(|h| class_of(h).and_then(|k| k.iterates_async.as_ref().map(|e| (k, e))))
         {
             let h_args = args_for(&k.name, k);
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, k).ret;
-            let elem = subst(&elem, &k.type_params, &h_args);
-            inherent_taken.insert("iterate_async".into());
-            inherent += &format!("    pub fn iterate_async(&self) -> JsAsyncIterator<{}> {{ JsAsyncIterator::over({this}) }}\n", ty(&elem));
+            let collision = trait_counts.get("iterate_async").copied().unwrap_or(0) > 1;
+            if k.name == c.name || !primary_covered.contains(&k.name) || collision || specialized_vs_primary(&k.name, k, &h_args) {
+                let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, k).ret;
+                let elem = subst(&elem, &k.type_params, &h_args);
+                inherent_taken.insert("iterate_async".into());
+                inherent += &format!("    pub fn iterate_async(&self) -> JsAsyncIterator<{}> {{ JsAsyncIterator::over({this}) }}\n", ty(&elem));
+            }
         }
         // Covariant upcast for generic handles: `Texture<BufferImageSource>::upcast::<TextureSource<JsValue>>()`.
         if !c.type_params.is_empty() && !inherent_taken.contains("upcast") {
@@ -1199,8 +1369,21 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         // The traits of its ancestors, and conversions to them.
         for a in &all {
             let Some(k) = class_of(a) else {
-                if !m.opaque_arity.contains_key(a) && !RUNTIME_TYPES.iter().any(|r| r.0 == a.as_str()) {
-                    *out += &upcast_in(&bounds, &me, &tn(a), resolved_opaque.contains_key(a));
+                if m.opaque.contains(a) && !RUNTIME_TYPES.iter().any(|r| r.0 == a.as_str()) {
+                    if let Some((_, _, is_handle)) = resolved_opaque.get(a) {
+                        if *is_handle {
+                            *out += &upcast_in(&bounds, &me, &tn(a), true);
+                        }
+                    } else {
+                        let arity = m.opaque_arity.get(a).copied().unwrap_or(0);
+                        let base_args_str = if arity == 0 {
+                            String::new()
+                        } else {
+                            let base = base_args(m, c, a).unwrap_or_default();
+                            format!("<{}>", (0..arity).map(|i| base.get(i).map(ty).unwrap_or_else(|| VALUE.into())).collect::<Vec<_>>().join(", "))
+                        };
+                        *out += &upcast_in(&bounds, &me, &format!("{}{base_args_str}", tn(a)), false);
+                    }
                 }
                 continue;
             };
@@ -1525,7 +1708,10 @@ fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<String, String>)
         let (v, t) = (variant(p), ty(p));
         out += &format!("impl{bounds} From<{t}> for {n}{args} {{ fn from(x: {t}) -> Self {{ {n}::{v}(x) }} }}\n");
         match p {
-            Ty::Str => out += &format!("impl{bounds} From<&str> for {n}{args} {{ fn from(x: &str) -> Self {{ {n}::{v}(x.to_string()) }} }}\n"),
+            Ty::Str => out += &format!(
+                "impl{bounds} From<&str> for {n}{args} {{ fn from(x: &str) -> Self {{ {n}::{v}(x.to_string()) }} }}\n\
+                 impl{bounds} From<&::std::string::String> for {n}{args} {{ fn from(x: &::std::string::String) -> Self {{ {n}::{v}(x.clone()) }} }}\n"
+            ),
             Ty::Num | Ty::Bool | Ty::Enum(_) => {}
             _ => out += &format!("impl{bounds} From<&{t}> for {n}{args} {{ fn from(x: &{t}) -> Self {{ {n}::{v}(Clone::clone(x)) }} }}\n"),
         }

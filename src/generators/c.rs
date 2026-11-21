@@ -90,6 +90,7 @@ fn ident(name: &str) -> String {
 pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::ModelOptions {
     target: "C",
     counted: false,
+    trap_uncaught: false,
     generics: false,
     overloading: false,
     retain_opaque_constraints: false,

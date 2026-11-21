@@ -34,6 +34,8 @@ pub(crate) mod rt {
         pub fn js_retain(h: u32);
         pub fn js_release(h: u32);
         pub fn js_live() -> u32;
+        pub fn js_attempt_enter();
+        pub fn js_attempt_leave();
         pub fn js_take_error() -> u32;
         pub fn js_error_message(h: u32) -> u32;
         pub fn js_error_name(h: u32) -> u32;
@@ -379,6 +381,11 @@ impl From<&str> for JsValue {
 }
 impl From<String> for JsValue {
     fn from(s: String) -> Self {
+        s.as_str().into()
+    }
+}
+impl From<&String> for JsValue {
+    fn from(s: &String) -> Self {
         s.as_str().into()
     }
 }
@@ -762,6 +769,14 @@ pub mod js {
     // Runs f and gives what it returned, or the exception a call in it threw:
     // `let found = js::attempt(|| el.query_selector(text))?;`.
     pub fn attempt<T>(f: impl FnOnce() -> T) -> Result<T, JsError> {
+        struct Guard;
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                unsafe { rt::js_attempt_leave() };
+            }
+        }
+        unsafe { rt::js_attempt_enter() };
+        let _guard = Guard;
         let x = f();
         match take_error() {
             Some(e) => Err(e),

@@ -63,12 +63,11 @@ pub extern "C" fn run() {
     let s = scaler(2.0);
     check!(s.invoke(5.0) == 10.0 && s.factor() == 2.0 && s.construct(3.0).invoke(5.0) == 15.0);
 
-    // A call that throws returns a zero value; its exception is kept to take.
+    // A call that throws inside attempt gives a Result with the exception;
+    // the error slot stays empty afterward.
     check!(js::take_error().is_none());
-    check!(explode("boom") == 0.0);
-    check!(js::take_error().map(|e| e.message()) == Some("boom".to_string()));
+    check!(js::attempt(|| explode("boom")).is_err_and(|e| e.message() == "boom"));
     check!(js::take_error().is_none());
-    // Or run the call for a Result: its value, or the exception.
     check!(js::attempt(|| explode("again")).is_err_and(|e| e.message() == "again"));
     check!(js::attempt(flush).is_ok());
 

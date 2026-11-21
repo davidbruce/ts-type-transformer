@@ -269,6 +269,9 @@ pub struct Model {
     // Handles are counted references: wasm retains and releases them, and
     // owns what a callback returns. Else a handle lives as long as the page.
     pub counted: bool,
+    // Uncaught JS exceptions throw out of the wasm import call immediately
+    // unless inside `attempt` (`attemptDepth > 0`).
+    pub trap_uncaught: bool,
     // Each top-level declaration's package, by its name in the output, when it
     // is in one (`pb_Node`: `pb`).
     pub packages: BTreeMap<String, String>,
@@ -336,6 +339,7 @@ pub fn ident(name: &str) -> String {
 pub struct ModelOptions<'a> {
     pub target: &'a str,
     pub counted: bool,
+    pub trap_uncaught: bool,
     pub generics: bool,
     pub overloading: bool,
     pub retain_opaque_constraints: bool,
@@ -346,6 +350,7 @@ impl<'a> ModelOptions<'a> {
         Self {
             target,
             counted: matches!(target, "C++" | "Rust"),
+            trap_uncaught: target == "Rust",
             generics: matches!(target, "C++" | "Rust" | "Gleam"),
             overloading: target == "C++",
             retain_opaque_constraints: target == "Gleam",
@@ -415,7 +420,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     let mut b = Builder {
         opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),

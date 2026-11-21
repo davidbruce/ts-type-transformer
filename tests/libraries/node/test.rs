@@ -72,13 +72,10 @@ fn files() {
     fs::write_file_sync(file.as_str(), "hello, node\nsecond line\n", None);
     check!(fs::exists_sync(file.as_str()));
 
-    // Read back as bytes, and as text with an encoding.
+    // Read back as bytes (`Buffer<T>` derefs to `Uint8Array<T>`), and as text with an encoding.
     let bytes = fs::read_file_sync(file.as_str(), None);
-    // FINDING 3: `Buffer` is not bound as a `Uint8Array`, so its bytes cannot be
-    // read; the same handle is viewed as one here.
-    let view = Uint8Array::<ArrayBufferLike>(bytes.0.clone(), core::marker::PhantomData);
-    check!(view.len() == 24);
-    check!(String::from_utf8(view.to_vec()).unwrap() == "hello, node\nsecond line\n");
+    check!(bytes.len() == 24);
+    check!(String::from_utf8(bytes.to_vec()).unwrap() == "hello, node\nsecond line\n");
     let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), BufferEncoding::Utf8);
     check!(text == "hello, node\nsecond line\n");
 

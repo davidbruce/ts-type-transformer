@@ -334,6 +334,7 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
     let listener = lending(&|args| format!("f(ctx, {args});"), &["put(ev)".to_string()]);
     let settle = lending(&|args| format!("table().get(fn)(ctx, ok, {args});"), &["put(v)".to_string()]);
     let mut out = include_str!("runtime/wasm_runtime.mjs")
+        .replace("/*__TRAP_UNCAUGHT__*/false", if m.trap_uncaught { "true" } else { "false" })
         .replace("/*__LISTENER__*/", &listener)
         .replace("/*__SETTLE__*/", &settle);
     out += "\nexport function makeEnv(getInstance, options = {}) {\n\

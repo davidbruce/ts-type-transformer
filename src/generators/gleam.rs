@@ -63,6 +63,7 @@ const OWN: &[&str] = &["Promise", "JsError", "Dynamic", "Option", "List", "Resul
 pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::ModelOptions {
     target: "Gleam",
     counted: false,
+    trap_uncaught: false,
     generics: true,
     overloading: false,
     retain_opaque_constraints: true,

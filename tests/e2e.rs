@@ -565,6 +565,39 @@ fn mistakes_are_reported() {
     }
 }
 
+// An uncaught JavaScript exception outside `js::attempt` traps immediately in Rust
+// rather than returning a corrupted handle or continuing execution.
+#[test]
+fn rust_uncaught_exception_traps() {
+    let Some(rustc) = rustc_wasm() else { return };
+    let Some([node]) = tools(["node"]) else { return };
+    let c = case_in("callbacks", "rust", "rust-uncaught-traps");
+    let model = model(&c.xml, "Rust");
+    rust_bindings(&rustc, &c.out, &model);
+    let src = r#"#![no_main]
+use bindings::*;
+
+#[link(wasm_import_module = "env")]
+unsafe extern "C" {
+    #[link_name = "check"]
+    fn check_at(ok: i32, line: u32);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn run() {
+    unsafe { check_at(1, line!()) };
+    explode("boom");
+    unsafe { check_at(0, line!()) };
+}
+"#;
+    fs::write(c.out.join("test.rs"), src).unwrap();
+    run(Command::new(&rustc).current_dir(&c.out).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
+    write_glue(&c, &model);
+    let out = Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("glue.mjs")).arg(c.out.join("test.wasm")).output().unwrap();
+    let report = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success() && report.contains("boom") && !report.contains("checks failed"), "expected immediate trap on uncaught exception:\n{report}");
+}
+
 // Benchmarks: the same workloads in TypeScript and through each target's
 // bindings, timed from JavaScript. Not part of the suite:
 // `cargo test --test e2e bench -- --ignored --nocapture`.

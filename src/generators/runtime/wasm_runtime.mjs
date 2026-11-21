@@ -68,8 +68,11 @@ export function createRuntime(getInstance, options = {}) {
   // is not taken by the time control returns to JavaScript, or before the
   // next one, is reported.
   let error = 0;
+  let attemptDepth = 0;
+  const trapUncaught = options.trapUncaught ?? /*__TRAP_UNCAUGHT__*/false;
   const unchecked = options.unchecked ?? (e => console.error('Uncaught in a wasm call:', e));
   const fail = e => {
+    if (trapUncaught && attemptDepth === 0) throw e;
     if (error !== 0) {
       const oldH = error;
       const old = objs[oldH];
@@ -206,7 +209,15 @@ export function createRuntime(getInstance, options = {}) {
     let f = callbacks.get(key)?.deref();
     if (f === undefined) {
       const state = { key, ctx, alive: true };
-      f = make(table().get(fn), state);
+      const raw = make(table().get(fn), state);
+      f = function (...a) {
+        const saved = attemptDepth;
+        try {
+          return raw.apply(this, a);
+        } finally {
+          attemptDepth = saved;
+        }
+      };
       owned.set(f, state);
       callbacks.set(key, new WeakRef(f));
       cbFinalizer?.register(f, state, state);
@@ -266,6 +277,8 @@ export function createRuntime(getInstance, options = {}) {
     // Asynchronous iteration: a promise of the next value, or of nothing at the end.
     js_async_iterate: guard(h => put(get(h)[Symbol.asyncIterator]())),
     js_async_iterator_next: guard(it => put(Promise.resolve(get(it).next()).then(r => (r.done ? undefined : r.value)))),
+    js_attempt_enter: () => { attemptDepth++; },
+    js_attempt_leave: () => { if (attemptDepth > 0) attemptDepth--; },
     // Whether an exception waits to be taken; the exception, which wasm now holds, or 0.
     js_has_error: () => (error !== 0 ? 1 : 0),
     js_take_error: () => { const e = error; error = 0; if (e !== 0 && scopes.length !== 0) scopes[scopes.length - 1].push(e, gens[e]); return e; },
@@ -311,7 +324,7 @@ export function createRuntime(getInstance, options = {}) {
     js_bytes_offset: guard(h => { const v = get(h); return ArrayBuffer.isView(v) ? (v.byteOffset >>> 0) : 0; }),
     // Calls fn(ctx, ok, value) once the promise settles: ok 1 with its value, 0 with its reason.
     js_promise_then: guard((p, fn, ctx) => {
-      const settle = ok => v => { /*__SETTLE__*/ };
+      const settle = ok => v => { const saved = attemptDepth; try { /*__SETTLE__*/ } finally { attemptDepth = saved; } };
       Promise.resolve(get(p)).then(settle(1), settle(0));
     }),
   };

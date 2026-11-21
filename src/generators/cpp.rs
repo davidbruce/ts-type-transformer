@@ -87,6 +87,7 @@ fn ident(name: &str) -> String {
 pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::ModelOptions {
     target: "C++",
     counted: true,
+    trap_uncaught: false,
     generics: true,
     overloading: true,
     retain_opaque_constraints: false,

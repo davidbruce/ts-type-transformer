@@ -118,9 +118,9 @@ pub extern "C" fn run() {
     check!(tags == ["P", "BUTTON"]);
     doc.set_title("driven by rust");
 
-    // An invalid selector throws: the call returns None, and the exception is kept.
-    check!(el.query_selector("<bad").is_none());
-    check!(js::take_error().is_some_and(|e| e.message().contains("not a valid selector")));
+    // An invalid selector throws inside attempt: caught as a JsError without leaking to the error slot.
+    check!(js::attempt(|| el.query_selector("<bad")).is_err_and(|e| e.message().contains("not a valid selector")));
+    check!(js::take_error().is_none());
 
     // A real request: a promise of a Response, then of its text, each awaited.
     js::spawn(async {

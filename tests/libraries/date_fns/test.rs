@@ -17,7 +17,7 @@ macro_rules! check {
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
     // A Friday, local midnight: what parseISO gives for a date alone.
-    let friday: Date = parse_iso::<Date, Date>("2024-03-15", None);
+    let friday: Date = parse_iso::<Date>("2024-03-15", None);
     check!(format_date(&friday, "yyyy-MM-dd", None) == "2024-03-15");
     check!(format_date(&friday, "EEEE", None) == "Friday");
     check!(get_year(&friday, None) == 2024.0);
@@ -57,5 +57,5 @@ pub extern "C" fn run() {
     check!(format_date(&moved, "yyyy-MM-dd", None) == "2024-04-17");
 
     // Nonsense is no date.
-    check!(!is_valid(&parse_iso::<Date, Date>("not a date", None)));
+    check!(!is_valid(&parse_iso::<Date>("not a date", None)));
 }
