@@ -69,13 +69,12 @@ Fs.appendFileSync (file, "more\n")
 let created = Fs.mkdirSync (join (join dir "sub") "deep", {| recursive = true; mode = None |})
 check (created.IsSome && created.Value.EndsWith "sub") "mkdirSync recursive returns the first directory made"
 Fs.writeFileSync (join (join dir "sub") "b.txt", "b")
-// FINDING 13: an encoding such as "utf8" cannot be given: `global_BufferEncoding` is an empty interface (Bindings.Prelude.fs:115),
-// not a string enum. Read without one, a Buffer, turned into a string by its default (utf8).
 let buffer: NonSharedBuffer = Fs.readFileSync file
 let content = buffer.toString ()
 check (content = "héllo\nworld\nmore\n") "readFileSync"
+check (Fs.readFileSync (file, BufferEncoding.Utf8) = "héllo\nworld\nmore\n") "readFileSync with BufferEncoding"
 // FINDING 13 too: Buffer inherits `Uint8Array<_>`, also an empty interface (Bindings.Prelude.fs:112): no length, no bytes.
-let names = Fs.readdirSync (dir, U2.Case1 {| encoding = None; withFileTypes = None; recursive = None |})
+let names = Fs.readdirSync (dir, ReaddirOptionsOrBufferEncoding.Object {| encoding = None; withFileTypes = None; recursive = None |})
 let name (n: StringOrNonSharedBuffer) = match n with StringOrNonSharedBuffer.String s -> s | _ -> "?"
 check (names |> Seq.map name |> List.ofSeq |> List.sort = [ "hello.txt"; "sub" ]) "readdirSync"
 let stat = Fs.statSync file

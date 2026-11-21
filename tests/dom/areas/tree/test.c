@@ -145,7 +145,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(((int)Node_compareDocumentPosition(a, host) & Node_DOCUMENT_POSITION_DISCONNECTED) != 0);
 
     // A walk over the list's elements (SHOW_ELEMENT is 1).
-    TreeWalker walker = Document_createTreeWalker(doc, list, js_some_double(1), (JsValue){ 0 });
+    TreeWalker walker = Document_createTreeWalker(doc, list, js_some_double(1), (NodeFilter){ .tag = -1 });
     CHECK(js_same(TreeWalker_get_root(walker), list));
     const char* expect[] = { "zero", "three", "a", "b", "z" };
     int seen = 0;

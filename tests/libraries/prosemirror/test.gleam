@@ -19,6 +19,7 @@ import bindings/areas/main/schema_marks
 import bindings/areas/main/schema_nodes
 import bindings/areas/main/editor_state_apply_transaction_result as applied
 import bindings/areas/main/editor_view_coords_at_pos_result as coords
+import bindings/areas/main/editor_view_new_place_object as place_obj
 import bindings/areas/prosemirror_state as pstate
 import bindings/areas/prosemirror_state/editor_state
 import bindings/areas/prosemirror_state/editor_state_config
@@ -320,7 +321,8 @@ pub fn main() {
       None -> Nil
     }
   }))
-  let view = editor_view.new(Some(runtime.dynamic(test_page.element("stage"))), props)
+  let place = place_obj.create() |> place_obj.with_mount(test_page.element("stage"))
+  let view = editor_view.new(Some(t.EditorViewNewPlaceOrDistDOMNodeEditorViewNewPlaceObject(place)), props)
   cell.set(view_cell, Some(view))
   let at_one = editor_view.coords_at_pos(view, 1.0, None)
   let passed =

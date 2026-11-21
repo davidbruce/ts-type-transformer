@@ -14,8 +14,37 @@ import marked/areas/main/marked_extension_renderer
 import marked/areas/main/marked_options_no_async
 import marked/areas/main/marked_parse
 import marked/areas/main/marked_parse_call_options_no_async
+import marked/namespaces/tokens/generic as token_generic
 import marked/runtime as mr
 import marked/types as mt
+
+fn token_type(tok: mt.Token) -> String {
+  case tok {
+    mt.TokenTokensBlockquote(_) -> "blockquote"
+    mt.TokenTokensBr(_) -> "br"
+    mt.TokenTokensCheckbox(_) -> "checkbox"
+    mt.TokenTokensCode(_) -> "code"
+    mt.TokenTokensCodespan(_) -> "codespan"
+    mt.TokenTokensDef(_) -> "def"
+    mt.TokenTokensDel(_) -> "del"
+    mt.TokenTokensEm(_) -> "em"
+    mt.TokenTokensEscape(_) -> "escape"
+    mt.TokenTokensHeading(_) -> "heading"
+    mt.TokenTokensHr(_) -> "hr"
+    mt.TokenTokensHTML(_) -> "html"
+    mt.TokenTokensImage(_) -> "image"
+    mt.TokenTokensLink(_) -> "link"
+    mt.TokenTokensList2(_) -> "list"
+    mt.TokenTokensListItem(_) -> "list_item"
+    mt.TokenTokensParagraph(_) -> "paragraph"
+    mt.TokenTokensSpace(_) -> "space"
+    mt.TokenTokensStrong(_) -> "strong"
+    mt.TokenTokensTable(_) -> "table"
+    mt.TokenTokensTag(_) -> "html"
+    mt.TokenTokensText(_) -> "text"
+    mt.TokenTokensGeneric(g) -> token_generic.get_type(g)
+  }
+}
 
 fn field_string(tok: Dynamic, name: String) -> String {
   let assert Ok(s) = decode.run(tok, decode.at([name], decode.string))
@@ -64,7 +93,7 @@ pub fn main() -> Nil {
         |> marked_extension.with_walk_tokens(fn(token) {
           let pill = document.create_element_span(doc, None)
           element.set_class_name(pill, "tok-pill")
-          node.set_text_content(pill, Some(field_string(token, "type")))
+          node.set_text_content(pill, Some(token_type(token)))
           let _ = node.append_child(strip, pill)
           None
         })

@@ -20,6 +20,14 @@ fn render(tex: []const u8, options: ?b.KatexOptions) b.JsString {
 }
 
 
+fn onTrust(ctx: b.TrustContext) bool {
+    var ubuf: [128]u8 = undefined;
+    return switch (ctx) {
+        .TrustContext_href => |h| std.mem.startsWith(u8, h.getUrl().copy(&ubuf), "https://example.com"),
+        else => false,
+    };
+}
+
 export fn run() void {
     // The version is a string.
     const version = b.getVersion();
@@ -136,8 +144,11 @@ export fn run() void {
     const link = render(href, trusted);
     expect(has(link, "<a href=\"https://example.com\""), @src());
 
-    // FINDING 2: trust as a callback `(context: TrustContext) => boolean` cannot be written:
-    // TrustContext_to_boolean_fn.from rejects any function ("expected type 'TrustContext', found 'JsValue'").
+    const trust_opts = b.KatexOptions.create();
+    const cb = b.TrustContext_to_boolean_fn.from(onTrust, null);
+    trust_opts.setTrust(.{ .TrustContext_to_boolean_fn = cb });
+    expect(has(render(href, trust_opts), "<a href=\"https://example.com\""), @src());
+    expect(!has(render("\\href{https://other.org}{link}", trust_opts), "<a href"), @src());
 
     // Output is deterministic.
     expect(render("e^{i\\pi}", null).eql(render("e^{i\\pi}", null).copy(&buf)), @src());

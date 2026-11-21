@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use node::events::EventEmitter;
-use node::{AnyArrayFn, GlobalBufferEncoding, JsArray, JsValue, fs, js, path};
+use node::{AnyArrayFn, BufferEncoding, JsArray, JsValue, fs, js, path};
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -67,13 +67,12 @@ pub extern "C" fn start() {
     logs.sort();
     c.check(logs == ["a.log", "b.log", "c.log"]);
 
-    let utf8 = JsValue::from("utf8").unchecked_into::<GlobalBufferEncoding>();
     let combined = path::join([out_dir.as_str(), "combined.log"]);
     for name in &logs {
         c.check(path::extname(name) == ".log");
         let chunk = fs::read_file_sync_or_buffer_encoding(
             &*path::join([in_dir.as_str(), name.as_str()]),
-            &utf8,
+            BufferEncoding::Utf8,
         );
         fs::append_file_sync(&*combined, &*chunk, None);
     }
@@ -81,7 +80,7 @@ pub extern "C" fn start() {
     c.check(stages.get() == 2);
 
     // Stage 3: verify
-    let comb_text = fs::read_file_sync_or_buffer_encoding(&*combined, &utf8);
+    let comb_text = fs::read_file_sync_or_buffer_encoding(&*combined, BufferEncoding::Utf8);
     c.check(fs::stat_sync(&*combined).size() == 21.0 && comb_text.contains("200 OK"));
 
     let missing = js::attempt(|| fs::read_file_sync(&*path::join([out_dir.as_str(), "missing.log"]), None));

@@ -1,7 +1,35 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use marked::{Lexer, js, tokens};
+use marked::{Lexer, Token, tokens};
+
+fn token_kind_raw(t: &Token) -> (String, String) {
+    match t {
+        Token::Blockquote(x) => (tokens::Blockquote::TYPE.into(), x.raw()),
+        Token::Br(x) => (tokens::Br::TYPE.into(), x.raw()),
+        Token::Checkbox(x) => (tokens::Checkbox::TYPE.into(), x.raw()),
+        Token::Code(x) => (tokens::Code::TYPE.into(), x.raw()),
+        Token::Codespan(x) => (tokens::Codespan::TYPE.into(), x.raw()),
+        Token::Def(x) => (tokens::Def::TYPE.into(), x.raw()),
+        Token::Del(x) => (tokens::Del::TYPE.into(), x.raw()),
+        Token::Em(x) => (tokens::Em::TYPE.into(), x.raw()),
+        Token::Escape(x) => (tokens::Escape::TYPE.into(), x.raw()),
+        Token::Heading(x) => (tokens::Heading::TYPE.into(), x.raw()),
+        Token::Hr(x) => (tokens::Hr::TYPE.into(), x.raw()),
+        Token::HTML(x) => (tokens::HTML::TYPE.into(), x.raw()),
+        Token::Image(x) => (tokens::Image::TYPE.into(), x.raw()),
+        Token::Link(x) => (tokens::Link::TYPE.into(), x.raw()),
+        Token::List(x) => (tokens::List::TYPE.into(), x.raw()),
+        Token::ListItem(x) => (tokens::ListItem::TYPE.into(), x.raw()),
+        Token::Paragraph(x) => (tokens::Paragraph::TYPE.into(), x.raw()),
+        Token::Space(x) => (tokens::Space::TYPE.into(), x.raw()),
+        Token::Strong(x) => (tokens::Strong::TYPE.into(), x.raw()),
+        Token::Table(x) => (tokens::Table::TYPE.into(), x.raw()),
+        Token::Tag(x) => (tokens::Tag::TYPE.into(), x.raw()),
+        Token::Text(x) => (tokens::Text::TYPE.into(), x.raw()),
+        Token::Generic(x) => (x.type_(), x.raw()),
+    }
+}
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -54,15 +82,14 @@ pub extern "C" fn start() {
     let tbody = make_el(&doc, "tbody", "", None);
     for i in 0..count {
         let tok = list.at(i as f64).expect("missing token");
-        let g = js::unchecked_cast::<tokens::Generic>(&tok);
-        let raw = g.raw();
+        let (kind, raw) = token_kind_raw(&tok);
         let snip = raw.replace('\n', "\u{21B5}");
         let idx_s = i.to_string();
         let bytes_s = raw.len().to_string();
 
         let tr = make_el(&doc, "tr", "", None);
         append(&tr, make_el(&doc, "td", "", Some(&idx_s)));
-        append(&tr, make_el(&doc, "td", "", Some(&g.type_())));
+        append(&tr, make_el(&doc, "td", "", Some(&kind)));
         append(&tr, make_el(&doc, "td", "", Some(&bytes_s)));
         append(&tr, make_el(&doc, "td", "", Some(&snip)));
         append(&tbody, tr);

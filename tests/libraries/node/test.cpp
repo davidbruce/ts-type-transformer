@@ -57,12 +57,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     std::vector<uint8_t> bytes = buf.to_vector();
     CHECK(bytes.size() == 13 && bytes[0] == 'h' && bytes[1] == 0xC3 && bytes[2] == 0xA9);
 
-    // FINDING 7: the encoding `"utf8"` of fs::readFileSync(path, "utf8") is typed
-    // global_BufferEncoding, an opaque handle struct with no way to make one from
-    // the string or from the BufferEncoding enum (also in Buffer::toString(enc),
-    // writeFileSync options). A raw JavaScript string handle is made by hand.
-    global_BufferEncoding utf8(ts::handle, ts_raw_js_from_string("utf8", 4));
-    std::string text = fs::readFileSync(file, ReadFileSyncOptionsWithStringEncoding_or_BufferEncoding(utf8));
+    std::string text = fs::readFileSync(file, ReadFileSyncOptionsWithStringEncoding_or_BufferEncoding(BufferEncoding::utf8));
     CHECK(text == "héllo\nworld\n");
 
     fs::appendFileSync(file, std::string("more\n"));

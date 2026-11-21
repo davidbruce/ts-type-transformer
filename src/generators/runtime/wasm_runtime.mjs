@@ -187,19 +187,29 @@ export function createRuntime(getInstance, options = {}) {
   // One JavaScript function per wasm function and context, so that a
   // callback passed twice is the same function (removeEventListener).
   const callbacks = new Map();
-  // Callbacks made here: their key and context, until released.
-  const owned = new Map();
+  // Callbacks made here: their key and context, until released or GC'd.
+  const owned = new WeakMap();
+  const cbFinalizer = typeof FinalizationRegistry !== 'undefined'
+    ? new FinalizationRegistry(state => {
+        if (callbacks.get(state.key)?.deref() === undefined) callbacks.delete(state.key);
+        if (state.alive) {
+          state.alive = false;
+          if (state.ctx) getInstance()?.exports?.ts_drop_closure?.(state.ctx);
+        }
+      })
+    : null;
   const dead = () => {
     throw new Error('callback called after release');
   };
   const callback = (kind, fn, ctx, make) => {
     const key = `${kind}:${fn}:${ctx}`;
-    let f = callbacks.get(key);
+    let f = callbacks.get(key)?.deref();
     if (f === undefined) {
       const state = { key, ctx, alive: true };
       f = make(table().get(fn), state);
       owned.set(f, state);
-      callbacks.set(key, f);
+      callbacks.set(key, new WeakRef(f));
+      cbFinalizer?.register(f, state, state);
     }
     return put(f);
   };
@@ -229,10 +239,12 @@ export function createRuntime(getInstance, options = {}) {
     js_listener_from: (fn, ctx) => callback('listener', fn, ctx, (f, s) => ev => { if (!s.alive) dead(); /*__LISTENER__*/ }),
     // Forgets a callback made here; returns its context, for wasm to free, or 0.
     js_callback_release: guard(h => {
-      const o = owned.get(get(h));
+      const f = get(h);
+      const o = owned.get(f);
       if (!o) return 0;
-      owned.delete(get(h));
+      owned.delete(f);
       callbacks.delete(o.key);
+      cbFinalizer?.unregister(o);
       o.alive = false;
       return o.ctx;
     }),
@@ -303,5 +315,6 @@ export function createRuntime(getInstance, options = {}) {
       Promise.resolve(get(p)).then(settle(1), settle(0));
     }),
   };
-  return { ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, env };
+  const trim = a => { let n = a.length; while (n > 0 && a[n - 1] === undefined) n--; if (n < a.length) a.length = n; return a; };
+  return { ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, trim, env };
 }

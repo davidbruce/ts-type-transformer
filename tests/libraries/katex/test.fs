@@ -93,15 +93,13 @@ let strictFails =
 check strictFails "strict error throws"
 
 // Trust: a function deciding on each \href.
-// FINDING 2 (still open): the case tests now keep their backslash, but Fable compiles matching a case whose
-// payload is an anonymous record to `if (false && ...)`, so `TrustContext.Object_ o` never matches. The context
-// is read as the object it is.
 let mutable asked: string list = []
 let decide (ctx: TrustContext) =
-    let command: string = (box ctx)?command
-    let url: string = (box ctx)?url
-    asked <- asked @ [ command + " " + url ]
-    command = @"\href" && url.StartsWith "https://example.com"
+    match ctx with
+    | TrustContext.TrustContextHref h ->
+        asked <- asked @ [ h.command + " " + h.url ]
+        h.url.StartsWith "https://example.com"
+    | _ -> false
 let trusting = KatexOptions.Create (trust = BooleanOrFn.Function decide)
 let link = renderToString (@"\href{https://example.com}{x}", trusting)
 check (link.Contains "https://example.com") "a trusted link"

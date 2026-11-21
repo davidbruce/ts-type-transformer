@@ -51,7 +51,7 @@ __attribute__((export_name("start"))) void start(void) {
     NodeJS_EventEmitter_once(bus, "done", any_array_fn_from(on_done, 0));
 
     char root[256], in_dir[320], out_dir[320], fp[384], combined[384];
-    JsString_copy(mkdtempSync("/tmp/tsrs-node-pipe-", (JsValue){ 0 }), root, sizeof root);
+    JsString_copy(mkdtempSync("/tmp/tsrs-node-pipe-", (ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), root, sizeof root);
 
     join2(in_dir, sizeof in_dir, root, "in");
     join2(out_dir, sizeof out_dir, root, "out");
@@ -61,11 +61,11 @@ __attribute__((export_name("start"))) void start(void) {
     mkdirSync_with_opt_MakeDirectoryOptions(PathLike_of(out_dir), mk);
 
     join2(fp, sizeof fp, in_dir, "a.log");
-    writeFileSync(PathOrFileDescriptor_of(fp), "100 OK\n", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(fp), "100 OK\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     join2(fp, sizeof fp, in_dir, "b.log");
-    writeFileSync(PathOrFileDescriptor_of(fp), "200 OK\n", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(fp), "200 OK\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     join2(fp, sizeof fp, in_dir, "c.log");
-    writeFileSync(PathOrFileDescriptor_of(fp), "300 OK\n", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(fp), "300 OK\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     emit_stage(bus, "stage", "seed");
     check(g_stages == 1);
 
@@ -73,12 +73,11 @@ __attribute__((export_name("start"))) void start(void) {
     check(JsArray_JsString_length(readdirSync(PathLike_of(in_dir), (readdir_options){ 0 })) == 3);
 
     join2(combined, sizeof combined, out_dir, "combined.log");
-    global_BufferEncoding utf8 = { JsString_from("utf8").h };
     for (int i = 0; i < 3; i++) {
         check(JsString_equals(path_extname(log_names[i]), ".log"));
         join2(fp, sizeof fp, in_dir, log_names[i]);
-        JsString chunk = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(fp), utf8);
-        appendFileSync(PathOrFileDescriptor_of(combined), chunk, (JsValue){ 0 });
+        JsString chunk = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(fp), BufferEncoding_utf8);
+        appendFileSync(PathOrFileDescriptor_of(combined), chunk, (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     }
     emit_stage(bus, "stage", "bundle");
     check(g_stages == 2);
@@ -86,11 +85,11 @@ __attribute__((export_name("start"))) void start(void) {
     Stats comb_st = statSync(PathLike_of(combined));
     int comb_size = (int)js_to_number(Stats_get_size(comb_st));
     char comb_buf[128];
-    JsString_copy(readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(combined), utf8), comb_buf, sizeof comb_buf);
+    JsString_copy(readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(combined), BufferEncoding_utf8), comb_buf, sizeof comb_buf);
     check(comb_size == 21 && strstr(comb_buf, "200 OK") != 0);
 
     join2(fp, sizeof fp, out_dir, "missing.log");
-    JsString missing = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(fp), utf8);
+    JsString missing = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(fp), BufferEncoding_utf8);
     check(missing.h == 0 && js_failed());
     char mbuf[256];
     JsString_copy(js_error_message(js_take_error()), mbuf, sizeof mbuf);

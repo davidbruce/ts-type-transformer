@@ -60,13 +60,19 @@ pub fn main() {
   table_features.set_row_sorting_feature(features, Some(table.get_row_sorting_feature()))
   table_features.set_row_pagination_feature(features, Some(table.get_row_pagination_feature()))
   let registry = table.table_features(runtime.dynamic(features))
+  let state_dyn = fn(s: t.TableState) {
+    case s {
+      t.TableStateTableStateObject(o) -> runtime.dynamic(o)
+      t.TableStateTableStateCellSelection2(o) -> runtime.dynamic(o)
+    }
+  }
   let state = table.get_initial_table_state(registry, None)
   let passed =
     check(option.is_some(table_features.get_row_sorting_feature(registry)), "the sorting feature is registered")
     + check(option.is_none(table_features.get_column_filtering_feature(registry)), "filtering is not")
-    + check(field(state, ["sorting"], decode.list(decode.dynamic)) == [], "initial sorting state is empty")
-    + check(field(state, ["pagination", "pageIndex"], decode.int) == 0, "initial page index")
-    + check(field(state, ["pagination", "pageSize"], decode.int) == 10, "initial page size")
+    + check(field(state_dyn(state), ["sorting"], decode.list(decode.dynamic)) == [], "initial sorting state is empty")
+    + check(field(state_dyn(state), ["pagination", "pageIndex"], decode.int) == 0, "initial page index")
+    + check(field(state_dyn(state), ["pagination", "pageSize"], decode.int) == 10, "initial page size")
   let core = core_features.create()
   let passed =
     passed
@@ -195,7 +201,7 @@ pub fn main() {
   let initial = table_core_properties.get_initial_state(tbl)
   let passed =
     passed
-    + check(field(initial, ["sorting"], decode.list(decode.dynamic)) == [], "the table starts unsorted")
+    + check(field(state_dyn(initial), ["sorting"], decode.list(decode.dynamic)) == [], "the table starts unsorted")
     + check(field(runtime.dynamic(table_core_properties.get_options(tbl)), ["data"], decode.list(decode.dynamic)) |> list.length == 3, "the table's options hold the data")
     + check(field(runtime.dynamic(table_core_properties.get_options(tbl)), ["columns"], decode.list(decode.dynamic)) |> list.length == 2, "and the columns")
 

@@ -2,18 +2,63 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
-import gleam/dynamic.{type Dynamic}
-import gleam/dynamic/decode
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import marked/areas/main/lexer
 import marked/areas/main/tokens_list
+import marked/namespaces/tokens/blockquote as token_blockquote
+import marked/namespaces/tokens/br as token_br
+import marked/namespaces/tokens/checkbox as token_checkbox
+import marked/namespaces/tokens/code as token_code
+import marked/namespaces/tokens/codespan as token_codespan
+import marked/namespaces/tokens/def as token_def
+import marked/namespaces/tokens/del as token_del
+import marked/namespaces/tokens/em as token_em
+import marked/namespaces/tokens/escape as token_escape
+import marked/namespaces/tokens/generic as token_generic
+import marked/namespaces/tokens/heading as token_heading
+import marked/namespaces/tokens/hr as token_hr
+import marked/namespaces/tokens/html as token_html
+import marked/namespaces/tokens/image as token_image
+import marked/namespaces/tokens/link as token_link
+import marked/namespaces/tokens/list as token_list
+import marked/namespaces/tokens/list_item as token_list_item
+import marked/namespaces/tokens/paragraph as token_paragraph
+import marked/namespaces/tokens/space as token_space
+import marked/namespaces/tokens/strong as token_strong
+import marked/namespaces/tokens/table as token_table
+import marked/namespaces/tokens/tag as token_tag
+import marked/namespaces/tokens/text as token_text
+import marked/types as mt
 
-fn field_string(tok: Dynamic, name: String) -> String {
-  let assert Ok(s) = decode.run(tok, decode.at([name], decode.string))
-  s
+fn token_kind_raw(tok: mt.Token) -> #(String, String) {
+  case tok {
+    mt.TokenTokensBlockquote(x) -> #("blockquote", token_blockquote.get_raw(x))
+    mt.TokenTokensBr(x) -> #("br", token_br.get_raw(x))
+    mt.TokenTokensCheckbox(x) -> #("checkbox", token_checkbox.get_raw(x))
+    mt.TokenTokensCode(x) -> #("code", token_code.get_raw(x))
+    mt.TokenTokensCodespan(x) -> #("codespan", token_codespan.get_raw(x))
+    mt.TokenTokensDef(x) -> #("def", token_def.get_raw(x))
+    mt.TokenTokensDel(x) -> #("del", token_del.get_raw(x))
+    mt.TokenTokensEm(x) -> #("em", token_em.get_raw(x))
+    mt.TokenTokensEscape(x) -> #("escape", token_escape.get_raw(x))
+    mt.TokenTokensHeading(x) -> #("heading", token_heading.get_raw(x))
+    mt.TokenTokensHr(x) -> #("hr", token_hr.get_raw(x))
+    mt.TokenTokensHTML(x) -> #("html", token_html.get_raw(x))
+    mt.TokenTokensImage(x) -> #("image", token_image.get_raw(x))
+    mt.TokenTokensLink(x) -> #("link", token_link.get_raw(x))
+    mt.TokenTokensList2(x) -> #("list", token_list.get_raw(x))
+    mt.TokenTokensListItem(x) -> #("list_item", token_list_item.get_raw(x))
+    mt.TokenTokensParagraph(x) -> #("paragraph", token_paragraph.get_raw(x))
+    mt.TokenTokensSpace(x) -> #("space", token_space.get_raw(x))
+    mt.TokenTokensStrong(x) -> #("strong", token_strong.get_raw(x))
+    mt.TokenTokensTable(x) -> #("table", token_table.get_raw(x))
+    mt.TokenTokensTag(x) -> #("html", token_tag.get_raw(x))
+    mt.TokenTokensText(x) -> #("text", token_text.get_raw(x))
+    mt.TokenTokensGeneric(x) -> #(token_generic.get_type(x), token_generic.get_raw(x))
+  }
 }
 
 pub fn main() -> Nil {
@@ -74,8 +119,7 @@ pub fn main() -> Nil {
 
       let tbody = document.create_element_tbody(doc, None)
       list.index_fold(items, Nil, fn(_, tok, i) {
-        let kind = field_string(tok, "type")
-        let raw = field_string(tok, "raw")
+        let #(kind, raw) = token_kind_raw(tok)
         let snip = string.replace(raw, "\n", "↵")
         let tr = document.create_element_tr(doc, None)
 

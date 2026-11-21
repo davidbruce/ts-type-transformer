@@ -129,8 +129,12 @@ pub extern "C" fn run() {
     let table = construct_table(&TableOptionsCore::<TableFeatures, JsValue>(options.0.clone(), PhantomData));
     check!(table.0 .0 != 0);
     let state = table.initial_state();
-    check!(state.0 .0 != 0);
-    check!(as_array(&MakeObjectMapResult::<JsValue>(state.0.clone(), PhantomData).at("sorting").unwrap()).len() == 0);
+    let state_h = match &state {
+        TableState::TableStateObject(s) => s.0.clone(),
+        TableState::TableStateCellSelection2(s) => s.0.clone(),
+    };
+    check!(state_h.0 != 0);
+    check!(as_array(&MakeObjectMapResult::<JsValue>(state_h, PhantomData).at("sorting").unwrap()).len() == 0);
     check!(table.options().0 .0 != 0);
 
     // The row model, got by calling the function-valued property: three rows

@@ -89,7 +89,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // ---- fs ----
     char dir[512], file[600], sub[600], moved[600];
-    JsString made = mkdtempSync("target/e2e/fs-c-", (JsValue){ 0 });
+    JsString made = mkdtempSync("target/e2e/fs-c-", (ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 });
     JsString_copy(made, dir, sizeof dir);
     js_release(made);
     CHECK(existsSync(P(dir)));
@@ -97,22 +97,18 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(StatsBase_isDirectory(statSync(P(dir))));
 
     join2(file, dir, "hello.txt");
-    writeFileSync(F(file), "hello, node\n", (JsValue){ 0 });
+    writeFileSync(F(file), "hello, node\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     CHECK(existsSync(P(file)));
     CHECK(StatsBase_isFile(statSync(P(file))));
     CHECK(js_to_number(StatsBase_get_size(statSync(P(file)))) == 12);
 
-    // FINDING 9: the encoding is a `global_BufferEncoding`, a type that is
-    // not the BufferEncoding enum, and has no constructor: a string handle
-    // cast to it.
-    global_BufferEncoding utf8 = { JsString_from("utf8").h };
-    JsString text = readFileSync_with_BufferEncoding(F(file), utf8);
+    JsString text = readFileSync_with_BufferEncoding(F(file), BufferEncoding_utf8);
     CHECK(JsString_equals(text, "hello, node\n"));
     js_release(text);
 
     // Appending, then the whole file again.
-    appendFileSync(F(file), "more\n", (JsValue){ 0 });
-    JsString both = readFileSync_with_BufferEncoding(F(file), utf8);
+    appendFileSync(F(file), "more\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    JsString both = readFileSync_with_BufferEncoding(F(file), BufferEncoding_utf8);
     CHECK(JsString_equals(both, "hello, node\nmore\n"));
     js_release(both);
 
@@ -130,7 +126,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(existsSync(P(sub)));
     char nested[700];
     join2(nested, sub, "n.txt");
-    writeFileSync(F(nested), "nested", (JsValue){ 0 });
+    writeFileSync(F(nested), "nested", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
 
     // The directory's entries.
     JsArray_JsString names = readdirSync(P(dir), (readdir_options){ 0 });
@@ -152,14 +148,14 @@ __attribute__((export_name("run"))) void run(void) {
     char copy[600];
     join2(copy, dir, "copy.txt");
     copyFileSync(P(moved), P(copy), js_none_double());
-    JsString copied = readFileSync_with_BufferEncoding(F(copy), utf8);
+    JsString copied = readFileSync_with_BufferEncoding(F(copy), BufferEncoding_utf8);
     CHECK(JsString_equals(copied, "hello, node\nmore\n"));
     js_release(copied);
     unlinkSync(P(copy));
     CHECK(!existsSync(P(copy)));
 
     // A missing file throws; the error says ENOENT.
-    JsString none = readFileSync_with_BufferEncoding(F("target/e2e/does-not-exist.txt"), utf8);
+    JsString none = readFileSync_with_BufferEncoding(F("target/e2e/does-not-exist.txt"), BufferEncoding_utf8);
     CHECK(none.h == 0 && js_failed());
     JsValue error = js_take_error();
     CHECK(error.h != 0);

@@ -148,6 +148,10 @@ template <class U>
 struct In;
 template <class T>
 struct Opt;
+template <class U>
+struct Exact;
+template <class T>
+struct OptExact;
 
 // A value lent to JavaScript as a handle, for one call: an object's own
 // handle, or a new one for a number, flag or string, released after the call.
@@ -177,6 +181,10 @@ struct Arg {
     Arg(const In<U>& v);
     template <class T>
     Arg(const Opt<T>& v);
+    template <class U>
+    Arg(const Exact<U>& v);
+    template <class T>
+    Arg(const OptExact<T>& v);
     Arg(const Arg&) = delete;
     Arg& operator=(const Arg&) = delete;
     ~Arg() {
@@ -498,9 +506,48 @@ struct Opt {
 };
 
 template <class U>
+struct Exact {
+    uint32_t h = 0;
+    bool own = false;
+    Exact(const Exact&) = delete;
+    Exact& operator=(const Exact&) = delete;
+    Exact(const U& x) {
+        Arg a(x);
+        h = a.h;
+        own = std::exchange(a.own, false);
+    }
+    ~Exact() {
+        if (own) ts_raw_js_release(h);
+    }
+};
+
+template <class T>
+struct OptExact {
+    uint32_t h = 0;
+    bool own = false;
+    OptExact(const OptExact&) = delete;
+    OptExact& operator=(const OptExact&) = delete;
+    OptExact(std::nullopt_t) noexcept {}
+    OptExact(const std::optional<T>& x) {
+        if (x) {
+            Arg a(*x);
+            h = a.h;
+            own = std::exchange(a.own, false);
+        }
+    }
+    ~OptExact() {
+        if (own) ts_raw_js_release(h);
+    }
+};
+
+template <class U>
 inline Arg::Arg(const In<U>& v) : h(v.h) {}
 template <class T>
 inline Arg::Arg(const Opt<T>& v) : h(v.h) {}
+template <class U>
+inline Arg::Arg(const Exact<U>& v) : h(v.h) {}
+template <class T>
+inline Arg::Arg(const OptExact<T>& v) : h(v.h) {}
 
 template <class Elem, class X>
 inline constexpr bool rest_accepts_v = [] {
@@ -774,6 +821,11 @@ template <class F>
 void* closure(F f) { return static_cast<Closure*>(new ClosureOf<F>(std::move(f))); }
 template <class F>
 F& closure_fn(void* ctx) { return static_cast<ClosureOf<F>*>(static_cast<Closure*>(ctx))->f; }
+
+extern "C" __attribute__((export_name("ts_drop_closure"), weak))
+inline void ts_drop_closure(void* ctx) {
+    delete static_cast<Closure*>(ctx);
+}
 
 // A JavaScript function. One made from a lambda lives until `release()`,
 // which frees the lambda; JavaScript must not call it after that. Copies

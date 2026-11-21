@@ -69,10 +69,7 @@ export fn run() void {
     const hello_path = std.fmt.bufPrint(&hello_buf, "{s}/hello.txt", .{dir_text}) catch "";
     b.fs.writeFileSync(.{ .string = str(hello_path) }, b.JsValue.string("hello, node\nsecond line\n"), null);
     expect(b.fs.existsSync(at(str(hello_path))), @src());
-    // FINDING 7: the encoding parameter is global_BufferEncoding, an opaque handle (the BufferEncoding enum
-    // exists but is not what these unions hold), so the string is made by hand.
-    const encoding: b.global_BufferEncoding = .{ .h = str("utf8").h };
-    const text = b.fs.readFileSyncOrBufferEncoding(.{ .string = str(hello_path) }, .{ .global_BufferEncoding = encoding });
+    const text = b.fs.readFileSyncOrBufferEncoding(.{ .string = str(hello_path) }, .{ .BufferEncoding = .utf8 });
     expect(text.eql("hello, node\nsecond line\n"), @src());
     expect(b.fs.statSync(at(str(hello_path))).isFile(), @src());
     expect(b.fs.statSync(at(str(hello_path))).getSize() == 24, @src());
@@ -170,9 +167,7 @@ export fn run() void {
     expect(em.eventNames().len() == 2, @src());
     _ = em.removeAllListeners(b.JsValue.string("a"));
     expect(em.eventNames().len() == 1, @src());
-    // FINDING 9: removeAllListeners(null) means "all events" but the glue calls removeAllListeners(undefined),
-    // and Node tests arguments.length, so it removes the listeners of the event `undefined` and nothing else.
-    _ = em.removeAllListeners(b.JsValue.string("b"));
+    _ = em.removeAllListeners(null);
     expect(em.eventNames().len() == 0, @src());
     expect(em.listeners(tick).len() == 0, @src());
 

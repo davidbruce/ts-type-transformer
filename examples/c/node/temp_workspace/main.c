@@ -28,19 +28,18 @@ static void join2(char* out, uint32_t cap, const char* a, const char* b) {
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     char dir[256], notes[320], backup[320], archive[320];
-    JsString_copy(mkdtempSync("/tmp/tsrs-node-ws-", (JsValue){ 0 }), dir, sizeof dir);
+    JsString_copy(mkdtempSync("/tmp/tsrs-node-ws-", (ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), dir, sizeof dir);
     Stats dir_st = statSync(PathLike_of(dir));
     check(existsSync(PathLike_of(dir)) && Stats_isDirectory(dir_st));
 
     join2(notes, sizeof notes, dir, "notes.txt");
-    writeFileSync(PathOrFileDescriptor_of(notes), "alpha\nbeta\n", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(notes), "alpha\nbeta\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     Stats st1 = statSync(PathLike_of(notes));
     int s1 = (int)js_to_number(Stats_get_size(st1));
     check(existsSync(PathLike_of(notes)) && Stats_isFile(st1) && s1 == 11);
 
-    appendFileSync(PathOrFileDescriptor_of(notes), "gamma\n", (JsValue){ 0 });
-    global_BufferEncoding utf8 = { JsString_from("utf8").h };
-    JsString text = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(notes), utf8);
+    appendFileSync(PathOrFileDescriptor_of(notes), "gamma\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    JsString text = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(notes), BufferEncoding_utf8);
     Stats st2 = statSync(PathLike_of(notes));
     int s2 = (int)js_to_number(Stats_get_size(st2));
     check(JsString_equals(text, "alpha\nbeta\ngamma\n") && s2 == 17);
@@ -53,7 +52,7 @@ __attribute__((export_name("start"))) void start(void) {
     renameSync(PathLike_of(backup), PathLike_of(archive));
     check(!existsSync(PathLike_of(backup)) && existsSync(PathLike_of(archive)));
 
-    JsString arch_text = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(archive), utf8);
+    JsString arch_text = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(archive), BufferEncoding_utf8);
     check(JsString_equals(arch_text, text));
 
     unlinkSync(PathLike_of(archive));

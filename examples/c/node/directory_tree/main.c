@@ -52,7 +52,7 @@ static void walk(const char* dir) {
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     char root[256], src_dir[320], core_dir[360], cli_dir[360], docs_dir[320], file_path[400];
-    JsString_copy(mkdtempSync("/tmp/tsrs-node-tree-", (JsValue){ 0 }), root, sizeof root);
+    JsString_copy(mkdtempSync("/tmp/tsrs-node-tree-", (ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), root, sizeof root);
     check(existsSync(PathLike_of(root)));
 
     MakeDirectoryOptions mk = MakeDirectoryOptions_create();
@@ -66,13 +66,13 @@ __attribute__((export_name("start"))) void start(void) {
     mkdirSync_with_opt_MakeDirectoryOptions(PathLike_of(docs_dir), mk);
 
     join2(file_path, sizeof file_path, root, "README.md");
-    writeFileSync(PathOrFileDescriptor_of(file_path), "node tree demo", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(file_path), "node tree demo", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     join2(file_path, sizeof file_path, core_dir, "engine.txt");
-    writeFileSync(PathOrFileDescriptor_of(file_path), "engine core module!\n", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(file_path), "engine core module!\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     join2(file_path, sizeof file_path, cli_dir, "args.txt");
-    writeFileSync(PathOrFileDescriptor_of(file_path), "cli args parser\n", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(file_path), "cli args parser\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     join2(file_path, sizeof file_path, docs_dir, "guide.md");
-    writeFileSync(PathOrFileDescriptor_of(file_path), "monochrome documentation\n", (JsValue){ 0 });
+    writeFileSync(PathOrFileDescriptor_of(file_path), "monochrome documentation\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
 
     walk(root);
 

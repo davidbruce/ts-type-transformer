@@ -79,14 +79,11 @@ fn files() {
     let view = Uint8Array::<ArrayBufferLike>(bytes.0.clone(), core::marker::PhantomData);
     check!(view.len() == 24);
     check!(String::from_utf8(view.to_vec()).unwrap() == "hello, node\nsecond line\n");
-    // FINDING 4: `BufferEncoding` is bound as the opaque `GlobalBufferEncoding`,
-    // not an enum of its strings; a handle made from "utf8" stands in.
-    let utf8 = GlobalBufferEncoding(JsValue::from("utf8").0.clone());
-    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), &utf8);
+    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), BufferEncoding::Utf8);
     check!(text == "hello, node\nsecond line\n");
 
     fs::append_file_sync(file.as_str(), "third\n", None);
-    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), &utf8);
+    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), BufferEncoding::Utf8);
     check!(text.lines().count() == 3 && text.ends_with("third\n"));
     let stats = fs::stat_sync(file.as_str());
     check!(stats.is_file() && !stats.is_directory());

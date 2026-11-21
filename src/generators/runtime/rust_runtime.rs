@@ -615,16 +615,16 @@ struct ClosureHeader {
 #[repr(C)]
 struct Closure<F> {
     drop_fn: unsafe fn(*mut c_void),
-    f: F,
+    f: core::cell::RefCell<F>,
 }
 pub(crate) fn closure<F: 'static>(f: F) -> *mut c_void {
     unsafe fn drop_closure<F>(p: *mut c_void) {
         drop(unsafe { Box::from_raw(p as *mut Closure<F>) });
     }
-    Box::into_raw(Box::new(Closure { drop_fn: drop_closure::<F>, f })) as *mut c_void
+    Box::into_raw(Box::new(Closure { drop_fn: drop_closure::<F>, f: core::cell::RefCell::new(f) })) as *mut c_void
 }
-pub(crate) unsafe fn closure_fn<'a, F: 'static>(ctx: *mut c_void) -> &'a mut F {
-    unsafe { &mut (*(ctx as *mut Closure<F>)).f }
+pub(crate) unsafe fn closure_fn<'a, F: 'static>(ctx: *mut c_void) -> core::cell::RefMut<'a, F> {
+    unsafe { (*(ctx as *const Closure<F>)).f.borrow_mut() }
 }
 
 // Forgets a callback when dropped: JavaScript calling it afterwards is an
@@ -690,16 +690,17 @@ impl<E> JsCallback for JsListener<E> {}
 impl<E: JsType> JsListener<E> {
     pub fn new<F: FnMut(E) + 'static>(f: F) -> Self {
         extern "C" fn call<E: JsType, F: FnMut(E) + 'static>(ctx: *mut c_void, ev: u32) {
-            (unsafe { closure_fn::<F>(ctx) })(E::from_handle(ev))
+            (&mut *unsafe { closure_fn::<F>(ctx) })(E::from_handle(ev))
         }
         JsListener(JsHandle(unsafe { rt::js_listener_from(call::<E, F> as *const () as usize, closure(f)) }), PhantomData)
     }
     // A listener for the length of `body`: its closure may borrow.
-    pub fn scoped<F: FnMut(E), R>(mut f: F, body: impl FnOnce(&Self) -> R) -> R {
+    pub fn scoped<F: FnMut(E), R>(f: F, body: impl FnOnce(&Self) -> R) -> R {
         extern "C" fn call<E: JsType, F: FnMut(E)>(ctx: *mut c_void, ev: u32) {
-            (unsafe { &mut *(ctx as *mut F) })(E::from_handle(ev))
+            (&mut *unsafe { &*(ctx as *const core::cell::RefCell<F>) }.borrow_mut())(E::from_handle(ev))
         }
-        let l = JsListener(JsHandle(unsafe { rt::js_listener_from(call::<E, F> as *const () as usize, &mut f as *mut F as *mut c_void) }), PhantomData);
+        let f = core::cell::RefCell::new(f);
+        let l = JsListener(JsHandle(unsafe { rt::js_listener_from(call::<E, F> as *const () as usize, &f as *const core::cell::RefCell<F> as *mut c_void) }), PhantomData);
         let _forget = Forget(l.0 .0);
         body(&l)
     }
@@ -862,8 +863,8 @@ impl<T> FromJs for JsPromise<T> {
 impl<T: JsType> JsPromise<T> {
     pub fn then<F: FnOnce(Result<T, JsError>) + 'static>(&self, f: F) {
         extern "C" fn settle<T: JsType, F: FnOnce(Result<T, JsError>) + 'static>(ctx: *mut c_void, ok: i32, v: u32) {
-            let mut b = unsafe { Box::from_raw(ctx as *mut Closure<Option<F>>) };
-            let f = b.f.take().unwrap();
+            let b = unsafe { Box::from_raw(ctx as *mut Closure<Option<F>>) };
+            let f = b.f.into_inner().unwrap();
             f(if ok != 0 { Ok(T::from_handle(v)) } else { Err(JsError(JsHandle(v))) })
         }
         unsafe { rt::js_promise_then(self.0 .0, settle::<T, F> as *const () as usize, closure(Some(f))) }

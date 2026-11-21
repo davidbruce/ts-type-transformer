@@ -176,8 +176,8 @@ pub extern "C" fn start() {
         }));
 
     let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
-    let place = JsValue::from(&mount);
-    let view = EditorView::new(Some(&place), &props);
+    let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
+    let view = EditorView::new(Some(place), &props);
     {
         let mut st = app.borrow_mut();
         st.view = Some(view.clone());

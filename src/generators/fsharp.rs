@@ -1249,10 +1249,11 @@ impl Gen {
             "object" if elements(n).all(|m| m.has_tag_name("property")) && elements(n).next().is_some() => {
                 let props: Vec<Node> = elements(n).collect();
                 let has_opt = props.iter().any(|m| flag(*m, "optional"));
+                let in_tagged_union = n.parent().is_some_and(|p| p.has_tag_name("union") && p.has_attribute("discriminant"))
+                    || n.attribute("test").is_some_and(|t| t.starts_with("tag:") || t.starts_with("tag_has:") || t.starts_with("has:"));
                 let plain = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_') && !s.as_bytes()[0].is_ascii_digit();
                 if !self.probing
-                    && has_opt
-                    && props.len() >= 4
+                    && (in_tagged_union || (has_opt && props.len() >= 4))
                     && props.iter().all(|m| plain(attr(*m, "name")) && attr(*m, "name") != "Create")
                     && let Some(hoisted) = self.hoist_object(n, &props, owner)
                 {
@@ -3416,7 +3417,11 @@ impl Gen {
         let mut untested = 0;
         for m in &members {
             let payload = self.ty(*m, "");
-            let mut case = case_name(*m);
+            let mut case = if m.has_tag_name("object") && !payload.starts_with("{|") && payload != "obj" {
+                payload.rsplit('.').next().unwrap_or(&payload).split('<').next().unwrap_or(&payload).to_string()
+            } else {
+                case_name(*m)
+            };
             while seen_names.contains(&case) || seen_testers.contains(&case) || seen_names.contains(&format!("Is{case}")) {
                 case.push('_');
             }
@@ -3435,9 +3440,13 @@ impl Gen {
         if untested > 1 || cases.iter().any(|c| c.1 == "obj" || c.1 == "unit") {
             return false;
         }
-        // Fable tags a case by its interface's member: each must be declared here.
-        let declared = members.iter().all(|m| m.has_tag_name("ref") && m.has_attribute("to"));
-        if let Some(d) = union.attribute("discriminant").filter(|_| declared) {
+        // Fable tags a case by its interface's member: each must be declared here and carry a `tag:` test.
+        let declared = members.iter().zip(&cases).all(|(m, (_, payload, _))| {
+            (m.has_tag_name("ref") && m.has_attribute("to"))
+                || (m.has_tag_name("object") && !payload.starts_with("{|") && payload != "obj")
+        });
+        let all_tagged = cases.iter().all(|(_, _, t)| t.as_deref().is_some_and(|t| t.starts_with("tag:")));
+        if let Some(d) = union.attribute("discriminant").filter(|_| declared && all_tagged) {
             self.out += &format!("{indent}[<TypeScriptTaggedUnion({d:?})>]\n{indent}type {name} =\n");
             for (case, payload, test) in &cases {
                 let value = test.as_deref().and_then(|t| t.strip_prefix("tag:")).unwrap_or_default();
@@ -3571,6 +3580,10 @@ fn case_test(test: &str, discriminant: Option<&str>) -> Option<String> {
     let (kind, arg) = test.split_once(':').unwrap_or((test, ""));
     Some(match kind {
         "tag" => format!("$0 != null && String($0[{:?}]) === {arg:?}", discriminant?),
+        "tag_has" => {
+            let (v, p) = arg.rsplit_once(':')?;
+            format!("$0 != null && String($0[{:?}]) === {v:?} && {p:?} in $0", discriminant?)
+        }
         "typeof" => format!("typeof $0 === '{arg}'"),
         "array" => "Array.isArray($0)".into(),
         "instanceof" => format!("$0 instanceof globalThis{}", arg.split('.').map(js_access).collect::<String>()),

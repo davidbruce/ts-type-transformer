@@ -160,6 +160,8 @@ pub struct Func {
     // arguments, and this function's index among them.
     pub shared: Option<(String, usize)>,
     pub ret: Ty,
+    // Declared `: this` in TypeScript.
+    pub returns_this: bool,
 }
 
 pub struct Class {
@@ -399,6 +401,8 @@ struct Builder<'a> {
     erased: HashSet<String>,
     // Type parameters over the keys of a type that is not a map: strings.
     key_strings: HashSet<String>,
+    // Interfaces / classes extended (directly or transitively) by at least one `class`.
+    extended_by_class: HashSet<String>,
 }
 
 // The model of the XML for a target, or what the target cannot express.
@@ -435,8 +439,48 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
         ident_taken: Default::default(),
         erased: HashSet::new(),
         key_strings: HashSet::new(),
+        extended_by_class: HashSet::new(),
     };
     b.index(doc.root_element(), "");
+    let mut extended = HashSet::new();
+    let mut todo = Vec::new();
+    let collect_edges = |d: Node<'_, '_>, out: &mut Vec<String>| {
+        for e in elements(d) {
+            let key = if e.has_tag_name("ancestor") {
+                Some(b.ref_key(e))
+            } else if e.has_tag_name("extends") {
+                let base = only_child(e);
+                base.has_tag_name("ref").then(|| b.ref_key(base))
+            } else {
+                None
+            };
+            if let Some(k) = key {
+                out.push(k);
+            }
+        }
+    };
+    for &d in b.decls.values() {
+        if d.has_tag_name("class") {
+            let mut edges = Vec::new();
+            collect_edges(d, &mut edges);
+            for k in edges {
+                if extended.insert(k.clone()) {
+                    todo.push(k);
+                }
+            }
+        }
+    }
+    while let Some(cur) = todo.pop() {
+        let Some(&decl) = b.decls.get(&cur) else { continue };
+        let mut edges = Vec::new();
+        collect_edges(decl, &mut edges);
+        for k in edges {
+            if extended.insert(k.clone()) {
+                todo.push(k);
+            }
+        }
+    }
+    b.extended_by_class = extended;
     for nested in [false, true] {
         for path in b.declared.iter().filter(|p| p.contains('.') == nested) {
             b.type_ident(path);
@@ -524,7 +568,7 @@ impl<'a> Builder<'a> {
         let f = if type_params.is_empty() { Ty::Obj(owner.to_string()) } else { Ty::Generic(owner.to_string(), type_params.iter().map(|p| Ty::Param(p.name.clone())).collect()) };
         let import = self.import(format!("{owner}_call"));
         let params = std::iter::once(("f".to_string(), f)).chain(params.iter().cloned()).collect();
-        self.model.funcs.push(Func { type_params: type_params.to_vec(), module: self.module.clone(), import, name: format!("call_{owner}"), call: Call::Apply, params, rest, fixed: vec![], shared: None, ret: ret.clone() });
+        self.model.funcs.push(Func { type_params: type_params.to_vec(), module: self.module.clone(), import, name: format!("call_{owner}"), call: Call::Apply, params, rest, fixed: vec![], shared: None, ret: ret.clone(), returns_this: false });
     }
 
     // Whether a type is a function that knows no `this` of its own: one
@@ -705,7 +749,7 @@ impl<'a> Builder<'a> {
                         c.type_params = alias_params;
                         let mut ext_names = HashSet::new();
                         for ext in named(d, "extends") {
-                            self.member(&mut c, &mut ext_names, ext, &path, false);
+                            self.member(&mut c, &mut ext_names, ext, &path, false, false);
                         }
                         self.model.classes.push(c);
                     }
@@ -719,7 +763,7 @@ impl<'a> Builder<'a> {
                     let import = self.import(name.clone());
                     self.namespace_func(prefix, &import, &own);
                     let type_params = std::mem::take(&mut self.last_type_params);
-                    self.model.funcs.push(Func { type_params, module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret });
+                    self.model.funcs.push(Func { type_params, module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret, returns_this: false });
                 }
                 "var" => {
                     let body = only_child(d);
@@ -746,7 +790,7 @@ impl<'a> Builder<'a> {
                     let import = self.import(name.clone());
                     self.namespace_func(prefix, &import, &format!("get_{}", ident(own)));
                     let js = self.js(d, &path);
-                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(js.clone()), params: vec![], rest: false, fixed: vec![], shared: None, ret: ret.clone() });
+                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(js.clone()), params: vec![], rest: false, fixed: vec![], shared: None, ret: ret.clone(), returns_this: false });
                     // A `const`, or a module's export, cannot be assigned.
                     if flag(d, "readonly") {
                         continue;
@@ -755,7 +799,7 @@ impl<'a> Builder<'a> {
                     let set_name = format!("set_{}", ident(&path));
                     let set_import = self.import(set_name.clone());
                     self.namespace_func(prefix, &set_import, &format!("set_{}", ident(own)));
-                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import: set_import, name: set_name, call: Call::StaticSet(path), params: vec![("value".into(), value(ret))], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
+                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import: set_import, name: set_name, call: Call::StaticSet(path), params: vec![("value".into(), value(ret))], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
                 }
                 _ => self.unsupported(d),
             }
@@ -951,10 +995,15 @@ impl<'a> Builder<'a> {
                 })
                 .collect();
             let literal = format!("{{{}}}", fixed.join(", "));
-            c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create(literal), params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()) });
+            c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create(literal), params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()), returns_this: false });
         }
+        let is_option_bag = !d.has_tag_name("class")
+            && !named(d, "call").any(|_| true)
+            && !self.extended_by_class.contains(path)
+            && !elements(d).any(|m| matches!(m.tag_name().name(), "method" | "construct" | "constructor") && !flag(m, "static"));
         for m in elements(d) {
-            self.member(&mut c, &mut names, m, path_js, m.has_tag_name("constructor") || flag(m, "static"));
+            let is_static = m.has_tag_name("constructor") || flag(m, "static");
+            self.member(&mut c, &mut names, m, path_js, is_static, !is_static && is_option_bag);
         }
         c
     }
@@ -963,12 +1012,12 @@ impl<'a> Builder<'a> {
         let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: None };
         let mut names = HashSet::new();
         for m in elements(body) {
-            self.member(&mut c, &mut names, m, path, true);
+            self.member(&mut c, &mut names, m, path, true, false);
         }
         c
     }
 
-    fn member(&mut self, c: &mut Class, names: &mut HashSet<String>, m: Node<'a, 'a>, path: &str, is_static: bool) {
+    fn member(&mut self, c: &mut Class, names: &mut HashSet<String>, m: Node<'a, 'a>, path: &str, is_static: bool, allow_readonly_set: bool) {
         let owner = c.name.clone();
         let raw_name = m.attribute("name").unwrap_or_default();
         let tag = m.tag_name().name();
@@ -1029,11 +1078,11 @@ impl<'a> Builder<'a> {
             if names.insert("get_at".into()) {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true) });
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true), returns_this: false });
                 // A value of none (`[key: number]: never`) is never set.
                 if value != Ty::Void {
                     let import = self.import(format!("{owner}_set_at"));
-                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
                 }
             }
             return;
@@ -1051,7 +1100,7 @@ impl<'a> Builder<'a> {
             if !names.contains(&base) && self.bad.is_none() {
                 names.insert(base.clone());
                 let import = self.import(format!("{owner}_{base}"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret });
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret, returns_this: false });
             }
             self.bad = None;
             return;
@@ -1079,7 +1128,7 @@ impl<'a> Builder<'a> {
             };
             let import = self.import(format!("{owner}_{name}"));
             let type_params = std::mem::take(&mut self.last_type_params);
-            c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret });
+            c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this: false });
             if let Some(why) = self.bad.take() {
                 c.funcs.pop();
                 self.skip(&why);
@@ -1137,10 +1186,11 @@ impl<'a> Builder<'a> {
                 let import = self.import(format!("{owner}_{name}"));
                 // Its own type parameters (`new<T>(x: T)`), as a method's.
                 let type_params = std::mem::take(&mut self.last_type_params);
-                c.funcs.push(Func { type_params, module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret });
+                c.funcs.push(Func { type_params, module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret, returns_this: false });
             }
             "method" => {
                 let (params, rest, fixed, ret) = self.signature(m, &owner);
+                let returns_this = !is_static && named(m, "returns").next().is_some_and(|r| only_child(r).has_tag_name("this"));
                 let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js) };
                 let name = unique(ident(raw_name), names);
                 let import = self.import(format!("{owner}_{name}"));
@@ -1156,7 +1206,7 @@ impl<'a> Builder<'a> {
                     }
                     tp.name = renamed;
                 }
-                c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret });
+                c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this });
             }
             // A constant needs no call across the boundary.
             "property" if m.has_attribute("const") => {
@@ -1181,11 +1231,11 @@ impl<'a> Builder<'a> {
                 };
                 let name = unique(format!("get_{}", ident(raw_name)), names);
                 let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone() });
-                if !flag(m, "readonly") {
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone(), returns_this: false });
+                if !flag(m, "readonly") || allow_readonly_set {
                     let name = unique(format!("set_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
-                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void });
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
                 }
             }
             _ => self.unsupported(m),
@@ -1628,6 +1678,7 @@ pub fn map_types(f: &Func, fix: &dyn Fn(&Ty) -> Ty) -> Func {
         fixed: f.fixed.clone(),
         shared: f.shared.clone(),
         ret: fix(&f.ret),
+        returns_this: f.returns_this,
     }
 }
 

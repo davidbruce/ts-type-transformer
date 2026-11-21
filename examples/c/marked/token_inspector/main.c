@@ -9,6 +9,35 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
     return el;
 }
 
+static uint32_t token_h(Token tok) {
+    switch (tok.tag) {
+    case Token_Tokens_Blockquote: return tok.as.Tokens_Blockquote.h;
+    case Token_Tokens_Br: return tok.as.Tokens_Br.h;
+    case Token_Tokens_Checkbox: return tok.as.Tokens_Checkbox.h;
+    case Token_Tokens_Code: return tok.as.Tokens_Code.h;
+    case Token_Tokens_Codespan: return tok.as.Tokens_Codespan.h;
+    case Token_Tokens_Def: return tok.as.Tokens_Def.h;
+    case Token_Tokens_Del: return tok.as.Tokens_Del.h;
+    case Token_Tokens_Em: return tok.as.Tokens_Em.h;
+    case Token_Tokens_Escape: return tok.as.Tokens_Escape.h;
+    case Token_Tokens_Heading: return tok.as.Tokens_Heading.h;
+    case Token_Tokens_Hr: return tok.as.Tokens_Hr.h;
+    case Token_Tokens_HTML: return tok.as.Tokens_HTML.h;
+    case Token_Tokens_Image: return tok.as.Tokens_Image.h;
+    case Token_Tokens_Link: return tok.as.Tokens_Link.h;
+    case Token_Tokens_List: return tok.as.Tokens_List.h;
+    case Token_Tokens_ListItem: return tok.as.Tokens_ListItem.h;
+    case Token_Tokens_Paragraph: return tok.as.Tokens_Paragraph.h;
+    case Token_Tokens_Space: return tok.as.Tokens_Space.h;
+    case Token_Tokens_Strong: return tok.as.Tokens_Strong.h;
+    case Token_Tokens_Table: return tok.as.Tokens_Table.h;
+    case Token_Tokens_Tag: return tok.as.Tokens_Tag.h;
+    case Token_Tokens_Text: return tok.as.Tokens_Text.h;
+    case Token_Tokens_Generic: return tok.as.Tokens_Generic.h;
+    default: return 0;
+    }
+}
+
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     Document doc = get_document();
@@ -49,7 +78,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     HTMLElement tbody = make_el(doc, "tbody", 0, 0);
     for (uint32_t i = 0; i < count; i++) {
-        Tokens_Generic g = { TokensList_get_at(tokens, (double)i).h };
+        Tokens_Generic g = { token_h(TokensList_get_at(tokens, (double)i)) };
 
         JsString raw = Tokens_Generic_get_raw(g);
         uint32_t raw_len = JsString_len(raw);

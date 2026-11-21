@@ -22,6 +22,35 @@ static bool contains(JsString s, const char* needle) {
     return false;
 }
 
+static uint32_t token_h(Token tok) {
+    switch (tok.tag) {
+    case Token_Tokens_Blockquote: return tok.as.Tokens_Blockquote.h;
+    case Token_Tokens_Br: return tok.as.Tokens_Br.h;
+    case Token_Tokens_Checkbox: return tok.as.Tokens_Checkbox.h;
+    case Token_Tokens_Code: return tok.as.Tokens_Code.h;
+    case Token_Tokens_Codespan: return tok.as.Tokens_Codespan.h;
+    case Token_Tokens_Def: return tok.as.Tokens_Def.h;
+    case Token_Tokens_Del: return tok.as.Tokens_Del.h;
+    case Token_Tokens_Em: return tok.as.Tokens_Em.h;
+    case Token_Tokens_Escape: return tok.as.Tokens_Escape.h;
+    case Token_Tokens_Heading: return tok.as.Tokens_Heading.h;
+    case Token_Tokens_Hr: return tok.as.Tokens_Hr.h;
+    case Token_Tokens_HTML: return tok.as.Tokens_HTML.h;
+    case Token_Tokens_Image: return tok.as.Tokens_Image.h;
+    case Token_Tokens_Link: return tok.as.Tokens_Link.h;
+    case Token_Tokens_List: return tok.as.Tokens_List.h;
+    case Token_Tokens_ListItem: return tok.as.Tokens_ListItem.h;
+    case Token_Tokens_Paragraph: return tok.as.Tokens_Paragraph.h;
+    case Token_Tokens_Space: return tok.as.Tokens_Space.h;
+    case Token_Tokens_Strong: return tok.as.Tokens_Strong.h;
+    case Token_Tokens_Table: return tok.as.Tokens_Table.h;
+    case Token_Tokens_Tag: return tok.as.Tokens_Tag.h;
+    case Token_Tokens_Text: return tok.as.Tokens_Text.h;
+    case Token_Tokens_Generic: return tok.as.Tokens_Generic.h;
+    default: return 0;
+    }
+}
+
 // What a token is: its `type`, whatever kind it is.
 static bool token_is(JsValue token, const char* type) {
     JsString t = Tokens_Generic_get_type((Tokens_Generic){ token.h });
@@ -127,9 +156,9 @@ __attribute__((export_name("run"))) void run(void) {
     // The lexer: the tokens of a document.
     TokensList tokens = Marked_lexer(m, "# Head\n\ntext **b**\n\n1. a\n2. b\n\n---\n");
     CHECK(TokensList_get_length(tokens) >= 4);
-    JsValue first = TokensList_get_at(tokens, 0);
-    CHECK(token_is(first, "heading"));
-    Tokens_Heading heading = { first.h };
+    Token first = TokensList_get_at(tokens, 0);
+    CHECK(first.tag == Token_Tokens_Heading);
+    Tokens_Heading heading = first.as.Tokens_Heading;
     CHECK(Tokens_Heading_get_depth(heading) == 1);
     JsString heading_text = Tokens_Heading_get_text(heading);
     CHECK(JsString_equals(heading_text, "Head"));
@@ -138,40 +167,40 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(contains(raw, "# Head"));
     js_release(raw);
     // The inline tokens of a heading.
-    JsArray inner = Tokens_Heading_get_tokens(heading);
-    CHECK(JsArray_length(inner) == 1);
-    JsValue inner0 = JsArray_get(inner, 0);
-    CHECK(token_is(inner0, "text"));
-    js_release(inner0);
+    JsArray_Token inner = Tokens_Heading_get_tokens(heading);
+    CHECK(JsArray_Token_length(inner) == 1);
+    Token inner0 = JsArray_Token_get(inner, 0);
+    CHECK(inner0.tag == Token_Tokens_Text);
+    js_release((JsValue){ token_h(inner0) });
     js_release(inner);
     // Walk the list for a paragraph with strong text and an ordered list.
     int paragraphs = 0, lists = 0, hrs = 0;
     uint32_t count = (uint32_t)TokensList_get_length(tokens);
     for (uint32_t i = 0; i < count; i++) {
-        JsValue tok = TokensList_get_at(tokens, i);
-        if (token_is(tok, "paragraph")) paragraphs++;
-        if (token_is(tok, "list")) {
+        Token tok = TokensList_get_at(tokens, i);
+        if (tok.tag == Token_Tokens_Paragraph) paragraphs++;
+        if (tok.tag == Token_Tokens_List) {
             lists++;
-            Tokens_List list = { tok.h };
+            Tokens_List list = tok.as.Tokens_List;
             CHECK(Tokens_List_get_ordered(list));
             JsArray_Tokens_ListItem items = Tokens_List_get_items(list);
             CHECK(JsArray_Tokens_ListItem_length(items) == 2);
             js_release(items);
         }
-        if (token_is(tok, "hr")) hrs++;
-        js_release(tok);
+        if (tok.tag == Token_Tokens_Hr) hrs++;
+        js_release((JsValue){ token_h(tok) });
     }
     CHECK(paragraphs == 1 && lists == 1 && hrs == 1);
-    js_release(first);
+    js_release((JsValue){ token_h(first) });
     js_release(tokens);
 
     // Options on the instance: the lexer takes them too.
     MarkedOptions opts = MarkedOptions_create();
     MarkedOptions_set_gfm(opts, js_some_bool(false));
     TokensList raw_table = Marked_lexer(m, table, opts);
-    JsValue tab0 = TokensList_get_at(raw_table, 0);
-    CHECK(token_is(tab0, "paragraph"));
-    js_release(tab0);
+    Token tab0 = TokensList_get_at(raw_table, 0);
+    CHECK(tab0.tag == Token_Tokens_Paragraph);
+    js_release((JsValue){ token_h(tab0) });
     js_release(raw_table);
 
     // `use` with a renderer: headings made by a function here.
@@ -227,9 +256,10 @@ __attribute__((export_name("run"))) void run(void) {
     // The top-level lexer and parser are function values: call_<Type> calls them.
     TokensList lexed = call_string_MarkedOptions_to_TokensList_fn(get_lexer(), "# H\n\ntext *x*");
     CHECK(TokensList_get_length(lexed) >= 2);
-    JsValue lexed0 = TokensList_get_at(lexed, 0);
-    CHECK(token_is(lexed0, "heading"));
-    JsString parsed = js_to_string(call_Token_array_MarkedOptions_fn(get_parser(), (JsArray){ lexed.h }));
+    Token lexed0 = TokensList_get_at(lexed, 0);
+    CHECK(lexed0.tag == Token_Tokens_Heading);
+    js_release((JsValue){ token_h(lexed0) });
+    JsString parsed = js_to_string(call_Token_array_MarkedOptions_fn(get_parser(), (JsArray_Token){ lexed.h }));
     CHECK(contains(parsed, "<h1>H</h1>") && contains(parsed, "<em>x</em>"));
     js_release(parsed);
 

@@ -446,7 +446,7 @@ fn lower_arg(name: &str, t: &Ty) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion], wasm_module: &str) {
+fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion], wasm_module: &str, emitted_imports: &mut HashSet<String>) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
@@ -555,9 +555,13 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
         },
         _ => None,
     };
-    let ret_type = match union {
-        Some(u) if !u.decodable() => "JsValue".to_string(),
-        _ => typed(&f.ret, false).replace("KEY", &key),
+    let ret_type = if f.returns_this && owner == Some("Self") {
+        "Self".to_string()
+    } else {
+        match union {
+            Some(u) if !u.decodable() => "JsValue".to_string(),
+            _ => typed(&f.ret, false).replace("KEY", &key),
+        }
     };
     let body = match &f.ret {
         Ty::NamedUnion(n) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; if (h == 0 and jsHasError()) return undefined; return {n}.fromHandle(h);"),
@@ -575,6 +579,7 @@ fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, z
         Ty::Nullable(..) => format!("const h = {call}; return if (h == 0) null else .{{ .h = h }};"),
         _ => format!("return .{{ .h = {call} }};"),
     };
+    emitted_imports.insert(import.to_string());
     let decl = format!("    extern \"{wasm_module}\" fn @\"{import}\"({}) {};\n", raw_params.join(", "), raw(&f.ret));
     // Declared once per file, though several functions use it.
     // Only a shared import can repeat; checking others would be quadratic.
@@ -609,11 +614,16 @@ pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {
 }
 
 pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec<(String, String)>, Vec<String>> {
+    files_with_imports(m, pkg_name, refs).map(|(files, _)| files)
+}
+
+pub fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<(Vec<(String, String)>, HashSet<String>), Vec<String>> {
     let problems = check(m);
     if !problems.is_empty() {
         return Err(problems.into_messages());
     }
     let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
+    let mut emitted_imports: HashSet<String> = HashSet::new();
     let mut resolved_opaque: HashMap<String, (usize, String)> = HashMap::new();
     let mut used_refs: BTreeSet<usize> = BTreeSet::new();
     for name in &m.opaque {
@@ -668,6 +678,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     for u in &m.unions {
         u.parts.iter().for_each(|p| type_refs(p, types_uses));
         types.0 += &union_decl(u);
+        emitted_imports.insert(format!("{}_tag", u.name));
         types.1 += &format!("    extern \"{wasm_module}\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
         types.2.push(u.name.clone());
     }
@@ -888,8 +899,9 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
                 fixed: apply_f.fixed.clone(),
                 shared: apply_f.shared.clone(),
                 ret: apply_f.ret.clone(),
+                returns_this: false,
             };
-            func(&mut types.0, &mut types.1, Some(&c.name), &method, "call", "    ", &m.unions, wasm_module);
+            func(&mut types.0, &mut types.1, Some(&c.name), &method, "call", "    ", &m.unions, wasm_module, &mut emitted_imports);
         }
         types.0 += &format!(
             "    pub fn deinit(self: {0}) void {{ jsRelease(self); }}\n    \
@@ -897,6 +909,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
              pub fn as(self: {0}, comptime Target_: type) Target_ {{ return .{{ .h = self.h }}; }}\n}};\n",
             c.name
         );
+        emitted_imports.insert(format!("{}_from", c.name));
         types.1 += &format!("    extern \"{wasm_module}\" fn {}_from(f: usize, ctx: ?*anyopaque) u32;\n", c.name);
         types.2.push(c.name.clone());
     }
@@ -920,7 +933,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         up.sort_by(|a, b| a.name.cmp(&b.name));
         ancestors.insert(&c.name, up);
     }
-    let same = |a: &Func, b: &Func| a.call == b.call && a.params == b.params && a.ret == b.ret && a.rest == b.rest && a.fixed == b.fixed && a.type_params == b.type_params;
+    let same = |a: &Func, b: &Func| a.call == b.call && a.params == b.params && (a.ret == b.ret || (a.returns_this && b.returns_this)) && a.rest == b.rest && a.fixed == b.fixed && a.type_params == b.type_params;
     let members: HashMap<&str, HashMap<String, Vec<&Func>>> = m
         .classes
         .iter()
@@ -945,20 +958,95 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     let class_names: HashMap<&str, HashMap<String, String>> = m.classes.iter().map(|c| (c.name.as_str(), names_of(c.funcs.iter()))).collect();
     // Alias methods from unflattened ancestors (e.g. generic mixins / Container / Node)
     // directly onto subclasses when the subclass does not already define that member.
+    let inherited_consts = |c: &Class| -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = c.consts.clone();
+        let mut seen_const: HashSet<String> = c.consts.iter().map(|(n, _)| n.clone()).collect();
+        let mut cq: std::collections::VecDeque<&Class> = c.ancestors.iter().filter_map(|a| class_of.get(a.as_str()).copied()).collect();
+        let mut seen_anc = HashSet::from([c.name.as_str()]);
+        while let Some(a) = cq.pop_front() {
+            if !seen_anc.insert(a.name.as_str()) {
+                continue;
+            }
+            for (k, v) in &a.consts {
+                if seen_const.insert(k.clone()) {
+                    out.push((k.clone(), v.clone()));
+                }
+            }
+            for pa in a.ancestors.iter().filter_map(|p| class_of.get(p.as_str()).copied()) {
+                if !seen_anc.contains(pa.name.as_str()) {
+                    cq.push_back(pa);
+                }
+            }
+        }
+        out
+    };
+    let inherited_iter = |c: &Class| -> (Option<Ty>, bool) {
+        let mut iter = c.iterates.clone();
+        let mut async_iter = c.iterates_async.is_some();
+        let mut iq: std::collections::VecDeque<&Class> = c.ancestors.iter().filter_map(|a| class_of.get(a.as_str()).copied()).collect();
+        let mut seen_anc = HashSet::from([c.name.as_str()]);
+        while (iter.is_none() || !async_iter)
+            && let Some(a) = iq.pop_front()
+        {
+            if !seen_anc.insert(a.name.as_str()) {
+                continue;
+            }
+            if iter.is_none() {
+                iter = a.iterates.clone();
+            }
+            if a.iterates_async.is_some() {
+                async_iter = true;
+            }
+            for pa in a.ancestors.iter().filter_map(|p| class_of.get(p.as_str()).copied()) {
+                if !seen_anc.contains(pa.name.as_str()) {
+                    iq.push_back(pa);
+                }
+            }
+        }
+        (iter, async_iter)
+    };
+    let inherited_elements = |c: &Class| -> Option<Ty> {
+        if let Some(e) = &c.elements {
+            return Some(e.clone());
+        }
+        let mut eq: std::collections::VecDeque<&Class> = c.ancestors.iter().filter_map(|a| class_of.get(a.as_str()).copied()).collect();
+        let mut seen_anc = HashSet::from([c.name.as_str()]);
+        while let Some(a) = eq.pop_front() {
+            if !seen_anc.insert(a.name.as_str()) {
+                continue;
+            }
+            if let Some(e) = &a.elements {
+                return Some(e.clone());
+            }
+            for pa in a.ancestors.iter().filter_map(|p| class_of.get(p.as_str()).copied()) {
+                if !seen_anc.contains(pa.name.as_str()) {
+                    eq.push_back(pa);
+                }
+            }
+        }
+        None
+    };
+    let consts_of: HashMap<&str, Vec<(String, String)>> = m.classes.iter().map(|c| (c.name.as_str(), inherited_consts(c))).collect();
+    let iters_of: HashMap<&str, (Option<Ty>, bool)> = m.classes.iter().map(|c| (c.name.as_str(), inherited_iter(c))).collect();
+    let elems_of: HashMap<&str, Option<Ty>> = m.classes.iter().map(|c| (c.name.as_str(), inherited_elements(c))).collect();
     let mut extra_inherited: HashMap<&str, Vec<(&str, &str, &str)>> = HashMap::new();
     for c in &m.classes {
         let own_names = &class_names[c.name.as_str()];
+        let c_consts = &consts_of[c.name.as_str()];
+        let (ref c_iter, c_iter_async) = iters_of[c.name.as_str()];
+        let c_elem = &elems_of[c.name.as_str()];
+        let c_iter = c_iter.as_ref().or(c_elem.as_ref());
         let mut taken: HashSet<String> = ["h", "Methods", "Key", "Type"].into_iter().map(String::from).collect();
-        taken.extend(c.consts.iter().map(|(n, _)| n.clone()));
+        taken.extend(c_consts.iter().map(|(n, _)| n.clone()));
         for a in ancestors[c.name.as_str()].iter().map(|a| a.name.as_str()).chain(c.ancestors.iter().map(String::as_str)) {
             if a != c.name {
                 taken.insert(format!("as{a}"));
             }
         }
-        if c.iterates_async.is_some() && !c.funcs.iter().any(|f| f.name == "iterateAsync") {
+        if c_iter_async && !c.funcs.iter().any(|f| f.name == "iterateAsync") {
             taken.insert("iterateAsync".into());
         }
-        if c.iterates.is_some() && !c.funcs.iter().any(|f| f.name == "iterate") {
+        if c_iter.is_some() && !c.funcs.iter().any(|f| f.name == "iterate") {
             taken.insert("iterate".into());
         }
         if c.js.is_some() {
@@ -994,6 +1082,10 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
     // Every object is an opaque handle; methods live in the struct's namespace.
     for c in &m.classes {
         let extras = &extra_inherited[c.name.as_str()];
+        let c_consts = &consts_of[c.name.as_str()];
+        let (ref c_iter, c_iter_async) = iters_of[c.name.as_str()];
+        let c_elem = &elems_of[c.name.as_str()];
+        let c_iter = c_iter.as_ref().or(c_elem.as_ref());
         let refs = uses.entry(c.module.clone()).or_default();
         for f in &c.funcs {
             f.params.iter().for_each(|p| type_refs(&p.1, refs));
@@ -1005,8 +1097,8 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         refs.extend(extras.iter().map(|&(_, from, _)| from.to_string()));
         refs.extend(ancestors[c.name.as_str()].iter().map(|a| a.name.clone()));
         refs.extend(c.ancestors.iter().cloned());
-        c.iterates.iter().chain(&c.elements).for_each(|t| type_refs(t, refs));
-        if c.iterates_async.is_some() {
+        c_iter.into_iter().chain(c_elem).for_each(|t| type_refs(t, refs));
+        if c_iter_async {
             refs.extend(["JsAsyncIterator".to_string(), "Promise".to_string()]);
         }
         if let Some(map) = m.maps.iter().find(|k| k.name == c.name) {
@@ -1016,20 +1108,20 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         names.push(c.name.clone());
         let own_names = &class_names[c.name.as_str()];
         let mut emitted: HashSet<String> = ["h", "Methods", "Key", "Type"].into_iter().map(String::from).collect();
-        emitted.extend(c.consts.iter().map(|(n, _)| n.clone()));
+        emitted.extend(c_consts.iter().map(|(n, _)| n.clone()));
         emitted.extend(own_names.values().cloned());
 
         *out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
-        for (name, value) in &c.consts {
+        for (name, value) in c_consts {
             *out += &format!("    pub const {} = {value};\n", ident(name));
         }
         // Asynchronous iteration: `it.next()` is a promise of the next value, or of a null handle at the end.
-        if c.iterates_async.is_some() && !c.funcs.iter().any(|f| f.name == "iterateAsync") {
+        if c_iter_async && !c.funcs.iter().any(|f| f.name == "iterateAsync") {
             emitted.insert("iterateAsync".into());
             *out += &format!("    pub fn iterateAsync(self: {}) JsAsyncIterator {{ return JsAsyncIterator.over(self.h); }}\n", c.name);
         }
         // Iteration: `var it = list.iterate(); while (it.next()) |n| ...`.
-        if let Some(elem) = &c.iterates
+        if let Some(elem) = c_iter
             && !c.funcs.iter().any(|f| f.name == "iterate")
         {
             emitted.insert("iterate".into());
@@ -1055,6 +1147,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         if c.js.is_some() {
             let cast_name = if own_names.values().any(|n| n == "cast") || c.consts.iter().any(|(n, _)| n == "cast") { "tryCast" } else { "cast" };
             emitted.insert(cast_name.into());
+            emitted_imports.insert(format!("js_is__{}", c.name));
             *externs += &format!("    extern \"{wasm_module}\" fn @\"js_is__{}\"(u32) i32;\n", c.name);
             *out += &format!("    pub fn {}(v: anytype) ?{} {{ return if (v.h != 0 and raw.@\"js_is__{1}\"(v.h) != 0) .{{ .h = v.h }} else null; }}\n", ident(cast_name), c.name);
         }
@@ -1063,7 +1156,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         if c.funcs.iter().any(&shared) {
             *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
             for f in c.funcs.iter().filter(|f| shared(f)) {
-                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions, wasm_module);
+                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions, wasm_module, &mut emitted_imports);
             }
             *out += "        };\n    }\n";
         }
@@ -1072,12 +1165,24 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             match inherited(f) {
                 Some((from, name)) => *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(own_name), ident(&class_names[from][name])),
                 None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(own_name)),
-                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions, wasm_module),
+                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions, wasm_module, &mut emitted_imports),
             }
         }
         for &(zname, from, home_zname) in extras {
             emitted.insert(zname.to_string());
             *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(zname), ident(home_zname));
+        }
+        if let Some(elem) = c_elem {
+            let elem_ty = typed(elem, false);
+            if emitted.insert("asArray".into()) {
+                *out += &format!("    pub fn asArray(self: @This()) JsArrayOf({elem_ty}) {{ return .{{ .h = self.h }}; }}\n");
+            }
+            if emitted.insert("getLength".into()) {
+                *out += &format!("    pub fn getLength(self: @This()) f64 {{ return @floatFromInt(JsArrayOf({elem_ty}).len(.{{ .h = self.h }})); }}\n");
+            }
+            if emitted.insert("getAt".into()) {
+                *out += &format!("    pub fn getAt(self: @This(), index_: f64) ?{elem_ty} {{ if (index_ < 0) return null; return JsArrayOf(?{elem_ty}).get(.{{ .h = self.h }}, @intFromFloat(index_)); }}\n");
+            }
         }
         if c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) {
             *out += "    pub const _has_field_init = true;\n";
@@ -1105,7 +1210,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         let (out, externs, names) = files.entry(f.module.clone()).or_default();
         let zig_name = &top_names[&f.name];
         names.push(zig_name.clone());
-        func(out, externs, None, f, zig_name, "", &m.unions, wasm_module);
+        func(out, externs, None, f, zig_name, "", &m.unions, wasm_module, &mut emitted_imports);
     }
 
     // Which file declares each name.
@@ -1181,7 +1286,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         ..Default::default()
     };
     out.push((super::pkg_meta::META_FILE.into(), meta.to_toml()));
-    Ok(out)
+    Ok((out, emitted_imports))
 }
 
 // A namespace as a struct of its types, by their own names: `Stream`'s

@@ -67,32 +67,35 @@ export fn run() void {
     const tokens = b.Lexer.lex("# Head\n\npara with `code`\n\n- x\n- y\n", .{});
     expect(tokens.getLength() == 5, @src());
 
-    // FINDING 3: tokens.iterate() does not compile: the Token union has no fromHandle
-    // (its Generic member has `type: string`, so no member is picked by `type`).
-    // Tokens are read with getAt and their member type is chosen by hand.
-    const head: b.tokens.Heading = .{ .h = tokens.getAt(0).h };
+    // The Token union decodes every token by its `type`.
+    const head = tokens.getAt(0).?.Tokens_Heading;
     expect(head.getDepth() == 1 and head.getText().eql("Head"), @src());
     expect(head.getRaw().eql("# Head"), @src());
-    const generic: b.tokens.Generic = .{ .h = tokens.getAt(1).h };
-    expect(generic.getType().eql("space"), @src());
-    const para: b.tokens.Paragraph = .{ .h = tokens.getAt(2).h };
+    expect(tokens.getAt(1).? == .Tokens_Space, @src());
+    const para = tokens.getAt(2).?.Tokens_Paragraph;
     expect(para.getText().eql("para with `code`"), @src());
     const kinds = [_][]const u8{ "heading", "space", "paragraph", "space", "list" };
-    for (kinds, 0..) |kind, i| {
-        const g: b.tokens.Generic = .{ .h = tokens.getAt(@floatFromInt(i)).h };
-        expect(g.getType().eql(kind), @src());
+    var it = tokens.iterate();
+    var kidx: usize = 0;
+    while (it.next()) |tok| : (kidx += 1) {
+        const tag_type: []const u8 = switch (tok) {
+            .Tokens_Generic => |g| g.getType().copy(&buf),
+            inline else => |x| @TypeOf(x).type,
+        };
+        expect(std.mem.eql(u8, tag_type, kinds[kidx]), @src());
     }
-    const list: b.tokens.List = .{ .h = tokens.getAt(4).h };
+    expect(kidx == kinds.len, @src());
+    const list = tokens.getAt(4).?.Tokens_List;
     expect(list.getItems().len() == 2 and list.getOrdered() == false, @src());
     // The heading's inline tokens: one text token.
     expect(head.getTokens().len() == 1, @src());
-    const inner: b.tokens.Text = .{ .h = head.getTokens().get(0).h };
+    const inner = head.getTokens().get(0).Tokens_Text;
     expect(inner.getText().eql("Head"), @src());
 
     // marked.lexer and marked.parser are function values: called through their call functions.
     const lexed = b.callStringMarkedOptionsToTokensListFn(b.marked_ns.getLexer_2(), "# T\n\ntext", .{});
     expect(lexed.getLength() == 3, @src());
-    const rendered = b.callTokenArrayMarkedOptionsFn(b.marked_ns.getParser_2(), .{ .h = lexed.h }, .{});
+    const rendered = b.callTokenArrayMarkedOptionsFn(b.marked_ns.getParser_2(), lexed.as(b.JsArrayOf(b.Token)), .{});
     expect(has(.{ .h = rendered.h }, "<h1>T</h1>") and has(.{ .h = rendered.h }, "<p>text</p>"), @src());
 
     // lexInline.

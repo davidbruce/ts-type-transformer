@@ -1132,16 +1132,24 @@ impl<'c> Front<'c> {
         let fqn = {
             let mut top = s;
             let mut hops = 0;
+            let mut in_global = false;
             while let Some(parent) = self.c.get_parent_of_symbol_exported(top) {
                 if parent.declarations().iter().any(|d| d.kind() == Kind::ModuleDeclaration && d.name().is_some_and(|n| n.kind() != Kind::StringLiteral) && !ast::is_global_scope_augmentation(*d)) {
                     top = parent;
                     hops += 1;
                 } else {
+                    in_global = parent.declarations().iter().any(|d| ast::is_global_scope_augmentation(*d));
                     break;
                 }
             }
             let segments: Vec<&str> = fqn.split('.').collect();
-            if hops == 0 || segments.len() <= hops { fqn } else { format!("{}.{}", self.output_name(top), segments[segments.len() - hops..].join(".")) }
+            if hops == 0 {
+                if in_global { fqn.strip_prefix("global.").map(str::to_string).unwrap_or(fqn) } else { fqn }
+            } else if segments.len() <= hops {
+                fqn
+            } else {
+                format!("{}.{}", self.output_name(top), segments[segments.len() - hops..].join("."))
+            }
         };
         let decl_file = s.declarations().first().and_then(|d| ast::get_source_file_of_node(*d));
         let in_pkg = decl_file.as_ref().is_some_and(|f| self.is_package_file(f));

@@ -137,7 +137,7 @@ props.dispatchTransaction <-
     Some (fun (tr: Transaction) ->
         dispatched <- dispatched + 1
         view.updateState (view.state.apply tr))
-view <- EditorView.Create (EditorViewNewPlace.Object {| mount = TestPage.element "stage" |}, props)
+view <- EditorView.Create (EditorViewNewPlace.EditorViewNewPlace1 (EditorViewNewPlace1.Create (TestPage.element "stage")), props)
 check (view.state.doc.eq doc) "the view shows the document"
 check (not view.isDestroyed) "not destroyed"
 view.dispatch (view.state.tr.insertText ("Q", 1.0))

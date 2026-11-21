@@ -579,24 +579,68 @@ fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
             }
         }
     }
+    fn collect_iface_shapes(decls: &[Decl], prefix: &[String], out: &mut HashMap<String, PropShapes>) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) => {
+                    let shape: PropShapes = i
+                        .members
+                        .iter()
+                        .filter(|m| matches!(m.kind, MemberKind::Property | MemberKind::Method))
+                        .map(|m| {
+                            let literal = match (&m.ty, &m.constant) {
+                                (_, Some(c)) => Some(c.clone()),
+                                (Some(Type::Literal { value, .. }), _) => Some(value.clone()),
+                                _ => None,
+                            };
+                            (m.name.clone(), m.optional, literal)
+                        })
+                        .collect();
+                    let qual = if prefix.is_empty() { i.name.clone() } else { format!("{}.{}", prefix.join("."), i.name) };
+                    out.insert(qual, shape.clone());
+                    out.entry(i.name.clone()).or_insert(shape);
+                }
+                Decl::Namespace(n) => {
+                    let mut next = prefix.to_vec();
+                    next.push(n.name.clone());
+                    collect_iface_shapes(&n.decls, &next, out);
+                }
+                _ => {}
+            }
+        }
+    }
     let mut enum_kinds = HashMap::new();
     enums(decls, &mut enum_kinds);
+    let mut iface_shapes = HashMap::new();
+    collect_iface_shapes(decls, &[], &mut iface_shapes);
     let enum_test = |p: &Type| match p {
         Type::Ref(r) if r.kind == "enum" => enum_kinds.get(&r.name).map(|k| Test::TypeOf(k)),
         _ => None,
     };
     walk(decls, &mut |t, _| {
         let Type::Union(parts) = t else { return true };
-        let shapes: Vec<Option<PropShapes>> = parts.iter().map(|p| front.object_shape(p)).collect();
-        let discriminant = discriminant_of(&shapes);
-        let tests: Vec<Option<Test>> = parts
+        let shapes: Vec<Option<PropShapes>> = parts
             .iter()
-            .enumerate()
-            .map(|(i, p)| match &discriminant {
-                Some(d) => shapes[i].as_ref().and_then(|s| s.iter().find(|f| f.0 == *d)).and_then(|f| f.2.clone()).map(Test::Tag),
-                None => enum_test(p).or_else(|| front.runtime_test(p)).or_else(|| unique_property(&shapes, i).map(Test::Has)),
+            .map(|p| {
+                front.object_shape(p).or_else(|| match p {
+                    Type::Ref(r) if matches!(r.kind, "interface" | "class") && r.args.is_empty() => {
+                        r.qualified.as_ref().and_then(|q| iface_shapes.get(q)).or_else(|| iface_shapes.get(&r.name)).cloned()
+                    }
+                    _ => None,
+                })
             })
             .collect();
+        let (discriminant, tests) = match discriminant_tests(&shapes) {
+            Some((d, tests)) => (Some(d), tests),
+            None => (
+                None,
+                parts
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| enum_test(p).or_else(|| front.runtime_test(p)).or_else(|| unique_property(&shapes, i).map(Test::Has)))
+                    .collect(),
+            ),
+        };
         for (p, test) in parts.iter_mut().zip(tests) {
             if let Some(test) = test {
                 *p = Type::Tested(Box::new(std::mem::replace(p, Type::This)), test);
@@ -610,14 +654,65 @@ fn annotate_unions(front: &mut Front, decls: &mut [Decl]) {
     });
 }
 
-// A property every member has, required, with a different literal value in each.
-fn discriminant_of(shapes: &[Option<PropShapes>]) -> Option<String> {
+// A property every member has, required, whose literal values partition the members
+// (at most one catch-all member without a literal, and any duplicate-literal group
+// disambiguated by a required property unique within that group).
+fn discriminant_tests(shapes: &[Option<PropShapes>]) -> Option<(String, Vec<Option<Test>>)> {
+    if shapes.len() < 2 {
+        return None;
+    }
     let shapes: Vec<&PropShapes> = shapes.iter().map(|s| s.as_ref()).collect::<Option<_>>()?;
     let first = shapes.first()?;
-    first.iter().map(|f| &f.0).find(|name| {
-        let mut values = HashSet::new();
-        shapes.iter().all(|s| s.iter().any(|f| f.0 == **name && !f.1 && f.2.as_ref().is_some_and(|v| values.insert(v.clone()))))
-    }).cloned()
+    for name in first.iter().filter(|f| !f.1).map(|f| &f.0) {
+        let mut groups: HashMap<&str, Vec<usize>> = HashMap::new();
+        let mut catchall = 0usize;
+        let mut ok = true;
+        for (i, s) in shapes.iter().enumerate() {
+            let Some(prop) = s.iter().find(|f| f.0 == *name && !f.1) else {
+                ok = false;
+                break;
+            };
+            match prop.2.as_deref() {
+                Some(v) => groups.entry(v).or_default().push(i),
+                None => {
+                    catchall += 1;
+                    if catchall > 1 {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+        }
+        if !ok || groups.is_empty() {
+            continue;
+        }
+        let mut tests: Vec<Option<Test>> = vec![None; shapes.len()];
+        for (val, members) in groups {
+            if members.len() == 1 {
+                tests[members[0]] = Some(Test::Tag(val.to_string()));
+            } else {
+                for &idx in &members {
+                    let Some(prop) = shapes[idx]
+                        .iter()
+                        .filter(|f| !f.1 && !f.0.contains(':'))
+                        .find(|f| members.iter().all(|&j| j == idx || !shapes[j].iter().any(|g| g.0 == f.0)))
+                        .map(|f| f.0.clone())
+                    else {
+                        ok = false;
+                        break;
+                    };
+                    tests[idx] = Some(Test::TagHas(val.to_string(), prop));
+                }
+                if !ok {
+                    break;
+                }
+            }
+        }
+        if ok {
+            return Some((name.clone(), tests));
+        }
+    }
+    None
 }
 
 // A required property of member `i` that no other member has.

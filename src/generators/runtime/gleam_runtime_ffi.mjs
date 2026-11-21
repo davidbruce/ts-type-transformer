@@ -69,3 +69,9 @@ export function $wrap(f, make) {
   if (!w) $wrapped.set(f, (w = make(f)));
   return w;
 }
+export function $trim(a) {
+  let n = a.length;
+  while (n > 0 && a[n - 1] === undefined) n--;
+  if (n < a.length) a.length = n;
+  return a;
+}

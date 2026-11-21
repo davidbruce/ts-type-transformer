@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use super::js::{call_expr, global, js_test};
+use super::js::{call_expr, global, js_test, trim_trailing_undef};
 use super::model::{Call, Class, Func, Model, Shared, Ty, ident};
 pub use super::model::manifest;
 
@@ -165,6 +165,7 @@ fn to_wasm(x: &str, t: &Ty) -> String {
 fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, String) {
     let mut wasm_params = Vec::new();
     let mut args = Vec::new();
+    let mut may_undef = Vec::new();
     if Class::has_self(f) {
         wasm_params.push("self".to_string());
     }
@@ -175,6 +176,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             wasm_params.push(format!("{p}_ptr"));
             wasm_params.push(format!("{p}_len"));
             args.push(format!("str({p}_ptr, {p}_len)"));
+            may_undef.push(false);
             continue;
         }
         if let Ty::Nullable(inner, undefined) = t
@@ -183,6 +185,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             wasm_params.push(format!("{p}_ptr"));
             wasm_params.push(format!("{p}_len"));
             args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", if *undefined { "undefined" } else { "null" }));
+            may_undef.push(*undefined);
             continue;
         }
         if let Ty::Nullable(inner, undefined) = t
@@ -191,19 +194,25 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             wasm_params.push(format!("{p}_has"));
             wasm_params.push(format!("{p}_value"));
             args.push(format!("({p}_has ? {p}_value : {})", if *undefined { "undefined" } else { "null" }));
+            may_undef.push(*undefined);
             continue;
         }
         // A rest parameter's array is spread; a null one is empty.
         if f.rest && i == f.params.len() - 1 {
             args.push(format!("...({} ?? [])", from_wasm(&p, t)));
+            may_undef.push(false);
         } else {
             args.push(from_wasm(&p, t));
+            may_undef.push(matches!(t, Ty::Nullable(_, true)));
         }
         wasm_params.push(p);
     }
     for (j, (position, literal)) in f.fixed.iter().enumerate() {
-        args.insert((*position).min(args.len()), fixed(j, literal));
+        let pos = (*position).min(args.len());
+        args.insert(pos, fixed(j, literal));
+        may_undef.insert(pos, false);
     }
+    trim_trailing_undef(&f.call, f.rest, &mut args, &may_undef, "trim");
     let call = call_expr(&f.call, "get(self)", &args);
     let body = match &f.ret {
         Ty::Void => format!("{{ {call}; }}"),
@@ -329,7 +338,7 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
         .replace("/*__SETTLE__*/", &settle);
     out += "\nexport function makeEnv(getInstance, options = {}) {\n\
             \x20 const rt = options.runtime ?? createRuntime(getInstance, options);\n\
-            \x20 const { ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, env: rtEnv } = rt;\n\
+            \x20 const { ref, put, release, get, take, str, mem, table, fail, guard, callback, dead, trim, env: rtEnv } = rt;\n\
             \x20 const G = options.root ?? globalThis;\n\
             \x20 // With several packages bound together, each one's module by its name.\n\
             \x20 const M = options.modules ?? {};\n";

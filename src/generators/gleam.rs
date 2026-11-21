@@ -27,7 +27,7 @@ use std::path::Path;
 
 use roxmltree::Document;
 
-use super::js::{access, call_expr, global, js_test};
+use super::js::{access, call_expr, global, js_test, trim_trailing_undef};
 use super::model::{Call, Class, Func, Model, NamedUnion, TParam, Ty, base_args, map_types, mentions, model_with_options, subst, walk, with_self_args};
 use super::names::{Kind, Naming};
 
@@ -634,13 +634,17 @@ impl<'m> Gen<'m> {
         let mut js_params = Vec::new();
         // A class's type is open in the parameters: any subtype.
         *self.open.borrow_mut() = Some(0);
+        let mut self_ty = None;
         if let Some((class, tps)) = owner.filter(|_| Class::has_self(f)) {
             let own: Vec<Ty> = tps.iter().map(|p| Ty::Param(p.name.clone())).collect();
-            params.push(format!("self: {}", self.class_type(class, &own)));
+            let st = self.class_type(class, &own);
+            params.push(format!("self: {st}"));
+            self_ty = Some(st);
             js_params.push("self".to_string());
         }
         let mut taken: HashSet<String> = HashSet::from(["self".to_string()]);
         let mut args = Vec::new();
+        let mut may_undef = Vec::new();
         for (i, (p, t)) in f.params.iter().enumerate() {
             // A parameter of the FFI's JavaScript too: `default_` there.
             let mut id = lower(p);
@@ -653,6 +657,7 @@ impl<'m> Gen<'m> {
             js_params.push(id.clone());
             let value = self.from_gleam(t, &id);
             args.push(if last_rest { format!("...({value} ?? [])") } else { value });
+            may_undef.push(!last_rest && matches!(t, Ty::Nullable(_, true)));
         }
         // A codec for each type parameter whose values cross: the class's, then the function's own.
         *self.open.borrow_mut() = None;
@@ -662,14 +667,17 @@ impl<'m> Gen<'m> {
             js_params.push(codec_var(&p.name));
         }
         for (position, literal) in &f.fixed {
-            args.insert((*position).min(args.len()), literal.clone());
+            let pos = (*position).min(args.len());
+            args.insert(pos, literal.clone());
+            may_undef.insert(pos, false);
         }
+        trim_trailing_undef(&f.call, f.rest, &mut args, &may_undef, "$trim");
         let call = call_expr(&f.call, "self", &args);
         let body = match &f.ret {
             Ty::Void => format!("{call};\n  return undefined;"),
             t => format!("return {};", self.to_gleam(t, &call)),
         };
-        let ret = self.ty(&f.ret);
+        let ret = if f.returns_this { self_ty.unwrap_or_else(|| self.ty(&f.ret)) } else { self.ty(&f.ret) };
         // A name JavaScript reserves (`new`, `delete`) is `new_` there.
         let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
         self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
@@ -1307,7 +1315,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         };
         // What it iterates, or holds as a subclass of Array: a list.
         if let Some(elem) = c.iterates.as_ref().or(c.elements.as_ref()) {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret;
             populate_class_bound(&g);
             let id = g.value_name("to_list");
             let elem_ty = g.ty(&elem);
@@ -1328,7 +1336,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
         // A subclass of Array has no class to inherit Array's members from:
         // its elements by index, and how many.
         if let Some(elem) = c.elements.as_ref() {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret;
             populate_class_bound(&g);
             let elem_ty = g.ty(&elem);
             g.note("Option");
@@ -1567,7 +1575,7 @@ pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Resul
              import {{ Ok, Error as GleamError, toList }} from \"{prelude}gleam.mjs\";\n"
         );
         if path != runtime_mod {
-            header += &format!("import {{ $wrap, $same, PK, G }} from \"{}\";\nimport * as $T from \"{}\";\n", relative(&path, &format!("{pkg}/runtime_ffi.mjs")), relative(&path, &format!("{pkg}/types_ffi.mjs")));
+            header += &format!("import {{ $wrap, $same, $trim, PK, G }} from \"{}\";\nimport * as $T from \"{}\";\n", relative(&path, &format!("{pkg}/runtime_ffi.mjs")), relative(&path, &format!("{pkg}/types_ffi.mjs")));
         }
         if path == types_mod {
             header += "import * as B from \"./types.mjs\";\n";
@@ -1861,21 +1869,25 @@ struct ClassBoundQuery<'a> {
 
 fn check_class_bound_ty(t: &Ty, q: &ClassBoundQuery<'_>, scope_tparams: &[TParam]) -> bool {
     match t {
-        Ty::Obj(cn) if cn == q.target_class => q.default_ok,
-        Ty::Generic(cn, args) => {
-            if cn == q.target_class {
-                let ok = match args.get(q.param_idx) {
-                    Some(a) => arg_satisfies(q.m, q.classes, q.parents, a, q.base, q.cargs, scope_tparams),
-                    None => q.default_ok,
-                };
-                if !ok {
-                    return false;
-                }
+        Ty::Obj(cn) | Ty::Generic(cn, _) if q.classes.contains_key(cn) && is_chain_subtype(q.parents, cn, q.target_class) => {
+            let Some(eff) = effective_base_args(q.m, t, q.target_class) else {
+                return false;
+            };
+            let ok = match eff.get(q.param_idx) {
+                Some(a) => arg_satisfies(q.m, q.classes, q.parents, a, q.base, q.cargs, scope_tparams),
+                None => q.default_ok,
+            };
+            if !ok {
+                return false;
             }
-            args.iter().all(|a| check_class_bound_ty(a, q, scope_tparams))
+            if let Ty::Generic(_, args) = t {
+                args.iter().all(|a| check_class_bound_ty(a, q, scope_tparams))
+            } else {
+                true
+            }
         }
+        Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().all(|a| check_class_bound_ty(a, q, scope_tparams)),
         Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => check_class_bound_ty(inner, q, scope_tparams),
-        Ty::Tuple(es) | Ty::Union(es) => es.iter().all(|e| check_class_bound_ty(e, q, scope_tparams)),
         _ => true,
     }
 }
@@ -1901,12 +1913,12 @@ fn compute_class_bound(
                 Some(def) => arg_satisfies(m, classes, parents, def, &base, &cargs, &c.type_params),
                 None => false,
             };
-            // `from` and `cast` instantiate `class_type(&c.name, &[])`, which falls back
-            // to `Dynamic` when a parameter lacks a valid default.
-            if c.js.is_some() && !default_ok {
+            let query = ClassBoundQuery { target_class: &c.name, param_idx: i, base: &base, cargs: &cargs, default_ok, m, classes, parents };
+            // `from` and `cast` on `c` or any runtime-constructible subclass instantiate
+            // defaults (falling back to `Dynamic`), so every such subclass must satisfy `c`'s bound.
+            if m.classes.iter().any(|sub| sub.js.is_some() && is_chain_subtype(parents, &sub.name, &c.name) && !check_class_bound_ty(&Ty::Obj(sub.name.clone()), &query, &[])) {
                 continue;
             }
-            let query = ClassBoundQuery { target_class: &c.name, param_idx: i, base: &base, cargs: &cargs, default_ok, m, classes, parents };
             let check = |t: &Ty, scope: &[TParam]| check_class_bound_ty(t, &query, scope);
             let mut ok = true;
             'classes: for c2 in &m.classes {

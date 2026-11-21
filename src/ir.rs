@@ -41,6 +41,8 @@ pub enum Test {
     Has(String),
     // The union's discriminant property has this value.
     Tag(String),
+    // The union's discriminant property has value `0` and the object has property `1`.
+    TagHas(String, String),
     // On a union: the property that tells its members apart.
     Discriminant(String),
 }

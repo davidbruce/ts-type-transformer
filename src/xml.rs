@@ -596,6 +596,7 @@ pub fn test_text(t: &Test) -> String {
         Test::InstanceOf(c) => format!("instanceof:{c}"),
         Test::Has(p) => format!("has:{p}"),
         Test::Tag(v) => format!("tag:{v}"),
+        Test::TagHas(v, p) => format!("tag_has:{v}:{p}"),
         Test::Discriminant(p) => format!("discriminant:{p}"),
     }
 }

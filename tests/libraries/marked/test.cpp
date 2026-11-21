@@ -14,12 +14,12 @@ static std::string text_of(const string_or_Promise& r) {
     return s ? *s : std::string("<promise>");
 }
 
-// A token rewrapped as the type wanted: the same JavaScript object.
-template <class T>
-static T as(const ts::Value& v) {
-    T t;
-    static_cast<ts::Handle&>(t) = v;
-    return t;
+static std::string token_type(const Token& tok) {
+    return std::visit([](const auto& x) -> std::string {
+        using X = std::decay_t<decltype(x)>;
+        if constexpr (std::is_same_v<X, Tokens_Generic>) return x.type();
+        else return std::string(X::type);
+    }, tok);
 }
 
 extern "C" __attribute__((export_name("run"))) void run() {
@@ -47,25 +47,20 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // The function-typed consts are called through call_<Callback>.
     TokensList viaConst = call_string_MarkedOptions_to_TokensList_fn(marked_ns::get_lexer(), "# T\n\npara", std::nullopt);
     CHECK(viaConst.length() == 3);
-    CHECK(as<Tokens_Generic>(*viaConst.at(0)).type() == "heading");
-    ts::Array<> tokenArray;
+    CHECK(std::holds_alternative<Tokens_Heading>(*viaConst.at(0)));
+    ts::Array<Token> tokenArray;
     static_cast<ts::Handle&>(tokenArray) = viaConst;
     ts::Value out = call_Token_array_MarkedOptions_to_ParserOutput_fn(marked_ns::get_parser(), tokenArray, std::nullopt);
     CHECK(out.to_string() == "<h1>T</h1>\n<p>para</p>\n");
     using Mk = Marked<std::string, std::string>;
     Mk md = Mk::create(ts::Array<MarkedExtension<std::string, std::string>>::create());
     TokensList list = md.lexer("# H *x*\n\npara **b**\n\n- x\n- y\n\n```js\nlet a\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n");
-    // FINDING 3: iterating or indexing a TokensList gives untyped ts::Value, and
-    // the `Token` union has no decoder (types/Token.hpp declares ts_raw_Token_tag
-    // but defines no decode_Token), so ts::Array<Token> does not compile and a
-    // token cannot be told apart by type. Workaround: rewrap the Value as the
-    // type wanted, and read `type` through Tokens_Generic.
     CHECK(list.length() == 9);
     std::string types;
-    for (ts::Value v : list) types += as<Tokens_Generic>(v).type() + " ";
+    for (const Token& v : list) types += token_type(v) + " ";
     CHECK(types == "heading space paragraph space list space code space table ");
 
-    Tokens_Heading heading = as<Tokens_Heading>(*list.at(0));
+    Tokens_Heading heading = std::get<Tokens_Heading>(*list.at(0));
     CHECK(heading.depth() == 1);
     CHECK(heading.text() == "H *x*");
     CHECK(heading.raw() == "# H *x*");
@@ -73,22 +68,22 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(heading.tokens().size() == 2);
 
     // The nested inline tokens.
-    ts::Array<> inner = heading.tokens();
-    CHECK(as<Tokens_Generic>(inner[0]).type() == "text");
-    ts::Value emv = inner[1];
-    CHECK(as<Tokens_Generic>(emv).type() == "em");
-    CHECK(as<Tokens_Em>(emv).text() == "x");
+    ts::Array<Token> inner = heading.tokens();
+    CHECK(std::holds_alternative<Tokens_Text>(inner[0]));
+    Token emv = inner[1];
+    CHECK(std::holds_alternative<Tokens_Em>(emv));
+    CHECK(std::get<Tokens_Em>(emv).text() == "x");
 
-    Tokens_Paragraph para = as<Tokens_Paragraph>(*list.at(2));
+    Tokens_Paragraph para = std::get<Tokens_Paragraph>(*list.at(2));
     CHECK(para.text() == "para **b**");
-    Tokens_List ul = as<Tokens_List>(*list.at(4));
+    Tokens_List ul = std::get<Tokens_List>(*list.at(4));
     CHECK(!ul.ordered());
     CHECK(ul.items().size() == 2);
     CHECK(ul.items()[1].text() == "y");
-    Tokens_Code code = as<Tokens_Code>(*list.at(6));
+    Tokens_Code code = std::get<Tokens_Code>(*list.at(6));
     CHECK(code.lang() == "js");
     CHECK(code.text() == "let a");
-    Tokens_Table table = as<Tokens_Table>(*list.at(8));
+    Tokens_Table table = std::get<Tokens_Table>(*list.at(8));
     CHECK(table.header().size() == 2);
     CHECK(table.header()[0].text() == "a");
     CHECK(table.rows().size() == 1);
@@ -97,7 +92,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // The static lexer, and inline tokens.
     TokensList quick = ::Lexer<std::string, std::string>::lex_static("*a* b");
     CHECK(quick.length() == 1);
-    ts::Array<> inlineTokens = ::Lexer<std::string, std::string>::lexInline("`c` and **d**");
+    ts::Array<Token> inlineTokens = ::Lexer<std::string, std::string>::lexInline("`c` and **d**");
     CHECK(inlineTokens.size() == 3);
 
     // A Marked instance made with an extension holding options.
@@ -123,7 +118,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // walkTokens visits every token, nested ones too.
     int visited = 0;
     MarkedExtension<std::string, std::string> walker = MarkedExtension<std::string, std::string>::create();
-    walker.walkTokens(Token_to_void_or_Promise_or_void_or_Promise_array_fn([&](ts::Value token) {
+    walker.walkTokens(Token_to_void_or_Promise_or_void_or_Promise_array_fn([&](const Token& token) {
         visited++;
         (void)token;
         return void_or_Promise_or_void_or_Promise_array(std::in_place_index<1>, ts::Array<>());

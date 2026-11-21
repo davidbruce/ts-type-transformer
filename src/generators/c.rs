@@ -697,7 +697,7 @@ fn call_macros(name: &str, owner: Option<&str>, f: &Func, earlier: &[&Func], fam
             }
             format!("_Generic((a{}), {})", at + 1, choices.join(", "))
         }
-        None => name.to_string(),
+        None => format!("({name})"),
     };
     let param_absent = |g: &Func, idx: usize| -> Option<String> {
         if g.rest && idx + 1 == g.params.len() {
@@ -726,7 +726,7 @@ fn call_macros(name: &str, owner: Option<&str>, f: &Func, earlier: &[&Func], fam
     let mut out = format!("{prefix}#define {name}(...) TS_CALL({name}, __VA_ARGS__)\n");
     out += &match forward {
         Some(call) => format!("#define {name}__{n}({}) {call}\n", params.join(", ")),
-        None => format!("#define {name}__{n} {name}\n"),
+        None => format!("#define {name}__{n} ({name})\n"),
     };
     for given in shorter {
         let mut next: Vec<String> = params[..given].to_vec();

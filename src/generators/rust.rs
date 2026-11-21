@@ -483,7 +483,7 @@ impl Family {
 
     // The method: `fn query_selector<A_: ..Arg>(&self, selectors: A_) -> A_::Output`,
     // and for an overload with a type argument to state, `query_selector_as::<T>`.
-    fn methods(&self, vis: &str, imports: &mut BTreeMap<String, String>, this: &str) -> Vec<String> {
+    fn methods(&self, vis: &str, imports: &mut BTreeMap<String, String>, this: &str, ret_self: Option<&Ty>) -> Vec<String> {
         let first = &self.members[0];
         let names: Vec<String> = first.params.iter().map(|(p, _)| ident(&snake(p))).collect();
         let params: Vec<String> = first
@@ -496,9 +496,21 @@ impl Family {
         let rest = if self.others.is_empty() { String::new() } else { format!(", ({},)", self.others.iter().map(|&i| names[i].as_str()).collect::<Vec<_>>().join(", ")) };
         let same: String = names.iter().enumerate().filter(|(i, _)| *i != self.at && !self.others.contains(i)).map(|(_, p)| format!(", {p}")).collect();
         let generics: String = self.others.iter().map(|i| format!(", R{i}_")).collect();
-        let mut out = vec![format!("{vis}fn {}<A_: {}{}{generics}>(&self, {}) -> A_::Output {{ A_::call({}, {this}{rest}{same}) }}", self.name, self.trait_name, self.rest(), params.join(", "), names[self.at])];
+        let call = format!("A_::call({}, {this}{rest}{same})", names[self.at]);
+        let (ret_s, body_s) = match ret_self {
+            Some(_) => (
+                "Self".to_string(),
+                format!("let out_ = {call}; let h_ = AsRef::<JsHandle>::as_ref(&out_).0; core::mem::forget(out_); <Self>::from_handle(h_)"),
+            ),
+            None => ("A_::Output".to_string(), call),
+        };
+        let mut out = vec![format!("{vis}fn {}<A_: {}{}{generics}>(&self, {}) -> {ret_s} {{ {body_s} }}", self.name, self.trait_name, self.rest(), params.join(", "))];
         if let Some(f) = self.members.iter().find(|f| f.params[self.at].1 == Ty::Str && !hidden(f).is_empty()) {
-            out.push(one_function(f, &format!("{}_as", self.name), vis, imports, Some(this)));
+            let mut f = f.clone();
+            if let Some(sty) = ret_self {
+                f.ret = sty.clone();
+            }
+            out.push(one_function(&f, &format!("{}_as", self.name), vis, imports, Some(this)));
         }
         out
     }
@@ -721,8 +733,14 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             .map(|v| {
                 let id = camel(&super::model::ident(if v.is_empty() { "empty" } else { v }));
                 // Nothing of it is a name (`"\\"`, `"/"`).
-                let id = if id.trim_matches('_').is_empty() { "Value".to_string() } else { id };
-                let id = if seen.insert(id.clone()) { id } else { format!("{id}{}", seen.len()) };
+                let mut id = if id.trim_matches('_').is_empty() { "Value".to_string() } else { id };
+                if !seen.insert(id.clone()) {
+                    let mut i = 2;
+                    while !seen.insert(format!("{id}{i}")) {
+                        i += 1;
+                    }
+                    id = format!("{id}{i}");
+                }
                 (id, v.clone())
             })
             .collect();
@@ -950,13 +968,13 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
         }
         let mut dispatch = String::new();
         for g in &grouped[c.name.as_str()] {
-            for item in g.methods("", &mut imports, this) {
+            for item in g.methods("", &mut imports, this, None) {
                 trait_body += &format!("    {item}\n");
             }
             dispatch += &g.dispatch(&mut imports);
         }
         if let Some(elem) = &c.iterates {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret;
             trait_body += &format!("    fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem));
         }
         if let Some(elem) = &c.iterates_async {
@@ -1017,6 +1035,11 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
                 (0..k.type_params.len()).map(|i| b.get(i).cloned().unwrap_or(Ty::Any)).collect()
             }
         };
+        let self_ty = if c.type_params.is_empty() {
+            Ty::Obj(c.name.clone())
+        } else {
+            Ty::Generic(c.name.clone(), c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect())
+        };
         for (method, hs) in &holders {
             if inherent_taken.contains(method) {
                 continue;
@@ -1030,7 +1053,8 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
                 if g.members.iter().any(|f| f.params[g.at].1 == Ty::Str && !hidden(f).is_empty()) {
                     inherent_taken.insert(format!("{method}_as"));
                 }
-                for item in g.methods("pub ", &mut imports, this) {
+                let ret_self = (h != &c.name && g.members.iter().all(|f| f.returns_this)).then_some(&self_ty);
+                for item in g.methods("pub ", &mut imports, this, ret_self) {
                     inherent += &format!("    {item}\n");
                 }
                 continue;
@@ -1040,7 +1064,10 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
                 if !c.type_params.is_empty() && !orig.type_params.is_empty() {
                     orig = avoid_outer_type_params(&orig, &c.type_params, &k.type_params);
                 }
-                let f = map_types(&orig, &|t| subst(t, &k.type_params, &h_args));
+                let mut f = map_types(&orig, &|t| subst(t, &k.type_params, &h_args));
+                if f.returns_this && h != &c.name {
+                    f.ret = self_ty.clone();
+                }
                 inherent_taken.insert(method.clone());
                 let as_name = format!("{method}_as");
                 if !hidden(&f).is_empty() && !inherent_taken.contains(&as_name) && !holders.contains_key(&as_name) {
@@ -1128,7 +1155,7 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             && let Some((k, elem)) = std::iter::once(c.name.as_str()).chain(all.iter().map(String::as_str)).find_map(|h| class_of(h).and_then(|k| k.iterates.as_ref().map(|e| (k, e))))
         {
             let h_args = args_for(&k.name, k);
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, k).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, k).ret;
             let elem = subst(&elem, &k.type_params, &h_args);
             inherent_taken.insert("iter".into());
             inherent += &format!("    pub fn iter(&self) -> JsIterator<{}> {{ JsIterator::over({this}) }}\n", ty(&elem));
@@ -1137,7 +1164,7 @@ pub fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> Result<V
             && let Some((k, elem)) = std::iter::once(c.name.as_str()).chain(all.iter().map(String::as_str)).find_map(|h| class_of(h).and_then(|k| k.iterates_async.as_ref().map(|e| (k, e))))
         {
             let h_args = args_for(&k.name, k);
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, k).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, k).ret;
             let elem = subst(&elem, &k.type_params, &h_args);
             inherent_taken.insert("iterate_async".into());
             inherent += &format!("    pub fn iterate_async(&self) -> JsAsyncIterator<{}> {{ JsAsyncIterator::over({this}) }}\n", ty(&elem));
@@ -1550,7 +1577,7 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
     let trampoline = |f: &str, lifetime: &str| {
         let mut generic: Vec<String> = type_params.iter().map(bound).collect();
         generic.push(format!("F: {fn_bound}{lifetime}"));
-        format!("extern \"C\" fn call<{}>(ctx: *mut core::ffi::c_void{raw_args}){raw_result} {{ {} }}", generic.join(", "), lower_callback(ret, &format!("({f})({})", call_args.join(", "))))
+        format!("extern \"C\" fn call<{}>(ctx: *mut core::ffi::c_void{raw_args}){raw_result} {{ {} }}", generic.join(", "), lower_callback(ret, &format!("(&mut *{f})({})", call_args.join(", "))))
     };
     let turbofish: Vec<String> = tps.iter().cloned().chain(std::iter::once("F".to_string())).collect();
     imports.insert(format!("{import}_from"), format!("    pub fn {import}_from(f: usize, ctx: *mut c_void) -> u32;\n"));
@@ -1568,6 +1595,7 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
             fixed: apply.fixed.clone(),
             shared: apply.shared.clone(),
             ret: apply.ret.clone(),
+            returns_this: false,
         };
         format!("\n    {}", one_function(&method_f, "call", "pub ", imports, Some("self.0 .0")))
     } else {
@@ -1579,11 +1607,12 @@ fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty)], ret: &T
          pub fn new<F: {fn_bound} + 'static>(f: F) -> Self {{\n        {}\n        \
          Self::from_handle(unsafe {{ raw::{import}_from(call::<{2}> as *const () as usize, crate::runtime::closure(f)) }})\n    }}\n    \
          // For the length of `body`: its closure may borrow.\n    \
-         pub fn scoped<F: {fn_bound}, R_>(mut f: F, body: impl FnOnce(&Self) -> R_) -> R_ {{\n        {}\n        \
-         let made = Self::from_handle(unsafe {{ raw::{import}_from(call::<{2}> as *const () as usize, &mut f as *mut F as *mut core::ffi::c_void) }});\n        \
+         pub fn scoped<F: {fn_bound}, R_>(f: F, body: impl FnOnce(&Self) -> R_) -> R_ {{\n        {}\n        \
+         let f = core::cell::RefCell::new(f);\n        \
+         let made = Self::from_handle(unsafe {{ raw::{import}_from(call::<{2}> as *const () as usize, &f as *const core::cell::RefCell<F> as *mut core::ffi::c_void) }});\n        \
          let _forget = crate::runtime::Forget(made.0 .0);\n        body(&made)\n    }}{call_method}\n}}\n",
         trampoline("unsafe { crate::runtime::closure_fn::<F>(ctx) }", " + 'static"),
-        trampoline("unsafe { &mut *(ctx as *mut F) }", ""),
+        trampoline("unsafe { &*(ctx as *const core::cell::RefCell<F>) }.borrow_mut()", ""),
         turbofish.join(", ")
     )
 }

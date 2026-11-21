@@ -94,8 +94,11 @@ fn generate(target: &str, xml: &str, glue_for: Option<&Path>, pkg_name: &str, de
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| vec![e])?;
             let model = wasm::model_with(xml, zig::MODEL_OPTIONS, &zig::NAMING, &[])?;
-            let mut out = zig::files_named(&model, pkg_name, &loaded)?;
-            push_glue(&model, &mut out);
+            let (mut out, zig_imports) = zig::files_with_imports(&model, pkg_name, &loaded)?;
+            out.push(("glue.mjs".into(), wasm::glue_for_module(&model, used.as_ref().or(Some(&zig_imports)), wasm_module)));
+            for (why, n) in &model.skipped {
+                eprintln!("not bound: {n} x {why}");
+            }
             Ok(out)
         }
         "rust" => {

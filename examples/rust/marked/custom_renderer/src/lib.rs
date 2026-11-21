@@ -2,8 +2,8 @@
 
 use dom::{Document, HTMLElement};
 use marked::{
-    BooleanOrRendererOutput, JsArray, JsValue, Marked, MarkedExtension, MarkedExtensionRenderer,
-    MarkedExtensionRendererHeading, ParserOutputOrPromise, StringOrPromise,
+    BooleanOrRendererOutput, JsArray, Marked, MarkedExtension, MarkedExtensionRenderer,
+    MarkedExtensionRendererHeading, ParserOutputOrPromise, StringOrPromise, Token,
     TokenToVoidOrPromiseOrVoidOrPromiseArrayFn, tokens,
 };
 use std::cell::RefCell;
@@ -22,6 +22,34 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
+}
+
+fn token_type(t: &Token) -> String {
+    match t {
+        Token::Blockquote(_) => tokens::Blockquote::TYPE.into(),
+        Token::Br(_) => tokens::Br::TYPE.into(),
+        Token::Checkbox(_) => tokens::Checkbox::TYPE.into(),
+        Token::Code(_) => tokens::Code::TYPE.into(),
+        Token::Codespan(_) => tokens::Codespan::TYPE.into(),
+        Token::Def(_) => tokens::Def::TYPE.into(),
+        Token::Del(_) => tokens::Del::TYPE.into(),
+        Token::Em(_) => tokens::Em::TYPE.into(),
+        Token::Escape(_) => tokens::Escape::TYPE.into(),
+        Token::Heading(_) => tokens::Heading::TYPE.into(),
+        Token::Hr(_) => tokens::Hr::TYPE.into(),
+        Token::HTML(_) => tokens::HTML::TYPE.into(),
+        Token::Image(_) => tokens::Image::TYPE.into(),
+        Token::Link(_) => tokens::Link::TYPE.into(),
+        Token::List(_) => tokens::List::TYPE.into(),
+        Token::ListItem(_) => tokens::ListItem::TYPE.into(),
+        Token::Paragraph(_) => tokens::Paragraph::TYPE.into(),
+        Token::Space(_) => tokens::Space::TYPE.into(),
+        Token::Strong(_) => tokens::Strong::TYPE.into(),
+        Token::Table(_) => tokens::Table::TYPE.into(),
+        Token::Tag(_) => tokens::Tag::TYPE.into(),
+        Token::Text(_) => tokens::Text::TYPE.into(),
+        Token::Generic(g) => g.type_(),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -46,9 +74,8 @@ pub extern "C" fn start() {
 
     let walk = TokenToVoidOrPromiseOrVoidOrPromiseArrayFn::new({
         let seen = seen.clone();
-        move |t: JsValue| {
-            let g = t.unchecked_into::<tokens::Generic>();
-            seen.borrow_mut().push(g.type_());
+        move |t: Token| {
+            seen.borrow_mut().push(token_type(&t));
             None
         }
     });

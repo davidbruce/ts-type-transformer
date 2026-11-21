@@ -10,6 +10,9 @@ import bindings/areas/main/marked_options_no_async
 import bindings/areas/main/marked_parse
 import bindings/areas/main/marked_parse_call_options_no_async
 import bindings/areas/main/tokens_list
+import bindings/namespaces/tokens/generic as token_generic
+import bindings/namespaces/tokens/heading as token_heading
+import bindings/namespaces/tokens/paragraph as token_paragraph
 import bindings/runtime
 import bindings/types as t
 import cell
@@ -37,6 +40,34 @@ fn field_string(token: Dynamic, name: String) -> String {
 fn field_float(token: Dynamic, name: String) -> Float {
   let assert Ok(s) = decode.run(token, decode.at([name], decode.float))
   s
+}
+
+fn token_type(tok: t.Token) -> String {
+  case tok {
+    t.TokenTokensBlockquote(_) -> "blockquote"
+    t.TokenTokensBr(_) -> "br"
+    t.TokenTokensCheckbox(_) -> "checkbox"
+    t.TokenTokensCode(_) -> "code"
+    t.TokenTokensCodespan(_) -> "codespan"
+    t.TokenTokensDef(_) -> "def"
+    t.TokenTokensDel(_) -> "del"
+    t.TokenTokensEm(_) -> "em"
+    t.TokenTokensEscape(_) -> "escape"
+    t.TokenTokensHeading(_) -> "heading"
+    t.TokenTokensHr(_) -> "hr"
+    t.TokenTokensHTML(_) -> "html"
+    t.TokenTokensImage(_) -> "image"
+    t.TokenTokensLink(_) -> "link"
+    t.TokenTokensList2(_) -> "list"
+    t.TokenTokensListItem(_) -> "list_item"
+    t.TokenTokensParagraph(_) -> "paragraph"
+    t.TokenTokensSpace(_) -> "space"
+    t.TokenTokensStrong(_) -> "strong"
+    t.TokenTokensTable(_) -> "table"
+    t.TokenTokensTag(_) -> "html"
+    t.TokenTokensText(_) -> "text"
+    t.TokenTokensGeneric(g) -> token_generic.get_type(g)
+  }
 }
 
 pub fn main() {
@@ -90,26 +121,26 @@ pub fn main() {
   // The lexer: tokens, their types and fields.
   let tokens = lexer.lex("# Head\n\nSome *text*.\n\n- one\n- two\n", None)
   let list_of = tokens_list.to_list(tokens)
-  let types = list.map(list_of, field_string(_, "type"))
+  let types = list.map(list_of, token_type)
   let passed =
     passed
     + check(tokens_list.get_length(tokens) == 5.0, "token count")
     + check(types == ["heading", "space", "paragraph", "space", "list"], "token types")
-  let assert [heading, ..] = list_of
+  let assert [t.TokenTokensHeading(heading), ..] = list_of
   let passed =
     passed
-    + check(field_float(heading, "depth") == 1.0, "heading depth")
-    + check(field_string(heading, "text") == "Head", "heading text")
-    + check(field_string(heading, "raw") == "# Head", "heading raw")
-  let assert Ok(paragraph) = list.drop(list_of, 2) |> list.first
-  let assert Ok(inner) = decode.run(paragraph, decode.at(["tokens"], decode.list(decode.dynamic)))
+    + check(token_heading.get_depth(heading) == 1.0, "heading depth")
+    + check(token_heading.get_text(heading) == "Head", "heading text")
+    + check(token_heading.get_raw(heading) == "# Head", "heading raw")
+  let assert Ok(t.TokenTokensParagraph(paragraph)) = list.drop(list_of, 2) |> list.first
+  let inner = token_paragraph.get_tokens(paragraph)
   let passed =
     passed
-    + check(list.map(inner, field_string(_, "type")) == ["text", "em", "text"], "inline tokens")
+    + check(list.map(inner, token_type) == ["text", "em", "text"], "inline tokens")
   let assert Some(first) = tokens_list.get_at(tokens, 0.0)
   let passed =
     passed
-    + check(field_string(first, "type") == "heading", "get_at")
+    + check(token_type(first) == "heading", "get_at")
     + check(list.length(lexer.lex_inline("a *b* c", None)) == 3, "lex_inline")
     + check(tokens_list.get_length(marked.get_lexer()("a\n\nb", None)) == 3.0, "the lexer function")
 
@@ -170,7 +201,7 @@ pub fn main() {
   marked_extension.set_walk_tokens(
     walker,
     Some(fn(token) {
-      cell.set(seen, [field_string(token, "type"), ..cell.get(seen)])
+      cell.set(seen, [token_type(token), ..cell.get(seen)])
       None
     }),
   )

@@ -166,9 +166,9 @@ fn contains_param(t: &Ty) -> bool {
     }
 }
 
-// C++ type of a function/method parameter, using input adapters (`ts::In`/`ts::Opt`)
-// where ergonomic implicit conversions are needed.
-fn ty_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> String {
+// C++ type of a function/method parameter, using input adapters (`ts::In`/`ts::Opt`,
+// or `ts::Exact`/`ts::OptExact` for a superset union parameter that clashes with a subset overload).
+fn ty_param_with_exact(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>, exact: bool) -> String {
     let wrap = |inner: String| {
         if contains_param(t) {
             format!("const std::type_identity_t<{inner}>&")
@@ -176,18 +176,25 @@ fn ty_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> String 
             format!("const {inner}&")
         }
     };
+    let in_tpl = if exact { "ts::Exact" } else { "ts::In" };
+    let opt_tpl = if exact { "ts::OptExact" } else { "ts::Opt" };
     match t {
-        Ty::NamedUnion(n) => wrap(format!("ts::In<{}>", tn(n))),
-        Ty::Generic(n, _) if is_union(n, unions) => wrap(format!("ts::In<{}>", ty_in(t))),
+        Ty::NamedUnion(n) => wrap(format!("{in_tpl}<{}>", tn(n))),
+        Ty::Generic(n, _) if is_union(n, unions) => wrap(format!("{in_tpl}<{}>", ty_in(t))),
         Ty::Nullable(inner, _) => match &**inner {
-            Ty::NamedUnion(n) => wrap(format!("ts::Opt<{}>", tn(n))),
-            Ty::Generic(n, _) if is_union(n, unions) || callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner))),
+            Ty::NamedUnion(n) => wrap(format!("{opt_tpl}<{}>", tn(n))),
+            Ty::Generic(n, _) if is_union(n, unions) => wrap(format!("{opt_tpl}<{}>", ty_in(inner))),
+            Ty::Generic(n, _) if callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner))),
             Ty::Obj(n) if callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner))),
             Ty::Tuple(_) => wrap(format!("ts::Opt<{}>", ty_in(inner))),
             _ => ty_in(t),
         },
         _ => ty_in(t),
     }
+}
+
+fn ty_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> String {
+    ty_param_with_exact(t, unions, callbacks, false)
 }
 
 fn union_subsumed(sub_t: &Ty, sup_t: &Ty, unions: &[NamedUnion]) -> bool {
@@ -198,6 +205,7 @@ fn union_subsumed(sub_t: &Ty, sup_t: &Ty, unions: &[NamedUnion]) -> bool {
             (ua.parts.len() < ub.parts.len() || (ua.parts.len() == ub.parts.len() && a > b))
                 && ua.parts.iter().all(|p| ub.parts.contains(p))
         }
+        (Ty::NamedUnion(a), Ty::Nullable(b, _)) => matches!(&**b, Ty::NamedUnion(bn) if a == bn) || union_subsumed(sub_t, b, unions),
         (Ty::Nullable(a, _), Ty::Nullable(b, _)) => union_subsumed(a, b, unions),
         _ => false,
     }
@@ -235,6 +243,48 @@ fn func_subsumed_by(
         }
     }
     strict
+}
+
+/// Returns parameter indices of `sup` that strictly subsume a sibling overload
+/// in `peers` and should accept only the exact union type (`ts::Exact`/`ts::OptExact`).
+fn exact_params_for<'a>(
+    sup: &Func,
+    sup_name: &str,
+    peers: impl Iterator<Item = (&'a Func, &'a str)>,
+    unions: &[NamedUnion],
+    callbacks: &HashSet<&str>,
+) -> HashSet<usize> {
+    let mut out = HashSet::new();
+    if !sup.type_params.is_empty() {
+        return out;
+    }
+    for (sub, sub_name) in peers {
+        if sub_name != sup_name
+            || Class::has_self(sub) != Class::has_self(sup)
+            || sub.params.len() != sup.params.len()
+            || !sub.type_params.is_empty()
+            || sub.rest != sup.rest
+        {
+            continue;
+        }
+        let mut subsumed_at = Vec::new();
+        let mut clashes = true;
+        for (i, ((_, st), (_, pt))) in sub.params.iter().zip(&sup.params).enumerate() {
+            if ty_param(st, unions, callbacks) == ty_param(pt, unions, callbacks) {
+                continue;
+            }
+            if union_subsumed(st, pt, unions) {
+                subsumed_at.push(i);
+            } else {
+                clashes = false;
+                break;
+            }
+        }
+        if clashes && !subsumed_at.is_empty() {
+            out.extend(subsumed_at);
+        }
+    }
+    out
 }
 
 fn lower_param(t: &Ty, x: &str, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> Vec<String> {
@@ -524,6 +574,7 @@ fn build_function(
     wasm_module: &str,
     raw_prefix: &str,
     params_slice: &[(String, Ty)],
+    exact_params: &HashSet<usize>,
     rest_pack: Option<&str>,
     omit_rest: bool,
 ) -> Function {
@@ -536,11 +587,11 @@ fn build_function(
     }
     let mut params = Vec::new();
     let mut refs = BTreeSet::new();
-    for (pname, t) in params_slice {
+    for (idx, (pname, t)) in params_slice.iter().enumerate() {
         // `w_`; `h`, reserved, is already `h_`: two underscores are the implementation's.
         let base = ident(pname);
         let pname = if base.ends_with('_') { base } else { format!("{base}_") };
-        params.push(format!("{} {pname}", ty_param(t, unions, callbacks)));
+        params.push(format!("{} {pname}", ty_param_with_exact(t, unions, callbacks, exact_params.contains(&idx))));
         raw_params.extend(raw(t));
         args.extend(lower_param(t, &pname, unions, callbacks));
         named_types(t, &mut refs);
@@ -654,14 +705,14 @@ fn build_function(
             "{}{}{name}({})|rest<{elem_ty}>",
             again_key.replace('\n', " "),
             if place == Place::Static { "static " } else { "" },
-            params_slice.iter().map(|p| ty_param(&p.1, unions, callbacks)).collect::<Vec<_>>().join(",")
+            params_slice.iter().enumerate().map(|(idx, p)| ty_param_with_exact(&p.1, unions, callbacks, exact_params.contains(&idx))).collect::<Vec<_>>().join(",")
         )
     } else {
         format!(
             "{}{}{name}({})",
             again_key.replace('\n', " "),
             if place == Place::Static { "static " } else { "" },
-            params_slice.iter().map(|p| ty_param(&p.1, unions, callbacks)).collect::<Vec<_>>().join(",")
+            params_slice.iter().enumerate().map(|(idx, p)| ty_param_with_exact(&p.1, unions, callbacks, exact_params.contains(&idx))).collect::<Vec<_>>().join(",")
         )
     };
     let key = rename_words(&key, &type_params.iter().enumerate().map(|(i, p)| (p.name.clone(), format!("${i}"))).collect());
@@ -680,8 +731,9 @@ fn function_variants(
     callbacks: &HashSet<&str>,
     wasm_module: &str,
     raw_prefix: &str,
+    exact_params: &HashSet<usize>,
 ) -> Vec<Function> {
-    let mut out = vec![build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, &f.params, None, false)];
+    let mut out = vec![build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, &f.params, exact_params, None, false)];
     if f.rest
         && let Some((_, last_t)) = f.params.last()
         && matches!(last_t, Ty::Array | Ty::ArrayOf(_))
@@ -693,8 +745,8 @@ fn function_variants(
         };
         let fixed = &f.params[..f.params.len() - 1];
         let zname = zero_name.as_deref().unwrap_or(&name);
-        out.push(build_function(f, zname, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, None, true));
-        out.push(build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, Some(&elem_ty), false));
+        out.push(build_function(f, zname, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, exact_params, None, true));
+        out.push(build_function(f, &name, owner, owner_head, place, unions, callbacks, wasm_module, raw_prefix, fixed, exact_params, Some(&elem_ty), false));
     }
     out
 }
@@ -923,7 +975,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             op_f.call = Call::Invoke;
             op_f.params = f.params[1..].to_vec();
             op_f.type_params = f.type_params.get(c.type_params.len()..).unwrap_or(&[]).to_vec();
-            for func in function_variants(&op_f, "operator()".into(), None, &owner, &tpl, Place::Member, unions, &callbacks, wasm_module, &raw_prefix) {
+            for func in function_variants(&op_f, "operator()".into(), None, &owner, &tpl, Place::Member, unions, &callbacks, wasm_module, &raw_prefix, &HashSet::new()) {
                 if !op_seen.insert(func.key) {
                     continue;
                 }
@@ -1021,7 +1073,13 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
                 }
                 let b_ad = is_adapted_param(bt, unions, &callbacks);
                 let c_ad = is_adapted_param(ct, unions, &callbacks);
-                if (b_ad && c_ad) || (b_ad && *ct == Ty::Any) || (c_ad && *bt == Ty::Any) {
+                let b_opt = matches!(bt, Ty::Nullable(..));
+                let c_opt = matches!(ct, Ty::Nullable(..));
+                if (b_ad && c_ad)
+                    || ((b_ad || b_opt) && *ct == Ty::Any)
+                    || ((c_ad || c_opt) && *bt == Ty::Any)
+                    || (matches!(bf.call, Call::Set(_)) && bf.call == cf.call)
+                {
                     diff = true;
                 } else {
                     return false;
@@ -1100,13 +1158,28 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         // The functions of the namespace it shares its name with, as its statics.
         let namespaced: Vec<Func> = class_statics.get(&c.name).cloned().unwrap_or_default();
         let all_funcs: Vec<Func> = c.funcs.iter().map(|f| with_self_args(f, c)).chain(again).chain(namespaced).collect();
+        let names: Vec<String> = all_funcs.iter().map(|f| cpp_name(f, ctor)).collect();
+        let subsumed: Vec<bool> = all_funcs
+            .iter()
+            .enumerate()
+            .map(|(idx, f)| {
+                all_funcs.iter().enumerate().any(|(j, g)| {
+                    j != idx && func_subsumed_by(f, g, &names[idx], &names[j], unions, &callbacks)
+                })
+            })
+            .collect();
         for (idx, f) in all_funcs.iter().enumerate() {
-            let raw_name = cpp_name(f, ctor);
-            if all_funcs.iter().enumerate().any(|(j, g)| {
-                j != idx && func_subsumed_by(f, g, &raw_name, &cpp_name(g, ctor), unions, &callbacks)
-            }) {
+            if subsumed[idx] {
                 continue;
             }
+            let raw_name = names[idx].clone();
+            let exact_params = exact_params_for(
+                f,
+                &raw_name,
+                all_funcs.iter().enumerate().filter(|(j, _)| *j != idx && !subsumed[*j]).map(|(j, g)| (g, names[j].as_str())),
+                unions,
+                &callbacks,
+            );
             let place = if Class::has_self(f) { Place::Member } else { Place::Static };
             let name = if place == Place::Static && instance.contains(&signature(f)) { format!("{raw_name}_static") } else { raw_name };
             let zero_name = if place == Place::Static
@@ -1123,7 +1196,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
                 emit_names.push("operator()".to_string());
             }
             for emit_name in emit_names {
-                for func in function_variants(f, emit_name, zero_name.clone(), &owner, &class_head, place, unions, &callbacks, wasm_module, &raw_prefix) {
+                for func in function_variants(f, emit_name, zero_name.clone(), &owner, &class_head, place, unions, &callbacks, wasm_module, &raw_prefix, &exact_params) {
                     // Overloads TypeScript tells apart and C++ cannot are the same C++ function.
                     if !seen.insert(func.key) {
                         continue;
@@ -1144,7 +1217,13 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             }
         }
         for (name, value) in &c.consts {
-            let ty = if value.starts_with('"') { "std::string_view" } else { "double" };
+            let ty = if value.starts_with('"') {
+                "std::string_view"
+            } else if matches!(value.as_str(), "true" | "false") {
+                "bool"
+            } else {
+                "double"
+            };
             members += &format!("    static constexpr {ty} {} = {value};\n", ident(name));
         }
         // Covariant conversion for generic classes: `Shape<RectConfig>` -> `Shape<ShapeConfig>`.
@@ -1199,7 +1278,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             && !own.contains("begin")
             && !own.contains("end")
         {
-            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret));
+            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret));
             members += &format!("    {it} begin() const;\n    ts::IterationEnd end() const {{ return {{}}; }}\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::begin() const {{ return {it}(ts_raw_js_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
@@ -1209,7 +1288,7 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
         if let Some(elem) = &c.iterates_async
             && !own.contains("iterate_async")
         {
-            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone() }, c).ret));
+            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret));
             members += &format!("    {it} iterate_async() const;\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::iterate_async() const {{ return {it}(ts::handle, ts_raw_js_async_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
@@ -1265,13 +1344,31 @@ pub fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec
             (space, name, f)
         })
         .collect();
+    let free_subsumed: Vec<bool> = free_funcs
+        .iter()
+        .enumerate()
+        .map(|(idx, (space, name, f))| {
+            free_funcs.iter().enumerate().any(|(j, (os, on, g))| {
+                j != idx && os == space && func_subsumed_by(f, g, name, on, unions, &callbacks)
+            })
+        })
+        .collect();
     for (idx, (space, name, f)) in free_funcs.iter().enumerate() {
-        if free_funcs.iter().enumerate().any(|(j, (os, on, g))| {
-            j != idx && os == space && func_subsumed_by(f, g, name, on, unions, &callbacks)
-        }) {
+        if free_subsumed[idx] {
             continue;
         }
-        for mut func in function_variants(f, name.clone(), None, "", "", Place::Free, unions, &callbacks, wasm_module, &raw_prefix) {
+        let exact_params = exact_params_for(
+            f,
+            name,
+            free_funcs
+                .iter()
+                .enumerate()
+                .filter(|(j, (os, _, _))| *j != idx && !free_subsumed[*j] && os == space)
+                .map(|(_, (_, on, g))| (*g, on.as_str())),
+            unions,
+            &callbacks,
+        );
+        for mut func in function_variants(f, name.clone(), None, "", "", Place::Free, unions, &callbacks, wasm_module, &raw_prefix, &exact_params) {
             if let Some(space) = &space {
                 let wrap = |text: &str| if text.is_empty() { String::new() } else { format!("namespace {space} {{\n{text}}}\n") };
                 func.key = format!("{space}::{}", func.key);
@@ -1481,7 +1578,21 @@ fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resolved_opaque:
     let mut enum_specs = String::new();
     for (id, (name, values)) in m.enums.iter().enumerate() {
         let mut seen = std::collections::HashSet::new();
-        let members: Vec<String> = values.iter().map(|v| ident(if v.is_empty() { "empty" } else { v })).map(|v| if seen.insert(v.clone()) { v } else { format!("{v}_{}", seen.len()) }).collect();
+        let members: Vec<String> = values
+            .iter()
+            .map(|v| ident(if v.is_empty() { "empty" } else { v }))
+            .map(|mut v| {
+                if !seen.insert(v.clone()) {
+                    let base = v;
+                    let mut i = 2;
+                    while !seen.insert(format!("{base}_{i}")) {
+                        i += 1;
+                    }
+                    v = format!("{base}_{i}");
+                }
+                v
+            })
+            .collect();
         types += &format!("enum class {name} : int32_t {{ {} }};\n", members.join(", "));
         enum_specs += &format!(
             "template <>\ninline constexpr int32_t ts::enum_id<::{ns_prefix}{name}> = {id};\n\

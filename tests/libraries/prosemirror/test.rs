@@ -8,7 +8,6 @@ use bindings::prosemirror_model::*;
 // its Methods trait): a glob import of both is ambiguous.
 use bindings::prosemirror_model::SchemaSpec;
 use bindings::prosemirror_state::*;
-use bindings::prosemirror_transform::*;
 use bindings::prosemirror_view::*;
 use bindings::*;
 use std::cell::{Cell, RefCell};
@@ -141,12 +140,7 @@ fn state_and_transactions(schema: &Schema<JsValue, JsValue>, doc: &Node) {
 
     // Marks over a range, by a transform step: bold the word "hello".
     let strong = schema.mark("strong", None);
-    // FINDING 18: `addMark(..): this` is bound as returning `Transform`, not the
-    // Transaction it is called on, so calls cannot be chained into `apply`:
-    // each transaction is kept in a variable (the call changes it in place).
-    let tr = next.tr();
-    tr.add_mark(5.0, 10.0, &strong);
-    let bolded = next.apply(&tr);
+    let bolded = next.apply(&next.tr().add_mark(5.0, 10.0, &strong));
     let first = bolded.doc().child(0.0);
     check!(first.child_count() == 2.0 && first.child(1.0).text().as_deref() == Some("hello"));
     check!(first.child(1.0).marks().len() == 1 && first.child(0.0).marks().is_empty());
@@ -226,8 +220,8 @@ fn editor_view(doc: &Node) {
     let props = DirectEditorProps::create();
     props.set_state(&state);
     props.set_dispatch_transaction(Some(&dispatch));
-    let place = JsValue::from(&test_page::element("stage"));
-    let view = EditorView::new(Some(&place), &props);
+    let place = EditorViewNewPlaceObject::create().with_mount(&test_page::element("stage"));
+    let view = EditorView::new(Some(EditorViewNewPlaceOrDistDOMNode::from(place)), &props);
     *view_cell.borrow_mut() = Some(view.clone());
     check!(view.state().doc().js_eq(doc));
     check!(view.editable() && !view.is_destroyed());

@@ -75,12 +75,11 @@ export fn start() void {
     const n2 = logs_buf[order[2]][0..logs_len[order[2]]];
     state.check(std.mem.eql(u8, n0, "a.log") and std.mem.eql(u8, n1, "b.log") and std.mem.eql(u8, n2, "c.log"));
 
-    const utf8 = b.JsString.from("utf8").as(b.global_BufferEncoding);
     const combined = b.path.join(&.{ out_dir, "combined.log" });
     for (order) |k| {
         const name = logs_buf[k][0..logs_len[k]];
         state.check(b.path.extname(name).eql(".log"));
-        const chunk = b.fs.readFileSyncOrBufferEncoding(b.path.join(&.{ in_dir, name }), utf8);
+        const chunk = b.fs.readFileSyncOrBufferEncoding(b.path.join(&.{ in_dir, name }), .{ .BufferEncoding = .utf8 });
         b.fs.appendFileSync(combined, chunk, null);
     }
 
@@ -88,13 +87,13 @@ export fn start() void {
     state.check(state.stages == 2);
 
     // Stage 3: verify
-    const comb_text = b.fs.readFileSyncOrBufferEncoding(combined, utf8);
+    const comb_text = b.fs.readFileSyncOrBufferEncoding(combined, .{ .BufferEncoding = .utf8 });
     var comb_buf: [128]u8 = undefined;
     const comb_slice = comb_text.copy(&comb_buf);
     state.check(b.fs.statSync(combined).getSize() == 21 and std.mem.indexOf(u8, comb_slice, "200 OK") != null);
 
     var enoent_caught = false;
-    if (b.jsTry(b.fs.readFileSyncOrBufferEncoding(b.path.join(&.{ out_dir, "missing.log" }), utf8))) |_| {} else |_| {
+    if (b.jsTry(b.fs.readFileSyncOrBufferEncoding(b.path.join(&.{ out_dir, "missing.log" }), .{ .BufferEncoding = .utf8 }))) |_| {} else |_| {
         if (b.jsTakeError()) |e| {
             var mbuf: [256]u8 = undefined;
             const msg_s = std.fmt.bufPrint(&mbuf, "{f}", .{b.jsErrorMessage(e)}) catch "";

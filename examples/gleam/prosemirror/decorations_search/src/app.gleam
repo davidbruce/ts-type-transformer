@@ -332,7 +332,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view = editor_view.new(Some(pm_rt.dynamic(mount)), props)
+  let view = editor_view.new(Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))), props)
   pm_rt.ref_set(view_ref, Some(view))
   sync_meta(doc, search_key, editor_view.get_state(view), pm_rt.ref_get(active_ref))
 

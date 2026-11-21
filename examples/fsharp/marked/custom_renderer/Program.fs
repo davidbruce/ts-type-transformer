@@ -43,10 +43,35 @@ let ext =
 
 let customInstance = Marked.Create ext
 let customTokens = customInstance.lexer md
+let private tokenType = function
+    | Token.Blockquote _ -> "blockquote"
+    | Token.Br _ -> "br"
+    | Token.Checkbox _ -> "checkbox"
+    | Token.Code _ -> "code"
+    | Token.Codespan _ -> "codespan"
+    | Token.Def _ -> "def"
+    | Token.Del _ -> "del"
+    | Token.Em _ -> "em"
+    | Token.Escape _ -> "escape"
+    | Token.Heading _ -> "heading"
+    | Token.Hr _ -> "hr"
+    | Token.HTML _ -> "html"
+    | Token.Image _ -> "image"
+    | Token.Link _ -> "link"
+    | Token.List _ -> "list"
+    | Token.ListItem _ -> "list_item"
+    | Token.Paragraph _ -> "paragraph"
+    | Token.Space _ -> "space"
+    | Token.Strong _ -> "strong"
+    | Token.Table _ -> "table"
+    | Token.Tag _ -> "html"
+    | Token.Text _ -> "text"
+    | Token.Generic g -> g.``type``
+
 customInstance.walkTokens (
     !^customTokens,
     fun t ->
-        seen <- (unbox<Tokens.Generic> t).``type`` :: seen
+        seen <- tokenType t :: seen
         !^()
 ) |> ignore
 let visited = List.rev seen

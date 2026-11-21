@@ -55,9 +55,14 @@ export fn start() void {
     var bytes_buf: [16]u8 = undefined;
 
     for (0..count) |i| {
-        const g = tokens.getAt(@floatFromInt(i)).as(m.tokens.Generic);
-        const kind_str = g.getType().copy(&kind_buf);
-        const raw_str = g.getRaw().copy(&raw_buf);
+        const tok = tokens.getAt(@floatFromInt(i)).?;
+        const kind_str = switch (tok) {
+            .Tokens_Generic => |g| g.getType().copy(&kind_buf),
+            inline else => |x| @TypeOf(x).type,
+        };
+        const raw_str = switch (tok) {
+            inline else => |x| x.getRaw().copy(&raw_buf),
+        };
 
         var sp: usize = 0;
         for (raw_str) |ch| {

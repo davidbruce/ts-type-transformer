@@ -381,6 +381,26 @@ pub const Lent = struct {
         return obj(Base_, v);
     }
 
+    fn elemCompatible(comptime From_: type, comptime To_: type) bool {
+        if (From_ == To_) return true;
+        if (hasDecl(To_, "_is_js_value")) return true;
+        if (canUpcast(From_, To_)) return true;
+        if (@typeInfo(To_) == .optional) {
+            const Child_ = @typeInfo(To_).optional.child;
+            if (@typeInfo(From_) == .optional) return elemCompatible(@typeInfo(From_).optional.child, Child_);
+            return elemCompatible(From_, Child_);
+        }
+        return false;
+    }
+
+    fn tupleCompatible(comptime From_: []const type, comptime To_: []const type) bool {
+        if (From_.len != To_.len) return false;
+        inline for (From_, To_) |F_, T_| {
+            if (!elemCompatible(F_, T_)) return false;
+        }
+        return true;
+    }
+
     pub fn array(v: anytype) Lent {
         const T_ = @TypeOf(v);
         if (comptime (T_ == JsArray or hasDecl(T_, "_is_js_array") or hasDecl(T_, "_elem_type") or hasDecl(T_, "_tuple_types"))) return .{ .h = v.h, .own = false };
@@ -398,7 +418,7 @@ pub const Lent = struct {
 
     pub fn arrayOf(comptime E_: type, v: anytype) Lent {
         const T_ = @TypeOf(v);
-        if (comptime (T_ == JsArrayOf(E_) or T_ == JsArray or hasDecl(T_, "_elem_type") or hasDecl(T_, "_is_js_array"))) return .{ .h = v.h, .own = false };
+        if (comptime (T_ == JsArrayOf(E_) or T_ == JsArray or (hasDecl(T_, "_elem_type") and elemCompatible(T_._elem_type, E_)) or hasDecl(T_, "_is_js_array"))) return .{ .h = v.h, .own = false };
         if (comptime isRawHandle(T_)) return .{ .h = @intCast(v.h), .own = false };
         if (comptime isSeq(T_)) return .{ .h = JsArrayOf(E_).of(v).h, .own = true };
         @compileError("expected array of " ++ @typeName(E_) ++ ", got " ++ @typeName(T_));
@@ -413,7 +433,7 @@ pub const Lent = struct {
 
     pub fn tuple(comptime Types_: []const type, v: anytype) Lent {
         const T_ = @TypeOf(v);
-        if (comptime (T_ == JsTuple(Types_) or T_ == JsArray or hasDecl(T_, "_tuple_types") or hasDecl(T_, "_is_js_array"))) return .{ .h = v.h, .own = false };
+        if (comptime (T_ == JsTuple(Types_) or T_ == JsArray or (hasDecl(T_, "_tuple_types") and tupleCompatible(T_._tuple_types, Types_)) or hasDecl(T_, "_is_js_array"))) return .{ .h = v.h, .own = false };
         if (comptime isRawHandle(T_)) return .{ .h = @intCast(v.h), .own = false };
         if (comptime isSeq(T_)) return .{ .h = JsTuple(Types_).of(v).h, .own = true };
         @compileError("expected tuple, got " ++ @typeName(T_));
@@ -432,7 +452,8 @@ pub const Lent = struct {
         if (comptime isRawHandle(T_)) return .{ .h = @intCast(v.h), .own = false };
         if (@typeInfo(T_) == .@"fn") return .{ .h = L_.fromFn(v).h, .own = true };
         if (comptime isTwoTupleFn(T_)) return .{ .h = L_.from(v[0], v[1]).h, .own = true };
-        if (comptime isHandle(T_)) return .{ .h = @intCast(v.h), .own = false };
+        if (comptime (hasDecl(T_, "_listener_event") and elemCompatible(L_._listener_event, T_._listener_event))) return .{ .h = @intCast(v.h), .own = false };
+        if (comptime (isHandle(T_) and hasDecl(T_, "handleEvent"))) return .{ .h = @intCast(v.h), .own = false };
         @compileError("expected " ++ @typeName(L_) ++ ", got " ++ @typeName(T_));
     }
 

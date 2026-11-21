@@ -8,9 +8,16 @@ const WalkState = struct {
     count: usize = 0,
 };
 
-fn walkToken(state: *WalkState, tok: m.JsValue) ?m.void_or_void_or_Promise_array_or_Promise {
+fn walkToken(state: *WalkState, tok: m.Token) ?m.void_or_void_or_Promise_array_or_Promise {
     if (state.count < state.types.len) {
-        const s = tok.as(m.tokens.Generic).getType().copy(&state.types[state.count]);
+        const s = switch (tok) {
+            .Tokens_Generic => |g| g.getType().copy(&state.types[state.count]),
+            inline else => |x| blk: {
+                const name = @TypeOf(x).type;
+                @memcpy(state.types[state.count][0..name.len], name);
+                break :blk state.types[state.count][0..name.len];
+            },
+        };
         state.lens[state.count] = s.len;
         state.count += 1;
     }

@@ -56,21 +56,51 @@ nogfm.gfm <- Some false
 check (not ((html (marked ("~~gone~~", nogfm))).Contains "<del>")) "gfm false"
 
 // The lexer: tokens with their types and raw text.
+let tokenKind = function
+    | Token.Blockquote _ -> "blockquote"
+    | Token.Br _ -> "br"
+    | Token.Checkbox _ -> "checkbox"
+    | Token.Code _ -> "code"
+    | Token.Codespan _ -> "codespan"
+    | Token.Def _ -> "def"
+    | Token.Del _ -> "del"
+    | Token.Em _ -> "em"
+    | Token.Escape _ -> "escape"
+    | Token.Heading _ -> "heading"
+    | Token.Hr _ -> "hr"
+    | Token.HTML _ -> "html"
+    | Token.Image _ -> "image"
+    | Token.Link _ -> "link"
+    | Token.List _ -> "list"
+    | Token.ListItem _ -> "list_item"
+    | Token.Paragraph _ -> "paragraph"
+    | Token.Space _ -> "space"
+    | Token.Strong _ -> "strong"
+    | Token.Table _ -> "table"
+    | Token.Tag _ -> "tag"
+    | Token.Text _ -> "text"
+    | Token.Generic g -> g.``type``
+
 let tokens = Lexer.lex "# Hi\n\npara *x*\n\n- a\n- b\n"
-let kinds = [ for i in 0 .. int tokens.length - 1 -> (unbox<Tokens.Generic> tokens.[float i]).``type`` ] // FINDING 4: a Token has no way to read its type
+let kinds = [ for i in 0 .. int tokens.length - 1 -> tokenKind tokens.[float i] ]
 check (kinds = [ "heading"; "space"; "paragraph"; "space"; "list" ]) "token types"
-let heading: Tokens.Heading = unbox tokens.[0.0]
+let heading = match tokens.[0.0] with Token.Heading h -> h | _ -> failwith "expected heading"
 check (heading.depth = 1.0 && heading.text = "Hi") "heading token"
 check (heading.tokens.Count = 1) "its inline tokens"
-let para: Tokens.Paragraph = unbox tokens.[2.0]
+let para = match tokens.[2.0] with Token.Paragraph p -> p | _ -> failwith "expected paragraph"
 check (para.text = "para *x*") "paragraph token"
-check ((unbox<Tokens.Generic> para.tokens.[1]).``type`` = "em") "inline em token"
-let lst: Tokens.List = unbox tokens.[4.0]
+check (tokenKind para.tokens.[1] = "em") "inline em token"
+let lst = match tokens.[4.0] with Token.List l -> l | _ -> failwith "expected list"
 check (not lst.ordered && lst.items.Count = 2) "list token"
 check (lst.items.[1].text = "b") "list item"
 
+let htmlToks = Lexer.lex "<div>hi</div>\n"
+check (match htmlToks.[0.0] with Token.HTML h -> h.block | _ -> false) "html block token case test"
+let tagToks = Lexer.lexInline "<span>hi</span>"
+check (match tagToks.[0] with Token.Tag t -> t.``type`` = "html" | _ -> false) "html tag token case test"
+
 let inlTokens = Lexer.lexInline "a `b`"
-check (inlTokens.Count = 2 && (unbox<Tokens.Generic> inlTokens.[1]).``type`` = "codespan") "lexInline"
+check (inlTokens.Count = 2 && tokenKind inlTokens.[1] = "codespan") "lexInline"
 
 let tbl: Tokens.Table = unbox (Lexer.lex "| a | b |\n|:--|--:|\n| 1 | 2 |\n").[0.0]
 check (tbl.header.Count = 2 && tbl.rows.Count = 1) "table token"

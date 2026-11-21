@@ -1,6 +1,6 @@
 #![no_main]
 
-use node::{GlobalBufferEncoding, JsValue, fs, path};
+use node::{BufferEncoding, fs, path};
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -38,8 +38,7 @@ pub extern "C" fn start() {
     c.check(fs::exists_sync(&*notes) && st1.is_file() && st1.size() == 11.0);
 
     fs::append_file_sync(&*notes, "gamma\n", None);
-    let utf8 = JsValue::from("utf8").unchecked_into::<GlobalBufferEncoding>();
-    let text = fs::read_file_sync_or_buffer_encoding(&*notes, &utf8);
+    let text = fs::read_file_sync_or_buffer_encoding(&*notes, BufferEncoding::Utf8);
     let st2 = fs::stat_sync(&*notes);
     c.check(text == "alpha\nbeta\ngamma\n" && st2.size() == 17.0);
 
@@ -51,7 +50,7 @@ pub extern "C" fn start() {
     fs::rename_sync(&*backup, &*archive);
     c.check(!fs::exists_sync(&*backup) && fs::exists_sync(&*archive));
 
-    let arch_text = fs::read_file_sync_or_buffer_encoding(&*archive, &utf8);
+    let arch_text = fs::read_file_sync_or_buffer_encoding(&*archive, BufferEncoding::Utf8);
     c.check(arch_text == text);
 
     fs::unlink_sync(&*archive);

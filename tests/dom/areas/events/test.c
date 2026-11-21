@@ -82,9 +82,9 @@ static Event make(const char* type, bool bubbles, bool cancelable) {
     return Event_new(type, init);
 }
 
-static Rec outer_bubble = { 'B' }, outer_capture = { 'C' }, inner = { 'I' }, inner2 = { 'J' };
-static Rec once_rec = { 'O' }, signal_rec = { 'S' }, passive_rec = { 'P' }, removed = { 'R' };
-static Rec custom_rec, mouse_rec, key_rec, doc_rec = { 'D' };
+static Rec outer_bubble = { .tag = 'B' }, outer_capture = { .tag = 'C' }, inner = { .tag = 'I' }, inner2 = { .tag = 'J' };
+static Rec once_rec = { .tag = 'O' }, signal_rec = { .tag = 'S' }, passive_rec = { .tag = 'P' }, removed = { .tag = 'R' };
+static Rec custom_rec, mouse_rec, key_rec, doc_rec = { .tag = 'D' };
 
 __attribute__((export_name("run"))) void run(void) {
     Document doc = get_document();

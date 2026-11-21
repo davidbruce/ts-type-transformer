@@ -56,9 +56,13 @@ pub fn main() {
   // ---- fs: a temporary directory under target/e2e ----
   let dir = fs.mkdtemp_sync("target/e2e/gleam-node-", None)
   let file = path.join([dir, "hello.txt"])
-  // FINDING 7: a read with an encoding (utf8) cannot be made: GlobalBufferEncoding
-  // is an opaque type with no values. Read as a Buffer, then to_string.
   let read = fn(p) {
+    fs.read_file_sync_or_buffer_encoding(
+      t.PathOrFileDescriptorString(p),
+      t.ReadFileSyncOptionsWithStringEncodingOrBufferEncodingBufferEncoding(t.BufferEncodingUtf8),
+    )
+  }
+  let read_buf = fn(p) {
     buffer.to_string(fs.read_file_sync(t.PathOrFileDescriptorString(p), None), None, None, None)
   }
   let write = fn(p, text) {
@@ -78,6 +82,7 @@ pub fn main() {
     passed
     + check(fs.exists_sync(str(file)), "writeFileSync")
     + check(read(file) == "hello, node", "readFileSync")
+    + check(read_buf(file) == "hello, node", "readFileSync as Buffer")
   fs.append_file_sync(
     t.PathOrFileDescriptorString(file),
     t.StringOrUint8ArrayString("!\nsecond line"),

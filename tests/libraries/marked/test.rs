@@ -23,9 +23,32 @@ fn html(r: StringOrPromise) -> String {
     }
 }
 
-// A token out of a token list, as the generic token every token is.
-fn token(list: &TokensList, i: usize) -> tokens::Generic {
-    tokens::Generic(list.at(i as f64).unwrap().0.clone())
+fn token_type(t: &Token) -> String {
+    match t {
+        Token::Blockquote(_) => tokens::Blockquote::TYPE.into(),
+        Token::Br(_) => tokens::Br::TYPE.into(),
+        Token::Checkbox(_) => tokens::Checkbox::TYPE.into(),
+        Token::Code(_) => tokens::Code::TYPE.into(),
+        Token::Codespan(_) => tokens::Codespan::TYPE.into(),
+        Token::Def(_) => tokens::Def::TYPE.into(),
+        Token::Del(_) => tokens::Del::TYPE.into(),
+        Token::Em(_) => tokens::Em::TYPE.into(),
+        Token::Escape(_) => tokens::Escape::TYPE.into(),
+        Token::Heading(_) => tokens::Heading::TYPE.into(),
+        Token::Hr(_) => tokens::Hr::TYPE.into(),
+        Token::HTML(_) => tokens::HTML::TYPE.into(),
+        Token::Image(_) => tokens::Image::TYPE.into(),
+        Token::Link(_) => tokens::Link::TYPE.into(),
+        Token::List(_) => tokens::List::TYPE.into(),
+        Token::ListItem(_) => tokens::ListItem::TYPE.into(),
+        Token::Paragraph(_) => tokens::Paragraph::TYPE.into(),
+        Token::Space(_) => tokens::Space::TYPE.into(),
+        Token::Strong(_) => tokens::Strong::TYPE.into(),
+        Token::Table(_) => tokens::Table::TYPE.into(),
+        Token::Tag(_) => tokens::Tag::TYPE.into(),
+        Token::Text(_) => tokens::Text::TYPE.into(),
+        Token::Generic(g) => g.type_(),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -73,19 +96,17 @@ pub extern "C" fn run() {
 
     // The lexer: tokens of a document, the type of each, and their children.
     let list = Lexer::<String, String>::lex::<String, String>("# Head\n\npara with **bold**\n\n- a\n- b\n", None);
-    let types: Vec<String> = (0..list.length() as usize).map(|i| token(&list, i).type_()).collect();
+    let types: Vec<String> = (0..list.length() as usize).map(|i| token_type(&list.at(i as f64).unwrap())).collect();
     check!(types == ["heading", "space", "paragraph", "space", "list"]);
-    check!(token(&list, 0).type_() == "heading");
-    let heading = tokens::Heading(list.at(0.0).unwrap().0.clone());
+    let Token::Heading(heading) = list.at(0.0).unwrap() else { panic!("expected heading") };
     check!(heading.depth() == 1.0 && heading.text() == "Head");
-    let para = (0..list.length() as usize).map(|i| token(&list, i)).find(|t| t.type_() == "paragraph").unwrap();
-    let children = para.tokens().unwrap();
+    let Token::Paragraph(para) = list.at(2.0).unwrap() else { panic!("expected paragraph") };
+    let children = para.tokens();
     check!(children.len() == 2);
-    let child_types: Vec<String> = children.iter().map(|c| tokens::Generic(c.0.clone()).type_()).collect();
+    let child_types: Vec<String> = children.iter().map(|c| token_type(&c)).collect();
     check!(child_types == ["text", "strong"]);
     check!(para.raw().starts_with("para with"));
-    let items = (0..list.length() as usize).map(|i| token(&list, i)).find(|t| t.type_() == "list").unwrap();
-    let list_token = tokens::List(items.0.clone());
+    let Token::List(list_token) = list.at(4.0).unwrap() else { panic!("expected list") };
     check!(list_token.ordered() == false && list_token.items().len() == 2);
     check!(list_token.items().get(1).text() == "b");
 
@@ -97,18 +118,17 @@ pub extern "C" fn run() {
     check!(m.defaults().breaks() == Some(true));
     check!(!html(marked_with_opt_marked_options("x\ny", None)).contains("<br>"));
     let toks = m.lexer_2("hi *there*", None);
-    check!(toks.length() == 1.0 && token(&toks, 0).type_() == "paragraph");
+    check!(toks.length() == 1.0 && matches!(toks.at(0.0), Some(Token::Paragraph(_))));
 
     // A walkTokens extension sees every token, and may change them.
     let seen = Rc::new(Cell::new(0));
     let ext = MarkedExtension::<String, String>::create();
     let walk = TokenToVoidOrPromiseOrVoidOrPromiseArrayFn::new({
         let seen = seen.clone();
-        move |t: JsValue| {
-            let g = tokens::Generic(t.0.clone());
+        move |t: Token| {
             seen.set(seen.get() + 1);
-            if g.type_() == "heading" {
-                tokens::Heading(t.0.clone()).set_depth(2.0);
+            if let Token::Heading(h) = t {
+                h.set_depth(2.0);
             }
             None
         }

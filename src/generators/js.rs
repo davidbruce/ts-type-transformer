@@ -15,6 +15,10 @@ pub(crate) fn js_test(test: &str, discriminant: Option<&str>, js_refs: &BTreeMap
         "instanceof" => format!("v instanceof {}", global(js_refs.get(arg).map_or(arg, String::as_str))),
         "has" => format!("typeof v === 'object' && v !== null && {arg:?} in v"),
         "tag" => format!("v != null && String(v[{:?}]) === {arg:?}", discriminant.unwrap_or_default()),
+        "tag_has" => arg
+            .rsplit_once(':')
+            .map(|(v, p)| format!("v != null && String(v[{:?}]) === {v:?} && {p:?} in v", discriminant.unwrap_or_default()))
+            .unwrap_or_else(|| "false".into()),
         _ => "false".into(),
     }
 }
@@ -68,5 +72,20 @@ pub(crate) fn call_expr(call: &Call, self_expr: &str, args: &[String]) -> String
         Call::IndexSet => format!("{self_expr}[{first}] = {second}"),
         // The function is a handle: `args[0]`, with no comma in it.
         Call::Apply => format!("({first})({})", args.get(1..).unwrap_or_default().join(", ")),
+    }
+}
+
+/// Collapses trailing `undefined`-able optional arguments of a call into
+/// `...<trim_fn>([...])` so omitted optional arguments are not passed as explicit `undefined`.
+pub(crate) fn trim_trailing_undef(call: &Call, rest: bool, args: &mut Vec<String>, may_undef: &[bool], trim_fn: &str) {
+    let is_call = matches!(call, Call::Method(_) | Call::New(_) | Call::Static(_) | Call::Invoke | Call::Construct | Call::Apply);
+    let arg_start = usize::from(matches!(call, Call::Apply));
+    if is_call && !rest && args.len() > arg_start && may_undef.last() == Some(&true) {
+        let mut cut = args.len();
+        while cut > arg_start && may_undef[cut - 1] {
+            cut -= 1;
+        }
+        let tail: Vec<String> = args.drain(cut..).collect();
+        args.push(format!("...{trim_fn}([{}])", tail.join(", ")));
     }
 }
