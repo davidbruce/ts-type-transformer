@@ -1,0 +1,421 @@
+// Lowering passes. Each removes one TypeScript construct from the IR, for
+// targets that cannot express it. Passes that need semantics ask the checker
+// through `Front`; the rest are plain IR rewrites.
+
+mod classes;
+mod eval;
+mod generics;
+mod hoist;
+mod names;
+mod overloads;
+mod unions;
+mod walk;
+
+pub use generics::keyed_map;
+pub use names::{pascal_types, rename, rename_everywhere};
+pub use walk::visit;
+
+use std::collections::{HashMap, HashSet};
+
+use crate::front::Front;
+use crate::ir::*;
+
+use classes::{flatten, mark_class_refs, pair_classes, structural_extends};
+use eval::{drop_unreachable_overloads, evaluate, expand_aliases, expand_keyed, inline_object_bases, nominal_constraints, splice_union_aliases};
+use generics::{erase_generics, literals, nullable};
+use hoist::{cut_recursive_dictionary, hoist};
+use overloads::{expand_functions, expand_members, mark_overloads, rename_functions, rename_members};
+use unions::{absorb_enums, annotate_unions, collect_declared_names, flatten_unions, merge_array_members, name_unions};
+use walk::{each_member_list, walk, walk_signature};
+
+// What to lower. Built from a config file; see config.rs.
+#[derive(Clone, Copy)]
+pub struct Options {
+    pub classes: bool,
+    pub typeops: bool,
+    pub intersections: bool,
+    pub inheritance: bool,
+    pub generics: bool,
+    pub aliases: bool,
+    pub constraints: bool,
+    // A type parameter meets a constraint only with that one (`constraints = "exact"`).
+    pub exact_constraints: bool,
+    pub nullable: bool,
+    pub literals: bool,
+    pub anonymous: bool,
+    pub optionals: bool,
+    pub param_unions: bool,
+    pub unions: bool,
+    pub overloads: bool,
+    pub keyed: bool,
+    pub redeclared: bool,
+    // Keep keyed signatures generic, with their map (`keyed_params = "map"`).
+    pub map_keyed: bool,
+    // Unions become named declarations (`unions = "name"`).
+    pub name_unions: bool,
+    // Most keys a keyed signature is expanded over.
+    pub keyed_limit: usize,
+    // Most overloads one signature may expand into through union parameters.
+    pub union_param_limit: usize,
+    // Largest merged intersection that is written out inline.
+    pub intersection_limit: usize,
+    // Joins the parts of generated names.
+    pub separator: &'static str,
+    // Overload names: `f_2`, `f_3` instead of `f_with_x`.
+    pub numbered_overloads: bool,
+    // Generated type names in PascalCase: `BooleanOrAddEventListenerOptions`.
+    pub pascal_types: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, aliases: false, constraints: false, exact_constraints: false, nullable: false,
+            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
+            union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false, pascal_types: false,
+        }
+    }
+}
+
+impl Options {
+    // Whether the construct with this config key is lowered.
+    pub fn slot(&mut self, key: &str) -> Option<&mut bool> {
+        Some(match key {
+            "classes" => &mut self.classes,
+            "type_ops" => &mut self.typeops,
+            "intersections" => &mut self.intersections,
+            "inheritance" => &mut self.inheritance,
+            "generics" => &mut self.generics,
+            "aliases" => &mut self.aliases,
+            "constraints" => &mut self.constraints,
+            "nullable" => &mut self.nullable,
+            "literals" => &mut self.literals,
+            "anonymous" => &mut self.anonymous,
+            "optional_params" => &mut self.optionals,
+            "union_params" => &mut self.param_unions,
+            "unions" => &mut self.unions,
+            "overloads" => &mut self.overloads,
+            "keyed_params" => &mut self.keyed,
+            "redeclarations" => &mut self.redeclared,
+            _ => return None,
+        })
+    }
+}
+
+pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
+    front.merge_intersections = o.intersections;
+    front.intersection_limit = o.intersection_limit;
+    front.expand_keyed = o.keyed;
+    front.map_keyed = o.map_keyed;
+    front.keyed_limit = o.keyed_limit;
+    // Before widening and erasing lose what marks them.
+    mark_overloads(decls);
+    // An inherited member serves every subtype, where a target has subtypes.
+    if o.redeclared && !o.inheritance {
+        let dropped = drop_redeclared(decls);
+        *front.stats.entry("dropped: member redeclared as inherited".into()).or_default() += dropped;
+    }
+    // `keyed_params = "map"` keeps a map these bindings declare; one they do
+    // not (the DOM's tag map, for a library) has no keys here: expanded.
+    if o.keyed || o.map_keyed {
+        expand_keyed(front, decls, o);
+    }
+    if o.classes {
+        pair_classes(decls);
+    }
+    if o.inheritance {
+        flatten(front, decls);
+    }
+    if o.classes {
+        structural_extends(decls, o.inheritance);
+    }
+    if o.keyed || o.map_keyed {
+        drop_unreachable_overloads(decls);
+    }
+    if o.typeops || o.intersections {
+        evaluate(front, decls, o);
+        flatten_unions(decls);
+        inline_object_bases(front, decls);
+        // And the overloads evaluating made (`typeof merge`).
+        mark_overloads(decls);
+    }
+    if o.aliases {
+        expand_aliases(front, decls);
+    }
+    if o.generics {
+        erase_generics(decls, o.map_keyed);
+    }
+    if o.nullable {
+        walk(decls, &mut |t, _| {
+            nullable(t);
+            true
+        });
+    }
+    if o.literals {
+        let widened = literals(decls, o.separator);
+        *front.stats.entry("widened: literal -> primitive".into()).or_default() += widened;
+    }
+    // Whether hoisted or kept inline.
+    walk(decls, &mut |t, _| {
+        cut_recursive_dictionary(t);
+        true
+    });
+    if o.anonymous {
+        hoist(decls, o.separator);
+    }
+    if o.optionals || o.param_unions {
+        each_member_list(decls, &mut |members| expand_members(members, o));
+        expand_functions(decls, o);
+    }
+    if o.unions {
+        walk(decls, &mut |t, _| {
+            match t {
+                Type::Union(parts) => match front.common_supertype(parts) {
+                    Some(sup) => {
+                        front.count("widened: union -> common supertype");
+                        *t = sup;
+                    }
+                    None => {
+                        front.count("erased: union");
+                        *t = Type::Erased("union");
+                    }
+                },
+                Type::Intersection(..) => {
+                    front.count("erased: intersection");
+                    *t = Type::Erased("intersection");
+                }
+                _ => {}
+            }
+            true
+        });
+    }
+    if o.name_unions {
+        // Merging arrays can bring a union alias next to its own members: a few rounds settle it.
+        for _ in 0..3 {
+            splice_union_aliases(decls);
+            flatten_unions(decls);
+            merge_array_members(decls);
+        }
+        absorb_enums(decls);
+        name_unions(decls, o.separator);
+    }
+    if o.overloads {
+        each_member_list(decls, &mut |members| rename_members(members, o));
+        // A renamed overload is of its package (leaflet's `circle_with_radius`).
+        for (old, new) in rename_functions(decls, o) {
+            if let Some(p) = front.package_of_name.get(&old).cloned() {
+                front.package_of_name.insert(new.clone(), p);
+            }
+            if let Some(origin) = front.origin_of_name.get(&old).cloned() {
+                front.origin_of_name.insert(new, origin);
+            }
+        }
+    }
+    if o.classes {
+        mark_class_refs(decls);
+    }
+    if o.constraints {
+        nominal_constraints(front, decls, o.exact_constraints);
+    }
+    prune_bundled(decls);
+    readonly_globals(decls);
+    annotate_unions(front, decls);
+}
+
+// A global `var` that the global object has read-only is read-only:
+// lib.dom's `declare var document: Document` is `Window`'s `readonly
+// document`, the global object's interface being what `window` or `self` is
+// (`declare var self: Window & typeof globalThis`), with what it extends.
+// A namespace's variables are its object's, read-only (`CSS.highlights`).
+// A class's `prototype` is read-only.
+fn readonly_globals(decls: &mut [Decl]) {
+    let interfaces: HashMap<String, &Interface> = decls.iter().filter_map(|d| if let Decl::Interface(i) = d { Some((i.name.clone(), i)) } else { None }).collect();
+    let mut scopes: Vec<String> = Vec::new();
+    for d in decls.iter() {
+        if let Decl::Var(v) = d
+            && matches!(v.name.as_str(), "window" | "self")
+        {
+            let mut t = v.ty.clone();
+            visit(&mut t, &mut |x| {
+                if let Type::Ref(r) = x
+                    && interfaces.contains_key(&r.name)
+                {
+                    scopes.push(r.name.clone());
+                }
+                true
+            });
+        }
+    }
+    let mut readonly: HashSet<String> = HashSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    while let Some(name) = scopes.pop() {
+        let Some(i) = interfaces.get(&name).filter(|_| seen.insert(name.clone())) else { continue };
+        readonly.extend(i.members.iter().filter(|m| m.kind == MemberKind::Property && m.readonly).map(|m| m.name.clone()));
+        scopes.extend(i.ancestors.iter().cloned());
+        for e in &i.extends {
+            if let Type::Ref(r) = e {
+                scopes.push(r.name.clone());
+            }
+        }
+    }
+    for d in decls.iter_mut() {
+        // A class's static side has its `prototype` read-only (`declare var
+        // SVGMatrix: { prototype: DOMMatrix; new(): DOMMatrix }`).
+        if let Decl::Var(v) = d
+            && let Type::Object(members) = &mut v.ty
+        {
+            members.iter_mut().filter(|m| m.name == "prototype" && m.kind == MemberKind::Property).for_each(|m| m.readonly = true);
+        }
+        match d {
+            Decl::Var(v) if readonly.contains(&v.name) => v.readonly = true,
+            Decl::Namespace(n) => {
+                for d in n.decls.iter_mut() {
+                    if let Decl::Var(v) = d {
+                        v.readonly = true;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+// A declaration a bundler renamed (rollup's `BarSeriesOption$1`), once what
+// it was for has its members (the export, merged with it), is gone; so are
+// the types made of its own, once only it had them.
+fn prune_bundled(decls: &mut Vec<Decl>) {
+    let mut gone: Vec<String> = Vec::new();
+    loop {
+        let mut used: HashSet<String> = HashSet::new();
+        walk(decls, &mut |t, _| {
+            if let Type::Ref(r) = t {
+                used.insert(r.name.clone());
+            }
+            true
+        });
+        for d in decls.iter() {
+            if let Decl::Interface(i) = d {
+                used.extend(i.ancestors.iter().cloned());
+            }
+        }
+        let before = decls.len();
+        decls.retain(|d| {
+            let (name, synthetic) = match d {
+                Decl::Interface(i) => (&i.name, i.synthetic),
+                Decl::Alias(a) => (&a.name, a.synthetic),
+                _ => return true,
+            };
+            let bundled = name.contains('$') && !synthetic;
+            let made_of_gone = synthetic && gone.iter().any(|g| name.starts_with(&format!("{g}_")));
+            if used.contains(name) || !(bundled || made_of_gone) {
+                return true;
+            }
+            if bundled {
+                gone.push(name.clone());
+            }
+            false
+        });
+        if decls.len() == before {
+            break;
+        }
+    }
+    // One still used has its own name if no other has it: `NullUndefined$1`
+    // is `NullUndefined`, and `string_or_LabelFormatter$1` `string_or_LabelFormatter`.
+    let mut taken: HashSet<String> = HashSet::new();
+    collect_declared_names(decls, "", "_", &mut taken);
+    let bundled: Vec<String> = decls
+        .iter()
+        .filter_map(|d| match d {
+            Decl::Interface(i) if !i.synthetic => Some(&i.name),
+            Decl::Alias(a) if !a.synthetic => Some(&a.name),
+            _ => None,
+        })
+        .filter(|n| n.contains('$'))
+        .cloned()
+        .collect();
+    let strip = |n: &str| -> String {
+        let mut out = n.to_string();
+        for b in &bundled {
+            out = out.replace(b.as_str(), b.split('$').next().unwrap_or(b));
+        }
+        out
+    };
+    let mut names: Vec<String> = Vec::new();
+    collect_names(decls, &mut names);
+    let mut renames = Vec::new();
+    for n in names.into_iter().filter(|n| n.contains('$')) {
+        let new = strip(&n);
+        if new != n && !new.contains('$') && !taken.contains(&new) {
+            taken.insert(new.clone());
+            renames.push((n, new));
+        }
+    }
+    rename_everywhere(decls, &renames);
+}
+
+fn collect_names(decls: &[Decl], out: &mut Vec<String>) {
+    for d in decls {
+        match d {
+            Decl::Namespace(n) => collect_names(&n.decls, out),
+            Decl::Function(_) | Decl::Var(_) => {}
+            d => out.push(d.name().to_string()),
+        }
+    }
+}
+
+// A method a type redeclares as its ancestor declares it, but for the types
+// of `this`: `HTMLDivElement.addEventListener` is `HTMLElement.addEventListener`.
+fn drop_redeclared(decls: &mut [Decl]) -> usize {
+    let key = |m: &Member| -> Option<String> {
+        let mut sig = m.sig.clone()?;
+        sig.this = None;
+        let mut path = Vec::new();
+        walk_signature(&mut sig, &mut path, &mut |t, _| {
+            if let Type::Function(s) | Type::Constructor(s) = t {
+                s.this = None;
+            }
+            true
+        });
+        let params: Vec<String> = sig.params.iter().map(|p| format!("{}{}{}", p.optional, p.rest, crate::xml::type_key(&p.ty))).collect();
+        let tps: Vec<String> = sig.type_params.iter().map(|t| format!("{}:{}", t.name, t.constraint.as_ref().map(crate::xml::type_key).unwrap_or_default())).collect();
+        Some(format!("{}({})<{}>{}", m.name, params.join(","), tps.join(","), sig.ret.as_ref().map(crate::xml::type_key).unwrap_or_default()))
+    };
+    let mut own: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut bases: HashMap<String, Vec<String>> = HashMap::new();
+    for d in decls.iter() {
+        if let Decl::Interface(i) = d {
+            own.entry(i.name.clone()).or_default().extend(i.members.iter().filter(|m| m.kind == MemberKind::Method).filter_map(key));
+            bases.entry(i.name.clone()).or_default().extend(i.extends.iter().filter_map(|t| if let Type::Ref(r) = t { Some(r.name.clone()) } else { None }));
+        }
+    }
+    let inherited = |name: &str| -> HashSet<String> {
+        let mut out = HashSet::new();
+        let mut todo: Vec<String> = bases.get(name).cloned().unwrap_or_default();
+        let mut seen = HashSet::new();
+        while let Some(b) = todo.pop() {
+            if seen.insert(b.clone()) {
+                out.extend(own.get(&b).cloned().unwrap_or_default());
+                todo.extend(bases.get(&b).cloned().unwrap_or_default());
+            }
+        }
+        out
+    };
+    let mut dropped = 0;
+    for d in decls.iter_mut() {
+        if let Decl::Interface(i) = d {
+            let from_bases = inherited(&i.name);
+            if from_bases.is_empty() {
+                continue;
+            }
+            // Only whole overload sets: a set split between a type and its
+            // ancestor is resolved differently, or hidden, in some targets.
+            let redeclared = |m: &Member| m.kind == MemberKind::Method && key(m).is_some_and(|k| from_bases.contains(&k));
+            let names: HashSet<String> = i.members.iter().filter(|m| m.kind == MemberKind::Method).map(|m| m.name.clone()).collect();
+            let whole: HashSet<String> = names.into_iter().filter(|n| i.members.iter().filter(|m| m.kind == MemberKind::Method && m.name == *n).all(redeclared)).collect();
+            let before = i.members.len();
+            i.members.retain(|m| !(m.kind == MemberKind::Method && whole.contains(&m.name)));
+            dropped += before - i.members.len();
+        }
+    }
+    dropped
+}

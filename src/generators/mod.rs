@@ -2,6 +2,7 @@
 // prints what its target config produced and rejects anything else, so a
 // construct the config should have lowered is an error, not a guess.
 
+pub mod backend;
 pub mod c;
 pub mod case;
 pub mod cpp;

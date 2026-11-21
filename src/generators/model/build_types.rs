@@ -1,0 +1,718 @@
+use std::collections::HashSet;
+
+use roxmltree::Node;
+
+use super::build::{external, Builder};
+use super::ops::{listener_result, mentions};
+use super::{ident, Call, Class, Func, KeyMap, NamedUnion, TParam, Ty};
+use super::super::{attr, elements, flag, named, only_child};
+
+pub(super) type Sig = (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty);
+
+impl<'a> Builder<'a> {
+    // Whether a type is a function that knows no `this` of its own: one
+    // written so, an alias of one, or a type of only call signatures.
+    fn function_value(&self, t: Node) -> bool {
+        let t = if t.has_tag_name("nullable") { only_child(t) } else { t };
+        let no_this = |f: Node| !named(f, "thisParameter").any(|_| true);
+        match t.tag_name().name() {
+            "functionType" => no_this(t),
+            "object" => elements(t).next().is_some() && elements(t).all(|m| m.has_tag_name("call") && no_this(m)),
+            "ref" => match self.decls.get(&self.ref_key(t)) {
+                Some(d) if d.has_tag_name("typeAlias") => elements(*d).find(|c| !c.has_tag_name("typeParameter")).is_some_and(|b| b.has_tag_name("functionType") && no_this(b) || b.has_tag_name("object") && elements(b).next().is_some() && elements(b).all(|m| m.has_tag_name("call") && no_this(m))),
+                Some(d) if d.has_tag_name("interface") => elements(*d).filter(|m| !m.has_tag_name("typeParameter")).all(|m| m.has_tag_name("call") && no_this(m)) && named(*d, "call").next().is_some(),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    pub(super) fn class(&mut self, d: Node<'a, 'a>, path: &str) -> Class {
+        self.class_at(d, path, path)
+    }
+
+    // A class named for `path`, its constructor and statics reached at `js`.
+    pub(super) fn class_at(&mut self, d: Node<'a, 'a>, path: &str, js: &str) -> Class {
+        let runtime = d.has_tag_name("class").then(|| js.to_string());
+        let path_js = js;
+        let owner = self.type_ident(path);
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: runtime };
+        let mut names = HashSet::new();
+        if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
+            names.insert("create".to_string());
+            let import = self.import(format!("{owner}_create"));
+            // What its type fixes, optional or not: echarts' `BarSeriesOption`,
+            // `type?: "bar"`, is `{ type: "bar" }`, as echarts tells series apart.
+            let fixed: Vec<String> = elements(d)
+                .filter(|m| m.has_tag_name("property") && !flag(*m, "static"))
+                .filter_map(|m| {
+                    let value = m.attribute("const")?;
+                    let key = m.attribute("jsName").unwrap_or(attr(m, "name"));
+                    let quoted = only_child(m).attribute("name") == Some("string");
+                    Some(format!("{key:?}: {}", if quoted { format!("{value:?}") } else { value.to_string() }))
+                })
+                .collect();
+            let literal = format!("{{{}}}", fixed.join(", "));
+            c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create(literal), params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()), returns_this: false });
+        }
+        let is_option_bag = !d.has_tag_name("class")
+            && !named(d, "call").any(|_| true)
+            && !self.extended_by_class.contains(path)
+            && !elements(d).any(|m| matches!(m.tag_name().name(), "method" | "construct" | "constructor") && !flag(m, "static"));
+        for m in elements(d) {
+            let is_static = m.has_tag_name("constructor") || flag(m, "static");
+            self.member(&mut c, &mut names, m, path_js, is_static, !is_static && is_option_bag);
+        }
+        c
+    }
+
+    pub(super) fn statics(&mut self, body: Node<'a, 'a>, path: &str, name: String) -> Class {
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: None };
+        let mut names = HashSet::new();
+        for m in elements(body) {
+            self.member(&mut c, &mut names, m, path, true, false);
+        }
+        c
+    }
+
+    pub(super) fn member(&mut self, c: &mut Class, names: &mut HashSet<String>, m: Node<'a, 'a>, path: &str, is_static: bool, allow_readonly_set: bool) {
+        let owner = c.name.clone();
+        let raw_name = m.attribute("name").unwrap_or_default();
+        let tag = m.tag_name().name();
+        if matches!(tag, "ancestor") {
+            // A base from another file is still a type to convert to.
+            let key = self.ref_key(m);
+            let out = self.type_ident(&key);
+            if !self.decls.contains_key(&key) {
+                self.model.opaque_names.insert(out.clone(), ident(external(&key)));
+                self.opaque.insert(out.clone());
+            }
+            return c.ancestors.push(out);
+        }
+        // A direct base, when inheritance is kept: members stay on the type that declares them.
+        if tag == "extends" {
+            let base = only_child(m);
+            if base.has_tag_name("ref") {
+                let key = self.ref_key(base);
+                let name = key.as_str();
+                // A subclass of Array is an array of its elements.
+                if matches!(external(name), "Array" | "ReadonlyArray") && !self.decls.contains_key(name) {
+                    if let Some(e) = elements(base).next() {
+                        let elem = self.ty(e, &owner);
+                        if let Ty::ArrayOf(elem) = self.array_of(elem) {
+                            c.elements = Some(*elem.clone());
+                            // Where generics are kept, the array is its base.
+                            if self.generics {
+                                c.bases.push(Ty::ArrayOf(elem));
+                            }
+                        }
+                    }
+                    return;
+                }
+                // Where generics are erased, a generic base is the base without its arguments.
+                let out = self.type_ident(name);
+                let t = if elements(base).next().is_some() && !self.generics { Ty::Obj(out.clone()) } else { self.reference(base, &owner) };
+                if !self.decls.contains_key(name) {
+                    self.model.opaque_names.insert(out.clone(), ident(external(name)));
+                    self.opaque.insert(out.clone());
+                }
+                c.bases.push(t);
+                return c.ancestors.push(out);
+            }
+            return self.skip("generic base");
+        }
+        if tag == "typeParameter" {
+            if !self.generics {
+                return self.unsupported(m);
+            }
+            let p = self.tparam(m);
+            return c.type_params.push(p);
+        }
+        self.bad = None;
+        let before = c.funcs.len();
+        if tag == "index" && !is_static {
+            let (params, _, _, value) = self.signature(m, &owner);
+            let key = params.into_iter().next().map(|p| p.1).unwrap_or(Ty::Str);
+            if names.insert("get_at".into()) {
+                // A missing key reads as `undefined`.
+                let import = self.import(format!("{owner}_get_at"));
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true), returns_this: false });
+                // A value of none (`[key: number]: never`) is never set.
+                if value != Ty::Void {
+                    let import = self.import(format!("{owner}_set_at"));
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                }
+            }
+            return;
+        }
+        // An accessor: `get classList(): DOMTokenList`, `set classList(value: string)`.
+        if matches!(tag, "get" | "set") && !raw_name.starts_with('[') {
+            let (params, _, _, ret) = self.signature(m, &owner);
+            let js = m.attribute("jsName").unwrap_or(raw_name).to_string();
+            let (prefix, call, ret) = if tag == "get" {
+                ("get", if is_static { Call::StaticGet(format!("{path}.{js}")) } else { Call::Get(js) }, ret)
+            } else {
+                ("set", if is_static { Call::StaticSet(format!("{path}.{js}")) } else { Call::Set(js) }, Ty::Void)
+            };
+            let base = format!("{prefix}_{}", ident(raw_name));
+            if !names.contains(&base) && self.bad.is_none() {
+                names.insert(base.clone());
+                let import = self.import(format!("{owner}_{base}"));
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret, returns_this: false });
+            }
+            self.bad = None;
+            return;
+        }
+        // An object that is also a function: `invoke(...)`, `construct(...)`.
+        if tag == "call" || tag == "construct" && !is_static {
+            let (params, rest, fixed, ret) = self.signature(m, &owner);
+            let (base, call) = if tag == "call" { ("invoke", Call::Invoke) } else { ("construct", Call::Construct) };
+            let name = if self.opts.overloading { base.to_string() } else {
+                // Named for the marks it has that its siblings do not all have
+                // (`invoke_async`); the first without any is `invoke`, which
+                // none before it took.
+                let siblings: Vec<Node> = m.parent().map(|p| elements(p).filter(|s| s.tag_name() == m.tag_name() && !flag(*s, "static")).collect()).unwrap_or_default();
+                let own = super::super::own_marks(&siblings.iter().map(|s| super::super::marks(*s)).collect::<Vec<_>>());
+                let me = siblings.iter().position(|s| *s == m).unwrap_or(0);
+                let plain = own.iter().position(Vec::is_empty).unwrap_or(0);
+                let base = if me == plain || own[me].is_empty() { base.to_string() } else { format!("{base}_{}", own[me].join("_")) };
+                let mut name = base.clone();
+                let mut n = 2;
+                while !names.insert(name.clone()) {
+                    name = format!("{base}_{n}");
+                    n += 1;
+                }
+                name
+            };
+            let import = self.import(format!("{owner}_{name}"));
+            let type_params = std::mem::take(&mut self.last_type_params);
+            c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this: false });
+            if let Some(why) = self.bad.take() {
+                c.funcs.pop();
+                self.skip(&why);
+            }
+            return;
+        }
+        if matches!(tag, "index" | "get" | "set") {
+            return self.skip(&format!("<{tag}> member"));
+        }
+        // `[Symbol.iterator](): ArrayIterator<Node>` iterates Nodes.
+        if raw_name == "[Symbol.iterator]" && !is_static {
+            let elem = named(m, "returns").next().and_then(|r| elements(r).next()).and_then(|it| elements(it).next());
+            c.iterates = Some(match elem {
+                Some(e) => self.ty(e, &owner),
+                None => Ty::Any,
+            });
+            self.bad = None;
+            return;
+        }
+        if raw_name == "[Symbol.asyncIterator]" && !is_static {
+            let elem = named(m, "returns").next().and_then(|r| elements(r).next()).and_then(|it| elements(it).next());
+            c.iterates_async = Some(match elem {
+                Some(e) => self.ty(e, &owner),
+                None => Ty::Any,
+            });
+            self.bad = None;
+            return;
+        }
+        // A member keyed by a well-known symbol is named by it: `[Symbol.toStringTag]` is `toStringTag`.
+        let symbol = raw_name.strip_prefix("[Symbol.").and_then(|s| s.strip_suffix(']'));
+        if raw_name.starts_with('[') && symbol.is_none() {
+            return self.skip("member with a computed name");
+        }
+        let (raw_name, key) = (symbol.unwrap_or(raw_name), raw_name);
+        // A target with overloading keeps one name for all of a method's overloads.
+        let overloading = self.opts.overloading;
+        let unique = |base: String, names: &mut HashSet<String>| {
+            if overloading {
+                return base;
+            }
+            let mut name = base.clone();
+            let mut n = 2;
+            while !names.insert(name.clone()) {
+                name = format!("{base}_{n}");
+                n += 1;
+            }
+            name
+        };
+        let js = m.attribute("jsName").unwrap_or(key).to_string();
+        match tag {
+            "constructor" | "construct" => {
+                let (params, rest, fixed, sig_ret) = self.signature(m, &owner);
+                let ret = if tag == "construct" && sig_ret != Ty::Void { sig_ret } else { Ty::Obj(owner.clone()) };
+                let name = unique(if raw_name.is_empty() { "new".into() } else { ident(raw_name) }, names);
+                let import = self.import(format!("{owner}_{name}"));
+                // Its own type parameters (`new<T>(x: T)`), as a method's.
+                let type_params = std::mem::take(&mut self.last_type_params);
+                c.funcs.push(Func { type_params, module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret, returns_this: false });
+            }
+            "method" => {
+                let (params, rest, fixed, ret) = self.signature(m, &owner);
+                let returns_this = !is_static && named(m, "returns").next().is_some_and(|r| only_child(r).has_tag_name("this"));
+                let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js) };
+                let name = unique(ident(raw_name), names);
+                let import = self.import(format!("{owner}_{name}"));
+                let mut type_params = std::mem::take(&mut self.last_type_params);
+                let (mut params, mut ret) = (params, ret);
+                // A method's type parameter may not reuse its class's name in C++: it is renamed.
+                for tp in type_params.iter_mut().filter(|tp| c.type_params.iter().any(|ctp| ctp.name == tp.name)) {
+                    let renamed = format!("{}_{}", tp.name, raw_name);
+                    params.iter_mut().for_each(|p| rename_param(&mut p.1, &tp.name, &renamed));
+                    rename_param(&mut ret, &tp.name, &renamed);
+                    for x in tp.default.iter_mut().chain(tp.constraint.iter_mut()) {
+                        rename_param(x, &tp.name, &renamed);
+                    }
+                    tp.name = renamed;
+                }
+                c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this });
+            }
+            // A constant needs no call across the boundary.
+            "property" if m.has_attribute("const") => {
+                let quoted = only_child(m).attribute("name") == Some("string");
+                let value = attr(m, "const");
+                // The same constant is often on both the class and its instances.
+                if !c.consts.iter().any(|(n, _)| *n == ident(raw_name)) {
+                    c.consts.push((ident(raw_name), if quoted { format!("{value:?}") } else { value.to_string() }));
+                }
+            }
+            "property" => {
+                let mut t = value(self.ty(only_child(m), &owner));
+                if flag(m, "optional") {
+                    t = absent(t, true);
+                }
+                let (get, set) = if is_static {
+                    (Call::StaticGet(format!("{path}.{js}")), Call::StaticSet(format!("{path}.{js}")))
+                } else if self.function_value(only_child(m)) {
+                    (Call::GetBound(js.clone()), Call::Set(js))
+                } else {
+                    (Call::Get(js.clone()), Call::Set(js))
+                };
+                let name = unique(format!("get_{}", ident(raw_name)), names);
+                let import = self.import(format!("{owner}_{name}"));
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone(), returns_this: false });
+                if !flag(m, "readonly") || allow_readonly_set {
+                    let name = unique(format!("set_{}", ident(raw_name)), names);
+                    let import = self.import(format!("{owner}_{name}"));
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                }
+            }
+            _ => self.unsupported(m),
+        }
+        if let Some(why) = self.bad.take() {
+            c.funcs.truncate(before);
+            self.skip(&why);
+        }
+    }
+
+    // A callback's signature: its own type parameters (`<T>(x: T) => T`) are untyped values.
+    pub(super) fn callback_signature(&mut self, n: Node<'a, 'a>, owner: &str) -> Sig {
+        self.erased = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
+        let mut sig = self.signature(n, owner);
+        self.erased.clear();
+        // A listener (one argument, a declared `any` result) returns nothing
+        // JavaScript reads: its result is void, as its writer would have it.
+        if sig.0.len() == 1 && sig.3 == Ty::Any && listener_result(n) {
+            sig.3 = Ty::Void;
+        }
+        sig
+    }
+
+    pub(super) fn signature(&mut self, n: Node<'a, 'a>, owner: &str) -> Sig {
+        // Type parameters left after `generics = "erase"` range over a map's keys.
+        self.keyed.clear();
+        self.key_strings.clear();
+        self.last_type_params.clear();
+        let own: Vec<Node> = named(n, "typeParameter").filter(|p| !self.erased.contains(attr(*p, "name"))).collect();
+        for p in own {
+            let map = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child).filter(|k| k.has_tag_name("keyof")).map(only_child);
+            match map {
+                Some(m) => {
+                    let name = self.ref_key(m);
+                    if self.key_map(&name) {
+                        self.keyed.insert(attr(p, "name").to_string(), self.type_ident(&name));
+                    } else {
+                        // A key of a type that is not a map of keys: a string.
+                        self.key_strings.insert(attr(p, "name").to_string());
+                    }
+                }
+                None if self.generics => {
+                    let p = self.tparam(p);
+                    self.last_type_params.push(p);
+                }
+                None => self.unsupported(p),
+            }
+        }
+        let mut params = Vec::new();
+        let mut rest = false;
+        let mut fixed = Vec::new();
+        let mut ret = Ty::Void;
+        for p in elements(n) {
+            match p.tag_name().name() {
+                // The receiver of a callback is not an argument.
+                "thisParameter" => {}
+                // An argument with one possible value is supplied by the glue.
+                "parameter" if p.has_attribute("const") => {
+                    let value = attr(p, "const");
+                    let literal = if only_child(p).attribute("name") == Some("string") { format!("{value:?}") } else { value.to_string() };
+                    fixed.push((params.len() + fixed.len(), literal));
+                }
+                // An optional parameter is an optional value: null, or a null handle, when absent.
+                "parameter" if flag(p, "optional") => {
+                    let t = value(self.ty(only_child(p), owner));
+                    // One of any type: `undefined` when absent (leaflet's `on(type, fn,
+                    // context?)`), where a null handle would be `null`.
+                    let optional = if t == Ty::Any { Ty::Nullable(Box::new(Ty::Any), true) } else { absent(t.clone(), true) };
+                    if optional == Ty::Any && t != Ty::Any {
+                        self.skip("optional parameter of a type that cannot be absent, bound as an untyped value");
+                    }
+                    params.push((ident(attr(p, "name")), optional));
+                }
+                "parameter" => {
+                    rest |= flag(p, "rest");
+                    params.push((ident(attr(p, "name")), value(self.ty(only_child(p), owner))));
+                }
+                "returns" => ret = self.ty(only_child(p), owner),
+                "typeParameter" => {}
+                _ => self.unsupported(p),
+            }
+        }
+        (params, rest, fixed, ret)
+    }
+
+    // Registers a map whose values are all handles; false, with a reason, if it is not one.
+    fn key_map(&mut self, name: &str) -> bool {
+        let id = self.type_ident(name);
+        if self.model.maps.iter().any(|m| m.name == id) {
+            return true;
+        }
+        let Some(decl) = self.decls.get(name).copied() else {
+            self.bad = Some("map declared elsewhere".into());
+            return false;
+        };
+        let mut keys = Vec::new();
+        let mut values = Vec::new();
+        // Its own properties and those of the maps it extends, the nearest first.
+        let mut props: Vec<Node> = Vec::new();
+        let mut todo = vec![decl];
+        let mut seen_keys = HashSet::new();
+        while let Some(d) = todo.pop() {
+            props.extend(named(d, "property").filter(|p| seen_keys.insert(attr(*p, "name").to_string())));
+            for e in named(d, "extends") {
+                let base = only_child(e);
+                if let Some(b) = self.decls.get(&self.ref_key(base)) {
+                    todo.insert(0, *b);
+                }
+            }
+        }
+        for p in props {
+            let t = self.ty(only_child(p), "");
+            if !matches!(t, Ty::Obj(_) | Ty::Generic(..)) {
+                self.bad = Some("map with values that are not objects".into());
+                return false;
+            }
+            keys.push(attr(p, "name").to_string());
+            values.push(t);
+        }
+        self.model.maps.push(KeyMap { name: id, keys, values });
+        true
+    }
+
+    pub(super) fn ty(&mut self, n: Node<'a, 'a>, owner: &str) -> Ty {
+        match n.tag_name().name() {
+            "primitive" => match attr(n, "name") {
+                "number" => Ty::Num,
+                "boolean" => Ty::Bool,
+                "string" => Ty::Str,
+                "void" | "undefined" | "never" => Ty::Void,
+                _ => Ty::Any,
+            },
+            "this" => Ty::Obj(owner.to_string()),
+            "ref" if attr(n, "kind") == "typeParameter" && self.key_strings.contains(attr(n, "name")) => Ty::Str,
+            "ref" if attr(n, "kind") == "typeParameter" && self.erased.contains(attr(n, "name")) => {
+                self.skip("type parameter of a generic callback, bound as an untyped value");
+                Ty::Any
+            }
+            "ref" if attr(n, "kind") == "typeParameter" => match self.keyed.get(attr(n, "name")) {
+                Some(map) => Ty::Key(map.clone()),
+                None if self.generics => Ty::Param(attr(n, "name").to_string()),
+                None => {
+                    self.unsupported(n);
+                    Ty::Any
+                }
+            },
+            "ref" => self.reference(n, owner),
+            // `M[K]`: the value the key selects.
+            // `M[K]` where K is a key of a type that is not a map of keys: whatever M holds.
+            "indexedAccess" if elements(n).nth(1).is_some_and(|k| k.has_tag_name("ref") && self.key_strings.contains(attr(k, "name"))) => {
+                self.skip("value of a key of a type that is not a map, bound as an untyped value");
+                Ty::Any
+            }
+            "indexedAccess" => {
+                let index = elements(n).nth(1).unwrap();
+                match index.attribute("name").and_then(|k| self.keyed.get(k)) {
+                    Some(map) => Ty::Mapped(map.clone()),
+                    None => {
+                        self.unsupported(n);
+                        Ty::Any
+                    }
+                }
+            }
+            // `new () => Material`: a class itself, which only JavaScript has to give.
+            "constructorType" => {
+                self.skip("constructor type, bound as an untyped value");
+                Ty::Any
+            }
+            // A callback written inline: kept so only when it takes `M[K]`.
+            "functionType" if self.keyed.is_empty() => {
+                self.bad = Some("callback written inline".into());
+                Ty::Any
+            }
+            "functionType" => {
+                let params: Vec<Node> = named(n, "parameter").collect();
+                let ret = named(n, "returns").next().map(|r| self.ty(only_child(r), owner)).unwrap_or(Ty::Void);
+                match (params.as_slice(), ret) {
+                    ([p], Ty::Void | Ty::Any) => match self.ty(only_child(*p), owner) {
+                        t @ (Ty::Mapped(_) | Ty::Obj(_) | Ty::Generic(..)) => Ty::Listener(Box::new(t)),
+                        _ => {
+                            self.bad = Some("keyed callback of another shape".into());
+                            Ty::Any
+                        }
+                    },
+                    _ => {
+                        self.bad = Some("keyed callback of another shape".into());
+                        Ty::Any
+                    }
+                }
+            }
+            "nullable" => {
+                let inner = self.ty(only_child(n), owner);
+                absent(inner, attr(n, "absent") == "undefined")
+            }
+            // Elements that cross as a number, a flag, a string, a handle or a
+            // union that can be told apart.
+            "array" => {
+                let elem = self.ty(only_child(n), owner);
+                self.array_of(elem)
+            }
+            // A tuple whose elements all cross, none optional or rest.
+            "tuple" => {
+                let elems: Vec<Node> = elements(n).collect();
+                if elems.is_empty() || elems.iter().any(|e| e.attributes().len() > 0) {
+                    return Ty::Array;
+                }
+                let ts: Vec<Ty> = elems.iter().map(|e| self.ty(only_child(*e), owner)).collect();
+                let crosses = |t: &Ty| match t {
+                    Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_) | Ty::Array | Ty::Tuple(_) => true,
+                    Ty::Generic(..) | Ty::Param(_) => self.generics,
+                    Ty::NamedUnion(u) => self.model.unions.iter().any(|x| x.name == *u && x.decodable()),
+                    _ => false,
+                };
+                if ts.iter().all(crosses) { Ty::Tuple(ts) } else { Ty::Array }
+            }
+            "union" => {
+                let parts: Vec<Ty> = elements(n).map(|p| self.ty(p, owner)).collect();
+                // Only alternatives a tagged union can hold directly.
+                if parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_))) && distinct(&parts) {
+                    Ty::Union(parts)
+                } else {
+                    self.skip("union whose members cannot be told apart, bound as an untyped value");
+                    Ty::Union(vec![])
+                }
+            }
+            _ => {
+                self.unsupported(n);
+                Ty::Any
+            }
+        }
+    }
+
+    // An array of the given elements: typed, if they cross as a number, a
+    // flag, a string, a handle or a union that can be told apart.
+    fn array_of(&mut self, elem: Ty) -> Ty {
+        match elem {
+            e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_)) => Ty::ArrayOf(Box::new(e)),
+            e @ (Ty::Generic(..) | Ty::Param(_)) if self.generics => Ty::ArrayOf(Box::new(e)),
+            Ty::NamedUnion(u) if self.model.unions.iter().any(|x| x.name == u && x.decodable()) => Ty::ArrayOf(Box::new(Ty::NamedUnion(u))),
+            _ => Ty::Array,
+        }
+    }
+
+    // `owner` is what `this` is, in a type argument (`GetSet<number, this>`).
+    fn reference(&mut self, n: Node<'a, 'a>, owner: &str) -> Ty {
+        let key = self.ref_key(n);
+        let declared = self.decls.get(&key).copied();
+        // `Array<T>` is `T[]`.
+        if declared.is_none() && matches!(external(&key), "Array" | "ReadonlyArray") {
+            return match elements(n).next() {
+                Some(e) => {
+                    let elem = self.ty(e, owner);
+                    self.array_of(elem)
+                }
+                None => Ty::Array,
+            };
+        }
+        match (attr(n, "kind"), declared) {
+            ("typeParameter", _) => {
+                self.unsupported(n);
+                Ty::Any
+            }
+            // By what is declared: an alias of string literals has become an enum.
+            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "string") => Ty::Enum(self.type_ident(&key)),
+            (_, Some(d)) if d.has_tag_name("enum") && named(d, "member").all(|m| attr(m, "type") == "number") => Ty::NumEnum(self.type_ident(&key)),
+            ("enum", _) => Ty::Num,
+            (_, Some(d)) if d.has_tag_name("typeAlias") => {
+                let body = self.alias_body(d);
+                if body.has_tag_name("functionType") || body.has_tag_name("object") {
+                    if self.generics && elements(n).next().is_some() {
+                        let args: Vec<Ty> = elements(n).map(|a| self.ty(a, owner)).collect();
+                        return Ty::Generic(self.type_ident(&key), args);
+                    }
+                    return Ty::Obj(self.type_ident(&key));
+                }
+                // A generic union alias, where generics are kept, is a generic union.
+                let generic_union = self.generics && body.has_tag_name("union") && named(d, "typeParameter").next().is_some();
+                // Another generic alias would need its arguments substituted
+                // (`aliases = "expand"` does, but for one that refers to itself).
+                if named(d, "typeParameter").next().is_some() && !generic_union {
+                    self.skip("generic alias, bound as any");
+                    return Ty::Any;
+                }
+                if self.resolving.contains(&key) || self.resolving.len() > 8 {
+                    return Ty::Any;
+                }
+                // A union with a name of its own is declared once.
+                if body.has_tag_name("union") {
+                    let name = self.type_ident(&key);
+                    let args: Vec<Ty> = if generic_union { elements(n).map(|a| self.ty(a, owner)).collect() } else { Vec::new() };
+                    // `void` in a union is a value that may be absent: `void | Promise<void>`.
+                    // So is a member that may itself be absent: `string | (number | null)`.
+                    let is_void = |p: Node| p.has_tag_name("primitive") && attr(p, "name") == "void";
+                    let has_void = elements(body).any(|p| is_void(p) || p.has_tag_name("nullable"));
+                    let named_type = |name: String, kept: Option<&Vec<usize>>| {
+                        let args: Vec<Ty> = args.iter().enumerate().filter(|(i, _)| kept.is_none_or(|k| k.contains(i))).map(|(_, a)| a.clone()).collect();
+                        // One left with no type parameters is no generic union.
+                        let t = if generic_union && !args.is_empty() { Ty::Generic(name, args) } else { Ty::NamedUnion(name) };
+                        if has_void { absent(t, true) } else { t }
+                    };
+                    if self.model.unions.iter().any(|u| u.name == name) {
+                        return named_type(name.clone(), self.union_kept.get(&name));
+                    }
+                    let type_params: Vec<TParam> = named(d, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
+                    let members: Vec<Node> = elements(body).filter(|p| !is_void(*p)).collect();
+                    self.resolving.push(key.clone());
+                    // Its own type parameters, not those of where it is named
+                    // (a callback's erased `T` is not this `T`).
+                    let own: Vec<String> = type_params.iter().map(|p| p.name.clone()).collect();
+                    let saved = (self.erased.clone(), self.keyed.clone(), self.key_strings.clone());
+                    self.erased.retain(|e| !own.contains(e));
+                    self.keyed.retain(|k, _| !own.contains(k));
+                    self.key_strings.retain(|k| !own.contains(k));
+                    let parts: Vec<Ty> = members
+                        .iter()
+                        .map(|p| match self.ty(*p, "") {
+                            Ty::Nullable(inner, _) => *inner,
+                            t => t,
+                        })
+                        .collect();
+                    (self.erased, self.keyed, self.key_strings) = saved;
+                    self.resolving.pop();
+                    // Members that are one type here, as two generic types are once erased, are one member.
+                    let mut kept = Vec::new();
+                    let (members, parts): (Vec<Node>, Vec<Ty>) = members.into_iter().zip(parts).filter(|(_, p)| if kept.contains(p) { false } else { kept.push(p.clone()); true }).unzip();
+                    // `X | any` is any.
+                    if parts.contains(&Ty::Any) {
+                        return Ty::Any;
+                    }
+                    if let [only] = parts.as_slice() {
+                        return if has_void { absent(only.clone(), true) } else { only.clone() };
+                    }
+                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
+                    if !parts.iter().all(simple) || !distinct(&parts) {
+                        if std::env::var_os("TS_UNION_DEBUG").is_some() {
+                            eprintln!("UNION {name}: distinct={} {:?}", distinct(&parts), parts);
+                        }
+                        self.skip("union whose members cannot be told apart, bound as an untyped value");
+                        return Ty::Any;
+                    }
+                    let tests = members.iter().map(|p| p.attribute("test").map(str::to_string)).collect();
+                    let discriminant = body.attribute("discriminant").map(str::to_string);
+                    // A type parameter no member uses (`Number<TNum> = NodeClass | number`)
+                    // is no parameter of it: a target may not declare one unused.
+                    let kept: Vec<usize> = (0..type_params.len()).filter(|&i| parts.iter().any(|p| mentions(p, &type_params[i].name))).collect();
+                    let type_params: Vec<TParam> = if kept.len() < type_params.len() {
+                        self.union_kept.insert(name.clone(), kept.clone());
+                        kept.iter().map(|&i| type_params[i].clone()).collect()
+                    } else {
+                        type_params
+                    };
+                    self.model.unions.push(NamedUnion { name: name.clone(), type_params, parts, tests, discriminant });
+                    return named_type(name.clone(), self.union_kept.get(&name));
+                }
+                self.resolving.push(key.clone());
+                let t = self.ty(body, "");
+                self.resolving.pop();
+                t
+            }
+            ("class" | "interface", declared) if self.generics && elements(n).next().is_some() => {
+                let args: Vec<Ty> = elements(n).map(|a| self.ty(a, owner)).collect();
+                let out = self.type_ident(&key);
+                if declared.is_none() {
+                    self.model.opaque_names.insert(out.clone(), ident(external(&key)));
+                    self.opaque.insert(out.clone());
+                    let arity = self.model.opaque_arity.entry(out.clone()).or_default();
+                    *arity = (*arity).max(args.len());
+                }
+                Ty::Generic(out, args)
+            }
+            ("class" | "interface", Some(_)) => Ty::Obj(self.type_ident(&key)),
+            // Declared in another library: a handle, by name. An alias may be of anything, and a handle can hold anything.
+            ("class" | "interface" | "typeAlias", None) => {
+                let out = self.type_ident(&key);
+                self.model.opaque_names.insert(out.clone(), ident(external(&key)));
+                self.opaque.insert(out.clone());
+                Ty::Obj(out)
+            }
+            _ => Ty::Any,
+        }
+    }
+}
+
+pub(super) fn is_function_interface(d: Node) -> bool {
+    let mut members = elements(d);
+    members.next().is_some_and(|m| m.has_tag_name("call")) && members.next().is_none()
+}
+
+// No two members alike. Arrays are alike whatever they hold: a test sees only an array.
+fn distinct(parts: &[Ty]) -> bool {
+    let shape = |p: &Ty| if matches!(p, Ty::ArrayOf(_) | Ty::Tuple(_)) { Ty::Array } else { p.clone() };
+    let shapes: Vec<Ty> = parts.iter().map(shape).collect();
+    shapes.iter().enumerate().all(|(i, p)| !shapes[..i].contains(p))
+}
+
+// `void` is only a result. A parameter or property of type `undefined` holds a value.
+pub(super) fn value(t: Ty) -> Ty {
+    if t == Ty::Void { Ty::Any } else { t }
+}
+
+// Renames a type parameter wherever a type mentions it.
+fn rename_param(t: &mut Ty, from: &str, to: &str) {
+    match t {
+        Ty::Param(n) if n == from => *n = to.to_string(),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => rename_param(inner, from, to),
+        Ty::Generic(_, args) | Ty::Tuple(args) => args.iter_mut().for_each(|a| rename_param(a, from, to)),
+        _ => {}
+    }
+}
+
+// What may be absent. A handle can be null; a string is a null pointer going
+// in and a null handle coming back; a number is a flag and the number going
+// in, and a handle coming back; a flag or an enum is -1 when absent.
+fn absent(t: Ty, undefined: bool) -> Ty {
+    match t {
+        Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
+        Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) | Ty::Listener(_) => Ty::Nullable(Box::new(t), undefined),
+        Ty::Nullable(..) => t,
+        Ty::Void => Ty::Void,
+        _ => Ty::Any,
+    }
+}
