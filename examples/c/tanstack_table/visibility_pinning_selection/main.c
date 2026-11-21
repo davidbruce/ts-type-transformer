@@ -16,14 +16,14 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->is_ro) return call_void_to_any_fn((void_to_any_fn){ a->derive.h });
+    if (a->is_ro) return table_call_void_to_any_fn((Table_void_to_any_fn){ a->derive.h });
     js_retain(a->value);
     return a->value;
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
     js_scope_open();
-    JsValue next = functionalUpdate(updater, a->value);
+    JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
     if (a->value.h != 0) js_release(a->value);
     a->value = next;
@@ -34,44 +34,44 @@ static void no_unsub(void* ctx) { (void)ctx; }
 static JsValue atom_sub(void* ctx, JsValue obs) {
     (void)ctx; (void)obs;
     JsValue sub = js_object();
-    js_set_val(sub, "unsubscribe", void_fn_from(no_unsub, NULL));
+    js_set_val(sub, "unsubscribe", Table_void_fn_from(no_unsub, NULL));
     return sub;
 }
 static JsValue make_atom(AtomState* a) {
     JsValue atom = js_object();
-    js_set_val(atom, "get", void_to_any_fn_from(atom_get, a));
-    if (!a->is_ro) js_set_val(atom, "set", Updater_fn2_from(atom_set, a));
-    js_set_val(atom, "subscribe", Updater_fn2_from(atom_sub, NULL));
+    js_set_val(atom, "get", Table_void_to_any_fn_from(atom_get, a));
+    if (!a->is_ro) js_set_val(atom, "set", Table_Updater_fn2_from(atom_set, a));
+    js_set_val(atom, "subscribe", Table_Updater_fn2_from(atom_sub, NULL));
     return atom;
 }
-static Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
+static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     AtomState* a = &atoms[atom_count++];
     a->value = initial;
     js_retain(initial);
-    return (Atom){ make_atom(a).h };
+    return (Table_Atom){ make_atom(a).h };
 }
-static ReadonlyAtom create_readonly(void* ctx, void_to_any_fn fn, TableAtomOptions opts) {
+static Table_ReadonlyAtom create_readonly(void* ctx, Table_void_to_any_fn fn, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     AtomState* a = &atoms[atom_count++];
     a->is_ro = true;
     a->derive = (JsValue){ fn.h };
     js_retain(fn);
-    return (ReadonlyAtom){ make_atom(a).h };
+    return (Table_ReadonlyAtom){ make_atom(a).h };
 }
-static void add_sub(void* ctx, Subscription s) { (void)ctx; (void)s; }
+static void add_sub(void* ctx, Table_Subscription s) { (void)ctx; (void)s; }
 static void unmount_cb(void* ctx) { (void)ctx; }
-static void batch_cb(void* ctx, void_fn fn) { (void)ctx; call_void_fn(fn); }
-static JsValue untrack_cb(void* ctx, void_to_any_fn fn) { (void)ctx; return call_void_to_any_fn(fn); }
+static void batch_cb(void* ctx, Table_void_fn fn) { (void)ctx; table_call_void_fn(fn); }
+static JsValue untrack_cb(void* ctx, Table_void_to_any_fn fn) { (void)ctx; return table_call_void_to_any_fn(fn); }
 
 static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
     TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
-    TableReactivityBindings_set_unmount(r, void_fn_from(unmount_cb, NULL));
-    TableReactivityBindings_set_batch(r, fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_schedule(r, fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
+    TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
     TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
     TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
@@ -132,10 +132,10 @@ static void render(void) {
     Table_ColumnVisibility vis = { g_table.h };
     Table_RowSelection sel = { g_table.h };
 
-    JsArray_Column_Core groups[3] = {
-        call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getStartVisibleLeafColumns(pin)),
-        call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getCenterVisibleLeafColumns(pin)),
-        call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getEndVisibleLeafColumns(pin))
+    JsArray_Table_Column_Core groups[3] = {
+        table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getStartVisibleLeafColumns(pin)),
+        table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getCenterVisibleLeafColumns(pin)),
+        table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getEndVisibleLeafColumns(pin))
     };
 
     char col_ids[8][16];
@@ -145,14 +145,14 @@ static void render(void) {
     HtmlOut out = { html, html + sizeof html };
     html_fmt(&out, "<table><thead><tr><th>Sel</th>");
     for (int g = 0; g < 3; g++) {
-        uint32_t gn = JsArray_Column_Core_length(groups[g]);
+        uint32_t gn = JsArray_Table_Column_Core_length(groups[g]);
         for (uint32_t j = 0; j < gn && ncol < 8; j++) {
-            Column_Core col = JsArray_Column_Core_get(groups[g], j);
-            JsString cid = Column_Core_get_id(col);
+            Table_Column_Core col = JsArray_Table_Column_Core_get(groups[g], j);
+            JsString cid = Table_Column_Core_get_id(col);
             uint32_t clen = JsString_copy(cid, col_ids[ncol], sizeof col_ids[ncol] - 1);
             col_ids[ncol][clen < sizeof col_ids[ncol] ? clen : sizeof col_ids[ncol] - 1] = 0;
             bool is_cpu = JsString_equals(cid, "cpu");
-            JsString hdr = js_to_string(js_get_prop(Column_Core_get_columnDef(col), "header"));
+            JsString hdr = js_to_string(js_get_prop(Table_Column_Core_get_columnDef(col), "header"));
             html_fmt(&out, "%s", is_cpu ? "<th class=\"num\">" : "<th>");
             html_js_esc(&out, hdr);
             if (g != 1) html_fmt(&out, "<span class=\"pin-tag\">PIN</span>");
@@ -162,20 +162,20 @@ static void render(void) {
     }
     html_fmt(&out, "</tr></thead><tbody>");
 
-    RowModel rm = call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
-    JsArray_Row_Core rows = RowModel_get_rows(rm);
-    uint32_t nrows = JsArray_Row_Core_length(rows);
+    Table_RowModel rm = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
+    JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
+    uint32_t nrows = JsArray_Table_Row_Core_length(rows);
     for (uint32_t i = 0; i < nrows; i++) {
-        Row_Core row = JsArray_Row_Core_get(rows, i);
-        string_fn gv = Row_Core_get_getValue(row);
-        bool is_sel = call_void_to_boolean_fn(Row_RowSelection_get_getIsSelected((Row_RowSelection){ row.h }));
+        Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
+        Table_string_fn gv = Table_Row_Core_get_getValue(row);
+        bool is_sel = table_call_void_to_boolean_fn(Table_Row_RowSelection_get_getIsSelected((Table_Row_RowSelection){ row.h }));
         html_fmt(&out, "%s", is_sel ? "<tr class=\"selected-row\"><td>&#9632;</td>" : "<tr><td>&#9633;</td>");
         for (int c = 0; c < ncol; c++) {
             if (strcmp(col_ids[c], "cpu") == 0) {
-                html_fmt(&out, "<td class=\"num\">%d%%</td>", (int)(js_to_number(call_string_fn(gv, "cpu")) + 0.5));
+                html_fmt(&out, "<td class=\"num\">%d%%</td>", (int)(js_to_number(table_call_string_fn(gv, "cpu")) + 0.5));
             } else {
                 html_fmt(&out, "<td>");
-                html_js_esc(&out, js_to_string(call_string_fn(gv, col_ids[c])));
+                html_js_esc(&out, js_to_string(table_call_string_fn(gv, col_ids[c])));
                 html_fmt(&out, "</td>");
             }
         }
@@ -184,10 +184,10 @@ static void render(void) {
     html_fmt(&out, "</tbody></table>");
     HTMLElement_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), html);
 
-    uint32_t vis_count = JsArray_Column_Core_length(call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnVisibility_get_getVisibleLeafColumns(vis)));
-    uint32_t all_count = JsArray_Column_Core_length(call_Table_ColumnPinning_getCenterLeafColumns(Table_Core_get_getAllLeafColumns(g_table)));
-    RowModel sel_rm = call_void_to_RowModel_fn(Table_RowSelection_get_getSelectedRowModel(sel));
-    uint32_t sel_count = JsArray_Row_Core_length(RowModel_get_rows(sel_rm));
+    uint32_t vis_count = JsArray_Table_Column_Core_length(table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnVisibility_get_getVisibleLeafColumns(vis)));
+    uint32_t all_count = JsArray_Table_Column_Core_length(table_call_Table_ColumnPinning_getCenterLeafColumns(Table_Core_get_getAllLeafColumns(g_table)));
+    Table_RowModel sel_rm = table_call_void_to_RowModel_fn(Table_RowSelection_get_getSelectedRowModel(sel));
+    uint32_t sel_count = JsArray_Table_Row_Core_length(Table_RowModel_get_rows(sel_rm));
 
     char meta[256];
     snprintf(meta, sizeof meta, "%u / %u visible columns \xC2\xB7 start:id end:status pinned \xC2\xB7 %u / %u rows selected",
@@ -201,7 +201,7 @@ static void apply_visibility(void) {
     JsValue cv = js_object();
     js_set_bool(cv, "zone", g_zone_visible);
     js_set_bool(cv, "owner", g_owner_visible);
-    call_Table_ColumnVisibility_setColumnVisibility(
+    table_call_Table_ColumnVisibility_setColumnVisibility(
         Table_ColumnVisibility_get_setColumnVisibility((Table_ColumnVisibility){ g_table.h }),
         cv
     );
@@ -225,9 +225,9 @@ static void on_click(void* ctx, PointerEvent ev) {
         JsValue s = js_object();
         static const char* keys[7] = { "0", "1", "2", "3", "4", "5", "6" };
         for (int i = 0; i < 7; i++) js_set_bool(s, keys[i], true);
-        call_Table_RowSelection_setRowSelection(Table_RowSelection_get_setRowSelection(sel), s);
+        table_call_Table_RowSelection_setRowSelection(Table_RowSelection_get_setRowSelection(sel), s);
     } else if (idx == 3) {
-        call_Table_RowSelection_setRowSelection(Table_RowSelection_get_setRowSelection(sel), js_object());
+        table_call_Table_RowSelection_setRowSelection(Table_RowSelection_get_setRowSelection(sel), js_object());
     } else if (idx == 4) {
         g_zone_visible = false;
         g_owner_visible = true;
@@ -239,12 +239,12 @@ static void on_click(void* ctx, PointerEvent ev) {
         JsValue cp = js_object();
         js_set_val(cp, "start", st);
         js_set_val(cp, "end", en);
-        call_Table_ColumnPinning_setColumnPinning(Table_ColumnPinning_get_setColumnPinning(pin), cp);
+        table_call_Table_ColumnPinning_setColumnPinning(Table_ColumnPinning_get_setColumnPinning(pin), cp);
         JsValue s = js_object();
         js_set_bool(s, "0", true);
         js_set_bool(s, "2", true);
         js_set_bool(s, "4", true);
-        call_Table_RowSelection_setRowSelection(Table_RowSelection_get_setRowSelection(sel), s);
+        table_call_Table_RowSelection_setRowSelection(Table_RowSelection_get_setRowSelection(sel), s);
     }
     render();
     js_scope_close();
@@ -254,10 +254,10 @@ __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     JsValue features = js_object();
     js_set_val(features, "coreReactivityFeature", make_reactivity());
-    js_set_val(features, "columnVisibilityFeature", get_columnVisibilityFeature());
-    js_set_val(features, "columnPinningFeature", get_columnPinningFeature());
-    js_set_val(features, "rowSelectionFeature", get_rowSelectionFeature());
-    js_set_val(features, "coreRowModel", createCoreRowModel());
+    js_set_val(features, "columnVisibilityFeature", table_get_columnVisibilityFeature());
+    js_set_val(features, "columnPinningFeature", table_get_columnPinningFeature());
+    js_set_val(features, "rowSelectionFeature", table_get_rowSelectionFeature());
+    js_set_val(features, "coreRowModel", table_createCoreRowModel());
 
     JsArray data = JsArray_new();
     js_push_val(data, task_row("T-101", "ingest-wal-sync", "a.meyer", "eu-ch-1", 42, "running"));
@@ -303,7 +303,7 @@ __attribute__((export_name("start"))) void start(void) {
     js_set_val(opts, "columns", cols);
     js_set_val(opts, "initialState", init_state);
 
-    g_table = constructTable((TableOptions_Core){ opts.h });
+    g_table = table_constructTable((TableOptions_Core){ opts.h });
     js_retain(g_table);
     g_doc = get_document();
     js_retain(g_doc);

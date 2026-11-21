@@ -2,14 +2,14 @@
 #include "echarts/echarts.h"
 #include <stdio.h>
 
-static Dictionary make_value_axis(void) {
-    Dictionary split_ls = Dictionary_create();
+static Echarts_Dictionary make_value_axis(void) {
+    Echarts_Dictionary split_ls = Echarts_Dictionary_create();
     js_set_str(split_ls, "color", "#e5e5e5");
-    Dictionary split = Dictionary_create();
+    Echarts_Dictionary split = Echarts_Dictionary_create();
     js_set_val(split, "lineStyle", split_ls);
-    Dictionary lbl = Dictionary_create();
+    Echarts_Dictionary lbl = Echarts_Dictionary_create();
     js_set_str(lbl, "color", "#555555");
-    Dictionary ax = Dictionary_create();
+    Echarts_Dictionary ax = Echarts_Dictionary_create();
     js_set_str(ax, "type", "value");
     js_set_num(ax, "min", 0);
     js_set_num(ax, "max", 100);
@@ -33,15 +33,15 @@ __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     Document doc = get_document();
     HTMLElement box = Document_getElementById(doc, "chart");
-    ECharts chart = init(box, NULL);
+    ECharts chart = echarts_init(box, NULL);
 
-    Dictionary leg_ts = Dictionary_create();
+    Echarts_Dictionary leg_ts = Echarts_Dictionary_create();
     js_set_str(leg_ts, "color", "#111111");
-    Dictionary legend = Dictionary_create();
+    Echarts_Dictionary legend = Echarts_Dictionary_create();
     js_set_num(legend, "top", 8);
     js_set_val(legend, "textStyle", leg_ts);
 
-    Dictionary grid = Dictionary_create();
+    Echarts_Dictionary grid = Echarts_Dictionary_create();
     js_set_num(grid, "left", 48);
     js_set_num(grid, "right", 24);
     js_set_num(grid, "top", 48);
@@ -50,9 +50,9 @@ __attribute__((export_name("start"))) void start(void) {
     const double ca_pts[10][2] = { {14,22},{21,31},{28,27},{33,42},{40,48},{46,53},{54,61},{62,59},{71,74},{82,85} };
     const double cb_pts[10][2] = { {18,64},{25,72},{31,68},{39,79},{47,65},{55,81},{64,77},{72,88},{79,82},{88,92} };
 
-    Dictionary is_a = Dictionary_create();
+    Echarts_Dictionary is_a = Echarts_Dictionary_create();
     js_set_str(is_a, "color", "#111111");
-    Dictionary s0 = Dictionary_create();
+    Echarts_Dictionary s0 = Echarts_Dictionary_create();
     js_set_str(s0, "type", "scatter");
     js_set_str(s0, "name", "Cluster A");
     js_set_str(s0, "symbol", "circle");
@@ -60,11 +60,11 @@ __attribute__((export_name("start"))) void start(void) {
     js_set_val(s0, "itemStyle", is_a);
     js_set_val(s0, "data", make_pts(ca_pts, 10));
 
-    Dictionary is_b = Dictionary_create();
+    Echarts_Dictionary is_b = Echarts_Dictionary_create();
     js_set_str(is_b, "color", "#ffffff");
     js_set_str(is_b, "borderColor", "#111111");
     js_set_num(is_b, "borderWidth", 2);
-    Dictionary s1 = Dictionary_create();
+    Echarts_Dictionary s1 = Echarts_Dictionary_create();
     js_set_str(s1, "type", "scatter");
     js_set_str(s1, "name", "Cluster B");
     js_set_str(s1, "symbol", "rect");

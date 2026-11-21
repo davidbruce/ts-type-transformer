@@ -45,6 +45,8 @@ pub struct Modules {
     // Where each top-level declaration comes from (`readline`), by name:
     // written `origin="..."` where they come from more than one place.
     pub origins: std::collections::HashMap<String, String>,
+    // Optional C symbol prefix override (`--prefix` or `[naming] prefix`).
+    pub prefix: Option<String>,
 }
 
 impl Modules {
@@ -126,7 +128,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
         let t = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?.parse::<Table>().map_err(|e| format!("{p}: {e}"))?;
         merge(&mut table, t);
     }
-    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None, packages: Default::default(), origins: Default::default() };
+    let mut modules = Modules { default: "main".into(), areas: Vec::new(), import: None, packages: Default::default(), origins: Default::default(), prefix: None };
     // `--set generics=erase`, `--set limits.union_param_overloads=4`.
     for o in overrides {
         let (key, value) = o.split_once('=').ok_or_else(|| format!("--set {o}: expected key=value"))?;
@@ -168,6 +170,7 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
                 ("naming", "separator") => o.separator = Box::leak(string(&at, value)?.to_string().into_boxed_str()),
                 ("naming", "overloads") => o.numbered_overloads = one_of(&at, value, OVERLOAD_NAMES)? == "numbered",
                 ("naming", "types") => o.pascal_types = one_of(&at, value, &["as_generated", "pascal"])? == "pascal",
+                ("naming", "prefix") => modules.prefix = Some(string(&at, value)?.to_string()),
                 ("library", "module") => modules.import = Some(string(&at, value)?.to_string()),
                 ("rename", old) => renames.push((old.to_string(), string(&at, value)?.to_string())),
                 ("modules", "default") => modules.default = string(&at, value)?.to_string(),
@@ -251,6 +254,7 @@ pub fn template() -> String {
          \n[naming]\n# Joins the parts of generated names.\nseparator = \"{}\"\n\
          # \"with_params\": f_with_x. \"numbered\": f_2.\noverloads = \"with_params\"\n\
          # Generated types: \"as_generated\" (boolean_or_Options) or \"pascal\" (BooleanOrOptions).\ntypes = \"as_generated\"\n\
+         # C symbol prefix override (\"\" disables prefixing; default derives from module name).\n# prefix = \"\"\n\
          \n# Names for declarations a pass generated, which are named after where they came from.\n[rename]\n# SVGSVGElement_getEnclosureList_result = \"EnclosureList\"\n",
         d.union_param_limit, d.intersection_limit, d.keyed_limit, d.separator
     );

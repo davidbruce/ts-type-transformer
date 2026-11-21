@@ -30,106 +30,106 @@ static JsValue dom_hole(const char* tag) {
     js_push_num(a, 0);
     return js_value(a);
 }
-static JsValue heading_dom(void* ctx, Node_3 n) {
+static JsValue heading_dom(void* ctx, Pm_Node n) {
     (void)ctx;
     js_scope_open();
-    int lvl = (int)js_to_number(js_get_prop(Node_3_get_attrs(n), "level"));
+    int lvl = (int)js_to_number(js_get_prop(Pm_Node_get_attrs(n), "level"));
     JsValue res = dom_hole(lvl == 1 ? "h1" : "h2");
     js_retain(res);
     js_scope_close();
     return res;
 }
-static JsValue tag_dom(void* ctx, Node_3 n) { (void)n; return dom_hole((const char*)ctx); }
-static JsValue mark_dom(void* ctx, Mark m, bool inl) {
+static JsValue tag_dom(void* ctx, Pm_Node n) { (void)n; return dom_hole((const char*)ctx); }
+static JsValue mark_dom(void* ctx, Pm_Mark m, bool inl) {
     (void)m; (void)inl;
     return dom_hole((const char*)ctx);
 }
 
-static TagParseRule make_tag_rule(const char* tag, int level) {
-    TagParseRule r = TagParseRule_create();
-    TagParseRule_set_tag(r, tag);
+static Pm_TagParseRule make_tag_rule(const char* tag, int level) {
+    Pm_TagParseRule r = Pm_TagParseRule_create();
+    Pm_TagParseRule_set_tag(r, tag);
     if (level > 0) {
-        Attrs a = Attrs_create();
+        Pm_Attrs a = Pm_Attrs_create();
         js_set_num(a, "level", (double)level);
-        TagParseRule_set_attrs(r, a);
+        Pm_TagParseRule_set_attrs(r, a);
     }
     return r;
 }
 
 static Document g_doc;
-static Schema g_schema;
-static DOMParser_2 g_parser;
-static DOMSerializer g_serializer;
-static EditorView g_view;
+static Pm_Schema g_schema;
+static Pm_DOMParser g_parser;
+static Pm_DOMSerializer g_serializer;
+static Pm_EditorView g_view;
 static const char* g_status = "JSON Node.eq() pending";
 
-static Schema make_schema(void) {
-    NodeSpec doc = NodeSpec_create();
-    NodeSpec_set_content(doc, "block+");
+static Pm_Schema make_schema(void) {
+    Pm_NodeSpec doc = Pm_NodeSpec_create();
+    Pm_NodeSpec_set_content(doc, "block+");
 
-    AttributeSpec lvl = AttributeSpec_create();
-    AttributeSpec_set_default(lvl, js_number(2));
-    MarkSpec_attrs hattrs = MarkSpec_attrs_create();
-    MarkSpec_attrs_set_at(hattrs, "level", lvl);
+    Pm_AttributeSpec lvl = Pm_AttributeSpec_create();
+    Pm_AttributeSpec_set_default(lvl, js_number(2));
+    Pm_MarkSpec_attrs hattrs = Pm_MarkSpec_attrs_create();
+    Pm_MarkSpec_attrs_set_at(hattrs, "level", lvl);
 
-    NodeSpec heading = NodeSpec_create();
-    NodeSpec_set_attrs(heading, hattrs);
-    NodeSpec_set_content(heading, "inline*");
-    NodeSpec_set_group(heading, "block");
-    NodeSpec_set_defining(heading, true);
-    TagParseRule hrules[2] = { make_tag_rule("h1", 1), make_tag_rule("h2", 2) };
-    NodeSpec_set_parseDOM(heading, JsArray_TagParseRule_from(hrules, 2));
-    NodeSpec_set_toDOM(heading, Node_to_DOMOutputSpec_fn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create();
+    Pm_NodeSpec_set_attrs(heading, hattrs);
+    Pm_NodeSpec_set_content(heading, "inline*");
+    Pm_NodeSpec_set_group(heading, "block");
+    Pm_NodeSpec_set_defining(heading, true);
+    Pm_TagParseRule hrules[2] = { make_tag_rule("h1", 1), make_tag_rule("h2", 2) };
+    Pm_NodeSpec_set_parseDOM(heading, JsArray_Pm_TagParseRule_from(hrules, 2));
+    Pm_NodeSpec_set_toDOM(heading, Pm_Node_to_DOMOutputSpec_fn_from(heading_dom, NULL));
 
-    NodeSpec para = NodeSpec_create();
-    NodeSpec_set_content(para, "inline*");
-    NodeSpec_set_group(para, "block");
-    TagParseRule p_rule = make_tag_rule("p", 0);
-    NodeSpec_set_parseDOM(para, JsArray_TagParseRule_from(&p_rule, 1));
-    NodeSpec_set_toDOM(para, Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"p"));
+    Pm_NodeSpec para = Pm_NodeSpec_create();
+    Pm_NodeSpec_set_content(para, "inline*");
+    Pm_NodeSpec_set_group(para, "block");
+    Pm_TagParseRule p_rule = make_tag_rule("p", 0);
+    Pm_NodeSpec_set_parseDOM(para, JsArray_Pm_TagParseRule_from(&p_rule, 1));
+    Pm_NodeSpec_set_toDOM(para, Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"p"));
 
-    NodeSpec quote = NodeSpec_create();
-    NodeSpec_set_content(quote, "block+");
-    NodeSpec_set_group(quote, "block");
-    NodeSpec_set_defining(quote, true);
-    TagParseRule q_rule = make_tag_rule("blockquote", 0);
-    NodeSpec_set_parseDOM(quote, JsArray_TagParseRule_from(&q_rule, 1));
-    NodeSpec_set_toDOM(quote, Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"blockquote"));
+    Pm_NodeSpec quote = Pm_NodeSpec_create();
+    Pm_NodeSpec_set_content(quote, "block+");
+    Pm_NodeSpec_set_group(quote, "block");
+    Pm_NodeSpec_set_defining(quote, true);
+    Pm_TagParseRule q_rule = make_tag_rule("blockquote", 0);
+    Pm_NodeSpec_set_parseDOM(quote, JsArray_Pm_TagParseRule_from(&q_rule, 1));
+    Pm_NodeSpec_set_toDOM(quote, Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"blockquote"));
 
-    NodeSpec text = NodeSpec_create();
-    NodeSpec_set_group(text, "inline");
+    Pm_NodeSpec text = Pm_NodeSpec_create();
+    Pm_NodeSpec_set_group(text, "inline");
 
-    Attrs nodes = Attrs_create();
+    Pm_Attrs nodes = Pm_Attrs_create();
     js_set_val(nodes, "doc", doc);
     js_set_val(nodes, "heading", heading);
     js_set_val(nodes, "paragraph", para);
     js_set_val(nodes, "blockquote", quote);
     js_set_val(nodes, "text", text);
 
-    MarkSpec strong = MarkSpec_create();
-    ParseRule srule = ParseRule_of(make_tag_rule("strong", 0));
-    MarkSpec_set_parseDOM(strong, JsArray_ParseRule_from(&srule, 1));
-    MarkSpec_set_toDOM(strong, Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"strong"));
+    Pm_MarkSpec strong = Pm_MarkSpec_create();
+    Pm_ParseRule srule = Pm_ParseRule_of(make_tag_rule("strong", 0));
+    Pm_MarkSpec_set_parseDOM(strong, JsArray_Pm_ParseRule_from(&srule, 1));
+    Pm_MarkSpec_set_toDOM(strong, Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"strong"));
 
-    MarkSpec em = MarkSpec_create();
-    ParseRule erule = ParseRule_of(make_tag_rule("em", 0));
-    MarkSpec_set_parseDOM(em, JsArray_ParseRule_from(&erule, 1));
-    MarkSpec_set_toDOM(em, Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"em"));
+    Pm_MarkSpec em = Pm_MarkSpec_create();
+    Pm_ParseRule erule = Pm_ParseRule_of(make_tag_rule("em", 0));
+    Pm_MarkSpec_set_parseDOM(em, JsArray_Pm_ParseRule_from(&erule, 1));
+    Pm_MarkSpec_set_toDOM(em, Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"em"));
 
-    MarkSpec code = MarkSpec_create();
-    ParseRule crule = ParseRule_of(make_tag_rule("code", 0));
-    MarkSpec_set_parseDOM(code, JsArray_ParseRule_from(&crule, 1));
-    MarkSpec_set_toDOM(code, Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"code"));
+    Pm_MarkSpec code = Pm_MarkSpec_create();
+    Pm_ParseRule crule = Pm_ParseRule_of(make_tag_rule("code", 0));
+    Pm_MarkSpec_set_parseDOM(code, JsArray_Pm_ParseRule_from(&crule, 1));
+    Pm_MarkSpec_set_toDOM(code, Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"code"));
 
-    Attrs marks = Attrs_create();
+    Pm_Attrs marks = Pm_Attrs_create();
     js_set_val(marks, "strong", strong);
     js_set_val(marks, "em", em);
     js_set_val(marks, "code", code);
 
-    SchemaSpec spec = SchemaSpec_create();
+    Pm_SchemaSpec spec = Pm_SchemaSpec_create();
     js_set_val(spec, "nodes", nodes);
     js_set_val(spec, "marks", marks);
-    return Schema_new(spec);
+    return Pm_Schema_new(spec);
 }
 
 static const char* SPEC_HTML =
@@ -144,16 +144,16 @@ static const char* CHANGELOG_HTML =
     "<blockquote><p>All round-trips verified with Node.eq().</p></blockquote>"
     "<p>Edit directly above to watch HTML output update live.</p>";
 
-static Node_3 parse_html(const char* html) {
+static Pm_Node parse_html(const char* html) {
     HTMLElement div = Document_createElement(g_doc, "div");
     HTMLElement_set_innerHTML(div, html);
-    return DOMParser_2_parse(g_parser, (Node_2){ div.h });
+    return Pm_DOMParser_parse(g_parser, AS_Node(div));
 }
 
-static void refresh_output(Node_3 doc) {
+static void refresh_output(Pm_Node doc) {
     js_scope_open();
     HTMLElement div = Document_createElement(g_doc, "div");
-    DOMSerializer_serializeFragment(g_serializer, Node_3_get_content(doc), (DOMSerializer_serializeFragment_options){ 0 }, div);
+    Pm_DOMSerializer_serializeFragment(g_serializer, Pm_Node_get_content(doc), (Pm_DOMSerializer_serializeFragment_options){ 0 }, div);
     JsString html_js = HTMLElement_get_innerHTML(div);
     int html_len = (int)JsString_len(html_js);
 
@@ -161,20 +161,20 @@ static void refresh_output(Node_3 doc) {
     OutBuf out = { out_buf, out_buf + sizeof out_buf };
     out_fmt(&out, "SERIALIZED HTML (DOMSerializer):\n");
     out_js(&out, html_js);
-    int nb = (int)Node_3_get_childCount(doc);
+    int nb = (int)Pm_Node_get_childCount(doc);
     out_fmt(&out, "\n\nDOCUMENT AST & JSON ROUND-TRIP:\ndoc(blocks=%d, nodeSize=%d)\n",
-            nb, (int)Node_3_get_nodeSize(doc));
+            nb, (int)Pm_Node_get_nodeSize(doc));
     for (int i = 0; i < nb; i++) {
-        Node_3 b = Node_3_child(doc, i);
-        JsString tname = NodeType_get_name(Node_3_get_type(b));
+        Pm_Node b = Pm_Node_child(doc, i);
+        JsString tname = Pm_NodeType_get_name(Pm_Node_get_type(b));
         out_fmt(&out, "  [%d] ", i);
         if (JsString_equals(tname, "heading")) {
-            out_fmt(&out, "heading[level=%d]", (int)js_to_number(js_get_prop(Node_3_get_attrs(b), "level")));
+            out_fmt(&out, "heading[level=%d]", (int)js_to_number(js_get_prop(Pm_Node_get_attrs(b), "level")));
         } else {
             out_js(&out, tname);
         }
-        out_fmt(&out, " (%d bytes): ", (int)Node_3_get_nodeSize(b));
-        out_js(&out, Node_3_get_textContent(b));
+        out_fmt(&out, " (%d bytes): ", (int)Pm_Node_get_nodeSize(b));
+        out_js(&out, Pm_Node_get_textContent(b));
         out_fmt(&out, "\n");
     }
     out_fmt(&out, "\nROUND-TRIP STATUS: %s", g_status);
@@ -182,18 +182,18 @@ static void refresh_output(Node_3 doc) {
 
     char meta[256];
     snprintf(meta, sizeof meta, "%s \xC2\xB7 blocks=%d \xC2\xB7 nodeSize=%d \xC2\xB7 htmlBytes=%d",
-             g_status, nb, (int)Node_3_get_nodeSize(doc), html_len);
+             g_status, nb, (int)Pm_Node_get_nodeSize(doc), html_len);
     HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
     js_scope_close();
 }
 
-static void on_dispatch(void* ctx, Transaction tr) {
+static void on_dispatch(void* ctx, Pm_Transaction tr) {
     (void)ctx;
     if (g_view.h == 0) return;
     js_scope_open();
-    EditorState next = EditorState_apply(EditorView_get_state(g_view), tr);
-    EditorView_updateState(g_view, next);
-    refresh_output(EditorState_get_doc(next));
+    Pm_EditorState next = Pm_EditorState_apply(Pm_EditorView_get_state(g_view), tr);
+    Pm_EditorView_updateState(g_view, next);
+    refresh_output(Pm_EditorState_get_doc(next));
     js_scope_close();
 }
 
@@ -202,51 +202,51 @@ static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
     js_scope_open();
     int idx = *(const int*)ctx;
-    EditorState st = EditorView_get_state(g_view);
-    Node_3 doc = EditorState_get_doc(st);
+    Pm_EditorState st = Pm_EditorView_get_state(g_view);
+    Pm_Node doc = Pm_EditorState_get_doc(st);
     if (idx == 0) {
         g_status = "Parsed Spec HTML via DOMParser";
-        EditorStateConfig cfg = EditorStateConfig_create();
-        EditorStateConfig_set_schema(cfg, g_schema);
-        EditorStateConfig_set_doc(cfg, parse_html(SPEC_HTML));
-        EditorState next = EditorState_create(cfg);
-        EditorView_updateState(g_view, next);
-        refresh_output(EditorState_get_doc(next));
+        Pm_EditorStateConfig cfg = Pm_EditorStateConfig_create();
+        Pm_EditorStateConfig_set_schema(cfg, g_schema);
+        Pm_EditorStateConfig_set_doc(cfg, parse_html(SPEC_HTML));
+        Pm_EditorState next = Pm_EditorState_create(cfg);
+        Pm_EditorView_updateState(g_view, next);
+        refresh_output(Pm_EditorState_get_doc(next));
     } else if (idx == 1) {
         g_status = "Parsed Changelog HTML via DOMParser";
-        EditorStateConfig cfg = EditorStateConfig_create();
-        EditorStateConfig_set_schema(cfg, g_schema);
-        EditorStateConfig_set_doc(cfg, parse_html(CHANGELOG_HTML));
-        EditorState next = EditorState_create(cfg);
-        EditorView_updateState(g_view, next);
-        refresh_output(EditorState_get_doc(next));
+        Pm_EditorStateConfig cfg = Pm_EditorStateConfig_create();
+        Pm_EditorStateConfig_set_schema(cfg, g_schema);
+        Pm_EditorStateConfig_set_doc(cfg, parse_html(CHANGELOG_HTML));
+        Pm_EditorState next = Pm_EditorState_create(cfg);
+        Pm_EditorView_updateState(g_view, next);
+        refresh_output(Pm_EditorState_get_doc(next));
     } else if (idx == 2) {
-        Node_3 rebuilt = Node_3_fromJSON(g_schema, Node_3_toJSON(doc));
-        bool ok = Node_3_eq(doc, rebuilt);
+        Pm_Node rebuilt = Pm_Node_fromJSON(g_schema, Pm_Node_toJSON(doc));
+        bool ok = Pm_Node_eq(doc, rebuilt);
         g_status = ok ? "JSON toJSON->fromJSON eq() = true" : "JSON toJSON->fromJSON eq() = false";
         refresh_output(doc);
     } else if (idx == 3) {
-        if (Node_3_get_childCount(doc) >= 2.0) {
-            double insert_pos = Node_3_get_nodeSize(Node_3_child(doc, 0)) + Node_3_get_nodeSize(Node_3_child(doc, 1)) - 1.0;
-            Mark code_mark = Schema_mark(g_schema, "code", (Attrs){ 0 });
-            Node_3 span = Schema_text(g_schema, " roundtrip()", JsArray_Mark_from(&code_mark, 1));
-            Transaction tr = EditorState_get_tr(st);
-            Transaction_insert(tr, insert_pos, span);
+        if (Pm_Node_get_childCount(doc) >= 2.0) {
+            double insert_pos = Pm_Node_get_nodeSize(Pm_Node_child(doc, 0)) + Pm_Node_get_nodeSize(Pm_Node_child(doc, 1)) - 1.0;
+            Pm_Mark code_mark = Pm_Schema_mark(g_schema, "code", (Pm_Attrs){ 0 });
+            Pm_Node span = Pm_Schema_text(g_schema, " roundtrip()", JsArray_Pm_Mark_from(&code_mark, 1));
+            Pm_Transaction tr = Pm_EditorState_get_tr(st);
+            Pm_Transaction_insert(tr, insert_pos, span);
             g_status = "Inserted code span into paragraph";
-            call_Transaction_fn(EditorView_get_dispatch(g_view), tr);
+            pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
         }
     } else if (idx == 4) {
         HTMLElement div = Document_createElement(g_doc, "div");
-        DOMSerializer_serializeFragment(g_serializer, Node_3_get_content(doc), (DOMSerializer_serializeFragment_options){ 0 }, div);
-        Node_3 reparsed = DOMParser_2_parse(g_parser, (Node_2){ div.h });
-        bool ok = Node_3_eq(doc, reparsed);
+        Pm_DOMSerializer_serializeFragment(g_serializer, Pm_Node_get_content(doc), (Pm_DOMSerializer_serializeFragment_options){ 0 }, div);
+        Pm_Node reparsed = Pm_DOMParser_parse(g_parser, AS_Node(div));
+        bool ok = Pm_Node_eq(doc, reparsed);
         g_status = ok ? "DOM serializeFragment->parse eq() = true" : "DOM serializeFragment->parse eq() = false";
-        EditorStateConfig cfg = EditorStateConfig_create();
-        EditorStateConfig_set_schema(cfg, g_schema);
-        EditorStateConfig_set_doc(cfg, reparsed);
-        EditorState next = EditorState_create(cfg);
-        EditorView_updateState(g_view, next);
-        refresh_output(EditorState_get_doc(next));
+        Pm_EditorStateConfig cfg = Pm_EditorStateConfig_create();
+        Pm_EditorStateConfig_set_schema(cfg, g_schema);
+        Pm_EditorStateConfig_set_doc(cfg, reparsed);
+        Pm_EditorState next = Pm_EditorState_create(cfg);
+        Pm_EditorView_updateState(g_view, next);
+        refresh_output(Pm_EditorState_get_doc(next));
     }
     js_scope_close();
 }
@@ -257,24 +257,24 @@ __attribute__((export_name("start"))) void start(void) {
     js_retain(g_doc);
     g_schema = make_schema();
     js_retain(g_schema);
-    g_parser = DOMParser_2_fromSchema(g_schema);
+    g_parser = Pm_DOMParser_fromSchema(g_schema);
     js_retain(g_parser);
-    g_serializer = DOMSerializer_fromSchema(g_schema);
+    g_serializer = Pm_DOMSerializer_fromSchema(g_schema);
     js_retain(g_serializer);
 
-    EditorStateConfig scfg = EditorStateConfig_create();
-    EditorStateConfig_set_schema(scfg, g_schema);
-    EditorStateConfig_set_doc(scfg, parse_html(SPEC_HTML));
+    Pm_EditorStateConfig scfg = Pm_EditorStateConfig_create();
+    Pm_EditorStateConfig_set_schema(scfg, g_schema);
+    Pm_EditorStateConfig_set_doc(scfg, parse_html(SPEC_HTML));
 
-    DirectEditorProps props = DirectEditorProps_create();
-    DirectEditorProps_set_state(props, EditorState_create(scfg));
-    DirectEditorProps_set_dispatchTransaction(props, Transaction_fn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create();
+    Pm_DirectEditorProps_set_state(props, Pm_EditorState_create(scfg));
+    Pm_DirectEditorProps_set_dispatchTransaction(props, Pm_Transaction_fn_from(on_dispatch, NULL));
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = EditorView_new(AS_Node(mount), props);
+    g_view = Pm_EditorView_new(AS_Node(mount), props);
     js_retain(g_view);
     g_status = "Parsed Spec HTML via DOMParser";
-    refresh_output(EditorState_get_doc(EditorView_get_state(g_view)));
+    refresh_output(Pm_EditorState_get_doc(Pm_EditorView_get_state(g_view)));
 
     static const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (int i = 0; i < 5; i++) {

@@ -15,7 +15,7 @@ static uint32_t walked_count = 0;
 static JsValue walk_token_cb(void* ctx, JsValue token) {
     (void)ctx;
     if (walked_count < 64) {
-        JsString t = Tokens_Generic_get_type((Tokens_Generic){ token.h });
+        JsString t = Marked_Tokens_Generic_get_type((Marked_Tokens_Generic){ token.h });
         JsString_copy(t, walked_types[walked_count], sizeof(walked_types[0]));
         js_release(t);
         walked_count++;
@@ -23,14 +23,14 @@ static JsValue walk_token_cb(void* ctx, JsValue token) {
     return (JsValue){ 0 };
 }
 
-static JsValue render_heading(void* ctx, JsTuple_Tokens_Heading args) {
+static JsValue render_heading(void* ctx, JsTuple_Marked_Tokens_Heading args) {
     (void)ctx;
     js_scope_open();
-    Tokens_Heading h = JsTuple_Tokens_Heading_get_0(args);
-    uint32_t depth = (uint32_t)Tokens_Heading_get_depth(h);
+    Marked_Tokens_Heading h = JsTuple_Marked_Tokens_Heading_get_0(args);
+    uint32_t depth = (uint32_t)Marked_Tokens_Heading_get_depth(h);
     if (depth < 1 || depth > 6) depth = 1;
     char text_buf[128];
-    JsString_copy(Tokens_Heading_get_text(h), text_buf, sizeof text_buf);
+    JsString_copy(Marked_Tokens_Heading_get_text(h), text_buf, sizeof text_buf);
     char out[256];
     snprintf(out, sizeof out, "<h%u class=\"wire-h\">\xC2\xA7 %s</h%u>\n", depth, text_buf, depth);
     JsValue res = js_string(out);
@@ -53,7 +53,7 @@ __attribute__((export_name("start"))) void start(void) {
     MarkedExtension_renderer rend = MarkedExtension_renderer_create();
     MarkedExtension_renderer_set_heading(rend, MarkedExtension_renderer_heading_from(render_heading, 0));
     MarkedExtension_set_renderer(ext, rend);
-    MarkedExtension_set_walkTokens(ext, Token_to_void_or_Promise_or_void_or_Promise_array_fn_from(walk_token_cb, 0));
+    MarkedExtension_set_walkTokens(ext, Marked_Token_to_void_or_Promise_or_void_or_Promise_array_fn_from(walk_token_cb, 0));
 
     Marked custom_m = Marked_new(JsArray_MarkedExtension_from(&ext, 1));
     JsString def_html = marked(md, (marked_options_no_async){ 0 });

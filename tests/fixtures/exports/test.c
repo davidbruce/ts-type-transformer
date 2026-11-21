@@ -16,19 +16,19 @@ static bool str_eq(JsString s, const char* expected) {
 
 __attribute__((export_name("run"))) void run(void) {
     // A default export, reached as `default`.
-    CHECK(Point_get_x(origin()) == 0);
+    CHECK(Exports_Point_get_x(exports_origin()) == 0);
 
     // Exported under other names: called and constructed by them.
-    CHECK(area(3, 4) == 12);
-    Figure f = Figure_new(2);
-    CHECK(Figure_grow(f) == 3 && Figure_get_size(f) == 3);
-    CHECK(str_eq(Badge_get_label(Badge_new("x")), "x"));
+    CHECK(exports_area(3, 4) == 12);
+    Exports_Figure f = Exports_Figure_new(2);
+    CHECK(Exports_Figure_grow(f) == 3 && Exports_Figure_get_size(f) == 3);
+    CHECK(str_eq(Exports_Badge_get_label(Exports_Badge_new("x")), "x"));
 
     // Constants are read, never assigned: there is no set_LIMIT.
-    CHECK(get_LIMIT() == 10);
-    CHECK(get_counter() == 0 && bump() == 1 && get_counter() == 1);
+    CHECK(exports_get_LIMIT() == 10);
+    CHECK(exports_get_counter() == 0 && exports_bump() == 1 && exports_get_counter() == 1);
 
     // A union told apart by the classes as exported.
-    CHECK(pick(0).tag == Figure_or_Badge_Figure && Figure_get_size(pick(0).as.Figure) == 2);
-    CHECK(pick(1).tag == Figure_or_Badge_Badge);
+    CHECK(exports_pick(0).tag == Exports_Figure_or_Badge_Exports_Figure && Exports_Figure_get_size(exports_pick(0).as.Exports_Figure) == 2);
+    CHECK(exports_pick(1).tag == Exports_Figure_or_Badge_Exports_Badge);
 }

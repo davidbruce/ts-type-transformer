@@ -1,37 +1,37 @@
 #include "pts/pts.h"
 #include <math.h>
 
-static Pt mk_pt(double x, double y) {
-    Pt p = Pt_make(2.0);
-    Pt_set_x(p, x);
-    Pt_set_y(p, y);
+static Pts_Pt mk_pt(double x, double y) {
+    Pts_Pt p = Pts_Pt_make(2.0);
+    Pts_Pt_set_x(p, x);
+    Pts_Pt_set_y(p, y);
     return p;
 }
 
-static Group mk_group2(Pt a, Pt b) {
-    return Group_new(JsArray_Pt_from((Pt[]){ a, b }, 2));
+static Pts_Group mk_group2(Pts_Pt a, Pts_Pt b) {
+    return Pts_Group_new(JsArray_Pts_Pt_from((Pts_Pt[]){ a, b }, 2));
 }
 
-static CanvasSpace g_space;
-static CanvasForm g_form;
+static Pts_CanvasSpace g_space;
+static Pts_CanvasForm g_form;
 
-static void on_animate(void* ctx, double time_ms, double ftime_ms, Space current_space) {
+static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space current_space) {
     (void)ctx; (void)ftime_ms; (void)current_space;
     js_scope_open();
 
-    Pt size = CanvasSpace_get_size(g_space);
-    Pt c = CanvasSpace_get_center(g_space);
-    Pt pointer = CanvasSpace_get_pointer(g_space);
-    double w = Pt_get_x(size); if (w < 120.0) w = 120.0;
-    double h = Pt_get_y(size); if (h < 120.0) h = 120.0;
-    double cy = Pt_get_y(c);
-    double px = Pt_get_x(pointer), py = Pt_get_y(pointer);
+    Pts_Pt size = Pts_CanvasSpace_get_size(g_space);
+    Pts_Pt c = Pts_CanvasSpace_get_center(g_space);
+    Pts_Pt pointer = Pts_CanvasSpace_get_pointer(g_space);
+    double w = Pts_Pt_get_x(size); if (w < 120.0) w = 120.0;
+    double h = Pts_Pt_get_y(size); if (h < 120.0) h = 120.0;
+    double cy = Pts_Pt_get_y(c);
+    double px = Pts_Pt_get_x(pointer), py = Pts_Pt_get_y(pointer);
     double amp = h * 0.24;
 
-    Group base_line = mk_group2(mk_pt(w * 0.06, cy), mk_pt(w * 0.94, cy));
-    CanvasForm_line_2(CanvasForm_strokeOnly(g_form, "#e5e5e5", 1.0), PtLikeIterable_of(base_line));
+    Pts_Group base_line = mk_group2(mk_pt(w * 0.06, cy), mk_pt(w * 0.94, cy));
+    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#e5e5e5", 1.0), Pts_PtLikeIterable_of(base_line));
 
-    JsArray_Pt arr = JsArray_Pt_new();
+    JsArray_Pts_Pt arr = JsArray_Pts_Pt_new();
     int count = 11;
     for (int i = 0; i < count; i++) {
         double u = (double)i / (double)(count - 1);
@@ -45,32 +45,32 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Space current
             double pull = 1.0 - dx / (w * 0.25);
             y += (py - y) * pull * 0.35;
         }
-        JsArray_Pt_push(arr, mk_pt(x, y));
+        JsArray_Pts_Pt_push(arr, mk_pt(x, y));
     }
 
-    Group ctrls = Group_new(arr);
-    Group bs = Curve_bspline(GroupLike_of(ctrls), 12.0);
-    Group card = Curve_cardinal(PtLikeIterable_of(ctrls), 12.0, 0.35);
-    Group cr = Curve_catmullRom(PtLikeIterable_of(ctrls), 12.0);
+    Pts_Group ctrls = Pts_Group_new(arr);
+    Pts_Group bs = Pts_Curve_bspline(Pts_GroupLike_of(ctrls), 12.0);
+    Pts_Group card = Pts_Curve_cardinal(Pts_PtLikeIterable_of(ctrls), 12.0, 0.35);
+    Pts_Group cr = Pts_Curve_catmullRom(Pts_PtLikeIterable_of(ctrls), 12.0);
 
-    JsArray_Pt cr_arr = Group_as_array(cr);
-    uint32_t cr_len = JsArray_Pt_length(cr_arr);
+    JsArray_Pts_Pt cr_arr = Pts_Group_as_array(cr);
+    uint32_t cr_len = JsArray_Pts_Pt_length(cr_arr);
     for (uint32_t i = 0; i < cr_len; i += 3) {
-        Pt p = JsArray_Pt_get(cr_arr, i);
-        Group stem = mk_group2(mk_pt(Pt_get_x(p), cy), p);
-        CanvasForm_line_2(CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), PtLikeIterable_of(stem));
+        Pts_Pt p = JsArray_Pts_Pt_get(cr_arr, i);
+        Pts_Group stem = mk_group2(mk_pt(Pts_Pt_get_x(p), cy), p);
+        Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), Pts_PtLikeIterable_of(stem));
     }
 
-    CanvasForm_line_2(CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), PtLikeIterable_of(ctrls));
-    CanvasForm_line_2(CanvasForm_strokeOnly(g_form, "#b5b5b5", 2.0), PtLikeIterable_of(bs));
-    CanvasForm_line_2(CanvasForm_strokeOnly(g_form, "#555555", 1.8), PtLikeIterable_of(card));
-    CanvasForm_line_2(CanvasForm_strokeOnly(g_form, "#111111", 2.6), PtLikeIterable_of(cr));
+    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), Pts_PtLikeIterable_of(ctrls));
+    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 2.0), Pts_PtLikeIterable_of(bs));
+    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#555555", 1.8), Pts_PtLikeIterable_of(card));
+    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#111111", 2.6), Pts_PtLikeIterable_of(cr));
 
     for (uint32_t i = 0; i < (uint32_t)count; i++) {
-        Pt p = JsArray_Pt_get(arr, i);
-        CanvasForm_point_2(
-            CanvasForm_stroke(CanvasForm_fill(g_form, "#ffffff"), "#111111", 1.5),
-            PtLike_of(p), 4.5, "circle"
+        Pts_Pt p = JsArray_Pts_Pt_get(arr, i);
+        Pts_CanvasForm_point_2(
+            Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#ffffff"), "#111111", 1.5),
+            Pts_PtLike_of(p), 4.5, "circle"
         );
     }
 
@@ -80,20 +80,20 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Space current
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
 
-    CanvasSpaceOptions opts = CanvasSpaceOptions_create();
-    CanvasSpaceOptions_set_bgcolor(opts, "#ffffff");
-    CanvasSpaceOptions_set_resize(opts, true);
-    CanvasSpaceOptions_set_retina(opts, true);
+    Pts_CanvasSpaceOptions opts = Pts_CanvasSpaceOptions_create();
+    Pts_CanvasSpaceOptions_set_bgcolor(opts, "#ffffff");
+    Pts_CanvasSpaceOptions_set_resize(opts, true);
+    Pts_CanvasSpaceOptions_set_retina(opts, true);
 
-    g_space = CanvasSpace_setup(CanvasSpace_new("#pt"), opts);
-    g_form = CanvasSpace_getForm(g_space);
+    g_space = Pts_CanvasSpace_setup(Pts_CanvasSpace_new("#pt"), opts);
+    g_form = Pts_CanvasSpace_getForm(g_space);
 
-    IPlayer player = IPlayer_create();
-    IPlayer_set_animate(player, AnimateCallbackFn_from(on_animate, 0));
-    CanvasSpace_add(g_space, player);
-    CanvasSpace_bindMouse(g_space);
-    CanvasSpace_bindTouch(g_space);
-    CanvasSpace_play(g_space);
+    Pts_IPlayer player = Pts_IPlayer_create();
+    Pts_IPlayer_set_animate(player, Pts_AnimateCallbackFn_from(on_animate, 0));
+    Pts_CanvasSpace_add(g_space, player);
+    Pts_CanvasSpace_bindMouse(g_space);
+    Pts_CanvasSpace_bindTouch(g_space);
+    Pts_CanvasSpace_play(g_space);
 
     js_retain(g_space);
     js_retain(g_form);

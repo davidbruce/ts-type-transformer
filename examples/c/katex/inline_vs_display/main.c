@@ -37,14 +37,14 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement c1 = make_el(doc, "div", "cell", 0);
         HTMLElement_appendChild(c1, make_el(doc, "div", "label", labels_in[i]));
         HTMLElement out1 = make_el(doc, "div", "slot", 0);
-        HTMLElement_set_innerHTML(out1, renderToString(texs[i], inline_opts));
+        HTMLElement_set_innerHTML(out1, katex_renderToString(texs[i], inline_opts));
         HTMLElement_appendChild(c1, out1);
         HTMLElement_appendChild(row, c1);
 
         HTMLElement c2 = make_el(doc, "div", "cell", 0);
         HTMLElement_appendChild(c2, make_el(doc, "div", "label", labels_disp[i]));
         HTMLElement out2 = make_el(doc, "div", "slot", 0);
-        HTMLElement_set_innerHTML(out2, renderToString(texs[i], display_opts));
+        HTMLElement_set_innerHTML(out2, katex_renderToString(texs[i], display_opts));
         HTMLElement_appendChild(c2, out2);
         HTMLElement_appendChild(row, c2);
 

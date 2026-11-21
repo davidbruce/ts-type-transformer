@@ -21,7 +21,7 @@ static CanvasRenderingContext2D g_ctx;
 static HTMLElement g_meta;
 static HTMLElement g_sweep_btn;
 static FrameRequestCallback g_raf_cb;
-static World g_world;
+static Rapier_World g_world;
 
 static bool g_auto_sweep = true;
 static double g_phase = 0.0;
@@ -71,15 +71,15 @@ static void draw_circle(double wx, double wy, double r, string_or_CanvasGradient
 }
 
 static void add_box(double cx, double cy, double theta, double hx, double hy) {
-    Quaternion q = Quaternion_new(0.0, 0.0, sin(theta * 0.5), cos(theta * 0.5));
-    RigidBodyDesc d = RigidBodyDesc_setRotation(RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), cx, cy, 0.0), q);
-    RigidBody rb = World_createRigidBody(g_world, d);
-    World_createCollider(g_world, ColliderDesc_cuboid(hx, hy, 1.0), rb);
+    Rapier_Quaternion q = Rapier_Quaternion_new(0.0, 0.0, sin(theta * 0.5), cos(theta * 0.5));
+    Rapier_RigidBodyDesc d = Rapier_RigidBodyDesc_setRotation(Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), cx, cy, 0.0), q);
+    Rapier_RigidBody rb = Rapier_World_createRigidBody(g_world, d);
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_cuboid(hx, hy, 1.0), rb);
 }
 
 static void add_sphere(double cx, double cy, double r) {
-    RigidBody rb = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), cx, cy, 0.0));
-    World_createCollider(g_world, ColliderDesc_ball(r), rb);
+    Rapier_RigidBody rb = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), cx, cy, 0.0));
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_ball(r), rb);
 }
 
 static void render(void) {
@@ -114,7 +114,7 @@ static void render(void) {
 
     double base_angle = -0.35 + g_manual_offset + 0.28 * sin(g_phase);
     double ox = to_cx(EMITTER_X), oy = to_cy(EMITTER_Y);
-    Vector3 origin = Vector3_new(EMITTER_X, EMITTER_Y, 0.0);
+    Rapier_Vector3 origin = Rapier_Vector3_new(EMITTER_X, EMITTER_Y, 0.0);
 
     int hits = 0;
     double min_toi = MAX_TOI;
@@ -122,15 +122,15 @@ static void render(void) {
         double frac = (double)i / (double)(RAY_COUNT - 1) - 0.5;
         double angle = base_angle + frac * 1.35;
         double dx = cos(angle), dy = sin(angle);
-        Ray ray = Ray_new(origin, Vector3_new(dx, dy, 0.0));
+        Rapier_Ray ray = Rapier_Ray_new(origin, Rapier_Vector3_new(dx, dy, 0.0));
 
-        RayColliderIntersection hit = World_castRayAndGetNormal(g_world, ray, MAX_TOI, true);
+        Rapier_RayColliderIntersection hit = Rapier_World_castRayAndGetNormal(g_world, ray, MAX_TOI, true);
         if (hit.h != 0) {
             hits++;
-            double toi = RayColliderIntersection_get_timeOfImpact(hit);
+            double toi = Rapier_RayColliderIntersection_get_timeOfImpact(hit);
             if (toi < min_toi) min_toi = toi;
-            Vector pt = Ray_pointAt(ray, toi);
-            double ptx = Vector_get_x(pt), pty = Vector_get_y(pt);
+            Rapier_Vector pt = Rapier_Ray_pointAt(ray, toi);
+            double ptx = Rapier_Vector_get_x(pt), pty = Rapier_Vector_get_y(pt);
             double hx = to_cx(ptx), hy = to_cy(pty);
 
             CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#737373"));
@@ -140,8 +140,8 @@ static void render(void) {
             CanvasRenderingContext2D_lineTo(g_ctx, hx, hy);
             CanvasRenderingContext2D_stroke(g_ctx);
 
-            Vector n = RayColliderIntersection_get_normal(hit);
-            double nx = Vector_get_x(n), ny = Vector_get_y(n);
+            Rapier_Vector n = Rapier_RayColliderIntersection_get_normal(hit);
+            double nx = Rapier_Vector_get_x(n), ny = Rapier_Vector_get_y(n);
             CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#111111"));
             CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.4);
             CanvasRenderingContext2D_beginPath(g_ctx);
@@ -232,7 +232,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     g_sweep_btn = Document_getElementById(doc, "btn-sweep");
     js_retain(g_sweep_btn);
 
-    g_world = World_new(Vector3_new(0.0, 0.0, 0.0));
+    g_world = Rapier_World_new(Rapier_Vector3_new(0.0, 0.0, 0.0));
     js_retain(g_world);
 
     add_box(0.0, -0.35, 0.0, 7.0, 0.35);
@@ -242,7 +242,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     add_box(0.4, 4.4, 0.0, 1.9, 0.22);
     add_sphere(-2.5, 3.6, 0.65);
     add_sphere(4.2, 3.2, 0.75);
-    World_step(g_world);
+    Rapier_World_step(g_world);
 
     render();
 
@@ -259,6 +259,6 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
-    Promise_then(init(), on_init, NULL);
+    Promise_then(rapier_init(), on_init, NULL);
     js_scope_close();
 }

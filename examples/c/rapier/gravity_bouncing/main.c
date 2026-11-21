@@ -23,8 +23,8 @@ static HTMLElement g_grav_btn;
 static HTMLElement g_pause_btn;
 static FrameRequestCallback g_raf_cb;
 
-static World g_world = { 0 };
-static RigidBody g_balls[5];
+static Rapier_World g_world = { 0 };
+static Rapier_RigidBody g_balls[5];
 static double g_trail_x[5][TRAIL_LEN];
 static double g_trail_y[5][TRAIL_LEN];
 static int g_trail_count = 0;
@@ -53,24 +53,24 @@ static void build_scene(void) {
         }
     }
     if (g_world.h != 0) {
-        World_free(g_world);
+        Rapier_World_free(g_world);
         js_release(g_world);
     }
-    g_world = World_new(Vector3_new(0.0, g_earth ? -9.81 : -1.62, 0.0));
+    g_world = Rapier_World_new(Rapier_Vector3_new(0.0, g_earth ? -9.81 : -1.62, 0.0));
     js_retain(g_world);
 
-    RigidBody ground = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), 0.0, -0.4, 0.0));
-    World_createCollider(g_world, ColliderDesc_cuboid(7.0, 0.4, 2.0), ground);
-    RigidBody lw = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), -6.8, 3.5, 0.0));
-    World_createCollider(g_world, ColliderDesc_cuboid(0.25, 4.0, 2.0), lw);
-    RigidBody rw = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), 6.8, 3.5, 0.0));
-    World_createCollider(g_world, ColliderDesc_cuboid(0.25, 4.0, 2.0), rw);
+    Rapier_RigidBody ground = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), 0.0, -0.4, 0.0));
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_cuboid(7.0, 0.4, 2.0), ground);
+    Rapier_RigidBody lw = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), -6.8, 3.5, 0.0));
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_cuboid(0.25, 4.0, 2.0), lw);
+    Rapier_RigidBody rw = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), 6.8, 3.5, 0.0));
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_cuboid(0.25, 4.0, 2.0), rw);
 
     for (int i = 0; i < 5; i++) {
-        g_balls[i] = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), X_COORDS[i], 5.6, 0.0));
+        g_balls[i] = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), X_COORDS[i], 5.6, 0.0));
         js_retain(g_balls[i]);
-        ColliderDesc cd = ColliderDesc_setDensity(ColliderDesc_setFriction(ColliderDesc_setRestitution(ColliderDesc_ball(0.42), RESTITUTIONS[i]), 0.2), 1.2);
-        World_createCollider(g_world, cd, g_balls[i]);
+        Rapier_ColliderDesc cd = Rapier_ColliderDesc_setDensity(Rapier_ColliderDesc_setFriction(Rapier_ColliderDesc_setRestitution(Rapier_ColliderDesc_ball(0.42), RESTITUTIONS[i]), 0.2), 1.2);
+        Rapier_World_createCollider(g_world, cd, g_balls[i]);
     }
     g_step_count = 0;
     g_trail_count = 0;
@@ -79,13 +79,13 @@ static void build_scene(void) {
 
 static void step_sim(void) {
     js_scope_open();
-    World_step(g_world);
+    Rapier_World_step(g_world);
     g_step_count++;
     int idx = (g_step_count - 1) % TRAIL_LEN;
     for (int i = 0; i < 5; i++) {
-        Vector p = RigidBody_translation(g_balls[i]);
-        g_trail_x[i][idx] = Vector_get_x(p);
-        g_trail_y[i][idx] = Vector_get_y(p);
+        Rapier_Vector p = Rapier_RigidBody_translation(g_balls[i]);
+        g_trail_x[i][idx] = Rapier_Vector_get_x(p);
+        g_trail_y[i][idx] = Rapier_Vector_get_y(p);
     }
     if (g_trail_count < TRAIL_LEN) g_trail_count++;
     js_scope_close();
@@ -147,10 +147,10 @@ static void render(void) {
             CanvasRenderingContext2D_fill(g_ctx);
         }
 
-        Vector p = RigidBody_translation(g_balls[i]);
-        Vector v = RigidBody_linvel(g_balls[i]);
-        double px = Vector_get_x(p), py = Vector_get_y(p);
-        double vx = Vector_get_x(v), vy = Vector_get_y(v);
+        Rapier_Vector p = Rapier_RigidBody_translation(g_balls[i]);
+        Rapier_Vector v = Rapier_RigidBody_linvel(g_balls[i]);
+        double px = Rapier_Vector_get_x(p), py = Rapier_Vector_get_y(p);
+        double vx = Rapier_Vector_get_x(v), vy = Rapier_Vector_get_y(v);
 
         energy += 0.5 * (vx * vx + vy * vy);
         if (py > max_y) max_y = py;
@@ -205,14 +205,14 @@ static void on_btn(void* ctx, PointerEvent ev) {
     int id = *(const int*)ctx;
     if (id == 0) {
         g_earth = !g_earth;
-        World_set_gravity(g_world, Vector3_new(0.0, g_earth ? -9.81 : -1.62, 0.0));
-        Vector3 imp = Vector3_new(0.0, 0.25, 0.0);
-        for (int i = 0; i < 5; i++) RigidBody_applyImpulse(g_balls[i], imp, true);
+        Rapier_World_set_gravity(g_world, Rapier_Vector3_new(0.0, g_earth ? -9.81 : -1.62, 0.0));
+        Rapier_Vector3 imp = Rapier_Vector3_new(0.0, 0.25, 0.0);
+        for (int i = 0; i < 5; i++) Rapier_RigidBody_applyImpulse(g_balls[i], imp, true);
         HTMLElement_set_textContent(g_grav_btn, g_earth ? "Gravity: Earth" : "Gravity: Moon");
         render();
     } else if (id == 1) {
         for (int i = 0; i < 5; i++) {
-            RigidBody_applyImpulse(g_balls[i], Vector3_new(((double)i - 2.0) * 0.28, 3.4, 0.0), true);
+            Rapier_RigidBody_applyImpulse(g_balls[i], Rapier_Vector3_new(((double)i - 2.0) * 0.28, 3.4, 0.0), true);
         }
         render();
     } else if (id == 2) {
@@ -262,6 +262,6 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
-    Promise_then(init(), on_init, NULL);
+    Promise_then(rapier_init(), on_init, NULL);
     js_scope_close();
 }

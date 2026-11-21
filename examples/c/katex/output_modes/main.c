@@ -10,7 +10,7 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 static void add_card(Document doc, HTMLElement grid, const char* label, const char* extra_cls, const char* tex, KatexOptions opts) {
-    JsString html = renderToString(tex, opts);
+    JsString html = katex_renderToString(tex, opts);
     char len_buf[32];
     snprintf(len_buf, sizeof len_buf, "%u chars", JsString_len(html));
 
@@ -62,7 +62,7 @@ __attribute__((export_name("start"))) void start(void) {
     KatexOptions_set_displayMode(o_fl, true);
     KatexOptions_set_fleqn(o_fl, true);
     KatexOptions_set_maxSize(o_fl, 2.0);
-    KatexOptions_set_strict(o_fl, boolean_or_string_or_StrictFunction_of(false));
+    KatexOptions_set_strict(o_fl, Katex_boolean_or_string_or_StrictFunction_of(false));
     add_card(doc, grid, "fleqn + maxSize(2) + strict(false)", "", "\\text{café} + \\rule{10em}{0.4em} + é", o_fl);
 
     HTMLElement_appendChild(app, grid);

@@ -680,6 +680,163 @@ fn c_calls_may_be_empty() {
     run(Command::new(clang).current_dir(&c.out).args(["--target=wasm32", "-std=c2x", "-pedantic", "-Werror", "-nostdlib", "-ffreestanding", "-fsyntax-only", "-I", "bindings", "t.c"]));
 }
 
+// `Union_release` frees handle arms of a decodable C union without double-releasing
+// primitives or static cstrs, and `{Union}_from_handle` releases any handle whose
+// runtime tag is unrecognized (`tag == -1`).
+#[test]
+fn c_union_release_and_unmatched_tag() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+    let dir = root().join("target/e2e/c-union-release");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("api.d.ts"),
+        "declare class Box { tag: number; constructor(tag: number); }\n\
+         type Item = number | string | Box;\n\
+         declare function pick(kind: number): Item;\n",
+    )
+    .unwrap();
+    let xml = lower(&dir.join("api.d.ts"), Some("c"), &[]);
+    let m = model(&xml, "C");
+    write_files(&dir.join("bindings"), generators::c::files(&m).unwrap());
+    fs::write(
+        dir.join("test.c"),
+        "#include \"bindings.h\"\n\
+         TS_IMPORT(check) void check(int ok, int line);\n\
+         #define CHECK(c) check((c), __LINE__)\n\
+         __attribute__((export_name(\"run\"))) void run(void) {\n\
+             uint32_t base = js_live_handles();\n\
+             Item n = pick(0);\n\
+             CHECK(n.tag == Item_number && n.as.number == 42);\n\
+             Item_release(n);\n\
+             CHECK(js_live_handles() == base);\n\
+             Item s = pick(1);\n\
+             CHECK(s.tag == Item_string && JsString_equals(s.as.string, \"hi\"));\n\
+             CHECK(js_live_handles() > base);\n\
+             Item_release(s);\n\
+             CHECK(js_live_handles() == base);\n\
+             Item b = pick(2);\n\
+             CHECK(b.tag == Item_Box && Box_get_tag(b.as.Box) == 7);\n\
+             CHECK(js_live_handles() > base);\n\
+             Item_release(b);\n\
+             CHECK(js_live_handles() == base);\n\
+             Item_release(Item_of_cstr(\"static\"));\n\
+             Item empty = { .tag = -1 };\n\
+             Item_release(empty);\n\
+             Item bad = pick(3);\n\
+             CHECK(bad.tag == -1);\n\
+             CHECK(js_live_handles() == base);\n\
+             Item_release(bad);\n\
+             CHECK(js_live_handles() == base);\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(dir.join("bindings")).arg("-o").arg(dir.join("test.wasm")).arg(dir.join("test.c")));
+    let c = Case { fixture: dir.clone(), out: dir.clone(), xml };
+    write_glue(&c, &m);
+    fs::write(
+        dir.join("impl.mjs"),
+        "export class Box { constructor(tag) { this.tag = tag; } }\n\
+         export const root = { Box, pick: k => (k === 0 ? 42 : k === 1 ? 'hi' : k === 2 ? new Box(7) : { unexpected: true }) };\n",
+    )
+    .unwrap();
+    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("glue.mjs")).arg(dir.join("test.wasm")));
+    print!("{report}");
+}
+
+// Independently generated ES-module C packages defining colliding names (`Node`, `min`)
+// compose cleanly in one translation unit alongside unprefixed DOM without `--ref` between them.
+#[test]
+fn c_multi_library_prefixes_compose() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+    let dir = root().join("target/e2e/c-prefix-compose");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("pkg-a")).unwrap();
+    fs::create_dir_all(dir.join("pkg-b")).unwrap();
+    fs::write(dir.join("pkg-a/package.json"), r#"{"name": "pkg-a"}"#).unwrap();
+    fs::write(
+        dir.join("pkg-a/index.d.ts"),
+        "export class Node { label: string; constructor(s: string); }\nexport declare function min(a: number, b: number): number;\n",
+    )
+    .unwrap();
+    fs::write(dir.join("pkg-b/package.json"), r#"{"name": "pkg-b"}"#).unwrap();
+    fs::write(
+        dir.join("pkg-b/index.d.ts"),
+        "export class Node { value: number; constructor(v: number); }\nexport declare function min(a: number, b: number): number;\n",
+    )
+    .unwrap();
+
+    let bindings = dir.join("bindings");
+    let dom_dir = bindings.join("dom");
+    run(Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg("lib.dom.d.ts")
+        .arg("--config")
+        .arg(config("c"))
+        .arg("--config")
+        .arg(root().join("examples/modules/dom.toml"))
+        .args(["--emit", "c", "--name", "dom", "--out"])
+        .arg(&bindings));
+    for pkg in ["pkg-a", "pkg-b"] {
+        run(Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+            .arg(dir.join(pkg).join("index.d.ts"))
+            .arg("--config")
+            .arg(config("c"))
+            .arg("--emit")
+            .arg("c")
+            .arg("--ref")
+            .arg(&dom_dir)
+            .arg("--out")
+            .arg(&bindings));
+    }
+
+    fs::write(
+        dir.join("test.c"),
+        "#include \"dom/dom.h\"\n\
+         #include \"pkg_a/pkg_a.h\"\n\
+         #include \"pkg_b/pkg_b.h\"\n\
+         TS_IMPORT(check) void check(int ok, int line);\n\
+         #define CHECK(c) check((c), __LINE__)\n\
+         __attribute__((export_name(\"run\"))) void run(void) {\n\
+             Node dom_node = { 0 };\n\
+             (void)dom_node;\n\
+             PkgA_Node a = PkgA_Node_new(\"alpha\");\n\
+             PkgB_Node b = PkgB_Node_new(9);\n\
+             CHECK(JsString_equals(PkgA_Node_get_label(a), \"alpha\"));\n\
+             CHECK(PkgB_Node_get_value(b) == 9);\n\
+             CHECK(pkg_a_min(3, 7) == 3);\n\
+             CHECK(pkg_b_min(3, 7) == 7);\n\
+             js_release(a);\n\
+             js_release(b);\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(&bindings).arg("-o").arg(dir.join("test.wasm")).arg(dir.join("test.c")));
+
+    fs::write(
+        dir.join("run.mjs"),
+        "import fs from 'node:fs';\n\
+         import { createRuntime, makeEnv as domEnv } from './bindings/dom/glue.mjs';\n\
+         import { makeEnv as aEnv } from './bindings/pkg_a/glue.mjs';\n\
+         import { makeEnv as bEnv } from './bindings/pkg_b/glue.mjs';\n\
+         const pkgA = { Node: class { constructor(label) { this.label = label; } }, min: (a, b) => Math.min(a, b) };\n\
+         const pkgB = { Node: class { constructor(value) { this.value = value; } }, min: (a, b) => Math.max(a, b) };\n\
+         let instance, passed = 0;\n\
+         const failed = [];\n\
+         const rt = createRuntime(() => instance, { check: true, unchecked: e => failed.push(String(e)) });\n\
+         const dom = domEnv(() => instance, { runtime: rt });\n\
+         const a = aEnv(() => instance, { runtime: rt, modules: { 'pkg-a': pkgA } });\n\
+         const b = bEnv(() => instance, { runtime: rt, modules: { 'pkg-b': pkgB } });\n\
+         const env = { ...rt.env, check: (ok, line) => (ok ? passed++ : failed.push(line)) };\n\
+         ({ instance } = await WebAssembly.instantiate(fs.readFileSync(new URL('./test.wasm', import.meta.url)), { env, dom: dom.$pkg, pkg_a: a.$pkg, pkg_b: b.$pkg }));\n\
+         instance.exports.run();\n\
+         if (failed.length || passed === 0) { console.error({ passed, failed }); process.exit(1); }\n\
+         console.log(`${passed} checks passed`);\n",
+    )
+    .unwrap();
+    let report = run(Command::new(node).arg(dir.join("run.mjs")));
+    print!("{report}");
+}
+
 // What a package across files declares has one name each in the output:
 // a class merged with an interface is one class; two files' own `Item`s are
 // two types; an object base gives its members; a class given as a value is a value.
@@ -1083,14 +1240,14 @@ fn c_cross_project_refs() {
          __attribute__((import_module(\"env\"), import_name(\"check\"))) void check(int32_t ok, uint32_t line);\n\
          #define CHECK(ok) check((ok) ? 1 : 0, __LINE__)\n\
          __attribute__((export_name(\"run\"))) void run(void) {\n\
-             Surface s = makeSurface(640.0, 480.0);\n\
+             Base_Surface s = base_makeSurface(640.0, 480.0);\n\
              CHECK(render(s, Quality_high) == 1130.0);\n\
-             RenderingContext bc = makeBaseContext(7.0);\n\
-             RenderingContext_2 ac = makeAppContext(\"gl\");\n\
-             CHECK(RenderingContext_get_id(bc) == 7.0);\n\
-             JsString lbl = RenderingContext_2_get_label(ac);\n\
+             Base_RenderingContext bc = base_makeBaseContext(7.0);\n\
+             RenderingContext ac = makeAppContext(\"gl\");\n\
+             CHECK(Base_RenderingContext_get_id(bc) == 7.0);\n\
+             JsString lbl = RenderingContext_get_label(ac);\n\
              CHECK(JsString_equals(lbl, \"gl\"));\n\
-             JsString dm = describeMode(Mode_fast);\n\
+             JsString dm = base_describeMode(Base_Mode_fast);\n\
              CHECK(JsString_equals(dm, \"mode:fast\"));\n\
              JsString dq = describeQuality(Quality_high);\n\
              CHECK(JsString_equals(dq, \"quality:high\"));\n\
@@ -2609,6 +2766,7 @@ mod examples {
         extra_specs: &'static [&'static PackageSpec],
         crate_name: &'static str,
         fsharp_name: &'static str,
+        c_prefix: &'static str,
         demos: &'static [&'static str],
         verify: VerifyKind,
     }
@@ -2620,6 +2778,7 @@ mod examples {
         extra_specs: &[],
         crate_name: "pts",
         fsharp_name: "Pts",
+        c_prefix: "pts",
         demos: &[
             "vector_field",
             "polygon_subdivision",
@@ -2637,6 +2796,7 @@ mod examples {
         extra_specs: &[],
         crate_name: "babylonjs_lite",
         fsharp_name: "Babylonjs.Lite",
+        c_prefix: "babylon",
         demos: &[
             "torus_knot",
             "pbr_material_matrix",
@@ -2654,6 +2814,7 @@ mod examples {
         extra_specs: &[],
         crate_name: "katex",
         fsharp_name: "Katex",
+        c_prefix: "katex",
         demos: &[
             "formula_gallery",
             "inline_vs_display",
@@ -2674,6 +2835,7 @@ mod examples {
         extra_specs: &[],
         crate_name: "marked",
         fsharp_name: "Marked",
+        c_prefix: "marked",
         demos: &[
             "document_preview",
             "token_inspector",
@@ -2694,6 +2856,7 @@ mod examples {
         extra_specs: &[],
         crate_name: "date_fns",
         fsharp_name: "DateFns",
+        c_prefix: "df",
         demos: &[
             "calendar_grid",
             "format_cookbook",
@@ -2714,6 +2877,7 @@ mod examples {
         extra_specs: &[],
         crate_name: "echarts",
         fsharp_name: "Echarts",
+        c_prefix: "echarts",
         demos: &[
             "bar_chart",
             "line_area",
@@ -2732,6 +2896,7 @@ mod examples {
         npm: &["konva"],
         crate_name: "konva",
         fsharp_name: "Konva",
+        c_prefix: "konva",
         needs_dom: true,
         extra_specs: &[],
         demos: &[
@@ -2752,6 +2917,7 @@ mod examples {
         npm: &["pixi.js"],
         crate_name: "pixi_js",
         fsharp_name: "Pixi.Js",
+        c_prefix: "pixi",
         needs_dom: true,
         extra_specs: &[],
         demos: &[
@@ -2772,6 +2938,7 @@ mod examples {
         npm: &["leaflet"],
         crate_name: "leaflet",
         fsharp_name: "Leaflet",
+        c_prefix: "leaflet",
         needs_dom: true,
         extra_specs: &[],
         demos: &[
@@ -2792,6 +2959,7 @@ mod examples {
         npm: &["@tanstack/table-core"],
         crate_name: "tanstack_table_core",
         fsharp_name: "Tanstack.TableCore",
+        c_prefix: "table",
         needs_dom: true,
         extra_specs: &[],
         demos: &[
@@ -2812,6 +2980,7 @@ mod examples {
         npm: &["prosemirror-model", "prosemirror-transform", "prosemirror-state", "prosemirror-view"],
         crate_name: "prosemirror",
         fsharp_name: "Prosemirror",
+        c_prefix: "pm",
         needs_dom: true,
         extra_specs: &[],
         demos: &[
@@ -2832,6 +3001,7 @@ mod examples {
         npm: &["three"],
         crate_name: "three",
         fsharp_name: "Three",
+        c_prefix: "three",
         needs_dom: true,
         extra_specs: &[],
         demos: &[
@@ -2852,6 +3022,7 @@ mod examples {
         npm: &["@dimforge/rapier3d-compat"],
         crate_name: "dimforge_rapier3d_compat",
         fsharp_name: "Dimforge.Rapier3dCompat",
+        c_prefix: "rapier",
         needs_dom: true,
         extra_specs: &[],
         demos: &[
@@ -2872,6 +3043,7 @@ mod examples {
         npm: &["@dimforge/rapier3d-compat"],
         crate_name: "dimforge_rapier3d_compat",
         fsharp_name: "Dimforge.Rapier3dCompat",
+        c_prefix: "rapier",
         needs_dom: true,
         extra_specs: &[&BABYLON_LITE_SPEC],
         demos: &[
@@ -2887,6 +3059,7 @@ mod examples {
         npm: &["fs", "path", "events"],
         crate_name: "node",
         fsharp_name: "Node",
+        c_prefix: "node",
         needs_dom: false,
         extra_specs: &[],
         demos: &[
@@ -3078,6 +3251,9 @@ mod examples {
                     cmd.args(["--package", p]);
                 }
                 cmd.arg("--config").arg(&cfg).args(["--emit", target]);
+                if target == "c" && !s.c_prefix.is_empty() {
+                    cmd.args(["--prefix", s.c_prefix]);
+                }
                 if s.npm.len() > 1 {
                     cmd.args(["--name", s.crate_name]);
                 }

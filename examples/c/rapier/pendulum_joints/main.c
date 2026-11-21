@@ -19,10 +19,10 @@ static HTMLElement g_meta;
 static HTMLElement g_pause_btn;
 static FrameRequestCallback g_raf_cb;
 
-static World g_world = { 0 };
-static RigidBody g_chain[3];
-static RigidBody g_arm = { 0 };
-static RigidBody g_bob = { 0 };
+static Rapier_World g_world = { 0 };
+static Rapier_RigidBody g_chain[3];
+static Rapier_RigidBody g_arm = { 0 };
+static Rapier_RigidBody g_bob = { 0 };
 static double g_ax[TRAIL_LEN], g_ay[TRAIL_LEN], g_bx[TRAIL_LEN], g_by[TRAIL_LEN];
 static int g_trail_count = 0;
 static int g_step_count = 0;
@@ -88,40 +88,40 @@ static void build_scene(void) {
     if (g_arm.h != 0) { js_release(g_arm); g_arm.h = 0; }
     if (g_bob.h != 0) { js_release(g_bob); g_bob.h = 0; }
     if (g_world.h != 0) {
-        World_free(g_world);
+        Rapier_World_free(g_world);
         js_release(g_world);
     }
-    g_world = World_new(Vector3_new(0.0, -9.81, 0.0));
+    g_world = Rapier_World_new(Rapier_Vector3_new(0.0, -9.81, 0.0));
     js_retain(g_world);
 
-    RigidBody gantry = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), 0.0, 6.2, 0.0));
-    World_createCollider(g_world, ColliderDesc_cuboid(6.0, 0.22, 0.6), gantry);
-    Vector3 z_axis = Vector3_new(0.0, 0.0, 1.0);
+    Rapier_RigidBody gantry = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), 0.0, 6.2, 0.0));
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_cuboid(6.0, 0.22, 0.6), gantry);
+    Rapier_Vector3 z_axis = Rapier_Vector3_new(0.0, 0.0, 1.0);
 
     double cx[3] = { -2.8, -3.3, -3.8 }, cy[3] = { 5.4, 4.1, 2.8 };
     for (int i = 0; i < 3; i++) {
-        g_chain[i] = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), cx[i], cy[i], 0.0));
+        g_chain[i] = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), cx[i], cy[i], 0.0));
         js_retain(g_chain[i]);
-        World_createCollider(g_world, ColliderDesc_setDensity(ColliderDesc_cuboid(LINK_HX, LINK_HY, 0.2), i == 2 ? 1.6 : 1.4), g_chain[i]);
+        Rapier_World_createCollider(g_world, Rapier_ColliderDesc_setDensity(Rapier_ColliderDesc_cuboid(LINK_HX, LINK_HY, 0.2), i == 2 ? 1.6 : 1.4), g_chain[i]);
     }
-    World_createImpulseJoint(g_world, JointData_revolute(Vector3_new(-2.2, -0.22, 0.0), Vector3_new(0.0, LINK_HY + 0.06, 0.0), z_axis), gantry, g_chain[0], true);
+    Rapier_World_createImpulseJoint(g_world, Rapier_JointData_revolute(Rapier_Vector3_new(-2.2, -0.22, 0.0), Rapier_Vector3_new(0.0, LINK_HY + 0.06, 0.0), z_axis), gantry, g_chain[0], true);
 
-    Vector3 b1 = Vector3_new(0.0, -LINK_HY - 0.06, 0.0), b2 = Vector3_new(0.0, LINK_HY + 0.06, 0.0);
-    World_createImpulseJoint(g_world, JointData_revolute(b1, b2, z_axis), g_chain[0], g_chain[1], true);
-    World_createImpulseJoint(g_world, JointData_revolute(b1, b2, z_axis), g_chain[1], g_chain[2], true);
+    Rapier_Vector3 b1 = Rapier_Vector3_new(0.0, -LINK_HY - 0.06, 0.0), b2 = Rapier_Vector3_new(0.0, LINK_HY + 0.06, 0.0);
+    Rapier_World_createImpulseJoint(g_world, Rapier_JointData_revolute(b1, b2, z_axis), g_chain[0], g_chain[1], true);
+    Rapier_World_createImpulseJoint(g_world, Rapier_JointData_revolute(b1, b2, z_axis), g_chain[1], g_chain[2], true);
 
-    RigidBody_applyImpulse(g_chain[2], Vector3_new(-1.4, 0.0, 0.0), true);
+    Rapier_RigidBody_applyImpulse(g_chain[2], Rapier_Vector3_new(-1.4, 0.0, 0.0), true);
 
-    g_arm = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), 3.1, 5.2, 0.0));
+    g_arm = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), 3.1, 5.2, 0.0));
     js_retain(g_arm);
-    World_createCollider(g_world, ColliderDesc_setDensity(ColliderDesc_cuboid(0.14, 0.85, 0.2), 1.2), g_arm);
-    g_bob = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), 3.8, 3.6, 0.0));
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_setDensity(Rapier_ColliderDesc_cuboid(0.14, 0.85, 0.2), 1.2), g_arm);
+    g_bob = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), 3.8, 3.6, 0.0));
     js_retain(g_bob);
-    World_createCollider(g_world, ColliderDesc_setDensity(ColliderDesc_ball(0.42), 3.0), g_bob);
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_setDensity(Rapier_ColliderDesc_ball(0.42), 3.0), g_bob);
 
-    World_createImpulseJoint(g_world, JointData_revolute(Vector3_new(2.3, -0.22, 0.0), Vector3_new(0.0, 0.88, 0.0), z_axis), gantry, g_arm, true);
-    World_createImpulseJoint(g_world, JointData_revolute(Vector3_new(0.0, -0.88, 0.0), Vector3_new(0.0, 0.72, 0.0), z_axis), g_arm, g_bob, true);
-    RigidBody_applyImpulse(g_bob, Vector3_new(1.8, 0.2, 0.0), true);
+    Rapier_World_createImpulseJoint(g_world, Rapier_JointData_revolute(Rapier_Vector3_new(2.3, -0.22, 0.0), Rapier_Vector3_new(0.0, 0.88, 0.0), z_axis), gantry, g_arm, true);
+    Rapier_World_createImpulseJoint(g_world, Rapier_JointData_revolute(Rapier_Vector3_new(0.0, -0.88, 0.0), Rapier_Vector3_new(0.0, 0.72, 0.0), z_axis), g_arm, g_bob, true);
+    Rapier_RigidBody_applyImpulse(g_bob, Rapier_Vector3_new(1.8, 0.2, 0.0), true);
 
     g_step_count = 0;
     g_trail_count = 0;
@@ -130,13 +130,13 @@ static void build_scene(void) {
 
 static void step_sim(void) {
     js_scope_open();
-    World_step(g_world);
+    Rapier_World_step(g_world);
     g_step_count++;
-    Vector pa = RigidBody_translation(g_chain[2]);
-    Vector pb = RigidBody_translation(g_bob);
+    Rapier_Vector pa = Rapier_RigidBody_translation(g_chain[2]);
+    Rapier_Vector pb = Rapier_RigidBody_translation(g_bob);
     int idx = (g_step_count - 1) % TRAIL_LEN;
-    g_ax[idx] = Vector_get_x(pa); g_ay[idx] = Vector_get_y(pa);
-    g_bx[idx] = Vector_get_x(pb); g_by[idx] = Vector_get_y(pb);
+    g_ax[idx] = Rapier_Vector_get_x(pa); g_ay[idx] = Rapier_Vector_get_y(pa);
+    g_bx[idx] = Rapier_Vector_get_x(pb); g_by[idx] = Rapier_Vector_get_y(pb);
     if (g_trail_count < TRAIL_LEN) g_trail_count++;
     js_scope_close();
 }
@@ -178,10 +178,10 @@ static void render(void) {
     double tip_x = 0.0, tip_y = 0.0;
     double pin_x[2] = { 0.0, 0.0 }, pin_y[2] = { 0.0, 0.0 };
     for (int i = 0; i < 3; i++) {
-        Vector p = RigidBody_translation(g_chain[i]);
-        Rotation q = RigidBody_rotation(g_chain[i]);
-        double px = Vector_get_x(p), py = Vector_get_y(p);
-        double qx = Rotation_get_x(q), qy = Rotation_get_y(q), qz = Rotation_get_z(q), qw = Rotation_get_w(q);
+        Rapier_Vector p = Rapier_RigidBody_translation(g_chain[i]);
+        Rapier_Rotation q = Rapier_RigidBody_rotation(g_chain[i]);
+        double px = Rapier_Vector_get_x(p), py = Rapier_Vector_get_y(p);
+        double qx = Rapier_Rotation_get_x(q), qy = Rapier_Rotation_get_y(q), qz = Rapier_Rotation_get_z(q), qw = Rapier_Rotation_get_w(q);
         draw_rot_box(px, py, qx, qy, qz, qw, LINK_HX, LINK_HY, C(i == 2 ? "#d4d4d4" : "#f7f7f7"));
         if (i < 2) {
             double r01 = 2.0 * (qx * qy - qw * qz);
@@ -193,14 +193,14 @@ static void render(void) {
         }
     }
 
-    Vector ap = RigidBody_translation(g_arm);
-    Rotation aq = RigidBody_rotation(g_arm);
-    double apx = Vector_get_x(ap), apy = Vector_get_y(ap);
-    double aqx = Rotation_get_x(aq), aqy = Rotation_get_y(aq), aqz = Rotation_get_z(aq), aqw = Rotation_get_w(aq);
+    Rapier_Vector ap = Rapier_RigidBody_translation(g_arm);
+    Rapier_Rotation aq = Rapier_RigidBody_rotation(g_arm);
+    double apx = Rapier_Vector_get_x(ap), apy = Rapier_Vector_get_y(ap);
+    double aqx = Rapier_Rotation_get_x(aq), aqy = Rapier_Rotation_get_y(aq), aqz = Rapier_Rotation_get_z(aq), aqw = Rapier_Rotation_get_w(aq);
     draw_rot_box(apx, apy, aqx, aqy, aqz, aqw, 0.14, 0.85, C("#f7f7f7"));
 
-    Vector bp = RigidBody_translation(g_bob);
-    double bpx = Vector_get_x(bp), bpy = Vector_get_y(bp);
+    Rapier_Vector bp = Rapier_RigidBody_translation(g_bob);
+    double bpx = Rapier_Vector_get_x(bp), bpy = Rapier_Vector_get_y(bp);
     double bcx = to_cx(bpx), bcy = to_cy(bpy);
     CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#262626"));
     CanvasRenderingContext2D_beginPath(g_ctx);
@@ -252,8 +252,8 @@ static void on_btn(void* ctx, PointerEvent ev) {
     js_scope_open();
     int id = *(const int*)ctx;
     if (id == 0) {
-        RigidBody_applyImpulse(g_chain[2], Vector3_new(1.6, 0.3, 0.0), true);
-        RigidBody_applyImpulse(g_bob, Vector3_new(-2.0, 0.4, 0.0), true);
+        Rapier_RigidBody_applyImpulse(g_chain[2], Rapier_Vector3_new(1.6, 0.3, 0.0), true);
+        Rapier_RigidBody_applyImpulse(g_bob, Rapier_Vector3_new(-2.0, 0.4, 0.0), true);
         render();
     } else if (id == 1) {
         g_paused = !g_paused;
@@ -300,6 +300,6 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
-    Promise_then(init(), on_init, NULL);
+    Promise_then(rapier_init(), on_init, NULL);
     js_scope_close();
 }

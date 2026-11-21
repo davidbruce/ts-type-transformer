@@ -21,9 +21,9 @@ static HTMLElement g_meta;
 static HTMLElement g_pause_btn;
 static FrameRequestCallback g_raf_cb;
 
-static World g_world = { 0 };
-static RigidBody g_dominoes[DOMINO_COUNT];
-static RigidBody g_striker = { 0 };
+static Rapier_World g_world = { 0 };
+static Rapier_RigidBody g_dominoes[DOMINO_COUNT];
+static Rapier_RigidBody g_striker = { 0 };
 static double g_trail_x[TRAIL_LEN];
 static double g_trail_y[TRAIL_LEN];
 static int g_trail_count = 0;
@@ -79,28 +79,28 @@ static void build_scene(void) {
         g_striker.h = 0;
     }
     if (g_world.h != 0) {
-        World_free(g_world);
+        Rapier_World_free(g_world);
         js_release(g_world);
     }
-    g_world = World_new(Vector3_new(0.0, -9.81, 0.0));
+    g_world = Rapier_World_new(Rapier_Vector3_new(0.0, -9.81, 0.0));
     js_retain(g_world);
 
-    RigidBody floor = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), 0.0, -0.35, 0.0));
-    World_createCollider(g_world, ColliderDesc_setFriction(ColliderDesc_cuboid(7.2, 0.35, 2.0), 0.8), floor);
+    Rapier_RigidBody floor = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), 0.0, -0.35, 0.0));
+    Rapier_World_createCollider(g_world, Rapier_ColliderDesc_setFriction(Rapier_ColliderDesc_cuboid(7.2, 0.35, 2.0), 0.8), floor);
 
     for (int i = 0; i < DOMINO_COUNT; i++) {
         double x = -2.4 + (double)i * 0.88;
-        g_dominoes[i] = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), x, DOM_HY, 0.0));
+        g_dominoes[i] = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), x, DOM_HY, 0.0));
         js_retain(g_dominoes[i]);
-        ColliderDesc cd = ColliderDesc_setDensity(ColliderDesc_setRestitution(ColliderDesc_setFriction(ColliderDesc_cuboid(DOM_HX, DOM_HY, 0.35), 0.55), 0.15), 1.0);
-        World_createCollider(g_world, cd, g_dominoes[i]);
+        Rapier_ColliderDesc cd = Rapier_ColliderDesc_setDensity(Rapier_ColliderDesc_setRestitution(Rapier_ColliderDesc_setFriction(Rapier_ColliderDesc_cuboid(DOM_HX, DOM_HY, 0.35), 0.55), 0.15), 1.0);
+        Rapier_World_createCollider(g_world, cd, g_dominoes[i]);
     }
 
-    g_striker = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), -5.3, 1.05, 0.0));
+    g_striker = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), -5.3, 1.05, 0.0));
     js_retain(g_striker);
-    ColliderDesc bcd = ColliderDesc_setFriction(ColliderDesc_setRestitution(ColliderDesc_setDensity(ColliderDesc_ball(0.40), 2.8), 0.45), 0.25);
-    World_createCollider(g_world, bcd, g_striker);
-    RigidBody_applyImpulse(g_striker, Vector3_new(4.8, 0.2, 0.0), true);
+    Rapier_ColliderDesc bcd = Rapier_ColliderDesc_setFriction(Rapier_ColliderDesc_setRestitution(Rapier_ColliderDesc_setDensity(Rapier_ColliderDesc_ball(0.40), 2.8), 0.45), 0.25);
+    Rapier_World_createCollider(g_world, bcd, g_striker);
+    Rapier_RigidBody_applyImpulse(g_striker, Rapier_Vector3_new(4.8, 0.2, 0.0), true);
 
     g_step_count = 0;
     g_trail_count = 0;
@@ -109,12 +109,12 @@ static void build_scene(void) {
 
 static void step_sim(void) {
     js_scope_open();
-    World_step(g_world);
+    Rapier_World_step(g_world);
     g_step_count++;
-    Vector sp = RigidBody_translation(g_striker);
+    Rapier_Vector sp = Rapier_RigidBody_translation(g_striker);
     int idx = (g_step_count - 1) % TRAIL_LEN;
-    g_trail_x[idx] = Vector_get_x(sp);
-    g_trail_y[idx] = Vector_get_y(sp);
+    g_trail_x[idx] = Rapier_Vector_get_x(sp);
+    g_trail_y[idx] = Rapier_Vector_get_y(sp);
     if (g_trail_count < TRAIL_LEN) g_trail_count++;
     js_scope_close();
 }
@@ -159,17 +159,17 @@ static void render(void) {
 
     int toppled = 0;
     for (int i = 0; i < DOMINO_COUNT; i++) {
-        Vector p = RigidBody_translation(g_dominoes[i]);
-        Rotation q = RigidBody_rotation(g_dominoes[i]);
-        double px = Vector_get_x(p), py = Vector_get_y(p);
-        double qx = Rotation_get_x(q), qy = Rotation_get_y(q), qz = Rotation_get_z(q), qw = Rotation_get_w(q);
+        Rapier_Vector p = Rapier_RigidBody_translation(g_dominoes[i]);
+        Rapier_Rotation q = Rapier_RigidBody_rotation(g_dominoes[i]);
+        double px = Rapier_Vector_get_x(p), py = Rapier_Vector_get_y(p);
+        double qx = Rapier_Rotation_get_x(q), qy = Rapier_Rotation_get_y(q), qz = Rapier_Rotation_get_z(q), qw = Rapier_Rotation_get_w(q);
         bool tilted = fabs(qz) > 0.25;
         if (tilted) toppled++;
         draw_rot_box(px, py, qx, qy, qz, qw, DOM_HX, DOM_HY, C(tilted ? "#d4d4d4" : "#f7f7f7"));
     }
 
-    Vector sp = RigidBody_translation(g_striker);
-    double spx = Vector_get_x(sp), spy = Vector_get_y(sp);
+    Rapier_Vector sp = Rapier_RigidBody_translation(g_striker);
+    double spx = Rapier_Vector_get_x(sp), spy = Rapier_Vector_get_y(sp);
     double scx = to_cx(spx), scy = to_cy(spy);
 
     CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#262626"));
@@ -219,7 +219,7 @@ static void on_btn(void* ctx, PointerEvent ev) {
     js_scope_open();
     int id = *(const int*)ctx;
     if (id == 0) {
-        RigidBody_applyImpulse(g_striker, Vector3_new(3.5, 0.6, 0.0), true);
+        Rapier_RigidBody_applyImpulse(g_striker, Rapier_Vector3_new(3.5, 0.6, 0.0), true);
         render();
     } else if (id == 1) {
         g_paused = !g_paused;
@@ -266,6 +266,6 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
-    Promise_then(init(), on_init, NULL);
+    Promise_then(rapier_init(), on_init, NULL);
     js_scope_close();
 }

@@ -2,144 +2,144 @@
 #include "konva/konva.h"
 #include <stdio.h>
 
-static void add_caption(JsArray_Node_2 list, double x, double y, const char* caption) {
-    TextConfig tc = TextConfig_create();
-    TextConfig_set_x(tc, x);
-    TextConfig_set_y(tc, y);
-    TextConfig_set_text(tc, caption);
-    TextConfig_set_fontSize(tc, 11);
-    TextConfig_set_fontFamily(tc, "monospace");
-    TextConfig_set_fill(tc, string_or_CanvasGradient_of("#555555"));
-    JsArray_Node_2_push(list, AS_Node_2(Text_2_new(tc)));
+static void add_caption(JsArray_Konva_Node list, double x, double y, const char* caption) {
+    Konva_TextConfig tc = Konva_TextConfig_create();
+    Konva_TextConfig_set_x(tc, x);
+    Konva_TextConfig_set_y(tc, y);
+    Konva_TextConfig_set_text(tc, caption);
+    Konva_TextConfig_set_fontSize(tc, 11);
+    Konva_TextConfig_set_fontFamily(tc, "monospace");
+    Konva_TextConfig_set_fill(tc, Konva_string_or_CanvasGradient_of("#555555"));
+    JsArray_Konva_Node_push(list, AS_Konva_Node(Konva_Text_new(tc)));
 }
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
 
-    StageConfig sc = StageConfig_create();
-    StageConfig_set_container(sc, HTMLDivElement_or_string_of("stage"));
-    StageConfig_set_width(sc, 680);
-    StageConfig_set_height(sc, 400);
-    Stage stage = Stage_new(sc);
+    Konva_StageConfig sc = Konva_StageConfig_create();
+    Konva_StageConfig_set_container(sc, Konva_HTMLDivElement_or_string_of("stage"));
+    Konva_StageConfig_set_width(sc, 680);
+    Konva_StageConfig_set_height(sc, 400);
+    Konva_Stage stage = Konva_Stage_new(sc);
 
-    Layer layer = Layer_new();
-    Stage_add(stage, layer);
-    JsArray_Node_2 children = JsArray_Node_2_new();
+    Konva_Layer layer = Konva_Layer_new();
+    Konva_Stage_add(stage, layer);
+    JsArray_Konva_Node children = JsArray_Konva_Node_new();
 
-    RectConfig bg = RectConfig_create();
-    RectConfig_set_x(bg, 0);
-    RectConfig_set_y(bg, 0);
-    RectConfig_set_width(bg, 680);
-    RectConfig_set_height(bg, 400);
-    RectConfig_set_fill(bg, string_or_CanvasGradient_of("#ffffff"));
-    JsArray_Node_2_push(children, AS_Node_2(Rect_new(bg)));
+    Konva_RectConfig bg = Konva_RectConfig_create();
+    Konva_RectConfig_set_x(bg, 0);
+    Konva_RectConfig_set_y(bg, 0);
+    Konva_RectConfig_set_width(bg, 680);
+    Konva_RectConfig_set_height(bg, 400);
+    Konva_RectConfig_set_fill(bg, Konva_string_or_CanvasGradient_of("#ffffff"));
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Rect_new(bg)));
 
     // Row 1: Rounded filled Rect, dashed Rect, Circle, Hexagon.
-    RectConfig r1 = RectConfig_create();
-    RectConfig_set_x(r1, 40);
-    RectConfig_set_y(r1, 55);
-    RectConfig_set_width(r1, 110);
-    RectConfig_set_height(r1, 76);
-    RectConfig_set_cornerRadius(r1, number_or_number_array_of(8));
-    RectConfig_set_fill(r1, string_or_CanvasGradient_of("#111111"));
-    JsArray_Node_2_push(children, AS_Node_2(Rect_new(r1)));
+    Konva_RectConfig r1 = Konva_RectConfig_create();
+    Konva_RectConfig_set_x(r1, 40);
+    Konva_RectConfig_set_y(r1, 55);
+    Konva_RectConfig_set_width(r1, 110);
+    Konva_RectConfig_set_height(r1, 76);
+    Konva_RectConfig_set_cornerRadius(r1, Konva_number_or_number_array_of(8));
+    Konva_RectConfig_set_fill(r1, Konva_string_or_CanvasGradient_of("#111111"));
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Rect_new(r1)));
     add_caption(children, 40, 142, "Rect (filled)");
 
-    RectConfig r2 = RectConfig_create();
-    RectConfig_set_x(r2, 195);
-    RectConfig_set_y(r2, 55);
-    RectConfig_set_width(r2, 110);
-    RectConfig_set_height(r2, 76);
-    RectConfig_set_fill(r2, string_or_CanvasGradient_of("#ffffff"));
-    RectConfig_set_stroke(r2, string_or_CanvasGradient_of("#111111"));
-    RectConfig_set_strokeWidth(r2, 2);
-    RectConfig_set_dash(r2, JsArray_double_from((double[]){ 6.0, 4.0 }, 2));
-    JsArray_Node_2_push(children, AS_Node_2(Rect_new(r2)));
+    Konva_RectConfig r2 = Konva_RectConfig_create();
+    Konva_RectConfig_set_x(r2, 195);
+    Konva_RectConfig_set_y(r2, 55);
+    Konva_RectConfig_set_width(r2, 110);
+    Konva_RectConfig_set_height(r2, 76);
+    Konva_RectConfig_set_fill(r2, Konva_string_or_CanvasGradient_of("#ffffff"));
+    Konva_RectConfig_set_stroke(r2, Konva_string_or_CanvasGradient_of("#111111"));
+    Konva_RectConfig_set_strokeWidth(r2, 2);
+    Konva_RectConfig_set_dash(r2, JsArray_double_from((double[]){ 6.0, 4.0 }, 2));
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Rect_new(r2)));
     add_caption(children, 195, 142, "Rect (dashed)");
 
-    CircleConfig cc = CircleConfig_create();
-    CircleConfig_set_x(cc, 415);
-    CircleConfig_set_y(cc, 93);
-    CircleConfig_set_radius(cc, 40);
-    CircleConfig_set_fill(cc, string_or_CanvasGradient_of("#404040"));
-    CircleConfig_set_stroke(cc, string_or_CanvasGradient_of("#111111"));
-    CircleConfig_set_strokeWidth(cc, 2);
-    JsArray_Node_2_push(children, AS_Node_2(Circle_new(cc)));
+    Konva_CircleConfig cc = Konva_CircleConfig_create();
+    Konva_CircleConfig_set_x(cc, 415);
+    Konva_CircleConfig_set_y(cc, 93);
+    Konva_CircleConfig_set_radius(cc, 40);
+    Konva_CircleConfig_set_fill(cc, Konva_string_or_CanvasGradient_of("#404040"));
+    Konva_CircleConfig_set_stroke(cc, Konva_string_or_CanvasGradient_of("#111111"));
+    Konva_CircleConfig_set_strokeWidth(cc, 2);
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Circle_new(cc)));
     add_caption(children, 395, 142, "Circle");
 
-    RegularPolygonConfig pc = RegularPolygonConfig_create();
-    RegularPolygonConfig_set_x(pc, 575);
-    RegularPolygonConfig_set_y(pc, 93);
-    RegularPolygonConfig_set_sides(pc, 6);
-    RegularPolygonConfig_set_radius(pc, 42);
-    RegularPolygonConfig_set_fill(pc, string_or_CanvasGradient_of("#efefef"));
-    RegularPolygonConfig_set_stroke(pc, string_or_CanvasGradient_of("#111111"));
-    RegularPolygonConfig_set_strokeWidth(pc, 2);
-    JsArray_Node_2_push(children, AS_Node_2(RegularPolygon_new(pc)));
+    Konva_RegularPolygonConfig pc = Konva_RegularPolygonConfig_create();
+    Konva_RegularPolygonConfig_set_x(pc, 575);
+    Konva_RegularPolygonConfig_set_y(pc, 93);
+    Konva_RegularPolygonConfig_set_sides(pc, 6);
+    Konva_RegularPolygonConfig_set_radius(pc, 42);
+    Konva_RegularPolygonConfig_set_fill(pc, Konva_string_or_CanvasGradient_of("#efefef"));
+    Konva_RegularPolygonConfig_set_stroke(pc, Konva_string_or_CanvasGradient_of("#111111"));
+    Konva_RegularPolygonConfig_set_strokeWidth(pc, 2);
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_RegularPolygon_new(pc)));
     add_caption(children, 548, 142, "Hexagon");
 
     // Row 2: Star, Ring, Wedge, Framed Text.
-    StarConfig st = StarConfig_create();
-    StarConfig_set_x(st, 95);
-    StarConfig_set_y(st, 268);
-    StarConfig_set_numPoints(st, 5);
-    StarConfig_set_innerRadius(st, 19);
-    StarConfig_set_outerRadius(st, 44);
-    StarConfig_set_fill(st, string_or_CanvasGradient_of("#737373"));
-    StarConfig_set_stroke(st, string_or_CanvasGradient_of("#111111"));
-    StarConfig_set_strokeWidth(st, 2);
-    JsArray_Node_2_push(children, AS_Node_2(Star_new(st)));
+    Konva_StarConfig st = Konva_StarConfig_create();
+    Konva_StarConfig_set_x(st, 95);
+    Konva_StarConfig_set_y(st, 268);
+    Konva_StarConfig_set_numPoints(st, 5);
+    Konva_StarConfig_set_innerRadius(st, 19);
+    Konva_StarConfig_set_outerRadius(st, 44);
+    Konva_StarConfig_set_fill(st, Konva_string_or_CanvasGradient_of("#737373"));
+    Konva_StarConfig_set_stroke(st, Konva_string_or_CanvasGradient_of("#111111"));
+    Konva_StarConfig_set_strokeWidth(st, 2);
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Star_new(st)));
     add_caption(children, 62, 325, "Star (5pt)");
 
-    RingConfig rc = RingConfig_create();
-    RingConfig_set_x(rc, 250);
-    RingConfig_set_y(rc, 268);
-    RingConfig_set_innerRadius(rc, 22);
-    RingConfig_set_outerRadius(rc, 42);
-    RingConfig_set_fill(rc, string_or_CanvasGradient_of("#d4d4d4"));
-    RingConfig_set_stroke(rc, string_or_CanvasGradient_of("#111111"));
-    RingConfig_set_strokeWidth(rc, 2);
-    JsArray_Node_2_push(children, AS_Node_2(Ring_new(rc)));
+    Konva_RingConfig rc = Konva_RingConfig_create();
+    Konva_RingConfig_set_x(rc, 250);
+    Konva_RingConfig_set_y(rc, 268);
+    Konva_RingConfig_set_innerRadius(rc, 22);
+    Konva_RingConfig_set_outerRadius(rc, 42);
+    Konva_RingConfig_set_fill(rc, Konva_string_or_CanvasGradient_of("#d4d4d4"));
+    Konva_RingConfig_set_stroke(rc, Konva_string_or_CanvasGradient_of("#111111"));
+    Konva_RingConfig_set_strokeWidth(rc, 2);
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Ring_new(rc)));
     add_caption(children, 236, 325, "Ring");
 
-    WedgeConfig wc = WedgeConfig_create();
-    WedgeConfig_set_x(wc, 415);
-    WedgeConfig_set_y(wc, 268);
-    WedgeConfig_set_radius(wc, 44);
-    WedgeConfig_set_angle(wc, 270);
-    WedgeConfig_set_rotation(wc, -90);
-    WedgeConfig_set_fill(wc, string_or_CanvasGradient_of("#111111"));
-    WedgeConfig_set_stroke(wc, string_or_CanvasGradient_of("#555555"));
-    WedgeConfig_set_strokeWidth(wc, 1);
-    JsArray_Node_2_push(children, AS_Node_2(Wedge_new(wc)));
+    Konva_WedgeConfig wc = Konva_WedgeConfig_create();
+    Konva_WedgeConfig_set_x(wc, 415);
+    Konva_WedgeConfig_set_y(wc, 268);
+    Konva_WedgeConfig_set_radius(wc, 44);
+    Konva_WedgeConfig_set_angle(wc, 270);
+    Konva_WedgeConfig_set_rotation(wc, -90);
+    Konva_WedgeConfig_set_fill(wc, Konva_string_or_CanvasGradient_of("#111111"));
+    Konva_WedgeConfig_set_stroke(wc, Konva_string_or_CanvasGradient_of("#555555"));
+    Konva_WedgeConfig_set_strokeWidth(wc, 1);
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Wedge_new(wc)));
     add_caption(children, 382, 325, "Wedge 270\xC2\xB0");
 
-    RectConfig tf = RectConfig_create();
-    RectConfig_set_x(tf, 500);
-    RectConfig_set_y(tf, 224);
-    RectConfig_set_width(tf, 150);
-    RectConfig_set_height(tf, 88);
-    RectConfig_set_fill(tf, string_or_CanvasGradient_of("#f7f7f7"));
-    RectConfig_set_stroke(tf, string_or_CanvasGradient_of("#111111"));
-    RectConfig_set_strokeWidth(tf, 1.5);
-    JsArray_Node_2_push(children, AS_Node_2(Rect_new(tf)));
+    Konva_RectConfig tf = Konva_RectConfig_create();
+    Konva_RectConfig_set_x(tf, 500);
+    Konva_RectConfig_set_y(tf, 224);
+    Konva_RectConfig_set_width(tf, 150);
+    Konva_RectConfig_set_height(tf, 88);
+    Konva_RectConfig_set_fill(tf, Konva_string_or_CanvasGradient_of("#f7f7f7"));
+    Konva_RectConfig_set_stroke(tf, Konva_string_or_CanvasGradient_of("#111111"));
+    Konva_RectConfig_set_strokeWidth(tf, 1.5);
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Rect_new(tf)));
 
-    TextConfig txt = TextConfig_create();
-    TextConfig_set_x(txt, 514);
-    TextConfig_set_y(txt, 240);
-    TextConfig_set_text(txt, "KONVA 2D\nMonochrome\nScene Graph");
-    TextConfig_set_fontSize(txt, 13);
-    TextConfig_set_fontFamily(txt, "monospace");
-    TextConfig_set_fill(txt, string_or_CanvasGradient_of("#111111"));
-    JsArray_Node_2_push(children, AS_Node_2(Text_2_new(txt)));
+    Konva_TextConfig txt = Konva_TextConfig_create();
+    Konva_TextConfig_set_x(txt, 514);
+    Konva_TextConfig_set_y(txt, 240);
+    Konva_TextConfig_set_text(txt, "KONVA 2D\nMonochrome\nScene Graph");
+    Konva_TextConfig_set_fontSize(txt, 13);
+    Konva_TextConfig_set_fontFamily(txt, "monospace");
+    Konva_TextConfig_set_fill(txt, Konva_string_or_CanvasGradient_of("#111111"));
+    JsArray_Konva_Node_push(children, AS_Konva_Node(Konva_Text_new(txt)));
     add_caption(children, 558, 325, "Text");
 
-    Layer_add(layer, children);
-    Layer_draw(layer);
+    Konva_Layer_add(layer, children);
+    Konva_Layer_draw(layer);
 
     char meta[128];
     snprintf(meta, sizeof meta, "Stage: 680x400 \xC2\xB7 7 primitive types \xC2\xB7 %d layer children",
-        (int)JsArray_Node_2_length(Layer_getChildren(layer)));
+        (int)JsArray_Konva_Node_length(Konva_Layer_getChildren(layer)));
     HTMLElement_set_textContent(Document_getElementById(get_document(), "meta"), meta);
     js_scope_close();
 }

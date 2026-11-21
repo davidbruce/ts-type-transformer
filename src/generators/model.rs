@@ -297,6 +297,12 @@ pub struct Model {
     // With several packages bound together, those asked for: a program must
     // give their modules; others only where used.
     pub requested_packages: Vec<String>,
+    // Optional explicit symbol prefix from `<declarations prefix="...">`.
+    pub prefix: Option<String>,
+    // ES module from `<declarations import="...">`, if this is a module library.
+    pub root_import: Option<String>,
+    // Emitted C struct name -> original unprefixed model type name (when prefixed/disambiguated).
+    pub original_type_names: BTreeMap<String, String>,
 }
 
 impl Class {
@@ -420,7 +426,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     let mut b = Builder {
         opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),

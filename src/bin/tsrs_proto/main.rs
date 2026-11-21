@@ -131,6 +131,7 @@ fn main() {
     let mut emit: Option<String> = None;
     let mut out_dir: Option<String> = None;
     let mut project_name: Option<String> = None;
+    let mut prefix_arg: Option<String> = None;
     let mut project_refs: Vec<String> = Vec::new();
     let mut glue_for: Option<String> = None;
     let mut libs_arg: Option<String> = None;
@@ -150,6 +151,7 @@ fn main() {
             "--emit" => emit = Some(args.next().expect("c, cpp, zig or fsharp")),
             "--out" => out_dir = Some(args.next().expect("output directory")),
             "--name" => project_name = Some(args.next().expect("project / namespace name")),
+            "--prefix" => prefix_arg = Some(args.next().expect("C symbol prefix")),
             "--ref" => project_refs.push(args.next().expect("referenced binding .fsproj or directory")),
             "--glue-for" => glue_for = Some(args.next().expect("compiled module")),
             "--lib" => libs_arg = Some(args.next().expect("comma-separated lib list")),
@@ -349,7 +351,9 @@ fn main() {
     // The packages asked for: a program gives each one's module; others
     // declarations come from only where they are used.
     let requested = if entries.len() > 1 { format!(" packages=\"{}\"", xml::escape(&entries.iter().map(|e| e.0.as_str()).collect::<Vec<_>>().join(" "))) } else { String::new() };
-    let mut doc = format!("<declarations{import}{requested}>\n  <lowering {}/>\n", strategies.join(" "));
+    let effective_prefix = prefix_arg.or_else(|| modules.prefix.clone());
+    let prefix_attr = effective_prefix.as_ref().map(|p| format!(" prefix=\"{}\"", xml::escape(p))).unwrap_or_default();
+    let mut doc = format!("<declarations{import}{requested}{prefix_attr}>\n  <lowering {}/>\n", strategies.join(" "));
     for line in x.out.lines() {
         doc += &format!("  {line}\n");
     }

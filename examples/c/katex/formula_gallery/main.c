@@ -16,7 +16,7 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement head = make_el(doc, "div", "head", 0);
     HTMLElement title = make_el(doc, "h1", 0, "KaTeX Formula Gallery (C)");
     char badge_buf[64] = "katex v";
-    JsString_copy(get_version(), badge_buf + 7, sizeof(badge_buf) - 7);
+    JsString_copy(katex_get_version_2(), badge_buf + 7, sizeof(badge_buf) - 7);
     HTMLElement badge = make_el(doc, "span", "badge", badge_buf);
     HTMLElement_appendChild(head, title);
     HTMLElement_appendChild(head, badge);
@@ -46,7 +46,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(card, make_el(doc, "div", "label", names[i]));
         HTMLElement_appendChild(card, make_el(doc, "pre", "tex", texs[i]));
         HTMLElement slot = make_el(doc, "div", "slot", 0);
-        render(texs[i], slot, opts);
+        katex_render(texs[i], slot, opts);
         HTMLElement_appendChild(card, slot);
         HTMLElement_appendChild(grid, card);
     }

@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 static void push_slice(JsArray data, const char* name, double value) {
-    Dictionary d = Dictionary_create();
+    Echarts_Dictionary d = Echarts_Dictionary_create();
     js_set_str(d, "name", name);
     js_set_num(d, "value", value);
     js_push_val(data, d);
@@ -13,19 +13,19 @@ __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     Document doc = get_document();
     HTMLElement box = Document_getElementById(doc, "chart");
-    ECharts chart = init(box, NULL);
+    ECharts chart = echarts_init(box, NULL);
 
     JsArray palette = JsArray_new();
     const char* cols[] = { "#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4" };
     for (int i = 0; i < 5; i++) js_push_str(palette, cols[i]);
 
-    Dictionary leg_ts = Dictionary_create();
+    Echarts_Dictionary leg_ts = Echarts_Dictionary_create();
     js_set_str(leg_ts, "color", "#111111");
-    Dictionary legend = Dictionary_create();
+    Echarts_Dictionary legend = Echarts_Dictionary_create();
     js_set_num(legend, "bottom", 8);
     js_set_val(legend, "textStyle", leg_ts);
 
-    Dictionary tooltip = Dictionary_create();
+    Echarts_Dictionary tooltip = Echarts_Dictionary_create();
     js_set_str(tooltip, "trigger", "item");
 
     JsArray radius = JsArray_new();
@@ -36,11 +36,11 @@ __attribute__((export_name("start"))) void start(void) {
     js_push_str(center, "50%");
     js_push_str(center, "46%");
 
-    Dictionary item_style = Dictionary_create();
+    Echarts_Dictionary item_style = Echarts_Dictionary_create();
     js_set_str(item_style, "borderColor", "#ffffff");
     js_set_num(item_style, "borderWidth", 2);
 
-    Dictionary lbl = Dictionary_create();
+    Echarts_Dictionary lbl = Echarts_Dictionary_create();
     js_set_str(lbl, "color", "#111111");
 
     JsArray data = JsArray_new();
@@ -50,7 +50,7 @@ __attribute__((export_name("start"))) void start(void) {
     push_slice(data, "Parser", 14);
     push_slice(data, "Tests", 8);
 
-    Dictionary s0 = Dictionary_create();
+    Echarts_Dictionary s0 = Echarts_Dictionary_create();
     js_set_str(s0, "type", "pie");
     js_set_str(s0, "name", "Subsystems");
     js_set_val(s0, "radius", radius);

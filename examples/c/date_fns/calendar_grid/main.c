@@ -26,19 +26,19 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(head, make_el(doc, "span", "badge", "March 2024"));
     HTMLElement_appendChild(app, head);
 
-    Date ref_day = parseISO("2024-03-15");
-    DateArg ref_arg = DateArg_of(ref_day);
-    Date month_start = startOfMonth(ref_arg);
-    Date month_end = endOfMonth(ref_arg);
-    int offset = (int)getDay(month_start);
+    Date ref_day = df_parseISO("2024-03-15");
+    Df_DateArg ref_arg = Df_DateArg_of(ref_day);
+    Date month_start = df_startOfMonth(ref_arg);
+    Date month_end = df_endOfMonth(ref_arg);
+    int offset = (int)df_getDay(month_start);
 
     char b_days[16], b_q[16], b_w[16], b_doy[32];
-    snprintf(b_days, sizeof b_days, "%d", (int)getDaysInMonth(ref_day));
-    snprintf(b_q, sizeof b_q, "Q%d", (int)getQuarter(ref_day));
-    snprintf(b_w, sizeof b_w, "W%d", (int)getISOWeek_with_Date(ref_day));
+    snprintf(b_days, sizeof b_days, "%d", (int)df_getDaysInMonth(ref_day));
+    snprintf(b_q, sizeof b_q, "Q%d", (int)df_getQuarter(ref_day));
+    snprintf(b_w, sizeof b_w, "W%d", (int)df_getISOWeek_with_Date(ref_day));
     snprintf(b_doy, sizeof b_doy, "%s \xC2\xB7 #%d",
-        isLeapYear(ref_day) ? "Yes" : "No",
-        (int)getDayOfYear_with_Date(ref_day));
+        df_isLeapYear(ref_day) ? "Yes" : "No",
+        (int)df_getDayOfYear_with_Date(ref_day));
 
     HTMLElement metrics = make_el(doc, "div", "metrics", 0);
     add_metric(doc, metrics, "Days in Month", b_days);
@@ -59,27 +59,27 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(grid, make_el(doc, "div", "day-cell empty", 0));
     }
 
-    Interval span = Interval_create();
-    Interval_set_start(span, DateArg_of(month_start));
-    Interval_set_end(span, DateArg_of(month_end));
-    JsArray_DateArg days = eachDayOfInterval(span);
-    uint32_t count = JsArray_DateArg_length(days);
+    Df_Interval span = Df_Interval_create();
+    Df_Interval_set_start(span, Df_DateArg_of(month_start));
+    Df_Interval_set_end(span, Df_DateArg_of(month_end));
+    JsArray_Df_DateArg days = df_eachDayOfInterval(span);
+    uint32_t count = JsArray_Df_DateArg_length(days);
     for (uint32_t i = 0; i < count; i++) {
-        Date d = JsArray_DateArg_get(days, i).as.Date;
-        bool is_ref = isSameDay_with_Date_and_Date(d, ref_day);
-        bool is_wknd = isWeekend(d);
+        Date d = JsArray_Df_DateArg_get(days, i).as.Date;
+        bool is_ref = df_isSameDay_with_Date_and_Date(d, ref_day);
+        bool is_wknd = df_isWeekend(d);
         const char* cls = is_ref ? "day-cell today" : (is_wknd ? "day-cell weekend" : "day-cell");
 
         HTMLElement cell = make_el(doc, "div", cls, 0);
         HTMLElement num = make_el(doc, "span", "day-num", 0);
-        HTMLElement_set_textContent(num, formatDate_with_Date(d, "d"));
+        HTMLElement_set_textContent(num, df_formatDate_with_Date(d, "d"));
         HTMLElement_appendChild(cell, num);
 
         if (is_ref) {
             HTMLElement_appendChild(cell, make_el(doc, "span", "sub", "REF"));
         } else {
             HTMLElement sub = make_el(doc, "span", "sub", 0);
-            HTMLElement_set_textContent(sub, formatDate_with_Date(d, "EEE"));
+            HTMLElement_set_textContent(sub, df_formatDate_with_Date(d, "EEE"));
             HTMLElement_appendChild(cell, sub);
         }
         HTMLElement_appendChild(grid, cell);

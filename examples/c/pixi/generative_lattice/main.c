@@ -3,19 +3,19 @@
 
 static const double TWO_PI = 6.283185307179586;
 
-static Application g_app;
+static Pixi_Application g_app;
 
-static void stroke_g(Graphics g, double width, double color_hex) {
-    StrokeStyle ss = StrokeStyle_create();
-    StrokeStyle_set_width(ss, width);
-    StrokeStyle_set_color(ss, js_number(color_hex));
+static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
+    Pixi_StrokeStyle ss = Pixi_StrokeStyle_create();
+    Pixi_StrokeStyle_set_width(ss, width);
+    Pixi_StrokeStyle_set_color(ss, js_number(color_hex));
     JsArray args = JsArray_new();
     js_push_val(args, ss);
-    Graphics_stroke(g, args);
+    Pixi_Graphics_stroke(g, args);
 }
 
-static void add_gfx(Container stage, Graphics g) {
-    Container_addChild(stage, JsArray_Container_from((Container[]){ AS_Container(g) }, 1));
+static void add_gfx(Pixi_Container stage, Pixi_Graphics g) {
+    Pixi_Container_addChild(stage, JsArray_Pixi_Container_from((Pixi_Container[]){ AS_Pixi_Container(g) }, 1));
 }
 
 static void on_init(void* ctx, bool ok, JsValue v) {
@@ -27,32 +27,32 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     Document doc = get_document();
     HTMLElement stage_el = Document_getElementById(doc, "stage");
     if (stage_el.h != 0) {
-        HTMLElement_appendChild(stage_el, Application_get_canvas(g_app));
+        HTMLElement_appendChild(stage_el, Pixi_Application_get_canvas(g_app));
     }
 
-    Container stage = Application_get_stage(g_app);
+    Pixi_Container stage = Pixi_Application_get_stage(g_app);
 
     static const double rings[4] = { 42.0, 82.0, 122.0, 162.0 };
     static const int ring_colors[4] = { 0x111111, 0x555555, 0xa3a3a3, 0xe5e5e5 };
 
-    Graphics guides = Graphics_new();
+    Pixi_Graphics guides = Pixi_Graphics_new();
     for (int r = 0; r < 4; r++) {
-        Graphics_circle(guides, 340.0, 200.0, rings[r]);
+        Pixi_Graphics_circle(guides, 340.0, 200.0, rings[r]);
         stroke_g(guides, 1.0, (double)0xe5e5e5);
     }
 
-    Point unit_x = Point_new(1.0, 0.0);
+    Pixi_Point unit_x = Pixi_Point_new(1.0, 0.0);
     for (int step = 0; step < 12; step++) {
         double theta = (double)step * (TWO_PI / 12.0);
-        Matrix spoke = Matrix_rotate(Matrix_new(), theta);
-        PointData dir = Matrix_apply(spoke, (PointData){ unit_x.h });
-        Graphics_moveTo(guides, 340.0, 200.0);
-        Graphics_lineTo(guides, 340.0 + PointData_get_x(dir) * 182.0, 200.0 + PointData_get_y(dir) * 182.0);
+        Pixi_Matrix spoke = Pixi_Matrix_rotate(Pixi_Matrix_new(), theta);
+        Pixi_PointData dir = Pixi_Matrix_apply(spoke, (Pixi_PointData){ unit_x.h });
+        Pixi_Graphics_moveTo(guides, 340.0, 200.0);
+        Pixi_Graphics_lineTo(guides, 340.0 + Pixi_PointData_get_x(dir) * 182.0, 200.0 + Pixi_PointData_get_y(dir) * 182.0);
     }
     stroke_g(guides, 1.0, (double)0xd4d4d4);
     add_gfx(stage, guides);
 
-    Graphics tiles = Graphics_new();
+    Pixi_Graphics tiles = Pixi_Graphics_new();
     for (int r_idx = 0; r_idx < 4; r_idx++) {
         double radius = rings[r_idx];
         double s = 8.0 + (double)r_idx * 2.5;
@@ -61,34 +61,34 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
         for (int step = 0; step < 12; step++) {
             double theta = (double)step * (TWO_PI / 12.0) + (double)r_idx * 0.13;
-            Matrix dir_m = Matrix_rotate(Matrix_new(), theta);
-            PointData dir = Matrix_apply(dir_m, (PointData){ unit_x.h });
+            Pixi_Matrix dir_m = Pixi_Matrix_rotate(Pixi_Matrix_new(), theta);
+            Pixi_PointData dir = Pixi_Matrix_apply(dir_m, (Pixi_PointData){ unit_x.h });
 
-            Matrix tile_m = Matrix_new();
-            Matrix_rotate(tile_m, theta + (double)r_idx * 0.2);
-            Matrix_translate(tile_m, 340.0 + radius * PointData_get_x(dir), 200.0 + radius * PointData_get_y(dir));
+            Pixi_Matrix tile_m = Pixi_Matrix_new();
+            Pixi_Matrix_rotate(tile_m, theta + (double)r_idx * 0.2);
+            Pixi_Matrix_translate(tile_m, 340.0 + radius * Pixi_PointData_get_x(dir), 200.0 + radius * Pixi_PointData_get_y(dir));
 
-            Point p0 = Point_new(cx[0], cy[0]);
-            PointData tp0 = Matrix_apply(tile_m, (PointData){ p0.h });
-            Graphics_moveTo(tiles, PointData_get_x(tp0), PointData_get_y(tp0));
+            Pixi_Point p0 = Pixi_Point_new(cx[0], cy[0]);
+            Pixi_PointData tp0 = Pixi_Matrix_apply(tile_m, (Pixi_PointData){ p0.h });
+            Pixi_Graphics_moveTo(tiles, Pixi_PointData_get_x(tp0), Pixi_PointData_get_y(tp0));
             for (int k = 1; k < 4; k++) {
-                Point pk = Point_new(cx[k], cy[k]);
-                PointData tpk = Matrix_apply(tile_m, (PointData){ pk.h });
-                Graphics_lineTo(tiles, PointData_get_x(tpk), PointData_get_y(tpk));
+                Pixi_Point pk = Pixi_Point_new(cx[k], cy[k]);
+                Pixi_PointData tpk = Pixi_Matrix_apply(tile_m, (Pixi_PointData){ pk.h });
+                Pixi_Graphics_lineTo(tiles, Pixi_PointData_get_x(tpk), Pixi_PointData_get_y(tpk));
             }
-            Graphics_closePath(tiles);
-            Graphics_fill(tiles, js_number((double)ring_colors[r_idx]));
+            Pixi_Graphics_closePath(tiles);
+            Pixi_Graphics_fill(tiles, js_number((double)ring_colors[r_idx]));
             stroke_g(tiles, 1.2, (double)0x111111);
         }
     }
     add_gfx(stage, tiles);
 
-    Graphics center_dot = Graphics_new();
-    Graphics_circle(center_dot, 340.0, 200.0, 8.0);
-    Graphics_fill(center_dot, js_number((double)0x111111));
+    Pixi_Graphics center_dot = Pixi_Graphics_new();
+    Pixi_Graphics_circle(center_dot, 340.0, 200.0, 8.0);
+    Pixi_Graphics_fill(center_dot, js_number((double)0x111111));
     add_gfx(stage, center_dot);
 
-    Application_render(g_app);
+    Pixi_Application_render(g_app);
 
     HTMLElement meta = Document_getElementById(doc, "meta");
     if (meta.h != 0) {
@@ -99,16 +99,16 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
-    g_app = Application_new();
+    g_app = Pixi_Application_new();
     js_retain(g_app);
-    Application_init_options opts = Application_init_options_create();
-    Application_init_options_set_width(opts, 680.0);
-    Application_init_options_set_height(opts, 400.0);
-    Application_init_options_set_backgroundColor(opts, js_number((double)0xffffff));
-    Application_init_options_set_preference(opts, string_or_RendererPreference_array_of("webgl"));
-    Application_init_options_set_preserveDrawingBuffer(opts, true);
-    Application_init_options_set_antialias(opts, true);
-    Application_init_options_set_autoStart(opts, false);
-    Promise_then(Application_init(g_app, opts), on_init, 0);
+    Pixi_Application_init_options opts = Pixi_Application_init_options_create();
+    Pixi_Application_init_options_set_width(opts, 680.0);
+    Pixi_Application_init_options_set_height(opts, 400.0);
+    Pixi_Application_init_options_set_backgroundColor(opts, js_number((double)0xffffff));
+    Pixi_Application_init_options_set_preference(opts, Pixi_string_or_RendererPreference_array_of("webgl"));
+    Pixi_Application_init_options_set_preserveDrawingBuffer(opts, true);
+    Pixi_Application_init_options_set_antialias(opts, true);
+    Pixi_Application_init_options_set_autoStart(opts, false);
+    Promise_then(Pixi_Application_init(g_app, opts), on_init, 0);
     js_scope_close();
 }

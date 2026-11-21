@@ -47,7 +47,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(card, make_el(doc, "div", "label", names[i]));
         HTMLElement_appendChild(card, make_el(doc, "pre", "tex", texs[i]));
         HTMLElement slot = make_el(doc, "div", "slot", 0);
-        HTMLElement_set_innerHTML(slot, renderToString(texs[i], opts));
+        HTMLElement_set_innerHTML(slot, katex_renderToString(texs[i], opts));
         HTMLElement_appendChild(card, slot);
         HTMLElement_appendChild(grid, card);
     }

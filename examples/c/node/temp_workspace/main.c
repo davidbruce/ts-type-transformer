@@ -21,48 +21,48 @@ static void emitf(const char* fmt, ...) {
 }
 
 static void join2(char* out, uint32_t cap, const char* a, const char* b) {
-    JsString j = path_join(JsArray_JsString_from((const char* const[]){ a, b }, 2));
+    JsString j = node_path_join(JsArray_JsString_from((const char* const[]){ a, b }, 2));
     JsString_copy(j, out, cap);
 }
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     char dir[256], notes[320], backup[320], archive[320];
-    JsString_copy(mkdtempSync("/tmp/tsrs-node-ws-", (ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), dir, sizeof dir);
-    Stats dir_st = statSync(PathLike_of(dir));
-    check(existsSync(PathLike_of(dir)) && Stats_isDirectory(dir_st));
+    JsString_copy(node_mkdtempSync("/tmp/tsrs-node-ws-", (Node_ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), dir, sizeof dir);
+    Node_Stats dir_st = node_statSync(Node_PathLike_of(dir));
+    check(node_existsSync(Node_PathLike_of(dir)) && Node_Stats_isDirectory(dir_st));
 
     join2(notes, sizeof notes, dir, "notes.txt");
-    writeFileSync(PathOrFileDescriptor_of(notes), "alpha\nbeta\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
-    Stats st1 = statSync(PathLike_of(notes));
-    int s1 = (int)js_to_number(Stats_get_size(st1));
-    check(existsSync(PathLike_of(notes)) && Stats_isFile(st1) && s1 == 11);
+    node_writeFileSync(Node_PathOrFileDescriptor_of(notes), "alpha\nbeta\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    Node_Stats st1 = node_statSync(Node_PathLike_of(notes));
+    int s1 = (int)js_to_number(Node_Stats_get_size(st1));
+    check(node_existsSync(Node_PathLike_of(notes)) && Node_Stats_isFile(st1) && s1 == 11);
 
-    appendFileSync(PathOrFileDescriptor_of(notes), "gamma\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
-    JsString text = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(notes), BufferEncoding_utf8);
-    Stats st2 = statSync(PathLike_of(notes));
-    int s2 = (int)js_to_number(Stats_get_size(st2));
+    node_appendFileSync(Node_PathOrFileDescriptor_of(notes), "gamma\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    JsString text = node_readFileSync_with_BufferEncoding(Node_PathOrFileDescriptor_of(notes), Node_BufferEncoding_utf8);
+    Node_Stats st2 = node_statSync(Node_PathLike_of(notes));
+    int s2 = (int)js_to_number(Node_Stats_get_size(st2));
     check(JsString_equals(text, "alpha\nbeta\ngamma\n") && s2 == 17);
 
     join2(backup, sizeof backup, dir, "backup.txt");
     join2(archive, sizeof archive, dir, "archive.txt");
-    copyFileSync(PathLike_of(notes), PathLike_of(backup), js_none_double());
-    check(existsSync(PathLike_of(backup)));
+    node_copyFileSync(Node_PathLike_of(notes), Node_PathLike_of(backup), js_none_double());
+    check(node_existsSync(Node_PathLike_of(backup)));
 
-    renameSync(PathLike_of(backup), PathLike_of(archive));
-    check(!existsSync(PathLike_of(backup)) && existsSync(PathLike_of(archive)));
+    node_renameSync(Node_PathLike_of(backup), Node_PathLike_of(archive));
+    check(!node_existsSync(Node_PathLike_of(backup)) && node_existsSync(Node_PathLike_of(archive)));
 
-    JsString arch_text = readFileSync_with_BufferEncoding(PathOrFileDescriptor_of(archive), BufferEncoding_utf8);
+    JsString arch_text = node_readFileSync_with_BufferEncoding(Node_PathOrFileDescriptor_of(archive), Node_BufferEncoding_utf8);
     check(JsString_equals(arch_text, text));
 
-    unlinkSync(PathLike_of(archive));
-    check(!existsSync(PathLike_of(archive)));
+    node_unlinkSync(Node_PathLike_of(archive));
+    check(!node_existsSync(Node_PathLike_of(archive)));
 
-    RmOptions rm = RmOptions_create();
-    RmOptions_set_recursive(rm, true);
-    RmOptions_set_force(rm, true);
-    rmSync(PathLike_of(dir), rm);
-    check(!existsSync(PathLike_of(dir)));
+    Node_RmOptions rm = Node_RmOptions_create();
+    Node_RmOptions_set_recursive(rm, true);
+    Node_RmOptions_set_force(rm, true);
+    node_rmSync(Node_PathLike_of(dir), rm);
+    check(!node_existsSync(Node_PathLike_of(dir)));
     check(1);
 
     emitf("workspace=%s\nsize_before=%d size_after=%d\nPASS: temp_workspace (%d checks)\n",

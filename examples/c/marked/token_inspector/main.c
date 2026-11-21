@@ -9,31 +9,31 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
     return el;
 }
 
-static uint32_t token_h(Token tok) {
+static uint32_t token_h(Marked_Token tok) {
     switch (tok.tag) {
-    case Token_Tokens_Blockquote: return tok.as.Tokens_Blockquote.h;
-    case Token_Tokens_Br: return tok.as.Tokens_Br.h;
-    case Token_Tokens_Checkbox: return tok.as.Tokens_Checkbox.h;
-    case Token_Tokens_Code: return tok.as.Tokens_Code.h;
-    case Token_Tokens_Codespan: return tok.as.Tokens_Codespan.h;
-    case Token_Tokens_Def: return tok.as.Tokens_Def.h;
-    case Token_Tokens_Del: return tok.as.Tokens_Del.h;
-    case Token_Tokens_Em: return tok.as.Tokens_Em.h;
-    case Token_Tokens_Escape: return tok.as.Tokens_Escape.h;
-    case Token_Tokens_Heading: return tok.as.Tokens_Heading.h;
-    case Token_Tokens_Hr: return tok.as.Tokens_Hr.h;
-    case Token_Tokens_HTML: return tok.as.Tokens_HTML.h;
-    case Token_Tokens_Image: return tok.as.Tokens_Image.h;
-    case Token_Tokens_Link: return tok.as.Tokens_Link.h;
-    case Token_Tokens_List: return tok.as.Tokens_List.h;
-    case Token_Tokens_ListItem: return tok.as.Tokens_ListItem.h;
-    case Token_Tokens_Paragraph: return tok.as.Tokens_Paragraph.h;
-    case Token_Tokens_Space: return tok.as.Tokens_Space.h;
-    case Token_Tokens_Strong: return tok.as.Tokens_Strong.h;
-    case Token_Tokens_Table: return tok.as.Tokens_Table.h;
-    case Token_Tokens_Tag: return tok.as.Tokens_Tag.h;
-    case Token_Tokens_Text: return tok.as.Tokens_Text.h;
-    case Token_Tokens_Generic: return tok.as.Tokens_Generic.h;
+    case Marked_Token_Marked_Tokens_Blockquote: return tok.as.Marked_Tokens_Blockquote.h;
+    case Marked_Token_Marked_Tokens_Br: return tok.as.Marked_Tokens_Br.h;
+    case Marked_Token_Marked_Tokens_Checkbox: return tok.as.Marked_Tokens_Checkbox.h;
+    case Marked_Token_Marked_Tokens_Code: return tok.as.Marked_Tokens_Code.h;
+    case Marked_Token_Marked_Tokens_Codespan: return tok.as.Marked_Tokens_Codespan.h;
+    case Marked_Token_Marked_Tokens_Def: return tok.as.Marked_Tokens_Def.h;
+    case Marked_Token_Marked_Tokens_Del: return tok.as.Marked_Tokens_Del.h;
+    case Marked_Token_Marked_Tokens_Em: return tok.as.Marked_Tokens_Em.h;
+    case Marked_Token_Marked_Tokens_Escape: return tok.as.Marked_Tokens_Escape.h;
+    case Marked_Token_Marked_Tokens_Heading: return tok.as.Marked_Tokens_Heading.h;
+    case Marked_Token_Marked_Tokens_Hr: return tok.as.Marked_Tokens_Hr.h;
+    case Marked_Token_Marked_Tokens_HTML: return tok.as.Marked_Tokens_HTML.h;
+    case Marked_Token_Marked_Tokens_Image: return tok.as.Marked_Tokens_Image.h;
+    case Marked_Token_Marked_Tokens_Link: return tok.as.Marked_Tokens_Link.h;
+    case Marked_Token_Marked_Tokens_List: return tok.as.Marked_Tokens_List.h;
+    case Marked_Token_Marked_Tokens_ListItem: return tok.as.Marked_Tokens_ListItem.h;
+    case Marked_Token_Marked_Tokens_Paragraph: return tok.as.Marked_Tokens_Paragraph.h;
+    case Marked_Token_Marked_Tokens_Space: return tok.as.Marked_Tokens_Space.h;
+    case Marked_Token_Marked_Tokens_Strong: return tok.as.Marked_Tokens_Strong.h;
+    case Marked_Token_Marked_Tokens_Table: return tok.as.Marked_Tokens_Table.h;
+    case Marked_Token_Marked_Tokens_Tag: return tok.as.Marked_Tokens_Tag.h;
+    case Marked_Token_Marked_Tokens_Text: return tok.as.Marked_Tokens_Text.h;
+    case Marked_Token_Marked_Tokens_Generic: return tok.as.Marked_Tokens_Generic.h;
     default: return 0;
     }
 }
@@ -47,8 +47,8 @@ __attribute__((export_name("start"))) void start(void) {
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n";
 
     Marked m = Marked_new();
-    TokensList tokens = Marked_lexer(m, sample);
-    uint32_t count = (uint32_t)TokensList_get_length(tokens);
+    Marked_TokensList tokens = Marked_lexer(m, sample);
+    uint32_t count = (uint32_t)Marked_TokensList_get_length(tokens);
 
     char badge_buf[32];
     snprintf(badge_buf, sizeof badge_buf, "%u tokens", count);
@@ -78,9 +78,9 @@ __attribute__((export_name("start"))) void start(void) {
 
     HTMLElement tbody = make_el(doc, "tbody", 0, 0);
     for (uint32_t i = 0; i < count; i++) {
-        Tokens_Generic g = { token_h(TokensList_get_at(tokens, (double)i)) };
+        Marked_Tokens_Generic g = { token_h(Marked_TokensList_get_at(tokens, (double)i)) };
 
-        JsString raw = Tokens_Generic_get_raw(g);
+        JsString raw = Marked_Tokens_Generic_get_raw(g);
         uint32_t raw_len = JsString_len(raw);
         char raw_buf[512], snip_buf[1024];
         uint32_t rn = JsString_copy(raw, raw_buf, sizeof raw_buf);
@@ -105,7 +105,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement tr = make_el(doc, "tr", 0, 0);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, idx_buf));
         HTMLElement td_kind = make_el(doc, "td", 0, 0);
-        HTMLElement_set_textContent(td_kind, Tokens_Generic_get_type(g));
+        HTMLElement_set_textContent(td_kind, Marked_Tokens_Generic_get_type(g));
         HTMLElement_appendChild(tr, td_kind);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, bytes_buf));
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, snip_buf));

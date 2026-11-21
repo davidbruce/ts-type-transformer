@@ -58,7 +58,7 @@ pub fn ret_abi(t: &Ty) -> AbiSlot {
 // in their fixed arguments made one.
 pub fn model(xml: &str, target: &str) -> Result<Model, Vec<String>> {
     match target {
-        "C" => model_with(xml, super::c::MODEL_OPTIONS, &super::c::NAMING, &[]),
+        "C" => super::c::model_with_refs(xml, &[]),
         "C++" => model_with(xml, super::cpp::MODEL_OPTIONS, &super::cpp::NAMING, &[]),
         "Zig" => model_with(xml, super::zig::MODEL_OPTIONS, &super::zig::NAMING, &[]),
         "Rust" => model_with(xml, super::rust::MODEL_OPTIONS, &super::rust::NAMING, &[]),

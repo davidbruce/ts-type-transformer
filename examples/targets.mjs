@@ -59,24 +59,25 @@ export const TARGETS = [
 export const TARGETS_BY_ID = Object.fromEntries(TARGETS.map(t => [t.id, t]));
 
 export const PACKAGES_SNAKE = {
-  pts: { npm: ['pts'], needsDom: false, outDir: 'pts', name: 'pts' },
-  babylon_lite: { npm: ['@babylonjs/lite'], needsDom: true, outDir: 'babylonjs_lite', name: 'babylonjs_lite' },
-  katex: { npm: ['katex'], needsDom: true, outDir: 'katex', name: 'katex' },
-  marked: { npm: ['marked'], needsDom: true, outDir: 'marked', name: 'marked' },
-  date_fns: { npm: ['date-fns'], needsDom: true, outDir: 'date_fns', name: 'date_fns' },
-  node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'node', name: 'node' },
-  leaflet: { npm: ['leaflet'], needsDom: true, outDir: 'leaflet', name: 'leaflet' },
-  pixi: { npm: ['pixi.js'], needsDom: true, outDir: 'pixi_js', name: 'pixi_js' },
-  echarts: { npm: ['echarts'], needsDom: true, outDir: 'echarts', name: 'echarts' },
-  konva: { npm: ['konva'], needsDom: true, outDir: 'konva', name: 'konva' },
-  three: { npm: ['three'], needsDom: true, outDir: 'three', name: 'three' },
-  rapier: { npm: ['@dimforge/rapier3d-compat'], needsDom: true, outDir: 'dimforge_rapier3d_compat', name: 'dimforge_rapier3d_compat' },
-  tanstack_table: { npm: ['@tanstack/table-core'], needsDom: true, outDir: 'tanstack_table_core', name: 'tanstack_table_core' },
+  pts: { npm: ['pts'], needsDom: false, outDir: 'pts', name: 'pts', cPrefix: 'pts' },
+  babylon_lite: { npm: ['@babylonjs/lite'], needsDom: true, outDir: 'babylonjs_lite', name: 'babylonjs_lite', cPrefix: 'babylon' },
+  katex: { npm: ['katex'], needsDom: true, outDir: 'katex', name: 'katex', cPrefix: 'katex' },
+  marked: { npm: ['marked'], needsDom: true, outDir: 'marked', name: 'marked', cPrefix: 'marked' },
+  date_fns: { npm: ['date-fns'], needsDom: true, outDir: 'date_fns', name: 'date_fns', cPrefix: 'df' },
+  node: { npm: ['fs', 'path', 'events'], needsDom: false, outDir: 'node', name: 'node', cPrefix: 'node' },
+  leaflet: { npm: ['leaflet'], needsDom: true, outDir: 'leaflet', name: 'leaflet', cPrefix: 'leaflet' },
+  pixi: { npm: ['pixi.js'], needsDom: true, outDir: 'pixi_js', name: 'pixi_js', cPrefix: 'pixi' },
+  echarts: { npm: ['echarts'], needsDom: true, outDir: 'echarts', name: 'echarts', cPrefix: 'echarts' },
+  konva: { npm: ['konva'], needsDom: true, outDir: 'konva', name: 'konva', cPrefix: 'konva' },
+  three: { npm: ['three'], needsDom: true, outDir: 'three', name: 'three', cPrefix: 'three' },
+  rapier: { npm: ['@dimforge/rapier3d-compat'], needsDom: true, outDir: 'dimforge_rapier3d_compat', name: 'dimforge_rapier3d_compat', cPrefix: 'rapier' },
+  tanstack_table: { npm: ['@tanstack/table-core'], needsDom: true, outDir: 'tanstack_table_core', name: 'tanstack_table_core', cPrefix: 'table' },
   prosemirror: {
     npm: ['prosemirror-model', 'prosemirror-transform', 'prosemirror-state', 'prosemirror-view'],
     needsDom: true,
     outDir: 'prosemirror',
     name: 'prosemirror',
+    cPrefix: 'pm',
   },
 };
 
@@ -545,6 +546,7 @@ export async function ensureTargetBindings({
       const args = ['--from', fromDir];
       for (const n of spec.npm) args.push('--package', n);
       args.push('--config', cfg, '--emit', emit);
+      if (emit === 'c' && spec.cPrefix) args.push('--prefix', spec.cPrefix);
       if (spec.npm.length > 1) args.push('--name', spec.name);
       if (spec.needsDom) args.push('--ref', domDir);
       args.push('--out', bindingsDir);

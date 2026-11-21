@@ -21,6 +21,8 @@ pub struct PkgMeta {
     pub structs: Vec<String>,
     /// C external opaque handle struct names emitted as stubs in this package.
     pub external_structs: Vec<String>,
+    /// Original unprefixed TS type name -> emitted C struct name (when renamed/prefixed).
+    pub c_structs: BTreeMap<String, String>,
     /// Rust exported top-level types: `name -> (arity, is_handle)`.
     pub rust_types: BTreeMap<String, (usize, bool)>,
     /// F# exported top-level types: `name -> (arity, is_interface, abbrev_target)`.
@@ -103,6 +105,12 @@ impl PkgMeta {
         write_str_list(&mut out, "types", &self.types);
         write_str_list(&mut out, "structs", &self.structs);
         write_str_list(&mut out, "external_structs", &self.external_structs);
+        if !self.c_structs.is_empty() {
+            out += "\n[c_structs]\n";
+            for (orig, emitted) in &self.c_structs {
+                out += &format!("{} = {}\n", toml_str(orig), toml_str(emitted));
+            }
+        }
         if !self.rust_types.is_empty() {
             out += "\n[rust_types]\n";
             for (name, &(arity, handle)) in &self.rust_types {
@@ -158,6 +166,20 @@ impl PkgMeta {
         let structs = get_opt_str_list(&root, "structs", path)?;
         let external_structs = get_opt_str_list(&root, "external_structs", path)?;
 
+        let mut c_structs = BTreeMap::new();
+        if let Some(val) = root.get("c_structs") {
+            let tbl = val
+                .as_table()
+                .ok_or_else(|| format!("{}: `c_structs` must be a table", path.display()))?;
+            for (orig, v) in tbl {
+                let emitted = v
+                    .as_str()
+                    .ok_or_else(|| format!("{}: `c_structs.{orig}` must be a string", path.display()))?
+                    .to_string();
+                c_structs.insert(orig.clone(), emitted);
+            }
+        }
+
         let mut rust_types = BTreeMap::new();
         if let Some(val) = root.get("rust_types") {
             let tbl = val
@@ -203,6 +225,7 @@ impl PkgMeta {
             types,
             structs,
             external_structs,
+            c_structs,
             rust_types,
             fsharp_types,
         })

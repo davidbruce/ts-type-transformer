@@ -20,12 +20,12 @@ static bool contains(JsString s, const char* needle) {
 
 __attribute__((export_name("run"))) void run(void) {
     // The version is a string.
-    JsString version = get_version();
+    JsString version = katex_get_version_2();
     CHECK(JsString_len(version) > 0 && contains(version, "0.19"));
     js_release(version);
 
     // Plain rendering: inline math, HTML and MathML.
-    JsString html = renderToString("x^2 + y^2 = z^2");
+    JsString html = katex_renderToString("x^2 + y^2 = z^2");
     CHECK(contains(html, "class=\"katex\""));
     CHECK(contains(html, "katex-html"));
     CHECK(contains(html, "katex-mathml"));
@@ -36,7 +36,7 @@ __attribute__((export_name("run"))) void run(void) {
     // displayMode wraps in a display block.
     KatexOptions display = KatexOptions_create();
     KatexOptions_set_displayMode(display, js_some_bool(true));
-    JsString shown = renderToString("\\sum_{i=1}^n i", display);
+    JsString shown = katex_renderToString("\\sum_{i=1}^n i", display);
     CHECK(contains(shown, "katex-display"));
     CHECK(contains(shown, "mop op-limits"));
     js_release(shown);
@@ -45,24 +45,24 @@ __attribute__((export_name("run"))) void run(void) {
     // The output format picks the parts.
     KatexOptions html_only = KatexOptions_create();
     KatexOptions_set_output(html_only, KatexOptions_output_html);
-    JsString h = renderToString("a+b", html_only);
+    JsString h = katex_renderToString("a+b", html_only);
     CHECK(contains(h, "katex-html") && !contains(h, "katex-mathml"));
     js_release(h);
     KatexOptions mathml_only = KatexOptions_create();
     KatexOptions_set_output(mathml_only, KatexOptions_output_mathml);
-    JsString m = renderToString("\\frac{1}{2}", mathml_only);
+    JsString m = katex_renderToString("\\frac{1}{2}", mathml_only);
     CHECK(contains(m, "<mfrac>") && !contains(m, "katex-html"));
     CHECK(contains(m, "<mn>1</mn>") && contains(m, "<mn>2</mn>"));
     js_release(m);
 
     // Structures: fractions, roots, greek.
-    JsString frac = renderToString("\\frac{a}{b}");
+    JsString frac = katex_renderToString("\\frac{a}{b}");
     CHECK(contains(frac, "mfrac") && contains(frac, "frac-line"));
     js_release(frac);
-    JsString root = renderToString("\\sqrt{x}");
+    JsString root = katex_renderToString("\\sqrt{x}");
     CHECK(contains(root, "msqrt") && contains(root, "sqrt"));
     js_release(root);
-    JsString greek = renderToString("\\alpha + \\beta");
+    JsString greek = katex_renderToString("\\alpha + \\beta");
     CHECK(contains(greek, "\xCE\xB1") && contains(greek, "\xCE\xB2"));
     js_release(greek);
 
@@ -73,7 +73,7 @@ __attribute__((export_name("run"))) void run(void) {
     KatexOptions_macros_set_at(macros, "\\RR", replacement);
     js_release(replacement);
     KatexOptions_set_macros(with_macro, macros);
-    JsString real = renderToString("x \\in \\RR", with_macro);
+    JsString real = katex_renderToString("x \\in \\RR", with_macro);
     CHECK(contains(real, "mathbb"));
     CHECK(contains(real, "x \\in \\RR"));
     js_release(real);
@@ -82,14 +82,14 @@ __attribute__((export_name("run"))) void run(void) {
     KatexOptions lax = KatexOptions_create();
     KatexOptions_set_throwOnError(lax, js_some_bool(false));
     KatexOptions_set_errorColor(lax, "#ff0000");
-    JsString shown_error = renderToString("\\badcommand{x}", lax);
+    JsString shown_error = katex_renderToString("\\badcommand{x}", lax);
     CHECK(contains(shown_error, "\\badcommand"));
     CHECK(contains(shown_error, "color:#ff0000"));
     CHECK(!js_failed());
     js_release(shown_error);
 
     // throwOnError (the default): a ParseError is thrown.
-    JsString none = renderToString("\\badcommand{x}");
+    JsString none = katex_renderToString("\\badcommand{x}");
     CHECK(none.h == 0 && js_failed());
     JsValue error = js_take_error();
     CHECK(error.h != 0);
@@ -101,29 +101,29 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(contains(message, "Undefined control sequence: \\badcommand"));
     js_release(message);
     // The error is a ParseError: its own fields can be read.
-    ParseError parse_error = { error.h };
-    CHECK(ParseError_get_position(parse_error) == 0);
-    CHECK(ParseError_get_length(parse_error) == 11);
-    JsString raw = ParseError_get_rawMessage(parse_error);
+    Katex_ParseError parse_error = { error.h };
+    CHECK(Katex_ParseError_get_position(parse_error) == 0);
+    CHECK(Katex_ParseError_get_length(parse_error) == 11);
+    JsString raw = Katex_ParseError_get_rawMessage(parse_error);
     CHECK(JsString_equals(raw, "Undefined control sequence: \\badcommand"));
     js_release(raw);
-    Error as_error = ParseError_as_Error(parse_error);
+    Error as_error = Katex_ParseError_as_Error(parse_error);
     JsString text = Error_message(as_error);
     CHECK(contains(text, "KaTeX parse error"));
     js_release(text);
     js_release(error);
 
     // Unbalanced braces.
-    renderToString("\\frac{1");
+    katex_renderToString("\\frac{1");
     CHECK(js_failed());
     js_release(js_take_error());
 
     // Strict mode is a boolean, string or function: a string here.
     KatexOptions strict = KatexOptions_create();
-    KatexOptions_set_strict(strict, boolean_or_string_or_StrictFunction_of_string(JsString_from("ignore")));
-    JsString ok = renderToString("x", strict);
+    KatexOptions_set_strict(strict, Katex_boolean_or_string_or_StrictFunction_of_string(JsString_from("ignore")));
+    JsString ok = katex_renderToString("x", strict);
     CHECK(contains(ok, "katex"));
     js_release(ok);
-    boolean_or_string_or_StrictFunction got = KatexOptions_get_strict(strict);
-    CHECK(got.tag == boolean_or_string_or_StrictFunction_string && JsString_equals(got.as.string, "ignore"));
+    Katex_boolean_or_string_or_StrictFunction got = KatexOptions_get_strict(strict);
+    CHECK(got.tag == Katex_boolean_or_string_or_StrictFunction_string && JsString_equals(got.as.string, "ignore"));
 }

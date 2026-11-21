@@ -1,11 +1,5 @@
 #include "dom/dom.h"
-#define Ray BabylonRay
-#define Ray_get_origin BabylonRay_get_origin
-#define Ray_set_origin BabylonRay_set_origin
 #include "babylonjs_lite/babylonjs_lite.h"
-#undef Ray
-#undef Ray_get_origin
-#undef Ray_set_origin
 #include "dimforge_rapier3d_compat/dimforge_rapier3d_compat.h"
 #include <math.h>
 #include <stdio.h>
@@ -21,15 +15,15 @@
 static HTMLCanvasElement g_canvas;
 static HTMLElement g_meta;
 static HTMLElement g_pause_btn;
-static EngineContext g_engine;
-static World g_world;
-static RigidBody g_planks[PLANK_COUNT];
-static RigidBody g_striker;
+static Babylon_EngineContext g_engine;
+static Rapier_World g_world;
+static Rapier_RigidBody g_planks[PLANK_COUNT];
+static Rapier_RigidBody g_striker;
 static bool g_has_bodies = false;
-static ObservableVec3 g_plank_pos[PLANK_COUNT];
-static ObservableQuat g_plank_rot[PLANK_COUNT];
-static ObservableVec3 g_striker_pos;
-static ObservableQuat g_striker_rot;
+static Babylon_ObservableVec3 g_plank_pos[PLANK_COUNT];
+static Babylon_ObservableQuat g_plank_rot[PLANK_COUNT];
+static Babylon_ObservableVec3 g_striker_pos;
+static Babylon_ObservableQuat g_striker_rot;
 static bool g_has_meshes = false;
 static bool g_paused = false;
 static int g_step_count = 0;
@@ -62,18 +56,18 @@ static void build_world(void) {
             js_release(g_striker);
             g_has_bodies = false;
         }
-        World_free(g_world);
+        Rapier_World_free(g_world);
         js_release(g_world);
-        g_world = (World){ 0 };
+        g_world = (Rapier_World){ 0 };
     }
 
-    g_world = World_new(Vector3_new(0.0, -9.81, 0.0));
+    g_world = Rapier_World_new(Rapier_Vector3_new(0.0, -9.81, 0.0));
     js_retain(g_world);
 
-    RigidBody floor_body = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_fixed(), 0.0, -0.3, 0.0));
-    World_createCollider(
+    Rapier_RigidBody floor_body = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_fixed(), 0.0, -0.3, 0.0));
+    Rapier_World_createCollider(
         g_world,
-        ColliderDesc_setRestitution(ColliderDesc_setFriction(ColliderDesc_cuboid(10.0, 0.3, 10.0), 0.75), 0.1),
+        Rapier_ColliderDesc_setRestitution(Rapier_ColliderDesc_setFriction(Rapier_ColliderDesc_cuboid(10.0, 0.3, 10.0), 0.75), 0.1),
         floor_body
     );
 
@@ -87,11 +81,11 @@ static void build_world(void) {
         double hx = (layer % 2 == 0) ? HALF_LONG : HALF_THIN;
         double hz = (layer % 2 == 0) ? HALF_THIN : HALF_LONG;
 
-        RigidBody rb = World_createRigidBody(g_world, RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), x, y, z));
-        World_createCollider(
+        Rapier_RigidBody rb = Rapier_World_createRigidBody(g_world, Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), x, y, z));
+        Rapier_World_createCollider(
             g_world,
-            ColliderDesc_setDensity(
-                ColliderDesc_setRestitution(ColliderDesc_setFriction(ColliderDesc_cuboid(hx, HALF_HEIGHT, hz), 0.65), 0.12),
+            Rapier_ColliderDesc_setDensity(
+                Rapier_ColliderDesc_setRestitution(Rapier_ColliderDesc_setFriction(Rapier_ColliderDesc_cuboid(hx, HALF_HEIGHT, hz), 0.65), 0.12),
                 1.0
             ),
             rb
@@ -100,17 +94,17 @@ static void build_world(void) {
         js_retain(g_planks[idx]);
     }
 
-    g_striker = World_createRigidBody(
+    g_striker = Rapier_World_createRigidBody(
         g_world,
-        RigidBodyDesc_setLinvel(
-            RigidBodyDesc_setTranslation(RigidBodyDesc_dynamic(), -6.2, 1.55, 0.12),
+        Rapier_RigidBodyDesc_setLinvel(
+            Rapier_RigidBodyDesc_setTranslation(Rapier_RigidBodyDesc_dynamic(), -6.2, 1.55, 0.12),
             13.5, 1.1, -0.25
         )
     );
-    World_createCollider(
+    Rapier_World_createCollider(
         g_world,
-        ColliderDesc_setFriction(
-            ColliderDesc_setRestitution(ColliderDesc_setDensity(ColliderDesc_ball(SPHERE_RADIUS), 4.5), 0.35),
+        Rapier_ColliderDesc_setFriction(
+            Rapier_ColliderDesc_setRestitution(Rapier_ColliderDesc_setDensity(Rapier_ColliderDesc_ball(SPHERE_RADIUS), 4.5), 0.35),
             0.3
         ),
         g_striker
@@ -125,15 +119,15 @@ static void sync_meshes(void) {
     if (!g_has_meshes || !g_has_bodies) return;
     js_scope_open();
     for (int i = 0; i < PLANK_COUNT; i++) {
-        Vector p = RigidBody_translation(g_planks[i]);
-        Rotation q = RigidBody_rotation(g_planks[i]);
-        ObservableVec3_set(g_plank_pos[i], Vector_get_x(p), Vector_get_y(p), Vector_get_z(p));
-        ObservableQuat_set(g_plank_rot[i], Rotation_get_x(q), Rotation_get_y(q), Rotation_get_z(q), Rotation_get_w(q));
+        Rapier_Vector p = Rapier_RigidBody_translation(g_planks[i]);
+        Rapier_Rotation q = Rapier_RigidBody_rotation(g_planks[i]);
+        Babylon_ObservableVec3_set(g_plank_pos[i], Rapier_Vector_get_x(p), Rapier_Vector_get_y(p), Rapier_Vector_get_z(p));
+        Babylon_ObservableQuat_set(g_plank_rot[i], Rapier_Rotation_get_x(q), Rapier_Rotation_get_y(q), Rapier_Rotation_get_z(q), Rapier_Rotation_get_w(q));
     }
-    Vector sp = RigidBody_translation(g_striker);
-    Rotation sq = RigidBody_rotation(g_striker);
-    ObservableVec3_set(g_striker_pos, Vector_get_x(sp), Vector_get_y(sp), Vector_get_z(sp));
-    ObservableQuat_set(g_striker_rot, Rotation_get_x(sq), Rotation_get_y(sq), Rotation_get_z(sq), Rotation_get_w(sq));
+    Rapier_Vector sp = Rapier_RigidBody_translation(g_striker);
+    Rapier_Rotation sq = Rapier_RigidBody_rotation(g_striker);
+    Babylon_ObservableVec3_set(g_striker_pos, Rapier_Vector_get_x(sp), Rapier_Vector_get_y(sp), Rapier_Vector_get_z(sp));
+    Babylon_ObservableQuat_set(g_striker_rot, Rapier_Rotation_get_x(sq), Rapier_Rotation_get_y(sq), Rapier_Rotation_get_z(sq), Rapier_Rotation_get_w(sq));
     js_scope_close();
 }
 
@@ -143,15 +137,15 @@ static void update_meta(void) {
     double max_y = 0.0;
     double ke = 0.0;
     for (int i = 0; i < PLANK_COUNT; i++) {
-        Vector p = RigidBody_translation(g_planks[i]);
-        Vector v = RigidBody_linvel(g_planks[i]);
-        double py = Vector_get_y(p);
+        Rapier_Vector p = Rapier_RigidBody_translation(g_planks[i]);
+        Rapier_Vector v = Rapier_RigidBody_linvel(g_planks[i]);
+        double py = Rapier_Vector_get_y(p);
         if (py > max_y) max_y = py;
-        double vx = Vector_get_x(v), vy = Vector_get_y(v), vz = Vector_get_z(v);
+        double vx = Rapier_Vector_get_x(v), vy = Rapier_Vector_get_y(v), vz = Rapier_Vector_get_z(v);
         ke += 0.5 * (vx * vx + vy * vy + vz * vz);
     }
-    Vector sv = RigidBody_linvel(g_striker);
-    double svx = Vector_get_x(sv), svy = Vector_get_y(sv), svz = Vector_get_z(sv);
+    Rapier_Vector sv = Rapier_RigidBody_linvel(g_striker);
+    double svx = Rapier_Vector_get_x(sv), svy = Rapier_Vector_get_y(sv), svz = Rapier_Vector_get_z(sv);
     ke += 2.25 * (svx * svx + svy * svy + svz * svz);
 
     char buf[192];
@@ -170,7 +164,7 @@ static void update_meta(void) {
 
 static void step_sim(void) {
     js_scope_open();
-    if (g_world.h != 0) World_step(g_world);
+    if (g_world.h != 0) Rapier_World_step(g_world);
     g_step_count++;
     sync_meshes();
     update_meta();
@@ -197,9 +191,9 @@ static void on_btn(void* ctx, PointerEvent ev) {
         double sz = dist * sin(angle);
         double sy = 1.2 + (double)(g_shot_idx % 3) * 0.45;
         if (g_has_bodies) {
-            RigidBody_setTranslation(g_striker, Vector3_new(sx, sy, sz), true);
-            RigidBody_setLinvel(g_striker, Vector3_new(14.4 * cos(angle), 0.9, -14.4 * sin(angle)), true);
-            RigidBody_setAngvel(g_striker, Vector3_new(0.0, 0.0, 0.0), true);
+            Rapier_RigidBody_setTranslation(g_striker, Rapier_Vector3_new(sx, sy, sz), true);
+            Rapier_RigidBody_setLinvel(g_striker, Rapier_Vector3_new(14.4 * cos(angle), 0.9, -14.4 * sin(angle)), true);
+            Rapier_RigidBody_setAngvel(g_striker, Rapier_Vector3_new(0.0, 0.0, 0.0), true);
         }
         sync_meshes();
         update_meta();
@@ -212,7 +206,7 @@ static void on_btn(void* ctx, PointerEvent ev) {
         HTMLElement_set_textContent(g_pause_btn, "Pause");
         build_world();
         for (int i = 0; i < 12; i++) {
-            World_step(g_world);
+            Rapier_World_step(g_world);
             g_step_count++;
         }
         sync_meshes();
@@ -233,16 +227,16 @@ static void on_registered(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_scope_open();
-    Promise_then(startEngine(g_engine), on_started, 0);
+    Promise_then(babylon_startEngine(g_engine), on_started, 0);
     js_scope_close();
 }
 
-static PbrMaterialProps mk_pbr(double r, double g, double bl, double metallic, double roughness) {
-    createPbrMaterial_props props = createPbrMaterial_props_create();
-    createPbrMaterial_props_set_baseColorFactor(props, JsTuple_double_double_double_double_new(r, g, bl, 1.0));
-    createPbrMaterial_props_set_metallicFactor(props, metallic);
-    createPbrMaterial_props_set_roughnessFactor(props, roughness);
-    return createPbrMaterial(props);
+static Babylon_PbrMaterialProps mk_pbr(double r, double g, double bl, double metallic, double roughness) {
+    Babylon_createPbrMaterial_props props = Babylon_createPbrMaterial_props_create();
+    Babylon_createPbrMaterial_props_set_baseColorFactor(props, JsTuple_double_double_double_double_new(r, g, bl, 1.0));
+    Babylon_createPbrMaterial_props_set_metallicFactor(props, metallic);
+    Babylon_createPbrMaterial_props_set_roughnessFactor(props, roughness);
+    return babylon_createPbrMaterial(props);
 }
 
 static void on_engine(void* ctx, bool ok, JsValue value) {
@@ -252,38 +246,38 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_scope_open();
-    g_engine = (EngineContext){ value.h };
+    g_engine = (Babylon_EngineContext){ value.h };
     js_retain(g_engine);
 
-    SceneContext scene = createSceneContext(g_engine);
+    Babylon_SceneContext scene = babylon_createSceneContext(g_engine);
     GPUColorDict clear = GPUColorDict_create();
     GPUColorDict_set_r(clear, 0.06);
     GPUColorDict_set_g(clear, 0.07);
     GPUColorDict_set_b(clear, 0.09);
     GPUColorDict_set_a(clear, 1.0);
-    SceneContext_set_clearColor(scene, clear);
+    Babylon_SceneContext_set_clearColor(scene, clear);
 
-    ArcRotateCamera camera = createArcRotateCamera(0.85, 1.12, 11.5, vec3(0.0, 1.5, 0.0));
-    addToScene(scene, js_value(camera));
-    attachControl(camera, g_canvas, scene);
+    Babylon_ArcRotateCamera camera = babylon_createArcRotateCamera(0.85, 1.12, 11.5, babylon_vec3(0.0, 1.5, 0.0));
+    babylon_addToScene(scene, js_value(camera));
+    babylon_attachControl(camera, g_canvas, scene);
 
-    HemisphericLight hemi = createHemisphericLight(JsTuple_double_double_double_new(0.0, 1.0, 0.2), 0.72);
-    HemisphericLight_set_diffuseColor(hemi, JsTuple_double_double_double_new(0.85, 0.88, 0.95));
-    HemisphericLight_set_groundColor(hemi, JsTuple_double_double_double_new(0.14, 0.14, 0.16));
-    addToScene(scene, js_value(hemi));
+    Babylon_HemisphericLight hemi = babylon_createHemisphericLight(JsTuple_double_double_double_new(0.0, 1.0, 0.2), 0.72);
+    Babylon_HemisphericLight_set_diffuseColor(hemi, JsTuple_double_double_double_new(0.85, 0.88, 0.95));
+    Babylon_HemisphericLight_set_groundColor(hemi, JsTuple_double_double_double_new(0.14, 0.14, 0.16));
+    babylon_addToScene(scene, js_value(hemi));
 
-    DirectionalLight dir = createDirectionalLight(JsTuple_double_double_double_new(-1.0, -2.0, -1.2), 2.1);
-    DirectionalLight_set_diffuse(dir, JsTuple_double_double_double_new(1.0, 0.97, 0.92));
-    addToScene(scene, js_value(dir));
+    Babylon_DirectionalLight dir = babylon_createDirectionalLight(JsTuple_double_double_double_new(-1.0, -2.0, -1.2), 2.1);
+    Babylon_DirectionalLight_set_diffuse(dir, JsTuple_double_double_double_new(1.0, 0.97, 0.92));
+    babylon_addToScene(scene, js_value(dir));
 
-    GroundOptions gopts = GroundOptions_create();
-    GroundOptions_set_width(gopts, 20.0);
-    GroundOptions_set_height(gopts, 20.0);
-    Mesh ground = createGround(g_engine, gopts);
-    Mesh_set_material(ground, createGridMaterial());
-    addToScene(scene, js_value(ground));
+    Babylon_GroundOptions gopts = Babylon_GroundOptions_create();
+    Babylon_GroundOptions_set_width(gopts, 20.0);
+    Babylon_GroundOptions_set_height(gopts, 20.0);
+    Babylon_Mesh ground = babylon_createGround(g_engine, gopts);
+    Babylon_Mesh_set_material(ground, babylon_createGridMaterial());
+    babylon_addToScene(scene, js_value(ground));
 
-    PbrMaterialProps palette[3] = {
+    Babylon_PbrMaterialProps palette[3] = {
         mk_pbr(0.86, 0.86, 0.86, 0.15, 0.45),
         mk_pbr(0.58, 0.58, 0.60, 0.25, 0.38),
         mk_pbr(0.30, 0.31, 0.33, 0.35, 0.35),
@@ -293,35 +287,35 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         int layer = idx / PER_LAYER;
         double w_box = (layer % 2 == 0) ? (HALF_LONG * 2.0) : (HALF_THIN * 2.0);
         double d_box = (layer % 2 == 0) ? (HALF_THIN * 2.0) : (HALF_LONG * 2.0);
-        BoxOptions bopts = BoxOptions_create();
-        BoxOptions_set_width(bopts, w_box);
-        BoxOptions_set_height(bopts, HALF_HEIGHT * 2.0);
-        BoxOptions_set_depth(bopts, d_box);
-        Mesh m = createBox_with_BoxOptions(g_engine, bopts);
-        Mesh_set_material(m, palette[layer % 3]);
-        addToScene(scene, js_value(m));
-        g_plank_pos[idx] = Mesh_get_position(m);
-        g_plank_rot[idx] = Mesh_get_rotationQuaternion(m);
+        Babylon_BoxOptions bopts = Babylon_BoxOptions_create();
+        Babylon_BoxOptions_set_width(bopts, w_box);
+        Babylon_BoxOptions_set_height(bopts, HALF_HEIGHT * 2.0);
+        Babylon_BoxOptions_set_depth(bopts, d_box);
+        Babylon_Mesh m = babylon_createBox_with_BoxOptions(g_engine, bopts);
+        Babylon_Mesh_set_material(m, palette[layer % 3]);
+        babylon_addToScene(scene, js_value(m));
+        g_plank_pos[idx] = Babylon_Mesh_get_position(m);
+        g_plank_rot[idx] = Babylon_Mesh_get_rotationQuaternion(m);
         js_retain(g_plank_pos[idx]);
         js_retain(g_plank_rot[idx]);
     }
 
-    SphereOptions sopts = SphereOptions_create();
-    SphereOptions_set_diameter(sopts, SPHERE_RADIUS * 2.0);
-    SphereOptions_set_segments(sopts, 24.0);
-    Mesh sm = createSphere(g_engine, sopts);
-    Mesh_set_material(sm, mk_pbr(0.95, 0.42, 0.28, 0.55, 0.22));
-    addToScene(scene, js_value(sm));
-    g_striker_pos = Mesh_get_position(sm);
-    g_striker_rot = Mesh_get_rotationQuaternion(sm);
+    Babylon_SphereOptions sopts = Babylon_SphereOptions_create();
+    Babylon_SphereOptions_set_diameter(sopts, SPHERE_RADIUS * 2.0);
+    Babylon_SphereOptions_set_segments(sopts, 24.0);
+    Babylon_Mesh sm = babylon_createSphere(g_engine, sopts);
+    Babylon_Mesh_set_material(sm, mk_pbr(0.95, 0.42, 0.28, 0.55, 0.22));
+    babylon_addToScene(scene, js_value(sm));
+    g_striker_pos = Babylon_Mesh_get_position(sm);
+    g_striker_rot = Babylon_Mesh_get_rotationQuaternion(sm);
     js_retain(g_striker_pos);
     js_retain(g_striker_rot);
     g_has_meshes = true;
 
     sync_meshes();
 
-    onBeforeRender(scene, number_fn_from(on_before_render, 0));
-    Promise_then(registerScene(scene), on_registered, 0);
+    babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
+    Promise_then(babylon_registerScene(scene), on_registered, 0);
     js_scope_close();
 }
 
@@ -341,7 +335,7 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
 
     build_world();
     for (int i = 0; i < 18; i++) {
-        World_step(g_world);
+        Rapier_World_step(g_world);
         g_step_count++;
     }
     update_meta();
@@ -359,12 +353,12 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_retain(g_canvas);
-    Promise_then(createEngine_with_EngineOptions(RenderCanvas_of(g_canvas)), on_engine, 0);
+    Promise_then(babylon_createEngine_with_EngineOptions(Babylon_RenderCanvas_of(g_canvas)), on_engine, 0);
     js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
-    Promise_then(init(), on_rapier_ready, 0);
+    Promise_then(rapier_init(), on_rapier_ready, 0);
     js_scope_close();
 }

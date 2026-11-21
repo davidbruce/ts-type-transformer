@@ -8,10 +8,10 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
     return el;
 }
 
-static Interval make_span(const char* s_iso, const char* e_iso) {
-    Interval span = Interval_create();
-    Interval_set_start(span, DateArg_of(parseISO(s_iso)));
-    Interval_set_end(span, DateArg_of(parseISO(e_iso)));
+static Df_Interval make_span(const char* s_iso, const char* e_iso) {
+    Df_Interval span = Df_Interval_create();
+    Df_Interval_set_start(span, Df_DateArg_of(df_parseISO(s_iso)));
+    Df_Interval_set_end(span, Df_DateArg_of(df_parseISO(e_iso)));
     return span;
 }
 
@@ -25,13 +25,13 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(head, make_el(doc, "span", "badge", "March 2024 \xC2\xB7 31 days"));
     HTMLElement_appendChild(app, head);
 
-    Interval win_span = make_span("2024-03-01", "2024-03-31");
-    JsArray_DateArg month_days = eachDayOfInterval(win_span);
-    uint32_t day_count = JsArray_DateArg_length(month_days);
+    Df_Interval win_span = make_span("2024-03-01", "2024-03-31");
+    JsArray_Df_DateArg month_days = df_eachDayOfInterval(win_span);
+    uint32_t day_count = JsArray_Df_DateArg_length(month_days);
 
-    Interval sprint_a = make_span("2024-03-08", "2024-03-18");
+    Df_Interval sprint_a = make_span("2024-03-08", "2024-03-18");
     const char* track_names[4] = { "Sprint A (Ref)", "Design Review", "QA Hardening", "Post-Release" };
-    Interval tracks[4] = {
+    Df_Interval tracks[4] = {
         sprint_a,
         make_span("2024-03-03", "2024-03-10"),
         make_span("2024-03-15", "2024-03-25"),
@@ -46,9 +46,9 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(ghead, make_el(doc, "div", 0, "Track"));
     HTMLElement hslots = make_el(doc, "div", "slots", 0);
     for (uint32_t i = 0; i < day_count; i++) {
-        Date d = JsArray_DateArg_get(month_days, i).as.Date;
+        Date d = JsArray_Df_DateArg_get(month_days, i).as.Date;
         HTMLElement lbl = make_el(doc, "div", "slot-lbl", 0);
-        HTMLElement_set_textContent(lbl, formatDate_with_Date(d, "d"));
+        HTMLElement_set_textContent(lbl, df_formatDate_with_Date(d, "d"));
         HTMLElement_appendChild(hslots, lbl);
     }
     HTMLElement_appendChild(ghead, hslots);
@@ -62,21 +62,21 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(meta, make_el(doc, "span", "track-name", track_names[t]));
 
         HTMLElement dur_el = make_el(doc, "span", "track-dur", 0);
-        HTMLElement_set_textContent(dur_el, formatDuration(intervalToDuration(tracks[t])));
+        HTMLElement_set_textContent(dur_el, df_formatDuration(df_intervalToDuration(tracks[t])));
         HTMLElement_appendChild(meta, dur_el);
         HTMLElement_appendChild(row, meta);
 
         HTMLElement slots = make_el(doc, "div", "slots", 0);
         for (uint32_t i = 0; i < day_count; i++) {
-            Date d = JsArray_DateArg_get(month_days, i).as.Date;
-            bool in_track = isWithinInterval_with_Date(d, tracks[t]);
-            bool in_ref = isWithinInterval_with_Date(d, sprint_a);
+            Date d = JsArray_Df_DateArg_get(month_days, i).as.Date;
+            bool in_track = df_isWithinInterval_with_Date(d, tracks[t]);
+            bool in_ref = df_isWithinInterval_with_Date(d, sprint_a);
             const char* cls = (in_track && !is_ref && in_ref) ? "slot overlap" : (in_track ? "slot active" : "slot");
             HTMLElement_appendChild(slots, make_el(doc, "div", cls, 0));
         }
         HTMLElement_appendChild(row, slots);
 
-        bool overlaps = areIntervalsOverlapping(tracks[t], sprint_a);
+        bool overlaps = df_areIntervalsOverlapping(tracks[t], sprint_a);
         const char* b_text = is_ref ? "REF" : (overlaps ? "OVERLAP" : "DISJOINT");
         const char* b_cls = (is_ref || overlaps) ? "pill" : "pill-muted";
         HTMLElement_appendChild(row, make_el(doc, "span", b_cls, b_text));
@@ -102,11 +102,11 @@ __attribute__((export_name("start"))) void start(void) {
     const char* rules[3] = { "Clamped to start", "Inside interval", "Clamped to end" };
     HTMLElement tbody = make_el(doc, "tbody", 0, 0);
     for (int i = 0; i < 3; i++) {
-        DateArg res = clamp(DateArg_of(parseISO(probes[i])), sprint_a);
+        Df_DateArg res = df_clamp(Df_DateArg_of(df_parseISO(probes[i])), sprint_a);
         HTMLElement tr = make_el(doc, "tr", 0, 0);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, probes[i]));
         HTMLElement td_clamped = make_el(doc, "td", 0, 0);
-        HTMLElement_set_textContent(td_clamped, formatDate_with_Date(res.as.Date, "yyyy-MM-dd"));
+        HTMLElement_set_textContent(td_clamped, df_formatDate_with_Date(res.as.Date, "yyyy-MM-dd"));
         HTMLElement_appendChild(tr, td_clamped);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, rules[i]));
         HTMLElement_appendChild(tbody, tr);

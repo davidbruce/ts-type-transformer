@@ -4,7 +4,7 @@
 #include "tanstack_table_core/tanstack_table_core.h"
 
 static const JsValue NONE = { 0 };
-static JsValue store_state(JsValue tbl) { return functionalUpdate(js_get_prop(js_get_prop(tbl, "store"), "get"), NONE); }
+static JsValue store_state(JsValue tbl) { return table_functionalUpdate(js_get_prop(js_get_prop(tbl, "store"), "get"), NONE); }
 
 typedef struct {
     JsValue value;
@@ -16,14 +16,14 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->is_ro) return call_void_to_any_fn((void_to_any_fn){ a->derive.h });
+    if (a->is_ro) return table_call_void_to_any_fn((Table_void_to_any_fn){ a->derive.h });
     js_retain(a->value);
     return a->value;
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
     js_scope_open();
-    JsValue next = functionalUpdate(updater, a->value);
+    JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
     if (a->value.h != 0) js_release(a->value);
     a->value = next;
@@ -34,44 +34,44 @@ static void no_unsub(void* ctx) { (void)ctx; }
 static JsValue atom_sub(void* ctx, JsValue obs) {
     (void)ctx; (void)obs;
     JsValue sub = js_object();
-    js_set_val(sub, "unsubscribe", void_fn_from(no_unsub, NULL));
+    js_set_val(sub, "unsubscribe", Table_void_fn_from(no_unsub, NULL));
     return sub;
 }
 static JsValue make_atom(AtomState* a) {
     JsValue atom = js_object();
-    js_set_val(atom, "get", void_to_any_fn_from(atom_get, a));
-    if (!a->is_ro) js_set_val(atom, "set", Updater_fn2_from(atom_set, a));
-    js_set_val(atom, "subscribe", Updater_fn2_from(atom_sub, NULL));
+    js_set_val(atom, "get", Table_void_to_any_fn_from(atom_get, a));
+    if (!a->is_ro) js_set_val(atom, "set", Table_Updater_fn2_from(atom_set, a));
+    js_set_val(atom, "subscribe", Table_Updater_fn2_from(atom_sub, NULL));
     return atom;
 }
-static Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
+static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     AtomState* a = &atoms[atom_count++];
     a->value = initial;
     js_retain(initial);
-    return (Atom){ make_atom(a).h };
+    return (Table_Atom){ make_atom(a).h };
 }
-static ReadonlyAtom create_readonly(void* ctx, void_to_any_fn fn, TableAtomOptions opts) {
+static Table_ReadonlyAtom create_readonly(void* ctx, Table_void_to_any_fn fn, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     AtomState* a = &atoms[atom_count++];
     a->is_ro = true;
     a->derive = (JsValue){ fn.h };
     js_retain(fn);
-    return (ReadonlyAtom){ make_atom(a).h };
+    return (Table_ReadonlyAtom){ make_atom(a).h };
 }
-static void add_sub(void* ctx, Subscription s) { (void)ctx; (void)s; }
+static void add_sub(void* ctx, Table_Subscription s) { (void)ctx; (void)s; }
 static void unmount_cb(void* ctx) { (void)ctx; }
-static void batch_cb(void* ctx, void_fn fn) { (void)ctx; call_void_fn(fn); }
-static JsValue untrack_cb(void* ctx, void_to_any_fn fn) { (void)ctx; return call_void_to_any_fn(fn); }
+static void batch_cb(void* ctx, Table_void_fn fn) { (void)ctx; table_call_void_fn(fn); }
+static JsValue untrack_cb(void* ctx, Table_void_to_any_fn fn) { (void)ctx; return table_call_void_to_any_fn(fn); }
 
 static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
     TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
-    TableReactivityBindings_set_unmount(r, void_fn_from(unmount_cb, NULL));
-    TableReactivityBindings_set_batch(r, fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_schedule(r, fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
+    TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
+    TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
     TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
     TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
@@ -130,9 +130,9 @@ static Document g_doc;
 
 static void render(void) {
     js_scope_open();
-    RowModel rm = call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
-    JsArray_Row_Core rows = RowModel_get_rows(rm);
-    uint32_t nrows = JsArray_Row_Core_length(rows);
+    Table_RowModel rm = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
+    JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
+    uint32_t nrows = JsArray_Table_Row_Core_length(rows);
 
     JsArray grp_arr = js_to_array(js_get_prop(store_state(js_value(g_table)), "grouping"));
     char grp_col[32] = "region";
@@ -146,33 +146,33 @@ static void render(void) {
     html_fmt(&out, "<table><thead><tr><th>Group / Host</th><th>Region</th><th>Role</th><th class=\"num\">CPU %%</th><th class=\"num\">Mem GB</th><th class=\"num\">Nodes</th></tr></thead><tbody>");
     int groups = 0;
     for (uint32_t i = 0; i < nrows; i++) {
-        Row_Core row = JsArray_Row_Core_get(rows, i);
-        string_fn gv = Row_Core_get_getValue(row);
-        bool is_grp = call_void_to_boolean_fn(Row_ColumnGrouping_get_getIsGrouped((Row_ColumnGrouping){ row.h }));
-        double cpu = js_to_number(call_string_fn(gv, "cpu"));
-        double mem = js_to_number(call_string_fn(gv, "mem"));
-        double nodes = js_to_number(call_string_fn(gv, "nodes"));
+        Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
+        Table_string_fn gv = Table_Row_Core_get_getValue(row);
+        bool is_grp = table_call_void_to_boolean_fn(Table_Row_ColumnGrouping_get_getIsGrouped((Table_Row_ColumnGrouping){ row.h }));
+        double cpu = js_to_number(table_call_string_fn(gv, "cpu"));
+        double mem = js_to_number(table_call_string_fn(gv, "mem"));
+        double nodes = js_to_number(table_call_string_fn(gv, "nodes"));
         if (is_grp) {
             groups++;
-            bool is_exp = call_void_to_boolean_fn(Row_RowExpanding_get_getIsExpanded((Row_RowExpanding){ row.h }));
-            uint32_t sub_n = JsArray_Row_Core_length(Row_Core_get_subRows(row));
+            bool is_exp = table_call_void_to_boolean_fn(Table_Row_RowExpanding_get_getIsExpanded((Table_Row_RowExpanding){ row.h }));
+            uint32_t sub_n = JsArray_Table_Row_Core_length(Table_Row_Core_get_subRows(row));
             html_fmt(&out, "<tr class=\"group-row\"><td>%s", is_exp ? "[-] " : "[+] ");
             html_esc(&out, grp_col);
             html_fmt(&out, "=");
-            html_js_esc(&out, js_to_string(call_string_fn(gv, grp_col)));
+            html_js_esc(&out, js_to_string(table_call_string_fn(gv, grp_col)));
             html_fmt(&out, " (%u)</td><td>", sub_n);
-            html_js_esc(&out, js_to_string(call_string_fn(gv, "region")));
+            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "region")));
             html_fmt(&out, "</td><td>");
-            html_js_esc(&out, js_to_string(call_string_fn(gv, "role")));
+            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "role")));
             html_fmt(&out, "</td><td class=\"num\">%.1f</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
                      cpu, (int)(mem + 0.5), (int)(nodes + 0.5));
         } else {
             html_fmt(&out, "<tr><td class=\"child-indent\">");
-            html_js_esc(&out, js_to_string(call_string_fn(gv, "host")));
+            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "host")));
             html_fmt(&out, "</td><td>");
-            html_js_esc(&out, js_to_string(call_string_fn(gv, "region")));
+            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "region")));
             html_fmt(&out, "</td><td>");
-            html_js_esc(&out, js_to_string(call_string_fn(gv, "role")));
+            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "role")));
             html_fmt(&out, "</td><td class=\"num\">%d</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
                      (int)(cpu + 0.5), (int)(mem + 0.5), (int)(nodes + 0.5));
         }
@@ -194,14 +194,14 @@ static void on_click(void* ctx, PointerEvent ev) {
     Table_ColumnGrouping grp = { g_table.h };
     Table_RowExpanding exp = { g_table.h };
     if (idx == 0) {
-        call_Row_RowExpanding_toggleExpanded(Table_RowExpanding_get_toggleAllRowsExpanded(exp), true);
+        table_call_Row_RowExpanding_toggleExpanded(Table_RowExpanding_get_toggleAllRowsExpanded(exp), true);
     } else if (idx == 1) {
-        call_Row_RowExpanding_toggleExpanded(Table_RowExpanding_get_toggleAllRowsExpanded(exp), false);
+        table_call_Row_RowExpanding_toggleExpanded(Table_RowExpanding_get_toggleAllRowsExpanded(exp), false);
     } else {
         JsArray next = JsArray_new();
         js_push_str(next, idx == 2 ? "region" : "role");
-        call_Table_ColumnGrouping_setGrouping(Table_ColumnGrouping_get_setGrouping(grp), js_value(next));
-        call_Table_RowExpanding_setExpanded(Table_RowExpanding_get_setExpanded(exp), js_bool(true));
+        table_call_Table_ColumnGrouping_setGrouping(Table_ColumnGrouping_get_setGrouping(grp), js_value(next));
+        table_call_Table_RowExpanding_setExpanded(Table_RowExpanding_get_setExpanded(exp), js_bool(true));
     }
     render();
     js_scope_close();
@@ -210,18 +210,18 @@ static void on_click(void* ctx, PointerEvent ev) {
 __attribute__((export_name("start"))) void start(void) {
     js_scope_open();
     JsValue agg_fns = js_object();
-    js_set_val(agg_fns, "sum", get_aggregationFn_sum());
-    js_set_val(agg_fns, "mean", get_aggregationFn_mean());
-    js_set_val(agg_fns, "count", get_aggregationFn_count());
+    js_set_val(agg_fns, "sum", table_get_aggregationFn_sum());
+    js_set_val(agg_fns, "mean", table_get_aggregationFn_mean());
+    js_set_val(agg_fns, "count", table_get_aggregationFn_count());
 
     JsValue features = js_object();
     js_set_val(features, "coreReactivityFeature", make_reactivity());
-    js_set_val(features, "columnGroupingFeature", get_columnGroupingFeature());
-    js_set_val(features, "rowAggregationFeature", get_rowAggregationFeature());
-    js_set_val(features, "rowExpandingFeature", get_rowExpandingFeature());
-    js_set_val(features, "coreRowModel", createCoreRowModel());
-    js_set_val(features, "groupedRowModel", createGroupedRowModel());
-    js_set_val(features, "expandedRowModel", createExpandedRowModel());
+    js_set_val(features, "columnGroupingFeature", table_get_columnGroupingFeature());
+    js_set_val(features, "rowAggregationFeature", table_get_rowAggregationFeature());
+    js_set_val(features, "rowExpandingFeature", table_get_rowExpandingFeature());
+    js_set_val(features, "coreRowModel", table_createCoreRowModel());
+    js_set_val(features, "groupedRowModel", table_createGroupedRowModel());
+    js_set_val(features, "expandedRowModel", table_createExpandedRowModel());
     js_set_val(features, "aggregationFns", agg_fns);
 
     JsArray data = JsArray_new();
@@ -255,7 +255,7 @@ __attribute__((export_name("start"))) void start(void) {
     js_set_val(opts, "columns", cols);
     js_set_val(opts, "initialState", init_state);
 
-    g_table = constructTable((TableOptions_Core){ opts.h });
+    g_table = table_constructTable((TableOptions_Core){ opts.h });
     js_retain(g_table);
     g_doc = get_document();
     js_retain(g_doc);

@@ -328,6 +328,44 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
     m.funcs.iter_mut().for_each(|f| func(f, &to));
 }
 
+fn stem(w: &str) -> String {
+    let w = w.to_lowercase();
+    if w.len() > 4 && w.ends_with("es") {
+        w[..w.len() - 2].to_string()
+    } else if w.len() > 3 && w.ends_with('s') {
+        w[..w.len() - 1].to_string()
+    } else {
+        w
+    }
+}
+
+/// Whether `name` already carries `prefix` at word boundaries (by word stems or a contiguous word slice).
+pub(crate) fn has_prefix_word(prefix: &str, name: &str) -> bool {
+    let pw = words(prefix);
+    if pw.is_empty() {
+        return true;
+    }
+    let nw = words(name);
+    let name_stems: HashSet<String> = nw.iter().map(|w| stem(w)).collect();
+    if pw.iter().all(|w| name_stems.contains(&stem(w))) {
+        return true;
+    }
+    let p_joined: String = pw.iter().map(|w| w.to_lowercase()).collect();
+    for i in 0..nw.len() {
+        let mut acc = String::new();
+        for w in &nw[i..] {
+            acc.push_str(&w.to_lowercase());
+            if acc == p_joined {
+                return true;
+            }
+            if acc.len() >= p_joined.len() {
+                break;
+            }
+        }
+    }
+    false
+}
+
 // A type named by its origin, less what its name says already:
 // `readline` and `Key` are `ReadlineKey`, `stream/web` and
 // `StreamPipeOptions` `WebStreamPipeOptions`, `GlContextSystem` and
@@ -337,17 +375,6 @@ fn origin_name(origin: &str, name: &str) -> Option<String> {
     let upper = |w: &str| {
         let mut cs = w.chars();
         cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
-    };
-    // `Events` is the name's `Event`.
-    let stem = |w: &str| {
-        let w = w.to_lowercase();
-        if w.len() > 4 && w.ends_with("es") {
-            w[..w.len() - 2].to_string()
-        } else if w.len() > 3 && w.ends_with('s') {
-            w[..w.len() - 1].to_string()
-        } else {
-            w
-        }
     };
     let said: HashSet<String> = words(name).iter().map(|w| stem(w)).collect();
     let prefix: String = words(origin).iter().filter(|w| !said.contains(&stem(w))).map(|w| upper(w)).collect();
@@ -395,5 +422,16 @@ mod tests {
         assert_eq!(origin_name("PointerEvents", "KonvaPointerEvent"), None);
         assert_eq!(words("addISOWeekYears"), ["add", "ISO", "Week", "Years"]);
         assert_eq!(words("HTMLElement2D"), ["HTML", "Element", "2", "D"]);
+        assert!(has_prefix_word("echarts", "ECharts"));
+        assert!(has_prefix_word("echarts", "EChartsOption"));
+        assert!(has_prefix_word("katex", "KatexOptions"));
+        assert!(has_prefix_word("marked", "MarkedOptions"));
+        assert!(has_prefix_word("konva", "KonvaEventObject"));
+        assert!(has_prefix_word("table", "Table_Core"));
+        assert!(has_prefix_word("pts", "PtsCanvas"));
+        assert!(!has_prefix_word("pm", "StepMap"));
+        assert!(!has_prefix_word("konva", "Node"));
+        assert!(!has_prefix_word("babylon", "Vector3"));
+        assert!(!has_prefix_word("pts", "Pt"));
     }
 }

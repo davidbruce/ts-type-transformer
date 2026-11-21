@@ -37,13 +37,13 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement left = make_el(doc, "div", "cell mode-html", 0);
         HTMLElement_appendChild(left, make_el(doc, "div", "label", "throwOnError: false (#555555)"));
         HTMLElement l_slot = make_el(doc, "div", "slot", 0);
-        HTMLElement_set_innerHTML(l_slot, renderToString(bad_inputs[i], lenient));
+        HTMLElement_set_innerHTML(l_slot, katex_renderToString(bad_inputs[i], lenient));
         HTMLElement_appendChild(left, l_slot);
 
         HTMLElement right = make_el(doc, "div", "cell", 0);
         HTMLElement_appendChild(right, make_el(doc, "div", "label", "throwOnError: true (caught ParseError)"));
         HTMLElement r_out = make_el(doc, "div", "err", 0);
-        (void)renderToString(bad_inputs[i], strict);
+        (void)katex_renderToString(bad_inputs[i], strict);
         if (js_failed()) {
             HTMLElement_set_textContent(r_out, js_error_message(js_take_error()));
         } else {

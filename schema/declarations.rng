@@ -17,6 +17,7 @@
           <a:documentation>With several packages bound together, those asked for, space-separated: a program gives each one's module. Others a declaration is imported from (a dependency's, node's "stream") are needed only where used.</a:documentation>
         </attribute>
       </optional>
+      <optional><attribute name="prefix"/></optional>
       <ref name="lowering"/>
       <zeroOrMore>
         <ref name="topDeclaration"/>
