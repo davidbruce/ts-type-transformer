@@ -4,6 +4,9 @@
   "type": "module",
   "scripts": {
     "setup": "node build.mjs",
+    "precompile": "node build.mjs",
+    "precompile:browser": "node build.mjs --browser",
+    "status": "node ../build.mjs --list cpp",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

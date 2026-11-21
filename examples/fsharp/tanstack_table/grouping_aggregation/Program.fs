@@ -21,21 +21,21 @@ type private HostRow =
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
-let private features: TableFeatures =
-    unbox {|
-        coreReactivityFeature = storeReactivityBindings ()
-        columnGroupingFeature = columnGroupingFeature
-        rowAggregationFeature = rowAggregationFeature
-        rowExpandingFeature = rowExpandingFeature
-        coreRowModel = box (createCoreRowModel<TableFeatures, HostRow> ())
-        groupedRowModel = box (createGroupedRowModel<TableFeatures, HostRow> ())
-        expandedRowModel = box (createExpandedRowModel<TableFeatures, HostRow> ())
+let private features =
+    TableFeatures.Create(
+        coreReactivityFeature = storeReactivityBindings (),
+        columnGroupingFeature = columnGroupingFeature,
+        rowAggregationFeature = rowAggregationFeature,
+        rowExpandingFeature = rowExpandingFeature,
+        coreRowModel = unbox (createCoreRowModel<TableFeatures, HostRow> ()),
+        groupedRowModel = unbox (createGroupedRowModel<TableFeatures, HostRow> ()),
+        expandedRowModel = unbox (createExpandedRowModel<TableFeatures, HostRow> ()),
         aggregationFns = JsRecord.Create [
-            "sum", box aggregationFn_sum
-            "mean", box aggregationFn_mean
-            "count", box aggregationFn_count
+            "sum", unbox aggregationFn_sum
+            "mean", unbox aggregationFn_mean
+            "count", unbox aggregationFn_count
         ]
-    |}
+    )
 
 let private col (key: string) (header: string) (aggFn: string option) : ColumnDefBase_Core<TableFeatures, HostRow, CellData> =
     match aggFn with

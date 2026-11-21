@@ -15,7 +15,7 @@ let private addShape (target: Container<GroupOrShape, _>) (s: Shape<ShapeConfig>
     target.add (!^s) |> ignore
 
 let private addLine (target: Container<GroupOrShape, _>) (l: Line<'C>) =
-    target.add (!^(unbox<Shape<ShapeConfig>> l)) |> ignore
+    target.add (!^(l.asShape ())) |> ignore
 
 addShape layer (
     Rect.Create(
@@ -24,7 +24,7 @@ addShape layer (
 )
 
 let private addStageBox x title subtitle fillHex inkHex =
-    let g = Group.Create (GroupConfig.Create (?isolated = None, x = x, y = 95.0))
+    let g = Group.Create (GroupConfig.Create (x = x, y = 95.0))
 
     addShape g (
         Rect.Create(

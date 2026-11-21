@@ -21,19 +21,19 @@ type private ServiceRow =
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
-let private features: TableFeatures =
-    unbox {|
-        coreReactivityFeature = storeReactivityBindings ()
-        columnFilteringFeature = columnFilteringFeature
-        globalFilteringFeature = globalFilteringFeature
-        coreRowModel = box (createCoreRowModel<TableFeatures, ServiceRow> ())
-        filteredRowModel = box (createFilteredRowModel<TableFeatures, ServiceRow> ())
+let private features =
+    TableFeatures.Create(
+        coreReactivityFeature = storeReactivityBindings (),
+        columnFilteringFeature = columnFilteringFeature,
+        globalFilteringFeature = globalFilteringFeature,
+        coreRowModel = unbox (createCoreRowModel<TableFeatures, ServiceRow> ()),
+        filteredRowModel = unbox (createFilteredRowModel<TableFeatures, ServiceRow> ()),
         filterFns = JsRecord.Create [
-            "includesString", box filterFn_includesString
-            "equalsString", box filterFn_equalsString
-            "greaterThanOrEqualTo", box filterFn_greaterThanOrEqualTo
+            "includesString", unbox filterFn_includesString
+            "equalsString", unbox filterFn_equalsString
+            "greaterThanOrEqualTo", unbox filterFn_greaterThanOrEqualTo
         ]
-    |}
+    )
 
 let private col (key: string) (header: string) (filterFn: string option) : ColumnDefBase_Core<TableFeatures, ServiceRow, CellData> =
     match filterFn with

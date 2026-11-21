@@ -588,6 +588,36 @@
       "kind": "browser"
     },
     {
+      "id": "rapier/tower_collapse_3d",
+      "package": "rapier",
+      "extraPackages": ["babylon_lite"],
+      "title": "Rapier 3D + Babylon Lite \u2014 3D Tower Collapse",
+      "description": "18-block 3D alternating Jenga tower struck by a heavy wrecking sphere rendered in Babylon Lite WebGPU",
+      "path": "./rapier/tower_collapse_3d/index.html",
+      "source": "./rapier/tower_collapse_3d/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "rapier/billiards_break_3d",
+      "package": "rapier",
+      "extraPackages": ["babylon_lite"],
+      "title": "Rapier 3D + Babylon Lite \u2014 3D Pool Break",
+      "description": "Walled 3D billiards arena with 10 racked PBR spheres and high-speed cue ball break in Babylon Lite WebGPU",
+      "path": "./rapier/billiards_break_3d/index.html",
+      "source": "./rapier/billiards_break_3d/main.c",
+      "kind": "browser"
+    },
+    {
+      "id": "rapier/domino_spiral_3d",
+      "package": "rapier",
+      "extraPackages": ["babylon_lite"],
+      "title": "Rapier 3D + Babylon Lite \u2014 3D Domino Spiral & Ramp",
+      "description": "Tilted 3D launch ramp, marble, 14 quaternion-oriented spiral dominoes, and 3 target cylinders in Babylon Lite WebGPU",
+      "path": "./rapier/domino_spiral_3d/index.html",
+      "source": "./rapier/domino_spiral_3d/main.c",
+      "kind": "browser"
+    },
+    {
       "id": "node/path_inspector",
       "package": "node",
       "title": "Node \u2014 Path Inspector",

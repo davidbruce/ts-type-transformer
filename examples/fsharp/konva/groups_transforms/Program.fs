@@ -15,7 +15,7 @@ let private addShape (target: Container<GroupOrShape, _>) (s: Shape<ShapeConfig>
     target.add (!^s) |> ignore
 
 let private addLine (target: Container<GroupOrShape, _>) (line: Line<LineConfig>) =
-    target.add (!^(unbox<Shape<ShapeConfig>> line)) |> ignore
+    target.add (!^(line.asShape ())) |> ignore
 
 addShape layer (
     Rect.Create(
@@ -46,7 +46,7 @@ for y in 40 .. 40 .. 360 do
     )
 
 // Group A: unrotated base frame.
-let private groupA = Group.Create (GroupConfig.Create (?isolated = None, x = 40.0, y = 55.0))
+let private groupA = Group.Create (GroupConfig.Create (x = 40.0, y = 55.0))
 
 addShape groupA (
     Rect.Create(
@@ -66,7 +66,7 @@ addShape groupA (
 layer.add (!^groupA) |> ignore
 
 // Group B: rotated 24 degrees.
-let private groupB = Group.Create (GroupConfig.Create (?isolated = None, x = 340.0, y = 75.0, rotation = 24.0))
+let private groupB = Group.Create (GroupConfig.Create (x = 340.0, y = 75.0, rotation = 24.0))
 
 addShape groupB (
     Rect.Create(
@@ -100,7 +100,7 @@ addShape groupB (
 layer.add (!^groupB) |> ignore
 
 // Group C: scaled container with nested rotated child group containing marker.
-let private groupC = Group.Create (GroupConfig.Create (?isolated = None, x = 495.0, y = 55.0, scaleX = 1.15, scaleY = 1.15))
+let private groupC = Group.Create (GroupConfig.Create (x = 495.0, y = 55.0, scaleX = 1.15, scaleY = 1.15))
 
 addShape groupC (
     Rect.Create(
@@ -113,7 +113,7 @@ addShape groupC (
     ).asShape ()
 )
 
-let private innerGroup = Group.Create (GroupConfig.Create (?isolated = None, x = 25.0, y = 25.0, rotation = 15.0))
+let private innerGroup = Group.Create (GroupConfig.Create (x = 25.0, y = 25.0, rotation = 15.0))
 let private marker = Circle.Create (CircleConfig.Create (x = 40.0, y = 30.0, radius = 16.0, fill = !^"#111111"))
 addShape innerGroup (marker.asShape ())
 groupC.add (!^innerGroup) |> ignore

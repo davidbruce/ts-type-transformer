@@ -21,14 +21,14 @@ type private TaskRow =
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
-let private features: TableFeatures =
-    unbox {|
-        coreReactivityFeature = storeReactivityBindings ()
-        columnVisibilityFeature = columnVisibilityFeature
-        columnPinningFeature = columnPinningFeature
-        rowSelectionFeature = rowSelectionFeature
-        coreRowModel = box (createCoreRowModel<TableFeatures, TaskRow> ())
-    |}
+let private features =
+    TableFeatures.Create(
+        coreReactivityFeature = storeReactivityBindings (),
+        columnVisibilityFeature = columnVisibilityFeature,
+        columnPinningFeature = columnPinningFeature,
+        rowSelectionFeature = rowSelectionFeature,
+        coreRowModel = unbox (createCoreRowModel<TableFeatures, TaskRow> ())
+    )
 
 let private col (key: string) (header: string) : ColumnDefBase_Core<TableFeatures, TaskRow, CellData> =
     unbox {| accessorKey = key; header = header |}

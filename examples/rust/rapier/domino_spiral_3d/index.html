@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Domino Spiral &amp; Ramp — Rapier + Babylon Lite + Rust</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+      #app { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+      .head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #111111; padding-bottom: 10px; }
+      .head h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      .badge { font-size: 11px; color: #111111; background: #f7f7f7; border: 1px solid #b5b5b5; border-radius: 3px; padding: 2px 9px; }
+      .card { background: #f7f7f7; border: 1px solid #d4d4d4; border-radius: 3px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .label { font-size: 11px; color: #555555; text-transform: uppercase; letter-spacing: 0.06em; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+      button { appearance: none; font: inherit; font-size: 12px; color: #111111; background: #ffffff; border: 1px solid #111111; border-radius: 3px; padding: 5px 10px; cursor: pointer; }
+      button:hover { background: #efefef; }
+      button:active { background: #111111; color: #ffffff; }
+      .stage-box { position: relative; width: 100%; max-width: 780px; height: 420px; background: #111111; border: 1px solid #d4d4d4; border-radius: 3px; overflow: hidden; }
+      #renderCanvas { width: 100%; height: 100%; display: block; touch-action: none; }
+      #status { position: absolute; top: 10px; left: 12px; color: #e5e5e5; font-size: 12px; pointer-events: none; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75); }
+      .meta { font-size: 12px; color: #555555; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 3px; padding: 8px 10px; }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <div class="head">
+        <h1>Rapier 3D Domino Spiral &amp; Ramp · Babylon Lite WebGPU (Rust)</h1>
+        <span class="badge">rapier3d · babylon-lite · webgpu</span>
+      </div>
+      <div class="card">
+        <div class="label">Tilted Ramp · Marble · 14 Quaternion-Oriented Spiral Dominoes · 3 Target Cylinders</div>
+        <div class="toolbar">
+          <button id="btn-launch" type="button">Drop Marble</button>
+          <button id="btn-nudge" type="button">Nudge Wave</button>
+          <button id="btn-pause" type="button">Pause</button>
+          <button id="btn-reset" type="button">Reset Spiral</button>
+        </div>
+        <div id="stage" class="stage-box">
+          <canvas id="renderCanvas"></canvas>
+          <div id="status">Rapier3D + Babylon Lite (WebGPU) — drag to orbit, scroll to zoom</div>
+        </div>
+        <div id="meta" class="meta">Initializing Rapier 3D WASM...</div>
+      </div>
+    </main>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>

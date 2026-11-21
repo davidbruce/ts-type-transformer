@@ -1,0 +1,12 @@
+[package]
+name = "rapier-domino-spiral-3d"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dom = { path = "../../bindings/dom" }
+dimforge_rapier3d_compat = { path = "../../bindings/dimforge_rapier3d_compat" }
+babylonjs_lite = { path = "../../bindings/babylonjs_lite" }

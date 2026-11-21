@@ -17,7 +17,7 @@ let private addTo (l: Layer) (s: Shape<ShapeConfig>) =
     l.add (!^s) |> ignore
 
 let private addLineTo (l: Layer) (line: Line<LineConfig>) =
-    l.add (!^(unbox<Shape<ShapeConfig>> line)) |> ignore
+    l.add (!^(line.asShape ())) |> ignore
 
 // Layer 1: Blueprint Grid (distinct colors: #ffffff, #e5e5e5, #b5b5b5, #737373).
 addTo bgLayer (

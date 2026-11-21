@@ -21,18 +21,18 @@ type private NodeRow =
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
-let private features: TableFeatures =
-    unbox {|
-        coreReactivityFeature = storeReactivityBindings ()
-        rowSortingFeature = rowSortingFeature
-        coreRowModel = box (createCoreRowModel<TableFeatures, NodeRow> ())
-        sortedRowModel = box (createSortedRowModel<TableFeatures, NodeRow> ())
+let private features =
+    TableFeatures.Create(
+        coreReactivityFeature = storeReactivityBindings (),
+        rowSortingFeature = rowSortingFeature,
+        coreRowModel = unbox (createCoreRowModel<TableFeatures, NodeRow> ()),
+        sortedRowModel = unbox (createSortedRowModel<TableFeatures, NodeRow> ()),
         sortFns = JsRecord.Create [
-            "alphanumeric", box sortFn_alphanumeric
-            "basic", box sortFn_basic
-            "text", box sortFn_text
+            "alphanumeric", unbox sortFn_alphanumeric
+            "basic", unbox sortFn_basic
+            "text", unbox sortFn_text
         ]
-    |}
+    )
 
 let private col (key: string) (header: string) : ColumnDefBase_Core<TableFeatures, NodeRow, CellData> =
     unbox {| accessorKey = key; header = header |}

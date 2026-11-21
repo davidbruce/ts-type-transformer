@@ -20,13 +20,13 @@ type private LedgerRow =
 let private escapeHtml (s: string) =
     s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
 
-let private features: TableFeatures =
-    unbox {|
-        coreReactivityFeature = storeReactivityBindings ()
-        rowPaginationFeature = rowPaginationFeature
-        coreRowModel = box (createCoreRowModel<TableFeatures, LedgerRow> ())
-        paginatedRowModel = box (createPaginatedRowModel<TableFeatures, LedgerRow> ())
-    |}
+let private features =
+    TableFeatures.Create(
+        coreReactivityFeature = storeReactivityBindings (),
+        rowPaginationFeature = rowPaginationFeature,
+        coreRowModel = unbox (createCoreRowModel<TableFeatures, LedgerRow> ()),
+        paginatedRowModel = unbox (createPaginatedRowModel<TableFeatures, LedgerRow> ())
+    )
 
 let private col (key: string) (header: string) : ColumnDefBase_Core<TableFeatures, LedgerRow, CellData> =
     unbox {| accessorKey = key; header = header |}

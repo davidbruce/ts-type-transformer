@@ -2556,6 +2556,7 @@ mod examples {
     enum VerifyKind {
         PtsCanvas,
         BabylonWebGpu,
+        RapierBabylon3d,
         NodeCli,
         DomSelector {
             selector: &'static str,
@@ -2572,6 +2573,7 @@ mod examples {
         pkg: &'static str,
         npm: &'static [&'static str],
         needs_dom: bool,
+        extra_specs: &'static [&'static PackageSpec],
         crate_name: &'static str,
         fsharp_name: &'static str,
         demos: &'static [&'static str],
@@ -2582,6 +2584,7 @@ mod examples {
         pkg: "pts",
         npm: &["pts"],
         needs_dom: false,
+        extra_specs: &[],
         crate_name: "pts",
         fsharp_name: "Pts",
         demos: &[
@@ -2598,6 +2601,7 @@ mod examples {
         pkg: "babylon_lite",
         npm: &["@babylonjs/lite"],
         needs_dom: true,
+        extra_specs: &[],
         crate_name: "babylonjs_lite",
         fsharp_name: "Babylonjs.Lite",
         demos: &[
@@ -2614,6 +2618,7 @@ mod examples {
         pkg: "katex",
         npm: &["katex"],
         needs_dom: true,
+        extra_specs: &[],
         crate_name: "katex",
         fsharp_name: "Katex",
         demos: &[
@@ -2633,6 +2638,7 @@ mod examples {
         pkg: "marked",
         npm: &["marked"],
         needs_dom: true,
+        extra_specs: &[],
         crate_name: "marked",
         fsharp_name: "Marked",
         demos: &[
@@ -2652,6 +2658,7 @@ mod examples {
         pkg: "date_fns",
         npm: &["date-fns"],
         needs_dom: true,
+        extra_specs: &[],
         crate_name: "date_fns",
         fsharp_name: "DateFns",
         demos: &[
@@ -2671,6 +2678,7 @@ mod examples {
         pkg: "echarts",
         npm: &["echarts"],
         needs_dom: true,
+        extra_specs: &[],
         crate_name: "echarts",
         fsharp_name: "Echarts",
         demos: &[
@@ -2692,6 +2700,7 @@ mod examples {
         crate_name: "konva",
         fsharp_name: "Konva",
         needs_dom: true,
+        extra_specs: &[],
         demos: &[
             "shapes_gallery",
             "groups_transforms",
@@ -2711,6 +2720,7 @@ mod examples {
         crate_name: "pixi_js",
         fsharp_name: "Pixi.Js",
         needs_dom: true,
+        extra_specs: &[],
         demos: &[
             "vector_primitives",
             "sprite_mosaic",
@@ -2730,6 +2740,7 @@ mod examples {
         crate_name: "leaflet",
         fsharp_name: "Leaflet",
         needs_dom: true,
+        extra_specs: &[],
         demos: &[
             "vector_route",
             "polygon_zones",
@@ -2749,6 +2760,7 @@ mod examples {
         crate_name: "tanstack_table_core",
         fsharp_name: "Tanstack.TableCore",
         needs_dom: true,
+        extra_specs: &[],
         demos: &[
             "sorting_leaderboard",
             "filtering_facets",
@@ -2768,6 +2780,7 @@ mod examples {
         crate_name: "prosemirror",
         fsharp_name: "Prosemirror",
         needs_dom: true,
+        extra_specs: &[],
         demos: &[
             "rich_schema_marks",
             "structural_transforms",
@@ -2787,6 +2800,7 @@ mod examples {
         crate_name: "three",
         fsharp_name: "Three",
         needs_dom: true,
+        extra_specs: &[],
         demos: &[
             "platonic_wireframes",
             "hierarchical_orrery",
@@ -2806,6 +2820,7 @@ mod examples {
         crate_name: "dimforge_rapier3d_compat",
         fsharp_name: "Dimforge.Rapier3dCompat",
         needs_dom: true,
+        extra_specs: &[],
         demos: &[
             "gravity_bouncing",
             "domino_cascade",
@@ -2819,12 +2834,28 @@ mod examples {
         },
     };
 
+    const RAPIER_3D_SPEC: PackageSpec = PackageSpec {
+        pkg: "rapier",
+        npm: &["@dimforge/rapier3d-compat"],
+        crate_name: "dimforge_rapier3d_compat",
+        fsharp_name: "Dimforge.Rapier3dCompat",
+        needs_dom: true,
+        extra_specs: &[&BABYLON_LITE_SPEC],
+        demos: &[
+            "tower_collapse_3d",
+            "billiards_break_3d",
+            "domino_spiral_3d",
+        ],
+        verify: VerifyKind::RapierBabylon3d,
+    };
+
     const NODE_SPEC: PackageSpec = PackageSpec {
         pkg: "node",
         npm: &["fs", "path", "events"],
         crate_name: "node",
         fsharp_name: "Node",
         needs_dom: false,
+        extra_specs: &[],
         demos: &[
             "path_inspector",
             "event_bus",
@@ -2957,6 +2988,16 @@ mod examples {
                 }
             }
         }
+        let cv_src = root().join("examples/code_viewer.mjs");
+        if cv_src.exists() {
+            let bytes = fs::read(&cv_src).unwrap();
+            let dst = target_root.join("code_viewer.mjs");
+            if fs::read(&dst).ok().as_deref() != Some(bytes.as_slice()) {
+                let tmp = target_root.join(".code_viewer.mjs.tmp");
+                fs::write(&tmp, bytes).unwrap();
+                fs::rename(&tmp, &dst).unwrap();
+            }
+        }
         target_root
     }
 
@@ -2981,7 +3022,8 @@ mod examples {
         let bindings = target_root.join("bindings");
         let cfg = config(target);
         let dom_dir_name = if target == "fsharp" { "Dom" } else { "dom" };
-        let dom_stamp = if spec.needs_dom {
+        let needs_dom = spec.needs_dom || spec.extra_specs.iter().any(|e| e.needs_dom);
+        let dom_stamp = if needs_dom {
             ensure_pkg_bindings(from, target, &bindings, dom_dir_name, |cmd| {
                 cmd.arg("lib.dom.d.ts")
                     .arg("--config")
@@ -2994,22 +3036,26 @@ mod examples {
         } else {
             String::new()
         };
-        let pkg_dir_name = if target == "fsharp" { spec.fsharp_name } else { spec.crate_name };
-        let pkg_stamp = ensure_pkg_bindings(from, target, &bindings, pkg_dir_name, |cmd| {
-            cmd.arg("--from").arg(from);
-            for p in spec.npm {
-                cmd.args(["--package", p]);
-            }
-            cmd.arg("--config").arg(&cfg).args(["--emit", target]);
-            if spec.npm.len() > 1 {
-                cmd.args(["--name", spec.crate_name]);
-            }
-            if spec.needs_dom {
-                cmd.args(["--ref"]).arg(bindings.join(dom_dir_name));
-            }
-            cmd.args(["--out"]).arg(&bindings);
-        });
-        format!("{dom_stamp}:{pkg_stamp}")
+        let mut stamps = vec![dom_stamp];
+        for s in std::iter::once(spec).chain(spec.extra_specs.iter().copied()) {
+            let pkg_dir_name = if target == "fsharp" { s.fsharp_name } else { s.crate_name };
+            let pkg_stamp = ensure_pkg_bindings(from, target, &bindings, pkg_dir_name, |cmd| {
+                cmd.arg("--from").arg(from);
+                for p in s.npm {
+                    cmd.args(["--package", p]);
+                }
+                cmd.arg("--config").arg(&cfg).args(["--emit", target]);
+                if s.npm.len() > 1 {
+                    cmd.args(["--name", s.crate_name]);
+                }
+                if s.needs_dom {
+                    cmd.args(["--ref"]).arg(bindings.join(dom_dir_name));
+                }
+                cmd.args(["--out"]).arg(&bindings);
+            });
+            stamps.push(pkg_stamp);
+        }
+        stamps.join(":")
     }
 
     fn compile_cpp_package(clang: &Path, bindings: &Path, pkg: &str) -> Vec<PathBuf> {
@@ -3087,22 +3133,24 @@ mod examples {
     fn gleam_example_manifest(spec: &PackageSpec) -> String {
         let mut pkg_lines = Vec::new();
         let mut req_lines = Vec::new();
-        if spec.needs_dom {
+        let needs_dom = spec.needs_dom || spec.extra_specs.iter().any(|e| e.needs_dom);
+        for s in std::iter::once(spec).chain(spec.extra_specs.iter().copied()) {
+            let reqs = if s.needs_dom {
+                r#"["dom", "gleam_stdlib"]"#
+            } else {
+                r#"["gleam_stdlib"]"#
+            };
             pkg_lines.push(format!(
-                "  {{ name = \"{}\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"dom\", \"gleam_stdlib\"], source = \"local\", path = \"../../bindings/{}\" }},",
-                spec.crate_name, spec.crate_name
+                "  {{ name = \"{}\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = {reqs}, source = \"local\", path = \"../../bindings/{}\" }},",
+                s.crate_name, s.crate_name
             ));
+            req_lines.push(format!("{} = {{ path = \"../../bindings/{}\" }}", s.crate_name, s.crate_name));
+        }
+        if needs_dom {
             pkg_lines.push(
                 "  { name = \"dom\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], source = \"local\", path = \"../../bindings/dom\" },".to_string(),
             );
-            req_lines.push(format!("{} = {{ path = \"../../bindings/{}\" }}", spec.crate_name, spec.crate_name));
             req_lines.push("dom = { path = \"../../bindings/dom\" }".to_string());
-        } else {
-            pkg_lines.push(format!(
-                "  {{ name = \"{}\", version = \"0.1.0\", build_tools = [\"gleam\"], requirements = [\"gleam_stdlib\"], source = \"local\", path = \"../../bindings/{}\" }},",
-                spec.crate_name, spec.crate_name
-            ));
-            req_lines.push(format!("{} = {{ path = \"../../bindings/{}\" }}", spec.crate_name, spec.crate_name));
         }
         pkg_lines.push(
             "  { name = \"gleam_stdlib\", version = \"1.0.5\", build_tools = [\"gleam\"], requirements = [], otp_app = \"gleam_stdlib\", source = \"hex\", outer_checksum = \"CEE5B6C076A85B45F60C585F4316C63EC8B7127C119D5738C3958A9C4D50404E\" },".to_string(),
@@ -3172,6 +3220,65 @@ try {
 window.__result = { passed, failed, dom: [], domChecks: 1 };
 </script>"#;
 
+    const RAPIER_BABYLON_3D_VERIFY_SCRIPT: &str = r#"<script type="module">
+let passed = 0;
+const failed = [];
+window.addEventListener('unhandledrejection', e => failed.push('rejected: ' + (e.reason?.message ?? e.reason)));
+try {
+  await import('./bundle.mjs');
+  const canvas = document.getElementById('renderCanvas');
+  const status = document.getElementById('status');
+  const meta = document.getElementById('meta');
+  const pauseBtn = document.getElementById('btn-pause');
+  if (canvas && status && meta && pauseBtn) passed++;
+  else failed.push('missing #renderCanvas, #status, #meta, or #btn-pause');
+
+  const metaDeadline = Date.now() + 6000;
+  let metaOk = false;
+  while (Date.now() < metaDeadline && !failed.length) {
+    const txt = meta?.textContent ?? '';
+    if (txt.includes('step=') && txt.includes('ke=')) {
+      metaOk = true;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  if (metaOk) passed++;
+  else failed.push('rapier 3d telemetry #meta did not populate step= and ke=: ' + (meta?.textContent ?? ''));
+
+  if (metaOk && pauseBtn) {
+    pauseBtn.click();
+    const pauseDeadline = Date.now() + 1000;
+    let pauseOk = false;
+    while (Date.now() < pauseDeadline && !failed.length) {
+      if ((meta?.textContent ?? '').includes('(paused)')) {
+        pauseOk = true;
+        break;
+      }
+      await new Promise(r => setTimeout(r, 25));
+    }
+    if (pauseOk) passed++;
+    else failed.push('clicking #btn-pause did not update #meta to (paused)');
+  }
+
+  const deadline = Date.now() + 4000;
+  let webgpuChecked = false;
+  while (Date.now() < deadline && !failed.length) {
+    if (status && status.textContent.includes('WebGPU / Babylon Lite error:')) {
+      webgpuChecked = true;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  if (!failed.length && (webgpuChecked || passed >= 3)) {
+    passed++;
+  }
+} catch (e) {
+  failed.push('threw: ' + (e?.message ?? e));
+}
+window.__result = { passed, failed, dom: [], domChecks: 1 };
+</script>"#;
+
     fn run_browser_pages(roots: &[&Path], pages: &[String]) {
         let Some([node]) = tools(["node"]) else { return };
         let mut cmd = Command::new(node);
@@ -3218,10 +3325,13 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
             "cpp" => {
                 let Some(clang) = wasi_clang() else { return false };
                 let mut objects = Vec::new();
-                if spec.needs_dom {
+                let needs_dom = spec.needs_dom || spec.extra_specs.iter().any(|e| e.needs_dom);
+                if needs_dom {
                     objects.extend(compile_cpp_package(&clang, &bindings, "dom"));
                 }
-                objects.extend(compile_cpp_package(&clang, &bindings, spec.crate_name));
+                for s in std::iter::once(spec).chain(spec.extra_specs.iter().copied()) {
+                    objects.extend(compile_cpp_package(&clang, &bindings, s.crate_name));
+                }
                 run(Command::new(clang).args(CLANGXX_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("app.wasm")).arg(out.join("main.cpp")).args(&objects));
             }
             "zig" => {
@@ -3237,16 +3347,19 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
                     .args(RUSTC_WASM)
                     .args(["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "-L"])
                     .arg(&rlibs_dir);
-                if spec.needs_dom {
-                    let dom_rlib = build_rust_rlib(&rustc, &bindings, "dom", &rlibs_dir, &[]);
-                    let pkg_rlib = build_rust_rlib(&rustc, &bindings, spec.crate_name, &rlibs_dir, &[("dom", &dom_rlib)]);
-                    cmd.arg("--extern")
-                        .arg(format!("dom={}", dom_rlib.display()))
-                        .arg("--extern")
-                        .arg(format!("{}={}", spec.crate_name, pkg_rlib.display()));
-                } else {
-                    let pkg_rlib = build_rust_rlib(&rustc, &bindings, spec.crate_name, &rlibs_dir, &[]);
-                    cmd.arg("--extern").arg(format!("{}={}", spec.crate_name, pkg_rlib.display()));
+                let needs_dom = spec.needs_dom || spec.extra_specs.iter().any(|e| e.needs_dom);
+                let dom_rlib = needs_dom.then(|| build_rust_rlib(&rustc, &bindings, "dom", &rlibs_dir, &[]));
+                if let Some(ref dom_rlib) = dom_rlib {
+                    cmd.arg("--extern").arg(format!("dom={}", dom_rlib.display()));
+                }
+                for s in std::iter::once(spec).chain(spec.extra_specs.iter().copied()) {
+                    let externs: Vec<(&str, &Path)> = if s.needs_dom {
+                        vec![("dom", dom_rlib.as_ref().expect("dom rlib").as_path())]
+                    } else {
+                        vec![]
+                    };
+                    let pkg_rlib = build_rust_rlib(&rustc, &bindings, s.crate_name, &rlibs_dir, &externs);
+                    cmd.arg("--extern").arg(format!("{}={}", s.crate_name, pkg_rlib.display()));
                 }
                 cmd.args(["-o", "app.wasm", "src/lib.rs"]);
                 run(&mut cmd);
@@ -3278,6 +3391,7 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
         let verify = match spec.verify {
             VerifyKind::PtsCanvas => PTS_VERIFY_SCRIPT.to_string(),
             VerifyKind::BabylonWebGpu => BABYLON_VERIFY_SCRIPT.to_string(),
+            VerifyKind::RapierBabylon3d => RAPIER_BABYLON_3D_VERIFY_SCRIPT.to_string(),
             VerifyKind::NodeCli => unreachable!("NodeCli returns above"),
             VerifyKind::DomSelector { selector, min_count } => format!(
                 r#"<script type="module">
@@ -3477,14 +3591,15 @@ try {{
   while (Date.now() < deadline) {{
     const drawer = doc.getElementById('source-drawer');
     const code = doc.getElementById('source-code')?.textContent ?? '';
-    if (!drawer.hidden && code.trim().length > 0 && code !== 'Loading...') {{
+    const lines = doc.querySelectorAll('#source-code .cv-line').length;
+    if (!drawer.hidden && code.trim().length > 0 && code !== 'Loading...' && lines > 0) {{
       sourceLoaded = true;
       break;
     }}
     await new Promise(r => setTimeout(r, 50));
   }}
   if (sourceLoaded) passed++;
-  else failed.push('view source drawer did not load source');
+  else failed.push('view source drawer did not load highlighted source lines');
 }} catch (e) {{
   failed.push('threw: ' + (e?.message ?? e));
 }}
@@ -3523,6 +3638,7 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
     pkg_tests!(prosemirror, PROSEMIRROR_SPEC);
     pkg_tests!(three, THREE_SPEC);
     pkg_tests!(rapier, RAPIER_SPEC);
+    pkg_tests!(rapier_3d, RAPIER_3D_SPEC);
     pkg_tests!(node, NODE_SPEC);
 
     mod gallery {

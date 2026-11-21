@@ -1,0 +1,9 @@
+name = "app"
+version = "1.0.0"
+target = "javascript"
+
+[dependencies]
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+dom = { path = "../../bindings/dom" }
+dimforge_rapier3d_compat = { path = "../../bindings/dimforge_rapier3d_compat" }
+babylonjs_lite = { path = "../../bindings/babylonjs_lite" }

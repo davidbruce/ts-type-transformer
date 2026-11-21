@@ -16,7 +16,7 @@ let private addShape (s: Shape<ShapeConfig>) =
     layer.add (!^s) |> ignore
 
 let private addLine (l: Line<LineConfig>) =
-    layer.add (!^(unbox<Shape<ShapeConfig>> l)) |> ignore
+    layer.add (!^(l.asShape ())) |> ignore
 
 addShape (
     Rect.Create(

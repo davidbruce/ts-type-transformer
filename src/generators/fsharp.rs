@@ -191,6 +191,10 @@ struct Gen {
     fn_params: Vec<String>,
     // Aliases a type extends, by id: an interface, as F# inherits only those.
     inherited: HashSet<String>,
+    // Every declared interface/class/alias referenced as a base in any `<extends>`.
+    extended_bases: HashSet<String>,
+    // Depth-layered `[<ParamObject>]` `Create` factories: file -> depth -> owner -> lines.
+    factories: BTreeMap<usize, BTreeMap<usize, BTreeMap<String, Vec<String>>>>,
     // The numbers of arguments constructor types take: a `JsConstructor<N>` each.
     ctor_arities: BTreeSet<usize>,
     // Abbreviations without type parameters, by name: what F# sees through
@@ -245,6 +249,9 @@ struct Gen {
     js_prefix: String,
     // Method names declared on any ancestor of the interface currently being written.
     inherited_methods: HashSet<String>,
+    // True while emitting members inside `hoist_inline_interface` so forward-ref members
+    // are kept inline and accounted for via the hoisted type's placement file.
+    hoisting: bool,
     // External binding projects whose types may be referenced directly.
     refs: Vec<ProjectRef>,
     // Indices into `refs` that were actually referenced.
@@ -458,6 +465,8 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
         abbrevs: HashMap::new(),
         marks: HashMap::new(),
         inherited: HashSet::new(),
+        extended_bases: HashSet::new(),
+        factories: BTreeMap::new(),
         ctor_arities: BTreeSet::new(),
         maps: BTreeSet::new(),
         types: BTreeMap::new(),
@@ -490,6 +499,7 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
         cur_prefix: String::new(),
         js_prefix: String::new(),
         inherited_methods: HashSet::new(),
+        hoisting: false,
         refs: refs.to_vec(),
         used_refs: BTreeSet::new(),
     };
@@ -548,6 +558,7 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
     g.units = units;
     g.index(doc.root_element(), "");
     g.inherited = doc.root_element().descendants().filter(|e| e.has_tag_name("extends")).filter_map(|e| elements(e).next()).filter(|r| r.attribute("kind") == Some("typeAlias")).filter_map(|r| r.attribute("to")).map(str::to_string).collect();
+    g.extended_bases = doc.root_element().descendants().filter(|e| e.has_tag_name("extends")).filter_map(|e| elements(e).next()).filter_map(|r| r.attribute("to")).map(str::to_string).collect();
     g.union_abbrevs(doc.root_element());
     g.settle_alias_kept(doc.root_element());
     g.decls(doc.root_element(), "", "");
@@ -607,6 +618,16 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
             for (owner, lines) in ext {
                 let owner = g.constrained_owner.get(owner).unwrap_or(owner);
                 body += &format!("    type {owner} with\n{}\n", lines.concat());
+            }
+        }
+        // Depth-ordered factory overloads so derived option-bag `Create` shadows base `Create`.
+        if let Some(by_depth) = g.factories.get(&i) {
+            for (depth, by_owner) in by_depth {
+                body += &format!("[<AutoOpen>]\nmodule Factories{:02}_{depth} =\n", i + 1);
+                for (owner, lines) in by_owner {
+                    let owner = g.constrained_owner.get(owner).unwrap_or(owner);
+                    body += &format!("    type {owner} with\n{}\n", lines.concat());
+                }
             }
         }
         files.push((format!("{ns}.{:02}.{name}.fs", i + 1), format!("// Generated. Modules: {}.\nnamespace rec {ns}\n\nopen Fable.Core\n\n{body}", group.join(", "))));
@@ -1291,7 +1312,14 @@ impl Gen {
                 self.ctor_arities.insert(k);
                 format!("JsConstructor{k}<{}>", parts.join(", "))
             }
-            "object" | "constructorType" => {
+            "object" => {
+                if let Some(hoisted) = self.hoist_inline_interface(n, owner) {
+                    return hoisted;
+                }
+                self.skip("inline type with methods, bound as obj");
+                "obj".into()
+            }
+            "constructorType" => {
                 self.skip("inline type with methods, bound as obj");
                 "obj".into()
             }
@@ -1410,30 +1438,83 @@ impl Gen {
         out
     }
 
+    fn is_fn_return(&self, ret: &str, ret_node: Option<Node>) -> bool {
+        if is_fn_type(ret, &self.abbrevs) {
+            return true;
+        }
+        let Some(mut cur) = ret_node else { return false };
+        let root = cur.document().root_element();
+        for _ in 0..8 {
+            if cur.has_tag_name("functionType") {
+                return !named(cur, "parameter").any(|p| flag(p, "optional") || flag(p, "rest"));
+            }
+            if cur.has_tag_name("ref")
+                && let Some(to) = cur.attribute("to")
+                && let Some(decl) = find_decl(root, to)
+                && decl.has_tag_name("typeAlias")
+            {
+                cur = only_child_type(decl);
+                continue;
+            }
+            break;
+        }
+        false
+    }
+
     fn fn_type(&mut self, n: Node, owner: &str) -> String {
+        self.fn_type_inner(n, owner, false)
+    }
+
+    fn fn_type_inner(&mut self, n: Node, owner: &str, in_delegate_ret: bool) -> String {
         let own: Vec<String> = named(n, "typeParameter").map(|p| attr(p, "name").to_string()).collect();
         let depth = self.fn_params.len();
         self.fn_params.extend(own);
         // Optional arguments, or the rest of them (`...args`), as
         // JavaScript calls it: a delegate's.
         let t = if named(n, "parameter").any(|p| flag(p, "optional") || flag(p, "rest")) {
-            self.function_delegate(n, owner)
+            let fn_owner = if owner == "__HOIST_SELF__" { "obj" } else { owner };
+            self.function_delegate(n, fn_owner)
         } else {
-            let mut parts: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
-            if parts.is_empty() {
-                parts.push("unit".into());
-            }
-            let ret = named(n, "returns").next().map(only_child);
+            let mut param_types: Vec<String> = named(n, "parameter").map(|p| self.ty(only_child(p), owner)).collect();
+            let ret_node = named(n, "returns").next().map(only_child);
             // A listener (one argument, any result): its result is
             // nothing JavaScript reads, as the model has it.
             let listener = named(n, "parameter").count() == 1 && super::model::listener_result(n);
-            let ret = match ret {
-                Some(_) if listener => "unit".to_string(),
+            let ret = match ret_node {
+                _ if listener => "unit".to_string(),
+                Some(r) if r.has_tag_name("functionType") && !named(r, "parameter").any(|p| flag(p, "optional") || flag(p, "rest")) => {
+                    self.fn_type_inner(r, owner, true)
+                }
                 Some(r) => self.ty(r, owner),
                 None => "unit".into(),
             };
-            parts.push(ret);
-            format!("({})", parts.join(" -> "))
+            // Higher-order returns (`(t) => () => R`) would become curried
+            // `obj -> (unit -> R)` arrows that Fable uncurries via `uncurry2` at
+            // `[<ParamObject>]` boundaries; emit explicit delegates instead.
+            let delegate_ret = (!listener && self.is_fn_return(&ret, ret_node)) || (in_delegate_ret && param_types.len() >= 2);
+            if delegate_ret {
+                if param_types.len() > 16 {
+                    let fn_owner = if owner == "__HOIST_SELF__" { "obj" } else { owner };
+                    self.function_delegate(n, fn_owner)
+                } else if ret == "unit" {
+                    if param_types.is_empty() {
+                        "System.Action".into()
+                    } else {
+                        let j = param_types.join(", ");
+                        format!("System.Action<{j}{}>", if j.ends_with('>') { " " } else { "" })
+                    }
+                } else {
+                    param_types.push(ret);
+                    let j = param_types.join(", ");
+                    format!("System.Func<{j}{}>", if j.ends_with('>') { " " } else { "" })
+                }
+            } else {
+                if param_types.is_empty() {
+                    param_types.push("unit".into());
+                }
+                param_types.push(ret);
+                format!("({})", param_types.join(" -> "))
+            }
         };
         self.fn_params.truncate(depth);
         t
@@ -1535,6 +1616,95 @@ impl Gen {
         }
     }
 
+    fn collect_ordered_tparams(text: &str, excluded: &HashSet<String>) -> Vec<String> {
+        let mut tparams = Vec::new();
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        let mut in_str = false;
+        while i < text.len() {
+            if in_str {
+                if bytes[i] == b'\\' && i + 1 < text.len() {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'"' {
+                    in_str = false;
+                }
+                i += 1;
+                continue;
+            }
+            if bytes[i] == b'"' {
+                in_str = true;
+                i += 1;
+                continue;
+            }
+            if let Some(end) = type_var_end(text, i)
+                && end > i + 1
+            {
+                let tp = text[i..end].to_string();
+                if !excluded.contains(&tp) && !tparams.contains(&tp) {
+                    tparams.push(tp);
+                }
+                i = end;
+            } else {
+                i += text[i..].chars().next().unwrap().len_utf8();
+            }
+        }
+        tparams
+    }
+
+    fn pick_hoist_name(&mut self, n: Node, string_tags: &[&str]) -> String {
+        let places: Vec<String> = n
+            .ancestors()
+            .skip(1)
+            .filter(|a| matches!(a.tag_name().name(), "parameter" | "property" | "method" | "function" | "interface" | "class" | "typeAlias" | "var" | "namespace"))
+            .filter_map(|a| a.attribute("jsName").filter(|j| *j != "default").or(a.attribute("name")))
+            .map(pascal)
+            .filter(|p| !p.is_empty())
+            .collect();
+        let free = |c: &String, g: &Self| {
+            !g.file_of.contains_key(c)
+                && !g.declared.contains(c)
+                && !g.type_names.contains(c)
+                && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
+                && !g.records.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
+        };
+        let at: Vec<String> = (2..=places.len().min(3))
+            .chain(1..=1)
+            .map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>())
+            .filter(|c| !c.is_empty())
+            .collect();
+        let mut candidates: Vec<String> = Vec::new();
+        if string_tags.len() == 1 {
+            let tag = pascal(string_tags[0]);
+            if !tag.is_empty() {
+                for base in &at {
+                    candidates.push(format!("{base}{tag}"));
+                }
+            }
+        }
+        candidates.extend(at.iter().cloned());
+        match candidates.into_iter().find(|c| free(c, self)) {
+            Some(c) => c,
+            None => {
+                if let Some(base) = at.first() {
+                    (1usize..)
+                        .map(|i| format!("{base}{i}"))
+                        .find(|c| free(c, self))
+                        .unwrap()
+                } else {
+                    loop {
+                        self.record_counter += 1;
+                        let candidate = format!("JsObj{}", self.record_counter);
+                        if free(&candidate, self) {
+                            break candidate;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Hoists an inline option-bag object (`{ a?: T; b?: U; ... }`) to a named
     // `[<AllowNullLiteral; Interface>]` with a `[<ParamObject>]` `Create`, so
     // callers pass only the fields they want instead of every `None`.
@@ -1557,15 +1727,7 @@ impl Gen {
             .map(|(raw, _, t, opt, ro, fixed)| format!("{raw}:{t}:{}:{}:{}", u8::from(*opt), u8::from(*ro), fixed.as_deref().unwrap_or("")))
             .collect::<Vec<_>>()
             .join(";");
-        let mut tparams: Vec<String> = Vec::new();
-        let b = key_sig.as_bytes();
-        for (i, _) in key_sig.match_indices('\'') {
-            let end = b[i + 1..].iter().position(|c| !(c.is_ascii_alphanumeric() || *c == b'_')).map_or(b.len(), |p| i + 1 + p);
-            let tp = key_sig[i..end].to_string();
-            if end > i + 1 && !tparams.contains(&tp) {
-                tparams.push(tp);
-            }
-        }
+        let tparams = Self::collect_ordered_tparams(&key_sig, &HashSet::new());
         // A constrained enclosing type parameter cannot be hoisted without its constraint.
         if tparams.iter().any(|tp| self.cur_constrained.contains(tp)) {
             return None;
@@ -1581,56 +1743,11 @@ impl Gen {
         let rname = if let Some(existing) = self.records.get(&key) {
             existing.clone()
         } else {
-            let places: Vec<String> = n
-                .ancestors()
-                .skip(1)
-                .filter(|a| matches!(a.tag_name().name(), "parameter" | "property" | "method" | "function" | "interface" | "class" | "typeAlias" | "var" | "namespace"))
-                .filter_map(|a| a.attribute("jsName").filter(|j| *j != "default").or(a.attribute("name")))
-                .map(pascal)
-                .filter(|p| !p.is_empty())
-                .collect();
-            let free = |c: &String, g: &Self| {
-                !g.file_of.contains_key(c)
-                    && !g.declared.contains(c)
-                    && !g.type_names.contains(c)
-                    && !g.delegates.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
-                    && !g.records.values().any(|d| d == c || d.rsplit('.').next() == Some(c.as_str()))
-            };
-            let at: Vec<String> = (2..=places.len().min(3)).chain(1..=1).map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>()).filter(|c| !c.is_empty()).collect();
-            // If the object fixes a string tag (like `type: "category"`), prefer naming it after that tag.
-            let mut candidates: Vec<String> = Vec::new();
             let string_tags: Vec<&str> = props
                 .iter()
                 .filter_map(|m| m.attribute("const").filter(|_| only_child(*m).attribute("name") == Some("string")))
                 .collect();
-            if string_tags.len() == 1 {
-                let tag = pascal(string_tags[0]);
-                if !tag.is_empty() {
-                    for base in &at {
-                        candidates.push(format!("{base}{tag}"));
-                    }
-                }
-            }
-            candidates.extend(at.iter().cloned());
-            let mut rname = match candidates.into_iter().find(|c| free(c, self)) {
-                Some(c) => c,
-                None => {
-                    if let Some(base) = at.first() {
-                        (1usize..)
-                            .map(|i| format!("{base}{i}"))
-                            .find(|c| free(c, self))
-                            .unwrap()
-                    } else {
-                        loop {
-                            self.record_counter += 1;
-                            let candidate = format!("JsObj{}", self.record_counter);
-                            if free(&candidate, self) {
-                                break candidate;
-                            }
-                        }
-                    }
-                }
-            };
+            let mut rname = self.pick_hoist_name(n, &string_tags);
             let tp_suffix = if tparams.is_empty() { String::new() } else { format!("<{}>", tparams.join(", ")) };
             let indent = self.cur_indent.clone();
             let mut def = format!("{indent}[<AllowNullLiteral; Interface>]\n{indent}type {rname}{tp_suffix} =\n");
@@ -1661,6 +1778,156 @@ impl Gen {
             } else {
                 let latest = words(&def).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
                 let target_file = latest.max(self.current_file);
+                self.file_of.insert(rname.clone(), target_file);
+                *self.alias_types.entry(target_file).or_default() += &def;
+            }
+            if !self.cur_indent.is_empty() && !self.cur_prefix.is_empty() {
+                rname = format!("{}.{rname}", self.cur_prefix.split('.').map(type_ident).collect::<Vec<_>>().join("."));
+            }
+            self.records.insert(key, rname.clone());
+            if !tparams.is_empty() {
+                rname = format!("{rname}{tp_suffix}");
+            }
+            rname
+        };
+        Some(if !tparams.is_empty() && !rname.contains('<') { format!("{rname}<{}>", tparams.join(", ")) } else { rname })
+    }
+
+    // Hoists inline object types that contain methods, indexers, or call/construct
+    // signatures to named interfaces instead of falling back to `obj`.
+    fn hoist_inline_interface(&mut self, n: Node, _owner: &str) -> Option<String> {
+        let members: Vec<Node> = elements(n)
+            .filter(|m| !m.has_tag_name("typeParameter") && !m.has_tag_name("extends"))
+            .collect();
+        if members.is_empty() {
+            return None;
+        }
+        if self.probing {
+            let mut inner_tps = HashSet::new();
+            for tp_decl in n.descendants().filter(|d| d.has_tag_name("typeParameter")) {
+                inner_tps.insert(attr(tp_decl, "name"));
+            }
+            let mut free: Vec<String> = Vec::new();
+            for r in n.descendants().filter(|r| r.has_tag_name("ref") && r.attribute("kind") == Some("typeParameter")) {
+                let name = attr(r, "name");
+                if !inner_tps.contains(name) {
+                    let tv = format!("'{name}");
+                    if self.cur_constrained.contains(&tv) {
+                        return None;
+                    }
+                    if !free.contains(&tv) {
+                        free.push(tv);
+                    }
+                }
+            }
+            return Some(if free.is_empty() { "obj".into() } else { format!("__Probe<{}>", free.join(", ")) });
+        }
+
+        let indent = self.cur_indent.clone();
+        let saved_hoisting = std::mem::replace(&mut self.hoisting, true);
+        let saved_inherited = std::mem::take(&mut self.inherited_methods);
+        let body_lines = self.members(&members, "__HOIST_SELF__", "", &indent);
+        self.hoisting = saved_hoisting;
+        self.inherited_methods = saved_inherited;
+        if body_lines.is_empty() {
+            return None;
+        }
+
+        let body_str = body_lines.concat();
+        let mut bound_member_tps = HashSet::new();
+        for &m in &members {
+            let sig = if m.has_tag_name("property") && !flag(m, "optional") && only_child(m).has_tag_name("functionType") {
+                Some(only_child(m))
+            } else if matches!(m.tag_name().name(), "method" | "call" | "construct") {
+                Some(m)
+            } else {
+                None
+            };
+            if let Some(s) = sig {
+                for p in named(s, "typeParameter") {
+                    bound_member_tps.insert(format!("'{}", attr(p, "name")));
+                }
+            }
+        }
+        let tparams = Self::collect_ordered_tparams(&body_str, &bound_member_tps);
+        if tparams.iter().any(|tp| self.cur_constrained.contains(tp)) {
+            return None;
+        }
+
+        let scope = if !self.cur_indent.is_empty() {
+            format!("ns:{}", self.cur_prefix)
+        } else if self.in_globals {
+            "globals".into()
+        } else {
+            "files".into()
+        };
+        let key = (scope, tparams.clone(), format!("iface:{body_str}"));
+        let rname = if let Some(existing) = self.records.get(&key) {
+            existing.clone()
+        } else {
+            let latest = words(&body_str).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
+            if !self.cur_indent.is_empty() && latest > self.current_file {
+                return None;
+            }
+            let plain = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_') && !s.as_bytes()[0].is_ascii_digit();
+            let non_index: Vec<Node> = members.iter().copied().filter(|m| !m.has_tag_name("index")).collect();
+            let mut seen_create_names = HashSet::new();
+            let can_factory = !non_index.is_empty()
+                && non_index.iter().all(|m| {
+                    let is_opt_method = m.has_tag_name("method")
+                        && !flag(*m, "static")
+                        && flag(*m, "optional")
+                        && named(*m, "typeParameter").next().is_none()
+                        && !named(*m, "parameter").any(|p| p.has_attribute("const"));
+                    let is_prop = m.has_tag_name("property") && !flag(*m, "static");
+                    let raw = m.attribute("name").unwrap_or_default();
+                    (is_prop || is_opt_method) && plain(raw) && raw != "Create" && seen_create_names.insert(raw)
+                });
+            let mut create_snippet: Option<String> = None;
+            if can_factory {
+                let (required, optional): (Vec<_>, Vec<_>) = non_index
+                    .into_iter()
+                    .partition(|m| m.has_tag_name("property") && !flag(*m, "optional") && !m.has_attribute("const"));
+                let mut fixed = Vec::new();
+                let mut args = Vec::new();
+                for m in required.iter().chain(&optional) {
+                    if let Some(val) = const_js(*m) {
+                        fixed.push(format!("{:?}: {val}", attr(*m, "name")));
+                    }
+                    let raw_t = if m.has_tag_name("method") {
+                        self.fn_type(*m, "__HOIST_SELF__")
+                    } else {
+                        self.ty(only_child(*m), "__HOIST_SELF__")
+                    };
+                    let is_opt = m.has_tag_name("method") || flag(*m, "optional") || m.has_attribute("const");
+                    let q = if is_opt { "?" } else { "" };
+                    let t = if is_opt { strip_opt(&raw_t) } else { raw_t.as_str() };
+                    args.push(format!("{q}{}: {t}", ident(attr(*m, "name"))));
+                }
+                let create_args = args.join(", ");
+                let emit = if fixed.is_empty() { "$0".to_string() } else { format!("Object.assign({{{}}}, $0)", fixed.join(", ")) };
+                create_snippet = Some(format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({create_args}) : __HOIST_SELF__ = jsNative\n"));
+            }
+
+            let mut rname = self.pick_hoist_name(n, &[]);
+            let tp_suffix = if tparams.is_empty() { String::new() } else { format!("<{}>", tparams.join(", ")) };
+            let self_ty = format!("{rname}{tp_suffix}");
+            let body_filled = body_str.replace("__HOIST_SELF__", &self_ty);
+            let create_filled = create_snippet.map(|s| s.replace("__HOIST_SELF__", &self_ty));
+            let attr_line = if create_filled.is_some() { "AllowNullLiteral; Interface" } else { "AllowNullLiteral" };
+            let def = format!(
+                "{indent}[<{attr_line}>]\n{indent}type {rname}{tp_suffix} =\n{body_filled}{}\n",
+                create_filled.as_deref().unwrap_or("")
+            );
+            let target_file = words(&def).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0).max(self.current_file);
+            if !self.cur_indent.is_empty() && target_file > self.current_file {
+                return None;
+            }
+            if !self.cur_indent.is_empty() {
+                self.pending_delegates += &def;
+            } else if self.in_globals {
+                self.global_delegates += &def;
+            } else {
                 self.file_of.insert(rname.clone(), target_file);
                 *self.alias_types.entry(target_file).or_default() += &def;
             }
@@ -1715,16 +1982,19 @@ impl Gen {
     // state: `<'E when 'E :> Element>`, checked where it is called. An
     // interface's are left unconstrained: F# would check them wherever the
     // interface is named, erased unions and `obj` arguments included.
-    fn constrained_type_params(&mut self, n: Node) -> String {
+    fn constrained_type_params_with_names(&mut self, n: Node) -> (String, Vec<String>) {
         let mut params = Vec::new();
         let mut constraints = Vec::new();
+        let mut constrained_names = Vec::new();
         for p in named(n, "typeParameter") {
             let name = format!("'{}", attr(p, "name"));
+            let mut is_constrained = false;
             let c = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child);
             if let Some(c) = c.filter(|c| c.has_tag_name("ref") && matches!(attr(*c, "kind"), "interface" | "class")) {
                 let t = self.ty(c, "");
                 if t != "obj" {
                     constraints.push(format!("{name} :> {t}"));
+                    is_constrained = true;
                 }
             }
             // `K extends keyof M`: 'K is the value the key selects. Where the
@@ -1740,17 +2010,22 @@ impl Gen {
                         if !constraints.contains(&bound) {
                             constraints.push(bound);
                         }
+                        is_constrained = true;
                     }
                 }
             }
+            if is_constrained {
+                constrained_names.push(name.clone());
+            }
             params.push(name);
         }
-        match (params.is_empty(), constraints.is_empty()) {
+        let formatted = match (params.is_empty(), constraints.is_empty()) {
             (true, _) => String::new(),
             (false, true) => format!("<{}>", params.join(", ")),
             // `X<Y> >`: F# would read `>>` as an operator.
             (false, false) => format!("<{} when {}{}>", params.join(", "), constraints.join(" and "), if constraints.last().unwrap().ends_with('>') { " " } else { "" }),
-        }
+        };
+        (formatted, constrained_names)
     }
 
     fn type_params(&self, n: Node) -> String {
@@ -2013,6 +2288,16 @@ impl Gen {
                 let t = elem.map_or("obj".to_string(), |e| self.ty(e, owner));
                 let emit = "[<Emit(\"$0[Symbol.asyncIterator]()\")>]";
                 vec![(format!("{emit} abstract asyncIterator: unit -> JsAsyncIterator<{t}>"), format!("{emit} member this.asyncIterator(): JsAsyncIterator<{t}> = jsNative"), Vec::new())]
+            } else if raw == "[Symbol.dispose]" {
+                let clash = members.iter().any(|x| x.attribute("name") == Some("dispose")) || self.inherited_methods.contains("dispose");
+                let dname = if clash { "symbolDispose" } else { "dispose" };
+                let emit = "[<Emit(\"$0[Symbol.dispose]()\")>]";
+                vec![(format!("{emit} abstract {dname}: unit -> unit"), format!("{emit} member this.{dname}(): unit = jsNative"), Vec::new())]
+            } else if raw == "[Symbol.asyncDispose]" {
+                let clash = members.iter().any(|x| x.attribute("name") == Some("asyncDispose")) || self.inherited_methods.contains("asyncDispose");
+                let dname = if clash { "symbolAsyncDispose" } else { "asyncDispose" };
+                let emit = "[<Emit(\"$0[Symbol.asyncDispose]()\")>]";
+                vec![(format!("{emit} abstract {dname}: unit -> JS.Promise<unit>"), format!("{emit} member this.{dname}(): JS.Promise<unit> = jsNative"), Vec::new())]
             } else if raw.starts_with('[') {
                 self.skip("symbol-named member");
                 Vec::new()
@@ -2031,7 +2316,7 @@ impl Gen {
             for (line, ext, exp) in pairs {
                 // The latest file a type in the member is declared in.
                 let latest = words(&line).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
-                if latest > self.current_file && indent.is_empty() {
+                if !self.hoisting && latest > self.current_file && indent.is_empty() {
                     let lines = self.extensions.entry(latest).or_default().entry(extend.to_string()).or_default();
                     let ext = format!("        {ext}\n");
                     if !lines.contains(&ext) {
@@ -2060,7 +2345,12 @@ impl Gen {
         let raw = m.attribute("name").unwrap_or_default();
         let name = ident(raw);
         let js = js_access(m.attribute("jsName").unwrap_or(raw));
-        let tps = self.constrained_type_params(m);
+        let saved_constrained = self.cur_constrained.clone();
+        for p in named(m, "typeParameter") {
+            self.cur_constrained.remove(&format!("'{}", attr(p, "name")));
+        }
+        let (tps, m_constrained) = self.constrained_type_params_with_names(m);
+        self.cur_constrained.extend(m_constrained);
         let property = |name: &str, t: &str, settable: bool, js: &str| {
             // A `unit` cannot be set (`static protoInitialize: void`).
             let settable = settable && t != "unit";
@@ -2151,11 +2441,15 @@ impl Gen {
             }
             (abstract_line, ext, expanded)
         };
-        Some(match m.tag_name().name() {
+        let res: Option<(String, String, Vec<String>)> = match m.tag_name().name() {
             "property" if !flag(m, "optional") && only_child(m).has_tag_name("functionType") => {
                 let fn_node = only_child(m);
-                let fn_tps = self.constrained_type_params(fn_node);
-                match self.fixed(fn_node, 1) {
+                for p in named(fn_node, "typeParameter") {
+                    self.cur_constrained.remove(&format!("'{}", attr(p, "name")));
+                }
+                let (fn_tps, fn_constrained) = self.constrained_type_params_with_names(fn_node);
+                self.cur_constrained.extend(fn_constrained);
+                Some(match self.fixed(fn_node, 1) {
                     Some((suffix, args)) => {
                         let emit = format!("$0{js}({args})");
                         let fixed_name = ident(&format!("{raw}_{suffix}"));
@@ -2163,26 +2457,27 @@ impl Gen {
                         method_from(self, fn_node, &fn_tps, &fixed_name, emit, &attr)
                     }
                     None => method_from(self, fn_node, &fn_tps, &name, format!("$0{js}($1...)"), ""),
-                }
+                })
             }
             "property" => {
                 let t = self.ty(only_child(m), owner);
                 let t = if flag(m, "optional") { add_opt(t) } else { t };
-                property(&name, &t, !flag(m, "readonly"), &js)
+                Some(property(&name, &t, !flag(m, "readonly"), &js))
             }
             "get" => {
                 let t = self.returns(m, owner);
-                property(&name, &t, has_setter, &js)
+                Some(property(&name, &t, has_setter, &js))
             }
             "set" => {
                 let t = named(m, "parameter").next().map(|p| self.ty(only_child(p), owner)).unwrap_or("obj".into());
                 if t == "unit" {
-                    return None;
+                    None
+                } else {
+                    let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
+                    Some((format!("abstract {name}: {t} with set"), format!("member this.{name} with {set}"), Vec::new()))
                 }
-                let set = format!("[<Emit(\"$0{} = $1\")>] set (v: {t}) = jsNative", js.replace('"', "\\\""));
-                (format!("abstract {name}: {t} with set"), format!("member this.{name} with {set}"), Vec::new())
             }
-            "method" => match self.fixed(m, 1) {
+            "method" => Some(match self.fixed(m, 1) {
                 Some((suffix, args)) => {
                     let emit = format!("$0{js}({args})");
                     let fixed_name = ident(&format!("{raw}_{suffix}"));
@@ -2190,9 +2485,9 @@ impl Gen {
                     method_from(self, m, &tps, &fixed_name, emit, &attr)
                 }
                 None => method_from(self, m, &tps, &name, format!("$0{js}($1...)"), ""),
-            },
-            "call" => method_from(self, m, &tps, "Invoke", "$0($1...)".into(), "[<Emit(\"$0($1...)\")>] "),
-            "construct" | "constructor" => method_from(self, m, &tps, "Create", "new $0($1...)".into(), "[<EmitConstructor>] "),
+            }),
+            "call" => Some(method_from(self, m, &tps, "Invoke", "$0($1...)".into(), "[<Emit(\"$0($1...)\")>] ")),
+            "construct" | "constructor" => Some(method_from(self, m, &tps, "Create", "new $0($1...)".into(), "[<EmitConstructor>] ")),
             "index" => {
                 let key = named(m, "parameter").next().map(|p| self.ty(only_child(p), owner)).unwrap_or("string".into());
                 let value = self.returns(m, owner);
@@ -2204,13 +2499,143 @@ impl Gen {
                 } else {
                     format!("member this.Item with {get}")
                 };
-                (abstract_line, ext, Vec::new())
+                Some((abstract_line, ext, Vec::new()))
             }
             _ => {
                 self.problems.element(T, m);
-                return None;
+                None
             }
+        };
+        self.cur_constrained = saved_constrained;
+        res
+    }
+
+    fn inheritance_depth(&self, id: &str) -> usize {
+        fn go(bases: &HashMap<String, Vec<String>>, cur: &str, seen: &mut HashSet<String>) -> usize {
+            if !seen.insert(cur.to_string()) {
+                return 0;
+            }
+            let d = bases.get(cur).map_or(0, |bs| {
+                bs.iter()
+                    .filter(|b| bases.contains_key(b.as_str()))
+                    .map(|b| 1 + go(bases, b, seen))
+                    .max()
+                    .unwrap_or(0)
+            });
+            seen.remove(cur);
+            d
+        }
+        go(&self.bases, id, &mut HashSet::new())
+    }
+
+    fn is_arg_subtype(&self, _root: Node, decl: Node, arg: Node, default: Node, depth: usize) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        if default.has_tag_name("primitive") && matches!(default.attribute("name"), Some("any" | "unknown")) {
+            return true;
+        }
+        if arg.has_tag_name("union") {
+            return elements(arg).next().is_some()
+                && elements(arg).all(|arm| self.is_arg_subtype(_root, decl, arm, default, depth + 1));
+        }
+        if arg.has_tag_name("ref") && arg.attribute("kind") == Some("typeParameter") {
+            let tname = attr(arg, "name");
+            let Some(tp_decl) = named(decl, "typeParameter").find(|p| attr(*p, "name") == tname) else {
+                return false;
+            };
+            let Some(constraint) = named(tp_decl, "constraint").next() else {
+                return false;
+            };
+            return self.is_arg_subtype(_root, decl, only_child(constraint), default, depth + 1);
+        }
+        let Some(ato) = arg.attribute("to") else { return false };
+        let Some(dto) = default.attribute("to") else { return false };
+        ato == dto || self.reaches(ato, dto)
+    }
+
+    fn can_widen_to_defaults(&self, root: Node, decl: Node, gdecl: Node, actual: &[Node]) -> bool {
+        let gparams: Vec<Node> = named(gdecl, "typeParameter").collect();
+        if gparams.is_empty()
+            || gparams.len() != actual.len()
+            || !gparams.iter().all(|p| named(*p, "default").next().is_some())
+        {
+            return false;
+        }
+        gparams.iter().enumerate().all(|(i, p)| {
+            let def = only_child(named(*p, "default").next().unwrap());
+            self.is_arg_subtype(root, decl, actual[i], def, 0)
         })
+    }
+
+    fn widen_candidates<'a>(
+        &mut self,
+        root: Node<'a, 'a>,
+        decl: Node<'a, 'a>,
+        owner: &str,
+        max_file: usize,
+    ) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = Vec::new();
+        let mut seen_decls: HashSet<String> = HashSet::new();
+        let mut seen_methods: HashSet<String> = HashSet::new();
+        let start_id = decl.attribute("id").unwrap_or(attr(decl, "name")).to_string();
+        seen_decls.insert(start_id);
+
+        let mut queue: std::collections::VecDeque<(Node<'a, 'a>, HashMap<String, Node<'a, 'a>>, bool)> =
+            std::collections::VecDeque::from([(decl, HashMap::new(), true)]);
+
+        while let Some((cur, subst, is_direct)) = queue.pop_front() {
+            if cur.has_tag_name("typeAlias") {
+                continue;
+            }
+            for e in named(cur, "extends") {
+                let target = only_child(e);
+                let Some(to) = target.attribute("to") else { continue };
+                let Some(gdecl) = find_decl(root, to) else { continue };
+
+                let raw_actual: Vec<Node<'a, 'a>> = elements(target).collect();
+                let actual: Vec<Node<'a, 'a>> = raw_actual
+                    .iter()
+                    .map(|a| {
+                        if a.has_tag_name("ref") && a.attribute("kind") == Some("typeParameter") {
+                            subst.get(attr(*a, "name")).copied().unwrap_or(*a)
+                        } else {
+                            *a
+                        }
+                    })
+                    .collect();
+
+                if !actual.is_empty() && self.can_widen_to_defaults(root, decl, gdecl, &actual) {
+                    let gparams: Vec<Node> = named(gdecl, "typeParameter").collect();
+                    let def_tys: Vec<String> = gparams
+                        .iter()
+                        .map(|p| self.ty(only_child(named(*p, "default").next().unwrap()), owner))
+                        .collect();
+                    let base_name_ty = type_path(to);
+                    let def_base = format!("{base_name_ty}<{}>", def_tys.join(", "));
+                    let same_direct = is_direct && def_base == self.ty(target, owner);
+                    if !same_direct
+                        && collect_type_vars(&def_base).is_empty()
+                        && words(&def_base).iter().filter_map(|w| self.file_of.get(*w)).all(|f| *f <= max_file)
+                    {
+                        let mname = format!("as{}", pascal(attr(gdecl, "name")));
+                        if seen_methods.insert(mname.clone()) {
+                            out.push((mname, def_base));
+                        }
+                    }
+                }
+
+                let gid = gdecl.attribute("id").unwrap_or(to).to_string();
+                if seen_decls.insert(gid) {
+                    let next_subst: HashMap<String, Node<'a, 'a>> = named(gdecl, "typeParameter")
+                        .zip(actual.iter())
+                        .map(|(gp, a)| (attr(gp, "name").to_string(), *a))
+                        .collect();
+                    queue.push_back((gdecl, next_subst, false));
+                }
+            }
+        }
+        out
     }
 
     fn interface(&mut self, d: Node, prefix: &str, indent: &str) {
@@ -2261,7 +2686,6 @@ impl Gen {
         let mut is_array = false;
         let direct: Vec<Option<&str>> = if d.has_tag_name("typeAlias") { Vec::new() } else { named(d, "extends").map(|e| only_child(e).attribute("to")).collect() };
         let mut left: Vec<Node> = Vec::new();
-        let mut widen_methods: Vec<String> = Vec::new();
         for (i, e) in named(d, "extends").enumerate() {
             if d.has_tag_name("typeAlias") {
                 break;
@@ -2287,37 +2711,6 @@ impl Gen {
                     body.push(format!("{indent}    [<Emit(\"$0.length\")>] abstract length: int\n"));
                 }
                 None => body.push(format!("{indent}    inherit {base}\n")),
-            }
-            // If this concrete type extends a generic base `G<A0, ...>` whose defaults
-            // `D0, ...` are supertypes of `A0, ...` (e.g. Konva `Rect` extending `Shape<RectConfig>`
-            // where `Shape`'s default is `ShapeConfig`), emit `asShape: unit -> Shape<ShapeConfig>`.
-            let root = d.document().root_element();
-            if elements(target).next().is_some()
-                && let Some(to) = target.attribute("to")
-                && let Some(gdecl) = find_decl(root, to)
-            {
-                let gparams: Vec<Node> = named(gdecl, "typeParameter").collect();
-                let actual: Vec<Node> = elements(target).collect();
-                if !gparams.is_empty() && gparams.len() == actual.len() && gparams.iter().all(|p| named(*p, "default").next().is_some()) {
-                    let defaults: Vec<Node> = gparams.iter().map(|p| only_child(named(*p, "default").next().unwrap())).collect();
-                    let all_sub = actual.iter().zip(&defaults).all(|(a, def)| {
-                        let Some(ato) = a.attribute("to") else { return false };
-                        if def.has_tag_name("primitive") && def.attribute("name") == Some("any") {
-                            return true;
-                        }
-                        let Some(dto) = def.attribute("to") else { return false };
-                        ato == dto || self.reaches(ato, dto)
-                    });
-                    let def_tys: Vec<String> = defaults.iter().map(|def| self.ty(*def, &owner)).collect();
-                    let base_name_ty = base.split('<').next().unwrap_or(&base);
-                    let def_base = format!("{base_name_ty}<{}>", def_tys.join(", "));
-                    if all_sub && def_base != base && words(&def_base).iter().filter_map(|w| self.file_of.get(*w)).all(|f| *f <= self.current_file) {
-                        let mname = format!("as{}", pascal(attr(gdecl, "name")));
-                        if !instance.iter().any(|m| attr(*m, "name") == mname) {
-                            widen_methods.push(format!("{indent}    [<Emit(\"$0\")>] abstract {mname}: unit -> {def_base}\n"));
-                        }
-                    }
-                }
             }
         }
         // `[Symbol.iterator](): ArrayIterator<Node>`: a seq of Nodes, which Fable iterates by that method.
@@ -2359,18 +2752,68 @@ impl Gen {
             }
         }
         let saved_inherited_methods = std::mem::replace(&mut self.inherited_methods, inherited_methods);
+        let mut ancestor_widens: HashSet<String> = HashSet::new();
+        if !d.has_tag_name("typeAlias") {
+            let saved_probing = std::mem::replace(&mut self.probing, true);
+            for b in &seen {
+                if let Some(bd) = find_decl(root, b) {
+                    let b_file = if let Some(module) = bd.attribute("module") {
+                        let unit = self.units.get(attr(bd, "name")).cloned().unwrap_or_else(|| module.to_string());
+                        self.file_of.get(&format!("module:{unit}")).copied().unwrap_or(self.current_file)
+                    } else {
+                        self.file_of.get(attr(bd, "name")).copied().unwrap_or(self.current_file)
+                    };
+                    let b_owner = format!("{}{}", type_ident(attr(bd, "name")), self.type_params(bd));
+                    for (mname, _) in self.widen_candidates(root, bd, &b_owner, b_file) {
+                        ancestor_widens.insert(mname);
+                    }
+                }
+            }
+            self.probing = saved_probing;
+        }
         body.extend(self.members(&instance, &owner, &extend, indent));
-        self.inherited_methods = saved_inherited_methods;
         body.extend(self.redeclared(d, &left, &body, &owner, &extend, indent));
-        body.extend(widen_methods);
+        if !d.has_tag_name("typeAlias") {
+            for (mname, def_base) in self.widen_candidates(root, d, &owner, self.current_file) {
+                if !instance.iter().any(|m| attr(*m, "name") == mname)
+                    && !self.inherited_methods.contains(&mname)
+                    && !ancestor_widens.contains(&mname)
+                {
+                    body.push(format!("{indent}    [<Emit(\"$0\")>] abstract {mname}: unit -> {def_base}\n"));
+                }
+            }
+        }
+        self.inherited_methods = saved_inherited_methods;
+
+        let decl_id = d.attribute("id").unwrap_or(attr(d, "name"));
+        let is_base = self.extended_bases.contains(decl_id);
+        let depth = self.inheritance_depth(decl_id);
+        let disambiguated = |args: &str| {
+            let mut sentinel = "_base".to_string();
+            let arg_words = words(args);
+            while arg_words.contains(sentinel.as_str()) {
+                sentinel.push('_');
+            }
+            if args.is_empty() { format!("?{sentinel}: unit") } else { format!("{args}, ?{sentinel}: unit") }
+        };
         match factory {
             FactoryResult::Inline { args, emit } => {
-                body.push(format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({args}) : {owner} = jsNative\n"));
+                if is_base && indent.is_empty() && !self.in_globals {
+                    let bargs = disambiguated(&args);
+                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({bargs}) : {owner} = jsNative\n");
+                    let lines = self.factories.entry(self.current_file).or_default().entry(depth).or_default().entry(extend.clone()).or_default();
+                    if !lines.contains(&ext) {
+                        lines.push(ext);
+                    }
+                } else {
+                    body.push(format!("{indent}    [<ParamObject; Emit({emit:?})>]\n{indent}    static member Create ({args}) : {owner} = jsNative\n"));
+                }
             }
             FactoryResult::Extension { latest, args, emit } => {
-                if indent.is_empty() {
-                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({args}) : {owner} = jsNative\n");
-                    let lines = self.extensions.entry(latest).or_default().entry(extend.clone()).or_default();
+                if indent.is_empty() && !self.in_globals {
+                    let fargs = if is_base { disambiguated(&args) } else { args };
+                    let ext = format!("        [<ParamObject; Emit({emit:?})>]\n        static member Create ({fargs}) : {owner} = jsNative\n");
+                    let lines = self.factories.entry(latest).or_default().entry(depth).or_default().entry(extend.clone()).or_default();
                     if !lines.contains(&ext) {
                         lines.push(ext);
                     }
@@ -2860,6 +3303,12 @@ impl Gen {
                 }
                 "interface" | "class" => self.interface(d, prefix, indent),
                 "function" => {
+                    let saved_constrained = self.cur_constrained.clone();
+                    for p in named(d, "typeParameter") {
+                        self.cur_constrained.remove(&format!("'{}", attr(p, "name")));
+                    }
+                    let (tps, fn_constrained) = self.constrained_type_params_with_names(d);
+                    self.cur_constrained.extend(fn_constrained);
                     let params = self.params(d, "");
                     let ret = self.returns(d, "");
                     let (name, args) = match self.fixed(d, 0) {
@@ -2867,7 +3316,6 @@ impl Gen {
                         Some((suffix, args)) => (ident(&format!("{raw}_{suffix}")), args),
                         None => (name, "$0...".to_string()),
                     };
-                    let tps = self.constrained_type_params(d);
                     let at_attr = self.at(&path, Some(&args));
                     let fn_tparams: Vec<Node> = named(d, "typeParameter").collect();
                     let (ret_only_map, all_ret_only, _) = if fn_tparams.is_empty() {
@@ -2891,6 +3339,7 @@ impl Gen {
                     for ep in self.union_param_expansions(d, "", &params) {
                         func_extras.push(format!("{indent}    {at_attr} static member {name}{tps} ({}): {ret} = jsNative\n", ep.join(", ")));
                     }
+                    self.cur_constrained = saved_constrained;
                 }
                 "typeAlias" if only_child_type(d).has_tag_name("union") && named(d, "typeParameter").next().is_none() => {
                     let body = only_child_type(d);
@@ -2940,7 +3389,6 @@ impl Gen {
                         }
                     }
                     let form = self.alias_form(d);
-                    self.cur_constrained = saved_constrained;
                     match form {
                         AliasForm::Interface => self.interface(d, prefix, indent),
                         AliasForm::Delegate => {
@@ -2959,6 +3407,7 @@ impl Gen {
                             self.out += &format!("{indent}type {name}{header} = {t}\n\n");
                         }
                     }
+                    self.cur_constrained = saved_constrained;
                 }
                 "var" => {
                     let body = only_child(d);
@@ -3506,11 +3955,15 @@ struct CallbackSig {
     rest: Option<(Vec<String>, String, String)>,
 }
 
-// Whether an F# type string (or what it abbreviates) is an arrow type `(a -> b)`.
+// Whether an F# type string (or what it abbreviates) is an arrow/delegate type `(a -> b)`.
 fn is_fn_type<'a>(mut t: &'a str, abbrevs: &'a HashMap<String, String>) -> bool {
     for _ in 0..8 {
-        let Some(next) = abbrevs.get(t) else { break };
+        let key = t.split('<').next().unwrap_or(t);
+        let Some(next) = abbrevs.get(key) else { break };
         t = next.as_str();
+    }
+    if t.starts_with("System.Func<") || t == "System.Action" || t.starts_with("System.Action<") {
+        return true;
     }
     let Some(inner) = t.strip_prefix('(').and_then(|s| s.strip_suffix(')')) else {
         return false;

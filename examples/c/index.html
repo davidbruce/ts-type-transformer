@@ -210,12 +210,16 @@
         padding: 14px;
         overflow-x: auto;
       }
+      #node-card pre.cv-code {
+        background: var(--bg);
+        padding: 8px 0;
+      }
       #source-drawer {
         position: absolute;
         top: 0;
         right: 0;
         bottom: 0;
-        width: min(560px, 55%);
+        width: min(680px, 60%);
         background: var(--surface);
         border-left: 1px solid var(--border);
         display: flex;
@@ -257,14 +261,20 @@
         font-family: ui-monospace, SFMono-Regular, monospace;
         font-size: 12px;
       }
+      .drawer-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
       #source-code {
         margin: 0;
-        padding: 14px;
+        padding: 10px 0;
         flex: 1;
         overflow: auto;
         font-family: ui-monospace, SFMono-Regular, monospace;
         font-size: 12px;
-        line-height: 1.5;
+        line-height: 1.55;
         background: var(--bg);
         color: var(--text);
       }
@@ -307,7 +317,10 @@
           <aside id="source-drawer" hidden>
             <div class="drawer-head">
               <span id="source-path"></span>
-              <button id="close-source" class="btn" type="button">Close</button>
+              <div class="drawer-actions">
+                <button id="copy-source" class="btn" type="button">Copy</button>
+                <button id="close-source" class="btn" type="button">Close</button>
+              </div>
             </div>
             <pre id="source-code"></pre>
           </aside>
@@ -315,6 +328,8 @@
       </main>
     </div>
     <script type="module">
+      import { langFromSource, renderCode } from '/code_viewer.mjs';
+
       const res = await fetch('./examples.json');
       const manifest = await res.json();
       const targetTitle = document.getElementById('target-title');
@@ -335,6 +350,7 @@
       const sourcePath = document.getElementById('source-path');
       const sourceCode = document.getElementById('source-code');
       const viewSourceBtn = document.getElementById('view-source-btn');
+      const copySourceBtn = document.getElementById('copy-source');
       const closeSourceBtn = document.getElementById('close-source');
 
       document.title = `${manifest.label} Examples — tsrs_proto`;
@@ -400,8 +416,9 @@
           nodeCard.hidden = false;
           nodeDesc.textContent = `${item.title} — Node benchmark / CLI example`;
           nodeCmd.textContent = item.command ?? `node ./${item.package}/...`;
-          nodeSource.textContent = await (await fetch(item.source)).text();
+          const srcText = await (await fetch(item.source)).text();
           if (seq !== activeSeq) return;
+          renderCode(nodeSource, srcText, langFromSource(manifest.target, item.source));
           window.__galleryReady = {
             target: manifest.target,
             label: manifest.label,
@@ -434,9 +451,45 @@
       viewSourceBtn.addEventListener('click', async () => {
         if (!current) return;
         sourcePath.textContent = current.source;
+        sourceCode.classList.remove('cv-code');
         sourceCode.textContent = 'Loading...';
         sourceDrawer.hidden = false;
-        sourceCode.textContent = await (await fetch(current.source)).text();
+        const srcText = await (await fetch(current.source)).text();
+        renderCode(sourceCode, srcText, langFromSource(manifest.target, current.source));
+      });
+
+      copySourceBtn.addEventListener('click', async () => {
+        const text = sourceCode.dataset.rawSource ?? sourceCode.textContent ?? '';
+        if (!text) return;
+        let copied = false;
+        if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+          } catch {
+            copied = false;
+          }
+        }
+        if (!copied) {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            copied = document.execCommand('copy');
+          } catch {
+            copied = false;
+          }
+          ta.remove();
+        }
+        if (copied) {
+          copySourceBtn.textContent = 'Copied';
+          setTimeout(() => {
+            if (copySourceBtn.textContent === 'Copied') copySourceBtn.textContent = 'Copy';
+          }, 1200);
+        }
       });
 
       closeSourceBtn.addEventListener('click', () => {
