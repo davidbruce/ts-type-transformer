@@ -6,8 +6,9 @@ use super::super::{attr, elements, flag, named, only_child};
 use super::Gen;
 use super::member_ir::render_members;
 use super::syntax::{
-    add_opt, collect_ordered_tparams, const_js, ident, is_plain_ident, pascal, strip_opt, type_ident, type_word, words,
+    add_opt, collect_ordered_tparams, const_js, ident, is_plain_ident, pascal, ret_type_word, strip_opt, type_ident, type_word, words,
 };
+use crate::lower::{SYNTH_NAME_MAX, trim_wrapper_suffixes};
 
 fn ancestor_places(n: Node) -> Vec<String> {
     n.ancestors()
@@ -20,11 +21,160 @@ fn ancestor_places(n: Node) -> Vec<String> {
 }
 
 fn place_candidates(places: &[String]) -> Vec<String> {
-    (2..=places.len().min(3))
-        .chain(1..=1)
-        .map(|k| places[..k.min(places.len())].iter().rev().cloned().collect::<String>())
-        .filter(|c| !c.is_empty())
-        .collect()
+    let mut out = Vec::new();
+    for k in (2..=places.len().min(3)).chain(1..=1) {
+        let mut segs: Vec<String> = places[..k.min(places.len())].iter().rev().cloned().collect();
+        let raw_len: usize = segs.iter().map(String::len).sum();
+        if segs.len() >= 3 && raw_len > SYNTH_NAME_MAX {
+            let last_idx = segs.len() - 1;
+            segs = segs
+                .into_iter()
+                .enumerate()
+                .filter(|(i, s)| *i == 0 || *i == last_idx || !matches!(s.as_str(), "Result" | "Return" | "Value"))
+                .map(|(_, s)| s)
+                .collect();
+            let trimmed_len: usize = segs.iter().map(String::len).sum();
+            if trimmed_len > SYNTH_NAME_MAX {
+                for i in 0..segs.len().saturating_sub(1) {
+                    segs[i] = trim_wrapper_suffixes(&segs[i]).to_string();
+                }
+            }
+        }
+        let cand: String = segs.concat();
+        if !cand.is_empty() && !out.contains(&cand) {
+            out.push(cand);
+        }
+    }
+    out
+}
+
+fn prop_desc(t: Node) -> Option<String> {
+    match t.tag_name().name() {
+        "functionType" => Some("Fn".into()),
+        "object" => {
+            if elements(t).any(|m| m.has_tag_name("call"))
+                && elements(t).all(|m| m.has_tag_name("call") || m.has_tag_name("typeParameter"))
+            {
+                Some("Fn".into())
+            } else {
+                Some("Obj".into())
+            }
+        }
+        "array" | "tuple" => Some("Array".into()),
+        "union" => {
+            let parts: Vec<String> = elements(t).filter_map(prop_desc).take(2).collect();
+            Some(if parts.is_empty() { "Union".into() } else { parts.join("Or") })
+        }
+        "nullable" => prop_desc(only_child(t)),
+        _ => ret_type_word(t),
+    }
+}
+
+fn union_sibling_suffixes(n: Node) -> Vec<String> {
+    let Some(parent) = n.parent().filter(|p| p.has_tag_name("union")) else {
+        return Vec::new();
+    };
+    let siblings: Vec<Node> = elements(parent)
+        .filter(|c| c.has_tag_name("object") || c.has_tag_name("functionType"))
+        .collect();
+    if siblings.len() < 2 {
+        return Vec::new();
+    }
+    let obj_info = |obj: Node| -> (bool, Vec<(String, Option<String>)>) {
+        if obj.has_tag_name("functionType") {
+            return (true, Vec::new());
+        }
+        let has_call = elements(obj).any(|m| m.has_tag_name("call"));
+        let mut props = Vec::new();
+        for m in elements(obj).filter(|m| m.has_tag_name("property")) {
+            let name = attr(m, "name").to_string();
+            if !props.iter().any(|(pn, _)| pn == &name) {
+                props.push((name, prop_desc(only_child(m))));
+            }
+        }
+        (has_call, props)
+    };
+    let infos: Vec<(Node, bool, Vec<(String, Option<String>)>)> = siblings
+        .into_iter()
+        .map(|s| {
+            let (hc, props) = obj_info(s);
+            (s, hc, props)
+        })
+        .collect();
+    let Some((_, own_has_call, own_props)) = infos.iter().find(|(s, _, _)| *s == n) else {
+        return Vec::new();
+    };
+    let others: Vec<_> = infos.iter().filter(|(s, _, _)| *s != n).collect();
+
+    let mut out = Vec::new();
+    let mut push = |s: String| {
+        if !s.is_empty() && !out.contains(&s) {
+            out.push(s);
+        }
+    };
+
+    if *own_has_call {
+        if own_props.is_empty() {
+            if others.iter().any(|(_, hc, op)| !hc || !op.is_empty()) {
+                push("Fn".into());
+            }
+        } else {
+            for (p, _) in own_props {
+                if !others.iter().any(|(_, _, op)| op.iter().any(|(on, _)| on == p)) {
+                    push(format!("With{}", pascal(p)));
+                }
+            }
+            for (p, _) in own_props {
+                push(format!("With{}", pascal(p)));
+            }
+        }
+    }
+
+    // Properties unique to this sibling among all union arms.
+    let mut dist = Vec::new();
+    for (p, _) in own_props {
+        if !others.iter().any(|(_, _, op)| op.iter().any(|(on, _)| on == p)) {
+            let w = pascal(p);
+            if !w.is_empty() && !dist.contains(&w) {
+                dist.push(w.clone());
+            }
+            push(w);
+        }
+    }
+    // Properties present in this sibling that at least one sibling lacks.
+    for (p, _) in own_props {
+        if others.iter().any(|(_, _, op)| !op.iter().any(|(on, _)| on == p)) {
+            let w = pascal(p);
+            if !w.is_empty() && !dist.contains(&w) {
+                dist.push(w.clone());
+            }
+            push(w);
+        }
+    }
+    // Shared properties whose child type descriptor differs from another sibling.
+    let mut typed_dist = Vec::new();
+    for (p, desc) in own_props {
+        let Some(d) = desc else { continue };
+        if others
+            .iter()
+            .any(|(_, _, op)| op.iter().any(|(on, od)| on == p && od.as_deref() != Some(d.as_str())))
+        {
+            let w = format!("{}{d}", pascal(p));
+            if !typed_dist.contains(&w) {
+                typed_dist.push(w.clone());
+            }
+            push(w);
+        }
+    }
+    // Combine a distinguishing property with a differing-type property when multiple arms share one.
+    for d in &dist {
+        for td in &typed_dist {
+            push(format!("{d}{td}"));
+        }
+    }
+    push("Base".into());
+    push("Object".into());
+    out
 }
 
 impl Gen {
@@ -96,15 +246,16 @@ impl Gen {
             // Else with the types it takes, or gives (node's `pipeline` sources).
             let said: Vec<String> = named(n, "parameter")
                 .filter_map(|p| type_word(only_child(p)))
-                .chain(named(n, "returns").next().and_then(|r| type_word(only_child(r))).map(|w| format!("To{w}")))
+                .chain(named(n, "returns").next().and_then(|r| ret_type_word(only_child(r))).map(|w| format!("To{w}")))
                 .collect();
             let mut cands = at.clone();
-            if let Some(a) = at.first() {
+            for a in &at {
                 cands.extend(said.iter().map(|w| format!("{a}{w}")));
                 for (i, x) in said.iter().enumerate() {
                     cands.extend(said[i + 1..].iter().map(|y| format!("{a}{x}{y}")));
                 }
             }
+            cands.extend(at.iter().map(|a| format!("{a}Fn")));
             let by_place = cands.into_iter().find(|c| self.is_hoist_name_free(c));
             let dname = match by_place {
                 Some(c) => c,
@@ -144,13 +295,27 @@ impl Gen {
                 }
             }
         }
+        let sibling_suffixes = union_sibling_suffixes(n);
+        if !sibling_suffixes.is_empty() {
+            for base in &at {
+                for suffix in &sibling_suffixes {
+                    candidates.push(format!("{base}{suffix}"));
+                }
+            }
+        }
         candidates.extend(at.iter().cloned());
         match candidates.into_iter().find(|c| self.is_hoist_name_free(c)) {
             Some(c) => c,
             None => {
                 if let Some(base) = at.first() {
                     (1usize..)
-                        .map(|i| format!("{base}{i}"))
+                        .map(|i| {
+                            if base.as_bytes().last().is_some_and(u8::is_ascii_digit) {
+                                format!("{base}_{i}")
+                            } else {
+                                format!("{base}{i}")
+                            }
+                        })
                         .find(|c| self.is_hoist_name_free(c))
                         .unwrap()
                 } else {

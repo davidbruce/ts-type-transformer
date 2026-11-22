@@ -350,40 +350,76 @@ fn widen(t: &mut Type) {
 
 // The longest name made of others' before it is cut and hashed.
 pub(super) const NAME_MAX: usize = 64;
+// Tighter cap for synthetic hoisted objects, callbacks, and inline unions.
+pub(crate) const SYNTH_NAME_MAX: usize = 44;
+
+/// Trims a trailing configuration/options wrapper suffix when a >= 3-char stem remains.
+pub(crate) fn trim_wrapper_suffixes(s: &str) -> &str {
+    const SUFFIXES: &[&str] = &[
+        "Parameters",
+        "Options",
+        "Settings",
+        "Config",
+        "Option",
+        "Params",
+        "Props",
+    ];
+    for suffix in SUFFIXES {
+        if let Some(stem) = s.strip_suffix(suffix) {
+            if stem.len() >= 3 {
+                return stem;
+            }
+        }
+    }
+    s
+}
 
 pub(super) fn unique(base: String, taken: &mut HashSet<String>) -> String {
+    unique_with_limit(base, NAME_MAX, taken)
+}
+
+pub(super) fn unique_with_limit(base: String, max_len: usize, taken: &mut HashSet<String>) -> String {
     // A name made of a long path (echarts' `MapToType` of `Path`'s properties,
     // `Path__transitionState_animationProps___value_changed_…`) keeps where it
     // starts and where it ends: names become file names.
     let parts: Vec<&str> = base.split('_').collect();
-    let base = if base.len() > NAME_MAX && parts.len() > 2 {
+    let base = if base.len() > max_len && parts.len() > 2 {
         let mut tail = Vec::new();
-        let head = parts[0];
+        let head = trim_wrapper_suffixes(parts[0]);
         for p in parts[1..].iter().rev() {
-            if head.len() + tail.iter().map(|t: &&str| t.len() + 1).sum::<usize>() + p.len() + 1 > NAME_MAX {
+            if head.len() + tail.iter().map(|t: &&str| t.len() + 1).sum::<usize>() + p.len() + 1 > max_len {
                 break;
             }
             tail.insert(0, *p);
         }
-        if tail.iter().all(|t| t.is_empty()) { hashed(&base) } else { format!("{head}_{}", tail.join("_")) }
-    } else if base.len() > NAME_MAX {
-        hashed(&base)
+        if tail.iter().all(|t| t.is_empty()) { hashed(&base, max_len) } else { format!("{head}_{}", tail.join("_")) }
+    } else if base.len() > max_len && parts.len() == 2 {
+        let head = trim_wrapper_suffixes(parts[0]);
+        let candidate = format!("{head}_{}", parts[1]);
+        if candidate.len() <= max_len { candidate } else { hashed(&base, max_len) }
+    } else if base.len() > max_len {
+        let trimmed = trim_wrapper_suffixes(&base);
+        if trimmed.len() <= max_len { trimmed.to_string() } else { hashed(&base, max_len) }
     } else {
         base
     };
     let mut name = base.clone();
     let mut n = 2;
     while !taken.insert(name.clone()) {
-        name = format!("{base}{n}");
+        name = if base.as_bytes().last().is_some_and(u8::is_ascii_digit) {
+            format!("{base}_{n}")
+        } else {
+            format!("{base}{n}")
+        };
         n += 1;
     }
     name
 }
 
 // A name too long to keep: its start and a hash of it.
-fn hashed(base: &str) -> String {
+fn hashed(base: &str, max_len: usize) -> String {
     let hash = crate::fnv1a64(base);
-    let mut cut = 48;
+    let mut cut = max_len.saturating_sub(9).min(48).min(base.len());
     while !base.is_char_boundary(cut) {
         cut -= 1;
     }

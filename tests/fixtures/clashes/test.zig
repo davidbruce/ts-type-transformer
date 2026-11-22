@@ -10,8 +10,8 @@ fn expect(ok: bool, src: std.builtin.SourceLocation) void {
 
 export fn run() void {
     const g = b.Gizmo.new();
-    expect(g.isTransforming(), @src());
-    expect(b.Gizmo.getIsTransforming().h != 0, @src());
+    expect(g.isTransforming2(), @src());
+    expect(!b.Gizmo.isTransforming(), @src());
     // `fooBar` and `foo_bar` are one `fooBar`.
     expect(g.fooBar() == 1 and g.fooBar2() == 2, @src());
 
@@ -20,7 +20,7 @@ export fn run() void {
 
     const p = b.point(4);
     expect(p.getX() == 4, @src());
-    expect(p.getCreate().h != 0, @src());
+    expect(p.create2(5).getX() == 5, @src());
     expect(b.Point.create().h != 0, @src());
 
     expect(b.ns_Node.new().id() == 2, @src());

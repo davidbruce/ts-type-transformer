@@ -123,8 +123,11 @@ pub fn settle_with(m: &mut Model, naming: &Naming, extra_reserved: &[String]) {
             for (name, kind) in ranked.iter().copied().filter(|(n, _)| m.synthetic.contains(*n) == synthetic && !(naming.nests && m.namespaced.contains_key(*n))) {
                 // Where it must give way, it is named by where it comes from:
                 // node's `readline` `Key` is `ReadlineKey`.
-                let by_origin: Vec<String> = m.origins.get(*name).and_then(|o| origin_name(o, name)).into_iter().collect();
-                let chosen = claim_as(name, &by_origin, &mut |candidate| {
+                let mut fallbacks: Vec<String> = m.origins.get(*name).and_then(|o| origin_name(o, name)).into_iter().collect();
+                if *kind == Kind::Callback && !name.ends_with("_cb") {
+                    fallbacks.push(format!("{name}_cb"));
+                }
+                let chosen = claim_as(name, &fallbacks, &mut |candidate| {
                     let ids = (naming.type_names)(candidate, name, *kind, m);
                     let values = ids.first().map(|own| (naming.values_of)(own, name, *kind, m)).unwrap_or_default();
                     top.take_type(ids, values)
@@ -328,7 +331,7 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
     m.funcs.iter_mut().for_each(|f| func(f, &to));
 }
 
-fn stem(w: &str) -> String {
+pub(crate) fn stem(w: &str) -> String {
     let w = w.to_lowercase();
     if w.len() > 4 && w.ends_with("es") {
         w[..w.len() - 2].to_string()
@@ -383,7 +386,7 @@ fn origin_name(origin: &str, name: &str) -> Option<String> {
 
 // The words of a name: `fs/promises` is fs, promises; `HTMLElement` HTML,
 // Element; `addISOWeekYears` add, ISO, Week, Years.
-fn words(s: &str) -> Vec<String> {
+pub(crate) fn words(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     for part in s.split(|c: char| !c.is_alphanumeric()).filter(|p| !p.is_empty()) {
         let cs: Vec<char> = part.chars().collect();

@@ -216,7 +216,16 @@ impl<'m> Gen<'m> {
             match &f.call {
                 Call::Set(js) if f.params.len() == 1 => {
                     let fname = lower(&function_name(&f, &f.name));
-                    let Some(rest) = fname.strip_prefix("set_") else { continue };
+                    let rest_owned;
+                    let rest = if !super::super::case::has_dollar_js_name(&f.call)
+                        && super::super::case::starts_with_word(js, "set")
+                    {
+                        rest_owned = lower(js);
+                        rest_owned.as_str()
+                    } else {
+                        let Some(r) = fname.strip_prefix("set_").or_else(|| fname.strip_prefix("assign_")) else { continue };
+                        r
+                    };
                     let with_base = match prefix {
                         Some(p) => lower(&format!("{p}_with_{rest}")),
                         None => lower(&format!("with_{rest}")),

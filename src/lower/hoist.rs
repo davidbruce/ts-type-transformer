@@ -8,7 +8,30 @@ use tsrs_core::P;
 use crate::ir::*;
 use crate::xml::type_key;
 
-use super::generics::{NAME_MAX, keyed_syms, mentions, unique};
+use super::generics::{SYNTH_NAME_MAX, keyed_syms, mentions, trim_wrapper_suffixes, unique_with_limit};
+
+pub(crate) fn compact_hoist_path(path: &[String], sep: &str) -> String {
+    let joined = path.join(sep);
+    if path.len() < 3 || joined.len() <= SYNTH_NAME_MAX {
+        return joined;
+    }
+    let last_idx = path.len() - 1;
+    let mut kept: Vec<String> = path
+        .iter()
+        .enumerate()
+        .filter(|(i, s)| *i == 0 || *i == last_idx || !matches!(s.as_str(), "result" | "return" | "value"))
+        .map(|(_, s)| s.clone())
+        .collect();
+    if kept.join(sep).len() <= SYNTH_NAME_MAX {
+        return kept.join(sep);
+    }
+    for i in 0..kept.len().saturating_sub(1) {
+        if i == 0 || kept[i].len() >= 18 {
+            kept[i] = trim_wrapper_suffixes(&kept[i]).to_string();
+        }
+    }
+    kept.join(sep)
+}
 use super::overloads::{describe, name_part};
 use super::unions::collect_declared_names;
 use super::walk::{visit, walk, walk_members, walk_type};
@@ -132,7 +155,9 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                 .entry(key.clone())
                 .or_insert_with(|| {
                     let shared = uses.get(&key).is_some_and(|n| *n > 1);
-                    let mut at = best.get(&key).map_or_else(|| path.join(sep), |p| p.join(sep));
+                    let mut at = best
+                        .get(&key)
+                        .map_or_else(|| compact_hoist_path(path, sep), |p| compact_hoist_path(p, sep));
                     if let Some(w) = apart.get(&key) {
                         at = format!("{at}{sep}{w}");
                     // Its declaration's name only, which that has (`type ExpandedState
@@ -144,10 +169,10 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let base = match t {
                         // Another of that name (pixi's `(width, localWidth)` beside
                         // `(height, localHeight)`): where it is.
-                        Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep).filter(|n| n.len() <= NAME_MAX && !names.contains(n)).unwrap_or(at),
+                        Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep).filter(|n| n.len() <= SYNTH_NAME_MAX && !names.contains(n)).unwrap_or(at),
                         _ => at,
                     };
-                    let name = unique(base, &mut names);
+                    let name = unique_with_limit(base, SYNTH_NAME_MAX, &mut names);
                     // Enclosing type parameters the type mentions become its own.
                     let free = free_type_params(t);
                     let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();

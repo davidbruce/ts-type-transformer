@@ -6,8 +6,8 @@ use crate::front::Front;
 use crate::ir::*;
 use crate::xml::type_key;
 
-use super::generics::{NAME_MAX, unique};
-use super::hoist::{collect_bodies, free_type_params};
+use super::generics::{SYNTH_NAME_MAX, unique_with_limit};
+use super::hoist::{collect_bodies, compact_hoist_path, free_type_params};
 use super::overloads::{describe, mnemonic};
 use super::walk::walk;
 
@@ -135,19 +135,19 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
                 // Another's (F#'s `string | (a) => b` beside `string | (c) => d`,
                 // both `string_or_fn`): where it is; a place another has, with what
                 // else it holds (`string | FileHandle_readFile_options`).
-                let at = path.join(sep);
+                let at = compact_hoist_path(path, sep);
                 let or_rest = || -> Option<String> {
                     let rest: Vec<String> = parts.iter().filter_map(describe).filter(|d| !d.starts_with(&at)).collect();
                     (!rest.is_empty() && rest.len() < parts.len()).then(|| format!("{at}{sep}or{sep}{}", rest.join(&format!("{sep}or{sep}"))))
                 };
                 let base = match joined {
-                    Some(j) if parts.len() <= 3 && j.len() <= NAME_MAX && !names.contains(&j) => j,
+                    Some(j) if parts.len() <= 3 && j.len() <= SYNTH_NAME_MAX && !names.contains(&j) => j,
                     _ if !path.is_empty() && !names.contains(&at) => at,
                     // Of the types of its place alone: what it is.
                     _ if !path.is_empty() => or_rest().filter(|n| !names.contains(n)).unwrap_or_else(|| format!("{at}{sep}union")),
                     j => j.unwrap_or_else(|| parts.iter().map(mnemonic).collect::<Vec<_>>().join(&format!("{sep}or{sep}"))),
                 };
-                let name = unique(base, names);
+                let name = unique_with_limit(base, SYNTH_NAME_MAX, names);
                 // Type parameters the union mentions become its own.
                 let free = free_type_params(t);
                 let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();

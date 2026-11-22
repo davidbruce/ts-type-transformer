@@ -17,8 +17,8 @@ fn check(ok: Bool, what: String) -> Nil {
 
 pub fn main() {
   let g = gizmo.new()
-  check(gizmo.is_transforming(g), "method")
-  let _ = gizmo.get_is_transforming()
+  check(!gizmo.is_transforming(), "static")
+  check(gizmo.is_transforming_2(g), "method")
   // `fooBar` and `foo_bar` are one `foo_bar`.
   check(gizmo.foo_bar(g) == 1.0 && gizmo.foo_bar_2(g) == 2.0, "foo_bar")
 
@@ -29,7 +29,7 @@ pub fn main() {
 
   let p = b.point(4.0)
   check(point.get_x(p) == 4.0, "point")
-  let _ = point.get_create(p)
+  check(point.get_x(point.create_2(p, 5.0)) == 5.0, "property create")
 
   check(ns_node.id(ns_node.new()) == 2.0, "class")
   // The namespace's class: its functions in a module of its own name, its

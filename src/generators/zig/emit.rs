@@ -557,7 +557,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
             emitted.insert(cast_name.into());
             emitted_imports.insert(format!("js_is__{}", c.name));
             *externs += &format!("    extern \"{wasm_module}\" fn @\"js_is__{}\"(u32) i32;\n", c.name);
-            *out += &format!("    pub fn {}(v: anytype) ?{} {{ return if (v.h != 0 and raw.@\"js_is__{1}\"(v.h) != 0) .{{ .h = v.h }} else null; }}\n", ident(cast_name), c.name);
+            *out += &format!("    pub fn {}(v_: anytype) ?{} {{ return if (v_.h != 0 and raw.@\"js_is__{1}\"(v_.h) != 0) .{{ .h = v_.h }} else null; }}\n", ident(cast_name), c.name);
         }
         let inherited = |f: &Func| if Class::has_self(f) { homes.get(&(c.name.as_str(), f.name.as_str())).copied() } else { None };
         let shared = |f: &Func| shares.contains(c.name.as_str()) && Class::has_self(f) && inherited(f).is_none();
@@ -596,7 +596,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
             *out += "    pub const _has_field_init = true;\n";
             let init_name = if emitted.contains("init") { "fromFields" } else { "init" };
             if emitted.insert(init_name.into()) {
-                *out += &format!("    pub fn {init_name}(fields: anytype) @This() {{ return Lent.init(@This(), fields); }}\n");
+                *out += &format!("    pub fn {init_name}(fields_: anytype) @This() {{ return Lent.init(@This(), fields_); }}\n");
             }
         }
         if emitted.insert("deinit".into()) {

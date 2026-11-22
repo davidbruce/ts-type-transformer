@@ -189,6 +189,19 @@ pub(super) fn type_word(t: Node) -> Option<String> {
     }
 }
 
+/// Like `type_word`, also mapping `any`/`unknown` -> `Obj` and `void`/`undefined` -> `Unit`
+/// for return-type suffixes on callback delegates.
+pub(super) fn ret_type_word(t: Node) -> Option<String> {
+    if t.has_tag_name("primitive") {
+        match t.attribute("name")? {
+            "any" | "unknown" => return Some("Obj".into()),
+            "void" | "undefined" => return Some("Unit".into()),
+            _ => {}
+        }
+    }
+    type_word(t)
+}
+
 // Whether a reference is a base type: `<extends>`, or an argument of one.
 pub(super) fn is_base(n: Node) -> bool {
     n.ancestors().skip(1).any(|a| a.has_tag_name("extends"))

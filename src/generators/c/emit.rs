@@ -466,7 +466,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 && let Some((name, _)) = rest.split_once('(')
             {
                 let name = name.trim();
-                if !name.is_empty() && !name.contains("__") {
+                if !name.is_empty() && !name.starts_with("ts_arity_") {
                     all_names.push(name.to_string());
                 }
             }

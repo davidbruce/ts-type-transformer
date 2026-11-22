@@ -8,12 +8,12 @@
 #define TS_IMPORT_MOD(mod, name) __attribute__((import_module(mod), import_name(#name)))
 #define TS_IMPORT(name) TS_IMPORT_MOD("env", name)
 
-// `name__N`, by the number of arguments: how trailing optional arguments are left out.
+// `ts_arity_<name>_<N>`, by the number of arguments: how trailing optional arguments are left out.
 // An empty call counts as none: `orUnit()` (C23, or C11 without -pedantic).
 #define TS_COUNT(...) TS_COUNT_(0 __VA_OPT__(,) __VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 #define TS_COUNT_(z, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, n, ...) n
 #define TS_PASTE(name, n) TS_PASTE_(name, n)
-#define TS_PASTE_(name, n) name##__##n
+#define TS_PASTE_(name, n) ts_arity_##name##_##n
 #define TS_CALL(name, ...) TS_PASTE(name, TS_COUNT(__VA_ARGS__))(__VA_ARGS__)
 
 // Handles to JavaScript values. Zero is null.

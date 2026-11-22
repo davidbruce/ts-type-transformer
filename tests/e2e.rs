@@ -1620,7 +1620,8 @@ export declare function makeTable(): TableLike;
     let bindings_zig = zig_files.iter().find(|(p, _)| p == "bindings.zig").map(|(_, s)| s.as_str()).unwrap();
     assert!(areas_main.contains("pub fn getRowModel("), "missing getRowModel:\n{areas_main}");
     assert!(!areas_main.contains("getGetRowModel"), "unexpected getGetRowModel:\n{areas_main}");
-    assert!(areas_main.contains("pub fn getGet("), "property `get` should stay getGet:\n{areas_main}");
+    assert!(areas_main.contains("pub fn get("), "missing get:\n{areas_main}");
+    assert!(!areas_main.contains("getGet"), "unexpected getGet:\n{areas_main}");
     assert!(!bindings_zig.contains("pub const call"), "unexpected call* in bindings.zig:\n{bindings_zig}");
     write_files(&out, zig_files);
 
@@ -1665,8 +1666,8 @@ pub export fn run() void {
     expect(b.restAfterOpt(.{ .scale = 3, .xs = .{ 4, 5 } }) == 27, @src().line);
 
     const tbl = b.makeTable();
-    expect(tbl.getRowModel().call() == 42, @src().line);
-    expect(tbl.getGet().call() == 7, @src().line);
+    expect(tbl.getRowModel() == 42, @src().line);
+    expect(tbl.get() == 7, @src().line);
 
     expect(b.getApplyFn().call(21) == 42, @src().line);
 }
@@ -4579,6 +4580,298 @@ window.__result = {{ passed, failed, dom: [], domChecks: 3 }};
         #[test] #[ignore] fn zig() { super::run_gallery("zig"); }
         #[test] #[ignore] fn rust() { super::run_gallery("rust"); }
         #[test] #[ignore] fn gleam() { super::run_gallery("gleam"); }
+    }
+}
+
+mod naming_fixes {
+    use super::*;
+
+    fn write_dts(dir_name: &str, src: &str) -> PathBuf {
+        let out = root().join("target/e2e").join(dir_name);
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let dts = out.join("api.d.ts");
+        fs::write(&dts, src).unwrap();
+        dts
+    }
+
+    fn joined(files: &[(String, String)]) -> String {
+        files.iter().map(|(p, s)| format!("// === {p} ===\n{s}")).collect::<Vec<_>>().join("\n")
+    }
+
+    #[test]
+    fn overload_synth_enums_and_empty_arity() {
+        let dts = write_dts(
+            "naming-overloads",
+            r#"export interface EventMap { count: number; }
+export interface Evented {
+    off(type: string, fn?: () => void, context?: any): this;
+    off(type: "resize", fn?: () => void): this;
+    off(type: "click" | "dblclick", fn?: (n: number) => void, context?: any): this;
+    off(type: "layeradd" | "layerremove", fn?: (s: string) => void, context?: any): this;
+    off(eventMap: EventMap): this;
+    off(): this;
+}
+export declare function makeEvented(): Evented;
+export type BufferEncoding = "ascii" | "utf8" | "hex";
+export declare function readFileSync(path: string, opts: EventMap): string;
+export declare function readFileSync(path: string, opts: BufferEncoding): string;
+"#,
+        );
+        for target in ["c", "zig", "rust", "gleam"] {
+            let xml = lower(&dts, Some(target), &[]);
+            let code = match target {
+                "c" => joined(&generators::c::files(&model(&xml, "C")).unwrap()),
+                "zig" => joined(&generators::zig::files(&model(&xml, "Zig")).unwrap()),
+                "rust" => joined(&generators::rust::files(&model(&xml, "Rust")).unwrap()),
+                _ => joined(&generators::gleam::module(&xml).unwrap().files),
+            };
+            assert!(!code.contains("off_1") && !code.contains("off1"), "{target} hit numbered fallback:\n{code}");
+            assert!(!code.contains("add_event_listener") && !code.contains("addEventListener"), "{target} leaked synthetic enum name:\n{code}");
+            assert!(
+                code.contains("off_resize") || code.contains("offResize"),
+                "{target} missing fixed literal overload:\n{code}"
+            );
+            assert!(
+                code.contains("off_click") || code.contains("offClick"),
+                "{target} missing synthetic enum click shortcut:\n{code}"
+            );
+            assert!(
+                code.contains("off_layeradd") || code.contains("offLayeradd"),
+                "{target} missing synthetic enum layeradd shortcut:\n{code}"
+            );
+            assert!(
+                code.contains("off_all") || code.contains("offAll"),
+                "{target} missing empty-arity off_all:\n{code}"
+            );
+            assert!(
+                code.contains("readFileSync_with_BufferEncoding")
+                    || code.contains("readFileSyncWithBufferEncoding")
+                    || code.contains("read_file_sync_with_buffer_encoding"),
+                "{target} should preserve author-named BufferEncoding overload name:\n{code}"
+            );
+            assert!(
+                !code.contains("readFileSync_ascii")
+                    && !code.contains("readFileSyncAscii")
+                    && !code.contains("read_file_sync_ascii"),
+                "{target} leaked first literal from author-named BufferEncoding:\n{code}"
+            );
+        }
+    }
+
+    #[test]
+    fn fsharp_union_siblings_and_delegates() {
+        let dts = write_dts(
+            "naming-fsharp",
+            r#"export interface Abortable { signal?: boolean; }
+export interface ItemResult { ok: boolean; }
+export interface RowItem { id: string; }
+export type DefaultColumn =
+    | { accessorKey: string; header?: string; a?: number; b?: boolean; c?: string }
+    | { accessorFn: (row: any) => any; header?: string; a?: number; b?: boolean; c?: string }
+    | { columns: RowItem[]; header?: string; a?: number; b?: boolean; c?: string }
+    | { columns: RowItem[]; header?: (props: any) => string; a?: number; b?: boolean; c?: string }
+    | { header?: string; footer?: string; a?: number; b?: boolean; c?: string }
+    | { header?: string; a?: number; b?: boolean; c?: string }
+    | { a?: number; b?: boolean; c?: string; d?: number };
+
+export type Formatter2 =
+    | ((val: string) => string)
+    | (((val: number) => string) & { day: string; month?: string });
+
+export interface CbHolder { value: number; }
+export declare function pipeline(s: any, cb: (src: any, opts?: Abortable) => ItemResult): void;
+export declare function pipeline(s: any, cb: (src: any, opts?: Abortable) => Abortable): void;
+export declare function pipeline(s: any, cb: (src: any, opts?: Abortable) => any): void;
+export type Cb = (x: number) => number;
+"#,
+        );
+        let xml = lower(&dts, Some("fsharp"), &[]);
+        let fs_out = generators::fsharp::module(&xml).unwrap();
+        let all = joined(&fs_out.files);
+        for i in 1..=8 {
+            assert!(!all.contains(&format!("type DefaultColumn{i}")), "numbered DefaultColumn{i}:\n{all}");
+        }
+        assert!(all.contains("type DefaultColumnAccessorKey"), "missing DefaultColumnAccessorKey:\n{all}");
+        assert!(all.contains("type DefaultColumnAccessorFn"), "missing DefaultColumnAccessorFn:\n{all}");
+        assert!(all.contains("type DefaultColumnColumns"), "missing DefaultColumnColumns:\n{all}");
+        assert!(all.contains("type DefaultColumnHeader"), "missing DefaultColumnHeader:\n{all}");
+        assert!(all.contains("type DefaultColumnFooter"), "missing DefaultColumnFooter:\n{all}");
+        assert!(all.contains("type DefaultColumnHeaderString"), "missing DefaultColumnHeaderString:\n{all}");
+        assert!(all.contains("type DefaultColumnD"), "missing DefaultColumnD:\n{all}");
+
+        assert!(!all.contains("Formatter21") && !all.contains("Formatter22") && !all.contains("Formatter2_1"), "glued or numbered Formatter2:\n{all}");
+        assert!(all.contains("Formatter2WithDay"), "expected Formatter2WithDay:\n{all}");
+        assert!(!all.contains("JsFn1") && !all.contains("JsFn2") && !all.contains("JsFn3"), "unexpected JsFn counter fallback:\n{all}");
+        assert!(all.contains("ToObj"), "expected ToObj candidate for any return callback:\n{all}");
+    }
+
+    #[test]
+    fn bundled_dollar_disambiguation() {
+        let dts = write_dts(
+            "naming-bundled",
+            r#"interface ExtraStateOption { a?: number; }
+interface ExtraStateOption$1 { b?: string; }
+interface ExtraStateOption$2 { c?: boolean; }
+export interface BaseSeriesOption { state?: ExtraStateOption; }
+export interface TreemapSeriesOption { state?: ExtraStateOption$1; }
+export interface TreemapNodeOption { extra?: ExtraStateOption$1; }
+export interface SankeySeriesOption { state?: ExtraStateOption$2; }
+"#,
+        );
+        for target in ["c", "zig", "rust", "gleam", "fsharp"] {
+            let xml = lower(&dts, Some(target), &[]);
+            assert!(!xml.contains('$'), "{target} XML still contains `$`:\n{xml}");
+            assert!(xml.contains("TreemapExtraStateOption"), "{target} missing TreemapExtraStateOption:\n{xml}");
+            assert!(xml.contains("Sankey"), "{target} missing Sankey prefix disambiguation:\n{xml}");
+            assert!(!xml.contains("ExtraStateOption_2") && !xml.contains("ExtraStateOption2"), "{target} hit numeric collision suffix:\n{xml}");
+        }
+    }
+
+    #[test]
+    fn c_single_hop_arity_tuples_and_union_fields() {
+        let dts = write_dts(
+            "naming-c",
+            r#"export declare const UNIFORM_TYPES_VALUES: readonly [
+    string, string, string, string, string, string, string, string, string, string,
+    string, string, string, string, string, string, string, string, string, string, string
+];
+export declare function vec3(): readonly [number, number, number];
+export declare function mixedTuple(): readonly [
+    string, number, boolean, string, number, boolean, string, number
+];
+export declare function manyOpt(a: number, b?: number, c?: boolean, d?: string): number;
+export interface SeriesOption_levels_item_emphasis_focus_blurScope_extra { tag: number; }
+export interface SeriesOption_levels_item_emphasis_focus_holder {
+    blur?: "none" | SeriesOption_levels_item_emphasis_focus_blurScope_extra;
+}
+export interface Babylon_PbrLocalEnvironmentProbe_box { size: number; }
+export interface Babylon_PbrLocalEnvironmentProbe_sphere { radius: number; }
+export type Babylon_PbrLocalEnvironmentProbe =
+    | Babylon_PbrLocalEnvironmentProbe_box
+    | Babylon_PbrLocalEnvironmentProbe_sphere;
+export function makeProbe(): Babylon_PbrLocalEnvironmentProbe;
+"#,
+        );
+        let dir = dts.parent().unwrap();
+        let xml = lower(&dts, Some("c"), &[]);
+        let m = model(&xml, "C");
+        let files = generators::c::files(&m).unwrap();
+        let all = joined(&files);
+        let meta = files.iter().find(|(p, _)| p == "tsrs-meta.toml").map(|(_, s)| s.as_str()).unwrap();
+
+        assert!(all.contains("#define ts_arity_manyOpt_1(a1) (manyOpt)((a1), TS_OPT_DOUBLE(js_none_double()), TS_OPT_BOOL(js_none_bool()), TS_STR((const char*)0))"), "expected direct single-hop ts_arity_manyOpt_1:\n{all}");
+        assert!(all.contains("#define ts_arity_manyOpt_4("), "expected ts_arity_manyOpt_4:\n{all}");
+        assert!(!all.contains("manyOpt__"), "unexpected old __ arity macro:\n{all}");
+        assert!(!meta.contains("ts_arity_"), "ts_arity_ helper leaked into tsrs-meta.toml:\n{meta}");
+
+        assert!(all.contains("JsTuple21_JsString"), "expected compressed 21-string tuple:\n{all}");
+        assert!(!all.contains("JsTuple_JsString_JsString_JsString_JsString_JsString"), "uncompressed 21-string tuple:\n{all}");
+        assert!(all.contains("JsTuple_double_double_double"), "3-double tuple should remain readable:\n{all}");
+        assert!(all.contains("JsTuple8_JsString_double_"), "long mixed tuple should hash-cap:\n{all}");
+        assert!(all.contains("SeriesOption_levels_blurScope_extra;") && all.contains("_of_SeriesOption_levels_blurScope_extra("), "expected deduplicated union field:\n{all}");
+        assert!(all.contains("Babylon_PbrLocalEnvironmentProbe_of_box_arm(") && all.contains("Babylon_PbrLocalEnvironmentProbe_box_arm = "), "expected union enum tag not to collide with arm typedef:\n{all}");
+
+        if let Some([clang]) = tools(["clang"]) {
+            let bdir = dir.join("bindings");
+            write_files(&bdir, files);
+            fs::write(
+                dir.join("test.c"),
+                r#"#include "bindings.h"
+__attribute__((export_name("run"))) double run(void) {
+    return manyOpt(1.0) + manyOpt(1.0, 2.0, true, "hi");
+}
+"#,
+            )
+            .unwrap();
+            run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(&bdir).arg("-o").arg(dir.join("test.wasm")).arg(dir.join("test.c")));
+        }
+    }
+
+    #[test]
+    fn accessor_fn_props_and_deep_hoist() {
+        let dts = write_dts(
+            "naming-accessors",
+            r#"export interface Camera {
+    setFocalLength: (len: number) => void;
+    setMode: string;
+    setSelection?: (x: number) => void;
+    settings?: number;
+    deepVeryLongOuterConfigurationOptions: {
+        innerContainer: {
+            result: {
+                value: {
+                    finalLeafCallbackWithVeryLongName: (x: number) => void;
+                };
+            };
+        };
+    };
+}
+export interface Holder {
+    get: number;
+    getCamera: number;
+    emitGeneric: <T>(event: string, ctx?: T) => void;
+    options: (opt?: number) => void;
+    run(src: string, options?: number): void;
+}
+export declare function makeCamera(): Camera;
+export declare function makeHolder(): Holder;
+"#,
+        );
+        let c_gen_xml = lower(&dts, Some("c"), &[]);
+        let c_gen_all = joined(&generators::c::files(&model(&c_gen_xml, "C")).unwrap());
+        assert!(c_gen_all.contains("Holder_emitGeneric("), "expected callable emitGeneric in C:\n{c_gen_all}");
+        assert!(c_gen_all.contains("Holder_emitGeneric_cb;") && c_gen_all.contains("Holder_emitGeneric_cb_from(") && !c_gen_all.contains("Holder_emitGeneric_2;") && !c_gen_all.contains("Holder_emitGeneric_2_from("), "expected colliding C callback to use _cb instead of _2:\n{c_gen_all}");
+
+        let zig_xml = lower(&dts, Some("zig"), &[]);
+        let zig_all = joined(&generators::zig::files(&model(&zig_xml, "Zig")).unwrap());
+        assert!(zig_all.contains("pub fn emitGeneric("), "expected callable emitGeneric in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn options(") && zig_all.contains("pub fn run(self: Holder, src_: anytype, opts_: anytype)"), "expected no options parameter shadowing in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn setFocalLength(self: Camera, len_: f64)"), "missing direct setFocalLength in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn setFocalLengthFn("), "missing setFocalLengthFn in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn assignSetMode("), "missing assignSetMode in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn setSelectionFn("), "missing setSelectionFn in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn setSettings("), "settings should keep setSettings in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn get(self: Holder) f64"), "Holder.get should stay `get` in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn getCamera(self: Holder) f64"), "Holder.getCamera should stay `getCamera` in Zig:\n{zig_all}");
+        assert!(!zig_all.contains("getGet"), "unexpected getGet in Zig:\n{zig_all}");
+        assert!(!zig_all.contains("setSetFocal") && !zig_all.contains("setSetMode") && !zig_all.contains("setSetSelection"), "unexpected setSet in Zig:\n{zig_all}");
+
+        let gleam_xml = lower(&dts, Some("gleam"), &[]);
+        let gleam_all = joined(&generators::gleam::module(&gleam_xml).unwrap().files);
+        assert!(gleam_all.contains("pub fn set_focal_length("), "missing direct set_focal_length in Gleam:\n{gleam_all}");
+        assert!(gleam_all.contains("pub fn set_focal_length_fn("), "missing set_focal_length_fn in Gleam:\n{gleam_all}");
+        assert!(gleam_all.contains("pub fn assign_set_mode("), "missing assign_set_mode in Gleam:\n{gleam_all}");
+        assert!(gleam_all.contains("pub fn with_set_mode("), "missing with_set_mode in Gleam:\n{gleam_all}");
+        assert!(gleam_all.contains("pub fn with_set_selection("), "missing with_set_selection in Gleam:\n{gleam_all}");
+        assert!(gleam_all.contains("pub fn get(self: Holder"), "Holder.get should stay `get` in Gleam:\n{gleam_all}");
+        assert!(gleam_all.contains("pub fn get_camera(self: Holder"), "Holder.getCamera should stay `get_camera` in Gleam:\n{gleam_all}");
+        assert!(!gleam_all.contains("get_get"), "unexpected get_get in Gleam:\n{gleam_all}");
+        assert!(!gleam_all.contains("set_set_"), "unexpected set_set_ in Gleam:\n{gleam_all}");
+
+        let rust_xml = lower(&dts, Some("rust"), &[]);
+        let rust_all = joined(&generators::rust::files(&model(&rust_xml, "Rust")).unwrap());
+        assert!(rust_all.contains("pub fn set_focal_length(&self"), "missing direct set_focal_length in Rust:\n{rust_all}");
+        assert!(rust_all.contains("pub fn set_focal_length_fn(&self"), "missing set_focal_length_fn in Rust:\n{rust_all}");
+        assert!(rust_all.contains("pub fn assign_set_mode(&self"), "missing assign_set_mode in Rust:\n{rust_all}");
+        assert!(rust_all.contains("pub fn with_set_mode(self"), "missing with_set_mode in Rust:\n{rust_all}");
+        assert!(rust_all.contains("pub fn with_set_selection(self"), "missing with_set_selection in Rust:\n{rust_all}");
+        assert!(!rust_all.contains("set_set_"), "unexpected set_set_ in Rust:\n{rust_all}");
+
+        // Verify deep synthetic hoist compaction (drops middle result/value + trims wrapper suffixes)
+        // and no panic on 45..=47 char synthetic names.
+        assert!(!zig_xml.contains("_result_value_finalLeaf"), "expected middle result/value dropped in deep hoist:\n{zig_xml}");
+        let long_dts = write_dts(
+            "naming-long46",
+            r#"export interface A2345678901234567890123456789012345678 {
+    x: { a: number };
+    y: { b: string };
+}
+export declare function useLong(): A2345678901234567890123456789012345678;
+"#,
+        );
+        let c_xml = lower(&long_dts, Some("c"), &[]);
+        assert!(!c_xml.is_empty());
     }
 }
 

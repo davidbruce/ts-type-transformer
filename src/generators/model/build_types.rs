@@ -9,7 +9,129 @@ use super::super::{attr, elements, flag, named, only_child};
 
 pub(super) type Sig = (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty);
 
+fn setter_name(raw_name: &str, is_fn_prop: bool) -> String {
+    let id = ident(raw_name);
+    if crate::generators::case::starts_with_word(raw_name, "set") {
+        if is_fn_prop {
+            if id == "set" { "set_fn".into() } else { format!("{id}_fn") }
+        } else {
+            format!("assign_{id}")
+        }
+    } else {
+        format!("set_{id}")
+    }
+}
+
 impl<'a> Builder<'a> {
+    fn push_callable(
+        &mut self,
+        c: &mut Class,
+        owner: &str,
+        raw_name: &str,
+        name: String,
+        call: Call,
+        sig: Sig,
+        returns_this: bool,
+    ) {
+        let (mut params, rest, fixed, mut ret) = sig;
+        let import = self.import(format!("{owner}_{name}"));
+        let mut type_params = std::mem::take(&mut self.last_type_params);
+        // A method's type parameter may not reuse its class's name in C++: it is renamed.
+        for tp in type_params.iter_mut().filter(|tp| c.type_params.iter().any(|ctp| ctp.name == tp.name)) {
+            let renamed = format!("{}_{}", tp.name, raw_name);
+            params.iter_mut().for_each(|p| rename_param(&mut p.1, &tp.name, &renamed));
+            rename_param(&mut ret, &tp.name, &renamed);
+            for x in tp.default.iter_mut().chain(tp.constraint.iter_mut()) {
+                rename_param(x, &tp.name, &renamed);
+            }
+            tp.name = renamed;
+        }
+        c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this });
+    }
+
+    fn resolve_fn_prop(
+        &mut self,
+        ty_node: Node<'a, 'a>,
+        owner: &str,
+        depth: usize,
+    ) -> Option<(Node<'a, 'a>, String, Vec<(Vec<TParam>, Vec<Ty>)>, bool)> {
+        if depth > 8 {
+            return None;
+        }
+        let no_this = |f: Node| !named(f, "thisParameter").any(|_| true);
+        match ty_node.tag_name().name() {
+            "functionType" if no_this(ty_node) => Some((ty_node, owner.to_string(), Vec::new(), true)),
+            "ref" => {
+                let key = self.ref_key(ty_node);
+                let decl = *self.decls.get(&key)?;
+                if !flag(decl, "synthetic") {
+                    return None;
+                }
+                if !self.generics && named(decl, "typeParameter").next().is_some() {
+                    return None;
+                }
+                if decl.has_tag_name("typeAlias") {
+                    if self.resolving.contains(&key) {
+                        return None;
+                    }
+                    let body = self.alias_body(decl);
+                    let sig_kind = if body.has_tag_name("functionType") && no_this(body) {
+                        Some(body)
+                    } else if body.has_tag_name("object") {
+                        let members: Vec<Node> = elements(body).collect();
+                        if members.len() == 1 && members[0].has_tag_name("call") && no_this(members[0]) {
+                            Some(members[0])
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    if sig_kind.is_none() && !body.has_tag_name("ref") {
+                        return None;
+                    }
+                    let tparams: Vec<TParam> = named(decl, "typeParameter").map(|p| self.tparam(p)).collect();
+                    let targs: Vec<Ty> = elements(ty_node).map(|a| self.ty(a, owner)).collect();
+                    if self.bad.is_some() {
+                        return None;
+                    }
+                    if let Some(sig_node) = sig_kind {
+                        return Some((sig_node, owner.to_string(), vec![(tparams, targs)], false));
+                    }
+                    self.resolving.push(key);
+                    let res = self.resolve_fn_prop(body, owner, depth + 1);
+                    self.resolving.pop();
+                    res.map(|(sig, sig_owner, mut layers, _)| {
+                        for (_, inner_args) in &mut layers {
+                            for arg in inner_args.iter_mut() {
+                                *arg = super::ops::subst(arg, &tparams, &targs);
+                            }
+                        }
+                        layers.push((tparams, targs));
+                        (sig, sig_owner, layers, false)
+                    })
+                } else if decl.has_tag_name("interface") {
+                    let members: Vec<Node> = elements(decl)
+                        .filter(|c| !c.has_tag_name("typeParameter"))
+                        .collect();
+                    if members.len() != 1 || !members[0].has_tag_name("call") || !no_this(members[0]) {
+                        return None;
+                    }
+                    let tparams: Vec<TParam> = named(decl, "typeParameter").map(|p| self.tparam(p)).collect();
+                    let targs: Vec<Ty> = elements(ty_node).map(|a| self.ty(a, owner)).collect();
+                    if self.bad.is_some() {
+                        return None;
+                    }
+                    let sig_owner = self.type_ident(&key);
+                    Some((members[0], sig_owner, vec![(tparams, targs)], false))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     // Whether a type is a function that knows no `this` of its own: one
     // written so, an alias of one, or a type of only call signatures.
     fn function_value(&self, t: Node) -> bool {
@@ -247,24 +369,11 @@ impl<'a> Builder<'a> {
                 c.funcs.push(Func { type_params, module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret, returns_this: false });
             }
             "method" => {
-                let (params, rest, fixed, ret) = self.signature(m, &owner);
+                let sig = self.signature(m, &owner);
                 let returns_this = !is_static && named(m, "returns").next().is_some_and(|r| only_child(r).has_tag_name("this"));
                 let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js) };
                 let name = unique(ident(raw_name), names);
-                let import = self.import(format!("{owner}_{name}"));
-                let mut type_params = std::mem::take(&mut self.last_type_params);
-                let (mut params, mut ret) = (params, ret);
-                // A method's type parameter may not reuse its class's name in C++: it is renamed.
-                for tp in type_params.iter_mut().filter(|tp| c.type_params.iter().any(|ctp| ctp.name == tp.name)) {
-                    let renamed = format!("{}_{}", tp.name, raw_name);
-                    params.iter_mut().for_each(|p| rename_param(&mut p.1, &tp.name, &renamed));
-                    rename_param(&mut ret, &tp.name, &renamed);
-                    for x in tp.default.iter_mut().chain(tp.constraint.iter_mut()) {
-                        rename_param(x, &tp.name, &renamed);
-                    }
-                    tp.name = renamed;
-                }
-                c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this });
+                self.push_callable(c, &owner, raw_name, name, call, sig, returns_this);
             }
             // A constant needs no call across the boundary.
             "property" if m.has_attribute("const") => {
@@ -276,24 +385,94 @@ impl<'a> Builder<'a> {
                 }
             }
             "property" => {
-                let mut t = value(self.ty(only_child(m), &owner));
-                if flag(m, "optional") {
-                    t = absent(t, true);
+                let mut bound_fn_prop = false;
+                if !flag(m, "optional")
+                    && let Some((sig_node, sig_owner, layers, inline)) = self.resolve_fn_prop(only_child(m), &owner, 0)
+                {
+                    let saved_erased = self.erased.clone();
+                    if !self.generics {
+                        for p in named(sig_node, "typeParameter") {
+                            let is_keyof = elements(p)
+                                .find(|c| c.has_tag_name("constraint"))
+                                .map(only_child)
+                                .is_some_and(|k| k.has_tag_name("keyof"));
+                            if !is_keyof {
+                                self.erased.insert(attr(p, "name").to_string());
+                            }
+                        }
+                    }
+                    let (mut params, rest, fixed, mut ret) = self.signature(sig_node, &sig_owner);
+                    self.erased = saved_erased;
+                    if self.bad.is_none() {
+                        for (tparams, targs) in layers {
+                            let active: Vec<(TParam, Ty)> = tparams
+                                .into_iter()
+                                .enumerate()
+                                .filter(|(_, tp)| !self.last_type_params.iter().any(|ip| ip.name == tp.name))
+                                .map(|(i, tp)| {
+                                    let arg = targs.get(i).cloned().or_else(|| tp.default.clone()).unwrap_or(Ty::Any);
+                                    (tp, arg)
+                                })
+                                .collect();
+                            if !active.is_empty() {
+                                let active_params: Vec<TParam> = active.iter().map(|(p, _)| p.clone()).collect();
+                                let active_args: Vec<Ty> = active.into_iter().map(|(_, a)| a).collect();
+                                for (_, pt) in &mut params {
+                                    *pt = super::ops::subst(pt, &active_params, &active_args);
+                                }
+                                ret = super::ops::subst(&ret, &active_params, &active_args);
+                                for tp in &mut self.last_type_params {
+                                    tp.default = tp.default.as_ref().map(|d| super::ops::subst(d, &active_params, &active_args));
+                                    tp.constraint = tp.constraint.as_ref().map(|d| super::ops::subst(d, &active_params, &active_args));
+                                }
+                            }
+                        }
+                        let returns_this = inline && !is_static && named(sig_node, "returns").next().is_some_and(|r| only_child(r).has_tag_name("this"));
+                        let call = if is_static { Call::Static(format!("{path}.{js}")) } else { Call::Method(js.clone()) };
+                        let fn_name = unique(ident(raw_name), names);
+                        self.push_callable(c, &owner, raw_name, fn_name, call, (params, rest, fixed, ret), returns_this);
+                        if !flag(m, "readonly") || allow_readonly_set {
+                            let prop_ty = value(self.ty(only_child(m), &owner));
+                            if self.bad.is_none() {
+                                let set = if is_static { Call::StaticSet(format!("{path}.{js}")) } else { Call::Set(js.clone()) };
+                                let set_name = unique(setter_name(raw_name, true), names);
+                                let import = self.import(format!("{owner}_{set_name}"));
+                                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: set_name, call: set, params: vec![("value".into(), prop_ty)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                            } else {
+                                self.bad = None;
+                            }
+                        }
+                        bound_fn_prop = true;
+                    } else {
+                        c.funcs.truncate(before);
+                        self.bad = None;
+                        self.last_type_params.clear();
+                    }
+                } else if self.bad.is_some() {
+                    c.funcs.truncate(before);
+                    self.bad = None;
                 }
-                let (get, set) = if is_static {
-                    (Call::StaticGet(format!("{path}.{js}")), Call::StaticSet(format!("{path}.{js}")))
-                } else if self.function_value(only_child(m)) {
-                    (Call::GetBound(js.clone()), Call::Set(js))
-                } else {
-                    (Call::Get(js.clone()), Call::Set(js))
-                };
-                let name = unique(format!("get_{}", ident(raw_name)), names);
-                let import = self.import(format!("{owner}_{name}"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone(), returns_this: false });
-                if !flag(m, "readonly") || allow_readonly_set {
-                    let name = unique(format!("set_{}", ident(raw_name)), names);
+                if !bound_fn_prop {
+                    let mut t = value(self.ty(only_child(m), &owner));
+                    if flag(m, "optional") {
+                        t = absent(t, true);
+                    }
+                    let is_fn_prop = self.function_value(only_child(m));
+                    let (get, set) = if is_static {
+                        (Call::StaticGet(format!("{path}.{js}")), Call::StaticSet(format!("{path}.{js}")))
+                    } else if is_fn_prop {
+                        (Call::GetBound(js.clone()), Call::Set(js))
+                    } else {
+                        (Call::Get(js.clone()), Call::Set(js))
+                    };
+                    let name = unique(format!("get_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
-                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone(), returns_this: false });
+                    if !flag(m, "readonly") || allow_readonly_set {
+                        let name = unique(setter_name(raw_name, is_fn_prop), names);
+                        let import = self.import(format!("{owner}_{name}"));
+                        c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                    }
                 }
             }
             _ => self.unsupported(m),

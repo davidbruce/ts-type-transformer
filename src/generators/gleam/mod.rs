@@ -202,6 +202,12 @@ pub(super) fn relative(from: &str, to: &str) -> String {
 pub(super) fn function_name(f: &Func, name: &str) -> String {
     let dollar = super::case::has_dollar_js_name(&f.call);
     if !dollar {
+        if matches!(&f.call, Call::Get(_) | Call::GetBound(_) | Call::StaticGet(_))
+            && let Some(rest) = name.strip_prefix("get_")
+            && super::case::starts_with_word(rest, "get")
+        {
+            return rest.to_string();
+        }
         return name.to_string();
     }
     let is_prop = matches!(&f.call, Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::StaticGet(_) | Call::StaticSet(_));

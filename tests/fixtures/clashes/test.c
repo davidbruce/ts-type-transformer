@@ -5,11 +5,10 @@ TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
 __attribute__((export_name("run"))) void run(void) {
-    // The method keeps its name; the static property's hoisted type gives way.
+    // The static and instance members keep distinct C names.
     Gizmo g = Gizmo_new();
-    CHECK(Gizmo_isTransforming(g));
-    Gizmo_isTransforming_2 f = Gizmo_get_isTransforming();
-    CHECK(f.h != 0);
+    CHECK(!Gizmo_isTransforming());
+    CHECK(Gizmo_isTransforming_2(g));
     CHECK(Gizmo_fooBar(g) == 1 && Gizmo_foo_bar(g) == 2);
 
     // The method `Shape_area` keeps its name; the function of that name gives way.
@@ -20,7 +19,7 @@ __attribute__((export_name("run"))) void run(void) {
     Point p = point(4);
     CHECK(Point_get_x(p) == 4);
     CHECK(Point_get_x(Point_create()) != 4);
-    CHECK(Point_get_create(p).h != 0);
+    CHECK(Point_get_x(Point_create_2(p, 5)) == 5);
 
     // A class keeps its name; a namespace's class that flattens to it gives way.
     CHECK(ns_Node_id(ns_Node_new()) == 2);

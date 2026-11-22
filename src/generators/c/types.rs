@@ -21,7 +21,7 @@ pub(super) fn typed(t: &Ty, param: bool, cx: &Ctx) -> String {
         Ty::Any => "JsValue".into(),
         Ty::Array => "JsArray".into(),
         Ty::ArrayOf(e) => format!("JsArray_{}", element(e, cx)),
-        Ty::Tuple(es) => format!("JsTuple_{}", es.iter().map(|e| element(e, cx)).collect::<Vec<_>>().join("_")),
+        Ty::Tuple(es) => tuple_name(es, cx),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         // An optional number or flag says whether it is there; an optional enum is `E_absent` when it is not.
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_)) => "JsOptionalDouble".into(),
@@ -58,8 +58,27 @@ pub(super) fn arrays(t: &Ty, out: &mut Vec<Ty>) {
     }
 }
 
+fn tuple_name(es: &[Ty], cx: &Ctx) -> String {
+    let elems: Vec<String> = es.iter().map(|e| element(e, cx)).collect();
+    if elems.len() >= 5 && elems.iter().all(|e| e == &elems[0]) {
+        return format!("JsTuple{}_{}", elems.len(), elems[0]);
+    }
+    let joined = elems.join("_");
+    if elems.len() > 3 && joined.len() > 40 {
+        let full = format!("JsTuple_{joined}");
+        return format!(
+            "JsTuple{}_{}_{}_{:04x}",
+            elems.len(),
+            elems[0],
+            elems.last().unwrap(),
+            (crate::fnv1a64(&full) & 0xffff) as u16
+        );
+    }
+    format!("JsTuple_{joined}")
+}
+
 // A union's member name: `number`, `string`, `Element`, `array`.
-pub(in super::super) fn union_field(t: &Ty) -> String {
+fn union_field(t: &Ty) -> String {
     match t {
         Ty::Num => "number".into(),
         Ty::Str => "string".into(),
@@ -68,6 +87,52 @@ pub(in super::super) fn union_field(t: &Ty) -> String {
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
         t => panic!("{T} generator: a union member it cannot hold: {t:?}"),
     }
+}
+
+pub(in super::super) fn union_fields(u: &NamedUnion) -> Vec<String> {
+    let raws: Vec<String> = u.parts.iter().map(union_field).collect();
+    let union_words: std::collections::HashSet<String> = crate::generators::names::words(&u.name)
+        .into_iter()
+        .map(|w| w.to_lowercase())
+        .collect();
+    let mut out: Vec<String> = raws
+        .iter()
+        .map(|raw| {
+            if u.name.len() + raw.len() <= 64 || !raw.contains('_') {
+                return raw.clone();
+            }
+            let kept: Vec<&str> = raw
+                .split('_')
+                .filter(|seg| !seg.is_empty())
+                .filter(|seg| {
+                    let ws = crate::generators::names::words(seg);
+                    ws.is_empty() || !ws.iter().all(|w| union_words.contains(&w.to_lowercase()))
+                })
+                .collect();
+            let mut cand = kept.join("_");
+            if !cand.is_empty() {
+                while raws.iter().any(|r| *r == format!("{}_{cand}", u.name)) {
+                    cand.push_str("_arm");
+                }
+            }
+            let valid = !cand.is_empty()
+                && cand.as_bytes()[0].is_ascii_alphabetic()
+                && cand.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                && !super::KEYWORDS.contains(&cand.as_str())
+                && !matches!(cand.as_str(), "ts_cstr" | "cstr");
+            if valid { cand } else { raw.clone() }
+        })
+        .collect();
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for f in &out {
+        *counts.entry(f.clone()).or_default() += 1;
+    }
+    for (i, f) in out.iter_mut().enumerate() {
+        if counts.get(f).copied().unwrap_or(0) > 1 {
+            *f = raws[i].clone();
+        }
+    }
+    out
 }
 
 // A union: a struct with a tag and its members, tag constants, and
@@ -79,11 +144,17 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     let n = &u.name;
     let has_str = u.parts.contains(&Ty::Str);
     let has_num = u.parts.contains(&Ty::Num);
-    let mut fields: Vec<String> = u.parts.iter().map(|p| format!("{} {};", if *p == Ty::Str { "JsString".to_string() } else { typed(p, false, cx) }, union_field(p))).collect();
+    let field_names = union_fields(u);
+    let mut fields: Vec<String> = u
+        .parts
+        .iter()
+        .zip(&field_names)
+        .map(|(p, f)| format!("{} {f};", if *p == Ty::Str { "JsString".to_string() } else { typed(p, false, cx) }))
+        .collect();
     if has_str {
         fields.push("const char* ts_cstr;".into());
     }
-    let tags: Vec<String> = u.parts.iter().enumerate().map(|(i, p)| format!("{n}_{} = {i}", union_field(p))).collect();
+    let tags: Vec<String> = field_names.iter().enumerate().map(|(i, f)| format!("{n}_{f} = {i}")).collect();
     let decl = format!(
         "// {n}: `tag` says which member it holds; -1 is none.\ntypedef struct {{ int32_t tag; union {{ {} }} as; }} {n};\nenum {{ {} }};\n",
         fields.join(" "),
@@ -94,15 +165,13 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     let mut to: String = u
         .parts
         .iter()
+        .zip(&field_names)
         .enumerate()
-        .map(|(i, p)| {
-            let f = union_field(p);
-            match p {
-                Ty::Num => format!(" case {i}: return ts_raw_js_from_number(u.as.{f});"),
-                Ty::Bool => format!(" case {i}: return ts_raw_js_from_bool(u.as.{f});"),
-                Ty::Enum(e) => format!(" case {i}: return {enum_value_fn}({}, u.as.{f});", enum_id(e)),
-                _ => format!(" case {i}: ts_raw_js_retain(u.as.{f}.h); return u.as.{f}.h;"),
-            }
+        .map(|(i, (p, f))| match p {
+            Ty::Num => format!(" case {i}: return ts_raw_js_from_number(u.as.{f});"),
+            Ty::Bool => format!(" case {i}: return ts_raw_js_from_bool(u.as.{f});"),
+            Ty::Enum(e) => format!(" case {i}: return {enum_value_fn}({}, u.as.{f});", enum_id(e)),
+            _ => format!(" case {i}: ts_raw_js_retain(u.as.{f}.h); return u.as.{f}.h;"),
         })
         .collect();
     if has_str {
@@ -111,24 +180,23 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     let from: String = u
         .parts
         .iter()
+        .zip(&field_names)
         .enumerate()
-        .map(|(i, p)| {
-            let f = union_field(p);
-            match p {
-                Ty::Num => format!(" case {i}: u.as.{f} = ts_raw_js_to_number(h); ts_raw_js_release(h); break;"),
-                Ty::Bool => format!(" case {i}: u.as.{f} = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); break;"),
-                Ty::Str => format!(" case {i}: u.as.{f} = (JsString){{ h }}; break;"),
-                Ty::Enum(e) => format!(" case {i}: u.as.{f} = ({e}){enum_index_fn}({}, h); ts_raw_js_release(h); break;", enum_id(e)),
-                p => format!(" case {i}: u.as.{f} = ({}){{ h }}; break;", typed(p, false, cx)),
-            }
+        .map(|(i, (p, f))| match p {
+            Ty::Num => format!(" case {i}: u.as.{f} = ts_raw_js_to_number(h); ts_raw_js_release(h); break;"),
+            Ty::Bool => format!(" case {i}: u.as.{f} = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); break;"),
+            Ty::Str => format!(" case {i}: u.as.{f} = (JsString){{ h }}; break;"),
+            Ty::Enum(e) => format!(" case {i}: u.as.{f} = ({e}){enum_index_fn}({}, h); ts_raw_js_release(h); break;", enum_id(e)),
+            p => format!(" case {i}: u.as.{f} = ({}){{ h }}; break;", typed(p, false, cx)),
         })
         .collect();
     let release: String = u
         .parts
         .iter()
+        .zip(&field_names)
         .enumerate()
-        .filter(|(_, p)| !matches!(p, Ty::Num | Ty::Bool | Ty::Enum(_) | Ty::NumEnum(_)))
-        .map(|(i, p)| format!(" case {i}: ts_raw_js_release(u.as.{}.h); break;", union_field(p)))
+        .filter(|(_, (p, _))| !matches!(p, Ty::Num | Ty::Bool | Ty::Enum(_) | Ty::NumEnum(_)))
+        .map(|(i, (_, f))| format!(" case {i}: ts_raw_js_release(u.as.{f}.h); break;"))
         .collect();
     let tag_attr = import_attr(wasm_module, &format!("{n}_tag"));
     let tag_raw = raw_fn(raw_prefix, &format!("{n}_tag"));
@@ -140,8 +208,7 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     );
     // Made from a member: `Value_of_number(42)`, or by its type, `Value_of(widget)`.
     let field_type = |p: &Ty| if *p == Ty::Str { "JsString".to_string() } else { typed(p, false, cx) };
-    for p in &u.parts {
-        let f = union_field(p);
+    for (p, f) in u.parts.iter().zip(&field_names) {
         functions += &format!("static inline {n} {n}_of_{f}({} v) {{ return ({n}){{ .tag = {n}_{f}, .as.{f} = v }}; }}\n", field_type(p));
     }
     if has_str {
@@ -151,7 +218,8 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     let choices: Option<Vec<String>> = u
         .parts
         .iter()
-        .map(|p| {
+        .zip(&field_names)
+        .map(|(p, f)| {
             if *p == Ty::Str {
                 let pairs = [("JsString", "string"), ("const char*", "cstr"), ("char*", "cstr")];
                 pairs
@@ -160,7 +228,7 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
                     .then(|| pairs.iter().map(|(t, suffix)| format!("{t}: {n}_of_{suffix}")).collect::<Vec<_>>().join(", "))
             } else {
                 let types = generic_types(p, has_num, cx)?;
-                types.iter().all(|t| seen.insert(t.clone())).then(|| types.iter().map(|t| format!("{t}: {n}_of_{}", union_field(p))).collect::<Vec<_>>().join(", "))
+                types.iter().all(|t| seen.insert(t.clone())).then(|| types.iter().map(|t| format!("{t}: {n}_of_{f}")).collect::<Vec<_>>().join(", "))
             }
         })
         .collect();
@@ -456,6 +524,22 @@ pub(super) fn call_macros(
         },
         _ => None,
     };
+    let chosen = family.as_ref().map(|f| f.0);
+    let wrap_expr = |p_idx: usize, t: &Ty, expr: String| -> String {
+        if chosen == Some(p_idx) {
+            format!("({expr})")
+        } else if let Some(n) = upcast(t) {
+            format!("{}({expr})", as_macro(&n))
+        } else if *t == Ty::Str || matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
+            format!("TS_STR({expr})")
+        } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_))) {
+            format!("TS_OPT_DOUBLE({expr})")
+        } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Bool) {
+            format!("TS_OPT_BOOL({expr})")
+        } else {
+            format!("({expr})")
+        }
+    };
     let mut params = Vec::new();
     let mut args = Vec::new();
     let mut any = false;
@@ -465,27 +549,14 @@ pub(super) fn call_macros(
         any |= upcast_self;
         args.push(if upcast_self { format!("{}(self)", as_macro(o)) } else { "(self)".into() });
     }
-    let chosen = family.as_ref().map(|f| f.0);
     for (i, (_, t)) in f.params.iter().enumerate() {
         let a = format!("a{}", i + 1);
         params.push(a.clone());
-        if chosen == Some(i) {
-            args.push(format!("({a})"));
-        } else if let Some(n) = upcast(t) {
-            any = true;
-            args.push(format!("{}({a})", as_macro(&n)));
-        } else if *t == Ty::Str || matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
-            any = true;
-            args.push(format!("TS_STR({a})"));
-        } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_))) {
-            any = true;
-            args.push(format!("TS_OPT_DOUBLE({a})"));
-        } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Bool) {
-            any = true;
-            args.push(format!("TS_OPT_BOOL({a})"));
-        } else {
-            args.push(format!("({a})"));
-        }
+        any |= chosen != Some(i)
+            && (upcast(t).is_some()
+                || *t == Ty::Str
+                || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Str | Ty::Num | Ty::NumEnum(_) | Ty::Bool)));
+        args.push(wrap_expr(i, t, a));
     }
     let mut prefix = String::new();
     let callee = match &family {
@@ -562,17 +633,29 @@ pub(super) fn call_macros(
     if shorter.is_empty() {
         return forward.map(|call| format!("{prefix}#define {name}({}) {call}\n", params.join(", "))).unwrap_or_default();
     }
-    // By the number of arguments: each shorter call adds what is absent and
-    // makes the next longer one. All of them is the function, upcast or chosen.
+    // By the number of arguments: each shorter call supplies every omitted
+    // trailing parameter directly in a single hop.
     let mut out = format!("{prefix}#define {name}(...) TS_CALL({name}, __VA_ARGS__)\n");
-    out += &match forward {
-        Some(call) => format!("#define {name}__{n}({}) {call}\n", params.join(", ")),
-        None => format!("#define {name}__{n} ({name})\n"),
+    out += &match &forward {
+        Some(call) => format!("#define ts_arity_{name}_{n}({}) {call}\n", params.join(", ")),
+        None => format!("#define ts_arity_{name}_{n} ({name})\n"),
     };
+    let head = if forward.is_some() { callee.as_str() } else { "" };
     for given in shorter {
-        let mut next: Vec<String> = params[..given].to_vec();
-        next.push(param_absent(f, given - own).unwrap());
-        out += &format!("#define {name}__{given}({}) {name}__{}({})\n", params[..given].join(", "), given + 1, next.join(", "));
+        let mut call_args: Vec<String> = (0..given)
+            .map(|j| if forward.is_some() { args[j].clone() } else { params[j].clone() })
+            .collect();
+        for j in given..n {
+            let p_idx = j - own;
+            let abs = param_absent(f, p_idx).unwrap();
+            call_args.push(if forward.is_some() {
+                wrap_expr(p_idx, &f.params[p_idx].1, abs)
+            } else {
+                abs
+            });
+        }
+        let target = if forward.is_some() { head.to_string() } else { format!("({name})") };
+        out += &format!("#define ts_arity_{name}_{given}({}) {target}({})\n", params[..given].join(", "), call_args.join(", "));
     }
     out
 }

@@ -112,7 +112,13 @@ pub(super) fn expand_functions(decls: &mut Vec<Decl>, o: Options) {
 // values: `createEvent_MouseEvent`. The first one without is the plain name;
 // each other one by the least that tells it apart: the parameters it adds
 // (`f_with_options`), else the one type that differs (`f_with_Blob`), else a number.
-fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, o: Options) -> Vec<String> {
+fn overload_names(
+    base: &str,
+    sigs: &[&Signature],
+    taken: &mut HashSet<String>,
+    o: Options,
+    synth_enums: &std::collections::HashMap<String, String>,
+) -> Vec<String> {
     let sep = o.separator;
     let constants = |s: &Signature| -> Vec<String> { s.params.iter().filter_map(|p| p.constant.as_deref()).map(name_part).collect() };
     // Overloads with the same fixed values are named as a family of their own,
@@ -129,7 +135,7 @@ fn overload_names(base: &str, sigs: &[&Signature], taken: &mut HashSet<String>, 
     for (fixed, members) in families {
         let family_base = if fixed.is_empty() || o.numbered_overloads { base.to_string() } else { format!("{base}{sep}{}", fixed.join(sep)) };
         let family: Vec<&Signature> = members.iter().map(|&i| sigs[i]).collect();
-        let names = family_names(&family_base, &family, fixed.is_empty(), taken, o);
+        let names = family_names(&family_base, &family, fixed.is_empty(), taken, o, synth_enums);
         for (i, name) in members.into_iter().zip(names) {
             out[i] = name;
         }
@@ -228,16 +234,34 @@ fn signature_marks(s: &Signature) -> Vec<String> {
     out.into_iter().map(|w| name_part(&w)).filter(|w| seen.insert(w.clone())).collect()
 }
 
+fn synth_enum_lit<'a>(t: &Type, synth_enums: &'a std::collections::HashMap<String, String>) -> Option<&'a str> {
+    let Type::Ref(r) = t else { return None };
+    if r.kind != "enum" {
+        return None;
+    }
+    synth_enums
+        .get(&r.name)
+        .or_else(|| r.name.rsplit('.').next().and_then(|short| synth_enums.get(short)))
+        .map(String::as_str)
+}
+
 // Names for overloads that share their fixed values. The one with no marks
 // of its own (the first, without marks) takes `base`, the others are named
 // for theirs, `merge_Dictionary`, else as `family_names_from` names them.
-fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut HashSet<String>, o: Options) -> Vec<String> {
+fn family_names(
+    base: &str,
+    sigs: &[&Signature],
+    base_taken: bool,
+    taken: &mut HashSet<String>,
+    o: Options,
+    synth_enums: &std::collections::HashMap<String, String>,
+) -> Vec<String> {
     let own = crate::generators::own_marks(&sigs.iter().map(|s| s.marks.clone()).collect::<Vec<_>>());
     let plain = own.iter().position(Vec::is_empty).unwrap_or(0);
     let order: Vec<usize> = std::iter::once(plain).chain((0..sigs.len()).filter(|&i| i != plain)).collect();
     let ordered: Vec<&Signature> = order.iter().map(|&i| sigs[i]).collect();
     let ordered_own: Vec<Vec<String>> = order.iter().map(|&i| own[i].clone()).collect();
-    let names = family_names_from(base, &ordered, &ordered_own, base_taken, taken, o);
+    let names = family_names_from(base, &ordered, &ordered_own, base_taken, taken, o, synth_enums);
     let mut out = vec![String::new(); sigs.len()];
     for (k, i) in order.into_iter().enumerate() {
         out[i] = names[k].clone();
@@ -247,7 +271,15 @@ fn family_names(base: &str, sigs: &[&Signature], base_taken: bool, taken: &mut H
 
 // Names for overloads that share their fixed values. The first takes `base`;
 // `base_taken` says whether it is already the member's own name.
-fn family_names_from(base: &str, sigs: &[&Signature], own: &[Vec<String>], base_taken: bool, taken: &mut HashSet<String>, o: Options) -> Vec<String> {
+fn family_names_from(
+    base: &str,
+    sigs: &[&Signature],
+    own: &[Vec<String>],
+    base_taken: bool,
+    taken: &mut HashSet<String>,
+    o: Options,
+    synth_enums: &std::collections::HashMap<String, String>,
+) -> Vec<String> {
     let sep = o.separator;
     let first = sigs[0];
     let mut out = Vec::new();
@@ -270,7 +302,23 @@ fn family_names_from(base: &str, sigs: &[&Signature], own: &[Vec<String>], base_
         // it adds, the others by the types that vary among them.
         let group: Vec<&Signature> = sigs.iter().copied().filter(|t| names(t) == names(s)).collect();
         let varying_at: Vec<usize> = (0..s.params.len()).filter(|&i| group.iter().any(|t| type_key(&t.params[i].ty) != type_key(&s.params[i].ty))).collect();
-        let varying: Vec<String> = varying_at.iter().map(|&i| param_mnemonic(s, &s.params[i].ty)).collect();
+        if let Some(direct) = varying_at.iter().find_map(|&i| {
+            let lit = synth_enum_lit(&s.params[i].ty, synth_enums)?;
+            let count = group
+                .iter()
+                .filter(|t| synth_enum_lit(&t.params[i].ty, synth_enums) == Some(lit))
+                .count();
+            if count == 1 {
+                let direct = format!("{base}{sep}{lit}");
+                (!taken.contains(&direct) && direct.len() <= NAME_MAX).then_some(direct)
+            } else {
+                None
+            }
+        }) {
+            out.push(unique(direct, taken));
+            continue;
+        }
+        let varying: Vec<String> = varying_at.iter().map(|&i| param_mnemonic(s, &s.params[i].ty, synth_enums)).collect();
         let leads = std::ptr::eq(group[0], *s);
         // Parameters the plain overload does not have. When they only extend
         // it (`f(a)`, `f(a, b, c)`), the last one says it: `f_with_c`.
@@ -292,14 +340,14 @@ fn family_names_from(base: &str, sigs: &[&Signature], own: &[Vec<String>], base_
             .filter(|(i, p)| first.params.get(*i).is_none_or(|q| type_key(&q.ty) != type_key(&p.ty)))
             .map(|(i, p)| match first.params.get(i) {
                 Some(q) if unwrapped(&q.ty) == unwrapped(&p.ty) => p.name.clone(),
-                _ => param_mnemonic(s, &p.ty),
+                _ => param_mnemonic(s, &p.ty, synth_enums),
             })
             .collect();
         // Named by the first type that sets it apart, plus what it adds:
         // `addEventListener_with_string_and_options`.
         let first_name = varying_at.first().map(|&i| s.params[i].name.clone());
         let first_varying: Vec<String> = varying.first().cloned().into_iter().chain(added.iter().filter(|a| Some(*a) != first_name.as_ref()).cloned()).collect();
-        let candidates = [
+        let mut candidates: Vec<Option<String>> = vec![
             (leads && !added.is_empty()).then(|| with(added.clone())),
             (!leads && !varying.is_empty()).then(|| with(first_varying.clone())),
             (!leads && !varying.is_empty()).then(|| with(varying.clone())),
@@ -311,6 +359,16 @@ fn family_names_from(base: &str, sigs: &[&Signature], own: &[Vec<String>], base_
             added.first().map(|a| with(vec![a.clone()])),
             varying.first().map(|v| with(vec![v.clone()])),
         ];
+        if s.params.len() < first.params.len() {
+            if s.params.is_empty() {
+                candidates.push(Some(format!("{base}{sep}all")));
+                candidates.push(Some(format!("{base}{sep}none")));
+            } else {
+                let mnemonics: Vec<String> = s.params.iter().map(|p| param_mnemonic(s, &p.ty, synth_enums)).collect();
+                candidates.push(Some(with(names(s))));
+                candidates.push(Some(with(mnemonics)));
+            }
+        }
         let free: Vec<String> = candidates.into_iter().flatten().filter(|c| !taken.contains(c)).collect();
         let name = free.iter().find(|c| c.len() <= NAME_MAX).or(free.first()).cloned().unwrap_or_else(|| format!("{base}{sep}{}", n + 1));
         out.push(unique(name, taken));
@@ -327,7 +385,10 @@ pub(super) fn name_part(value: &str) -> String {
 }
 
 // A parameter's type in a name; a key of a map is named by its map.
-fn param_mnemonic(s: &Signature, t: &Type) -> String {
+fn param_mnemonic(s: &Signature, t: &Type, synth_enums: &std::collections::HashMap<String, String>) -> String {
+    if let Some(lit) = synth_enum_lit(t, synth_enums) {
+        return lit.to_string();
+    }
     if let Type::Ref(r) = t
         && r.kind == "typeParameter"
         && let Some(map) = s.type_params.iter().find(|p| p.sym.is_some() && p.sym == r.sym).and_then(keyed_map)
@@ -362,7 +423,7 @@ pub(super) fn describe(t: &Type) -> Option<String> {
     })
 }
 
-pub(super) fn rename_members(members: &mut [Member], o: Options) {
+pub(super) fn rename_members(members: &mut [Member], o: Options, synth_enums: &std::collections::HashMap<String, String>) {
     let mut taken: HashSet<String> = members.iter().map(|m| m.name.clone()).collect();
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
     for (i, m) in members.iter().enumerate() {
@@ -379,7 +440,7 @@ pub(super) fn rename_members(members: &mut [Member], o: Options) {
     for (_, idx) in groups.into_iter().filter(|g| g.1.len() > 1) {
         let base = members[idx[0]].name.clone();
         let sigs: Vec<&Signature> = idx.iter().map(|i| members[*i].sig.as_ref().unwrap()).collect();
-        let names = overload_names(&base, &sigs, &mut taken, o);
+        let names = overload_names(&base, &sigs, &mut taken, o, synth_enums);
         for (i, name) in idx.into_iter().zip(names) {
             if name != base {
                 members[i].js_name = Some(base.clone());
@@ -390,7 +451,7 @@ pub(super) fn rename_members(members: &mut [Member], o: Options) {
 }
 
 // Gives each renamed overload's (old, new) name.
-pub(super) fn rename_functions(decls: &mut [Decl], o: Options) -> Vec<(String, String)> {
+pub(super) fn rename_functions(decls: &mut [Decl], o: Options, synth_enums: &std::collections::HashMap<String, String>) -> Vec<(String, String)> {
     let mut renamed = Vec::new();
     let mut taken: HashSet<String> = HashSet::new();
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
@@ -403,13 +464,13 @@ pub(super) fn rename_functions(decls: &mut [Decl], o: Options) -> Vec<(String, S
                     None => groups.push((f.name.clone(), vec![i])),
                 }
             }
-            Decl::Namespace(n) => renamed.extend(rename_functions(&mut n.decls, o)),
+            Decl::Namespace(n) => renamed.extend(rename_functions(&mut n.decls, o, synth_enums)),
             _ => {}
         }
     }
     for (base, idx) in groups.into_iter().filter(|g| g.1.len() > 1) {
         let sigs: Vec<&Signature> = idx.iter().map(|i| if let Decl::Function(f) = &decls[*i] { &f.sig } else { unreachable!() }).collect();
-        let names = overload_names(&base, &sigs, &mut taken, o);
+        let names = overload_names(&base, &sigs, &mut taken, o, synth_enums);
         for (i, name) in idx.into_iter().zip(names) {
             if let Decl::Function(f) = &mut decls[i]
                 && name != base

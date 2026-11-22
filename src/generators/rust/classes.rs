@@ -17,17 +17,21 @@ fn valid_with_param(t: &Ty) -> bool {
 }
 
 fn setter_for_with<'a>(k: &'a Class, method: &str, names: &HashMap<&str, HashMap<String, String>>) -> Option<(&'a Func, String)> {
-    let stem = method.strip_prefix("set_")?;
-    if stem.is_empty() {
-        return None;
-    }
     let k_names = &names[k.name.as_str()];
     let matching: Vec<&Func> = k.funcs.iter().filter(|f| Class::has_self(f) && k_names[&f.name] == method).collect();
     if matching.len() != 1 {
         return None;
     }
     let f0 = matching[0];
-    if !matches!(f0.call, Call::Set(_))
+    let Call::Set(js) = &f0.call else {
+        return None;
+    };
+    let stem = if !super::super::case::has_dollar_js_name(&f0.call) && super::super::case::starts_with_word(js, "set") {
+        snake(js)
+    } else {
+        method.strip_prefix("set_").or_else(|| method.strip_prefix("assign_"))?.to_string()
+    };
+    if stem.is_empty()
         || f0.params.len() != 1
         || !f0.type_params.is_empty()
         || f0.ret != Ty::Void

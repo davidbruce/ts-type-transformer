@@ -18,7 +18,7 @@ pub extern "C" fn run() {
     // The static property and the method are both `is_transforming`: the method gives way.
     let g = Gizmo::new();
     check!(g.is_transforming_2());
-    let _f: GizmoIsTransforming = Gizmo::is_transforming();
+    check!(!Gizmo::is_transforming());
     // `fooBar` and `foo_bar` are one `foo_bar`.
     check!(g.foo_bar() == 1.0 && g.foo_bar_2() == 2.0);
 
@@ -28,7 +28,7 @@ pub extern "C" fn run() {
     // The property `create` gives way to the option bag's constructor.
     let p = point(4.0);
     check!(p.x() == 4.0);
-    let _c: PointCreate = p.create_2();
+    check!(p.create_2(5.0).x() == 5.0);
     let _empty: Point = Point::create();
 
     // The class `ns_Node`, and the namespace's `Node` in a module of its own.

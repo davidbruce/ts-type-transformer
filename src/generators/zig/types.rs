@@ -266,6 +266,7 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
     // A lone parameter stays one: `orUnit(s)`, `orUnit(null)`.
     let optional = if optional == f.params.len() && optional == 1 { 0 } else { optional };
     let first_optional = f.params.len() - optional;
+    let opts_param = if f.params.iter().any(|(n, _)| param(n) == "opts_") { "ts_opts_" } else { "opts_" };
     let mut allowed = Vec::new();
     let mut unpack = String::new();
     let mut pre = String::new();
@@ -285,7 +286,7 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
             if optional == 1 {
                 let inner_ty = typed(inner, true);
                 let inner_ty = if key.is_empty() { inner_ty } else { inner_ty.replace("KEY", &key) };
-                let unwrap = format!("Lent.singleOpt({inner_ty}, {name:?}, options)");
+                let unwrap = format!("Lent.singleOpt({inner_ty}, {name:?}, {opts_param})");
                 if is_lent_ty(&effective_t) {
                     pre += &format!("const lent_{id} = {}; defer lent_{id}.done(); ", lent_expr(&unwrap, &effective_t, &key));
                 } else if *inner == Ty::Str {
@@ -301,8 +302,8 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
                 }
             } else {
                 allowed.push(format!("{name:?}"));
-                let field_expr = format!("@field(options, {name:?})");
-                let cond = format!("comptime Lent.hasOpt(@TypeOf(options), {name:?})");
+                let field_expr = format!("@field({opts_param}, {name:?})");
+                let cond = format!("comptime Lent.hasOpt(@TypeOf({opts_param}), {name:?})");
                 if is_lent_ty(&effective_t) {
                     pre += &format!("const lent_{id}: Lent = if ({cond}) {} else Lent.none; defer lent_{id}.done(); ", lent_expr(&field_expr, &effective_t, &key));
                 } else if *inner == Ty::Str {
@@ -348,10 +349,10 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         }
     }
     if optional > 1 {
-        unpack = format!("Lent.checkOpts(options, &.{{ {} }}); {unpack}", allowed.join(", "));
+        unpack = format!("Lent.checkOpts({opts_param}, &.{{ {} }}); {unpack}", allowed.join(", "));
     }
     if optional > 0 {
-        params.push("options: anytype".to_string());
+        params.push(format!("{opts_param}: anytype"));
     }
     // A shared import takes the index of this function's fixed arguments after `self`.
     let import = match &f.shared {

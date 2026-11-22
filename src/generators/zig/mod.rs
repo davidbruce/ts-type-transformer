@@ -162,8 +162,7 @@ fn method_name(name: &str) -> String {
 pub(super) fn zig_func_name(name: &str, f: &Func) -> String {
     if matches!(f.call, Call::Get(_) | Call::GetBound(_) | Call::StaticGet(_))
         && let Some(rest) = name.strip_prefix("get_")
-        && rest.starts_with("get")
-        && rest.as_bytes().get(3).is_some_and(u8::is_ascii_uppercase)
+        && super::case::starts_with_word(rest, "get")
     {
         return method_name(rest);
     }

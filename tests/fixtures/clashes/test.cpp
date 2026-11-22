@@ -7,8 +7,7 @@ extern "C" TS_IMPORT(check) void check(int ok, int line);
 extern "C" __attribute__((export_name("run"))) void run() {
     Gizmo g = Gizmo::create();
     CHECK(g.isTransforming());
-    Gizmo_isTransforming f = Gizmo::isTransforming_static();
-    CHECK(f.h != 0);
+    CHECK(!Gizmo::isTransforming_static());
     CHECK(g.fooBar() == 1 && g.foo_bar() == 2);
 
     Shape s = shape();
@@ -17,7 +16,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // The property `create` keeps its name; the option bag's constructor is `make`.
     Point p = point(4);
     CHECK(p.x() == 4);
-    CHECK(p.create().h != 0);
+    CHECK(p.create(5).x() == 5);
     CHECK(Point::make().h != 0);
 
     CHECK(ns_Node::create().id() == 2);

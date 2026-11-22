@@ -12,6 +12,7 @@ mod unions;
 mod walk;
 
 pub use generics::keyed_map;
+pub(crate) use generics::{SYNTH_NAME_MAX, trim_wrapper_suffixes};
 pub use names::{pascal_types, rename, rename_everywhere};
 pub use walk::visit;
 
@@ -200,9 +201,11 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         name_unions(decls, o.separator);
     }
     if o.overloads {
-        each_member_list(decls, &mut |members| rename_members(members, o));
+        let mut synth_enums = HashMap::new();
+        collect_synth_enum_firsts(decls, "", o.separator, &mut synth_enums);
+        each_member_list(decls, &mut |members| rename_members(members, o, &synth_enums));
         // A renamed overload is of its package (leaflet's `circle_with_radius`).
-        for (old, new) in rename_functions(decls, o) {
+        for (old, new) in rename_functions(decls, o, &synth_enums) {
             if let Some(p) = front.package_of_name.get(&old).cloned() {
                 front.package_of_name.insert(new.clone(), p);
             }
@@ -333,24 +336,195 @@ fn prune_bundled(decls: &mut Vec<Decl>) {
         .filter(|n| n.contains('$'))
         .cloned()
         .collect();
-    let strip = |n: &str| -> String {
-        let mut out = n.to_string();
-        for b in &bundled {
-            out = out.replace(b.as_str(), b.split('$').next().unwrap_or(b));
+    let referrers = collect_bundled_referrers(decls, &bundled);
+    let mut bundled_map: HashMap<String, String> = HashMap::new();
+    let mut renames: Vec<(String, String)> = Vec::new();
+    for b in &bundled {
+        let bare = b.split('$').next().unwrap_or(b);
+        let candidate = if !bare.contains('$') && !taken.contains(bare) {
+            Some(bare.to_string())
+        } else {
+            referrers
+                .get(b)
+                .and_then(|refs| disambiguate_bundled(refs, bare, &taken))
+        };
+        if let Some(new) = candidate
+            && new != *b
+            && !new.contains('$')
+            && taken.insert(new.clone())
+        {
+            bundled_map.insert(b.clone(), new.clone());
+            renames.push((b.clone(), new));
         }
-        out
-    };
+    }
+    let mut replacements: Vec<(&str, &str)> = bundled_map.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    // Replace longer bundled names first so `Foo$1` cannot partially match `Foo$10`.
+    replacements.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(b.0)));
     let mut names: Vec<String> = Vec::new();
     collect_names(decls, &mut names);
-    let mut renames = Vec::new();
-    for n in names.into_iter().filter(|n| n.contains('$')) {
-        let new = strip(&n);
-        if new != n && !new.contains('$') && !taken.contains(&new) {
-            taken.insert(new.clone());
+    for n in names.into_iter().filter(|n| n.contains('$') && !bundled_map.contains_key(n)) {
+        let mut new = n.clone();
+        for (old_b, new_b) in &replacements {
+            new = new.replace(*old_b, *new_b);
+        }
+        if new != n && !new.contains('$') && taken.insert(new.clone()) {
             renames.push((n, new));
         }
     }
     rename_everywhere(decls, &renames);
+}
+
+fn collect_synth_enum_firsts(decls: &[Decl], prefix: &str, sep: &str, out: &mut HashMap<String, String>) {
+    for d in decls {
+        match d {
+            Decl::Enum(e)
+                if e.synthetic
+                    && !sep.is_empty()
+                    && e.name.contains(sep)
+                    && !e.members.is_empty()
+                    && e.members.iter().all(|m| m.kind == "string") =>
+            {
+                let first = overloads::name_part(&e.members[0].value);
+                out.insert(e.name.clone(), first.clone());
+                if !prefix.is_empty() {
+                    out.insert(format!("{prefix}.{}", e.name), first);
+                }
+            }
+            Decl::Namespace(ns) => {
+                let next = if prefix.is_empty() { ns.name.clone() } else { format!("{prefix}.{}", ns.name) };
+                collect_synth_enum_firsts(&ns.decls, &next, sep, out);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_bundled_referrers(decls: &mut [Decl], bundled: &[String]) -> HashMap<String, Vec<String>> {
+    fn index_decls(decls: &[Decl], ns: &mut HashSet<String>, synth: &mut HashSet<String>) {
+        for d in decls {
+            match d {
+                Decl::Namespace(n) => {
+                    ns.insert(n.name.clone());
+                    index_decls(&n.decls, ns, synth);
+                }
+                Decl::Interface(i) if i.synthetic => {
+                    synth.insert(i.name.clone());
+                }
+                Decl::Alias(a) if a.synthetic => {
+                    synth.insert(a.name.clone());
+                }
+                _ => {}
+            }
+        }
+    }
+    if bundled.is_empty() {
+        return HashMap::new();
+    }
+    let bundled_set: HashSet<&str> = bundled.iter().map(String::as_str).collect();
+    let (mut ns_names, mut synth_names) = (HashSet::new(), HashSet::new());
+    index_decls(decls, &mut ns_names, &mut synth_names);
+
+    let mut non_synth: HashMap<String, Vec<String>> = HashMap::new();
+    let mut fallback: HashMap<String, Vec<String>> = HashMap::new();
+    walk(decls, &mut |t, path| {
+        if let Type::Ref(r) = t {
+            let short = r.name.rsplit('.').next().unwrap_or(&r.name);
+            let key = bundled_set.get(r.name.as_str()).or_else(|| bundled_set.get(short)).copied();
+            if let Some(target) = key {
+                let enclosing = path
+                    .iter()
+                    .find(|p| !ns_names.contains(p.as_str()))
+                    .or_else(|| path.first())
+                    .map(String::as_str)
+                    .unwrap_or_default();
+                if !enclosing.is_empty() && enclosing != target && !enclosing.contains('$') {
+                    let fb = fallback.entry(target.to_string()).or_default();
+                    if !fb.iter().any(|x| x == enclosing) {
+                        fb.push(enclosing.to_string());
+                    }
+                    if !synth_names.contains(enclosing) {
+                        let ns = non_synth.entry(target.to_string()).or_default();
+                        if !ns.iter().any(|x| x == enclosing) {
+                            ns.push(enclosing.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        true
+    });
+    bundled
+        .iter()
+        .filter_map(|b| {
+            let refs = non_synth
+                .remove(b)
+                .filter(|v| !v.is_empty())
+                .or_else(|| fallback.remove(b));
+            refs.map(|v| (b.clone(), v))
+        })
+        .collect()
+}
+
+fn upper_first(w: &str) -> String {
+    let mut cs = w.chars();
+    cs.next()
+        .map(|c| c.to_uppercase().collect::<String>() + cs.as_str())
+        .unwrap_or_default()
+}
+
+fn disambiguate_bundled(referrers: &[String], bare: &str, taken: &HashSet<String>) -> Option<String> {
+    use crate::generators::names::{stem, words};
+
+    let bare_stems: HashSet<String> = words(bare).into_iter().map(|w| stem(&w)).collect();
+    let word_vecs: Vec<Vec<String>> = referrers
+        .iter()
+        .map(|r| words(r))
+        .filter(|w| !w.is_empty())
+        .collect();
+    if word_vecs.is_empty() {
+        return None;
+    }
+    let mut common_len = 0;
+    while common_len < word_vecs[0].len()
+        && word_vecs[1..].iter().all(|wv| {
+            wv.get(common_len)
+                .is_some_and(|w| w.eq_ignore_ascii_case(&word_vecs[0][common_len]))
+        })
+    {
+        common_len += 1;
+    }
+
+    let make_cand = |prefix: String| -> Option<String> {
+        if prefix.is_empty() {
+            return None;
+        }
+        let cand = format!("{prefix}{}", upper_first(bare));
+        (!taken.contains(&cand)).then_some(cand)
+    };
+
+    if common_len > 0 {
+        let deduped: String = word_vecs[0][..common_len]
+            .iter()
+            .filter(|w| !bare_stems.contains(&stem(w)))
+            .map(|w| upper_first(w))
+            .collect();
+        if let Some(c) = make_cand(deduped) {
+            return Some(c);
+        }
+        let raw_common: String = word_vecs[0][..common_len].iter().map(|w| upper_first(w)).collect();
+        if let Some(c) = make_cand(raw_common) {
+            return Some(c);
+        }
+    }
+
+    // Fallback when referrers start with different leading words: try the first referrer's
+    // first distinct leading word(s).
+    let first_words: Vec<String> = word_vecs[0]
+        .iter()
+        .filter(|w| !bare_stems.contains(&stem(w)))
+        .map(|w| upper_first(w))
+        .collect();
+    (1..=first_words.len().min(2)).find_map(|k| make_cand(first_words[..k].concat()))
 }
 
 fn collect_names(decls: &[Decl], out: &mut Vec<String>) {
