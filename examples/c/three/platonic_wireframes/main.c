@@ -19,12 +19,8 @@ static double g_azimuth = 0.35;
 
 static void add_solid(Three_BufferGeometry geo, uint32_t hex, double rough, double metal, bool flat,
                       double x, double y, double z, double thresh, Three_LineBasicMaterial line_mat) {
-    Three_MeshStandardMaterialParameters mp = Three_MeshStandardMaterialParameters_create();
-    Three_MeshStandardMaterialParameters_set_color(mp, Three_ColorRepresentation_of(hex));
-    Three_MeshStandardMaterialParameters_set_roughness(mp, rough);
-    Three_MeshStandardMaterialParameters_set_metalness(mp, metal);
-    Three_MeshStandardMaterialParameters_set_flatShading(mp, flat);
-    Three_MeshStandardMaterial mat = Three_MeshStandardMaterial_new(mp);
+    Three_MeshStandardMaterial mat = Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
+        .color = Three_ColorRepresentation_of(hex), .roughness = rough, .metalness = metal, .flatShading = flat));
 
     Three_Mesh mesh = Three_Mesh_new(geo, mat);
     Three_Vector3_set(Three_Mesh_get_position(mesh), x, y, z);
@@ -41,7 +37,7 @@ static void add_solid(Three_BufferGeometry geo, uint32_t hex, double rough, doub
 }
 
 static void update_view(void) {
-    js_scope_open();
+    js_scope();
     double r = 8.6;
     Three_Vector3_set(Three_PerspectiveCamera_get_position(g_camera), r * sin(g_azimuth), 3.6, r * cos(g_azimuth));
     Three_PerspectiveCamera_lookAt(g_camera, Three_Vector3_new(0.0, 0.0, 0.0));
@@ -58,7 +54,6 @@ static void update_view(void) {
         g_wire_visible ? "on" : "off", deg
     );
     HTMLElement_set_textContent(g_meta, meta_buf);
-    js_scope_close();
 }
 
 static const int BTN_TAGS[4] = { 0, 1, 2, 3 };
@@ -73,14 +68,11 @@ static void on_btn(void* ctx, PointerEvent ev) {
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     double width = 680.0, height = 400.0;
 
-    Three_WebGLRendererParameters rp = Three_WebGLRendererParameters_create();
-    Three_WebGLRendererParameters_set_antialias(rp, true);
-    Three_WebGLRendererParameters_set_preserveDrawingBuffer(rp, true);
-    g_renderer = Three_WebGLRenderer_new(rp);
+    g_renderer = Three_WebGLRenderer_new(Three_WebGLRendererParameters_create(.antialias = true, .preserveDrawingBuffer = true));
     js_retain(g_renderer);
     Three_WebGLRenderer_setPixelRatio(g_renderer, 1.0);
     Three_WebGLRenderer_setSize(g_renderer, width, height);
@@ -90,19 +82,19 @@ __attribute__((export_name("start"))) void start(void) {
 
     g_scene = Three_Scene_new();
     js_retain(g_scene);
-    Three_Scene_set_background(g_scene, Three_Color_or_Texture_of(Three_Color_new(Three_ColorRepresentation_of(0xf7f7f7))));
+    Three_Scene_set_background(g_scene, Three_Color_new(0xf7f7f7));
     g_camera = Three_PerspectiveCamera_new(42.0, width / height, 0.1, 100.0);
     js_retain(g_camera);
 
-    add_obj(g_scene, Three_AmbientLight_new(Three_ColorRepresentation_of(0xffffff), 1.2));
-    Three_DirectionalLight key = Three_DirectionalLight_new(Three_ColorRepresentation_of(0xffffff), 2.2);
+    add_obj(g_scene, Three_AmbientLight_new(0xffffff, 1.2));
+    Three_DirectionalLight key = Three_DirectionalLight_new(0xffffff, 2.2);
     Three_Vector3_set(Three_DirectionalLight_get_position(key), 6.0, 10.0, 8.0);
     add_obj(g_scene, key);
-    Three_DirectionalLight rim = Three_DirectionalLight_new(Three_ColorRepresentation_of(0xffffff), 0.9);
+    Three_DirectionalLight rim = Three_DirectionalLight_new(0xffffff, 0.9);
     Three_Vector3_set(Three_DirectionalLight_get_position(rim), -7.0, 5.0, -6.0);
     add_obj(g_scene, rim);
 
-    Three_GridHelper grid = Three_GridHelper_new(12.0, 12.0, Three_ColorRepresentation_of(0x737373), Three_ColorRepresentation_of(0xd4d4d4));
+    Three_GridHelper grid = Three_GridHelper_new(12.0, 12.0, 0x737373, 0xd4d4d4);
     Three_Vector3_set_y(Three_GridHelper_get_position(grid), -1.2);
     add_obj(g_scene, grid);
 
@@ -110,9 +102,8 @@ __attribute__((export_name("start"))) void start(void) {
     js_retain(g_wire_group);
     add_obj(g_scene, g_wire_group);
 
-    Three_LineBasicMaterialParameters lmp = Three_LineBasicMaterialParameters_create();
-    Three_LineBasicMaterialParameters_set_color(lmp, Three_ColorRepresentation_of(0x111111));
-    Three_LineBasicMaterial line_mat = Three_LineBasicMaterial_new(lmp);
+    Three_LineBasicMaterial line_mat = Three_LineBasicMaterial_new(Three_LineBasicMaterialParameters_create(
+        .color = Three_ColorRepresentation_of(0x111111)));
 
     add_solid(AS_Three_BufferGeometry(Three_BoxGeometry_new(1.45, 1.45, 1.45)),
               0x262626, 0.65, 0.1, false, -3.2, 0.0, -0.6, 1.0, line_mat);
@@ -136,5 +127,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(b, HTMLElement_PointerEvent_fn_from(on_btn, (void*)&BTN_TAGS[i]));
     }
     update_view();
-    js_scope_close();
 }

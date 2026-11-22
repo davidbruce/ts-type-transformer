@@ -9,11 +9,8 @@ static Pixi_Rectangle mk_rect(double x, double y, double w, double h) {
 }
 
 static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
-    Pixi_StrokeStyle ss = Pixi_StrokeStyle_create();
-    Pixi_StrokeStyle_set_width(ss, width);
-    Pixi_StrokeStyle_set_color(ss, js_number(color_hex));
     JsArray args = JsArray_new();
-    js_push_val(args, ss);
+    js_push_val(args, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
     Pixi_Graphics_stroke(g, args);
 }
 
@@ -21,7 +18,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx;
     (void)v;
     if (!ok) return;
-    js_scope_open();
+    js_scope();
 
     Document doc = get_document();
     HTMLElement stage_el = Document_getElementById(doc, "stage");
@@ -56,14 +53,14 @@ static void on_init(void* ctx, bool ok, JsValue v) {
         Pixi_Graphics_rect(g, Pixi_Rectangle_get_x(c), Pixi_Rectangle_get_y(c), Pixi_Rectangle_get_width(c), Pixi_Rectangle_get_height(c));
         if (Pixi_Rectangle_containsRect(query, c)) {
             contained++;
-            Pixi_Graphics_fill(g, js_number((double)0x111111));
+            Pixi_Graphics_fill(g, 0x111111);
         } else if (Pixi_Rectangle_intersects(query, c)) {
             intersecting++;
-            Pixi_Graphics_fill(g, js_number((double)0x737373));
+            Pixi_Graphics_fill(g, 0x737373);
             stroke_g(g, 2.0, (double)0x111111);
         } else {
             disjoint++;
-            Pixi_Graphics_fill(g, js_number((double)0xe5e5e5));
+            Pixi_Graphics_fill(g, 0xe5e5e5);
             stroke_g(g, 1.0, (double)0xa3a3a3);
         }
     }
@@ -88,21 +85,15 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     HTMLElement meta = Document_getElementById(doc, "meta");
     if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     g_app = Pixi_Application_new();
     js_retain(g_app);
-    Pixi_Application_init_options opts = Pixi_Application_init_options_create();
-    Pixi_Application_init_options_set_width(opts, 680.0);
-    Pixi_Application_init_options_set_height(opts, 400.0);
-    Pixi_Application_init_options_set_backgroundColor(opts, js_number((double)0xffffff));
-    Pixi_Application_init_options_set_preference(opts, Pixi_string_or_RendererPreference_array_of("webgl"));
-    Pixi_Application_init_options_set_preserveDrawingBuffer(opts, true);
-    Pixi_Application_init_options_set_antialias(opts, true);
-    Pixi_Application_init_options_set_autoStart(opts, false);
+    Pixi_Application_init_options opts = Pixi_Application_init_options_create(
+        .width = 680.0, .height = 400.0, .backgroundColor = Pixi_ColorSource_of(0xffffff),
+        .preference = Pixi_string_or_RendererPreference_array_of("webgl"),
+        .preserveDrawingBuffer = true, .antialias = true, .autoStart = false);
     Promise_then(Pixi_Application_init(g_app, opts), on_init, 0);
-    js_scope_close();
 }

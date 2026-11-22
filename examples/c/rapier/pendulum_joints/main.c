@@ -10,10 +10,6 @@ static const double TWO_PI = 6.28318530717958647692;
 static double to_cx(double wx) { return 340.0 + wx * 46.0; }
 static double to_cy(double wy) { return 350.0 - wy * 46.0; }
 
-static string_or_CanvasGradient_or_CanvasPattern C(const char* hex) {
-    return string_or_CanvasGradient_or_CanvasPattern_of(hex);
-}
-
 static CanvasRenderingContext2D g_ctx;
 static HTMLElement g_meta;
 static HTMLElement g_pause_btn;
@@ -29,7 +25,7 @@ static int g_step_count = 0;
 static bool g_paused = false;
 
 static void draw_rot_box(double cx, double cy, double qx, double qy, double qz, double qw, double hx, double hy,
-                         string_or_CanvasGradient_or_CanvasPattern fill) {
+                         const char* fill) {
     double r00 = 1.0 - 2.0 * (qy * qy + qz * qz);
     double r01 = 2.0 * (qx * qy - qw * qz);
     double r10 = 2.0 * (qx * qy + qw * qz);
@@ -55,7 +51,7 @@ static void draw_rot_box(double cx, double cy, double qx, double qy, double qz, 
     CanvasRenderingContext2D_closePath(g_ctx);
     CanvasRenderingContext2D_fill(g_ctx);
 
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#111111"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#111111");
     CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.5);
     CanvasRenderingContext2D_beginPath(g_ctx);
     CanvasRenderingContext2D_moveTo(g_ctx, xs[0], ys[0]);
@@ -66,11 +62,11 @@ static void draw_rot_box(double cx, double cy, double qx, double qy, double qz, 
 
 static void draw_pivot(double wx, double wy) {
     double cx = to_cx(wx), cy = to_cy(wy);
-    CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#ffffff"));
+    CanvasRenderingContext2D_set_fillStyle(g_ctx, "#ffffff");
     CanvasRenderingContext2D_beginPath(g_ctx);
     CanvasRenderingContext2D_arc(g_ctx, cx, cy, 4.0, 0.0, TWO_PI);
     CanvasRenderingContext2D_fill(g_ctx);
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#111111"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#111111");
     CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.6);
     CanvasRenderingContext2D_beginPath(g_ctx);
     CanvasRenderingContext2D_arc(g_ctx, cx, cy, 4.0, 0.0, TWO_PI);
@@ -78,7 +74,7 @@ static void draw_pivot(double wx, double wy) {
 }
 
 static void build_scene(void) {
-    js_scope_open();
+    js_scope();
     for (int i = 0; i < 3; i++) {
         if (g_chain[i].h != 0) {
             js_release(g_chain[i]);
@@ -125,11 +121,10 @@ static void build_scene(void) {
 
     g_step_count = 0;
     g_trail_count = 0;
-    js_scope_close();
 }
 
 static void step_sim(void) {
-    js_scope_open();
+    js_scope();
     Rapier_World_step(g_world);
     g_step_count++;
     Rapier_Vector pa = Rapier_RigidBody_translation(g_chain[2]);
@@ -138,15 +133,14 @@ static void step_sim(void) {
     g_ax[idx] = Rapier_Vector_get_x(pa); g_ay[idx] = Rapier_Vector_get_y(pa);
     g_bx[idx] = Rapier_Vector_get_x(pb); g_by[idx] = Rapier_Vector_get_y(pb);
     if (g_trail_count < TRAIL_LEN) g_trail_count++;
-    js_scope_close();
 }
 
 static void render(void) {
-    js_scope_open();
-    CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#ffffff"));
+    js_scope();
+    CanvasRenderingContext2D_set_fillStyle(g_ctx, "#ffffff");
     CanvasRenderingContext2D_fillRect(g_ctx, 0.0, 0.0, 680.0, 400.0);
 
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#efefef"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#efefef");
     CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.0);
     for (int gx = -6; gx <= 6; gx++) {
         double x = to_cx((double)gx);
@@ -163,9 +157,9 @@ static void render(void) {
         CanvasRenderingContext2D_stroke(g_ctx);
     }
 
-    draw_rot_box(0.0, 6.2, 0.0, 0.0, 0.0, 1.0, 6.0, 0.22, C("#efefef"));
+    draw_rot_box(0.0, 6.2, 0.0, 0.0, 0.0, 1.0, 6.0, 0.22, "#efefef");
 
-    CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#b5b5b5"));
+    CanvasRenderingContext2D_set_fillStyle(g_ctx, "#b5b5b5");
     for (int i = 0; i < g_trail_count; i++) {
         CanvasRenderingContext2D_beginPath(g_ctx);
         CanvasRenderingContext2D_arc(g_ctx, to_cx(g_ax[i]), to_cy(g_ay[i]), 1.6, 0.0, TWO_PI);
@@ -182,7 +176,7 @@ static void render(void) {
         Rapier_Rotation q = Rapier_RigidBody_rotation(g_chain[i]);
         double px = Rapier_Vector_get_x(p), py = Rapier_Vector_get_y(p);
         double qx = Rapier_Rotation_get_x(q), qy = Rapier_Rotation_get_y(q), qz = Rapier_Rotation_get_z(q), qw = Rapier_Rotation_get_w(q);
-        draw_rot_box(px, py, qx, qy, qz, qw, LINK_HX, LINK_HY, C(i == 2 ? "#d4d4d4" : "#f7f7f7"));
+        draw_rot_box(px, py, qx, qy, qz, qw, LINK_HX, LINK_HY, (i == 2 ? "#d4d4d4" : "#f7f7f7"));
         if (i < 2) {
             double r01 = 2.0 * (qx * qy - qw * qz);
             double r11 = 1.0 - 2.0 * (qx * qx + qz * qz);
@@ -197,16 +191,16 @@ static void render(void) {
     Rapier_Rotation aq = Rapier_RigidBody_rotation(g_arm);
     double apx = Rapier_Vector_get_x(ap), apy = Rapier_Vector_get_y(ap);
     double aqx = Rapier_Rotation_get_x(aq), aqy = Rapier_Rotation_get_y(aq), aqz = Rapier_Rotation_get_z(aq), aqw = Rapier_Rotation_get_w(aq);
-    draw_rot_box(apx, apy, aqx, aqy, aqz, aqw, 0.14, 0.85, C("#f7f7f7"));
+    draw_rot_box(apx, apy, aqx, aqy, aqz, aqw, 0.14, 0.85, "#f7f7f7");
 
     Rapier_Vector bp = Rapier_RigidBody_translation(g_bob);
     double bpx = Rapier_Vector_get_x(bp), bpy = Rapier_Vector_get_y(bp);
     double bcx = to_cx(bpx), bcy = to_cy(bpy);
-    CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#262626"));
+    CanvasRenderingContext2D_set_fillStyle(g_ctx, "#262626");
     CanvasRenderingContext2D_beginPath(g_ctx);
     CanvasRenderingContext2D_arc(g_ctx, bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI);
     CanvasRenderingContext2D_fill(g_ctx);
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#111111"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#111111");
     CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.6);
     CanvasRenderingContext2D_beginPath(g_ctx);
     CanvasRenderingContext2D_arc(g_ctx, bcx, bcy, 0.42 * 46.0, 0.0, TWO_PI);
@@ -220,7 +214,7 @@ static void render(void) {
     double arm_r11 = 1.0 - 2.0 * (aqx * aqx + aqz * aqz);
     draw_pivot(apx - arm_r01 * 0.88, apy - arm_r11 * 0.88);
 
-    CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#555555"));
+    CanvasRenderingContext2D_set_fillStyle(g_ctx, "#555555");
     CanvasRenderingContext2D_set_font(g_ctx, "11px ui-monospace, monospace");
     CanvasRenderingContext2D_fillText(g_ctx, "3-Link Revolute Chain", to_cx(-3.5), 36.0);
     CanvasRenderingContext2D_fillText(g_ctx, "2-Body Bob Pendulum", to_cx(1.1), 36.0);
@@ -232,24 +226,22 @@ static void render(void) {
         tip_x, tip_y, bpx, bpy, g_step_count, g_paused ? " (paused)" : " (running)"
     );
     HTMLElement_set_textContent(g_meta, meta_buf);
-    js_scope_close();
 }
 
 static void on_raf(void* ctx, double ts) {
     (void)ctx; (void)ts;
-    js_scope_open();
+    js_scope();
     if (!g_paused) {
         step_sim();
         render();
     }
     requestAnimationFrame(g_raf_cb);
-    js_scope_close();
 }
 
 static const int BTN_TAGS[3] = { 0, 1, 2 };
 static void on_btn(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int id = *(const int*)ctx;
     if (id == 0) {
         Rapier_RigidBody_applyImpulse(g_chain[2], Rapier_Vector3_new(1.6, 0.3, 0.0), true);
@@ -266,13 +258,12 @@ static void on_btn(void* ctx, PointerEvent ev) {
         for (int i = 0; i < 15; i++) step_sim();
         render();
     }
-    js_scope_close();
 }
 
 static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx; (void)v;
     if (!ok) return;
-    js_scope_open();
+    js_scope();
 
     Document doc = get_document();
     HTMLCanvasElement canvas = HTMLCanvasElement_cast(Document_getElementById(doc, "canvas"));
@@ -295,11 +286,9 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     g_raf_cb = FrameRequestCallback_from(on_raf, NULL);
     js_retain(g_raf_cb);
     requestAnimationFrame(g_raf_cb);
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Promise_then(rapier_init(), on_init, NULL);
-    js_scope_close();
 }

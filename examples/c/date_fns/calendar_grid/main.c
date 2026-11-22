@@ -17,7 +17,7 @@ static void add_metric(Document doc, HTMLElement metrics, const char* label, con
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -27,9 +27,8 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(app, head);
 
     Date ref_day = df_parseISO("2024-03-15");
-    Df_DateArg ref_arg = Df_DateArg_of(ref_day);
-    Date month_start = df_startOfMonth(ref_arg);
-    Date month_end = df_endOfMonth(ref_arg);
+    Date month_start = df_startOfMonth(ref_day);
+    Date month_end = df_endOfMonth(ref_day);
     int offset = (int)df_getDay(month_start);
 
     char b_days[16], b_q[16], b_w[16], b_doy[32];
@@ -59,9 +58,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(grid, make_el(doc, "div", "day-cell empty", 0));
     }
 
-    Df_Interval span = Df_Interval_create();
-    Df_Interval_set_start(span, Df_DateArg_of(month_start));
-    Df_Interval_set_end(span, Df_DateArg_of(month_end));
+    Df_Interval span = Df_Interval_create(.start = Df_DateArg_of(month_start), .end = Df_DateArg_of(month_end));
     JsArray_Df_DateArg days = df_eachDayOfInterval(span);
     uint32_t count = JsArray_Df_DateArg_length(days);
     for (uint32_t i = 0; i < count; i++) {
@@ -87,5 +84,4 @@ __attribute__((export_name("start"))) void start(void) {
 
     HTMLElement_appendChild(card, grid);
     HTMLElement_appendChild(app, card);
-    js_scope_close();
 }

@@ -9,7 +9,7 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -18,12 +18,9 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(head, make_el(doc, "span", "badge", "throwOnError: false vs true"));
     HTMLElement_appendChild(app, head);
 
-    KatexOptions lenient = KatexOptions_create();
-    KatexOptions_set_throwOnError(lenient, false);
-    KatexOptions_set_errorColor(lenient, "#555555");
+    KatexOptions lenient = KatexOptions_create(.throwOnError = false, .errorColor = "#555555");
 
-    KatexOptions strict = KatexOptions_create();
-    KatexOptions_set_throwOnError(strict, true);
+    KatexOptions strict = KatexOptions_create(.throwOnError = true);
 
     const char* bad_inputs[] = {
         "\\frac{1}{",
@@ -55,6 +52,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(row, right);
         HTMLElement_appendChild(app, row);
     }
-
-    js_scope_close();
 }

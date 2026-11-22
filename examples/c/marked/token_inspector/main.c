@@ -39,7 +39,7 @@ static uint32_t token_h(Marked_Token tok) {
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -115,5 +115,4 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(table, tbody);
     HTMLElement_appendChild(tbl_card, table);
     HTMLElement_appendChild(app, tbl_card);
-    js_scope_close();
 }

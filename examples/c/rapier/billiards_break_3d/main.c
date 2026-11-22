@@ -22,14 +22,13 @@ static bool g_paused = false;
 static int g_step_count = 0;
 
 static void set_status_text(const char* text) {
-    js_scope_open();
+    js_scope();
     HTMLElement el = Document_getElementById(get_document(), "status");
     if (el.h != 0) HTMLElement_set_textContent(el, text);
-    js_scope_close();
 }
 
 static void set_status_error(JsValue err) {
-    js_scope_open();
+    js_scope();
     HTMLElement el = Document_getElementById(get_document(), "status");
     if (el.h != 0) {
         char msg[272], buf[320];
@@ -37,11 +36,10 @@ static void set_status_error(JsValue err) {
         snprintf(buf, sizeof buf, "WebGPU / Babylon Lite error: %s", msg);
         HTMLElement_set_textContent(el, buf);
     }
-    js_scope_close();
 }
 
 static void build_world(bool shoot_cue) {
-    js_scope_open();
+    js_scope();
     if (g_world.h != 0) {
         if (g_has_bodies) {
             for (int i = 0; i < BALL_COUNT; i++) js_release(g_balls[i]);
@@ -133,24 +131,22 @@ static void build_world(bool shoot_cue) {
     js_retain(g_balls[RACK_COUNT]);
     g_has_bodies = true;
     g_step_count = 0;
-    js_scope_close();
 }
 
 static void sync_meshes(void) {
     if (!g_has_meshes || !g_has_bodies) return;
-    js_scope_open();
+    js_scope();
     for (int i = 0; i < BALL_COUNT; i++) {
         Rapier_Vector p = Rapier_RigidBody_translation(g_balls[i]);
         Rapier_Rotation q = Rapier_RigidBody_rotation(g_balls[i]);
         Babylon_ObservableVec3_set(g_ball_pos[i], Rapier_Vector_get_x(p), Rapier_Vector_get_y(p), Rapier_Vector_get_z(p));
         Babylon_ObservableQuat_set(g_ball_rot[i], Rapier_Rotation_get_x(q), Rapier_Rotation_get_y(q), Rapier_Rotation_get_z(q), Rapier_Rotation_get_w(q));
     }
-    js_scope_close();
 }
 
 static void update_meta(void) {
     if (!g_has_bodies) return;
-    js_scope_open();
+    js_scope();
     int moving = 0;
     double ke = 0.0;
     for (int i = 0; i < BALL_COUNT; i++) {
@@ -172,16 +168,14 @@ static void update_meta(void) {
         g_paused ? "paused" : "running"
     );
     HTMLElement_set_textContent(g_meta, buf);
-    js_scope_close();
 }
 
 static void step_sim(void) {
-    js_scope_open();
+    js_scope();
     if (g_world.h != 0) Rapier_World_step(g_world);
     g_step_count++;
     sync_meshes();
     update_meta();
-    js_scope_close();
 }
 
 static void on_before_render(void* ctx, double delta_ms) {
@@ -194,7 +188,7 @@ static const int BTN_TAGS[4] = { 0, 1, 2, 3 };
 
 static void on_btn(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int id = *(const int*)ctx;
     if (id == 0) {
         g_paused = false;
@@ -221,7 +215,6 @@ static void on_btn(void* ctx, PointerEvent ev) {
         sync_meshes();
         update_meta();
     }
-    js_scope_close();
 }
 
 static void on_started(void* ctx, bool ok, JsValue value) {
@@ -235,17 +228,12 @@ static void on_registered(void* ctx, bool ok, JsValue value) {
         set_status_error(value);
         return;
     }
-    js_scope_open();
+    js_scope();
     Promise_then(babylon_startEngine(g_engine), on_started, 0);
-    js_scope_close();
 }
 
 static Babylon_PbrMaterialProps mk_pbr(double r, double g, double bl, double metallic, double roughness) {
-    Babylon_createPbrMaterial_props props = Babylon_createPbrMaterial_props_create();
-    Babylon_createPbrMaterial_props_set_baseColorFactor(props, JsTuple_double_double_double_double_new(r, g, bl, 1.0));
-    Babylon_createPbrMaterial_props_set_metallicFactor(props, metallic);
-    Babylon_createPbrMaterial_props_set_roughnessFactor(props, roughness);
-    return babylon_createPbrMaterial(props);
+    return babylon_createPbrMaterial(Babylon_createPbrMaterial_props_create(.baseColorFactor = JsTuple_double_double_double_double_new(r, g, bl, 1.0), .metallicFactor = metallic, .roughnessFactor = roughness));
 }
 
 static void on_engine(void* ctx, bool ok, JsValue value) {
@@ -254,17 +242,12 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         set_status_error(value);
         return;
     }
-    js_scope_open();
+    js_scope();
     g_engine = (Babylon_EngineContext){ value.h };
     js_retain(g_engine);
 
     Babylon_SceneContext scene = babylon_createSceneContext(g_engine);
-    GPUColorDict clear = GPUColorDict_create();
-    GPUColorDict_set_r(clear, 0.05);
-    GPUColorDict_set_g(clear, 0.07);
-    GPUColorDict_set_b(clear, 0.09);
-    GPUColorDict_set_a(clear, 1.0);
-    Babylon_SceneContext_set_clearColor(scene, clear);
+    Babylon_SceneContext_set_clearColor(scene, GPUColorDict_create(.r = 0.05, .g = 0.07, .b = 0.09, .a = 1.0));
 
     Babylon_ArcRotateCamera camera = babylon_createArcRotateCamera(1.18, 0.92, 13.5, babylon_vec3(0.0, 0.3, -0.4));
     babylon_addToScene(scene, js_value(camera));
@@ -279,10 +262,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_DirectionalLight_set_diffuse(dir, JsTuple_double_double_double_new(1.0, 0.97, 0.92));
     babylon_addToScene(scene, js_value(dir));
 
-    Babylon_BoxOptions topts = Babylon_BoxOptions_create();
-    Babylon_BoxOptions_set_width(topts, 9.2);
-    Babylon_BoxOptions_set_height(topts, 0.5);
-    Babylon_BoxOptions_set_depth(topts, 15.2);
+    Babylon_BoxOptions topts = Babylon_BoxOptions_create(.width = 9.2, .height = 0.5, .depth = 15.2);
     Babylon_Mesh table = babylon_createBox_with_BoxOptions(g_engine, topts);
     Babylon_ObservableVec3_set(Babylon_Mesh_get_position(table), 0.0, -0.25, 0.0);
     Babylon_Mesh_set_material(table, mk_pbr(0.08, 0.24, 0.18, 0.05, 0.78));
@@ -296,10 +276,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         { 0.0, 0.45, 7.35, 9.2, 0.9, 0.5 },
     };
     for (int i = 0; i < 4; i++) {
-        Babylon_BoxOptions ropts = Babylon_BoxOptions_create();
-        Babylon_BoxOptions_set_width(ropts, rail_meshes[i][3]);
-        Babylon_BoxOptions_set_height(ropts, rail_meshes[i][4]);
-        Babylon_BoxOptions_set_depth(ropts, rail_meshes[i][5]);
+        Babylon_BoxOptions ropts = Babylon_BoxOptions_create(.width = rail_meshes[i][3], .height = rail_meshes[i][4], .depth = rail_meshes[i][5]);
         Babylon_Mesh r = babylon_createBox_with_BoxOptions(g_engine, ropts);
         Babylon_ObservableVec3_set(Babylon_Mesh_get_position(r), rail_meshes[i][0], rail_meshes[i][1], rail_meshes[i][2]);
         Babylon_Mesh_set_material(r, rail_mat);
@@ -314,9 +291,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         mk_pbr(0.20, 0.20, 0.22, 0.25, 0.2),
     };
 
-    Babylon_SphereOptions sopts = Babylon_SphereOptions_create();
-    Babylon_SphereOptions_set_diameter(sopts, BALL_RADIUS * 2.0);
-    Babylon_SphereOptions_set_segments(sopts, 24.0);
+    Babylon_SphereOptions sopts = Babylon_SphereOptions_create(.diameter = BALL_RADIUS * 2.0, .segments = 24.0);
     for (int i = 0; i < BALL_COUNT; i++) {
         Babylon_Mesh m = babylon_createSphere(g_engine, sopts);
         Babylon_Mesh_set_material(m, (i == RACK_COUNT) ? cue_mat : rack_mats[i % 4]);
@@ -332,7 +307,6 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
 
     babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
     Promise_then(babylon_registerScene(scene), on_registered, 0);
-    js_scope_close();
 }
 
 static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
@@ -342,7 +316,7 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
         set_status_text("Rapier3D init failed");
         return;
     }
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     g_meta = Document_getElementById(doc, "meta");
     js_retain(g_meta);
@@ -365,16 +339,13 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
     g_canvas = Document_querySelector_canvas(doc);
     if (g_canvas.h == 0) {
         set_status_text("WebGPU / Babylon Lite error: missing <canvas> element");
-        js_scope_close();
         return;
     }
     js_retain(g_canvas);
-    Promise_then(babylon_createEngine_with_EngineOptions(Babylon_RenderCanvas_of(g_canvas)), on_engine, 0);
-    js_scope_close();
+    Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Promise_then(rapier_init(), on_rapier_ready, 0);
-    js_scope_close();
 }

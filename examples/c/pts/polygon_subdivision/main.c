@@ -23,7 +23,7 @@ static const char* SHADES[9] = {
 
 static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space current_space) {
     (void)ctx; (void)ftime_ms; (void)current_space;
-    js_scope_open();
+    js_scope();
 
     Pts_Pt c = Pts_CanvasSpace_get_center(g_space);
     Pts_Pt size = Pts_CanvasSpace_get_size(g_space);
@@ -36,52 +36,46 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     double px_norm = (Pts_Pt_get_x(pointer) / (sx > 1.0 ? sx : 1.0)) - 0.5;
     double t = Pts_Num_clamp(0.22 + 0.16 * sin(time_ms * 0.0012) + px_norm * 0.24, 0.10, 0.48);
 
-    Pts_Group poly = Pts_Polygon_fromCenter(Pts_PtLike_of(c), radius, 6.0);
-    Pts_Group_rotate2D(poly, time_ms * 0.00035, Pts_PtLike_of(c));
-    Pts_Pt centroid = Pts_Polygon_centroid(Pts_PtLikeIterable_of(poly));
+    Pts_Group poly = Pts_Polygon_fromCenter(c, radius, 6.0);
+    Pts_Group_rotate2D(poly, time_ms * 0.00035, c);
+    Pts_Pt centroid = Pts_Polygon_centroid(poly);
 
     for (int depth = 0; depth < 9; depth++) {
         double sw = depth == 0 ? 1.6 : 1.0;
         Pts_CanvasForm f = Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, SHADES[depth]), "#111111", sw);
-        Pts_CanvasForm_polygon_2(f, Pts_PtLikeIterable_of(poly));
+        Pts_CanvasForm_polygon_2(f, poly);
         if (depth == 0) {
             JsArray_Pts_Pt items = Pts_Group_as_array(poly);
             uint32_t n = JsArray_Pts_Pt_length(items);
             for (uint32_t i = 0; i < n; i++) {
                 Pts_Pt pt = JsArray_Pts_Pt_get(items, i);
                 Pts_Group ray = mk_group2(centroid, pt);
-                Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), Pts_PtLikeIterable_of(ray));
-                Pts_CanvasForm_point_2(Pts_CanvasForm_fillOnly(g_form, "#111111"), Pts_PtLike_of(pt), 3.5, "circle");
+                Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), ray);
+                Pts_CanvasForm_point_2(Pts_CanvasForm_fillOnly(g_form, "#111111"), pt, 3.5, "circle");
             }
         }
-        poly = Pts_Polygon_midpoints(Pts_PtIterable_of(poly), true, t);
+        poly = Pts_Polygon_midpoints(poly, true, t);
     }
 
     double cx = Pts_Pt_get_x(c), cy = Pts_Pt_get_y(c);
     Pts_Group hbar = mk_group2(mk_pt(cx - 10.0, cy), mk_pt(cx + 10.0, cy));
     Pts_Group vbar = mk_group2(mk_pt(cx, cy - 10.0), mk_pt(cx, cy + 10.0));
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), Pts_PtLikeIterable_of(hbar));
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), Pts_PtLikeIterable_of(vbar));
+    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), hbar);
+    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), vbar);
     Pts_CanvasForm_point_2(
         Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#ffffff"), "#111111", 1.5),
-        Pts_PtLike_of(centroid), 5.0, "circle"
+        centroid, 5.0, "circle"
     );
 
-    Pts_Group ring = Pts_Circle_fromCenter(Pts_PtLike_of(pointer), 10.0);
-    Pts_CanvasForm_circle_2(Pts_CanvasForm_strokeOnly(g_form, "#737373", 1.5), Pts_PtLikeIterable_of(ring));
-
-    js_scope_close();
+    Pts_Group ring = Pts_Circle_fromCenter(pointer, 10.0);
+    Pts_CanvasForm_circle_2(Pts_CanvasForm_strokeOnly(g_form, "#737373", 1.5), ring);
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
 
-    Pts_CanvasSpaceOptions opts = Pts_CanvasSpaceOptions_create();
-    Pts_CanvasSpaceOptions_set_bgcolor(opts, "#ffffff");
-    Pts_CanvasSpaceOptions_set_resize(opts, true);
-    Pts_CanvasSpaceOptions_set_retina(opts, true);
-
-    g_space = Pts_CanvasSpace_setup(Pts_CanvasSpace_new("#pt"), opts);
+    g_space = Pts_CanvasSpace_setup(Pts_CanvasSpace_new("#pt"),
+        Pts_CanvasSpaceOptions_create(.bgcolor = "#ffffff", .resize = true, .retina = true));
     g_form = Pts_CanvasSpace_getForm(g_space);
 
     Pts_IPlayer player = Pts_IPlayer_create();
@@ -93,5 +87,4 @@ __attribute__((export_name("start"))) void start(void) {
 
     js_retain(g_space);
     js_retain(g_form);
-    js_scope_close();
 }

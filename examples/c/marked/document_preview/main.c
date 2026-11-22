@@ -9,7 +9,7 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -49,6 +49,4 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(grid, src_card);
     HTMLElement_appendChild(grid, out_card);
     HTMLElement_appendChild(app, grid);
-
-    js_scope_close();
 }

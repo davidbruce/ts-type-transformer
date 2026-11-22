@@ -10,7 +10,7 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -20,8 +20,7 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(app, head);
 
     Date anchor = df_parseISO("2024-03-15");
-    Df_FormatDistanceOptions opts = Df_FormatDistanceOptions_create();
-    Df_FormatDistanceOptions_set_addSuffix(opts, true);
+    Df_FormatDistanceOptions opts = Df_FormatDistanceOptions_create(.addSuffix = true);
 
     const char* isos[6] = {
         "2024-01-10", "2024-02-29", "2024-03-12",
@@ -39,7 +38,7 @@ __attribute__((export_name("start"))) void start(void) {
     JsArray_Df_DateArg all_dates = JsArray_Df_DateArg_new();
     for (int i = 0; i < 6; i++) {
         Date d = df_parseISO(isos[i]);
-        JsArray_Df_DateArg_push(all_dates, Df_DateArg_of(d));
+        JsArray_Df_DateArg_push(all_dates, d);
 
         bool same = df_isSameDay_with_Date_and_Date(d, anchor);
         HTMLElement row = make_el(doc, "div", same ? "milestone anchor" : "milestone", 0);
@@ -88,6 +87,4 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(summary, make_el(doc, "span", 0, s3));
     HTMLElement_appendChild(sum_card, summary);
     HTMLElement_appendChild(app, sum_card);
-
-    js_scope_close();
 }

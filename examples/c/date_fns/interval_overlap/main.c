@@ -9,14 +9,11 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 static Df_Interval make_span(const char* s_iso, const char* e_iso) {
-    Df_Interval span = Df_Interval_create();
-    Df_Interval_set_start(span, Df_DateArg_of(df_parseISO(s_iso)));
-    Df_Interval_set_end(span, Df_DateArg_of(df_parseISO(e_iso)));
-    return span;
+    return Df_Interval_create(.start = Df_DateArg_of(df_parseISO(s_iso)), .end = Df_DateArg_of(df_parseISO(e_iso)));
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -102,7 +99,7 @@ __attribute__((export_name("start"))) void start(void) {
     const char* rules[3] = { "Clamped to start", "Inside interval", "Clamped to end" };
     HTMLElement tbody = make_el(doc, "tbody", 0, 0);
     for (int i = 0; i < 3; i++) {
-        Df_DateArg res = df_clamp(Df_DateArg_of(df_parseISO(probes[i])), sprint_a);
+        Df_DateArg res = df_clamp(df_parseISO(probes[i]), sprint_a);
         HTMLElement tr = make_el(doc, "tr", 0, 0);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, probes[i]));
         HTMLElement td_clamped = make_el(doc, "td", 0, 0);
@@ -114,6 +111,4 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(tbl, tbody);
     HTMLElement_appendChild(clamp_card, tbl);
     HTMLElement_appendChild(app, clamp_card);
-
-    js_scope_close();
 }

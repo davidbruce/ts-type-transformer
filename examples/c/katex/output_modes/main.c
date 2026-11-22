@@ -30,7 +30,7 @@ static void add_card(Document doc, HTMLElement grid, const char* label, const ch
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -41,30 +41,23 @@ __attribute__((export_name("start"))) void start(void) {
 
     HTMLElement grid = make_el(doc, "div", "grid", 0);
 
-    KatexOptions o_html = KatexOptions_create();
-    KatexOptions_set_output(o_html, KatexOptions_output_html);
+    KatexOptions o_html = KatexOptions_create(.output = KatexOptions_output_html);
     add_card(doc, grid, "output: html", "mode-html", "a^2 + b^2 = c^2", o_html);
 
-    KatexOptions o_math = KatexOptions_create();
-    KatexOptions_set_output(o_math, KatexOptions_output_mathml);
+    KatexOptions o_math = KatexOptions_create(.output = KatexOptions_output_mathml);
     add_card(doc, grid, "output: mathml", "", "\\frac{1}{1 + x^2}", o_math);
 
-    KatexOptions o_both = KatexOptions_create();
-    KatexOptions_set_output(o_both, KatexOptions_output_htmlAndMathml);
+    KatexOptions o_both = KatexOptions_create(.output = KatexOptions_output_htmlAndMathml);
     add_card(doc, grid, "output: htmlAndMathml", "", "\\sqrt{\\alpha + \\beta}", o_both);
 
-    KatexOptions o_leq = KatexOptions_create();
-    KatexOptions_set_displayMode(o_leq, true);
-    KatexOptions_set_leqno(o_leq, true);
+    KatexOptions o_leq = KatexOptions_create(.displayMode = true, .leqno = true);
     add_card(doc, grid, "displayMode + leqno", "", "\\int_0^1 x^2\\,dx = \\frac{1}{3} \\tag{1}", o_leq);
 
-    KatexOptions o_fl = KatexOptions_create();
-    KatexOptions_set_displayMode(o_fl, true);
-    KatexOptions_set_fleqn(o_fl, true);
-    KatexOptions_set_maxSize(o_fl, 2.0);
-    KatexOptions_set_strict(o_fl, Katex_boolean_or_string_or_StrictFunction_of(false));
+    KatexOptions o_fl = KatexOptions_create(
+        .displayMode = true, .fleqn = true, .maxSize = 2.0,
+        .strict = Katex_boolean_or_string_or_StrictFunction_of(false)
+    );
     add_card(doc, grid, "fleqn + maxSize(2) + strict(false)", "", "\\text{café} + \\rule{10em}{0.4em} + é", o_fl);
 
     HTMLElement_appendChild(app, grid);
-    js_scope_close();
 }

@@ -20,7 +20,7 @@ static Babylon_ObservableVec3 g_light2_pos;
 static double g_elapsed = 0.0;
 
 static void set_status_error(JsValue err) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement status = Document_getElementById(doc, "status");
     if (status.h != 0) {
@@ -29,7 +29,6 @@ static void set_status_error(JsValue err) {
         snprintf(buf, sizeof buf, "WebGPU / Babylon Lite error: %s", msg);
         HTMLElement_set_textContent(status, buf);
     }
-    js_scope_close();
 }
 
 static void on_before_render(void* ctx, double delta_ms) {
@@ -69,16 +68,15 @@ static void on_registered(void* ctx, bool ok, JsValue value) {
         set_status_error(value);
         return;
     }
-    js_scope_open();
+    js_scope();
     Promise_then(babylon_startEngine(g_engine), on_started, 0);
-    js_scope_close();
 }
 
 static Babylon_PbrMaterialProps mk_pbr(double v, double metallic, double roughness) {
-    Babylon_createPbrMaterial_props props = Babylon_createPbrMaterial_props_create();
-    Babylon_createPbrMaterial_props_set_baseColorFactor(props, JsTuple_double_double_double_double_new(v, v, v, 1.0));
-    Babylon_createPbrMaterial_props_set_metallicFactor(props, metallic);
-    Babylon_createPbrMaterial_props_set_roughnessFactor(props, roughness);
+    Babylon_createPbrMaterial_props props = Babylon_createPbrMaterial_props_create(
+        .baseColorFactor = JsTuple_double_double_double_double_new(v, v, v, 1.0), .metallicFactor = metallic,
+        .roughnessFactor = roughness
+    );
     return babylon_createPbrMaterial(props);
 }
 
@@ -88,60 +86,49 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         set_status_error(value);
         return;
     }
-    js_scope_open();
+    js_scope();
     g_engine = (Babylon_EngineContext){ value.h };
     js_retain(g_engine);
 
     Babylon_SceneContext scene = babylon_createSceneContext(g_engine);
-    GPUColorDict clear = GPUColorDict_create();
-    GPUColorDict_set_r(clear, 0.05);
-    GPUColorDict_set_g(clear, 0.05);
-    GPUColorDict_set_b(clear, 0.05);
-    GPUColorDict_set_a(clear, 1.0);
-    Babylon_SceneContext_set_clearColor(scene, clear);
+    Babylon_SceneContext_set_clearColor(scene, GPUColorDict_create(.r = 0.05, .g = 0.05, .b = 0.05, .a = 1.0));
 
     Babylon_ArcRotateCamera camera = babylon_createArcRotateCamera(PI / 4.0, PI / 3.1, 12.8, babylon_vec3(0.0, 1.4, 0.0));
-    babylon_addToScene(scene, js_value(camera));
+    babylon_addToScene(scene, AS_Babylon_Camera(camera));
     babylon_attachControl(camera, g_canvas, scene);
 
     Babylon_HemisphericLight hemi = babylon_createHemisphericLight(JsTuple_double_double_double_new(0.0, 1.0, 0.15), 0.55);
     Babylon_HemisphericLight_set_diffuseColor(hemi, JsTuple_double_double_double_new(0.76, 0.76, 0.76));
     Babylon_HemisphericLight_set_groundColor(hemi, JsTuple_double_double_double_new(0.10, 0.10, 0.10));
-    babylon_addToScene(scene, js_value(hemi));
+    babylon_addToScene(scene, AS_Babylon_LightBase(hemi));
 
     Babylon_DirectionalLight dir = babylon_createDirectionalLight(JsTuple_double_double_double_new(-1.0, -2.2, -0.8), 1.35);
     Babylon_DirectionalLight_set_diffuse(dir, JsTuple_double_double_double_new(0.90, 0.90, 0.90));
-    babylon_addToScene(scene, js_value(dir));
+    babylon_addToScene(scene, AS_Babylon_LightBase(dir));
 
     Babylon_PointLight light1 = babylon_createPointLight(JsTuple_double_double_double_new(5.2, 4.2, 0.0), 10.0);
     Babylon_PointLight_set_diffuse(light1, JsTuple_double_double_double_new(1.0, 1.0, 1.0));
     Babylon_PointLight_set_range(light1, 16.0);
-    babylon_addToScene(scene, js_value(light1));
+    babylon_addToScene(scene, AS_Babylon_LightBase(light1));
     g_light1_pos = Babylon_PointLight_get_position(light1);
     js_retain(g_light1_pos);
 
     Babylon_PointLight light2 = babylon_createPointLight(JsTuple_double_double_double_new(-5.2, 3.4, 0.0), 7.5);
     Babylon_PointLight_set_diffuse(light2, JsTuple_double_double_double_new(0.78, 0.78, 0.78));
     Babylon_PointLight_set_range(light2, 16.0);
-    babylon_addToScene(scene, js_value(light2));
+    babylon_addToScene(scene, AS_Babylon_LightBase(light2));
     g_light2_pos = Babylon_PointLight_get_position(light2);
     js_retain(g_light2_pos);
 
-    Babylon_GroundOptions gopts = Babylon_GroundOptions_create();
-    Babylon_GroundOptions_set_width(gopts, 18.0);
-    Babylon_GroundOptions_set_height(gopts, 18.0);
-    Babylon_Mesh floor_m = babylon_createGround(g_engine, gopts);
+    Babylon_Mesh floor_m = babylon_createGround(g_engine, Babylon_GroundOptions_create(.width = 18.0, .height = 18.0));
     Babylon_Mesh_set_material(floor_m, mk_pbr(0.09, 0.10, 0.88));
-    babylon_addToScene(scene, js_value(floor_m));
+    babylon_addToScene(scene, floor_m);
 
     const double shades[4] = { 0.22, 0.44, 0.68, 0.88 };
     Babylon_PbrMaterialProps col_mats[4];
     for (int i = 0; i < 4; i++) col_mats[i] = mk_pbr(shades[i], 0.35, 0.36);
 
-    Babylon_BoxOptions bopts = Babylon_BoxOptions_create();
-    Babylon_BoxOptions_set_width(bopts, 0.72);
-    Babylon_BoxOptions_set_height(bopts, 1.0);
-    Babylon_BoxOptions_set_depth(bopts, 0.72);
+    Babylon_BoxOptions bopts = Babylon_BoxOptions_create(.width = 0.72, .height = 1.0, .depth = 0.72);
 
     for (int row = 0; row < 6; row++) {
         for (int col = 0; col < 6; col++) {
@@ -162,26 +149,19 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
             js_retain(g_col_scale[idx]);
             Babylon_ObservableVec3_set(g_col_pos[idx], x, 0.5, z);
             Babylon_Mesh_set_material(m, col_mats[(row + col) % 4]);
-            babylon_addToScene(scene, js_value(m));
+            babylon_addToScene(scene, m);
         }
     }
 
-    Babylon_createPbrMaterial_props cprops = Babylon_createPbrMaterial_props_create();
-    Babylon_createPbrMaterial_props_set_baseColorFactor(cprops, JsTuple_double_double_double_double_new(0.92, 0.92, 0.92, 1.0));
-    Babylon_createPbrMaterial_props_set_metallicFactor(cprops, 0.50);
-    Babylon_createPbrMaterial_props_set_roughnessFactor(cprops, 0.15);
-    Babylon_ClearCoatProps cc = Babylon_ClearCoatProps_create();
-    Babylon_ClearCoatProps_set_isEnabled(cc, true);
-    Babylon_ClearCoatProps_set_intensity(cc, 1.0);
-    Babylon_ClearCoatProps_set_roughness(cc, 0.08);
-    babylon_setPbrClearCoat(cprops, cc);
+    Babylon_createPbrMaterial_props cprops = Babylon_createPbrMaterial_props_create(
+        .baseColorFactor = JsTuple_double_double_double_double_new(0.92, 0.92, 0.92, 1.0), .metallicFactor = 0.50,
+        .roughnessFactor = 0.15
+    );
+    babylon_setPbrClearCoat(cprops, Babylon_ClearCoatProps_create(.isEnabled = true, .intensity = 1.0, .roughness = 0.08));
     babylon_setPbrEmissive(cprops, JsTuple_double_double_double_new(0.16, 0.16, 0.16));
     Babylon_PbrMaterialProps cap_mat = babylon_createPbrMaterial(cprops);
 
-    Babylon_CapsuleOptions copts = Babylon_CapsuleOptions_create();
-    Babylon_CapsuleOptions_set_height(copts, 1.15);
-    Babylon_CapsuleOptions_set_radius(copts, 0.22);
-    Babylon_CapsuleOptions_set_tessellation(copts, 20.0);
+    Babylon_CapsuleOptions copts = Babylon_CapsuleOptions_create(.height = 1.15, .radius = 0.22, .tessellation = 20.0);
     for (int k = 0; k < 4; k++) {
         Babylon_Mesh cap = babylon_createCapsule(g_engine, copts);
         g_cap_pos[k] = Babylon_Mesh_get_position(cap);
@@ -189,20 +169,18 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         js_retain(g_cap_pos[k]);
         js_retain(g_cap_rot[k]);
         Babylon_Mesh_set_material(cap, cap_mat);
-        babylon_addToScene(scene, js_value(cap));
+        babylon_addToScene(scene, cap);
     }
 
     babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
     Promise_then(babylon_registerScene(scene), on_registered, 0);
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     g_canvas = Document_querySelector_canvas(get_document());
     if (g_canvas.h != 0) {
         js_retain(g_canvas);
-        Promise_then(babylon_createEngine_with_EngineOptions(Babylon_RenderCanvas_of(g_canvas)), on_engine, 0);
+        Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
     }
-    js_scope_close();
 }

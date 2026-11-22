@@ -22,12 +22,11 @@ static JsValue atom_get(void* ctx) {
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
-    js_scope_open();
+    js_scope();
     JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
     if (a->value.h != 0) js_release(a->value);
     a->value = next;
-    js_scope_close();
     return NONE;
 }
 static void no_unsub(void* ctx) { (void)ctx; }
@@ -127,7 +126,7 @@ static Table_Core g_table;
 static Document g_doc;
 
 static void render(void) {
-    js_scope_open();
+    js_scope();
     Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
     Table_RowModel core = Table_RowModels_Core_getCoreRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
@@ -162,13 +161,12 @@ static void render(void) {
     snprintf(meta, sizeof meta, "Page %d / %d \xC2\xB7 pageSize %d \xC2\xB7 showing %u of %u rows",
              page_idx + 1, page_count, page_size, nrows, ntotal);
     HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
-    js_scope_close();
 }
 
 static const int BTN_IDS[5] = { 0, 1, 2, 3, 4 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int idx = *(const int*)ctx;
     Table_RowPagination pag = { g_table.h };
     JsValue pg = js_get_prop(store_state(js_value(g_table)), "pagination");
@@ -185,11 +183,10 @@ static void on_click(void* ctx, PointerEvent ev) {
         Table_RowPagination_setPageSize(pag, js_number((double)new_sz));
     }
     render();
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     static const char* accounts[3] = { "ops-pool", "clearing-ch", "reserve-de" };
     static const char* cats[4] = { "compute", "storage", "egress", "audit" };
 
@@ -242,5 +239,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
     render();
-    js_scope_close();
 }

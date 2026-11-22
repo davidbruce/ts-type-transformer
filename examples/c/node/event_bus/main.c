@@ -26,12 +26,11 @@ static void emitf(const char* fmt, ...) {
 
 static void on_metric(void* ctx, JsArray args) {
     (void)ctx;
-    js_scope_open();
+    js_scope();
     g_metric_calls++;
     if (JsArray_length(args) > 0) {
         g_metric_sum += js_to_number(JsArray_get(args, 0));
     }
-    js_scope_close();
 }
 
 static void on_once(void* ctx, JsArray args) {
@@ -45,7 +44,7 @@ static void on_shutdown(void* ctx, JsArray args) {
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Node_EventEmitter emitter = Node_EventEmitter_new();
 
     NodeJS_EventEmitter_setMaxListeners(emitter, 12.0);
@@ -86,5 +85,4 @@ __attribute__((export_name("start"))) void start(void) {
     emitf("maxListeners=%d metricCalls=%d metricSum=%d\nonceCalls=%d shutdownCalls=%d\nPASS: event_bus (%d checks)\n",
         (int)NodeJS_EventEmitter_getMaxListeners(emitter),
         g_metric_calls, (int)g_metric_sum, g_once_calls, g_shutdown_calls, g_passed);
-    js_scope_close();
 }

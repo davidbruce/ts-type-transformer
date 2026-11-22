@@ -17,7 +17,7 @@ static Pts_CanvasForm g_form;
 
 static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space current_space) {
     (void)ctx; (void)ftime_ms; (void)current_space;
-    js_scope_open();
+    js_scope();
 
     Pts_Pt c = Pts_CanvasSpace_get_center(g_space);
     Pts_Pt size = Pts_CanvasSpace_get_size(g_space);
@@ -28,7 +28,7 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     if (base_r < 70.0) base_r = 70.0;
     double cx = Pts_Pt_get_x(c), cy = Pts_Pt_get_y(c);
 
-    Pts_Group radial = Pts_Create_radialPts(Pts_PtLike_of(c), base_r, 20.0, time_ms * 0.00025);
+    Pts_Group radial = Pts_Create_radialPts(c, base_r, 20.0, time_ms * 0.00025);
     JsArray_Pts_Pt r_arr = Pts_Group_as_array(radial);
     uint32_t r_len = JsArray_Pts_Pt_length(r_arr);
 
@@ -47,68 +47,62 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     }
 
     Pts_Group cloud = Pts_Group_new(cloud_arr);
-    Pts_Group hull = Pts_Polygon_convexHull(Pts_PtLikeIterable_of(cloud), false);
-    Pts_Group bbox = Pts_Geom_boundingBox(Pts_PtIterable_of(hull));
-    Pts_Pt cent = Pts_Polygon_centroid(Pts_PtLikeIterable_of(hull));
+    Pts_Group hull = Pts_Polygon_convexHull(cloud, false);
+    Pts_Group bbox = Pts_Geom_boundingBox(hull);
+    Pts_Pt cent = Pts_Polygon_centroid(hull);
 
-    Pts_CanvasForm_rect_2(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 1.0), Pts_PtLikeIterable_of(bbox));
+    Pts_CanvasForm_rect_2(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 1.0), bbox);
     Pts_CanvasForm_polygon_2(
         Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#f7f7f7"), "#111111", 2.0),
-        Pts_PtLikeIterable_of(hull)
+        hull
     );
 
-    JsArray_Pts_Group net0 = Pts_Polygon_network(Pts_PtIterable_of(hull), 0.0);
+    JsArray_Pts_Group net0 = Pts_Polygon_network(hull, 0.0);
     uint32_t net0_len = JsArray_Pts_Group_length(net0);
     for (uint32_t i = 0; i < net0_len; i++) {
-        Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), Pts_PtLikeIterable_of(JsArray_Pts_Group_get(net0, i)));
+        Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), JsArray_Pts_Group_get(net0, i));
     }
     JsArray_Pts_Pt hull_arr = Pts_Group_as_array(hull);
     uint32_t hull_len = JsArray_Pts_Pt_length(hull_arr);
     if (hull_len > 3) {
-        JsArray_Pts_Group net_mid = Pts_Polygon_network(Pts_PtIterable_of(hull), (double)(hull_len / 2));
+        JsArray_Pts_Group net_mid = Pts_Polygon_network(hull, (double)(hull_len / 2));
         uint32_t nm_len = JsArray_Pts_Group_length(net_mid);
         for (uint32_t i = 0; i < nm_len; i++) {
-            Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), Pts_PtLikeIterable_of(JsArray_Pts_Group_get(net_mid, i)));
+            Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), JsArray_Pts_Group_get(net_mid, i));
         }
     }
 
     uint32_t cl_len = JsArray_Pts_Pt_length(cloud_arr);
     for (uint32_t i = 0; i < cl_len; i++) {
-        Pts_CanvasForm_point_2(Pts_CanvasForm_fillOnly(g_form, "#737373"), Pts_PtLike_of(JsArray_Pts_Pt_get(cloud_arr, i)), 3.0, "circle");
+        Pts_CanvasForm_point_2(Pts_CanvasForm_fillOnly(g_form, "#737373"), JsArray_Pts_Pt_get(cloud_arr, i), 3.0, "circle");
     }
     for (uint32_t i = 0; i < hull_len; i++) {
         Pts_CanvasForm_point_2(
             Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#111111"), "#ffffff", 1.5),
-            Pts_PtLike_of(JsArray_Pts_Pt_get(hull_arr, i)), 5.0, "circle"
+            JsArray_Pts_Pt_get(hull_arr, i), 5.0, "circle"
         );
     }
 
     double cent_x = Pts_Pt_get_x(cent), cent_y = Pts_Pt_get_y(cent);
     Pts_CanvasForm_line_2(
         Pts_CanvasForm_strokeOnly(g_form, "#111111", 1.4),
-        Pts_PtLikeIterable_of(mk_group2(mk_pt(cent_x - 10.0, cent_y), mk_pt(cent_x + 10.0, cent_y)))
+        mk_group2(mk_pt(cent_x - 10.0, cent_y), mk_pt(cent_x + 10.0, cent_y))
     );
     Pts_CanvasForm_line_2(
         Pts_CanvasForm_strokeOnly(g_form, "#111111", 1.4),
-        Pts_PtLikeIterable_of(mk_group2(mk_pt(cent_x, cent_y - 10.0), mk_pt(cent_x, cent_y + 10.0)))
+        mk_group2(mk_pt(cent_x, cent_y - 10.0), mk_pt(cent_x, cent_y + 10.0))
     );
     Pts_CanvasForm_point_2(
         Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#ffffff"), "#111111", 1.6),
-        Pts_PtLike_of(cent), 5.5, "circle"
+        cent, 5.5, "circle"
     );
-
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
 
-    Pts_CanvasSpaceOptions opts = Pts_CanvasSpaceOptions_create();
-    Pts_CanvasSpaceOptions_set_bgcolor(opts, "#ffffff");
-    Pts_CanvasSpaceOptions_set_resize(opts, true);
-    Pts_CanvasSpaceOptions_set_retina(opts, true);
-
-    g_space = Pts_CanvasSpace_setup(Pts_CanvasSpace_new("#pt"), opts);
+    g_space = Pts_CanvasSpace_setup(Pts_CanvasSpace_new("#pt"),
+        Pts_CanvasSpaceOptions_create(.bgcolor = "#ffffff", .resize = true, .retina = true));
     g_form = Pts_CanvasSpace_getForm(g_space);
 
     Pts_IPlayer player = Pts_IPlayer_create();
@@ -120,5 +114,4 @@ __attribute__((export_name("start"))) void start(void) {
 
     js_retain(g_space);
     js_retain(g_form);
-    js_scope_close();
 }

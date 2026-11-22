@@ -32,11 +32,10 @@ static JsValue dom_hole(const char* tag) {
 }
 static JsValue heading_dom(void* ctx, Pm_Node n) {
     (void)ctx;
-    js_scope_open();
+    js_scope();
     int lvl = (int)js_to_number(js_get_prop(Pm_Node_get_attrs(n), "level"));
     JsValue res = dom_hole(lvl == 1 ? "h1" : "h2");
     js_retain(res);
-    js_scope_close();
     return res;
 }
 static JsValue tag_dom(void* ctx, Pm_Node n) { (void)n; return dom_hole((const char*)ctx); }
@@ -59,49 +58,25 @@ static int g_note_counter = 0;
 static const char* g_last_op = "Initialized document structure";
 
 static Pm_Schema make_schema(void) {
-    Pm_NodeSpec doc = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_content(doc, "block+");
+    Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
-    Pm_AttributeSpec lvl = Pm_AttributeSpec_create();
-    Pm_AttributeSpec_set_default(lvl, js_number(2));
+    Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
     Pm_MarkSpec_attrs hattrs = Pm_MarkSpec_attrs_create();
     Pm_MarkSpec_attrs_set_at(hattrs, "level", lvl);
 
-    Pm_NodeSpec heading = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_attrs(heading, hattrs);
-    Pm_NodeSpec_set_content(heading, "inline*");
-    Pm_NodeSpec_set_group(heading, "block");
-    Pm_NodeSpec_set_defining(heading, true);
-    Pm_NodeSpec_set_toDOM(heading, Pm_Node_to_DOMOutputSpec_fn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = hattrs, .content = "inline*", .group = "block", .defining = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(heading_dom, NULL));
 
-    Pm_NodeSpec para = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_content(para, "inline*");
-    Pm_NodeSpec_set_group(para, "block");
-    Pm_NodeSpec_set_toDOM(para, Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"p"));
+    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"p"));
 
-    Pm_NodeSpec quote = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_content(quote, "block+");
-    Pm_NodeSpec_set_group(quote, "block");
-    Pm_NodeSpec_set_defining(quote, true);
-    Pm_NodeSpec_set_toDOM(quote, Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"blockquote"));
+    Pm_NodeSpec quote = Pm_NodeSpec_create(.content = "block+", .group = "block", .defining = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"blockquote"));
 
-    Pm_NodeSpec ulist = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_content(ulist, "list_item+");
-    Pm_NodeSpec_set_group(ulist, "block");
-    Pm_NodeSpec_set_toDOM(ulist, Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"ul"));
+    Pm_NodeSpec ulist = Pm_NodeSpec_create(.content = "list_item+", .group = "block", .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"ul"));
 
-    Pm_NodeSpec li = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_content(li, "paragraph block*");
-    Pm_NodeSpec_set_defining(li, true);
-    Pm_NodeSpec_set_toDOM(li, Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"li"));
+    Pm_NodeSpec li = Pm_NodeSpec_create(.content = "paragraph block*", .defining = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"li"));
 
-    Pm_NodeSpec hr = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_group(hr, "block");
-    Pm_NodeSpec_set_atom(hr, true);
-    Pm_NodeSpec_set_toDOM(hr, Pm_Node_to_DOMOutputSpec_fn_from(hr_dom, NULL));
+    Pm_NodeSpec hr = Pm_NodeSpec_create(.group = "block", .atom = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(hr_dom, NULL));
 
-    Pm_NodeSpec text = Pm_NodeSpec_create();
-    Pm_NodeSpec_set_group(text, "inline");
+    Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
     Pm_Attrs nodes = Pm_Attrs_create();
     js_set_val(nodes, "doc", doc);
@@ -113,18 +88,13 @@ static Pm_Schema make_schema(void) {
     js_set_val(nodes, "horizontal_rule", hr);
     js_set_val(nodes, "text", text);
 
-    Pm_MarkSpec strong = Pm_MarkSpec_create();
-    Pm_MarkSpec_set_toDOM(strong, Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"strong"));
-    Pm_MarkSpec code = Pm_MarkSpec_create();
-    Pm_MarkSpec_set_toDOM(code, Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"code"));
+    Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"strong"));
+    Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"code"));
     Pm_Attrs marks = Pm_Attrs_create();
     js_set_val(marks, "strong", strong);
     js_set_val(marks, "code", code);
 
-    Pm_SchemaSpec spec = Pm_SchemaSpec_create();
-    js_set_val(spec, "nodes", nodes);
-    js_set_val(spec, "marks", marks);
-    return Pm_Schema_new(spec);
+    return Pm_Schema_new(Pm_SchemaSpec_create(.nodes = js_value(nodes), .marks = js_value(marks)));
 }
 
 static Pm_Node t_node(const char* t) {
@@ -158,14 +128,12 @@ static Pm_Node make_initial_doc(void) {
 }
 
 static Pm_EditorState make_state(void) {
-    Pm_EditorStateConfig cfg = Pm_EditorStateConfig_create();
-    Pm_EditorStateConfig_set_schema(cfg, g_schema);
-    Pm_EditorStateConfig_set_doc(cfg, make_initial_doc());
+    Pm_EditorStateConfig cfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = make_initial_doc());
     return Pm_EditorState_create(cfg);
 }
 
 static void update_meta(Pm_Node doc) {
-    js_scope_open();
+    js_scope();
     char meta[512];
     OutBuf out = { meta, meta + sizeof meta };
     int n = (int)Pm_Node_get_childCount(doc);
@@ -176,24 +144,22 @@ static void update_meta(Pm_Node doc) {
     }
     out_fmt(&out, "] \xC2\xB7 totalSteps=%d \xC2\xB7 nodeSize=%d", g_total_steps, (int)Pm_Node_get_nodeSize(doc));
     HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
-    js_scope_close();
 }
 
 static void on_dispatch(void* ctx, Pm_Transaction tr) {
     (void)ctx;
     if (g_view.h == 0) return;
-    js_scope_open();
+    js_scope();
     g_total_steps += (int)JsArray_Pm_Step_length(Pm_Transaction_get_steps(tr));
     Pm_EditorState next = Pm_EditorState_apply(Pm_EditorView_get_state(g_view), tr);
     Pm_EditorView_updateState(g_view, next);
     update_meta(Pm_EditorState_get_doc(next));
-    js_scope_close();
 }
 
 static const int BTN_IDS[5] = { 0, 1, 2, 3, 4 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int idx = *(const int*)ctx;
     Pm_EditorState st = Pm_EditorView_get_state(g_view);
     Pm_Node doc = Pm_EditorState_get_doc(st);
@@ -311,19 +277,16 @@ static void on_click(void* ctx, PointerEvent ev) {
         Pm_EditorView_updateState(g_view, fresh);
         update_meta(Pm_EditorState_get_doc(fresh));
     }
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     g_doc = get_document();
     js_retain(g_doc);
     g_schema = make_schema();
     js_retain(g_schema);
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create();
-    Pm_DirectEditorProps_set_state(props, make_state());
-    Pm_DirectEditorProps_set_dispatchTransaction(props, Pm_Transaction_fn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = make_state(), .dispatchTransaction = Pm_Transaction_fn_from(on_dispatch, NULL));
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
     g_view = Pm_EditorView_new(AS_Node(mount), props);
@@ -335,5 +298,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement btn = Document_getElementById(g_doc, ids[i]);
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
-    js_scope_close();
 }

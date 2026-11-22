@@ -6,11 +6,8 @@ static const double TWO_PI = 6.283185307179586;
 static Pixi_Application g_app;
 
 static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
-    Pixi_StrokeStyle ss = Pixi_StrokeStyle_create();
-    Pixi_StrokeStyle_set_width(ss, width);
-    Pixi_StrokeStyle_set_color(ss, js_number(color_hex));
     JsArray args = JsArray_new();
-    js_push_val(args, ss);
+    js_push_val(args, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
     Pixi_Graphics_stroke(g, args);
 }
 
@@ -22,7 +19,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx;
     (void)v;
     if (!ok) return;
-    js_scope_open();
+    js_scope();
 
     Document doc = get_document();
     HTMLElement stage_el = Document_getElementById(doc, "stage");
@@ -77,7 +74,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
                 Pixi_Graphics_lineTo(tiles, Pixi_PointData_get_x(tpk), Pixi_PointData_get_y(tpk));
             }
             Pixi_Graphics_closePath(tiles);
-            Pixi_Graphics_fill(tiles, js_number((double)ring_colors[r_idx]));
+            Pixi_Graphics_fill(tiles, ring_colors[r_idx]);
             stroke_g(tiles, 1.2, (double)0x111111);
         }
     }
@@ -85,7 +82,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     Pixi_Graphics center_dot = Pixi_Graphics_new();
     Pixi_Graphics_circle(center_dot, 340.0, 200.0, 8.0);
-    Pixi_Graphics_fill(center_dot, js_number((double)0x111111));
+    Pixi_Graphics_fill(center_dot, 0x111111);
     add_gfx(stage, center_dot);
 
     Pixi_Application_render(g_app);
@@ -94,21 +91,15 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     if (meta.h != 0) {
         HTMLElement_set_textContent(meta, "48 matrix-transformed diamond tiles · 4 rings · 12 radial spokes · 680x400 WebGL");
     }
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     g_app = Pixi_Application_new();
     js_retain(g_app);
-    Pixi_Application_init_options opts = Pixi_Application_init_options_create();
-    Pixi_Application_init_options_set_width(opts, 680.0);
-    Pixi_Application_init_options_set_height(opts, 400.0);
-    Pixi_Application_init_options_set_backgroundColor(opts, js_number((double)0xffffff));
-    Pixi_Application_init_options_set_preference(opts, Pixi_string_or_RendererPreference_array_of("webgl"));
-    Pixi_Application_init_options_set_preserveDrawingBuffer(opts, true);
-    Pixi_Application_init_options_set_antialias(opts, true);
-    Pixi_Application_init_options_set_autoStart(opts, false);
+    Pixi_Application_init_options opts = Pixi_Application_init_options_create(
+        .width = 680.0, .height = 400.0, .backgroundColor = Pixi_ColorSource_of(0xffffff),
+        .preference = Pixi_string_or_RendererPreference_array_of("webgl"),
+        .preserveDrawingBuffer = true, .antialias = true, .autoStart = false);
     Promise_then(Pixi_Application_init(g_app, opts), on_init, 0);
-    js_scope_close();
 }

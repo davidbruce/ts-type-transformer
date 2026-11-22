@@ -21,7 +21,7 @@ static HTMLElement make_pane(Document doc, const char* title, JsString html) {
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -31,10 +31,8 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(app, head);
 
     const char* gfm_src = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n";
-    marked_options_no_async gfm_on = marked_options_no_async_create();
-    marked_options_no_async_set_gfm(gfm_on, true);
-    marked_options_no_async gfm_off = marked_options_no_async_create();
-    marked_options_no_async_set_gfm(gfm_off, false);
+    marked_options_no_async gfm_on = marked_options_no_async_create(.gfm = true);
+    marked_options_no_async gfm_off = marked_options_no_async_create(.gfm = false);
 
     HTMLElement gfm_sec = make_el(doc, "div", "section", 0);
     HTMLElement_appendChild(gfm_sec, make_el(doc, "div", "label", "GitHub Flavored Markdown (gfm)"));
@@ -45,10 +43,8 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(app, gfm_sec);
 
     const char* breaks_src = "Line one\nLine two\nLine three";
-    marked_options_no_async br_off = marked_options_no_async_create();
-    marked_options_no_async_set_breaks(br_off, false);
-    marked_options_no_async br_on = marked_options_no_async_create();
-    marked_options_no_async_set_breaks(br_on, true);
+    marked_options_no_async br_off = marked_options_no_async_create(.breaks = false);
+    marked_options_no_async br_on = marked_options_no_async_create(.breaks = true);
 
     HTMLElement br_sec = make_el(doc, "div", "section", 0);
     HTMLElement_appendChild(br_sec, make_el(doc, "div", "label", "Soft Line Breaks (breaks)"));
@@ -57,6 +53,4 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(br_grid, make_pane(doc, "breaks: true", marked(breaks_src, br_on)));
     HTMLElement_appendChild(br_sec, br_grid);
     HTMLElement_appendChild(app, br_sec);
-
-    js_scope_close();
 }

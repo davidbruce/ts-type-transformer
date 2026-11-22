@@ -34,7 +34,7 @@ static void add_val_row(Document doc, HTMLElement tbody, const char* input, cons
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -44,7 +44,7 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(app, head);
 
     Date sample = df_parseISO("2024-03-15T14:30:45");
-    Date parsed = df_parse("15/03/2024", "dd/MM/yyyy", Df_DateArg_of(sample));
+    Date parsed = df_parse("15/03/2024", "dd/MM/yyyy", sample);
 
     HTMLElement fmt_card = make_el(doc, "div", "card", 0);
     HTMLElement_appendChild(fmt_card, make_el(doc, "div", "label", "Format Tokens & ISO Output"));
@@ -99,6 +99,4 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(vtbl, vbody);
     HTMLElement_appendChild(val_card, vtbl);
     HTMLElement_appendChild(app, val_card);
-
-    js_scope_close();
 }

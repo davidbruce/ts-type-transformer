@@ -29,17 +29,16 @@ static int g_selected = -1;
 static char g_hit_buf[160] = "none";
 
 static void update_camera(void) {
-    js_scope_open();
+    js_scope();
     double r = 8.4;
     Three_Vector3_set(Three_PerspectiveCamera_get_position(g_camera), r * sin(g_yaw), 5.1, r * cos(g_yaw));
     Three_PerspectiveCamera_lookAt(g_camera, Three_Vector3_new(0.0, 0.0, 0.0));
     Three_PerspectiveCamera_updateMatrixWorld(g_camera, true);
     Three_Scene_updateMatrixWorld(g_scene, true);
-    js_scope_close();
 }
 
 static void render_scene(void) {
-    js_scope_open();
+    js_scope();
     for (int i = 0; i < 9; i++) {
         Three_Color_setHex(Three_MeshStandardMaterial_get_color(g_mats[i]), i == g_selected ? 0x111111 : 0xd4d4d4);
     }
@@ -54,11 +53,10 @@ static void render_scene(void) {
     char meta_buf[256];
     snprintf(meta_buf, sizeof meta_buf, "picked: %s \xC2\xB7 9 specimens \xC2\xB7 click canvas or buttons", g_hit_buf);
     HTMLElement_set_textContent(g_meta, meta_buf);
-    js_scope_close();
 }
 
 static void cast_at_ndc(double nx, double ny) {
-    js_scope_open();
+    js_scope();
     Three_Raycaster_setFromCamera(g_raycaster, Three_Vector2_new(nx, ny), g_camera);
 
     JsArray_Three_Intersection hits = Three_Raycaster_intersectObjects(g_raycaster, g_mesh_arr, false);
@@ -87,27 +85,24 @@ static void cast_at_ndc(double nx, double ny) {
         snprintf(g_hit_buf, sizeof g_hit_buf, "miss at ndc (%.2f, %.2f)", nx, ny);
     }
     render_scene();
-    js_scope_close();
 }
 
 static void pick_specimen(int idx) {
-    js_scope_open();
+    js_scope();
     update_camera();
     Three_Vector3 wp = Three_Object3D_getWorldPosition(g_meshes[idx], Three_Vector3_new());
     Three_Vector3 proj = Three_Vector3_project(wp, g_camera);
     cast_at_ndc(Three_Vector3_get_x(proj), Three_Vector3_get_y(proj));
-    js_scope_close();
 }
 
 static void on_canvas_click(void* ctx, PointerEvent ev) {
     (void)ctx;
-    js_scope_open();
+    js_scope();
     DOMRect rect = HTMLCanvasElement_getBoundingClientRect(g_canvas);
     double nx = ((PointerEvent_get_clientX(ev) - DOMRect_get_left(rect)) / DOMRect_get_width(rect)) * 2.0 - 1.0;
     double ny = -((PointerEvent_get_clientY(ev) - DOMRect_get_top(rect)) / DOMRect_get_height(rect)) * 2.0 + 1.0;
     update_camera();
     cast_at_ndc(nx, ny);
-    js_scope_close();
 }
 
 static const int BTN_TAGS[5] = { 0, 1, 2, 3, 4 };
@@ -127,14 +122,11 @@ static void on_btn(void* ctx, PointerEvent ev) {
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     double width = 680.0, height = 400.0;
 
-    Three_WebGLRendererParameters rp = Three_WebGLRendererParameters_create();
-    Three_WebGLRendererParameters_set_antialias(rp, true);
-    Three_WebGLRendererParameters_set_preserveDrawingBuffer(rp, true);
-    g_renderer = Three_WebGLRenderer_new(rp);
+    g_renderer = Three_WebGLRenderer_new(Three_WebGLRendererParameters_create(.antialias = true, .preserveDrawingBuffer = true));
     js_retain(g_renderer);
     Three_WebGLRenderer_setPixelRatio(g_renderer, 1.0);
     Three_WebGLRenderer_setSize(g_renderer, width, height);
@@ -144,19 +136,19 @@ __attribute__((export_name("start"))) void start(void) {
 
     g_scene = Three_Scene_new();
     js_retain(g_scene);
-    Three_Scene_set_background(g_scene, Three_Color_or_Texture_of(Three_Color_new(Three_ColorRepresentation_of(0xf7f7f7))));
+    Three_Scene_set_background(g_scene, Three_Color_new(0xf7f7f7));
     g_camera = Three_PerspectiveCamera_new(42.0, width / height, 0.1, 100.0);
     js_retain(g_camera);
 
-    add_obj(g_scene, Three_AmbientLight_new(Three_ColorRepresentation_of(0xffffff), 1.2));
-    Three_DirectionalLight key = Three_DirectionalLight_new(Three_ColorRepresentation_of(0xffffff), 2.2);
+    add_obj(g_scene, Three_AmbientLight_new(0xffffff, 1.2));
+    Three_DirectionalLight key = Three_DirectionalLight_new(0xffffff, 2.2);
     Three_Vector3_set(Three_DirectionalLight_get_position(key), 6.0, 10.0, 8.0);
     add_obj(g_scene, key);
-    Three_DirectionalLight rim = Three_DirectionalLight_new(Three_ColorRepresentation_of(0xffffff), 0.9);
+    Three_DirectionalLight rim = Three_DirectionalLight_new(0xffffff, 0.9);
     Three_Vector3_set(Three_DirectionalLight_get_position(rim), -7.0, 5.0, -6.0);
     add_obj(g_scene, rim);
 
-    Three_GridHelper grid = Three_GridHelper_new(9.0, 9.0, Three_ColorRepresentation_of(0x999999), Three_ColorRepresentation_of(0xd4d4d4));
+    Three_GridHelper grid = Three_GridHelper_new(9.0, 9.0, 0x999999, 0xd4d4d4);
     Three_Vector3_set_y(Three_GridHelper_get_position(grid), -0.85);
     add_obj(g_scene, grid);
 
@@ -175,12 +167,8 @@ __attribute__((export_name("start"))) void start(void) {
     for (int i = 0; i < 9; i++) {
         int gx = (i % 3) - 1;
         int gz = (i / 3) - 1;
-        Three_MeshStandardMaterialParameters mp = Three_MeshStandardMaterialParameters_create();
-        Three_MeshStandardMaterialParameters_set_color(mp, Three_ColorRepresentation_of(0xd4d4d4));
-        Three_MeshStandardMaterialParameters_set_roughness(mp, 0.55);
-        Three_MeshStandardMaterialParameters_set_metalness(mp, 0.1);
-        Three_MeshStandardMaterialParameters_set_flatShading(mp, i >= 4);
-        g_mats[i] = Three_MeshStandardMaterial_new(mp);
+        g_mats[i] = Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
+            .color = Three_ColorRepresentation_of(0xd4d4d4), .roughness = 0.55, .metalness = 0.1, .flatShading = i >= 4));
         js_retain(g_mats[i]);
 
         Three_Mesh m = Three_Mesh_new(geos[i], g_mats[i]);
@@ -198,7 +186,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     g_box = Three_Box3_new(Three_Vector3_new(-0.5, -0.5, -0.5), Three_Vector3_new(0.5, 0.5, 0.5));
     js_retain(g_box);
-    g_helper = Three_Box3Helper_new(g_box, Three_ColorRepresentation_of(0x111111));
+    g_helper = Three_Box3Helper_new(g_box, 0x111111);
     js_retain(g_helper);
     Three_Box3Helper_set_visible(g_helper, false);
     add_obj(g_scene, g_helper);
@@ -216,5 +204,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(b, HTMLElement_PointerEvent_fn_from(on_btn, (void*)&BTN_TAGS[i]));
     }
     pick_specimen(4);
-    js_scope_close();
 }

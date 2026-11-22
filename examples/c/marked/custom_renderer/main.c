@@ -25,7 +25,7 @@ static JsValue walk_token_cb(void* ctx, JsValue token) {
 
 static JsValue render_heading(void* ctx, JsTuple_Marked_Tokens_Heading args) {
     (void)ctx;
-    js_scope_open();
+    js_scope();
     Marked_Tokens_Heading h = JsTuple_Marked_Tokens_Heading_get_0(args);
     uint32_t depth = (uint32_t)Marked_Tokens_Heading_get_depth(h);
     if (depth < 1 || depth > 6) depth = 1;
@@ -35,12 +35,11 @@ static JsValue render_heading(void* ctx, JsTuple_Marked_Tokens_Heading args) {
     snprintf(out, sizeof out, "<h%u class=\"wire-h\">\xC2\xA7 %s</h%u>\n", depth, text_buf, depth);
     JsValue res = js_string(out);
     js_retain(res);
-    js_scope_close();
     return res;
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -49,11 +48,10 @@ __attribute__((export_name("start"))) void start(void) {
         "## Custom Pipeline\n\n"
         "Paragraph with *italic* and **bold** and `code`.\n";
 
-    MarkedExtension ext = MarkedExtension_create();
-    MarkedExtension_renderer rend = MarkedExtension_renderer_create();
-    MarkedExtension_renderer_set_heading(rend, MarkedExtension_renderer_heading_from(render_heading, 0));
-    MarkedExtension_set_renderer(ext, rend);
-    MarkedExtension_set_walkTokens(ext, MarkedExtension_walkTokens_from(walk_token_cb, 0));
+    MarkedExtension ext = MarkedExtension_create(
+        .renderer = MarkedExtension_renderer_create(.heading = MarkedExtension_renderer_heading_from(render_heading, 0)),
+        .walkTokens = MarkedExtension_walkTokens_from(walk_token_cb, 0)
+    );
 
     Marked custom_m = Marked_new(JsArray_MarkedExtension_from(&ext, 1));
     JsString def_html = marked(md, (marked_options_no_async){ 0 });
@@ -93,6 +91,4 @@ __attribute__((export_name("start"))) void start(void) {
     }
     HTMLElement_appendChild(walk_card, strip);
     HTMLElement_appendChild(app, walk_card);
-
-    js_scope_close();
 }

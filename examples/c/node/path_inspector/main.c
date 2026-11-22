@@ -22,7 +22,7 @@ static void emitf(const char* fmt, ...) {
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     char jbuf[128], nbuf[128], rbuf[128], lbuf[128], fbuf[128], tmp[128];
 
     const char* join_items[] = { "/workspace", "packages", "core", "..", "cli", "index.ts" };
@@ -59,10 +59,9 @@ __attribute__((export_name("start"))) void start(void) {
     check(strcmp(proot, "/") == 0 && strcmp(pdir, "/srv/app") == 0 && strcmp(pbase, "archive.tar.gz") == 0
         && strcmp(pname, "archive.tar") == 0 && strcmp(pext, ".gz") == 0);
 
-    Node_path_FormatInputPathObject fmt = Node_path_FormatInputPathObject_create();
-    Node_path_FormatInputPathObject_set_dir(fmt, "/etc/service");
-    Node_path_FormatInputPathObject_set_name(fmt, "daemon");
-    Node_path_FormatInputPathObject_set_ext(fmt, ".conf");
+    Node_path_FormatInputPathObject fmt = Node_path_FormatInputPathObject_create(
+        .dir = "/etc/service", .name = "daemon", .ext = ".conf"
+    );
     JsString_copy(node_path_format(fmt), fbuf, sizeof fbuf);
     check(strcmp(fbuf, "/etc/service/daemon.conf") == 0);
 
@@ -70,5 +69,4 @@ __attribute__((export_name("start"))) void start(void) {
 
     emitf("join=%s norm=%s\nresolve=%s relative=%s format=%s\nparsed=(root=%s dir=%s base=%s ext=%s)\nPASS: path_inspector (%d checks)\n",
         jbuf, nbuf, rbuf, lbuf, fbuf, proot, pdir, pbase, pext, g_passed);
-    js_scope_close();
 }

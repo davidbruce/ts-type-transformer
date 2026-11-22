@@ -22,12 +22,11 @@ static JsValue atom_get(void* ctx) {
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
-    js_scope_open();
+    js_scope();
     JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
     if (a->value.h != 0) js_release(a->value);
     a->value = next;
-    js_scope_close();
     return NONE;
 }
 static void no_unsub(void* ctx) { (void)ctx; }
@@ -139,7 +138,7 @@ static bool g_zone_visible = false;
 static bool g_owner_visible = true;
 
 static void render(void) {
-    js_scope_open();
+    js_scope();
     Table_ColumnPinning pin = { g_table.h };
     Table_ColumnVisibility vis = { g_table.h };
     Table_RowSelection sel = { g_table.h };
@@ -204,22 +203,20 @@ static void render(void) {
     snprintf(meta, sizeof meta, "%u / %u visible columns \xC2\xB7 start:id end:status pinned \xC2\xB7 %u / %u rows selected",
              vis_count, all_count, sel_count, nrows);
     HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
-    js_scope_close();
 }
 
 static void apply_visibility(void) {
-    js_scope_open();
+    js_scope();
     JsValue cv = js_object();
     js_set_bool(cv, "zone", g_zone_visible);
     js_set_bool(cv, "owner", g_owner_visible);
     Table_ColumnVisibility_setColumnVisibility((Table_ColumnVisibility){ g_table.h }, cv);
-    js_scope_close();
 }
 
 static const int BTN_IDS[5] = { 0, 1, 2, 3, 4 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int idx = *(const int*)ctx;
     Table_ColumnPinning pin = { g_table.h };
     Table_RowSelection sel = { g_table.h };
@@ -252,11 +249,10 @@ static void on_click(void* ctx, PointerEvent ev) {
         Table_RowSelection_setRowSelection(sel, s);
     }
     render();
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     JsValue features = js_object();
     js_set_val(features, "coreReactivityFeature", make_reactivity());
     js_set_val(features, "columnVisibilityFeature", table_get_columnVisibilityFeature());
@@ -319,5 +315,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
     render();
-    js_scope_close();
 }

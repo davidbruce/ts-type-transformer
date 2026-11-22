@@ -7,11 +7,8 @@ static const double TWO_PI_3 = 2.0943951023931953;
 static Pixi_Application g_app;
 
 static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
-    Pixi_StrokeStyle ss = Pixi_StrokeStyle_create();
-    Pixi_StrokeStyle_set_width(ss, width);
-    Pixi_StrokeStyle_set_color(ss, js_number(color_hex));
     JsArray args = JsArray_new();
-    js_push_val(args, ss);
+    js_push_val(args, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
     Pixi_Graphics_stroke(g, args);
 }
 
@@ -23,7 +20,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx;
     (void)v;
     if (!ok) return;
-    js_scope_open();
+    js_scope();
 
     Document doc = get_document();
     HTMLElement stage_el = Document_getElementById(doc, "stage");
@@ -53,9 +50,9 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
         Pixi_Graphics arm_bar = Pixi_Graphics_new();
         Pixi_Graphics_rect(arm_bar, 0.0, -4.0, 110.0, 8.0);
-        Pixi_Graphics_fill(arm_bar, js_number((double)0x737373));
+        Pixi_Graphics_fill(arm_bar, 0x737373);
         Pixi_Graphics_circle(arm_bar, 110.0, 0.0, 10.0);
-        Pixi_Graphics_fill(arm_bar, js_number((double)0x111111));
+        Pixi_Graphics_fill(arm_bar, 0x111111);
         add_child_c(arm, AS_Pixi_Container(arm_bar));
 
         Pixi_Container sub = Pixi_Container_new();
@@ -70,13 +67,13 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
         Pixi_Graphics sat_box = Pixi_Graphics_new();
         Pixi_Graphics_rect(sat_box, -12.0, -12.0, 24.0, 24.0);
-        Pixi_Graphics_fill(sat_box, js_number((double)0x262626));
+        Pixi_Graphics_fill(sat_box, 0x262626);
         Pixi_Graphics_set_x(sat_box, 48.0);
         add_child_c(sub, AS_Pixi_Container(sat_box));
 
         Pixi_Graphics sat_orb = Pixi_Graphics_new();
         Pixi_Graphics_circle(sat_orb, 0.0, 0.0, 14.0);
-        Pixi_Graphics_fill(sat_orb, js_number((double)0xd4d4d4));
+        Pixi_Graphics_fill(sat_orb, 0xd4d4d4);
         stroke_g(sat_orb, 2.0, (double)0x111111);
         Pixi_Graphics_set_x(sat_orb, -32.0);
         add_child_c(sub, AS_Pixi_Container(sat_orb));
@@ -87,9 +84,9 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     Pixi_Graphics hub = Pixi_Graphics_new();
     Pixi_Graphics_circle(hub, 0.0, 0.0, 18.0);
-    Pixi_Graphics_fill(hub, js_number((double)0x111111));
+    Pixi_Graphics_fill(hub, 0x111111);
     Pixi_Graphics_circle(hub, 0.0, 0.0, 7.0);
-    Pixi_Graphics_fill(hub, js_number((double)0xffffff));
+    Pixi_Graphics_fill(hub, 0xffffff);
     add_child_c(root, AS_Pixi_Container(hub));
 
     add_child_c(stage, root);
@@ -102,21 +99,15 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     HTMLElement meta = Document_getElementById(doc, "meta");
     if (meta.h != 0) HTMLElement_set_textContent(meta, buf);
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     g_app = Pixi_Application_new();
     js_retain(g_app);
-    Pixi_Application_init_options opts = Pixi_Application_init_options_create();
-    Pixi_Application_init_options_set_width(opts, 680.0);
-    Pixi_Application_init_options_set_height(opts, 400.0);
-    Pixi_Application_init_options_set_backgroundColor(opts, js_number((double)0xffffff));
-    Pixi_Application_init_options_set_preference(opts, Pixi_string_or_RendererPreference_array_of("webgl"));
-    Pixi_Application_init_options_set_preserveDrawingBuffer(opts, true);
-    Pixi_Application_init_options_set_antialias(opts, true);
-    Pixi_Application_init_options_set_autoStart(opts, false);
+    Pixi_Application_init_options opts = Pixi_Application_init_options_create(
+        .width = 680.0, .height = 400.0, .backgroundColor = Pixi_ColorSource_of(0xffffff),
+        .preference = Pixi_string_or_RendererPreference_array_of("webgl"),
+        .preserveDrawingBuffer = true, .antialias = true, .autoStart = false);
     Promise_then(Pixi_Application_init(g_app, opts), on_init, 0);
-    js_scope_close();
 }

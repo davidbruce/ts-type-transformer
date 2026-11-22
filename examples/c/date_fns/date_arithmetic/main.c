@@ -46,7 +46,7 @@ static void add_kv_js(Document doc, HTMLElement row, const char* label, JsString
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -57,12 +57,8 @@ __attribute__((export_name("start"))) void start(void) {
 
     Date base_d = df_parseISO("2024-03-15");
     Date jan31 = df_parseISO("2024-01-31");
-    Df_DateArg day_base = Df_DateArg_of(base_d);
-    Df_DateArg day_jan = Df_DateArg_of(jan31);
 
-    Df_Duration dur = Df_Duration_create();
-    Df_Duration_set_months(dur, 1);
-    Df_Duration_set_days(dur, 2);
+    Df_Duration dur = Df_Duration_create(.months = 1, .days = 2);
 
     HTMLElement card = make_el(doc, "div", "card", 0);
     HTMLElement_appendChild(card, make_el(doc, "div", "label", "Immutable Date Stepping"));
@@ -78,15 +74,15 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(tbl, thead);
 
     HTMLElement tbody = make_el(doc, "tbody", 0, 0);
-    add_op_row(doc, tbody, "addDays(base, 3)", df_addDays(day_base, 3.0), base_d, "yyyy-MM-dd");
-    add_op_row(doc, tbody, "subDays(base, 15)", df_subDays(day_base, 15.0), base_d, "yyyy-MM-dd");
-    add_op_row(doc, tbody, "addWeeks(base, 2)", df_addWeeks(day_base, 2.0), base_d, "yyyy-MM-dd");
-    add_op_row(doc, tbody, "addMonths(jan31, 1)", df_addMonths(day_jan, 1.0), base_d, "yyyy-MM-dd");
-    add_op_row(doc, tbody, "subMonths(base, 3)", df_subMonths(day_base, 3.0), base_d, "yyyy-MM-dd");
-    add_op_row(doc, tbody, "addYears(base, 1)", df_addYears(day_base, 1.0), base_d, "yyyy-MM-dd");
-    add_op_row(doc, tbody, "startOfWeek(base)", df_startOfWeek(day_base), base_d, "yyyy-MM-dd");
-    add_op_row(doc, tbody, "endOfMonth(base)", df_endOfMonth(day_base), base_d, "yyyy-MM-dd HH:mm:ss");
-    add_op_row(doc, tbody, "add(base, { months: 1, days: 2 })", df_add(day_base, dur), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "addDays(base, 3)", df_addDays(base_d, 3.0), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "subDays(base, 15)", df_subDays(base_d, 15.0), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "addWeeks(base, 2)", df_addWeeks(base_d, 2.0), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "addMonths(jan31, 1)", df_addMonths(jan31, 1.0), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "subMonths(base, 3)", df_subMonths(base_d, 3.0), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "addYears(base, 1)", df_addYears(base_d, 1.0), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "startOfWeek(base)", df_startOfWeek(base_d), base_d, "yyyy-MM-dd");
+    add_op_row(doc, tbody, "endOfMonth(base)", df_endOfMonth(base_d), base_d, "yyyy-MM-dd HH:mm:ss");
+    add_op_row(doc, tbody, "add(base, { months: 1, days: 2 })", df_add(base_d, dur), base_d, "yyyy-MM-dd");
     add_op_row(doc, tbody, "base (immutable check)", base_d, base_d, "yyyy-MM-dd");
     HTMLElement_appendChild(tbl, tbody);
     HTMLElement_appendChild(card, tbl);
@@ -107,5 +103,4 @@ __attribute__((export_name("start"))) void start(void) {
 
     HTMLElement_appendChild(footer, srow);
     HTMLElement_appendChild(app, footer);
-    js_scope_close();
 }

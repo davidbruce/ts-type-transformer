@@ -22,12 +22,11 @@ static JsValue atom_get(void* ctx) {
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
-    js_scope_open();
+    js_scope();
     JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
     if (a->value.h != 0) js_release(a->value);
     a->value = next;
-    js_scope_close();
     return NONE;
 }
 static void no_unsub(void* ctx) { (void)ctx; }
@@ -143,7 +142,7 @@ static Table_Core g_table;
 static Document g_doc;
 
 static void render(const char* label) {
-    js_scope_open();
+    js_scope();
     Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     JsArray_Table_Column_Core cols = Table_Core_getAllLeafColumns(g_table);
@@ -196,13 +195,12 @@ static void render(const char* label) {
     char meta[256];
     snprintf(meta, sizeof meta, "%s \xC2\xB7 %u rows \xC2\xB7 top node: %s", label, nrows, top_host);
     HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
-    js_scope_close();
 }
 
 static const int BTN_IDS[5] = { 0, 1, 2, 3, 4 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int idx = *(const int*)ctx;
     JsArray next = JsArray_new();
     const char* label = "Sort: unsorted (data order)";
@@ -222,11 +220,10 @@ static void on_click(void* ctx, PointerEvent ev) {
     }
     Table_RowSorting_setSorting((Table_RowSorting){ g_table.h }, js_value(next));
     render(label);
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     JsValue sort_fns = js_object();
     js_set_val(sort_fns, "alphanumeric", table_get_sortFn_alphanumeric());
     js_set_val(sort_fns, "basic", table_get_sortFn_basic());
@@ -280,5 +277,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
     render("Sort: region asc, latency asc");
-    js_scope_close();
 }

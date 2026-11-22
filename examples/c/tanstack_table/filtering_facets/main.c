@@ -21,12 +21,11 @@ static JsValue atom_get(void* ctx) {
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
-    js_scope_open();
+    js_scope();
     JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
     if (a->value.h != 0) js_release(a->value);
     a->value = next;
-    js_scope_close();
     return NONE;
 }
 static void no_unsub(void* ctx) { (void)ctx; }
@@ -146,7 +145,7 @@ static Table_Core g_table;
 static Document g_doc;
 
 static void render(const char* label) {
-    js_scope_open();
+    js_scope();
     Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
     Table_RowModel core = Table_RowModels_Core_getCoreRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
@@ -176,13 +175,12 @@ static void render(const char* label) {
     char meta[256];
     snprintf(meta, sizeof meta, "%s \xC2\xB7 showing %u / %u services", label, nrows, ntotal);
     HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
-    js_scope_close();
 }
 
 static const int BTN_IDS[5] = { 0, 1, 2, 3, 4 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int idx = *(const int*)ctx;
     Table_ColumnFiltering cf = { g_table.h };
     Table_GlobalFiltering gf = { g_table.h };
@@ -214,11 +212,10 @@ static void on_click(void* ctx, PointerEvent ev) {
         label = "Filter: errors >= 5";
     }
     render(label);
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     JsValue filter_fns = js_object();
     js_set_val(filter_fns, "includesString", table_get_filterFn_includesString());
     js_set_val(filter_fns, "equalsString", table_get_filterFn_equalsString());
@@ -275,5 +272,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
     render("Filter: tier = core & requests >= 400");
-    js_scope_close();
 }

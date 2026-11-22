@@ -41,7 +41,7 @@ static bool g_overlay_on = true;
 static double g_azimuth = 0.62;
 
 static void rebuild_field(void) {
-    js_scope_open();
+    js_scope();
     double span = 7.6, half = span / 2.0;
     for (int iz = 0; iz < GRID_N; iz++) {
         for (int ix = 0; ix < GRID_N; ix++) {
@@ -86,7 +86,6 @@ static void rebuild_field(void) {
         wave_name(g_wave_mode), GRID_N * GRID_N, g_tri_count, min_y, max_y, g_overlay_on ? "on" : "off"
     );
     HTMLElement_set_textContent(g_meta, meta_buf);
-    js_scope_close();
 }
 
 static const int BTN_TAGS[5] = { 0, 1, 2, 3, 4 };
@@ -100,14 +99,11 @@ static void on_btn(void* ctx, PointerEvent ev) {
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     double width = 680.0, height = 400.0;
 
-    Three_WebGLRendererParameters rp = Three_WebGLRendererParameters_create();
-    Three_WebGLRendererParameters_set_antialias(rp, true);
-    Three_WebGLRendererParameters_set_preserveDrawingBuffer(rp, true);
-    g_renderer = Three_WebGLRenderer_new(rp);
+    g_renderer = Three_WebGLRenderer_new(Three_WebGLRendererParameters_create(.antialias = true, .preserveDrawingBuffer = true));
     js_retain(g_renderer);
     Three_WebGLRenderer_setPixelRatio(g_renderer, 1.0);
     Three_WebGLRenderer_setSize(g_renderer, width, height);
@@ -115,19 +111,19 @@ __attribute__((export_name("start"))) void start(void) {
 
     g_scene = Three_Scene_new();
     js_retain(g_scene);
-    Three_Scene_set_background(g_scene, Three_Color_or_Texture_of(Three_Color_new(Three_ColorRepresentation_of(0xf7f7f7))));
+    Three_Scene_set_background(g_scene, Three_Color_new(0xf7f7f7));
     g_camera = Three_PerspectiveCamera_new(42.0, width / height, 0.1, 100.0);
     js_retain(g_camera);
 
-    add_obj(g_scene, Three_AmbientLight_new(Three_ColorRepresentation_of(0xffffff), 1.2));
-    Three_DirectionalLight key = Three_DirectionalLight_new(Three_ColorRepresentation_of(0xffffff), 2.2);
+    add_obj(g_scene, Three_AmbientLight_new(0xffffff, 1.2));
+    Three_DirectionalLight key = Three_DirectionalLight_new(0xffffff, 2.2);
     Three_Vector3_set(Three_DirectionalLight_get_position(key), 6.0, 10.0, 8.0);
     add_obj(g_scene, key);
-    Three_DirectionalLight rim = Three_DirectionalLight_new(Three_ColorRepresentation_of(0xffffff), 0.9);
+    Three_DirectionalLight rim = Three_DirectionalLight_new(0xffffff, 0.9);
     Three_Vector3_set(Three_DirectionalLight_get_position(rim), -7.0, 5.0, -6.0);
     add_obj(g_scene, rim);
 
-    Three_GridHelper grid = Three_GridHelper_new(9.0, 12.0, Three_ColorRepresentation_of(0x999999), Three_ColorRepresentation_of(0xe5e5e5));
+    Three_GridHelper grid = Three_GridHelper_new(9.0, 12.0, 0x999999, 0xe5e5e5);
     Three_Vector3_set_y(Three_GridHelper_get_position(grid), -1.1);
     add_obj(g_scene, grid);
 
@@ -154,18 +150,12 @@ __attribute__((export_name("start"))) void start(void) {
     Three_BufferGeometry_setAttribute(g_geo, "position", g_pos_attr);
     Three_BufferGeometry_setIndex_with_opt_number_array(g_geo, indices);
 
-    Three_MeshStandardMaterialParameters smp = Three_MeshStandardMaterialParameters_create();
-    Three_MeshStandardMaterialParameters_set_color(smp, Three_ColorRepresentation_of(0xb5b5b5));
-    Three_MeshStandardMaterialParameters_set_roughness(smp, 0.72);
-    Three_MeshStandardMaterialParameters_set_metalness(smp, 0.05);
-    Three_MeshStandardMaterialParameters_set_flatShading(smp, true);
-    Three_Mesh surface_mesh = Three_Mesh_new(g_geo, Three_MeshStandardMaterial_new(smp));
+    Three_Mesh surface_mesh = Three_Mesh_new(g_geo, Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
+        .color = Three_ColorRepresentation_of(0xb5b5b5), .roughness = 0.72, .metalness = 0.05, .flatShading = true)));
     add_obj(g_scene, surface_mesh);
 
-    Three_MeshBasicMaterialParameters wmp = Three_MeshBasicMaterialParameters_create();
-    Three_MeshBasicMaterialParameters_set_color(wmp, Three_ColorRepresentation_of(0x262626));
-    Three_MeshBasicMaterialParameters_set_wireframe(wmp, true);
-    g_wire_mesh = Three_Mesh_new(g_geo, Three_MeshBasicMaterial_new(wmp));
+    g_wire_mesh = Three_Mesh_new(g_geo, Three_MeshBasicMaterial_new(Three_MeshBasicMaterialParameters_create(
+        .color = Three_ColorRepresentation_of(0x262626), .wireframe = true)));
     js_retain(g_wire_mesh);
     Three_Vector3_set_y(Three_Mesh_get_position(g_wire_mesh), 0.015);
     add_obj(g_scene, g_wire_mesh);
@@ -175,10 +165,8 @@ __attribute__((export_name("start"))) void start(void) {
     g_pts_attr = Three_Float32BufferAttribute_new_with_number((double)(pt_count * 3), 3.0);
     js_retain(g_pts_attr);
     Three_BufferGeometry_setAttribute(pts_geo, "position", g_pts_attr);
-    Three_PointsMaterialParameters pmp = Three_PointsMaterialParameters_create();
-    Three_PointsMaterialParameters_set_color(pmp, Three_ColorRepresentation_of(0x111111));
-    Three_PointsMaterialParameters_set_size(pmp, 0.14);
-    add_obj(g_scene, Three_Points_new(pts_geo, Three_PointsMaterial_new(pmp)));
+    add_obj(g_scene, Three_Points_new(pts_geo, Three_PointsMaterial_new(Three_PointsMaterialParameters_create(
+        .color = Three_ColorRepresentation_of(0x111111), .size = 0.14))));
 
     g_wire_btn = Document_getElementById(doc, "btn-wire");
     js_retain(g_wire_btn);
@@ -191,5 +179,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(b, HTMLElement_PointerEvent_fn_from(on_btn, (void*)&BTN_TAGS[i]));
     }
     rebuild_field();
-    js_scope_close();
 }

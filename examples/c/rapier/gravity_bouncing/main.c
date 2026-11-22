@@ -13,10 +13,6 @@ static const char* REST_LABELS[5] = { "e=0.00", "e=0.35", "e=0.60", "e=0.80", "e
 static double to_cx(double wx) { return 340.0 + wx * 46.0; }
 static double to_cy(double wy) { return 350.0 - wy * 46.0; }
 
-static string_or_CanvasGradient_or_CanvasPattern C(const char* hex) {
-    return string_or_CanvasGradient_or_CanvasPattern_of(hex);
-}
-
 static CanvasRenderingContext2D g_ctx;
 static HTMLElement g_meta;
 static HTMLElement g_grav_btn;
@@ -45,7 +41,7 @@ static void draw_dashed(double x1, double y1, double x2, double y2, int segs) {
 }
 
 static void build_scene(void) {
-    js_scope_open();
+    js_scope();
     for (int i = 0; i < 5; i++) {
         if (g_balls[i].h != 0) {
             js_release(g_balls[i]);
@@ -74,11 +70,10 @@ static void build_scene(void) {
     }
     g_step_count = 0;
     g_trail_count = 0;
-    js_scope_close();
 }
 
 static void step_sim(void) {
-    js_scope_open();
+    js_scope();
     Rapier_World_step(g_world);
     g_step_count++;
     int idx = (g_step_count - 1) % TRAIL_LEN;
@@ -88,15 +83,14 @@ static void step_sim(void) {
         g_trail_y[i][idx] = Rapier_Vector_get_y(p);
     }
     if (g_trail_count < TRAIL_LEN) g_trail_count++;
-    js_scope_close();
 }
 
 static void render(void) {
-    js_scope_open();
-    CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#ffffff"));
+    js_scope();
+    CanvasRenderingContext2D_set_fillStyle(g_ctx, "#ffffff");
     CanvasRenderingContext2D_fillRect(g_ctx, 0.0, 0.0, 680.0, 400.0);
 
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#efefef"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#efefef");
     CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.0);
     for (int gx = -6; gx <= 6; gx++) {
         double x = to_cx((double)gx);
@@ -113,23 +107,23 @@ static void render(void) {
         CanvasRenderingContext2D_stroke(g_ctx);
     }
 
-    CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#f7f7f7"));
+    CanvasRenderingContext2D_set_fillStyle(g_ctx, "#f7f7f7");
     CanvasRenderingContext2D_fillRect(g_ctx, 0.0, 350.0, 680.0, 50.0);
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#d4d4d4"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#d4d4d4");
     for (double hx = -20.0; hx < 700.0; hx += 18.0) {
         CanvasRenderingContext2D_beginPath(g_ctx);
         CanvasRenderingContext2D_moveTo(g_ctx, hx, 350.0);
         CanvasRenderingContext2D_lineTo(g_ctx, hx - 24.0, 400.0);
         CanvasRenderingContext2D_stroke(g_ctx);
     }
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#111111"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#111111");
     CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.5);
     CanvasRenderingContext2D_beginPath(g_ctx);
     CanvasRenderingContext2D_moveTo(g_ctx, 0.0, 350.0);
     CanvasRenderingContext2D_lineTo(g_ctx, 680.0, 350.0);
     CanvasRenderingContext2D_stroke(g_ctx);
 
-    CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#d4d4d4"));
+    CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#d4d4d4");
     CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.0);
     draw_dashed(to_cx(-5.0), to_cy(5.6), to_cx(5.0), to_cy(5.6), 40);
     for (int i = 0; i < 5; i++) {
@@ -140,7 +134,7 @@ static void render(void) {
     double energy = 0.0, max_y = 0.0;
     CanvasRenderingContext2D_set_font(g_ctx, "11px ui-monospace, monospace");
     for (int i = 0; i < 5; i++) {
-        CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#b5b5b5"));
+        CanvasRenderingContext2D_set_fillStyle(g_ctx, "#b5b5b5");
         for (int k = 0; k < g_trail_count; k++) {
             CanvasRenderingContext2D_beginPath(g_ctx);
             CanvasRenderingContext2D_arc(g_ctx, to_cx(g_trail_x[i][k]), to_cy(g_trail_y[i][k]), 1.6, 0.0, TWO_PI);
@@ -156,23 +150,23 @@ static void render(void) {
         if (py > max_y) max_y = py;
 
         double cx = to_cx(px), cy = to_cy(py), rpx = 0.42 * 46.0;
-        CanvasRenderingContext2D_set_fillStyle(g_ctx, C(BALL_HEX[i]));
+        CanvasRenderingContext2D_set_fillStyle(g_ctx, BALL_HEX[i]);
         CanvasRenderingContext2D_beginPath(g_ctx);
         CanvasRenderingContext2D_arc(g_ctx, cx, cy, rpx, 0.0, TWO_PI);
         CanvasRenderingContext2D_fill(g_ctx);
 
-        CanvasRenderingContext2D_set_strokeStyle(g_ctx, C("#111111"));
+        CanvasRenderingContext2D_set_strokeStyle(g_ctx, "#111111");
         CanvasRenderingContext2D_set_lineWidth(g_ctx, 1.6);
         CanvasRenderingContext2D_beginPath(g_ctx);
         CanvasRenderingContext2D_arc(g_ctx, cx, cy, rpx, 0.0, TWO_PI);
         CanvasRenderingContext2D_stroke(g_ctx);
 
-        CanvasRenderingContext2D_set_fillStyle(g_ctx, C(i >= 3 ? "#d4d4d4" : "#737373"));
+        CanvasRenderingContext2D_set_fillStyle(g_ctx, (i >= 3 ? "#d4d4d4" : "#737373"));
         CanvasRenderingContext2D_beginPath(g_ctx);
         CanvasRenderingContext2D_arc(g_ctx, cx - 5.0, cy - 5.0, 2.8, 0.0, TWO_PI);
         CanvasRenderingContext2D_fill(g_ctx);
 
-        CanvasRenderingContext2D_set_fillStyle(g_ctx, C("#111111"));
+        CanvasRenderingContext2D_set_fillStyle(g_ctx, "#111111");
         CanvasRenderingContext2D_fillText(g_ctx, REST_LABELS[i], cx - 22.0, 368.0);
     }
 
@@ -184,24 +178,22 @@ static void render(void) {
         max_y, energy, g_step_count, g_paused ? " (paused)" : " (running)"
     );
     HTMLElement_set_textContent(g_meta, meta_buf);
-    js_scope_close();
 }
 
 static void on_raf(void* ctx, double ts) {
     (void)ctx; (void)ts;
-    js_scope_open();
+    js_scope();
     if (!g_paused) {
         step_sim();
         render();
     }
     requestAnimationFrame(g_raf_cb);
-    js_scope_close();
 }
 
 static const int BTN_TAGS[4] = { 0, 1, 2, 3 };
 static void on_btn(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int id = *(const int*)ctx;
     if (id == 0) {
         g_earth = !g_earth;
@@ -226,13 +218,12 @@ static void on_btn(void* ctx, PointerEvent ev) {
         for (int i = 0; i < 18; i++) step_sim();
         render();
     }
-    js_scope_close();
 }
 
 static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx; (void)v;
     if (!ok) return;
-    js_scope_open();
+    js_scope();
 
     Document doc = get_document();
     HTMLCanvasElement canvas = HTMLCanvasElement_cast(Document_getElementById(doc, "canvas"));
@@ -257,11 +248,9 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     g_raf_cb = FrameRequestCallback_from(on_raf, NULL);
     js_retain(g_raf_cb);
     requestAnimationFrame(g_raf_cb);
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Promise_then(rapier_init(), on_init, NULL);
-    js_scope_close();
 }

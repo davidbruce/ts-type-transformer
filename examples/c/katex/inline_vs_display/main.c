@@ -9,7 +9,7 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -18,10 +18,8 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(head, make_el(doc, "span", "badge", "displayMode: false vs true"));
     HTMLElement_appendChild(app, head);
 
-    KatexOptions inline_opts = KatexOptions_create();
-    KatexOptions_set_displayMode(inline_opts, false);
-    KatexOptions display_opts = KatexOptions_create();
-    KatexOptions_set_displayMode(display_opts, true);
+    KatexOptions inline_opts = KatexOptions_create(.displayMode = false);
+    KatexOptions display_opts = KatexOptions_create(.displayMode = true);
 
     const char* labels_in[] = { "Basel Series — inline", "Dilogarithm — inline", "Sinc Limit — inline", "Binomial — inline" };
     const char* labels_disp[] = { "Basel Series — display", "Dilogarithm — display", "Sinc Limit — display", "Binomial — display" };
@@ -50,6 +48,4 @@ __attribute__((export_name("start"))) void start(void) {
 
         HTMLElement_appendChild(app, row);
     }
-
-    js_scope_close();
 }

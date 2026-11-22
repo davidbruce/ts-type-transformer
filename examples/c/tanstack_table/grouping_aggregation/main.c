@@ -22,12 +22,11 @@ static JsValue atom_get(void* ctx) {
 }
 static JsValue atom_set(void* ctx, JsValue updater) {
     AtomState* a = ctx;
-    js_scope_open();
+    js_scope();
     JsValue next = table_functionalUpdate(updater, a->value);
     js_retain(next);
     if (a->value.h != 0) js_release(a->value);
     a->value = next;
-    js_scope_close();
     return NONE;
 }
 static void no_unsub(void* ctx) { (void)ctx; }
@@ -141,7 +140,7 @@ static Table_Core g_table;
 static Document g_doc;
 
 static void render(void) {
-    js_scope_open();
+    js_scope();
     Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Table_Row_Core_length(rows);
@@ -194,13 +193,12 @@ static void render(void) {
     char meta[256];
     snprintf(meta, sizeof meta, "Grouped by %s \xC2\xB7 %d groups \xC2\xB7 %u visible rows", grp_col, groups, nrows);
     HTMLElement_set_textContent(Document_getElementById(g_doc, "meta"), meta);
-    js_scope_close();
 }
 
 static const int BTN_IDS[4] = { 0, 1, 2, 3 };
 static void on_click(void* ctx, PointerEvent ev) {
     (void)ev;
-    js_scope_open();
+    js_scope();
     int idx = *(const int*)ctx;
     Table_ColumnGrouping grp = { g_table.h };
     Table_RowExpanding exp = { g_table.h };
@@ -215,11 +213,10 @@ static void on_click(void* ctx, PointerEvent ev) {
         Table_RowExpanding_setExpanded(exp, js_bool(true));
     }
     render();
-    js_scope_close();
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     JsValue agg_fns = js_object();
     js_set_val(agg_fns, "sum", table_get_aggregationFn_sum());
     js_set_val(agg_fns, "mean", table_get_aggregationFn_mean());
@@ -277,5 +274,4 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_addEventListener_click(btn, HTMLElement_PointerEvent_fn_from(on_click, (void*)&BTN_IDS[i]));
     }
     render();
-    js_scope_close();
 }

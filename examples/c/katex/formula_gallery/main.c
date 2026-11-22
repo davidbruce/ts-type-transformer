@@ -9,7 +9,7 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 __attribute__((export_name("start"))) void start(void) {
-    js_scope_open();
+    js_scope();
     Document doc = get_document();
     HTMLElement app = Document_getElementById(doc, "app");
 
@@ -23,8 +23,7 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(app, head);
 
     HTMLElement grid = make_el(doc, "div", "grid", 0);
-    KatexOptions opts = KatexOptions_create();
-    KatexOptions_set_displayMode(opts, true);
+    KatexOptions opts = KatexOptions_create(.displayMode = true);
 
     const char* names[] = {
         "Euler's Identity",
@@ -52,5 +51,4 @@ __attribute__((export_name("start"))) void start(void) {
     }
 
     HTMLElement_appendChild(app, grid);
-    js_scope_close();
 }
