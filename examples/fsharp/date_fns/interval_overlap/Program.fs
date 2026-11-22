@@ -22,7 +22,7 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
 let private makeSpan (sIso: string) (eIso: string) : Interval<DateArg<JS.Date>, DateArg<JS.Date>> =
     let s: JS.Date = parseISO sIso
     let e: JS.Date = parseISO eIso
-    Interval.Create (!^s, !^e)
+    Interval.Create (s, e)
 
 let private app = (document.getElementById "app").Value
 

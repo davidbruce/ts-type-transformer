@@ -72,7 +72,7 @@ let private options =
         data = data,
         initialState = TableState_All.Create(
             grouping = ResizeArray [ "region" ],
-            expanded = !^true
+            expanded = true
         )
     )
 
@@ -129,13 +129,13 @@ let main () =
     wireBtn "btn-2" (fun () ->
         grp.setGrouping (!^ (ResizeArray [ "region" ]))
         let expandAll : ExpandedState = !^true
-        exp.setExpanded (!^ expandAll)
+        exp.setExpanded expandAll
         render ()
     )
     wireBtn "btn-3" (fun () ->
         grp.setGrouping (!^ (ResizeArray [ "role" ]))
         let expandAll : ExpandedState = !^true
-        exp.setExpanded (!^ expandAll)
+        exp.setExpanded expandAll
         render ()
     )
     render ()

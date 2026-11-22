@@ -95,11 +95,11 @@ let main () =
             if trailCount < trailLen then trailCount <- trailCount + 1
 
         let render () =
-            ctx.fillStyle <- !^ "#ffffff"
+            ctx.fillStyle <- "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
             // Blueprint drafting grid
-            ctx.strokeStyle <- !^ "#efefef"
+            ctx.strokeStyle <- "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -115,9 +115,9 @@ let main () =
                 ctx.stroke ()
 
             // Ground slab & cross-hatch ticks
-            ctx.fillStyle <- !^ "#f7f7f7"
+            ctx.fillStyle <- "#f7f7f7"
             ctx.fillRect (0.0, 350.0, 680.0, 50.0)
-            ctx.strokeStyle <- !^ "#d4d4d4"
+            ctx.strokeStyle <- "#d4d4d4"
             ctx.lineWidth <- 1.0
             let mutable hx = -20.0
             while hx < 700.0 do
@@ -126,7 +126,7 @@ let main () =
                 ctx.lineTo (hx - 24.0, 400.0)
                 ctx.stroke ()
                 hx <- hx + 18.0
-            ctx.strokeStyle <- !^ "#111111"
+            ctx.strokeStyle <- "#111111"
             ctx.lineWidth <- 1.5
             ctx.beginPath ()
             ctx.moveTo (0.0, 350.0)
@@ -134,7 +134,7 @@ let main () =
             ctx.stroke ()
 
             // Drop reference line & vertical guides
-            ctx.strokeStyle <- !^ "#d4d4d4"
+            ctx.strokeStyle <- "#d4d4d4"
             ctx.lineWidth <- 1.0
             drawDashed ctx (toCx -5.0) (toCy 5.6) (toCx 5.0) (toCy 5.6) 40
             for i in 0..4 do
@@ -145,7 +145,7 @@ let main () =
             let mutable energySum = 0.0
             let mutable highestY = 0.0
             for i in 0..4 do
-                ctx.fillStyle <- !^ "#b5b5b5"
+                ctx.fillStyle <- "#b5b5b5"
                 for k in 0 .. trailCount - 1 do
                     let tx = toCx trailX.[i].[k]
                     let ty = toCy trailY.[i].[k]
@@ -163,12 +163,12 @@ let main () =
                 let cy = toCy p.y
                 let rPx = 0.42 * 46.0
 
-                ctx.fillStyle <- !^ ballFills.[i]
+                ctx.fillStyle <- ballFills.[i]
                 ctx.beginPath ()
                 ctx.arc (cx, cy, rPx, 0.0, 2.0 * Math.PI)
                 ctx.fill ()
 
-                ctx.strokeStyle <- !^ "#111111"
+                ctx.strokeStyle <- "#111111"
                 ctx.lineWidth <- 1.6
                 ctx.beginPath ()
                 ctx.arc (cx, cy, rPx, 0.0, 2.0 * Math.PI)
@@ -176,12 +176,12 @@ let main () =
 
                 // Crisp inner ring detail
                 let hlColor = if i >= 3 then "#d4d4d4" else "#737373"
-                ctx.fillStyle <- !^ hlColor
+                ctx.fillStyle <- hlColor
                 ctx.beginPath ()
                 ctx.arc (cx - 5.0, cy - 5.0, 2.8, 0.0, 2.0 * Math.PI)
                 ctx.fill ()
 
-                ctx.fillStyle <- !^ "#111111"
+                ctx.fillStyle <- "#111111"
                 ctx.font <- "11px ui-monospace, monospace"
                 ctx.fillText (sprintf "e=%.2f" restitutions.[i], cx - 22.0, 368.0)
 

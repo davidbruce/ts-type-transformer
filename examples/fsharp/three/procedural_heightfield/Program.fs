@@ -55,8 +55,8 @@ let main () =
         GridHelper.Create(
             9.0,
             12.0,
-            !^ (float 0x999999),
-            !^ (float 0xe5e5e5)
+            (float 0x999999),
+            (float 0xe5e5e5)
         )
     grid.position.y <- -1.1
     scene.add (grid) |> ignore
@@ -85,7 +85,7 @@ let main () =
     let surfMat =
         MeshStandardMaterial.Create(
             MeshStandardMaterialParameters.Create(
-                color = !^ (float 0xb5b5b5),
+                color = float 0xb5b5b5,
                 roughness = 0.72,
                 metalness = 0.05,
                 flatShading = true
@@ -97,7 +97,7 @@ let main () =
     let wireMat =
         MeshBasicMaterial.Create(
             MeshBasicMaterialParameters.Create(
-                color = !^ (float 0x262626),
+                color = float 0x262626,
                 wireframe = true
             )
         )
@@ -112,7 +112,7 @@ let main () =
     let ptsMat =
         PointsMaterial.Create(
             PointsMaterialParameters.Create(
-                color = !^ (float 0x111111),
+                color = float 0x111111,
                 size = 0.14
             )
         )

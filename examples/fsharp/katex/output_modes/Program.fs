@@ -54,6 +54,6 @@ let oFleqn =
         displayMode = true,
         fleqn = true,
         maxSize = 2.0,
-        strict = !^ false
+        strict = false
     )
 addCard "fleqn + maxSize(2) + strict(false)" "" (renderToString (@"\text{café} + \rule{10em}{0.4em} + é", oFleqn))

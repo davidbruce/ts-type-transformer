@@ -31,7 +31,7 @@ let main () =
             ResizeArray<PolylineNewLatlngs> [ for (_, _, p) in stations -> !^p ],
             PolylineOptions.Create(smoothFactor = 1.0, color = "#404040", weight = 2.5)
         )
-    corridor.addTo (!^m) |> ignore
+    corridor.addTo m |> ignore
 
     let dotOpts =
         CircleMarkerOptions.Create(
@@ -45,19 +45,19 @@ let main () =
     for (code, name, pt) in stations do
         let cm = circleMarker (pt, dotOpts)
         cm.bindTooltip (!^ (sprintf "%s · %s" code name)) |> ignore
-        cm.addTo (!^m) |> ignore
+        cm.addTo m |> ignore
 
         let icon =
             divIcon (
                 DivIconOptions.Create(
                     className = "mono-pin",
                     html = !^ (sprintf "<span>%s</span>" code),
-                    iconSize = !^ (point (22.0, 22.0)),
-                    iconAnchor = !^ (point (11.0, 11.0))
+                    iconSize = point (22.0, 22.0),
+                    iconAnchor = point (11.0, 11.0)
                 )
             )
-        let mk = marker(pt, MarkerOptions.Create(icon = !^icon))
-        mk.addTo (!^m) |> ignore
+        let mk = marker(pt, MarkerOptions.Create(icon = icon))
+        mk.addTo m |> ignore
 
     m.fitBounds (corridor.getBounds().pad 0.15) |> ignore
 

@@ -50,19 +50,19 @@ let private buildSchema () : Schema<obj, obj> =
 let private schema = buildSchema ()
 
 let private p (t: string) =
-    schema.node (!^"paragraph", content = !^(schema.text t))
+    schema.node ("paragraph", content = schema.text t)
 
 let private buildInitialDoc () : ProsemirrorModel.Node =
     let h =
         schema.node (
-            !^"heading",
+            "heading",
             attrs = JsRecord.Create [ "level", box 2 ],
-            content = !^(schema.text "Step-Inversion Undo & Transaction Filter")
+            content = schema.text "Step-Inversion Undo & Transaction Filter"
         )
     let p1 = p "Every document change produces atomic Transform steps that can be inverted against prior snapshots."
     let p2 = p "A ProseMirror Plugin inspects transactions in filterTransaction and can enforce a read-only lock."
     let p3 = p "Click Append Revision or Bold First Line, then step backward with Undo and forward with Redo."
-    schema.node (!^"doc", content = !^(ResizeArray [ h; p1; p2; p3 ]))
+    schema.node ("doc", content = !^(ResizeArray [ h; p1; p2; p3 ]))
 
 let private auditKey = PluginKey.Create<int> "audit"
 let mutable private readOnlyLocked = false

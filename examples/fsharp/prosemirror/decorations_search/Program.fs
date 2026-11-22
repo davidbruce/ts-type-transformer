@@ -60,24 +60,24 @@ let private buildSchema () : Schema<obj, obj> =
 let private schema = buildSchema ()
 
 let private p (t: string) =
-    schema.node (!^"paragraph", content = !^(schema.text t))
+    schema.node ("paragraph", content = schema.text t)
 
 let private buildInitialDoc () : ProsemirrorModel.Node =
     let h =
         schema.node (
-            !^"heading",
+            "heading",
             attrs = JsRecord.Create [ "level", box 2 ],
-            content = !^(schema.text "Immutable State & View Decorations")
+            content = schema.text "Immutable State & View Decorations"
         )
     let p1 = p "A ProseMirror schema validates every document tree before state updates commit to the view."
     let p2 = p "Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema."
     let cb =
         schema.node (
-            !^"code_block",
-            content = !^(schema.text "const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view")
+            "code_block",
+            content = schema.text "const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view"
         )
     let p3 = p "Inline decorations highlight matching tokens while node decorations outline matching blocks in the view."
-    schema.node (!^"doc", content = !^(ResizeArray [ h; p1; p2; cb; p3 ]))
+    schema.node ("doc", content = !^(ResizeArray [ h; p1; p2; cb; p3 ]))
 
 let private computeDecorations (doc: ProsemirrorModel.Node) (query: string) : DecorationSet * int * int =
     let q = query.Trim().ToLowerInvariant()

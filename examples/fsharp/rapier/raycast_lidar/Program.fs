@@ -34,7 +34,7 @@ let private drawBox
     let x2, y2 = corner hx hy
     let x3, y3 = corner (-hx) hy
 
-    ctx.fillStyle <- !^ fillHex
+    ctx.fillStyle <- fillHex
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
     ctx.lineTo (x1, y1)
@@ -43,7 +43,7 @@ let private drawBox
     ctx.closePath ()
     ctx.fill ()
 
-    ctx.strokeStyle <- !^ "#111111"
+    ctx.strokeStyle <- "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
@@ -57,11 +57,11 @@ let private drawCircle (ctx: CanvasRenderingContext2D) (wx: float) (wy: float) (
     let cx = toCx wx
     let cy = toCy wy
     let rp = r * 46.0
-    ctx.fillStyle <- !^ fillHex
+    ctx.fillStyle <- fillHex
     ctx.beginPath ()
     ctx.arc (cx, cy, rp, 0.0, 2.0 * Math.PI)
     ctx.fill ()
-    ctx.strokeStyle <- !^ "#111111"
+    ctx.strokeStyle <- "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.arc (cx, cy, rp, 0.0, 2.0 * Math.PI)
@@ -104,10 +104,10 @@ let main () =
         let mutable manualOffset = 0.0
 
         let render () =
-            ctx.fillStyle <- !^ "#ffffff"
+            ctx.fillStyle <- "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
-            ctx.strokeStyle <- !^ "#efefef"
+            ctx.strokeStyle <- "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -154,7 +154,7 @@ let main () =
                     let hx = toCx pt.x
                     let hy = toCy pt.y
 
-                    ctx.strokeStyle <- !^ "#737373"
+                    ctx.strokeStyle <- "#737373"
                     ctx.lineWidth <- 1.0
                     ctx.beginPath ()
                     ctx.moveTo (ox, oy)
@@ -162,19 +162,19 @@ let main () =
                     ctx.stroke ()
 
                     let n = hit.normal
-                    ctx.strokeStyle <- !^ "#111111"
+                    ctx.strokeStyle <- "#111111"
                     ctx.lineWidth <- 1.4
                     ctx.beginPath ()
                     ctx.moveTo (hx, hy)
                     ctx.lineTo (toCx (pt.x + n.x * 0.45), toCy (pt.y + n.y * 0.45))
                     ctx.stroke ()
 
-                    ctx.fillStyle <- !^ "#111111"
+                    ctx.fillStyle <- "#111111"
                     ctx.beginPath ()
                     ctx.arc (hx, hy, 2.8, 0.0, 2.0 * Math.PI)
                     ctx.fill ()
                 | None ->
-                    ctx.strokeStyle <- !^ "#e5e5e5"
+                    ctx.strokeStyle <- "#e5e5e5"
                     ctx.lineWidth <- 0.9
                     ctx.beginPath ()
                     ctx.moveTo (ox, oy)
@@ -182,11 +182,11 @@ let main () =
                     ctx.stroke ()
 
             // Emitter turret
-            ctx.fillStyle <- !^ "#111111"
+            ctx.fillStyle <- "#111111"
             ctx.beginPath ()
             ctx.arc (ox, oy, 6.0, 0.0, 2.0 * Math.PI)
             ctx.fill ()
-            ctx.strokeStyle <- !^ "#ffffff"
+            ctx.strokeStyle <- "#ffffff"
             ctx.lineWidth <- 1.5
             ctx.beginPath ()
             ctx.arc (ox, oy, 3.0, 0.0, 2.0 * Math.PI)

@@ -6,20 +6,20 @@ open type Dom.Globals
 open Konva
 
 let private stage =
-    Stage.Create (StageConfig.Create (container = !^"stage", width = 680.0, height = 400.0))
+    Stage.Create (StageConfig.Create (container = "stage", width = 680.0, height = 400.0))
 
 let private layer = Layer.Create ()
 stage.add layer |> ignore
 
 let private addShape (target: Container<GroupOrShape, _>) (s: Shape<ShapeConfig>) =
-    target.add (!^s) |> ignore
+    target.add s |> ignore
 
 let private addLine (target: Container<GroupOrShape, _>) (l: Line<'C>) =
-    target.add (!^(l.asShape ())) |> ignore
+    target.add (l.asShape ()) |> ignore
 
 addShape layer (
     Rect.Create(
-        RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = !^"#ffffff")
+        RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
     ).asShape ()
 )
 
@@ -31,9 +31,9 @@ let private addStageBox x title subtitle fillHex inkHex =
             RectConfig.Create (
                 width = 126.0,
                 height = 68.0,
-                cornerRadius = !^3.0,
+                cornerRadius = 3.0,
                 fill = !^fillHex,
-                stroke = !^"#111111",
+                stroke = "#111111",
                 strokeWidth = 2.0
             )
         ).asShape ()
@@ -66,7 +66,7 @@ let private addStageBox x title subtitle fillHex inkHex =
         ).asShape ()
     )
 
-    layer.add (!^g) |> ignore
+    layer.add g |> ignore
 
 addStageBox 28.0 "01 PARSE" ".d.ts AST" "#ffffff" "#111111"
 addStageBox 194.0 "02 LOWER" "Typed IR" "#f7f7f7" "#111111"
@@ -80,8 +80,8 @@ let private addArrow (pts: float list) =
                 points = !^(ResizeArray pts),
                 pointerLength = 8.0,
                 pointerWidth = 8.0,
-                fill = !^"#111111",
-                stroke = !^"#111111",
+                fill = "#111111",
+                stroke = "#111111",
                 strokeWidth = 2.0
             )
         )
@@ -97,7 +97,7 @@ addLine layer (
     Line.Create (
         LineConfig.Create (
             points = !^(ResizeArray [ 589.0; 163.0; 589.0; 212.0; 91.0; 212.0; 91.0; 168.0 ]),
-            stroke = !^"#737373",
+            stroke = "#737373",
             strokeWidth = 1.5,
             dash = ResizeArray [ 6.0; 4.0 ]
         )
@@ -111,9 +111,9 @@ addShape layer (
             y = 255.0,
             width = 624.0,
             height = 58.0,
-            cornerRadius = !^3.0,
-            fill = !^"#f7f7f7",
-            stroke = !^"#111111",
+            cornerRadius = 3.0,
+            fill = "#f7f7f7",
+            stroke = "#111111",
             strokeWidth = 1.5
         )
     ).asShape ()
@@ -127,7 +127,7 @@ addShape layer (
             text = "Shared DOM & Package Handle Runtime",
             fontSize = 12.0,
             fontFamily = "monospace",
-            fill = !^"#111111"
+            fill = "#111111"
         )
     ).asShape ()
 )

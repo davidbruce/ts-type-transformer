@@ -7,20 +7,20 @@ open type Dom.Globals
 open Konva
 
 let private stage =
-    Stage.Create (StageConfig.Create (container = !^"stage", width = 680.0, height = 400.0))
+    Stage.Create (StageConfig.Create (container = "stage", width = 680.0, height = 400.0))
 
 let private layer = Layer.Create ()
 stage.add layer |> ignore
 
 let private addShape (s: Shape<ShapeConfig>) =
-    layer.add (!^s) |> ignore
+    layer.add s |> ignore
 
 let private addLine (l: Line<LineConfig>) =
-    layer.add (!^(l.asShape ())) |> ignore
+    layer.add (l.asShape ()) |> ignore
 
 addShape (
     Rect.Create(
-        RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = !^"#ffffff")
+        RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
     ).asShape ()
 )
 
@@ -43,7 +43,7 @@ for r, strokeCol, fillOpt, sw in [
                 x = cx,
                 y = cy,
                 radius = r,
-                stroke = !^strokeCol,
+                stroke = strokeCol,
                 strokeWidth = sw,
                 ?fill = fillVal
             )
@@ -56,7 +56,7 @@ for i in 0 .. 11 do
         Line.Create (
             LineConfig.Create (
                 points = !^(ResizeArray [ cx + 36.0 * cos a; cy + 36.0 * sin a; cx + 160.0 * cos a; cy + 160.0 * sin a ]),
-                stroke = !^"#d4d4d4",
+                stroke = "#d4d4d4",
                 strokeWidth = 1.0
             )
         )
@@ -69,7 +69,7 @@ for i in 0 .. 23 do
         Line.Create (
             LineConfig.Create (
                 points = !^(ResizeArray [ cx + r0 * cos a; cy + r0 * sin a; cx + 166.0 * cos a; cy + 166.0 * sin a ]),
-                stroke = !^"#111111",
+                stroke = "#111111",
                 strokeWidth = (if i % 2 = 0 then 2.0 else 1.0)
             )
         )
@@ -86,8 +86,8 @@ for i in 0 .. 7 do
                 offsetX = 9.0,
                 offsetY = 108.0,
                 rotation = float i * 45.0,
-                fill = !^(if i % 2 = 0 then "#111111" else "#efefef"),
-                stroke = !^"#111111",
+                fill = (if i % 2 = 0 then "#111111" else "#efefef"),
+                stroke = "#111111",
                 strokeWidth = 1.5
             )
         ).asShape ()
@@ -101,8 +101,8 @@ for i in 0 .. 11 do
                 x = cx + 125.0 * cos a,
                 y = cy + 125.0 * sin a,
                 radius = 5.0,
-                fill = !^(if i % 2 = 0 then "#111111" else "#ffffff"),
-                stroke = !^"#111111",
+                fill = (if i % 2 = 0 then "#111111" else "#ffffff"),
+                stroke = "#111111",
                 strokeWidth = 1.5
             )
         ).asShape ()
@@ -110,13 +110,13 @@ for i in 0 .. 11 do
 
 addShape (
     RegularPolygon.Create(
-        RegularPolygonConfig.Create (sides = 8.0, radius = 26.0, x = cx, y = cy, fill = !^"#111111")
+        RegularPolygonConfig.Create (sides = 8.0, radius = 26.0, x = cx, y = cy, fill = "#111111")
     ).asShape ()
 )
 
 addShape (
     Circle.Create(
-        CircleConfig.Create (x = cx, y = cy, radius = 9.0, fill = !^"#ffffff")
+        CircleConfig.Create (x = cx, y = cy, radius = 9.0, fill = "#ffffff")
     ).asShape ()
 )
 
@@ -129,7 +129,7 @@ for lx, ly, label in [ (516.0, 194.0, "0°"); (332.0, 376.0, "90°"); (140.0, 19
                 text = label,
                 fontSize = 11.0,
                 fontFamily = "monospace",
-                fill = !^"#555555"
+                fill = "#555555"
             )
         ).asShape ()
     )

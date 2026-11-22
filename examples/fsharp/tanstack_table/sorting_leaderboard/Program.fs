@@ -132,7 +132,7 @@ let main () =
         render "Sort: host asc"
     )
     wireBtn "btn-4" (fun () ->
-        tableSort.setSorting (!^ (ResizeArray<ColumnSort> ()))
+        tableSort.setSorting (ResizeArray<ColumnSort> ())
         render "Sort: unsorted (data order)"
     )
     render "Sort: region asc, latency asc"

@@ -61,7 +61,7 @@ let main () =
             PlaneGeometry.Create(8.6, 8.6),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0xe5e5e5),
+                    color = float 0xe5e5e5,
                     roughness = 0.85
                 )
             )
@@ -74,8 +74,8 @@ let main () =
         GridHelper.Create(
             9.0,
             10.0,
-            !^ (float 0x999999),
-            !^ (float 0xd4d4d4)
+            (float 0x999999),
+            (float 0xd4d4d4)
         )
     scene.add (grid) |> ignore
 
@@ -83,7 +83,7 @@ let main () =
     let towerMat =
         MeshStandardMaterial.Create(
             MeshStandardMaterialParameters.Create(
-                color = !^ (float 0xffffff),
+                color = float 0xffffff,
                 roughness = 0.65,
                 metalness = 0.08
             )

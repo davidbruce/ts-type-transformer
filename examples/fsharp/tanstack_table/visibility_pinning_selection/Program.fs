@@ -148,7 +148,7 @@ let main () =
     )
     wireBtn "btn-4" (fun () ->
         vis.setColumnVisibility (!^ (JsRecord.Create [ "zone", false; "owner", true ]))
-        pin.setColumnPinning (!^ (ColumnPinningState.Create(ResizeArray [ "id" ], ResizeArray [ "status" ])))
+        pin.setColumnPinning (ColumnPinningState.Create(ResizeArray [ "id" ], ResizeArray [ "status" ]))
         sel.setRowSelection (!^ (JsRecord.Create [ "0", true; "2", true; "4", true ]))
         render ()
     )

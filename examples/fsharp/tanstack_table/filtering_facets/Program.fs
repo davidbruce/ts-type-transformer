@@ -112,27 +112,27 @@ let private render (label: string) =
 
 let main () =
     wireBtn "btn-0" (fun () ->
-        globFilt.setGlobalFilter (!^ (box ""))
+        globFilt.setGlobalFilter (box "")
         colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("tier", box "core"); ColumnFilter.Create("requests", box 400.0) ]))
         render "Filter: tier = core & requests >= 400"
     )
     wireBtn "btn-1" (fun () ->
-        globFilt.setGlobalFilter (!^ (box ""))
-        colFilt.setColumnFilters (!^ (ResizeArray<ColumnFilter> ()))
+        globFilt.setGlobalFilter (box "")
+        colFilt.setColumnFilters (ResizeArray<ColumnFilter> ())
         render "Filter: all services"
     )
     wireBtn "btn-2" (fun () ->
-        globFilt.setGlobalFilter (!^ (box ""))
+        globFilt.setGlobalFilter (box "")
         colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("tier", box "edge") ]))
         render "Filter: tier = edge"
     )
     wireBtn "btn-3" (fun () ->
-        colFilt.setColumnFilters (!^ (ResizeArray<ColumnFilter> ()))
-        globFilt.setGlobalFilter (!^ (box "auth"))
+        colFilt.setColumnFilters (ResizeArray<ColumnFilter> ())
+        globFilt.setGlobalFilter (box "auth")
         render "Global search: \"auth\""
     )
     wireBtn "btn-4" (fun () ->
-        globFilt.setGlobalFilter (!^ (box ""))
+        globFilt.setGlobalFilter (box "")
         colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("errors", box 5.0) ]))
         render "Filter: errors >= 5"
     )

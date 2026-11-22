@@ -38,7 +38,7 @@ let main () =
                 fillOpacity = op
             )
         let c = circle (zurich, r, cOpts)
-        c.addTo (!^m) |> ignore
+        c.addTo m |> ignore
         if outerCircle.IsNone then outerCircle <- Some c
 
     let beacons =
@@ -58,11 +58,11 @@ let main () =
                 radius = 18000.0,
                 color = "#555555",
                 weight = 1.2,
-                dashArray = !^"3 3",
+                dashArray = "3 3",
                 fillColor = "#737373",
                 fillOpacity = 0.18
             )
-        circle(pt, 18000.0, bRingOpts).addTo (!^m) |> ignore
+        circle(pt, 18000.0, bRingOpts).addTo m |> ignore
         circleMarker(
             pt,
             CircleMarkerOptions.Create(
@@ -72,7 +72,7 @@ let main () =
                 fillColor = "#111111",
                 fillOpacity = 1.0
             )
-        ).addTo (!^m)
+        ).addTo m
         |> ignore
 
     match outerCircle with

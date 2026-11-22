@@ -41,8 +41,8 @@ let main () =
         GridHelper.Create(
             9.0,
             9.0,
-            !^ (float 0x999999),
-            !^ (float 0xd4d4d4)
+            (float 0x999999),
+            (float 0xd4d4d4)
         )
     grid.position.y <- -0.85
     scene.add grid |> ignore
@@ -70,7 +70,7 @@ let main () =
         let mat =
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0xd4d4d4),
+                    color = float 0xd4d4d4,
                     roughness = 0.55,
                     metalness = 0.1,
                     flatShading = (i >= 4)

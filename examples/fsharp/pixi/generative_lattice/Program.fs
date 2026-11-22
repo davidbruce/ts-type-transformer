@@ -8,14 +8,14 @@ open type Dom.Globals
 open Pixi.Js
 
 let private strokeStyle w (c: int) : StrokeInput =
-    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = !^ (float c))))
+    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = float c)))
 
 let private initOpts () =
     InitOptions.Create(
         width = 680.0,
         height = 400.0,
-        backgroundColor = !^ 16777215.0,
-        preference = !^ "webgl",
+        backgroundColor = 16777215.0,
+        preference = "webgl",
         preserveDrawingBuffer = true,
         antialias = true,
         autoStart = false
@@ -66,13 +66,13 @@ let main =
                     tiles.lineTo (pk.x, pk.y) |> ignore
                 tiles
                     .closePath()
-                    .fill(color = !^ (float ringColors[rIdx]))
+                    .fill(color = float ringColors[rIdx])
                     .stroke(strokeStyle 1.2 0x111111)
                 |> ignore
         app.stage.addChild tiles |> ignore
 
         let centerDot = Graphics.Create ()
-        centerDot.circle(340.0, 200.0, 8.0).fill (color = !^ (float 0x111111)) |> ignore
+        centerDot.circle(340.0, 200.0, 8.0).fill (color = float 0x111111) |> ignore
         app.stage.addChild centerDot |> ignore
 
         app.render ()

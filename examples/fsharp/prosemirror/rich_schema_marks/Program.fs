@@ -68,14 +68,14 @@ let private buildSchema () : Schema<obj, obj> =
 let private schema = buildSchema ()
 
 let private p (children: ProsemirrorModel.Node list) =
-    schema.node (!^"paragraph", content = !^(ResizeArray children))
+    schema.node ("paragraph", content = !^(ResizeArray children))
 
 let private buildInitialDoc () : ProsemirrorModel.Node =
     let h =
         schema.node (
-            !^"heading",
+            "heading",
             attrs = JsRecord.Create [ "level", box 2 ],
-            content = !^(schema.text "ProseMirror Document Schema")
+            content = schema.text "ProseMirror Document Schema"
         )
     let mStrong = schema.mark "strong"
     let mEm = schema.mark "em"
@@ -92,18 +92,18 @@ let private buildInitialDoc () : ProsemirrorModel.Node =
         ]
     let quote =
         schema.node (
-            !^"blockquote",
-            content = !^(p [ schema.text "Every document conforms to a strict schema enforced on every transaction." ])
+            "blockquote",
+            content = p [ schema.text "Every document conforms to a strict schema enforced on every transaction." ]
         )
     let codeBlock =
         schema.node (
-            !^"code_block",
-            content = !^(schema.text "schema.node(\"paragraph\", null, [schema.text(\"typed\")])")
+            "code_block",
+            content = schema.text "schema.node(\"paragraph\", null, [schema.text(\"typed\")])"
         )
     let pOutro =
         p [ schema.text "Select any text in this editor and click a toolbar action to toggle marks or switch block types." ]
 
-    schema.node (!^"doc", content = !^(ResizeArray [ h; pMarks; quote; codeBlock; pOutro ]))
+    schema.node ("doc", content = !^(ResizeArray [ h; pMarks; quote; codeBlock; pOutro ]))
 
 let mutable private dispatches = 0
 let mutable private lastAction = "Initialized schema with 7 node types & 3 marks"

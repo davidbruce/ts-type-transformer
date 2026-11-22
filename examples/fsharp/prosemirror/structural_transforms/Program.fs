@@ -59,35 +59,35 @@ let private buildSchema () : Schema<obj, obj> =
 let private schema = buildSchema ()
 
 let private p (t: string) =
-    schema.node (!^"paragraph", content = !^(schema.text t))
+    schema.node ("paragraph", content = schema.text t)
 
 let private li (t: string) =
-    schema.node (!^"list_item", content = !^(p t))
+    schema.node ("list_item", content = p t)
 
 let private buildInitialDoc () : ProsemirrorModel.Node =
     let h =
         schema.node (
-            !^"heading",
+            "heading",
             attrs = JsRecord.Create [ "level", box 2 ],
-            content = !^(schema.text "Structural Transform Pipeline")
+            content = schema.text "Structural Transform Pipeline"
         )
     let p1 = p "ProseMirror transforms express structural edits as invertible steps."
     let p2 = p "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly."
     let quote =
         schema.node (
-            !^"blockquote",
-            content = !^(p "Blockquote content can be lifted back to top-level document depth.")
+            "blockquote",
+            content = p "Blockquote content can be lifted back to top-level document depth."
         )
     let list =
         schema.node (
-            !^"bullet_list",
+            "bullet_list",
             content = !^(ResizeArray [
                 li "Split at cursor position"
                 li "Wrap range with blockquote"
                 li "Lift nested block to root"
             ])
         )
-    schema.node (!^"doc", content = !^(ResizeArray [ h; p1; p2; quote; list ]))
+    schema.node ("doc", content = !^(ResizeArray [ h; p1; p2; quote; list ]))
 
 let mutable private totalSteps = 0
 let mutable private noteCounter = 0
@@ -223,7 +223,7 @@ let main () =
     wire "btn-3" (fun () ->
         noteCounter <- noteCounter + 1
         let st = v.state
-        let hr = schema.node !^"horizontal_rule"
+        let hr = schema.node "horizontal_rule"
         let note = p (sprintf "Appended structural section #%d at doc offset %d." noteCounter (int st.doc.content.size))
         let tr = st.tr
         tr.insert (st.doc.content.size, ResizeArray [ hr; note ]) |> ignore

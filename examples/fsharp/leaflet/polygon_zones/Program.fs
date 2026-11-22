@@ -69,15 +69,15 @@ let main () =
                 smoothFactor = 1.0,
                 color = "#737373",
                 weight = 1.5,
-                dashArray = !^"4 4",
+                dashArray = "4 4",
                 fillColor = "#efefef",
                 fillOpacity = 0.05
             )
         )
 
-    hullRect.addTo (!^m) |> ignore
-    midPoly.addTo (!^m) |> ignore
-    corePoly.addTo (!^m) |> ignore
+    hullRect.addTo m |> ignore
+    midPoly.addTo m |> ignore
+    corePoly.addTo m |> ignore
 
     let coreBounds = corePoly.getBounds ()
     let midBounds = midPoly.getBounds ()
@@ -118,7 +118,7 @@ let main () =
                 fillColor = fillHex,
                 fillOpacity = 1.0
             )
-        ).addTo (!^m)
+        ).addTo m
         |> ignore
 
     m.fitBounds paddedBounds |> ignore

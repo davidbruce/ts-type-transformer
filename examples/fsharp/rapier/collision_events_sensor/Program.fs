@@ -36,7 +36,7 @@ let private drawRotatedBox
     let x2, y2 = corner hx hy
     let x3, y3 = corner (-hx) hy
 
-    ctx.fillStyle <- !^ fillHex
+    ctx.fillStyle <- fillHex
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
     ctx.lineTo (x1, y1)
@@ -45,7 +45,7 @@ let private drawRotatedBox
     ctx.closePath ()
     ctx.fill ()
 
-    ctx.strokeStyle <- !^ "#111111"
+    ctx.strokeStyle <- "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
@@ -159,10 +159,10 @@ let main () =
             )
 
         let render () =
-            ctx.fillStyle <- !^ "#ffffff"
+            ctx.fillStyle <- "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
-            ctx.strokeStyle <- !^ "#efefef"
+            ctx.strokeStyle <- "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -183,17 +183,17 @@ let main () =
             let sw = 3.70 * 46.0
             let sh = 0.60 * 46.0
             if activeInSensor > 0 then
-                ctx.fillStyle <- !^ "#efefef"
+                ctx.fillStyle <- "#efefef"
                 ctx.fillRect (sx, sy, sw, sh)
-                ctx.strokeStyle <- !^ "#111111"
+                ctx.strokeStyle <- "#111111"
                 ctx.lineWidth <- 2.0
                 ctx.strokeRect (sx, sy, sw, sh)
             else
-                ctx.strokeStyle <- !^ "#737373"
+                ctx.strokeStyle <- "#737373"
                 ctx.lineWidth <- 1.4
                 drawDashedRect ctx sx sy sw sh
 
-            ctx.fillStyle <- !^ "#555555"
+            ctx.fillStyle <- "#555555"
             ctx.font <- "11px ui-monospace, monospace"
             ctx.fillText (sprintf "SENSOR GATE (%d inside)" activeInSensor, sx + 8.0, sy + 17.0)
 
@@ -213,11 +213,11 @@ let main () =
                 else
                     let cx = toCx p.x
                     let cy = toCy p.y
-                    ctx.fillStyle <- !^ "#262626"
+                    ctx.fillStyle <- "#262626"
                     ctx.beginPath ()
                     ctx.arc (cx, cy, 0.32 * 46.0, 0.0, 2.0 * Math.PI)
                     ctx.fill ()
-                    ctx.strokeStyle <- !^ "#111111"
+                    ctx.strokeStyle <- "#111111"
                     ctx.lineWidth <- 1.5
                     ctx.beginPath ()
                     ctx.arc (cx, cy, 0.32 * 46.0, 0.0, 2.0 * Math.PI)

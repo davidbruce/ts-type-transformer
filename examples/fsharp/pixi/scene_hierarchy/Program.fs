@@ -8,14 +8,14 @@ open type Dom.Globals
 open Pixi.Js
 
 let private strokeStyle w (c: int) : StrokeInput =
-    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = !^ (float c))))
+    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = float c)))
 
 let private initOpts () =
     InitOptions.Create(
         width = 680.0,
         height = 400.0,
-        backgroundColor = !^ 16777215.0,
-        preference = !^ "webgl",
+        backgroundColor = 16777215.0,
+        preference = "webgl",
         preserveDrawingBuffer = true,
         antialias = true,
         autoStart = false
@@ -43,8 +43,8 @@ let main =
             arm.rotation <- float i * 2.0 * Math.PI / 3.0
 
             let armBar = Graphics.Create ()
-            armBar.rect(0.0, -4.0, 110.0, 8.0).fill (color = !^ (float 0x737373)) |> ignore
-            armBar.circle(110.0, 0.0, 10.0).fill (color = !^ (float 0x111111)) |> ignore
+            armBar.rect(0.0, -4.0, 110.0, 8.0).fill (color = float 0x737373) |> ignore
+            armBar.circle(110.0, 0.0, 10.0).fill (color = float 0x111111) |> ignore
             arm.addChild armBar |> ignore
 
             let sub = Container.Create ()
@@ -56,14 +56,14 @@ let main =
             sub.addChild subBar |> ignore
 
             let satBox = Graphics.Create ()
-            satBox.rect(-12.0, -12.0, 24.0, 24.0).fill (color = !^ (float 0x262626)) |> ignore
+            satBox.rect(-12.0, -12.0, 24.0, 24.0).fill (color = float 0x262626) |> ignore
             satBox.x <- 48.0
             sub.addChild satBox |> ignore
 
             let satOrb = Graphics.Create ()
             satOrb
                 .circle(0.0, 0.0, 14.0)
-                .fill(color = !^ (float 0xd4d4d4))
+                .fill(color = float 0xd4d4d4)
                 .stroke(strokeStyle 2.0 0x111111)
             |> ignore
             satOrb.x <- -32.0
@@ -73,8 +73,8 @@ let main =
             root.addChild arm |> ignore
 
         let hub = Graphics.Create ()
-        hub.circle(0.0, 0.0, 18.0).fill (color = !^ (float 0x111111)) |> ignore
-        hub.circle(0.0, 0.0, 7.0).fill (color = !^ (float 0xffffff)) |> ignore
+        hub.circle(0.0, 0.0, 18.0).fill (color = float 0x111111) |> ignore
+        hub.circle(0.0, 0.0, 7.0).fill (color = float 0xffffff) |> ignore
         root.addChild hub |> ignore
 
         app.stage.addChild root |> ignore

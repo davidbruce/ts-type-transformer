@@ -6,13 +6,13 @@ open type Dom.Globals
 open Konva
 
 let private stage =
-    Stage.Create (StageConfig.Create (container = !^"stage", width = 680.0, height = 400.0))
+    Stage.Create (StageConfig.Create (container = "stage", width = 680.0, height = 400.0))
 
 let private layer = Layer.Create ()
 stage.add layer |> ignore
 
 let private addShape (s: Shape<ShapeConfig>) =
-    layer.add (!^s) |> ignore
+    layer.add s |> ignore
 
 let private addCaption x y caption =
     addShape (
@@ -23,7 +23,7 @@ let private addCaption x y caption =
                 text = caption,
                 fontSize = 11.0,
                 fontFamily = "monospace",
-                fill = !^"#555555"
+                fill = "#555555"
             )
         ).asShape ()
     )
@@ -31,7 +31,7 @@ let private addCaption x y caption =
 // Full monochrome canvas backing so pixel inspection sees >= 2 distinct colors.
 addShape (
     Rect.Create(
-        RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = !^"#ffffff")
+        RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
     ).asShape ()
 )
 
@@ -43,8 +43,8 @@ addShape (
             y = 55.0,
             width = 110.0,
             height = 76.0,
-            cornerRadius = !^8.0,
-            fill = !^"#111111"
+            cornerRadius = 8.0,
+            fill = "#111111"
         )
     ).asShape ()
 )
@@ -57,8 +57,8 @@ addShape (
             y = 55.0,
             width = 110.0,
             height = 76.0,
-            fill = !^"#ffffff",
-            stroke = !^"#111111",
+            fill = "#ffffff",
+            stroke = "#111111",
             strokeWidth = 2.0,
             dash = ResizeArray [ 6.0; 4.0 ]
         )
@@ -72,8 +72,8 @@ addShape (
             x = 415.0,
             y = 93.0,
             radius = 40.0,
-            fill = !^"#404040",
-            stroke = !^"#111111",
+            fill = "#404040",
+            stroke = "#111111",
             strokeWidth = 2.0
         )
     ).asShape ()
@@ -87,8 +87,8 @@ addShape (
             radius = 42.0,
             x = 575.0,
             y = 93.0,
-            fill = !^"#efefef",
-            stroke = !^"#111111",
+            fill = "#efefef",
+            stroke = "#111111",
             strokeWidth = 2.0
         )
     ).asShape ()
@@ -104,8 +104,8 @@ addShape (
             outerRadius = 44.0,
             x = 95.0,
             y = 268.0,
-            fill = !^"#737373",
-            stroke = !^"#111111",
+            fill = "#737373",
+            stroke = "#111111",
             strokeWidth = 2.0
         )
     ).asShape ()
@@ -119,8 +119,8 @@ addShape (
             outerRadius = 42.0,
             x = 250.0,
             y = 268.0,
-            fill = !^"#d4d4d4",
-            stroke = !^"#111111",
+            fill = "#d4d4d4",
+            stroke = "#111111",
             strokeWidth = 2.0
         )
     ).asShape ()
@@ -135,8 +135,8 @@ addShape (
             x = 415.0,
             y = 268.0,
             rotation = -90.0,
-            fill = !^"#111111",
-            stroke = !^"#555555",
+            fill = "#111111",
+            stroke = "#555555",
             strokeWidth = 1.0
         )
     ).asShape ()
@@ -150,8 +150,8 @@ addShape (
             y = 224.0,
             width = 150.0,
             height = 88.0,
-            fill = !^"#f7f7f7",
-            stroke = !^"#111111",
+            fill = "#f7f7f7",
+            stroke = "#111111",
             strokeWidth = 1.5
         )
     ).asShape ()
@@ -165,7 +165,7 @@ addShape (
             text = "KONVA 2D\nMonochrome\nScene Graph",
             fontSize = 13.0,
             fontFamily = "monospace",
-            fill = !^"#111111"
+            fill = "#111111"
         )
     ).asShape ()
 )

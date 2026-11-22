@@ -46,13 +46,13 @@ let main () =
 
     let gratOpts = polyOpts "#e5e5e5" 1.0 None 0.0
     for lat in [ 46.0; 48.0; 50.0; 52.0; 54.0 ] do
-        polyline(toPolyPts [ latLng (lat, -2.0); latLng (lat, 17.0) ], gratOpts).addTo (!^m) |> ignore
+        polyline(toPolyPts [ latLng (lat, -2.0); latLng (lat, 17.0) ], gratOpts).addTo m |> ignore
     for lng in [ 0.0; 4.0; 8.0; 12.0; 16.0 ] do
-        polyline(toPolyPts [ latLng (45.0, lng); latLng (55.0, lng) ], gratOpts).addTo (!^m) |> ignore
+        polyline(toPolyPts [ latLng (45.0, lng); latLng (55.0, lng) ], gratOpts).addTo m |> ignore
 
     let primaryPts = hubs |> Array.map snd |> Array.toList
     let primaryLine = polyline(toPolyPts primaryPts, polyOpts "#111111" 3.0 None 0.0)
-    primaryLine.addTo (!^m) |> ignore
+    primaryLine.addTo m |> ignore
 
     let altPts =
         [
@@ -61,7 +61,7 @@ let main () =
             latLng (52.3676, 4.9041)
             snd hubs[5]
         ]
-    polyline(toPolyPts altPts, polyOpts "#737373" 1.5 (Some "5 5") 0.0).addTo (!^m) |> ignore
+    polyline(toPolyPts altPts, polyOpts "#737373" 1.5 (Some "5 5") 0.0).addTo m |> ignore
 
     let nodes = layerGroup ()
     let nodeOpts =
@@ -74,9 +74,9 @@ let main () =
         )
     for (name, pt) in hubs do
         let cm = circleMarker (pt, nodeOpts)
-        cm.bindTooltip (!^name) |> ignore
+        cm.bindTooltip name |> ignore
         nodes.addLayer cm |> ignore
-    nodes.addTo (!^m) |> ignore
+    nodes.addTo m |> ignore
 
     m.fitBounds (primaryLine.getBounds ()) |> ignore
 

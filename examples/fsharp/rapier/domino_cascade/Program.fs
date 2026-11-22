@@ -43,7 +43,7 @@ let private drawRotatedBox
     let x2, y2 = corner hx hy
     let x3, y3 = corner (-hx) hy
 
-    ctx.fillStyle <- !^ fillHex
+    ctx.fillStyle <- fillHex
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
     ctx.lineTo (x1, y1)
@@ -52,7 +52,7 @@ let private drawRotatedBox
     ctx.closePath ()
     ctx.fill ()
 
-    ctx.strokeStyle <- !^ "#111111"
+    ctx.strokeStyle <- "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
@@ -123,10 +123,10 @@ let main () =
             if trailCount < trailLen then trailCount <- trailCount + 1
 
         let render () =
-            ctx.fillStyle <- !^ "#ffffff"
+            ctx.fillStyle <- "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
-            ctx.strokeStyle <- !^ "#efefef"
+            ctx.strokeStyle <- "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -141,9 +141,9 @@ let main () =
                 ctx.lineTo (680.0, y)
                 ctx.stroke ()
 
-            ctx.fillStyle <- !^ "#f7f7f7"
+            ctx.fillStyle <- "#f7f7f7"
             ctx.fillRect (0.0, 350.0, 680.0, 50.0)
-            ctx.strokeStyle <- !^ "#111111"
+            ctx.strokeStyle <- "#111111"
             ctx.lineWidth <- 1.5
             ctx.beginPath ()
             ctx.moveTo (0.0, 350.0)
@@ -151,7 +151,7 @@ let main () =
             ctx.stroke ()
 
             // Striker trail
-            ctx.fillStyle <- !^ "#b5b5b5"
+            ctx.fillStyle <- "#b5b5b5"
             for i in 0 .. trailCount - 1 do
                 ctx.beginPath ()
                 ctx.arc (toCx trailX.[i], toCy trailY.[i], 2.0, 0.0, 2.0 * Math.PI)
@@ -171,21 +171,21 @@ let main () =
             let sp = striker.translation ()
             let scx = toCx sp.x
             let scy = toCy sp.y
-            ctx.fillStyle <- !^ "#262626"
+            ctx.fillStyle <- "#262626"
             ctx.beginPath ()
             ctx.arc (scx, scy, 0.40 * 46.0, 0.0, 2.0 * Math.PI)
             ctx.fill ()
-            ctx.strokeStyle <- !^ "#111111"
+            ctx.strokeStyle <- "#111111"
             ctx.lineWidth <- 1.6
             ctx.beginPath ()
             ctx.arc (scx, scy, 0.40 * 46.0, 0.0, 2.0 * Math.PI)
             ctx.stroke ()
-            ctx.fillStyle <- !^ "#e5e5e5"
+            ctx.fillStyle <- "#e5e5e5"
             ctx.beginPath ()
             ctx.arc (scx - 5.0, scy - 5.0, 2.5, 0.0, 2.0 * Math.PI)
             ctx.fill ()
 
-            ctx.fillStyle <- !^ "#555555"
+            ctx.fillStyle <- "#555555"
             ctx.font <- "11px ui-monospace, monospace"
             ctx.fillText (sprintf "Dominoes toppled: %d / %d" toppled dominoCount, 18.0, 24.0)
 

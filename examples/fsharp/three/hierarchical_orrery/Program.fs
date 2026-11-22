@@ -45,8 +45,8 @@ let main () =
         GridHelper.Create(
             12.0,
             12.0,
-            !^ (float 0x999999),
-            !^ (float 0xe5e5e5)
+            (float 0x999999),
+            (float 0xe5e5e5)
         )
     grid.position.y <- -1.5
     scene.add (grid) |> ignore
@@ -56,7 +56,7 @@ let main () =
             CylinderGeometry.Create(0.55, 0.75, 0.35, 24.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0x262626),
+                    color = float 0x262626,
                     roughness = 0.7
                 )
             )
@@ -69,7 +69,7 @@ let main () =
             SphereGeometry.Create(0.65, 24.0, 18.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0x111111),
+                    color = float 0x111111,
                     roughness = 0.45,
                     metalness = 0.2
                 )
@@ -84,7 +84,7 @@ let main () =
         Mesh.Create(
             TorusGeometry.Create(2.1, 0.025, 8.0, 64.0),
             MeshBasicMaterial.Create(
-                MeshBasicMaterialParameters.Create(color = !^ (float 0x999999))
+                MeshBasicMaterialParameters.Create(color = float 0x999999)
             )
         )
     innerTrack.rotation.x <- Math.PI / 2.0
@@ -99,7 +99,7 @@ let main () =
             SphereGeometry.Create(0.36, 20.0, 16.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0x555555),
+                    color = float 0x555555,
                     roughness = 0.55
                 )
             )
@@ -114,7 +114,7 @@ let main () =
             OctahedronGeometry.Create(0.18, 0.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0xd4d4d4),
+                    color = float 0xd4d4d4,
                     roughness = 0.4,
                     flatShading = true
                 )
@@ -130,7 +130,7 @@ let main () =
         Mesh.Create(
             TorusGeometry.Create(3.8, 0.025, 8.0, 80.0),
             MeshBasicMaterial.Create(
-                MeshBasicMaterialParameters.Create(color = !^ (float 0xb5b5b5))
+                MeshBasicMaterialParameters.Create(color = float 0xb5b5b5)
             )
         )
     outerTrack.rotation.x <- Math.PI / 2.0
@@ -145,7 +145,7 @@ let main () =
             IcosahedronGeometry.Create(0.42, 0.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0x404040),
+                    color = float 0x404040,
                     roughness = 0.5,
                     flatShading = true
                 )
@@ -158,7 +158,7 @@ let main () =
             TorusGeometry.Create(0.68, 0.06, 10.0, 32.0),
             MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
-                    color = !^ (float 0x111111),
+                    color = float 0x111111,
                     roughness = 0.4
                 )
             )

@@ -7,14 +7,14 @@ open type Dom.Globals
 open Pixi.Js
 
 let private strokeStyle w (c: int) : StrokeInput =
-    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = !^ (float c))))
+    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = float c)))
 
 let private initOpts () =
     InitOptions.Create(
         width = 680.0,
         height = 400.0,
-        backgroundColor = !^ 16777215.0,
-        preference = !^ "webgl",
+        backgroundColor = 16777215.0,
+        preference = "webgl",
         preserveDrawingBuffer = true,
         antialias = true,
         autoStart = false
@@ -56,19 +56,19 @@ let main =
             hull.enlarge c |> ignore
             if query.containsRect c then
                 contained <- contained + 1
-                g.rect(c.x, c.y, c.width, c.height).fill (color = !^ (float 0x111111)) |> ignore
+                g.rect(c.x, c.y, c.width, c.height).fill (color = float 0x111111) |> ignore
             elif query.intersects c then
                 intersecting <- intersecting + 1
                 g
                     .rect(c.x, c.y, c.width, c.height)
-                    .fill(color = !^ (float 0x737373))
+                    .fill(color = float 0x737373)
                     .stroke(strokeStyle 2.0 0x111111)
                 |> ignore
             else
                 disjoint <- disjoint + 1
                 g
                     .rect(c.x, c.y, c.width, c.height)
-                    .fill(color = !^ (float 0xe5e5e5))
+                    .fill(color = float 0xe5e5e5)
                     .stroke(strokeStyle 1.0 0xa3a3a3)
                 |> ignore
 

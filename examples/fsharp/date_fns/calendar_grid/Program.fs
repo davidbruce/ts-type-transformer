@@ -47,9 +47,9 @@ for dow in [ "Sun"; "Mon"; "Tue"; "Wed"; "Thu"; "Fri"; "Sat" ] do
 for _ in 0 .. offset - 1 do
     grid.appendChild (el "div" "day-cell empty" "") |> ignore
 
-let days = eachDayOfInterval (Interval.Create (!^monthStart, !^monthEnd))
+let days = eachDayOfInterval (Interval.Create (monthStart, monthEnd))
 for item in days do
-    let isRef = isSameDay (item, !^refDay)
+    let isRef = isSameDay (item, refDay)
     let isWknd = isWeekend item
     let cls =
         if isRef then "day-cell today"

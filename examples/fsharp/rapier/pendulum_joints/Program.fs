@@ -42,7 +42,7 @@ let private drawRotatedBox
     let x2, y2 = corner hx hy
     let x3, y3 = corner (-hx) hy
 
-    ctx.fillStyle <- !^ fillHex
+    ctx.fillStyle <- fillHex
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
     ctx.lineTo (x1, y1)
@@ -51,7 +51,7 @@ let private drawRotatedBox
     ctx.closePath ()
     ctx.fill ()
 
-    ctx.strokeStyle <- !^ "#111111"
+    ctx.strokeStyle <- "#111111"
     ctx.lineWidth <- 1.5
     ctx.beginPath ()
     ctx.moveTo (x0, y0)
@@ -64,11 +64,11 @@ let private drawRotatedBox
 let private drawPivot (ctx: CanvasRenderingContext2D) (wx: float) (wy: float) =
     let cx = toCx wx
     let cy = toCy wy
-    ctx.fillStyle <- !^ "#ffffff"
+    ctx.fillStyle <- "#ffffff"
     ctx.beginPath ()
     ctx.arc (cx, cy, 4.0, 0.0, 2.0 * Math.PI)
     ctx.fill ()
-    ctx.strokeStyle <- !^ "#111111"
+    ctx.strokeStyle <- "#111111"
     ctx.lineWidth <- 1.6
     ctx.beginPath ()
     ctx.arc (cx, cy, 4.0, 0.0, 2.0 * Math.PI)
@@ -167,10 +167,10 @@ let main () =
             if trailCount < trailLen then trailCount <- trailCount + 1
 
         let render () =
-            ctx.fillStyle <- !^ "#ffffff"
+            ctx.fillStyle <- "#ffffff"
             ctx.fillRect (0.0, 0.0, 680.0, 400.0)
 
-            ctx.strokeStyle <- !^ "#efefef"
+            ctx.strokeStyle <- "#efefef"
             ctx.lineWidth <- 1.0
             for gx in -6 .. 6 do
                 let x = toCx (float gx)
@@ -189,7 +189,7 @@ let main () =
             drawRotatedBox ctx 0.0 6.2 0.0 0.0 0.0 1.0 6.0 0.22 "#efefef"
 
             // End-bob swing trails
-            ctx.fillStyle <- !^ "#b5b5b5"
+            ctx.fillStyle <- "#b5b5b5"
             for i in 0 .. trailCount - 1 do
                 ctx.beginPath ()
                 ctx.arc (toCx trailAX.[i], toCy trailAY.[i], 1.6, 0.0, 2.0 * Math.PI)
@@ -213,11 +213,11 @@ let main () =
 
             let bCx = toCx bp.x
             let bCy = toCy bp.y
-            ctx.fillStyle <- !^ "#262626"
+            ctx.fillStyle <- "#262626"
             ctx.beginPath ()
             ctx.arc (bCx, bCy, 0.42 * 46.0, 0.0, 2.0 * Math.PI)
             ctx.fill ()
-            ctx.strokeStyle <- !^ "#111111"
+            ctx.strokeStyle <- "#111111"
             ctx.lineWidth <- 1.6
             ctx.beginPath ()
             ctx.arc (bCx, bCy, 0.42 * 46.0, 0.0, 2.0 * Math.PI)
@@ -236,7 +236,7 @@ let main () =
             let armR11 = 1.0 - 2.0 * (aq.x * aq.x + aq.z * aq.z)
             drawPivot ctx (ap.x - armR01 * 0.88) (ap.y - armR11 * 0.88)
 
-            ctx.fillStyle <- !^ "#555555"
+            ctx.fillStyle <- "#555555"
             ctx.font <- "11px ui-monospace, monospace"
             ctx.fillText ("3-Link Revolute Chain", toCx -3.5, 36.0)
             ctx.fillText ("2-Body Bob Pendulum", toCx 1.1, 36.0)

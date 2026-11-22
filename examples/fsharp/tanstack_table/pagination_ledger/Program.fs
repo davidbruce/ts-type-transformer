@@ -115,18 +115,18 @@ let main () =
         render ()
     )
     wireBtn "btn-2" (fun () ->
-        pag.setPageIndex (!^ 0.0)
-        pag.setPageSize (!^ 5.0)
+        pag.setPageIndex 0.0
+        pag.setPageSize 5.0
         render ()
     )
     wireBtn "btn-3" (fun () ->
-        pag.setPageIndex (!^ 0.0)
-        pag.setPageSize (!^ 6.0)
+        pag.setPageIndex 0.0
+        pag.setPageSize 6.0
         render ()
     )
     wireBtn "btn-4" (fun () ->
-        pag.setPageIndex (!^ 0.0)
-        pag.setPageSize (!^ 9.0)
+        pag.setPageIndex 0.0
+        pag.setPageSize 9.0
         render ()
     )
     render ()
