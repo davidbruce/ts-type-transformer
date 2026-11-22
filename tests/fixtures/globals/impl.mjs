@@ -9,4 +9,5 @@ globalThis.Geometry = {
     Deep: { twice: n => n * 2 },
 };
 globalThis.join = (separator, ...parts) => parts.join(separator);
+globalThis.arity = (...args) => args.length;
 globalThis.bump = level => (level === 0 ? 5 : level);

@@ -241,7 +241,7 @@ static ts::Task run_app() {
     b::addToScene(scene, ground);
 
     auto mk_mat = [](double r, double g, double bl, double m, double ro) {
-        return b::createPbrMaterial({{.baseColorFactor = ts::Tuple(r, g, bl, 1.0), .metallicFactor = m, .roughnessFactor = ro}});
+        return b::createPbrMaterial({{.baseColorFactor = {r, g, bl, 1.0}, .metallicFactor = m, .roughnessFactor = ro}});
     };
 
     b::Mesh ramp_mesh = b::createBox(engine, b::BoxOptions({.width = 3.5, .height = 0.2, .depth = 1.3}));

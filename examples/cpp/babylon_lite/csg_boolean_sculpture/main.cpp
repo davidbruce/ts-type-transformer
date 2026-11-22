@@ -15,7 +15,7 @@ static void set_status_error(std::string_view message) {
 }
 
 static PbrMaterialProps mk_pbr(double v, double metallic, double roughness) {
-    return createPbrMaterial({{.baseColorFactor = ts::Tuple(v, v, v, 1.0), .metallicFactor = metallic, .roughnessFactor = roughness}});
+    return createPbrMaterial({{.baseColorFactor = {v, v, v, 1.0}, .metallicFactor = metallic, .roughnessFactor = roughness}});
 }
 
 static ts::Task run_app() {
@@ -78,7 +78,7 @@ static ts::Task run_app() {
     Mesh monolith = createMeshFromCsg(engine, s3, "monolith");
     monolith.position().set(0.0, 2.15, 0.0);
 
-    auto mprops = createPbrMaterial_props({.baseColorFactor = ts::Tuple(0.86, 0.86, 0.86, 1.0), .metallicFactor = 0.65, .roughnessFactor = 0.24});
+    auto mprops = createPbrMaterial_props({.baseColorFactor = {0.86, 0.86, 0.86, 1.0}, .metallicFactor = 0.65, .roughnessFactor = 0.24});
     setPbrClearCoat(mprops, {{.isEnabled = true, .intensity = 0.90, .roughness = 0.10}});
     monolith.material(createPbrMaterial(mprops));
     addToScene(scene, monolith);

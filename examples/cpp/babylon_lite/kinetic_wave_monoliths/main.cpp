@@ -25,7 +25,7 @@ static void set_status_error(std::string_view message) {
 }
 
 static PbrMaterialProps mk_pbr(double v, double metallic, double roughness) {
-    return createPbrMaterial({{.baseColorFactor = ts::Tuple(v, v, v, 1.0), .metallicFactor = metallic, .roughnessFactor = roughness}});
+    return createPbrMaterial({{.baseColorFactor = {v, v, v, 1.0}, .metallicFactor = metallic, .roughnessFactor = roughness}});
 }
 
 static ts::Task run_app() {
@@ -94,7 +94,7 @@ static ts::Task run_app() {
         }
     }
 
-    auto cap_props = createPbrMaterial_props({.baseColorFactor = ts::Tuple(0.92, 0.92, 0.92, 1.0), .metallicFactor = 0.50, .roughnessFactor = 0.15});
+    auto cap_props = createPbrMaterial_props({.baseColorFactor = {0.92, 0.92, 0.92, 1.0}, .metallicFactor = 0.50, .roughnessFactor = 0.15});
     setPbrClearCoat(cap_props, {{.isEnabled = true, .intensity = 1.0, .roughness = 0.08}});
     setPbrEmissive(cap_props, {0.16, 0.16, 0.16});
     auto cap_mat = createPbrMaterial(cap_props);

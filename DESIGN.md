@@ -327,7 +327,7 @@ the time control returns to JavaScript is reported, not lost.
   not set at all; `false`, `0` and `""` are set. A property declared again is
   where it is declared last, one set in more than one way is left out, and a
   long list of properties none optional (`ElementTagNameMap`) is a map, not a
-  bag. A nested bag is made as `Inner({...})`. A union no test tells apart is
+  bag. A nested bag is made as `Inner({...})`; a tuple or an array field takes a braced list (`.at = {1, 2, 3}`). A union no test tells apart is
   typed where a value goes in, in an array too (`ts::Array<Loose>`), and
   what comes back is a `ts::Value`; a `ts::Array<>` takes any array. A
   variable initialized from a template's value needs no argument list

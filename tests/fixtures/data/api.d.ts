@@ -68,6 +68,8 @@ declare function pipe(): Pipe;
 interface Base { id?: number }
 interface Marks extends Base { on?: boolean; count?: number; label?: string; mode?: "wide" | "narrow" }
 declare function marked(marks: Marks): string;
+interface Spot { at?: [number, number, number]; tags?: string[] }
+declare function spot(s: Spot): string;
 
 // A nullable string and a nullable object; a parameter of any type.
 declare function greeting(name: string | null, options: Options | null): string;

@@ -58,6 +58,7 @@ declare namespace Geometry {
  * @internal
  */
 declare function join(separator: string, ...parts: string[]): string;
+declare function arity(...args: any[]): number;
 /** How high. */
 declare const enum Level {
     /** The floor: `<` & `>` alone. */

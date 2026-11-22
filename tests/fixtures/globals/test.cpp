@@ -27,6 +27,10 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // Rest parameters take an array; overloads keep the name.
     CHECK(join("-", {"a", "b", "c"}) == "a-b-c");
     CHECK(join("-", {}) == "");
+    // An array of anything, given alone, is the argument list.
+    CHECK(arity(1, 2, 3) == 3 && arity() == 0);
+    CHECK(arity(ts::Array<double>::of(1, 2, 3)) == 3 && arity(ts::Array<>::of(1, 2)) == 2);
+    CHECK(arity(ts::Value(ts::Array<double>::of(1, 2, 3))) == 1);
 
     // Numeric enums.
     CHECK(bump(Level::Low) == Level::High);

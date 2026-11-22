@@ -42,6 +42,7 @@ globalThis.pipe = () => {
     return { label: "pipe", take: () => queue.shift(), put: v => { queue.push(v); } };
 };
 
+globalThis.spot = s => JSON.stringify(s);
 globalThis.marked = marks => Object.keys(marks).map(k => `${k}=${marks[k]}`).join(",");
 
 globalThis.greeting = (name, options) => `${name === null ? "nobody" : name}${options === null ? "" : ` ${options.width}`}`;

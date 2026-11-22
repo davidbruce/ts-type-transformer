@@ -116,6 +116,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(marked(Marks({.id = 7, .count = 2})) == "id=7,count=2");
     CHECK(marked({{.on = true, .count = 1.5}}) == "on=true,count=1.5");
 
+    // A tuple or an array is a braced list.
+    CHECK(spot({{.at = {1, 2, 3.5}, .tags = {"a", "b"}}}) == "{\"at\":[1,2,3.5],\"tags\":[\"a\",\"b\"]}");
+
     // A variable initialized from a template's value needs no argument list.
     Box deduced = wrap(21.0);
     Box again = deduced;

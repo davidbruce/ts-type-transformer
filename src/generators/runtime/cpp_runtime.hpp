@@ -515,6 +515,13 @@ struct Opt {
     }
 };
 
+template <class A>
+struct array_elem {};
+template <class U>
+struct array_elem<Array<U>> {
+    using type = U;
+};
+
 // A field of an aggregate that may be left out: `X({.a = 1})` sets only what it names.
 // Made from what a `T` is made from, it holds the value as a handle: a header of hundreds
 // of them is then cheap to compile, as it would not be of `std::optional<T>`.
@@ -523,10 +530,17 @@ struct Field {
     uint32_t h = 0;
     Field() = default;
     Field(std::nullopt_t) {}
-    template <class X>
-        requires (!std::same_as<std::decay_t<X>, Field> && std::constructible_from<T, X>)
-    Field(X&& x) {
-        T v(std::forward<X>(x));
+    // From what `T` is made from: one value, or a braced list of the values of a tuple (`{r, g, b, 1.0}`).
+    template <class X0, class... X>
+        requires (!std::same_as<std::decay_t<X0>, Field> && std::constructible_from<T, X0, X...>)
+    Field(X0&& x0, X&&... xs) {
+        T v(std::forward<X0>(x0), std::forward<X>(xs)...);
+        h = Arg(v).give();
+    }
+    // A braced list of the elements of an array (`{1, 2, 3}`).
+    template <class A = T>
+    Field(std::initializer_list<typename array_elem<A>::type> xs) {
+        T v(xs);
         h = Arg(v).give();
     }
     Field(const Field&) = delete;
@@ -606,22 +620,21 @@ inline constexpr bool rest_accepts_v = [] {
 template <class Elem, class X>
 concept rest_accepts = rest_accepts_v<Elem, X>;
 
+template <class A>
+inline constexpr bool is_array = false;
+template <class U>
+inline constexpr bool is_array<Array<U>> = true;
+
+// An array given alone is the argument list, of whatever it holds.
 template <class Elem, bool CheckExtends, class R0, class... Rest>
 concept rest_pack =
-    !(sizeof...(Rest) == 0 && (std::is_base_of_v<Array<Elem>, std::decay_t<R0>> || (CheckExtends && extends<std::decay_t<R0>, Array<Elem>>)))
+    !(sizeof...(Rest) == 0 && (is_array<std::decay_t<R0>> || std::is_base_of_v<Array<Elem>, std::decay_t<R0>> || (CheckExtends && extends<std::decay_t<R0>, Array<Elem>>)))
     && rest_accepts<Elem, R0>
     && (rest_accepts<Elem, Rest> && ...);
 
 template <class T>
 struct Iterator;
 struct IterationEnd {};
-
-template <class A>
-struct array_elem {};
-template <class U>
-struct array_elem<Array<U>> {
-    using type = U;
-};
 
 // A JavaScript array of T; `Array<>` of any values. A type that extends
 // Array inherits this: it can be indexed and iterated.
