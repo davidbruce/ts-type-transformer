@@ -158,7 +158,8 @@ fn scene() void {
     expect(clicks == 2, @src());
 
     // Drawing and hit testing.
-    _ = stage.batchDraw().draw();
+    stage.batchDraw();
+    stage.draw();
     const outside = kv.Vector2d.create();
     outside.setX(5);
     outside.setY(5);

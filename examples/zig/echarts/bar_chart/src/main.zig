@@ -12,7 +12,7 @@ export fn start() void {
     const box = doc.getElementById("chart") orelse return;
     const chart = ec.init(box, null);
 
-    const opt = ec.JsValue.obj(.{
+    const opt = ec.EChartsOption.init(.{
         .animation = false,
         .backgroundColor = "#ffffff",
         .title = .{
@@ -42,7 +42,7 @@ export fn start() void {
             .data = &.{ 42, 68, 55, 84, 71, 93 },
             .itemStyle = .{ .color = "#111111" },
         }},
-    }).as(ec.EChartsCoreOption);
+    });
     chart.setOption(opt, null);
 
     const w: i32 = @intFromFloat(chart.getWidth());

@@ -34,8 +34,8 @@ fn onInit(_: ?*anyopaque, ok: bool, v: b.JsValue) void {
     // The stage is a container: draw on it and render.
     const stage = app.getStage();
     const bar = px.Graphics.new(null);
-    _ = bar.rect(0, 0, 50, 20);
-    _ = bar.fillWithColorAndAlpha(.{ .number = 0x3366ff }, .{});
+    bar.rect(0, 0, 50, 20);
+    bar.fillWithColorAndAlpha(.{ .number = 0x3366ff }, .{});
     _ = stage.asPixiMixins_Container().addChild(b.JsArrayOf(px.Container).of(&.{bar.asViewContainer().asContainer()}));
     expect(stage.getChildren().len() == 1, @src());
     app.render();
@@ -69,7 +69,7 @@ export fn run() void {
     expect(p.toString().len() > 0, @src());
     const origin = px.Point.new(.{});
     expect(origin.getX() == 0 and origin.getY() == 0, @src());
-    _ = origin.set(.{ .x = 7, .y = 8 });
+    origin.set(.{ .x = 7, .y = 8 });
     expect(origin.getX() == 7 and origin.getY() == 8, @src());
 
     // Rectangles.
@@ -81,7 +81,8 @@ export fn run() void {
     const other = px.Rectangle.new(.{ .x = .{ .number = 30 }, .y = .{ .number = 30 }, .width = .{ .number = 50 }, .height = .{ .number = 50 } });
     expect(r.intersects(other, .{}), @src());
     expect(!r.intersects(px.Rectangle.new(.{ .x = .{ .number = 100 }, .y = .{ .number = 100 }, .width = .{ .number = 5 }, .height = .{ .number = 5 } }), .{}), @src());
-    const padded = r.clone().pad(.{ .paddingX = 5 });
+    const padded = r.clone();
+    padded.pad(.{ .paddingX = 5 });
     expect(padded.getX() == 5 and padded.getWidth() == 40 and padded.getHeight() == 50, @src());
     expect(r.containsRect(px.Rectangle.new(.{ .x = .{ .number = 12 }, .y = .{ .number = 22 }, .width = .{ .number = 5 }, .height = .{ .number = 5 } })), @src());
     expect(r.getWidth() == 30, @src());
@@ -89,18 +90,22 @@ export fn run() void {
     // Matrices: transform and invert.
     const m = px.Matrix.new(.{});
     expect(m.isIdentity() and m.getA() == 1 and m.getD() == 1, @src());
-    _ = m.translate(10, 20).scale(2, 3);
+    const t1 = m;
+    t1.translate(10, 20);
+    t1.scale(2, 3);
     expect(m.getA() == 2 and m.getD() == 3 and m.getTx() == 20 and m.getTy() == 60, @src());
     const mapped = m.apply(.{ .h = px.Point.new(.{ .x = 1, .y = 1 }).h }, .{});
     expect(@as(px.Point, .{ .h = mapped.h }).getX() == 22 and @as(px.Point, .{ .h = mapped.h }).getY() == 63, @src());
     const back = m.applyInverse(.{ .h = px.Point.new(.{ .x = 22, .y = 63 }).h }, .{});
     expect(near(@as(px.Point, .{ .h = back.h }).getX(), 1) and near(@as(px.Point, .{ .h = back.h }).getY(), 1), @src());
-    const inv = m.clone().invert();
+    const inv = m.clone();
+    inv.invert();
     expect(near(inv.getA(), 0.5) and near(inv.getD(), 1.0 / 3.0), @src());
     expect(!m.isIdentity() and m.clone().equals(m), @src());
-    _ = m.identity();
+    m.identity();
     expect(m.isIdentity(), @src());
-    const spin = px.Matrix.new(.{}).rotate(std.math.pi / 2.0);
+    const spin = px.Matrix.new(.{});
+    spin.rotate(std.math.pi / 2.0);
     expect(near(spin.getA(), 0) and near(spin.getB(), 1), @src());
 
     // A scene graph: positions compose into world transforms.
@@ -124,7 +129,7 @@ export fn run() void {
     const wp: px.Point = .{ .h = world.h };
     expect(wp.getX() == 111 and wp.getY() == 55, @src());
     // The scale of a parent carries down (not its own position).
-    _ = root.getScale().set(.{ .x = 2, .y = 2 });
+    root.getScale().set(.{ .x = 2, .y = 2 });
     const scaled_world: px.Point = .{ .h = leaf.asPixiMixins_Container().toGlobal(.{ .h = px.Point.new(.{}).h }, .{}).h };
     expect(scaled_world.getX() == 122 and scaled_world.getY() == 60, @src());
     // Properties of a container.
@@ -139,8 +144,8 @@ export fn run() void {
 
     // Graphics: a drawn rectangle has bounds.
     const g = px.Graphics.new(null);
-    _ = g.rect(10, 20, 100, 50);
-    _ = g.fillWithColorAndAlpha(.{ .number = 0xff0000 }, .{});
+    g.rect(10, 20, 100, 50);
+    g.fillWithColorAndAlpha(.{ .number = 0xff0000 }, .{});
     const gb = g.asViewContainer().asContainer().asPixiMixins_Container().getBounds(.{});
     expect(gb.getMinX() == 10 and gb.getMinY() == 20, @src());
     expect(gb.getMaxX() == 110 and gb.getMaxY() == 70, @src());
@@ -149,10 +154,10 @@ export fn run() void {
     g.asViewContainer().asContainer().setX(5);
     expect(g.asViewContainer().asContainer().asPixiMixins_Container().getBounds(.{}).getMinX() == 15, @src());
     expect(g.asViewContainer().asContainer().asPixiMixins_Container().getLocalBounds().getMinX() == 10, @src());
-    _ = g.circle(200, 200, 10);
-    _ = g.fillWithColorAndAlpha(.{ .number = 0x00ff00 }, .{});
+    g.circle(200, 200, 10);
+    g.fillWithColorAndAlpha(.{ .number = 0x00ff00 }, .{});
     expect(g.asViewContainer().asContainer().asPixiMixins_Container().getLocalBounds().getMaxX() == 210, @src());
-    _ = g.clear();
+    g.clear();
     expect(g.asViewContainer().asContainer().asPixiMixins_Container().getLocalBounds().getRectangle().getWidth() == 0, @src());
 
     // A sprite with the white texture: 1 by 1 until sized.
@@ -165,7 +170,7 @@ export fn run() void {
     const placed = sprite.asViewContainer().asContainer();
     placed.setX(30);
     placed.setY(40);
-    _ = sprite.getAnchor().set(.{ .x = 0.5, .y = 0.5 });
+    sprite.getAnchor().set(.{ .x = 0.5, .y = 0.5 });
     expect(sprite.getAnchor().get_X() == 0.5, @src());
     // Sized, a sprite's bounds are its texture frame scaled.
     placed.asPixiMixins_Container().setWidth(20);

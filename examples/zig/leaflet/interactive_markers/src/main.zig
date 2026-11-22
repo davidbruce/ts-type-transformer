@@ -21,9 +21,9 @@ fn onClick(st: *State, e: lf.LeafletMouseEvent) void {
     var buf: [160]u8 = undefined;
     if (st.clicks > 2) {
         const pop_msg = std.fmt.bufPrint(&buf, "Click #{d} \xC2\xB7 {d:.2}N, {d:.2}E", .{ st.clicks, lat, lng }) catch "Click";
-        _ = st.note.setLatLng(ll);
-        _ = st.note.setContent(pop_msg);
-        _ = st.note.openOn(st.map);
+        st.note.setLatLng(ll);
+        st.note.setContent(pop_msg);
+        st.note.openOn(st.map);
     }
     const msg = std.fmt.bufPrint(
         &buf,
@@ -61,7 +61,7 @@ export fn start() void {
     };
 
     const corridor = lf.polyline(&pts, .{ .smoothFactor = 1.0, .color = "#404040", .weight = 2.5 });
-    _ = corridor.addTo(m);
+    corridor.addTo(m);
 
     const dot_opts = lf.CircleMarkerOptions.init(.{
         .radius = 6.0,
@@ -75,30 +75,23 @@ export fn start() void {
 
     for (pts, 0..) |pt, i| {
         const cm = lf.circleMarker(pt, dot_opts);
-        _ = cm.bindTooltip(tips[i], null);
-        _ = cm.addTo(m);
+        cm.bindTooltip(tips[i], null);
+        cm.addTo(m);
 
-        _ = lf.marker(pt, .{
-            .icon = lf.divIcon(.{
-                .className = "mono-pin",
-                .html = htmls[i],
-                .iconSize = pin_size,
-                .iconAnchor = pin_anchor,
-            }),
-        }).addTo(m);
+        lf.marker(pt, .{ .icon = lf.divIcon(.{ .className = "mono-pin", .html = htmls[i], .iconSize = pin_size, .iconAnchor = pin_anchor }) }).addTo(m);
     }
 
-    _ = m.fitBounds(corridor.getBounds().pad(0.15), null);
+    m.fitBounds(corridor.getBounds().pad(0.15), null);
 
     const note = lf.popup(pts[2], .{ .maxWidth = 220.0 });
-    _ = note.setContent("03 Bern · 46.95N, 7.45E");
-    _ = note.openOn(m);
+    note.setContent("03 Bern · 46.95N, 7.45E");
+    note.openOn(m);
 
     g_state.map = m.retain();
     g_state.note = note.retain();
 
-    _ = m.onClick(.{ onClick, &g_state }, null);
+    m.onClick(.{ onClick, &g_state }, null);
     const payload = lf.LeafletMouseEvent.init(.{ .latlng = pts[2] });
-    _ = m.fire("click", .{ .data = payload });
-    _ = m.fire("click", .{ .data = payload });
+    m.fire("click", .{ .data = payload });
+    m.fire("click", .{ .data = payload });
 }

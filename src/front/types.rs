@@ -664,8 +664,10 @@ impl<'c> Front<'c> {
             let name = if p.name().starts_with("__") { destructured_name(&ty, i) } else { p.name().to_string() };
             out.params.push(Param { name, optional, rest, constant: None, ty });
         }
+        // A return type written `this` stays so, though the checker has put the receiver's type in.
+        let written_this = self.keep_this && sig.declaration().and_then(|d| d.type_node()).is_some_and(|n| n.kind() == Kind::ThisType);
         let ret = self.c.get_return_type_of_signature_exported(sig);
-        out.ret = Some(self.from_type(ret));
+        out.ret = Some(if written_this { Type::This } else { self.from_type(ret) });
         out
     }
 
@@ -689,7 +691,9 @@ impl<'c> Front<'c> {
     // their symbols.
     pub fn flattened(&mut self, sym: P<Symbol>) -> (Vec<Member>, Vec<(String, Sym)>) {
         let t = self.c.get_declared_type_of_symbol_exported(sym);
+        self.keep_this = true;
         let members = self.members_of_type(t, Some(sym));
+        self.keep_this = false;
         let mut ancestors: Vec<(String, Sym)> = Vec::new();
         let mut queue = vec![t];
         while let Some(t) = queue.pop() {

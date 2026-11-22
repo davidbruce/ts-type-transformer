@@ -24,7 +24,7 @@ fn vec(x: f64, y: f64, z: f64) b.Vector3 {
 }
 
 fn place(v: b.Vector3, x: f64, y: f64, z: f64) void {
-    _ = v.set(x, y, .{ .z = z });
+    v.set(x, y, .{ .z = z });
 }
 
 fn at(v: b.Vector3, x: f64, y: f64, z: f64) bool {
@@ -36,19 +36,32 @@ export fn run() void {
     const v = vec(1, 2, 3);
     expect(at(v, 1, 2, 3), @src());
     expect(at(b.Vector3.new(.{}), 0, 0, 0), @src());
-    const sum = v.clone().add(like(vec(4, 5, 6)));
+    const sum = v.clone();
+    sum.add(like(vec(4, 5, 6)));
     expect(at(sum, 5, 7, 9), @src());
     expect(at(v, 1, 2, 3), @src());
     expect(v.dot(like(vec(4, 5, 6))) == 32, @src());
-    expect(at(vec(1, 0, 0).cross(like(vec(0, 1, 0))), 0, 0, 1), @src());
+    const t1 = vec(1, 0, 0);
+    t1.cross(like(vec(0, 1, 0)));
+    expect(at(t1, 0, 0, 1), @src());
     expect(vec(3, 4, 0).length() == 5 and vec(3, 4, 0).lengthSq() == 25, @src());
-    expect(near(vec(0, 0, 9).normalize().getZ(), 1), @src());
-    expect(at(vec(1, 2, 3).multiplyScalar(2), 2, 4, 6), @src());
-    expect(at(vec(0, 0, 0).lerp(like(vec(10, 20, 30)), 0.5), 5, 10, 15), @src());
+    const t2 = vec(0, 0, 9);
+    t2.normalize();
+    expect(near(t2.getZ(), 1), @src());
+    const t3 = vec(1, 2, 3);
+    t3.multiplyScalar(2);
+    expect(at(t3, 2, 4, 6), @src());
+    const t4 = vec(0, 0, 0);
+    t4.lerp(like(vec(10, 20, 30)), 0.5);
+    expect(at(t4, 5, 10, 15), @src());
     expect(vec(1, 1, 1).distanceTo(like(vec(1, 1, 4))) == 3, @src());
     expect(vec(1, 2, 3).equals(like(vec(1, 2, 3))) and !vec(1, 2, 3).equals(like(vec(1, 2, 4))), @src());
-    expect(at(vec(1, 2, 3).negate(), -1, -2, -3), @src());
-    expect(at(vec(1, 2, 3).set(7, 8, .{ .z = 9 }), 7, 8, 9), @src());
+    const t5 = vec(1, 2, 3);
+    t5.negate();
+    expect(at(t5, -1, -2, -3), @src());
+    const t6 = vec(1, 2, 3);
+    t6.set(7, 8, .{ .z = 9 });
+    expect(at(t6, 7, 8, 9), @src());
     expect(near(vec(1, 0, 0).angleTo(vec(0, 1, 0)), std.math.pi / 2.0), @src());
     const arr = vec(7, 8, 9).toArray(.{});
     expect(arr.len() == 3 and arr.get(0) == 7 and arr.get(2) == 9, @src());
@@ -59,31 +72,50 @@ export fn run() void {
     expect(total == 15, @src());
 
     // Matrix4: translation, scale, products, inverse.
-    const t = b.Matrix4.new().makeTranslation(vec(10, 0, 0));
-    expect(at(vec(1, 2, 3).applyMatrix4(t), 11, 2, 3), @src());
+    const t = b.Matrix4.new();
+    t.makeTranslation(vec(10, 0, 0));
+    const t7 = vec(1, 2, 3);
+    t7.applyMatrix4(t);
+    expect(at(t7, 11, 2, 3), @src());
     expect(b.Matrix4.new().determinant() == 1, @src());
-    const s = b.Matrix4.new().makeScale(2, 3, 4);
+    const s = b.Matrix4.new();
+    s.makeScale(2, 3, 4);
     expect(s.determinant() == 24, @src());
-    const ts = b.Matrix4.new().multiplyMatrices(t, s);
-    expect(at(vec(1, 1, 1).applyMatrix4(ts), 12, 3, 4), @src());
-    const inv = ts.clone().invert();
-    expect(at(vec(12, 3, 4).applyMatrix4(inv), 1, 1, 1), @src());
-    expect(ts.clone().multiply(inv).equals(b.Matrix4.new()), @src());
+    const ts = b.Matrix4.new();
+    ts.multiplyMatrices(t, s);
+    const t8 = vec(1, 1, 1);
+    t8.applyMatrix4(ts);
+    expect(at(t8, 12, 3, 4), @src());
+    const inv = ts.clone();
+    inv.invert();
+    const t9 = vec(12, 3, 4);
+    t9.applyMatrix4(inv);
+    expect(at(t9, 1, 1, 1), @src());
+    const t10 = ts.clone();
+    t10.multiply(inv);
+    expect(t10.equals(b.Matrix4.new()), @src());
     const e = ts.getElements();
     expect(e.len() == 16 and e.get(0).toNumber() == 2 and e.get(12).toNumber() == 10, @src());
-    expect(b.Matrix4.new().makeRotationZ(std.math.pi).determinant() > 0.999, @src());
+    const t11 = b.Matrix4.new();
+    t11.makeRotationZ(std.math.pi);
+    expect(t11.determinant() > 0.999, @src());
 
     // Quaternion and Euler.
-    const quarter = b.Quaternion.new(.{}).setFromAxisAngle(like(vec(0, 0, 1)), std.math.pi / 2.0);
+    const quarter = b.Quaternion.new(.{});
+    quarter.setFromAxisAngle(like(vec(0, 0, 1)), std.math.pi / 2.0);
     expect(near(quarter.getW(), @sqrt(0.5)) and near(quarter.getZ(), @sqrt(0.5)), @src());
-    expect(at(vec(1, 0, 0).applyQuaternion(qlike(quarter)), 0, 1, 0), @src());
+    const t12 = vec(1, 0, 0);
+    t12.applyQuaternion(qlike(quarter));
+    expect(at(t12, 0, 1, 0), @src());
     expect(near(b.Quaternion.new(.{}).angleTo(quarter), std.math.pi / 2.0), @src());
-    const halfway = b.Quaternion.new(.{}).slerp(quarter, 0.5);
+    const halfway = b.Quaternion.new(.{});
+    halfway.slerp(quarter, 0.5);
     expect(near(halfway.angleTo(b.Quaternion.new(.{})), std.math.pi / 4.0), @src());
     expect(b.Quaternion.new(.{}).getW() == 1, @src());
     const euler = b.Euler.new(.{ .x = 0, .y = 0, .z = std.math.pi / 2.0, .order = .XYZ });
     expect(euler.getOrder() == .XYZ and near(euler.getZ(), std.math.pi / 2.0), @src());
-    const from_euler = b.Quaternion.new(.{}).setFromEuler(euler, .{});
+    const from_euler = b.Quaternion.new(.{});
+    from_euler.setFromEuler(euler, .{});
     expect(near(from_euler.getZ(), quarter.getZ()), @src());
     const back = b.Euler.new(.{}).setFromQuaternion(from_euler, .{});
     expect(near(back.getZ(), std.math.pi / 2.0) and near(back.getX(), 0), @src());
@@ -91,11 +123,12 @@ export fn run() void {
     expect(euler.getOrder() == .ZYX, @src());
 
     // compose and decompose are inverses.
-    const composed = b.Matrix4.new().compose(vec(1, 2, 3), quarter, vec(2, 2, 2));
+    const composed = b.Matrix4.new();
+    composed.compose(vec(1, 2, 3), quarter, vec(2, 2, 2));
     const pos = vec(0, 0, 0);
     const rot = b.Quaternion.new(.{});
     const scl = vec(0, 0, 0);
-    _ = composed.decompose(pos, rot, scl);
+    composed.decompose(pos, rot, scl);
     expect(at(pos, 1, 2, 3) and at(scl, 2, 2, 2) and near(rot.getZ(), quarter.getZ()), @src());
 
     // Color: by name, number, string and channel.
@@ -106,18 +139,21 @@ export fn run() void {
     expect(b.Color.new(.{ .number = 0x00ff00 }).getHexString(null).eql("00ff00"), @src());
     const mix = b.Color.newWithRAndGAndB(0.5, 0.25, 1);
     expect(mix.getR() == 0.5 and mix.getG() == 0.25, @src());
-    _ = mix.setHex(0x0000ff, .{});
+    mix.setHex(0x0000ff, .{});
     expect(mix.getB() == 1 and mix.getR() == 0, @src());
-    _ = mix.setStyle("rgb(255, 0, 0)", .{});
+    mix.setStyle("rgb(255, 0, 0)", .{});
     expect(mix.getHex(null) == 0xff0000, @src());
     expect(red.equals(mix), @src());
-    expect(near(b.Color.new(null).multiplyScalar(0.5).getR(), 0.5), @src());
+    const t13 = b.Color.new(null);
+    t13.multiplyScalar(0.5);
+    expect(near(t13.getR(), 0.5), @src());
 
     // Box3 and Sphere.
     const points = b.JsArrayOf(b.Vector3Like).new();
     points.push(like(vec(-1, -2, -3)));
     points.push(like(vec(4, 5, 6)));
-    const box = b.Box3.new(.{}).setFromPoints(points);
+    const box = b.Box3.new(.{});
+    box.setFromPoints(points);
     expect(at(box.getMin(), -1, -2, -3) and at(box.getMax(), 4, 5, 6), @src());
     expect(at(box.getCenter(vec(0, 0, 0)), 1.5, 1.5, 1.5), @src());
     expect(at(box.getSize(vec(0, 0, 0)), 5, 7, 9), @src());
@@ -125,8 +161,12 @@ export fn run() void {
     expect(!box.isEmpty() and b.Box3.new(.{}).isEmpty(), @src());
     const other = b.Box3.new(.{ .min = vec(3, 3, 3), .max = vec(9, 9, 9) });
     expect(box.intersectsBox(other), @src());
-    expect(at(box.clone().@"union"(other).getMax(), 9, 9, 9), @src());
-    expect(at(box.clone().expandByScalar(1).getMin(), -2, -3, -4), @src());
+    const t14 = box.clone();
+    t14.@"union"(other);
+    expect(at(t14.getMax(), 9, 9, 9), @src());
+    const t15 = box.clone();
+    t15.expandByScalar(1);
+    expect(at(t15.getMin(), -2, -3, -4), @src());
     const sphere = b.Sphere.new(.{ .center = vec(0, 0, 0), .radius = 2 });
     expect(sphere.containsPoint(vec(1, 1, 0)) and !sphere.containsPoint(vec(2, 2, 0)), @src());
     expect(sphere.distanceToPoint(vec(5, 0, 0)) == 3, @src());
@@ -141,7 +181,7 @@ export fn run() void {
     place(inner.getPosition(), 0, 5, 0);
     inner.setName("inner");
     // A Group where an Object3D is wanted is its asObject3D.
-    _ = outer.add(b.JsArrayOf(b.Object3D).of(&.{inner.asObject3D()}));
+    outer.add(b.JsArrayOf(b.Object3D).of(&.{inner.asObject3D()}));
     expect(outer.getChildren().len() == 1, @src());
     expect(inner.getParent() != null and b.jsSame(inner.getParent().?, outer.asObject3D()), @src());
     outer.updateMatrixWorld(true);
@@ -159,7 +199,7 @@ export fn run() void {
     outer.updateMatrixWorld(true);
     expect(at(inner.getWorldPosition(vec(0, 0, 0)), 5, 0, 0), @src());
     // Removing it detaches.
-    _ = outer.remove(b.JsArrayOf(b.Object3D).of(&.{inner.asObject3D()}));
+    outer.remove(b.JsArrayOf(b.Object3D).of(&.{inner.asObject3D()}));
     expect(outer.getChildren().len() == 0 and inner.getParent() == null, @src());
 
     // A mesh: a 2x2x2 box with a red basic material.

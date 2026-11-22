@@ -115,8 +115,7 @@ export fn run() void {
     const r2 = b.MarkedExtension_renderer.create();
     r2.setCodespan(b.MarkedExtension_renderer_codespan.from(renderCodespan, null));
     ext2.setRenderer(r2);
-    const chained = custom.use(b.JsArrayOf(b.MarkedExtension).of(&.{ext2}));
-    expect(chained.h == custom.h or b.jsSame(chained, custom), @src());
+    custom.use(b.JsArrayOf(b.MarkedExtension).of(&.{ext2}));
     const both = custom.getParse().invoke2("# Hi\n\nuse `x` here", null);
     expect(has(.{ .h = both.h }, "<h1 class=\"mine\">") and has(.{ .h = both.h }, "<tt>x</tt>"), @src());
 

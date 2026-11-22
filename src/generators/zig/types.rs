@@ -288,6 +288,10 @@ fn accepts(f: &Func, first_optional: usize, optional: usize, opts_param: &str, u
         t => says_more_of(t, callbacks),
     };
     for (i, (name, t)) in f.params.iter().enumerate().take(first_optional) {
+        if *t == Ty::Num {
+            items.push(format!("`{name}`: an integer or a float"));
+            continue;
+        }
         if !says_more(t) || (i == f.params.len() - 1 && f.rest) {
             continue;
         }
@@ -383,6 +387,8 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
             }
         } else if matches!(t, Ty::Key(_)) {
             params.push(format!("comptime {id}: {}", typed(t, true).replace("KEY", &key)));
+        } else if *t == Ty::Num {
+            params.push(format!("{id}: anytype"));
         } else if *t == Ty::Str {
             params.push(format!("{id}: anytype"));
             unpack += &format!("const str_{id} = Lent.str({id}); ");
@@ -406,6 +412,9 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
             raw_params.extend(["?[*]const u8".to_string(), "usize".to_string()]);
             args.extend([format!("str_{id}.ptr"), format!("str_{id}.len")]);
+        } else if *t == Ty::Num {
+            raw_params.push("f64".to_string());
+            args.push(format!("Lent.num({id}, {name:?})"));
         } else {
             raw_params.push(raw(t).to_string());
             args.push(lower_arg(&id, &effective_t));
@@ -438,7 +447,11 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         },
         _ => None,
     };
-    let ret_type = if f.returns_this && owner == Some("Self") {
+    // `clone(): this` makes another one.
+    let returns_nothing = f.returns_this && !f.name.starts_with("clone");
+    let ret_type = if returns_nothing {
+        "void".to_string()
+    } else if f.returns_this && owner == Some("Self") {
         "Self".to_string()
     } else {
         match union {
@@ -447,6 +460,8 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         }
     };
     let body = match &f.ret {
+        // The caller holds the receiver; the handle the call returned for it is let go.
+        _ if returns_nothing => format!("jsRelease(JsValue{{ .h = {call} }});"),
         Ty::NamedUnion(n) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; if (h == 0 and jsHasError()) return undefined; return {n}.fromHandle(h);"),
         Ty::Nullable(inner, _) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; return if (h == 0) null else {}.fromHandle(h);", typed(inner, false)),
         Ty::Nullable(..) if union.is_some() => format!("return .{{ .h = {call} }};"),

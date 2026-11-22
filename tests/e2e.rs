@@ -1794,6 +1794,108 @@ pub export fn run() void {
     assert!(report.contains("22 checks passed"), "{report}");
 }
 
+// A method that returns its receiver returns nothing; a number parameter takes any integer or
+// float and nothing else; a union nothing can tell apart is typed where a value goes in.
+#[test]
+fn zig_numbers_fluent_methods_and_unions() {
+    let Some([zig, node]) = tools(["zig", "node"]) else { return };
+    let out = root().join("target/e2e/zig-numbers");
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(&out).unwrap();
+    let dts = out.join("api.d.ts");
+    fs::write(
+        &dts,
+        r#"export interface Counter {
+    total: number;
+    add(n: number): this;
+    value(): number;
+}
+export declare function makeCounter(): Counter;
+export declare function twice(n: number): number;
+export interface LooseA { a?: number }
+export interface LooseB { b?: number }
+export type Loose = LooseA | LooseB;
+export declare function loose(value: Loose): string;
+export declare function anyLoose(): Loose;
+"#,
+    )
+    .unwrap();
+    fs::write(
+        out.join("impl.mjs"),
+        r#"export const root = {
+    makeCounter: () => { let t = 0; const c = { add(n) { t += n; return c; }, value: () => t, get total() { return t; }, set total(v) { t = v; } }; return c; },
+    twice: n => n * 2,
+    loose: v => `loose ${JSON.stringify(v)}`,
+    anyLoose: () => ({ b: 2 }),
+};
+"#,
+    )
+    .unwrap();
+    let xml = lower(&dts, Some("zig"), &[]);
+    fs::write(out.join("api.xml"), &xml).unwrap();
+    let model = model(&xml, "Zig");
+    let files = generators::zig::files(&model).unwrap();
+    let bindings: String = files.iter().map(|(_, s)| s.as_str()).collect();
+    assert!(bindings.contains("pub fn add(self: Counter, n_: anytype) void"), "a fluent method returns nothing:\n{bindings}");
+    assert!(bindings.contains("/// Takes `n`: an integer or a float."), "{bindings}");
+    write_files(&out, files);
+    fs::write(
+        out.join("test.zig"),
+        r#"const b = @import("bindings.zig");
+extern "env" fn check(ok: i32, line: u32) void;
+fn expect(ok: bool, line: u32) void { check(@intFromBool(ok), line); }
+
+pub export fn run() void {
+    const scope = b.JsScope.open();
+    defer scope.deinit();
+
+    const c = b.makeCounter();
+    c.add(1);
+    const n: usize = 2;
+    const i: i32 = 3;
+    const f: f64 = 0.5;
+    c.add(n);
+    c.add(i);
+    c.add(f);
+    c.add(@as(f32, 0.25));
+    expect(c.value() == 6.75, @src().line);
+    c.setTotal(10);
+    expect(c.value() == 10, @src().line);
+    c.setTotal(n);
+    expect(c.getTotal() == 2, @src().line);
+
+    expect(b.twice(4) == 8, @src().line);
+    expect(b.twice(n) == 4, @src().line);
+    expect(b.twice(i) == 6, @src().line);
+    expect(b.twice(2.5) == 5, @src().line);
+    for (0..3) |k| expect(b.twice(k) == @as(f64, @floatFromInt(2 * k)), @src().line);
+
+    const a = b.LooseA.create();
+    expect(b.loose(.{ .LooseA = a }).eql("loose {}"), @src().line);
+    expect(b.loose(b.anyLoose()).eql("loose {\"b\":2}"), @src().line);
+}
+"#,
+    )
+    .unwrap();
+    run(Command::new(&zig).current_dir(&out).args(ZIG_WASM));
+    let used = generators::wasm::imports(&fs::read(out.join("test.wasm")).unwrap());
+    fs::write(out.join("glue.mjs"), generators::wasm::glue(&model, Some(&used))).unwrap();
+    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+    assert!(report.contains("checks passed"), "{report}");
+
+    for (call, said) in [
+        ("b.twice(true);", "`n` takes an integer or a float, got bool"),
+        ("b.twice(\"text\");", "`n` takes an integer or a float"),
+        ("b.makeCounter().setTotal(false);", "`value` takes an integer or a float"),
+        ("_ = b.loose(1.5);", "cannot convert"),
+    ] {
+        fs::write(out.join("bad.zig"), format!("const b = @import(\"bindings.zig\");\nexport fn run() void {{ {call} }}\n")).unwrap();
+        let bad = Command::new(&zig).current_dir(&out).args(["build-exe", "bad.zig", "-target", "wasm32-freestanding", "-fno-entry", "-rdynamic"]).output().unwrap();
+        let errors = String::from_utf8_lossy(&bad.stderr);
+        assert!(!bad.status.success() && errors.contains(said), "`{call}` should not compile, saying `{said}`:\n{errors}");
+    }
+}
+
 fn setup_ref_fixture(name: &str, target: &str) -> (PathBuf, PathBuf) {
     let out = root().join("target/e2e").join(name);
     let _ = fs::remove_dir_all(&out);
@@ -4970,7 +5072,7 @@ export declare function makeHolder(): Holder;
         let zig_all = joined(&generators::zig::files(&model(&zig_xml, "Zig")).unwrap());
         assert!(zig_all.contains("pub fn emitGeneric("), "expected callable emitGeneric in Zig:\n{zig_all}");
         assert!(zig_all.contains("pub fn options(") && zig_all.contains("pub fn run(self: Holder, src_: anytype, opts_: anytype)"), "expected no options parameter shadowing in Zig:\n{zig_all}");
-        assert!(zig_all.contains("pub fn setFocalLength(self: Camera, len_: f64)"), "missing direct setFocalLength in Zig:\n{zig_all}");
+        assert!(zig_all.contains("pub fn setFocalLength(self: Camera, len_: anytype)"), "missing direct setFocalLength in Zig:\n{zig_all}");
         assert!(zig_all.contains("pub fn setFocalLengthFn("), "missing setFocalLengthFn in Zig:\n{zig_all}");
         assert!(zig_all.contains("pub fn assignSetMode("), "missing assignSetMode in Zig:\n{zig_all}");
         assert!(zig_all.contains("pub fn setSelectionFn("), "missing setSelectionFn in Zig:\n{zig_all}");

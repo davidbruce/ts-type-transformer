@@ -323,7 +323,13 @@ the time control returns to JavaScript is reported, not lost.
   are comptime functions with Zig types, behind a C-convention trampoline;
   `defer jsRelease(x)` or `JsScope`. Trailing optional parameters are one
   struct whose fields default to null (`s.resize(2.6, .{})`,
-  `s.resize(2.6, .{ .round = true })`); a lone one stays a `?T`. Names are
+  `s.resize(2.6, .{ .round = true })`); a lone one stays a `?T`. A number
+  parameter takes any integer or float (`shape.setX(i * 40)`, `s.resize(n, .{})`),
+  and nothing else; a number a call returns is an `f64`. A method that returns
+  its receiver (`addTo(map): this`) returns nothing: `marker.addTo(m);`, but
+  for `clone`, which makes another. A union
+  whose members no test tells apart is still a tagged union where a value goes in
+  (`loose(.{ .A = a })`, or a `JsValue`) and a `JsValue` where one comes out. Names are
   Zig's, camelCase: `getTextContent()`, `setTextContent(..)`,
   `addEventListenerWithString`. Inheritance is flattened, and an
   inherited member is written once: the furthest ancestor that declares it

@@ -70,6 +70,8 @@ pub struct Front<'c> {
     pub expand_keyed: bool,
     // Keep keyed signatures generic: `K extends keyof M` and `M[K]` stay.
     pub map_keyed: bool,
+    // Members copied into each subtype keep a return type written `this`.
+    pub(crate) keep_this: bool,
     kept_keyed: HashSet<TypeId>,
     pub keyed_limit: usize,
     // During expansion: the type parameter being replaced, and its key.
@@ -124,6 +126,7 @@ impl<'c> Front<'c> {
             intersection_limit: 64,
             expand_keyed: false,
             map_keyed: false,
+            keep_this: false,
             kept_keyed: HashSet::new(),
             keyed_limit: 0,
             key_binding: None,

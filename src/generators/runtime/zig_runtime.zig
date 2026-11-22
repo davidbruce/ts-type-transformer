@@ -269,10 +269,22 @@ pub const Lent = struct {
         const finfo = @typeInfo(F_);
         if (finfo != .@"struct" or finfo.@"struct".layout != .auto or (finfo.@"struct".is_tuple and finfo.@"struct".field_names.len != 0)) return false;
         if (hasDecl(Self_, "setAt")) return true;
-        inline for (finfo.@"struct".field_names) |fname| {
-            if (!hasDecl(Self_, setterName(fname))) return false;
+        inline for (finfo.@"struct".field_names, 0..) |fname, i| {
+            if (!hasDecl(Self_, setterName(fname)) and !fixedField(Self_, F_, i, fname)) return false;
         }
         return true;
+    }
+
+    // A field the type fixes (`type: "bar"`), given the value it fixes.
+    fn fixedField(comptime Self_: type, comptime F_: type, comptime i: usize, comptime fname: []const u8) bool {
+        if (!hasDecl(Self_, fname)) return false;
+        const info = @typeInfo(F_).@"struct";
+        if (!info.field_attrs[i].@"comptime") return true;
+        const V_ = info.field_types[i];
+        const fixed = @field(Self_, fname);
+        if (!isStr(V_) or !isStr(@TypeOf(fixed))) return false;
+        const given: V_ = @as(*const V_, @ptrCast(@alignCast(info.field_attrs[i].default_value_ptr.?))).*;
+        return std.mem.eql(u8, given, fixed);
     }
 
     fn canUpcast(comptime From_: type, comptime Base_: type) bool {
@@ -342,6 +354,8 @@ pub const Lent = struct {
             const setter = comptime setterName(fname);
             if (@hasDecl(Self_, setter)) {
                 @field(Self_, setter)(res, @field(fields, fname));
+            } else if (@hasDecl(Self_, fname)) {
+                // Fixed by the type.
             } else if (@hasDecl(Self_, "setAt")) {
                 res.setAt(fname, @field(fields, fname));
             } else {
@@ -578,6 +592,8 @@ pub const Lent = struct {
         inline for (uinfo.field_types) |uf_type| {
             if (comptime hasDecl(uf_type, "_is_js_value")) return of(v);
         }
+        // A value no member could be told from is still the union's.
+        if (comptime hasDecl(T_, "_is_js_value")) return of(v);
         @compileError("cannot convert " ++ @typeName(T_) ++ " to union " ++ @typeName(U_));
     }
 
@@ -617,6 +633,17 @@ pub const Lent = struct {
             }
             if (!ok) @compileError("unknown option '" ++ fname ++ "'");
         }
+    }
+
+    // A number parameter takes any integer or float.
+    pub fn num(v: anytype, comptime pname: []const u8) f64 {
+        const T_ = @TypeOf(v);
+        if (T_ == comptime_int or T_ == comptime_float) return v;
+        return switch (@typeInfo(T_)) {
+            .int => @floatFromInt(v),
+            .float => @floatCast(v),
+            else => @compileError("`" ++ pname ++ "` takes an integer or a float, got " ++ @typeName(T_)),
+        };
     }
 
     pub fn optNum(v: anytype) ?f64 {
