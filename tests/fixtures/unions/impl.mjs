@@ -14,3 +14,6 @@ globalThis.makeShape = (kind, size) => (kind === "circle" ? { kind, radius: size
 globalThis.area = s => (s.kind === "circle" ? 3 * s.radius * s.radius : s.side * s.side);
 globalThis.setup = o => (typeof o === "boolean" ? `bool ${o}` : `options verbose=${o.verbose}`);
 globalThis.lookup = key => (key === "w" ? new Widget(key) : key.length);
+globalThis.peek = slot => (slot.value === undefined ? "empty" : globalThis.describe(slot.value));
+globalThis.loose = v => `loose ${JSON.stringify(v)}`;
+globalThis.anyLoose = () => ({ b: 2 });

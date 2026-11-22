@@ -16,6 +16,20 @@
 #define TS_PASTE_(name, n) ts_arity_##name##_##n
 #define TS_CALL(name, ...) TS_PASTE(name, TS_COUNT(__VA_ARGS__))(__VA_ARGS__)
 
+// What `U_of(x)` calls where `x` is not a member of the union `U`.
+#if __STDC_VERSION__ >= 202311L
+void ts_no_member(...) __attribute__((error("not a member of the union")));
+#else
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wstrict-prototypes"
+#endif
+void ts_no_member() __attribute__((error("not a member of the union")));
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+#endif
+
 // Handles to JavaScript values. Zero is null.
 typedef struct { uint32_t h; } JsValue;
 typedef struct { uint32_t h; } JsString;
@@ -105,6 +119,10 @@ TS_IMPORT(js_async_iterator_next) uint32_t ts_raw_js_async_iterator_next(uint32_
 // scope is released when it closes. Retain one to keep it.
 TS_IMPORT(js_scope_open) void js_scope_open(void);
 TS_IMPORT(js_scope_close) void js_scope_close(void);
+// `js_scope();` opens a scope that closes where the enclosing block is left, by any path.
+static inline void ts_scope_exit(char* unused) { (void)unused; js_scope_close(); }
+#define TS_UNIQUE(name) TS_PASTE2(name, __COUNTER__)
+#define js_scope() __attribute__((cleanup(ts_scope_exit), unused)) char TS_UNIQUE(ts_scope_) = (js_scope_open(), 0)
 // How many JavaScript values wasm holds handles to.
 static inline uint32_t js_live_handles(void) { return ts_raw_js_live(); }
 // Forgets a callback made with `X_from`, and returns its context. Its handle is released as any other.
@@ -159,5 +177,56 @@ static inline void ts_push_val(uint32_t a, uint32_t v) { ts_raw_js_array_push(a,
 #define js_push_num(a, v) ts_push_num((a).h, (v))
 #define js_push_bool(a, v) ts_push_bool((a).h, (v))
 #define js_push_val(a, v) ts_push_val((a).h, (v).h)
+
+// An option bag: `X_create(.a = 1, .b = "x")` sets the properties it names and no others. `X_FIELDS` lists the
+// fields, each by its owner (the type that declares the setter) and kind: `i` a flag or an enum (-1 is absent),
+// `d` a number (one NaN is absent), `s` a string (NULL), `h` a handle (0), `u` a union (tag -1), and `B`, `D`
+// for an optional flag or number. A designator after the absent values overrides one.
+static inline bool ts_absent_num(double x) { union { double d; uint64_t u; } a = { x }, b = { __builtin_nan("0x7515") }; return a.u == b.u; }
+#define TS_NO_i (-1)
+#define TS_NO_B (-1)
+#define TS_NO_d __builtin_nan("0x7515")
+#define TS_NO_D __builtin_nan("0x7515")
+#define TS_NO_s 0
+#define TS_NO_h { 0 }
+#define TS_NO_u { .tag = -1 }
+#define TS_HAS_i(x) ((x) >= 0)
+#define TS_HAS_B(x) ((x) >= 0)
+#define TS_HAS_d(x) (!ts_absent_num(x))
+#define TS_HAS_D(x) (!ts_absent_num(x))
+#define TS_HAS_s(x) ((x) != 0)
+#define TS_HAS_h(x) ((x).h != 0)
+#define TS_HAS_u(x) ((x).tag != -1)
+#define TS_GET_i(x) (x)
+#define TS_GET_B(x) js_some_bool(x)
+#define TS_GET_d(x) (x)
+#define TS_GET_D(x) js_some_double(x)
+#define TS_GET_s(x) ts_str_c(x)
+#define TS_GET_h(x) (x)
+#define TS_GET_u(x) (x)
+#define TS_FIELD(c, k, t, n) t n;
+#define TS_FIELD_NO(c, k, t, n) .n = TS_NO_##k,
+#define TS_FIELD_SET(c, k, t, n) if (TS_HAS_##k(f.n)) (c##_set_##n)((c){ o.h }, TS_GET_##k(f.n));
+// A field whose setter is not `set_` and its name: `F_N(c, k, t, n, setter)`.
+#define TS_FIELD_N(c, k, t, n, s) t n;
+#define TS_FIELD_NO_N(c, k, t, n, s) .n = TS_NO_##k,
+#define TS_FIELD_SET_N(c, k, t, n, s) if (TS_HAS_##k(f.n)) (c##_##s)((c){ o.h }, TS_GET_##k(f.n));
+#define TS_BAG_DEF(c) typedef struct { c##_FIELDS(TS_FIELD, c) } c##_fields; \
+    static inline c c##_from_fields(c##_fields f) { c o = (c##_create)(); c##_FIELDS(TS_FIELD_SET, c) return o; }
+#if defined(__clang__)
+#define TS_OVERRIDE_ON _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Winitializer-overrides\"")
+#define TS_OVERRIDE_OFF _Pragma("clang diagnostic pop")
+#else
+#define TS_OVERRIDE_ON _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Woverride-init\"")
+#define TS_OVERRIDE_OFF _Pragma("GCC diagnostic pop")
+#endif
+// No designators is the empty object, made by the function itself.
+#define TS_BAG(c, ...) TS_PASTE2(TS_BAG_, TS_FILLED(__VA_ARGS__))(c, __VA_ARGS__)
+#define TS_FILLED(...) TS_FILLED_(__VA_OPT__(1,) 0, 0, 0)
+#define TS_FILLED_(a, b, ...) a
+#define TS_PASTE2(a, b) TS_PASTE2_(a, b)
+#define TS_PASTE2_(a, b) a##b
+#define TS_BAG_0(c, ...) (c##_create)()
+#define TS_BAG_1(c, ...) TS_OVERRIDE_ON c##_from_fields((c##_fields){ c##_FIELDS(TS_FIELD_NO, c) __VA_ARGS__ }) TS_OVERRIDE_OFF
 
 #endif

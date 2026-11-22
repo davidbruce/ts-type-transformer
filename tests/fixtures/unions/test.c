@@ -48,4 +48,40 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(str_eq(setup(options), "options verbose=true"));
     number_or_Widget found = lookup("abc");
     CHECK(found.tag == number_or_Widget_number && found.as.number == 3);
+
+    // A union parameter takes the union or any member; so does a setter, and a field of a bag.
+    CHECK(str_eq(describe("text"), "string text"));
+    CHECK(str_eq(describe(42), "number 42"));
+    CHECK(str_eq(describe(widget), "widget w"));
+    CHECK(str_eq(describe(number), "number 42"));
+    Slot slot = Slot_create();
+    CHECK(str_eq(peek(slot), "empty"));
+    Slot_set_value(slot, "slotted");
+    CHECK(str_eq(peek(slot), "string slotted"));
+    Slot_set_value(slot, widget);
+    CHECK(str_eq(peek(slot), "widget w"));
+    Slot_set_value(slot, o);
+    CHECK(str_eq(peek(slot), "options verbose=true"));
+    CHECK(str_eq(peek(Slot_create(.value = Value_of(7))), "number 7"));
+
+    // Members no test tells apart: typed going in, a value coming back. A value goes in as it is.
+    LooseA loose_a = LooseA_create(.a = 1);
+    CHECK(str_eq(loose(loose_a), "loose {\"a\":1}"));
+    CHECK(str_eq(loose(Loose_of(LooseB_create(.b = 0))), "loose {\"b\":0}"));
+    JsValue any = anyLoose();
+    CHECK(str_eq(loose(any), "loose {\"b\":2}"));
+    js_release(any);
+
+    // A scope closes where its block is left, on any path.
+    uint32_t live = js_live_handles();
+    for (int i = 0; i < 3; i++) {
+        js_scope();
+        Widget made = Widget_new("scoped");
+        if (i == 1) continue;
+        js_scope();
+        Widget inner = Widget_new("inner");
+        if (i == 2) break;
+        CHECK(made.h != inner.h);
+    }
+    CHECK(js_live_handles() == live);
 }

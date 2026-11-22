@@ -20,3 +20,14 @@ declare function area(shape: Shape): number;
 // A union written inline.
 declare function setup(options: boolean | Options): string;
 declare function lookup(key: string): number | Widget;
+
+// A union is the parameter, or a property, whichever member the caller has.
+interface Slot { value?: Value }
+declare function peek(slot: Slot): string;
+
+// Members no runtime test tells apart: the union goes in, a value comes back.
+interface LooseA { a?: number }
+interface LooseB { b?: number }
+type Loose = LooseA | LooseB;
+declare function loose(value: Loose): string;
+declare function anyLoose(): Loose;

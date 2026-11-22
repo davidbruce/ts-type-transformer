@@ -815,6 +815,23 @@ fn c_calls_may_be_empty() {
     run(Command::new(clang).current_dir(&c.out).args(["--target=wasm32", "-std=c2x", "-pedantic", "-Werror", "-nostdlib", "-ffreestanding", "-fsyntax-only", "-I", "bindings", "t.c"]));
 }
 
+// A union argument is the union or a member whose C type tells it apart: anything else is `ts_no_member`.
+#[test]
+fn c_union_argument_must_be_a_member() {
+    let Some([clang]) = tools(["clang"]) else { return };
+    let c = case_in("unions", "c", "unions-c-not-a-member");
+    write_files(&c.out.join("bindings"), generators::c::files(&model(&c.xml, "C")).unwrap());
+    let compile = |source: &str| {
+        fs::write(c.out.join("t.c"), format!("#include \"bindings.h\"\n{source}\n")).unwrap();
+        Command::new(&clang).current_dir(&c.out).args(["--target=wasm32", "-std=c11", "-pedantic", "-Werror", "-nostdlib", "-ffreestanding", "-fsyntax-only", "-I", "bindings", "t.c"]).output().unwrap()
+    };
+    let ok = compile("JsString member(const char* s, double n) { describe(n); return describe(s); }");
+    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    let bad = compile("JsString wrong(JsArray a) { return describe(a); }");
+    let errors = String::from_utf8_lossy(&bad.stderr);
+    assert!(!bad.status.success() && errors.contains("ts_no_member"), "{errors}");
+}
+
 // `Union_release` frees handle arms of a decodable C union without double-releasing
 // primitives or static cstrs, and `{Union}_from_handle` releases any handle whose
 // runtime tag is unrecognized (`tag == -1`).

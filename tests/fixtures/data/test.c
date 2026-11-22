@@ -113,6 +113,15 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(js_to_number(first(JsArray_double_any(r))) == 0);
     CHECK(first(JsArray_new()).h == 0);
 
+    // A bag is made in one expression, with the properties it names: `false`, 0 and "" are present, the rest absent.
+    CHECK(str_eq(marked(Marks_create()), ""));
+    CHECK(str_eq(marked(Marks_create(.on = false, .count = 0, .label = "")), "on=false,count=0,label="));
+    CHECK(str_eq(marked(Marks_create(.label = "x", .mode = Marks_mode_narrow)), "label=x,mode=narrow"));
+    // A property of a base is a field too.
+    CHECK(str_eq(marked(Marks_create(.count = 2, .id = 7)), "count=2,id=7"));
+    CHECK(str_eq(marked(Marks_create(.count = 1.5, .on = true)), "on=true,count=1.5"));
+    CHECK(str_eq(describe(Options_create(.width = 3, .title = "hi", .mode = Options_mode_fill)), "3x? fill \"hi\""));
+
     // A handle a function returns is the caller's to release.
     uint32_t live = js_live_handles();
     for (int i = 0; i < 1000; i++) {

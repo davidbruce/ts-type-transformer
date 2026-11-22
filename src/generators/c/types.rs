@@ -29,8 +29,9 @@ pub(super) fn typed(t: &Ty, param: bool, cx: &Ctx) -> String {
         Ty::Nullable(inner, _) if **inner == Ty::Bool => "JsOptionalBool".into(),
         // NULL, or a null handle, is the absent value.
         Ty::Nullable(inner, _) => typed(inner, param, cx),
-        // A union a handle can be decoded to: a tagged struct. Any other is a value.
-        Ty::NamedUnion(n) if cx.decodable(n) => n.clone(),
+        // A union a handle can be decoded to: a tagged struct. Any other is a value,
+        // but for what goes in, where the caller knows the member.
+        Ty::NamedUnion(n) if cx.decodable(n) || param && cx.takes(n) => n.clone(),
         Ty::NamedUnion(_) => "JsValue".into(),
         Ty::Union(_) => panic!("{T} generator cannot express a union: the target config must name or erase unions"),
         Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => panic!("{T} generator cannot express keyed generics: the target config must expand them"),
@@ -144,7 +145,6 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     let enum_id = |e: &str| m.enums.iter().position(|x| x.0 == e).unwrap_or(0);
     let n = &u.name;
     let has_str = u.parts.contains(&Ty::Str);
-    let has_num = u.parts.contains(&Ty::Num);
     let field_names = union_fields(u);
     let mut fields: Vec<String> = u
         .parts
@@ -154,6 +154,10 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
         .collect();
     if has_str {
         fields.push("const char* ts_cstr;".into());
+    }
+    // What no test tells apart is also taken as the value it is: tag -3.
+    if !cx.decodable(n) {
+        fields.push("JsValue ts_value;".into());
     }
     let tags: Vec<String> = field_names.iter().enumerate().map(|(i, f)| format!("{n}_{f} = {i}")).collect();
     let decl = format!(
@@ -178,6 +182,9 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     if has_str {
         to.push_str(" case -2: return u.as.ts_cstr ? ts_raw_js_from_string(u.as.ts_cstr, ts_strlen(u.as.ts_cstr)) : 0;");
     }
+    if !cx.decodable(n) {
+        to.push_str(" case -3: ts_raw_js_retain(u.as.ts_value.h); return u.as.ts_value.h;");
+    }
     let from: String = u
         .parts
         .iter()
@@ -199,14 +206,17 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
         .filter(|(_, (p, _))| !matches!(p, Ty::Num | Ty::Bool | Ty::Enum(_) | Ty::NumEnum(_)))
         .map(|(i, (_, f))| format!(" case {i}: ts_raw_js_release(u.as.{f}.h); break;"))
         .collect();
-    let tag_attr = import_attr(wasm_module, &format!("{n}_tag"));
-    let tag_raw = raw_fn(raw_prefix, &format!("{n}_tag"));
-    let mut functions = format!(
-        "{tag_attr} int32_t {tag_raw}(uint32_t, int32_t);\n\
-         static inline uint32_t {n}_to_handle({n} u) {{ switch (u.tag) {{{to} }} return 0; }}\n\
-         static inline {n} {n}_from_handle(uint32_t h) {{ {n} u = {{ .tag = -1 }}; if (!h) return u; u.tag = {tag_raw}(h, 0); switch (u.tag) {{{from} default: ts_raw_js_release(h); break; }} return u; }}\n\
-         static inline void {n}_release({n} u) {{ switch (u.tag) {{{release} default: break; }} }}\n"
-    );
+    let mut functions = format!("static inline uint32_t {n}_to_handle({n} u) {{ switch (u.tag) {{{to} }} return 0; }}\n");
+    // Telling the member of a handle is for what comes back from JavaScript.
+    if cx.decodable(n) {
+        let tag_attr = import_attr(wasm_module, &format!("{n}_tag"));
+        let tag_raw = raw_fn(raw_prefix, &format!("{n}_tag"));
+        functions = format!(
+            "{tag_attr} int32_t {tag_raw}(uint32_t, int32_t);\n{functions}\
+             static inline {n} {n}_from_handle(uint32_t h) {{ {n} u = {{ .tag = -1 }}; if (!h) return u; u.tag = {tag_raw}(h, 0); switch (u.tag) {{{from} default: ts_raw_js_release(h); break; }} return u; }}\n\
+             static inline void {n}_release({n} u) {{ switch (u.tag) {{{release} default: break; }} }}\n"
+        );
+    }
     // Made from a member: `Value_of_number(42)`, or by its type, `Value_of(widget)`.
     let field_type = |p: &Ty| if *p == Ty::Str { "JsString".to_string() } else { typed(p, false, cx) };
     for (p, f) in u.parts.iter().zip(&field_names) {
@@ -215,28 +225,48 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     if has_str {
         functions += &format!("static inline {n} {n}_of_cstr(const char* v) {{ return ({n}){{ .tag = -2, .as.ts_cstr = v }}; }}\n");
     }
-    let mut seen = std::collections::BTreeSet::new();
-    let choices: Option<Vec<String>> = u
-        .parts
-        .iter()
-        .zip(&field_names)
-        .map(|(p, f)| {
-            if *p == Ty::Str {
-                let pairs = [("JsString", "string"), ("const char*", "cstr"), ("char*", "cstr")];
-                pairs
-                    .iter()
-                    .all(|(t, _)| seen.insert((*t).to_string()))
-                    .then(|| pairs.iter().map(|(t, suffix)| format!("{t}: {n}_of_{suffix}")).collect::<Vec<_>>().join(", "))
-            } else {
-                let types = generic_types(p, has_num, cx)?;
-                types.iter().all(|t| seen.insert(t.clone())).then(|| types.iter().map(|t| format!("{t}: {n}_of_{f}")).collect::<Vec<_>>().join(", "))
-            }
-        })
-        .collect();
-    if let Some(choices) = choices {
-        functions += &format!("#define {n}_of(x) _Generic((x), {})(x)\n", choices.join(", "));
+    if !cx.decodable(n) {
+        functions += &format!("static inline {n} {n}_of_ts_value(JsValue v) {{ return ({n}){{ .tag = -3, .as.ts_value = v }}; }}\n");
+    }
+    if let Some(choices) = of_choices(u, cx) {
+        functions += &format!("static inline {n} {n}_of_self({n} u) {{ return u; }}\n");
+        let mut choices: Vec<String> = choices.iter().map(|(t, f)| format!("{t}: {f}")).collect();
+        if !cx.decodable(n) {
+            choices.push(format!("JsValue: {n}_of_ts_value"));
+        }
+        functions += &format!("#define {n}_of(x) _Generic((x), {n}: {n}_of_self, {}, default: ts_no_member)(x)\n", choices.join(", "));
     }
     (decl, functions)
+}
+
+// What `U_of(x)` picks by the C type of `x`, as (type, function), where each member has types of its own.
+pub(super) fn of_choices(u: &NamedUnion, cx: &Ctx) -> Option<Vec<(String, String)>> {
+    let n = &u.name;
+    let has_num = u.parts.contains(&Ty::Num);
+    let mut seen = std::collections::BTreeSet::new();
+    let per_member: Option<Vec<Vec<(String, String)>>> = u
+        .parts
+        .iter()
+        .zip(union_fields(u))
+        .map(|(p, f)| {
+            let pairs: Vec<(String, String)> = if *p == Ty::Str {
+                [("JsString", "string"), ("const char*", "cstr"), ("char*", "cstr")].iter().map(|(t, suffix)| ((*t).to_string(), format!("{n}_of_{suffix}"))).collect()
+            } else {
+                generic_types(p, has_num, cx)?.into_iter().map(|t| (t, format!("{n}_of_{f}"))).collect()
+            };
+            pairs.iter().all(|(t, _)| seen.insert(t.clone())).then_some(pairs)
+        })
+        .collect();
+    Some(per_member?.concat())
+}
+
+// A union a value can be made of: its members have C types and names of their own.
+pub(super) fn typable(u: &NamedUnion) -> bool {
+    if !u.type_params.is_empty() || !u.parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))) {
+        return false;
+    }
+    let fields = union_fields(u);
+    fields.iter().enumerate().all(|(i, f)| !fields[..i].contains(f))
 }
 
 // A tuple: `JsTuple_double_JsString`, made by `_new(1, "one")`, read by `_get_0`.
@@ -299,7 +329,7 @@ pub(super) fn array_type(e: &Ty, cx: &Ctx) -> String {
         Ty::Bool => ("bool x = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); return x;".to_string(), "bool v".to_string(), "uint32_t h = ts_raw_js_from_bool(v); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h);".to_string()),
         _ => (format!("return ({elem}){{ h }};"), format!("{elem} v"), "ts_raw_js_array_push(a.h, v.h);".to_string()),
     };
-    [
+    let mut lines = vec![
         format!("typedef struct {{ uint32_t h; }} {name};"),
         format!("static inline {name} {name}_new(void) {{ return ({name}){{ ts_raw_js_array_new() }}; }}"),
         format!("static inline uint32_t {name}_length({name} a) {{ return ts_raw_js_array_length(a.h); }}"),
@@ -308,9 +338,12 @@ pub(super) fn array_type(e: &Ty, cx: &Ctx) -> String {
         format!("static inline {name} {name}_from(const {elem}* items, uint32_t len) {{ {name} a = {name}_new(); for (uint32_t i = 0; i < len; i++) {name}_push(a, items[i]); return a; }}"),
         // The same array, untyped.
         format!("static inline JsArray {name}_any({name} a) {{ return (JsArray){{ a.h }}; }}"),
-    ]
-    .map(|l| l + "\n")
-    .concat()
+    ];
+    // A union element is pushed as any member: `push(a, widget)`.
+    if let Ty::NamedUnion(n) = e && cx.decodable(n) && cx.of.contains_key(n) {
+        lines.push(format!("#define {name}_push(a, v) {name}_push((a), {n}_of(v))"));
+    }
+    lines.into_iter().map(|l| l + "\n").collect()
 }
 
 fn func_param_ty(t: &Ty, cx: &Ctx) -> String {
@@ -356,7 +389,7 @@ pub(super) fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module:
             },
             _ => None,
         };
-        if let Some(n) = union.filter(|n| cx.decodable(n)) {
+        if let Some(n) = union.filter(|n| cx.takes(n)) {
             raw_params.push("uint32_t".into());
             args.push(format!("lent_{name}"));
             lent.push(format!("uint32_t lent_{name} = {n}_to_handle({name});"));
@@ -465,6 +498,52 @@ pub(super) fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module:
     *out += &format!("static inline {} {name}({}) {{ {pre}{body} }}\n", typed(&f.ret, false, cx), void(&params));
 }
 
+// A bag's fields kind by kind (see `TS_BAG` in the runtime): one for each property that can be set.
+fn field(t: &Ty, cx: &Ctx) -> Option<(char, String)> {
+    let optional = matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_) | Ty::Bool));
+    let t = match t {
+        Ty::Nullable(inner, _) => inner,
+        t => t,
+    };
+    Some(match t {
+        Ty::Bool => (if optional { 'B' } else { 'i' }, "int8_t".into()),
+        Ty::Num | Ty::NumEnum(_) => (if optional { 'D' } else { 'd' }, "double".into()),
+        Ty::Str => ('s', "const char*".into()),
+        Ty::Enum(e) => ('i', e.clone()),
+        Ty::NamedUnion(n) if cx.takes(n) => ('u', n.clone()),
+        Ty::NamedUnion(_) | Ty::Any | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => ('h', typed(t, true, cx)),
+        _ => return None,
+    })
+}
+
+// `X_create(.a = 1, .b = "x")`: a struct of the settable properties, and the object made from what is named.
+// Each field is by the type that declares its setter. A property set in more than one way is left out.
+pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx) -> String {
+    let js = |f: &Func| match &f.call {
+        Call::Set(js) => js.clone(),
+        _ => unreachable!(),
+    };
+    let entries: Vec<String> = setters
+        .iter()
+        .filter(|(f, _)| f.params.len() == 1 && setters.iter().filter(|(g, _)| js(g) == js(f)).count() == 1)
+        .filter_map(|(f, owner)| {
+            let (kind, ty) = field(&f.params[0].1, cx)?;
+            let prop = js(f);
+            if !prop.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || !prop.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                return None;
+            }
+            let field = ident(&prop);
+            let owner = if *owner == name { "C_" } else { owner };
+            // Where the setter is not `set_` and the property (a keyword, a function assigned), it is named.
+            Some(if f.name == format!("set_{field}") { format!("F_({owner}, {kind}, {ty}, {field})") } else { format!("F_##_N({owner}, {kind}, {ty}, {field}, {})", f.name) })
+        })
+        .collect();
+    if entries.is_empty() {
+        return String::new();
+    }
+    format!("#define {name}_FIELDS(F_, C_) {}\nTS_BAG_DEF({name})\n#define {name}_create(...) TS_BAG({name}, __VA_ARGS__)\n", entries.join(" "))
+}
+
 // What an argument left out is: `undefined`, as each type says it.
 fn absent(t: &Ty, cx: &Ctx) -> Option<String> {
     let Ty::Nullable(inner, true) = t else { return None };
@@ -473,7 +552,7 @@ fn absent(t: &Ty, cx: &Ctx) -> Option<String> {
         Ty::Bool => "js_none_bool()".into(),
         Ty::Enum(e) => format!("{e}_absent"),
         Ty::Str => "(const char*)0".into(),
-        Ty::NamedUnion(n) if cx.decodable(n) => format!("({n}){{ .tag = -1 }}"),
+        Ty::NamedUnion(n) if cx.takes(n) => format!("({n}){{ .tag = -1 }}"),
         _ => format!("({}){{ 0 }}", typed(t, true, cx)),
     })
 }
@@ -541,12 +620,41 @@ pub(super) fn call_macros(
         },
         _ => None,
     };
+    // A union argument is the union or any member `U_of` tells by its type.
+    let made = |t: &Ty| match t {
+        Ty::NamedUnion(n) if cx.of.contains_key(n) => Some(n.clone()),
+        Ty::Nullable(inner, _) => match &**inner {
+            Ty::NamedUnion(n) if cx.of.contains_key(n) => Some(n.clone()),
+            _ => None,
+        },
+        _ => None,
+    };
     let chosen = family.as_ref().map(|f| f.0);
+    // Where an overload takes a union, the members the others do not take choose it too, and are made into it.
+    let mut conv: Vec<(String, String)> = Vec::new();
+    if let Some((at, _, members)) = &family {
+        let has_num = members.iter().any(|o| o.params[*at].1 == Ty::Num);
+        let mut seen: std::collections::BTreeSet<String> = members.iter().flat_map(|o| generic_types(&o.params[*at].1, has_num, cx).unwrap_or_default()).collect();
+        for o in members {
+            if let Ty::NamedUnion(n) = &o.params[*at].1 {
+                for t in cx.of.get(n).into_iter().flatten() {
+                    if seen.insert(t.clone()) {
+                        conv.push((t.clone(), n.clone()));
+                    }
+                }
+            }
+        }
+    }
     let wrap_expr = |p_idx: usize, t: &Ty, expr: String| -> String {
-        if chosen == Some(p_idx) {
+        if chosen == Some(p_idx) && !conv.is_empty() {
+            let arms: String = conv.iter().map(|(t, n)| format!("{t}: {n}_of({expr}), ")).collect();
+            format!("_Generic(({expr}), {arms}default: ({expr}))")
+        } else if chosen == Some(p_idx) {
             format!("({expr})")
         } else if let Some(n) = upcast(t) {
             format!("{}({expr})", as_macro(&n))
+        } else if let Some(n) = made(t) {
+            format!("{n}_of({expr})")
         } else if *t == Ty::Str || matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
             format!("TS_STR({expr})")
         } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_))) {
@@ -571,6 +679,7 @@ pub(super) fn call_macros(
         params.push(a.clone());
         any |= chosen != Some(i)
             && (upcast(t).is_some()
+                || made(t).is_some()
                 || *t == Ty::Str
                 || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Str | Ty::Num | Ty::NumEnum(_) | Ty::Bool)));
         args.push(wrap_expr(i, t, a));
@@ -622,6 +731,9 @@ pub(super) fn call_macros(
                     choices.extend([format!("const char*: {c_fn}"), format!("char*: {c_fn}"), format!("JsString: {js_fn}")]);
                 } else {
                     choices.extend(generic_types(&o.params[*at].1, has_num, cx).unwrap_or_default().into_iter().map(|t| format!("{t}: {o_name}")));
+                    if let Ty::NamedUnion(n) = &o.params[*at].1 {
+                        choices.extend(conv.iter().filter(|(_, u)| u == n).map(|(t, _)| format!("{t}: {o_name}")));
+                    }
                 }
             }
             format!("_Generic((a{}), {})", at + 1, choices.join(", "))

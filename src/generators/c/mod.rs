@@ -17,11 +17,21 @@ pub(super) const RUNTIME: &str = include_str!("../runtime/c_runtime.h");
 
 pub(super) struct Ctx {
     pub decodable: HashSet<String>,
+    // Unions with a C type: the decodable ones, and those only a value goes into.
+    pub typed: HashSet<String>,
+    // Unions made from a member by `U_of(x)`.
+    // with the C types it tells members by.
+    pub of: HashMap<String, Vec<String>>,
 }
 
 impl Ctx {
     pub fn decodable(&self, n: &str) -> bool {
         self.decodable.contains(n)
+    }
+
+    // Whether a parameter of this union is typed as it.
+    pub fn takes(&self, n: &str) -> bool {
+        self.typed.contains(n)
     }
 }
 
@@ -34,6 +44,12 @@ pub struct ProjectRef {
     pub external_structs: HashSet<String>,
     pub struct_aliases: HashMap<String, String>,
     pub all_names: Vec<String>,
+}
+
+// The names the runtime takes. What a pragma or an attribute says is not one.
+pub(super) fn runtime_names() -> Vec<String> {
+    let code: Vec<&str> = RUNTIME.lines().filter(|l| !l.contains("_Pragma") && !l.contains("#pragma") && !l.contains("__attribute__((error")).collect();
+    identifiers(&code.join("\n"))
 }
 
 pub(super) fn is_builtin_c_type(name: &str) -> bool {
@@ -269,12 +285,13 @@ pub fn model_with_refs(xml: &str, refs: &[ProjectRef]) -> Result<Model, Vec<Stri
 }
 
 pub const NAMING: Naming = Naming {
-    reserved: || KEYWORDS.iter().chain(LIBC_NAMES).map(|k| (*k).to_string()).chain(identifiers(RUNTIME)).collect(),
+    reserved: || KEYWORDS.iter().chain(LIBC_NAMES).map(|k| (*k).to_string()).chain(runtime_names()).collect(),
     type_names: |candidate, name, kind, m| {
         let mut ids = vec![candidate.to_string(), format!("AS_{candidate}")];
         match kind {
             Kind::Class => {
                 if let Some(c) = m.classes.iter().find(|c| c.name == name) {
+                    ids.extend(["fields", "FIELDS", "from_fields"].map(|s| format!("{candidate}_{s}")));
                     ids.extend(c.ancestors.iter().map(|a| format!("{candidate}_as_{a}")));
                     if c.iterates.is_some() || c.iterates_async.is_some() {
                         ids.extend(["iterate", "iterate_async", "iterate_next"].map(|s| format!("{candidate}_{s}")));
@@ -283,7 +300,7 @@ pub const NAMING: Naming = Naming {
             }
             Kind::Callback => ids.extend(["fn", "from"].map(|s| format!("{candidate}_{s}"))),
             Kind::Union => {
-                ids.extend(["from_handle", "to_handle", "of", "release"].map(|s| format!("{candidate}_{s}")));
+                ids.extend(["from_handle", "to_handle", "of", "of_self", "of_ts_value", "release"].map(|s| format!("{candidate}_{s}")));
                 if let Some(u) = m.unions.iter().find(|u| u.name == name) {
                     if u.parts.contains(&Ty::Str) {
                         ids.push(format!("{candidate}_of_cstr"));

@@ -285,8 +285,27 @@ the time control returns to JavaScript is reported, not lost.
   where several overloads share it. Optional values are `JsOptionalDouble`,
   `JsOptionalBool`, null handles and `E_absent`; unions tagged structs made
   from a member (`Value_of(widget)`, `Value_of_number(42)`); arrays and
-  tuples typed (`JsArray_double`, `JsTuple_double_JsString`). Handles are
-  released one by one or by scope (`js_scope_open()`/`js_scope_close()`).
+  tuples typed (`JsArray_double`, `JsTuple_double_JsString`). A union
+  parameter, a setter, an array's `push` and a family's overload take the
+  union or any member whose C type tells it apart (`leaflet_marker(ll, opts)`,
+  `Popup_setContent(note, "text")`): the macro applies `U_of`, and a value
+  that is no member is `ts_no_member`. A subtype of a member is upcast first.
+  An object an interface only holds properties of is made in one expression,
+  `X_create(.a = 1, .name = "x")`: a struct of the settable properties, own
+  and inherited, and an object with those named set, and no others; `false`,
+  0 and "" are values. What is absent is a signed byte of -1 for a flag, one
+  NaN for a number, NULL, a null handle, `tag == -1`; the macro lists those
+  first and silences the compiler's warning of the designators that override
+  them. `X_create()` and `(X_create)()` are the empty object, made by the
+  function. A bag nests: `.icon = Icon_or_DivIcon_of(divIcon(DivIconOptions_create(.className = "pin")))`.
+  A property of a type with no C value is a `JsValue` field, a property
+  set in more than one way is left out, and a property named as a C keyword
+  is a field with an underscore (`.inline_`). A long list of properties none
+  optional (`ElementTagNameMap`) is a map, not a bag. A union only a value goes into, because no test tells its
+  members apart, is typed for parameters and setters; what returns it is a
+  `JsValue`. Handles are released one by one or by scope
+  (`js_scope_open()`/`js_scope_close()`), or by `js_scope();`, which
+  closes where its block is left, on any path.
   The DOM: 10 MB.
 - C++ (C++20, WASI SDK): headers include each other by their path from the
   bindings' root, so they are compiled with `-I` on it. A value type per JavaScript type, inheriting
@@ -582,8 +601,8 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 
 - OCaml has a config but no generator: it needs `js_of_ocaml` or `wasm_of_ocaml`.
 - 8 DOM unions have members no runtime test can tell apart (two array types,
-  `ArrayBufferLike | ArrayBufferView`): bound as untyped values. A union with
-  an `any` member is `any`.
+  `ArrayBufferLike | ArrayBufferView`): bound as untyped values, in C typed
+  where a value goes in. A union with an `any` member is `any`.
 - F# on Pts erases 7 unions whose members no test tells apart (`U3<...>`,
   matched by nothing). Namespaced
   classes of a module library are still tested through `globalThis`.

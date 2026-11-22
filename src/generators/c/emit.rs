@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use super::super::model::{Class, Func, Model, Ty};
-use super::super::names::{Kind, identifiers};
+use super::super::model::{Call, Class, Func, Model, Ty};
+use super::super::names::Kind;
 use super::super::comments::{Style, comment};
 use super::types::{
-    all_ancestors, array_type, arrays, call_macros, check, family, func, tuple_type, typed, union_type, with_doc,
+    all_ancestors, array_type, arrays, bag, call_macros, check, family, func, of_choices, tuple_type, typable, typed, union_type, with_doc,
 };
 use super::{
-    Ctx, KEYWORDS, LIBC_NAMES, NAMING, ProjectRef, RUNTIME, c_elem, ident, import_attr, is_builtin_c_type, raw_fn,
+    Ctx, KEYWORDS, LIBC_NAMES, NAMING, ProjectRef, RUNTIME, c_elem, ident, import_attr, is_builtin_c_type, raw_fn, runtime_names,
 };
 
 // The bindings as files: `ts_runtime.h`; `ts_types.h` with every handle type,
@@ -47,9 +47,14 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         }
     };
 
-    let cx = Ctx {
+    let mut cx = Ctx {
         decodable: m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect(),
+        typed: HashSet::new(),
+        of: HashMap::new(),
     };
+    // A union only a value goes into is typed where a member can be told by its C type: else a value stays one.
+    cx.of = m.unions.iter().filter(|u| cx.decodable(&u.name) || typable(u)).filter_map(|u| Some((u.name.clone(), of_choices(u, &cx)?.into_iter().map(|c| c.0).chain((!cx.decodable(&u.name)).then(|| "JsValue".to_string())).collect()))).collect();
+    cx.typed = m.unions.iter().filter(|u| cx.decodable(&u.name) || cx.of.contains_key(&u.name)).map(|u| u.name.clone()).collect();
     let mut types = String::from("// Generated.\n#pragma once\n#include \"ts_runtime.h\"\n");
     for &idx in &used_refs {
         types += &format!("#include \"{}\"\n", refs[idx].ts_types_include);
@@ -267,7 +272,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     let unions: Vec<(String, String)> = m
         .unions
         .iter()
-        .filter(|u| u.decodable() && u.type_params.is_empty())
+        .filter(|u| cx.typed.contains(&u.name))
         .map(|u| {
             if !is_builtin_c_type(&u.name) {
                 all_names.push(u.name.clone());
@@ -281,7 +286,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     for (_, functions) in &unions {
         types += functions;
     }
-    for (alias, to) in m.type_aliases.iter().filter(|(_, to)| m.unions.iter().any(|u| u.name == *to && u.decodable() && u.type_params.is_empty())) {
+    for (alias, to) in m.type_aliases.iter().filter(|(_, to)| cx.typed.contains(to)) {
         types += &format!("typedef {to} {alias};\n");
         all_names.push(alias.clone());
     }
@@ -335,7 +340,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         .iter()
         .chain(LIBC_NAMES)
         .map(|k| (*k).to_string())
-        .chain(identifiers(RUNTIME))
+        .chain(runtime_names())
         .chain(refs.iter().flat_map(|r| r.all_names.iter().cloned()))
         .collect();
     for (name, values) in &m.enums {
@@ -460,8 +465,12 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         let mut own_methods: HashSet<&str> = c.funcs.iter().map(|f| f.name.as_str()).chain(c.consts.iter().map(|(k, _)| k.as_str())).collect();
         own_methods.extend(["cast", "try_cast", "as_array", "iterate", "iterate_async", "iterate_next"]);
         let mut ancestor_includes = Vec::new();
-        for a in all_ancestors(m, &c.name) {
+        let mut setters: Vec<(&Func, &str)> = c.funcs.iter().filter(|f| matches!(f.call, Call::Set(_))).map(|f| (f, c.name.as_str())).collect();
+        let mut methods = c.funcs.iter().any(|f| matches!(f.call, Call::Method(_)));
+        let ancestors = all_ancestors(m, &c.name);
+        for a in &ancestors {
             let Some(a_class) = class_by_name.get(a.as_str()) else { continue };
+            methods |= a_class.funcs.iter().any(|f| matches!(f.call, Call::Method(_)));
             for af in a_class.funcs.iter().filter(|af| Class::has_self(af)) {
                 if !own_methods.insert(af.name.as_str()) {
                     continue;
@@ -475,7 +484,16 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                     ancestor_includes.push(a_path);
                 }
                 body += &format!("#define {alias} {a}_{}\n", af.name);
+                if matches!(af.call, Call::Set(_)) {
+                    setters.push((af, a));
+                }
             }
+        }
+        // An object a caller fills in, not one with methods: made in one expression. A long list of
+        // properties none optional is a map of keys to types (`ElementTagNameMap`), not made by hand.
+        let optional = setters.iter().any(|(f, _)| matches!(f.params.first(), Some((_, Ty::Nullable(_, true)))));
+        if !methods && (optional || setters.len() <= 32) && c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) {
+            body += &bag(&c.name, &setters, &cx);
         }
         modules.entry(c.module.clone()).or_default().push(path.clone());
         out.push((path.clone(), header(&c.module, &ancestor_includes, body)));

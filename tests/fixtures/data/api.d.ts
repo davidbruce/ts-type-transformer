@@ -63,3 +63,8 @@ interface Source<T> { label: string; take(): T }
 interface Sink<T> { label: string; put(value: T): void }
 interface Pipe extends Source<number>, Sink<number> {}
 declare function pipe(): Pipe;
+
+// An option bag whose properties are all optional: what is named is set, and nothing else.
+interface Base { id?: number }
+interface Marks extends Base { on?: boolean; count?: number; label?: string; mode?: "wide" | "narrow" }
+declare function marked(marks: Marks): string;

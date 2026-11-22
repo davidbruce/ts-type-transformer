@@ -41,3 +41,5 @@ globalThis.pipe = () => {
     const queue = [];
     return { label: "pipe", take: () => queue.shift(), put: v => { queue.push(v); } };
 };
+
+globalThis.marked = marks => Object.keys(marks).map(k => `${k}=${marks[k]}`).join(",");
