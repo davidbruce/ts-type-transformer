@@ -159,7 +159,7 @@ async {
     | Some first -> document.body.insertBefore (visible, first) |> ignore
     | None -> document.body.insertBefore (visible, null) |> ignore
     let hits = ResizeArray<IntersectionObserverEntry>()
-    // FINDING 7: IntersectionObserverInit.threshold is typed VibratePattern (Bindings.10.core.fs:4363), a float | float[] union named for another API; usable (`!^ 0.0`), but the name is wrong.
+    // The threshold is a float or an array of them (`NumberOrNumberArray`).
     let intersection = IntersectionObserver.Create ((fun entries _ -> hits.AddRange entries), IntersectionObserverInit.Create (threshold = !^ 0.0))
     check (intersection.thresholds.Count = 1 && intersection.thresholds.[0] = 0.0) "thresholds"
     check (intersection.rootMargin = "0px 0px 0px 0px") "rootMargin"

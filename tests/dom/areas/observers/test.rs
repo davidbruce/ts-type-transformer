@@ -246,8 +246,7 @@ pub extern "C" fn run() {
     KEEP.with(|k| k.borrow_mut().push(intersect.0.clone()));
     intersect.observe(&near);
     intersect.observe(&far);
-    // Options: a threshold list is a number or an array of them (FINDING 7: typed as the
-    // VibratePattern alias, which is the TypeScript definition's own doing; awkward to read).
+    // Options: a threshold list is a number or an array of them.
     let options = IntersectionObserverInit::create();
     options.set_threshold(JsArray::<f64>::from([0.0, 0.5, 1.0]));
     options.set_root_margin(Some("10px"));

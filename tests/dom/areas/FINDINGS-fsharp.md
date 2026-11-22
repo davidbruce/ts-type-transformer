@@ -1,6 +1,6 @@
 # Findings: F# DOM area programs
 
-**Status:** Fixed: 6 (`Function.Create` and `Function.Invoke`).
+**Status:** Fixed: 6 (`Function.Create` and `Function.Invoke`), 7 (`NumberOrNumberArray`).
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.fs.
 

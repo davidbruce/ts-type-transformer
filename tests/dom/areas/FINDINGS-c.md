@@ -1,6 +1,6 @@
 # Findings: C DOM area programs
 
-**Status:** Fixed: 5 (`HeadersInit_map_set_at`, `js_object`/`js_object_get`/`js_object_set`/`js_object_has`/`js_value`/`js_to_array`), 6 (`Function_from`), 8 (checked downcasts `T_cast(v)` for classes).
+**Status:** Fixed: 5 (`HeadersInit_map_set_at`, `js_object`/`js_object_get`/`js_object_set`/`js_object_has`/`js_value`/`js_to_array`), 6 (`Function_from`), 7 (`number_or_number_array`, given as a number or an array), 8 (checked downcasts `T_cast(v)` for classes).
 
 Numbers match `// FINDING n` in tests/dom/areas/*/test.c. No runtime bugs.
 

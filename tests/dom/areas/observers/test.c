@@ -219,17 +219,16 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(IntersectionObserver_get_root(intersect).tag == -1);
     CHECK(STR(IntersectionObserver_get_rootMargin(intersect), "0px 0px 0px 0px"));
     CHECK(JsArray_double_length(IntersectionObserver_get_thresholds(intersect)) == 1);
-    // FINDING 7: the threshold option is typed VibratePattern (number | number[], the same union
-    // under another alias's name); it works, but the name is of no help.
+    // The threshold option is a number or an array of them, given as either.
     IntersectionObserverInit steps = IntersectionObserverInit_create();
     JsArray_double marks = JsArray_double_new();
     JsArray_double_push(marks, 0);
     JsArray_double_push(marks, 0.5);
     JsArray_double_push(marks, 1);
-    IntersectionObserverInit_set_threshold(steps, (VibratePattern){ .tag = VibratePattern_array, .as.array = marks });
+    IntersectionObserverInit_set_threshold(steps, marks);
     CHECK(JsArray_double_length(IntersectionObserver_get_thresholds(IntersectionObserver_new(IntersectionObserverCallback_from(on_intersect, 0), steps))) == 3);
     IntersectionObserverInit half = IntersectionObserverInit_create();
-    IntersectionObserverInit_set_threshold(half, (VibratePattern){ .tag = VibratePattern_number, .as.number = 0.5 });
+    IntersectionObserverInit_set_threshold(half, 0.5);
     CHECK(JsArray_double_get(IntersectionObserver_get_thresholds(IntersectionObserver_new(IntersectionObserverCallback_from(on_intersect, 0), half)), 0) == 0.5);
     IntersectionObserver_observe(intersect, visible);
     IntersectionObserver_observe(intersect, far);
