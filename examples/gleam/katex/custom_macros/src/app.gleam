@@ -22,9 +22,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("\\RR, \\NN, \\dd, \\norm"))
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let macros =
         katex_options_macros.create()
@@ -54,13 +54,13 @@ pub fn main() -> Nil {
           "\\RR -> \\mathbb{R}\n\\NN -> \\mathbb{N}\n\\dd -> \\mathrm{d}\n\\norm -> \\left\\| #1 \\right\\|",
         ),
       )
-      let _ = node.append_child(legend, leg_lbl)
-      let _ = node.append_child(legend, leg_pre)
-      let _ = node.append_child(app, legend)
+      node.append_child(legend, leg_lbl)
+      node.append_child(legend, leg_pre)
+      node.append_child(app, legend)
 
       let grid = document.create_element(doc, tag.div, None)
       element.set_class_name(grid, "grid")
-      let _ = node.append_child(app, grid)
+      node.append_child(app, grid)
 
       let exprs = [
         #("Euclidean Space", "v \\in \\RR^n,\\quad k \\in \\NN"),
@@ -85,10 +85,10 @@ pub fn main() -> Nil {
         let slot = document.create_element(doc, tag.div, None)
         element.set_class_name(slot, "slot")
         element.set_inner_html(slot, katex.render_to_string(tex, Some(opts)))
-        let _ = node.append_child(card, lbl)
-        let _ = node.append_child(card, src)
-        let _ = node.append_child(card, slot)
-        let _ = node.append_child(grid, card)
+        node.append_child(card, lbl)
+        node.append_child(card, src)
+        node.append_child(card, slot)
+        node.append_child(grid, card)
         Nil
       })
     }

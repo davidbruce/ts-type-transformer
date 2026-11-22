@@ -47,7 +47,7 @@ pub fn main() {
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
     Some(stage_el) -> {
-      let _ = dom_node.append_child(stage_el, application.get_canvas(app))
+      dom_node.append_child(stage_el, application.get_canvas(app))
       Nil
     }
     None -> Nil
@@ -64,7 +64,7 @@ pub fn main() {
         #("color", runtime.dynamic(int.to_float(0xd4d4d4))),
       ]),
     ])
-  let _ = container.add_child(stage, [frame])
+  container.add_child(stage, [frame])
 
   let white = texture.get_white()
   int.range(from: 0, to: 6, with: Nil, run: fn(_, row) {
@@ -76,13 +76,14 @@ pub fn main() {
       let alpha_mod = int.to_float({ col + row } % 3)
       container.set_width(s, 52.0)
       container.set_height(s, 48.0)
-      let _ = observable_point.set(sprite.get_anchor(s), Some(0.5), Some(0.5))
+      sprite.get_anchor(s)
+      |> observable_point.set(Some(0.5), Some(0.5))
       container.set_x(s, 70.0 +. c_f *. 60.0)
       container.set_y(s, 56.0 +. r_f *. 56.0)
       container.set_rotation(s, { c_f -. 4.5 } *. 0.04 +. { r_f -. 2.5 } *. 0.03)
       container.set_alpha(s, 0.65 +. 0.35 *. alpha_mod /. 2.0)
       container.set_tint(s, runtime.dynamic(int.to_float(shade_at(idx))))
-      let _ = container.add_child(stage, [s])
+      container.add_child(stage, [s])
       Nil
     })
   })

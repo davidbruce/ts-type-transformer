@@ -54,9 +54,9 @@ pub fn main() -> Nil {
   let passed = check(fs.exists_sync(str(root)), "temp tree created")
 
   let mk = mkdir_options.create()
-  let _ = fs.mkdir_sync_recursive(str(path.join([root, "src", "core"])), mk)
-  let _ = fs.mkdir_sync_recursive(str(path.join([root, "src", "cli"])), mk)
-  let _ = fs.mkdir_sync_recursive(str(path.join([root, "docs"])), mk)
+  fs.mkdir_sync_recursive(str(path.join([root, "src", "core"])), mk)
+  fs.mkdir_sync_recursive(str(path.join([root, "src", "cli"])), mk)
+  fs.mkdir_sync_recursive(str(path.join([root, "docs"])), mk)
 
   write_text(path.join([root, "README.md"]), "node tree demo")
   write_text(

@@ -154,14 +154,13 @@ pub fn main() -> Nil {
         rigid_body_desc.fixed()
         |> rigid_body_desc.set_translation(0.0, -0.3, 0.0),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.cuboid(10.0, 0.3, 10.0)
-        |> collider_desc.set_friction(0.75)
-        |> collider_desc.set_restitution(0.1),
-        Some(floor_body),
-      )
+    world.create_collider(
+      w,
+      collider_desc.cuboid(10.0, 0.3, 10.0)
+      |> collider_desc.set_friction(0.75)
+      |> collider_desc.set_restitution(0.1),
+      Some(floor_body),
+    )
 
     let ramp_rot =
       quaternion.new(0.0, 0.0, sin(ramp_angle *. 0.5), cos(ramp_angle *. 0.5))
@@ -172,14 +171,13 @@ pub fn main() -> Nil {
         |> rigid_body_desc.set_translation(ramp_x, ramp_y, ramp_z)
         |> rigid_body_desc.set_rotation(ramp_rot),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.cuboid(1.75, 0.10, 0.65)
-        |> collider_desc.set_friction(0.15)
-        |> collider_desc.set_restitution(0.2),
-        Some(ramp_body),
-      )
+    world.create_collider(
+      w,
+      collider_desc.cuboid(1.75, 0.10, 0.65)
+      |> collider_desc.set_friction(0.15)
+      |> collider_desc.set_restitution(0.2),
+      Some(ramp_body),
+    )
 
     let marble =
       world.create_rigid_body(
@@ -188,15 +186,14 @@ pub fn main() -> Nil {
         |> rigid_body_desc.set_translation(-4.75, 2.02, -2.5)
         |> rigid_body_desc.set_linvel(3.0, 0.0, 0.0),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.ball(marble_radius)
-        |> collider_desc.set_density(3.2)
-        |> collider_desc.set_restitution(0.32)
-        |> collider_desc.set_friction(0.18),
-        Some(marble),
-      )
+    world.create_collider(
+      w,
+      collider_desc.ball(marble_radius)
+      |> collider_desc.set_density(3.2)
+      |> collider_desc.set_restitution(0.32)
+      |> collider_desc.set_friction(0.18),
+      Some(marble),
+    )
 
     let doms =
       int.range(from: 0, to: dom_count, with: [], run: fn(acc, i) {
@@ -209,15 +206,14 @@ pub fn main() -> Nil {
             |> rigid_body_desc.set_translation(x, y, z)
             |> rigid_body_desc.set_rotation(q),
           )
-        let _ =
-          world.create_collider(
-            w,
-            collider_desc.cuboid(dom_hx, dom_hy, dom_hz)
-            |> collider_desc.set_friction(0.55)
-            |> collider_desc.set_restitution(0.18)
-            |> collider_desc.set_density(1.0),
-            Some(rb),
-          )
+        world.create_collider(
+          w,
+          collider_desc.cuboid(dom_hx, dom_hy, dom_hz)
+          |> collider_desc.set_friction(0.55)
+          |> collider_desc.set_restitution(0.18)
+          |> collider_desc.set_density(1.0),
+          Some(rb),
+        )
         [rb, ..acc]
       })
       |> list.reverse
@@ -238,15 +234,14 @@ pub fn main() -> Nil {
             rigid_body_desc.dynamic()
             |> rigid_body_desc.set_translation(cx, 0.42, cz),
           )
-        let _ =
-          world.create_collider(
-            w,
-            collider_desc.cylinder(0.42, 0.25)
-            |> collider_desc.set_friction(0.55)
-            |> collider_desc.set_restitution(0.25)
-            |> collider_desc.set_density(1.0),
-            Some(rb),
-          )
+        world.create_collider(
+          w,
+          collider_desc.cylinder(0.42, 0.25)
+          |> collider_desc.set_friction(0.55)
+          |> collider_desc.set_restitution(0.25)
+          |> collider_desc.set_density(1.0),
+          Some(rb),
+        )
         [rb, ..acc]
       })
       |> list.reverse
@@ -334,7 +329,7 @@ pub fn main() -> Nil {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     sync_meshes()
     update_meta()
   }
@@ -345,7 +340,7 @@ pub fn main() -> Nil {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     Nil
   })
   update_meta()
@@ -419,7 +414,7 @@ pub fn main() -> Nil {
 
       let camera = b.create_arc_rotate_camera(0.65, 1.05, 12.0, b.vec3(-0.4, 0.8, 0.0))
       b.add_to_scene(scene, br.dynamic(camera))
-      let _ = b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.88, 0.95))

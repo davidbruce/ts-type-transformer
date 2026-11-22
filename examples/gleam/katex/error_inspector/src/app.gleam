@@ -21,9 +21,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("throwOnError: false vs true"))
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let lenient =
         katex_options.create()
@@ -56,8 +56,8 @@ pub fn main() -> Nil {
           l_slot,
           katex.render_to_string(tex, Some(lenient)),
         )
-        let _ = node.append_child(left, l_lbl)
-        let _ = node.append_child(left, l_slot)
+        node.append_child(left, l_lbl)
+        node.append_child(left, l_slot)
 
         let right = document.create_element(doc, tag.div, None)
         element.set_class_name(right, "cell")
@@ -76,12 +76,12 @@ pub fn main() -> Nil {
           Error(e) -> kr.js_error_message(e)
         }
         node.set_text_content(r_err, Some(msg))
-        let _ = node.append_child(right, r_lbl)
-        let _ = node.append_child(right, r_err)
+        node.append_child(right, r_lbl)
+        node.append_child(right, r_err)
 
-        let _ = node.append_child(row, left)
-        let _ = node.append_child(row, right)
-        let _ = node.append_child(app, row)
+        node.append_child(row, left)
+        node.append_child(row, right)
+        node.append_child(app, row)
         Nil
       })
     }

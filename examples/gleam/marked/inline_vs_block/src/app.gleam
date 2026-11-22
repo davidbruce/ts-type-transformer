@@ -20,9 +20,9 @@ fn make_result_card(doc, title: String, html: String) {
   let raw = document.create_element(doc, tag.pre, None)
   element.set_class_name(raw, "html-raw")
   node.set_text_content(raw, Some(html))
-  let _ = node.append_child(card, lbl)
-  let _ = node.append_child(card, out)
-  let _ = node.append_child(card, raw)
+  node.append_child(card, lbl)
+  node.append_child(card, out)
+  node.append_child(card, raw)
   card
 }
 
@@ -38,9 +38,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("parse vs parseInline"))
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let inst = marked_class.new([])
       let parse_fn = marked_class.get_parse(inst)
@@ -68,13 +68,13 @@ pub fn main() -> Nil {
         element.set_class_name(grid, "grid")
         let block_html = marked_class.parse_invoke(parse_fn, s, call, mr.codec_string())
         let inl_html = marked_class.parse_invoke(inline_fn, s, call, mr.codec_string())
-        let _ = node.append_child(grid, make_result_card(doc, "Block (parse)", block_html))
-        let _ = node.append_child(grid, make_result_card(doc, "Inline (parseInline)", inl_html))
+        node.append_child(grid, make_result_card(doc, "Block (parse)", block_html))
+        node.append_child(grid, make_result_card(doc, "Inline (parseInline)", inl_html))
 
-        let _ = node.append_child(row, lbl)
-        let _ = node.append_child(row, pre)
-        let _ = node.append_child(row, grid)
-        let _ = node.append_child(app, row)
+        node.append_child(row, lbl)
+        node.append_child(row, pre)
+        node.append_child(row, grid)
+        node.append_child(app, row)
         Nil
       })
     }

@@ -70,17 +70,19 @@ fn add_solid(
     |> mesh_standard_material.new
 
   let m = mesh.new(Some(geo), Some(mat), t.mesh_standard_material_codec())
-  let _ = vector3.set(object3d.get_position(m), x, y, Some(z))
+  object3d.get_position(m)
+  |> vector3.set(x, y, Some(z))
   euler.set_x(object3d.get_rotation(m), 0.25)
   euler.set_y(object3d.get_rotation(m), 0.45)
-  let _ = object3d.add(sc, [m])
+  object3d.add(sc, [m])
 
   let egeo = edges_geometry.new(Some(geo), Some(thresh))
   let segs = line_segments.new(Some(egeo), Some(line_mat), t.line_basic_material_codec())
-  let _ = vector3.set(object3d.get_position(segs), x, y, Some(z))
+  object3d.get_position(segs)
+  |> vector3.set(x, y, Some(z))
   euler.set_x(object3d.get_rotation(segs), 0.25)
   euler.set_y(object3d.get_rotation(segs), 0.45)
-  let _ = object3d.add(wire_grp, [segs])
+  object3d.add(wire_grp, [segs])
   Nil
 }
 
@@ -98,19 +100,21 @@ pub fn main() {
   web_gl_renderer.set_size(renderer, width, height, None)
 
   let assert Some(stage) = document.get_element_by_id(doc, "stage")
-  let _ = dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
+  dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
 
   let sc = scene.new()
   scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))))))
   let cam = perspective_camera.new(Some(42.0), Some(width /. height), Some(0.1), Some(100.0))
 
-  let _ = object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.2))])
+  object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.2))])
   let key = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(2.2))
-  let _ = vector3.set(object3d.get_position(key), 6.0, 10.0, Some(8.0))
-  let _ = object3d.add(sc, [key])
+  object3d.get_position(key)
+  |> vector3.set(6.0, 10.0, Some(8.0))
+  object3d.add(sc, [key])
   let rim = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(0.9))
-  let _ = vector3.set(object3d.get_position(rim), -7.0, 5.0, Some(-6.0))
-  let _ = object3d.add(sc, [rim])
+  object3d.get_position(rim)
+  |> vector3.set(-7.0, 5.0, Some(-6.0))
+  object3d.add(sc, [rim])
 
   let grid =
     grid_helper.new(
@@ -120,10 +124,10 @@ pub fn main() {
       Some(t.ColorRepresentationNumber(hex(0xd4d4d4))),
     )
   vector3.set_y(object3d.get_position(grid), -1.2)
-  let _ = object3d.add(sc, [grid])
+  object3d.add(sc, [grid])
 
   let wire_grp = group.new()
-  let _ = object3d.add(sc, [wire_grp])
+  object3d.add(sc, [wire_grp])
 
   let lmp =
     line_basic_material_parameters.create()
@@ -145,7 +149,8 @@ pub fn main() {
     let az = rt.ref_get(az_ref)
     let wv = rt.ref_get(wire_ref)
     let r = 8.6
-    let _ = vector3.set(object3d.get_position(cam), r *. sin(az), 3.6, Some(r *. cos(az)))
+    object3d.get_position(cam)
+    |> vector3.set(r *. sin(az), 3.6, Some(r *. cos(az)))
     object3d.look_at(cam, vector3.new(Some(0.0), Some(0.0), Some(0.0)))
     object3d.set_visible(wire_grp, wv)
     dom_node.set_text_content(wire_btn, Some(case wv { True -> "Wireframes: On" False -> "Wireframes: Off" }))
@@ -165,15 +170,15 @@ pub fn main() {
   }
 
   wire_click("btn-wire", fn() {
-    let _ = rt.ref_update(wire_ref, fn(w) { !w })
+    rt.ref_update(wire_ref, fn(w) { !w })
     update_view()
   })
   wire_click("btn-left", fn() {
-    let _ = rt.ref_update(az_ref, fn(a) { a -. pi /. 6.0 })
+    rt.ref_update(az_ref, fn(a) { a -. pi /. 6.0 })
     update_view()
   })
   wire_click("btn-right", fn() {
-    let _ = rt.ref_update(az_ref, fn(a) { a +. pi /. 6.0 })
+    rt.ref_update(az_ref, fn(a) { a +. pi /. 6.0 })
     update_view()
   })
   wire_click("btn-reset", fn() {

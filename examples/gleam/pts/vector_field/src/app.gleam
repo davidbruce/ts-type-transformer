@@ -50,56 +50,54 @@ pub fn main() -> Nil {
         let light = int.to_string(float.round(65.0 -. 57.0 *. weight))
         let alpha = 0.25 +. 0.75 *. weight
 
-        let _ =
-          canvas_form.stroke_only(
-            form,
-            t.CanvasFormFillCString(
-              "hsla(0, 0%, "
-              <> light
-              <> "%, "
-              <> float.to_string(alpha)
-              <> ")",
-            ),
-            Some(1.5 +. 2.5 *. weight),
-            None,
-            None,
-          )
-          |> canvas_form.line_2(
-            t.PtLikeIterableGroup(line.from_angle(t.PtLikePt(p), angle, len)),
-          )
-          |> canvas_form.fill_only(
-            t.CanvasFormFillCString("hsla(0, 0%, " <> light <> "%, 0.9)"),
-          )
-          |> canvas_form.circle_2(
-            t.PtLikeIterableGroup(circle.from_center(
-              t.PtLikePt(p),
-              1.5 +. 4.5 *. weight *. weight,
-            )),
-          )
+        canvas_form.stroke_only(
+          form,
+          t.CanvasFormFillCString(
+            "hsla(0, 0%, "
+            <> light
+            <> "%, "
+            <> float.to_string(alpha)
+            <> ")",
+          ),
+          Some(1.5 +. 2.5 *. weight),
+          None,
+          None,
+        )
+        |> canvas_form.line_2(
+          t.PtLikeIterableGroup(line.from_angle(t.PtLikePt(p), angle, len)),
+        )
+        |> canvas_form.fill_only(
+          t.CanvasFormFillCString("hsla(0, 0%, " <> light <> "%, 0.9)"),
+        )
+        |> canvas_form.circle_2(
+          t.PtLikeIterableGroup(circle.from_center(
+            t.PtLikePt(p),
+            1.5 +. 4.5 *. weight *. weight,
+          )),
+        )
         Nil
       })
 
       let ring_radius = 18.0 +. 6.0 *. sin(time *. 0.004)
-      let _ =
-        canvas_form.stroke_only(
-          form,
-          t.CanvasFormFillCString("#11111199"),
-          Some(2.0),
-          None,
-          None,
-        )
-        |> canvas_form.circle_2(
-          t.PtLikeIterableGroup(circle.from_center(
-            t.PtLikePt(pointer),
-            ring_radius,
-          )),
-        )
+      canvas_form.stroke_only(
+        form,
+        t.CanvasFormFillCString("#11111199"),
+        Some(2.0),
+        None,
+        None,
+      )
+      |> canvas_form.circle_2(
+        t.PtLikeIterableGroup(circle.from_center(
+          t.PtLikePt(pointer),
+          ring_radius,
+        )),
+      )
       Nil
     })
 
-  let _ = canvas_space.add(cs, r.dynamic(player))
-  let _ = canvas_space.bind_mouse(cs, Some(True), None)
-  let _ = canvas_space.bind_touch(cs, Some(True), None, None)
-  let _ = canvas_space.play(cs, None)
+  canvas_space.add(cs, r.dynamic(player))
+  canvas_space.bind_mouse(cs, Some(True), None)
+  canvas_space.bind_touch(cs, Some(True), None, None)
+  canvas_space.play(cs, None)
   Nil
 }

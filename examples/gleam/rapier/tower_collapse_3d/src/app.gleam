@@ -141,14 +141,13 @@ pub fn main() -> Nil {
         rigid_body_desc.fixed()
         |> rigid_body_desc.set_translation(0.0, -0.3, 0.0),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.cuboid(10.0, 0.3, 10.0)
-        |> collider_desc.set_friction(0.75)
-        |> collider_desc.set_restitution(0.1),
-        Some(floor_body),
-      )
+    world.create_collider(
+      w,
+      collider_desc.cuboid(10.0, 0.3, 10.0)
+      |> collider_desc.set_friction(0.75)
+      |> collider_desc.set_restitution(0.1),
+      Some(floor_body),
+    )
 
     let planks =
       int.range(from: 0, to: plank_count, with: [], run: fn(acc, idx) {
@@ -171,7 +170,7 @@ pub fn main() -> Nil {
           |> collider_desc.set_friction(0.65)
           |> collider_desc.set_restitution(0.12)
           |> collider_desc.set_density(1.0)
-        let _ = world.create_collider(w, cd, Some(rb))
+        world.create_collider(w, cd, Some(rb))
         [rb, ..acc]
       })
       |> list.reverse
@@ -183,15 +182,14 @@ pub fn main() -> Nil {
         |> rigid_body_desc.set_translation(-6.2, 1.55, 0.12)
         |> rigid_body_desc.set_linvel(13.5, 1.1, -0.25),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.ball(sphere_radius)
-        |> collider_desc.set_density(4.5)
-        |> collider_desc.set_restitution(0.35)
-        |> collider_desc.set_friction(0.3),
-        Some(striker),
-      )
+    world.create_collider(
+      w,
+      collider_desc.ball(sphere_radius)
+      |> collider_desc.set_density(4.5)
+      |> collider_desc.set_restitution(0.35)
+      |> collider_desc.set_friction(0.3),
+      Some(striker),
+    )
 
     rp_rt.ref_set(planks_ref, planks)
     rp_rt.ref_set(striker_ref, Some(striker))
@@ -275,7 +273,7 @@ pub fn main() -> Nil {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     sync_meshes()
     update_meta()
   }
@@ -286,7 +284,7 @@ pub fn main() -> Nil {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     Nil
   })
   update_meta()
@@ -340,7 +338,7 @@ pub fn main() -> Nil {
         Some(w) -> world.step(w, None, None)
         None -> Nil
       }
-      let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+      rp_rt.ref_update(step_ref, fn(s) { s + 1 })
       Nil
     })
     sync_meshes()
@@ -370,7 +368,7 @@ pub fn main() -> Nil {
 
       let camera = b.create_arc_rotate_camera(0.85, 1.12, 11.5, b.vec3(0.0, 1.5, 0.0))
       b.add_to_scene(scene, br.dynamic(camera))
-      let _ = b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.88, 0.95))

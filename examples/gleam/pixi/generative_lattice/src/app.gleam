@@ -55,7 +55,7 @@ pub fn main() {
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
     Some(stage_el) -> {
-      let _ = dom_node.append_child(stage_el, application.get_canvas(app))
+      dom_node.append_child(stage_el, application.get_canvas(app))
       Nil
     }
     None -> Nil
@@ -65,9 +65,8 @@ pub fn main() {
 
   let guides = graphics.new(None)
   list.each([42.0, 82.0, 122.0, 162.0], fn(r) {
-    let _ =
-      graphics.circle(guides, 340.0, 200.0, r)
-      |> stroke_g(1.0, 0xe5e5e5)
+    graphics.circle(guides, 340.0, 200.0, r)
+    |> stroke_g(1.0, 0xe5e5e5)
     Nil
   })
 
@@ -76,16 +75,15 @@ pub fn main() {
     let theta = int.to_float(step) *. { two_pi /. 12.0 }
     let spoke = matrix.rotate(matrix.new(None, None, None, None, None, None), theta)
     let dir = matrix.apply(spoke, unit_x, None)
-    let _ =
-      graphics.move_to(guides, 340.0, 200.0)
-      |> graphics.line_to(
-        340.0 +. point_data.get_x(dir) *. 182.0,
-        200.0 +. point_data.get_y(dir) *. 182.0,
-      )
+    graphics.move_to(guides, 340.0, 200.0)
+    |> graphics.line_to(
+      340.0 +. point_data.get_x(dir) *. 182.0,
+      200.0 +. point_data.get_y(dir) *. 182.0,
+    )
     Nil
   })
-  let _ = stroke_g(guides, 1.0, 0xd4d4d4)
-  let _ = container.add_child(stage, [guides])
+  stroke_g(guides, 1.0, 0xd4d4d4)
+  container.add_child(stage, [guides])
 
   let tiles = graphics.new(None)
   int.range(from: 0, to: 4, with: Nil, run: fn(_, r_idx) {
@@ -111,24 +109,23 @@ pub fn main() {
       let p2 = matrix.apply(tile_m, point.new(Some(0.0), Some(s)), None)
       let p3 = matrix.apply(tile_m, point.new(Some(0.0 -. hw), Some(0.0)), None)
 
-      let _ =
-        graphics.move_to(tiles, point_data.get_x(p0), point_data.get_y(p0))
-        |> graphics.line_to(point_data.get_x(p1), point_data.get_y(p1))
-        |> graphics.line_to(point_data.get_x(p2), point_data.get_y(p2))
-        |> graphics.line_to(point_data.get_x(p3), point_data.get_y(p3))
-        |> graphics.close_path()
-        |> graphics.fill(Some(runtime.dynamic(int.to_float(fill_hex))))
-        |> stroke_g(1.2, 0x111111)
+      graphics.move_to(tiles, point_data.get_x(p0), point_data.get_y(p0))
+      |> graphics.line_to(point_data.get_x(p1), point_data.get_y(p1))
+      |> graphics.line_to(point_data.get_x(p2), point_data.get_y(p2))
+      |> graphics.line_to(point_data.get_x(p3), point_data.get_y(p3))
+      |> graphics.close_path()
+      |> graphics.fill(Some(runtime.dynamic(int.to_float(fill_hex))))
+      |> stroke_g(1.2, 0x111111)
       Nil
     })
   })
-  let _ = container.add_child(stage, [tiles])
+  container.add_child(stage, [tiles])
 
-  let center_dot = graphics.new(None)
-  let _ =
-    graphics.circle(center_dot, 340.0, 200.0, 8.0)
+  let center_dot =
+    graphics.new(None)
+    |> graphics.circle(340.0, 200.0, 8.0)
     |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
-  let _ = container.add_child(stage, [center_dot])
+  container.add_child(stage, [center_dot])
 
   application.render(app)
 

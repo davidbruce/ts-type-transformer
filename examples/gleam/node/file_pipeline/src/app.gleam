@@ -50,29 +50,27 @@ pub fn main() -> Nil {
 
   let ev_stage = runtime.dynamic("stage")
   let ev_done = runtime.dynamic("done")
-  let _ =
-    emitter.on(bus, ev_stage, fn(_) {
-      let _ = runtime.ref_update(stages, fn(n) { n + 1 })
-      Nil
-    })
-  let _ =
-    emitter.once(bus, ev_done, fn(_) {
-      let _ = runtime.ref_update(done_count, fn(n) { n + 1 })
-      Nil
-    })
+  emitter.on(bus, ev_stage, fn(_) {
+    runtime.ref_update(stages, fn(n) { n + 1 })
+    Nil
+  })
+  emitter.once(bus, ev_done, fn(_) {
+    runtime.ref_update(done_count, fn(n) { n + 1 })
+    Nil
+  })
 
   let root = fs.mkdtemp_sync("/tmp/tsrs-node-pipe-", None)
   let in_dir = path.join([root, "in"])
   let out_dir = path.join([root, "out"])
   let mk = mkdir_options.create()
-  let _ = fs.mkdir_sync_recursive(str(in_dir), mk)
-  let _ = fs.mkdir_sync_recursive(str(out_dir), mk)
+  fs.mkdir_sync_recursive(str(in_dir), mk)
+  fs.mkdir_sync_recursive(str(out_dir), mk)
 
   // Stage 1: seed
   write_text(path.join([in_dir, "a.log"]), "100 OK\n")
   write_text(path.join([in_dir, "b.log"]), "200 OK\n")
   write_text(path.join([in_dir, "c.log"]), "300 OK\n")
-  let _ = emitter.emit(bus, ev_stage, [runtime.dynamic("seed")])
+  emitter.emit(bus, ev_stage, [runtime.dynamic("seed")])
   let passed = check(runtime.ref_get(stages) == 1, "seed stage")
 
   // Stage 2: bundle
@@ -90,7 +88,7 @@ pub fn main() -> Nil {
       )
       acc + c
     })
-  let _ = emitter.emit(bus, ev_stage, [runtime.dynamic("bundle")])
+  emitter.emit(bus, ev_stage, [runtime.dynamic("bundle")])
   let passed = passed + check(runtime.ref_get(stages) == 2, "bundle stage")
 
   // Stage 3: verify
@@ -110,11 +108,10 @@ pub fn main() -> Nil {
   }
   let passed = passed + check(enoent_caught, "missing file raised ENOENT")
 
-  let _ = emitter.emit(bus, ev_stage, [runtime.dynamic("verify")])
-  let _ =
-    emitter.emit(bus, ev_done, [
-      runtime.dynamic(int.to_float(string.length(comb_text))),
-    ])
+  emitter.emit(bus, ev_stage, [runtime.dynamic("verify")])
+  emitter.emit(bus, ev_done, [
+    runtime.dynamic(int.to_float(string.length(comb_text))),
+  ])
   let passed =
     passed
     + check(

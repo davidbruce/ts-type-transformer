@@ -56,11 +56,10 @@ fn fmt2(v: Float) -> String {
 }
 
 fn start_loop(tick: fn() -> Nil) -> Nil {
-  let _ =
-    core.request_animation_frame(fn(_) {
-      tick()
-      start_loop(tick)
-    })
+  core.request_animation_frame(fn(_) {
+    tick()
+    start_loop(tick)
+  })
   Nil
 }
 
@@ -157,7 +156,7 @@ pub fn main() {
         w,
         rigid_body_desc.fixed() |> rigid_body_desc.set_translation(0.0, 6.2, 0.0),
       )
-    let _ = world.create_collider(w, collider_desc.cuboid(6.0, 0.22, 0.6), Some(gantry))
+    world.create_collider(w, collider_desc.cuboid(6.0, 0.22, 0.6), Some(gantry))
     let z_axis = vec(0.0, 0.0, 1.0)
 
     let add_link = fn(x: Float, y: Float, density: Float) {
@@ -166,12 +165,11 @@ pub fn main() {
           w,
           rigid_body_desc.dynamic() |> rigid_body_desc.set_translation(x, y, 0.0),
         )
-      let _ =
-        world.create_collider(
-          w,
-          collider_desc.cuboid(link_hx, link_hy, 0.2) |> collider_desc.set_density(density),
-          Some(rb),
-        )
+      world.create_collider(
+        w,
+        collider_desc.cuboid(link_hx, link_hy, 0.2) |> collider_desc.set_density(density),
+        Some(rb),
+      )
       rb
     }
 
@@ -179,9 +177,9 @@ pub fn main() {
     let l2 = add_link(-3.3, 4.1, 1.4)
     let l3 = add_link(-3.8, 2.8, 1.6)
 
-    let _ = world.create_impulse_joint(w, joint_data.revolute(vec(-2.2, -0.22, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), gantry, l1, True)
-    let _ = world.create_impulse_joint(w, joint_data.revolute(vec(0.0, 0.0 -. link_hy -. 0.06, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), l1, l2, True)
-    let _ = world.create_impulse_joint(w, joint_data.revolute(vec(0.0, 0.0 -. link_hy -. 0.06, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), l2, l3, True)
+    world.create_impulse_joint(w, joint_data.revolute(vec(-2.2, -0.22, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), gantry, l1, True)
+    world.create_impulse_joint(w, joint_data.revolute(vec(0.0, 0.0 -. link_hy -. 0.06, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), l1, l2, True)
+    world.create_impulse_joint(w, joint_data.revolute(vec(0.0, 0.0 -. link_hy -. 0.06, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), l2, l3, True)
     rigid_body.apply_impulse(l3, vec(-1.4, 0.0, 0.0), True)
 
     let arm =
@@ -189,26 +187,24 @@ pub fn main() {
         w,
         rigid_body_desc.dynamic() |> rigid_body_desc.set_translation(3.1, 5.2, 0.0),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.cuboid(0.14, 0.85, 0.2) |> collider_desc.set_density(1.2),
-        Some(arm),
-      )
+    world.create_collider(
+      w,
+      collider_desc.cuboid(0.14, 0.85, 0.2) |> collider_desc.set_density(1.2),
+      Some(arm),
+    )
     let bob =
       world.create_rigid_body(
         w,
         rigid_body_desc.dynamic() |> rigid_body_desc.set_translation(3.8, 3.6, 0.0),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.ball(0.42) |> collider_desc.set_density(3.0),
-        Some(bob),
-      )
+    world.create_collider(
+      w,
+      collider_desc.ball(0.42) |> collider_desc.set_density(3.0),
+      Some(bob),
+    )
 
-    let _ = world.create_impulse_joint(w, joint_data.revolute(vec(2.3, -0.22, 0.0), vec(0.0, 0.88, 0.0), z_axis), gantry, arm, True)
-    let _ = world.create_impulse_joint(w, joint_data.revolute(vec(0.0, -0.88, 0.0), vec(0.0, 0.72, 0.0), z_axis), arm, bob, True)
+    world.create_impulse_joint(w, joint_data.revolute(vec(2.3, -0.22, 0.0), vec(0.0, 0.88, 0.0), z_axis), gantry, arm, True)
+    world.create_impulse_joint(w, joint_data.revolute(vec(0.0, -0.88, 0.0), vec(0.0, 0.72, 0.0), z_axis), arm, bob, True)
     rigid_body.apply_impulse(bob, vec(1.8, 0.2, 0.0), True)
 
     rp_rt.ref_set(world_ref, Some(w))
@@ -225,13 +221,13 @@ pub fn main() {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     case rp_rt.ref_get(chain_ref), rp_rt.ref_get(bob_ref) {
       [_, _, l3], Some(bob) -> {
         let pa = rigid_body.translation(l3, None)
         let pb = rigid_body.translation(bob, None)
-        let _ = rp_rt.ref_update(trail_a_ref, fn(t) { list.take([#(vector.get_x(pa), vector.get_y(pa)), ..t], 36) })
-        let _ = rp_rt.ref_update(trail_b_ref, fn(t) { list.take([#(vector.get_x(pb), vector.get_y(pb)), ..t], 36) })
+        rp_rt.ref_update(trail_a_ref, fn(t) { list.take([#(vector.get_x(pa), vector.get_y(pa)), ..t], 36) })
+        rp_rt.ref_update(trail_b_ref, fn(t) { list.take([#(vector.get_x(pb), vector.get_y(pb)), ..t], 36) })
         Nil
       }
       _, _ -> Nil

@@ -55,11 +55,10 @@ fn fmt2(v: Float) -> String {
 }
 
 fn start_loop(tick: fn() -> Nil) -> Nil {
-  let _ =
-    core.request_animation_frame(fn(_) {
-      tick()
-      start_loop(tick)
-    })
+  core.request_animation_frame(fn(_) {
+    tick()
+    start_loop(tick)
+  })
   Nil
 }
 
@@ -140,12 +139,11 @@ pub fn main() {
         w,
         rigid_body_desc.fixed() |> rigid_body_desc.set_translation(0.0, -0.35, 0.0),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.cuboid(7.2, 0.35, 2.0) |> collider_desc.set_friction(0.8),
-        Some(floor),
-      )
+    world.create_collider(
+      w,
+      collider_desc.cuboid(7.2, 0.35, 2.0) |> collider_desc.set_friction(0.8),
+      Some(floor),
+    )
 
     let doms =
       int.range(from: 0, to: 9, with: [], run: fn(acc, i) {
@@ -160,7 +158,7 @@ pub fn main() {
           |> collider_desc.set_friction(0.55)
           |> collider_desc.set_restitution(0.15)
           |> collider_desc.set_density(1.0)
-        let _ = world.create_collider(w, cd, Some(rb))
+        world.create_collider(w, cd, Some(rb))
         [rb, ..acc]
       })
       |> list.reverse
@@ -175,7 +173,7 @@ pub fn main() {
       |> collider_desc.set_density(2.8)
       |> collider_desc.set_restitution(0.45)
       |> collider_desc.set_friction(0.25)
-    let _ = world.create_collider(w, scd, Some(sb))
+    world.create_collider(w, scd, Some(sb))
     rigid_body.apply_impulse(sb, vec(4.8, 0.2, 0.0), True)
 
     rp_rt.ref_set(world_ref, Some(w))
@@ -190,14 +188,13 @@ pub fn main() {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     case rp_rt.ref_get(striker_ref) {
       Some(sb) -> {
         let sp = rigid_body.translation(sb, None)
-        let _ =
-          rp_rt.ref_update(trail_ref, fn(trail) {
-            list.take([#(vector.get_x(sp), vector.get_y(sp)), ..trail], 22)
-          })
+        rp_rt.ref_update(trail_ref, fn(trail) {
+          list.take([#(vector.get_x(sp), vector.get_y(sp)), ..trail], 22)
+        })
         Nil
       }
       None -> Nil

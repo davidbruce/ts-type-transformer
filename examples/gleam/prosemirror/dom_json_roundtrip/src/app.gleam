@@ -159,7 +159,7 @@ fn describe_doc(d: t.Node(Nil)) -> String {
 
 fn refresh_output(doc, serializer, d: t.Node(Nil), status_ref: pm_rt.Ref(String)) {
   let div = document.create_element(doc, tag.div, None)
-  let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
+  dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
   let html_out = element.get_inner_html(div)
   let status = pm_rt.ref_get(status_ref)
   let full =
@@ -263,8 +263,9 @@ pub fn main() {
         let insert_pos = node.get_node_size(node.child(d, 0.0)) +. node.get_node_size(node.child(d, 1.0)) -. 1.0
         let mc = schema.mark(sch, t.StringOrMarkTypeString("code"), None)
         let span = schema.text(sch, " roundtrip()", Some([mc]))
-        let tr = editor_state.get_tr(st)
-        let _ = transform.insert(tr, insert_pos, t.FragmentOrNodeOrNodeArrayNode(span))
+        let tr =
+          editor_state.get_tr(st)
+          |> transform.insert(insert_pos, t.FragmentOrNodeOrNodeArrayNode(span))
         pm_rt.ref_set(status_ref, "Inserted code span at pos " <> int.to_string(float.round(insert_pos)))
         editor_view.dispatch(view, tr)
       }
@@ -275,7 +276,7 @@ pub fn main() {
   wire_btn(doc, "btn-4", fn() {
     let d = editor_state.get_doc(editor_view.get_state(view))
     let div = document.create_element(doc, tag.div, None)
-    let _ = dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
+    dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
     let reparsed = dom_parser.parse(parser, div, None)
     pm_rt.ref_set(status_ref, "DOM serializeFragment->parse eq() = " <> string.lowercase(bool.to_string(node.eq(d, reparsed))))
     let c =

@@ -28,9 +28,9 @@ fn add_kv(doc, row, label: String, val: String) -> Nil {
   let s = document.create_element(doc, tag.div, None)
   element.set_class_name(s, "val")
   node.set_text_content(s, Some(val))
-  let _ = node.append_child(box, lbl)
-  let _ = node.append_child(box, s)
-  let _ = node.append_child(row, box)
+  node.append_child(box, lbl)
+  node.append_child(box, s)
+  node.append_child(row, box)
   Nil
 }
 
@@ -49,9 +49,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("Base 2024-03-15"))
-      let _ = node.append_child(head, h1)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, h1)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let base_d = df.parse_iso("2024-03-15", None)
       let jan31 = df.parse_iso("2024-01-31", None)
@@ -78,7 +78,7 @@ pub fn main() -> Nil {
       let lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(lbl, "label")
       node.set_text_content(lbl, Some("Immutable Date Stepping"))
-      let _ = node.append_child(card, lbl)
+      node.append_child(card, lbl)
 
       let tbl = document.create_element(doc, tag.table, None)
       let thead = document.create_element(doc, tag.thead, None)
@@ -86,11 +86,11 @@ pub fn main() -> Nil {
       list.each(["Operation", "Result", "Δ Days (vs base)", "Δ Hours"], fn(h) {
         let th = document.create_element(doc, tag.th, None)
         node.set_text_content(th, Some(h))
-        let _ = node.append_child(hrow, th)
+        node.append_child(hrow, th)
         Nil
       })
-      let _ = node.append_child(thead, hrow)
-      let _ = node.append_child(tbl, thead)
+      node.append_child(thead, hrow)
+      node.append_child(tbl, thead)
 
       let tbody = document.create_element(doc, tag.tbody, None)
       list.each(ops, fn(item) {
@@ -99,7 +99,7 @@ pub fn main() -> Nil {
         let td_op = document.create_element(doc, tag.td, None)
         let code = document.create_element(doc, tag.code, None)
         node.set_text_content(code, Some(name))
-        let _ = node.append_child(td_op, code)
+        node.append_child(td_op, code)
         let td_res = document.create_element(doc, tag.td, None)
         node.set_text_content(td_res, Some(df.format_date(day(res), fmt, None)))
         let td_dd = document.create_element(doc, tag.td, None)
@@ -112,23 +112,23 @@ pub fn main() -> Nil {
           td_dh,
           Some(fmt_signed(df.difference_in_hours(day(res), day(base_d), None))),
         )
-        let _ = node.append_child(tr, td_op)
-        let _ = node.append_child(tr, td_res)
-        let _ = node.append_child(tr, td_dd)
-        let _ = node.append_child(tr, td_dh)
-        let _ = node.append_child(tbody, tr)
+        node.append_child(tr, td_op)
+        node.append_child(tr, td_res)
+        node.append_child(tr, td_dd)
+        node.append_child(tr, td_dh)
+        node.append_child(tbody, tr)
         Nil
       })
-      let _ = node.append_child(tbl, tbody)
-      let _ = node.append_child(card, tbl)
-      let _ = node.append_child(app, card)
+      node.append_child(tbl, tbody)
+      node.append_child(card, tbl)
+      node.append_child(app, card)
 
       let footer = document.create_element(doc, tag.div, None)
       element.set_class_name(footer, "card")
       let f_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(f_lbl, "label")
       node.set_text_content(f_lbl, Some("Duration & Unit Conversions"))
-      let _ = node.append_child(footer, f_lbl)
+      node.append_child(footer, f_lbl)
 
       let srow = document.create_element(doc, tag.div, None)
       element.set_class_name(srow, "summary-row")
@@ -146,8 +146,8 @@ pub fn main() -> Nil {
         "daysToWeeks(14)",
         int.to_string(float.round(df.days_to_weeks(14.0))) <> " wk",
       )
-      let _ = node.append_child(footer, srow)
-      let _ = node.append_child(app, footer)
+      node.append_child(footer, srow)
+      node.append_child(app, footer)
       Nil
     }
   }

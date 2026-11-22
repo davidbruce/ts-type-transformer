@@ -65,12 +65,11 @@ fn stage_box(
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
 
-  let _ =
-    group.add(g, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(rc)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(t1)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(t2)))),
-    ])
+  group.add(g, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(rc)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(t1)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(t2)))),
+  ])
   t.GroupOrShapeGroup(g)
 }
 
@@ -95,7 +94,7 @@ pub fn main() -> Nil {
   let stg = stage.new(sc)
 
   let l = layer.new(None)
-  let _ = stage.add(stg, l, [])
+  stage.add(stg, l, [])
 
   let bg =
     rect_config.create()
@@ -134,24 +133,23 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
-  let _ =
-    layer.add(l, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(bg)))),
-      stage_box(28.0, "01 PARSE", ".d.ts AST", "#ffffff", "#111111"),
-      stage_box(194.0, "02 LOWER", "Typed IR", "#f7f7f7", "#111111"),
-      stage_box(360.0, "03 EMIT", "6 Targets", "#efefef", "#111111"),
-      stage_box(526.0, "04 RUN", "WASM / JS", "#111111", "#ffffff"),
-      make_arrow([154.0, 129.0, 190.0, 129.0]),
-      make_arrow([320.0, 129.0, 356.0, 129.0]),
-      make_arrow([486.0, 129.0, 522.0, 129.0]),
-      make_arrow([257.0, 163.0, 257.0, 251.0]),
-      make_arrow([423.0, 163.0, 423.0, 251.0]),
-      t.GroupOrShapeShape(shape.widen(line.new(Some(fbc)))),
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(bar)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(btxt)))),
-    ])
+  layer.add(l, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(bg)))),
+    stage_box(28.0, "01 PARSE", ".d.ts AST", "#ffffff", "#111111"),
+    stage_box(194.0, "02 LOWER", "Typed IR", "#f7f7f7", "#111111"),
+    stage_box(360.0, "03 EMIT", "6 Targets", "#efefef", "#111111"),
+    stage_box(526.0, "04 RUN", "WASM / JS", "#111111", "#ffffff"),
+    make_arrow([154.0, 129.0, 190.0, 129.0]),
+    make_arrow([320.0, 129.0, 356.0, 129.0]),
+    make_arrow([486.0, 129.0, 522.0, 129.0]),
+    make_arrow([257.0, 163.0, 257.0, 251.0]),
+    make_arrow([423.0, 163.0, 423.0, 251.0]),
+    t.GroupOrShapeShape(shape.widen(line.new(Some(fbc)))),
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(bar)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(btxt)))),
+  ])
 
-  let _ = node.draw(l)
+  node.draw(l)
 
   let rects = int.to_string(list.length(container.find(l, dynamic.string("Rect"))))
   let arrows = int.to_string(list.length(container.find(l, dynamic.string("Arrow"))))

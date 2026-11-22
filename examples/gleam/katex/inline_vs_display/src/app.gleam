@@ -20,9 +20,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("displayMode: false vs true"))
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let inline_opts =
         katex_options.create()
@@ -57,13 +57,13 @@ pub fn main() -> Nil {
             let slot = document.create_element(doc, tag.div, None)
             element.set_class_name(slot, "slot")
             element.set_inner_html(slot, katex.render_to_string(tex, Some(opts)))
-            let _ = node.append_child(cell, lbl)
-            let _ = node.append_child(cell, slot)
-            let _ = node.append_child(row, cell)
+            node.append_child(cell, lbl)
+            node.append_child(cell, slot)
+            node.append_child(row, cell)
             Nil
           },
         )
-        let _ = node.append_child(app, row)
+        node.append_child(app, row)
         Nil
       })
     }

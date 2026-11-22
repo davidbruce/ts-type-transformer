@@ -82,9 +82,9 @@ pub fn main() -> Nil {
         badge,
         Some(int.to_string(list.length(items)) <> " tokens"),
       )
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let src_card = document.create_element(doc, tag.div, None)
       element.set_class_name(src_card, "card")
@@ -94,16 +94,16 @@ pub fn main() -> Nil {
       let src_pre = document.create_element(doc, tag.pre, None)
       element.set_class_name(src_pre, "src")
       node.set_text_content(src_pre, Some(sample))
-      let _ = node.append_child(src_card, src_lbl)
-      let _ = node.append_child(src_card, src_pre)
-      let _ = node.append_child(app, src_card)
+      node.append_child(src_card, src_lbl)
+      node.append_child(src_card, src_pre)
+      node.append_child(app, src_card)
 
       let tbl_card = document.create_element(doc, tag.div, None)
       element.set_class_name(tbl_card, "card")
       let tbl_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(tbl_lbl, "label")
       node.set_text_content(tbl_lbl, Some("Lexer Token Stream"))
-      let _ = node.append_child(tbl_card, tbl_lbl)
+      node.append_child(tbl_card, tbl_lbl)
 
       let table = document.create_element(doc, tag.table, None)
       element.set_class_name(table, "tok-table")
@@ -112,11 +112,11 @@ pub fn main() -> Nil {
       list.each(["#", "Type", "Bytes", "Raw Snippet"], fn(col) {
         let th = document.create_element(doc, tag.th, None)
         node.set_text_content(th, Some(col))
-        let _ = node.append_child(hrow, th)
+        node.append_child(hrow, th)
         Nil
       })
-      let _ = node.append_child(thead, hrow)
-      let _ = node.append_child(table, thead)
+      node.append_child(thead, hrow)
+      node.append_child(table, thead)
 
       let tbody = document.create_element(doc, tag.tbody, None)
       list.index_fold(items, Nil, fn(_, tok, i) {
@@ -134,17 +134,17 @@ pub fn main() -> Nil {
           fn(cell_txt) {
             let td = document.create_element(doc, tag.td, None)
             node.set_text_content(td, Some(cell_txt))
-            let _ = node.append_child(tr, td)
+            node.append_child(tr, td)
             Nil
           },
         )
-        let _ = node.append_child(tbody, tr)
+        node.append_child(tbody, tr)
         Nil
       })
 
-      let _ = node.append_child(table, tbody)
-      let _ = node.append_child(tbl_card, table)
-      let _ = node.append_child(app, tbl_card)
+      node.append_child(table, tbody)
+      node.append_child(tbl_card, table)
+      node.append_child(app, tbl_card)
       Nil
     }
   }

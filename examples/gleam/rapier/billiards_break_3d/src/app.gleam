@@ -114,14 +114,13 @@ pub fn main() -> Nil {
         rigid_body_desc.fixed()
         |> rigid_body_desc.set_translation(0.0, -0.25, 0.0),
       )
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.cuboid(4.6, 0.25, 7.6)
-        |> collider_desc.set_friction(0.14)
-        |> collider_desc.set_restitution(0.35),
-        Some(bed),
-      )
+    world.create_collider(
+      w,
+      collider_desc.cuboid(4.6, 0.25, 7.6)
+      |> collider_desc.set_friction(0.14)
+      |> collider_desc.set_restitution(0.35),
+      Some(bed),
+    )
 
     let rails = [
       #(-4.35, 0.45, 0.0, 0.25, 0.45, 7.6),
@@ -137,14 +136,13 @@ pub fn main() -> Nil {
           rigid_body_desc.fixed()
           |> rigid_body_desc.set_translation(rx, ry, rz),
         )
-      let _ =
-        world.create_collider(
-          w,
-          collider_desc.cuboid(hx, hy, hz)
-          |> collider_desc.set_friction(0.12)
-          |> collider_desc.set_restitution(0.88),
-          Some(rb),
-        )
+      world.create_collider(
+        w,
+        collider_desc.cuboid(hx, hy, hz)
+        |> collider_desc.set_friction(0.12)
+        |> collider_desc.set_restitution(0.88),
+        Some(rb),
+      )
       Nil
     })
 
@@ -161,15 +159,14 @@ pub fn main() -> Nil {
               |> rigid_body_desc.set_linear_damping(0.30)
               |> rigid_body_desc.set_angular_damping(0.30),
             )
-          let _ =
-            world.create_collider(
-              w,
-              collider_desc.ball(ball_radius)
-              |> collider_desc.set_restitution(0.92)
-              |> collider_desc.set_friction(0.10)
-              |> collider_desc.set_density(1.0),
-              Some(rb),
-            )
+          world.create_collider(
+            w,
+            collider_desc.ball(ball_radius)
+            |> collider_desc.set_restitution(0.92)
+            |> collider_desc.set_friction(0.10)
+            |> collider_desc.set_density(1.0),
+            Some(rb),
+          )
           [rb, ..inner_acc]
         })
       })
@@ -185,15 +182,14 @@ pub fn main() -> Nil {
       False -> base_cue
     }
     let cue = world.create_rigid_body(w, cue_desc)
-    let _ =
-      world.create_collider(
-        w,
-        collider_desc.ball(ball_radius)
-        |> collider_desc.set_restitution(0.94)
-        |> collider_desc.set_friction(0.10)
-        |> collider_desc.set_density(1.25),
-        Some(cue),
-      )
+    world.create_collider(
+      w,
+      collider_desc.ball(ball_radius)
+      |> collider_desc.set_restitution(0.94)
+      |> collider_desc.set_friction(0.10)
+      |> collider_desc.set_density(1.25),
+      Some(cue),
+    )
 
     rp_rt.ref_set(balls_ref, list.append(rack, [cue]))
     rp_rt.ref_set(world_ref, Some(w))
@@ -259,7 +255,7 @@ pub fn main() -> Nil {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     sync_meshes()
     update_meta()
   }
@@ -270,7 +266,7 @@ pub fn main() -> Nil {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     Nil
   })
   update_meta()
@@ -339,7 +335,7 @@ pub fn main() -> Nil {
 
       let camera = b.create_arc_rotate_camera(1.18, 0.92, 13.5, b.vec3(0.0, 0.3, -0.4))
       b.add_to_scene(scene, br.dynamic(camera))
-      let _ = b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.9, 0.95))

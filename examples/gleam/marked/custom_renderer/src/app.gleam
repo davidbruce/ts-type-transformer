@@ -93,7 +93,7 @@ pub fn main() -> Nil {
           let pill = document.create_element(doc, tag.span, None)
           element.set_class_name(pill, "tok-pill")
           node.set_text_content(pill, Some(token_type(token)))
-          let _ = node.append_child(strip, pill)
+          node.append_child(strip, pill)
           None
         })
 
@@ -123,9 +123,9 @@ pub fn main() -> Nil {
         badge,
         Some(int.to_string(visited) <> " tokens visited"),
       )
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let grid = document.create_element(doc, tag.div, None)
       element.set_class_name(grid, "grid")
@@ -138,8 +138,8 @@ pub fn main() -> Nil {
       let def_out = document.create_element(doc, tag.div, None)
       element.set_class_name(def_out, "md-out")
       element.set_inner_html(def_out, def_html)
-      let _ = node.append_child(def_card, def_lbl)
-      let _ = node.append_child(def_card, def_out)
+      node.append_child(def_card, def_lbl)
+      node.append_child(def_card, def_out)
 
       let cust_card = document.create_element(doc, tag.div, None)
       element.set_class_name(cust_card, "card")
@@ -149,21 +149,21 @@ pub fn main() -> Nil {
       let cust_out = document.create_element(doc, tag.div, None)
       element.set_class_name(cust_out, "md-out")
       element.set_inner_html(cust_out, cust_html)
-      let _ = node.append_child(cust_card, cust_lbl)
-      let _ = node.append_child(cust_card, cust_out)
+      node.append_child(cust_card, cust_lbl)
+      node.append_child(cust_card, cust_out)
 
-      let _ = node.append_child(grid, def_card)
-      let _ = node.append_child(grid, cust_card)
-      let _ = node.append_child(app, grid)
+      node.append_child(grid, def_card)
+      node.append_child(grid, cust_card)
+      node.append_child(app, grid)
 
       let walk_card = document.create_element(doc, tag.div, None)
       element.set_class_name(walk_card, "card")
       let walk_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(walk_lbl, "label")
       node.set_text_content(walk_lbl, Some("Visited Tokens (walkTokens)"))
-      let _ = node.append_child(walk_card, walk_lbl)
-      let _ = node.append_child(walk_card, strip)
-      let _ = node.append_child(app, walk_card)
+      node.append_child(walk_card, walk_lbl)
+      node.append_child(walk_card, strip)
+      node.append_child(app, walk_card)
       Nil
     }
   }

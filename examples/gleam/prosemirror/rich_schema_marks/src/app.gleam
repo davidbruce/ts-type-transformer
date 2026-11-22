@@ -317,7 +317,7 @@ pub fn main() {
     |> direct_editor_props.with_dispatch_transaction(fn(tr) {
       case pm_rt.ref_get(view_ref) {
         Some(v) -> {
-          let _ = pm_rt.ref_update(dispatches_ref, fn(n) { n + 1 })
+          pm_rt.ref_update(dispatches_ref, fn(n) { n + 1 })
           let next = editor_state.apply(editor_view.get_state(v), tr)
           editor_view.update_state(v, next)
           update_meta(sch, doc, next, dispatches_ref, action_ref)
@@ -340,12 +340,12 @@ pub fn main() {
         let tr = editor_state.get_tr(st)
         case node.range_has_mark(editor_state.get_doc(st), f, t, t.MarkOrMarkTypeMarkType(mt)) {
           True -> {
-            let _ = transform.remove_mark(tr, f, t, Some(t.MarkOrMarkTypeMarkType(mt)))
+            transform.remove_mark(tr, f, t, Some(t.MarkOrMarkTypeMarkType(mt)))
             pm_rt.ref_set(action_ref, "Removed " <> label)
           }
           False -> {
             let m = schema.mark(sch, t.StringOrMarkTypeMarkType(mt), None)
-            let _ = transform.add_mark(tr, f, t, m)
+            transform.add_mark(tr, f, t, m)
             pm_rt.ref_set(action_ref, "Added " <> label)
           }
         }
@@ -367,7 +367,7 @@ pub fn main() {
     case pname == "heading" {
       True -> {
         let assert Some(pt) = schema.nodes_get_at(nodes, "paragraph")
-        let _ = transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), pt, None)
+        transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), pt, None)
         pm_rt.ref_set(action_ref, "Converted heading -> paragraph")
       }
       False -> {
@@ -375,7 +375,7 @@ pub fn main() {
         let ha =
           attrs.create()
           |> attrs.with_at("level", dynamic.int(2))
-        let _ = transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), ht, Some(pm_rt.dynamic(ha)))
+        transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), ht, Some(pm_rt.dynamic(ha)))
         pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }
     }

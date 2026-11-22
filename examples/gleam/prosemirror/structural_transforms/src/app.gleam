@@ -285,7 +285,7 @@ pub fn main() {
     |> direct_editor_props.with_dispatch_transaction(fn(tr) {
       case pm_rt.ref_get(view_ref) {
         Some(v) -> {
-          let _ = pm_rt.ref_update(steps_ref, fn(s) { s + list.length(transform.get_steps(tr)) })
+          pm_rt.ref_update(steps_ref, fn(s) { s + list.length(transform.get_steps(tr)) })
           let next = editor_state.apply(editor_view.get_state(v), tr)
           editor_view.update_state(v, next)
           update_meta(doc, editor_state.get_doc(next), steps_ref, op_ref)
@@ -309,8 +309,9 @@ pub fn main() {
     }
     case sp {
       Some(p) -> {
-        let tr = editor_state.get_tr(st)
-        let _ = transform.split(tr, p, None, None)
+        let tr =
+          editor_state.get_tr(st)
+          |> transform.split(p, None, None)
         pm_rt.ref_set(op_ref, "Split paragraph at pos " <> int.to_string(float.round(p)))
         editor_view.dispatch(view, tr)
       }
@@ -347,8 +348,9 @@ pub fn main() {
       Some(r) ->
         case prosemirror_transform.find_wrapping(r, qtype, None, None) {
           Some(wrapped) -> {
-            let tr = editor_state.get_tr(st)
-            let _ = transform.wrap(tr, r, wrapped)
+            let tr =
+              editor_state.get_tr(st)
+              |> transform.wrap(r, wrapped)
             pm_rt.ref_set(op_ref, "Wrapped block [" <> int.to_string(float.round(node_range.get_start(r))) <> ".." <> int.to_string(float.round(node_range.get_end(r))) <> "] in blockquote")
             editor_view.dispatch(view, tr)
           }
@@ -366,8 +368,9 @@ pub fn main() {
     let d = editor_state.get_doc(st)
     case find_quote_lift(node.get_children(d), d, 0.0) {
       Some(#(r, target)) -> {
-        let tr = editor_state.get_tr(st)
-        let _ = transform.lift(tr, r, target)
+        let tr =
+          editor_state.get_tr(st)
+          |> transform.lift(r, target)
         pm_rt.ref_set(op_ref, "Lifted blockquote child to target depth " <> int.to_string(float.round(target)))
         editor_view.dispatch(view, tr)
       }
@@ -385,8 +388,9 @@ pub fn main() {
     let sz = fragment.get_size(node.get_content(d))
     let hr = schema.node(sch, t.StringOrNodeTypeString("horizontal_rule"), None, None, None)
     let note = p_node(sch, "Appended structural section #" <> int.to_string(n) <> " at doc offset " <> int.to_string(float.round(sz)) <> ".")
-    let tr = editor_state.get_tr(st)
-    let _ = transform.insert(tr, sz, t.FragmentOrNodeOrNodeArrayArray([hr, note]))
+    let tr =
+      editor_state.get_tr(st)
+      |> transform.insert(sz, t.FragmentOrNodeOrNodeArrayArray([hr, note]))
     pm_rt.ref_set(op_ref, "Inserted horizontal_rule + note #" <> int.to_string(n))
     editor_view.dispatch(view, tr)
   })

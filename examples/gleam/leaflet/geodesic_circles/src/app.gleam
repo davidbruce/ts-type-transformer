@@ -25,7 +25,7 @@ pub fn main() {
   let m = leaflet.map(t.ContentString("map"), Some(m_opts))
 
   let zurich = leaflet.lat_lng(47.3769, 8.5417, None)
-  let _ = map.set_view(m, t.LatLngExpressionLatLng(zurich), Some(8.0), None)
+  map.set_view(m, t.LatLngExpressionLatLng(zurich), Some(8.0), None)
   let outer_opts =
     circle_marker_options.create()
     |> path_options.with_color("#404040")
@@ -34,7 +34,7 @@ pub fn main() {
     |> path_options.with_fill_opacity(0.25)
   let outer_circle =
     leaflet.circle_with_radius(t.LatLngExpressionLatLng(zurich), 130_000.0, Some(outer_opts))
-  let _ = layer.add_to(outer_circle, t.MapOrLayerGroupMap(m))
+    |> layer.add_to(t.MapOrLayerGroupMap(m))
 
   list.each(
     [
@@ -50,11 +50,8 @@ pub fn main() {
         |> path_options.with_weight(1.5)
         |> path_options.with_fill_color(fill)
         |> path_options.with_fill_opacity(op)
-      let _ =
-        layer.add_to(
-          leaflet.circle_with_radius(t.LatLngExpressionLatLng(zurich), r, Some(opts)),
-          t.MapOrLayerGroupMap(m),
-        )
+      leaflet.circle_with_radius(t.LatLngExpressionLatLng(zurich), r, Some(opts))
+      |> layer.add_to(t.MapOrLayerGroupMap(m))
       Nil
     },
   )
@@ -78,11 +75,8 @@ pub fn main() {
         |> path_options.with_dash_array(t.StringOrNumberArrayString("3 3"))
         |> path_options.with_fill_color("#737373")
         |> path_options.with_fill_opacity(0.18)
-      let _ =
-        layer.add_to(
-          leaflet.circle_with_radius(t.LatLngExpressionLatLng(pt), 18_000.0, Some(b_opts)),
-          t.MapOrLayerGroupMap(m),
-        )
+      leaflet.circle_with_radius(t.LatLngExpressionLatLng(pt), 18_000.0, Some(b_opts))
+      |> layer.add_to(t.MapOrLayerGroupMap(m))
 
       let d_opts =
         circle_marker_options.create()
@@ -91,21 +85,17 @@ pub fn main() {
         |> path_options.with_weight(1.5)
         |> path_options.with_fill_color("#111111")
         |> path_options.with_fill_opacity(1.0)
-      let _ =
-        layer.add_to(
-          leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(d_opts)),
-          t.MapOrLayerGroupMap(m),
-        )
+      leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(d_opts))
+      |> layer.add_to(t.MapOrLayerGroupMap(m))
 
       acc +. d_km
     })
 
-  let _ =
-    map.fit_bounds(
-      m,
-      t.LatLngBoundsExpressionLatLngBounds(circle.get_bounds(outer_circle)),
-      None,
-    )
+  map.fit_bounds(
+    m,
+    t.LatLngBoundsExpressionLatLngBounds(circle.get_bounds(outer_circle)),
+    None,
+  )
 
   let avg_tenths = float.round(total_dist_km /. 5.0 *. 10.0)
   let avg_str =

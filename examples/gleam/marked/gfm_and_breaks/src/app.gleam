@@ -19,9 +19,9 @@ fn make_pane(doc, title: String, html: String) {
   let raw = document.create_element(doc, tag.pre, None)
   element.set_class_name(raw, "html-raw")
   node.set_text_content(raw, Some(html))
-  let _ = node.append_child(card, lbl)
-  let _ = node.append_child(card, out)
-  let _ = node.append_child(card, raw)
+  node.append_child(card, lbl)
+  node.append_child(card, out)
+  node.append_child(card, raw)
   card
 }
 
@@ -37,9 +37,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("MarkedOptions"))
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let gfm_src =
         "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n"
@@ -57,19 +57,17 @@ pub fn main() -> Nil {
       node.set_text_content(gfm_lbl, Some("GitHub Flavored Markdown (gfm)"))
       let gfm_grid = document.create_element(doc, tag.div, None)
       element.set_class_name(gfm_grid, "grid")
-      let _ =
-        node.append_child(
-          gfm_grid,
-          make_pane(doc, "gfm: true", marked.marked(gfm_src, gfm_on)),
-        )
-      let _ =
-        node.append_child(
-          gfm_grid,
-          make_pane(doc, "gfm: false", marked.marked(gfm_src, gfm_off)),
-        )
-      let _ = node.append_child(gfm_sec, gfm_lbl)
-      let _ = node.append_child(gfm_sec, gfm_grid)
-      let _ = node.append_child(app, gfm_sec)
+      node.append_child(
+        gfm_grid,
+        make_pane(doc, "gfm: true", marked.marked(gfm_src, gfm_on)),
+      )
+      node.append_child(
+        gfm_grid,
+        make_pane(doc, "gfm: false", marked.marked(gfm_src, gfm_off)),
+      )
+      node.append_child(gfm_sec, gfm_lbl)
+      node.append_child(gfm_sec, gfm_grid)
+      node.append_child(app, gfm_sec)
 
       let breaks_src = "Line one\nLine two\nLine three"
       let br_off =
@@ -86,19 +84,17 @@ pub fn main() -> Nil {
       node.set_text_content(br_lbl, Some("Soft Line Breaks (breaks)"))
       let br_grid = document.create_element(doc, tag.div, None)
       element.set_class_name(br_grid, "grid")
-      let _ =
-        node.append_child(
-          br_grid,
-          make_pane(doc, "breaks: false", marked.marked(breaks_src, br_off)),
-        )
-      let _ =
-        node.append_child(
-          br_grid,
-          make_pane(doc, "breaks: true", marked.marked(breaks_src, br_on)),
-        )
-      let _ = node.append_child(br_sec, br_lbl)
-      let _ = node.append_child(br_sec, br_grid)
-      let _ = node.append_child(app, br_sec)
+      node.append_child(
+        br_grid,
+        make_pane(doc, "breaks: false", marked.marked(breaks_src, br_off)),
+      )
+      node.append_child(
+        br_grid,
+        make_pane(doc, "breaks: true", marked.marked(breaks_src, br_on)),
+      )
+      node.append_child(br_sec, br_lbl)
+      node.append_child(br_sec, br_grid)
+      node.append_child(app, br_sec)
       Nil
     }
   }

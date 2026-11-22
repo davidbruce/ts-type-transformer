@@ -113,19 +113,21 @@ pub fn main() {
   let canvas = web_gl_renderer.get_dom_element(renderer)
 
   let assert Some(stage) = document.get_element_by_id(doc, "stage")
-  let _ = dom_node.append_child(stage, canvas)
+  dom_node.append_child(stage, canvas)
 
   let sc = scene.new()
   scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))))))
   let cam = perspective_camera.new(Some(42.0), Some(width /. height), Some(0.1), Some(100.0))
 
-  let _ = object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.2))])
+  object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.2))])
   let key = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(2.2))
-  let _ = vector3.set(object3d.get_position(key), 6.0, 10.0, Some(8.0))
-  let _ = object3d.add(sc, [key])
+  object3d.get_position(key)
+  |> vector3.set(6.0, 10.0, Some(8.0))
+  object3d.add(sc, [key])
   let rim = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(0.9))
-  let _ = vector3.set(object3d.get_position(rim), -7.0, 5.0, Some(-6.0))
-  let _ = object3d.add(sc, [rim])
+  object3d.get_position(rim)
+  |> vector3.set(-7.0, 5.0, Some(-6.0))
+  object3d.add(sc, [rim])
 
   let grid =
     grid_helper.new(
@@ -135,7 +137,7 @@ pub fn main() {
       Some(t.ColorRepresentationNumber(hex(0xd4d4d4))),
     )
   vector3.set_y(object3d.get_position(grid), -0.85)
-  let _ = object3d.add(sc, [grid])
+  object3d.add(sc, [grid])
 
   let defs: List(#(String, t.BufferGeometry(t.NormalBufferAttributes(Nil), t.BufferGeometryEventMap(Nil), Nil))) = [
     #("Box", buffer_geometry.upcast(box_geometry.new(Some(1.05), Some(1.05), Some(1.05), None, None, None))),
@@ -164,10 +166,11 @@ pub fn main() {
         |> mesh_standard_material.new
       let m = mesh.new(Some(geo), Some(mat), t.mesh_standard_material_codec())
       object3d.set_name(m, name)
-      let _ = vector3.set(object3d.get_position(m), gx *. 2.1, 0.0, Some(gz *. 2.1))
+      object3d.get_position(m)
+      |> vector3.set(gx *. 2.1, 0.0, Some(gz *. 2.1))
       euler.set_x(object3d.get_rotation(m), 0.2)
       euler.set_y(object3d.get_rotation(m), 0.35 *. int.to_float(i))
-      let _ = object3d.add(sc, [m])
+      object3d.add(sc, [m])
       Specimen(name, mat, m)
     })
 
@@ -175,7 +178,7 @@ pub fn main() {
   let bx = box3.new(Some(vector3.new(Some(-0.5), Some(-0.5), Some(-0.5))), Some(vector3.new(Some(0.5), Some(0.5), Some(0.5))))
   let helper = box3_helper.new(bx, Some(t.ColorRepresentationNumber(hex(0x111111))))
   object3d.set_visible(helper, False)
-  let _ = object3d.add(sc, [helper])
+  object3d.add(sc, [helper])
 
   let caster = raycaster.new(None, None, None, None)
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
@@ -186,7 +189,8 @@ pub fn main() {
   let update_camera = fn() {
     let yaw = rt.ref_get(yaw_ref)
     let r = 8.4
-    let _ = vector3.set(object3d.get_position(cam), r *. sin(yaw), 5.1, Some(r *. cos(yaw)))
+    object3d.get_position(cam)
+    |> vector3.set(r *. sin(yaw), 5.1, Some(r *. cos(yaw)))
     object3d.look_at(cam, vector3.new(Some(0.0), Some(0.0), Some(0.0)))
     object3d.update_matrix_world(cam, Some(True))
     object3d.update_matrix_world(sc, Some(True))
@@ -196,13 +200,14 @@ pub fn main() {
     let sel = rt.ref_get(sel_ref)
     list.index_fold(specs, Nil, fn(_, s, i) {
       let col_hex = case i == sel { True -> hex(0x111111) False -> hex(0xd4d4d4) }
-      let _ = color.set_hex(mesh_standard_material.get_color(s.mat), col_hex, None)
+      mesh_standard_material.get_color(s.mat)
+      |> color.set_hex(col_hex, None)
       Nil
     })
     case sel >= 0 && sel < 9 {
       True -> {
         let target_sp = nth_specimen(specs, sel)
-        let _ = box3.set_from_object(bx, target_sp.obj, Some(True))
+        box3.set_from_object(bx, target_sp.obj, Some(True))
         object3d.set_visible(helper, True)
       }
       False -> object3d.set_visible(helper, False)
@@ -219,7 +224,7 @@ pub fn main() {
         case find_by_id(specs, object3d.get_id(hit_obj), 0) {
           Some(#(idx, sp)) -> {
             rt.ref_set(sel_ref, idx)
-            let _ = box3.set_from_object(bx, sp.obj, Some(True))
+            box3.set_from_object(bx, sp.obj, Some(True))
             let sz = box3.get_size(bx, vector3.new(None, None, None))
             let pt = intersection.get_point(first)
             rt.ref_set(
@@ -279,7 +284,7 @@ pub fn main() {
   wire_click("btn-p1", fn() { pick_specimen(0) })
   wire_click("btn-p2", fn() { pick_specimen(8) })
   wire_click("btn-orbit", fn() {
-    let _ = rt.ref_update(yaw_ref, fn(y) { y +. pi /. 4.0 })
+    rt.ref_update(yaw_ref, fn(y) { y +. pi /. 4.0 })
     update_camera()
     render_scene()
   })

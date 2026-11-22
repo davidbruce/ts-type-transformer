@@ -63,41 +63,38 @@ pub fn main() -> Nil {
         |> group.rotate2d(time_ms *. 0.00035, Some(t.PtLikePt(c)), None)
       let centroid = polygon.centroid(t.PtLikeIterableGroup(poly0))
 
-      let _ =
-        list.index_fold(shades, poly0, fn(poly, shade, depth) {
-          let sw = case depth == 0 {
-            True -> 1.6
-            False -> 1.0
-          }
-          let _ =
-            canvas_form.fill(form, t.CanvasFormFillCString(shade))
-            |> canvas_form.stroke(
-              t.CanvasFormFillCString("#111111"),
-              Some(sw),
-              None,
-              None,
-            )
-            |> canvas_form.polygon_2(t.PtLikeIterableGroup(poly))
+      list.index_fold(shades, poly0, fn(poly, shade, depth) {
+        let sw = case depth == 0 {
+          True -> 1.6
+          False -> 1.0
+        }
+        canvas_form.fill(form, t.CanvasFormFillCString(shade))
+        |> canvas_form.stroke(
+          t.CanvasFormFillCString("#111111"),
+          Some(sw),
+          None,
+          None,
+        )
+        |> canvas_form.polygon_2(t.PtLikeIterableGroup(poly))
 
           case depth == 0 {
             True ->
               list.each(group.to_list(poly), fn(p) {
                 let ray = group.new([centroid, p])
-                let _ =
-                  canvas_form.stroke_only(
-                    form,
-                    t.CanvasFormFillCString("#d4d4d4"),
-                    Some(1.0),
-                    None,
-                    None,
-                  )
-                  |> canvas_form.line_2(t.PtLikeIterableGroup(ray))
-                  |> canvas_form.fill_only(t.CanvasFormFillCString("#111111"))
-                  |> canvas_form.point_2(
-                    t.PtLikePt(p),
-                    Some(3.5),
-                    Some("circle"),
-                  )
+                canvas_form.stroke_only(
+                  form,
+                  t.CanvasFormFillCString("#d4d4d4"),
+                  Some(1.0),
+                  None,
+                  None,
+                )
+                |> canvas_form.line_2(t.PtLikeIterableGroup(ray))
+                |> canvas_form.fill_only(t.CanvasFormFillCString("#111111"))
+                |> canvas_form.point_2(
+                  t.PtLikePt(p),
+                  Some(3.5),
+                  Some("circle"),
+                )
                 Nil
               })
             False -> Nil
@@ -110,41 +107,39 @@ pub fn main() -> Nil {
       let cy = pt.get_y(c)
       let h_bar = group.new([mk_pt(cx -. 10.0, cy), mk_pt(cx +. 10.0, cy)])
       let v_bar = group.new([mk_pt(cx, cy -. 10.0), mk_pt(cx, cy +. 10.0)])
-      let _ =
-        canvas_form.stroke_only(
-          form,
-          t.CanvasFormFillCString("#ffffff"),
-          Some(1.5),
-          None,
-          None,
-        )
-        |> canvas_form.line_2(t.PtLikeIterableGroup(h_bar))
-        |> canvas_form.line_2(t.PtLikeIterableGroup(v_bar))
-        |> canvas_form.fill(t.CanvasFormFillCString("#ffffff"))
-        |> canvas_form.stroke(
-          t.CanvasFormFillCString("#111111"),
-          Some(1.5),
-          None,
-          None,
-        )
-        |> canvas_form.point_2(t.PtLikePt(centroid), Some(5.0), Some("circle"))
+      canvas_form.stroke_only(
+        form,
+        t.CanvasFormFillCString("#ffffff"),
+        Some(1.5),
+        None,
+        None,
+      )
+      |> canvas_form.line_2(t.PtLikeIterableGroup(h_bar))
+      |> canvas_form.line_2(t.PtLikeIterableGroup(v_bar))
+      |> canvas_form.fill(t.CanvasFormFillCString("#ffffff"))
+      |> canvas_form.stroke(
+        t.CanvasFormFillCString("#111111"),
+        Some(1.5),
+        None,
+        None,
+      )
+      |> canvas_form.point_2(t.PtLikePt(centroid), Some(5.0), Some("circle"))
 
       let ring = circle.from_center(t.PtLikePt(pointer), 10.0)
-      let _ =
-        canvas_form.stroke_only(
-          form,
-          t.CanvasFormFillCString("#737373"),
-          Some(1.5),
-          None,
-          None,
-        )
-        |> canvas_form.circle_2(t.PtLikeIterableGroup(ring))
+      canvas_form.stroke_only(
+        form,
+        t.CanvasFormFillCString("#737373"),
+        Some(1.5),
+        None,
+        None,
+      )
+      |> canvas_form.circle_2(t.PtLikeIterableGroup(ring))
       Nil
     })
 
-  let _ = canvas_space.add(cs, r.dynamic(player))
-  let _ = canvas_space.bind_mouse(cs, Some(True), None)
-  let _ = canvas_space.bind_touch(cs, Some(True), None, None)
-  let _ = canvas_space.play(cs, None)
+  canvas_space.add(cs, r.dynamic(player))
+  canvas_space.bind_mouse(cs, Some(True), None)
+  canvas_space.bind_touch(cs, Some(True), None, None)
+  canvas_space.play(cs, None)
   Nil
 }

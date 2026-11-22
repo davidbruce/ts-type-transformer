@@ -71,11 +71,10 @@ fn fmt2(v: Float) -> String {
 }
 
 fn start_loop(tick: fn() -> Nil) -> Nil {
-  let _ =
-    core.request_animation_frame(fn(_) {
-      tick()
-      start_loop(tick)
-    })
+  core.request_animation_frame(fn(_) {
+    tick()
+    start_loop(tick)
+  })
   Nil
 }
 
@@ -162,7 +161,7 @@ pub fn main() {
       |> rigid_body_desc.set_translation(cx, cy, 0.0)
       |> rigid_body_desc.set_rotation(rot_z(theta))
     let rb = world.create_rigid_body(w, desc)
-    let _ = world.create_collider(w, collider_desc.cuboid(hx, hy, 1.0), Some(rb))
+    world.create_collider(w, collider_desc.cuboid(hx, hy, 1.0), Some(rb))
     Nil
   }
   let add_sphere = fn(cx: Float, cy: Float, r: Float) {
@@ -171,7 +170,7 @@ pub fn main() {
         w,
         rigid_body_desc.fixed() |> rigid_body_desc.set_translation(cx, cy, 0.0),
       )
-    let _ = world.create_collider(w, collider_desc.ball(r), Some(rb))
+    world.create_collider(w, collider_desc.ball(r), Some(rb))
     Nil
   }
 
@@ -318,14 +317,13 @@ pub fn main() {
   })
 
   wire_click("btn-angle", fn() {
-    let _ =
-      rp_rt.ref_update(offset_ref, fn(cur) {
-        let next = cur +. pi /. 12.0
-        case next >. 0.8 {
-          True -> -0.6
-          False -> next
-        }
-      })
+    rp_rt.ref_update(offset_ref, fn(cur) {
+      let next = cur +. pi /. 12.0
+      case next >. 0.8 {
+        True -> -0.6
+        False -> next
+      }
+    })
     render()
   })
 
@@ -340,7 +338,7 @@ pub fn main() {
   start_loop(fn() {
     case rp_rt.ref_get(auto_ref) {
       True -> {
-        let _ = rp_rt.ref_update(phase_ref, fn(p) { p +. 0.025 })
+        rp_rt.ref_update(phase_ref, fn(p) { p +. 0.025 })
         render()
       }
       False -> Nil

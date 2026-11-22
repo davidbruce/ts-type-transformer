@@ -16,8 +16,9 @@ fn check(ok: Bool, what: String) -> Int {
 }
 
 pub fn main() -> Nil {
-  let bus = events.new(None)
-  let _ = emitter.set_max_listeners(bus, 12.0)
+  let bus =
+    events.new(None)
+    |> emitter.set_max_listeners(12.0)
   let passed = check(emitter.get_max_listeners(bus) == 12.0, "maxListeners")
 
   let metric_calls = runtime.ref_new(0)
@@ -30,12 +31,12 @@ pub fn main() -> Nil {
   let ev_idle = runtime.dynamic("idle")
 
   let on_metric = fn(args) {
-    let _ = runtime.ref_update(metric_calls, fn(n) { n + 1 })
+    runtime.ref_update(metric_calls, fn(n) { n + 1 })
     case args {
       [first, ..] ->
         case decode.run(first, decode.float) {
           Ok(n) -> {
-            let _ = runtime.ref_update(metric_sum, fn(s) { s +. n })
+            runtime.ref_update(metric_sum, fn(s) { s +. n })
             Nil
           }
           Error(_) -> Nil
@@ -44,17 +45,17 @@ pub fn main() -> Nil {
     }
   }
   let on_once = fn(_) {
-    let _ = runtime.ref_update(once_calls, fn(n) { n + 1 })
+    runtime.ref_update(once_calls, fn(n) { n + 1 })
     Nil
   }
   let on_shutdown = fn(_) {
-    let _ = runtime.ref_update(shutdown_calls, fn(n) { n + 1 })
+    runtime.ref_update(shutdown_calls, fn(n) { n + 1 })
     Nil
   }
 
-  let _ = emitter.on(bus, ev_metric, on_metric)
-  let _ = emitter.once(bus, ev_metric, on_once)
-  let _ = emitter.on(bus, ev_shutdown, on_shutdown)
+  emitter.on(bus, ev_metric, on_metric)
+  emitter.once(bus, ev_metric, on_once)
+  emitter.on(bus, ev_shutdown, on_shutdown)
 
   let passed =
     passed
@@ -98,7 +99,7 @@ pub fn main() -> Nil {
     )
     + check(!emitter.emit(bus, ev_idle, []), "idle emit false")
 
-  let _ = emitter.remove_listener(bus, ev_metric, on_metric)
+  emitter.remove_listener(bus, ev_metric, on_metric)
   let passed =
     passed
     + check(
@@ -108,7 +109,7 @@ pub fn main() -> Nil {
     )
     + check(runtime.ref_get(metric_calls) == 2, "metric count unchanged")
 
-  let _ = emitter.remove_all_listeners(bus, Some(ev_shutdown))
+  emitter.remove_all_listeners(bus, Some(ev_shutdown))
   let passed =
     passed
     + check(

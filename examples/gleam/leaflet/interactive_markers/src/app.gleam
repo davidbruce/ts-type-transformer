@@ -49,8 +49,9 @@ pub fn main() {
     |> polyline_options.with_smooth_factor(1.0)
     |> path_options.with_color("#404040")
     |> path_options.with_weight(2.5)
-  let corridor = leaflet.polyline(line_pts, Some(p_opts))
-  let _ = layer.add_to(corridor, t.MapOrLayerGroupMap(m))
+  let corridor =
+    leaflet.polyline(line_pts, Some(p_opts))
+    |> layer.add_to(t.MapOrLayerGroupMap(m))
 
   let dot_opts =
     circle_marker_options.create()
@@ -65,9 +66,9 @@ pub fn main() {
 
   list.each(stations, fn(s) {
     let #(code, name, pt) = s
-    let cm = leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(dot_opts))
-    let _ = layer.bind_tooltip(cm, t.LayerBindTooltipContentString(code <> " · " <> name), None)
-    let _ = layer.add_to(cm, t.MapOrLayerGroupMap(m))
+    leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(dot_opts))
+    |> layer.bind_tooltip(t.LayerBindTooltipContentString(code <> " · " <> name), None)
+    |> layer.add_to(t.MapOrLayerGroupMap(m))
 
     let d_opts =
       div_icon_options.create()
@@ -81,31 +82,26 @@ pub fn main() {
     let mk_opts =
       marker_options.create()
       |> marker_options.with_icon(t.IconOrDivIconDivIcon(leaflet.div_icon(Some(d_opts))))
-    let _ =
-      layer.add_to(
-        leaflet.marker(t.LatLngExpressionLatLng(pt), Some(mk_opts)),
-        t.MapOrLayerGroupMap(m),
-      )
+    leaflet.marker(t.LatLngExpressionLatLng(pt), Some(mk_opts))
+    |> layer.add_to(t.MapOrLayerGroupMap(m))
     Nil
   })
 
-  let _ =
-    map.fit_bounds(
-      m,
-      t.LatLngBoundsExpressionLatLngBounds(lat_lng_bounds.pad(polyline.get_bounds(corridor), 0.15)),
-      None,
-    )
+  map.fit_bounds(
+    m,
+    t.LatLngBoundsExpressionLatLngBounds(lat_lng_bounds.pad(polyline.get_bounds(corridor), 0.15)),
+    None,
+  )
 
   let pop_opts =
     popup_options.create()
     |> popup_options.with_max_width(220.0)
   let note = leaflet.popup(t.LatLngExpressionLatLng(bern), Some(pop_opts))
-  let _ =
-    div_overlay.set_content(
-      note,
-      t.DivOverlayResultOrStringOrHTMLElementString("03 Bern · 46.95N, 7.45E"),
-    )
-  let _ = popup.open_on(note, m)
+  div_overlay.set_content(
+    note,
+    t.DivOverlayResultOrStringOrHTMLElementString("03 Bern · 46.95N, 7.45E"),
+  )
+  popup.open_on(note, m)
 
   let fmt2 = fn(v: Float) -> String {
     let neg = v <. 0.0
@@ -127,57 +123,55 @@ pub fn main() {
   }
 
   let clicks = runtime.ref_new(0)
-  let _ =
-    evented.on_click(
-      m,
-      t.EventedAddEventListenerTypeClickClick,
-      fn(ev) {
-        let ll = leaflet_mouse_event.get_latlng(ev)
-        let lat = lat_lng.get_lat(ll)
-        let lng = lat_lng.get_lng(ll)
-        case lat >. 0.0 {
-          True -> {
-            let n = runtime.ref_update(clicks, fn(c) { c + 1 })
-            let coords = fmt2(lat) <> "N, " <> fmt2(lng) <> "E"
-            case n > 2 {
-              True -> {
-                let _ = div_overlay.set_lat_lng(note, t.LatLngExpressionLatLng(ll))
-                let _ =
-                  div_overlay.set_content(
-                    note,
-                    t.DivOverlayResultOrStringOrHTMLElementString(
-                      "Click #" <> int.to_string(n) <> " · " <> coords,
-                    ),
-                  )
-                let _ = popup.open_on(note, m)
-                Nil
-              }
-              False -> Nil
+  evented.on_click(
+    m,
+    t.EventedAddEventListenerTypeClickClick,
+    fn(ev) {
+      let ll = leaflet_mouse_event.get_latlng(ev)
+      let lat = lat_lng.get_lat(ll)
+      let lng = lat_lng.get_lng(ll)
+      case lat >. 0.0 {
+        True -> {
+          let n = runtime.ref_update(clicks, fn(c) { c + 1 })
+          let coords = fmt2(lat) <> "N, " <> fmt2(lng) <> "E"
+          case n > 2 {
+            True -> {
+              div_overlay.set_lat_lng(note, t.LatLngExpressionLatLng(ll))
+              div_overlay.set_content(
+                note,
+                t.DivOverlayResultOrStringOrHTMLElementString(
+                  "Click #" <> int.to_string(n) <> " · " <> coords,
+                ),
+              )
+              popup.open_on(note, m)
+              Nil
             }
-            case document.get_element_by_id(core.get_document(), "meta") {
-              Some(meta) ->
-                dom_node.set_text_content(
-                  meta,
-                  Some(
-                    "5 DivIcon stations · clicks="
-                    <> int.to_string(n)
-                    <> " · last click ("
-                    <> coords
-                    <> ")",
-                  ),
-                )
-              None -> Nil
-            }
+            False -> Nil
           }
-          False -> Nil
+          case document.get_element_by_id(core.get_document(), "meta") {
+            Some(meta) ->
+              dom_node.set_text_content(
+                meta,
+                Some(
+                  "5 DivIcon stations · clicks="
+                  <> int.to_string(n)
+                  <> " · last click ("
+                  <> coords
+                  <> ")",
+                ),
+              )
+            None -> Nil
+          }
         }
-      },
-      None,
-    )
+        False -> Nil
+      }
+    },
+    None,
+  )
 
   let payload = leaflet_mouse_event.create()
   leaflet_mouse_event.set_latlng(payload, bern)
-  let _ = evented.fire(m, "click", Some(runtime.dynamic(payload)), None)
-  let _ = evented.fire(m, "click", Some(runtime.dynamic(payload)), None)
+  evented.fire(m, "click", Some(runtime.dynamic(payload)), None)
+  evented.fire(m, "click", Some(runtime.dynamic(payload)), None)
   Nil
 }

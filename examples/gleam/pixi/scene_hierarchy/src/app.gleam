@@ -43,7 +43,7 @@ pub fn main() {
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
     Some(stage_el) -> {
-      let _ = dom_node.append_child(stage_el, application.get_canvas(app))
+      dom_node.append_child(stage_el, application.get_canvas(app))
       Nil
     }
     None -> Nil
@@ -60,7 +60,7 @@ pub fn main() {
     |> stroke_g(1.0, 0xe5e5e5)
     |> graphics.circle(340.0, 200.0, 110.0)
     |> stroke_g(1.0, 0xd4d4d4)
-  let _ = container.add_child(stage, [guide])
+  container.add_child(stage, [guide])
 
   let root = container.new(None)
   container.set_x(root, 340.0)
@@ -76,7 +76,7 @@ pub fn main() {
       |> graphics.fill(Some(runtime.dynamic(int.to_float(0x737373))))
       |> graphics.circle(110.0, 0.0, 10.0)
       |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
-    let _ = container.add_child(arm, [arm_bar])
+    container.add_child(arm, [arm_bar])
 
     let sub = container.new(None)
     container.set_x(sub, 110.0)
@@ -101,9 +101,9 @@ pub fn main() {
       |> stroke_g(2.0, 0x111111)
     container.set_x(sat_orb, -32.0)
 
-    let _ = container.add_child(sub, [sub_bar, sat_box, sat_orb])
-    let _ = container.add_child(arm, [sub])
-    let _ = container.add_child(root, [arm])
+    container.add_child(sub, [sub_bar, sat_box, sat_orb])
+    container.add_child(arm, [sub])
+    container.add_child(root, [arm])
     Nil
   })
 
@@ -113,9 +113,9 @@ pub fn main() {
     |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
     |> graphics.circle(0.0, 0.0, 7.0)
     |> graphics.fill(Some(runtime.dynamic(int.to_float(0xffffff))))
-  let _ = container.add_child(root, [hub])
+  container.add_child(root, [hub])
 
-  let _ = container.add_child(stage, [root])
+  container.add_child(stage, [root])
   application.render(app)
 
   let w_str = int.to_string(float.round(container.get_width(root)))

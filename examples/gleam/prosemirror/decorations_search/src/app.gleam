@@ -352,8 +352,9 @@ pub fn main() {
           html_element.add_event_listener(btn, ev.click,
             fn(_) {
               pm_rt.ref_set(active_ref, btn_id)
-              let tr = editor_state.get_tr(editor_view.get_state(view))
-              let _ = transaction.set_meta(tr, t.StringOrPluginOrPluginKeyString("search"), dynamic.string(query))
+              let tr =
+                editor_state.get_tr(editor_view.get_state(view))
+                |> transaction.set_meta(t.StringOrPluginOrPluginKeyString("search"), dynamic.string(query))
               editor_view.dispatch(view, tr)
             },
             None,

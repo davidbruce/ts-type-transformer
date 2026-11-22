@@ -54,11 +54,10 @@ fn rot_z(theta: Float) -> rt.Rotation(Nil) {
 }
 
 fn start_loop(tick: fn() -> Nil) -> Nil {
-  let _ =
-    core.request_animation_frame(fn(_) {
-      tick()
-      start_loop(tick)
-    })
+  core.request_animation_frame(fn(_) {
+    tick()
+    start_loop(tick)
+  })
   Nil
 }
 
@@ -177,7 +176,7 @@ pub fn main() {
         collider_desc.cuboid(hx, hy, 1.0)
         |> collider_desc.set_friction(0.15)
         |> collider_desc.set_restitution(0.35)
-      let _ = world.create_collider(w, cd, Some(rb))
+      world.create_collider(w, cd, Some(rb))
       Nil
     }
 
@@ -217,7 +216,7 @@ pub fn main() {
           |> collider_desc.set_restitution(0.35)
           |> collider_desc.set_friction(0.25)
           |> collider_desc.set_active_events(rt.ActiveEventsCollisionEvents)
-        let _ = world.create_collider(w, cd, Some(rb))
+        world.create_collider(w, cd, Some(rb))
         #(box_flag, rb)
       })
 
@@ -234,24 +233,24 @@ pub fn main() {
     case rp_rt.ref_get(world_ref), rp_rt.ref_get(queue_ref) {
       Some(w), Some(q) -> {
         world.step(w, Some(q), None)
-        let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+        rp_rt.ref_update(step_ref, fn(s) { s + 1 })
         let sh = rp_rt.ref_get(sensor_handle_ref)
         event_queue.drain_collision_events(q, fn(h1, h2, started) {
           case h1 == sh || h2 == sh {
             True -> case started {
               True -> {
-                let _ = rp_rt.ref_update(crossings_ref, fn(c) { c + 1 })
-                let _ = rp_rt.ref_update(active_ref, fn(a) { a + 1 })
+                rp_rt.ref_update(crossings_ref, fn(c) { c + 1 })
+                rp_rt.ref_update(active_ref, fn(a) { a + 1 })
                 Nil
               }
               False -> {
-                let _ = rp_rt.ref_update(active_ref, fn(a) { int.max(0, a - 1) })
+                rp_rt.ref_update(active_ref, fn(a) { int.max(0, a - 1) })
                 Nil
               }
             }
             False -> case started {
               True -> {
-                let _ = rp_rt.ref_update(contacts_ref, fn(c) { c + 1 })
+                rp_rt.ref_update(contacts_ref, fn(c) { c + 1 })
                 Nil
               }
               False -> Nil

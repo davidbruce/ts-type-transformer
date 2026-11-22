@@ -59,8 +59,8 @@ pub fn main() -> Nil {
 
   let bg_layer = layer.new(None)
   let fg_layer = layer.new(None)
-  let _ = stage.add(stg, bg_layer, [])
-  let _ = stage.add(stg, fg_layer, [])
+  stage.add(stg, bg_layer, [])
+  stage.add(stg, fg_layer, [])
 
   // Layer 1: Blueprint Grid.
   let bgr =
@@ -70,7 +70,7 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  let _ = layer.add(bg_layer, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bgr))))])
+  layer.add(bg_layer, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bgr))))])
 
   let vlines =
     int.range(from: 1, to: 17, with: [], run: fn(acc, i) {
@@ -103,13 +103,12 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#737373"))
 
-  let _ = layer.add(bg_layer, vlines)
-  let _ = layer.add(bg_layer, hlines)
-  let _ =
-    layer.add(bg_layer, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(frame)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(l1)))),
-    ])
+  layer.add(bg_layer, vlines)
+  layer.add(bg_layer, hlines)
+  layer.add(bg_layer, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(frame)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(l1)))),
+  ])
 
   // Layer 2: Stacked cards & badge.
   let card_a = make_card("card-a", 110.0, 80.0, "#efefef")
@@ -141,35 +140,34 @@ pub fn main() -> Nil {
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
   let gc = group_config.create() |> group_config.with_listening(False)
-  let overlay = group.new(Some(gc))
-  let _ =
-    group.add(overlay, [
+  let overlay =
+    group.new(Some(gc))
+    |> group.add([
       t.GroupOrShapeShape(shape.widen(circle.new(Some(dc)))),
       make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5),
       make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5),
       t.GroupOrShapeShape(shape.widen(text.new(Some(l2)))),
-    ])
+  ])
 
-  let _ =
-    layer.add(fg_layer, [
-      t.GroupOrShapeShape(shape.widen(card_a)),
-      t.GroupOrShapeShape(shape.widen(card_b)),
-      t.GroupOrShapeShape(shape.widen(card_c)),
-      t.GroupOrShapeShape(shape.widen(circle.new(Some(bc)))),
-      t.GroupOrShapeGroup(overlay),
-    ])
+  layer.add(fg_layer, [
+    t.GroupOrShapeShape(shape.widen(card_a)),
+    t.GroupOrShapeShape(shape.widen(card_b)),
+    t.GroupOrShapeShape(shape.widen(card_c)),
+    t.GroupOrShapeShape(shape.widen(circle.new(Some(bc)))),
+    t.GroupOrShapeGroup(overlay),
+  ])
 
-  let _ = node.move_to_top(card_a)
-  let _ = group.move_to_top(overlay)
-  let _ = node.draw(bg_layer)
-  let _ = node.draw(fg_layer)
+  node.move_to_top(card_a)
+  group.move_to_top(overlay)
+  node.draw(bg_layer)
+  node.draw(fg_layer)
 
   let counter = runtime.ref_new(0)
   let doc = core.get_document()
   let handle_click = fn(card: t.Rect(Nil), card_id: String) {
-    let _ = node.move_to_top(card)
-    let _ = group.move_to_top(overlay)
-    let _ = node.draw(fg_layer)
+    node.move_to_top(card)
+    group.move_to_top(overlay)
+    node.draw(fg_layer)
     let clicks = int.to_string(runtime.ref_update(counter, fn(n) { n + 1 }))
     let z = int.to_string(float.round(node.get_z_index(card)))
 
@@ -207,10 +205,10 @@ pub fn main() -> Nil {
     }
   }
 
-  let _ = node.on_click(card_a, fn(_) { handle_click(card_a, "card-a") })
-  let _ = node.on_click(card_b, fn(_) { handle_click(card_b, "card-b") })
-  let _ = node.on_click(card_c, fn(_) { handle_click(card_c, "card-c") })
-  let _ = node.fire(card_a, "click", None, None)
-  let _ = node.fire(card_a, "click", None, None)
+  node.on_click(card_a, fn(_) { handle_click(card_a, "card-a") })
+  node.on_click(card_b, fn(_) { handle_click(card_b, "card-b") })
+  node.on_click(card_c, fn(_) { handle_click(card_c, "card-c") })
+  node.fire(card_a, "click", None, None)
+  node.fire(card_a, "click", None, None)
   Nil
 }

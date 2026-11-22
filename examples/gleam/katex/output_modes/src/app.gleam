@@ -24,14 +24,14 @@ fn add_card(doc, grid, label: String, cls: String, html: String) -> Nil {
     badge,
     Some(int.to_string(string.length(html)) <> " chars"),
   )
-  let _ = node.append_child(row, lbl)
-  let _ = node.append_child(row, badge)
+  node.append_child(row, lbl)
+  node.append_child(row, badge)
   let slot = document.create_element(doc, tag.div, None)
   element.set_class_name(slot, "slot")
   element.set_inner_html(slot, html)
-  let _ = node.append_child(card, row)
-  let _ = node.append_child(card, slot)
-  let _ = node.append_child(grid, card)
+  node.append_child(card, row)
+  node.append_child(card, slot)
+  node.append_child(grid, card)
   Nil
 }
 
@@ -50,13 +50,13 @@ pub fn main() -> Nil {
         badge,
         Some("html | mathml | leqno | fleqn | maxSize | strict"),
       )
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let grid = document.create_element(doc, tag.div, None)
       element.set_class_name(grid, "grid")
-      let _ = node.append_child(app, grid)
+      node.append_child(app, grid)
 
       let o_html =
         katex_options.create()

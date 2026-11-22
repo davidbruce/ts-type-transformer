@@ -26,9 +26,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("Anchor 2024-03-15"))
-      let _ = node.append_child(head, h1)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, h1)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let anchor = df.parse_iso("2024-03-15", None)
       let opts =
@@ -51,7 +51,7 @@ pub fn main() -> Nil {
       let tl_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(tl_lbl, "label")
       node.set_text_content(tl_lbl, Some("Milestones Relative to 2024-03-15"))
-      let _ = node.append_child(tl_card, tl_lbl)
+      node.append_child(tl_card, tl_lbl)
 
       let timeline = document.create_element(doc, tag.div, None)
       element.set_class_name(timeline, "timeline")
@@ -103,16 +103,16 @@ pub fn main() -> Nil {
         element.set_class_name(s_pill, "pill")
         node.set_text_content(s_pill, Some(status))
 
-        let _ = node.append_child(row, s_date)
-        let _ = node.append_child(row, s_title)
-        let _ = node.append_child(row, s_rel)
-        let _ = node.append_child(row, s_strict)
-        let _ = node.append_child(row, s_pill)
-        let _ = node.append_child(timeline, row)
+        node.append_child(row, s_date)
+        node.append_child(row, s_title)
+        node.append_child(row, s_rel)
+        node.append_child(row, s_strict)
+        node.append_child(row, s_pill)
+        node.append_child(timeline, row)
         Nil
       })
-      let _ = node.append_child(tl_card, timeline)
-      let _ = node.append_child(app, tl_card)
+      node.append_child(tl_card, timeline)
+      node.append_child(app, tl_card)
 
       let date_args = list.map(milestones, fn(item) { arg(item.0) })
       let earliest = df.min(date_args, None)
@@ -127,7 +127,7 @@ pub fn main() -> Nil {
       let s_lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(s_lbl, "label")
       node.set_text_content(s_lbl, Some("Extremes & Total Span"))
-      let _ = node.append_child(sum_card, s_lbl)
+      node.append_child(sum_card, s_lbl)
 
       let summary = document.create_element(doc, tag.div, None)
       element.set_class_name(summary, "summary")
@@ -140,12 +140,12 @@ pub fn main() -> Nil {
         fn(txt) {
           let s = document.create_element(doc, tag.span, None)
           node.set_text_content(s, Some(txt))
-          let _ = node.append_child(summary, s)
+          node.append_child(summary, s)
           Nil
         },
       )
-      let _ = node.append_child(sum_card, summary)
-      let _ = node.append_child(app, sum_card)
+      node.append_child(sum_card, summary)
+      node.append_child(app, sum_card)
       Nil
     }
   }

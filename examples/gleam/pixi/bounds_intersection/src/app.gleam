@@ -48,7 +48,7 @@ pub fn main() {
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
     Some(stage_el) -> {
-      let _ = dom_node.append_child(stage_el, application.get_canvas(app))
+      dom_node.append_child(stage_el, application.get_canvas(app))
       Nil
     }
     None -> Nil
@@ -75,7 +75,7 @@ pub fn main() {
   let #(contained, intersecting, disjoint) =
     list.fold(candidates, #(0, 0, 0), fn(acc, c) {
       let #(cnt_c, cnt_i, cnt_d) = acc
-      let _ = rectangle.enlarge(hull, c)
+      rectangle.enlarge(hull, c)
       let g =
         graphics.rect(
           g,
@@ -86,54 +86,51 @@ pub fn main() {
         )
       case rectangle.contains_rect(query, c) {
         True -> {
-          let _ = graphics.fill(g, Some(runtime.dynamic(int.to_float(0x111111))))
+          graphics.fill(g, Some(runtime.dynamic(int.to_float(0x111111))))
           #(cnt_c + 1, cnt_i, cnt_d)
         }
         False ->
           case rectangle.intersects(query, c, None) {
             True -> {
-              let _ =
-                g
-                |> graphics.fill(Some(runtime.dynamic(int.to_float(0x737373))))
-                |> stroke_g(2.0, 0x111111)
+              g
+              |> graphics.fill(Some(runtime.dynamic(int.to_float(0x737373))))
+              |> stroke_g(2.0, 0x111111)
               #(cnt_c, cnt_i + 1, cnt_d)
             }
             False -> {
-              let _ =
-                g
-                |> graphics.fill(Some(runtime.dynamic(int.to_float(0xe5e5e5))))
-                |> stroke_g(1.0, 0xa3a3a3)
+              g
+              |> graphics.fill(Some(runtime.dynamic(int.to_float(0xe5e5e5))))
+              |> stroke_g(1.0, 0xa3a3a3)
               #(cnt_c, cnt_i, cnt_d + 1)
             }
           }
       }
     })
 
-  let _ =
-    g
-    |> graphics.rect(
-      rectangle.get_x(hull),
-      rectangle.get_y(hull),
-      rectangle.get_width(hull),
-      rectangle.get_height(hull),
-    )
-    |> stroke_g(1.5, 0xa3a3a3)
-    |> graphics.rect(
-      rectangle.get_x(padded),
-      rectangle.get_y(padded),
-      rectangle.get_width(padded),
-      rectangle.get_height(padded),
-    )
-    |> stroke_g(1.0, 0x737373)
-    |> graphics.rect(
-      rectangle.get_x(query),
-      rectangle.get_y(query),
-      rectangle.get_width(query),
-      rectangle.get_height(query),
-    )
-    |> stroke_g(2.5, 0x111111)
+  g
+  |> graphics.rect(
+    rectangle.get_x(hull),
+    rectangle.get_y(hull),
+    rectangle.get_width(hull),
+    rectangle.get_height(hull),
+  )
+  |> stroke_g(1.5, 0xa3a3a3)
+  |> graphics.rect(
+    rectangle.get_x(padded),
+    rectangle.get_y(padded),
+    rectangle.get_width(padded),
+    rectangle.get_height(padded),
+  )
+  |> stroke_g(1.0, 0x737373)
+  |> graphics.rect(
+    rectangle.get_x(query),
+    rectangle.get_y(query),
+    rectangle.get_width(query),
+    rectangle.get_height(query),
+  )
+  |> stroke_g(2.5, 0x111111)
 
-  let _ = container.add_child(stage, [g])
+  container.add_child(stage, [g])
   application.render(app)
 
   let hull_w = int.to_string(float.round(rectangle.get_width(hull)))

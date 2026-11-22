@@ -225,7 +225,7 @@ pub fn main() {
     |> plugin_spec.with_filter_transaction(fn(tr, _) {
       case pm_rt.ref_get(locked_ref) && transform.get_doc_changed(tr) {
         True -> {
-          let _ = pm_rt.ref_update(blocked_ref, fn(b) { b + 1 })
+          pm_rt.ref_update(blocked_ref, fn(b) { b + 1 })
           pm_rt.ref_set(action_ref, "Blocked document mutation (filterTransaction=false)")
           False
         }
@@ -258,15 +258,15 @@ pub fn main() {
                     |> list.reverse
                   case decode.run(transaction.get_meta(tr, t.StringOrPluginOrPluginKeyString("history")), decode.string) {
                     Ok("undo") -> {
-                      let _ = pm_rt.ref_update(redo_ref, fn(stack) { [inv, ..stack] })
+                      pm_rt.ref_update(redo_ref, fn(stack) { [inv, ..stack] })
                       Nil
                     }
                     Ok(_) -> {
-                      let _ = pm_rt.ref_update(undo_ref, fn(stack) { [inv, ..stack] })
+                      pm_rt.ref_update(undo_ref, fn(stack) { [inv, ..stack] })
                       Nil
                     }
                     Error(_) -> {
-                      let _ = pm_rt.ref_update(undo_ref, fn(stack) { [inv, ..stack] })
+                      pm_rt.ref_update(undo_ref, fn(stack) { [inv, ..stack] })
                       pm_rt.ref_set(redo_ref, [])
                     }
                   }
@@ -291,8 +291,9 @@ pub fn main() {
     let rev = pm_rt.ref_update(rev_ref, fn(r) { r + 1 })
     let st = editor_view.get_state(view)
     let msg = "Revision #" <> int.to_string(rev) <> " recorded via Transform step."
-    let tr = editor_state.get_tr(st)
-    let _ = transform.insert(tr, fragment.get_size(node.get_content(editor_state.get_doc(st))), t.FragmentOrNodeOrNodeArrayNode(p_node(sch, msg)))
+    let tr =
+      editor_state.get_tr(st)
+      |> transform.insert(fragment.get_size(node.get_content(editor_state.get_doc(st))), t.FragmentOrNodeOrNodeArrayNode(p_node(sch, msg)))
     case pm_rt.ref_get(locked_ref) {
       False -> pm_rt.ref_set(action_ref, "Appended Revision #" <> int.to_string(rev))
       True -> Nil
@@ -309,8 +310,9 @@ pub fn main() {
         let tp = fp +. fragment.get_size(node.get_content(node.child(d, 1.0)))
         case tp >. fp {
           True -> {
-            let tr = editor_state.get_tr(st)
-            let _ = transform.add_mark(tr, fp, tp, schema.mark(sch, t.StringOrMarkTypeString("strong"), None))
+            let tr =
+              editor_state.get_tr(st)
+              |> transform.add_mark(fp, tp, schema.mark(sch, t.StringOrMarkTypeString("strong"), None))
             case pm_rt.ref_get(locked_ref) {
               False -> pm_rt.ref_set(action_ref, "Bolded first body paragraph")
               True -> Nil
@@ -339,10 +341,11 @@ pub fn main() {
           }
           True -> Nil
         }
-        let tr = editor_state.get_tr(st)
-        let _ = transaction.set_meta(tr, t.StringOrPluginOrPluginKeyString("history"), dynamic.string("undo"))
+        let tr =
+          editor_state.get_tr(st)
+          |> transaction.set_meta(t.StringOrPluginOrPluginKeyString("history"), dynamic.string("undo"))
         list.each(batch, fn(s) {
-          let _ = transform.step(tr, s)
+          transform.step(tr, s)
           Nil
         })
         editor_view.dispatch(view, tr)
@@ -365,10 +368,11 @@ pub fn main() {
           }
           True -> Nil
         }
-        let tr = editor_state.get_tr(st)
-        let _ = transaction.set_meta(tr, t.StringOrPluginOrPluginKeyString("history"), dynamic.string("redo"))
+        let tr =
+          editor_state.get_tr(st)
+          |> transaction.set_meta(t.StringOrPluginOrPluginKeyString("history"), dynamic.string("redo"))
         list.each(batch, fn(s) {
-          let _ = transform.step(tr, s)
+          transform.step(tr, s)
           Nil
         })
         editor_view.dispatch(view, tr)

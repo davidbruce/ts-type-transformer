@@ -66,11 +66,10 @@ fn fmt1(v: Float) -> String {
 }
 
 fn start_loop(tick: fn() -> Nil) -> Nil {
-  let _ =
-    core.request_animation_frame(fn(_) {
-      tick()
-      start_loop(tick)
-    })
+  core.request_animation_frame(fn(_) {
+    tick()
+    start_loop(tick)
+  })
   Nil
 }
 
@@ -139,7 +138,7 @@ pub fn main() {
           w,
           rigid_body_desc.fixed() |> rigid_body_desc.set_translation(x, y, 0.0),
         )
-      let _ = world.create_collider(w, collider_desc.cuboid(hx, hy, 2.0), Some(body))
+      world.create_collider(w, collider_desc.cuboid(hx, hy, 2.0), Some(body))
       Nil
     }
     add_wall(0.0, -0.4, 7.0, 0.4)
@@ -159,7 +158,7 @@ pub fn main() {
           |> collider_desc.set_restitution(rest)
           |> collider_desc.set_friction(0.2)
           |> collider_desc.set_density(1.2)
-        let _ = world.create_collider(w, cd, Some(rb))
+        world.create_collider(w, cd, Some(rb))
         rb
       })
     rp_rt.ref_set(world_ref, Some(w))
@@ -173,13 +172,13 @@ pub fn main() {
       Some(w) -> world.step(w, None, None)
       None -> Nil
     }
-    let _ = rp_rt.ref_update(step_ref, fn(s) { s + 1 })
+    rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     let pts =
       list.index_map(rp_rt.ref_get(balls_ref), fn(rb, i) {
         let p = rigid_body.translation(rb, None)
         #(i, vector.get_x(p), vector.get_y(p))
       })
-    let _ = rp_rt.ref_update(trails_ref, fn(old) { list.take(list.append(pts, old), 100) })
+    rp_rt.ref_update(trails_ref, fn(old) { list.take(list.append(pts, old), 100) })
     Nil
   }
 

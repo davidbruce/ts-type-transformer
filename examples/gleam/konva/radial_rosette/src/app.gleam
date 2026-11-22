@@ -88,7 +88,7 @@ pub fn main() -> Nil {
   let stg = stage.new(sc)
 
   let l = layer.new(None)
-  let _ = stage.add(stg, l, [])
+  stage.add(stg, l, [])
 
   let bg =
     rect_config.create()
@@ -97,7 +97,7 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  let _ = layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))])
+  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))])
 
   let rings = [
     make_circle(cx, cy, 160.0, "#d4d4d4", 1.0, None),
@@ -228,19 +228,18 @@ pub fn main() -> Nil {
       },
     )
 
-  let _ = layer.add(l, rings)
-  let _ = layer.add(l, spokes)
-  let _ = layer.add(l, ticks)
-  let _ = layer.add(l, petals)
-  let _ = layer.add(l, nodes)
-  let _ =
-    layer.add(l, [
-      t.GroupOrShapeShape(shape.widen(regular_polygon.new(Some(cp)))),
-      t.GroupOrShapeShape(shape.widen(circle.new(Some(cd)))),
-    ])
-  let _ = layer.add(l, compass)
+  layer.add(l, rings)
+  layer.add(l, spokes)
+  layer.add(l, ticks)
+  layer.add(l, petals)
+  layer.add(l, nodes)
+  layer.add(l, [
+    t.GroupOrShapeShape(shape.widen(regular_polygon.new(Some(cp)))),
+    t.GroupOrShapeShape(shape.widen(circle.new(Some(cd)))),
+  ])
+  layer.add(l, compass)
 
-  let _ = node.draw(l)
+  node.draw(l)
 
   let count = int.to_string(list.length(layer.get_children(l)))
   let doc = core.get_document()

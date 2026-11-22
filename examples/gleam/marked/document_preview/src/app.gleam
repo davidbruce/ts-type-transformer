@@ -19,9 +19,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("marked"))
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let markdown_src =
         "# Marked Wireframe Spec\n\n"
@@ -50,8 +50,8 @@ pub fn main() -> Nil {
       let src_pre = document.create_element(doc, tag.pre, None)
       element.set_class_name(src_pre, "src")
       node.set_text_content(src_pre, Some(markdown_src))
-      let _ = node.append_child(src_card, src_lbl)
-      let _ = node.append_child(src_card, src_pre)
+      node.append_child(src_card, src_lbl)
+      node.append_child(src_card, src_pre)
 
       let out_card = document.create_element(doc, tag.div, None)
       element.set_class_name(out_card, "card")
@@ -62,12 +62,12 @@ pub fn main() -> Nil {
       element.set_class_name(md_out, "md-out")
       let html = marked.marked(markdown_src, marked_options_no_async.create())
       element.set_inner_html(md_out, html)
-      let _ = node.append_child(out_card, out_lbl)
-      let _ = node.append_child(out_card, md_out)
+      node.append_child(out_card, out_lbl)
+      node.append_child(out_card, md_out)
 
-      let _ = node.append_child(grid, src_card)
-      let _ = node.append_child(grid, out_card)
-      let _ = node.append_child(app, grid)
+      node.append_child(grid, src_card)
+      node.append_child(grid, out_card)
+      node.append_child(app, grid)
       Nil
     }
   }

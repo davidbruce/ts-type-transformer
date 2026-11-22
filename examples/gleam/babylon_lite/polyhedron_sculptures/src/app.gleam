@@ -80,7 +80,7 @@ pub fn main() -> Nil {
           b.vec3(0.0, 1.6, 0.0),
         )
       b.add_to_scene(scene, br.dynamic(camera))
-      let _ = b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi =
         b.create_hemispheric_light(

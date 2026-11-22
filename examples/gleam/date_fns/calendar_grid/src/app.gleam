@@ -21,9 +21,9 @@ fn add_metric(doc, metrics, label: String, val: String) -> Nil {
   let v = document.create_element(doc, tag.div, None)
   element.set_class_name(v, "val")
   node.set_text_content(v, Some(val))
-  let _ = node.append_child(m, lbl)
-  let _ = node.append_child(m, v)
-  let _ = node.append_child(metrics, m)
+  node.append_child(m, lbl)
+  node.append_child(m, v)
+  node.append_child(metrics, m)
   Nil
 }
 
@@ -43,9 +43,9 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("March 2024"))
-      let _ = node.append_child(head, h1)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, h1)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let ref_day = df.parse_iso("2024-03-15", None)
       let month_start = df.start_of_month(arg(ref_day), None)
@@ -82,14 +82,14 @@ pub fn main() -> Nil {
         "Leap Year / DOY",
         leap <> int.to_string(float.round(df.get_day_of_year(day(ref_day), None))),
       )
-      let _ = node.append_child(app, metrics)
+      node.append_child(app, metrics)
 
       let card = document.create_element(doc, tag.div, None)
       element.set_class_name(card, "card")
       let lbl = document.create_element(doc, tag.div, None)
       element.set_class_name(lbl, "label")
       node.set_text_content(lbl, Some("March 2024 — Reference 2024-03-15"))
-      let _ = node.append_child(card, lbl)
+      node.append_child(card, lbl)
 
       let grid = document.create_element(doc, tag.div, None)
       element.set_class_name(grid, "cal-grid")
@@ -97,14 +97,14 @@ pub fn main() -> Nil {
         let el = document.create_element(doc, tag.div, None)
         element.set_class_name(el, "dow")
         node.set_text_content(el, Some(dow))
-        let _ = node.append_child(grid, el)
+        node.append_child(grid, el)
         Nil
       })
 
       list.each(list.repeat(Nil, offset), fn(_) {
         let empty = document.create_element(doc, tag.div, None)
         element.set_class_name(empty, "day-cell empty")
-        let _ = node.append_child(grid, empty)
+        node.append_child(grid, empty)
         Nil
       })
 
@@ -134,14 +134,14 @@ pub fn main() -> Nil {
           False -> df.format_date(d, "EEE", None)
         }
         node.set_text_content(sub, Some(sub_txt))
-        let _ = node.append_child(cell, day_num)
-        let _ = node.append_child(cell, sub)
-        let _ = node.append_child(grid, cell)
+        node.append_child(cell, day_num)
+        node.append_child(cell, sub)
+        node.append_child(grid, cell)
         Nil
       })
 
-      let _ = node.append_child(card, grid)
-      let _ = node.append_child(app, card)
+      node.append_child(card, grid)
+      node.append_child(app, card)
       Nil
     }
   }

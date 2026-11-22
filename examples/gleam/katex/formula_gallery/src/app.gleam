@@ -20,13 +20,13 @@ pub fn main() -> Nil {
       let badge = document.create_element(doc, tag.span, None)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("katex v" <> katex.get_version()))
-      let _ = node.append_child(head, title)
-      let _ = node.append_child(head, badge)
-      let _ = node.append_child(app, head)
+      node.append_child(head, title)
+      node.append_child(head, badge)
+      node.append_child(app, head)
 
       let grid = document.create_element(doc, tag.div, None)
       element.set_class_name(grid, "grid")
-      let _ = node.append_child(app, grid)
+      node.append_child(app, grid)
 
       let opts =
         katex_options.create()
@@ -62,10 +62,10 @@ pub fn main() -> Nil {
         let slot = document.create_element(doc, tag.div, None)
         element.set_class_name(slot, "slot")
         katex.render(tex, slot, Some(opts))
-        let _ = node.append_child(card, lbl)
-        let _ = node.append_child(card, src)
-        let _ = node.append_child(card, slot)
-        let _ = node.append_child(grid, card)
+        node.append_child(card, lbl)
+        node.append_child(card, src)
+        node.append_child(card, slot)
+        node.append_child(grid, card)
         Nil
       })
     }

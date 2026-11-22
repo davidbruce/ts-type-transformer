@@ -42,7 +42,7 @@ pub fn main() -> Nil {
   let stg = stage.new(sc)
 
   let l = layer.new(None)
-  let _ = stage.add(stg, l, [])
+  stage.add(stg, l, [])
 
   let bg =
     rect_config.create()
@@ -51,7 +51,7 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  let _ = layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))])
+  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))])
 
   let vlines =
     int.range(from: 1, to: 17, with: [], run: fn(acc, i) {
@@ -65,8 +65,8 @@ pub fn main() -> Nil {
       [make_grid_line([0.0, y, 680.0, y]), ..acc]
     })
     |> list.reverse
-  let _ = layer.add(l, vlines)
-  let _ = layer.add(l, hlines)
+  layer.add(l, vlines)
+  layer.add(l, hlines)
 
   // Group A.
   let gac =
@@ -95,12 +95,11 @@ pub fn main() -> Nil {
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-  let _ =
-    group.add(group_a, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(gab)))),
-      t.GroupOrShapeShape(shape.widen(circle.new(Some(gad)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(gal)))),
-    ])
+  group.add(group_a, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(gab)))),
+    t.GroupOrShapeShape(shape.widen(circle.new(Some(gad)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(gal)))),
+  ])
 
   // Group B.
   let gbc =
@@ -140,13 +139,12 @@ pub fn main() -> Nil {
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-  let _ =
-    group.add(group_b, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(gbo)))),
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(gbi)))),
-      t.GroupOrShapeShape(shape.widen(circle.new(Some(gbd)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(gbl)))),
-    ])
+  group.add(group_b, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(gbo)))),
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(gbi)))),
+    t.GroupOrShapeShape(shape.widen(circle.new(Some(gbd)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(gbl)))),
+  ])
 
   // Group C + nested inner group.
   let gcc =
@@ -185,20 +183,18 @@ pub fn main() -> Nil {
     |> circle_config.with_radius(16.0)
     |> circle_config.with_fill(t.StringOrCanvasGradientString("#111111"))
   let marker = circle.new(Some(mc))
-  let _ = group.add(inner_group, [t.GroupOrShapeShape(shape.widen(marker))])
-  let _ =
-    group.add(group_c, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(gco)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(gcl)))),
-      t.GroupOrShapeGroup(inner_group),
-    ])
+  group.add(inner_group, [t.GroupOrShapeShape(shape.widen(marker))])
+  group.add(group_c, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(gco)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(gcl)))),
+    t.GroupOrShapeGroup(inner_group),
+  ])
 
-  let _ =
-    layer.add(l, [
-      t.GroupOrShapeGroup(group_a),
-      t.GroupOrShapeGroup(group_b),
-      t.GroupOrShapeGroup(group_c),
-    ])
+  layer.add(l, [
+    t.GroupOrShapeGroup(group_a),
+    t.GroupOrShapeGroup(group_b),
+    t.GroupOrShapeGroup(group_c),
+  ])
 
   let abs = node.get_absolute_position(marker, None)
   let bbox = node.get_client_rect(group_b, None)
@@ -226,13 +222,12 @@ pub fn main() -> Nil {
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-  let _ =
-    layer.add(l, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(strip)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(sum)))),
-    ])
+  layer.add(l, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(strip)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(sum)))),
+  ])
 
-  let _ = node.draw(l)
+  node.draw(l)
 
   let doc = core.get_document()
   case document.get_element_by_id(doc, "meta") {

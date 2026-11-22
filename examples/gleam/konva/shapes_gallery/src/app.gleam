@@ -34,7 +34,7 @@ fn add_caption(l: t.Layer(Nil), x: Float, y: Float, label: String) -> Nil {
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
-  let _ = layer.add(l, [t.GroupOrShapeShape(shape.widen(text.new(Some(tc))))])
+  layer.add(l, [t.GroupOrShapeShape(shape.widen(text.new(Some(tc))))])
   Nil
 }
 
@@ -47,7 +47,7 @@ pub fn main() -> Nil {
   let stg = stage.new(sc)
 
   let l = layer.new(None)
-  let _ = stage.add(stg, l, [])
+  stage.add(stg, l, [])
 
   let bg =
     rect_config.create()
@@ -149,19 +149,18 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
-  let _ =
-    layer.add(l, [
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(bg)))),
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(r1)))),
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(r2)))),
-      t.GroupOrShapeShape(shape.widen(circle.new(Some(cc)))),
-      t.GroupOrShapeShape(shape.widen(regular_polygon.new(Some(pc)))),
-      t.GroupOrShapeShape(shape.widen(star.new(Some(st)))),
-      t.GroupOrShapeShape(shape.widen(ring.new(Some(rc)))),
-      t.GroupOrShapeShape(shape.widen(wedge.new(Some(wc)))),
-      t.GroupOrShapeShape(shape.widen(rect.new(Some(tf)))),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(txt)))),
-    ])
+  layer.add(l, [
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(bg)))),
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(r1)))),
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(r2)))),
+    t.GroupOrShapeShape(shape.widen(circle.new(Some(cc)))),
+    t.GroupOrShapeShape(shape.widen(regular_polygon.new(Some(pc)))),
+    t.GroupOrShapeShape(shape.widen(star.new(Some(st)))),
+    t.GroupOrShapeShape(shape.widen(ring.new(Some(rc)))),
+    t.GroupOrShapeShape(shape.widen(wedge.new(Some(wc)))),
+    t.GroupOrShapeShape(shape.widen(rect.new(Some(tf)))),
+    t.GroupOrShapeShape(shape.widen(text.new(Some(txt)))),
+  ])
 
   add_caption(l, 40.0, 142.0, "Rect (filled)")
   add_caption(l, 195.0, 142.0, "Rect (dashed)")
@@ -172,7 +171,7 @@ pub fn main() -> Nil {
   add_caption(l, 382.0, 325.0, "Wedge 270°")
   add_caption(l, 558.0, 325.0, "Text")
 
-  let _ = node.draw(l)
+  node.draw(l)
 
   let count = int.to_string(list.length(layer.get_children(l)))
   let doc = core.get_document()

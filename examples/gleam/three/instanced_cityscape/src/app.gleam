@@ -102,16 +102,16 @@ fn update_towers(
     let x = { int.to_float(gx) -. 4.5 } *. 0.78
     let z = { int.to_float(gz) -. 4.5 } *. 0.78
     let h = tower_height(mode, gx, gz)
-    let _ = vector3.set(pos, x, h *. 0.5, Some(z))
-    let _ = quaternion.set_from_axis_angle(rot_q, axis_y, 0.08 *. int.to_float({ gx + gz } % 4))
-    let _ = vector3.set(scale, 1.0, h, Some(1.0))
-    let _ = matrix4.compose(mtx, pos, rot_q, scale)
-    let _ = instanced_mesh.set_matrix_at(inst, int.to_float(idx), mtx)
+    vector3.set(pos, x, h *. 0.5, Some(z))
+    quaternion.set_from_axis_angle(rot_q, axis_y, 0.08 *. int.to_float({ gx + gz } % 4))
+    vector3.set(scale, 1.0, h, Some(1.0))
+    matrix4.compose(mtx, pos, rot_q, scale)
+    instanced_mesh.set_matrix_at(inst, int.to_float(idx), mtx)
 
     let clamped_t = float.clamp({ h -. 0.3 } /. 3.2, min: 0.0, max: 1.0)
     let shade = 0.82 -. 0.70 *. clamped_t
-    let _ = color.set_rgb(col, shade, shade, shade, None)
-    let _ = instanced_mesh.set_color_at(inst, int.to_float(idx), col)
+    color.set_rgb(col, shade, shade, shade, None)
+    instanced_mesh.set_color_at(inst, int.to_float(idx), col)
     float.max(max_h, h)
   })
 }
@@ -131,20 +131,22 @@ pub fn main() {
   web_gl_renderer.set_size(renderer, width, height, None)
 
   let assert Some(stage) = document.get_element_by_id(doc, "stage")
-  let _ = dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
+  dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
 
   let sc = scene.new()
   scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))))))
   let ortho_cam = orthographic_camera.new(Some(-5.4 *. aspect), Some(5.4 *. aspect), Some(5.4), Some(-5.4), Some(0.1), Some(100.0))
   let persp_cam = perspective_camera.new(Some(40.0), Some(aspect), Some(0.1), Some(100.0))
 
-  let _ = object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.25))])
+  object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.25))])
   let key = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(2.1))
-  let _ = vector3.set(object3d.get_position(key), 8.0, 12.0, Some(6.0))
-  let _ = object3d.add(sc, [key])
+  object3d.get_position(key)
+  |> vector3.set(8.0, 12.0, Some(6.0))
+  object3d.add(sc, [key])
   let rim = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(0.9))
-  let _ = vector3.set(object3d.get_position(rim), -7.0, 6.0, Some(-8.0))
-  let _ = object3d.add(sc, [rim])
+  object3d.get_position(rim)
+  |> vector3.set(-7.0, 6.0, Some(-8.0))
+  object3d.add(sc, [rim])
 
   let pmp =
     mesh_standard_material_parameters.create()
@@ -158,7 +160,7 @@ pub fn main() {
     )
   euler.set_x(object3d.get_rotation(plinth), 0.0 -. pi /. 2.0)
   vector3.set_y(object3d.get_position(plinth), -0.01)
-  let _ = object3d.add(sc, [plinth])
+  object3d.add(sc, [plinth])
 
   let grid =
     grid_helper.new(
@@ -167,7 +169,7 @@ pub fn main() {
       Some(t.ColorRepresentationNumber(hex(0x999999))),
       Some(t.ColorRepresentationNumber(hex(0xd4d4d4))),
     )
-  let _ = object3d.add(sc, [grid])
+  object3d.add(sc, [grid])
 
   let tgeo = box_geometry.new(Some(0.54), Some(1.0), Some(0.54), None, None, None)
   let tmp =
@@ -177,7 +179,7 @@ pub fn main() {
     |> mesh_standard_material_parameters.with_metalness(0.08)
   let tmat = mesh_standard_material.new(Some(tmp))
   let inst = instanced_mesh.new(Some(tgeo), Some(tmat), 100.0, t.mesh_standard_material_codec())
-  let _ = object3d.add(sc, [inst])
+  object3d.add(sc, [inst])
 
   let assert Some(cam_btn) = document.get_element_by_id(doc, "btn-cam")
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
@@ -207,9 +209,11 @@ pub fn main() {
     let cx = radius *. cos(yaw)
     let cz = radius *. sin(yaw)
     let target = vector3.new(Some(0.0), Some(0.9), Some(0.0))
-    let _ = vector3.set(object3d.get_position(ortho_cam), cx, 8.2, Some(cz))
+    object3d.get_position(ortho_cam)
+    |> vector3.set(cx, 8.2, Some(cz))
     object3d.look_at(ortho_cam, target)
-    let _ = vector3.set(object3d.get_position(persp_cam), cx, 7.6, Some(cz))
+    object3d.get_position(persp_cam)
+    |> vector3.set(cx, 7.6, Some(cz))
     object3d.look_at(persp_cam, target)
 
     case use_ortho {
@@ -231,7 +235,7 @@ pub fn main() {
   }
 
   wire_click("btn-cam", fn() {
-    let _ = rt.ref_update(ortho_ref, fn(o) { !o })
+    rt.ref_update(ortho_ref, fn(o) { !o })
     render_city()
   })
   wire_click("btn-lay0", fn() {
@@ -247,7 +251,7 @@ pub fn main() {
     render_city()
   })
   wire_click("btn-rot", fn() {
-    let _ = rt.ref_update(yaw_ref, fn(y) { y +. pi /. 4.0 })
+    rt.ref_update(yaw_ref, fn(y) { y +. pi /. 4.0 })
     render_city()
   })
 

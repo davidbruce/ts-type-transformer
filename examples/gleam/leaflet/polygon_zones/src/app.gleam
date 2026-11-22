@@ -73,9 +73,9 @@ pub fn main() {
       Some(poly_opts("#737373", 1.5, Some("4 4"), "#efefef", 0.05)),
     )
 
-  let _ = layer.add_to(hull_rect, t.MapOrLayerGroupMap(m))
-  let _ = layer.add_to(mid_poly, t.MapOrLayerGroupMap(m))
-  let _ = layer.add_to(core_poly, t.MapOrLayerGroupMap(m))
+  layer.add_to(hull_rect, t.MapOrLayerGroupMap(m))
+  layer.add_to(mid_poly, t.MapOrLayerGroupMap(m))
+  layer.add_to(core_poly, t.MapOrLayerGroupMap(m))
 
   let probes = [
     leaflet.lat_lng(47.25, 8.6, None),
@@ -110,15 +110,12 @@ pub fn main() {
         |> path_options.with_weight(2.0)
         |> path_options.with_fill_color(fill_hex)
         |> path_options.with_fill_opacity(1.0)
-      let _ =
-        layer.add_to(
-          leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(cm_opts)),
-          t.MapOrLayerGroupMap(m),
-        )
+      leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(cm_opts))
+      |> layer.add_to(t.MapOrLayerGroupMap(m))
       next_acc
     })
 
-  let _ = map.fit_bounds(m, t.LatLngBoundsExpressionLatLngBounds(padded), None)
+  map.fit_bounds(m, t.LatLngBoundsExpressionLatLngBounds(padded), None)
 
   case document.get_element_by_id(core.get_document(), "meta") {
     Some(meta) ->
