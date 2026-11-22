@@ -25,15 +25,15 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // A bar series over a category axis.
     XAXisComponentOption_xAxis xaxis = XAXisComponentOption_xAxis::create();
-    auto days = ts::Array<string_or_number_or_CategoryAxisBaseOption_data>::create();
-    for (const char* d : {"Mon", "Tue", "Wed"}) days.push(string_or_number_or_CategoryAxisBaseOption_data(std::string(d)));
+    auto days = ts::Array<CategoryAxisBase_data_or_string_or_number>::create();
+    for (const char* d : {"Mon", "Tue", "Wed"}) days.push(CategoryAxisBase_data_or_string_or_number(std::string(d)));
     xaxis.data(days);
     YAXisComponentOption_yAxis_value yaxis = YAXisComponentOption_yAxis_value::create();
 
     ts::Array<> values = ts::Array<>::create();
     for (double v : {5.0, 20.0, 36.0}) values.push(ts::Value::number(v));
     BarSeriesOption bars = BarSeriesOption::create();
-    bars.name(PositionSizeOption(std::string("sales")));
+    bars.name(string_or_number(std::string("sales")));
     bars.data(values);
 
     EChartsOption option = EChartsOption::create();
@@ -68,13 +68,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     chart.resize();
     CHECK(chart.getWidth() == 400 && chart.getHeight() == 300);
     ResizeOpts size = ResizeOpts::create();
-    size.width(PositionSizeOption(300.0));
-    size.height(PositionSizeOption(200.0));
+    size.width(string_or_number(300.0));
+    size.height(string_or_number(200.0));
     chart.resize(size);
     CHECK(chart.getWidth() == 300 && chart.getHeight() == 200);
     ResizeOpts reset = ResizeOpts::create();
-    reset.width(PositionSizeOption(std::string("auto")));
-    reset.height(PositionSizeOption(std::string("auto")));
+    reset.width(string_or_number(std::string("auto")));
+    reset.height(string_or_number(std::string("auto")));
     chart.resize(reset);
     CHECK(chart.getWidth() == 400 && chart.getHeight() == 300);
 

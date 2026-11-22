@@ -133,8 +133,8 @@ __attribute__((export_name("run"))) void run(void) {
     // The plugin: its state starts at 0.
     PluginKey key = PluginKey_new("counter");
     StateField field = StateField_create();
-    StateField_set_init(field, StateField_init_from(counter_init, 0));
-    StateField_set_apply(field, StateField_apply_from(counter_apply, 0));
+    StateField_set_init(field, StateField_init_cb_from(counter_init, 0));
+    StateField_set_apply(field, StateField_apply_cb_from(counter_apply, 0));
     PluginSpec plugin_spec = PluginSpec_create();
     PluginSpec_set_state(plugin_spec, field);
     PluginSpec_set_key(plugin_spec, key);
@@ -251,9 +251,7 @@ __attribute__((export_name("run"))) void run(void) {
     // Dispatching: the view's own dispatch goes through ours, and the view updates.
     Transaction edit = EditorState_get_tr(EditorView_get_state(view));
     Transaction_insertText(edit, "Say: ", js_some_double(1), js_some_double(1));
-    Transaction_fn dispatch = EditorView_get_dispatch(view);
-    CHECK(dispatch.h != 0);
-    call_Transaction_fn(dispatch, edit);
+    EditorView_dispatch(view, edit);
     CHECK(dispatched == 1);
     CHECK(str_is(text_of(EditorState_get_doc(EditorView_get_state(view))), "Say: Hello world"));
 

@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::bounds::generic_args;
-use super::{codec_var, lower, relative, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS};
+use super::{codec_var, lower, relative, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
 use super::super::js::{call_expr, js_test, trim_trailing_undef};
 use super::super::model::{mentions, subst, Class, Func, Model, NamedUnion, TParam, Ty};
 
@@ -590,6 +590,16 @@ impl<'m> Gen<'m> {
         let variants: Vec<String> = (0..u.parts.len()).map(|i| self.variants[&(u.name.clone(), i)].clone()).collect();
         let cases: Vec<String> = u.parts.iter().zip(&variants).map(|(p, v)| format!("  {v}({})", self.ty(p))).collect();
         self.out += &format!("pub type {name}{params} {{\n{}\n}}\n\n", cases.join("\n"));
+        // A library's name for it, where that is free.
+        if u.type_params.is_empty() {
+            let mut seen = HashSet::new();
+            for (alias, _) in self.m.type_aliases.iter().filter(|(_, to)| *to == u.name) {
+                let a = upper(alias);
+                if !OWN.contains(&a.as_str()) && !self.types.values().any(|t| *t == a) && seen.insert(a.clone()) {
+                    self.out += &format!("pub type {a} =\n  {name}\n\n");
+                }
+            }
+        }
         let mut to = String::new();
         let mut fallback = None;
         for ((p, test), v) in u.parts.iter().zip(&u.tests).zip(&variants) {

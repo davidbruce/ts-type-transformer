@@ -173,6 +173,7 @@ fn apply_prefix(m: &mut Model, pfx: &str, opaque_kept: &mut HashSet<String>) {
         .map(|c| c.name.clone())
         .chain(m.callbacks.iter().map(|c| c.name.clone()))
         .chain(m.unions.iter().map(|u| u.name.clone()))
+        .chain(m.type_aliases.iter().map(|a| a.0.clone()))
         .chain(m.enums.iter().map(|e| e.0.clone()))
         .chain(m.num_enums.iter().map(|e| e.0.clone()))
         .chain(m.opaque.iter().cloned())

@@ -26,7 +26,7 @@ let option =
         animation = false,
         xAxis =
             U5.Case1 (
-                EChartsOptionXAxis1.Create (
+                EChartsOptionXAxisData.Create (
                     data = ResizeArray [
                         AngleAxisComponentOptionCategoryData.String "mon"
                         AngleAxisComponentOptionCategoryData.String "tue"
@@ -36,7 +36,7 @@ let option =
             ),
         yAxis =
             U5.Case4 (
-                EChartsOptionYAxis4.Create (
+                EChartsOptionYAxisScale.Create (
                     min = AngleAxisComponentOptionCategoryMin.Number 0.0,
                     max = AngleAxisComponentOptionCategoryMin.Number 40.0
                 )
@@ -44,7 +44,7 @@ let option =
         series =
             U9.Case1 (
                 BarSeriesOption.Create (
-                    name = PositionSizeOption.String "sales",
+                    name = OptionName.String "sales",
                     data = ResizeArray [
                         Some (BarSeriesOptionData.Number 5.0)
                         Some (BarSeriesOptionData.Number 20.0)
@@ -53,7 +53,7 @@ let option =
                 )
             ),
         grid =
-            GridComponentOptionOrGridComponentOptionArray.GridComponentOption (
+            EChartsOptionGrid.GridComponentOption (
                 GridComponentOption.Create (
                     show = false,
                     left = PositionSizeOption.Number 50.0,
@@ -130,7 +130,7 @@ chart.trigger<string> ("ping", box 3) |> ignore
 check (fired = 2) "off"
 
 // Resize and clear.
-chart.resize (ResizeOpts.Create (width = PositionSizeOption.Number 200.0, height = PositionSizeOption.Number 100.0))
+chart.resize (ResizeOpts.Create (width = StringOrNumber.Number 200.0, height = StringOrNumber.Number 100.0))
 check (chart.getWidth () = 200.0 && chart.getHeight () = 100.0) "resize"
 chart.clear ()
 check ((chart.getOption().["series"] |> unbox<ResizeArray<obj>>).Count = 0) "clear"

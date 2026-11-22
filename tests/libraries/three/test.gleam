@@ -275,9 +275,9 @@ pub fn main() {
 
   // Attributes: positions of 24 vertices, 36 indices.
   let attributes = buffer_geometry.get_attributes(geometry, t.normal_buffer_attributes_codec())
-  let assert Some(t.BufferAttributeOrInterleavedBufferAttributeBufferAttribute(position)) =
+  let assert Some(t.NormalBufferAttributesIndexResultBufferAttribute(position)) =
     normal_buffer_attributes.get_at(attributes, "position")
-  let assert Some(t.BufferAttributeOrInterleavedBufferAttributeBufferAttribute(uv)) =
+  let assert Some(t.NormalBufferAttributesIndexResultBufferAttribute(uv)) =
     normal_buffer_attributes.get_at(attributes, "uv")
   let assert Some(index) = buffer_geometry.get_index(geometry)
   let passed =

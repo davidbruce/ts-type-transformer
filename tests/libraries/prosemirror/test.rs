@@ -232,8 +232,8 @@ fn editor_view(doc: &Node) {
     check!(seen.get() == 1);
     check!(view.state().doc().text_content() == "Zhelloworld");
 
-    // The view's own `dispatch` is a function value: called, it reaches ours.
-    call_transaction_fn(&view.dispatch(), &view.state().tr());
+    // The view's own `dispatch` reaches ours.
+    view.dispatch(&view.state().tr());
     check!(seen.get() == 2);
 
     // A new state set directly does not dispatch.

@@ -336,7 +336,7 @@ pub fn main() {
   // The view's dispatch goes to the props' dispatchTransaction.
   let sent = editor_state.get_tr(editor_view.get_state(view))
   let _ = transaction.insert_text(sent, "A ", Some(1.0), Some(1.0))
-  editor_view.get_dispatch(view)(sent)
+  editor_view.dispatch(view, sent)
   let passed =
     passed
     + check(cell.get(dispatched) == 1, "dispatch reaches dispatchTransaction")
@@ -353,7 +353,7 @@ pub fn main() {
       None -> False
     }
   }
-  let ran = pstate.call_command(command, editor_view.get_state(view), Some(editor_view.get_dispatch(view)), None)
+  let ran = pstate.call_command(command, editor_view.get_state(view), Some(fn(tr) { editor_view.dispatch(view, tr) }), None)
   let dry = pstate.call_command(command, editor_view.get_state(view), None, None)
   let passed =
     passed

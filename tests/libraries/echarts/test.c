@@ -78,7 +78,7 @@ __attribute__((export_name("run"))) void run(void) {
     Dictionary_set_at(grid, "top", js_number(50));
     Dictionary_set_at(grid, "bottom", js_number(50));
     BarSeriesOption series0 = BarSeriesOption_create();
-    BarSeriesOption_set_name(series0, PositionSizeOption_of_string(JsString_from("sales")));
+    BarSeriesOption_set_name(series0, OptionName_of_string(JsString_from("sales")));
     JsArray values = JsArray_new();
     JsArray_push(values, js_number(5));
     JsArray_push(values, js_number(20));
@@ -178,13 +178,13 @@ __attribute__((export_name("run"))) void run(void) {
     // Resize to a smaller size, then back to what the container says ("auto":
     // a size given sticks until it is given as auto).
     ResizeOpts small = ResizeOpts_create();
-    ResizeOpts_set_width(small, PositionSizeOption_of_number(300));
-    ResizeOpts_set_height(small, PositionSizeOption_of_number(200));
+    ResizeOpts_set_width(small, string_or_number_of_number(300));
+    ResizeOpts_set_height(small, string_or_number_of_number(200));
     EChartsType_resize(chart, small);
     CHECK(EChartsType_getWidth(chart) == 300 && EChartsType_getHeight(chart) == 200);
     ResizeOpts automatic = ResizeOpts_create();
-    ResizeOpts_set_width(automatic, PositionSizeOption_of_string(JsString_from("auto")));
-    ResizeOpts_set_height(automatic, PositionSizeOption_of_string(JsString_from("auto")));
+    ResizeOpts_set_width(automatic, string_or_number_of_string(JsString_from("auto")));
+    ResizeOpts_set_height(automatic, string_or_number_of_string(JsString_from("auto")));
     EChartsType_resize(chart, automatic);
     CHECK(EChartsType_getWidth(chart) == 400 && EChartsType_getHeight(chart) == 300);
 

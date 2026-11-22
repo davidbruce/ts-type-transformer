@@ -245,8 +245,18 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
         }
     }
     // Unions that can be decoded: enums.
+    let mut alias_names: HashSet<String> = HashSet::new();
     for u in m.unions.iter().filter(|u| u.decodable()) {
-        let text = union_enum(u, m, &mut imports, &cx);
+        let mut text = union_enum(u, m, &mut imports, &cx);
+        if u.type_params.is_empty() {
+            // A library's name for it, where that is free.
+            for (alias, _) in m.type_aliases.iter().filter(|(_, to)| *to == u.name) {
+                let a = rust_type(alias);
+                if !declared.iter().any(|d| cx.def_name(d) == a) && alias_names.insert(a.clone()) {
+                    text += &format!("pub type {a} = {};\n", cx.def_name(&u.name));
+                }
+            }
+        }
         match module_of.get(&u.name) {
             Some(path) => *namespaces.entry(path.clone()).or_default() += &text,
             None => types_file += &text,

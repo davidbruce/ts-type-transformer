@@ -68,7 +68,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     let mut b = Builder {
         opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -387,7 +387,13 @@ impl<'a> Builder<'a> {
                         }
                         self.model.classes.push(c);
                     }
-                    // Other aliases are resolved where they are used.
+                    // A library's name for a named union is declared beside it; other aliases are resolved where they are used.
+                    if prefix.is_empty() && named(d, "typeParameter").next().is_none() && body.has_tag_name("ref") && !flag(d, "synthetic") && self.decls.get(&self.ref_key(body)).is_some_and(|t| t.has_tag_name("typeAlias") && elements(*t).any(|c| c.has_tag_name("union"))) {
+                        let alias = self.type_ident(&path);
+                        if let Ty::NamedUnion(to) = self.ty(body, "") {
+                            self.model.type_aliases.push((alias, to));
+                        }
+                    }
                 }
                 "function" => {
                     let (params, rest, fixed, ret) = self.signature(d, "");

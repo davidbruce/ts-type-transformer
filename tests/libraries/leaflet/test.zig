@@ -138,15 +138,15 @@ export fn run() void {
 
     // An event fired on the map reaches the listener, with its position.
     const on_click = b.leaflet.LeafletMouseEventHandlerFn.from(onClick, null);
-    _ = m.onWithCanvasAddEventListenerTypeClick(.click, on_click, .{});
+    _ = m.onClick(.click, on_click, .{});
     const data = b.leaflet.LeafletMouseEvent.create();
     data.setLatlng(london);
     _ = m.fire("click", .{ .data = .{ .h = data.h } });
     _ = m.fire("click", .{ .data = .{ .h = data.h } });
     expect(clicks == 2 and last_lat == 51.505, @src());
     // Removed, it is not called again. FINDING 21: an option named `fn` is a Zig keyword, so it is written
-    // .@"fn" = ...; and the event name is an enum picked per overload (offWithCanvasAddEventListenerTypeClick).
-    _ = m.offWithCanvasAddEventListenerTypeClick(.click, .{ .@"fn" = on_click });
+    // .@"fn" = ...; and the event name is an enum picked per overload (offClick).
+    _ = m.offClick(.click, .{ .@"fn" = on_click });
     _ = m.fire("click", .{ .data = .{ .h = data.h } });
     expect(clicks == 2, @src());
 

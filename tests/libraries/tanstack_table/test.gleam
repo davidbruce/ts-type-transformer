@@ -81,20 +81,18 @@ pub fn main() {
 
   // ---- column definitions from a column helper ----
   let helper = table.create_column_helper()
-  let accessor = column_helper.get_accessor(helper)
   let name_options = header_options.create()
   header_options.set_header(name_options, "Name")
-  let name = accessor(runtime.dynamic("name"), runtime.dynamic(name_options))
+  let name = column_helper.accessor(helper, "name", runtime.dynamic(name_options), runtime.codec_string())
   let age_options = header_options.create()
   header_options.set_header(age_options, "Age")
-  let age = accessor(runtime.dynamic("age"), runtime.dynamic(age_options))
+  let age = column_helper.accessor(helper, "age", runtime.dynamic(age_options), runtime.codec_string())
   let passed =
     passed
     + check(field(name, ["accessorKey"], decode.string) == "name", "accessorKey")
     + check(field(name, ["header"], decode.string) == "Name", "header")
     + check(field(age, ["accessorKey"], decode.string) == "age", "a second column")
-  let columns = column_helper.get_columns(helper)
-  let defs = columns([name, age])
+  let defs = column_helper.columns(helper, [name, age])
   let passed = passed + check(list.length(defs) == 2, "columns() keeps the definitions")
 
   // ---- small helpers ----
@@ -213,8 +211,7 @@ pub fn main() {
     passed
     + check(list.map(row_model.get_rows(core_model), name_of) == ["bo", "al", "cy"], "createCoreRowModel lists rows")
   let model_view: t.TableRowModelsCore(t.TableFeatures(Nil), dynamic.Dynamic, Nil) = coerce(tbl)
-  let get_row_model = table_row_models_core.get_get_row_model(model_view)
-  let unsorted_model = get_row_model()
+  let unsorted_model = table_row_models_core.get_row_model(model_view)
   let passed =
     passed
     + check(list.map(row_model.get_rows(unsorted_model), name_of) == ["bo", "al", "cy"], "getRowModel starts in data order")
@@ -224,8 +221,8 @@ pub fn main() {
   column_sort.set_id(by_age, "age")
   column_sort.set_desc(by_age, False)
   let sortable: t.TableRowSorting(t.TableFeatures(Nil), dynamic.Dynamic, Nil) = coerce(tbl)
-  table.call_table_row_sorting_set_sorting(table_row_sorting.get_set_sorting(sortable), t.UpdaterT([by_age]))
-  let sorted_model = get_row_model()
+  table_row_sorting.set_sorting(sortable, t.UpdaterT([by_age]))
+  let sorted_model = table_row_models_core.get_row_model(model_view)
   let passed =
     passed
     + check(

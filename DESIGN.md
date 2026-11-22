@@ -384,6 +384,9 @@ first required property no other member has, `tag:` when one required
 property has a distinct literal value in every member. F# turns these into
 `[<Erase>]` unions with `CaseTest`s or `[<TypeScriptTaggedUnion>]`; the wasm
 glue into a tag function, so Zig can `switch` on a union a call returns.
+A library's alias of a named union (`type Wrapped = Content`) is declared as
+the target's own alias (`typedef`, `using`, `pub const`, `pub type`, an F#
+abbreviation).
 
 ## Overload names
 
@@ -412,7 +415,15 @@ named by what it takes and gives, if that is short and free
 (`HTMLElement_MouseEvent_fn`, `Token_to_boolean_fn`). A union by its members
 when a few short ones say it (`string_or_number`, member order aside), else
 by its place; a place another union has, with what else it holds
-(`FileHandle_readFile_options_or_string`), or `_union`.
+(`FileHandle_readFile_options_or_string`), or `_union`. A declared alias keeps
+its name where it is written, exported or not, inherited members included,
+and for what a pass expanded to its structure. A union the library wrote as
+a union (`string | HTMLElement` beside `type Content = string | HTMLElement`)
+is named by its members where that applies: two declarations of one
+structure, each place showing the name the library wrote there; where no
+short name applies it has the alias's. A name made for an inherited member
+is of the type that declares it (`Evented_addEventListener_type_click`),
+flattened or not.
 
 Inline types one place would name (overloads' options, a union's members)
 are named apart: the first keeps the place's name, each other is named by

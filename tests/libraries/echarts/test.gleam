@@ -51,7 +51,7 @@ pub fn main() {
 
   // A bar series with a category axis and a value axis.
   let series = bar_series_option.create()
-  bar_series_option.set_name(series, Some(t.PositionSizeOptionString("sales")))
+  bar_series_option.set_name(series, Some(t.OptionNameString("sales")))
   bar_series_option.set_data(series, Some(list.map([5.0, 20.0, 36.0, 10.0], dynamic.float)))
   let option_object = raw.create()
   unit.set_animation(option_object, Some(False))
@@ -136,8 +136,8 @@ pub fn main() {
 
   // Resizing.
   let size = resize_opts.create()
-  resize_opts.set_width(size, Some(t.PositionSizeOptionNumber(200.0)))
-  resize_opts.set_height(size, Some(t.PositionSizeOptionNumber(150.0)))
+  resize_opts.set_width(size, Some(t.StringOrNumberNumber(200.0)))
+  resize_opts.set_height(size, Some(t.StringOrNumberNumber(150.0)))
   e_charts_type.resize(chart, Some(size))
   let passed =
     passed

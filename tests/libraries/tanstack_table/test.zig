@@ -116,11 +116,11 @@ export fn run() void {
 
     // A function the library returns can be called: createColumnHelper().accessor(key, column).
     const helper = b.createColumnHelper();
-    expect(helper.getAccessor().h != 0 and helper.getDisplay().h != 0, @src());
+    expect(helper.h != 0, @src());
     const column = b.ColumnHelper_accessor_column_header_string.create();
-    const def = helper.getAccessor().call(.{ .string = b.JsString.from("age") }, .{ .ColumnHelper_accessor_column_header_string = column });
+    const def = helper.accessor(.{ .string = b.JsString.from("age") }, .{ .ColumnHelper_accessor_column_header_string = column });
     expect(def.h != 0, @src());
-    const keyed: b.TableOptions_Core_defaultColumn_accessorKey = .{ .h = def.h };
+    const keyed: b.ColumnHelper_accessor_result_accessorKey = .{ .h = def.h };
     expect(keyed.getAccessorKey().toString().eql("age"), @src());
 
     // FINDING 13: a table cannot be built. constructTable needs options.features with a coreReactivityFeature

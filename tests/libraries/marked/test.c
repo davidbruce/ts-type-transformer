@@ -223,7 +223,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // `use` with walkTokens: every token is visited, headings change.
     MarkedExtension walker = MarkedExtension_create();
-    MarkedExtension_set_walkTokens(walker, Marked_Token_to_void_or_Promise_or_void_or_Promise_array_fn_from(demote, 0));
+    MarkedExtension_set_walkTokens(walker, MarkedExtension_walkTokens_from(demote, 0));
     JsArray_MarkedExtension wexts = JsArray_MarkedExtension_new();
     JsArray_MarkedExtension_push(wexts, walker);
     Marked walking = Marked_new(wexts);

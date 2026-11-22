@@ -76,11 +76,11 @@ fn files() {
     let bytes = fs::read_file_sync(file.as_str(), None);
     check!(bytes.len() == 24);
     check!(String::from_utf8(bytes.to_vec()).unwrap() == "hello, node\nsecond line\n");
-    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), BufferEncoding::Utf8);
+    let text = fs::read_file_sync_with_read_file_sync_options(file.as_str(), BufferEncoding::Utf8);
     check!(text == "hello, node\nsecond line\n");
 
     fs::append_file_sync(file.as_str(), "third\n", None);
-    let text = fs::read_file_sync_or_buffer_encoding(file.as_str(), BufferEncoding::Utf8);
+    let text = fs::read_file_sync_with_read_file_sync_options(file.as_str(), BufferEncoding::Utf8);
     check!(text.lines().count() == 3 && text.ends_with("third\n"));
     let stats = fs::stat_sync(file.as_str());
     check!(stats.is_file() && !stats.is_directory());

@@ -257,6 +257,10 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     for (_, functions) in &unions {
         types += functions;
     }
+    for (alias, to) in m.type_aliases.iter().filter(|(_, to)| m.unions.iter().any(|u| u.name == *to && u.decodable() && u.type_params.is_empty())) {
+        types += &format!("typedef {to} {alias};\n");
+        all_names.push(alias.clone());
+    }
     for c in &containers {
         let first = c.lines().next().unwrap();
         let cname = first.rsplit_once("} ").and_then(|(_, r)| r.strip_suffix(';')).unwrap_or("JsContainer").trim();

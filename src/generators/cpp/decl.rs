@@ -286,6 +286,9 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
     for u in unions {
         let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions, cx)).collect();
         let mut text = format!("{}using {} = std::variant<{}>;\n", head(&u.type_params, true, cx), u.name, parts.join(", "));
+        if u.type_params.is_empty() {
+            text += &m.type_aliases.iter().filter(|(_, to)| *to == u.name).map(|(alias, _)| format!("using {alias} = {};\n", u.name)).collect::<String>();
+        }
         // Defined with the union, used wherever one comes back.
         if u.decodable() {
             text += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false, cx), union_type(u), u.name);

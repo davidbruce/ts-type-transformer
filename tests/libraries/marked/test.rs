@@ -123,7 +123,7 @@ pub extern "C" fn run() {
     // A walkTokens extension sees every token, and may change them.
     let seen = Rc::new(Cell::new(0));
     let ext = MarkedExtension::<String, String>::create();
-    let walk = TokenToVoidOrPromiseOrVoidOrPromiseArrayFn::new({
+    let walk = MarkedExtensionWalkTokens::new({
         let seen = seen.clone();
         move |t: Token| {
             seen.set(seen.get() + 1);

@@ -50,7 +50,7 @@ pub fn main() {
 
   // A map in the page's #map, centred on London.
   let london = leaflet.lat_lng(51.505, -0.09, None)
-  let m = leaflet.map(t.ContentHTMLElement(test_page.element("map")), None)
+  let m = leaflet.map(t.StringOrHTMLElementHTMLElement(test_page.element("map")), None)
   let _ = map.set_view(m, ll(london), Some(13.0), None)
   let passed =
     check(map.get_zoom(m) == 13.0, "zoom")
@@ -179,7 +179,7 @@ pub fn main() {
     }
   }
   let _ =
-    evented.on_with_evented_add_event_listener_type_click(
+    evented.on_click(
       m,
       t.EventedAddEventListenerTypeClickClick,
       on_click,
@@ -194,7 +194,7 @@ pub fn main() {
     + check(cell.get(clicks) == 2, "the click listener ran twice")
     + check(evented.listens(m, t.EventedListensTypeClick, None), "listens")
   let _ =
-    evented.off_with_evented_add_event_listener_type_click(
+    evented.off_click(
       m,
       t.EventedAddEventListenerTypeClickClick,
       Some(on_click),
@@ -222,7 +222,7 @@ pub fn main() {
   map_options.set_zoom_control(opts, Some(False))
   map_options.set_zoom(opts, Some(4.0))
   map_options.set_center(opts, Some(t.LatLngExpressionLatLng(paris)))
-  let second = leaflet.map(t.ContentHTMLElement(test_page.element("stage")), Some(opts))
+  let second = leaflet.map(t.StringOrHTMLElementHTMLElement(test_page.element("stage")), Some(opts))
   let passed =
     passed
     + check(map.get_zoom(second) == 4.0, "a second map from options")

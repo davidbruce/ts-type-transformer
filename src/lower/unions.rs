@@ -82,10 +82,30 @@ pub(super) fn collect_declared_names(decls: &[Decl], prefix: &str, sep: &str, ou
     }
 }
 
-pub(super) fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
+// The places where the library wrote a union itself, as the front end made
+// them: two members or more besides `null`, none a union alias. Passes expand
+// and copy types, so this is taken before them.
+pub(super) fn written_unions(decls: &mut [Decl]) -> HashSet<String> {
+    let aliases: HashSet<String> = decls.iter().filter_map(|d| if let Decl::Alias(a) = d && matches!(a.ty, Type::Union(_)) { Some(a.name.clone()) } else { None }).collect();
+    let mut written = HashSet::new();
+    walk(decls, &mut |t, path| {
+        if let Type::Union(parts) = &*t {
+            let members: Vec<&Type> = parts.iter().filter(|p| !p.is_prim("null") && !p.is_prim("undefined")).collect();
+            if members.len() >= 2 && !members.iter().any(|p| matches!(p, Type::Ref(r) if r.kind == "typeAlias" && aliases.contains(&r.name))) {
+                written.insert(path.join("\u{1}"));
+            }
+        }
+        true
+    });
+    written
+}
+
+pub(super) fn name_unions(decls: &mut Vec<Decl>, sep: &str, written: &HashSet<String>) {
     let mut names: HashSet<String> = HashSet::new();
     collect_declared_names(decls, "", sep, &mut names);
-    // A union written inline that a declared alias already names uses that name.
+    // A union that a declared alias also is uses that name, but one the library
+    // wrote as a union there (`string | HTMLElement` beside `type Content =
+    // string | HTMLElement`) is named by its members, if a few say what it is.
     let mut by_key: HashMap<String, String> = HashMap::new();
     for d in decls.iter() {
         if let Decl::Alias(a) = d
@@ -95,11 +115,12 @@ pub(super) fn name_unions(decls: &mut Vec<Decl>, sep: &str) {
             by_key.entry(union_key(&a.ty)).or_insert_with(|| a.name.clone());
         }
     }
+    let declared: HashSet<String> = by_key.keys().cloned().collect();
     // A named union may itself hold unions, inside its arrays: until none is left.
     let mut free_of: HashMap<String, Vec<Ref>> = HashMap::new();
     loop {
         let before = decls.len();
-        name_unions_once(decls, sep, &mut names, &mut by_key, &mut free_of);
+        name_unions_once(decls, sep, &mut names, &mut by_key, &declared, written, &mut free_of);
         if decls.len() == before {
             break;
         }
@@ -118,7 +139,7 @@ fn union_key(t: &Type) -> String {
     }
 }
 
-fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String>, by_key: &mut HashMap<String, String>, free_of: &mut HashMap<String, Vec<Ref>>) {
+fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String>, by_key: &mut HashMap<String, String>, declared: &HashSet<String>, written: &HashSet<String>, free_of: &mut HashMap<String, Vec<Ref>>) {
     let mut bodies: HashSet<*const Type> = HashSet::new();
     collect_bodies(decls, &mut bodies);
     let mut added = Vec::new();
@@ -127,8 +148,15 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
             return true;
         }
         let Type::Union(parts) = &*t else { unreachable!() };
+        let key = union_key(t);
+        let alone = format!("written:{key}");
+        let short = |names: &HashSet<String>| {
+            let joined = parts.iter().map(describe).collect::<Option<Vec<_>>>().map(|ps| ps.join(&format!("{sep}or{sep}")));
+            joined.is_some_and(|j| parts.len() <= 3 && j.len() <= SYNTH_NAME_MAX && !names.contains(&j))
+        };
+        let own = declared.contains(&key) && written.contains(&path.join("\u{1}")) && (by_key.contains_key(&alone) || short(names));
         let name = by_key
-            .entry(union_key(t))
+            .entry(if own { alone } else { key })
             .or_insert_with(|| {
                 // By its members, if a few that say what they are; else where it is.
                 let joined = parts.iter().map(describe).collect::<Option<Vec<_>>>().map(|ps| ps.join(&format!("{sep}or{sep}")));

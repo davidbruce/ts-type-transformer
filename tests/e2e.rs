@@ -4873,5 +4873,115 @@ export declare function useLong(): A2345678901234567890123456789012345678;
         let c_xml = lower(&long_dts, Some("c"), &[]);
         assert!(!c_xml.is_empty());
     }
-}
 
+    // A union the library wrote as a union is named by its members, apart from a
+    // declared alias of the same structure; what a pass expanded keeps the alias's.
+    #[test]
+    fn written_unions_are_named_apart_from_aliases_of_their_structure() {
+        let dts = write_dts(
+            "naming-alias-unions",
+            r#"declare type Content = string | HTMLElement;
+declare type Shapes = Circle | Square | Triangle | Hexagon;
+interface Circle { r: number }
+interface Square { side: number }
+interface Triangle { base: number }
+interface Hexagon { edge: number }
+export interface Series { id?: string | HTMLElement; dark?: boolean | "auto"; shape?: Circle | Square | Triangle | Hexagon; content?: Content }
+export declare function map(element: string | HTMLElement): void;
+export declare function show(c: Content, s: Shapes): void;
+export declare function fold(c: Content | string): void;
+"#,
+        );
+        for target in ["c", "zig"] {
+            let xml = lower(&dts, Some(target), &[]);
+            let doc = roxmltree::Document::parse(&xml).unwrap();
+            let decl = |name: &str| doc.root_element().children().find(|n| n.attribute("name") == Some(name));
+            let union_decl = |name: &str| decl(name).is_some_and(|d| d.children().any(|c| c.has_tag_name("union")));
+            let param = |func: &str| -> String {
+                let f = doc.root_element().children().find(|n| n.has_tag_name("function") && n.attribute("name") == Some(func)).unwrap();
+                f.descendants().find(|n| n.has_tag_name("ref")).and_then(|r| r.attribute("name")).unwrap().to_string()
+            };
+            let series = decl("Series").unwrap();
+            let prop = |name: &str| series.children().find(|n| n.attribute("name") == Some(name)).unwrap().children().find(|c| c.has_tag_name("ref")).unwrap().attribute("name").unwrap().to_string();
+            assert!(union_decl("Content") && union_decl("string_or_HTMLElement"), "{target}: two declarations:\n{xml}");
+            assert_eq!(prop("id"), "string_or_HTMLElement", "{target}: written as a union");
+            assert_eq!(prop("content"), "Content", "{target}: written as the alias");
+            // Many members: where no short name applies, the alias's.
+            assert_eq!(prop("shape"), "Shapes", "{target}");
+            assert_eq!(param("show"), "Content", "{target}");
+            // `Content | string` is `Content` once the alias is spliced in.
+            assert_eq!(param("fold"), "Content", "{target}:\n{xml}");
+            if target == "zig" {
+                assert_eq!(param("map"), "string_or_HTMLElement", "{target}");
+            }
+        }
+    }
+
+    // A library's name for an alias of a named union is declared in the target's own form.
+    #[test]
+    fn an_alias_of_a_union_alias_is_declared() {
+        let dts = write_dts(
+            "naming-alias-of-union",
+            r#"declare type Content = string | HTMLElement;
+export type Wrapped = Content;
+export declare function show(c: Wrapped): void;
+"#,
+        );
+        let xml = lower(&dts, Some("zig"), &[]);
+        let zig = joined(&generators::zig::files(&model(&xml, "Zig")).unwrap());
+        assert!(zig.contains("pub const Wrapped = Content;"), "zig:\n{zig}");
+        let c = joined(&generators::c::files(&model(&xml, "C")).unwrap());
+        assert!(c.contains("typedef Content Wrapped;") || c.contains("_Content") && c.contains("_Wrapped;"), "c:\n{c}");
+        let rust = joined(&generators::rust::files(&model(&xml, "Rust")).unwrap());
+        assert!(rust.contains("pub type Wrapped = Content;"), "rust:\n{rust}");
+        let gleam = joined(&generators::gleam::module(&xml).unwrap().files);
+        assert!(gleam.contains("pub type Wrapped =\n  Content"), "gleam:\n{gleam}");
+    }
+
+    // An alias is the library's name for the type, exported or not, and a
+    // member's type is it whether the member is inherited (flattened) or not.
+    #[test]
+    fn an_alias_keeps_its_name_where_an_inherited_member_uses_it() {
+        let dts = write_dts(
+            "naming-alias-inherited",
+            r#"declare type ColorString = string;
+interface Gradient { x2: number }
+interface Pattern { image: string }
+declare type ZRColor = ColorString | Gradient | Pattern;
+export interface Base { background?: ZRColor; on(f: () => void, type: "click" | "dblclick"): this; }
+export interface Derived extends Base { size: number }
+export interface Other extends Base { z: number }
+"#,
+        );
+        for target in ["c", "zig"] {
+            let xml = lower(&dts, Some(target), &[]);
+            let doc = roxmltree::Document::parse(&xml).unwrap();
+            // Flattened, each subtype has the member; not, only the declaring type.
+            let owners: &[&str] = if target == "zig" { &["Base", "Derived", "Other"] } else { &["Base"] };
+            for owner in owners.iter().copied() {
+                let i = doc.root_element().children().find(|n| n.attribute("name") == Some(owner)).unwrap();
+                let p = i.children().find(|n| n.attribute("name") == Some("background")).unwrap();
+                assert_eq!(p.children().find(|c| c.has_tag_name("ref")).unwrap().attribute("name"), Some("ZRColor"), "{target} {owner}:\n{xml}");
+            }
+            assert!(!xml.contains("Derived_background") && !xml.contains("Other_background"), "{target}:\n{xml}");
+        }
+    }
+
+    // A name made for an inherited member is of the type that declares it, so
+    // one generated type is spelled alike whether or not members are flattened.
+    #[test]
+    fn names_of_inherited_members_are_of_their_declaring_type() {
+        let dts = write_dts(
+            "naming-inherited-owner",
+            r#"export interface Evented { on(type: "click" | "dblclick", f: () => void): this; }
+export interface Canvas extends Evented { draw(): void }
+export interface Map extends Evented { zoom: number }
+"#,
+        );
+        for target in ["c", "zig"] {
+            let xml = lower(&dts, Some(target), &[]);
+            assert!(xml.contains("Evented_on_type"), "{target}:\n{xml}");
+            assert!(!xml.contains("Canvas_on_type") && !xml.contains("Map_on_type"), "{target}:\n{xml}");
+        }
+    }
+}

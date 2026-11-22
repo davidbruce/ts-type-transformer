@@ -26,7 +26,7 @@ use eval::{drop_unreachable_overloads, evaluate, expand_aliases, expand_keyed, i
 use generics::{erase_generics, literals, nullable};
 use hoist::{cut_recursive_dictionary, hoist};
 use overloads::{expand_functions, expand_members, mark_overloads, rename_functions, rename_members};
-use unions::{absorb_enums, annotate_unions, collect_declared_names, flatten_unions, merge_array_members, name_unions};
+use unions::{absorb_enums, annotate_unions, collect_declared_names, flatten_unions, merge_array_members, name_unions, written_unions};
 use walk::{each_member_list, walk, walk_signature};
 
 // What to lower. Built from a config file; see config.rs.
@@ -109,6 +109,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.expand_keyed = o.keyed;
     front.map_keyed = o.map_keyed;
     front.keyed_limit = o.keyed_limit;
+    let mut written = if o.name_unions { written_unions(decls) } else { HashSet::new() };
     // Before widening and erasing lose what marks them.
     mark_overloads(decls);
     // An inherited member serves every subtype, where a target has subtypes.
@@ -198,7 +199,8 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
             merge_array_members(decls);
         }
         absorb_enums(decls);
-        name_unions(decls, o.separator);
+        written.extend(front.written_members.drain());
+        name_unions(decls, o.separator, &written);
     }
     if o.overloads {
         let mut synth_enums = HashMap::new();

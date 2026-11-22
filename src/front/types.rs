@@ -358,7 +358,7 @@ impl<'c> Front<'c> {
             let name = symbol_member_name(*prop);
             let pty = self.c.get_type_of_symbol_exported(*prop);
             let from = match (owner, self.c.get_parent_of_symbol_exported(*prop)) {
-                (Some(o), Some(p)) if p != o => Some(p.name().to_string()),
+                (Some(o), Some(p)) if p != o => Some(self.declaring_name(p)),
                 _ => None,
             };
             if prop.flags().intersects(SymbolFlags::Method) {
@@ -377,9 +377,17 @@ impl<'c> Front<'c> {
             m.optional = prop.flags().intersects(SymbolFlags::Optional);
             m.readonly = self.c.is_readonly_symbol_exported(*prop);
             m.from = from;
-            let mut ty = self.from_type(pty);
-            if m.optional {
-                ty = strip_undefined(ty);
+            let ty = if m.optional { self.optional_type(pty, *prop) } else { self.from_type(pty) };
+            let syntactic = prop.declarations().iter().find_map(|d| d.type_node()).is_some_and(|n| n.kind() == Kind::UnionType && self.written_elements(n).len() >= 2);
+            if let (Type::Union(parts), Some(o), true) = (&ty, owner, syntactic) {
+                let members = parts.iter().filter(|p| !p.is_prim("null") && !p.is_prim("undefined"));
+                if members.clone().count() >= 2 && !members.clone().any(|p| matches!(p, Type::Ref(r) if r.kind == "typeAlias")) {
+                    let at = match &m.from {
+                        Some(f) if f.starts_with(|c: char| c.is_alphabetic() || c == '_') => f.clone(),
+                        _ => self.output_name(o),
+                    };
+                    self.written_members.insert(format!("{at}\u{1}{}", m.name));
+                }
             }
             m.ty = Some(ty);
             out.push(m);
@@ -567,6 +575,49 @@ impl<'c> Front<'c> {
         }
     }
 
+    // The type a member is declared in: for an object type written as an alias's
+    // body (`type Unit = { ... }`), the alias.
+    fn declaring_name(&mut self, parent: P<Symbol>) -> String {
+        let alias = parent.declarations().iter().find_map(|d| d.parent().filter(|n| n.kind() == Kind::TypeAliasDeclaration));
+        match alias.and_then(|a| self.c.get_symbol_of_declaration_exported(a)) {
+            Some(s) => s.name().to_string(),
+            None => parent.name().to_string(),
+        }
+    }
+
+    // What a type node writes besides `undefined` and `null`: the members of a union.
+    fn written_elements(&mut self, node: P<Node>) -> Vec<P<Node>> {
+        if node.kind() != Kind::UnionType {
+            return vec![node];
+        }
+        let nodes = node.as_union_type_node().types().nodes();
+        nodes.iter().copied().filter(|n| !self.c.get_type_from_type_node_exported(*n).flags().intersects(TypeFlags::Undefined | TypeFlags::Null)).collect()
+    }
+
+    // An optional member's type without `undefined`: the union of an alias
+    // written there (`backgroundColor?: ZRColor`) stays that alias, which the
+    // checker's `ZRColor | undefined` has lost.
+    fn optional_type(&mut self, t: P<CType>, sym: P<Symbol>) -> Type {
+        if t.flags().intersects(TypeFlags::Union)
+            && let Some(node) = sym.declarations().iter().find_map(|d| d.type_node())
+        {
+            let node = match self.written_elements(node).as_slice() {
+                [only] => *only,
+                _ => node,
+            };
+            let written = self.c.get_type_from_type_node_exported(node);
+            let rest: Vec<TypeId> = t.types().iter().filter(|p| !p.flags().intersects(TypeFlags::Undefined)).map(|p| p.id()).collect();
+            if written.flags().intersects(TypeFlags::Union)
+                && written.alias().is_some_and(|a| a.type_arguments().is_empty())
+                && written.types().len() == rest.len()
+                && written.types().iter().all(|p| rest.contains(&p.id()))
+            {
+                return self.from_type(written);
+            }
+        }
+        strip_undefined(self.from_type(t))
+    }
+
     #[allow(clippy::wrong_self_convention)]
     pub(super) fn from_signature(&mut self, sig: P<CSignature>) -> Signature {
         let mut out = Signature::default();
@@ -605,10 +656,7 @@ impl<'c> Front<'c> {
                 out.params.push(Param { name: p.name().to_string(), optional, rest, constant: Some(key.clone()), ty: Type::prim("string") });
                 continue;
             }
-            let mut ty = self.from_type(t);
-            if optional {
-                ty = strip_undefined(ty);
-            }
+            let ty = if optional { self.optional_type(t, *p) } else { self.from_type(t) };
             // `__0`: a parameter destructured where it was declared.
             let name = if p.name().starts_with("__") { destructured_name(&ty, i) } else { p.name().to_string() };
             out.params.push(Param { name, optional, rest, constant: None, ty });

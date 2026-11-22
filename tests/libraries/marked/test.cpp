@@ -118,7 +118,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // walkTokens visits every token, nested ones too.
     int visited = 0;
     MarkedExtension<std::string, std::string> walker = MarkedExtension<std::string, std::string>::create();
-    walker.walkTokens(Token_to_void_or_Promise_or_void_or_Promise_array_fn([&](const Token& token) {
+    walker.walkTokens(MarkedExtension_walkTokens([&](const Token& token) {
         visited++;
         (void)token;
     }));

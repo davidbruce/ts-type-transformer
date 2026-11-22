@@ -21,10 +21,10 @@ static JsValue get(JsValue obj, const char* key) { return Table_RowData_map_get_
 // ReadonlyStore is opaque in the bindings (no methods): its `get` is read as a
 // property of the object and called.
 static JsValue store_state(JsValue table) { return call(get(get(table, "store"), "get"), NONE); }
-static JsValue row_model(Table_RowModels_Core t) { return (JsValue){ table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel(t)).h }; }
-static JsValue core_row_model(Table_RowModels t) { return (JsValue){ table_call_void_to_RowModel_fn(Table_RowModels_get_getCoreRowModel(t)).h }; }
-static JsValue pre_sorted_row_model(Table_RowModels t) { return (JsValue){ table_call_void_to_RowModel_fn(Table_RowModels_get_getPreSortedRowModel(t)).h }; }
-static void set_sorting(Table_RowSorting t, JsValue sorting) { table_call_Table_RowSorting_setSorting(Table_RowSorting_get_setSorting(t), sorting); }
+static JsValue row_model(Table_RowModels_Core t) { return (JsValue){ Table_RowModels_Core_getRowModel(t).h }; }
+static JsValue core_row_model(Table_RowModels t) { return (JsValue){ Table_RowModels_getCoreRowModel(t).h }; }
+static JsValue pre_sorted_row_model(Table_RowModels t) { return (JsValue){ Table_RowModels_getPreSortedRowModel(t).h }; }
+static void set_sorting(Table_RowSorting t, JsValue sorting) { Table_RowSorting_setSorting(t, sorting); }
 
 static bool str_is(JsValue v, const char* expected) { return JsString_equals(js_to_string(v), expected); }
 
@@ -152,13 +152,13 @@ __attribute__((export_name("run"))) void run(void) {
     TableReactivityBindings reactivity = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(reactivity, true);
     TableReactivityBindings_set_wrapExternalAtoms(reactivity, false);
-    TableReactivityBindings_set_addSubscription(reactivity, TableReactivityBindings_addSubscription_from(add_subscription, 0));
+    TableReactivityBindings_set_addSubscription(reactivity, TableReactivityBindings_addSubscription_cb_from(add_subscription, 0));
     TableReactivityBindings_set_unmount(reactivity, Table_void_fn_from(unmount, 0));
     TableReactivityBindings_set_batch(reactivity, Table_fn_fn_from(batch, 0));
     TableReactivityBindings_set_schedule(reactivity, Table_fn_fn_from(batch, 0));
-    TableReactivityBindings_set_untrack(reactivity, TableReactivityBindings_untrack_from(untrack, 0));
-    TableReactivityBindings_set_createWritableAtom(reactivity, TableReactivityBindings_createWritableAtom_from(create_writable, 0));
-    TableReactivityBindings_set_createReadonlyAtom(reactivity, TableReactivityBindings_createReadonlyAtom_from(create_readonly, 0));
+    TableReactivityBindings_set_untrack(reactivity, TableReactivityBindings_untrack_cb_from(untrack, 0));
+    TableReactivityBindings_set_createWritableAtom(reactivity, TableReactivityBindings_createWritableAtom_cb_from(create_writable, 0));
+    TableReactivityBindings_set_createReadonlyAtom(reactivity, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, 0));
     CHECK(TableReactivityBindings_get_createOptionsStore(reactivity) && !TableReactivityBindings_get_wrapExternalAtoms(reactivity));
 
     // ---- features, columns, data ----
@@ -192,10 +192,10 @@ __attribute__((export_name("run"))) void run(void) {
     default_sorting_update = table_makeStateUpdater("sorting", (Table_makeStateUpdater_instance){ table.h });
 
     // ---- columns ----
-    JsArray cols = (JsArray){ table_call_Table_ColumnPinning_getCenterLeafColumns(Table_Columns_get_getAllColumns((Table_Columns){ table.h })).h };
+    JsArray cols = (JsArray){ Table_Columns_getAllColumns((Table_Columns){ table.h }).h };
     CHECK(JsArray_length(cols) == 2);
     CHECK(str_is(get(JsArray_get(cols, 0), "id"), "name") && str_is(get(JsArray_get(cols, 1), "id"), "age"));
-    JsValue age_column = (JsValue){ table_call_Table_Columns_getColumn(Table_Columns_get_getColumn((Table_Columns){ table.h }), "age").h };
+    JsValue age_column = (JsValue){ Table_Columns_getColumn((Table_Columns){ table.h }, "age").h };
     CHECK(age_column.h != 0 && str_is(get(age_column, "id"), "age"));
 
     // ---- row models ----
@@ -206,8 +206,8 @@ __attribute__((export_name("run"))) void run(void) {
     JsValue first_row = (JsValue){ JsArray_Table_Row_Core_get(Table_RowModel_get_rows((Table_RowModel){ row_model((Table_RowModels_Core){ table.h }).h }), 0).h };
     CHECK(str_is(get(first_row, "id"), "0") && js_to_number(get(first_row, "index")) == 0);
     // row.getValue keeps its `this`.
-    CHECK(str_is(table_call_string_fn(Table_Row_Row_get_getValue((Table_Row_Row){ first_row.h }), "name"), "Bob"));
-    CHECK(js_to_number(table_call_string_fn(Table_Row_Row_get_getValue((Table_Row_Row){ first_row.h }), "age")) == 30);
+    CHECK(str_is(Table_Row_Row_getValue((Table_Row_Row){ first_row.h }, "name"), "Bob"));
+    CHECK(js_to_number(Table_Row_Row_getValue((Table_Row_Row){ first_row.h }, "age")) == 30);
     CHECK(str_is(get(get(first_row, "original"), "name"), "Bob"));
 
     // ---- sorting ----

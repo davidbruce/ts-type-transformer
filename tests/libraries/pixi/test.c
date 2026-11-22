@@ -32,7 +32,7 @@ static void on_app(void* ctx, bool ok, JsValue v) {
         Rectangle screen = Application_get_screen(app);
         CHECK(Rectangle_get_width(screen) == 400 && Rectangle_get_height(screen) == 300);
         Container stage = Application_get_stage(app);
-        Graphics dot = Graphics_new__0();
+        Graphics dot = Graphics_new((GraphicsOptions){ 0 });
         Graphics_circle(dot, 50, 50, 20);
         Graphics_fill(dot, js_number(0x00ff00));
         JsArray_Container kids = JsArray_Container_new();
@@ -85,9 +85,9 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Rectangle_get_right(r) == 70);
 
     // ---- Matrix ----
-    Matrix id = Matrix_new__0();
+    Matrix id = Matrix_new(js_none_double());
     CHECK(Matrix_isIdentity(id));
-    Matrix m = Matrix_new__0();
+    Matrix m = Matrix_new(js_none_double());
     Matrix_scale(m, 2, 3);
     Matrix_translate(m, 10, 20);
     CHECK(Matrix_get_a(m) == 2 && Matrix_get_d(m) == 3 && Matrix_get_tx(m) == 10 && Matrix_get_ty(m) == 20);
@@ -100,7 +100,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(near(Matrix_get_a(inv), 0.5) && !Matrix_isIdentity(inv));
     Matrix both = Matrix_append(Matrix_clone(m), inv);
     CHECK(Matrix_isIdentity(both));
-    Matrix rot = Matrix_rotate(Matrix_new__0(), 3.14159265358979323846 / 2);
+    Matrix rot = Matrix_rotate(Matrix_new(js_none_double()), 3.14159265358979323846 / 2);
     PointData turned = Matrix_apply(rot, Point_new(D(1), D(0)), (PointData){ 0 });
     CHECK(near(PointData_get_x(turned), 0) && near(PointData_get_y(turned), 1));
     CHECK(Matrix_equals(Matrix_clone(m), m));
@@ -116,7 +116,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Container_get_alpha(root) == 0.5);
 
     // Graphics: a filled rectangle, with bounds.
-    Graphics box = Graphics_new__0();
+    Graphics box = Graphics_new((GraphicsOptions){ 0 });
     Graphics_rect(box, 0, 0, 100, 50);
     Graphics_fill(box, js_number(0xff0000));
     Bounds local = Graphics_get_bounds(box);

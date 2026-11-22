@@ -88,6 +88,10 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         types.1 += &format!("    extern \"{wasm_module}\" fn {}_tag(h: u32, k: i32) i32;\n", u.name);
         types.2.push(u.name.clone());
     }
+    for (alias, to) in m.type_aliases.iter().filter(|(_, to)| m.unions.iter().any(|u| u.name == *to)) {
+        types.0 += &format!("pub const {alias} = {to};\n");
+        types.2.push(alias.clone());
+    }
     let iterates_async = m.classes.iter().any(|c| c.iterates_async.is_some());
     let mut opaque = m.opaque.clone();
     if iterates_async && !opaque.iter().any(|n| n == "Promise") {

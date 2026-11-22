@@ -62,6 +62,9 @@ pub struct Front<'c> {
     // Within a generic expression's constraint, which the checker makes.
     widening: usize,
     pub intersection_limit: usize,
+    // Members written with a union type, where the checker rebuilt them (flattened,
+    // evaluated): `owner\u{1}member`, as lowering paths them.
+    pub written_members: HashSet<String>,
     // Lowering: expand a signature over the keys its type parameter may take.
     pub expand_keyed: bool,
     // Keep keyed signatures generic: `K extends keyof M` and `M[K]` stay.
@@ -124,6 +127,7 @@ impl<'c> Front<'c> {
             keyed_limit: 0,
             key_binding: None,
             skip_alias: None,
+            written_members: HashSet::new(),
             included: HashSet::new(),
         }
     }

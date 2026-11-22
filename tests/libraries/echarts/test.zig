@@ -46,7 +46,7 @@ export fn run() void {
     title.setText("Sales");
     option.setTitle(.{ .TitleComponentOption = title });
     const x_axis = b.XAXisComponentOption_xAxis.create();
-    const labels = b.JsArrayOf(b.string_or_number_or_CategoryAxisBaseOption_data).new();
+    const labels = b.JsArrayOf(b.AxisModelExtendedInCreator_result).new();
     labels.push(.{ .string = b.JsString.from("A") });
     labels.push(.{ .string = b.JsString.from("B") });
     labels.push(.{ .string = b.JsString.from("C") });

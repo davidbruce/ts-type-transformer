@@ -57,7 +57,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     std::vector<uint8_t> bytes = buf.to_vector();
     CHECK(bytes.size() == 13 && bytes[0] == 'h' && bytes[1] == 0xC3 && bytes[2] == 0xA9);
 
-    std::string text = fs::readFileSync(file, ReadFileSyncOptionsWithStringEncoding_or_BufferEncoding(BufferEncoding::utf8));
+    std::string text = fs::readFileSync(file, readFileSync_options(BufferEncoding::utf8));
     CHECK(text == "héllo\nworld\n");
 
     fs::appendFileSync(file, std::string("more\n"));

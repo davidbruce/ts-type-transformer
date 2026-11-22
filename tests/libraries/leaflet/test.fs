@@ -14,7 +14,7 @@ let check (ok: bool) (what: string) =
 
 // A map in the page's #map, centred on London.
 let london = Leaflet.latLng (51.505, -0.09)
-let m = Leaflet.map (Content.HTMLElement (TestPage.element "map"))
+let m = Leaflet.map (StringOrHTMLElement.HTMLElement (TestPage.element "map"))
 m.setView (london, 13.0) |> ignore
 check (m.getZoom () = 13.0) "getZoom"
 check (m.getCenter().equals (LatLngExpression.LatLng london, 1e-9)) "getCenter"

@@ -315,6 +315,10 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
         tparams(&mut u.type_params, &to);
         u.parts.iter_mut().for_each(|p| ty(p, &to));
     }
+    for (a, u) in &mut m.type_aliases {
+        to(a);
+        to(u);
+    }
     for k in &mut m.maps {
         to(&mut k.name);
         k.values.iter_mut().for_each(|v| ty(v, &to));

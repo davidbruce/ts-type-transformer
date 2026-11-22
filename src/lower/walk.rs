@@ -66,6 +66,8 @@ fn walk_decls(decls: &mut [Decl], path: &mut Vec<String>, f: &mut TypeFn) {
 
 pub(super) fn walk_members(members: &mut [Member], path: &mut Vec<String>, f: &mut TypeFn) {
     for m in members {
+        // A name made for an inherited member is of the type that declares it.
+        let owner = m.from.as_ref().filter(|o| o.starts_with(|c: char| c.is_alphabetic() || c == '_')).zip(path.last_mut()).map(|(o, last)| std::mem::replace(last, o.clone()));
         let seg = match m.kind {
             MemberKind::Call => "call".to_string(),
             MemberKind::Construct => "new".to_string(),
@@ -87,6 +89,9 @@ pub(super) fn walk_members(members: &mut [Member], path: &mut Vec<String>, f: &m
             walk_signature(s, path, f);
         }
         path.pop();
+        if let (Some(owner), Some(last)) = (owner, path.last_mut()) {
+            *last = owner;
+        }
     }
 }
 

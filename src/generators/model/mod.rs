@@ -268,6 +268,8 @@ pub struct Model {
     pub classes: Vec<Class>,
     pub callbacks: Vec<Callback>,
     pub unions: Vec<NamedUnion>,
+    // A library's name for a union, and the union.
+    pub type_aliases: Vec<(String, String)>,
     pub maps: Vec<KeyMap>,
     pub shared: Vec<Shared>,
     pub funcs: Vec<Func>,

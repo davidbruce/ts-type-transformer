@@ -139,7 +139,7 @@ pub extern "C" fn run() {
 
     // The row model, got by calling the function-valued property: three rows
     // in the data's order.
-    let model = call_table_row_models_get_core_row_model(&table.get_row_model());
+    let model = table.get_core_row_model();
     let rows = model.rows();
     check!(rows.len() == 3);
     let name_of = |r: &RowCore<TableFeatures, JsValue>| MakeObjectMapResult::<JsValue>(r.original().0.clone(), PhantomData).at("name").unwrap().as_string();
@@ -155,8 +155,8 @@ pub extern "C" fn run() {
     // The table's sorting members are on a type its core type is not: a view.
     let sortable = TableRowSorting::<TableFeatures, JsValue>(table.0.clone(), PhantomData);
     let sorts = JsArray::<ColumnSort>::from(vec![by_age]);
-    call_table_row_sorting_set_sorting(&sortable.set_sorting(), Updater::T(sorts));
-    let model = call_table_row_models_get_core_row_model(&table.get_row_model());
+    sortable.set_sorting(Updater::T(sorts));
+    let model = table.get_row_model();
     let names: Vec<String> = model.rows().iter().map(|r| name_of(&r)).collect();
     check!(names == ["al", "cy", "bo"]);
 }
