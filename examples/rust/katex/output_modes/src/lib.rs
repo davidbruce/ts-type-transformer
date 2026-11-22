@@ -9,7 +9,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
         el.set_class_name(cls);
     }
     if let Some(t) = text {
-        el.set_text_content(Some(t));
+        el.set_text_content(t);
     }
     el
 }
@@ -19,7 +19,7 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
 }
 
 fn add_card(doc: &Document, grid: &HTMLElement, label: &str, extra_cls: &str, tex: &str, opts: &KatexOptions) {
-    let html = katex::render_to_string(tex, Some(opts));
+    let html = katex::render_to_string(tex, opts);
     let cls = if extra_cls.is_empty() { String::from("card") } else { format!("card {extra_cls}") };
     let card = make_el(doc, "div", &cls, None);
     let row = make_el(doc, "div", "head", None);

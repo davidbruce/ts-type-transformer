@@ -1,7 +1,7 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use katex::{JsValue, KatexOptions, KatexOptionsMacros};
+use katex::{KatexOptions, KatexOptionsMacros};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -9,7 +9,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
         el.set_class_name(cls);
     }
     if let Some(t) = text {
-        el.set_text_content(Some(t));
+        el.set_text_content(t);
     }
     el
 }
@@ -29,10 +29,10 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let macros = KatexOptionsMacros::default();
-    macros.set_at(r"\RR", JsValue::from(r"\mathbb{R}"));
-    macros.set_at(r"\NN", JsValue::from(r"\mathbb{N}"));
-    macros.set_at(r"\dd", JsValue::from(r"\mathrm{d}"));
-    macros.set_at(r"\norm", JsValue::from(r"\left\| #1 \right\|"));
+    macros.set_at(r"\RR", r"\mathbb{R}");
+    macros.set_at(r"\NN", r"\mathbb{N}");
+    macros.set_at(r"\dd", r"\mathrm{d}");
+    macros.set_at(r"\norm", r"\left\| #1 \right\|");
 
     let opts = KatexOptions::default()
         .with_display_mode(true)
@@ -59,7 +59,7 @@ pub extern "C" fn start() {
         append(&card, make_el(&doc, "div", "label", Some(name)));
         append(&card, make_el(&doc, "pre", "tex", Some(tex)));
         let slot = make_el(&doc, "div", "slot", None);
-        slot.set_inner_html(&katex::render_to_string(tex, Some(&opts)));
+        slot.set_inner_html(&katex::render_to_string(tex, &opts));
         append(&card, slot);
         append(&grid, card);
     }

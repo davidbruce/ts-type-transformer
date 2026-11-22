@@ -37,7 +37,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
         el.set_class_name(cls);
     }
     if let Some(t) = text {
-        el.set_text_content(Some(t));
+        el.set_text_content(t);
     }
     el
 }

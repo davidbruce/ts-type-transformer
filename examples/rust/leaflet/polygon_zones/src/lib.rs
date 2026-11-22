@@ -28,7 +28,7 @@ pub extern "C" fn start() {
         .with_zoom_animation(false)
         .with_fade_animation(false)
         .with_marker_zoom_animation(false);
-    let m = map("map", Some(&m_opts));
+    let m = map("map", &m_opts);
 
     let mid_pts = JsArray::<PolylineSetLatLngsLatlngs>::from([
         lat_lng(47.2, 7.6, None),
@@ -48,11 +48,11 @@ pub extern "C" fn start() {
 
     let mid_poly = polygon(
         mid_pts,
-        Some(&poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55)),
+        &poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55),
     );
     let core_poly = polygon(
         core_pts,
-        Some(&poly_opts("#111111", 2.5, None, "#404040", 0.75)),
+        &poly_opts("#111111", 2.5, None, "#404040", 0.75),
     );
 
     let mid_bounds = mid_poly.get_bounds();
@@ -60,7 +60,7 @@ pub extern "C" fn start() {
     let padded = mid_bounds.pad(0.18);
     let hull_rect = rectangle(
         &padded,
-        Some(&poly_opts("#737373", 1.5, Some("4 4"), "#efefef", 0.05)),
+        &poly_opts("#737373", 1.5, Some("4 4"), "#efefef", 0.05),
     );
 
     hull_rect.add_to(&m);
@@ -99,7 +99,7 @@ pub extern "C" fn start() {
             .with_weight(2.0)
             .with_fill_color(fill_hex)
             .with_fill_opacity(1.0);
-        circle_marker(pt, Some(&cm_opts)).add_to(&m);
+        circle_marker(pt, &cm_opts).add_to(&m);
     }
 
     m.fit_bounds(&padded, None);
@@ -108,6 +108,6 @@ pub extern "C" fn start() {
         let text = format!(
             "2 nested polygons · 1 padded hull · probes: {in_core} core · {in_mid} sector · {exterior} exterior"
         );
-        meta.set_text_content(Some(&text));
+        meta.set_text_content(&text);
     }
 }

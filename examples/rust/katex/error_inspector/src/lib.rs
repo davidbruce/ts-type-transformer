@@ -9,7 +9,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
         el.set_class_name(cls);
     }
     if let Some(t) = text {
-        el.set_text_content(Some(t));
+        el.set_text_content(t);
     }
     el
 }
@@ -47,13 +47,13 @@ pub extern "C" fn start() {
         let left = make_el(&doc, "div", "cell mode-html", None);
         append(&left, make_el(&doc, "div", "label", Some("throwOnError: false (#555555)")));
         let l_slot = make_el(&doc, "div", "slot", None);
-        l_slot.set_inner_html(&katex::render_to_string(tex, Some(&lenient)));
+        l_slot.set_inner_html(&katex::render_to_string(tex, &lenient));
         append(&left, l_slot);
         append(&row, left);
 
         let right = make_el(&doc, "div", "cell", None);
         append(&right, make_el(&doc, "div", "label", Some("throwOnError: true (caught ParseError)")));
-        let err_msg = match katex::js::attempt(|| katex::render_to_string(tex, Some(&strict))) {
+        let err_msg = match katex::js::attempt(|| katex::render_to_string(tex, &strict)) {
             Ok(_) => String::from("(did not throw)"),
             Err(e) => e.message(),
         };

@@ -9,7 +9,7 @@ use dom::{GPUColorDict, HTMLCanvasElement};
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
         let text = format!("WebGPU / Babylon Lite error: {msg}");
-        el.set_text_content(Some(&text));
+        el.set_text_content(&text);
     }
 }
 
@@ -18,7 +18,7 @@ fn mk_pbr(v: f64, metallic: f64, roughness: f64) -> PbrMaterialProps {
         .with_base_color_factor([v, v, v, 1.0])
         .with_metallic_factor(metallic)
         .with_roughness_factor(roughness);
-    babylonjs_lite::create_pbr_material(Some(&props))
+    babylonjs_lite::create_pbr_material(&props)
 }
 
 #[unsafe(no_mangle)]
@@ -52,29 +52,29 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 1.4, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
+        babylonjs_lite::attach_control(&camera, &canvas, &scene, None);
 
         let hemi = babylonjs_lite::create_hemispheric_light(
-            Some(&JsTuple3::from([0.0, 1.0, 0.15])),
-            Some(0.55),
+            &JsTuple3::from([0.0, 1.0, 0.15]),
+            0.55,
         );
         hemi.set_diffuse_color([0.76, 0.76, 0.76]);
         hemi.set_ground_color([0.10, 0.10, 0.10]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
         let dir =
-            babylonjs_lite::create_directional_light([-1.0, -2.2, -0.8], Some(1.35));
+            babylonjs_lite::create_directional_light([-1.0, -2.2, -0.8], 1.35);
         dir.set_diffuse([0.90, 0.90, 0.90]);
         babylonjs_lite::add_to_scene(&scene, &dir);
 
         let light1 =
-            babylonjs_lite::create_point_light([5.2, 4.2, 0.0], Some(10.0));
+            babylonjs_lite::create_point_light([5.2, 4.2, 0.0], 10.0);
         light1.set_diffuse([1.0, 1.0, 1.0]);
         light1.set_range(16.0);
         babylonjs_lite::add_to_scene(&scene, &light1);
 
         let light2 =
-            babylonjs_lite::create_point_light([-5.2, 3.4, 0.0], Some(7.5));
+            babylonjs_lite::create_point_light([-5.2, 3.4, 0.0], 7.5);
         light2.set_diffuse([0.78, 0.78, 0.78]);
         light2.set_range(16.0);
         babylonjs_lite::add_to_scene(&scene, &light2);
@@ -82,7 +82,7 @@ pub extern "C" fn start() {
         let floor_opts = GroundOptions::default()
             .with_width(18.0)
             .with_height(18.0);
-        let floor = babylonjs_lite::create_ground(&engine, Some(&floor_opts));
+        let floor = babylonjs_lite::create_ground(&engine, &floor_opts);
         floor.set_material(&mk_pbr(0.09, 0.10, 0.88));
         babylonjs_lite::add_to_scene(&scene, &floor);
 
@@ -131,7 +131,7 @@ pub extern "C" fn start() {
             .with_roughness(0.08);
         babylonjs_lite::set_pbr_clear_coat(&cap_props, &cc);
         babylonjs_lite::set_pbr_emissive(&cap_props, [0.16, 0.16, 0.16]);
-        let cap_mat = babylonjs_lite::create_pbr_material(Some(&cap_props));
+        let cap_mat = babylonjs_lite::create_pbr_material(&cap_props);
 
         let copts = CapsuleOptions::default()
             .with_height(1.15)
@@ -139,7 +139,7 @@ pub extern "C" fn start() {
             .with_tessellation(20.0);
         let mut capsules = Vec::with_capacity(4);
         for _ in 0..4 {
-            let cap = babylonjs_lite::create_capsule(&engine, Some(&copts));
+            let cap = babylonjs_lite::create_capsule(&engine, &copts);
             cap.set_material(&cap_mat);
             babylonjs_lite::add_to_scene(&scene, &cap);
             capsules.push((cap.position(), cap.rotation()));

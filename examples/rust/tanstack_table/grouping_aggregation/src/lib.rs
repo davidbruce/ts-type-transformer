@@ -134,7 +134,7 @@ fn render(st: &State) {
     st.wrap.set_inner_html(&html);
 
     let msg = format!("Grouped by {grp_col} \u{00B7} {group_cnt} groups \u{00B7} {} visible rows", rows.len());
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -199,8 +199,8 @@ pub extern "C" fn start() {
             let grp: TableColumnGrouping<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             let exp: TableRowExpanding<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             match idx {
-                0 => exp.toggle_all_rows_expanded(Some(true)),
-                1 => exp.toggle_all_rows_expanded(Some(false)),
+                0 => exp.toggle_all_rows_expanded(true),
+                1 => exp.toggle_all_rows_expanded(false),
                 _ => {
                     let key = if idx == 2 { "region" } else { "role" };
                     *st_c.grp_col.borrow_mut() = String::from(key);

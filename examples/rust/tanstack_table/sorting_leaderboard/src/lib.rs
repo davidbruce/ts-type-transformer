@@ -139,7 +139,7 @@ fn render(st: &State, label: &str) {
     st.wrap.set_inner_html(&html);
 
     let msg = format!("{label} \u{00B7} {} rows \u{00B7} top node: {top_host}", rows.len());
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]

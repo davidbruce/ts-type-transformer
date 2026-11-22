@@ -9,7 +9,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
         el.set_class_name(cls);
     }
     if let Some(t) = text {
-        el.set_text_content(Some(t));
+        el.set_text_content(t);
     }
     el
 }
@@ -19,7 +19,7 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
 }
 
 fn render_with(src: &str, opts: &MarkedOptions<String, String>) -> String {
-    match marked::marked_with_opt_marked_options(src, Some(opts)) {
+    match marked::marked_with_opt_marked_options(src, opts) {
         StringOrPromise::String(s) => s,
         StringOrPromise::JsPromise(_) => String::new(),
     }

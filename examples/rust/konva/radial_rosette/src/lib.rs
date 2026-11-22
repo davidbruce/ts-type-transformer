@@ -32,7 +32,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    layer.add([Rect::new(Some(&bg))]);
+    layer.add([Rect::new(&bg)]);
 
     for (r, col, fill, sw) in [
         (160.0, "#d4d4d4", None, 1.0),
@@ -49,7 +49,7 @@ pub extern "C" fn start() {
         if let Some(f) = fill {
             cc = cc.with_fill(f);
         }
-        layer.add([Circle::new(Some(&cc))]);
+        layer.add([Circle::new(&cc)]);
     }
 
     for i in 0..12 {
@@ -83,7 +83,7 @@ pub extern "C" fn start() {
             .with_fill(if i % 2 == 0 { "#111111" } else { "#efefef" })
             .with_stroke("#111111")
             .with_stroke_width(1.5);
-        layer.add([Rect::new(Some(&pc))]);
+        layer.add([Rect::new(&pc)]);
     }
 
     for i in 0..12 {
@@ -95,7 +95,7 @@ pub extern "C" fn start() {
             .with_fill(if i % 2 == 0 { "#111111" } else { "#ffffff" })
             .with_stroke("#111111")
             .with_stroke_width(1.5);
-        layer.add([Circle::new(Some(&oc))]);
+        layer.add([Circle::new(&oc)]);
     }
 
     let cp = RegularPolygonConfig::default()
@@ -110,8 +110,8 @@ pub extern "C" fn start() {
         .with_radius(9.0)
         .with_fill("#ffffff");
     layer.add([
-        GroupOrShape::from(RegularPolygon::new(Some(&cp))),
-        GroupOrShape::from(Circle::new(Some(&cd))),
+        GroupOrShape::from(RegularPolygon::new(&cp)),
+        GroupOrShape::from(Circle::new(&cd)),
     ]);
 
     for (x, y, label) in [
@@ -127,7 +127,7 @@ pub extern "C" fn start() {
             .with_font_size(11.0)
             .with_font_family("monospace")
             .with_fill("#555555");
-        layer.add([Text::new(Some(&tc))]);
+        layer.add([Text::new(&tc)]);
     }
 
     layer.draw();
@@ -137,5 +137,5 @@ pub extern "C" fn start() {
     dom::document()
         .get_element_by_id("meta")
         .expect("missing #meta")
-        .set_text_content(Some(&msg));
+        .set_text_content(&msg);
 }

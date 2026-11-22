@@ -9,7 +9,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
         el.set_class_name(cls);
     }
     if let Some(t) = text {
-        el.set_text_content(Some(t));
+        el.set_text_content(t);
     }
     el
 }
@@ -56,7 +56,7 @@ pub extern "C" fn start() {
         let rel = if same {
             "today (anchor)".to_string()
         } else {
-            date_fns::format_distance(&d, &anchor, Some(&opts))
+            date_fns::format_distance(&d, &anchor, &opts)
         };
         append(&row, make_el(&doc, "span", "", Some(&rel)));
         let strict = date_fns::format_distance_strict(&d, &anchor, None);

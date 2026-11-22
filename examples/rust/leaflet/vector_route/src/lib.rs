@@ -24,7 +24,7 @@ fn poly_opts(color: &str, weight: f64, dash: Option<&str>, fill_opacity: f64) ->
 
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
-    let m = map("map", Some(&make_map_opts()));
+    let m = map("map", &make_map_opts());
 
     let hubs = [
         ("London", lat_lng(51.505, -0.09, None)),
@@ -37,31 +37,25 @@ pub extern "C" fn start() {
 
     let grat_opts = poly_opts("#e5e5e5", 1.0, None, 0.0);
     for lat in [46.0, 48.0, 50.0, 52.0, 54.0] {
-        let pts = JsArray::from([
-            JsValue::from(&lat_lng(lat, -2.0, None)),
-            JsValue::from(&lat_lng(lat, 17.0, None)),
-        ]);
-        polyline(pts, Some(&grat_opts)).add_to(&m);
+        let pts = [lat_lng(lat, -2.0, None), lat_lng(lat, 17.0, None)];
+        polyline(pts, &grat_opts).add_to(&m);
     }
     for lng in [0.0, 4.0, 8.0, 12.0, 16.0] {
-        let pts = JsArray::from([
-            JsValue::from(&lat_lng(45.0, lng, None)),
-            JsValue::from(&lat_lng(55.0, lng, None)),
-        ]);
-        polyline(pts, Some(&grat_opts)).add_to(&m);
+        let pts = [lat_lng(45.0, lng, None), lat_lng(55.0, lng, None)];
+        polyline(pts, &grat_opts).add_to(&m);
     }
 
-    let primary_pts: JsArray<JsValue> = hubs.iter().map(|(_, p)| JsValue::from(p)).collect();
-    let primary_line = polyline(primary_pts, Some(&poly_opts("#111111", 3.0, None, 0.0)));
+    let primary_pts: Vec<_> = hubs.iter().map(|(_, p)| p).collect();
+    let primary_line = polyline(primary_pts, &poly_opts("#111111", 3.0, None, 0.0));
     primary_line.add_to(&m);
 
-    let alt_pts = JsArray::from([
-        JsValue::from(&hubs[0].1),
-        JsValue::from(&lat_lng(50.8503, 4.3517, None)),
-        JsValue::from(&lat_lng(52.3676, 4.9041, None)),
-        JsValue::from(&hubs[5].1),
-    ]);
-    polyline(alt_pts, Some(&poly_opts("#737373", 1.5, Some("5 5"), 0.0))).add_to(&m);
+    let alt_pts = [
+        hubs[0].1.clone(),
+        lat_lng(50.8503, 4.3517, None),
+        lat_lng(52.3676, 4.9041, None),
+        hubs[5].1.clone(),
+    ];
+    polyline(alt_pts, &poly_opts("#737373", 1.5, Some("5 5"), 0.0)).add_to(&m);
 
     let nodes = layer_group(None, None);
     let node_opts = CircleMarkerOptions::default()
@@ -72,7 +66,7 @@ pub extern "C" fn start() {
         .with_fill_opacity(1.0);
 
     for (name, pt) in &hubs {
-        let cm = circle_marker(pt, Some(&node_opts));
+        let cm = circle_marker(pt, &node_opts);
         cm.bind_tooltip(*name, None);
         nodes.add_layer(&cm);
     }
@@ -87,6 +81,6 @@ pub extern "C" fn start() {
 
     if let Some(meta) = dom::document().get_element_by_id("meta") {
         let text = format!("6 hubs · 2 routes · {total_km:.0} km total · EPSG:3857 vector SVG");
-        meta.set_text_content(Some(&text));
+        meta.set_text_content(&text);
     }
 }

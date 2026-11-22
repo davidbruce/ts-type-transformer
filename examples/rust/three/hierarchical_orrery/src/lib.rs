@@ -11,7 +11,7 @@ fn std_mat(hex: u32, rough: f64, metal: f64, flat: bool) -> MeshStandardMaterial
         .with_roughness(rough)
         .with_metalness(metal)
         .with_flat_shading(flat);
-    MeshStandardMaterial::new(Some(&mp))
+    MeshStandardMaterial::new(&mp)
 }
 
 struct AppState {
@@ -39,7 +39,7 @@ fn update_orrery(st: &AppState) {
         .set_z(if st.tilted { 0.38 } else { 0.0 });
     st.station_body.rotation().set_y(st.epoch * 1.4);
 
-    st.scene.update_matrix_world(Some(true));
+    st.scene.update_matrix_world(true);
     let mpos = st
         .moon
         .get_world_position(&Vector3::new(None, None, None));
@@ -47,11 +47,11 @@ fn update_orrery(st: &AppState) {
         .outer_station
         .get_world_position(&Vector3::new(None, None, None));
 
-    st.tilt_btn.set_text_content(Some(if st.tilted {
+    st.tilt_btn.set_text_content(if st.tilted {
         "Outer Tilt: On"
     } else {
         "Outer Tilt: Off"
-    }));
+    });
     st.renderer.render(&st.scene, &st.camera);
 
     let deg = (st.epoch * 180.0 / std::f64::consts::PI).round() as i32;
@@ -65,7 +65,7 @@ fn update_orrery(st: &AppState) {
         spos.y(),
         spos.z()
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -77,7 +77,7 @@ pub extern "C" fn start() {
     let rp = WebGLRendererParameters::default()
         .with_antialias(true)
         .with_preserve_drawing_buffer(true);
-    let renderer = WebGLRenderer::new(Some(&rp));
+    let renderer = WebGLRenderer::new(&rp);
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     doc.get_element_by_id("stage")
@@ -86,21 +86,21 @@ pub extern "C" fn start() {
 
     let scene = Scene::new();
     scene.set_background(Color::new(0xf7f7f7 as f64));
-    let camera = PerspectiveCamera::new(Some(42.0), Some(width / height), Some(0.1), Some(100.0));
-    camera.position().set(5.6, 5.2, Some(7.6));
-    camera.look_at(&Vector3::new(Some(0.0), Some(-0.1), Some(0.0)));
+    let camera = PerspectiveCamera::new(42.0, width / height, 0.1, 100.0);
+    camera.position().set(5.6, 5.2, 7.6);
+    camera.look_at(&Vector3::new(0.0, -0.1, 0.0));
 
-    scene.add([AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.2))]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.2));
-    key.position().set(6.0, 10.0, Some(8.0));
+    scene.add([AmbientLight::new(ColorRepresentation::from(0xffffff as f64), 1.2)]);
+    let key = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 2.2);
+    key.position().set(6.0, 10.0, 8.0);
     scene.add([key]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
-    rim.position().set(-7.0, 5.0, Some(-6.0));
+    let rim = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 0.9);
+    rim.position().set(-7.0, 5.0, -6.0);
     scene.add([rim]);
 
     let grid = GridHelper::new(
-        Some(12.0),
-        Some(12.0),
+        12.0,
+        12.0,
         0x999999 as f64,
         0xe5e5e5 as f64,
     );
@@ -108,14 +108,14 @@ pub extern "C" fn start() {
     scene.add([grid]);
 
     let pedestal = Mesh::<CylinderGeometry, MeshStandardMaterial>::new(
-        Some(CylinderGeometry::new(Some(0.55), Some(0.75), Some(0.35), Some(24.0), None, None, None, None)),
+        Some(CylinderGeometry::new(0.55, 0.75, 0.35, 24.0, None, None, None, None)),
         Some(std_mat(0x262626, 0.7, 0.05, false)),
     );
     pedestal.position().set_y(-1.3);
     scene.add([pedestal]);
 
     let core = Mesh::<SphereGeometry, MeshStandardMaterial>::new(
-        Some(SphereGeometry::new(Some(0.65), Some(24.0), Some(18.0), None, None, None, None)),
+        Some(SphereGeometry::new(0.65, 24.0, 18.0, None, None, None, None)),
         Some(std_mat(0x111111, 0.45, 0.2, false)),
     );
     scene.add([core]);
@@ -125,18 +125,18 @@ pub extern "C" fn start() {
 
     let tp1 = MeshBasicMaterialParameters::default().with_color(0x999999 as f64);
     let inner_track = Mesh::<TorusGeometry, MeshBasicMaterial>::new(
-        Some(TorusGeometry::new(Some(2.1), Some(0.025), Some(8.0), Some(64.0), None, None, None)),
-        Some(MeshBasicMaterial::new(Some(&tp1))),
+        Some(TorusGeometry::new(2.1, 0.025, 8.0, 64.0, None, None, None)),
+        Some(MeshBasicMaterial::new(&tp1)),
     );
     inner_track.rotation().set_x(std::f64::consts::FRAC_PI_2);
     inner_pivot.add([inner_track]);
 
     let inner_planet = Group::new();
-    inner_planet.position().set(2.1, 0.0, Some(0.0));
+    inner_planet.position().set(2.1, 0.0, 0.0);
     inner_pivot.add([inner_planet.clone()]);
 
     let planet = Mesh::<SphereGeometry, MeshStandardMaterial>::new(
-        Some(SphereGeometry::new(Some(0.36), Some(20.0), Some(16.0), None, None, None, None)),
+        Some(SphereGeometry::new(0.36, 20.0, 16.0, None, None, None, None)),
         Some(std_mat(0x555555, 0.55, 0.1, false)),
     );
     inner_planet.add([planet]);
@@ -144,10 +144,10 @@ pub extern "C" fn start() {
     let moon_pivot = Group::new();
     inner_planet.add([moon_pivot.clone()]);
     let moon = Mesh::<OctahedronGeometry, MeshStandardMaterial>::new(
-        Some(OctahedronGeometry::new(Some(0.18), Some(0.0))),
+        Some(OctahedronGeometry::new(0.18, 0.0)),
         Some(std_mat(0xd4d4d4, 0.4, 0.1, true)),
     );
-    moon.position().set(0.75, 0.0, Some(0.0));
+    moon.position().set(0.75, 0.0, 0.0);
     moon_pivot.add([moon.clone()]);
 
     let outer_pivot = Group::new();
@@ -155,24 +155,24 @@ pub extern "C" fn start() {
 
     let tp2 = MeshBasicMaterialParameters::default().with_color(0xb5b5b5 as f64);
     let outer_track = Mesh::<TorusGeometry, MeshBasicMaterial>::new(
-        Some(TorusGeometry::new(Some(3.8), Some(0.025), Some(8.0), Some(80.0), None, None, None)),
-        Some(MeshBasicMaterial::new(Some(&tp2))),
+        Some(TorusGeometry::new(3.8, 0.025, 8.0, 80.0, None, None, None)),
+        Some(MeshBasicMaterial::new(&tp2)),
     );
     outer_track.rotation().set_x(std::f64::consts::FRAC_PI_2);
     outer_pivot.add([outer_track]);
 
     let outer_station = Group::new();
-    outer_station.position().set(3.8, 0.0, Some(0.0));
+    outer_station.position().set(3.8, 0.0, 0.0);
     outer_pivot.add([outer_station.clone()]);
 
     let station_body = Mesh::<IcosahedronGeometry, MeshStandardMaterial>::new(
-        Some(IcosahedronGeometry::new(Some(0.42), Some(0.0))),
+        Some(IcosahedronGeometry::new(0.42, 0.0)),
         Some(std_mat(0x404040, 0.5, 0.1, true)),
     );
     outer_station.add([station_body.clone()]);
 
     let halo = Mesh::<TorusGeometry, MeshStandardMaterial>::new(
-        Some(TorusGeometry::new(Some(0.68), Some(0.06), Some(10.0), Some(32.0), None, None, None)),
+        Some(TorusGeometry::new(0.68, 0.06, 10.0, 32.0, None, None, None)),
         Some(std_mat(0x111111, 0.4, 0.1, false)),
     );
     halo.rotation().set_x(0.8);

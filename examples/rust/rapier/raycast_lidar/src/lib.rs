@@ -187,7 +187,7 @@ fn render(st: &AppState) {
         deg,
         if st.auto_sweep { "auto" } else { "manual" }
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -209,11 +209,11 @@ pub extern "C" fn start() {
             let rb = world.create_rigid_body(
                 &RigidBodyDesc::fixed().set_translation_2(cx, cy, 0.0).set_rotation_2(&q),
             );
-            world.create_collider(&ColliderDesc::cuboid(hx, hy, 1.0), Some(&rb));
+            world.create_collider(&ColliderDesc::cuboid(hx, hy, 1.0), &rb);
         };
         let add_sphere = |cx: f64, cy: f64, r: f64| {
             let rb = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(cx, cy, 0.0));
-            world.create_collider(&ColliderDesc::ball(r), Some(&rb));
+            world.create_collider(&ColliderDesc::ball(r), &rb);
         };
 
         add_box(0.0, -0.35, 0.0, 7.0, 0.35);
@@ -244,11 +244,11 @@ pub extern "C" fn start() {
                 match i {
                     0 => {
                         s.auto_sweep = !s.auto_sweep;
-                        s.sweep_btn.set_text_content(Some(if s.auto_sweep {
+                        s.sweep_btn.set_text_content(if s.auto_sweep {
                             "Sweep: Auto"
                         } else {
                             "Sweep: Manual"
-                        }));
+                        });
                         render(&s);
                     }
                     1 => {
@@ -262,7 +262,7 @@ pub extern "C" fn start() {
                         s.auto_sweep = true;
                         s.phase = 0.0;
                         s.manual_offset = 0.0;
-                        s.sweep_btn.set_text_content(Some("Sweep: Auto"));
+                        s.sweep_btn.set_text_content("Sweep: Auto");
                         render(&s);
                     }
                 }

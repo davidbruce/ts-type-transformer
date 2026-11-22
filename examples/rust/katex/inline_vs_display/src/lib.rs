@@ -9,7 +9,7 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
         el.set_class_name(cls);
     }
     if let Some(t) = text {
-        el.set_text_content(Some(t));
+        el.set_text_content(t);
     }
     el
 }
@@ -45,7 +45,7 @@ pub extern "C" fn start() {
             let label = format!("{name} — {suffix}");
             append(&cell, make_el(&doc, "div", "label", Some(&label)));
             let slot = make_el(&doc, "div", "slot", None);
-            slot.set_inner_html(&katex::render_to_string(tex, Some(opts)));
+            slot.set_inner_html(&katex::render_to_string(tex, opts));
             append(&cell, slot);
             append(&row, cell);
         }

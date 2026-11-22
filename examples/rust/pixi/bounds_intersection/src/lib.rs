@@ -29,7 +29,7 @@ pub extern "C" fn start() {
     js::spawn(async {
         let app = Application::<JsValue>::new();
         let opts = build_opts();
-        if app.init(Some(&opts)).await.is_err() {
+        if app.init(&opts).await.is_err() {
             return;
         }
 
@@ -41,7 +41,7 @@ pub extern "C" fn start() {
         let stage = app.stage();
 
         let query = Rectangle::new(190.0, 105.0, 260.0, 170.0);
-        let padded = query.js_clone().pad(Some(10.0), Some(10.0));
+        let padded = query.js_clone().pad(10.0, 10.0);
         let hull = query.js_clone();
 
         let candidates = [
@@ -65,14 +65,14 @@ pub extern "C" fn start() {
             g.rect(c.x(), c.y(), c.width(), c.height());
             if query.contains_rect(c) {
                 contained += 1;
-                g.fill(Some(&JsValue::from(0x111111 as f64)));
+                g.fill(&JsValue::from(0x111111 as f64));
             } else if query.intersects(c, None) {
                 intersecting += 1;
-                g.fill(Some(&JsValue::from(0x737373 as f64)));
+                g.fill(&JsValue::from(0x737373 as f64));
                 stroke_g(&g, 2.0, 0x111111);
             } else {
                 disjoint += 1;
-                g.fill(Some(&JsValue::from(0xe5e5e5 as f64)));
+                g.fill(&JsValue::from(0xe5e5e5 as f64));
                 stroke_g(&g, 1.0, 0xa3a3a3);
             }
         }
@@ -96,7 +96,7 @@ pub extern "C" fn start() {
                 hull.width(),
                 hull.height()
             );
-            meta.set_text_content(Some(&text));
+            meta.set_text_content(&text);
         }
     });
 }

@@ -16,7 +16,7 @@ fn tag_rule(tag: &str, level: i32) -> TagParseRule {
     let mut r = TagParseRule::default().with_tag(tag);
     if level > 0 {
         let a = Attrs::default();
-        a.set_at("level", JsValue::from(level as f64));
+        a.set_at("level", level as f64);
         r = r.with_attrs(&a);
     }
     r
@@ -121,10 +121,10 @@ fn refresh_output(app: &AppState, doc: &Node) {
         "SERIALIZED HTML (DOMSerializer):\n{html_out}\n\nDOCUMENT AST & JSON ROUND-TRIP:\n{ast}\nROUND-TRIP STATUS: {}",
         app.status
     );
-    app.output.set_text_content(Some(&full));
+    app.output.set_text_content(&full);
 
     let msg = format!("{} \u{00B7} blocks={nb} \u{00B7} nodeSize={nsz} \u{00B7} htmlBytes={}", app.status, html_out.len());
-    app.meta.set_text_content(Some(&msg));
+    app.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -166,7 +166,7 @@ pub extern "C" fn start() {
 
     let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
     let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
-    let view = EditorView::new(Some(place), &props);
+    let view = EditorView::new(place, &props);
     {
         let mut st = app.borrow_mut();
         st.view = Some(view.clone());
@@ -210,7 +210,7 @@ pub extern "C" fn start() {
                             let mut st = app_c.borrow_mut();
                             st.status = format!("Inserted code span at pos {}", insert_pos as usize);
                             let marks = JsArray::<Mark>::from([st.schema.mark("code", None)]);
-                            st.schema.text(" roundtrip()", Some(&marks))
+                            st.schema.text(" roundtrip()", &marks)
                         };
                         let tr = es.tr();
                         tr.insert(insert_pos, span);

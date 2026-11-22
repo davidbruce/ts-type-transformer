@@ -63,8 +63,8 @@ fn p_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
 
 fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     let ha = Attrs::default();
-    ha.set_at("level", JsValue::from(2.0));
-    let h = schema.node("heading", Some(&ha), schema.text("Step-Inversion Undo & Transaction Filter", None), None);
+    ha.set_at("level", 2.0);
+    let h = schema.node("heading", &ha, schema.text("Step-Inversion Undo & Transaction Filter", None), None);
     schema.node(
         "doc",
         None,
@@ -108,7 +108,7 @@ fn update_meta(app: &AppState, st: &EditorState) {
         app.blocked,
         st.doc().child_count() as usize
     );
-    app.meta.set_text_content(Some(&msg));
+    app.meta.set_text_content(&msg);
     app.doc
         .get_element_by_id("btn-4")
         .expect("missing #btn-4")
@@ -119,7 +119,7 @@ fn update_meta(app: &AppState, st: &EditorState) {
 pub extern "C" fn start() {
     let dom_doc = dom::document();
     let schema = build_schema();
-    let audit_key = PluginKey::<JsValue>::new(Some("audit"));
+    let audit_key = PluginKey::<JsValue>::new("audit");
 
     let app = Rc::new(RefCell::new(AppState {
         schema: schema.clone(),
@@ -199,7 +199,7 @@ pub extern "C" fn start() {
 
     let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
     let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
-    let view = EditorView::new(Some(place), &props);
+    let view = EditorView::new(place, &props);
     {
         let mut st = app.borrow_mut();
         st.view = Some(view.clone());

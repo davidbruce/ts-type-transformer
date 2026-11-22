@@ -22,10 +22,10 @@ fn pts(coords: &[(f64, f64)]) -> JsArray<JsValue> {
 pub extern "C" fn start() {
     let doc = dom::document();
     let box_el = doc.get_element_by_id("chart").expect("missing #chart");
-    let chart = echarts::init(Some(&box_el), None, None);
+    let chart = echarts::init(&box_el, None, None);
 
     let opt = EChartsCoreOption::default().with_animation(false);
-    opt.set_at("backgroundColor", JsValue::from("#ffffff"));
+    opt.set_at("backgroundColor", "#ffffff");
     opt.set_at(
         "legend",
         JsValue::object()
@@ -82,9 +82,9 @@ pub extern "C" fn start() {
     chart.set_option(opt, None, None);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
-    meta.set_text_content(Some(&format!(
+    meta.set_text_content(&format!(
         "Canvas: {}x{} \u{00B7} 20 data points across 2 clusters",
         chart.get_width() as i32,
         chart.get_height() as i32
-    )));
+    ));
 }

@@ -116,7 +116,7 @@ fn build_scene(st: &mut AppState) {
         let cd = ColliderDesc::cuboid(hx, hy, 1.0)
             .set_friction_2(0.15)
             .set_restitution_2(0.35);
-        world.create_collider(&cd, Some(&rb));
+        world.create_collider(&cd, &rb);
     };
 
     add_ramp(0.0, -0.35, 6.8, 0.35, 0.0);
@@ -130,7 +130,7 @@ fn build_scene(st: &mut AppState) {
         &ColliderDesc::cuboid(1.85, 0.30, 1.2)
             .set_sensor(true)
             .set_active_events_2(ActiveEvents::CollisionEvents),
-        Some(&sbody),
+        &sbody,
     );
     st.sensor_handle = sc.handle();
 
@@ -148,7 +148,7 @@ fn build_scene(st: &mut AppState) {
             &cd.set_restitution_2(0.35)
                 .set_friction_2(0.25)
                 .set_active_events_2(ActiveEvents::CollisionEvents),
-            Some(&rb),
+            &rb,
         );
         st.bodies.push(rb);
     }
@@ -167,7 +167,7 @@ fn step_sim(st: &mut AppState) {
     let mut active = st.active_in_sensor;
     let mut contacts = st.solid_contacts;
     if let (Some(w), Some(q)) = (st.world.as_ref(), st.queue.as_ref()) {
-        w.step(Some(q), None);
+        w.step(q, None);
         EventQueueDrainCollisionEventsF::scoped(
             |h1: f64, h2: f64, started: bool| {
                 if h1 == sh || h2 == sh {
@@ -270,7 +270,7 @@ fn render(st: &AppState) {
         st.step_count,
         if st.paused { "paused" } else { "running" }
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -325,16 +325,16 @@ pub extern "C" fn start() {
                     }
                     1 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(Some(if s.paused {
+                        s.pause_btn.set_text_content(if s.paused {
                             "Resume"
                         } else {
                             "Pause"
-                        }));
+                        });
                         render(&s);
                     }
                     _ => {
                         s.paused = false;
-                        s.pause_btn.set_text_content(Some("Pause"));
+                        s.pause_btn.set_text_content("Pause");
                         build_scene(&mut s);
                         for _ in 0..25 {
                             step_sim(&mut s);

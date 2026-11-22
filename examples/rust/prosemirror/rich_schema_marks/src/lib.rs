@@ -87,8 +87,8 @@ fn build_schema() -> Schema<JsValue, JsValue> {
 
 fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     let ha = Attrs::default();
-    ha.set_at("level", JsValue::from(2.0));
-    let h = schema.node("heading", Some(&ha), schema.text("ProseMirror Document Schema", None), None);
+    ha.set_at("level", 2.0);
+    let h = schema.node("heading", &ha, schema.text("ProseMirror Document Schema", None), None);
 
     let m_strong = JsArray::<Mark>::from([schema.mark("strong", None)]);
     let m_em = JsArray::<Mark>::from([schema.mark("em", None)]);
@@ -99,11 +99,11 @@ fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
         None,
         JsArray::<Node>::from([
             schema.text("Inline marks compose cleanly: ", None),
-            schema.text("bold", Some(&m_strong)),
+            schema.text("bold", &m_strong),
             schema.text(", ", None),
-            schema.text("italic", Some(&m_em)),
+            schema.text("italic", &m_em),
             schema.text(", and ", None),
-            schema.text("inline_code", Some(&m_code)),
+            schema.text("inline_code", &m_code),
             schema.text(" spans.", None),
         ]),
         None,
@@ -178,7 +178,7 @@ fn update_meta(app: &AppState, st: &EditorState) {
         bname,
         app.dispatches
     );
-    app.meta.set_text_content(Some(&msg));
+    app.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -211,7 +211,7 @@ pub extern "C" fn start() {
 
     let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
     let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
-    let view = EditorView::new(Some(place), &props);
+    let view = EditorView::new(place, &props);
     {
         let mut st = app.borrow_mut();
         st.view = Some(view.clone());
@@ -256,13 +256,13 @@ pub extern "C" fn start() {
                 let tr = es.tr();
                 if pname == "heading" {
                     let pt = app_c.borrow().schema.nodes().at("paragraph").expect("missing paragraph");
-                    tr.set_block_type(sel.from(), Some(sel.to()), &pt, None);
+                    tr.set_block_type(sel.from(), sel.to(), &pt, None);
                     app_c.borrow_mut().last_action = "Converted heading -> paragraph".to_string();
                 } else {
                     let ht = app_c.borrow().schema.nodes().at("heading").expect("missing heading");
                     let ha = Attrs::default();
-                    ha.set_at("level", JsValue::from(2.0));
-                    tr.set_block_type(sel.from(), Some(sel.to()), &ht, Some(&JsValue::from(&ha)));
+                    ha.set_at("level", 2.0);
+                    tr.set_block_type(sel.from(), sel.to(), &ht, &ha);
                     app_c.borrow_mut().last_action = "Converted block -> heading[level=2]".to_string();
                 }
                 view.dispatch(&tr);

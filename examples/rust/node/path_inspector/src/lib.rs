@@ -43,7 +43,7 @@ pub extern "C" fn start() {
 
     c.check(path::dirname("/srv/app/archive.tar.gz") == "/srv/app");
     c.check(path::basename("/srv/app/archive.tar.gz", None) == "archive.tar.gz");
-    c.check(path::basename("/srv/app/archive.tar.gz", Some(".gz")) == "archive.tar");
+    c.check(path::basename("/srv/app/archive.tar.gz", ".gz") == "archive.tar");
     c.check(path::extname("/srv/app/archive.tar.gz") == ".gz");
     c.check(path::is_absolute("/srv/app") && !path::is_absolute("src/app"));
 

@@ -29,7 +29,7 @@ pub extern "C" fn start() {
     js::spawn(async {
         let app = Application::<JsValue>::new();
         let opts = build_opts();
-        if app.init(Some(&opts)).await.is_err() {
+        if app.init(&opts).await.is_err() {
             return;
         }
 
@@ -48,7 +48,7 @@ pub extern "C" fn start() {
         add(&stage, guide);
 
         let root = Container::<JsValue>::new(None);
-        root.position().set(Some(340.0), Some(200.0));
+        root.position().set(340.0, 200.0);
 
         for i in 0..3 {
             let arm = Container::<JsValue>::new(None);
@@ -57,10 +57,10 @@ pub extern "C" fn start() {
             let arm_bar = Graphics::new(JsNone);
             arm_bar
                 .rect(0.0, -4.0, 110.0, 8.0)
-                .fill(Some(&JsValue::from(0x737373 as f64)));
+                .fill(&JsValue::from(0x737373 as f64));
             arm_bar
                 .circle(110.0, 0.0, 10.0)
-                .fill(Some(&JsValue::from(0x111111 as f64)));
+                .fill(&JsValue::from(0x111111 as f64));
             add(&arm, arm_bar);
 
             let sub = Container::<JsValue>::new(None);
@@ -75,14 +75,14 @@ pub extern "C" fn start() {
             let sat_box = Graphics::new(JsNone);
             sat_box
                 .rect(-12.0, -12.0, 24.0, 24.0)
-                .fill(Some(&JsValue::from(0x262626 as f64)));
+                .fill(&JsValue::from(0x262626 as f64));
             sat_box.set_x(48.0);
             add(&sub, sat_box);
 
             let sat_orb = Graphics::new(JsNone);
             sat_orb
                 .circle(0.0, 0.0, 14.0)
-                .fill(Some(&JsValue::from(0xd4d4d4 as f64)));
+                .fill(&JsValue::from(0xd4d4d4 as f64));
             stroke_g(&sat_orb, 2.0, 0x111111);
             sat_orb.set_x(-32.0);
             add(&sub, sat_orb);
@@ -93,9 +93,9 @@ pub extern "C" fn start() {
 
         let hub = Graphics::new(JsNone);
         hub.circle(0.0, 0.0, 18.0)
-            .fill(Some(&JsValue::from(0x111111 as f64)));
+            .fill(&JsValue::from(0x111111 as f64));
         hub.circle(0.0, 0.0, 7.0)
-            .fill(Some(&JsValue::from(0xffffff as f64)));
+            .fill(&JsValue::from(0xffffff as f64));
         add(&root, hub);
 
         add(&stage, root.clone());
@@ -108,7 +108,7 @@ pub extern "C" fn start() {
                 rb.width(),
                 rb.height()
             );
-            meta.set_text_content(Some(&text));
+            meta.set_text_content(&text);
         }
     });
 }

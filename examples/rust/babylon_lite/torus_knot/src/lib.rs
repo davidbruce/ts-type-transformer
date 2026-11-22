@@ -8,7 +8,7 @@ use dom::{GPUColorDict, HTMLCanvasElement};
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
         let text = format!("WebGPU / Babylon Lite error: {msg}");
-        el.set_text_content(Some(&text));
+        el.set_text_content(&text);
     }
 }
 
@@ -43,21 +43,21 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 1.6, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
+        babylonjs_lite::attach_control(&camera, &canvas, &scene, None);
 
         let hemi = babylonjs_lite::create_hemispheric_light(
-            Some(&JsTuple3::from([0.0, 1.0, 0.2])),
-            Some(0.75),
+            &JsTuple3::from([0.0, 1.0, 0.2]),
+            0.75,
         );
         hemi.set_diffuse_color([0.75, 0.85, 1.0]);
         hemi.set_ground_color([0.12, 0.14, 0.22]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
-        let dir = babylonjs_lite::create_directional_light([-1.0, -2.0, -1.2], Some(2.2));
+        let dir = babylonjs_lite::create_directional_light([-1.0, -2.0, -1.2], 2.2);
         dir.set_diffuse([1.0, 0.96, 0.9]);
         babylonjs_lite::add_to_scene(&scene, &dir);
 
-        let orb_light = babylonjs_lite::create_point_light([2.8, 1.6, 0.0], Some(8.0));
+        let orb_light = babylonjs_lite::create_point_light([2.8, 1.6, 0.0], 8.0);
         orb_light.set_diffuse([1.0, 0.45, 0.35]);
         orb_light.set_range(12.0);
         babylonjs_lite::add_to_scene(&scene, &orb_light);
@@ -66,14 +66,14 @@ pub extern "C" fn start() {
             .with_base_color_factor([0.18, 0.78, 0.95, 1.0])
             .with_metallic_factor(0.75)
             .with_roughness_factor(0.22);
-        let knot_mat = babylonjs_lite::create_pbr_material(Some(&knot_props));
+        let knot_mat = babylonjs_lite::create_pbr_material(&knot_props);
 
         let knot_opts = TorusKnotOptions::default()
             .with_radius(1.15)
             .with_tube(0.34)
             .with_radial_segments(48.0)
             .with_tubular_segments(160.0);
-        let knot = babylonjs_lite::create_torus_knot(&engine, Some(&knot_opts));
+        let knot = babylonjs_lite::create_torus_knot(&engine, &knot_opts);
         knot.position().set(0.0, 2.0, 0.0);
         knot.set_material(&knot_mat);
         babylonjs_lite::add_to_scene(&scene, &knot);
@@ -82,12 +82,12 @@ pub extern "C" fn start() {
             .with_base_color_factor([1.0, 0.42, 0.32, 1.0])
             .with_metallic_factor(0.2)
             .with_roughness_factor(0.35);
-        let orb_mat = babylonjs_lite::create_pbr_material(Some(&orb_props));
+        let orb_mat = babylonjs_lite::create_pbr_material(&orb_props);
 
         let orb_opts = SphereOptions::default()
             .with_diameter(0.55)
             .with_segments(32.0);
-        let orb = babylonjs_lite::create_sphere(&engine, Some(&orb_opts));
+        let orb = babylonjs_lite::create_sphere(&engine, &orb_opts);
         orb.set_material(&orb_mat);
         babylonjs_lite::add_to_scene(&scene, &orb);
 
@@ -95,7 +95,7 @@ pub extern "C" fn start() {
         let ground_opts = GroundOptions::default()
             .with_width(16.0)
             .with_height(16.0);
-        let ground = babylonjs_lite::create_ground(&engine, Some(&ground_opts));
+        let ground = babylonjs_lite::create_ground(&engine, &ground_opts);
         ground.set_material(&ground_mat);
         babylonjs_lite::add_to_scene(&scene, &ground);
 

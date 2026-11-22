@@ -45,8 +45,8 @@ pub extern "C" fn start() {
         let done_count = done_count.clone();
         move |_: JsArray| done_count.set(done_count.get() + 1)
     });
-    bus.on::<JsValue>("stage", &on_stage);
-    bus.once::<JsValue>("done", &on_done);
+    bus.on("stage", &on_stage);
+    bus.once("done", &on_done);
 
     let root = fs::mkdtemp_sync("/tmp/tsrs-node-pipe-", None);
     let in_dir = path::join([root.as_str(), "in"]);
@@ -59,7 +59,7 @@ pub extern "C" fn start() {
     fs::write_file_sync(&*path::join([in_dir.as_str(), "a.log"]), "100 OK\n", None);
     fs::write_file_sync(&*path::join([in_dir.as_str(), "b.log"]), "200 OK\n", None);
     fs::write_file_sync(&*path::join([in_dir.as_str(), "c.log"]), "300 OK\n", None);
-    bus.emit::<JsValue>("stage", [JsValue::from("seed")]);
+    bus.emit("stage", ["seed"]);
     c.check(stages.get() == 1);
 
     // Stage 2: bundle
@@ -76,7 +76,7 @@ pub extern "C" fn start() {
         );
         fs::append_file_sync(&*combined, &*chunk, None);
     }
-    bus.emit::<JsValue>("stage", [JsValue::from("bundle")]);
+    bus.emit("stage", ["bundle"]);
     c.check(stages.get() == 2);
 
     // Stage 3: verify
@@ -87,12 +87,12 @@ pub extern "C" fn start() {
     let enoent_caught = missing.is_err_and(|e| e.message().contains("ENOENT"));
     c.check(enoent_caught);
 
-    bus.emit::<JsValue>("stage", [JsValue::from("verify")]);
-    bus.emit::<JsValue>("done", [JsValue::from(comb_text.len() as f64)]);
+    bus.emit("stage", ["verify"]);
+    bus.emit("done", [comb_text.len() as f64]);
     c.check(stages.get() == 3 && done_count.get() == 1);
 
     let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
-    fs::rm_sync(&*root, Some(&rm));
+    fs::rm_sync(&*root, &rm);
     c.check(!fs::exists_sync(&*root));
 
     println(&format!("pipeline_root={root} combined_bytes={}", comb_text.len()));

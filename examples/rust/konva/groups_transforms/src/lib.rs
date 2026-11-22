@@ -28,7 +28,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    layer.add([Rect::new(Some(&bg))]);
+    layer.add([Rect::new(&bg)]);
 
     for x in (40..=640).step_by(40) {
         let xf = x as f64;
@@ -41,7 +41,7 @@ pub extern "C" fn start() {
 
     // Group A.
     let gac = GroupConfig::default().with_x(40.0).with_y(55.0);
-    let group_a = Group::new(Some(&gac));
+    let group_a = Group::new(&gac);
     let gab = RectConfig::default()
         .with_width(160.0)
         .with_height(120.0)
@@ -61,9 +61,9 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     group_a.add([
-        GroupOrShape::from(Rect::new(Some(&gab))),
-        GroupOrShape::from(Circle::new(Some(&gad))),
-        GroupOrShape::from(Text::new(Some(&gal))),
+        GroupOrShape::from(Rect::new(&gab)),
+        GroupOrShape::from(Circle::new(&gad)),
+        GroupOrShape::from(Text::new(&gal)),
     ]);
     layer.add([group_a]);
 
@@ -72,7 +72,7 @@ pub extern "C" fn start() {
         .with_x(340.0)
         .with_y(75.0)
         .with_rotation(24.0);
-    let group_b = Group::new(Some(&gbc));
+    let group_b = Group::new(&gbc);
     let gbo = RectConfig::default()
         .with_width(150.0)
         .with_height(110.0)
@@ -101,10 +101,10 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     group_b.add([
-        GroupOrShape::from(Rect::new(Some(&gbo))),
-        GroupOrShape::from(Rect::new(Some(&gbi))),
-        GroupOrShape::from(Circle::new(Some(&gbd))),
-        GroupOrShape::from(Text::new(Some(&gbl))),
+        GroupOrShape::from(Rect::new(&gbo)),
+        GroupOrShape::from(Rect::new(&gbi)),
+        GroupOrShape::from(Circle::new(&gbd)),
+        GroupOrShape::from(Text::new(&gbl)),
     ]);
     layer.add([GroupOrShape::from(&group_b)]);
 
@@ -114,7 +114,7 @@ pub extern "C" fn start() {
         .with_y(55.0)
         .with_scale_x(1.15)
         .with_scale_y(1.15);
-    let group_c = Group::new(Some(&gcc));
+    let group_c = Group::new(&gcc);
     let gco = RectConfig::default()
         .with_width(130.0)
         .with_height(110.0)
@@ -133,17 +133,17 @@ pub extern "C" fn start() {
         .with_x(25.0)
         .with_y(25.0)
         .with_rotation(15.0);
-    let inner_group = Group::new(Some(&icc));
+    let inner_group = Group::new(&icc);
     let mc = CircleConfig::default()
         .with_x(40.0)
         .with_y(30.0)
         .with_radius(16.0)
         .with_fill("#111111");
-    let marker = Circle::new(Some(&mc));
+    let marker = Circle::new(&mc);
     inner_group.add([GroupOrShape::from(&marker)]);
     group_c.add([
-        GroupOrShape::from(Rect::new(Some(&gco))),
-        GroupOrShape::from(Text::new(Some(&gcl))),
+        GroupOrShape::from(Rect::new(&gco)),
+        GroupOrShape::from(Text::new(&gcl)),
         GroupOrShape::from(inner_group),
     ]);
     layer.add([group_c]);
@@ -172,8 +172,8 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     layer.add([
-        GroupOrShape::from(Rect::new(Some(&strip))),
-        GroupOrShape::from(Text::new(Some(&sum))),
+        GroupOrShape::from(Rect::new(&strip)),
+        GroupOrShape::from(Text::new(&sum)),
     ]);
 
     layer.draw();
@@ -184,5 +184,5 @@ pub extern "C" fn start() {
     dom::document()
         .get_element_by_id("meta")
         .expect("missing #meta")
-        .set_text_content(Some(&msg));
+        .set_text_content(&msg);
 }

@@ -29,7 +29,7 @@ pub extern "C" fn start() {
     js::spawn(async {
         let app = Application::<JsValue>::new();
         let opts = build_opts();
-        if app.init(Some(&opts)).await.is_err() {
+        if app.init(&opts).await.is_err() {
             return;
         }
 
@@ -49,7 +49,7 @@ pub extern "C" fn start() {
             stroke_g(&guides, 1.0, 0xe5e5e5);
         }
 
-        let unit_x = Point::new(Some(1.0), Some(0.0));
+        let unit_x = Point::new(1.0, 0.0);
         for step in 0..12 {
             let theta = step as f64 * (2.0 * std::f64::consts::PI / 12.0);
             let spoke = Matrix::new(None, None, None, None, None, None);
@@ -78,15 +78,15 @@ pub extern "C" fn start() {
                     .rotate(theta + r_idx as f64 * 0.2)
                     .translate(340.0 + radius * dir.x(), 200.0 + radius * dir.y());
 
-                let p0: Point = tile_m.apply(&Point::new(Some(corners[0].0), Some(corners[0].1)), None);
+                let p0: Point = tile_m.apply(&Point::new(corners[0].0, corners[0].1), None);
                 tiles.move_to(p0.x(), p0.y());
                 for &(cx, cy) in &corners[1..] {
-                    let pk: Point = tile_m.apply(&Point::new(Some(cx), Some(cy)), None);
+                    let pk: Point = tile_m.apply(&Point::new(cx, cy), None);
                     tiles.line_to(pk.x(), pk.y());
                 }
                 tiles
                     .close_path()
-                    .fill(Some(&JsValue::from(ring_colors[r_idx] as f64)));
+                    .fill(&JsValue::from(ring_colors[r_idx] as f64));
                 stroke_g(&tiles, 1.2, 0x111111);
             }
         }
@@ -95,15 +95,15 @@ pub extern "C" fn start() {
         let center_dot = Graphics::new(JsNone);
         center_dot
             .circle(340.0, 200.0, 8.0)
-            .fill(Some(&JsValue::from(0x111111 as f64)));
+            .fill(&JsValue::from(0x111111 as f64));
         add(&stage, center_dot);
 
         app.render();
 
         if let Some(meta) = doc.get_element_by_id("meta") {
-            meta.set_text_content(Some(
+            meta.set_text_content(
                 "48 matrix-transformed diamond tiles · 4 rings · 12 radial spokes · 680x400 WebGL",
-            ));
+            );
         }
     });
 }

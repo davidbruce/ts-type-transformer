@@ -56,11 +56,11 @@ fn build_scene(st: &mut AppState) {
     let world = World::new(&gravity, None, None, None, None, None, None, None, None, None, None, None, None, None);
 
     let ground = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(0.0, -0.4, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(7.0, 0.4, 2.0), Some(&ground));
+    world.create_collider(&ColliderDesc::cuboid(7.0, 0.4, 2.0), &ground);
     let lw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(-6.8, 3.5, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), Some(&lw));
+    world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &lw);
     let rw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(6.8, 3.5, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), Some(&rw));
+    world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &rw);
 
     st.balls.clear();
     for i in 0..5 {
@@ -69,7 +69,7 @@ fn build_scene(st: &mut AppState) {
             .set_restitution_2(RESTITUTIONS[i])
             .set_friction_2(0.2)
             .set_density_2(1.2);
-        world.create_collider(&cd, Some(&rb));
+        world.create_collider(&cd, &rb);
         st.balls.push(rb);
     }
 
@@ -193,7 +193,7 @@ fn render(st: &AppState) {
         st.step_count,
         if st.paused { "paused" } else { "running" }
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -246,11 +246,11 @@ pub extern "C" fn start() {
                         for b in &s.balls {
                             b.apply_impulse(&imp, true);
                         }
-                        s.grav_btn.set_text_content(Some(if s.earth {
+                        s.grav_btn.set_text_content(if s.earth {
                             "Gravity: Earth"
                         } else {
                             "Gravity: Moon"
-                        }));
+                        });
                         render(&s);
                     }
                     1 => {
@@ -262,16 +262,16 @@ pub extern "C" fn start() {
                     }
                     2 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(Some(if s.paused {
+                        s.pause_btn.set_text_content(if s.paused {
                             "Resume"
                         } else {
                             "Pause"
-                        }));
+                        });
                         render(&s);
                     }
                     _ => {
                         s.paused = false;
-                        s.pause_btn.set_text_content(Some("Pause"));
+                        s.pause_btn.set_text_content("Pause");
                         build_scene(&mut s);
                         for _ in 0..18 {
                             step_sim(&mut s);

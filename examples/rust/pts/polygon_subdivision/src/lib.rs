@@ -45,29 +45,29 @@ pub extern "C" fn start() {
             for (depth, shade) in SHADES.iter().enumerate() {
                 let sw = if depth == 0 { 1.6 } else { 1.0 };
                 form.fill(*shade)
-                    .stroke("#111111", Some(sw), None, None)
+                    .stroke("#111111", sw, None, None)
                     .polygon_2(&poly);
                 if depth == 0 {
                     for pt in poly.as_array().iter() {
                         let ray = Group::new([centroid.clone(), pt.clone()]);
-                        form.stroke_only("#d4d4d4", Some(1.0), None, None).line_2(&ray);
+                        form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&ray);
                         form.fill_only("#111111")
-                            .point_2(&pt, Some(3.5), Some("circle"));
+                            .point_2(&pt, 3.5, "circle");
                     }
                 }
-                poly = Polygon::midpoints(&poly, Some(true), Some(t));
+                poly = Polygon::midpoints(&poly, true, t);
             }
 
             let h_bar = Group::new([mk_pt(c.x() - 10.0, c.y()), mk_pt(c.x() + 10.0, c.y())]);
             let v_bar = Group::new([mk_pt(c.x(), c.y() - 10.0), mk_pt(c.x(), c.y() + 10.0)]);
-            form.stroke_only("#ffffff", Some(1.5), None, None).line_2(&h_bar);
-            form.stroke_only("#ffffff", Some(1.5), None, None).line_2(&v_bar);
+            form.stroke_only("#ffffff", 1.5, None, None).line_2(&h_bar);
+            form.stroke_only("#ffffff", 1.5, None, None).line_2(&v_bar);
             form.fill("#ffffff")
-                .stroke("#111111", Some(1.5), None, None)
-                .point_2(&centroid, Some(5.0), Some("circle"));
+                .stroke("#111111", 1.5, None, None)
+                .point_2(&centroid, 5.0, "circle");
 
             let ring = Circle::from_center(&pointer, 10.0);
-            form.stroke_only("#737373", Some(1.5), None, None).circle_2(&ring);
+            form.stroke_only("#737373", 1.5, None, None).circle_2(&ring);
         })
     };
 

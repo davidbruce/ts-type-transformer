@@ -110,7 +110,7 @@ fn render(st: &State) {
         rows.len(),
         total,
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]

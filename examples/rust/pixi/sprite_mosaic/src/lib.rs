@@ -22,7 +22,7 @@ pub extern "C" fn start() {
     js::spawn(async {
         let app = Application::<JsValue>::new();
         let opts = build_opts();
-        if app.init(Some(&opts)).await.is_err() {
+        if app.init(&opts).await.is_err() {
             return;
         }
 
@@ -53,13 +53,13 @@ pub extern "C" fn start() {
                 let idx = (row * 3 + col * 5) % shades.len();
                 sprite.set_width(52.0);
                 sprite.set_height(48.0);
-                sprite.anchor().set(Some(0.5), Some(0.5));
+                sprite.anchor().set(0.5, 0.5);
                 sprite
                     .position()
-                    .set(Some(70.0 + col as f64 * 60.0), Some(56.0 + row as f64 * 56.0));
+                    .set(70.0 + col as f64 * 60.0, 56.0 + row as f64 * 56.0);
                 sprite.set_rotation((col as f64 - 4.5) * 0.04 + (row as f64 - 2.5) * 0.03);
                 sprite.set_alpha(0.65 + 0.35 * ((col + row) % 3) as f64 / 2.0);
-                sprite.set_tint(JsValue::from(shades[idx] as f64));
+                sprite.set_tint(shades[idx] as f64);
                 add(&stage, sprite);
             }
         }
@@ -67,9 +67,9 @@ pub extern "C" fn start() {
         app.render();
 
         if let Some(meta) = doc.get_element_by_id("meta") {
-            meta.set_text_content(Some(
+            meta.set_text_content(
                 "60 Texture.WHITE sprites · 10x6 mosaic · 8 monochrome tints · 680x400 WebGL",
-            ));
+            );
         }
     });
 }

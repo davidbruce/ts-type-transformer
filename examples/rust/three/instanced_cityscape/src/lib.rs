@@ -50,7 +50,7 @@ fn render_city(st: &AppState) {
     let rot_q = Quaternion::new(None, None, None, None);
     let scale = Vector3::new(None, None, None);
     let mtx = Matrix4::new();
-    let axis_y = Vector3::new(Some(0.0), Some(1.0), Some(0.0));
+    let axis_y = Vector3::new(0.0, 1.0, 0.0);
     let col = Color::new(0xffffff as f64);
 
     let mut max_h = 0.0_f64;
@@ -63,9 +63,9 @@ fn render_city(st: &AppState) {
             if h > max_h {
                 max_h = h;
             }
-            pos.set(x, h * 0.5, Some(z));
+            pos.set(x, h * 0.5, z);
             rot_q.set_from_axis_angle(&axis_y, 0.08 * ((gx + gz) % 4) as f64);
-            scale.set(1.0, h, Some(1.0));
+            scale.set(1.0, h, 1.0);
             mtx.compose(&pos, &rot_q, &scale);
             st.inst.set_matrix_at(idx as f64, &mtx);
 
@@ -85,10 +85,10 @@ fn render_city(st: &AppState) {
     let radius = 11.5;
     let cx = radius * st.cam_yaw.cos();
     let cz = radius * st.cam_yaw.sin();
-    let target = Vector3::new(Some(0.0), Some(0.9), Some(0.0));
-    st.ortho_cam.position().set(cx, 8.2, Some(cz));
+    let target = Vector3::new(0.0, 0.9, 0.0);
+    st.ortho_cam.position().set(cx, 8.2, cz);
     st.ortho_cam.look_at(&target);
-    st.persp_cam.position().set(cx, 7.6, Some(cz));
+    st.persp_cam.position().set(cx, 7.6, cz);
     st.persp_cam.look_at(&target);
 
     if st.use_ortho {
@@ -103,13 +103,13 @@ fn render_city(st: &AppState) {
         "Perspective"
     };
     st.cam_btn
-        .set_text_content(Some(&format!("Camera: {cname}")));
-    st.meta.set_text_content(Some(&format!(
+        .set_text_content(&format!("Camera: {cname}"));
+    st.meta.set_text_content(&format!(
         "100 InstancedMesh towers \u{00B7} layout: {} \u{00B7} peak height: {:.2} \u{00B7} camera: {}",
         layout_name(st.layout_mode),
         max_h,
         cname
-    )));
+    ));
 }
 
 #[unsafe(no_mangle)]
@@ -122,7 +122,7 @@ pub extern "C" fn start() {
     let rp = WebGLRendererParameters::default()
         .with_antialias(true)
         .with_preserve_drawing_buffer(true);
-    let renderer = WebGLRenderer::new(Some(&rp));
+    let renderer = WebGLRenderer::new(&rp);
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     doc.get_element_by_id("stage")
@@ -132,48 +132,48 @@ pub extern "C" fn start() {
     let scene = Scene::new();
     scene.set_background(Color::new(0xf7f7f7 as f64));
     let ortho_cam = OrthographicCamera::new(
-        Some(-5.4 * aspect),
-        Some(5.4 * aspect),
-        Some(5.4),
-        Some(-5.4),
-        Some(0.1),
-        Some(100.0),
+        -5.4 * aspect,
+        5.4 * aspect,
+        5.4,
+        -5.4,
+        0.1,
+        100.0,
     );
-    let persp_cam = PerspectiveCamera::new(Some(40.0), Some(aspect), Some(0.1), Some(100.0));
+    let persp_cam = PerspectiveCamera::new(40.0, aspect, 0.1, 100.0);
 
-    scene.add([AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.25))]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.1));
-    key.position().set(8.0, 12.0, Some(6.0));
+    scene.add([AmbientLight::new(ColorRepresentation::from(0xffffff as f64), 1.25)]);
+    let key = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 2.1);
+    key.position().set(8.0, 12.0, 6.0);
     scene.add([key]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
-    rim.position().set(-7.0, 6.0, Some(-8.0));
+    let rim = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 0.9);
+    rim.position().set(-7.0, 6.0, -8.0);
     scene.add([rim]);
 
     let pmp = MeshStandardMaterialParameters::default()
         .with_color(0xe5e5e5 as f64)
         .with_roughness(0.85);
     let plinth = Mesh::<PlaneGeometry, MeshStandardMaterial>::new(
-        Some(PlaneGeometry::new(Some(8.6), Some(8.6), None, None)),
-        Some(MeshStandardMaterial::new(Some(&pmp))),
+        Some(PlaneGeometry::new(8.6, 8.6, None, None)),
+        Some(MeshStandardMaterial::new(&pmp)),
     );
     plinth.rotation().set_x(-std::f64::consts::FRAC_PI_2);
     plinth.position().set_y(-0.01);
     scene.add([plinth]);
 
     let grid = GridHelper::new(
-        Some(9.0),
-        Some(10.0),
+        9.0,
+        10.0,
         0x999999 as f64,
         0xd4d4d4 as f64,
     );
     scene.add([grid]);
 
-    let tgeo = BoxGeometry::new(Some(0.54), Some(1.0), Some(0.54), None, None, None);
+    let tgeo = BoxGeometry::new(0.54, 1.0, 0.54, None, None, None);
     let tmp = MeshStandardMaterialParameters::default()
         .with_color(0xffffff as f64)
         .with_roughness(0.65)
         .with_metalness(0.08);
-    let tmat = MeshStandardMaterial::new(Some(&tmp));
+    let tmat = MeshStandardMaterial::new(&tmp);
     let inst = InstancedMesh::<BoxGeometry, MeshStandardMaterial, Object3DEventMap>::new(
         Some(tgeo),
         Some(tmat),

@@ -152,7 +152,7 @@ fn render(st: &State) {
         "{vis_n} / {all_n} visible columns \u{00B7} start:id end:status pinned \u{00B7} {sel_n} / {} rows selected",
         rows.len()
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -227,8 +227,8 @@ pub extern "C" fn start() {
                     st_c.owner_vis.set(!st_c.owner_vis.get());
                     apply_vis(&st_c);
                 }
-                2 => sel.toggle_all_rows_selected(Some(true), None),
-                3 => sel.toggle_all_rows_selected(Some(false), None),
+                2 => sel.toggle_all_rows_selected(true, None),
+                3 => sel.toggle_all_rows_selected(false, None),
                 _ => {
                     st_c.zone_vis.set(false);
                     st_c.owner_vis.set(true);

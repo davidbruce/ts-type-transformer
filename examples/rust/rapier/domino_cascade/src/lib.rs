@@ -93,7 +93,7 @@ fn build_scene(st: &mut AppState) {
     );
 
     let floor = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(0.0, -0.35, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(7.2, 0.35, 2.0).set_friction_2(0.8), Some(&floor));
+    world.create_collider(&ColliderDesc::cuboid(7.2, 0.35, 2.0).set_friction_2(0.8), &floor);
 
     st.dominoes.clear();
     for i in 0..DOMINO_COUNT {
@@ -103,7 +103,7 @@ fn build_scene(st: &mut AppState) {
             .set_friction_2(0.55)
             .set_restitution_2(0.15)
             .set_density_2(1.0);
-        world.create_collider(&cd, Some(&rb));
+        world.create_collider(&cd, &rb);
         st.dominoes.push(rb);
     }
 
@@ -112,7 +112,7 @@ fn build_scene(st: &mut AppState) {
         .set_density_2(2.8)
         .set_restitution_2(0.45)
         .set_friction_2(0.25);
-    world.create_collider(&bcd, Some(&striker));
+    world.create_collider(&bcd, &striker);
     striker.apply_impulse(&Vector3::new(4.8, 0.2, 0.0), true);
 
     st.striker = Some(striker);
@@ -230,7 +230,7 @@ fn render(st: &AppState) {
         st.step_count,
         if st.paused { "paused" } else { "running" }
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -280,16 +280,16 @@ pub extern "C" fn start() {
                     }
                     1 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(Some(if s.paused {
+                        s.pause_btn.set_text_content(if s.paused {
                             "Resume"
                         } else {
                             "Pause"
-                        }));
+                        });
                         render(&s);
                     }
                     _ => {
                         s.paused = false;
-                        s.pause_btn.set_text_content(Some("Pause"));
+                        s.pause_btn.set_text_content("Pause");
                         build_scene(&mut s);
                         for _ in 0..12 {
                             step_sim(&mut s);

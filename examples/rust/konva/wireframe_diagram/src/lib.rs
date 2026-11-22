@@ -4,7 +4,7 @@ use konva::*;
 
 fn add_stage_box(layer: &Layer, x: f64, title: &str, sub: &str, fill: &str, ink: &str) {
     let gc = GroupConfig::default().with_x(x).with_y(95.0);
-    let g = Group::new(Some(&gc));
+    let g = Group::new(&gc);
 
     let rc = RectConfig::default()
         .with_width(126.0)
@@ -32,9 +32,9 @@ fn add_stage_box(layer: &Layer, x: f64, title: &str, sub: &str, fill: &str, ink:
         .with_fill(ink);
 
     g.add([
-        GroupOrShape::from(Rect::new(Some(&rc))),
-        GroupOrShape::from(Text::new(Some(&t1))),
-        GroupOrShape::from(Text::new(Some(&t2))),
+        GroupOrShape::from(Rect::new(&rc)),
+        GroupOrShape::from(Text::new(&t1)),
+        GroupOrShape::from(Text::new(&t2)),
     ]);
     layer.add([g]);
 }
@@ -47,7 +47,7 @@ fn add_arrow(layer: &Layer, pts: [f64; 4]) {
         .with_fill("#111111")
         .with_stroke("#111111")
         .with_stroke_width(2.0);
-    layer.add([Arrow::new(Some(&ac))]);
+    layer.add([Arrow::new(&ac)]);
 }
 
 #[unsafe(no_mangle)]
@@ -67,7 +67,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    layer.add([Rect::new(Some(&bg))]);
+    layer.add([Rect::new(&bg)]);
 
     add_stage_box(&layer, 28.0, "01 PARSE", ".d.ts AST", "#ffffff", "#111111");
     add_stage_box(&layer, 194.0, "02 LOWER", "Typed IR", "#f7f7f7", "#111111");
@@ -106,19 +106,19 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     layer.add([
-        GroupOrShape::from(Rect::new(Some(&bar))),
-        GroupOrShape::from(Text::new(Some(&btxt))),
+        GroupOrShape::from(Rect::new(&bar)),
+        GroupOrShape::from(Text::new(&btxt)),
     ]);
 
     layer.draw();
 
-    let rects = layer.find::<Node<NodeConfig>>(JsValue::from("Rect")).len();
-    let arrows = layer.find::<Node<NodeConfig>>(JsValue::from("Arrow")).len();
+    let rects = layer.find::<Node<NodeConfig>>("Rect").len();
+    let arrows = layer.find::<Node<NodeConfig>>("Arrow").len();
     let json_len = layer.to_json().len();
 
     let msg = format!("Pipeline diagram \u{00B7} {rects} rects \u{00B7} {arrows} arrows \u{00B7} JSON {json_len} bytes");
     dom::document()
         .get_element_by_id("meta")
         .expect("missing #meta")
-        .set_text_content(Some(&msg));
+        .set_text_content(&msg);
 }

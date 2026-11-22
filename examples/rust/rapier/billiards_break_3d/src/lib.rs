@@ -25,7 +25,7 @@ struct AppState {
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
         let text = format!("WebGPU / Babylon Lite error: {msg}");
-        el.set_text_content(Some(&text));
+        el.set_text_content(&text);
     }
 }
 
@@ -41,7 +41,7 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
     let bed = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation_2(0.0, -0.25, 0.0));
     world.create_collider(
         &rp::ColliderDesc::cuboid(4.6, 0.25, 7.6).set_friction_2(0.14).set_restitution_2(0.35),
-        Some(&bed),
+        &bed,
     );
 
     let rails = [
@@ -54,7 +54,7 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
         let rb = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation_2(rx, ry, rz));
         world.create_collider(
             &rp::ColliderDesc::cuboid(hx, hy, hz).set_friction_2(0.12).set_restitution_2(0.88),
-            Some(&rb),
+            &rb,
         );
     }
 
@@ -74,7 +74,7 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
                     .set_restitution_2(0.92)
                     .set_friction_2(0.10)
                     .set_density_2(1.0),
-                Some(&rb),
+                &rb,
             );
             st.balls.push(rb);
         }
@@ -93,7 +93,7 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
             .set_restitution_2(0.94)
             .set_friction_2(0.10)
             .set_density_2(1.25),
-        Some(&cue),
+        &cue,
     );
     st.balls.push(cue);
 
@@ -126,7 +126,7 @@ fn update_meta(st: &AppState) {
         "11 spheres · moving={moving} · ke={ke:.1} · step={} ({state_text})",
         st.step_count
     );
-    st.meta.set_text_content(Some(&text));
+    st.meta.set_text_content(&text);
 }
 
 fn step_sim(st: &mut AppState) {
@@ -176,7 +176,7 @@ pub extern "C" fn start() {
                 match i {
                     0 => {
                         s.paused = false;
-                        s.pause_btn.set_text_content(Some("Pause"));
+                        s.pause_btn.set_text_content("Pause");
                         build_world(&mut s, true);
                         sync_meshes(&s);
                         update_meta(&s);
@@ -190,16 +190,16 @@ pub extern "C" fn start() {
                     }
                     2 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(Some(if s.paused {
+                        s.pause_btn.set_text_content(if s.paused {
                             "Resume"
                         } else {
                             "Pause"
-                        }));
+                        });
                         update_meta(&s);
                     }
                     _ => {
                         s.paused = false;
-                        s.pause_btn.set_text_content(Some("Pause"));
+                        s.pause_btn.set_text_content("Pause");
                         build_world(&mut s, false);
                         sync_meshes(&s);
                         update_meta(&s);
@@ -227,14 +227,14 @@ pub extern "C" fn start() {
 
         let camera = b::create_arc_rotate_camera(1.18, 0.92, 13.5, &b::vec3(0.0, 0.3, -0.4));
         b::add_to_scene(&scene, &camera);
-        b::attach_control(&camera, &canvas, Some(&scene), None);
+        b::attach_control(&camera, &canvas, &scene, None);
 
-        let hemi = b::create_hemispheric_light(Some(&b::JsTuple3::from([0.0, 1.0, 0.2])), Some(0.72));
+        let hemi = b::create_hemispheric_light(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
         hemi.set_diffuse_color([0.85, 0.9, 0.95]);
         hemi.set_ground_color([0.12, 0.14, 0.16]);
         b::add_to_scene(&scene, &hemi);
 
-        let dir = b::create_directional_light([-1.0, -2.0, -1.0], Some(2.1));
+        let dir = b::create_directional_light([-1.0, -2.0, -1.0], 2.1);
         dir.set_diffuse([1.0, 0.97, 0.92]);
         b::add_to_scene(&scene, &dir);
 
@@ -243,7 +243,7 @@ pub extern "C" fn start() {
                 .with_base_color_factor([r, g, bl, 1.0])
                 .with_metallic_factor(m)
                 .with_roughness_factor(ro);
-            b::create_pbr_material(Some(&props))
+            b::create_pbr_material(&props)
         };
 
         let table = b::create_box(
@@ -282,7 +282,7 @@ pub extern "C" fn start() {
             let mut s = st.borrow_mut();
             let sopts = b::SphereOptions::default().with_diameter(BALL_RADIUS * 2.0).with_segments(24.0);
             for i in 0..BALL_COUNT {
-                let m = b::create_sphere(&engine, Some(&sopts));
+                let m = b::create_sphere(&engine, &sopts);
                 m.set_material(if i == RACK_COUNT { &cue_mat } else { &rack_mats[i % 4] });
                 b::add_to_scene(&scene, &m);
                 s.ball_meshes.push(m);

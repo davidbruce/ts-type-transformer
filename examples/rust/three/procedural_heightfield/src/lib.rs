@@ -74,14 +74,14 @@ fn rebuild_field(st: &AppState) {
     let r = 9.2;
     st.camera
         .position()
-        .set(r * st.azimuth.sin(), 5.4, Some(r * st.azimuth.cos()));
-    st.camera.look_at(&Vector3::new(Some(0.0), Some(0.0), Some(0.0)));
+        .set(r * st.azimuth.sin(), 5.4, r * st.azimuth.cos());
+    st.camera.look_at(&Vector3::new(0.0, 0.0, 0.0));
     st.wire_mesh.set_visible(st.overlay_on);
-    st.wire_btn.set_text_content(Some(if st.overlay_on {
+    st.wire_btn.set_text_content(if st.overlay_on {
         "Wireframe: On"
     } else {
         "Wireframe: Off"
-    }));
+    });
     st.renderer.render(&st.scene, &st.camera);
 
     let bb = st.geo.bounding_box().expect("missing bounding box");
@@ -94,7 +94,7 @@ fn rebuild_field(st: &AppState) {
         bb.max().y(),
         if st.overlay_on { "on" } else { "off" }
     );
-    st.meta.set_text_content(Some(&msg));
+    st.meta.set_text_content(&msg);
 }
 
 #[unsafe(no_mangle)]
@@ -106,7 +106,7 @@ pub extern "C" fn start() {
     let rp = WebGLRendererParameters::default()
         .with_antialias(true)
         .with_preserve_drawing_buffer(true);
-    let renderer = WebGLRenderer::new(Some(&rp));
+    let renderer = WebGLRenderer::new(&rp);
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     doc.get_element_by_id("stage")
@@ -115,19 +115,19 @@ pub extern "C" fn start() {
 
     let scene = Scene::new();
     scene.set_background(Color::new(0xf7f7f7 as f64));
-    let camera = PerspectiveCamera::new(Some(42.0), Some(width / height), Some(0.1), Some(100.0));
+    let camera = PerspectiveCamera::new(42.0, width / height, 0.1, 100.0);
 
-    scene.add([AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.2))]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.2));
-    key.position().set(6.0, 10.0, Some(8.0));
+    scene.add([AmbientLight::new(ColorRepresentation::from(0xffffff as f64), 1.2)]);
+    let key = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 2.2);
+    key.position().set(6.0, 10.0, 8.0);
     scene.add([key]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
-    rim.position().set(-7.0, 5.0, Some(-6.0));
+    let rim = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 0.9);
+    rim.position().set(-7.0, 5.0, -6.0);
     scene.add([rim]);
 
     let grid = GridHelper::new(
-        Some(9.0),
-        Some(12.0),
+        9.0,
+        12.0,
         0x999999 as f64,
         0xe5e5e5 as f64,
     );
@@ -135,7 +135,7 @@ pub extern "C" fn start() {
     scene.add([grid]);
 
     let geo = BufferGeometry::<NormalBufferAttributes, BufferGeometryEventMap>::new();
-    let pos_attr = Float32BufferAttribute::new(JsValue::from((GRID_N * GRID_N * 3) as f64), 3.0, None);
+    let pos_attr = Float32BufferAttribute::new((GRID_N * GRID_N * 3) as f64, 3.0, None);
 
     let mut idx_vec = Vec::with_capacity((GRID_N - 1) * (GRID_N - 1) * 6);
     for iz in 0..GRID_N - 1 {
@@ -158,7 +158,7 @@ pub extern "C" fn start() {
         .with_flat_shading(true);
     let surf = Mesh::<_, MeshStandardMaterial>::new(
         Some(geo.clone()),
-        Some(MeshStandardMaterial::new(Some(&smp))),
+        Some(MeshStandardMaterial::new(&smp)),
     );
     scene.add([surf]);
 
@@ -167,14 +167,14 @@ pub extern "C" fn start() {
         .with_wireframe(true);
     let wire_mesh = Mesh::<_, MeshBasicMaterial>::new(
         Some(geo.clone()),
-        Some(MeshBasicMaterial::new(Some(&wmp))),
+        Some(MeshBasicMaterial::new(&wmp)),
     );
     wire_mesh.position().set_y(0.015);
     scene.add([wire_mesh.clone()]);
 
     let pt_count = (GRID_N / 2) * (GRID_N / 2);
     let pts_geo = BufferGeometry::<NormalBufferAttributes, BufferGeometryEventMap>::new();
-    let pts_attr = Float32BufferAttribute::new(JsValue::from((pt_count * 3) as f64), 3.0, None);
+    let pts_attr = Float32BufferAttribute::new((pt_count * 3) as f64, 3.0, None);
     pts_geo.set_attribute("position".to_string(), BufferAttribute::from(pts_attr.clone()));
     let pmp = PointsMaterialParameters::default()
         .with_color(0x111111 as f64)
@@ -183,7 +183,7 @@ pub extern "C" fn start() {
         BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
         PointsMaterial,
         Object3DEventMap,
-    >::new(Some(pts_geo), Some(PointsMaterial::new(Some(&pmp))));
+    >::new(Some(pts_geo), Some(PointsMaterial::new(&pmp)));
     scene.add([pts]);
 
     let st = Rc::new(RefCell::new(AppState {

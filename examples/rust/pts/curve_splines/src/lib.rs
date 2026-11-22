@@ -28,7 +28,7 @@ pub extern "C" fn start() {
             let count = 11usize;
 
             let base_line = Group::new([mk_pt(w * 0.06, c.y()), mk_pt(w * 0.94, c.y())]);
-            form.stroke_only("#e5e5e5", Some(1.0), None, None).line_2(&base_line);
+            form.stroke_only("#e5e5e5", 1.0, None, None).line_2(&base_line);
 
             let mut pts_vec = Vec::with_capacity(count);
             for i in 0..count {
@@ -47,26 +47,26 @@ pub extern "C" fn start() {
             }
 
             let ctrls = Group::new(pts_vec.clone());
-            let bs = Curve::bspline(&ctrls, Some(12.0), None);
-            let card = Curve::cardinal(&ctrls, Some(12.0), Some(0.35));
-            let cr = Curve::catmull_rom(&ctrls, Some(12.0));
+            let bs = Curve::bspline(&ctrls, 12.0, None);
+            let card = Curve::cardinal(&ctrls, 12.0, 0.35);
+            let cr = Curve::catmull_rom(&ctrls, 12.0);
 
             for (i, p) in cr.as_array().iter().enumerate() {
                 if i % 3 == 0 {
                     let stem = Group::new([mk_pt(p.x(), c.y()), p.clone()]);
-                    form.stroke_only("#d4d4d4", Some(1.0), None, None).line_2(&stem);
+                    form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&stem);
                 }
             }
 
-            form.stroke_only("#d4d4d4", Some(1.0), None, None).line_2(&ctrls);
-            form.stroke_only("#b5b5b5", Some(2.0), None, None).line_2(&bs);
-            form.stroke_only("#555555", Some(1.8), None, None).line_2(&card);
-            form.stroke_only("#111111", Some(2.6), None, None).line_2(&cr);
+            form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&ctrls);
+            form.stroke_only("#b5b5b5", 2.0, None, None).line_2(&bs);
+            form.stroke_only("#555555", 1.8, None, None).line_2(&card);
+            form.stroke_only("#111111", 2.6, None, None).line_2(&cr);
 
             for p in &pts_vec {
                 form.fill("#ffffff")
-                    .stroke("#111111", Some(1.5), None, None)
-                    .point_2(p, Some(4.5), Some("circle"));
+                    .stroke("#111111", 1.5, None, None)
+                    .point_2(p, 4.5, "circle");
             }
         })
     };

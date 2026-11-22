@@ -10,18 +10,18 @@ fn ind(name: &str) -> JsValue {
 pub extern "C" fn start() {
     let doc = dom::document();
     let radar = echarts::init(
-        Some(&doc.get_element_by_id("chart-radar").expect("missing #chart-radar")),
+        &doc.get_element_by_id("chart-radar").expect("missing #chart-radar"),
         None,
         None,
     );
     let gauge = echarts::init(
-        Some(&doc.get_element_by_id("chart-gauge").expect("missing #chart-gauge")),
+        &doc.get_element_by_id("chart-gauge").expect("missing #chart-gauge"),
         None,
         None,
     );
 
     let radar_opt = EChartsCoreOption::default().with_animation(false);
-    radar_opt.set_at("backgroundColor", JsValue::from("#ffffff"));
+    radar_opt.set_at("backgroundColor", "#ffffff");
     radar_opt.set_at(
         "legend",
         JsValue::object()
@@ -83,7 +83,7 @@ pub extern "C" fn start() {
     radar.set_option(radar_opt, None, None);
 
     let gauge_opt = EChartsCoreOption::default().with_animation(false);
-    gauge_opt.set_at("backgroundColor", JsValue::from("#ffffff"));
+    gauge_opt.set_at("backgroundColor", "#ffffff");
     gauge_opt.set_at(
         "series",
         JsValue::from(JsArray::<JsValue>::from([JsValue::object()
@@ -131,11 +131,11 @@ pub extern "C" fn start() {
     gauge.set_option(gauge_opt, None, None);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
-    meta.set_text_content(Some(&format!(
+    meta.set_text_content(&format!(
         "Radar: {}x{} \u{00B7} Gauge: {}x{} \u{00B7} Score 84%",
         radar.get_width() as i32,
         radar.get_height() as i32,
         gauge.get_width() as i32,
         gauge.get_height() as i32
-    )));
+    ));
 }

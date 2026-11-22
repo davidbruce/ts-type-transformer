@@ -44,7 +44,7 @@ struct AppState {
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
         let text = format!("WebGPU / Babylon Lite error: {msg}");
-        el.set_text_content(Some(&text));
+        el.set_text_content(&text);
     }
 }
 
@@ -60,7 +60,7 @@ fn build_world(st: &mut AppState) {
     let floor_body = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation_2(0.0, -0.3, 0.0));
     world.create_collider(
         &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).set_friction_2(0.75).set_restitution_2(0.1),
-        Some(&floor_body),
+        &floor_body,
     );
 
     let ramp_rot = rp::Quaternion::new(0.0, 0.0, (RAMP_ANGLE * 0.5).sin(), (RAMP_ANGLE * 0.5).cos());
@@ -71,7 +71,7 @@ fn build_world(st: &mut AppState) {
     );
     world.create_collider(
         &rp::ColliderDesc::cuboid(1.75, 0.10, 0.65).set_friction_2(0.15).set_restitution_2(0.2),
-        Some(&ramp_body),
+        &ramp_body,
     );
 
     let marble = world.create_rigid_body(
@@ -84,7 +84,7 @@ fn build_world(st: &mut AppState) {
             .set_density_2(3.2)
             .set_restitution_2(0.32)
             .set_friction_2(0.18),
-        Some(&marble),
+        &marble,
     );
     st.marble = Some(marble);
 
@@ -100,7 +100,7 @@ fn build_world(st: &mut AppState) {
                 .set_friction_2(0.55)
                 .set_restitution_2(0.18)
                 .set_density_2(1.0),
-            Some(&rb),
+            &rb,
         );
         st.doms.push(rb);
     }
@@ -121,7 +121,7 @@ fn build_world(st: &mut AppState) {
                 .set_friction_2(0.55)
                 .set_restitution_2(0.25)
                 .set_density_2(1.0),
-            Some(&rb),
+            &rb,
         );
         st.cyls.push(rb);
     }
@@ -173,7 +173,7 @@ fn update_meta(st: &AppState) {
         "18 bodies (marble + 14 dominoes + 3 cylinders) · fallen={fallen} · ke={ke:.1} · step={} ({state_text})",
         st.step_count
     );
-    st.meta.set_text_content(Some(&text));
+    st.meta.set_text_content(&text);
 }
 
 fn step_sim(st: &mut AppState) {
@@ -242,16 +242,16 @@ pub extern "C" fn start() {
                     }
                     2 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(Some(if s.paused {
+                        s.pause_btn.set_text_content(if s.paused {
                             "Resume"
                         } else {
                             "Pause"
-                        }));
+                        });
                         update_meta(&s);
                     }
                     _ => {
                         s.paused = false;
-                        s.pause_btn.set_text_content(Some("Pause"));
+                        s.pause_btn.set_text_content("Pause");
                         build_world(&mut s);
                         sync_meshes(&s);
                         update_meta(&s);
@@ -279,19 +279,19 @@ pub extern "C" fn start() {
 
         let camera = b::create_arc_rotate_camera(0.65, 1.05, 12.0, &b::vec3(-0.4, 0.8, 0.0));
         b::add_to_scene(&scene, &camera);
-        b::attach_control(&camera, &canvas, Some(&scene), None);
+        b::attach_control(&camera, &canvas, &scene, None);
 
-        let hemi = b::create_hemispheric_light(Some(&b::JsTuple3::from([0.0, 1.0, 0.2])), Some(0.72));
+        let hemi = b::create_hemispheric_light(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
         hemi.set_diffuse_color([0.85, 0.88, 0.95]);
         hemi.set_ground_color([0.14, 0.14, 0.16]);
         b::add_to_scene(&scene, &hemi);
 
-        let dir = b::create_directional_light([-1.0, -2.0, -1.2], Some(2.1));
+        let dir = b::create_directional_light([-1.0, -2.0, -1.2], 2.1);
         dir.set_diffuse([1.0, 0.97, 0.92]);
         b::add_to_scene(&scene, &dir);
 
         let ground_mat = b::create_grid_material(None);
-        let ground = b::create_ground(&engine, Some(&b::GroundOptions::default().with_width(20.0).with_height(20.0)));
+        let ground = b::create_ground(&engine, &b::GroundOptions::default().with_width(20.0).with_height(20.0));
         ground.set_material(&ground_mat);
         b::add_to_scene(&scene, &ground);
 
@@ -300,7 +300,7 @@ pub extern "C" fn start() {
                 .with_base_color_factor([r, g, bl, 1.0])
                 .with_metallic_factor(m)
                 .with_roughness_factor(ro);
-            b::create_pbr_material(Some(&props))
+            b::create_pbr_material(&props)
         };
 
         let ramp_mesh = b::create_box(
@@ -318,7 +318,7 @@ pub extern "C" fn start() {
             let mut s = st.borrow_mut();
             let mb = b::create_sphere(
                 &engine,
-                Some(&b::SphereOptions::default().with_diameter(MARBLE_RADIUS * 2.0).with_segments(24.0)),
+                &b::SphereOptions::default().with_diameter(MARBLE_RADIUS * 2.0).with_segments(24.0),
             );
             mb.set_material(&mk_mat(0.95, 0.42, 0.28, 0.55, 0.2));
             b::add_to_scene(&scene, &mb);
@@ -343,7 +343,7 @@ pub extern "C" fn start() {
                 .with_diameter(0.5)
                 .with_tessellation(24.0);
             for _ in 0..CYL_COUNT {
-                let m = b::create_cylinder(&engine, Some(&cyl_opts));
+                let m = b::create_cylinder(&engine, &cyl_opts);
                 m.set_material(&cyl_mat);
                 b::add_to_scene(&scene, &m);
                 s.cyl_meshes.push(m);

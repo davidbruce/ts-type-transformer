@@ -9,7 +9,7 @@ use dom::{GPUColorDict, HTMLCanvasElement};
 fn set_status_error(msg: &str) {
     if let Some(el) = dom::document().get_element_by_id("status") {
         let text = format!("WebGPU / Babylon Lite error: {msg}");
-        el.set_text_content(Some(&text));
+        el.set_text_content(&text);
     }
 }
 
@@ -18,7 +18,7 @@ fn mk_pbr(v: f64, metallic: f64, roughness: f64) -> PbrMaterialProps {
         .with_base_color_factor([v, v, v, 1.0])
         .with_metallic_factor(metallic)
         .with_roughness_factor(roughness);
-    babylonjs_lite::create_pbr_material(Some(&props))
+    babylonjs_lite::create_pbr_material(&props)
 }
 
 #[unsafe(no_mangle)]
@@ -52,27 +52,27 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 1.1, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        babylonjs_lite::attach_control(&camera, &canvas, Some(&scene), None);
+        babylonjs_lite::attach_control(&camera, &canvas, &scene, None);
 
         let hemi = babylonjs_lite::create_hemispheric_light(
-            Some(&JsTuple3::from([0.0, 1.0, 0.2])),
-            Some(0.65),
+            &JsTuple3::from([0.0, 1.0, 0.2]),
+            0.65,
         );
         hemi.set_diffuse_color([0.82, 0.82, 0.82]);
         hemi.set_ground_color([0.12, 0.12, 0.12]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
-        let dir = babylonjs_lite::create_directional_light([-1.0, -2.0, -1.0], Some(1.8));
+        let dir = babylonjs_lite::create_directional_light([-1.0, -2.0, -1.0], 1.8);
         dir.set_diffuse([0.95, 0.95, 0.95]);
         babylonjs_lite::add_to_scene(&scene, &dir);
 
-        let orb_light = babylonjs_lite::create_point_light([4.5, 3.0, 0.0], Some(12.0));
+        let orb_light = babylonjs_lite::create_point_light([4.5, 3.0, 0.0], 12.0);
         orb_light.set_diffuse([1.0, 1.0, 1.0]);
         orb_light.set_range(18.0);
         babylonjs_lite::add_to_scene(&scene, &orb_light);
 
         let floor_opts = GroundOptions::default().with_width(14.0).with_height(14.0);
-        let floor = babylonjs_lite::create_ground(&engine, Some(&floor_opts));
+        let floor = babylonjs_lite::create_ground(&engine, &floor_opts);
         floor.set_material(&mk_pbr(0.11, 0.08, 0.88));
         babylonjs_lite::add_to_scene(&scene, &floor);
 
@@ -90,7 +90,7 @@ pub extern "C" fn start() {
             for col in 0..5 {
                 let roughness = 0.08 + 0.22 * (row as f64);
                 let metallic = 0.25 * (col as f64);
-                let sphere = babylonjs_lite::create_sphere(&engine, Some(&sopts));
+                let sphere = babylonjs_lite::create_sphere(&engine, &sopts);
                 sphere.position().set(
                     ((col - 2) as f64) * 1.55,
                     0.75,
@@ -106,10 +106,10 @@ pub extern "C" fn start() {
             .with_metallic_factor(0.0)
             .with_roughness_factor(0.2);
         babylonjs_lite::set_pbr_emissive(&orb_props, [0.95, 0.95, 0.95]);
-        let orb_mat = babylonjs_lite::create_pbr_material(Some(&orb_props));
+        let orb_mat = babylonjs_lite::create_pbr_material(&orb_props);
 
         let orb_opts = SphereOptions::default().with_diameter(0.36).with_segments(16.0);
-        let orb = babylonjs_lite::create_sphere(&engine, Some(&orb_opts));
+        let orb = babylonjs_lite::create_sphere(&engine, &orb_opts);
         orb.position().set(4.5, 3.0, 0.0);
         orb.set_material(&orb_mat);
         babylonjs_lite::add_to_scene(&scene, &orb);

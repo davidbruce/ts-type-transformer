@@ -61,18 +61,18 @@ pub extern "C" fn start() {
         move |_: JsArray| shutdown_calls.set(shutdown_calls.get() + 1)
     });
 
-    emitter.on::<JsValue>("metric", &on_metric);
-    emitter.once::<JsValue>("metric", &on_once);
-    emitter.on::<JsValue>("shutdown", &on_shutdown);
+    emitter.on("metric", &on_metric);
+    emitter.once("metric", &on_once);
+    emitter.on("shutdown", &on_shutdown);
 
-    c.check(emitter.listener_count::<JsValue>("metric", None) == 2.0);
+    c.check(emitter.listener_count("metric", None) == 2.0);
     c.check(emitter.event_names().len() == 2);
 
-    let emitted1 = emitter.emit::<JsValue>("metric", [JsValue::from(101.0), JsValue::from("ok")]);
+    let emitted1 = emitter.emit("metric", [JsValue::from(101.0), JsValue::from("ok")]);
     c.check(emitted1 && metric_calls.get() == 1 && once_calls.get() == 1);
-    c.check(emitter.listener_count::<JsValue>("metric", None) == 1.0);
+    c.check(emitter.listener_count("metric", None) == 1.0);
 
-    let emitted2 = emitter.emit::<JsValue>("metric", [JsValue::from(202.0), JsValue::from("ok")]);
+    let emitted2 = emitter.emit("metric", [JsValue::from(202.0), JsValue::from("ok")]);
     c.check(
         emitted2
             && metric_calls.get() == 2
@@ -80,16 +80,16 @@ pub extern "C" fn start() {
             && once_calls.get() == 1,
     );
 
-    c.check(!emitter.emit::<JsValue>("idle", JsArray::new()));
+    c.check(!emitter.emit("idle", JsArray::new()));
 
-    emitter.remove_listener::<JsValue>("metric", &on_metric);
+    emitter.remove_listener("metric", &on_metric);
     c.check(
-        emitter.listener_count::<JsValue>("metric", None) == 0.0
-            && !emitter.emit::<JsValue>("metric", [JsValue::from(1.0)]),
+        emitter.listener_count("metric", None) == 0.0
+            && !emitter.emit("metric", [1.0]),
     );
     c.check(metric_calls.get() == 2);
 
-    emitter.remove_all_listeners::<JsValue>(Some(&JsValue::from("shutdown")));
+    emitter.remove_all_listeners("shutdown");
     c.check(emitter.event_names().is_empty() && shutdown_calls.get() == 0);
 
     println(&format!(

@@ -89,7 +89,7 @@ pub extern "C" fn start() {
     c.check(total_bytes == 75.0);
 
     let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
-    fs::rm_sync(&*root, Some(&rm));
+    fs::rm_sync(&*root, &rm);
     c.check(!fs::exists_sync(&*root));
     c.check(dir_count + file_count == 8);
     c.check(true);

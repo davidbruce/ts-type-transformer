@@ -38,10 +38,10 @@ fn update_camera(st: &AppState) {
     let r = 8.4;
     st.camera
         .position()
-        .set(r * st.yaw.sin(), 5.1, Some(r * st.yaw.cos()));
-    st.camera.look_at(&Vector3::new(Some(0.0), Some(0.0), Some(0.0)));
-    st.camera.update_matrix_world(Some(true));
-    st.scene.update_matrix_world(Some(true));
+        .set(r * st.yaw.sin(), 5.1, r * st.yaw.cos());
+    st.camera.look_at(&Vector3::new(0.0, 0.0, 0.0));
+    st.camera.update_matrix_world(true);
+    st.scene.update_matrix_world(true);
 }
 
 fn render_scene(st: &AppState) {
@@ -51,31 +51,31 @@ fn render_scene(st: &AppState) {
     }
     if st.selected >= 0 && (st.selected as usize) < st.meshes.len() {
         st.box3
-            .set_from_object(&st.meshes[st.selected as usize], Some(true));
+            .set_from_object(&st.meshes[st.selected as usize], true);
         st.helper.set_visible(true);
     } else {
         st.helper.set_visible(false);
     }
     st.renderer.render(&st.scene, &st.camera);
-    st.meta.set_text_content(Some(&format!(
+    st.meta.set_text_content(&format!(
         "picked: {} \u{00B7} 9 specimens \u{00B7} click canvas or buttons",
         st.hit_info
-    )));
+    ));
 }
 
 fn cast_at_ndc(st: &mut AppState, nx: f64, ny: f64) {
     st.raycaster
-        .set_from_camera(&Vector2::new(Some(nx), Some(ny)), &st.camera);
+        .set_from_camera(&Vector2::new(nx, ny), &st.camera);
     let hits = st
         .raycaster
-        .intersect_objects::<Object3D>(st.mesh_arr.clone(), Some(false), None);
+        .intersect_objects::<Object3D>(st.mesh_arr.clone(), false, None);
     if hits.len() > 0 {
         let hit = hits.get(0);
         let hobj = hit.object();
         let found = st.meshes.iter().position(|m| m == &hobj);
         if let Some(idx) = found {
             st.selected = idx as isize;
-            st.box3.set_from_object(&st.meshes[idx], Some(true));
+            st.box3.set_from_object(&st.meshes[idx], true);
             let sz = st.box3.get_size(&Vector3::new(None, None, None));
             let pt = hit.point();
             st.hit_info = format!(
@@ -116,7 +116,7 @@ pub extern "C" fn start() {
     let rp = WebGLRendererParameters::default()
         .with_antialias(true)
         .with_preserve_drawing_buffer(true);
-    let renderer = WebGLRenderer::new(Some(&rp));
+    let renderer = WebGLRenderer::new(&rp);
     renderer.set_pixel_ratio(1.0);
     renderer.set_size(width, height, None);
     let canvas: dom::HTMLCanvasElement = renderer.dom_element().into();
@@ -126,19 +126,19 @@ pub extern "C" fn start() {
 
     let scene = Scene::new();
     scene.set_background(Color::new(0xf7f7f7 as f64));
-    let camera = PerspectiveCamera::new(Some(42.0), Some(width / height), Some(0.1), Some(100.0));
+    let camera = PerspectiveCamera::new(42.0, width / height, 0.1, 100.0);
 
-    scene.add([AmbientLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(1.2))]);
-    let key = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(2.2));
-    key.position().set(6.0, 10.0, Some(8.0));
+    scene.add([AmbientLight::new(ColorRepresentation::from(0xffffff as f64), 1.2)]);
+    let key = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 2.2);
+    key.position().set(6.0, 10.0, 8.0);
     scene.add([key]);
-    let rim = DirectionalLight::new(Some(ColorRepresentation::from(0xffffff as f64)), Some(0.9));
-    rim.position().set(-7.0, 5.0, Some(-6.0));
+    let rim = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 0.9);
+    rim.position().set(-7.0, 5.0, -6.0);
     scene.add([rim]);
 
     let grid = GridHelper::new(
-        Some(9.0),
-        Some(9.0),
+        9.0,
+        9.0,
         0x999999 as f64,
         0xd4d4d4 as f64,
     );
@@ -146,15 +146,15 @@ pub extern "C" fn start() {
     scene.add([grid]);
 
     let geos: Vec<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>> = vec![
-        BoxGeometry::new(Some(1.05), Some(1.05), Some(1.05), None, None, None).into(),
-        ConeGeometry::new(Some(0.62), Some(1.25), Some(20.0), None, None, None, None).into(),
-        CylinderGeometry::new(Some(0.48), Some(0.48), Some(1.2), Some(24.0), None, None, None, None).into(),
-        SphereGeometry::new(Some(0.62), Some(24.0), Some(18.0), None, None, None, None).into(),
-        OctahedronGeometry::new(Some(0.68), Some(0.0)).into(),
-        DodecahedronGeometry::new(Some(0.62), Some(0.0)).into(),
-        TorusGeometry::new(Some(0.5), Some(0.18), Some(14.0), Some(36.0), None, None, None).into(),
-        IcosahedronGeometry::new(Some(0.64), Some(0.0)).into(),
-        TetrahedronGeometry::new(Some(0.72), Some(0.0)).into(),
+        BoxGeometry::new(1.05, 1.05, 1.05, None, None, None).into(),
+        ConeGeometry::new(0.62, 1.25, 20.0, None, None, None, None).into(),
+        CylinderGeometry::new(0.48, 0.48, 1.2, 24.0, None, None, None, None).into(),
+        SphereGeometry::new(0.62, 24.0, 18.0, None, None, None, None).into(),
+        OctahedronGeometry::new(0.68, 0.0).into(),
+        DodecahedronGeometry::new(0.62, 0.0).into(),
+        TorusGeometry::new(0.5, 0.18, 14.0, 36.0, None, None, None).into(),
+        IcosahedronGeometry::new(0.64, 0.0).into(),
+        TetrahedronGeometry::new(0.72, 0.0).into(),
     ];
 
     let mut mats = Vec::with_capacity(9);
@@ -167,10 +167,10 @@ pub extern "C" fn start() {
             .with_roughness(0.55)
             .with_metalness(0.1)
             .with_flat_shading(i >= 4);
-        let mat = MeshStandardMaterial::new(Some(&mp));
+        let mat = MeshStandardMaterial::new(&mp);
         let m = Mesh::<_, MeshStandardMaterial>::new(Some(geo), Some(mat.clone()));
         m.set_name(NAMES[i]);
-        m.position().set(gx * 2.1, 0.0, Some(gz * 2.1));
+        m.position().set(gx * 2.1, 0.0, gz * 2.1);
         m.rotation().set(0.2, 0.35 * i as f64, 0.0, None);
         let mo: Object3D = m.into();
         scene.add([mo.clone()]);
@@ -180,8 +180,8 @@ pub extern "C" fn start() {
     let mesh_arr = JsArray::from(meshes.clone());
 
     let box3 = Box3::new(
-        Some(&Vector3::new(Some(-0.5), Some(-0.5), Some(-0.5))),
-        Some(&Vector3::new(Some(0.5), Some(0.5), Some(0.5))),
+        &Vector3::new(-0.5, -0.5, -0.5),
+        &Vector3::new(0.5, 0.5, 0.5),
     );
     let helper = Box3Helper::new(&box3, 0x111111 as f64);
     helper.set_visible(false);

@@ -57,7 +57,7 @@ pub extern "C" fn start() {
     c.check(!fs::exists_sync(&*archive));
 
     let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
-    fs::rm_sync(&*dir, Some(&rm));
+    fs::rm_sync(&*dir, &rm);
     c.check(!fs::exists_sync(&*dir));
     c.check(true);
 

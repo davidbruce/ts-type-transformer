@@ -31,28 +31,22 @@ pub extern "C" fn start() {
         .with_zoom_animation(false)
         .with_fade_animation(false)
         .with_marker_zoom_animation(false);
-    let m = map("map", Some(&m_opts));
+    let m = map("map", &m_opts);
 
     let grid_opts = box_opts("#e5e5e5", 1.0, None, "#ffffff", 0.0);
     for i in 0..=5 {
         let r = (i * 20) as f64;
-        let line = JsArray::from([
-            JsValue::from(&lat_lng(r, 0.0, None)),
-            JsValue::from(&lat_lng(r, 160.0, None)),
-        ]);
-        polyline(line, Some(&grid_opts)).add_to(&m);
+        let line = [lat_lng(r, 0.0, None), lat_lng(r, 160.0, None)];
+        polyline(line, &grid_opts).add_to(&m);
     }
     for i in 0..=8 {
         let c = (i * 20) as f64;
-        let line = JsArray::from([
-            JsValue::from(&lat_lng(0.0, c, None)),
-            JsValue::from(&lat_lng(100.0, c, None)),
-        ]);
-        polyline(line, Some(&grid_opts)).add_to(&m);
+        let line = [lat_lng(0.0, c, None), lat_lng(100.0, c, None)];
+        polyline(line, &grid_opts).add_to(&m);
     }
 
     let env = lat_lng_bounds(&lat_lng(8.0, 12.0, None), &lat_lng(92.0, 148.0, None));
-    rectangle(&env, Some(&box_opts("#111111", 2.5, None, "#ffffff", 0.9))).add_to(&m);
+    rectangle(&env, &box_opts("#111111", 2.5, None, "#ffffff", 0.9)).add_to(&m);
 
     let rooms = [
         (12.0, 16.0, 46.0, 62.0, "#f7f7f7"),
@@ -62,7 +56,7 @@ pub extern "C" fn start() {
     ];
     for (r0, c0, r1, c1, fill) in rooms {
         let b = lat_lng_bounds(&lat_lng(r0, c0, None), &lat_lng(r1, c1, None));
-        rectangle(&b, Some(&box_opts("#404040", 1.5, None, fill, 0.85))).add_to(&m);
+        rectangle(&b, &box_opts("#404040", 1.5, None, fill, 0.85)).add_to(&m);
     }
 
     let atrium = JsArray::<PolylineSetLatLngsLatlngs>::from([
@@ -71,13 +65,10 @@ pub extern "C" fn start() {
         lat_lng(50.0, 96.0, None),
         lat_lng(26.0, 80.0, None),
     ]);
-    polygon(atrium, Some(&box_opts("#111111", 2.0, None, "#555555", 0.35))).add_to(&m);
+    polygon(atrium, &box_opts("#111111", 2.0, None, "#555555", 0.35)).add_to(&m);
 
-    let spine = JsArray::from([
-        JsValue::from(&lat_lng(50.0, 12.0, None)),
-        JsValue::from(&lat_lng(50.0, 148.0, None)),
-    ]);
-    polyline(spine, Some(&box_opts("#737373", 1.5, Some("4 4"), "#ffffff", 0.0))).add_to(&m);
+    let spine = [lat_lng(50.0, 12.0, None), lat_lng(50.0, 148.0, None)];
+    polyline(spine, &box_opts("#737373", 1.5, Some("4 4"), "#ffffff", 0.0)).add_to(&m);
 
     let col_opts = CircleMarkerOptions::default()
         .with_radius(5.0)
@@ -93,7 +84,7 @@ pub extern "C" fn start() {
         (12.0, 144.0),
         (88.0, 144.0),
     ] {
-        circle_marker(&lat_lng(r, c, None), Some(&col_opts)).add_to(&m);
+        circle_marker(&lat_lng(r, c, None), &col_opts).add_to(&m);
     }
 
     let plan_bounds = lat_lng_bounds(&lat_lng(0.0, 0.0, None), &lat_lng(100.0, 160.0, None));
@@ -106,6 +97,6 @@ pub extern "C" fn start() {
             px.x(),
             px.y()
         );
-        meta.set_text_content(Some(&text));
+        meta.set_text_content(&text);
     }
 }
