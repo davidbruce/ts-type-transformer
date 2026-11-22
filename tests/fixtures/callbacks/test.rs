@@ -86,7 +86,7 @@ pub extern "C" fn run() {
     c.subscribe(&on_value);
     check!(c.increment(None) == 1.0);
     check!(last.get() == 1.0);
-    c.increment(Some(4.0));
+    c.increment(4.0);
     check!(last.get() == 5.0 && calls.get() == 2);
 
     // A callback that takes an object and returns a value.

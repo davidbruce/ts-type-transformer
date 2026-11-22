@@ -43,3 +43,6 @@ globalThis.pipe = () => {
 };
 
 globalThis.marked = marks => Object.keys(marks).map(k => `${k}=${marks[k]}`).join(",");
+
+globalThis.greeting = (name, options) => `${name === null ? "nobody" : name}${options === null ? "" : ` ${options.width}`}`;
+globalThis.echo = value => `${typeof value}:${typeof value === "object" ? value.width : value}`;

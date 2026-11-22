@@ -527,11 +527,13 @@ fn variant(t: &Ty, cx: &Context) -> String {
 }
 
 // A union as an enum: decoded from a handle by its tag, lent as its member,
-// and made from any member: `describe(42.0)`.
+// and made from any member: `describe(42.0)`. One whose members cannot be told
+// apart is only made and lent, with a variant for any value.
 pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<String, String>, cx: &Context) -> String {
     let n = cx.def_name(&u.name);
     let opt = cx.option();
     let import = &u.name;
+    let decodable = u.decodable();
     let (bounds, args) = (generics(&u.type_params, cx), args_of(&u.type_params));
     // Each member's variant: by its type's own name, by its whole path
     // where two would be one (`stream::Readable` beside a `Readable`).
@@ -546,17 +548,16 @@ pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<Strin
         })
         .collect();
     let variant = |p: &Ty| names[u.parts.iter().position(|q| q == p).unwrap()].clone();
-    let variants: Vec<String> = u.parts.iter().map(|p| format!("{}({})", variant(p), ty(p, cx))).collect();
-    // A bare type parameter is told apart by what its argument is.
-    let kind = u.parts.iter().find_map(|p| if let Ty::Param(t) = p { Some(format!("{t}::KIND")) } else { None }).unwrap_or("0".into());
-    let decode: String = u.parts.iter().enumerate().map(|(i, p)| format!("{i} => {n}::{}(<{}>::from_handle(h)), ", variant(p), ty(p, cx))).collect();
-    let lend: String = u.parts.iter().map(|p| format!("{n}::{}(x) => x.lend(), ", variant(p))).collect();
-    let clone: String = u.parts.iter().map(|p| format!("{n}::{0}(x) => {n}::{0}(Clone::clone(x)), ", variant(p))).collect();
-    imports.insert(format!("{import}_tag"), format!("    pub fn {import}_tag(h: u32, k: i32) -> i32;\n"));
-    // A union is what each of its members is.
-    let is_bounds: Vec<String> = u.parts.iter().map(|p| format!("{}: Is<B_>", ty(p, cx))).collect();
-    let is_params = std::iter::once("B_".to_string()).chain(u.type_params.iter().map(|p| bound(p, cx))).collect::<Vec<_>>().join(", ");
-    let debug_arms: String = u.parts.iter().map(|p| format!("{n}::{}(x) => f.debug_tuple({:?}).field(x).finish(), ", variant(p), variant(p))).collect();
+    let mut variants: Vec<String> = u.parts.iter().map(|p| format!("{}({})", variant(p), ty(p, cx))).collect();
+    let mut lend: String = u.parts.iter().map(|p| format!("{n}::{}(x) => x.lend(), ", variant(p))).collect();
+    let mut clone: String = u.parts.iter().map(|p| format!("{n}::{0}(x) => {n}::{0}(Clone::clone(x)), ", variant(p))).collect();
+    let mut debug_arms: String = u.parts.iter().map(|p| format!("{n}::{}(x) => f.debug_tuple({:?}).field(x).finish(), ", variant(p), variant(p))).collect();
+    if !decodable {
+        variants.push(format!("{VALUE}({VALUE})"));
+        lend += &format!("{n}::{VALUE}(x) => x.lend(), ");
+        clone += &format!("{n}::{VALUE}(x) => {n}::{VALUE}(Clone::clone(x)), ");
+        debug_arms += &format!("{n}::{VALUE}(x) => f.debug_tuple({VALUE:?}).field(x).finish(), ");
+    }
     let debug_where = if u.type_params.is_empty() {
         String::new()
     } else {
@@ -566,14 +567,27 @@ pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<Strin
         "pub enum {n}{bounds} {{ {} }}\n\
          impl{bounds} Clone for {n}{args} {{ fn clone(&self) -> Self {{ match self {{ {clone}}} }} }}\n\
          impl{bounds} ToJs for {n}{args} {{ fn lend(&self) -> Lent {{ match self {{ {lend}}} }} }}\n\
-         impl{bounds} FromJs for {n}{args} {{ fn from_handle(h: u32) -> Self {{ match unsafe {{ raw::{import}_tag(h, {kind}) }} {{ {decode}_ => unreachable!() }} }} }}\n\
-         impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n\
          impl{bounds} Optional<{n}{args}> for {opt}<{n}{args}> {{ fn into_option(self) -> {opt}<{n}{args}> {{ self }} }}\n\
          impl{bounds} Optional<{n}{args}> for JsNone {{ fn into_option(self) -> {opt}<{n}{args}> {{ None }} }}\n\
          impl{bounds} core::fmt::Debug for {n}{args}{debug_where} {{ fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{ match self {{ {debug_arms}}} }} }}\n",
-        variants.join(", "),
-        is_bounds.join(", ")
+        variants.join(", ")
     );
+    if decodable {
+        // A bare type parameter is told apart by what its argument is.
+        let kind = u.parts.iter().find_map(|p| if let Ty::Param(t) = p { Some(format!("{t}::KIND")) } else { None }).unwrap_or("0".into());
+        let decode: String = u.parts.iter().enumerate().map(|(i, p)| format!("{i} => {n}::{}(<{}>::from_handle(h)), ", variant(p), ty(p, cx))).collect();
+        imports.insert(format!("{import}_tag"), format!("    pub fn {import}_tag(h: u32, k: i32) -> i32;\n"));
+        // A union is what each of its members is.
+        let is_bounds: Vec<String> = u.parts.iter().map(|p| format!("{}: Is<B_>", ty(p, cx))).collect();
+        let is_params = std::iter::once("B_".to_string()).chain(u.type_params.iter().map(|p| bound(p, cx))).collect::<Vec<_>>().join(", ");
+        out += &format!(
+            "impl{bounds} FromJs for {n}{args} {{ fn from_handle(h: u32) -> Self {{ match unsafe {{ raw::{import}_tag(h, {kind}) }} {{ {decode}_ => unreachable!() }} }} }}\n\
+             impl<{is_params}> Is<B_> for {n}{args} where {} {{}}\n",
+            is_bounds.join(", ")
+        );
+    } else {
+        out += &format!("impl From<{VALUE}> for {n} {{ fn from(x: {VALUE}) -> Self {{ {n}::{VALUE}(x) }} }}\nimpl From<&{VALUE}> for {n} {{ fn from(x: &{VALUE}) -> Self {{ {n}::{VALUE}(Clone::clone(x)) }} }}\n");
+    }
     // Made from a member. A bare type parameter cannot be: it could be the union itself.
     for p in u.parts.iter().filter(|p| !matches!(p, Ty::Param(_))) {
         let (v, t) = (variant(p), ty(p, cx));
@@ -601,7 +615,8 @@ pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<Strin
                 continue;
             }
             let matches: Vec<&Ty> = u.parts.iter().filter(|p| matches!(p, Ty::Obj(_) | Ty::Generic(..)) && is_subtype(m, &c_ty, p, 0)).collect();
-            if matches.len() == 1 {
+            // Which of several does not matter where no variant is decoded.
+            if matches.len() == 1 || !decodable && !matches.is_empty() {
                 let p = matches[0];
                 sub_impls.push((c_rust, variant(p), ty(p, cx)));
             }

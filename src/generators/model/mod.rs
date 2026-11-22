@@ -232,6 +232,12 @@ impl NamedUnion {
     pub fn params(&self) -> usize {
         self.parts.iter().filter(|p| matches!(p, Ty::Param(_))).count()
     }
+
+    // A value can be made of a member without telling members apart: each is a
+    // number, a flag, a string, a handle, an array or a tuple.
+    pub fn typable(&self) -> bool {
+        self.type_params.is_empty() && self.parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)))
+    }
 }
 
 // A map whose keys select types: `HTMLElementEventMap`.

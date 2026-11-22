@@ -12,9 +12,11 @@
 // CamelCase, a map's keys as constants of the map
 // (`HTMLElementEventMap::CLICK`). Arguments are borrowed: an object is
 // `&impl AsRef<T>`, so any subtype goes in; an array or a union is
-// `impl Into<..>`, so `["a", "b"]` or `42.0` do; a value of a type parameter
-// goes by value. Nullables are `Option`,
-// unions enums, callbacks closures, promises futures.
+// `impl Into<..>`, so `["a", "b"]` or `42.0` do; `any` is `impl Into<JsValue>`;
+// a nullable or optional string or object is `impl Nullable<T>`, the value by
+// reference, `Some` of it or `None`, and a number or flag `impl Into<Option<..>>`;
+// a value of a type parameter goes by value. Unions are enums, callbacks
+// closures, promises futures.
 //
 // The crate: `Cargo.toml`, `src/lib.rs`, `src/runtime.rs`, `src/types.rs`
 // (enums, unions, callbacks), a file per module, and `src/raw.rs` (the
@@ -92,6 +94,9 @@ pub(super) struct Context {
     // Unions values can be decoded to, and all unions.
     pub decodable: BTreeSet<String>,
     pub unions: BTreeSet<String>,
+    // Unions an argument is typed as: the decodable ones, and those only a
+    // value goes into, made from a member.
+    pub typed: BTreeSet<String>,
     // Types declared without type parameters: `Is` is implemented for them.
     pub classes: BTreeSet<String>,
     // The Rust name of each type the model names: a namespace's as its
@@ -106,6 +111,10 @@ pub(super) struct Context {
 impl Context {
     pub(super) fn decodable(&self, n: &str) -> bool {
         self.decodable.contains(n)
+    }
+
+    pub(super) fn takes(&self, n: &str) -> bool {
+        self.typed.contains(n)
     }
 
     pub(super) fn is_union(&self, n: &str) -> bool {

@@ -4,7 +4,7 @@ use super::classes::{callback, emit_classes, union_enum};
 use super::types::{function, names_of, ns_module, rust_elem};
 use super::{camel, camel_variant, rust_function, rust_type, snake, Context, ProjectRef, PRELUDE, RUNTIME, RUNTIME_TYPES};
 use super::super::comments::{Style, comment};
-use super::super::model::{Call, Model, Ty};
+use super::super::model::{Call, Model, NamedUnion, Ty};
 
 // Enum variants on one line; where some have documentation, one to a line.
 fn variant_list<'a>(variants: impl Iterator<Item = (String, Option<&'a str>)>) -> String {
@@ -18,6 +18,12 @@ fn variant_list<'a>(variants: impl Iterator<Item = (String, Option<&'a str>)>) -
         out += &format!("    {variant},\n");
     }
     out
+}
+
+// A union only a value goes into is typed where a member says which it is:
+// two arrays would be one variant.
+fn inputs_only(u: &NamedUnion) -> bool {
+    u.typable() && u.parts.iter().filter(|p| matches!(p, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() <= 1
 }
 
 // A module's file: `areas/core` is `src/areas_core.rs`.
@@ -73,6 +79,7 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
     let cx = Context {
         decodable: m.unions.iter().filter(|u| u.decodable()).map(|u| u.name.clone()).collect(),
         unions: m.unions.iter().map(|u| u.name.clone()).collect(),
+        typed: m.unions.iter().filter(|u| u.decodable() || inputs_only(u)).map(|u| u.name.clone()).collect(),
         classes: m.classes.iter().filter(|c| c.type_params.is_empty()).map(|c| c.name.clone()).chain(m.opaque.iter().filter(|n| !m.opaque_arity.contains_key(*n)).filter(|n| resolved_opaque.get(*n).is_none_or(|x| x.2)).cloned()).collect(),
         types,
         own,
@@ -268,9 +275,9 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             types_file += "}\n";
         }
     }
-    // Unions that can be decoded: enums.
+    // Unions an argument is typed as: enums.
     let mut alias_names: HashSet<String> = HashSet::new();
-    for u in m.unions.iter().filter(|u| u.decodable()) {
+    for u in m.unions.iter().filter(|u| cx.takes(&u.name)) {
         let mut text = union_enum(u, m, &mut imports, &cx);
         if u.type_params.is_empty() {
             // A library's name for it, where that is free.
@@ -403,7 +410,7 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             rust_types.entry(cx.def_name(model_name)).or_insert((0, false));
         }
     }
-    for u in m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()) {
+    for u in m.unions.iter().filter(|u| cx.takes(&u.name) && u.type_params.is_empty()) {
         if !module_of.contains_key(&u.name) {
             rust_types.entry(cx.def_name(&u.name)).or_insert((0, false));
         }

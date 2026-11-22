@@ -39,10 +39,10 @@ pub extern "C" fn run() {
     check!(big.size() == 8.0);
     check!(s.scale_with_name(2.0, "big").name() == "big");
 
-    // Optional parameter: an Option.
+    // An optional parameter is its value or None.
     s.resize(2.6, None);
     check!(s.size() == 2.6);
-    s.resize(2.6, Some(true));
+    s.resize(2.6, true);
     check!(s.size() == 3.0);
 
     // Union parameter: an enum, made from any of its members.
@@ -60,6 +60,7 @@ pub extern "C" fn run() {
     check!(total_area(&s, &Shape::unit()) == 10.0);
     check!(largest(&s, None) == Some(s.clone()));
     check!(largest(&Shape::unit(), Some(&s)) == Some(s.clone()));
+    check!(largest(&s, &s) == Some(s.clone()));
 
     // `undefined` rather than `null`.
     check!(or_unit(None).area() == 1.0);

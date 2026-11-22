@@ -2226,6 +2226,36 @@ fn rust_checks_constraints() {
     assert!(!out.status.success() && errors.contains("Is<Item>"), "an array of numbers should not satisfy T: Is<Item>:\n{errors}");
 }
 
+// An argument is the value itself, not a wrapper: a nullable string takes a `&str`, a `&String` or
+// `None` (no turbofish), an optional number or flag its value or `None`, an `any` a handle, a number
+// or a string, and a union only a value goes into a member. Anything else is a compile error.
+#[test]
+fn rust_arguments_are_values_not_wrappers() {
+    let Some(rustc) = rustc_wasm() else { return };
+    let compile = |c: &Case, source: &str| {
+        fs::write(c.out.join("t.rs"), format!("#![no_main]\nuse bindings::*;\n{source}\n")).unwrap();
+        Command::new(&rustc).current_dir(&c.out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--extern", "bindings=libbindings.rlib", "-o", "t.rlib", "t.rs"]).output().unwrap()
+    };
+    let data = case_in("data", "rust", "data-rust-arguments");
+    rust_bindings(&rustc, &data.out, &model(&data.xml, "Rust"));
+    let ok = compile(&data, "pub fn ok(s: &String, o: &Options) { greeting(\"a\", None); greeting(s, o); greeting(None, Some(o)); echo(o); echo(1.0); echo(\"x\"); }");
+    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    let bad = compile(&data, "pub fn bad() { greeting(1.0, None); }");
+    assert!(!bad.status.success(), "a number is not a nullable string");
+    let shapes = case_in("shapes", "rust", "shapes-rust-arguments");
+    rust_bindings(&rustc, &shapes.out, &model(&shapes.xml, "Rust"));
+    let ok = compile(&shapes, "pub fn ok(s: &Shape) { s.resize(1.0, None); s.resize(1.0, true); s.resize(1.0, Some(true)); }");
+    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    let bad = compile(&shapes, "pub fn bad(s: &Shape) { s.resize(1.0, 2.0); }");
+    assert!(!bad.status.success(), "a number is not an optional flag");
+    let unions = case_in("unions", "rust", "unions-rust-arguments");
+    rust_bindings(&rustc, &unions.out, &model(&unions.xml, "Rust"));
+    let ok = compile(&unions, "pub fn ok(a: &LooseA, b: LooseB) { loose(a); loose(b); loose(any_loose()); }");
+    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    let bad = compile(&unions, "pub fn bad() { loose(1.0); }");
+    assert!(!bad.status.success(), "a number is not a member of the union");
+}
+
 // A type argument outside its parameter's constraint is an F# compile error:
 // `largest<T extends Item>` takes no array of numbers.
 #[test]

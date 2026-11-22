@@ -141,6 +141,22 @@ impl<U, T: Into<U>> Optional<U> for T {
     }
 }
 
+// A nullable argument: the value by reference (`&opts`, `&text`), `Some` of
+// it, or `None`.
+pub trait Nullable<T: ?Sized> {
+    fn arg(&self) -> Option<&T>;
+}
+impl<T: ?Sized, U: AsRef<T> + ?Sized> Nullable<T> for &U {
+    fn arg(&self) -> Option<&T> {
+        Some((**self).as_ref())
+    }
+}
+impl<T: ?Sized> Nullable<T> for Option<&T> {
+    fn arg(&self) -> Option<&T> {
+        *self
+    }
+}
+
 // `T: Is<B>` says a T is a B: itself, a subtype of it, a union of such, or
 // any value. It is what a type parameter's `extends` becomes.
 pub trait Is<B> {}
@@ -383,6 +399,12 @@ impl From<&str> for JsValue {
 impl From<String> for JsValue {
     fn from(s: String) -> Self {
         s.as_str().into()
+    }
+}
+// `Some(&v)` is `v`, and `None` is null.
+impl From<Option<&JsValue>> for JsValue {
+    fn from(x: Option<&JsValue>) -> Self {
+        x.cloned().unwrap_or_else(JsValue::null)
     }
 }
 impl From<&String> for JsValue {

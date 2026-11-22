@@ -39,4 +39,11 @@ pub extern "C" fn run() {
     check!(setup(true) == "bool true");
     check!(setup(&options) == "options verbose=true");
     check!(matches!(lookup("abc"), NumberOrWidget::Number(n) if n == 3.0));
+
+    // Members no test tells apart: typed going in, made from a member; a value goes in as it is.
+    let a = LooseA::create();
+    a.set_a(Some(1.0));
+    check!(loose(&a) == "loose {\"a\":1}");
+    check!(loose(Loose::LooseA(a.clone())) == "loose {\"a\":1}");
+    check!(loose(any_loose()) == "loose {\"b\":2}");
 }

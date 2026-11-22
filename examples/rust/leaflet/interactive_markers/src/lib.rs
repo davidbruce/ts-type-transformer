@@ -11,7 +11,7 @@ pub extern "C" fn start() {
         .with_zoom_animation(false)
         .with_fade_animation(false)
         .with_marker_zoom_animation(false);
-    let m = map("map", Some(&m_opts));
+    let m = map("map", &m_opts);
 
     let stations = [
         ("01", "Geneva", lat_lng(46.2044, 6.1432, None)),
@@ -21,12 +21,11 @@ pub extern "C" fn start() {
         ("05", "Basel", lat_lng(47.5596, 7.5886, None)),
     ];
 
-    let line_pts: JsArray<JsValue> = stations.iter().map(|(_, _, p)| JsValue::from(p)).collect();
     let p_opts = PolylineOptions::default()
         .with_smooth_factor(1.0)
         .with_color("#404040")
         .with_weight(2.5);
-    let corridor = polyline(line_pts, Some(&p_opts));
+    let corridor = polyline(stations.iter().map(|s| &s.2).collect::<Vec<_>>(), &p_opts);
     corridor.add_to(&m);
 
     let dot_opts = CircleMarkerOptions::default()
@@ -40,7 +39,7 @@ pub extern "C" fn start() {
     let pin_anchor = point(11.0, 11.0, None);
 
     for (code, name, pt) in &stations {
-        let cm = circle_marker(pt, Some(&dot_opts));
+        let cm = circle_marker(pt, &dot_opts);
         cm.bind_tooltip(format!("{code} · {name}"), None);
         cm.add_to(&m);
 
@@ -50,14 +49,14 @@ pub extern "C" fn start() {
             .with_icon_size(pin_size.clone())
             .with_icon_anchor(pin_anchor.clone());
 
-        let mk_opts = MarkerOptions::default().with_icon(div_icon(Some(&d_opts)));
-        marker(pt, Some(&mk_opts)).add_to(&m);
+        let mk_opts = MarkerOptions::default().with_icon(div_icon(&d_opts));
+        marker(pt, &mk_opts).add_to(&m);
     }
 
     m.fit_bounds(&corridor.get_bounds().pad(0.15), None);
 
     let pop_opts = PopupOptions::default().with_max_width(220.0);
-    let note = popup(&stations[2].2, Some(&pop_opts));
+    let note = popup(&stations[2].2, &pop_opts);
     note.set_content("03 Bern · 46.95N, 7.45E");
     note.open_on(&m);
 
@@ -82,14 +81,13 @@ pub extern "C" fn start() {
                     let text = format!(
                         "5 DivIcon stations · clicks={n} · last click ({lat:.2}N, {lng:.2}E)"
                     );
-                    meta.set_text_content(Some(&text));
+                    meta.set_text_content(&text);
                 }
             }
         }
     });
     m.on_click(&on_click, None);
     let data = LeafletMouseEvent::default().with_latlng(&stations[2].2);
-    let payload = JsValue::from(&data);
-    m.fire("click", Some(&payload), None);
-    m.fire("click", Some(&payload), None);
+    m.fire("click", &data, None);
+    m.fire("click", &data, None);
 }

@@ -24,6 +24,18 @@ pub extern "C" fn run() {
     o.set_title(Some("hi"));
     check!(describe(&o) == "3x2 fill \"hi\"");
 
+    // A nullable string is a `&str`, a `&String` or None; a nullable object a reference or None.
+    let name = String::from("bob");
+    check!(greeting("ann", None) == "ann");
+    check!(greeting(&name, &o) == "bob 3");
+    check!(greeting(None, Some(&o)) == "nobody 3");
+
+    // A parameter of any type takes a handle, a number, a string; a JsValue goes as it is.
+    check!(echo(&o) == "object:3");
+    check!(echo(5.0) == "number:5");
+    check!(echo("x") == "string:x");
+    check!(echo(JsValue::from(true)) == "boolean:true");
+
     // Built by JavaScript, read here. A missing optional property is None.
     let d = defaults();
     check!(d.width() == 4.0);

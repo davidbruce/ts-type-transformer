@@ -336,13 +336,20 @@ the time control returns to JavaScript is reported, not lost.
   Rust's: `get_element_by_id`, `text_content()` and `set_text_content(..)`,
   `ShapeKind::Square`, `HTMLElementEventMap::CLICK`. Arguments are borrowed:
   an object is `&impl AsRef<T>`, so any subtype goes in; a union or an array
-  is `impl Into<..>`, so `describe(42.0)` and `join("-", ["a", "b"])` work; a
-  value of a type parameter goes by value. Overloads that differ in a
+  is `impl Into<..>`, so `describe(42.0)` and `join("-", ["a", "b"])` work, and
+  so does a union whose members no test tells apart (`loose(&a)`), which only
+  a value goes into and a getter gives as a `JsValue`; a parameter of `any` is
+  `impl Into<JsValue>`: `&handle`, `4.0`, `"text"`; a value of a type parameter
+  goes by value. An optional or nullable argument is its value or `None`: a
+  string is `"x"`, `&text` or `None`, an object `&opts`, `Some(&opts)` or
+  `None`, a number or flag `500.0`, `Some(500.0)` or `None`
+  (`lat_lng(46.2, 6.1, None)`, `map("map", &opts)`, `fire("click", &data, None)`).
+  Overloads that differ in a
   key-or-string parameter are one method (`query_selector(HTMLElementTagNameMap::P)`,
   `query_selector("p.intro")`), and where they differ in other parameters too,
   the key fixes their types (`add_event_listener(HTMLElementEventMap::CLICK,
-  &listener, None)`, `add_event_listener("ping", on_ping, &options)`). An
-  optional union argument is any member or `None`. A defaulted type argument is stated with
+  &listener, None)`, `add_event_listener("ping", on_ping, &options)`). A
+  nullable union argument is any member, the union or `None`. A defaulted type argument is stated with
   `query_selector_as::<T>`. `T extends Node` is `T: Is<Node>`. Callbacks are
   closures, kept (`new`, `release`) or for the length of a call and free to
   borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
@@ -601,8 +608,8 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 
 - OCaml has a config but no generator: it needs `js_of_ocaml` or `wasm_of_ocaml`.
 - 8 DOM unions have members no runtime test can tell apart (two array types,
-  `ArrayBufferLike | ArrayBufferView`): bound as untyped values, in C typed
-  where a value goes in. A union with an `any` member is `any`.
+  `ArrayBufferLike | ArrayBufferView`): bound as untyped values, in C and
+  Rust typed where a value goes in. A union with an `any` member is `any`.
 - F# on Pts erases 7 unions whose members no test tells apart (`U3<...>`,
   matched by nothing). Namespaced
   classes of a module library are still tested through `globalThis`.
@@ -613,7 +620,11 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
   compound literal with a comma needs parentheses to pass through a macro:
   unions have `U_of` so it is seldom written. `_Generic` takes exact types,
   so a subtype is upcast first.
-- Rust: a nullable union argument takes a member or `None`, not `Some(member)`.
+- Rust: a nullable union argument takes a member or `None`, not `Some(member)`; a
+  nullable string takes `Some(&str)`, not `Some(&String)`, and an `any` takes
+  `Some(&JsValue)`, not `Some(&handle)`: a bare `None` must infer, which one
+  accepted type for `Some` allows. A type argument nothing can infer is no
+  longer written (`em.on::<JsValue>(..)` is `em.on(..)`).
 - The wasm glue takes a module library as `options.root`; it does not read
   `import` yet.
 - Rust and Zig callbacks with a union argument receive it decoded; C's

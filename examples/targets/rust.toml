@@ -1,6 +1,6 @@
 # Example target: Rust over wasm32. Inheritance becomes traits, generics are
-# kept, unions are enums, optional parameters Option; Rust has no
-# overloading, so same-named members are renamed.
+# kept, unions are enums, optional and nullable parameters a value or None;
+# Rust has no overloading, so same-named members are renamed.
 [constructs]
 classes = "pair"
 type_ops = "evaluate"

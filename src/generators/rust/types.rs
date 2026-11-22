@@ -37,7 +37,6 @@ pub(super) fn ty(t: &Ty, cx: &Context) -> String {
 pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
     let lend = |e: &str| vec![format!("{e}.lend().h")];
     let into = |target: String| (format!("impl Into<{target}>"), vec![format!("Into::<{target}>::into({x}).lend().h")]);
-    let option = |inner: String| format!("{}<{inner}>", cx.option());
     match t {
         Ty::Num => ("f64".into(), vec![x.into()]),
         Ty::NumEnum(_) => (ty(t, cx), vec![format!("{x} as i32 as f64")]),
@@ -45,19 +44,27 @@ pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
         Ty::Key(_) => (ty(t, cx), vec![format!("{x}.index")]),
         Ty::Str => ("&str".into(), vec![format!("{x}.as_ptr()"), format!("{x}.len()")]),
         Ty::Nullable(inner, _) => match &**inner {
-            Ty::Str => (option("&str".into()), vec![format!("{x}.map_or(core::ptr::null(), |s| s.as_ptr())"), format!("{x}.map_or(0, |s| s.len())")]),
-            Ty::Num => (ty(t, cx), vec![format!("{x}.is_some() as i32"), format!("{x}.unwrap_or(0.0)")]),
-            Ty::NumEnum(_) => (ty(t, cx), vec![format!("{x}.is_some() as i32"), format!("{x}.map_or(0.0, |v| v as i32 as f64)")]),
-            Ty::Bool | Ty::Enum(_) => (ty(t, cx), vec![format!("{x}.map_or(-1, |v| v as i32)")]),
+            Ty::Str => ("impl Nullable<str>".into(), vec![format!("{x}.arg().map_or(core::ptr::null(), |s| s.as_ptr())"), format!("{x}.arg().map_or(0, |s| s.len())")]),
+            // The value itself or None: `500.0`, `Some(500.0)`, `None`.
+            Ty::Num => (format!("impl Into<{}>", ty(t, cx)), vec![format!("{x}.is_some() as i32"), format!("{x}.unwrap_or(0.0)")]),
+            Ty::NumEnum(_) => (format!("impl Into<{}>", ty(t, cx)), vec![format!("{x}.is_some() as i32"), format!("{x}.map_or(0.0, |v| v as i32 as f64)")]),
+            Ty::Bool | Ty::Enum(_) => (format!("impl Into<{}>", ty(t, cx)), vec![format!("{x}.map_or(-1, |v| v as i32)")]),
             // Any member, the union, or None: `options: true`, `Some(u)`, `None`.
-            Ty::NamedUnion(n) | Ty::Generic(n, _) if cx.is_union(n) && cx.decodable(n) => (format!("impl Optional<{}>", ty(inner, cx)), vec![format!("Optional::<{}>::into_option({x}).lend().h", ty(inner, cx))]),
+            Ty::NamedUnion(n) | Ty::Generic(n, _) if cx.is_union(n) && cx.takes(n) => {
+                let u = if cx.decodable(n) { ty(inner, cx) } else { cx.tn(n) };
+                (format!("impl Optional<{u}>"), vec![format!("Optional::<{u}>::into_option({x}).lend().h")])
+            }
             Ty::Param(_) => (ty(t, cx), lend(x)),
-            inner => (option(format!("&{}", ty(inner, cx))), lend(x)),
+            // Any value, or None: `JsValue::from(None)` is null.
+            Ty::Any => into(VALUE.into()),
+            // The value by reference, `Some` of it, or None.
+            inner => (format!("impl Nullable<{}>", ty(inner, cx)), vec![format!("{x}.arg().lend().h")]),
         },
         // Any value that is one: `name_of(&shape)` where a Named is wanted.
         Ty::Obj(n) => (format!("&impl AsRef<{}>", cx.tn(n)), vec![format!("AsRef::<{}>::as_ref({x}).lend().h", cx.tn(n))]),
         Ty::Generic(n, _) if !cx.is_union(n) => (format!("&impl AsRef<{}>", ty(t, cx)), vec![format!("AsRef::<{}>::as_ref({x}).lend().h", ty(t, cx))]),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => into(ty(t, cx)),
+        Ty::NamedUnion(n) if cx.takes(n) && !cx.decodable(n) => into(cx.tn(n)),
         Ty::NamedUnion(n) | Ty::Generic(n, _) if cx.is_union(n) => into(ty(t, cx)),
         Ty::Any | Ty::Union(_) | Ty::NamedUnion(_) => into(VALUE.into()),
         // A value of a type parameter is passed as into a collection: by value.
@@ -229,14 +236,19 @@ fn parts_with_raw(f: &Func, orig: Option<&Func>, imports: &mut BTreeMap<String, 
         args.push(this.into());
     }
     let mut params: Vec<String> = if this.is_some() { vec!["&self".into()] } else { Vec::new() };
+    // An optional number or flag is read more than once, as the `Option` it is made into.
+    let mut lets = String::new();
     for (i, ((p, t), (_, orig_t))) in f.params.iter().zip(&orig.params).enumerate() {
         let p = ident(&snake(p));
         let (written, lowered) = if raw(orig_t) == raw(t) {
             param(t, &p, cx)
         } else {
-            let w = if *t == Ty::Void { "()".into() } else { param(t, &p, cx).0 };
+            let w = if *t == Ty::Void { "()".into() } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_))) { ty(t, cx) } else { param(t, &p, cx).0 };
             (w, vec![format!("{p}.lend().h")])
         };
+        if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_))) && raw(orig_t) == raw(t) {
+            lets += &format!("let {p}: {} = {p}.into(); ", ty(t, cx));
+        }
         params.push(format!("{p}: {written}"));
         raw_params.extend(raw(orig_t).into_iter().enumerate().map(|(j, r)| format!("a{i}_{j}: {r}")));
         args.extend(lowered);
@@ -257,7 +269,9 @@ fn parts_with_raw(f: &Func, orig: Option<&Func>, imports: &mut BTreeMap<String, 
         format!("    {link}pub fn {raw_name}({}) -> {};\n", raw_params.join(", "), raw_ret(&orig.ret))
     });
     let import = raw_name;
-    let mut type_params: Vec<String> = f.type_params.iter().map(|p| bound(p, cx)).collect();
+    // A type parameter no argument or result names cannot be inferred: it has no use.
+    let used = |p: &TParam| p.default.is_some() || mentions(&f.ret, &p.name) || f.params.iter().any(|(_, t)| mentions(t, &p.name)) || f.type_params.iter().any(|q| q.constraint.as_ref().is_some_and(|c| mentions(c, &p.name)));
+    let mut type_params: Vec<String> = f.type_params.iter().filter(|p| used(p)).map(|p| bound(p, cx)).collect();
     if f.params.iter().any(|p| matches!(p.1, Ty::Key(_))) {
         type_params.insert(0, "V: JsType".into());
     }
@@ -270,7 +284,7 @@ fn parts_with_raw(f: &Func, orig: Option<&Func>, imports: &mut BTreeMap<String, 
         let semi = if f.ret == Ty::Void { ";" } else { "" };
         format!("let r = unsafe {{ raw::{import}({}) }}; <{}>::from_handle(r){semi}", args.join(", "), ty(&f.ret, cx))
     };
-    Parts { generics: type_params, params, ret: ty(&f.ret, cx), body }
+    Parts { generics: type_params, params, ret: ty(&f.ret, cx), body: format!("{lets}{body}") }
 }
 
 // Overloads of one method that differ in one parameter, which is a key of
@@ -445,7 +459,11 @@ pub(super) fn hidden(f: &Func) -> Vec<TParam> {
 // The function with those parameters at their defaults.
 pub(super) fn defaulted(f: &Func) -> Func {
     let hidden = hidden(f);
-    let mut out = map_types(f, &|t| subst(t, &hidden, &[]));
+    // A default may name another that is hidden: `R = D` beside `D = Date`.
+    let mut out = f.clone();
+    for _ in 0..=hidden.len() {
+        out = map_types(&out, &|t| subst(t, &hidden, &[]));
+    }
     out.type_params.retain(|p| !hidden.iter().any(|h| h.name == p.name));
     out
 }

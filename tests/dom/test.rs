@@ -34,7 +34,7 @@ pub extern "C" fn run() {
     let div: HTMLDivElement = doc.create_element(HTMLElementTagNameMap::DIV, None);
     let el: HTMLElement = div.into();
     el.set_id("made-by-rust");
-    el.set_text_content(Some("hello from rust"));
+    el.set_text_content("hello from rust");
     el.class_list().add(["box", "made"]);
     body.append_child(el.clone());
     check!(doc.get_element_by_id("made-by-rust") == Some(el.clone()));
@@ -46,7 +46,7 @@ pub extern "C" fn run() {
     check!(seed.get_attribute("data-x").as_deref() == Some("42"));
     check!(seed.get_attribute("data-missing").is_none());
     let copy: HTMLParagraphElement = doc.create_element(HTMLElementTagNameMap::P, None);
-    copy.set_text_content(Some(&seed.text_content()));
+    copy.set_text_content(&seed.text_content());
     el.append_child(copy.clone());
 
     // A subtype where its ancestor is wanted: into() moves, as_ref() borrows.
@@ -68,7 +68,7 @@ pub extern "C" fn run() {
 
     // A typed key selects the event type: the listener of "click" takes a PointerEvent.
     let button: HTMLElement = doc.create_element(HTMLElementTagNameMap::BUTTON, None).into();
-    button.set_text_content(Some("press"));
+    button.set_text_content("press");
     el.append_child(button.clone());
     let clicks = Rc::new(Cell::new(0));
     let on_click = JsListener::new({
@@ -91,7 +91,7 @@ pub extern "C" fn run() {
     // An options object, { once: true }, and events made and dispatched here.
     let pings = Rc::new(Cell::new(0));
     let once = AddEventListenerOptions::create();
-    once.set_once(Some(true));
+    once.set_once(true);
     let on_ping = EventListener::new({
         let (pings, el) = (pings.clone(), el.clone());
         move |_: Event| {
@@ -107,7 +107,7 @@ pub extern "C" fn run() {
     check!(pings.get() == 1);
 
     // Style, layout and the window.
-    el.style().set_property("color", Some("red"), None);
+    el.style().set_property("color", "red", None);
     check!(el.style().color() == "red");
     check!(el.get_bounding_client_rect().width() > 0.0);
     check!(el.children().length() == 2.0);

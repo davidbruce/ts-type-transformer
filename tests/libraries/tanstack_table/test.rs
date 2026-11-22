@@ -74,7 +74,7 @@ pub extern "C" fn run() {
     check!(state_slices_equal(&a, &b) && !state_slices_equal(&a, &c));
     check!(has_own(&a, &PropertyKey(JsValue::from("x").0.clone())));
     check!(!has_own(&a, &PropertyKey(JsValue::from("y").0.clone())));
-    check!(is_function::<JsValue>(JsValue(AnyFunction::new(|_: JsValue| {}).0.clone())) && !is_function::<JsValue>(1.0));
+    check!(is_function(JsValue(AnyFunction::new(|_: JsValue| {}).0.clone())) && !is_function(1.0));
 
     // The row sort and filter functions are values; their names are known.
     check!(sort_fn_basic().0 .0 != 0 && sort_fn_text().0 .0 != 0);

@@ -125,9 +125,9 @@ fn emitter() {
             log.borrow_mut().push(format!("greet {} {}", args.get(0).as_string(), args.len()));
         }
     });
-    em.on::<JsValue>("greet", &on_greet);
-    check!(em.listener_count::<JsValue>("greet", None) == 1.0);
-    check!(em.emit::<JsValue>("greet", [JsValue::from("world")]));
+    em.on("greet", &on_greet);
+    check!(em.listener_count("greet", None) == 1.0);
+    check!(em.emit("greet", [JsValue::from("world")]));
     check!(log.borrow().len() == 1 && log.borrow()[0] == "greet world 1");
 
     // once fires one time only; emit says whether anyone listened.
@@ -136,23 +136,23 @@ fn emitter() {
         let c = once_count.clone();
         move |_: JsArray| c.set(c.get() + 1)
     });
-    em.once::<JsValue>("ping", &once);
-    check!(em.listener_count::<JsValue>("ping", None) == 1.0);
-    check!(em.emit::<JsValue>("ping", Vec::<JsValue>::new()));
-    check!(!em.emit::<JsValue>("ping", Vec::<JsValue>::new()));
+    em.once("ping", &once);
+    check!(em.listener_count("ping", None) == 1.0);
+    check!(em.emit("ping", Vec::<JsValue>::new()));
+    check!(!em.emit("ping", Vec::<JsValue>::new()));
     check!(once_count.get() == 1);
-    check!(em.listener_count::<JsValue>("ping", None) == 0.0);
+    check!(em.listener_count("ping", None) == 0.0);
 
     // remove_listener stops a listener; event_names lists what is left.
     check!(em.event_names().len() == 1);
-    em.remove_listener::<JsValue>("greet", &on_greet);
-    check!(em.listener_count::<JsValue>("greet", None) == 0.0);
-    check!(!em.emit::<JsValue>("greet", [JsValue::from("again")]));
+    em.remove_listener("greet", &on_greet);
+    check!(em.listener_count("greet", None) == 0.0);
+    check!(!em.emit("greet", [JsValue::from("again")]));
     check!(log.borrow().len() == 1);
 
     em.set_max_listeners(3.0);
     check!(em.get_max_listeners() == 3.0);
     // An "error" event nobody listens for throws.
-    let thrown = js::attempt(|| em.emit::<JsValue>("error", [JsValue::from(&Error::new("boom"))]));
+    let thrown = js::attempt(|| em.emit("error", [JsValue::from(&Error::new("boom"))]));
     check!(thrown.is_err_and(|e| e.message().contains("boom")));
 }
