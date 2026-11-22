@@ -99,7 +99,7 @@ TS_EXPORT(start) void start() {
             meta->textContent(buf);
         }
     });
-    m.on(Evented_addEventListener_type_click::click, on_click);
+    m.on_click(on_click);
     LeafletMouseEvent payload = LeafletMouseEvent::create();
     payload.latlng(stations[2].pt);
     m.fire("click", payload);

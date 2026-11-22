@@ -32,7 +32,7 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map(t.ContentString("map"), Some(m_opts))
+  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(m_opts))
 
   let bern = leaflet.lat_lng(46.9480, 7.4474, None)
   let stations = [
@@ -125,7 +125,6 @@ pub fn main() {
   let clicks = runtime.ref_new(0)
   evented.on_click(
     m,
-    t.EventedAddEventListenerTypeClickClick,
     fn(ev) {
       let ll = leaflet_mouse_event.get_latlng(ev)
       let lat = lat_lng.get_lat(ll)

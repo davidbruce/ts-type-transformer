@@ -78,7 +78,7 @@ let main () =
                     note.openOn m |> ignore
                 let meta = (document.getElementById "meta").Value
                 meta.textContent <- sprintf "%d DivIcon stations · clicks=%d · last click (%.2fN, %.2fE)" stations.Length clicks ll.lat ll.lng
-    m.on (EventedAddEventListenerTypeClick.Click, onClick) |> ignore
+    m.on_click onClick |> ignore
     let payload = {| latlng = bernPt |}
     m.fire ("click", payload) |> ignore
     m.fire ("click", payload) |> ignore

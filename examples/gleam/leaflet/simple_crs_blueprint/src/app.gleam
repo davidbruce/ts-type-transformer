@@ -47,7 +47,7 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map(t.ContentString("map"), Some(m_opts))
+  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(m_opts))
 
   let grid_opts = box_opts("#e5e5e5", 1.0, None, "#ffffff", 0.0)
   list.each([0.0, 20.0, 40.0, 60.0, 80.0, 100.0], fn(r) {

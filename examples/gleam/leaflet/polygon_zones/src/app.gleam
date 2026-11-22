@@ -42,7 +42,7 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map(t.ContentString("map"), Some(m_opts))
+  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(m_opts))
 
   let mid_pts = [
     t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.2, 7.6, None)),

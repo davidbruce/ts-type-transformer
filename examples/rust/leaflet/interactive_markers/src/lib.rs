@@ -87,11 +87,7 @@ pub extern "C" fn start() {
             }
         }
     });
-    m.on_click(
-        EventedAddEventListenerTypeClick::Click,
-        &on_click,
-        None,
-    );
+    m.on_click(&on_click, None);
     let data = LeafletMouseEvent::default().with_latlng(&stations[2].2);
     let payload = JsValue::from(&data);
     m.fire("click", Some(&payload), None);

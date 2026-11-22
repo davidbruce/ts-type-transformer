@@ -54,7 +54,7 @@ fn pair_distances_km(pts: List(t.LatLng(Nil))) -> Float {
 }
 
 pub fn main() {
-  let m = leaflet.map(t.ContentString("map"), Some(make_map_opts()))
+  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(make_map_opts()))
   let london = leaflet.lat_lng(51.505, -0.09, None)
   let paris = leaflet.lat_lng(48.8566, 2.3522, None)
   let zurich = leaflet.lat_lng(47.3769, 8.5417, None)

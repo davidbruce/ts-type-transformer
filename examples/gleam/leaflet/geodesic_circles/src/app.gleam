@@ -22,7 +22,7 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map(t.ContentString("map"), Some(m_opts))
+  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(m_opts))
 
   let zurich = leaflet.lat_lng(47.3769, 8.5417, None)
   map.set_view(m, t.LatLngExpressionLatLng(zurich), Some(8.0), None)

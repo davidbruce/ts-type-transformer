@@ -97,7 +97,7 @@ export fn start() void {
     g_state.map = m.retain();
     g_state.note = note.retain();
 
-    _ = m.onClick(.click, .{ onClick, &g_state }, null);
+    _ = m.onClick(.{ onClick, &g_state }, null);
     const payload = lf.LeafletMouseEvent.init(.{ .latlng = pts[2] });
     _ = m.fire("click", .{ .data = payload });
     _ = m.fire("click", .{ .data = payload });
