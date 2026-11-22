@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use roxmltree::Node;
 
 use super::super::{attr, elements, flag, marks, named, only_child};
-use super::{Gen, T};
+use super::{doc_lines, member_doc_lines, Gen, T};
 use super::member_ir::{FsMember, FsMemberKind, FsParam, has_member_conflict, push_member, render_members};
 use super::plan::AliasForm;
 use super::syntax::{
@@ -122,7 +122,7 @@ impl Gen {
                     self.numeric_enum(d, &name, indent);
                     return;
                 }
-                self.out += &format!("{indent}[<StringEnum; RequireQualifiedAccess>]\n{indent}type {name} =\n");
+                self.out += &format!("{}{indent}[<StringEnum; RequireQualifiedAccess>]\n{indent}type {name} =\n", doc_lines(d, indent));
                 let mut seen = HashSet::new();
                 let mut testers = HashSet::new();
                 for v in named(d, "member") {
@@ -139,7 +139,7 @@ impl Gen {
                     }
                     testers.insert(format!("Is{case}"));
                     seen.insert(case.clone());
-                    self.out += &format!("{indent}    | [<CompiledName({value:?})>] {case}\n");
+                    self.out += &format!("{}{indent}    | [<CompiledName({value:?})>] {case}\n", member_doc_lines(v, &format!("{indent}    ")));
                 }
                 self.out += "\n";
             }
@@ -212,6 +212,7 @@ impl Gen {
                                 ret: def_ret.clone(),
                             },
                             marks: fn_marks.clone(),
+                            doc: member_doc_lines(d, &format!("{indent}    ")),
                         },
                         &self.abbrevs,
                     );
@@ -226,6 +227,7 @@ impl Gen {
                                 ret: def_ret.clone(),
                             },
                             marks: fn_marks.clone(),
+                            doc: String::new(),
                         });
                     }
                 }
@@ -241,6 +243,7 @@ impl Gen {
                             ret: ret.clone(),
                         },
                         marks: fn_marks.clone(),
+                        doc: member_doc_lines(d, &format!("{indent}    ")),
                     },
                     &self.abbrevs,
                 );
@@ -255,6 +258,7 @@ impl Gen {
                             ret: ret.clone(),
                         },
                         marks: fn_marks.clone(),
+                        doc: String::new(),
                     });
                 }
                 self.cur_constrained = saved_constrained;
@@ -444,10 +448,10 @@ impl Gen {
     }
 
     fn numeric_enum(&mut self, d: Node, name: &str, indent: &str) {
-        self.out += &format!("{indent}[<RequireQualifiedAccess>]\n{indent}type {name} =\n");
+        self.out += &format!("{}{indent}[<RequireQualifiedAccess>]\n{indent}type {name} =\n", doc_lines(d, indent));
         for (i, v) in named(d, "member").enumerate() {
             let value = if attr(v, "type") == "number" { attr(v, "value").to_string() } else { i.to_string() };
-            self.out += &format!("{indent}    | {} = {value}\n", ident(attr(v, "name")));
+            self.out += &format!("{}{indent}    | {} = {value}\n", member_doc_lines(v, &format!("{indent}    ")), ident(attr(v, "name")));
         }
         self.out += "\n";
     }

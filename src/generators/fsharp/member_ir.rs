@@ -56,6 +56,8 @@ pub(super) struct FsMember {
     pub name: String,
     pub kind: FsMemberKind,
     pub marks: Vec<String>,
+    // Its `///` lines, written before it.
+    pub doc: String,
 }
 
 #[derive(PartialEq, Eq)]
@@ -104,7 +106,7 @@ impl FsMember {
     }
 
     pub(super) fn render(&self) -> String {
-        format!("{}    {}\n", self.indent, self.render_unindented())
+        format!("{}{}    {}\n", self.doc, self.indent, self.render_unindented())
     }
 
     pub(super) fn subst(&self, map: &HashMap<String, String>) -> Self {
@@ -135,6 +137,7 @@ impl FsMember {
             name: self.name.clone(),
             kind,
             marks: self.marks.clone(),
+            doc: self.doc.clone(),
         }
     }
 
@@ -285,6 +288,11 @@ pub(super) fn has_member_conflict(members: &[FsMember], cand: &FsMember, abbrevs
         }
         false
     })
+}
+
+// The members without their documentation, for what scans the code for types.
+pub(super) fn render_code(members: &[FsMember]) -> String {
+    members.iter().map(|m| FsMember { doc: String::new(), ..m.clone() }.render()).collect()
 }
 
 pub(super) fn render_members(members: &[FsMember]) -> String {

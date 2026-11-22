@@ -4,7 +4,7 @@ use roxmltree::Node;
 
 use super::super::{attr, elements, flag, named, only_child};
 use super::Gen;
-use super::member_ir::render_members;
+use super::member_ir::{render_code, render_members};
 use super::syntax::{
     add_opt, collect_ordered_tparams, const_js, ident, is_plain_ident, pascal, ret_type_word, strip_opt, type_ident, type_word, words,
 };
@@ -441,6 +441,7 @@ impl Gen {
         }
 
         let body_str = render_members(&body_members);
+        let code_str = render_code(&body_members);
         let mut bound_member_tps = HashSet::new();
         for &m in &members {
             let sig = if m.has_tag_name("property") && !flag(m, "optional") && only_child(m).has_tag_name("functionType") {
@@ -456,16 +457,16 @@ impl Gen {
                 }
             }
         }
-        let tparams = collect_ordered_tparams(&body_str, &bound_member_tps);
+        let tparams = collect_ordered_tparams(&code_str, &bound_member_tps);
         if tparams.iter().any(|tp| self.cur_constrained.contains(tp)) {
             return None;
         }
 
-        let key = (self.hoist_scope(), tparams.clone(), format!("iface:{body_str}"));
+        let key = (self.hoist_scope(), tparams.clone(), format!("iface:{code_str}"));
         let rname = if let Some(existing) = self.records.get(&key) {
             existing.clone()
         } else {
-            let latest = words(&body_str).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
+            let latest = words(&code_str).iter().filter_map(|w| self.file_of.get(*w)).copied().max().unwrap_or(0);
             if !self.cur_indent.is_empty() && latest > self.current_file {
                 return None;
             }

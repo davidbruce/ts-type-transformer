@@ -188,10 +188,10 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                                 }
                             }
                             Decl::Interface(Interface {
-                                name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], ancestor_syms: vec![], members, class: None, synthetic: true, js_name: None,
+                                name: name.clone(), sym: None, type_params, extends: vec![], ancestors: vec![], ancestor_syms: vec![], members, class: None, synthetic: true, js_name: None, doc: None,
                             })
                         }
-                        ty => Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty, computed: false, synthetic: true }),
+                        ty => Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty, computed: false, synthetic: true, doc: None }),
                     });
                     (name, args)
                 })

@@ -57,6 +57,7 @@ pub fn map_types(f: &Func, fix: &dyn Fn(&Ty) -> Ty) -> Func {
         shared: f.shared.clone(),
         ret: fix(&f.ret),
         returns_this: f.returns_this,
+        doc: f.doc.clone(),
     }
 }
 

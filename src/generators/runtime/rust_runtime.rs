@@ -249,7 +249,8 @@ impl<T: FromJs> FromJs for Option<T> {
 // Declares a handle type, generic or not. `==` is whether two handles are
 // one JavaScript value.
 macro_rules! handle {
-    (@common $name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
+    (@common [$($meta:tt)*] $name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
+        $($meta)*
         #[repr(transparent)]
         pub struct $name $(<$($p $(= $d)?),*>)? (pub $crate::runtime::JsHandle $(, pub core::marker::PhantomData<fn() -> ($($p,)*)>)?);
         impl $(<$($p),*>)? AsRef<$name $(<$($p),*>)?> for $name $(<$($p),*>)? {
@@ -284,7 +285,7 @@ macro_rules! handle {
         }
     };
     (@jsvalue $name:ident) => {
-        handle!(@common $name);
+        handle!(@common [] $name);
         impl core::fmt::Debug for $name {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 write!(f, "{}(#{})", stringify!($name), self.0 .0)
@@ -292,15 +293,15 @@ macro_rules! handle {
         }
     };
     (@custom_debug $name:ident) => {
-        handle!(@common $name);
+        handle!(@common [] $name);
         impl From<$name> for $crate::runtime::JsValue {
             fn from(x: $name) -> Self {
                 $crate::runtime::JsValue(x.0)
             }
         }
     };
-    ($name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
-        handle!(@common $name $(<$($p $(= $d)?),*>)?);
+    ($(#[$meta:meta])* $name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
+        handle!(@common [$(#[$meta])*] $name $(<$($p $(= $d)?),*>)?);
         impl $(<$($p),*>)? From<$name $(<$($p),*>)?> for $crate::runtime::JsValue {
             fn from(x: $name $(<$($p),*>)?) -> Self {
                 $crate::runtime::JsValue(x.0)

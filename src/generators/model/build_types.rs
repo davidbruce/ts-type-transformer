@@ -9,6 +9,54 @@ use super::super::{attr, elements, flag, named, only_child};
 
 pub(super) type Sig = (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty);
 
+// What a declaration's functions say: its JSDoc, then where JavaScript is
+// called where lowering renamed the member or fixed an argument.
+pub(super) fn document(funcs: &mut [Func], d: Node) {
+    let doc = crate::generators::member_doc(d);
+    let renamed = d.attribute("jsName").is_some_and(|js| Some(js) != d.attribute("name"));
+    for f in funcs {
+        let origin = (renamed || !f.fixed.is_empty()).then(|| origin(f)).flatten().filter(|_| !named_by_its_call(f));
+        f.doc = match (&doc, origin) {
+            (Some(d), Some(o)) => Some(format!("{d}\n\n{o}")),
+            (Some(d), None) => Some(d.clone()),
+            (None, o) => o,
+        };
+    }
+}
+
+// A function whose name already says its call: `on_click` is `on("click", ...)`.
+fn named_by_its_call(f: &Func) -> bool {
+    let norm = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
+    let name = norm(&f.name);
+    let (Call::Method(js) | Call::Static(js)) = &f.call else { return false };
+    !f.fixed.is_empty() && name.contains(&norm(js.rsplit("::").next().unwrap_or(js))) && f.fixed.iter().all(|x| name.contains(&norm(&x.1)))
+}
+
+// `JavaScript: setView(center, zoom)`: the call as written, with the arguments
+// the glue fixes in place.
+fn origin(f: &Func) -> Option<String> {
+    let mut params = f.params.iter().map(|p| p.0.as_str());
+    let args: Vec<String> = (0..f.params.len() + f.fixed.len())
+        .map(|i| match f.fixed.iter().find(|x| x.0 == i) {
+            Some(x) => x.1.clone(),
+            None => format!("{}{}", if f.rest && i + 1 == f.params.len() + f.fixed.len() { "..." } else { "" }, params.next().unwrap_or_default()),
+        })
+        .collect();
+    // Not the package it is in: `leaflet::transformation`.
+    let bare = |js: &str| js.rsplit("::").next().unwrap_or(js).to_string();
+    let call = match &f.call {
+        Call::Method(js) => format!("{js}({})", args.join(", ")),
+        Call::Static(js) => format!("{}({})", bare(js), args.join(", ")),
+        Call::New(js) => format!("new {}({})", bare(js), args.join(", ")),
+        Call::Get(js) | Call::GetBound(js) => format!(".{js}"),
+        Call::Set(js) => format!(".{js} = {}", args.first().map_or("value", String::as_str)),
+        Call::StaticGet(js) => bare(js),
+        Call::StaticSet(js) => format!("{} = {}", bare(js), args.first().map_or("value", String::as_str)),
+        _ => return None,
+    };
+    Some(format!("JavaScript: `{call}`"))
+}
+
 fn setter_name(raw_name: &str, is_fn_prop: bool) -> String {
     let id = ident(raw_name);
     if crate::generators::case::starts_with_word(raw_name, "set") {
@@ -46,7 +94,7 @@ impl<'a> Builder<'a> {
             }
             tp.name = renamed;
         }
-        c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this });
+        c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this, doc: None });
     }
 
     fn resolve_fn_prop(
@@ -158,7 +206,7 @@ impl<'a> Builder<'a> {
         let runtime = d.has_tag_name("class").then(|| js.to_string());
         let path_js = js;
         let owner = self.type_ident(path);
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: runtime };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name: owner.clone(), ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: runtime, doc: None };
         let mut names = HashSet::new();
         if !d.has_tag_name("class") && !named(d, "call").any(|_| true) {
             names.insert("create".to_string());
@@ -175,7 +223,7 @@ impl<'a> Builder<'a> {
                 })
                 .collect();
             let literal = format!("{{{}}}", fixed.join(", "));
-            c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create(literal), params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()), returns_this: false });
+            c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "create".into(), call: Call::Create(literal), params: vec![], rest: false, fixed: vec![], shared: None, ret: Ty::Obj(owner.clone()), returns_this: false, doc: None });
         }
         let is_option_bag = !d.has_tag_name("class")
             && !named(d, "call").any(|_| true)
@@ -189,7 +237,7 @@ impl<'a> Builder<'a> {
     }
 
     pub(super) fn statics(&mut self, body: Node<'a, 'a>, path: &str, name: String) -> Class {
-        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: None };
+        let mut c = Class { type_params: vec![], bases: vec![], module: self.module.clone(), name, ancestors: Vec::new(), funcs: Vec::new(), consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: None, doc: None };
         let mut names = HashSet::new();
         for m in elements(body) {
             self.member(&mut c, &mut names, m, path, true, false);
@@ -198,6 +246,12 @@ impl<'a> Builder<'a> {
     }
 
     pub(super) fn member(&mut self, c: &mut Class, names: &mut HashSet<String>, m: Node<'a, 'a>, path: &str, is_static: bool, allow_readonly_set: bool) {
+        let before = c.funcs.len();
+        self.member_funcs(c, names, m, path, is_static, allow_readonly_set);
+        document(&mut c.funcs[before..], m);
+    }
+
+    fn member_funcs(&mut self, c: &mut Class, names: &mut HashSet<String>, m: Node<'a, 'a>, path: &str, is_static: bool, allow_readonly_set: bool) {
         let owner = c.name.clone();
         let raw_name = m.attribute("name").unwrap_or_default();
         let tag = m.tag_name().name();
@@ -258,11 +312,11 @@ impl<'a> Builder<'a> {
             if names.insert("get_at".into()) {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true), returns_this: false });
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true), returns_this: false, doc: None });
                 // A value of none (`[key: number]: never`) is never set.
                 if value != Ty::Void {
                     let import = self.import(format!("{owner}_set_at"));
-                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "set_at".into(), call: Call::IndexSet, params: vec![("key".into(), key), ("value".into(), value)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false, doc: None });
                 }
             }
             return;
@@ -280,7 +334,7 @@ impl<'a> Builder<'a> {
             if !names.contains(&base) && self.bad.is_none() {
                 names.insert(base.clone());
                 let import = self.import(format!("{owner}_{base}"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret, returns_this: false });
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: base, call, params, rest: false, fixed: vec![], shared: None, ret, returns_this: false, doc: None });
             }
             self.bad = None;
             return;
@@ -308,7 +362,7 @@ impl<'a> Builder<'a> {
             };
             let import = self.import(format!("{owner}_{name}"));
             let type_params = std::mem::take(&mut self.last_type_params);
-            c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this: false });
+            c.funcs.push(Func { type_params, module: String::new(), import, name, call, params, rest, fixed, shared: None, ret, returns_this: false, doc: None });
             if let Some(why) = self.bad.take() {
                 c.funcs.pop();
                 self.skip(&why);
@@ -366,7 +420,7 @@ impl<'a> Builder<'a> {
                 let import = self.import(format!("{owner}_{name}"));
                 // Its own type parameters (`new<T>(x: T)`), as a method's.
                 let type_params = std::mem::take(&mut self.last_type_params);
-                c.funcs.push(Func { type_params, module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret, returns_this: false });
+                c.funcs.push(Func { type_params, module: String::new(), import, name, call: Call::New(path.to_string()), params, rest, fixed, shared: None, ret, returns_this: false, doc: None });
             }
             "method" => {
                 let sig = self.signature(m, &owner);
@@ -437,7 +491,7 @@ impl<'a> Builder<'a> {
                                 let set = if is_static { Call::StaticSet(format!("{path}.{js}")) } else { Call::Set(js.clone()) };
                                 let set_name = unique(setter_name(raw_name, true), names);
                                 let import = self.import(format!("{owner}_{set_name}"));
-                                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: set_name, call: set, params: vec![("value".into(), prop_ty)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: set_name, call: set, params: vec![("value".into(), prop_ty)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false, doc: None });
                             } else {
                                 self.bad = None;
                             }
@@ -467,11 +521,11 @@ impl<'a> Builder<'a> {
                     };
                     let name = unique(format!("get_{}", ident(raw_name)), names);
                     let import = self.import(format!("{owner}_{name}"));
-                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone(), returns_this: false });
+                    c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: get, params: vec![], rest: false, fixed: vec![], shared: None, ret: t.clone(), returns_this: false, doc: None });
                     if !flag(m, "readonly") || allow_readonly_set {
                         let name = unique(setter_name(raw_name, is_fn_prop), names);
                         let import = self.import(format!("{owner}_{name}"));
-                        c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                        c.funcs.push(Func { type_params: vec![], module: String::new(), import, name, call: set, params: vec![("value".into(), t)], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false, doc: None });
                     }
                 }
             }

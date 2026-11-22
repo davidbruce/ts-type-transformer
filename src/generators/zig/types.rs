@@ -1,7 +1,8 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use super::{ident, zig_func_name};
-use super::super::model::{Call, Class, Func, NamedUnion, Ty};
+use super::super::comments::{Style, comment};
+use super::super::model::{Call, Callback, Class, Func, NamedUnion, Ty};
 
 // Each function's Zig name, by the model's: `names::settle` made them apart.
 pub(super) fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>) -> HashMap<String, String> {
@@ -238,8 +239,70 @@ fn lower_arg(name: &str, t: &Ty) -> String {
     }
 }
 
+// What a parameter of `anytype` takes, in words.
+fn describe(t: &Ty, unions: &[NamedUnion], callbacks: &[Callback]) -> String {
+    let list = |parts: &[Ty]| {
+        let shown: Vec<String> = parts.iter().take(6).map(|p| describe(p, unions, callbacks).trim_start_matches("a ").to_string()).collect();
+        format!("one of {}{}", shown.join(", "), if parts.len() > 6 { ", ..." } else { "" })
+    };
+    match t {
+        Ty::Str => "a string".into(),
+        Ty::Num => "a number".into(),
+        Ty::Bool => "a bool".into(),
+        Ty::Any => "any value".into(),
+        Ty::Array => "an array".into(),
+        Ty::ArrayOf(e) => format!("an array of {}", describe(e, unions, callbacks).trim_start_matches("a ")),
+        Ty::Tuple(es) => format!("a tuple of ({})", es.iter().map(|e| describe(e, unions, callbacks).trim_start_matches("a ").to_string()).collect::<Vec<_>>().join(", ")),
+        Ty::Obj(n) => match callbacks.iter().find(|c| c.name == *n) {
+            Some(c) => format!("a function `fn ({}) {}`", c.params.iter().map(|p| typed(&p.1, true)).collect::<Vec<_>>().join(", "), typed(&c.ret, false)),
+            None => format!("`{n}`"),
+        },
+        Ty::Enum(n) | Ty::NumEnum(n) => format!("`{n}`"),
+        Ty::NamedUnion(n) => match unions.iter().find(|u| u.name == *n) {
+            Some(u) => list(&u.parts),
+            None => format!("`{n}`"),
+        },
+        Ty::Union(parts) => list(parts),
+        Ty::Listener(ev) => format!("a function taking a `{}`", typed(ev, false)),
+        Ty::Mapped(m) => format!("the type `{m}` selects"),
+        Ty::Nullable(inner, _) => describe(inner, unions, callbacks),
+        Ty::Key(m) => format!("a `{m}.Key`"),
+        Ty::Void | Ty::Param(_) | Ty::Generic(..) => String::new(),
+    }
+}
+
+fn says_more_of(t: &Ty, callbacks: &[Callback]) -> bool {
+    match t {
+        Ty::NamedUnion(_) | Ty::Union(_) | Ty::Listener(_) | Ty::Tuple(_) => true,
+        Ty::Obj(n) => callbacks.iter().any(|c| c.name == *n),
+        _ => false,
+    }
+}
+
+// The one line that says what the `anytype` parameters of a function take.
+fn accepts(f: &Func, first_optional: usize, optional: usize, opts_param: &str, unions: &[NamedUnion], callbacks: &[Callback]) -> Option<String> {
+    let mut items: Vec<String> = Vec::new();
+    // What a name or a type alone does not say: a union's members, a function's signature.
+    let says_more = |t: &Ty| match t {
+        Ty::Nullable(inner, _) => says_more_of(inner, callbacks),
+        t => says_more_of(t, callbacks),
+    };
+    for (i, (name, t)) in f.params.iter().enumerate().take(first_optional) {
+        if !says_more(t) || (i == f.params.len() - 1 && f.rest) {
+            continue;
+        }
+        let or_null = if matches!(t, Ty::Nullable(..)) { ", or null" } else { "" };
+        items.push(format!("`{name}`: {}{or_null}", describe(t, unions, callbacks)));
+    }
+    if optional > 1 || optional == 1 && says_more(&f.params[first_optional].1) {
+        let fields: Vec<String> = f.params[first_optional..].iter().map(|(n, t)| format!(".{n}: {}", describe(t, unions, callbacks))).collect();
+        items.push(if optional == 1 { format!("`{opts_param}`: the optional `{}`", fields[0].trim_start_matches('.')) } else { format!("`{opts_param}`: null or a struct literal of {}", fields.join(", ")) });
+    }
+    (!items.is_empty()).then(|| format!("Takes {}.", items.join("; ")))
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion], wasm_module: &str, emitted_imports: &mut HashSet<String>) {
+pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, f: &Func, zig_name: &str, indent: &str, unions: &[NamedUnion], callbacks: &[Callback], wasm_module: &str, emitted_imports: &mut HashSet<String>) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
@@ -405,6 +468,11 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
     // Only a shared import can repeat; checking others would be quadratic.
     if f.shared.is_none() || !externs.contains(&decl) {
         *externs += &decl;
+    }
+    let takes = accepts(f, first_optional, optional, opts_param, unions, callbacks);
+    let docs: Vec<&str> = f.doc.as_deref().into_iter().chain(takes.as_deref()).collect();
+    if !docs.is_empty() {
+        *out += &comment(&docs.join("\n\n"), "///", indent, Style::Plain);
     }
     *out += &format!("{indent}pub fn {}({}) {ret_type} {{ {unpack}{pre}{body} }}\n", ident(zig_name), params.join(", "));
 }

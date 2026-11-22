@@ -88,6 +88,13 @@ impl Xml {
     fn leaf(&mut self, tag: &str, attrs: &Attrs) {
         self.line(tag, attrs, true);
     }
+    // A declaration's documentation, its first child.
+    fn doc(&mut self, doc: &Option<String>) {
+        let Some(text) = doc.as_deref().filter(|_| self.hash.is_none()) else { return };
+        // Line breaks as references: the output is indented by line.
+        let text = text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('\n', "&#10;");
+        let _ = writeln!(self.out, "{:w$}<doc>{text}</doc>", "", w = self.depth * 2);
+    }
     fn wrap(&mut self, tag: &str, types: &[&Type]) {
         self.open(tag, &vec![]);
         for t in types {
@@ -196,6 +203,7 @@ impl Xml {
                         attrs.push(("synthetic", "true"));
                     }
                     self.open("typeAlias", &attrs);
+                    self.doc(&a.doc);
                     self.type_params(&a.type_params);
                     if matches!(a.ty, Type::Object(_)) {
                         for e in &a.extends {
@@ -215,6 +223,7 @@ impl Xml {
                         attrs.push(("marks", &marks));
                     }
                     self.open("function", &attrs);
+                    self.doc(&f.doc);
                     self.signature(&f.sig);
                     self.close("function");
                 }
@@ -227,6 +236,7 @@ impl Xml {
                         attrs.push(("readonly", "true"));
                     }
                     self.open("var", &attrs);
+                    self.doc(&v.doc);
                     self.ty(&v.ty);
                     self.close("var");
                 }
@@ -240,8 +250,16 @@ impl Xml {
                         attrs.push(("synthetic", "true"));
                     }
                     self.open("enum", &attrs);
+                    self.doc(&e.doc);
                     for m in &e.members {
-                        self.leaf("member", &vec![("name", &m.name), ("type", m.kind), ("value", &m.value)]);
+                        let attrs = vec![("name", m.name.as_str()), ("type", m.kind), ("value", m.value.as_str())];
+                        if m.doc.is_some() && self.hash.is_none() {
+                            self.open("member", &attrs);
+                            self.doc(&m.doc);
+                            self.close("member");
+                        } else {
+                            self.leaf("member", &attrs);
+                        }
                     }
                     self.close("enum");
                 }
@@ -275,6 +293,7 @@ impl Xml {
             attrs.push(("synthetic", "true"));
         }
         self.open(tag, &attrs);
+        self.doc(&i.doc);
         self.type_params(&i.type_params);
         for e in &i.extends {
             self.wrap("extends", &[e]);
@@ -300,6 +319,7 @@ impl Xml {
                     attrs.push(("marks", &marks));
                 }
                 self.open("constructor", &attrs);
+                self.doc(&m.doc);
                 self.signature(m.sig.as_ref().unwrap());
                 self.close("constructor");
             }
@@ -360,6 +380,7 @@ impl Xml {
             attrs.push(("marks", &marks));
         }
         self.open(tag, &attrs);
+        self.doc(&m.doc);
         if let Some(t) = &m.ty {
             self.ty(t);
         }

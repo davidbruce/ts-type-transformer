@@ -11,6 +11,7 @@ use tsrs_scanner::get_text_of_node;
 use crate::ir::*;
 
 mod ast;
+mod doc;
 mod types;
 
 pub struct Front<'c> {
@@ -594,6 +595,7 @@ impl<'c> Front<'c> {
                         ty: self.opt_type(s.type_node()),
                         computed: self.is_computed_alias(sym),
                         synthetic: false,
+                        doc: self.doc(s),
                     }));
                 }
             }
@@ -604,7 +606,7 @@ impl<'c> Front<'c> {
                         None => s.name().map(text).unwrap_or_else(|| anonymous_name(s)),
                     };
                     let js_name = self.c.get_symbol_of_declaration_exported(s).and_then(|sym| self.renamed_from(sym));
-                    out.push(Decl::Function(Function { name, js_name, sig: self.signature(s) }));
+                    out.push(Decl::Function(Function { name, js_name, sig: self.signature(s), doc: self.doc(s) }));
                 }
             }
             Kind::EnumDeclaration => out.extend(self.enumeration(s).map(Decl::Enum)),
@@ -629,7 +631,7 @@ impl<'c> Front<'c> {
                         && ts_ast::get_source_file_of_node(s).is_some_and(|f| f.external_module_indicator().is_some());
                     let name = self.output_name(sym);
                     let js_name = self.renamed_from(sym);
-                    out.push(Decl::Var(Var { name, ty: self.opt_type(s.type_node()), js_name, readonly: constant || module_top }));
+                    out.push(Decl::Var(Var { name, ty: self.opt_type(s.type_node()), js_name, readonly: constant || module_top, doc: self.doc(s) }));
                 }
             }
             Kind::VariableStatement => {

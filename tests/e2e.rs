@@ -545,6 +545,102 @@ fn every_problem_is_reported() {
     let _ = xml;
 }
 
+// Every source file a target's bindings are made of, as one text.
+fn emitted_text(input: &Path, target: &str) -> String {
+    let out = root().join("target/e2e").join(format!("docs-{target}"));
+    let _ = fs::remove_dir_all(&out);
+    run(Command::new(env!("CARGO_BIN_EXE_tsrs_proto")).arg(input).arg("--config").arg(config(target)).args(["--emit", target, "--out"]).arg(&out));
+    fn collect(dir: &Path, text: &mut String) {
+        let mut entries: Vec<PathBuf> = fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                collect(&path, text);
+            } else if path.extension().is_some_and(|e| ["h", "hpp", "zig", "rs", "gleam", "fs"].iter().any(|x| e == *x)) {
+                text.push_str(&fs::read_to_string(&path).unwrap());
+            }
+        }
+    }
+    let mut text = String::new();
+    collect(&out, &mut text);
+    text
+}
+
+// A declaration's JSDoc reaches the XML and each target in its own comment form,
+// with what could break the code left out: `globals` is built and run by every
+// target, so the awkward text in it (`/*`, `<b>`, `&`, a fence, a line ending in a
+// backslash) is compiled as well.
+#[test]
+fn documentation_reaches_every_target() {
+    let api = root().join("tests/fixtures/globals/api.d.ts");
+    let xml = lower(&api, None, &[]);
+    let doc = roxmltree::Document::parse(&xml).unwrap();
+    let docs = |tag: &str, name: &str| -> String {
+        let n = doc.descendants().find(|n| n.has_tag_name(tag) && n.attribute("name") == Some(name)).unwrap_or_else(|| panic!("no <{tag} name={name}>"));
+        generators::doc(n).unwrap_or_else(|| panic!("<{tag} name={name}> has no documentation")).to_string()
+    };
+    let join = docs("function", "join");
+    assert!(join.starts_with("Joins `parts` with `separator`: `a * / b`, `/* c`, `<i>d</i>` & more.\n```ts\n"), "{join}");
+    assert!(join.contains("Ends in a backslash\\\nWords go on") && join.contains("A second paragraph, which a member leaves out."));
+    assert!(join.contains("@param separator Put between the parts \\\n@param parts The strings to join, as `string[]`.\n@deprecated Use `Array.prototype.join` instead."), "{join}");
+    assert!(!join.contains("@template") && !join.contains("@internal"));
+    assert_eq!(docs("method", "now"), "Milliseconds since the epoch, as <b>text</b> & numbers.\n\n@returns The time now.");
+    assert!(docs("property", "level").ends_with("\n\n@default 3"));
+    assert_eq!(docs("member", "Low"), "The floor: `<` & `>` alone.");
+    assert_eq!(docs("enum", "Level"), "How high.");
+    // Without a comment, none; a declaration lowering makes up has none.
+    assert!(doc.descendants().find(|n| n.has_tag_name("function") && n.attribute("name") == Some("bump")).is_some_and(|n| generators::doc(n).is_none()));
+
+    let lines = |text: &str, marker: &str| -> Vec<String> { text.lines().map(str::trim).filter(|l| l.starts_with(marker)).map(str::to_string).collect() };
+    let c = emitted_text(&api, "c");
+    assert!(c.contains("// Joins `parts` with `separator`: `a * / b`, `/* c`, `<i>d</i>` & more.\n"));
+    assert!(c.contains("// Deprecated: Use `Array.prototype.join` instead.\n") && c.contains("    // The floor: `<` & `>` alone.\n"));
+    // A backslash ends a comment line no more than it continues it.
+    assert!(lines(&c, "//").iter().all(|l| !l.ends_with('\\')));
+    let cpp = emitted_text(&api, "cpp");
+    assert!(cpp.contains("/// Joins `parts` with `separator`: `a * / b`, `/* c`, `<i>d</i>` & more.\n") && cpp.contains("    /// The floor: `<` & `>` alone.\n"));
+    assert!(lines(&cpp, "///").iter().all(|l| !l.ends_with('\\')));
+    let zig = emitted_text(&api, "zig");
+    assert!(zig.contains("/// Joins `parts` with `separator`: `a * / b`, `/* c`, `<i>d</i>` & more.\n") && zig.contains("/// Deprecated: Use `Array.prototype.join` instead.\n") && zig.contains("    /// The floor: `<` & `>` alone.\n"));
+    let rust = emitted_text(&api, "rust");
+    assert!(rust.contains("/// Joins `parts` with `separator`: `a * / b`, `/* c`, `<i>d</i>` & more.\n") && rust.contains("/// - **Deprecated:** Use `Array.prototype.join` instead.\n") && rust.contains("    /// The floor: `<` & `>` alone.\n"));
+    // rustdoc runs a fence without a language, and an indented block, as a test.
+    assert!(rust.contains("/// ```text\n") && !rust.contains("/// ```ts"));
+    // A type's documentation is attributes of what `handle!` makes; a member has its first paragraph and tags.
+    assert!(rust.contains("#[doc = \" Settings of the page: `<b>` stays text, & so does this.\"]") && rust.contains("#[doc = \" indented like code\"]") && rust.contains("#[doc = \" ```text\"]"));
+    assert!(!rust.contains("A second paragraph") && !rust.contains("#[doc = \"     indented"));
+    let gleam = emitted_text(&api, "gleam");
+    assert!(gleam.contains("/// Joins `parts` with `separator`: `a * / b`, `/* c`, `<i>d</i>` & more.\n") && gleam.contains("  /// The floor: `<` & `>` alone.\n"));
+    // F# reads `///` as XML: what is not markup is escaped, and the tags have their own.
+    let fsharp = emitted_text(&api, "fsharp");
+    assert!(fsharp.contains("/// Joins `parts` with `separator`: `a * / b`, `/* c`, `&lt;i&gt;d&lt;/i&gt;` &amp; more.\n"), "{fsharp}");
+    assert!(fsharp.contains("/// <param name=\"separator\">Put between the parts \\</param>\n") && fsharp.contains("/// Deprecated: Use `Array.prototype.join` instead.\n"));
+    assert!(fsharp.contains("/// <summary>The floor: `&lt;` &amp; `&gt;` alone.</summary>\n"));
+}
+
+// Where lowering renamed a member or fixed an argument, its documentation says
+// what JavaScript is called, and where the name says it, it does not.
+#[test]
+fn documentation_says_what_javascript_is_called_where_lowering_changed_it() {
+    let dir = root().join("target/e2e/docs-origin");
+    fs::create_dir_all(&dir).unwrap();
+    let api = dir.join("api.d.ts");
+    fs::write(
+        &api,
+        "interface Marker {\n    /** Opens it on the map. */\n    open(map: string): void;\n    /** Opens it with content. */\n    open(map: string, content: number): void;\n    /** Fires a click. */\n    on(type: \"click\", fn: () => void): void;\n    /** Fires a key. */\n    on(type: \"keydown\", fn: () => void): void;\n    /** Stays as written. */\n    close(): void;\n}\ndeclare var Marker: { new(): Marker };\n",
+    )
+    .unwrap();
+    let xml = lower(&api, Some("zig"), &[]);
+    let m = model(&xml, "Zig");
+    let marker = m.classes.iter().find(|c| c.name == "Marker").unwrap();
+    let doc = |name: &str| marker.funcs.iter().find(|f| f.name == name).unwrap_or_else(|| panic!("no {name}: {:?}", marker.funcs.iter().map(|f| &f.name).collect::<Vec<_>>())).doc.clone().unwrap_or_default();
+    assert_eq!(doc("open"), "Opens it on the map.");
+    assert_eq!(doc("open_with_content"), "Opens it with content.\n\nJavaScript: `open(map, content)`");
+    assert_eq!(doc("close"), "Stays as written.");
+    // `on_click` is `on("click", ...)`: the name says so.
+    assert_eq!(doc("on_click"), "Fires a click.");
+}
+
 // Every output follows `schema/declarations.rng`: each input unlowered and
 // with each target's config.
 #[test]

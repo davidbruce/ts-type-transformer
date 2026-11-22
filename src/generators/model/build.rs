@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use roxmltree::{Document, Node};
 
-use super::build_types::{is_function_interface, value};
-use super::{file_name, ident, Call, Callback, Func, Model, ModelOptions, TParam, Ty};
-use super::super::{attr, elements, flag, named, only_child, Problems};
+use super::build_types::{document, is_function_interface, value};
+use super::{file_name, ident, Call, Callback, EnumDoc, Func, Model, ModelOptions, TParam, Ty};
+use super::super::{attr, doc, elements, flag, member_doc, named, only_child, Problems};
 
 pub(super) struct Builder<'a> {
     pub opts: ModelOptions<'a>,
@@ -68,7 +68,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     let mut b = Builder {
         opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], enum_docs: vec![], num_enum_docs: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -219,7 +219,7 @@ impl<'a> Builder<'a> {
         let f = if type_params.is_empty() { Ty::Obj(owner.to_string()) } else { Ty::Generic(owner.to_string(), type_params.iter().map(|p| Ty::Param(p.name.clone())).collect()) };
         let import = self.import(format!("{owner}_call"));
         let params = std::iter::once(("f".to_string(), f)).chain(params.iter().cloned()).collect();
-        self.model.funcs.push(Func { type_params: type_params.to_vec(), module: self.module.clone(), import, name: format!("call_{owner}"), call: Call::Apply, params, rest, fixed: vec![], shared: None, ret: ret.clone(), returns_this: false });
+        self.model.funcs.push(Func { type_params: type_params.to_vec(), module: self.module.clone(), import, name: format!("call_{owner}"), call: Call::Apply, params, rest, fixed: vec![], shared: None, ret: ret.clone(), returns_this: false, doc: None });
     }
 
     // Where a reference leads: the declaration its `to` names; with none, a
@@ -347,10 +347,13 @@ impl<'a> Builder<'a> {
                 }
                 "enum" => {
                     // Only string enums cross as an index; numeric ones are numbers.
+                    let docs = || EnumDoc { doc: doc(d).map(str::to_string), members: named(d, "member").map(member_doc).collect() };
                     if named(d, "member").all(|m| attr(m, "type") == "string") {
+                        self.model.enum_docs.push(docs());
                         self.model.enums.push((self.type_ident(&path), named(d, "member").map(|v| attr(v, "value").to_string()).collect()));
                     } else if named(d, "member").all(|m| attr(m, "type") == "number") {
                         let members = named(d, "member").map(|v| (ident(attr(v, "name")), attr(v, "value").to_string())).collect();
+                        self.model.num_enum_docs.push(docs());
                         self.model.num_enums.push((self.type_ident(&path), members));
                     }
                 }
@@ -364,7 +367,8 @@ impl<'a> Builder<'a> {
                     self.model.callbacks.push(Callback { name: owner, params, ret, type_params, rest });
                 }
                 "interface" | "class" => {
-                    let c = self.class_at(d, &path, &self.js(d, &path));
+                    let mut c = self.class_at(d, &path, &self.js(d, &path));
+                    c.doc = doc(d).map(str::to_string);
                     self.model.classes.push(c);
                 }
                 "typeAlias" => {
@@ -381,6 +385,7 @@ impl<'a> Builder<'a> {
                     if body.has_tag_name("object") {
                         let mut c = self.class(body, &path);
                         c.type_params = alias_params;
+                        c.doc = doc(d).map(str::to_string);
                         let mut ext_names = HashSet::new();
                         for ext in named(d, "extends") {
                             self.member(&mut c, &mut ext_names, ext, &path, false, false);
@@ -403,7 +408,9 @@ impl<'a> Builder<'a> {
                     let import = self.import(name.clone());
                     self.namespace_func(prefix, &import, &own);
                     let type_params = std::mem::take(&mut self.last_type_params);
-                    self.model.funcs.push(Func { type_params, module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret, returns_this: false });
+                    let before = self.model.funcs.len();
+                    self.model.funcs.push(Func { type_params, module: self.module.clone(), import, name, call: Call::Static(js), params, rest, fixed, shared: None, ret, returns_this: false, doc: None });
+                    document(&mut self.model.funcs[before..], d);
                 }
                 "var" => {
                     let body = only_child(d);
@@ -420,7 +427,8 @@ impl<'a> Builder<'a> {
                             self.model.namespaced.insert(name.clone(), full);
                             self.model.namespace_modules.insert(name.clone(), (module, depth));
                         }
-                        let c = self.statics(body, &self.js(d, &path), name);
+                        let mut c = self.statics(body, &self.js(d, &path), name);
+                        c.doc = doc(d).map(str::to_string);
                         self.model.classes.push(c);
                         continue;
                     }
@@ -430,7 +438,9 @@ impl<'a> Builder<'a> {
                     let import = self.import(name.clone());
                     self.namespace_func(prefix, &import, &format!("get_{}", ident(own)));
                     let js = self.js(d, &path);
-                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(js.clone()), params: vec![], rest: false, fixed: vec![], shared: None, ret: ret.clone(), returns_this: false });
+                    let before = self.model.funcs.len();
+                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import, name, call: Call::StaticGet(js.clone()), params: vec![], rest: false, fixed: vec![], shared: None, ret: ret.clone(), returns_this: false, doc: None });
+                    document(&mut self.model.funcs[before..], d);
                     // A `const`, or a module's export, cannot be assigned.
                     if flag(d, "readonly") {
                         continue;
@@ -439,7 +449,8 @@ impl<'a> Builder<'a> {
                     let set_name = format!("set_{}", ident(&path));
                     let set_import = self.import(set_name.clone());
                     self.namespace_func(prefix, &set_import, &format!("set_{}", ident(own)));
-                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import: set_import, name: set_name, call: Call::StaticSet(path), params: vec![("value".into(), value(ret))], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false });
+                    self.model.funcs.push(Func { type_params: vec![], module: self.module.clone(), import: set_import, name: set_name, call: Call::StaticSet(path), params: vec![("value".into(), value(ret))], rest: false, fixed: vec![], shared: None, ret: Ty::Void, returns_this: false, doc: None });
+                    document(&mut self.model.funcs[before + 1..], d);
                 }
                 _ => self.unsupported(d),
             }

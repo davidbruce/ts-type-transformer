@@ -32,6 +32,16 @@ pub struct ProjectRef {
     pub types: HashMap<String, (usize, bool, Option<String>)>,
 }
 
+// A declaration's documentation as `///` lines at `indent`.
+pub(super) fn doc_lines(n: roxmltree::Node, indent: &str) -> String {
+    super::doc(n).map(|d| super::comments::fsharp(d, indent)).unwrap_or_default()
+}
+
+// A member's: see `member_doc`.
+pub(super) fn member_doc_lines(n: roxmltree::Node, indent: &str) -> String {
+    super::member_doc(n).map(|d| super::comments::fsharp(&d, indent)).unwrap_or_default()
+}
+
 /// Loads a previously generated F# binding project (via `tsrs-meta.toml`)
 /// so another generated binding project can reference its types
 /// directly instead of emitting opaque stubs.

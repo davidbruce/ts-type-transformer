@@ -4,7 +4,8 @@ use super::types::{
     cpp_name, decodable, head, is_union, named_types, param_types, raise, ty_in, ty_out,
 };
 use super::{ident, import_attr, is_builtin_cpp_type, raw_fn, Ctx, ProjectRef};
-use super::super::model::{Model, NamedUnion, TParam, Ty};
+use super::super::comments::{Style, comment};
+use super::super::model::{EnumDoc, Model, NamedUnion, TParam, Ty};
 
 // Whether `u` declares the decoder of its variant: unions with the same
 // members are the same type, and the first one does.
@@ -105,6 +106,22 @@ pub(super) fn decoder_guard_id(u: &NamedUnion, m: &Model, pkg_name: &str, resolv
     format!("{:016x}", crate::fnv1a64(&canonical))
 }
 
+// An enum with its documentation: on one line, but where its members have some.
+fn enum_class(name: &str, members: &[String], docs: Option<&EnumDoc>) -> String {
+    let mut out = docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::C)).unwrap_or_default();
+    if docs.is_some_and(|d| d.members.iter().any(Option::is_some)) {
+        out += &format!("enum class {name} : int32_t {{\n");
+        for (i, member) in members.iter().enumerate() {
+            out += &docs.and_then(|d| d.members[i].as_deref()).map(|d| comment(d, "///", "    ", Style::C)).unwrap_or_default();
+            out += &format!("    {member},\n");
+        }
+        out += "};\n";
+    } else {
+        out += &format!("enum class {name} : int32_t {{ {} }};\n", members.join(", "));
+    }
+    out
+}
+
 // A union as a type in its own definitions: `Either` or `Either<T>`.
 pub(super) fn union_type(u: &NamedUnion) -> String {
     if u.type_params.is_empty() { u.name.clone() } else { format!("{}<{}>", u.name, u.type_params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")) }
@@ -157,7 +174,7 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
                 v
             })
             .collect();
-        types += &format!("enum class {name} : int32_t {{ {} }};\n", members.join(", "));
+        types += &enum_class(name, &members, m.enum_docs.get(id));
         enum_specs += &format!(
             "template <>\ninline constexpr int32_t ts::enum_id<::{ns_prefix}{name}> = {id};\n\
              template <>\ninline uint32_t ts::enum_to_handle<::{ns_prefix}{name}>(::{ns_prefix}{name} x) {{ return {enum_val_raw}({id}, int32_t(x)); }}\n\
@@ -171,9 +188,9 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
             types += &enum_specs;
         }
     }
-    for (name, members) in &m.num_enums {
+    for (id, (name, members)) in m.num_enums.iter().enumerate() {
         let members: Vec<String> = members.iter().map(|(member, value)| format!("{} = {value}", ident(member))).collect();
-        types += &format!("enum class {name} : int32_t {{ {} }};\n", members.join(", "));
+        types += &enum_class(name, &members, m.num_enum_docs.get(id));
     }
     let opaque = |name: &str, params: &[TParam]| {
         let mut body = String::from("    ");

@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::super::model::{Class, Func, Model, Ty};
 use super::super::names::{Kind, identifiers};
+use super::super::comments::{Style, comment};
 use super::types::{
-    all_ancestors, array_type, arrays, call_macros, check, family, func, tuple_type, typed, union_type,
+    all_ancestors, array_type, arrays, call_macros, check, family, func, tuple_type, typed, union_type, with_doc,
 };
 use super::{
     Ctx, KEYWORDS, LIBC_NAMES, NAMING, ProjectRef, RUNTIME, c_elem, ident, import_attr, is_builtin_c_type, raw_fn,
@@ -66,7 +67,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     let mut meta_structs: Vec<String> = Vec::new();
     let mut meta_external_structs: Vec<String> = Vec::new();
     let mut all_names: Vec<String> = Vec::new();
-    for (name, values) in &m.enums {
+    for (at, (name, values)) in m.enums.iter().enumerate() {
         let mut seen = HashSet::new();
         // `E_absent`, -1, is an optional enum that is not there.
         let absent = format!("{name}_absent");
@@ -84,22 +85,44 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 id
             })
             .collect();
-        types += &format!("typedef enum {{ {absent} = -1, {} }} {name};\n", members.join(", "));
+        let docs = m.enum_docs.get(at);
+        types += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "//", "", Style::C)).unwrap_or_default();
+        if docs.is_some_and(|d| d.members.iter().any(Option::is_some)) {
+            types += &format!("typedef enum {{\n    {absent} = -1,\n");
+            for (i, member) in members.iter().enumerate() {
+                types += &docs.and_then(|d| d.members[i].as_deref()).map(|d| comment(d, "//", "    ", Style::C)).unwrap_or_default();
+                types += &format!("    {member},\n");
+            }
+            types += &format!("}} {name};\n");
+        } else {
+            types += &format!("typedef enum {{ {absent} = -1, {} }} {name};\n", members.join(", "));
+        }
         if !is_builtin_c_type(name) {
             all_names.push(name.clone());
             all_names.push(absent);
             all_names.extend(members);
         }
     }
-    for (name, members) in &m.num_enums {
+    for (at, (name, members)) in m.num_enums.iter().enumerate() {
         if !is_builtin_c_type(name) {
             all_names.push(name.clone());
             for (member, _) in members {
                 all_names.push(format!("{name}_{member}"));
             }
         }
-        let members: Vec<String> = members.iter().map(|(member, value)| format!("{name}_{member} = {value}")).collect();
-        types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
+        let docs = m.num_enum_docs.get(at);
+        types += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "//", "", Style::C)).unwrap_or_default();
+        if docs.is_some_and(|d| d.members.iter().any(Option::is_some)) {
+            types += "typedef enum {\n";
+            for (i, (member, value)) in members.iter().enumerate() {
+                types += &docs.and_then(|d| d.members[i].as_deref()).map(|d| comment(d, "//", "    ", Style::C)).unwrap_or_default();
+                types += &format!("    {name}_{member} = {value},\n");
+            }
+            types += &format!("}} {name};\n");
+        } else {
+            let members: Vec<String> = members.iter().map(|(member, value)| format!("{name}_{member} = {value}")).collect();
+            types += &format!("typedef enum {{ {} }} {name};\n", members.join(", "));
+        }
     }
     // Every object is an opaque handle; the struct keeps the types apart.
     for name in &m.opaque {
@@ -120,11 +143,12 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         }
         types += &format!("#ifndef TS_DEFINED_{name}\n#define TS_DEFINED_{name}\n/* external */\ntypedef struct {{ uint32_t h; }} {name};\n#endif\n");
     }
-    for name in m.classes.iter().map(|c| &c.name).chain(m.callbacks.iter().map(|c| &c.name)) {
+    for (name, doc) in m.classes.iter().map(|c| (&c.name, c.doc.as_deref())).chain(m.callbacks.iter().map(|c| (&c.name, None))) {
         if !is_builtin_c_type(name) {
             meta_structs.push(name.clone());
             all_names.push(name.clone());
         }
+        types += &doc.map(|d| comment(d, "//", "", Style::C)).unwrap_or_default();
         types += &format!("typedef struct {{ uint32_t h; }} {name};\n");
     }
     for name in &m.opaque {
@@ -416,14 +440,22 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 c.name
             );
         }
-        for f in &c.funcs {
-            func(&mut body, Some(&c.name), f, wasm_module, &raw_prefix, &cx);
+        let macros: Vec<String> = c
+            .funcs
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let overloads = family(f, &c.funcs, &cx).map(|(at, members)| (at, members.iter().map(|o| format!("{}_{}", c.name, o.name)).collect(), members));
+                let earlier: Vec<&Func> = c.funcs[..i].iter().collect();
+                call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants, &as_macro, &cx)
+            })
+            .collect();
+        for (f, macros) in c.funcs.iter().zip(&macros) {
+            func(&mut body, Some(&c.name), f, wasm_module, &raw_prefix, &cx, !macros.is_empty());
         }
         // After every function: a macro may choose a later one.
-        for (i, f) in c.funcs.iter().enumerate() {
-            let overloads = family(f, &c.funcs, &cx).map(|(at, members)| (at, members.iter().map(|o| format!("{}_{}", c.name, o.name)).collect(), members));
-            let earlier: Vec<&Func> = c.funcs[..i].iter().collect();
-            body += &call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants, &as_macro, &cx);
+        for (f, macros) in c.funcs.iter().zip(macros) {
+            body += &with_doc(macros, &format!("{}_{}", c.name, f.name), f);
         }
         let mut own_methods: HashSet<&str> = c.funcs.iter().map(|f| f.name.as_str()).chain(c.consts.iter().map(|(k, _)| k.as_str())).collect();
         own_methods.extend(["cast", "try_cast", "as_array", "iterate", "iterate_async", "iterate_next"]);
@@ -449,14 +481,22 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         out.push((path.clone(), header(&c.module, &ancestor_includes, body)));
     }
     let mut functions: BTreeMap<String, String> = Default::default();
-    for f in &m.funcs {
-        func(functions.entry(f.module.clone()).or_default(), None, f, wasm_module, &raw_prefix, &cx);
+    let macros: Vec<String> = m
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            // Overloads in one module: in one header.
+            let overloads = family(f, &m.funcs, &cx).filter(|(_, members)| members.iter().all(|o| o.module == f.module)).map(|(at, members)| (at, members.iter().map(|o| o.name.clone()).collect(), members));
+            let earlier: Vec<&Func> = m.funcs[..i].iter().filter(|g| g.module == f.module).collect();
+            call_macros(&f.name, None, f, &earlier, overloads, &descendants, &as_macro, &cx)
+        })
+        .collect();
+    for (f, macros) in m.funcs.iter().zip(&macros) {
+        func(functions.entry(f.module.clone()).or_default(), None, f, wasm_module, &raw_prefix, &cx, !macros.is_empty());
     }
-    for (i, f) in m.funcs.iter().enumerate() {
-        // Overloads in one module: in one header.
-        let overloads = family(f, &m.funcs, &cx).filter(|(_, members)| members.iter().all(|o| o.module == f.module)).map(|(at, members)| (at, members.iter().map(|o| o.name.clone()).collect(), members));
-        let earlier: Vec<&Func> = m.funcs[..i].iter().filter(|g| g.module == f.module).collect();
-        *functions.entry(f.module.clone()).or_default() += &call_macros(&f.name, None, f, &earlier, overloads, &descendants, &as_macro, &cx);
+    for (f, macros) in m.funcs.iter().zip(macros) {
+        *functions.entry(f.module.clone()).or_default() += &with_doc(macros, &f.name, f);
     }
     for (module, body) in functions {
         for line in body.lines().map(str::trim) {

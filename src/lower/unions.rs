@@ -180,7 +180,7 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
                 let free = free_type_params(t);
                 let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
                 free_of.insert(name.clone(), free);
-                added.push(Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty: t.clone(), computed: false, synthetic: true }));
+                added.push(Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty: t.clone(), computed: false, synthetic: true, doc: None }));
                 name
             })
             .clone();

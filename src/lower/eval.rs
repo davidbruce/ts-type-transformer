@@ -192,7 +192,7 @@ fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize
             Decl::Function(f) => match keyed_variants(front, &f.sig, limit, kept) {
                 Some(variants) => {
                     *expanded += 1;
-                    out.extend(variants.into_iter().map(|sig| Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig })));
+                    out.extend(variants.into_iter().map(|sig| Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig, doc: f.doc.clone() })));
                 }
                 None => out.push(Decl::Function(f)),
             },
@@ -280,10 +280,10 @@ fn split_group(sigs: &[Signature], limit: usize) -> Vec<(usize, Signature)> {
 }
 
 fn split_functions(decls: &mut Vec<Decl>, limit: usize) {
-    let mut sigs: HashMap<String, Vec<(Option<String>, Signature)>> = HashMap::new();
+    let mut sigs: HashMap<String, Vec<(Option<String>, Signature, Option<String>)>> = HashMap::new();
     for d in decls.iter() {
         if let Decl::Function(f) = d {
-            sigs.entry(f.name.clone()).or_default().push((f.js_name.clone(), f.sig.clone()));
+            sigs.entry(f.name.clone()).or_default().push((f.js_name.clone(), f.sig.clone(), f.doc.clone()));
         }
     }
     let mut out: Vec<Decl> = Vec::new();
@@ -296,7 +296,7 @@ fn split_functions(decls: &mut Vec<Decl>, limit: usize) {
                     continue;
                 }
                 let only: Vec<Signature> = group.iter().map(|g| g.1.clone()).collect();
-                out.extend(split_group(&only, limit).into_iter().map(|(n, sig)| Decl::Function(Function { name: f.name.clone(), js_name: group[n].0.clone(), sig })));
+                out.extend(split_group(&only, limit).into_iter().map(|(n, sig)| Decl::Function(Function { name: f.name.clone(), js_name: group[n].0.clone(), sig, doc: group[n].2.clone() })));
             }
             Decl::Namespace(mut n) => {
                 split_functions(&mut n.decls, limit);

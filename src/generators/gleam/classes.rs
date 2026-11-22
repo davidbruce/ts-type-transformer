@@ -65,7 +65,7 @@ impl<'m> Gen<'m> {
         }
         for (id, spec_f) in specs {
             let id = self.value_name(&id);
-            self.function(&id, &spec_f, Some((&c.name, &c.type_params)));
+            self.function(&id, &Func { doc: None, ..spec_f }, Some((&c.name, &c.type_params)));
         }
     }
 
@@ -404,7 +404,7 @@ pub(super) fn emit_class_and_func_modules<'m>(
         };
         // What it iterates, or holds as a subclass of Array: a list.
         if let Some(elem) = c.iterates.as_ref().or(c.elements.as_ref()) {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret;
             populate_class_bound(g);
             let id = g.value_name("to_list");
             let elem_ty = g.ty(&elem);
@@ -425,7 +425,7 @@ pub(super) fn emit_class_and_func_modules<'m>(
         // A subclass of Array has no class to inherit Array's members from:
         // its elements by index, and how many.
         if let Some(elem) = c.elements.as_ref() {
-            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret;
+            let elem = with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret;
             populate_class_bound(g);
             let elem_ty = g.ty(&elem);
             g.note("Option");

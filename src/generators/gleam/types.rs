@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::bounds::generic_args;
 use super::{codec_var, lower, relative, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
+use super::super::comments::{Style, comment};
 use super::super::js::{call_expr, js_test, trim_trailing_undef};
 use super::super::model::{mentions, subst, Class, Func, Model, NamedUnion, TParam, Ty};
 
@@ -577,6 +578,7 @@ impl<'m> Gen<'m> {
         let ret = if f.returns_this { self_ty.unwrap_or_else(|| self.ty(&f.ret)) } else { self.ty(&f.ret) };
         // A name JavaScript reserves (`new`, `delete`) is `new_` there.
         let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
+        self.out += &f.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
         self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
         self.ffi += &format!("export function {js}({}) {{\n  {body}\n}}\n", js_params.join(", "));
         self.clear_fn_bounds();

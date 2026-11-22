@@ -168,6 +168,8 @@ pub struct Func {
     pub ret: Ty,
     // Declared `: this` in TypeScript.
     pub returns_this: bool,
+    // What its JSDoc says, then where it was called in JavaScript, when lowering changed that.
+    pub doc: Option<String>,
 }
 
 pub struct Class {
@@ -189,12 +191,20 @@ pub struct Class {
     // Where its constructor is, when it is a class at runtime (not only an
     // interface): what `instanceof` tests against.
     pub js: Option<String>,
+    pub doc: Option<String>,
 }
 
 impl Class {
     pub fn has_self(f: &Func) -> bool {
         matches!(f.call, Call::Method(_) | Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::IndexGet | Call::IndexSet | Call::Invoke | Call::Construct)
     }
+}
+
+// An enum's documentation and its members', in the order of `Model::enums` or `num_enums`.
+#[derive(Default)]
+pub struct EnumDoc {
+    pub doc: Option<String>,
+    pub members: Vec<Option<String>>,
 }
 
 pub struct NamedUnion {
@@ -265,6 +275,8 @@ pub struct Model {
     pub enums: Vec<(String, Vec<String>)>,
     // Name, then member names and values.
     pub num_enums: Vec<(String, Vec<(String, String)>)>,
+    pub enum_docs: Vec<EnumDoc>,
+    pub num_enum_docs: Vec<EnumDoc>,
     pub classes: Vec<Class>,
     pub callbacks: Vec<Callback>,
     pub unions: Vec<NamedUnion>,

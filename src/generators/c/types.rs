@@ -1,3 +1,4 @@
+use super::super::comments::{Style, comment};
 use super::super::model::{Call, Class, Func, Model, NamedUnion, Ty};
 use super::{Ctx, T, ident, import_attr, raw_fn};
 
@@ -320,7 +321,20 @@ fn func_param_ty(t: &Ty, cx: &Ctx) -> String {
     }
 }
 
-pub(super) fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module: &str, raw_prefix: &str, cx: &Ctx) {
+// A function's comment, above what the caller names: its macro where it has one, else it.
+pub(super) fn documented(f: &Func) -> String {
+    f.doc.as_deref().map(|d| comment(d, "//", "", Style::C)).unwrap_or_default()
+}
+
+// `macros` (see `call_macros`) with the function's comment before the one the caller names.
+pub(super) fn with_doc(macros: String, name: &str, f: &Func) -> String {
+    match macros.find(&format!("#define {name}(")) {
+        Some(at) => format!("{}{}{}", &macros[..at], documented(f), &macros[at..]),
+        None => macros,
+    }
+}
+
+pub(super) fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module: &str, raw_prefix: &str, cx: &Ctx, macro_documented: bool) {
     let mut raw_params = Vec::new();
     let mut params = Vec::new();
     let mut args = Vec::new();
@@ -444,6 +458,9 @@ pub(super) fn func(out: &mut String, owner: Option<&str>, f: &Func, wasm_module:
     // Only a shared import can repeat; checking others would be quadratic.
     if f.shared.is_none() || !out.contains(&decl) {
         *out += &decl;
+    }
+    if !macro_documented {
+        *out += &documented(f);
     }
     *out += &format!("static inline {} {name}({}) {{ {pre}{body} }}\n", typed(&f.ret, false, cx), void(&params));
 }

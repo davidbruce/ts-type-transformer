@@ -5,6 +5,7 @@
 pub mod backend;
 pub mod c;
 pub mod case;
+pub mod comments;
 pub mod cpp;
 pub mod fsharp;
 pub mod gleam;
@@ -96,7 +97,39 @@ pub fn relative_path(from_dir: &Path, target: &Path) -> String {
 }
 
 pub fn elements<'a>(n: Node<'a, 'a>) -> impl Iterator<Item = Node<'a, 'a>> {
-    n.children().filter(|c| c.is_element())
+    n.children().filter(|c| c.is_element() && !c.has_tag_name("doc"))
+}
+
+// The documentation a declaration carries.
+pub fn doc<'a>(n: Node<'a, 'a>) -> Option<&'a str> {
+    n.children().find(|c| c.has_tag_name("doc")).and_then(|d| d.text())
+}
+
+// What is written of a member: its first paragraph and its tags. A type
+// keeps all of its documentation.
+pub fn member_doc(n: Node) -> Option<String> {
+    let doc = doc(n)?;
+    let mut fence = false;
+    let mut paragraph = Vec::new();
+    let mut tags = Vec::new();
+    let mut described = false;
+    for line in doc.lines() {
+        if line.starts_with('@') && !fence {
+            tags.push(line);
+            described = true;
+        } else if !described {
+            if line.trim_start().starts_with("```") || line.trim_start().starts_with("~~~") {
+                fence = !fence;
+            }
+            if line.is_empty() && !fence && !paragraph.is_empty() {
+                described = true;
+            } else {
+                paragraph.push(line);
+            }
+        }
+    }
+    let parts = [paragraph.join("\n"), tags.join("\n")];
+    Some(parts.into_iter().filter(|p| !p.is_empty()).collect::<Vec<_>>().join("\n\n")).filter(|d| !d.is_empty())
 }
 
 pub fn named<'a>(n: Node<'a, 'a>, tag: &'static str) -> impl Iterator<Item = Node<'a, 'a>> {

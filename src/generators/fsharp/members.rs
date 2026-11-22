@@ -4,7 +4,7 @@ use roxmltree::Node;
 
 use super::super::{attr, elements, flag, marks, named, only_child, value_name};
 use super::super::js::access as js_access;
-use super::{Gen, T};
+use super::{member_doc_lines, Gen, T};
 use super::member_ir::{FsMember, FsMemberKind, FsParam, PropAccessor, has_member_conflict, push_member};
 use super::syntax::{
     add_opt, collect_type_vars, expand, find_decl, ident, is_absent_null, map_properties, only_child_type, strip_opt, subst_params, type_ident,
@@ -376,7 +376,7 @@ impl Gen {
             }
             let fn_prop = m.has_tag_name("property") && !flag(m, "optional") && only_child(m).has_tag_name("functionType");
             let sig_node = if fn_prop { Some(only_child(m)) } else if m.has_tag_name("method") { Some(m) } else { None };
-            let pairs: Vec<(FsMember, String, Vec<FsMember>)> = if raw == "[Symbol.asyncIterator]" {
+            let mut pairs: Vec<(FsMember, String, Vec<FsMember>)> = if raw == "[Symbol.asyncIterator]" {
                 // `x.asyncIterator ()`, whose `next ()` is a promise of the next value.
                 let elem = named(m, "returns").next().and_then(|r| elements(r).next()).and_then(|it| elements(it).next());
                 let t = elem.map_or("obj".to_string(), |e| self.ty(e, owner));
@@ -388,6 +388,7 @@ impl Gen {
                         name: "asyncIterator".into(),
                         kind: FsMemberKind::AbstractMethod { tparams: String::new(), params: Vec::new(), ret: format!("JsAsyncIterator<{t}>") },
                         marks: marks(m),
+                        doc: String::new(),
                     },
                     format!("{emit} member this.asyncIterator(): JsAsyncIterator<{t}> = jsNative"),
                     Vec::new(),
@@ -403,6 +404,7 @@ impl Gen {
                         name: dname.into(),
                         kind: FsMemberKind::AbstractMethod { tparams: String::new(), params: Vec::new(), ret: "unit".into() },
                         marks: marks(m),
+                        doc: String::new(),
                     },
                     format!("{emit} member this.{dname}(): unit = jsNative"),
                     Vec::new(),
@@ -418,6 +420,7 @@ impl Gen {
                         name: dname.into(),
                         kind: FsMemberKind::AbstractMethod { tparams: String::new(), params: Vec::new(), ret: "JS.Promise<unit>".into() },
                         marks: marks(m),
+                        doc: String::new(),
                     },
                     format!("{emit} member this.{dname}(): JS.Promise<unit> = jsNative"),
                     Vec::new(),
@@ -437,6 +440,11 @@ impl Gen {
             } else {
                 self.member(m, owner, setters.contains(raw), indent)
             };
+            // Once, on the first of a property's accessors and of the forms of a method.
+            let doc = member_doc_lines(m, &format!("{indent}    "));
+            if let Some(first) = pairs.first_mut() {
+                first.0.doc = doc;
+            }
             for (cand, ext, exp) in pairs {
                 let rendered = cand.render_unindented();
                 // The latest file a type in the member is declared in.
@@ -492,6 +500,7 @@ impl Gen {
                             name: name.to_string(),
                             kind: FsMemberKind::Property { ty: t.to_string(), accessor: PropAccessor::Get },
                             marks: marks.clone(),
+                            doc: String::new(),
                         },
                         format!("member this.{name} with {get} and {set}"),
                         Vec::new(),
@@ -503,6 +512,7 @@ impl Gen {
                             name: name.to_string(),
                             kind: FsMemberKind::Property { ty: t.to_string(), accessor: PropAccessor::Set },
                             marks: marks.clone(),
+                            doc: String::new(),
                         },
                         String::new(),
                         Vec::new(),
@@ -518,6 +528,7 @@ impl Gen {
                         name: name.to_string(),
                         kind: FsMemberKind::Property { ty: t.to_string(), accessor },
                         marks: marks.clone(),
+                        doc: String::new(),
                     },
                     ext,
                     Vec::new(),
@@ -610,6 +621,7 @@ impl Gen {
                             name: name.to_string(),
                             kind: FsMemberKind::AbstractMethod { tparams: tps.clone(), params: prefix, ret: ret.clone() },
                             marks: m_marks.clone(),
+                            doc: String::new(),
                         });
                     }
                 } else {
@@ -619,6 +631,7 @@ impl Gen {
                         name: name.to_string(),
                         kind: FsMemberKind::AbstractMethod { tparams: tps.clone(), params: ep, ret: ret.clone() },
                         marks: m_marks.clone(),
+                        doc: String::new(),
                     });
                 }
             }
@@ -628,6 +641,7 @@ impl Gen {
                 name: name.to_string(),
                 kind: FsMemberKind::AbstractMethod { tparams: tps, params, ret },
                 marks: m_marks.clone(),
+                doc: String::new(),
             };
             (main, ext, expanded)
         };
@@ -676,6 +690,7 @@ impl Gen {
                             name: name.clone(),
                             kind: FsMemberKind::Property { ty: t, accessor: PropAccessor::Set },
                             marks: m_marks,
+                            doc: String::new(),
                         },
                         format!("member this.{name} with {set}"),
                         Vec::new(),
@@ -710,6 +725,7 @@ impl Gen {
                         name: "Item".into(),
                         kind: FsMemberKind::Indexer { key, value, settable },
                         marks: m_marks,
+                        doc: String::new(),
                     },
                     ext,
                     Vec::new(),

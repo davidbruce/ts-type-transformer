@@ -52,6 +52,7 @@ impl<'c> Front<'c> {
             class: None,
             synthetic: false,
             js_name: self.renamed_from(sym),
+            doc: decls.iter().find_map(|d| self.doc(*d)),
         })
     }
 
@@ -85,6 +86,7 @@ impl<'c> Front<'c> {
                     let mut c = Member::new(MemberKind::Construct, "new".into());
                     // The constructor's result and type parameters are the class's own.
                     c.sig = Some(Signature { type_params: Vec::new(), ret: None, ..self.signature(m) });
+                    c.doc = self.doc(m);
                     class.constructors.push(c);
                 }
                 continue;
@@ -106,6 +108,7 @@ impl<'c> Front<'c> {
             let mut member = Member::new(kind, m.name().map(member_name).unwrap_or_default());
             member.optional = m.question_token().is_some();
             member.readonly = has_syntactic_modifier(m, ModifierFlags::Readonly);
+            member.doc = self.doc(m);
             if kind == MemberKind::Property {
                 member.ty = Some(self.opt_type(m.type_node()));
             } else {
@@ -157,6 +160,7 @@ impl<'c> Front<'c> {
             class: Some(class),
             synthetic: false,
             js_name: self.renamed_from(sym),
+            doc: self.doc(node),
         })
     }
 
@@ -164,6 +168,7 @@ impl<'c> Front<'c> {
         let (sym, decls) = self.first_time(node)?;
         // Resolving the enum type computes member values.
         self.c.get_declared_type_of_symbol_exported(sym);
+        let doc = decls.iter().find_map(|d| self.doc(*d));
         let mut members = Vec::new();
         for d in decls {
             for m in d.members() {
@@ -173,10 +178,10 @@ impl<'c> Front<'c> {
                     // Computed, non-constant member.
                     _ => ("computed", m.as_enum_member().initializer().map(text).unwrap_or_default()),
                 };
-                members.push(EnumMember { name: member_name(name_of(*m)), kind, value });
+                members.push(EnumMember { name: member_name(name_of(*m)), kind, value, doc: self.doc(*m) });
             }
         }
-        Some(Enum { name: self.output_name(sym), sym: Some(sym), members, synthetic: false })
+        Some(Enum { name: self.output_name(sym), sym: Some(sym), members, synthetic: false, doc })
     }
 
     pub(super) fn namespace(&mut self, node: P<Node>) -> Option<Namespace> {
@@ -224,6 +229,7 @@ impl<'c> Front<'c> {
             let mut member = Member::new(kind, m.name().map(member_name).unwrap_or_default());
             member.optional = m.question_token().is_some();
             member.readonly = has_syntactic_modifier(m, ModifierFlags::Readonly);
+            member.doc = self.doc(m);
             if kind == MemberKind::Property {
                 member.ty = Some(self.opt_type(m.type_node()));
             } else {

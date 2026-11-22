@@ -3,7 +3,22 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use super::classes::{callback, emit_classes, union_enum};
 use super::types::{function, names_of, ns_module, rust_elem};
 use super::{camel, camel_variant, rust_function, rust_type, snake, Context, ProjectRef, PRELUDE, RUNTIME, RUNTIME_TYPES};
+use super::super::comments::{Style, comment};
 use super::super::model::{Call, Model, Ty};
+
+// Enum variants on one line; where some have documentation, one to a line.
+fn variant_list<'a>(variants: impl Iterator<Item = (String, Option<&'a str>)>) -> String {
+    let variants: Vec<(String, Option<&str>)> = variants.collect();
+    if variants.iter().all(|v| v.1.is_none()) {
+        return variants.into_iter().map(|v| v.0).collect::<Vec<_>>().join(", ");
+    }
+    let mut out = String::from("\n");
+    for (variant, doc) in variants {
+        out += &doc.map(|d| comment(d, "///", "    ", Style::Rust)).unwrap_or_default();
+        out += &format!("    {variant},\n");
+    }
+    out
+}
 
 // A module's file: `areas/core` is `src/areas_core.rs`.
 pub(super) fn module_file(module: &str) -> String {
@@ -68,8 +83,9 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
     let mut imports: BTreeMap<String, String> = BTreeMap::new();
     let mut types_file = String::from(PRELUDE);
 
-    for (model_name, values) in &m.enums {
+    for (at, (model_name, values)) in m.enums.iter().enumerate() {
         let name = cx.def_name(model_name);
+        let docs = m.enum_docs.get(at);
         let mut seen = HashSet::new();
         let variants: Vec<(String, String)> = values
             .iter()
@@ -94,21 +110,24 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             Some(path) => namespaces.entry(path.clone()).or_default(),
             None => &mut types_file,
         };
+        *out += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Rust)).unwrap_or_default();
         *out += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
              impl AsRef<{name}> for {name} {{ fn as_ref(&self) -> &Self {{ self }} }}\n\
              impl {name} {{\n    pub fn from_index(i: i32) -> Self {{ match i {{ {index}_ => panic!(\"{name}: no value {{i}}\") }} }}\n    pub fn as_str(self) -> &'static str {{ match self {{ {to}}} }}\n}}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ self.as_str().lend() }} }}\n\
              impl FromJs for {name} {{ fn from_handle(h: u32) -> Self {{ let s = String::from_handle(h); match s.as_str() {{ {from}_ => panic!(\"{name}: no value {{s}}\") }} }} }}\n",
-            variants.iter().map(|(v, _)| v.as_str()).collect::<Vec<_>>().join(", ")
+            variant_list(variants.iter().map(|(v, _)| v.clone()).enumerate().map(|(i, v)| (v, docs.and_then(|d| d.members.get(i)?.as_deref()))))
         );
     }
-    for (model_name, members) in &m.num_enums {
+    for (at, (model_name, members)) in m.num_enums.iter().enumerate() {
         let name = cx.def_name(model_name);
+        let docs = m.num_enum_docs.get(at);
         let mut seen = HashSet::new();
-        let all: Vec<(String, &String)> = members
+        let all: Vec<(String, &String, usize)> = members
             .iter()
-            .map(|(member, value)| {
+            .enumerate()
+            .map(|(n, (member, value))| {
                 let mut id = camel_variant(&super::super::model::ident(member));
                 if !seen.insert(id.clone()) {
                     let mut i = 2;
@@ -117,17 +136,21 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
                     }
                     id = format!("{id}{i}");
                 }
-                (id, value)
+                (id, value, n)
             })
             .collect();
         // A value once a variant; a member of a value given already
         // (`ROTATE = 0` beside `LEFT = 0`) is a constant of that variant.
         let mut variants: Vec<(String, &String)> = Vec::new();
+        let mut variant_docs: Vec<Option<&str>> = Vec::new();
         let mut aliases: Vec<String> = Vec::new();
-        for (v, value) in all {
+        for (v, value, n) in all {
             match variants.iter().find(|(_, w)| *w == value) {
                 Some((first, _)) => aliases.push(format!("pub const {v}: {name} = {name}::{first}; ")),
-                None => variants.push((v, value)),
+                None => {
+                    variants.push((v, value));
+                    variant_docs.push(docs.and_then(|d| d.members.get(n)?.as_deref()));
+                }
             }
         }
         let from: String = variants.iter().map(|(v, value)| format!("{value} => {name}::{v}, ")).collect();
@@ -135,13 +158,14 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             Some(path) => namespaces.entry(path.clone()).or_default(),
             None => &mut types_file,
         };
+        *out += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Rust)).unwrap_or_default();
         *out += &format!(
             "#[derive(Clone, Copy, PartialEq, Eq, Debug)]\n#[repr(i32)]\npub enum {name} {{ {} }}\n\
              impl AsRef<{name}> for {name} {{ fn as_ref(&self) -> &Self {{ self }} }}\n\
              #[allow(non_upper_case_globals)]\nimpl {name} {{ {}pub fn from_value(v: i32) -> Self {{ match v {{ {from}_ => panic!(\"{name}: no value {{v}}\") }} }} }}\n\
              impl ToJs for {name} {{ fn lend(&self) -> Lent {{ (*self as i32 as f64).lend() }} }}\n\
              impl FromJs for {name} {{ fn from_handle(h: u32) -> Self {{ Self::from_value(f64::from_handle(h) as i32) }} }}\n",
-            variants.iter().map(|(v, value)| format!("{v} = {value}")).collect::<Vec<_>>().join(", "),
+            variant_list(variants.iter().zip(&variant_docs).map(|((v, value), d)| (format!("{v} = {value}"), *d))),
             aliases.concat()
         );
     }

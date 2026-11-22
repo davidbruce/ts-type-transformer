@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use super::super::comments::{Style, comment};
 use super::decl::{
     declarations, decoder_guard_id, decoder_owner, level_names, lower_callback, namespace_aliases,
     namespace_containers, nested_name, raise_callback, union_type, Container,
@@ -398,6 +399,8 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         // same parameters, as TypeScript can: the static one says it is.
         let sig_of = |name: &str, ps: &[(String, Ty)]| format!("{name}({})", ps.iter().map(|p| ty_param(&p.1, unions, &callbacks, &cx)).collect::<Vec<_>>().join(","));
         let signature = |f: &Func| sig_of(&cpp_name(f, ctor), &f.params);
+        // Redeclared where the base documents them.
+        again.iter_mut().for_each(|f| f.doc = None);
         let mut instance = BTreeSet::new();
         for f in c.funcs.iter().map(|f| with_self_args(f, c)).chain(again.iter().cloned()).filter(Class::has_self) {
             instance.insert(signature(&f));
@@ -528,7 +531,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             && !own.contains("begin")
             && !own.contains("end")
         {
-            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret, &cx));
+            let it = format!("ts::Iterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret, &cx));
             members += &format!("    {it} begin() const;\n    ts::IterationEnd end() const {{ return {{}}; }}\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::begin() const {{ return {it}(ts_raw_js_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
@@ -538,7 +541,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         if let Some(elem) = &c.iterates_async
             && !own.contains("iterate_async")
         {
-            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false }, c).ret, &cx));
+            let it = format!("ts::AsyncIterator<{}>", ty_arg(&with_self_args(&Func { type_params: vec![], module: String::new(), import: String::new(), name: String::new(), call: Call::Create(String::new()), params: vec![], rest: false, fixed: vec![], shared: None, ret: elem.clone(), returns_this: false, doc: None }, c).ret, &cx));
             members += &format!("    {it} iterate_async() const;\n");
             let templated = !class_head.is_empty();
             let def = format!("{class_head}{}{it} {owner}::iterate_async() const {{ return {it}(ts::handle, ts_raw_js_async_iterate(this->h)); }}\n", if templated { "inline " } else { "" });
@@ -554,8 +557,9 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 decl += &include(&decl_path, &format!("{h}{}", if class { ".decl.hpp" } else { ".hpp" }));
             }
         }
+        let class_doc = c.doc.as_deref().map(|d| comment(d, "///", "", Style::C)).unwrap_or_default();
         let decl_body = format!(
-            "{class_head}struct {0} : {1} {{\n{2}{usings}{members}}};\n",
+            "{class_doc}{class_head}struct {0} : {1} {{\n{2}{usings}{members}}};\n",
             c.name,
             bases.join(", "),
             constructors(&c.name)

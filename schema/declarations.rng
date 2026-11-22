@@ -149,6 +149,7 @@
     <ref name="id"/>
     <optional><ref name="jsName"/></optional>
     <ref name="synthetic"/>
+    <optional><ref name="doc"/></optional>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <ref name="bases"/>
     <ref name="members"/>
@@ -159,6 +160,7 @@
     <attribute name="name"/>
     <ref name="id"/>
     <optional><ref name="jsName"/></optional>
+    <optional><ref name="doc"/></optional>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <ref name="bases"/>
     <zeroOrMore>
@@ -170,6 +172,7 @@
             <value>new</value>
           </attribute>
         </optional>
+        <optional><ref name="doc"/></optional>
         <!-- No type parameters or result: they are the class's own. -->
         <optional><ref name="thisParameter"/></optional>
         <zeroOrMore><ref name="parameter"/></zeroOrMore>
@@ -198,6 +201,7 @@
     <attribute name="name"/>
     <ref name="id"/>
     <ref name="synthetic"/>
+    <optional><ref name="doc"/></optional>
     <zeroOrMore><ref name="typeParameter"/></zeroOrMore>
     <zeroOrMore><ref name="extends"/></zeroOrMore>
     <ref name="type"/>
@@ -206,6 +210,7 @@
   <define name="function.body">
     <attribute name="name"/>
     <optional><ref name="jsName"/></optional>
+    <optional><ref name="doc"/></optional>
     <ref name="signature"/>
   </define>
 
@@ -214,6 +219,7 @@
     <optional><ref name="jsName"/></optional>
     <!-- `const`, or a module's export: it cannot be assigned. -->
     <optional><attribute name="readonly"><value>true</value></attribute></optional>
+    <optional><ref name="doc"/></optional>
     <ref name="type"/>
   </define>
 
@@ -221,6 +227,7 @@
     <attribute name="name"/>
     <ref name="id"/>
     <ref name="synthetic"/>
+    <optional><ref name="doc"/></optional>
     <zeroOrMore>
       <element name="member">
         <attribute name="name"/>
@@ -229,8 +236,17 @@
           <choice><value>string</value><value>number</value><value>computed</value></choice>
         </attribute>
         <attribute name="value"/>
+        <optional><ref name="doc"/></optional>
       </element>
     </zeroOrMore>
+  </define>
+
+  <!-- What the declaration's JSDoc says, as text: the description, then a line each for
+       the tags a binding's user needs (`@param name text`, `@returns`, `@deprecated`,
+       `@default`, `@see`). Lowering adds a last line, `JavaScript: ...`, where it renamed
+       the member or fixed an argument. A declaration lowering made up has none. -->
+  <define name="doc">
+    <element name="doc"><text/></element>
   </define>
 
   <define name="namespace.body">
@@ -315,6 +331,7 @@
     <ref name="readonly"/>
     <ref name="from"/>
     <ref name="const"/>
+    <optional><ref name="doc"/></optional>
     <ref name="type"/>
   </define>
 
@@ -323,27 +340,32 @@
     <optional><ref name="jsName"/></optional>
     <ref name="optional"/>
     <ref name="from"/>
+    <optional><ref name="doc"/></optional>
     <ref name="signature"/>
   </define>
 
   <!-- Call and construct signatures have no name. -->
   <define name="callable.body">
+    <optional><ref name="doc"/></optional>
     <ref name="signature"/>
   </define>
 
   <define name="index.body">
     <ref name="readonly"/>
+    <optional><ref name="doc"/></optional>
     <ref name="parameter"/>
     <ref name="returns"/>
   </define>
 
   <define name="get.body">
     <ref name="memberName"/>
+    <optional><ref name="doc"/></optional>
     <optional><ref name="returns"/></optional>
   </define>
 
   <define name="set.body">
     <ref name="memberName"/>
+    <optional><ref name="doc"/></optional>
     <ref name="parameter"/>
   </define>
 

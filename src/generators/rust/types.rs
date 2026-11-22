@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::{camel, ident, rust_function, snake, Context, KEYWORDS};
+use super::super::comments::{Style, comment, text_lines};
 use super::super::model::{base_args, map_types, mentions, subst, with_self_args, Call, Class, Func, Model, TParam, Ty};
 
 pub(super) const VALUE: &str = "JsValue";
@@ -177,9 +178,11 @@ pub(super) fn function_raw(f: &Func, orig: &Func, name: &str, vis: &str, imports
     if hidden(f).is_empty() {
         return vec![one_function_raw(f, Some(orig), name, vis, imports, this, cx)];
     }
+    // The variant that names its type argument has the same documentation.
+    let undocumented = |f: &Func| Func { doc: None, ..f.clone() };
     vec![
         one_function_raw(&defaulted(f), Some(&defaulted(orig)), name, vis, imports, this, cx),
-        one_function_raw(f, Some(orig), &format!("{name}_as"), vis, imports, this, cx),
+        one_function_raw(&undocumented(f), Some(orig), &format!("{name}_as"), vis, imports, this, cx),
     ]
 }
 
@@ -191,7 +194,17 @@ pub(super) fn one_function_raw(f: &Func, orig: Option<&Func>, name: &str, vis: &
     let p = parts_with_raw(f, orig, imports, this, cx);
     let generics = if p.generics.is_empty() { String::new() } else { format!("<{}>", p.generics.join(", ")) };
     let ret = if f.ret == Ty::Void { String::new() } else { format!(" -> {}", p.ret) };
-    format!("{vis}fn {name}{generics}({}){ret} {{ {} }}", p.params.join(", "), p.body)
+    format!("{}{vis}fn {name}{generics}({}){ret} {{ {} }}", doc_of(f), p.params.join(", "), p.body)
+}
+
+// Its documentation, as lines before it: a member is indented by `indented`.
+fn doc_of(f: &Func) -> String {
+    f.doc.as_deref().map(|d| comment(d, "///", "", Style::Rust)).unwrap_or_default()
+}
+
+// A member of a trait or an impl, with its documentation, as lines.
+pub(super) fn indented(item: &str) -> String {
+    item.lines().map(|l| format!("    {l}\n")).collect()
 }
 
 // A function's pieces: its bounds, its parameters as written (`&self`
@@ -345,7 +358,7 @@ impl Family {
 
     // The method: `fn query_selector<A_: ..Arg>(&self, selectors: A_) -> A_::Output`,
     // and for an overload with a type argument to state, `query_selector_as::<T>`.
-    pub(super) fn methods(&self, vis: &str, imports: &mut BTreeMap<String, String>, this: &str, ret_self: Option<&Ty>, cx: &Context) -> Vec<String> {
+    pub(super) fn methods(&self, vis: &str, imports: &mut BTreeMap<String, String>, this: &str, ret_self: Option<&Ty>, documented: bool, cx: &Context) -> Vec<String> {
         let first = &self.members[0];
         let names: Vec<String> = first.params.iter().map(|(p, _)| ident(&snake(p))).collect();
         let params: Vec<String> = first
@@ -366,12 +379,13 @@ impl Family {
             ),
             None => ("A_::Output".to_string(), call),
         };
-        let mut out = vec![format!("{vis}fn {}<A_: {}{}{generics}>(&self, {}) -> {ret_s} {{ {body_s} }}", self.name, self.trait_name, self.rest(), params.join(", "))];
+        let mut out = vec![format!("{}{vis}fn {}<A_: {}{}{generics}>(&self, {}) -> {ret_s} {{ {body_s} }}", if documented { doc_of(first) } else { String::new() }, self.name, self.trait_name, self.rest(), params.join(", "))];
         if let Some(f) = self.members.iter().find(|f| f.params[self.at].1 == Ty::Str && !hidden(f).is_empty()) {
             let mut f = f.clone();
             if let Some(sty) = ret_self {
                 f.ret = sty.clone();
             }
+            f.doc = None;
             out.push(one_function(&f, &format!("{}_as", self.name), vis, imports, Some(this), cx));
         }
         out
@@ -546,9 +560,11 @@ fn mentions_type(t: &Ty, name: &str) -> bool {
     }
 }
 
-pub(super) fn handle_decl(model_name: &str, rust_name: &str, type_params: &[TParam], cx: &Context) -> String {
+// `handle!` takes the documentation as attributes, for it makes the struct.
+pub(super) fn handle_decl(model_name: &str, rust_name: &str, type_params: &[TParam], doc: Option<&str>, cx: &Context) -> String {
+    let attrs: String = doc.map(|d| text_lines(d, Style::Rust).iter().map(|l| format!("#[doc = {:?}] ", format!(" {l}").trim_end())).collect()).unwrap_or_default();
     if type_params.is_empty() {
-        return format!("handle!({rust_name});");
+        return format!("handle!({attrs}{rust_name});");
     }
     let mut defaults: Vec<Option<String>> = vec![None; type_params.len()];
     for i in (0..type_params.len()).rev() {
@@ -566,7 +582,7 @@ pub(super) fn handle_decl(model_name: &str, rust_name: &str, type_params: &[TPar
             None => p.name.clone(),
         })
         .collect();
-    format!("handle!({rust_name}<{}>);", parts.join(", "))
+    format!("handle!({attrs}{rust_name}<{}>);", parts.join(", "))
 }
 
 // A buffer element as a Rust type.

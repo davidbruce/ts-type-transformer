@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use super::super::comments::{Style, comment};
 use super::types::{
     callback_arg, callback_param_ty, callback_result, func, names_of, raw_callback, type_refs,
     typed, union_decl, zig_elem,
@@ -21,6 +22,20 @@ fn check(m: &Model) -> super::super::Problems {
         }
     });
     problems
+}
+
+// Enum members on one line; where some have documentation, one to a line.
+fn enum_fields<'a>(fields: impl Iterator<Item = (String, Option<&'a str>)>) -> String {
+    let fields: Vec<(String, Option<&str>)> = fields.collect();
+    if fields.iter().all(|f| f.1.is_none()) {
+        return fields.into_iter().map(|f| f.0).collect::<Vec<_>>().join(", ");
+    }
+    let mut out = String::from("\n");
+    for (field, doc) in fields {
+        out += &doc.map(|d| comment(d, "///", "    ", Style::Plain)).unwrap_or_default();
+        out += &format!("    {field},\n");
+    }
+    out.trim_end_matches(",\n").to_string()
 }
 
 pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<(Vec<(String, String)>, HashSet<String>), Vec<String>> {
@@ -50,11 +65,13 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
     let mut types = (String::new(), String::new(), Vec::new());
     for (id, (name, values)) in m.enums.iter().enumerate() {
         let mut seen = std::collections::HashSet::new();
-        let members: Vec<String> = values.iter().map(|v| if v.is_empty() { "empty" } else { v }).filter(|v| seen.insert(v.to_string())).map(ident).collect();
+        let members: Vec<(usize, String)> = values.iter().enumerate().map(|(i, v)| (i, if v.is_empty() { "empty" } else { v.as_str() })).filter(|(_, v)| seen.insert(v.to_string())).map(|(i, v)| (i, ident(v))).collect();
+        let docs = m.enum_docs.get(id);
+        types.0 += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
         // `js_id`: which enum of strings it is, for its values to cross as handles.
         types.0 += &format!(
             "pub const {name} = enum(i32) {{ {}, pub const js_id: i32 = {id}; pub fn toJsHandle(self: @This()) u32 {{ return raw.js_enum_value({id}, @intFromEnum(self)); }} pub fn fromJsHandle(h: u32) @This() {{ return @enumFromInt(raw.js_enum_index({id}, h)); }} }};\n",
-            members.join(", ")
+            enum_fields(members.iter().map(|(i, name)| (name.clone(), docs.and_then(|d| d.members[*i].as_deref()))))
         );
         types.2.push(name.clone());
     }
@@ -63,21 +80,23 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
             "    extern \"{wasm_module}\" fn js_enum_value(id: i32, i: i32) u32;\n    extern \"{wasm_module}\" fn js_enum_index(id: i32, h: u32) i32;\n"
         );
     }
-    for (name, members) in &m.num_enums {
+    for (id, (name, members)) in m.num_enums.iter().enumerate() {
         // A value named twice (`LEFT = 0`, `ROTATE = 0`): the second is a constant of the first.
         let mut first: HashMap<&str, &str> = HashMap::new();
         let mut fields = Vec::new();
         let mut aliases = String::new();
-        for (member, value) in members {
+        let docs = m.num_enum_docs.get(id);
+        for (i, (member, value)) in members.iter().enumerate() {
             match first.get(value.as_str()) {
                 Some(f) => aliases += &format!(" pub const {} = @This().{};", ident(member), ident(f)),
                 None => {
                     first.insert(value, member);
-                    fields.push(format!("{} = {value}", ident(member)));
+                    fields.push((format!("{} = {value}", ident(member)), docs.and_then(|d| d.members[i].as_deref())));
                 }
             }
         }
-        types.0 += &format!("pub const {name} = enum(i32) {{ {},{aliases} }};\n", fields.join(", "));
+        types.0 += &docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
+        types.0 += &format!("pub const {name} = enum(i32) {{ {},{aliases} }};\n", enum_fields(fields.into_iter()));
         types.2.push(name.clone());
     }
     let types_uses = uses.entry("types".into()).or_default();
@@ -312,8 +331,9 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
                 shared: apply_f.shared.clone(),
                 ret: apply_f.ret.clone(),
                 returns_this: false,
+                doc: None,
             };
-            func(&mut types.0, &mut types.1, Some(&c.name), &method, "call", "    ", &m.unions, wasm_module, &mut emitted_imports);
+            func(&mut types.0, &mut types.1, Some(&c.name), &method, "call", "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
         }
         types.0 += &format!(
             "    pub fn deinit(self: {0}) void {{ jsRelease(self); }}\n    \
@@ -523,7 +543,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         emitted.extend(c_consts.iter().map(|(n, _)| n.clone()));
         emitted.extend(own_names.values().cloned());
 
-        *out += &format!("\npub const {} = extern struct {{\n    h: u32,\n", c.name);
+        *out += &format!("\n{}pub const {} = extern struct {{\n    h: u32,\n", c.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default(), c.name);
         for (name, value) in c_consts {
             *out += &format!("    pub const {} = {value};\n", ident(name));
         }
@@ -568,7 +588,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         if c.funcs.iter().any(&shared) {
             *out += "    pub fn Methods(comptime Self: type) type {\n        return struct {\n";
             for f in c.funcs.iter().filter(|f| shared(f)) {
-                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions, wasm_module, &mut emitted_imports);
+                func(out, externs, Some("Self"), f, &own_names[&f.name], "            ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
             }
             *out += "        };\n    }\n";
         }
@@ -577,7 +597,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
             match inherited(f) {
                 Some((from, name)) => *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(own_name), ident(&class_names[from][name])),
                 None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(own_name)),
-                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions, wasm_module, &mut emitted_imports),
+                None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports),
             }
         }
         for &(zname, from, home_zname) in extras {
@@ -623,7 +643,7 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
         let (out, externs, names) = files.entry(f.module.clone()).or_default();
         let zig_name = &top_names[&f.name];
         names.push(zig_name.clone());
-        func(out, externs, None, f, zig_name, "", &m.unions, wasm_module, &mut emitted_imports);
+        func(out, externs, None, f, zig_name, "", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports);
     }
 
     // Which file declares each name.

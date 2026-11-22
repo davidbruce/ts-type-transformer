@@ -94,7 +94,7 @@ pub(super) fn expand_functions(decls: &mut Vec<Decl>, o: Options) {
             Decl::Function(f) => {
                 for sig in expand_signature(&f.sig, o) {
                     if seen.insert(format!("{} {}", f.name, signature_key(&sig))) {
-                        out.push(Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig }));
+                        out.push(Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig, doc: f.doc.clone() }));
                     }
                 }
             }

@@ -187,6 +187,19 @@ declaration before a namespace's (`StreamPipeOptions` before a flattened
 `Stream.PipeOptions`), then functions, then what lowering made up, which
 takes the `_2`.
 
+Documentation: the model carries each function's, class's and enum's (and its
+members') `<doc>`, and each generator writes it once, at the definition, in its
+target's comment form: `//` in C, `///` in C++, Zig, Rust, Gleam, F#. A
+member has its first paragraph and tags, a type all of it. What could break
+the code is taken out: a backslash ending a C or C++ line, Rust fences made
+`text` and indented blocks unindented (rustdoc would run them as tests),
+F#'s markup escaped (`<summary>`, `<param>`). `@deprecated` is a line, not an
+attribute: a use of it must not warn. Where lowering renamed a member or
+fixed an argument and the name does not say so, the documentation ends with
+`JavaScript: open(map, content)`. In Zig, a parameter of `anytype` that is a
+union, a function or an option struct's fields also gets a line saying what
+it takes: the one documentation the library did not write.
+
 A namespace's types are its namespace's, as each target has namespaces:
 F#'s nested modules (`Stream.PipeOptions`); Rust's modules
 (`stream::PipeOptions`, defined in `src/stream.rs`, their member traits in
@@ -459,6 +472,12 @@ Lowering never silently loses the link to the source:
 - `const` on widened literal properties: the value.
 - `synthetic="true"` on declarations a pass created.
 - `lossy="reason"` on every `any` a pass introduced.
+- `<doc>` on a declaration or member: its JSDoc, read from the `/** */` block
+  before it in the source text. The
+  description, then a line each for `@param`, `@returns`, `@deprecated`,
+  `@default`, `@see`; links as their text, other tags dropped. A copy a pass
+  makes (flatten, overloads, accessors) keeps it; a declaration a pass made up
+  has none.
 
 ## Measured (lib.dom.d.ts)
 

@@ -344,6 +344,7 @@ impl<'c> Front<'c> {
             for sig in self.c.get_signatures_of_type_exported(t, kind) {
                 let mut m = Member::new(mk, String::new());
                 m.sig = Some(self.from_signature(*sig));
+                m.doc = sig.declaration().and_then(|d| self.doc(d));
                 out.push(m);
             }
         }
@@ -368,6 +369,7 @@ impl<'c> Front<'c> {
                         m.optional = prop.flags().intersects(SymbolFlags::Optional);
                         m.from = from.clone();
                         m.sig = Some(variant);
+                        m.doc = sig.declaration().and_then(|d| self.doc(d));
                         out.push(m);
                     }
                 }
@@ -377,6 +379,7 @@ impl<'c> Front<'c> {
             m.optional = prop.flags().intersects(SymbolFlags::Optional);
             m.readonly = self.c.is_readonly_symbol_exported(*prop);
             m.from = from;
+            m.doc = prop.declarations().iter().find_map(|d| self.doc(*d));
             let ty = if m.optional { self.optional_type(pty, *prop) } else { self.from_type(pty) };
             let syntactic = prop.declarations().iter().find_map(|d| d.type_node()).is_some_and(|n| n.kind() == Kind::UnionType && self.written_elements(n).len() >= 2);
             if let (Type::Union(parts), Some(o), true) = (&ty, owner, syntactic) {

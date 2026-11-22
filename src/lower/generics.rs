@@ -251,8 +251,8 @@ pub(super) fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
                     _ => at,
                 };
                 let name = unique(base, &mut names);
-                let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone() }).collect();
-                enums.push(Enum { name: name.clone(), sym: None, members, synthetic: true });
+                let members = strings.iter().map(|v| EnumMember { name: v.clone(), kind: "string", value: v.clone(), doc: None }).collect();
+                enums.push(Enum { name: name.clone(), sym: None, members, synthetic: true, doc: None });
                 name
             });
             *t = Type::synthetic_ref(name.clone(), "enum", vec![]);

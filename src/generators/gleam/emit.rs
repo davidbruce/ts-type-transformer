@@ -10,7 +10,19 @@ use super::{
     codec_var, lower, module_path, relative, snake, upper, upper_variant, Output, ProjectRef,
     KEYWORDS, MODEL_OPTIONS, NAMING, OPAQUE_BUILTINS, OWN, OWN_RUNTIME, PHANTOM,
 };
-use super::super::model::{model_with_options, walk, Call, Class, Model, TParam, Ty};
+use super::super::comments::{Style, comment};
+use super::super::model::{model_with_options, walk, Call, Class, EnumDoc, Model, TParam, Ty};
+
+// A custom type of variants without fields, with its documentation.
+fn enum_type(name: &str, variants: &[String], docs: Option<&EnumDoc>) -> String {
+    let mut out = docs.and_then(|d| d.doc.as_deref()).map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
+    out += &format!("pub type {name} {{\n");
+    for (i, v) in variants.iter().enumerate() {
+        out += &docs.and_then(|d| d.members.get(i)?.as_deref()).map(|d| comment(d, "///", "  ", Style::Plain)).unwrap_or_default();
+        out += &format!("  {v}\n");
+    }
+    out + "}\n\n"
+}
 
 fn assign_class_path(
     m: &Model,
@@ -326,10 +338,10 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         g.out += &format!("pub type {}{params}\n\n", g.tname(o));
     }
     // String and numeric enums: custom types without fields.
-    for (e, values) in &m.enums {
+    for (at, (e, values)) in m.enums.iter().enumerate() {
         let name = g.tname(e);
         let variants: Vec<String> = (0..values.len()).map(|i| g.variants[&(e.clone(), i)].clone()).collect();
-        g.out += &format!("pub type {name} {{\n{}\n}}\n\n", variants.iter().map(|v| format!("  {v}")).collect::<Vec<_>>().join("\n"));
+        g.out += &enum_type(&name, &variants, m.enum_docs.get(at));
         g.ffi += &format!(
             "const {name}_values = {:?};\nconst {name}_cases = () => [{}];\n\
              export function {name}_to(v) {{\n  const i = {name}_values.indexOf(v);\n  if (i < 0) throw new TypeError(\"not a {name}: \" + v);\n  return new ({name}_cases()[i])();\n}}\n\
@@ -338,10 +350,10 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
             variants.iter().map(|v| format!("B.{v}")).collect::<Vec<_>>().join(", ")
         );
     }
-    for (e, members) in &m.num_enums {
+    for (at, (e, members)) in m.num_enums.iter().enumerate() {
         let name = g.tname(e);
         let variants: Vec<String> = (0..members.len()).map(|i| g.variants[&(e.clone(), i)].clone()).collect();
-        g.out += &format!("pub type {name} {{\n{}\n}}\n\n", variants.iter().map(|v| format!("  {v}")).collect::<Vec<_>>().join("\n"));
+        g.out += &enum_type(&name, &variants, m.num_enum_docs.get(at));
         g.ffi += &format!(
             "const {name}_values = [{}];\nconst {name}_cases = () => [{}];\n\
              export function {name}_to(v) {{\n  return new ({name}_cases()[{name}_values.indexOf(v)])();\n}}\n\
@@ -437,6 +449,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         let mut vars: Vec<String> = c.type_params.iter().map(|p| Gen::tvar(&p.name)).collect();
         vars.push(PHANTOM.into());
         let vars = vars.join(", ");
+        g.out += &c.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
         match g.parents.get(&c.name).cloned() {
             None => g.out += &format!("pub type {name}({vars})\n\n"),
             Some((base, args)) => {

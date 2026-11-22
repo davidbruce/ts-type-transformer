@@ -156,6 +156,8 @@ pub struct Member {
     pub constant: Option<String>,
     pub ty: Option<Type>,
     pub sig: Option<Signature>,
+    // Its JSDoc as text: the description, then a line per tag. See `front::doc`.
+    pub doc: Option<String>,
 }
 
 pub struct Interface {
@@ -173,6 +175,7 @@ pub struct Interface {
     pub synthetic: bool,
     // What its constructor is exported as, where not its name: `default`.
     pub js_name: Option<String>,
+    pub doc: Option<String>,
 }
 
 pub struct Class {
@@ -190,12 +193,14 @@ pub struct Alias {
     pub ty: Type,
     pub computed: bool,
     pub synthetic: bool,
+    pub doc: Option<String>,
 }
 
 pub struct Function {
     pub name: String,
     pub js_name: Option<String>,
     pub sig: Signature,
+    pub doc: Option<String>,
 }
 
 pub struct Var {
@@ -205,12 +210,14 @@ pub struct Var {
     pub js_name: Option<String>,
     // `const`, or exported from a module: it cannot be assigned.
     pub readonly: bool,
+    pub doc: Option<String>,
 }
 
 pub struct EnumMember {
     pub name: String,
     pub kind: &'static str,
     pub value: String,
+    pub doc: Option<String>,
 }
 
 pub struct Enum {
@@ -218,6 +225,7 @@ pub struct Enum {
     pub sym: Sym,
     pub members: Vec<EnumMember>,
     pub synthetic: bool,
+    pub doc: Option<String>,
 }
 
 pub struct Namespace {
@@ -264,6 +272,6 @@ impl Type {
 
 impl Member {
     pub fn new(kind: MemberKind, name: String) -> Member {
-        Member { kind, name, js_name: None, optional: false, readonly: false, from: None, constant: None, ty: None, sig: None }
+        Member { kind, name, js_name: None, optional: false, readonly: false, from: None, constant: None, ty: None, sig: None, doc: None }
     }
 }

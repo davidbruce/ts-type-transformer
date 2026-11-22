@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use super::decl::rename_words;
 use super::{ident, import_attr, raw_fn, Ctx};
+use super::super::comments::{Style, comment};
 use super::super::model::{Call, Class, Func, NamedUnion, TParam, Ty};
 
 // C++ type of a value going in. `V` is the value a typed key selects.
@@ -618,6 +619,9 @@ fn build_function(
             format!("{ret} {name}({params_str}) {{ {body} }}\n"),
         ),
     };
+    // On the declaration a caller reads: in the class, else where it is defined.
+    let doc = f.doc.as_deref().filter(|_| rest_pack.is_none() && !omit_rest).map(|d| comment(d, "///", if place == Place::Free { "" } else { "    " }, Style::C)).unwrap_or_default();
+    let (decl, def) = if decl.is_empty() { (decl, format!("{doc}{def}")) } else { (format!("{doc}{decl}"), def) };
     // With its template head: an overload constrained and one not are two,
     // the more constrained chosen where both fit (`merge<T extends Dictionary>`).
     // Its template parameters by place: C++ tells none apart by name.

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use roxmltree::Node;
 
 use super::super::{attr, elements, flag, marks, named, only_child};
-use super::Gen;
+use super::{doc_lines, member_doc_lines, Gen};
 use super::member_ir::{FsMember, FsMemberKind, FsParam, has_member_conflict, push_member, render_members};
 use super::syntax::{
     collect_type_vars, const_js, fable_builtin, find_decl, ident, is_plain_ident, only_child_type, pascal, strip_opt, subst_params, type_ident,
@@ -188,7 +188,7 @@ impl Gen {
         // A static member makes F# take it for a class unless told.
         let factory = if d.has_tag_name("class") { FactoryResult::None } else { self.factory(d, &owner, &extend, is_base) };
         let kind = if factory.is_some() { "AllowNullLiteral; Interface" } else { "AllowNullLiteral" };
-        self.out += &format!("{origin}{indent}[<{kind}>]\n{indent}type {header} =\n");
+        self.out += &format!("{}{origin}{indent}[<{kind}>]\n{indent}type {header} =\n", doc_lines(d, indent));
         let mut prefix_body = Vec::new();
         // A subclass of Array is a seq with an indexer and a length: an F#
         // interface cannot inherit ResizeArray, which is a class.
@@ -611,6 +611,7 @@ impl Gen {
                                 ret: cret.to_string(),
                             },
                             marks: m_marks.clone(),
+                            doc: member_doc_lines(m, &format!("{indent}    ")),
                         },
                         &g.abbrevs,
                     );
@@ -626,6 +627,7 @@ impl Gen {
                                     ret: cret.to_string(),
                                 },
                                 marks: m_marks.clone(),
+                                doc: String::new(),
                             });
                         }
                     }

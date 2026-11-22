@@ -590,7 +590,10 @@ pub(super) fn package_modules(root: Node) -> Option<String> {
             *out += &format!(" {k}=\"{}\"", esc(v));
         }
         *out += ">";
-        for c in n.children().filter(|c| c.is_element()) {
+        if let Some(text) = super::super::doc(n) {
+            *out += &format!("<doc>{}</doc>", text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;"));
+        }
+        for c in super::super::elements(n) {
             write(c, out, ids, None, &[], moved);
         }
         *out += &format!("</{}>\n", n.tag_name().name());
