@@ -4984,4 +4984,95 @@ export interface Map extends Evented { zoom: number }
             assert!(!xml.contains("Canvas_on_type") && !xml.contains("Map_on_type"), "{target}:\n{xml}");
         }
     }
+
+    // Overloads told apart by a union of literals are one overload per literal,
+    // as if the library had written one for each; the plain name is the one
+    // that takes any string.
+    #[test]
+    fn overloads_told_apart_by_literal_unions_are_split_per_literal() {
+        let dts = write_dts(
+            "naming-literal-split",
+            r#"export interface Evented {
+    on(type: "baselayerchange" | "overlayadd", fn: (a: number) => void, context?: any): this;
+    on(type: "click" | "dblclick", fn: (s: string) => void, context?: any): this;
+    on(type: "load", fn: () => void): this;
+    on(type: string, fn: () => void): this;
+    on(eventMap: object): this;
+}
+"#,
+        );
+        let methods = |xml: &str| {
+            let doc = roxmltree::Document::parse(xml).unwrap();
+            let evented = doc.root_element().children().find(|n| n.attribute("name") == Some("Evented")).unwrap();
+            evented
+                .children()
+                .filter(|n| n.has_tag_name("method"))
+                .map(|m| {
+                    let p = m.children().find(|c| c.has_tag_name("parameter")).unwrap();
+                    let first = p.children().find(|c| c.is_element()).map(|c| c.attribute("name").unwrap_or("").to_string()).unwrap_or_default();
+                    (m.attribute("name").unwrap().to_string(), p.attribute("const").map(str::to_string), first)
+                })
+                .collect::<Vec<_>>()
+        };
+        for target in ["c", "zig", "rust", "gleam", "cpp", "fsharp"] {
+            let xml = lower(&dts, Some(target), &[]);
+            let ms = methods(&xml);
+            // C++ and F# keep overloads: the fixed argument tells them apart, and their generators name them.
+            for key in ["baselayerchange", "overlayadd", "click", "dblclick", "load"] {
+                assert!(ms.iter().any(|(n, c, _)| (n == &format!("on_{key}") || ["cpp", "fsharp"].contains(&target) && n == "on") && c.as_deref() == Some(key)), "{target} {key}:\n{ms:?}");
+            }
+            // The plain name is the overload that takes a string, with no key fixed.
+            assert!(ms.iter().any(|(n, c, t)| n == "on" && c.is_none() && t == "string"), "{target}:\n{ms:?}");
+            assert!(!xml.contains("Evented_on_type"), "{target} kept an enum for a split parameter:\n{xml}");
+        }
+        let cpp = joined(&generators::cpp::files(&model(&lower(&dts, Some("cpp"), &[]), "C++")).unwrap());
+        assert!(cpp.contains("on_dblclick(") && !cpp.contains("Evented_on_type"), "{cpp}");
+        let fs = joined(&generators::fsharp::module(&lower(&dts, Some("fsharp"), &[])).unwrap().files);
+        assert!(fs.contains("on_dblclick") && !fs.contains("EventedOnType"), "{fs}");
+        let c = joined(&generators::c::files(&model(&lower(&dts, Some("c"), &[]), "C")).unwrap());
+        assert!(c.contains("Evented_on_dblclick(Evented self, "), "{c}");
+        assert!(!c.contains("Evented_on_dblclick(Evented self, Evented_on_type"), "{c}");
+    }
+
+    // A parameter of literals that does not tell overloads apart stays an enum.
+    #[test]
+    fn a_literal_union_that_every_overload_shares_stays_an_enum() {
+        let dts = write_dts(
+            "naming-literal-lone",
+            r#"export declare function setMode(mode: "a" | "b" | "c"): void;
+export interface Shape {
+    paint(mode: "fill" | "stroke", value: number): void;
+    paint(mode: "fill" | "stroke", value: string): void;
+}
+"#,
+        );
+        for target in ["c", "rust"] {
+            let xml = lower(&dts, Some(target), &[]);
+            assert!(xml.contains("<ref name=\"setMode_mode\" kind=\"enum\""), "{target}:\n{xml}");
+            assert!(!xml.contains("setMode_a") && !xml.contains("paint_fill") && !xml.contains("paint_stroke"), "{target}:\n{xml}");
+            assert!(xml.contains("Shape_paint_mode"), "{target}:\n{xml}");
+        }
+    }
+
+    // As keyed expansion is: past `keyed_overloads`, an overload is left whole;
+    // a config that leaves `keyed_params` alone does not split at all.
+    #[test]
+    fn splitting_literal_overloads_is_bounded_and_belongs_to_keyed_params() {
+        let dts = write_dts(
+            "naming-literal-bound",
+            r#"export interface Evented {
+    on(type: "a" | "b" | "c", fn: () => void): this;
+    on(type: "d" | "e", fn: () => void): this;
+    on(type: string, fn: () => void): this;
+}
+"#,
+        );
+        let xml = lower(&dts, Some("c"), &["limits.keyed_overloads=2"]);
+        assert!(xml.contains("const=\"d\"") && xml.contains("const=\"e\""), "{xml}");
+        assert!(!xml.contains("const=\"a\"") && !xml.contains("const=\"b\""), "{xml}");
+        let xml = lower(&dts, Some("c"), &["keyed_params=keep"]);
+        assert!(!xml.contains("const="), "{xml}");
+        let xml = lower(&dts, Some("zig"), &[]);
+        assert!(xml.contains("const=\"a\"") && xml.contains("const=\"e\""), "{xml}");
+    }
 }

@@ -65,12 +65,12 @@ let onClick: LeafletMouseEventHandlerFn =
     let f =
         fun (e: LeafletMouseEvent) -> if e.latlng.lat > 0.0 then clicks <- clicks + 1
     f
-m.on (EventedAddEventListenerTypeClick.Click, onClick) |> ignore
+m.on_click onClick |> ignore
 let data = createObj [ "latlng" ==> london ]
 m.fire ("click", data) |> ignore
 m.fire ("click", data) |> ignore
 check (clicks = 2) "fire reaches the listener"
-m.off (EventedAddEventListenerTypeClick.Click, onClick) |> ignore
+m.off_click onClick |> ignore
 m.fire ("click", data) |> ignore
 check (clicks = 2) "off removes it"
 

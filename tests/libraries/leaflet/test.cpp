@@ -129,14 +129,14 @@ extern "C" __attribute__((export_name("run"))) void run() {
     LeafletMouseEventHandlerFn onClick = [&](LeafletMouseEvent e) {
         if (e.latlng().lat() > 0) clicks++;
     };
-    m.on(Evented_addEventListener_type_click::click, onClick);
+    m.on_click(onClick);
     LeafletMouseEvent data = LeafletMouseEvent::create();
     data.latlng(london);
     m.fire("click", val_of(data));
     m.fire("click", val_of(data));
     CHECK(clicks == 2);
     // Removed: the listener hears nothing more.
-    m.off(Evented_addEventListener_type_click::click, onClick);
+    m.off_click(onClick);
     m.fire("click", val_of(data));
     CHECK(clicks == 2);
     onClick.release();

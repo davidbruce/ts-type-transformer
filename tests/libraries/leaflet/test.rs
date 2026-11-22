@@ -66,7 +66,7 @@ pub extern "C" fn run() {
             }
         }
     });
-    m.on_click(EventedAddEventListenerTypeClick::Click, &on_click, None);
+    m.on_click(&on_click, None);
     let data = LeafletMouseEvent::create();
     data.set_latlng(&london);
     let data = JsValue::from(&data);

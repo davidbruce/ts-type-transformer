@@ -8,6 +8,7 @@ use tsrs_core::P;
 use crate::front::Front;
 use crate::ir::*;
 
+use super::eval::split_members;
 use super::walk::walk;
 
 // `interface X` + `var X: { prototype: X; new(): X; statics }` is a class.
@@ -88,6 +89,9 @@ pub(super) fn flatten(front: &mut Front, decls: &mut [Decl]) {
                 if let Some(sym) = i.sym {
                     let (members, ancestors) = front.flattened(sym);
                     i.members = members;
+                    if front.expand_keyed || front.map_keyed {
+                        split_members(&mut i.members, front.keyed_limit);
+                    }
                     i.ancestor_syms = ancestors.iter().map(|a| a.1).collect();
                     i.ancestors = ancestors.into_iter().map(|a| a.0).collect();
                     i.extends.clear();

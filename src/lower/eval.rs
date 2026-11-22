@@ -206,6 +206,108 @@ fn expand_keyed_functions(front: &mut Front, decls: &mut Vec<Decl>, limit: usize
     *decls = out;
 }
 
+// Overloads told apart by a parameter of string literals are keyed signatures
+// written by hand: `on(type: 'click' | 'dblclick', fn)` beside `on(type:
+// 'load', fn)` is one overload per literal, the literal a fixed argument.
+pub(super) fn split_literal_overloads(decls: &mut Vec<Decl>, limit: usize) {
+    each_member_list(decls, &mut |members| split_members(members, limit));
+    split_functions(decls, limit);
+}
+
+pub(super) fn split_members(members: &mut Vec<Member>, limit: usize) {
+    let mut out: Vec<Member> = Vec::new();
+    let mut done: HashSet<String> = HashSet::new();
+    for m in members.iter() {
+        if m.kind != MemberKind::Method || m.sig.is_none() {
+            out.push(m.clone());
+        } else if done.insert(m.name.clone()) {
+            let group: Vec<&Member> = members.iter().filter(|g| g.kind == MemberKind::Method && g.sig.is_some() && g.name == m.name).collect();
+            if group.len() < 2 {
+                out.push(m.clone());
+                continue;
+            }
+            let sigs: Vec<Signature> = group.iter().filter_map(|g| g.sig.clone()).collect();
+            out.extend(split_group(&sigs, limit).into_iter().map(|(n, sig)| Member { sig: Some(sig), ..group[n].clone() }));
+        }
+    }
+    *members = out;
+}
+
+fn string_literals(t: &Type) -> Option<Vec<String>> {
+    match t {
+        Type::Literal { kind: "string", value } => Some(vec![value.clone()]),
+        Type::Union(parts) => parts.iter().map(|p| if let Type::Literal { kind: "string", value } = p { Some(value.clone()) } else { None }).collect(),
+        _ => None,
+    }
+}
+
+// The position whose literals tell some of `sigs` apart, if any.
+fn discriminating(sigs: &[&Signature], from: usize) -> Option<usize> {
+    let width = sigs.iter().map(|s| s.params.len()).max()?;
+    (from..width).find(|&i| {
+        let at: Vec<&Param> = sigs.iter().filter_map(|s| s.params.get(i)).filter(|p| !p.rest).collect();
+        let keyed = at.iter().filter(|p| p.constant.is_none() && string_literals(&p.ty).is_some()).count();
+        let kinds: HashSet<String> = at.iter().map(|p| format!("{:?}{}", p.constant, type_key(&p.ty))).collect();
+        keyed >= 2 && kinds.len() > 1
+    })
+}
+
+fn split_at(sig: &Signature, i: usize, limit: usize) -> Vec<Signature> {
+    match sig.params.get(i).filter(|p| p.constant.is_none() && !p.rest).and_then(|p| string_literals(&p.ty)).filter(|k| k.len() <= limit) {
+        Some(keys) => keys
+            .into_iter()
+            .map(|key| {
+                let mut s = sig.clone();
+                s.params[i].constant = Some(key);
+                s.params[i].ty = Type::prim("string");
+                s
+            })
+            .collect(),
+        None => vec![sig.clone()],
+    }
+}
+
+// Each result with the index of the overload it came from. Splitting at one
+// position can leave overloads another position tells apart.
+fn split_group(sigs: &[Signature], limit: usize) -> Vec<(usize, Signature)> {
+    let mut out: Vec<(usize, Signature)> = sigs.iter().cloned().enumerate().collect();
+    let mut from = 0;
+    while let Some(i) = discriminating(&out.iter().map(|(_, s)| s).collect::<Vec<_>>(), from) {
+        out = out.iter().flat_map(|(n, s)| split_at(s, i, limit).into_iter().map(move |s| (*n, s))).collect();
+        from = i + 1;
+    }
+    out
+}
+
+fn split_functions(decls: &mut Vec<Decl>, limit: usize) {
+    let mut sigs: HashMap<String, Vec<(Option<String>, Signature)>> = HashMap::new();
+    for d in decls.iter() {
+        if let Decl::Function(f) = d {
+            sigs.entry(f.name.clone()).or_default().push((f.js_name.clone(), f.sig.clone()));
+        }
+    }
+    let mut out: Vec<Decl> = Vec::new();
+    for d in decls.drain(..) {
+        match d {
+            Decl::Function(f) => {
+                let Some(group) = sigs.remove(&f.name) else { continue };
+                if group.len() < 2 {
+                    out.push(Decl::Function(f));
+                    continue;
+                }
+                let only: Vec<Signature> = group.iter().map(|g| g.1.clone()).collect();
+                out.extend(split_group(&only, limit).into_iter().map(|(n, sig)| Decl::Function(Function { name: f.name.clone(), js_name: group[n].0.clone(), sig })));
+            }
+            Decl::Namespace(mut n) => {
+                split_functions(&mut n.decls, limit);
+                out.push(Decl::Namespace(n));
+            }
+            d => out.push(d),
+        }
+    }
+    *decls = out;
+}
+
 // TypeScript picks the first overload that matches a call, so an overload
 // whose parameters repeat an earlier one's can never be chosen. Expansion
 // makes these: `"a"` is a key of both the HTML and the SVG tag maps.

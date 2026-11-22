@@ -97,6 +97,14 @@ map; the example targets use it as:
 
 Both reject a listener of the wrong event type at compile time.
 
+Overloads a library writes by hand are keyed signatures too: where a parameter
+of string literals tells same-named overloads apart (`on(type: 'click' |
+'dblclick', fn)` beside `on(type: 'load', fn)` and `on(type: string, fn)`),
+each is one overload per literal, with the literal fixed (`on_click`,
+`on_dblclick`), under either strategy and the same `keyed_overloads` bound.
+A union of literals that no other overload differs from stays an enum
+parameter, as does a lone one.
+
 ## Modules
 
 `[modules]` assigns each top-level declaration a module, written as
@@ -405,6 +413,8 @@ name them only where they collide: F# by the same marks (`markedAsync`), C++
 not at all, a `requires` clause choosing. An overload whose parameters and
 constraints repeat an earlier one's is dropped: TypeScript would never
 choose it. An overload that only makes a parameter optional is named by it.
+The plain name goes to an overload with no fixed value where there is one
+(`on(type: string, fn)`), not to one literal.
 
 ## Generated names
 

@@ -181,7 +181,6 @@ pub fn main() {
   let _ =
     evented.on_click(
       m,
-      t.EventedAddEventListenerTypeClickClick,
       on_click,
       None,
     )
@@ -192,11 +191,10 @@ pub fn main() {
   let passed =
     passed
     + check(cell.get(clicks) == 2, "the click listener ran twice")
-    + check(evented.listens(m, t.EventedListensTypeClick, None), "listens")
+    + check(evented.listens_click(m, None), "listens")
   let _ =
     evented.off_click(
       m,
-      t.EventedAddEventListenerTypeClickClick,
       Some(on_click),
       None,
     )
@@ -206,7 +204,7 @@ pub fn main() {
   // A popup opened on the map, and a map event by name.
   let opened = cell.new(0)
   let _ =
-    evented.on_with_string(m, "popupopen", fn(_) { cell.set(opened, cell.get(opened) + 1) }, None)
+    evented.on(m, "popupopen", fn(_) { cell.set(opened, cell.get(opened) + 1) }, None)
   let popup_opts = popup_options.create()
   popup_options.set_max_width(popup_opts, Some(200.0))
   let note = leaflet.popup(ll(london), Some(popup_opts))

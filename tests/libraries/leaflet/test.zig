@@ -138,33 +138,33 @@ export fn run() void {
 
     // An event fired on the map reaches the listener, with its position.
     const on_click = b.leaflet.LeafletMouseEventHandlerFn.from(onClick, null);
-    _ = m.onClick(.click, on_click, .{});
+    _ = m.onClick(on_click, .{});
     const data = b.leaflet.LeafletMouseEvent.create();
     data.setLatlng(london);
     _ = m.fire("click", .{ .data = .{ .h = data.h } });
     _ = m.fire("click", .{ .data = .{ .h = data.h } });
     expect(clicks == 2 and last_lat == 51.505, @src());
     // Removed, it is not called again. FINDING 21: an option named `fn` is a Zig keyword, so it is written
-    // .@"fn" = ...; and the event name is an enum picked per overload (offClick).
-    _ = m.offClick(.click, .{ .@"fn" = on_click });
+    // .@"fn" = ...; and each event has its own overload (offClick).
+    _ = m.offClick(.{ .@"fn" = on_click });
     _ = m.fire("click", .{ .data = .{ .h = data.h } });
     expect(clicks == 2, @src());
 
     // Events by name, and a listener that runs once.
     var named: u32 = 0;
-    _ = m.onWithString("custom", b.leaflet.LeafletEventHandlerFn.from(onZoom, &named), .{});
+    _ = m.on("custom", b.leaflet.LeafletEventHandlerFn.from(onZoom, &named), .{});
     _ = m.fire("custom", .{});
     _ = m.fire("custom", .{});
     expect(named == 2, @src());
     var once: u32 = 0;
-    _ = m.onceWithString("shot", b.leaflet.LeafletEventHandlerFn.from(onZoom, &once), .{});
+    _ = m.once("shot", b.leaflet.LeafletEventHandlerFn.from(onZoom, &once), .{});
     _ = m.fire("shot", .{});
     _ = m.fire("shot", .{});
     expect(once == 1, @src());
 
     // The map's own events: zooming fires zoomend.
     var ends: u32 = 0;
-    _ = m.onWithString("zoomend", b.leaflet.LeafletEventHandlerFn.from(onZoom, &ends), .{});
+    _ = m.on("zoomend", b.leaflet.LeafletEventHandlerFn.from(onZoom, &ends), .{});
     _ = m.setZoom(9, .{ .options = still });
     expect(ends >= 1, @src());
 

@@ -22,7 +22,7 @@ use crate::front::Front;
 use crate::ir::*;
 
 use classes::{flatten, mark_class_refs, pair_classes, structural_extends};
-use eval::{drop_unreachable_overloads, evaluate, expand_aliases, expand_keyed, inline_object_bases, nominal_constraints, splice_union_aliases};
+use eval::{drop_unreachable_overloads, evaluate, expand_aliases, expand_keyed, inline_object_bases, nominal_constraints, split_literal_overloads, splice_union_aliases};
 use generics::{erase_generics, literals, nullable};
 use hoist::{cut_recursive_dictionary, hoist};
 use overloads::{expand_functions, expand_members, mark_overloads, rename_functions, rename_members};
@@ -109,6 +109,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     front.expand_keyed = o.keyed;
     front.map_keyed = o.map_keyed;
     front.keyed_limit = o.keyed_limit;
+    if o.keyed || o.map_keyed {
+        split_literal_overloads(decls, o.keyed_limit);
+    }
     let mut written = if o.name_unions { written_unions(decls) } else { HashSet::new() };
     // Before widening and erasing lose what marks them.
     mark_overloads(decls);

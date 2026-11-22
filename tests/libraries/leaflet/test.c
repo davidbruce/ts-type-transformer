@@ -84,24 +84,24 @@ __attribute__((export_name("run"))) void run(void) {
 
     // An event fired on the map reaches the listener, with its position.
     LeafletMouseEventHandlerFn handler = LeafletMouseEventHandlerFn_from(on_click, 0);
-    Evented_on_click(m, Evented_addEventListener_type_click_click, handler, (JsValue){ 0 });
+    Evented_on_click(m, handler, (JsValue){ 0 });
     LeafletMouseEvent data = LeafletMouseEvent_create();
     LeafletMouseEvent_set_latlng(data, london);
     Evented_fire(m, "click", (JsValue){ data.h }, js_none_bool());
     Evented_fire(m, "click", (JsValue){ data.h }, js_none_bool());
     CHECK(clicks == 2 && positive_clicks == 2);
-    CHECK(Evented_listens_click(m, Evented_addEventListener_type_click_click, handler, (JsValue){ 0 }, js_none_bool()));
+    CHECK(Evented_listens_click_with_fn_and_context(m, handler, (JsValue){ 0 }, js_none_bool()));
     // Removed, it is not called again.
-    Evented_off_click(m, Evented_addEventListener_type_click_click, handler, (JsValue){ 0 });
+    Evented_off_click(m, handler, (JsValue){ 0 });
     Evented_fire(m, "click", (JsValue){ data.h }, js_none_bool());
     CHECK(clicks == 2);
     // `once` is called once.
-    Evented_once_click(m, Evented_addEventListener_type_click_click, LeafletMouseEventHandlerFn_from(on_once, 0), (JsValue){ 0 });
+    Evented_once_click(m, LeafletMouseEventHandlerFn_from(on_once, 0), (JsValue){ 0 });
     Evented_fire(m, "click", (JsValue){ data.h }, js_none_bool());
     Evented_fire(m, "click", (JsValue){ data.h }, js_none_bool());
     CHECK(once_clicks == 1);
     // An event by name.
-    Evented_on_with_string(m, "custom", LeafletEventHandlerFn_from(on_named, 0), (JsValue){ 0 });
+    Evented_on(m, "custom", LeafletEventHandlerFn_from(on_named, 0), (JsValue){ 0 });
     Evented_fire(m, "custom", (JsValue){ 0 }, js_none_bool());
     CHECK(named == 1);
 
