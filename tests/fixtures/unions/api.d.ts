@@ -31,3 +31,4 @@ interface LooseB { b?: number }
 type Loose = LooseA | LooseB;
 declare function loose(value: Loose): string;
 declare function anyLoose(): Loose;
+declare function looseAll(values: Loose[]): string;

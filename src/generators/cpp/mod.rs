@@ -30,6 +30,8 @@ mod types;
 pub(super) struct Ctx {
     // The unions of the model being generated that values can be decoded to.
     pub decodable: BTreeSet<String>,
+    // Those that cannot, but whose members can be made of a value: typed where a value only goes in.
+    pub typable: BTreeSet<String>,
     // Types a class's member is named as (`easingFunc easingFunc()`): within
     // the class the member hides the type, so it is written `::easingFunc`.
     pub qualified: BTreeSet<String>,

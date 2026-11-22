@@ -43,4 +43,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(setup(options) == "options verbose=true");
     CHECK(std::get<Widget>(lookup("w")).name() == "w");
     CHECK(std::get<double>(lookup("abc")) == 3);
+
+    // Members no test tells apart: typed where a value goes in, in an array too; the array of one member, or of any, goes where the union's does.
+    LooseA a({.a = 1});
+    LooseB b({.b = 2});
+    CHECK(looseAll(ts::Array<Loose>::of(a, b)) == "loose {\"a\":1};loose {\"b\":2}");
+    CHECK(looseAll(ts::Array<LooseB>::of(b, b)) == "loose {\"b\":2};loose {\"b\":2}");
+    CHECK(looseAll(ts::Array<>::of(a)) == "loose {\"a\":1}");
 }

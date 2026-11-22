@@ -108,6 +108,20 @@ extern "C" __attribute__((export_name("run"))) void run() {
     pp.put(4);
     CHECK(pp.take() == 4);
 
+    // An option bag is made in one expression, and what it names is set, whatever the value: the rest is absent.
+    // Inherited properties come first, then the type's own, as declared.
+    CHECK(marked(Marks::create()) == "");
+    CHECK(marked(Marks({.on = false, .count = 0, .label = ""})) == "on=false,count=0,label=");
+    CHECK(marked(Marks({.label = "x", .mode = Marks_mode::narrow})) == "label=x,mode=narrow");
+    CHECK(marked(Marks({.id = 7, .count = 2})) == "id=7,count=2");
+    CHECK(marked({{.on = true, .count = 1.5}}) == "on=true,count=1.5");
+
+    // A variable initialized from a template's value needs no argument list.
+    Box deduced = wrap(21.0);
+    Box again = deduced;
+    auto inferred = wrap(2.0);
+    CHECK(again.value() == 21 && inferred.value() == 2);
+
     // Handles are counted: what goes out of scope is freed in JavaScript too.
     uint32_t live = ts::live_handles();
     for (int i = 0; i < 1000; i++) {

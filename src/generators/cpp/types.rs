@@ -3,10 +3,19 @@ use std::collections::{BTreeSet, HashSet};
 use super::decl::rename_words;
 use super::{ident, import_attr, raw_fn, Ctx};
 use super::super::comments::{Style, comment};
-use super::super::model::{Call, Class, Func, NamedUnion, TParam, Ty};
+use super::super::model::{base_args, map_types, subst, Call, Class, Func, Model, NamedUnion, TParam, Ty};
 
 // C++ type of a value going in. `V` is the value a typed key selects.
 pub(super) fn ty_in(t: &Ty, cx: &Ctx) -> String {
+    ty_in_as(t, cx, false)
+}
+
+// As `ty_in`, where a value only goes in: a union no test tells apart is typed, in an array or a tuple.
+pub(super) fn ty_put(t: &Ty, cx: &Ctx) -> String {
+    ty_in_as(t, cx, true)
+}
+
+fn ty_in_as(t: &Ty, cx: &Ctx, put: bool) -> String {
     match t {
         Ty::Void => "void".into(),
         Ty::Num => "double".into(),
@@ -14,11 +23,11 @@ pub(super) fn ty_in(t: &Ty, cx: &Ctx) -> String {
         Ty::Str => "std::string_view".into(),
         Ty::Any => "ts::Value".into(),
         Ty::Array => "ts::Array<>".into(),
-        Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg_for("", e, cx)),
-        Ty::Tuple(es) => format!("ts::Tuple<{}>", es.iter().map(|e| ty_arg_for("", e, cx)).collect::<Vec<_>>().join(", ")),
+        Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg_as("", e, cx, put)),
+        Ty::Tuple(es) => format!("ts::Tuple<{}>", es.iter().map(|e| ty_arg_as("", e, cx, put)).collect::<Vec<_>>().join(", ")),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => cx.tn(n),
-        Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("std::optional<{}>", ty_in(inner, cx).trim_start_matches("const ").trim_end_matches('&')),
-        Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_in(inner, cx)),
+        Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("std::optional<{}>", ty_in_as(inner, cx, put).trim_start_matches("const ").trim_end_matches('&')),
+        Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_in_as(inner, cx, put)),
         Ty::NamedUnion(n) => format!("const {}&", cx.tn(n)),
         Ty::Union(_) => "ts::Value".into(),
         Ty::Key(m) => format!("ts::Key<{m}, V>"),
@@ -26,7 +35,7 @@ pub(super) fn ty_in(t: &Ty, cx: &Ctx) -> String {
         // Not deduced from the lambda: the key says what the listener takes.
         Ty::Listener(ev) => format!("std::type_identity_t<ts::Listener<{}>>", ty_in(ev, cx)),
         Ty::Param(n) => n.clone(),
-        Ty::Generic(n, args) => format!("{}<{}>", cx.tn(n), args.iter().map(|a| ty_arg_for(n, a, cx)).collect::<Vec<_>>().join(", ")),
+        Ty::Generic(n, args) => format!("{}<{}>", cx.tn(n), args.iter().map(|a| ty_arg_as(n, a, cx, put)).collect::<Vec<_>>().join(", ")),
     }
 }
 
@@ -75,14 +84,55 @@ fn ty_param_with_exact(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>,
             Ty::Generic(n, _) if callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner, cx))),
             Ty::Obj(n) if callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner, cx))),
             Ty::Tuple(_) => wrap(format!("ts::Opt<{}>", ty_in(inner, cx))),
-            _ => ty_in(t, cx),
+            _ => ty_put(t, cx),
         },
-        _ => ty_in(t, cx),
+        _ => ty_put(t, cx),
     }
 }
 
 pub(super) fn ty_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>, cx: &Ctx) -> String {
     ty_param_with_exact(t, unions, callbacks, false, cx)
+}
+
+// The setters an object made in one expression names: its ancestors' before its own, each as declared,
+// with the type arguments it gives them. None for a type with methods.
+pub(super) fn bag_setters(m: &Model, c: &Class) -> Option<Vec<Func>> {
+    fn walk<'a>(m: &'a Model, c: &'a Class, seen: &mut Vec<&'a str>, order: &mut Vec<&'a Class>) -> bool {
+        if c.funcs.iter().any(|f| matches!(f.call, Call::Method(_))) {
+            return false;
+        }
+        seen.push(&c.name);
+        for a in &c.ancestors {
+            if !seen.contains(&a.as_str()) && let Some(k) = m.classes.iter().find(|k| k.name == *a) && !walk(m, k, seen, order) {
+                return false;
+            }
+        }
+        order.push(c);
+        true
+    }
+    let mut order = Vec::new();
+    if !walk(m, c, &mut Vec::new(), &mut order) {
+        return None;
+    }
+    let mut out: Vec<Func> = Vec::new();
+    for k in order {
+        let args = if k.name == c.name { k.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect() } else { base_args(m, c, &k.name).or_else(|| k.type_params.is_empty().then(Vec::new))? };
+        let own: Vec<Func> = k.funcs.iter().filter(|f| matches!(f.call, Call::Set(_))).map(|f| map_types(f, &|t| subst(t, &k.type_params, &args))).collect();
+        // A property it declares again is where it is declared last.
+        out.retain(|f| !own.iter().any(|o| o.call == f.call));
+        out.extend(own);
+    }
+    Some(out)
+}
+
+// The type of a bag's field: what the setter takes, left out or given, or nothing where it is not typed.
+pub(super) fn bag_field(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>, cx: &Ctx) -> Option<String> {
+    if matches!(t, Ty::Void | Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_)) {
+        return None;
+    }
+    let p = ty_param(t, unions, callbacks, cx);
+    let p = p.strip_prefix("const ").and_then(|p| p.strip_suffix('&')).unwrap_or(&p);
+    Some(format!("ts::Field<{}>", p.strip_prefix("std::optional<").and_then(|p| p.strip_suffix('>')).unwrap_or(p)))
 }
 
 fn union_subsumed(sub_t: &Ty, sup_t: &Ty, unions: &[NamedUnion]) -> bool {
@@ -224,21 +274,29 @@ fn head_with_extra(params: &[TParam], defaults: bool, extra_params: &[&str], ext
 
 // A type as a template argument: a value type, not a view.
 pub(super) fn ty_arg(t: &Ty, cx: &Ctx) -> String {
+    ty_arg_in(t, cx, false)
+}
+
+fn ty_arg_in(t: &Ty, cx: &Ctx, put: bool) -> String {
     match t {
         Ty::Str => "std::string".into(),
-        Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_arg(inner, cx)),
-        // A union a handle can be decoded to; any other stays a value.
-        Ty::NamedUnion(n) if cx.decodable.contains(n) => cx.tn(n),
+        Ty::Nullable(inner, _) => format!("std::optional<{}>", ty_arg_in(inner, cx, put)),
+        // A union a handle can be decoded to; any other stays a value, but where one only goes in.
+        Ty::NamedUnion(n) if cx.decodable.contains(n) || (put && cx.typable.contains(n)) => cx.tn(n),
         Ty::NamedUnion(_) | Ty::Union(_) => "ts::Value".into(),
-        t => ty_in(t, cx),
+        t => ty_in_as(t, cx, put),
     }
 }
 
 fn ty_arg_for(owner: &str, t: &Ty, cx: &Ctx) -> String {
+    ty_arg_as(owner, t, cx, false)
+}
+
+fn ty_arg_as(owner: &str, t: &Ty, cx: &Ctx, put: bool) -> String {
     if *t == Ty::Void && !matches!(owner, "Promise" | "PromiseLike") {
         "ts::Value".into()
     } else {
-        ty_arg(t, cx)
+        ty_arg_in(t, cx, put)
     }
 }
 

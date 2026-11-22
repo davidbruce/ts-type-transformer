@@ -8,12 +8,7 @@
 using namespace leaflet;
 
 TS_EXPORT(start) void start() {
-    MapOptions m_opts = MapOptions::create();
-    m_opts.attributionControl(false);
-    m_opts.zoomAnimation(false);
-    m_opts.fadeAnimation(false);
-    m_opts.markerZoomAnimation(false);
-    Map m = leaflet::map("map", m_opts);
+    Map m = leaflet::map("map", {{.attributionControl = false, .fadeAnimation = false, .markerZoomAnimation = false, .zoomAnimation = false}});
 
     struct Station {
         const char* code;
@@ -28,46 +23,28 @@ TS_EXPORT(start) void start() {
         { "05", "Basel", leaflet::latLng(47.5596, 7.5886) },
     };
 
-    ts::Array<> line_pts = ts::Array<>::create();
+    auto line_pts = ts::Array<LatLng>::create();
     for (const Station& s : stations) line_pts.push(s.pt);
-    PolylineOptions p_opts = PolylineOptions::create();
-    p_opts.smoothFactor(1.0);
-    p_opts.color("#404040");
-    p_opts.weight(2.5);
-    Polyline<> corridor = leaflet::polyline(line_pts, p_opts);
+    Polyline corridor = leaflet::polyline(line_pts, {{.color = "#404040", .weight = 2.5, .smoothFactor = 1}});
     corridor.addTo(m);
 
-    CircleMarkerOptions dot_opts = CircleMarkerOptions::create();
-    dot_opts.radius(6.0);
-    dot_opts.color("#111111");
-    dot_opts.weight(2.0);
-    dot_opts.fillColor("#ffffff");
-    dot_opts.fillOpacity(1.0);
+    CircleMarkerOptions dot_opts({.color = "#111111", .weight = 2, .fillColor = "#ffffff", .fillOpacity = 1, .radius = 6});
 
     Point pin_size = leaflet::point(22.0, 22.0);
     Point pin_anchor = leaflet::point(11.0, 11.0);
 
     for (const Station& s : stations) {
-        CircleMarker<> cm = leaflet::circleMarker(s.pt, dot_opts);
+        CircleMarker cm = leaflet::circleMarker(s.pt, dot_opts);
         cm.bindTooltip(std::string(s.code) + " · " + s.name);
         cm.addTo(m);
 
-        DivIconOptions d_opts = DivIconOptions::create();
-        d_opts.className("mono-pin");
-        d_opts.html(std::string("<span>") + s.code + "</span>");
-        d_opts.iconSize(pin_size);
-        d_opts.iconAnchor(pin_anchor);
-
-        MarkerOptions mk_opts = MarkerOptions::create();
-        mk_opts.icon(leaflet::divIcon(d_opts));
-        leaflet::marker(s.pt, mk_opts).addTo(m);
+        DivIcon pin = leaflet::divIcon({{.html = std::string("<span>") + s.code + "</span>", .iconSize = pin_size, .iconAnchor = pin_anchor, .className = "mono-pin"}});
+        leaflet::marker(s.pt, {{.icon = pin}}).addTo(m);
     }
 
     m.fitBounds(corridor.getBounds().pad(0.15));
 
-    PopupOptions pop_opts = PopupOptions::create();
-    pop_opts.maxWidth(220.0);
-    Popup note = leaflet::popup(stations[2].pt, pop_opts);
+    Popup note = leaflet::popup(stations[2].pt, {{.maxWidth = 220}});
     note.setContent("03 Bern · 46.95N, 7.45E");
     note.openOn(m);
 

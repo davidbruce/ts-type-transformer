@@ -17,3 +17,4 @@ globalThis.lookup = key => (key === "w" ? new Widget(key) : key.length);
 globalThis.peek = slot => (slot.value === undefined ? "empty" : globalThis.describe(slot.value));
 globalThis.loose = v => `loose ${JSON.stringify(v)}`;
 globalThis.anyLoose = () => ({ b: 2 });
+globalThis.looseAll = values => values.map(globalThis.loose).join(";");

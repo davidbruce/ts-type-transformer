@@ -6,7 +6,7 @@ use super::decl::{
     namespace_containers, nested_name, raise_callback, union_type, Container,
 };
 use super::types::{
-    constructors, cpp_name, cpp_name_as, exact_params_for, func_subsumed_by, function_variants,
+    bag_field, bag_setters, constructors, cpp_name, cpp_name_as, exact_params_for, func_subsumed_by, function_variants,
     head, is_adapted_param, named_types, param_types, raise, raw_ret, rest_pack_info, ty_arg,
     ty_in, ty_out, ty_param, Place,
 };
@@ -22,6 +22,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
 
     let unions = &m.unions;
     let decodable: BTreeSet<String> = unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect();
+    let typable: BTreeSet<String> = unions.iter().filter(|u| !u.decodable() && u.typable()).map(|u| u.name.clone()).collect();
     let resolved_opaque: HashMap<String, (usize, String)> = m
         .opaque
         .iter()
@@ -36,7 +37,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     // A constructor is named as its class, and hides nothing.
     let members: BTreeSet<String> = m.classes.iter().flat_map(|c| c.funcs.iter().filter(|f| !matches!(f.call, Call::New(_) | Call::Create(_))).map(|f| cpp_name(f, &c.name))).collect();
     let qualified: BTreeSet<String> = members.into_iter().filter(|n| m.classes.iter().any(|c| c.name == *n) || m.callbacks.iter().any(|c| c.name == *n) || m.unions.iter().any(|u| u.name == *n) || m.enums.iter().any(|e| e.0 == *n) || m.num_enums.iter().any(|e| e.0 == *n)).collect();
-    let cx = Ctx { decodable, qualified, ns_prefix: ns_prefix.clone(), resolved_ref };
+    let cx = Ctx { decodable, typable, qualified, ns_prefix: ns_prefix.clone(), resolved_ref };
 
     let mut taken = HashMap::new();
     // Where each declared type is defined, without the extension.
@@ -479,6 +480,42 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             };
             members += &format!("    static constexpr {ty} {} = {value};\n", ident(name));
         }
+        // An object a caller fills in, not one with methods, is made in one expression:
+        // `X({.a = 1, .b = "x"})`, from an aggregate of its settable properties, each optional, that sets what is named.
+        // A long list of properties none optional is a map of keys to types (`ElementTagNameMap`), not made by hand.
+        let mut fields_def = String::new();
+        if let Some(setters) = bag_setters(m, c).filter(|s| c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) && !own.contains("Fields") && !holders.contains_key("Fields")
+            && (s.len() <= 32 || s.iter().any(|f| matches!(f.params.first(), Some((_, Ty::Nullable(_, true))))))) {
+            let js = |f: &Func| match &f.call {
+                Call::Set(js) => js.clone(),
+                _ => unreachable!(),
+            };
+            let (mut fields, mut sets) = (String::new(), String::new());
+            let mut all_named = BTreeSet::new();
+            setters.iter().for_each(|g| g.params.iter().for_each(|p| named_types(&p.1, &mut all_named)));
+            for f in setters.iter().filter(|f| f.params.len() == 1 && f.fixed.is_empty() && setters.iter().filter(|g| js(g) == js(f)).count() == 1) {
+                let prop = js(f);
+                let ty = &f.params[0].1;
+                let Some(field) = bag_field(ty, unions, &callbacks, &cx) else { continue };
+                let name = ident(&prop);
+                // A field named as a type hides it from the fields after it.
+                if !prop.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || !prop.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') || all_named.contains(&name) {
+                    continue;
+                }
+                let mut named = BTreeSet::new();
+                named_types(ty, &mut named);
+                fields += &f.doc.as_deref().map(|d| comment(d, "///", "    ", Style::C)).unwrap_or_default();
+                fields += &format!("    {field} {name}{{}};\n");
+                sets += &format!(" f_.{name}.to(this->h, \"{prop}\");");
+                used.extend(named);
+            }
+            if !fields.is_empty() {
+                members += &format!("    struct Fields;\n    {}(const Fields& f_);\n", c.name);
+                fields_def = format!("{class_head}struct {owner}::Fields {{\n{fields}}};\n");
+                let def = format!("{class_head}{}{owner}::{}(const Fields& f_) : {owner}({ctor}()) {{{sets} }}\n", if class_head.is_empty() { "" } else { "inline " }, c.name);
+                if class_head.is_empty() { lib.1 += &def } else { header_defs += &def }
+            }
+        }
         // Covariant conversion for generic classes: `Shape<RectConfig>` -> `Shape<ShapeConfig>`.
         if !c.type_params.is_empty() {
             let u_names: Vec<String> = (0..c.type_params.len()).map(|i| format!("U{i}_")).collect();
@@ -568,6 +605,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         used.remove(&c.name);
         used.extend(c.ancestors.iter().cloned());
         let mut imp = format!("// Generated.\n#pragma once\n{}{}", include(&impl_path, &decl_path), includes(&impl_path, &used));
+        imp += &wrap_ns(ns, &fields_def);
         if !header_defs.is_empty() {
             imp += &format!("\n{}\n{}", header_imports.into_iter().collect::<String>(), wrap_ns(ns, &header_defs));
         }

@@ -515,6 +515,31 @@ struct Opt {
     }
 };
 
+// A field of an aggregate that may be left out: `X({.a = 1})` sets only what it names.
+// Made from what a `T` is made from, it holds the value as a handle: a header of hundreds
+// of them is then cheap to compile, as it would not be of `std::optional<T>`.
+template <class T>
+struct Field {
+    uint32_t h = 0;
+    Field() = default;
+    Field(std::nullopt_t) {}
+    template <class X>
+        requires (!std::same_as<std::decay_t<X>, Field> && std::constructible_from<T, X>)
+    Field(X&& x) {
+        T v(std::forward<X>(x));
+        h = Arg(v).give();
+    }
+    Field(const Field&) = delete;
+    Field& operator=(const Field&) = delete;
+    ~Field() {
+        if (h) ts_raw_js_release(h);
+    }
+    // Sets `o[key]` if given.
+    void to(uint32_t o, std::string_view key) const {
+        if (h) ts_raw_js_object_set(o, key.data(), key.size(), h);
+    }
+};
+
 template <class U>
 struct Exact {
     uint32_t h = 0;
@@ -591,6 +616,13 @@ template <class T>
 struct Iterator;
 struct IterationEnd {};
 
+template <class A>
+struct array_elem {};
+template <class U>
+struct array_elem<Array<U>> {
+    using type = U;
+};
+
 // A JavaScript array of T; `Array<>` of any values. A type that extends
 // Array inherits this: it can be indexed and iterated.
 template <class T>
@@ -600,6 +632,11 @@ struct Array : virtual Handle {
     Array(std::initializer_list<T> items) : Handle(handle, ts_raw_js_array_new()) {
         for (const T& x : items) push(x);
     }
+    // An array of any value takes any array, and an array of a union one of what the union takes.
+    // Not a type that extends Array: it is also taken where another parameter would take it.
+    template <class A, class U = typename array_elem<A>::type>
+        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_variant<T> && in_accepts<T, U>)))
+    Array(const A& o) : Handle(o) {}
     static Array create() { return Array(handle, ts_raw_js_array_new()); }
     template <class... Us>
         requires (rest_accepts<T, Us> && ...)

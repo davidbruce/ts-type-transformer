@@ -317,7 +317,21 @@ the time control returns to JavaScript is reported, not lost.
   Constraints are checked of types that are only declared: each type's bases
   are declared beside it (`ts::bases<X>`) and `ts::extends` walks them.
   `X.hpp` includes what its members name; non-template definitions are one
-  `.cpp` per module, compiled once. 7 MB.
+  `.cpp` per module, compiled once. An object a caller fills in (no methods)
+  is made in one expression from the properties it names:
+  `MapOptions({.attributionControl = false, .zoomAnimation = false})`, or a
+  braced list where a `MapOptions` goes (`leaflet::map("map", {{.zoomSnap = 1}})`).
+  `X::Fields` has a `ts::Field<T>` for each property that can be set, its
+  ancestors' first, each in the order declared: designators follow that order
+  (`.top` before `.left`, which the library declares so). What is not named is
+  not set at all; `false`, `0` and `""` are set. A property declared again is
+  where it is declared last, one set in more than one way is left out, and a
+  long list of properties none optional (`ElementTagNameMap`) is a map, not a
+  bag. A nested bag is made as `Inner({...})`. A union no test tells apart is
+  typed where a value goes in, in an array too (`ts::Array<Loose>`), and
+  what comes back is a `ts::Value`; a `ts::Array<>` takes any array. A
+  variable initialized from a template's value needs no argument list
+  (`Polyline line = leaflet::polyline(..)`). 7 MB.
 - Zig: a file per module and a root `bindings.zig`; Zig reads only what is
   used. `?T`, tagged unions, `JsArrayOf(T)`, `JsTuple(&.{...})`; callbacks
   are comptime functions with Zig types, behind a C-convention trampoline;
