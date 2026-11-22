@@ -116,12 +116,12 @@ fn computeDecorations(doc: model.Node, query: []const u8) DecoStats {
     var block_pos: f64 = 0;
     const nb: usize = @intFromFloat(doc.getChildCount());
     for (0..nb) |i| {
-        const blk = doc.child(@floatFromInt(i));
+        const blk = doc.child(i);
         var inline_pos: f64 = block_pos + 1.0;
         var matched = false;
         const nc: usize = @intFromFloat(blk.getChildCount());
         for (0..nc) |j| {
-            const ch = blk.child(@floatFromInt(j));
+            const ch = blk.child(j);
             if (ch.getIsText()) {
                 var tbuf: [1024]u8 = undefined;
                 const txt = ch.getTextContent().copy(&tbuf);

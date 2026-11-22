@@ -60,7 +60,7 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
     }
     const hull_len: usize = @intFromFloat(hull.getLength());
     if (hull_len > 3) {
-        const net_mid = b.Polygon.network(hull, .{ .originIndex = @as(f64, @floatFromInt(hull_len / 2)) });
+        const net_mid = b.Polygon.network(hull, .{ .originIndex = hull_len / 2 });
         for (0..net_mid.len()) |i| {
             _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line2(net_mid.get(i));
         }

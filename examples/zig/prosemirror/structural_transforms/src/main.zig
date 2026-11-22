@@ -125,7 +125,7 @@ fn updateMeta(app: *App, doc: model.Node) void {
     for (0..n) |i| {
         if (i > 0) w.writeAll(" · ") catch {};
         var nbuf: [48]u8 = undefined;
-        w.writeAll(doc.child(@floatFromInt(i)).getType().getName().copy(&nbuf)) catch {};
+        w.writeAll(doc.child(i).getType().getName().copy(&nbuf)) catch {};
     }
     var mbuf: [768]u8 = undefined;
     const msg = std.fmt.bufPrint(&mbuf, "{s} · blocks={d} · outline=[{s}] · totalSteps={d} · nodeSize={d}", .{
@@ -165,7 +165,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             var pos: f64 = 0;
             const n: usize = @intFromFloat(doc.getChildCount());
             for (0..n) |i| {
-                const ch = doc.child(@floatFromInt(i));
+                const ch = doc.child(i);
                 if (split_pos == null and ch.getType().getName().eql("paragraph")) {
                     const len = ch.getContent().getSize();
                     if (len >= 8.0) {
@@ -197,7 +197,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             var pos: f64 = 0;
             const n: usize = @intFromFloat(doc.getChildCount());
             for (0..n) |i| {
-                const ch = doc.child(@floatFromInt(i));
+                const ch = doc.child(i);
                 if (found == null and ch.getType().getName().eql("paragraph")) {
                     const rp = doc.resolve(pos + 1.0);
                     if (rp.blockRange(null)) |r| {
@@ -221,7 +221,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         var pos: f64 = 0;
         const n: usize = @intFromFloat(doc.getChildCount());
         for (0..n) |i| {
-            const ch = doc.child(@floatFromInt(i));
+            const ch = doc.child(i);
             if (ch.getType().getName().eql("blockquote") and ch.getChildCount() > 0.0) {
                 const rp = doc.resolve(pos + 2.0);
                 if (rp.blockRange(null)) |r| {

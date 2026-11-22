@@ -109,7 +109,7 @@ fn buildScene(app: *App) void {
     const cy = [3]f64{ 5.4, 4.1, 2.8 };
     for (0..3) |i| {
         app.chain[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(cx[i], cy[i], 0.0)).retain();
-        _ = w.createCollider(rp.ColliderDesc.cuboid(LINK_HX, LINK_HY, 0.2).setDensity2(if (i == 2) 1.6 else 1.4), .{ .parent = app.chain[i] });
+        _ = w.createCollider(rp.ColliderDesc.cuboid(LINK_HX, LINK_HY, 0.2).setDensity2(@as(f64, if (i == 2) 1.6 else 1.4)), .{ .parent = app.chain[i] });
     }
 
     _ = w.createImpulseJoint(rp.JointData.revolute(rp.Vector3.new(-2.2, -0.22, 0.0), rp.Vector3.new(0.0, LINK_HY + 0.06, 0.0), z_axis), gantry, app.chain[0], true);

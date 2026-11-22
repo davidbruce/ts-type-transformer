@@ -58,7 +58,7 @@ fn rebuildField(app: *App) void {
             const idx = iz * GRID_N + ix;
             const x = -half + span * @as(f64, @floatFromInt(ix)) / denom;
             const z = -half + span * @as(f64, @floatFromInt(iz)) / denom;
-            _ = app.pos_attr.setXYZ(@floatFromInt(idx), x, waveHeight(app.wave_mode, x, z), z);
+            _ = app.pos_attr.setXYZ(idx, x, waveHeight(app.wave_mode, x, z), z);
         }
     }
 
@@ -69,7 +69,7 @@ fn rebuildField(app: *App) void {
         while (ix < GRID_N) : (ix += 2) {
             const x = -half + span * @as(f64, @floatFromInt(ix)) / denom;
             const z = -half + span * @as(f64, @floatFromInt(iz)) / denom;
-            _ = app.pts_attr.setXYZ(@floatFromInt(pi), x, waveHeight(app.wave_mode, x, z) + 0.06, z);
+            _ = app.pts_attr.setXYZ(pi, x, waveHeight(app.wave_mode, x, z) + 0.06, z);
             pi += 1;
         }
     }

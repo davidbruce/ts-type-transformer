@@ -33,8 +33,8 @@ fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {
             s.setWidth(52.0);
             s.setHeight(48.0);
             _ = s.getAnchor().set(.{ .x = 0.5, .y = 0.5 });
-            s.setX(70.0 + @as(f64, @floatFromInt(col)) * 60.0);
-            s.setY(56.0 + @as(f64, @floatFromInt(row)) * 56.0);
+            s.setX(70 + col * 60);
+            s.setY(56 + row * 56);
             s.setRotation((@as(f64, @floatFromInt(col)) - 4.5) * 0.04 + (@as(f64, @floatFromInt(row)) - 2.5) * 0.03);
             s.setAlpha(0.65 + 0.35 * @as(f64, @floatFromInt((col + row) % 3)) / 2.0);
             s.setTint(shades[idx]);

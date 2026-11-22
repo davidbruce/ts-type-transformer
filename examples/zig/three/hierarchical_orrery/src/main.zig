@@ -43,7 +43,7 @@ fn updateOrrery(app: *App) void {
     app.inner_pivot.getRotation().setY(app.epoch);
     app.moon_pivot.getRotation().setY(app.epoch * 2.5);
     app.outer_pivot.getRotation().setY(-app.epoch * 0.55);
-    app.outer_pivot.getRotation().setZ(if (app.tilted) 0.38 else 0.0);
+    app.outer_pivot.getRotation().setZ(@as(f64, if (app.tilted) 0.38 else 0.0));
     app.station_body.getRotation().setY(app.epoch * 1.4);
 
     app.scene.updateMatrixWorld(true);

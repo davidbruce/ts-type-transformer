@@ -133,7 +133,7 @@ fn refreshOutput(app: *App, doc: model.Node) void {
         nsz,
     }) catch {};
     for (0..nb) |i| {
-        const b = doc.child(@floatFromInt(i));
+        const b = doc.child(i);
         var kbuf: [64]u8 = undefined;
         const kname = b.getType().getName().copy(&kbuf);
         var tbuf: [512]u8 = undefined;

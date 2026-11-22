@@ -55,7 +55,7 @@ export fn start() void {
     var bytes_buf: [16]u8 = undefined;
 
     for (0..count) |i| {
-        const tok = tokens.getAt(@floatFromInt(i)).?;
+        const tok = tokens.getAt(i).?;
         const kind_str = switch (tok) {
             .Tokens_Generic => |g| g.getType().copy(&kind_buf),
             inline else => |x| @TypeOf(x).type,

@@ -44,8 +44,7 @@ export fn run() void {
         // A method that changes a Pt returns it; its `$` twin returns another.
         const moved = p._add(xy(1, 1));
         expect(!b.jsSame(moved, p) and moved.getX() == 4 and p.getX() == 3, @src());
-        p.add(xy(1, 1));
-        expect(p.getX() == 4, @src());
+        expect(b.jsSame(p.add(xy(1, 1)), p) and p.getX() == 4, @src());
         // A union is a tagged union; trailing optional arguments are a struct of them.
         expect(p.equals(.{ .Pt = moved }, .{}), @src());
         expect(p.clone().equals(.{ .Pt = p }, .{ .threshold = 0.001 }) and !b.jsSame(p.clone(), p), @src());

@@ -64,7 +64,7 @@ export fn start() void {
             .height = 52,
             .offsetX = 9,
             .offsetY = 108,
-            .rotation = @as(f64, @floatFromInt(i)) * 45.0,
+            .rotation = i * 45,
             .fill = if (i % 2 == 0) "#111111" else "#efefef",
             .stroke = "#111111",
             .strokeWidth = 1.5,

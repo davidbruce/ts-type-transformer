@@ -326,8 +326,8 @@ the time control returns to JavaScript is reported, not lost.
   `s.resize(2.6, .{ .round = true })`); a lone one stays a `?T`. A number
   parameter takes any integer or float (`shape.setX(i * 40)`, `s.resize(n, .{})`),
   and nothing else; a number a call returns is an `f64`. A method that returns
-  its receiver (`addTo(map): this`) returns nothing: `marker.addTo(m);`, but
-  for `clone`, which makes another. A union
+  its receiver (`addTo(map): this`) returns it, so it chains
+  (`marker.addTo(m).bindPopup(p)`) or is discarded (`_ = marker.addTo(m);`). A union
   whose members no test tells apart is still a tagged union where a value goes in
   (`loose(.{ .A = a })`, or a `JsValue`) and a `JsValue` where one comes out. Names are
   Zig's, camelCase: `getTextContent()`, `setTextContent(..)`,

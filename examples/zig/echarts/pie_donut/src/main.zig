@@ -12,12 +12,12 @@ export fn start() void {
     const box = doc.getElementById("chart") orelse return;
     const chart = ec.init(box, null);
 
-    const opt = ec.JsValue.obj(.{
+    const opt = ec.EChartsOption.init(.{
         .animation = false,
         .backgroundColor = "#ffffff",
         .color = .{ "#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4" },
-        .legend = .{ .bottom = 8, .textStyle = .{ .color = "#111111" } },
-        .tooltip = .{ .trigger = "item" },
+        .legend = ec.PlainLegendComponentOption.init(.{ .bottom = 8, .textStyle = .{ .color = "#111111" } }),
+        .tooltip = .{ .trigger = .item },
         .series = .{.{
             .type = "pie",
             .name = "Subsystems",
@@ -33,7 +33,7 @@ export fn start() void {
                 .{ .name = "Tests", .value = 8 },
             },
         }},
-    }).as(ec.EChartsCoreOption);
+    });
     chart.setOption(opt, null);
 
     const w: i32 = @intFromFloat(chart.getWidth());

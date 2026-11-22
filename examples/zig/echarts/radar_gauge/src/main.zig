@@ -15,10 +15,10 @@ export fn start() void {
     const radar = ec.init(radar_box, null);
     const gauge = ec.init(gauge_box, null);
 
-    radar.setOption(ec.JsValue.obj(.{
+    radar.setOption(ec.EChartsOption.init(.{
         .animation = false,
         .backgroundColor = "#ffffff",
-        .legend = .{ .bottom = 6, .textStyle = .{ .color = "#111111" } },
+        .legend = ec.PlainLegendComponentOption.init(.{ .bottom = 6, .textStyle = .{ .color = "#111111" } }),
         .radar = .{
             .radius = "62%",
             .axisName = .{ .color = "#111111" },
@@ -51,9 +51,9 @@ export fn start() void {
                 },
             },
         }},
-    }).as(ec.EChartsCoreOption), null);
+    }), null);
 
-    gauge.setOption(ec.JsValue.obj(.{
+    gauge.setOption(ec.EChartsOption.init(.{
         .animation = false,
         .backgroundColor = "#ffffff",
         .series = .{.{
@@ -70,7 +70,7 @@ export fn start() void {
             .title = .{ .color = "#555555", .fontSize = 12 },
             .data = .{.{ .value = 84, .name = "Score" }},
         }},
-    }).as(ec.EChartsCoreOption), null);
+    }), null);
 
     const w1: i32 = @intFromFloat(radar.getWidth());
     const h1: i32 = @intFromFloat(radar.getHeight());

@@ -447,11 +447,7 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         },
         _ => None,
     };
-    // `clone(): this` makes another one.
-    let returns_nothing = f.returns_this && !f.name.starts_with("clone");
-    let ret_type = if returns_nothing {
-        "void".to_string()
-    } else if f.returns_this && owner == Some("Self") {
+    let ret_type = if f.returns_this && owner == Some("Self") {
         "Self".to_string()
     } else {
         match union {
@@ -460,8 +456,6 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         }
     };
     let body = match &f.ret {
-        // The caller holds the receiver; the handle the call returned for it is let go.
-        _ if returns_nothing => format!("jsRelease(JsValue{{ .h = {call} }});"),
         Ty::NamedUnion(n) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; if (h == 0 and jsHasError()) return undefined; return {n}.fromHandle(h);"),
         Ty::Nullable(inner, _) if union.is_some_and(|u| u.decodable()) => format!("const h = {call}; return if (h == 0) null else {}.fromHandle(h);", typed(inner, false)),
         Ty::Nullable(..) if union.is_some() => format!("return .{{ .h = {call} }};"),

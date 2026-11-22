@@ -1801,8 +1801,9 @@ pub export fn run() void {
     assert!(report.contains("22 checks passed"), "{report}");
 }
 
-// A method that returns its receiver returns nothing; a number parameter takes any integer or
-// float and nothing else; a union nothing can tell apart is typed where a value goes in.
+// A method that returns its receiver can be chained, and an inherited one is written once; a
+// number parameter takes any integer or float and nothing else; a union nothing can tell apart is
+// typed where a value goes in.
 #[test]
 fn zig_numbers_fluent_methods_and_unions() {
     let Some([zig, node]) = tools(["zig", "node"]) else { return };
@@ -1812,7 +1813,10 @@ fn zig_numbers_fluent_methods_and_unions() {
     let dts = out.join("api.d.ts");
     fs::write(
         &dts,
-        r#"export interface Counter {
+        r#"export interface Base {
+    bump(n: number): this;
+}
+export interface Counter extends Base {
     total: number;
     add(n: number): this;
     value(): number;
@@ -1830,7 +1834,7 @@ export declare function anyLoose(): Loose;
     fs::write(
         out.join("impl.mjs"),
         r#"export const root = {
-    makeCounter: () => { let t = 0; const c = { add(n) { t += n; return c; }, value: () => t, get total() { return t; }, set total(v) { t = v; } }; return c; },
+    makeCounter: () => { let t = 0; const c = { add(n) { t += n; return c; }, bump(n) { t += n; return c; }, value: () => t, get total() { return t; }, set total(v) { t = v; } }; return c; },
     twice: n => n * 2,
     loose: v => `loose ${JSON.stringify(v)}`,
     anyLoose: () => ({ b: 2 }),
@@ -1843,7 +1847,9 @@ export declare function anyLoose(): Loose;
     let model = model(&xml, "Zig");
     let files = generators::zig::files(&model).unwrap();
     let bindings: String = files.iter().map(|(_, s)| s.as_str()).collect();
-    assert!(bindings.contains("pub fn add(self: Counter, n_: anytype) void"), "a fluent method returns nothing:\n{bindings}");
+    assert!(bindings.contains("pub fn add(self: Counter, n_: anytype) Counter"), "a fluent method returns its receiver:\n{bindings}");
+    assert_eq!(bindings.matches("pub fn bump(").count(), 1, "an inherited fluent method is written once:\n{bindings}");
+    assert!(bindings.contains("pub const bump = Base.Methods(@This()).bump;"), "the subtype aliases the ancestor's:\n{bindings}");
     assert!(bindings.contains("/// Takes `n`: an integer or a float."), "{bindings}");
     write_files(&out, files);
     fs::write(
@@ -1857,15 +1863,16 @@ pub export fn run() void {
     defer scope.deinit();
 
     const c = b.makeCounter();
-    c.add(1);
+    expect(b.jsSame(c.add(1), c), @src().line);
+    expect(b.jsSame(c.bump(1).add(1), c), @src().line);
     const n: usize = 2;
     const i: i32 = 3;
     const f: f64 = 0.5;
-    c.add(n);
-    c.add(i);
-    c.add(f);
-    c.add(@as(f32, 0.25));
-    expect(c.value() == 6.75, @src().line);
+    _ = c.add(n);
+    _ = c.add(i);
+    _ = c.add(f);
+    _ = c.add(@as(f32, 0.25));
+    expect(c.value() == 8.75, @src().line);
     c.setTotal(10);
     expect(c.value() == 10, @src().line);
     c.setTotal(n);

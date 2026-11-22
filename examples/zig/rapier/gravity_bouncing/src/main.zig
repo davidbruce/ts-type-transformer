@@ -61,7 +61,7 @@ fn buildScene(app: *App) void {
         w.deinit();
     }
 
-    const w = rp.World.new(rp.Vector3.new(0.0, if (app.earth) -9.81 else -1.62, 0.0), null).retain();
+    const w = rp.World.new(rp.Vector3.new(0.0, @as(f64, if (app.earth) -9.81 else -1.62), 0.0), null).retain();
     app.world = w;
 
     const ground = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, -0.4, 0.0));
@@ -215,7 +215,7 @@ fn onBtn(ctx: *const BtnCtx, _: dom.PointerEvent) void {
     const app = ctx.app;
     if (ctx.id == 0) {
         app.earth = !app.earth;
-        app.world.?.setGravity(rp.Vector3.new(0.0, if (app.earth) -9.81 else -1.62, 0.0));
+        app.world.?.setGravity(rp.Vector3.new(0.0, @as(f64, if (app.earth) -9.81 else -1.62), 0.0));
         const imp = rp.Vector3.new(0.0, 0.25, 0.0);
         for (0..5) |i| app.balls[i].applyImpulse(imp, true);
         app.grav_btn.setTextContent(if (app.earth) "Gravity: Earth" else "Gravity: Moon");

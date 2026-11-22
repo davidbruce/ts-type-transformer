@@ -25,10 +25,10 @@ export fn start() void {
     const ca_pts = &[_][2]f64{ .{ 14, 22 }, .{ 21, 31 }, .{ 28, 27 }, .{ 33, 42 }, .{ 40, 48 }, .{ 46, 53 }, .{ 54, 61 }, .{ 62, 59 }, .{ 71, 74 }, .{ 82, 85 } };
     const cb_pts = &[_][2]f64{ .{ 18, 64 }, .{ 25, 72 }, .{ 31, 68 }, .{ 39, 79 }, .{ 47, 65 }, .{ 55, 81 }, .{ 64, 77 }, .{ 72, 88 }, .{ 79, 82 }, .{ 88, 92 } };
 
-    chart.setOption(ec.JsValue.obj(.{
+    chart.setOption(ec.EChartsOption.init(.{
         .animation = false,
         .backgroundColor = "#ffffff",
-        .legend = .{ .top = 8, .textStyle = .{ .color = "#111111" } },
+        .legend = ec.PlainLegendComponentOption.init(.{ .top = 8, .textStyle = .{ .color = "#111111" } }),
         .grid = .{ .left = 48, .right = 24, .top = 48, .bottom = 36 },
         .xAxis = makeValueAxis(),
         .yAxis = makeValueAxis(),
@@ -50,7 +50,7 @@ export fn start() void {
                 .data = cb_pts,
             },
         },
-    }).as(ec.EChartsCoreOption), null);
+    }), null);
 
     const w: i32 = @intFromFloat(chart.getWidth());
     const h: i32 = @intFromFloat(chart.getHeight());

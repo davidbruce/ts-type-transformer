@@ -173,8 +173,7 @@ export fn run() void {
     expect(sel0.getFrom() == 1 and sel0.getTo() == 1 and sel0.getEmpty(), @src());
 
     // A transaction: type text at the cursor, and apply it.
-    const tr1 = state0.getTr();
-    tr1.insertText("Oh, ", .{});
+    const tr1 = state0.getTr().insertText("Oh, ", .{});
     expect(tr1.asTransform().getDocChanged(), @src());
     expect(tr1.asTransform().getDoc().getTextContent().eql("Oh, Helloworld"), @src());
     const state1 = state0.apply(tr1);
@@ -187,9 +186,8 @@ export fn run() void {
     // A selection range, then a mark added over it.
     const range = ps.TextSelection.create(state1.getDoc(), 1, .{ .head = 3 });
     expect(range.asSelection().getFrom() == 1 and range.asSelection().getTo() == 3 and !range.asSelection().getEmpty(), @src());
-    const tr2 = state1.getTr();
-    tr2.setSelection(range.asSelection());
-    tr2.asTransform().addMark(1, 3, strong);
+    const tr2 = state1.getTr().setSelection(range.asSelection());
+    _ = tr2.asTransform().addMark(1, 3, strong);
     const state2 = state1.apply(tr2);
     expect(state2.getSelection().getFrom() == 1 and state2.getSelection().getTo() == 3, @src());
     expect(state2.getDoc().rangeHasMark(1, 3, .{ .Mark = strong }), @src());
@@ -197,23 +195,18 @@ export fn run() void {
     expect(key.getState(state2).toNumber() == 2, @src());
 
     // A transaction that changes nothing does not count: selection only.
-    const t1 = state2.getTr();
-    t1.setSelection(ps.Selection.atEnd(state2.getDoc()));
-    const state3 = state2.apply(t1);
+    const state3 = state2.apply(state2.getTr().setSelection(ps.Selection.atEnd(state2.getDoc())));
     expect(key.getState(state3).toNumber() == 2, @src());
     expect(state3.getSelection().getFrom() == state3.getDoc().getContent().getSize() - 1, @src());
 
     // Deleting a range.
-    const t2 = state3.getTr();
-    t2.delete(1, 5);
-    const state4 = state3.apply(t2);
+    const state4 = state3.apply(state3.getTr().delete(1, 5));
     expect(state4.getDoc().child(0).getTextContent().eql("Hello"), @src());
     expect(state4.getDoc().getChildCount() == 2, @src());
     expect(key.getState(state4).toNumber() == 3, @src());
 
     // Replacing the whole document with new content, in one step.
-    const tr5 = state4.getTr();
-    tr5.replaceWith(0, state4.getDoc().getContent().getSize(), .{ .Node = paragraphOf(schema, "only") });
+    const tr5 = state4.getTr().replaceWith(0, state4.getDoc().getContent().getSize(), .{ .Node = paragraphOf(schema, "only") });
     expect(tr5.asTransform().getDoc().getChildCount() == 1, @src());
     expect(tr5.asTransform().getSteps().len() == 1, @src());
     expect(tr5.asTransform().getDocs().len() == 1, @src());
@@ -235,8 +228,7 @@ export fn run() void {
     expect(view.coordsAtPos(3, .{}).h != 0, @src());
 
     // The editor's own typing goes through dispatchTransaction: dispatch here as the view would.
-    const typed = view.getState().getTr();
-    typed.insertText("!", .{ .from = 14, .to = 14 });
+    const typed = view.getState().getTr().insertText("!", .{ .from = 14, .to = 14 });
     props.setState(view.getState());
     view.update(props);
     view.dispatch(typed);

@@ -67,14 +67,14 @@ fn renderCity(app: *App) void {
             _ = rot_q.setFromAxisAngle(axis_y, 0.08 * @as(f64, @floatFromInt((gx + gz) % 4)));
             _ = scale.set(1.0, h, 1.0);
             _ = mtx.compose(pos, rot_q, scale);
-            _ = app.inst.setMatrixAt(@floatFromInt(idx), mtx);
+            _ = app.inst.setMatrixAt(idx, mtx);
 
             var t = (h - 0.3) / 3.2;
             if (t < 0.0) t = 0.0;
             if (t > 1.0) t = 1.0;
             const shade = 0.82 - 0.70 * t;
             _ = col.setRGB(shade, shade, shade, null);
-            _ = app.inst.setColorAt(@floatFromInt(idx), col);
+            _ = app.inst.setColorAt(idx, col);
             idx += 1;
         }
     }
