@@ -131,8 +131,7 @@ TS_EXPORT(start) void start() {
         col_def("amount", "Amount (CHF)"),
     };
 
-    auto init_pg = PaginationState::create().pageIndex(0.0).pageSize(5.0);
-    auto init_state = Obj::create().set_at("pagination", init_pg);
+    auto init_state = Obj::create().set_at("pagination", PaginationState({.pageIndex = 0.0, .pageSize = 5.0}));
 
     auto opts = Obj::create()
         .set_at("features", features)

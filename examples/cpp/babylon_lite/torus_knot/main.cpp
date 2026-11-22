@@ -50,32 +50,19 @@ static ts::Task run_app() {
     orb_light.range(12.0);
     addToScene(scene, orb_light);
 
-    PbrMaterialProps knot_mat = createPbrMaterial(
-        createPbrMaterial_props::create()
-            .baseColorFactor({0.18, 0.78, 0.95, 1.0})
-            .metallicFactor(0.75)
-            .roughnessFactor(0.22)
-    );
-    Mesh knot = createTorusKnot(
-        engine,
-        TorusKnotOptions::create().radius(1.15).tube(0.34).radialSegments(48.0).tubularSegments(160.0)
-    );
+    PbrMaterialProps knot_mat = createPbrMaterial({{.baseColorFactor = ts::Tuple(0.18, 0.78, 0.95, 1.0), .metallicFactor = 0.75, .roughnessFactor = 0.22}});
+    Mesh knot = createTorusKnot(engine, {{.radius = 1.15, .tube = 0.34, .radialSegments = 48.0, .tubularSegments = 160.0}});
     knot.position().set(0.0, 2.0, 0.0);
     knot.material(knot_mat);
     addToScene(scene, knot);
 
-    PbrMaterialProps orb_mat = createPbrMaterial(
-        createPbrMaterial_props::create()
-            .baseColorFactor({1.0, 0.42, 0.32, 1.0})
-            .metallicFactor(0.2)
-            .roughnessFactor(0.35)
-    );
-    Mesh orb = createSphere(engine, SphereOptions::create().diameter(0.55).segments(32.0));
+    PbrMaterialProps orb_mat = createPbrMaterial({{.baseColorFactor = ts::Tuple(1.0, 0.42, 0.32, 1.0), .metallicFactor = 0.2, .roughnessFactor = 0.35}});
+    Mesh orb = createSphere(engine, {{.segments = 32.0, .diameter = 0.55}});
     orb.material(orb_mat);
     addToScene(scene, orb);
 
     ShaderMaterial ground_mat = createGridMaterial(GridMaterialOptions::create());
-    Mesh ground = createGround(engine, GroundOptions::create().width(16.0).height(16.0));
+    Mesh ground = createGround(engine, {{.width = 16.0, .height = 16.0}});
     ground.material(ground_mat);
     addToScene(scene, ground);
 

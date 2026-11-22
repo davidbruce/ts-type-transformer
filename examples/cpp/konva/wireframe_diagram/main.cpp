@@ -6,68 +6,26 @@
 using namespace konva;
 
 static void add_stage_box(const Layer& layer, double x, const char* title, const char* sub, const char* fill, const char* ink) {
-    GroupConfig gc = GroupConfig::create();
-    gc.x(x);
-    gc.y(95);
-    Group g = Group::create(gc);
-
-    RectConfig rc = RectConfig::create();
-    rc.width(126);
-    rc.height(68);
-    rc.cornerRadius(3.0);
-    rc.fill(fill);
-    rc.stroke("#111111");
-    rc.strokeWidth(2);
-
-    TextConfig t1 = TextConfig::create();
-    t1.x(12);
-    t1.y(16);
-    t1.text(title);
-    t1.fontSize(12);
-    t1.fontStyle("bold");
-    t1.fontFamily("monospace");
-    t1.fill(ink);
-
-    TextConfig t2 = TextConfig::create();
-    t2.x(12);
-    t2.y(38);
-    t2.text(sub);
-    t2.fontSize(11);
-    t2.fontFamily("monospace");
-    t2.fill(ink);
-
-    g.add(Rect::create(rc), Text::create(t1), Text::create(t2));
+    Group g = Group::create({{.x = x, .y = 95}});
+    g.add(
+        Rect::create({{.width = 126, .height = 68, .fill = fill, .stroke = "#111111", .strokeWidth = 2, .cornerRadius = 3.0}}),
+        Text::create({{.x = 12, .y = 16, .fill = ink, .text = title, .fontFamily = "monospace", .fontSize = 12, .fontStyle = "bold"}}),
+        Text::create({{.x = 12, .y = 38, .fill = ink, .text = sub, .fontFamily = "monospace", .fontSize = 11}})
+    );
     layer.add(g);
 }
 
 static void add_arrow(const Layer& layer, double x1, double y1, double x2, double y2) {
-    ArrowConfig ac = ArrowConfig::create();
-    ac.points(ts::Array<double>::of(x1, y1, x2, y2));
-    ac.pointerLength(8);
-    ac.pointerWidth(8);
-    ac.fill("#111111");
-    ac.stroke("#111111");
-    ac.strokeWidth(2);
-    layer.add(Arrow::create(ac));
+    layer.add(Arrow::create({{.fill = "#111111", .stroke = "#111111", .strokeWidth = 2, .points = ts::Array<double>::of(x1, y1, x2, y2), .pointerLength = 8, .pointerWidth = 8}}));
 }
 
 TS_EXPORT(start) void start() {
-    StageConfig sc = StageConfig::create();
-    sc.container("stage");
-    sc.width(680);
-    sc.height(400);
-    Stage stage = Stage::create(sc);
+    Stage stage = Stage::create({{.width = 680, .height = 400, .container = "stage"}});
 
     Layer layer = Layer::create();
     stage.add(layer);
 
-    RectConfig bg = RectConfig::create();
-    bg.x(0);
-    bg.y(0);
-    bg.width(680);
-    bg.height(400);
-    bg.fill("#ffffff");
-    layer.add(Rect::create(bg));
+    layer.add(Rect::create({{.x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff"}}));
 
     add_stage_box(layer, 28, "01 PARSE", ".d.ts AST", "#ffffff", "#111111");
     add_stage_box(layer, 194, "02 LOWER", "Typed IR", "#f7f7f7", "#111111");
@@ -80,31 +38,11 @@ TS_EXPORT(start) void start() {
     add_arrow(layer, 257, 163, 257, 251);
     add_arrow(layer, 423, 163, 423, 251);
 
-    LineConfig fbc = LineConfig::create();
-    fbc.points(ts::Array<double>::of(589, 163, 589, 212, 91, 212, 91, 168));
-    fbc.stroke("#737373");
-    fbc.strokeWidth(1.5);
-    fbc.dash(ts::Array<double>::of(6.0, 4.0));
-
-    RectConfig bar = RectConfig::create();
-    bar.x(28);
-    bar.y(255);
-    bar.width(624);
-    bar.height(58);
-    bar.cornerRadius(3.0);
-    bar.fill("#f7f7f7");
-    bar.stroke("#111111");
-    bar.strokeWidth(1.5);
-
-    TextConfig btxt = TextConfig::create();
-    btxt.x(180);
-    btxt.y(278);
-    btxt.text("Shared DOM & Package Handle Runtime");
-    btxt.fontSize(12);
-    btxt.fontFamily("monospace");
-    btxt.fill("#111111");
-
-    layer.add(Line<LineConfig>::create(fbc), Rect::create(bar), Text::create(btxt));
+    layer.add(
+        Line<LineConfig>::create({{.stroke = "#737373", .strokeWidth = 1.5, .dash = ts::Array<double>::of(6.0, 4.0), .points = ts::Array<double>::of(589, 163, 589, 212, 91, 212, 91, 168)}}),
+        Rect::create({{.x = 28, .y = 255, .width = 624, .height = 58, .fill = "#f7f7f7", .stroke = "#111111", .strokeWidth = 1.5, .cornerRadius = 3.0}}),
+        Text::create({{.x = 180, .y = 278, .fill = "#111111", .text = "Shared DOM & Package Handle Runtime", .fontFamily = "monospace", .fontSize = 12}})
+    );
     layer.draw();
 
     size_t rects = layer.find<Rect>(ts::Value::string("Rect")).size();

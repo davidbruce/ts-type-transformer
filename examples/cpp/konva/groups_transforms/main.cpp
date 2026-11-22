@@ -7,20 +7,11 @@
 using namespace konva;
 
 static Line<LineConfig> make_line(double x1, double y1, double x2, double y2, const char* stroke, double sw) {
-    LineConfig lc = LineConfig::create();
-    lc.points(ts::Array<double>::of(x1, y1, x2, y2));
-    lc.stroke(stroke);
-    lc.strokeWidth(sw);
-    return Line<LineConfig>::create(lc);
+    return Line<LineConfig>::create({{.stroke = stroke, .strokeWidth = sw, .points = ts::Array<double>::of(x1, y1, x2, y2)}});
 }
 
 static Rect make_rect(double x, double y, double w, double h, const char* fill, const char* stroke, double sw) {
-    RectConfig rc = RectConfig::create();
-    rc.x(x);
-    rc.y(y);
-    rc.width(w);
-    rc.height(h);
-    rc.fill(fill);
+    RectConfig rc({.x = x, .y = y, .width = w, .height = h, .fill = fill});
     if (stroke) {
         rc.stroke(stroke);
         rc.strokeWidth(sw);
@@ -29,22 +20,11 @@ static Rect make_rect(double x, double y, double w, double h, const char* fill, 
 }
 
 static Text make_text(double x, double y, const std::string& txt, double size, const char* fill) {
-    TextConfig tc = TextConfig::create();
-    tc.x(x);
-    tc.y(y);
-    tc.text(txt);
-    tc.fontSize(size);
-    tc.fontFamily("monospace");
-    tc.fill(fill);
-    return Text::create(tc);
+    return Text::create({{.x = x, .y = y, .fill = fill, .text = txt, .fontFamily = "monospace", .fontSize = size}});
 }
 
 TS_EXPORT(start) void start() {
-    StageConfig sc = StageConfig::create();
-    sc.container("stage");
-    sc.width(680);
-    sc.height(400);
-    Stage stage = Stage::create(sc);
+    Stage stage = Stage::create({{.width = 680, .height = 400, .container = "stage"}});
 
     Layer layer = Layer::create();
     stage.add(layer);
@@ -58,69 +38,29 @@ TS_EXPORT(start) void start() {
     }
 
     // Group A: unrotated base frame.
-    GroupConfig gac = GroupConfig::create();
-    gac.x(40);
-    gac.y(55);
-    Group group_a = Group::create(gac);
-    CircleConfig gad = CircleConfig::create();
-    gad.x(80);
-    gad.y(60);
-    gad.radius(24);
-    gad.fill("#111111");
+    Group group_a = Group::create({{.x = 40, .y = 55}});
     group_a.add(
         make_rect(0, 0, 160, 120, "#f7f7f7", "#111111", 1.5),
-        Circle::create(gad),
+        Circle::create({{.x = 80, .y = 60, .fill = "#111111", .radius = 24}}),
         make_text(12, 10, "Group A \xC2\xB7 0\xC2\xB0", 11, "#111111")
     );
     layer.add(group_a);
 
     // Group B: rotated 24 degrees.
-    GroupConfig gbc = GroupConfig::create();
-    gbc.x(340);
-    gbc.y(75);
-    gbc.rotation(24);
-    Group group_b = Group::create(gbc);
-    RectConfig gbi = RectConfig::create();
-    gbi.x(22);
-    gbi.y(22);
-    gbi.width(106);
-    gbi.height(66);
-    gbi.fill("#ffffff");
-    gbi.stroke("#555555");
-    gbi.strokeWidth(1.5);
-    gbi.dash(ts::Array<double>::of(4.0, 3.0));
-    CircleConfig gbd = CircleConfig::create();
-    gbd.x(75);
-    gbd.y(55);
-    gbd.radius(14);
-    gbd.fill("#404040");
+    Group group_b = Group::create({{.x = 340, .y = 75, .rotation = 24}});
     group_b.add(
         make_rect(0, 0, 150, 110, "#efefef", "#111111", 2),
-        Rect::create(gbi),
-        Circle::create(gbd),
+        Rect::create({{.x = 22, .y = 22, .width = 106, .height = 66, .fill = "#ffffff", .stroke = "#555555", .strokeWidth = 1.5, .dash = ts::Array<double>::of(4.0, 3.0)}}),
+        Circle::create({{.x = 75, .y = 55, .fill = "#404040", .radius = 14}}),
         make_text(10, 8, "Group B \xC2\xB7 24\xC2\xB0", 11, "#111111")
     );
     layer.add(group_b);
 
     // Group C: scaled + nested rotated child group.
-    GroupConfig gcc = GroupConfig::create();
-    gcc.x(495);
-    gcc.y(55);
-    gcc.scaleX(1.15);
-    gcc.scaleY(1.15);
-    Group group_c = Group::create(gcc);
+    Group group_c = Group::create({{.x = 495, .y = 55, .scaleX = 1.15, .scaleY = 1.15}});
 
-    GroupConfig icc = GroupConfig::create();
-    icc.x(25);
-    icc.y(25);
-    icc.rotation(15);
-    Group inner_group = Group::create(icc);
-    CircleConfig mc = CircleConfig::create();
-    mc.x(40);
-    mc.y(30);
-    mc.radius(16);
-    mc.fill("#111111");
-    Circle marker = Circle::create(mc);
+    Group inner_group = Group::create({{.x = 25, .y = 25, .rotation = 15}});
+    Circle marker = Circle::create({{.x = 40, .y = 30, .fill = "#111111", .radius = 16}});
     inner_group.add(marker);
     group_c.add(
         make_rect(0, 0, 130, 110, "#ffffff", "#111111", 2),

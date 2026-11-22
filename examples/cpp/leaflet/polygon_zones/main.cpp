@@ -7,25 +7,15 @@
 using namespace leaflet;
 
 static PolylineOptions poly_opts(const char* color, double weight, const char* dash, const char* fill_color, double fill_opacity) {
-    PolylineOptions opts = PolylineOptions::create();
-    opts.smoothFactor(1.0);
-    opts.color(color);
-    opts.weight(weight);
+    PolylineOptions opts({.color = color, .weight = weight, .fillColor = fill_color, .fillOpacity = fill_opacity, .smoothFactor = 1.0});
     if (dash != nullptr) {
         opts.dashArray(dash);
     }
-    opts.fillColor(fill_color);
-    opts.fillOpacity(fill_opacity);
     return opts;
 }
 
 TS_EXPORT(start) void start() {
-    MapOptions m_opts = MapOptions::create();
-    m_opts.attributionControl(false);
-    m_opts.zoomAnimation(false);
-    m_opts.fadeAnimation(false);
-    m_opts.markerZoomAnimation(false);
-    Map m = leaflet::map("map", m_opts);
+    Map m = leaflet::map("map", {{.attributionControl = false, .fadeAnimation = false, .markerZoomAnimation = false, .zoomAnimation = false}});
 
     auto mid_pts = ts::Array<Polyline_setLatLngs_latlngs>::of(
         leaflet::latLng(47.2, 7.6),
@@ -42,13 +32,13 @@ TS_EXPORT(start) void start() {
         leaflet::latLng(46.95, 8.4)
     );
 
-    Polygon<> mid_poly = leaflet::polygon(mid_pts, poly_opts("#404040", 2.0, nullptr, "#d4d4d4", 0.55));
-    Polygon<> core_poly = leaflet::polygon(core_pts, poly_opts("#111111", 2.5, nullptr, "#404040", 0.75));
+    Polygon mid_poly = leaflet::polygon(mid_pts, poly_opts("#404040", 2.0, nullptr, "#d4d4d4", 0.55));
+    Polygon core_poly = leaflet::polygon(core_pts, poly_opts("#111111", 2.5, nullptr, "#404040", 0.75));
 
     LatLngBounds mid_bounds = mid_poly.getBounds();
     LatLngBounds core_bounds = core_poly.getBounds();
     LatLngBounds padded = mid_bounds.pad(0.18);
-    Rectangle<> hull_rect = leaflet::rectangle(padded, poly_opts("#737373", 1.5, "4 4", "#efefef", 0.05));
+    Rectangle hull_rect = leaflet::rectangle(padded, poly_opts("#737373", 1.5, "4 4", "#efefef", 0.05));
 
     hull_rect.addTo(m);
     mid_poly.addTo(m);
@@ -80,13 +70,7 @@ TS_EXPORT(start) void start() {
         } else {
             exterior++;
         }
-        CircleMarkerOptions cm_opts = CircleMarkerOptions::create();
-        cm_opts.radius(6.0);
-        cm_opts.color("#111111");
-        cm_opts.weight(2.0);
-        cm_opts.fillColor(fill_hex);
-        cm_opts.fillOpacity(1.0);
-        leaflet::circleMarker(pt, cm_opts).addTo(m);
+        leaflet::circleMarker(pt, {{.color = "#111111", .weight = 2.0, .fillColor = fill_hex, .fillOpacity = 1.0, .radius = 6.0}}).addTo(m);
     }
 
     m.fitBounds(padded);

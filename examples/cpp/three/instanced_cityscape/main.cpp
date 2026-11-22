@@ -105,15 +105,12 @@ TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
     double width = 680.0, height = 400.0, aspect = width / height;
 
-    WebGLRendererParameters rp = WebGLRendererParameters::create();
-    rp.antialias(true);
-    rp.preserveDrawingBuffer(true);
-    WebGLRenderer renderer = WebGLRenderer::create(rp);
+    WebGLRenderer renderer = WebGLRenderer::create({{.antialias = true, .preserveDrawingBuffer = true}});
     renderer.setPixelRatio(1.0);
     renderer.setSize(width, height);
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
-    Scene<> scene = Scene<>::create();
+    Scene scene = Scene<>::create();
     scene.background(Color::create(0xf7f7f7));
     OrthographicCamera ortho_cam = OrthographicCamera::create(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0);
     PerspectiveCamera persp_cam = PerspectiveCamera::create(40.0, aspect, 0.1, 100.0);
@@ -123,18 +120,18 @@ TS_EXPORT(start) void start() {
     DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
     rim.position().set(-7.0, 6.0, -8.0);
 
-    Mesh<> plinth = Mesh<>::create(
+    Mesh plinth = Mesh<>::create(
         PlaneGeometry::create(8.6, 8.6),
-        MeshStandardMaterial::create(MeshStandardMaterialParameters::create().color(0xe5e5e5).roughness(0.85))
+        MeshStandardMaterial::create({{.color = 0xe5e5e5, .roughness = 0.85}})
     );
     plinth.rotation().x(-M_PI / 2.0);
     plinth.position().y(-0.01);
 
     GridHelper grid = GridHelper::create(9.0, 10.0, 0x999999, 0xd4d4d4);
 
-    InstancedMesh<> inst = InstancedMesh<>::create(
+    InstancedMesh inst = InstancedMesh<>::create(
         BoxGeometry::create(0.54, 1.0, 0.54),
-        MeshStandardMaterial::create(MeshStandardMaterialParameters::create().color(0xffffff).roughness(0.65).metalness(0.08)),
+        MeshStandardMaterial::create({{.color = 0xffffff, .roughness = 0.65, .metalness = 0.08}}),
         100.0
     );
     scene.add(AmbientLight::create(0xffffff, 1.25), key, rim, plinth, grid, inst);

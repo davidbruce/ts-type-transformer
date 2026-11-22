@@ -65,7 +65,7 @@ static Obj svc_row(const char* id, const char* svc, const char* tier, const char
         .set_at("errors", V::number(errs));
 }
 static ColumnFilter filter_spec(const char* id, V value) {
-    return ColumnFilter::create().id(id).value(value);
+    return ColumnFilter({.id = id, .value = value});
 }
 
 struct AppState {

@@ -21,31 +21,30 @@ static std::string to_lower_ascii(std::string s) {
 }
 
 static Sch make_schema() {
-    NodeSpec doc = NodeSpec::create().content("block+");
+    NodeSpec doc({.content = "block+"});
     MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
-    NodeSpec heading = NodeSpec::create()
-        .attrs(hattrs)
-        .content("inline*")
-        .group("block")
-        .toDOM([](Node n) {
+    NodeSpec heading({
+        .content = "inline*",
+        .group = "block",
+        .attrs = hattrs,
+        .toDOM = [](Node n) {
             int l = static_cast<int>(n.attrs().at("level").to_number());
             return hole_spec(l == 1 ? "h1" : "h2");
-        });
+        },
+    });
 
-    NodeSpec para = NodeSpec::create()
-        .content("inline*")
-        .group("block")
-        .toDOM([](Node) { return hole_spec("p"); });
+    NodeSpec para({.content = "inline*", .group = "block", .toDOM = [](Node) { return hole_spec("p"); }});
 
-    NodeSpec cblock = NodeSpec::create()
-        .content("text*")
-        .marks("")
-        .group("block")
-        .code(true)
-        .toDOM([](Node) { return DOMOutputSpec(ts::Array<>::of("pre", ts::Array<>::of("code", 0))); });
+    NodeSpec cblock({
+        .content = "text*",
+        .marks = "",
+        .group = "block",
+        .code = true,
+        .toDOM = [](Node) { return DOMOutputSpec(ts::Array<>::of("pre", ts::Array<>::of("code", 0))); },
+    });
 
-    NodeSpec text = NodeSpec::create().group("inline");
+    NodeSpec text({.group = "inline"});
 
     auto nodes = NodeSpec::create()
         .set_at("doc", doc)
@@ -55,13 +54,13 @@ static Sch make_schema() {
         .set_at("text", text);
 
     auto make_mark = [](const char* tag) {
-        return MarkSpec::create().toDOM([tag](Mark, bool) { return hole_spec(tag); });
+        return MarkSpec({.toDOM = [tag](Mark, bool) { return hole_spec(tag); }});
     };
     auto marks = MarkSpec::create()
         .set_at("strong", make_mark("strong"))
         .set_at("code", make_mark("code"));
 
-    return Sch::create(SchemaSpec<ts::Value, ts::Value>::create().nodes(nodes).marks(marks));
+    return Sch::create({{.nodes = nodes, .marks = marks}});
 }
 
 static Node p_node(const Sch& schema, std::string_view t) {
@@ -89,8 +88,8 @@ static DecoStats compute_decorations(Node doc, const std::string& raw_query) {
     if (q.empty()) return { DecorationSet::empty(), 0, 0 };
 
     ts::Array<Decoration> decos = ts::Array<Decoration>::create();
-    DecorationAttrs inl_attr = DecorationAttrs::create().class_("pm-match");
-    DecorationAttrs blk_attr = DecorationAttrs::create().class_("pm-hit-block");
+    DecorationAttrs inl_attr({.class_ = "pm-match"});
+    DecorationAttrs blk_attr({.class_ = "pm-hit-block"});
 
     int inl_hits = 0;
     int blk_hits = 0;
@@ -170,31 +169,31 @@ TS_EXPORT(start) void start() {
             return mv.is_null() ? prev : mv;
         });
 
-    EditorProps<Plugin<ts::Value>> eprops = EditorProps<Plugin<ts::Value>>::create()
-        .decorations([app](EditorState st) -> std::optional<DecorationSource> {
+    EditorProps<Plugin<ts::Value>> eprops({
+        .decorations = [app](EditorState st) -> std::optional<DecorationSource> {
             auto qv = app->search_key.getState(st);
             std::string q = (qv.has_value() && !qv->is_null()) ? qv->to_string() : "";
             return DecorationSource(compute_decorations(st.doc(), q).set);
-        });
+        },
+    });
 
-    PluginSpec<ts::Value> pspec = PluginSpec<ts::Value>::create()
-        .key(app->search_key)
-        .state(field)
-        .props(eprops);
+    PluginSpec<ts::Value> pspec({.props = eprops, .state = field, .key = app->search_key});
 
-    EditorStateConfig scfg = EditorStateConfig::create()
-        .schema(app->schema)
-        .doc(make_initial_doc(app->schema))
-        .plugins(ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>::create(pspec) });
+    EditorStateConfig scfg({
+        .schema = app->schema,
+        .doc = make_initial_doc(app->schema),
+        .plugins = ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>::create(pspec) },
+    });
 
-    DirectEditorProps props = DirectEditorProps::create()
-        .state(EditorState::create(scfg))
-        .dispatchTransaction([app](Transaction tr) {
+    DirectEditorProps props({
+        .state = EditorState::create(scfg),
+        .dispatchTransaction = [app](Transaction tr) {
             if (!app->view) return;
             EditorState next = app->view.state().apply(tr);
             app->view.updateState(next);
             sync_meta(app, next);
-        });
+        },
+    });
 
     app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     sync_meta(app, app->view.state());

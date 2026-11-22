@@ -66,7 +66,7 @@ static Obj node_row(const char* id, const char* host, const char* region, double
         .set_at("uptime", V::number(up));
 }
 static ColumnSort sort_spec(const char* id, bool desc) {
-    return ColumnSort::create().id(id).desc(desc);
+    return ColumnSort({.desc = desc, .id = id});
 }
 
 struct AppState {

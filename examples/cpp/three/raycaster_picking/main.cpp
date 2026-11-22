@@ -94,16 +94,13 @@ TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
     double width = 680.0, height = 400.0;
 
-    WebGLRendererParameters rp = WebGLRendererParameters::create();
-    rp.antialias(true);
-    rp.preserveDrawingBuffer(true);
-    WebGLRenderer renderer = WebGLRenderer::create(rp);
+    WebGLRenderer renderer = WebGLRenderer::create({{.antialias = true, .preserveDrawingBuffer = true}});
     renderer.setPixelRatio(1.0);
     renderer.setSize(width, height);
     dom::HTMLCanvasElement canvas = renderer.domElement();
     doc.getElementById("stage")->appendChild(canvas);
 
-    Scene<> scene = Scene<>::create();
+    Scene scene = Scene<>::create();
     scene.background(Color::create(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
 
@@ -133,14 +130,8 @@ TS_EXPORT(start) void start() {
     for (int i = 0; i < 9; i++) {
         int gx = (i % 3) - 1;
         int gz = (i / 3) - 1;
-        MeshStandardMaterial mat = MeshStandardMaterial::create(
-            MeshStandardMaterialParameters::create()
-                .color(0xd4d4d4)
-                .roughness(0.55)
-                .metalness(0.1)
-                .flatShading(i >= 4)
-        );
-        Mesh<> m = Mesh<>::create(geos[i], mat);
+        MeshStandardMaterial mat = MeshStandardMaterial::create({{.color = 0xd4d4d4, .roughness = 0.55, .metalness = 0.1, .flatShading = i >= 4}});
+        Mesh m = Mesh<>::create(geos[i], mat);
         m.name(NAMES[i]);
         m.position().set(double(gx) * 2.1, 0.0, double(gz) * 2.1);
         m.rotation().set(0.2, 0.35 * double(i), 0.0);

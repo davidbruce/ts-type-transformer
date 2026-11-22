@@ -200,17 +200,12 @@ static ts::Task run_app() {
     dir.diffuse({1.0, 0.97, 0.92});
     b::addToScene(scene, dir);
 
-    b::Mesh ground = b::createGround(engine, b::GroundOptions::create().width(20.0).height(20.0));
+    b::Mesh ground = b::createGround(engine, {{.width = 20.0, .height = 20.0}});
     ground.material(b::createGridMaterial(b::GridMaterialOptions::create()));
     b::addToScene(scene, ground);
 
     auto mk_mat = [](double r, double g, double bl, double m, double ro) {
-        return b::createPbrMaterial(
-            b::createPbrMaterial_props::create()
-                .baseColorFactor({r, g, bl, 1.0})
-                .metallicFactor(m)
-                .roughnessFactor(ro)
-        );
+        return b::createPbrMaterial({{.baseColorFactor = ts::Tuple(r, g, bl, 1.0), .metallicFactor = m, .roughnessFactor = ro}});
     };
     b::PbrMaterialProps palette[3] = {
         mk_mat(0.86, 0.86, 0.86, 0.15, 0.45),
@@ -222,16 +217,13 @@ static ts::Task run_app() {
         int layer = idx / PER_LAYER;
         double w_box = (layer % 2 == 0) ? (HALF_LONG * 2.0) : (HALF_THIN * 2.0);
         double d_box = (layer % 2 == 0) ? (HALF_THIN * 2.0) : (HALF_LONG * 2.0);
-        b::Mesh m = b::createBox(
-            engine,
-            b::BoxOptions::create().width(w_box).height(HALF_HEIGHT * 2.0).depth(d_box)
-        );
+        b::Mesh m = b::createBox(engine, b::BoxOptions({.width = w_box, .height = HALF_HEIGHT * 2.0, .depth = d_box}));
         m.material(palette[layer % 3]);
         b::addToScene(scene, m);
         st->plank_meshes.push_back(m);
     }
 
-    b::Mesh sm = b::createSphere(engine, b::SphereOptions::create().diameter(SPHERE_RADIUS * 2.0).segments(24.0));
+    b::Mesh sm = b::createSphere(engine, {{.segments = 24.0, .diameter = SPHERE_RADIUS * 2.0}});
     sm.material(mk_mat(0.95, 0.42, 0.28, 0.55, 0.22));
     b::addToScene(scene, sm);
     st->striker_mesh = sm;

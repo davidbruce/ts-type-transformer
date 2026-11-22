@@ -7,35 +7,22 @@
 using namespace leaflet;
 
 static PolylineOptions box_opts(const char* color, double weight, const char* dash, const char* fill_color, double fill_opacity) {
-    PolylineOptions opts = PolylineOptions::create();
-    opts.smoothFactor(1.0);
-    opts.color(color);
-    opts.weight(weight);
+    PolylineOptions opts({.color = color, .weight = weight, .fillColor = fill_color, .fillOpacity = fill_opacity, .smoothFactor = 1.0});
     if (dash != nullptr) {
         opts.dashArray(dash);
     }
-    opts.fillColor(fill_color);
-    opts.fillOpacity(fill_opacity);
     return opts;
 }
 
 TS_EXPORT(start) void start() {
-    MapOptions m_opts = MapOptions::create();
-    m_opts.crs(CRS::get_Simple());
-    m_opts.minZoom(-1.0);
-    m_opts.maxZoom(3.0);
-    m_opts.attributionControl(false);
-    m_opts.zoomAnimation(false);
-    m_opts.fadeAnimation(false);
-    m_opts.markerZoomAnimation(false);
-    Map m = leaflet::map("map", m_opts);
+    Map m = leaflet::map("map", {{.attributionControl = false, .crs = CRS::get_Simple(), .minZoom = -1.0, .maxZoom = 3.0, .fadeAnimation = false, .markerZoomAnimation = false, .zoomAnimation = false}});
 
     PolylineOptions grid_opts = box_opts("#e5e5e5", 1.0, nullptr, "#ffffff", 0.0);
     for (int r = 0; r <= 100; r += 20) {
-        leaflet::polyline(ts::Array<>::of(leaflet::latLng(r, 0.0), leaflet::latLng(r, 160.0)), grid_opts).addTo(m);
+        leaflet::polyline(ts::Array<LatLng>::of(leaflet::latLng(r, 0.0), leaflet::latLng(r, 160.0)), grid_opts).addTo(m);
     }
     for (int c = 0; c <= 160; c += 20) {
-        leaflet::polyline(ts::Array<>::of(leaflet::latLng(0.0, c), leaflet::latLng(100.0, c)), grid_opts).addTo(m);
+        leaflet::polyline(ts::Array<LatLng>::of(leaflet::latLng(0.0, c), leaflet::latLng(100.0, c)), grid_opts).addTo(m);
     }
 
     LatLngBounds env = leaflet::latLngBounds(leaflet::latLng(8.0, 12.0), leaflet::latLng(92.0, 148.0));
@@ -65,16 +52,11 @@ TS_EXPORT(start) void start() {
     leaflet::polygon(atrium, box_opts("#111111", 2.0, nullptr, "#555555", 0.35)).addTo(m);
 
     leaflet::polyline(
-        ts::Array<>::of(leaflet::latLng(50.0, 12.0), leaflet::latLng(50.0, 148.0)),
+        ts::Array<LatLng>::of(leaflet::latLng(50.0, 12.0), leaflet::latLng(50.0, 148.0)),
         box_opts("#737373", 1.5, "4 4", "#ffffff", 0.0)
     ).addTo(m);
 
-    CircleMarkerOptions col_opts = CircleMarkerOptions::create();
-    col_opts.radius(5.0);
-    col_opts.color("#111111");
-    col_opts.weight(1.5);
-    col_opts.fillColor("#111111");
-    col_opts.fillOpacity(1.0);
+    CircleMarkerOptions col_opts({.color = "#111111", .weight = 1.5, .fillColor = "#111111", .fillOpacity = 1.0, .radius = 5.0});
     double cols[6][2] = {
         { 12.0, 16.0 }, { 88.0, 16.0 }, { 12.0, 80.0 },
         { 88.0, 80.0 }, { 12.0, 144.0 }, { 88.0, 144.0 },

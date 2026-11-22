@@ -12,12 +12,7 @@ static Pt mk_pt(double x, double y) {
 }
 
 TS_EXPORT(start) void start() {
-    auto opts = CanvasSpaceOptions::create()
-        .bgcolor("#ffffff")
-        .resize(true)
-        .retina(true);
-
-    auto space = CanvasSpace::create("#pt").setup(opts);
+    auto space = CanvasSpace::create("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
     auto form = space.getForm();
 
     auto player = IPlayer::create();

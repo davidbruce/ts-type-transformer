@@ -64,8 +64,7 @@ TS_EXPORT(start) void start() {
     check(file_count == 4);
     check(total_bytes == 75.0);
 
-    auto rm = RmOptions::create().recursive(true).force(true);
-    fs::rmSync(root, rm);
+    fs::rmSync(root, {{.force = true, .recursive = true}});
     check(!fs::existsSync(root));
     check(dir_count + file_count == 8);
     check(true);

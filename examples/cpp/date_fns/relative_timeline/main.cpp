@@ -18,7 +18,7 @@ TS_EXPORT(start) void start() {
     app.appendChild(head);
 
     auto anchor = date_fns::parseISO("2024-03-15");
-    auto opts = date_fns::FormatDistanceOptions::create().addSuffix(true);
+    auto opts = date_fns::FormatDistanceOptions({.addSuffix = true});
 
     struct Entry { const char* iso; const char* title; };
     Entry entries[] = {

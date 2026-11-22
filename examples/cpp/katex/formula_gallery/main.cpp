@@ -18,7 +18,7 @@ TS_EXPORT(start) void start() {
     app.appendChild(head);
 
     auto grid = make_el(doc, "div", "grid", "");
-    auto opts = katex::KatexOptions::create().displayMode(true);
+    auto opts = katex::KatexOptions({.displayMode = true});
 
     struct Entry { const char* name; const char* tex; };
     const Entry formulas[] = {

@@ -7,23 +7,14 @@
 using namespace leaflet;
 
 static MapOptions make_map_opts() {
-    MapOptions opts = MapOptions::create();
-    opts.attributionControl(false);
-    opts.zoomAnimation(false);
-    opts.fadeAnimation(false);
-    opts.markerZoomAnimation(false);
-    return opts;
+    return MapOptions({.attributionControl = false, .fadeAnimation = false, .markerZoomAnimation = false, .zoomAnimation = false});
 }
 
 static PolylineOptions poly_opts(const char* color, double weight, const char* dash, double fill_opacity) {
-    PolylineOptions opts = PolylineOptions::create();
-    opts.smoothFactor(1.0);
-    opts.color(color);
-    opts.weight(weight);
+    PolylineOptions opts({.color = color, .weight = weight, .fillOpacity = fill_opacity, .smoothFactor = 1.0});
     if (dash != nullptr) {
         opts.dashArray(dash);
     }
-    opts.fillOpacity(fill_opacity);
     return opts;
 }
 
@@ -45,32 +36,27 @@ TS_EXPORT(start) void start() {
 
     PolylineOptions grat_opts = poly_opts("#e5e5e5", 1.0, nullptr, 0.0);
     for (double lat : { 46.0, 48.0, 50.0, 52.0, 54.0 }) {
-        leaflet::polyline(ts::Array<>::of(leaflet::latLng(lat, -2.0), leaflet::latLng(lat, 17.0)), grat_opts).addTo(m);
+        leaflet::polyline(ts::Array<LatLng>::of(leaflet::latLng(lat, -2.0), leaflet::latLng(lat, 17.0)), grat_opts).addTo(m);
     }
     for (double lng : { 0.0, 4.0, 8.0, 12.0, 16.0 }) {
-        leaflet::polyline(ts::Array<>::of(leaflet::latLng(45.0, lng), leaflet::latLng(55.0, lng)), grat_opts).addTo(m);
+        leaflet::polyline(ts::Array<LatLng>::of(leaflet::latLng(45.0, lng), leaflet::latLng(55.0, lng)), grat_opts).addTo(m);
     }
 
-    ts::Array<> primary_pts = ts::Array<>::create();
+    auto primary_pts = ts::Array<LatLng>::create();
     for (const Hub& h : hubs) primary_pts.push(h.pt);
-    Polyline<> primary_line = leaflet::polyline(primary_pts, poly_opts("#111111", 3.0, nullptr, 0.0));
+    Polyline primary_line = leaflet::polyline(primary_pts, poly_opts("#111111", 3.0, nullptr, 0.0));
     primary_line.addTo(m);
 
     leaflet::polyline(
-        ts::Array<>::of(hubs[0].pt, leaflet::latLng(50.8503, 4.3517), leaflet::latLng(52.3676, 4.9041), hubs[5].pt),
+        ts::Array<LatLng>::of(hubs[0].pt, leaflet::latLng(50.8503, 4.3517), leaflet::latLng(52.3676, 4.9041), hubs[5].pt),
         poly_opts("#737373", 1.5, "5 5", 0.0)
     ).addTo(m);
 
-    LayerGroup<> nodes = leaflet::layerGroup();
-    CircleMarkerOptions node_opts = CircleMarkerOptions::create();
-    node_opts.radius(6.0);
-    node_opts.color("#111111");
-    node_opts.weight(2.0);
-    node_opts.fillColor("#ffffff");
-    node_opts.fillOpacity(1.0);
+    LayerGroup nodes = leaflet::layerGroup();
+    CircleMarkerOptions node_opts({.color = "#111111", .weight = 2.0, .fillColor = "#ffffff", .fillOpacity = 1.0, .radius = 6.0});
 
     for (const Hub& h : hubs) {
-        CircleMarker<> cm = leaflet::circleMarker(h.pt, node_opts);
+        CircleMarker cm = leaflet::circleMarker(h.pt, node_opts);
         cm.bindTooltip(h.name);
         nodes.addLayer(cm);
     }

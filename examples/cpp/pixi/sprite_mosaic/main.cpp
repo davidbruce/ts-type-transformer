@@ -6,17 +6,8 @@
 using namespace pixi_js;
 
 static ts::Task run_app() {
-    Application<> app = Application<>::create();
-    auto opts = Application_init_options::create()
-        .width(680)
-        .height(400)
-        .backgroundColor(0xffffff)
-        .preference("webgl")
-        .preserveDrawingBuffer(true)
-        .antialias(true)
-        .autoStart(false);
-
-    if (auto res = co_await app.init(opts); !res) co_return;
+    Application app = Application<>::create();
+    if (auto res = co_await app.init({{.backgroundColor = 0xffffff, .preserveDrawingBuffer = true, .preference = "webgl", .width = 680, .height = 400, .antialias = true, .autoStart = false}}); !res) co_return;
 
     dom::Document doc = dom::get_document();
     if (auto stage_el = doc.getElementById("stage")) {
@@ -27,10 +18,7 @@ static ts::Task run_app() {
 
     Graphics frame = Graphics::create();
     frame.rect(32.0, 20.0, 616.0, 360.0);
-    StrokeStyle ss = StrokeStyle::create();
-    ss.width(1.5);
-    ss.color(0xd4d4d4);
-    frame.stroke(ts::Array<>::of(ss));
+    frame.stroke(StrokeStyle({.color = 0xd4d4d4, .width = 1.5}));
     stage.addChild(frame);
 
     static constexpr int shades[8] = {

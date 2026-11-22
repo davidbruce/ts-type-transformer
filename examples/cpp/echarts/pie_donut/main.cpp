@@ -1,44 +1,31 @@
 #include "dom/dom.hpp"
 #include "echarts/echarts.hpp"
 
-static ts::Value slice(const char* name, double val) {
-    return ts::Value::object().set("name", name).set("value", val);
+using namespace echarts;
+
+static PieSeriesOption_data slice(const char* name, double val) {
+    return PieDataItemOption({.name = name, .value = val});
 }
 
 TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
-    echarts::ECharts chart = echarts::init(*doc.getElementById("chart"));
+    ECharts chart = echarts::init(*doc.getElementById("chart"));
 
-    auto palette = ts::Array<>::of("#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4");
-    auto legend = ts::Value::object().set("bottom", 8).set("textStyle", ts::Value::object().set("color", "#111111"));
-    auto tooltip = ts::Value::object().set("trigger", "item");
-
-    auto data = ts::Array<>::of(
-        slice("Runtime", 34),
-        slice("Bindings", 26),
-        slice("Glue", 18),
-        slice("Parser", 14),
-        slice("Tests", 8)
-    );
-
-    auto series = ts::Array<>::of(
-        ts::Value::object()
-            .set("type", "pie")
-            .set("name", "Subsystems")
-            .set("radius", ts::Array<>::of("44%", "72%"))
-            .set("center", ts::Array<>::of("50%", "46%"))
-            .set("itemStyle", ts::Value::object().set("borderColor", "#ffffff").set("borderWidth", 2))
-            .set("label", ts::Value::object().set("color", "#111111"))
-            .set("data", data)
-    );
-
-    auto opt = echarts::EChartsCoreOption::create();
-    opt.animation(false);
-    opt.set_at("backgroundColor", ts::Value::string("#ffffff"))
-        .set_at("color", palette)
-        .set_at("legend", legend)
-        .set_at("tooltip", tooltip)
-        .set_at("series", series);
+    EChartsOption opt({
+        .backgroundColor = "#ffffff",
+        .animation = false,
+        .color = ts::Array<std::string>::of("#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4"),
+        .tooltip = TooltipComponentOption({.trigger = TooltipComponentOption_trigger::item}),
+        .legend = PlainLegendComponentOption({.textStyle = LabelOption<DetailOption_object>({.color = "#111111"}), .bottom = 8}),
+        .series = PieSeriesOption({
+            .data = ts::Array<PieSeriesOption_data>::of(slice("Runtime", 34), slice("Bindings", 26), slice("Glue", 18), slice("Parser", 14), slice("Tests", 8)),
+            .center = ts::Array<PositionSizeOption>::of("50%", "46%"),
+            .radius = ts::Array<PositionSizeOption>::of("44%", "72%"),
+            .name = "Subsystems",
+            .itemStyle = PieItemStyleOption<ts::Value>({.borderColor = "#ffffff", .borderWidth = 2}),
+            .label = PieLabelOption({.color = "#111111"}),
+        }),
+    });
     chart.setOption(opt);
 
     doc.getElementById("meta")->textContent(

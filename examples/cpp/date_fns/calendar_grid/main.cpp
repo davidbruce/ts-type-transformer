@@ -52,7 +52,7 @@ TS_EXPORT(start) void start() {
         grid.appendChild(make_el(doc, "div", "day-cell empty", ""));
     }
 
-    auto span = Span::create().start(month_start).end(month_end);
+    auto span = Span({.start = month_start, .end = month_end});
     auto days = date_fns::eachDayOfInterval(span);
     for (size_t i = 0; i < days.size(); i++) {
         date_fns::Date_or_string_or_number item = days[i];

@@ -21,12 +21,11 @@ TS_EXPORT(start) void start() {
     std::vector<std::string> visited;
 
     using Mk = marked::Marked<std::string, std::string>;
-    auto rend = marked::MarkedExtension_renderer<std::string, std::string>::create();
-    rend.heading([](ts::Tuple<marked::Tokens_Heading> args) {
+    auto rend = marked::MarkedExtension_renderer<std::string, std::string>({.heading = [](ts::Tuple<marked::Tokens_Heading> args) {
         auto h = args.get<0>();
         auto d = std::to_string(int(h.depth()));
         return std::string("<h") + d + " class=\"wire-h\">\xC2\xA7 " + h.text() + "</h" + d + ">\n";
-    });
+    }});
     ts::Scoped<marked::MarkedExtension_walkTokens> on_token = [&](const marked::Token& token) {
         std::visit([&](const auto& x) {
             using X = std::decay_t<decltype(x)>;
@@ -34,9 +33,7 @@ TS_EXPORT(start) void start() {
             else visited.push_back(std::string(X::type));
         }, token);
     };
-    auto ext = marked::MarkedExtension<std::string, std::string>::create()
-        .renderer(rend)
-        .walkTokens(on_token);
+    auto ext = marked::MarkedExtension<std::string, std::string>({.renderer = rend, .walkTokens = on_token});
 
     Mk custom_m = Mk::create(ext);
     std::string def_html = marked::marked(md, marked::marked_options_no_async::create());

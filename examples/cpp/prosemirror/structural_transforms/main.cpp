@@ -14,32 +14,30 @@ static DOMOutputSpec hole_spec(std::string_view tag) {
 }
 
 static Sch make_schema() {
-    NodeSpec doc = NodeSpec::create().content("block+");
+    NodeSpec doc({.content = "block+"});
     MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
-    NodeSpec heading = NodeSpec::create()
-        .attrs(hattrs)
-        .content("inline*")
-        .group("block")
-        .defining(true)
-        .toDOM([](Node n) {
+    NodeSpec heading({
+        .content = "inline*",
+        .group = "block",
+        .attrs = hattrs,
+        .defining = true,
+        .toDOM = [](Node n) {
             int l = static_cast<int>(n.attrs().at("level").to_number());
             return hole_spec(l == 1 ? "h1" : "h2");
-        });
+        },
+    });
 
     auto tag_node = [](const char* content, const char* group, const char* tag, bool defining = false) {
-        NodeSpec s = NodeSpec::create().content(content).toDOM([tag](Node) { return hole_spec(tag); });
+        NodeSpec s({.content = content, .toDOM = [tag](Node) { return hole_spec(tag); }});
         if (group) s.group(group);
         if (defining) s.defining(true);
         return s;
     };
 
-    NodeSpec hr = NodeSpec::create()
-        .group("block")
-        .atom(true)
-        .toDOM([](Node) { return DOMOutputSpec(ts::Array<>::of("hr")); });
+    NodeSpec hr({.group = "block", .atom = true, .toDOM = [](Node) { return DOMOutputSpec(ts::Array<>::of("hr")); }});
 
-    NodeSpec text = NodeSpec::create().group("inline");
+    NodeSpec text({.group = "inline"});
 
     auto nodes = NodeSpec::create()
         .set_at("doc", doc)
@@ -52,13 +50,13 @@ static Sch make_schema() {
         .set_at("text", text);
 
     auto make_mark = [](const char* tag) {
-        return MarkSpec::create().toDOM([tag](Mark, bool) { return hole_spec(tag); });
+        return MarkSpec({.toDOM = [tag](Mark, bool) { return hole_spec(tag); }});
     };
     auto marks = MarkSpec::create()
         .set_at("strong", make_mark("strong"))
         .set_at("code", make_mark("code"));
 
-    return Sch::create(SchemaSpec<ts::Value, ts::Value>::create().nodes(nodes).marks(marks));
+    return Sch::create({{.nodes = nodes, .marks = marks}});
 }
 
 static Node p_node(const Sch& schema, std::string_view t) {
@@ -93,7 +91,7 @@ struct AppState {
 };
 
 static EditorState make_state(const Sch& schema) {
-    return EditorState::create(EditorStateConfig::create().schema(schema).doc(make_initial_doc(schema)));
+    return EditorState::create({{.schema = schema, .doc = make_initial_doc(schema)}});
 }
 
 static void update_meta(const std::shared_ptr<AppState>& app, Node doc) {
@@ -118,15 +116,16 @@ TS_EXPORT(start) void start() {
     app->doc = dom::get_document();
     app->meta = *app->doc.getElementById("meta");
 
-    DirectEditorProps props = DirectEditorProps::create()
-        .state(make_state(app->schema))
-        .dispatchTransaction([app](Transaction tr) {
+    DirectEditorProps props({
+        .state = make_state(app->schema),
+        .dispatchTransaction = [app](Transaction tr) {
             if (!app->view) return;
             app->total_steps += static_cast<int>(tr.steps().size());
             EditorState next = app->view.state().apply(tr);
             app->view.updateState(next);
             update_meta(app, next.doc());
-        });
+        },
+    });
 
     app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     update_meta(app, app->view.state().doc());

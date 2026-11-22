@@ -13,40 +13,32 @@ static DOMOutputSpec hole_spec(std::string_view tag) {
 }
 
 static TagParseRule tag_rule(std::string_view tag, int level = 0) {
-    TagParseRule r = TagParseRule::create().tag(tag);
+    TagParseRule r({.tag = tag});
     if (level > 0) r.attrs(Attrs::create().set_at("level", ts::Value::number(level)));
     return r;
 }
 
 static Sch make_schema() {
-    NodeSpec doc = NodeSpec::create().content("block+");
+    NodeSpec doc({.content = "block+"});
     MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
-    NodeSpec heading = NodeSpec::create()
-        .attrs(hattrs)
-        .content("inline*")
-        .group("block")
-        .defining(true)
-        .parseDOM(ts::Array<TagParseRule>{ tag_rule("h1", 1), tag_rule("h2", 2) })
-        .toDOM([](Node n) {
+    NodeSpec heading({
+        .content = "inline*",
+        .group = "block",
+        .attrs = hattrs,
+        .defining = true,
+        .toDOM = [](Node n) {
             int l = static_cast<int>(n.attrs().at("level").to_number());
             return hole_spec(l == 1 ? "h1" : "h2");
-        });
+        },
+        .parseDOM = ts::Array<TagParseRule>{ tag_rule("h1", 1), tag_rule("h2", 2) },
+    });
 
-    NodeSpec para = NodeSpec::create()
-        .content("inline*")
-        .group("block")
-        .parseDOM(ts::Array<TagParseRule>{ tag_rule("p") })
-        .toDOM([](Node) { return hole_spec("p"); });
+    NodeSpec para({.content = "inline*", .group = "block", .toDOM = [](Node) { return hole_spec("p"); }, .parseDOM = ts::Array<TagParseRule>{ tag_rule("p") }});
 
-    NodeSpec quote = NodeSpec::create()
-        .content("block+")
-        .group("block")
-        .defining(true)
-        .parseDOM(ts::Array<TagParseRule>{ tag_rule("blockquote") })
-        .toDOM([](Node) { return hole_spec("blockquote"); });
+    NodeSpec quote({.content = "block+", .group = "block", .defining = true, .toDOM = [](Node) { return hole_spec("blockquote"); }, .parseDOM = ts::Array<TagParseRule>{ tag_rule("blockquote") }});
 
-    NodeSpec text = NodeSpec::create().group("inline");
+    NodeSpec text({.group = "inline"});
 
     auto nodes = NodeSpec::create()
         .set_at("doc", doc)
@@ -56,16 +48,14 @@ static Sch make_schema() {
         .set_at("text", text);
 
     auto mark_spec = [](const char* tag) {
-        return MarkSpec::create()
-            .parseDOM(ts::Array<ParseRule>::of(tag_rule(tag)))
-            .toDOM([tag](Mark, bool) { return hole_spec(tag); });
+        return MarkSpec({.toDOM = [tag](Mark, bool) { return hole_spec(tag); }, .parseDOM = ts::Array<ParseRule>::of(tag_rule(tag))});
     };
     auto marks = MarkSpec::create()
         .set_at("strong", mark_spec("strong"))
         .set_at("em", mark_spec("em"))
         .set_at("code", mark_spec("code"));
 
-    return Sch::create(SchemaSpec<ts::Value, ts::Value>::create().nodes(nodes).marks(marks));
+    return Sch::create({{.nodes = nodes, .marks = marks}});
 }
 
 static constexpr const char* SPEC_HTML =
@@ -139,18 +129,15 @@ TS_EXPORT(start) void start() {
     app->output = *app->doc.getElementById("output");
     app->meta = *app->doc.getElementById("meta");
 
-    EditorStateConfig scfg = EditorStateConfig::create()
-        .schema(app->schema)
-        .doc(parse_html(app, SPEC_HTML));
-
-    DirectEditorProps props = DirectEditorProps::create()
-        .state(EditorState::create(scfg))
-        .dispatchTransaction([app](Transaction tr) {
+    DirectEditorProps props({
+        .state = EditorState::create({{.schema = app->schema, .doc = parse_html(app, SPEC_HTML)}}),
+        .dispatchTransaction = [app](Transaction tr) {
             if (!app->view) return;
             EditorState next = app->view.state().apply(tr);
             app->view.updateState(next);
             refresh_output(app, next.doc());
-        });
+        },
+    });
 
     app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     app->status = "Parsed Spec HTML via DOMParser";
@@ -163,10 +150,7 @@ TS_EXPORT(start) void start() {
             Node doc = st.doc();
             if (i == 0 || i == 1) {
                 app->status = (i == 0) ? "Parsed Spec HTML via DOMParser" : "Parsed Changelog HTML via DOMParser";
-                auto cfg = EditorStateConfig::create()
-                    .schema(app->schema)
-                    .doc(parse_html(app, i == 0 ? SPEC_HTML : CHANGELOG_HTML));
-                EditorState next = EditorState::create(cfg);
+                EditorState next = EditorState::create({{.schema = app->schema, .doc = parse_html(app, i == 0 ? SPEC_HTML : CHANGELOG_HTML)}});
                 app->view.updateState(next);
                 refresh_output(app, next.doc());
             } else if (i == 2) {
@@ -189,8 +173,7 @@ TS_EXPORT(start) void start() {
                 Node reparsed = app->parser.parse(div.unsafe_as<Node_2>());
                 bool ok = doc.eq(reparsed);
                 app->status = ok ? "DOM serializeFragment->parse eq() = true" : "DOM serializeFragment->parse eq() = false";
-                auto cfg = EditorStateConfig::create().schema(app->schema).doc(reparsed);
-                EditorState next = EditorState::create(cfg);
+                EditorState next = EditorState::create({{.schema = app->schema, .doc = reparsed}});
                 app->view.updateState(next);
                 refresh_output(app, next.doc());
             }

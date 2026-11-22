@@ -192,15 +192,10 @@ static ts::Task run_app() {
     b::addToScene(scene, dir);
 
     auto mk_mat = [](double r, double g, double bl, double m, double ro) {
-        return b::createPbrMaterial(
-            b::createPbrMaterial_props::create()
-                .baseColorFactor({r, g, bl, 1.0})
-                .metallicFactor(m)
-                .roughnessFactor(ro)
-        );
+        return b::createPbrMaterial({{.baseColorFactor = ts::Tuple(r, g, bl, 1.0), .metallicFactor = m, .roughnessFactor = ro}});
     };
 
-    b::Mesh table = b::createBox(engine, b::BoxOptions::create().width(9.2).height(0.5).depth(15.2));
+    b::Mesh table = b::createBox(engine, b::BoxOptions({.width = 9.2, .height = 0.5, .depth = 15.2}));
     table.position().set(0.0, -0.25, 0.0);
     table.material(mk_mat(0.08, 0.24, 0.18, 0.05, 0.78));
     b::addToScene(scene, table);
@@ -214,7 +209,7 @@ static ts::Task run_app() {
         { 0.0, 0.45, 7.35, 9.2, 0.9, 0.5 },
     };
     for (const auto& rm : rail_meshes) {
-        b::Mesh m = b::createBox(engine, b::BoxOptions::create().width(rm.w).height(rm.h).depth(rm.d));
+        b::Mesh m = b::createBox(engine, b::BoxOptions({.width = rm.w, .height = rm.h, .depth = rm.d}));
         m.position().set(rm.x, rm.y, rm.z);
         m.material(rail_mat);
         b::addToScene(scene, m);
@@ -228,7 +223,7 @@ static ts::Task run_app() {
         mk_mat(0.20, 0.20, 0.22, 0.25, 0.2),
     };
 
-    b::SphereOptions sopts = b::SphereOptions::create().diameter(BALL_RADIUS * 2.0).segments(24.0);
+    b::SphereOptions sopts = b::SphereOptions({.segments = 24.0, .diameter = BALL_RADIUS * 2.0});
     for (int i = 0; i < BALL_COUNT; i++) {
         b::Mesh m = b::createSphere(engine, sopts);
         m.material(i == RACK_COUNT ? cue_mat : rack_mats[i % 4]);

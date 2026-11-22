@@ -25,12 +25,7 @@ static void set_status_error(std::string_view message) {
 }
 
 static PbrMaterialProps mk_pbr(double v, double metallic, double roughness) {
-    return createPbrMaterial(
-        createPbrMaterial_props::create()
-            .baseColorFactor({v, v, v, 1.0})
-            .metallicFactor(metallic)
-            .roughnessFactor(roughness)
-    );
+    return createPbrMaterial({{.baseColorFactor = ts::Tuple(v, v, v, 1.0), .metallicFactor = metallic, .roughnessFactor = roughness}});
 }
 
 static ts::Task run_app() {
@@ -74,7 +69,7 @@ static ts::Task run_app() {
     light2.range(16.0);
     addToScene(scene, light2);
 
-    Mesh floor_m = createGround(engine, GroundOptions::create().width(18.0).height(18.0));
+    Mesh floor_m = createGround(engine, {{.width = 18.0, .height = 18.0}});
     floor_m.material(mk_pbr(0.09, 0.10, 0.88));
     addToScene(scene, floor_m);
 
@@ -82,7 +77,7 @@ static ts::Task run_app() {
     std::vector<PbrMaterialProps> col_mats;
     for (double v : shades) col_mats.push_back(mk_pbr(v, 0.35, 0.36));
 
-    auto bopts = BoxOptions::create().width(0.72).height(1.0).depth(0.72);
+    auto bopts = BoxOptions({.width = 0.72, .height = 1.0, .depth = 0.72});
 
     std::vector<ColumnState> columns;
     for (int row = 0; row < 6; row++) {
@@ -99,15 +94,12 @@ static ts::Task run_app() {
         }
     }
 
-    auto cap_props = createPbrMaterial_props::create()
-        .baseColorFactor({0.92, 0.92, 0.92, 1.0})
-        .metallicFactor(0.50)
-        .roughnessFactor(0.15);
-    setPbrClearCoat(cap_props, ClearCoatProps::create().isEnabled(true).intensity(1.0).roughness(0.08));
+    auto cap_props = createPbrMaterial_props({.baseColorFactor = ts::Tuple(0.92, 0.92, 0.92, 1.0), .metallicFactor = 0.50, .roughnessFactor = 0.15});
+    setPbrClearCoat(cap_props, {{.isEnabled = true, .intensity = 1.0, .roughness = 0.08}});
     setPbrEmissive(cap_props, {0.16, 0.16, 0.16});
     auto cap_mat = createPbrMaterial(cap_props);
 
-    auto copts = CapsuleOptions::create().height(1.15).radius(0.22).tessellation(20.0);
+    auto copts = CapsuleOptions({.height = 1.15, .radius = 0.22, .tessellation = 20.0});
     std::vector<ObservableVec3> cap_pos;
     std::vector<EulerProxy> cap_rot;
     for (int k = 0; k < 4; k++) {

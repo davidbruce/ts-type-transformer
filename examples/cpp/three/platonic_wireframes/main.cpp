@@ -24,21 +24,15 @@ static void add_solid(const std::shared_ptr<AppState>& st,
                       uint32_t hex, double rough, double metal, bool flat,
                       double x, double y, double z, double thresh,
                       const LineBasicMaterial& line_mat) {
-    MeshStandardMaterial mat = MeshStandardMaterial::create(
-        MeshStandardMaterialParameters::create()
-            .color(hex)
-            .roughness(rough)
-            .metalness(metal)
-            .flatShading(flat)
-    );
+    MeshStandardMaterial mat = MeshStandardMaterial::create({{.color = hex, .roughness = rough, .metalness = metal, .flatShading = flat}});
 
-    Mesh<> mesh = Mesh<>::create(geo, mat);
+    Mesh mesh = Mesh<>::create(geo, mat);
     mesh.position().set(x, y, z);
     mesh.rotation().set(0.25, 0.45, 0.0);
     st->scene.add(mesh);
 
-    EdgesGeometry<> egeo = EdgesGeometry<>::create(geo, thresh);
-    LineSegments<> segs = LineSegments<>::create(egeo, line_mat);
+    EdgesGeometry egeo = EdgesGeometry<>::create(geo, thresh);
+    LineSegments segs = LineSegments<>::create(egeo, line_mat);
     segs.position().set(x, y, z);
     segs.rotation().set(0.25, 0.45, 0.0);
     st->wire_group.add(segs);
@@ -64,15 +58,12 @@ TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
     double width = 680.0, height = 400.0;
 
-    WebGLRendererParameters rp = WebGLRendererParameters::create();
-    rp.antialias(true);
-    rp.preserveDrawingBuffer(true);
-    WebGLRenderer renderer = WebGLRenderer::create(rp);
+    WebGLRenderer renderer = WebGLRenderer::create({{.antialias = true, .preserveDrawingBuffer = true}});
     renderer.setPixelRatio(1.0);
     renderer.setSize(width, height);
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
-    Scene<> scene = Scene<>::create();
+    Scene scene = Scene<>::create();
     scene.background(Color::create(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
 
@@ -84,7 +75,7 @@ TS_EXPORT(start) void start() {
     GridHelper grid = GridHelper::create(12.0, 12.0, 0x737373, 0xd4d4d4);
     grid.position().y(-1.2);
 
-    Group<> wire_group = Group<>::create();
+    Group wire_group = Group<>::create();
     scene.add(AmbientLight::create(0xffffff, 1.2), key, rim, grid, wire_group);
 
     auto st = std::make_shared<AppState>(AppState{
@@ -94,9 +85,7 @@ TS_EXPORT(start) void start() {
         true, 0.35
     });
 
-    LineBasicMaterialParameters lmp = LineBasicMaterialParameters::create();
-    lmp.color(0x111111);
-    LineBasicMaterial line_mat = LineBasicMaterial::create(lmp);
+    LineBasicMaterial line_mat = LineBasicMaterial::create({{.color = 0x111111}});
 
     add_solid(st, BoxGeometry::create(1.45, 1.45, 1.45), 0x262626, 0.65, 0.1, false, -3.2, 0.0, -0.6, 1.0, line_mat);
     add_solid(st, IcosahedronGeometry::create(0.95, 0.0), 0xd4d4d4, 0.55, 0.08, true, -1.55, 0.1, 0.55, 1.0, line_mat);

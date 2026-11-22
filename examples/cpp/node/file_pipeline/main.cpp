@@ -78,8 +78,7 @@ TS_EXPORT(start) void start() {
     bus.emit(ev_done, static_cast<double>(comb_text.size()));
     check(stages == 3 && done_count == 1);
 
-    auto rm = RmOptions::create().recursive(true).force(true);
-    fs::rmSync(root, rm);
+    fs::rmSync(root, {{.force = true, .recursive = true}});
     check(!fs::existsSync(root));
 
     println("pipeline_root=" + root + " combined_bytes=" + std::to_string(comb_text.size()));

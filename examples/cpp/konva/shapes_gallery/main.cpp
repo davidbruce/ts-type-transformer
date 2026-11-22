@@ -6,131 +6,44 @@
 using namespace konva;
 
 static void add_caption(const Layer& layer, double x, double y, const char* label) {
-    TextConfig tc = TextConfig::create();
-    tc.x(x);
-    tc.y(y);
-    tc.text(label);
-    tc.fontSize(11);
-    tc.fontFamily("monospace");
-    tc.fill("#555555");
-    layer.add(Text::create(tc));
+    layer.add(Text::create({{.x = x, .y = y, .fill = "#555555", .text = label, .fontFamily = "monospace", .fontSize = 11}}));
 }
 
 TS_EXPORT(start) void start() {
-    StageConfig sc = StageConfig::create();
-    sc.container("stage");
-    sc.width(680);
-    sc.height(400);
-    Stage stage = Stage::create(sc);
+    Stage stage = Stage::create({{.width = 680, .height = 400, .container = "stage"}});
 
     Layer layer = Layer::create();
     stage.add(layer);
 
-    RectConfig bg = RectConfig::create();
-    bg.x(0);
-    bg.y(0);
-    bg.width(680);
-    bg.height(400);
-    bg.fill("#ffffff");
-    layer.add(Rect::create(bg));
+    layer.add(Rect::create({{.x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff"}}));
 
     // Row 1: Rounded filled Rect, dashed Rect, Circle, Hexagon.
-    RectConfig r1 = RectConfig::create();
-    r1.x(40);
-    r1.y(55);
-    r1.width(110);
-    r1.height(76);
-    r1.cornerRadius(8.0);
-    r1.fill("#111111");
-    layer.add(Rect::create(r1));
+    layer.add(Rect::create({{.x = 40, .y = 55, .width = 110, .height = 76, .fill = "#111111", .cornerRadius = 8.0}}));
     add_caption(layer, 40, 142, "Rect (filled)");
 
-    RectConfig r2 = RectConfig::create();
-    r2.x(195);
-    r2.y(55);
-    r2.width(110);
-    r2.height(76);
-    r2.fill("#ffffff");
-    r2.stroke("#111111");
-    r2.strokeWidth(2);
-    r2.dash(ts::Array<double>::of(6.0, 4.0));
-    layer.add(Rect::create(r2));
+    layer.add(Rect::create({{.x = 195, .y = 55, .width = 110, .height = 76, .fill = "#ffffff", .stroke = "#111111", .strokeWidth = 2, .dash = ts::Array<double>::of(6.0, 4.0)}}));
     add_caption(layer, 195, 142, "Rect (dashed)");
 
-    CircleConfig cc = CircleConfig::create();
-    cc.x(415);
-    cc.y(93);
-    cc.radius(40);
-    cc.fill("#404040");
-    cc.stroke("#111111");
-    cc.strokeWidth(2);
-    layer.add(Circle::create(cc));
+    layer.add(Circle::create({{.x = 415, .y = 93, .fill = "#404040", .stroke = "#111111", .strokeWidth = 2, .radius = 40}}));
     add_caption(layer, 395, 142, "Circle");
 
-    RegularPolygonConfig pc = RegularPolygonConfig::create();
-    pc.x(575);
-    pc.y(93);
-    pc.sides(6);
-    pc.radius(42);
-    pc.fill("#efefef");
-    pc.stroke("#111111");
-    pc.strokeWidth(2);
-    layer.add(RegularPolygon::create(pc));
+    layer.add(RegularPolygon::create({{.x = 575, .y = 93, .fill = "#efefef", .stroke = "#111111", .strokeWidth = 2, .sides = 6, .radius = 42}}));
     add_caption(layer, 548, 142, "Hexagon");
 
     // Row 2: Star, Ring, Wedge, Framed Text.
-    StarConfig st = StarConfig::create();
-    st.x(95);
-    st.y(268);
-    st.numPoints(5);
-    st.innerRadius(19);
-    st.outerRadius(44);
-    st.fill("#737373");
-    st.stroke("#111111");
-    st.strokeWidth(2);
-    layer.add(Star::create(st));
+    layer.add(Star::create({{.x = 95, .y = 268, .fill = "#737373", .stroke = "#111111", .strokeWidth = 2, .numPoints = 5, .innerRadius = 19, .outerRadius = 44}}));
     add_caption(layer, 62, 325, "Star (5pt)");
 
-    RingConfig rc = RingConfig::create();
-    rc.x(250);
-    rc.y(268);
-    rc.innerRadius(22);
-    rc.outerRadius(42);
-    rc.fill("#d4d4d4");
-    rc.stroke("#111111");
-    rc.strokeWidth(2);
-    layer.add(Ring::create(rc));
+    layer.add(Ring::create({{.x = 250, .y = 268, .fill = "#d4d4d4", .stroke = "#111111", .strokeWidth = 2, .innerRadius = 22, .outerRadius = 42}}));
     add_caption(layer, 236, 325, "Ring");
 
-    WedgeConfig wc = WedgeConfig::create();
-    wc.x(415);
-    wc.y(268);
-    wc.radius(44);
-    wc.angle(270);
-    wc.rotation(-90);
-    wc.fill("#111111");
-    wc.stroke("#555555");
-    wc.strokeWidth(1);
-    layer.add(Wedge::create(wc));
+    layer.add(Wedge::create({{.x = 415, .y = 268, .rotation = -90, .fill = "#111111", .stroke = "#555555", .strokeWidth = 1, .angle = 270, .radius = 44}}));
     add_caption(layer, 382, 325, "Wedge 270\xC2\xB0");
 
-    RectConfig tf = RectConfig::create();
-    tf.x(500);
-    tf.y(224);
-    tf.width(150);
-    tf.height(88);
-    tf.fill("#f7f7f7");
-    tf.stroke("#111111");
-    tf.strokeWidth(1.5);
-
-    TextConfig tc = TextConfig::create();
-    tc.x(514);
-    tc.y(240);
-    tc.text("KONVA 2D\nMonochrome\nScene Graph");
-    tc.fontSize(13);
-    tc.fontFamily("monospace");
-    tc.fill("#111111");
-    layer.add(Rect::create(tf), Text::create(tc));
+    layer.add(
+        Rect::create({{.x = 500, .y = 224, .width = 150, .height = 88, .fill = "#f7f7f7", .stroke = "#111111", .strokeWidth = 1.5}}),
+        Text::create({{.x = 514, .y = 240, .fill = "#111111", .text = "KONVA 2D\nMonochrome\nScene Graph", .fontFamily = "monospace", .fontSize = 13}})
+    );
     add_caption(layer, 558, 325, "Text");
 
     layer.draw();

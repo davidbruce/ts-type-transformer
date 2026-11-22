@@ -7,12 +7,7 @@
 using namespace leaflet;
 
 TS_EXPORT(start) void start() {
-    MapOptions m_opts = MapOptions::create();
-    m_opts.attributionControl(false);
-    m_opts.zoomAnimation(false);
-    m_opts.fadeAnimation(false);
-    m_opts.markerZoomAnimation(false);
-    Map m = leaflet::map("map", m_opts);
+    Map m = leaflet::map("map", {{.attributionControl = false, .fadeAnimation = false, .markerZoomAnimation = false, .zoomAnimation = false}});
 
     LatLng zurich = leaflet::latLng(47.3769, 8.5417);
     m.setView(zurich, 8.0);
@@ -32,12 +27,7 @@ TS_EXPORT(start) void start() {
 
     LatLngBounds outer_bounds;
     for (const RingSpec& r : rings) {
-        CircleMarkerOptions c_opts = CircleMarkerOptions::create();
-        c_opts.color(r.stroke);
-        c_opts.weight(1.5);
-        c_opts.fillColor(r.fill);
-        c_opts.fillOpacity(r.opacity);
-        Circle<> c = leaflet::circle(zurich, r.radius, c_opts);
+        Circle c = leaflet::circle(zurich, r.radius, {{.color = r.stroke, .weight = 1.5, .fillColor = r.fill, .fillOpacity = r.opacity}});
         c.addTo(m);
         if (!outer_bounds) outer_bounds = c.getBounds();
     }
@@ -54,21 +44,8 @@ TS_EXPORT(start) void start() {
     for (const LatLng& pt : beacons) {
         total_dist_km += zurich.distanceTo(pt) / 1000.0;
 
-        CircleMarkerOptions b_opts = CircleMarkerOptions::create();
-        b_opts.color("#555555");
-        b_opts.weight(1.2);
-        b_opts.dashArray("3 3");
-        b_opts.fillColor("#737373");
-        b_opts.fillOpacity(0.18);
-        leaflet::circle(pt, 18000.0, b_opts).addTo(m);
-
-        CircleMarkerOptions d_opts = CircleMarkerOptions::create();
-        d_opts.radius(4.5);
-        d_opts.color("#111111");
-        d_opts.weight(1.5);
-        d_opts.fillColor("#111111");
-        d_opts.fillOpacity(1.0);
-        leaflet::circleMarker(pt, d_opts).addTo(m);
+        leaflet::circle(pt, 18000.0, {{.color = "#555555", .weight = 1.2, .dashArray = "3 3", .fillColor = "#737373", .fillOpacity = 0.18}}).addTo(m);
+        leaflet::circleMarker(pt, {{.color = "#111111", .weight = 1.5, .fillColor = "#111111", .fillOpacity = 1.0, .radius = 4.5}}).addTo(m);
     }
 
     m.fitBounds(outer_bounds);

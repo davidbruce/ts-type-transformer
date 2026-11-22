@@ -165,9 +165,7 @@ TS_EXPORT(start) void start() {
     };
 
     auto cv = ColumnVisibilityState::create().set_at("zone", false);
-    auto cp = ColumnPinningState::create()
-        .start(ts::Array<std::string>{ "id" })
-        .end(ts::Array<std::string>{ "status" });
+    auto cp = ColumnPinningState({.start = ts::Array<std::string>{ "id" }, .end = ts::Array<std::string>{ "status" }});
     auto rs = RowSelectionState::create().set_at("0", true).set_at("2", true).set_at("4", true);
 
     auto init_state = Obj::create()
@@ -209,11 +207,7 @@ TS_EXPORT(start) void start() {
                 st->zone_vis = false;
                 st->owner_vis = true;
                 apply_vis(st);
-                pin.setColumnPinning(
-                    ColumnPinningState::create()
-                        .start(ts::Array<std::string>{ "id" })
-                        .end(ts::Array<std::string>{ "status" })
-                );
+                pin.setColumnPinning(ColumnPinningState({.start = ts::Array<std::string>{ "id" }, .end = ts::Array<std::string>{ "status" }}));
                 sel.setRowSelection(
                     RowSelectionState::create().set_at("0", true).set_at("2", true).set_at("4", true)
                 );

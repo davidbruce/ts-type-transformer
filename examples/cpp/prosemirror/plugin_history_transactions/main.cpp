@@ -14,24 +14,22 @@ static DOMOutputSpec hole_spec(std::string_view tag) {
 }
 
 static Sch make_schema() {
-    NodeSpec doc = NodeSpec::create().content("block+");
+    NodeSpec doc({.content = "block+"});
     MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
-    NodeSpec heading = NodeSpec::create()
-        .attrs(hattrs)
-        .content("inline*")
-        .group("block")
-        .toDOM([](Node n) {
+    NodeSpec heading({
+        .content = "inline*",
+        .group = "block",
+        .attrs = hattrs,
+        .toDOM = [](Node n) {
             int l = static_cast<int>(n.attrs().at("level").to_number());
             return hole_spec(l == 1 ? "h1" : "h2");
-        });
+        },
+    });
 
-    NodeSpec para = NodeSpec::create()
-        .content("inline*")
-        .group("block")
-        .toDOM([](Node) { return hole_spec("p"); });
+    NodeSpec para({.content = "inline*", .group = "block", .toDOM = [](Node) { return hole_spec("p"); }});
 
-    NodeSpec text = NodeSpec::create().group("inline");
+    NodeSpec text({.group = "inline"});
 
     auto nodes = NodeSpec::create()
         .set_at("doc", doc)
@@ -40,13 +38,13 @@ static Sch make_schema() {
         .set_at("text", text);
 
     auto make_mark = [](const char* tag) {
-        return MarkSpec::create().toDOM([tag](Mark, bool) { return hole_spec(tag); });
+        return MarkSpec({.toDOM = [tag](Mark, bool) { return hole_spec(tag); }});
     };
     auto marks = MarkSpec::create()
         .set_at("strong", make_mark("strong"))
         .set_at("code", make_mark("code"));
 
-    return Sch::create(SchemaSpec<ts::Value, ts::Value>::create().nodes(nodes).marks(marks));
+    return Sch::create({{.nodes = nodes, .marks = marks}});
 }
 
 static Node p_node(const Sch& schema, std::string_view t) {
@@ -105,26 +103,28 @@ TS_EXPORT(start) void start() {
             return ts::Value::number(prev.to_number() + (tr.docChanged() ? 1.0 : 0.0));
         });
 
-    PluginSpec<ts::Value> pspec = PluginSpec<ts::Value>::create()
-        .key(app->audit_key)
-        .state(field)
-        .filterTransaction([app](Transaction tr, EditorState) {
+    PluginSpec<ts::Value> pspec({
+        .state = field,
+        .key = app->audit_key,
+        .filterTransaction = [app](Transaction tr, EditorState) {
             if (app->locked && tr.docChanged()) {
                 app->blocked++;
                 app->last_action = "Blocked document mutation (filterTransaction=false)";
                 return false;
             }
             return true;
-        });
+        },
+    });
 
-    EditorStateConfig scfg = EditorStateConfig::create()
-        .schema(app->schema)
-        .doc(make_initial_doc(app->schema))
-        .plugins(ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>::create(pspec) });
+    EditorStateConfig scfg({
+        .schema = app->schema,
+        .doc = make_initial_doc(app->schema),
+        .plugins = ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>::create(pspec) },
+    });
 
-    DirectEditorProps props = DirectEditorProps::create()
-        .state(EditorState::create(scfg))
-        .dispatchTransaction([app](Transaction tr) {
+    DirectEditorProps props({
+        .state = EditorState::create(scfg),
+        .dispatchTransaction = [app](Transaction tr) {
             if (!app->view) return;
             auto res = app->view.state().applyTransaction(tr);
             if (res.transactions().size() > 0) {
@@ -148,7 +148,8 @@ TS_EXPORT(start) void start() {
                 app->view.updateState(res.state());
             }
             update_meta(app, app->view.state());
-        });
+        },
+    });
 
     app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     update_meta(app, app->view.state());

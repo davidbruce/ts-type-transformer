@@ -28,8 +28,8 @@ TS_EXPORT(start) void start() {
     app.appendChild(head);
 
     std::string gfm_src = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n";
-    auto gfm_on = marked::marked_options_no_async::create().gfm(true);
-    auto gfm_off = marked::marked_options_no_async::create().gfm(false);
+    auto gfm_on = marked::marked_options_no_async({.gfm = true});
+    auto gfm_off = marked::marked_options_no_async({.gfm = false});
 
     auto gfm_sec = make_el(doc, "div", "section", "");
     gfm_sec.appendChild(make_el(doc, "div", "label", "GitHub Flavored Markdown (gfm)"));
@@ -40,8 +40,8 @@ TS_EXPORT(start) void start() {
     app.appendChild(gfm_sec);
 
     std::string breaks_src = "Line one\nLine two\nLine three";
-    auto br_off = marked::marked_options_no_async::create().breaks(false);
-    auto br_on = marked::marked_options_no_async::create().breaks(true);
+    auto br_off = marked::marked_options_no_async({.breaks = false});
+    auto br_on = marked::marked_options_no_async({.breaks = true});
 
     dom::HTMLElement br_sec = make_el(doc, "div", "section", "");
     br_sec.appendChild(make_el(doc, "div", "label", "Soft Line Breaks (breaks)"));

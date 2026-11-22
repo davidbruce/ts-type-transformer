@@ -8,24 +8,12 @@
 using namespace pixi_js;
 
 static void stroke_g(const Graphics& g, double width, double color_hex) {
-    StrokeStyle ss = StrokeStyle::create();
-    ss.width(width);
-    ss.color(color_hex);
-    g.stroke(ts::Array<>::of(ss));
+    g.stroke(StrokeStyle({.color = color_hex, .width = width}));
 }
 
 static ts::Task run_app() {
-    Application<> app = Application<>::create();
-    auto opts = Application_init_options::create()
-        .width(680)
-        .height(400)
-        .backgroundColor(0xffffff)
-        .preference("webgl")
-        .preserveDrawingBuffer(true)
-        .antialias(true)
-        .autoStart(false);
-
-    if (auto res = co_await app.init(opts); !res) co_return;
+    Application app = Application<>::create();
+    if (auto res = co_await app.init({{.backgroundColor = 0xffffff, .preserveDrawingBuffer = true, .preference = "webgl", .width = 680, .height = 400, .antialias = true, .autoStart = false}}); !res) co_return;
 
     dom::Document doc = dom::get_document();
     if (auto stage_el = doc.getElementById("stage")) {

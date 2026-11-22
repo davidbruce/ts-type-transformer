@@ -17,8 +17,8 @@ TS_EXPORT(start) void start() {
     head.appendChild(make_el(doc, "span", "badge", "displayMode: false vs true"));
     app.appendChild(head);
 
-    auto inline_opts = katex::KatexOptions::create().displayMode(false);
-    auto display_opts = katex::KatexOptions::create().displayMode(true);
+    auto inline_opts = katex::KatexOptions({.displayMode = false});
+    auto display_opts = katex::KatexOptions({.displayMode = true});
 
     struct Item { const char* name; const char* tex; };
     const Item items[] = {

@@ -18,12 +18,7 @@ static const char* SHADES[9] = {
 };
 
 TS_EXPORT(start) void start() {
-    auto opts = CanvasSpaceOptions::create()
-        .bgcolor("#ffffff")
-        .resize(true)
-        .retina(true);
-
-    auto space = CanvasSpace::create("#pt").setup(opts);
+    auto space = CanvasSpace::create("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
     auto form = space.getForm();
 
     auto player = IPlayer::create();

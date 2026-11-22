@@ -58,12 +58,12 @@ static ts::Task run_app() {
     fill.diffuse({0.80, 0.80, 0.80});
     addToScene(scene, fill);
 
-    Mesh floor_m = createGround(engine, GroundOptions::create().width(18.0).height(18.0));
+    Mesh floor_m = createGround(engine, {{.width = 18.0, .height = 18.0}});
     floor_m.material(mk_std(0.10, 0.25, 24.0));
     addToScene(scene, floor_m);
 
     auto plinth_mat = mk_std(0.18, 0.30, 32.0);
-    auto plinth_opts = CylinderOptions::create().height(1.1).diameter(1.15).tessellation(28.0);
+    auto plinth_opts = CylinderOptions({.height = 1.1, .diameter = 1.15, .tessellation = 28.0});
     std::vector<ObservableVec3> poly_pos;
     std::vector<EulerProxy> poly_rot;
 
@@ -78,7 +78,7 @@ static ts::Task run_app() {
         addToScene(scene, plinth);
 
         double v = 0.90 - fi * 0.13;
-        Mesh mesh = createPolyhedron(engine, PolyhedronOptions::create().type(fi).size(0.62).flat(true));
+        Mesh mesh = createPolyhedron(engine, {{.type = fi, .size = 0.62, .flat = true}});
         mesh.position().set(x, 2.05, z);
         mesh.material(mk_std(v, 0.95, 18.0 + fi * 24.0));
         addToScene(scene, mesh);

@@ -236,33 +236,28 @@ static ts::Task run_app() {
     dir.diffuse({1.0, 0.97, 0.92});
     b::addToScene(scene, dir);
 
-    b::Mesh ground = b::createGround(engine, b::GroundOptions::create().width(20.0).height(20.0));
+    b::Mesh ground = b::createGround(engine, {{.width = 20.0, .height = 20.0}});
     ground.material(b::createGridMaterial(b::GridMaterialOptions::create()));
     b::addToScene(scene, ground);
 
     auto mk_mat = [](double r, double g, double bl, double m, double ro) {
-        return b::createPbrMaterial(
-            b::createPbrMaterial_props::create()
-                .baseColorFactor({r, g, bl, 1.0})
-                .metallicFactor(m)
-                .roughnessFactor(ro)
-        );
+        return b::createPbrMaterial({{.baseColorFactor = ts::Tuple(r, g, bl, 1.0), .metallicFactor = m, .roughnessFactor = ro}});
     };
 
-    b::Mesh ramp_mesh = b::createBox(engine, b::BoxOptions::create().width(3.5).height(0.2).depth(1.3));
+    b::Mesh ramp_mesh = b::createBox(engine, b::BoxOptions({.width = 3.5, .height = 0.2, .depth = 1.3}));
     ramp_mesh.position().set(RAMP_X, RAMP_Y, RAMP_Z);
     ramp_mesh.rotationQuaternion().set(0.0, 0.0, std::sin(RAMP_ANGLE * 0.5), std::cos(RAMP_ANGLE * 0.5));
     ramp_mesh.material(mk_mat(0.28, 0.30, 0.34, 0.35, 0.48));
     b::addToScene(scene, ramp_mesh);
 
-    b::Mesh mb = b::createSphere(engine, b::SphereOptions::create().diameter(MARBLE_RADIUS * 2.0).segments(24.0));
+    b::Mesh mb = b::createSphere(engine, {{.segments = 24.0, .diameter = MARBLE_RADIUS * 2.0}});
     mb.material(mk_mat(0.95, 0.42, 0.28, 0.55, 0.2));
     b::addToScene(scene, mb);
     st->marble_mesh = mb;
 
     b::PbrMaterialProps mat_a = mk_mat(0.88, 0.88, 0.88, 0.15, 0.4);
     b::PbrMaterialProps mat_b = mk_mat(0.45, 0.46, 0.48, 0.25, 0.38);
-    b::BoxOptions dom_opts = b::BoxOptions::create().width(DOM_HX * 2.0).height(DOM_HY * 2.0).depth(DOM_HZ * 2.0);
+    b::BoxOptions dom_opts = b::BoxOptions({.width = DOM_HX * 2.0, .height = DOM_HY * 2.0, .depth = DOM_HZ * 2.0});
     for (int i = 0; i < DOM_COUNT; i++) {
         b::Mesh m = b::createBox(engine, dom_opts);
         m.material((i % 2 == 0) ? mat_a : mat_b);
@@ -271,7 +266,7 @@ static ts::Task run_app() {
     }
 
     b::PbrMaterialProps cyl_mat = mk_mat(0.26, 0.62, 0.88, 0.45, 0.25);
-    b::CylinderOptions cyl_opts = b::CylinderOptions::create().height(0.84).diameter(0.5).tessellation(24.0);
+    b::CylinderOptions cyl_opts = b::CylinderOptions({.height = 0.84, .diameter = 0.5, .tessellation = 24.0});
     for (int j = 0; j < CYL_COUNT; j++) {
         b::Mesh m = b::createCylinder(engine, cyl_opts);
         m.material(cyl_mat);

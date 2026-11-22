@@ -23,9 +23,7 @@ TS_EXPORT(start) void start() {
         .set_at("\\dd", ts::Value::string("\\mathrm{d}"))
         .set_at("\\norm", ts::Value::string("\\left\\| #1 \\right\\|"));
 
-    auto opts = katex::KatexOptions::create()
-        .displayMode(true)
-        .macros(macros);
+    auto opts = katex::KatexOptions({.displayMode = true, .macros = macros});
 
     dom::HTMLElement legend = make_el(doc, "div", "card", "");
     legend.appendChild(make_el(doc, "div", "label", "Defined Macros"));

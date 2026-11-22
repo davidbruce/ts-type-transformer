@@ -15,12 +15,7 @@ static void set_status_error(std::string_view message) {
 }
 
 static PbrMaterialProps mk_pbr(double v, double metallic, double roughness) {
-    return createPbrMaterial(
-        createPbrMaterial_props::create()
-            .baseColorFactor({v, v, v, 1.0})
-            .metallicFactor(metallic)
-            .roughnessFactor(roughness)
-    );
+    return createPbrMaterial({{.baseColorFactor = ts::Tuple(v, v, v, 1.0), .metallicFactor = metallic, .roughnessFactor = roughness}});
 }
 
 static ts::Task run_app() {
@@ -59,16 +54,16 @@ static ts::Task run_app() {
     orb_light.range(18.0);
     addToScene(scene, orb_light);
 
-    Mesh floor_m = createGround(engine, GroundOptions::create().width(14.0).height(14.0));
+    Mesh floor_m = createGround(engine, {{.width = 14.0, .height = 14.0}});
     floor_m.material(mk_pbr(0.11, 0.08, 0.88));
     addToScene(scene, floor_m);
 
-    Mesh plinth = createBox(engine, BoxOptions::create().width(8.4).height(0.08).depth(8.4));
+    Mesh plinth = createBox(engine, BoxOptions({.width = 8.4, .height = 0.08, .depth = 8.4}));
     plinth.position().set(0.0, 0.04, 0.0);
     plinth.material(mk_pbr(0.17, 0.12, 0.78));
     addToScene(scene, plinth);
 
-    auto sphere_opts = SphereOptions::create().diameter(1.05).segments(24.0);
+    auto sphere_opts = SphereOptions({.segments = 24.0, .diameter = 1.05});
     for (int row = 0; row < 5; row++) {
         for (int col = 0; col < 5; col++) {
             double roughness = 0.08 + 0.22 * double(row);
@@ -80,13 +75,10 @@ static ts::Task run_app() {
         }
     }
 
-    auto orb_props = createPbrMaterial_props::create()
-        .baseColorFactor({0.95, 0.95, 0.95, 1.0})
-        .metallicFactor(0.0)
-        .roughnessFactor(0.2);
+    auto orb_props = createPbrMaterial_props({.baseColorFactor = ts::Tuple(0.95, 0.95, 0.95, 1.0), .metallicFactor = 0.0, .roughnessFactor = 0.2});
     setPbrEmissive(orb_props, {0.95, 0.95, 0.95});
 
-    Mesh orb = createSphere(engine, SphereOptions::create().diameter(0.36).segments(16.0));
+    Mesh orb = createSphere(engine, {{.segments = 16.0, .diameter = 0.36}});
     orb.position().set(4.5, 3.0, 0.0);
     orb.material(createPbrMaterial(orb_props));
     addToScene(scene, orb);

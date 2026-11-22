@@ -11,9 +11,7 @@ static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::st
 }
 
 static Span make_span(std::string_view s_iso, std::string_view e_iso) {
-    return Span::create()
-        .start(date_fns::parseISO(s_iso))
-        .end(date_fns::parseISO(e_iso));
+    return Span({.start = date_fns::parseISO(s_iso), .end = date_fns::parseISO(e_iso)});
 }
 
 TS_EXPORT(start) void start() {

@@ -43,11 +43,7 @@ TS_EXPORT(start) void start() {
           parsed.base() == "archive.tar.gz" && parsed.name() == "archive.tar" &&
           parsed.ext() == ".gz");
 
-    auto fmt = path_FormatInputPathObject::create()
-        .dir("/etc/service")
-        .name("daemon")
-        .ext(".conf");
-    std::string formatted = path::format(fmt);
+    std::string formatted = path::format({{.dir = "/etc/service", .ext = ".conf", .name = "daemon"}});
     check(formatted == "/etc/service/daemon.conf");
 
     check(path::matchesGlob("/src/components/Button.tsx", "/src/**/*.tsx") &&

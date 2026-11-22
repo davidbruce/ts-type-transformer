@@ -30,7 +30,7 @@ TS_EXPORT(start) void start() {
 
     auto base_d = date_fns::parseISO("2024-03-15");
     auto jan31 = date_fns::parseISO("2024-01-31");
-    auto dur = date_fns::Duration::create().months(1.0).days(2.0);
+    auto dur = date_fns::Duration({.months = 1.0, .days = 2.0});
 
     struct OpRow { const char* name; date_fns::Date res; const char* fmt; };
     OpRow ops[] = {

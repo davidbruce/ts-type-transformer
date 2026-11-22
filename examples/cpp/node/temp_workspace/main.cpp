@@ -45,8 +45,7 @@ TS_EXPORT(start) void start() {
     fs::unlinkSync(archive);
     check(!fs::existsSync(archive));
 
-    auto rm = RmOptions::create().recursive(true).force(true);
-    fs::rmSync(dir, rm);
+    fs::rmSync(dir, {{.force = true, .recursive = true}});
     check(!fs::existsSync(dir));
     check(true);
 

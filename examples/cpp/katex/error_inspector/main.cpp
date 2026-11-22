@@ -17,12 +17,9 @@ TS_EXPORT(start) void start() {
     head.appendChild(make_el(doc, "span", "badge", "throwOnError: false vs true"));
     app.appendChild(head);
 
-    auto lenient = katex::KatexOptions::create()
-        .throwOnError(false)
-        .errorColor("#555555");
+    auto lenient = katex::KatexOptions({.throwOnError = false, .errorColor = "#555555"});
 
-    auto strict = katex::KatexOptions::create()
-        .throwOnError(true);
+    auto strict = katex::KatexOptions({.throwOnError = true});
 
     const char* bad_inputs[] = {
         "\\frac{1}{",

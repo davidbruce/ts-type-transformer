@@ -87,15 +87,12 @@ TS_EXPORT(start) void start() {
     dom::Document doc = dom::get_document();
     double width = 680.0, height = 400.0;
 
-    WebGLRendererParameters rp = WebGLRendererParameters::create();
-    rp.antialias(true);
-    rp.preserveDrawingBuffer(true);
-    WebGLRenderer renderer = WebGLRenderer::create(rp);
+    WebGLRenderer renderer = WebGLRenderer::create({{.antialias = true, .preserveDrawingBuffer = true}});
     renderer.setPixelRatio(1.0);
     renderer.setSize(width, height);
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
-    Scene<> scene = Scene<>::create();
+    Scene scene = Scene<>::create();
     scene.background(Color::create(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
 
@@ -107,7 +104,7 @@ TS_EXPORT(start) void start() {
     GridHelper grid = GridHelper::create(9.0, 12.0, 0x999999, 0xe5e5e5);
     grid.position().y(-1.1);
 
-    BufferGeometry<> geo = BufferGeometry<>::create();
+    BufferGeometry geo = BufferGeometry<>::create();
     Float32BufferAttribute pos_attr = Float32BufferAttribute::create(GRID_N * GRID_N * 3, 3.0);
     ts::Array<double> indices = ts::Array<double>::create();
     for (int iz = 0; iz < GRID_N - 1; iz++) {
@@ -124,17 +121,14 @@ TS_EXPORT(start) void start() {
     geo.setAttribute("position", pos_attr);
     geo.setIndex(indices);
 
-    Mesh<> surface = Mesh<>::create(
+    Mesh surface = Mesh<>::create(
         geo,
         MeshStandardMaterial::create(
-            MeshStandardMaterialParameters::create().color(0xb5b5b5).roughness(0.72).metalness(0.05).flatShading(true)
+            {{.color = 0xb5b5b5, .roughness = 0.72, .metalness = 0.05, .flatShading = true}}
         )
     );
 
-    MeshBasicMaterialParameters wmp = MeshBasicMaterialParameters::create();
-    wmp.color(0x262626);
-    wmp.wireframe(true);
-    Mesh<> wire_mesh = Mesh<>::create(geo, MeshBasicMaterial::create(wmp));
+    Mesh wire_mesh = Mesh<>::create(geo, MeshBasicMaterial::create({{.color = 0x262626, .wireframe = true}}));
     wire_mesh.position().y(0.015);
 
     int pt_count = (GRID_N / 2) * (GRID_N / 2);
@@ -142,13 +136,10 @@ TS_EXPORT(start) void start() {
     PointsGeo pts_geo = PointsGeo::create();
     Float32BufferAttribute pts_attr = Float32BufferAttribute::create(pt_count * 3, 3.0);
     pts_geo.setAttribute("position", pts_attr);
-    PointsMaterialParameters pmp = PointsMaterialParameters::create();
-    pmp.color(0x111111);
-    pmp.size(0.14);
 
     scene.add(
         AmbientLight::create(0xffffff, 1.2), key, rim, grid,
-        surface, wire_mesh, three::Points<PointsGeo>::create(pts_geo, PointsMaterial::create(pmp))
+        surface, wire_mesh, three::Points<PointsGeo>::create(pts_geo, PointsMaterial::create({{.color = 0x111111, .size = 0.14}}))
     );
 
     auto st = std::make_shared<AppState>(AppState{
