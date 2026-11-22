@@ -233,7 +233,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             Pm_Transaction tr = Pm_EditorState_get_tr(st);
             Pm_Transaction_insert(tr, insert_pos, span);
             g_status = "Inserted code span into paragraph";
-            pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+            Pm_EditorView_dispatch(g_view, tr);
         }
     } else if (idx == 4) {
         HTMLElement div = Document_createElement(g_doc, "div");

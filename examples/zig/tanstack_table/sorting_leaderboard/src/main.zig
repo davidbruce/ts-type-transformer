@@ -133,9 +133,9 @@ fn render(app: *App, label: []const u8) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel();
     const rows = rm.getRows();
-    const cols = app.table.as(tt.Table_Columns).getAllLeafColumns().call();
+    const cols = app.table.as(tt.Table_Columns).getAllLeafColumns();
 
     var w = std.Io.Writer.fixed(&html_buf);
     w.writeAll("<table><thead><tr>") catch return;
@@ -148,7 +148,7 @@ fn render(app: *App, label: []const u8) void {
         w.writeAll(if (is_num) "<th class=\"num\">" else "<th>") catch return;
         const hdr = getProp(cp.getColumnDef().as(tt.JsValue), "header").toString().copy(&tmp_buf);
         appendEsc(&w, hdr) catch return;
-        const sd = col.as(tt.Column_RowSorting).getIsSorted().call();
+        const sd = col.as(tt.Column_RowSorting).getIsSorted();
         if (sd == .string) {
             if (sd.string.eql("asc")) {
                 w.writeAll(" &#9650;") catch return;
@@ -165,11 +165,11 @@ fn render(app: *App, label: []const u8) void {
     var top_host: []const u8 = "-";
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getValue();
+        const r_row = row.as(tt.Row_Row);
         w.writeAll("<tr><td>") catch return;
-        appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        const host = gv.call("host").toString().copy(&tmp_buf);
+        const host = r_row.getValue("host").toString().copy(&tmp_buf);
         if (i == 0) {
             const cpy_len = @min(host.len, top_host_buf.len);
             @memcpy(top_host_buf[0..cpy_len], host[0..cpy_len]);
@@ -177,11 +177,11 @@ fn render(app: *App, label: []const u8) void {
         }
         appendEsc(&w, host) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, gv.call("region").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("region").toString().copy(&tmp_buf)) catch return;
         w.print("</td><td class=\"num\">{d:.1}</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.2}%</td></tr>", .{
-            gv.call("latency").toNumber(),
-            gv.call("throughput").toNumber(),
-            gv.call("uptime").toNumber(),
+            r_row.getValue("latency").toNumber(),
+            r_row.getValue("throughput").toNumber(),
+            r_row.getValue("uptime").toNumber(),
         }) catch return;
     }
     w.writeAll("</tbody></table>") catch return;
@@ -212,7 +212,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         next.push(.{ .id = "host", .desc = false });
         label = "Sort: host asc";
     }
-    app.table.as(tt.Table_RowSorting).getSetSorting().call(next);
+    app.table.as(tt.Table_RowSorting).setSorting(next);
     render(app, label);
 }
 

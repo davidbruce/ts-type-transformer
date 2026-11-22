@@ -188,7 +188,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         Pm_Transaction tr = Pm_EditorState_get_tr(st);
         Pm_Transaction_insert(tr, Pm_Fragment_get_size(Pm_Node_get_content(Pm_EditorState_get_doc(st))), p_node(rbuf));
         if (!g_locked) g_last_action = "Appended revision paragraph";
-        pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+        Pm_EditorView_dispatch(g_view, tr);
     } else if (idx == 1) {
         Pm_Node doc = Pm_EditorState_get_doc(st);
         if (Pm_Node_get_childCount(doc) >= 2.0) {
@@ -198,7 +198,7 @@ static void on_click(void* ctx, PointerEvent ev) {
                 Pm_Transaction tr = Pm_EditorState_get_tr(st);
                 Pm_Transaction_addMark(tr, from_p, to_p, Pm_Schema_mark(g_schema, "strong", (Pm_Attrs){ 0 }));
                 if (!g_locked) g_last_action = "Bolded first body paragraph";
-                pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+                Pm_EditorView_dispatch(g_view, tr);
             }
         }
     } else if (idx == 2) {
@@ -212,7 +212,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             uint32_t n = JsArray_Pm_Step_length(batch);
             for (uint32_t i = 0; i < n; i++) Pm_Transaction_step(tr, JsArray_Pm_Step_get(batch, i));
             if (!g_locked) { js_release(batch); g_last_action = "Undid step(s) via Step.invert"; }
-            pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+            Pm_EditorView_dispatch(g_view, tr);
         }
     } else if (idx == 3) {
         if (g_redo_len == 0) {
@@ -225,7 +225,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             uint32_t n = JsArray_Pm_Step_length(batch);
             for (uint32_t i = 0; i < n; i++) Pm_Transaction_step(tr, JsArray_Pm_Step_get(batch, i));
             if (!g_locked) { js_release(batch); g_last_action = "Redid inverted step(s)"; }
-            pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+            Pm_EditorView_dispatch(g_view, tr);
         }
     } else if (idx == 4) {
         g_locked = !g_locked;
@@ -246,8 +246,8 @@ __attribute__((export_name("start"))) void start(void) {
     js_retain(g_audit_key);
 
     Pm_StateField field = Pm_StateField_create();
-    Pm_StateField_set_init(field, Pm_StateField_init_from(audit_init, NULL));
-    Pm_StateField_set_apply(field, Pm_StateField_apply_from(audit_apply, NULL));
+    Pm_StateField_set_init(field, Pm_StateField_init_cb_from(audit_init, NULL));
+    Pm_StateField_set_apply(field, Pm_StateField_apply_cb_from(audit_apply, NULL));
 
     Pm_PluginSpec pspec = Pm_PluginSpec_create();
     Pm_PluginSpec_set_key(pspec, g_audit_key);

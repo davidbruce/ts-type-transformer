@@ -95,25 +95,24 @@ struct State {
 }
 
 fn render(st: &State, label: &str) {
-    let rows = st.table.get_row_model().call().rows();
-    let total = st.table.get_core_row_model().call().rows().len();
+    let rows = st.table.get_row_model().rows();
+    let total = st.table.get_core_row_model().rows().len();
 
     let mut html = String::from("<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>");
     for r in rows.iter() {
-        let gv = r.get_value();
         html.push_str("<tr><td>");
-        esc_html(&gv.call("id").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("id").as_string(), &mut html);
         html.push_str("</td><td>");
-        esc_html(&gv.call("service").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("service").as_string(), &mut html);
         html.push_str("</td><td>");
-        esc_html(&gv.call("tier").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("tier").as_string(), &mut html);
         html.push_str("</td><td>");
-        esc_html(&gv.call("region").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("region").as_string(), &mut html);
         let _ = write!(
             html,
             "</td><td class=\"num\">{:.0}</td><td class=\"num\">{:.0}</td></tr>",
-            gv.call("requests").as_f64(),
-            gv.call("errors").as_f64(),
+            r.get_value::<JsValue>("requests").as_f64(),
+            r.get_value::<JsValue>("errors").as_f64(),
         );
     }
     html.push_str("</tbody></table>");
@@ -185,31 +184,31 @@ pub extern "C" fn start() {
             let gf: TableGlobalFiltering<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             let label = match idx {
                 0 => {
-                    gf.set_global_filter().call(Updater::T(JsValue::from("")));
+                    gf.set_global_filter(Updater::T(JsValue::from("")));
                     let next = [filter_spec("tier", JsValue::from("core")), filter_spec("requests", JsValue::from(400.0))];
-                    cf.set_column_filters().call(Updater::T(JsArray::from(next)));
+                    cf.set_column_filters(Updater::T(JsArray::from(next)));
                     "Filter: tier = core & requests >= 400"
                 }
                 1 => {
-                    gf.set_global_filter().call(Updater::T(JsValue::from("")));
-                    cf.set_column_filters().call(Updater::T(JsArray::new()));
+                    gf.set_global_filter(Updater::T(JsValue::from("")));
+                    cf.set_column_filters(Updater::T(JsArray::new()));
                     "Filter: all services"
                 }
                 2 => {
-                    gf.set_global_filter().call(Updater::T(JsValue::from("")));
+                    gf.set_global_filter(Updater::T(JsValue::from("")));
                     let next = [filter_spec("tier", JsValue::from("edge"))];
-                    cf.set_column_filters().call(Updater::T(JsArray::from(next)));
+                    cf.set_column_filters(Updater::T(JsArray::from(next)));
                     "Filter: tier = edge"
                 }
                 3 => {
-                    cf.set_column_filters().call(Updater::T(JsArray::new()));
-                    gf.set_global_filter().call(Updater::T(JsValue::from("auth")));
+                    cf.set_column_filters(Updater::T(JsArray::new()));
+                    gf.set_global_filter(Updater::T(JsValue::from("auth")));
                     "Global search: \"auth\""
                 }
                 _ => {
-                    gf.set_global_filter().call(Updater::T(JsValue::from("")));
+                    gf.set_global_filter(Updater::T(JsValue::from("")));
                     let next = [filter_spec("errors", JsValue::from(5.0))];
-                    cf.set_column_filters().call(Updater::T(JsArray::from(next)));
+                    cf.set_column_filters(Updater::T(JsArray::from(next)));
                     "Filter: errors >= 5"
                 }
             };

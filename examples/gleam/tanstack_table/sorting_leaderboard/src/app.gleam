@@ -96,12 +96,10 @@ fn decode_num(v: Dynamic) -> Float {
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: String) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view)
-  let rows = row_model.get_rows(get_rm())
+  let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
 
   let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_leaf_cols = table_columns.get_get_all_leaf_columns(cols_view)
-  let cols = get_leaf_cols()
+  let cols = table_columns.get_all_leaf_columns(cols_view)
 
   let header_cells =
     list.map(cols, fn(col) {
@@ -111,8 +109,7 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
         None -> cid
       }
       let csort: t.ColumnRowSorting(t.TableFeatures(Nil), Dynamic, Nil) = coerce(col)
-      let get_sd = column_row_sorting.get_get_is_sorted(csort)
-      let mark = case tt.call_column_row_sorting_get_is_sorted(get_sd) {
+      let mark = case column_row_sorting.get_is_sorted(csort) {
         t.BooleanOrSortDirectionSortDirection(t.SortDirectionAsc) -> " &#9650;"
         t.BooleanOrSortDirectionSortDirection(t.SortDirectionDesc) -> " &#9660;"
         _ -> ""
@@ -127,9 +124,8 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
 
   let body_rows =
     list.map(rows, fn(r) {
-      let gv = row_row.get_get_value(coerce(r))
-      let str_val = fn(k) { decode_str(tt.call_string_to_t_value_fn(gv, k), "") }
-      let num_val = fn(k) { decode_num(tt.call_string_to_t_value_fn(gv, k)) }
+      let str_val = fn(k) { decode_str(row_row.get_value(coerce(r), k, rt.codec_dynamic()), "") }
+      let num_val = fn(k) { decode_num(row_row.get_value(coerce(r), k, rt.codec_dynamic())) }
       let lat = fmt1(num_val("latency"))
       let thr = int.to_string(float.round(num_val("throughput")))
       let up = fmt2(num_val("uptime"))
@@ -155,7 +151,7 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
     None -> Nil
   }
   let top_host = case rows {
-    [first, ..] -> decode_str(tt.call_string_to_t_value_fn(row_row.get_get_value(coerce(first)), "host"), "-")
+    [first, ..] -> decode_str(row_row.get_value(coerce(first), "host", rt.codec_dynamic()), "-")
     [] -> "-"
   }
   let msg = label <> " · " <> int.to_string(list.length(rows)) <> " rows · top node: " <> top_host
@@ -214,26 +210,25 @@ pub fn main() {
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
   let tsort: t.TableRowSorting(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let set_sort = table_row_sorting.get_set_sorting(tsort)
 
   wire_btn(doc, "btn-0", fn() {
-    tt.call_table_row_sorting_set_sorting(set_sort, t.UpdaterT([sort_spec("region", False), sort_spec("latency", False)]))
+    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("region", False), sort_spec("latency", False)]))
     render(table, doc, "Sort: region asc, latency asc")
   })
   wire_btn(doc, "btn-1", fn() {
-    tt.call_table_row_sorting_set_sorting(set_sort, t.UpdaterT([sort_spec("latency", False)]))
+    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("latency", False)]))
     render(table, doc, "Sort: latency asc")
   })
   wire_btn(doc, "btn-2", fn() {
-    tt.call_table_row_sorting_set_sorting(set_sort, t.UpdaterT([sort_spec("throughput", True)]))
+    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("throughput", True)]))
     render(table, doc, "Sort: throughput desc")
   })
   wire_btn(doc, "btn-3", fn() {
-    tt.call_table_row_sorting_set_sorting(set_sort, t.UpdaterT([sort_spec("host", False)]))
+    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("host", False)]))
     render(table, doc, "Sort: host asc")
   })
   wire_btn(doc, "btn-4", fn() {
-    tt.call_table_row_sorting_set_sorting(set_sort, t.UpdaterT([]))
+    table_row_sorting.set_sorting(tsort, t.UpdaterT([]))
     render(table, doc, "Sort: unsorted (data order)")
   })
   render(table, doc, "Sort: region asc, latency asc")

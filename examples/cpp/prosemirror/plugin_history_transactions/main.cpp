@@ -164,7 +164,7 @@ TS_EXPORT(start) void start() {
                 Transaction tr = st.tr();
                 tr.insert(st.doc().content().size(), p_node(app->schema, msg));
                 if (!app->locked) app->last_action = std::string("Appended Revision #") + std::to_string(app->rev);
-                app->view.dispatch()(tr);
+                app->view.dispatch(tr);
             } else if (i == 1) {
                 Node doc = st.doc();
                 if (doc.childCount() >= 2.0) {
@@ -174,7 +174,7 @@ TS_EXPORT(start) void start() {
                         Transaction tr = st.tr();
                         tr.addMark(fp, tp, app->schema.mark("strong"));
                         if (!app->locked) app->last_action = "Bolded first body paragraph";
-                        app->view.dispatch()(tr);
+                        app->view.dispatch(tr);
                     }
                 }
             } else if (i == 2) {
@@ -188,7 +188,7 @@ TS_EXPORT(start) void start() {
                     tr.setMeta("history", ts::Value::string("undo"));
                     for (const Step& s : batch) tr.step(s);
                     if (!app->locked) app->last_action = "Undid step(s) via Step.invert";
-                    app->view.dispatch()(tr);
+                    app->view.dispatch(tr);
                 }
             } else if (i == 3) {
                 if (app->redo_stack.empty()) {
@@ -201,7 +201,7 @@ TS_EXPORT(start) void start() {
                     tr.setMeta("history", ts::Value::string("redo"));
                     for (const Step& s : batch) tr.step(s);
                     if (!app->locked) app->last_action = "Redid inverted step(s)";
-                    app->view.dispatch()(tr);
+                    app->view.dispatch(tr);
                 }
             } else {
                 app->locked = !app->locked;

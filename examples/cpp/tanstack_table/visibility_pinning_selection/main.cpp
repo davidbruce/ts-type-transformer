@@ -81,9 +81,9 @@ static void render(const std::shared_ptr<AppState>& st) {
     auto sel = st->table.unsafe_as<Table_RowSelection<TableFeatures, Obj>>();
 
     ts::Array<ColT> groups[3] = {
-        pin.getStartVisibleLeafColumns()(),
-        pin.getCenterVisibleLeafColumns()(),
-        pin.getEndVisibleLeafColumns()(),
+        pin.getStartVisibleLeafColumns(),
+        pin.getCenterVisibleLeafColumns(),
+        pin.getEndVisibleLeafColumns(),
     };
 
     std::vector<std::string> col_ids;
@@ -102,18 +102,18 @@ static void render(const std::shared_ptr<AppState>& st) {
     }
     html += "</tr></thead><tbody>";
 
-    ts::Array<RowT> rows = st->table.getRowModel()().rows();
+    ts::Array<RowT> rows = st->table.getRowModel().rows();
     char nbuf[96];
     for (uint32_t i = 0; i < rows.size(); i++) {
         RowT r = rows[i];
-        bool is_sel = r.unsafe_as<Row_RowSelection>().getIsSelected()();
+        bool is_sel = r.unsafe_as<Row_RowSelection>().getIsSelected();
         html += is_sel ? "<tr class=\"selected-row\"><td>&#9632;</td>" : "<tr><td>&#9633;</td>";
         for (const std::string& cid : col_ids) {
             if (cid == "cpu") {
-                std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue()("cpu").to_number());
+                std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue("cpu").to_number());
                 html += std::string("<td class=\"num\">") + nbuf + "%</td>";
             } else {
-                html += "<td>" + esc_html(r.getValue()(cid).to_string()) + "</td>";
+                html += "<td>" + esc_html(r.getValue(cid).to_string()) + "</td>";
             }
         }
         html += "</tr>";
@@ -121,9 +121,9 @@ static void render(const std::shared_ptr<AppState>& st) {
     html += "</tbody></table>";
     st->wrap.innerHTML(html);
 
-    size_t vis_n = vis.getVisibleLeafColumns()().size();
-    size_t all_n = st->table.unsafe_as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns()().size();
-    size_t sel_n = sel.getSelectedRowModel()().rows().size();
+    size_t vis_n = vis.getVisibleLeafColumns().size();
+    size_t all_n = st->table.unsafe_as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns().size();
+    size_t sel_n = sel.getSelectedRowModel().rows().size();
     std::snprintf(
         nbuf, sizeof nbuf,
         "%zu / %zu visible columns \xC2\xB7 start:id end:status pinned \xC2\xB7 %zu / %zu rows selected",
@@ -133,7 +133,7 @@ static void render(const std::shared_ptr<AppState>& st) {
 }
 
 static void apply_vis(const std::shared_ptr<AppState>& st) {
-    st->table.unsafe_as<Table_ColumnVisibility<TableFeatures, Obj>>().setColumnVisibility()(
+    st->table.unsafe_as<Table_ColumnVisibility<TableFeatures, Obj>>().setColumnVisibility(
         ColumnVisibilityState::create().set_at("zone", st->zone_vis).set_at("owner", st->owner_vis)
     );
 }
@@ -202,19 +202,19 @@ TS_EXPORT(start) void start() {
                 st->owner_vis = !st->owner_vis;
                 apply_vis(st);
             } else if (i == 2) {
-                sel.toggleAllRowsSelected()(true, std::nullopt);
+                sel.toggleAllRowsSelected(true, std::nullopt);
             } else if (i == 3) {
-                sel.toggleAllRowsSelected()(false, std::nullopt);
+                sel.toggleAllRowsSelected(false, std::nullopt);
             } else if (i == 4) {
                 st->zone_vis = false;
                 st->owner_vis = true;
                 apply_vis(st);
-                pin.setColumnPinning()(
+                pin.setColumnPinning(
                     ColumnPinningState::create()
                         .start(ts::Array<std::string>{ "id" })
                         .end(ts::Array<std::string>{ "status" })
                 );
-                sel.setRowSelection()(
+                sel.setRowSelection(
                     RowSelectionState::create().set_at("0", true).set_at("2", true).set_at("4", true)
                 );
             }

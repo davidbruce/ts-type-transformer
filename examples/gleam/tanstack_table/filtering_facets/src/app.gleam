@@ -77,22 +77,19 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: String) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view)
-  let get_core = table_row_models_core.get_get_core_row_model(rows_view)
-  let rows = row_model.get_rows(get_rm())
-  let total = list.length(row_model.get_rows(get_core()))
+  let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
+  let total = list.length(row_model.get_rows(table_row_models_core.get_core_row_model(rows_view)))
 
   let body =
     list.map(rows, fn(r) {
-      let gv = row_row.get_get_value(coerce(r))
       let str_val = fn(k) -> String {
-        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.string) {
+        case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.string) {
           Ok(s) -> s
           Error(_) -> ""
         }
       }
       let int_val = fn(k) -> String {
-        let num = case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.float) {
+        let num = case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.float) {
           Ok(n) -> n
           Error(_) -> 0.0
         }
@@ -186,35 +183,35 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let set_cf = table_column_filtering.get_set_column_filters(coerce(table))
-  let set_gf = table_global_filtering.get_set_global_filter(coerce(table))
+  let cf: t.TableColumnFiltering(Nil) = coerce(table)
+  let gf: t.TableGlobalFiltering(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
-    tt.call_updater_fn(set_gf, t.UpdaterT(rt.dynamic("")))
-    tt.call_table_column_filtering_set_column_filters(
-      set_cf,
+    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
+    table_column_filtering.set_column_filters(
+      cf,
       t.UpdaterT([filter_spec("tier", rt.dynamic("core")), filter_spec("requests", rt.dynamic(400.0))]),
     )
     render(table, doc, "Filter: tier = core & requests >= 400")
   })
   wire_btn(doc, "btn-1", fn() {
-    tt.call_updater_fn(set_gf, t.UpdaterT(rt.dynamic("")))
-    tt.call_table_column_filtering_set_column_filters(set_cf, t.UpdaterT([]))
+    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
+    table_column_filtering.set_column_filters(cf, t.UpdaterT([]))
     render(table, doc, "Filter: all services")
   })
   wire_btn(doc, "btn-2", fn() {
-    tt.call_updater_fn(set_gf, t.UpdaterT(rt.dynamic("")))
-    tt.call_table_column_filtering_set_column_filters(set_cf, t.UpdaterT([filter_spec("tier", rt.dynamic("edge"))]))
+    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
+    table_column_filtering.set_column_filters(cf, t.UpdaterT([filter_spec("tier", rt.dynamic("edge"))]))
     render(table, doc, "Filter: tier = edge")
   })
   wire_btn(doc, "btn-3", fn() {
-    tt.call_table_column_filtering_set_column_filters(set_cf, t.UpdaterT([]))
-    tt.call_updater_fn(set_gf, t.UpdaterT(rt.dynamic("auth")))
+    table_column_filtering.set_column_filters(cf, t.UpdaterT([]))
+    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("auth")))
     render(table, doc, "Global search: \"auth\"")
   })
   wire_btn(doc, "btn-4", fn() {
-    tt.call_updater_fn(set_gf, t.UpdaterT(rt.dynamic("")))
-    tt.call_table_column_filtering_set_column_filters(set_cf, t.UpdaterT([filter_spec("errors", rt.dynamic(5.0))]))
+    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
+    table_column_filtering.set_column_filters(cf, t.UpdaterT([filter_spec("errors", rt.dynamic(5.0))]))
     render(table, doc, "Filter: errors >= 5")
   })
   render(table, doc, "Filter: tier = core & requests >= 400")

@@ -181,7 +181,7 @@ TS_EXPORT(start) void start() {
                     Transaction tr = st.tr();
                     tr.insert(insert_pos, span);
                     app->status = "Inserted code span into paragraph";
-                    app->view.dispatch()(tr);
+                    app->view.dispatch(tr);
                 }
             } else {
                 dom::HTMLElement div = app->doc.createElement("div");

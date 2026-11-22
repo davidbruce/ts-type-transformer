@@ -91,8 +91,8 @@ struct State {
 }
 
 fn render(st: &State, label: &str) {
-    let rows = st.table.get_row_model().call().rows();
-    let cols = st.table.get_all_leaf_columns().call();
+    let rows = st.table.get_row_model().rows();
+    let cols = st.table.get_all_leaf_columns();
 
     let mut html = String::from("<table><thead><tr>");
     for col in cols.iter() {
@@ -105,7 +105,7 @@ fn render(st: &State, label: &str) {
         html.push_str(if is_num { "<th class=\"num\">" } else { "<th>" });
         esc_html(&hdr, &mut html);
         let csort: ColumnRowSorting<TableFeatures, JsValue> = js::unchecked_cast(&col);
-        match csort.get_is_sorted().call() {
+        match csort.get_is_sorted() {
             BooleanOrSortDirection::SortDirection(SortDirection::Asc) => html.push_str(" &#9650;"),
             BooleanOrSortDirection::SortDirection(SortDirection::Desc) => html.push_str(" &#9660;"),
             _ => {}
@@ -117,23 +117,22 @@ fn render(st: &State, label: &str) {
     let mut top_host = String::from("-");
     for i in 0..rows.len() {
         let r = rows.get(i);
-        let gv = r.get_value();
-        let host = gv.call("host").as_string();
+        let host = r.get_value::<JsValue>("host").as_string();
         if i == 0 {
             top_host = host.clone();
         }
         html.push_str("<tr><td>");
-        esc_html(&gv.call("id").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("id").as_string(), &mut html);
         html.push_str("</td><td>");
         esc_html(&host, &mut html);
         html.push_str("</td><td>");
-        esc_html(&gv.call("region").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("region").as_string(), &mut html);
         let _ = write!(
             html,
             "</td><td class=\"num\">{:.1}</td><td class=\"num\">{:.0}</td><td class=\"num\">{:.2}%</td></tr>",
-            gv.call("latency").as_f64(),
-            gv.call("throughput").as_f64(),
-            gv.call("uptime").as_f64(),
+            r.get_value::<JsValue>("latency").as_f64(),
+            r.get_value::<JsValue>("throughput").as_f64(),
+            r.get_value::<JsValue>("uptime").as_f64(),
         );
     }
     html.push_str("</tbody></table>");
@@ -203,7 +202,7 @@ pub extern "C" fn start() {
                 3 => (vec![sort_spec("host", false)], "Sort: host asc"),
                 _ => (vec![], "Sort: unsorted (data order)"),
             };
-            tsort.set_sorting().call(Updater::T(JsArray::from(next)));
+            tsort.set_sorting(Updater::T(JsArray::from(next)));
             render(&st_c, label);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);

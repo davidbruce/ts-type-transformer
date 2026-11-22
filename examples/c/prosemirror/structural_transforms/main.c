@@ -223,7 +223,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             Pm_Transaction tr = Pm_EditorState_get_tr(st);
             Pm_Transaction_split(tr, split_pos);
             g_last_op = "Split paragraph node";
-            pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+            Pm_EditorView_dispatch(g_view, tr);
         } else {
             g_last_op = "No splittable paragraph found";
             update_meta(doc);
@@ -258,7 +258,7 @@ static void on_click(void* ctx, PointerEvent ev) {
                 Pm_Transaction tr = Pm_EditorState_get_tr(st);
                 Pm_Transaction_wrap(tr, range, wrappers);
                 g_last_op = "Wrapped paragraph block in blockquote";
-                pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+                Pm_EditorView_dispatch(g_view, tr);
                 wrapped = true;
             }
         }
@@ -281,7 +281,7 @@ static void on_click(void* ctx, PointerEvent ev) {
                         Pm_Transaction tr = Pm_EditorState_get_tr(st);
                         Pm_Transaction_lift(tr, range, target.value);
                         g_last_op = "Lifted blockquote child to root depth";
-                        pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+                        Pm_EditorView_dispatch(g_view, tr);
                         lifted = true;
                     }
                 }
@@ -302,7 +302,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         Pm_Transaction tr = Pm_EditorState_get_tr(st);
         Pm_Transaction_insert(tr, doc_end, JsArray_Pm_Node_from(items, 2));
         g_last_op = "Inserted horizontal_rule + note";
-        pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+        Pm_EditorView_dispatch(g_view, tr);
     } else if (idx == 4) {
         g_total_steps = 0;
         g_note_counter = 0;

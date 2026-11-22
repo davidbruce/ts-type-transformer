@@ -79,30 +79,29 @@ struct State {
 }
 
 fn render(st: &State) {
-    let rows = st.table.get_row_model().call().rows();
-    let total = st.table.get_core_row_model().call().rows().len();
+    let rows = st.table.get_row_model().rows();
+    let total = st.table.get_core_row_model().rows().len();
 
     let mut html = String::from("<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>");
     for r in rows.iter() {
-        let gv = r.get_value();
         html.push_str("<tr><td>");
-        esc_html(&gv.call("id").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("id").as_string(), &mut html);
         html.push_str("</td><td>");
-        esc_html(&gv.call("account").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("account").as_string(), &mut html);
         html.push_str("</td><td>");
-        esc_html(&gv.call("category").as_string(), &mut html);
+        esc_html(&r.get_value::<JsValue>("category").as_string(), &mut html);
         let _ = write!(
             html,
             "</td><td class=\"num\">{:.0}</td><td class=\"num\">{:.0}</td></tr>",
-            gv.call("units").as_f64(),
-            gv.call("amount").as_f64(),
+            r.get_value::<JsValue>("units").as_f64(),
+            r.get_value::<JsValue>("amount").as_f64(),
         );
     }
     html.push_str("</tbody></table>");
     st.wrap.set_inner_html(&html);
 
     let pag: TableRowPagination<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
-    let page_cnt = pag.get_page_count().call() as u32;
+    let page_cnt = pag.get_page_count() as u32;
     let msg = format!(
         "Page {} / {} \u{00B7} pageSize {} \u{00B7} showing {} of {} rows",
         st.page_idx.get() + 1,
@@ -170,28 +169,28 @@ pub extern "C" fn start() {
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
             let pag: TableRowPagination<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
-            let page_cnt = pag.get_page_count().call() as u32;
+            let page_cnt = pag.get_page_count() as u32;
             match idx {
                 0 => {
                     let cur = st_c.page_idx.get();
                     if cur > 0 {
                         st_c.page_idx.set(cur - 1);
-                        pag.set_page_index().call(Updater::T((cur - 1) as f64));
+                        pag.set_page_index(Updater::T((cur - 1) as f64));
                     }
                 }
                 1 => {
                     let cur = st_c.page_idx.get();
                     if cur + 1 < page_cnt {
                         st_c.page_idx.set(cur + 1);
-                        pag.set_page_index().call(Updater::T((cur + 1) as f64));
+                        pag.set_page_index(Updater::T((cur + 1) as f64));
                     }
                 }
                 _ => {
                     let new_sz = match idx { 2 => 5u32, 3 => 6u32, _ => 9u32 };
                     st_c.page_idx.set(0);
                     st_c.page_size.set(new_sz);
-                    pag.set_page_index().call(Updater::T(0.0));
-                    pag.set_page_size().call(Updater::T(new_sz as f64));
+                    pag.set_page_index(Updater::T(0.0));
+                    pag.set_page_size(Updater::T(new_sz as f64));
                 }
             }
             render(&st_c);

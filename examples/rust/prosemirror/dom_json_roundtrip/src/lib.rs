@@ -214,7 +214,7 @@ pub extern "C" fn start() {
                         };
                         let tr = es.tr();
                         tr.insert(insert_pos, span);
-                        view.dispatch().call(&tr);
+                        view.dispatch(&tr);
                     }
                 }
                 _ => {

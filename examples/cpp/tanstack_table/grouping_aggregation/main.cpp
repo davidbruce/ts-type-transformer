@@ -72,7 +72,7 @@ struct AppState {
 };
 
 static void render(const std::shared_ptr<AppState>& st) {
-    ts::Array<RowT> rows = st->table.getRowModel()().rows();
+    ts::Array<RowT> rows = st->table.getRowModel().rows();
     V store_v = functionalUpdate<V>(
         st->table.unsafe_as<Table_CoreProperties<TableFeatures, Obj>>().store().unsafe_as<Obj>().at("get"),
         V()
@@ -85,25 +85,25 @@ static void render(const std::shared_ptr<AppState>& st) {
     int group_cnt = 0;
     for (uint32_t i = 0; i < rows.size(); i++) {
         RowT r = rows[i];
-        bool is_grp = r.unsafe_as<Row_ColumnGrouping>().getIsGrouped()();
-        double cpu = r.getValue()("cpu").to_number();
-        double mem = r.getValue()("mem").to_number();
-        double nodes = r.getValue()("nodes").to_number();
+        bool is_grp = r.unsafe_as<Row_ColumnGrouping>().getIsGrouped();
+        double cpu = r.getValue("cpu").to_number();
+        double mem = r.getValue("mem").to_number();
+        double nodes = r.getValue("nodes").to_number();
         if (is_grp) {
             group_cnt++;
-            bool is_exp = r.unsafe_as<Row_RowExpanding>().getIsExpanded()();
+            bool is_exp = r.unsafe_as<Row_RowExpanding>().getIsExpanded();
             uint32_t sub_n = r.unsafe_as<Row_CoreProperties<TableFeatures, Obj>>().subRows().size();
-            std::string gval = r.getValue()(grp_col).to_string();
+            std::string gval = r.getValue(grp_col).to_string();
             std::snprintf(nbuf, sizeof nbuf, "%s %s=%s (%zu)", is_exp ? "[-]" : "[+]", esc_html(grp_col).c_str(), esc_html(gval).c_str(), static_cast<size_t>(sub_n));
             html += std::string("<tr class=\"group-row\"><td>") + nbuf + "</td>";
-            html += "<td>" + esc_html(r.getValue()("region").to_string()) + "</td>";
-            html += "<td>" + esc_html(r.getValue()("role").to_string()) + "</td>";
+            html += "<td>" + esc_html(r.getValue("region").to_string()) + "</td>";
+            html += "<td>" + esc_html(r.getValue("role").to_string()) + "</td>";
             std::snprintf(nbuf, sizeof nbuf, "<td class=\"num\">%.1f</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td></tr>", cpu, mem, nodes);
             html += nbuf;
         } else {
-            html += "<tr><td class=\"child-indent\">" + esc_html(r.getValue()("host").to_string()) + "</td>";
-            html += "<td>" + esc_html(r.getValue()("region").to_string()) + "</td>";
-            html += "<td>" + esc_html(r.getValue()("role").to_string()) + "</td>";
+            html += "<tr><td class=\"child-indent\">" + esc_html(r.getValue("host").to_string()) + "</td>";
+            html += "<td>" + esc_html(r.getValue("region").to_string()) + "</td>";
+            html += "<td>" + esc_html(r.getValue("role").to_string()) + "</td>";
             std::snprintf(nbuf, sizeof nbuf, "<td class=\"num\">%.0f</td><td class=\"num\">%.0f</td><td class=\"num\">%.0f</td></tr>", cpu, mem, nodes);
             html += nbuf;
         }
@@ -174,12 +174,12 @@ TS_EXPORT(start) void start() {
             auto grp = st->table.unsafe_as<Table_ColumnGrouping<TableFeatures, Obj>>();
             auto exp = st->table.unsafe_as<Table_RowExpanding<TableFeatures, Obj>>();
             if (i == 0) {
-                exp.toggleAllRowsExpanded()(true);
+                exp.toggleAllRowsExpanded(true);
             } else if (i == 1) {
-                exp.toggleAllRowsExpanded()(false);
+                exp.toggleAllRowsExpanded(false);
             } else {
-                grp.setGrouping()(ts::Array<std::string>{ (i == 2) ? std::string("region") : std::string("role") });
-                exp.setExpanded()(true);
+                grp.setGrouping(ts::Array<std::string>{ (i == 2) ? std::string("region") : std::string("role") });
+                exp.setExpanded(true);
             }
             render(st);
         });

@@ -53,7 +53,7 @@ __attribute__((export_name("start"))) void start(void) {
     MarkedExtension_renderer rend = MarkedExtension_renderer_create();
     MarkedExtension_renderer_set_heading(rend, MarkedExtension_renderer_heading_from(render_heading, 0));
     MarkedExtension_set_renderer(ext, rend);
-    MarkedExtension_set_walkTokens(ext, Marked_Token_to_void_or_Promise_or_void_or_Promise_array_fn_from(walk_token_cb, 0));
+    MarkedExtension_set_walkTokens(ext, MarkedExtension_walkTokens_from(walk_token_cb, 0));
 
     Marked custom_m = Marked_new(JsArray_MarkedExtension_from(&ext, 1));
     JsString def_html = marked(md, (marked_options_no_async){ 0 });

@@ -207,7 +207,7 @@ TS_EXPORT(start) void start() {
             app->active_btn = i;
             Transaction tr = app->view.state().tr();
             tr.setMeta("search", ts::Value::string(q));
-            app->view.dispatch()(tr);
+            app->view.dispatch(tr);
         });
     }
 }

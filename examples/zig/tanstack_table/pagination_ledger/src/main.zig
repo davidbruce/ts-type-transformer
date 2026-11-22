@@ -127,8 +127,8 @@ fn render(app: *App) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
-    const core = app.table.as(tt.Table_RowModels_Core).getCoreRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel();
+    const core = app.table.as(tt.Table_RowModels_Core).getCoreRowModel();
     const rows = rm.getRows();
     const nrows = rows.len();
     const ntotal = core.getRows().len();
@@ -137,16 +137,16 @@ fn render(app: *App) void {
     w.writeAll("<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>") catch return;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getValue();
+        const r_row = row.as(tt.Row_Row);
         w.writeAll("<tr><td>") catch return;
-        appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, gv.call("account").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("account").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, gv.call("category").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("category").toString().copy(&tmp_buf)) catch return;
         w.print("</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.0}</td></tr>", .{
-            gv.call("units").toNumber(),
-            gv.call("amount").toNumber(),
+            r_row.getValue("units").toNumber(),
+            r_row.getValue("amount").toNumber(),
         }) catch return;
     }
     w.writeAll("</tbody></table>") catch return;
@@ -155,7 +155,7 @@ fn render(app: *App) void {
     const pg = getProp(storeState(app.table), "pagination");
     const page_idx: i32 = @intFromFloat(@round(getProp(pg, "pageIndex").toNumber()));
     const page_sz: i32 = @intFromFloat(@round(getProp(pg, "pageSize").toNumber()));
-    const page_cnt: i32 = @intFromFloat(@round(app.table.as(tt.Table_RowPagination).getPageCount().call()));
+    const page_cnt: i32 = @intFromFloat(@round(app.table.as(tt.Table_RowPagination).getPageCount()));
     const m = std.fmt.bufPrint(&meta_buf, "Page {d} / {d} · pageSize {d} · showing {d} of {d} rows", .{
         page_idx + 1, page_cnt, page_sz, nrows, ntotal,
     }) catch "Page";
@@ -170,16 +170,16 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
     const pag = app.table.as(tt.Table_RowPagination);
     const pg = getProp(storeState(app.table), "pagination");
     const page_idx: f64 = getProp(pg, "pageIndex").toNumber();
-    const max_idx: f64 = pag.getPageCount().call() - 1.0;
+    const max_idx: f64 = pag.getPageCount() - 1.0;
 
     if (ctx.id == 0) {
-        if (page_idx > 0.0) pag.getSetPageIndex().call(page_idx - 1.0);
+        if (page_idx > 0.0) pag.setPageIndex(page_idx - 1.0);
     } else if (ctx.id == 1) {
-        if (page_idx < max_idx) pag.getSetPageIndex().call(page_idx + 1.0);
+        if (page_idx < max_idx) pag.setPageIndex(page_idx + 1.0);
     } else {
         const new_sz: f64 = if (ctx.id == 2) 5.0 else if (ctx.id == 3) 6.0 else 9.0;
-        pag.getSetPageIndex().call(0.0);
-        pag.getSetPageSize().call(new_sz);
+        pag.setPageIndex(0.0);
+        pag.setPageSize(new_sz);
     }
     render(app);
 }

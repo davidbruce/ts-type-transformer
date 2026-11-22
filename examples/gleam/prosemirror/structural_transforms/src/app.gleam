@@ -312,7 +312,7 @@ pub fn main() {
         let tr = editor_state.get_tr(st)
         let _ = transform.split(tr, p, None, None)
         pm_rt.ref_set(op_ref, "Split paragraph at pos " <> int.to_string(float.round(p)))
-        editor_view.get_dispatch(view)(tr)
+        editor_view.dispatch(view, tr)
       }
       None -> {
         pm_rt.ref_set(op_ref, "No splittable paragraph found")
@@ -350,7 +350,7 @@ pub fn main() {
             let tr = editor_state.get_tr(st)
             let _ = transform.wrap(tr, r, wrapped)
             pm_rt.ref_set(op_ref, "Wrapped block [" <> int.to_string(float.round(node_range.get_start(r))) <> ".." <> int.to_string(float.round(node_range.get_end(r))) <> "] in blockquote")
-            editor_view.get_dispatch(view)(tr)
+            editor_view.dispatch(view, tr)
           }
           None -> Nil
         }
@@ -369,7 +369,7 @@ pub fn main() {
         let tr = editor_state.get_tr(st)
         let _ = transform.lift(tr, r, target)
         pm_rt.ref_set(op_ref, "Lifted blockquote child to target depth " <> int.to_string(float.round(target)))
-        editor_view.get_dispatch(view)(tr)
+        editor_view.dispatch(view, tr)
       }
       None -> {
         pm_rt.ref_set(op_ref, "No blockquote left to lift")
@@ -388,7 +388,7 @@ pub fn main() {
     let tr = editor_state.get_tr(st)
     let _ = transform.insert(tr, sz, t.FragmentOrNodeOrNodeArrayArray([hr, note]))
     pm_rt.ref_set(op_ref, "Inserted horizontal_rule + note #" <> int.to_string(n))
-    editor_view.get_dispatch(view)(tr)
+    editor_view.dispatch(view, tr)
   })
 
   wire_btn(doc, "btn-4", fn() {

@@ -103,7 +103,7 @@ pub fn main() {
   let _ =
     div_overlay.set_content(
       note,
-      t.StringOrHTMLElementOrDivOverlayGetContentResultString("03 Bern · 46.95N, 7.45E"),
+      t.DivOverlayResultOrStringOrHTMLElementString("03 Bern · 46.95N, 7.45E"),
     )
   let _ = popup.open_on(note, m)
 
@@ -128,7 +128,7 @@ pub fn main() {
 
   let clicks = runtime.ref_new(0)
   let _ =
-    evented.on_with_evented_add_event_listener_type_click(
+    evented.on_click(
       m,
       t.EventedAddEventListenerTypeClickClick,
       fn(ev) {
@@ -145,7 +145,7 @@ pub fn main() {
                 let _ =
                   div_overlay.set_content(
                     note,
-                    t.StringOrHTMLElementOrDivOverlayGetContentResultString(
+                    t.DivOverlayResultOrStringOrHTMLElementString(
                       "Click #" <> int.to_string(n) <> " · " <> coords,
                     ),
                   )

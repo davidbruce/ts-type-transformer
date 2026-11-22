@@ -349,7 +349,7 @@ pub fn main() {
             pm_rt.ref_set(action_ref, "Added " <> label)
           }
         }
-        editor_view.get_dispatch(view)(tr)
+        editor_view.dispatch(view, tr)
       }
       False -> Nil
     }
@@ -379,7 +379,7 @@ pub fn main() {
         pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }
     }
-    editor_view.get_dispatch(view)(tr)
+    editor_view.dispatch(view, tr)
   })
   wire_btn(doc, "btn-4", fn() {
     pm_rt.ref_set(dispatches_ref, 0)

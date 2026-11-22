@@ -79,13 +79,13 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
+    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_cb_from(add_sub, NULL));
     TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
     TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
+    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_cb_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_cb_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, NULL));
     return r;
 }
 
@@ -147,8 +147,8 @@ static Document g_doc;
 
 static void render(const char* label) {
     js_scope_open();
-    Table_RowModel rm = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
-    Table_RowModel core = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getCoreRowModel((Table_RowModels_Core){ g_table.h }));
+    Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
+    Table_RowModel core = Table_RowModels_Core_getCoreRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Table_Row_Core_length(rows);
     uint32_t ntotal = JsArray_Table_Row_Core_length(Table_RowModel_get_rows(core));
@@ -158,18 +158,17 @@ static void render(const char* label) {
     html_fmt(&out, "<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>");
     for (uint32_t i = 0; i < nrows; i++) {
         Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
-        Table_string_fn gv = Table_Row_Core_get_getValue(row);
         html_fmt(&out, "<tr><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "id")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "id")));
         html_fmt(&out, "</td><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "service")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "service")));
         html_fmt(&out, "</td><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "tier")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "tier")));
         html_fmt(&out, "</td><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "region")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "region")));
         html_fmt(&out, "</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
-                 (int)(js_to_number(table_call_string_fn(gv, "requests")) + 0.5),
-                 (int)(js_to_number(table_call_string_fn(gv, "errors")) + 0.5));
+                 (int)(js_to_number(Table_Row_Core_getValue(row, "requests")) + 0.5),
+                 (int)(js_to_number(Table_Row_Core_getValue(row, "errors")) + 0.5));
     }
     html_fmt(&out, "</tbody></table>");
     HTMLElement_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), html);
@@ -190,28 +189,28 @@ static void on_click(void* ctx, PointerEvent ev) {
     JsArray filters = JsArray_new();
     const char* label = "Filter: all services";
     if (idx == 0) {
-        table_call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
+        Table_GlobalFiltering_setGlobalFilter(gf, js_string(""));
         JsArray_push(filters, filter_spec("tier", js_string("core")));
         JsArray_push(filters, filter_spec("requests", js_number(400.0)));
-        table_call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
+        Table_ColumnFiltering_setColumnFilters(cf, js_value(filters));
         label = "Filter: tier = core & requests >= 400";
     } else if (idx == 1) {
-        table_call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
-        table_call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
+        Table_GlobalFiltering_setGlobalFilter(gf, js_string(""));
+        Table_ColumnFiltering_setColumnFilters(cf, js_value(filters));
         label = "Filter: all services";
     } else if (idx == 2) {
-        table_call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
+        Table_GlobalFiltering_setGlobalFilter(gf, js_string(""));
         JsArray_push(filters, filter_spec("tier", js_string("edge")));
-        table_call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
+        Table_ColumnFiltering_setColumnFilters(cf, js_value(filters));
         label = "Filter: tier = edge";
     } else if (idx == 3) {
-        table_call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
-        table_call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string("auth"));
+        Table_ColumnFiltering_setColumnFilters(cf, js_value(filters));
+        Table_GlobalFiltering_setGlobalFilter(gf, js_string("auth"));
         label = "Global search: \"auth\"";
     } else if (idx == 4) {
-        table_call_Updater_fn(Table_GlobalFiltering_get_setGlobalFilter(gf), js_string(""));
+        Table_GlobalFiltering_setGlobalFilter(gf, js_string(""));
         JsArray_push(filters, filter_spec("errors", js_number(5.0)));
-        table_call_Table_ColumnFiltering_setColumnFilters(Table_ColumnFiltering_get_setColumnFilters(cf), js_value(filters));
+        Table_ColumnFiltering_setColumnFilters(cf, js_value(filters));
         label = "Filter: errors >= 5";
     }
     render(label);

@@ -184,7 +184,7 @@ TS_EXPORT(start) void start() {
             tr.addMark(f, t, app->schema.mark(mt));
             app->last_action = std::string("Added ") + label;
         }
-        app->view.dispatch()(tr);
+        app->view.dispatch(tr);
     };
 
     const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
@@ -206,7 +206,7 @@ TS_EXPORT(start) void start() {
                     tr.setBlockType(sel.from(), sel.to(), *app->schema.nodes().at("heading"), ha);
                     app->last_action = "Converted block -> heading[level=2]";
                 }
-                app->view.dispatch()(tr);
+                app->view.dispatch(tr);
             } else {
                 app->dispatches = 0;
                 app->last_action = "Reset initial schema document";

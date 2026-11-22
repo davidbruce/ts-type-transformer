@@ -194,7 +194,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             const span = app.schema.text(" roundtrip()", &.{mc});
             const tr = st.getTr().insert(insert_pos, span);
             app.status = "Inserted code span into paragraph";
-            app.view.getDispatch().call(tr);
+            app.view.dispatch(tr);
         }
     } else {
         const div = app.doc.createElementWithString("div", null);

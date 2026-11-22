@@ -27,7 +27,7 @@ TS_EXPORT(start) void start() {
         auto d = std::to_string(int(h.depth()));
         return std::string("<h") + d + " class=\"wire-h\">\xC2\xA7 " + h.text() + "</h" + d + ">\n";
     });
-    ts::Scoped<marked::Token_to_void_or_Promise_or_void_or_Promise_array_fn> on_token = [&](const marked::Token& token) {
+    ts::Scoped<marked::MarkedExtension_walkTokens> on_token = [&](const marked::Token& token) {
         std::visit([&](const auto& x) {
             using X = std::decay_t<decltype(x)>;
             if constexpr (std::is_same_v<X, marked::Tokens_Generic>) visited.push_back(x.type());

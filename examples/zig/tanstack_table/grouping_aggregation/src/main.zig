@@ -142,7 +142,7 @@ fn render(app: *App) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel();
     const rows = rm.getRows();
     const nrows = rows.len();
 
@@ -157,32 +157,32 @@ fn render(app: *App) void {
     var groups: usize = 0;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getValue();
-        const is_grp = row.as(tt.Row_ColumnGrouping).getIsGrouped().call();
-        const cpu = gv.call("cpu").toNumber();
-        const mem = gv.call("mem").toNumber();
-        const nodes = gv.call("nodes").toNumber();
+        const r_row = row.as(tt.Row_Row);
+        const is_grp = row.as(tt.Row_ColumnGrouping).getIsGrouped();
+        const cpu = r_row.getValue("cpu").toNumber();
+        const mem = r_row.getValue("mem").toNumber();
+        const nodes = r_row.getValue("nodes").toNumber();
         if (is_grp) {
             groups += 1;
-            const is_exp = row.as(tt.Row_RowExpanding).getIsExpanded().call();
+            const is_exp = row.as(tt.Row_RowExpanding).getIsExpanded();
             const sub_n = row.as(tt.Row_CoreProperties).getSubRows().len();
             w.writeAll("<tr class=\"group-row\"><td>") catch return;
             w.writeAll(if (is_exp) "[-] " else "[+] ") catch return;
             appendEsc(&w, grp_col) catch return;
             w.writeAll("=") catch return;
-            appendEsc(&w, gv.call(grp_col).toString().copy(&tmp_buf)) catch return;
+            appendEsc(&w, r_row.getValue(grp_col).toString().copy(&tmp_buf)) catch return;
             w.print(" ({d})</td><td>", .{sub_n}) catch return;
-            appendEsc(&w, gv.call("region").toString().copy(&tmp_buf)) catch return;
+            appendEsc(&w, r_row.getValue("region").toString().copy(&tmp_buf)) catch return;
             w.writeAll("</td><td>") catch return;
-            appendEsc(&w, gv.call("role").toString().copy(&tmp_buf)) catch return;
+            appendEsc(&w, r_row.getValue("role").toString().copy(&tmp_buf)) catch return;
             w.print("</td><td class=\"num\">{d:.1}</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.0}</td></tr>", .{ cpu, mem, nodes }) catch return;
         } else {
             w.writeAll("<tr><td class=\"child-indent\">") catch return;
-            appendEsc(&w, gv.call("host").toString().copy(&tmp_buf)) catch return;
+            appendEsc(&w, r_row.getValue("host").toString().copy(&tmp_buf)) catch return;
             w.writeAll("</td><td>") catch return;
-            appendEsc(&w, gv.call("region").toString().copy(&tmp_buf)) catch return;
+            appendEsc(&w, r_row.getValue("region").toString().copy(&tmp_buf)) catch return;
             w.writeAll("</td><td>") catch return;
-            appendEsc(&w, gv.call("role").toString().copy(&tmp_buf)) catch return;
+            appendEsc(&w, r_row.getValue("role").toString().copy(&tmp_buf)) catch return;
             w.print("</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.0}</td></tr>", .{ cpu, mem, nodes }) catch return;
         }
     }
@@ -201,12 +201,12 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
     const grp = app.table.as(tt.Table_ColumnGrouping);
     const exp = app.table.as(tt.Table_RowExpanding);
     if (ctx.id == 0) {
-        exp.getToggleAllRowsExpanded().call(true);
+        exp.toggleAllRowsExpanded(true);
     } else if (ctx.id == 1) {
-        exp.getToggleAllRowsExpanded().call(false);
+        exp.toggleAllRowsExpanded(false);
     } else {
-        grp.getSetGrouping().call(&[_][]const u8{if (ctx.id == 2) "region" else "role"});
-        exp.getSetExpanded().call(true);
+        grp.setGrouping(&[_][]const u8{if (ctx.id == 2) "region" else "role"});
+        exp.setExpanded(true);
     }
     render(app);
 }

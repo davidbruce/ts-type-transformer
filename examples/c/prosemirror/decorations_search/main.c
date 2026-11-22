@@ -261,7 +261,7 @@ static void on_click(void* ctx, PointerEvent ev) {
     g_active_btn = idx;
     Pm_Transaction tr = Pm_EditorState_get_tr(Pm_EditorView_get_state(g_view));
     Pm_Transaction_setMeta(tr, "search", js_string(QUERIES[idx]));
-    pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+    Pm_EditorView_dispatch(g_view, tr);
     js_scope_close();
 }
 
@@ -275,8 +275,8 @@ __attribute__((export_name("start"))) void start(void) {
     g_search_key = Pm_PluginKey_new("search");
     js_retain(g_search_key);
     Pm_StateField field = Pm_StateField_create();
-    Pm_StateField_set_init(field, Pm_StateField_init_from(search_init, NULL));
-    Pm_StateField_set_apply(field, Pm_StateField_apply_from(search_apply, NULL));
+    Pm_StateField_set_init(field, Pm_StateField_init_cb_from(search_init, NULL));
+    Pm_StateField_set_apply(field, Pm_StateField_apply_cb_from(search_apply, NULL));
 
     Pm_EditorProps eprops = Pm_EditorProps_create();
     Pm_EditorProps_set_decorations(eprops, Pm_any_EditorState_to_opt_DecorationSource_fn_from(search_decos, NULL));

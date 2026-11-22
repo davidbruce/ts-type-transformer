@@ -80,13 +80,13 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
+    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_cb_from(add_sub, NULL));
     TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
     TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
+    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_cb_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_cb_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, NULL));
     return r;
 }
 
@@ -128,8 +128,8 @@ static Document g_doc;
 
 static void render(void) {
     js_scope_open();
-    Table_RowModel rm = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
-    Table_RowModel core = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getCoreRowModel((Table_RowModels_Core){ g_table.h }));
+    Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
+    Table_RowModel core = Table_RowModels_Core_getCoreRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Table_Row_Core_length(rows);
     uint32_t ntotal = JsArray_Table_Row_Core_length(Table_RowModel_get_rows(core));
@@ -139,16 +139,15 @@ static void render(void) {
     html_fmt(&out, "<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>");
     for (uint32_t i = 0; i < nrows; i++) {
         Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
-        Table_string_fn gv = Table_Row_Core_get_getValue(row);
         html_fmt(&out, "<tr><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "id")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "id")));
         html_fmt(&out, "</td><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "account")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "account")));
         html_fmt(&out, "</td><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "category")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "category")));
         html_fmt(&out, "</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
-                 (int)(js_to_number(table_call_string_fn(gv, "units")) + 0.5),
-                 (int)(js_to_number(table_call_string_fn(gv, "amount")) + 0.5));
+                 (int)(js_to_number(Table_Row_Core_getValue(row, "units")) + 0.5),
+                 (int)(js_to_number(Table_Row_Core_getValue(row, "amount")) + 0.5));
     }
     html_fmt(&out, "</tbody></table>");
     HTMLElement_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), html);
@@ -157,7 +156,7 @@ static void render(void) {
     JsValue pg = js_get_prop(state, "pagination");
     int page_idx = (int)(js_to_number(js_get_prop(pg, "pageIndex")) + 0.5);
     int page_size = (int)(js_to_number(js_get_prop(pg, "pageSize")) + 0.5);
-    int page_count = (int)(table_call_void_to_number_fn(Table_RowPagination_get_getPageCount((Table_RowPagination){ g_table.h })) + 0.5);
+    int page_count = (int)(Table_RowPagination_getPageCount((Table_RowPagination){ g_table.h }) + 0.5);
 
     char meta[256];
     snprintf(meta, sizeof meta, "Page %d / %d \xC2\xB7 pageSize %d \xC2\xB7 showing %u of %u rows",
@@ -174,16 +173,16 @@ static void on_click(void* ctx, PointerEvent ev) {
     Table_RowPagination pag = { g_table.h };
     JsValue pg = js_get_prop(store_state(js_value(g_table)), "pagination");
     int page_idx = (int)(js_to_number(js_get_prop(pg, "pageIndex")) + 0.5);
-    int page_count = (int)(table_call_void_to_number_fn(Table_RowPagination_get_getPageCount(pag)) + 0.5);
+    int page_count = (int)(Table_RowPagination_getPageCount(pag) + 0.5);
 
     if (idx == 0) {
-        if (page_idx > 0) table_call_Table_RowPagination_setPageIndex(Table_RowPagination_get_setPageIndex(pag), js_number(page_idx - 1));
+        if (page_idx > 0) Table_RowPagination_setPageIndex(pag, js_number(page_idx - 1));
     } else if (idx == 1) {
-        if (page_idx + 1 < page_count) table_call_Table_RowPagination_setPageIndex(Table_RowPagination_get_setPageIndex(pag), js_number(page_idx + 1));
+        if (page_idx + 1 < page_count) Table_RowPagination_setPageIndex(pag, js_number(page_idx + 1));
     } else {
         int new_sz = (idx == 2) ? 5 : ((idx == 3) ? 6 : 9);
-        table_call_Table_RowPagination_setPageIndex(Table_RowPagination_get_setPageIndex(pag), js_number(0.0));
-        table_call_Table_RowPagination_setPageIndex(Table_RowPagination_get_setPageSize(pag), js_number((double)new_sz));
+        Table_RowPagination_setPageIndex(pag, js_number(0.0));
+        Table_RowPagination_setPageSize(pag, js_number((double)new_sz));
     }
     render();
     js_scope_close();

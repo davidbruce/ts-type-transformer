@@ -266,7 +266,7 @@ pub fn main() {
         let tr = editor_state.get_tr(st)
         let _ = transform.insert(tr, insert_pos, t.FragmentOrNodeOrNodeArrayNode(span))
         pm_rt.ref_set(status_ref, "Inserted code span at pos " <> int.to_string(float.round(insert_pos)))
-        editor_view.get_dispatch(view)(tr)
+        editor_view.dispatch(view, tr)
       }
       False -> Nil
     }

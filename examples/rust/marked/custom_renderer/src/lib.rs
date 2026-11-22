@@ -4,7 +4,7 @@ use dom::{Document, HTMLElement};
 use marked::{
     BooleanOrRendererOutput, JsArray, Marked, MarkedExtension, MarkedExtensionRenderer,
     MarkedExtensionRendererHeading, ParserOutputOrPromise, StringOrPromise, Token,
-    TokenToVoidOrPromiseOrVoidOrPromiseArrayFn, tokens,
+    MarkedExtensionWalkTokens, tokens,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -72,7 +72,7 @@ pub extern "C" fn start() {
     });
     let renderer = MarkedExtensionRenderer::<String, String>::default().with_heading(&heading);
 
-    let walk = TokenToVoidOrPromiseOrVoidOrPromiseArrayFn::new({
+    let walk = MarkedExtensionWalkTokens::new({
         let seen = seen.clone();
         move |t: Token| {
             seen.borrow_mut().push(token_type(&t));

@@ -87,22 +87,20 @@ fn current_grp_col(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil)) -> St
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view)
-  let rows = row_model.get_rows(get_rm())
+  let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
   let grp_col = current_grp_col(table)
 
   let #(group_cnt, row_htmls) =
     list.map_fold(rows, 0, fn(acc, r) {
-      let gv = row_row.get_get_value(coerce(r))
-      let is_grp = tt.call_void_to_boolean_fn(row_column_grouping.get_get_is_grouped(coerce(r)))
+      let is_grp = row_column_grouping.get_is_grouped(coerce(r))
       let num_val = fn(k) -> Float {
-        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.float) {
+        case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.float) {
           Ok(n) -> n
           Error(_) -> 0.0
         }
       }
       let str_val = fn(k) -> String {
-        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.string) {
+        case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.string) {
           Ok(s) -> s
           Error(_) -> ""
         }
@@ -112,7 +110,7 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
       let nodes = int.to_string(float.round(num_val("nodes")))
       case is_grp {
         True -> {
-          let is_exp = tt.call_void_to_boolean_fn(row_row_expanding.get_get_is_expanded(coerce(r)))
+          let is_exp = row_row_expanding.get_is_expanded(coerce(r))
           let mark = case is_exp {
             True -> "[-] "
             False -> "[+] "
@@ -236,26 +234,23 @@ pub fn main() {
   let doc = core.get_document()
   let grp: t.TableColumnGrouping(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
   let exp: t.TableRowExpanding(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let set_grp = table_column_grouping.get_set_grouping(grp)
-  let set_exp = table_row_expanding.get_set_expanded(exp)
-  let toggle_all = table_row_expanding.get_toggle_all_rows_expanded(exp)
 
   wire_btn(doc, "btn-0", fn() {
-    tt.call_row_row_expanding_toggle_expanded(toggle_all, Some(True))
+    table_row_expanding.toggle_all_rows_expanded(exp, Some(True))
     render(table, doc)
   })
   wire_btn(doc, "btn-1", fn() {
-    tt.call_row_row_expanding_toggle_expanded(toggle_all, Some(False))
+    table_row_expanding.toggle_all_rows_expanded(exp, Some(False))
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
-    tt.call_table_column_grouping_set_grouping(set_grp, t.UpdaterT(["region"]))
-    tt.call_table_row_expanding_set_expanded(set_exp, t.UpdaterT(t.ExpandedStateBoolean(True)))
+    table_column_grouping.set_grouping(grp, t.UpdaterT(["region"]))
+    table_row_expanding.set_expanded(exp, t.UpdaterT(t.ExpandedStateBoolean(True)))
     render(table, doc)
   })
   wire_btn(doc, "btn-3", fn() {
-    tt.call_table_column_grouping_set_grouping(set_grp, t.UpdaterT(["role"]))
-    tt.call_table_row_expanding_set_expanded(set_exp, t.UpdaterT(t.ExpandedStateBoolean(True)))
+    table_column_grouping.set_grouping(grp, t.UpdaterT(["role"]))
+    table_row_expanding.set_expanded(exp, t.UpdaterT(t.ExpandedStateBoolean(True)))
     render(table, doc)
   })
   render(table, doc)

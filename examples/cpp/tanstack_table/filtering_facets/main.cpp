@@ -75,20 +75,20 @@ struct AppState {
 };
 
 static void render(const std::shared_ptr<AppState>& st, const std::string& label) {
-    ts::Array<RowT> rows = st->table.getRowModel()().rows();
-    ts::Array<RowT> core = st->table.getCoreRowModel()().rows();
+    ts::Array<RowT> rows = st->table.getRowModel().rows();
+    ts::Array<RowT> core = st->table.getCoreRowModel().rows();
 
     std::string html = "<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>";
     char nbuf[64];
     for (uint32_t i = 0; i < rows.size(); i++) {
         RowT r = rows[i];
-        html += "<tr><td>" + esc_html(r.getValue()("id").to_string()) + "</td>";
-        html += "<td>" + esc_html(r.getValue()("service").to_string()) + "</td>";
-        html += "<td>" + esc_html(r.getValue()("tier").to_string()) + "</td>";
-        html += "<td>" + esc_html(r.getValue()("region").to_string()) + "</td>";
-        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue()("requests").to_number());
+        html += "<tr><td>" + esc_html(r.getValue("id").to_string()) + "</td>";
+        html += "<td>" + esc_html(r.getValue("service").to_string()) + "</td>";
+        html += "<td>" + esc_html(r.getValue("tier").to_string()) + "</td>";
+        html += "<td>" + esc_html(r.getValue("region").to_string()) + "</td>";
+        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue("requests").to_number());
         html += std::string("<td class=\"num\">") + nbuf + "</td>";
-        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue()("errors").to_number());
+        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue("errors").to_number());
         html += std::string("<td class=\"num\">") + nbuf + "</td></tr>";
     }
     html += "</tbody></table>";
@@ -159,25 +159,25 @@ TS_EXPORT(start) void start() {
             ts::Array<ColumnFilter> next = ts::Array<ColumnFilter>::create();
             std::string label = "Filter: all services";
             if (i == 0) {
-                gf.setGlobalFilter()(V::string(""));
+                gf.setGlobalFilter(V::string(""));
                 next = ts::Array<ColumnFilter>{ filter_spec("tier", V::string("core")), filter_spec("requests", V::number(400.0)) };
-                cf.setColumnFilters()(next);
+                cf.setColumnFilters(next);
                 label = "Filter: tier = core & requests >= 400";
             } else if (i == 1) {
-                gf.setGlobalFilter()(V::string(""));
-                cf.setColumnFilters()(next);
+                gf.setGlobalFilter(V::string(""));
+                cf.setColumnFilters(next);
                 label = "Filter: all services";
             } else if (i == 2) {
-                gf.setGlobalFilter()(V::string(""));
-                cf.setColumnFilters()(ts::Array<ColumnFilter>{ filter_spec("tier", V::string("edge")) });
+                gf.setGlobalFilter(V::string(""));
+                cf.setColumnFilters(ts::Array<ColumnFilter>{ filter_spec("tier", V::string("edge")) });
                 label = "Filter: tier = edge";
             } else if (i == 3) {
-                cf.setColumnFilters()(next);
-                gf.setGlobalFilter()(V::string("auth"));
+                cf.setColumnFilters(next);
+                gf.setGlobalFilter(V::string("auth"));
                 label = "Global search: \"auth\"";
             } else if (i == 4) {
-                gf.setGlobalFilter()(V::string(""));
-                cf.setColumnFilters()(ts::Array<ColumnFilter>{ filter_spec("errors", V::number(5.0)) });
+                gf.setGlobalFilter(V::string(""));
+                cf.setColumnFilters(ts::Array<ColumnFilter>{ filter_spec("errors", V::number(5.0)) });
                 label = "Filter: errors >= 5";
             }
             render(st, label);

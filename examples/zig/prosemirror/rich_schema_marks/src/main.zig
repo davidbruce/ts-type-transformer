@@ -185,7 +185,7 @@ fn toggleMark(app: *App, name: []const u8, added: []const u8, removed: []const u
         _ = tr.addMark(r.f, r.t, app.schema.mark(mt, null));
         app.last_action = added;
     }
-    app.view.getDispatch().call(tr);
+    app.view.dispatch(tr);
 }
 
 fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
@@ -211,7 +211,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             _ = tr.setBlockType(sel.getFrom(), sel.getTo(), nodes.getAt("heading").?, .{ .level = 2 });
             app.last_action = "Converted block -> heading[level=2]";
         }
-        app.view.getDispatch().call(tr);
+        app.view.dispatch(tr);
     } else {
         app.dispatches = 0;
         app.last_action = "Reset initial schema document";

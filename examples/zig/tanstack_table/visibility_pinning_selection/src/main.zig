@@ -142,9 +142,9 @@ fn render(app: *App) void {
     const sel = app.table.as(tt.Table_RowSelection);
 
     const groups = [3]tt.JsArrayOf(tt.Column_Core){
-        pin.getStartVisibleLeafColumns().call(),
-        pin.getCenterVisibleLeafColumns().call(),
-        pin.getEndVisibleLeafColumns().call(),
+        pin.getStartVisibleLeafColumns(),
+        pin.getCenterVisibleLeafColumns(),
+        pin.getEndVisibleLeafColumns(),
     };
 
     var ncol: usize = 0;
@@ -169,21 +169,21 @@ fn render(app: *App) void {
     }
     w.writeAll("</tr></thead><tbody>") catch return;
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel();
     const rows = rm.getRows();
     const nrows = rows.len();
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getValue();
-        const is_sel = row.as(tt.Row_RowSelection).getIsSelected().call();
+        const r_row = row.as(tt.Row_Row);
+        const is_sel = row.as(tt.Row_RowSelection).getIsSelected();
         w.writeAll(if (is_sel) "<tr class=\"selected-row\"><td>&#9632;</td>" else "<tr><td>&#9633;</td>") catch return;
         for (0..ncol) |c| {
             const cid = col_ids_buf[c][0..col_lens[c]];
             if (std.mem.eql(u8, cid, "cpu")) {
-                w.print("<td class=\"num\">{d:.0}%</td>", .{gv.call("cpu").toNumber()}) catch return;
+                w.print("<td class=\"num\">{d:.0}%</td>", .{r_row.getValue("cpu").toNumber()}) catch return;
             } else {
                 w.writeAll("<td>") catch return;
-                appendEsc(&w, gv.call(cid).toString().copy(&tmp_buf)) catch return;
+                appendEsc(&w, r_row.getValue(cid).toString().copy(&tmp_buf)) catch return;
                 w.writeAll("</td>") catch return;
             }
         }
@@ -192,9 +192,9 @@ fn render(app: *App) void {
     w.writeAll("</tbody></table>") catch return;
     app.wrap.setInnerHTML(w.buffered());
 
-    const vis_n = vis.getVisibleLeafColumns().call().len();
-    const all_n = app.table.as(tt.Table_Columns).getAllLeafColumns().call().len();
-    const sel_n = sel.getSelectedRowModel().call().getRows().len();
+    const vis_n = vis.getVisibleLeafColumns().len();
+    const all_n = app.table.as(tt.Table_Columns).getAllLeafColumns().len();
+    const sel_n = sel.getSelectedRowModel().getRows().len();
     const m = std.fmt.bufPrint(&meta_buf, "{d} / {d} visible columns · start:id end:status pinned · {d} / {d} rows selected", .{
         vis_n, all_n, sel_n, nrows,
     }) catch "Layout";
@@ -202,7 +202,7 @@ fn render(app: *App) void {
 }
 
 fn applyVisibility(app: *App) void {
-    app.table.as(tt.Table_ColumnVisibility).getSetColumnVisibility().call(.{
+    app.table.as(tt.Table_ColumnVisibility).setColumnVisibility(.{
         .zone = app.zone_vis,
         .owner = app.owner_vis,
     });
@@ -222,15 +222,15 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         app.owner_vis = !app.owner_vis;
         applyVisibility(app);
     } else if (ctx.id == 2) {
-        sel.getToggleAllRowsSelected().call(.{ .value = true });
+        sel.toggleAllRowsSelected(.{ .value = true });
     } else if (ctx.id == 3) {
-        sel.getToggleAllRowsSelected().call(.{ .value = false });
+        sel.toggleAllRowsSelected(.{ .value = false });
     } else if (ctx.id == 4) {
         app.zone_vis = false;
         app.owner_vis = true;
         applyVisibility(app);
-        pin.getSetColumnPinning().call(.{ .start = &.{"id"}, .end = &.{"status"} });
-        sel.getSetRowSelection().call(.{ .@"0" = true, .@"2" = true, .@"4" = true });
+        pin.setColumnPinning(.{ .start = &.{"id"}, .end = &.{"status"} });
+        sel.setRowSelection(.{ .@"0" = true, .@"2" = true, .@"4" = true });
     }
     render(app);
 }

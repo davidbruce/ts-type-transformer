@@ -76,9 +76,9 @@ struct AppState {
 };
 
 static void render(const std::shared_ptr<AppState>& st, const std::string& label) {
-    RowModel<TableFeatures, Obj> rm = st->table.getRowModel()();
+    RowModel<TableFeatures, Obj> rm = st->table.getRowModel();
     ts::Array<RowT> rows = rm.rows();
-    ts::Array<ColT> cols = st->table.unsafe_as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns()();
+    ts::Array<ColT> cols = st->table.unsafe_as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns();
 
     std::string html = "<table><thead><tr>";
     for (uint32_t i = 0; i < cols.size(); i++) {
@@ -89,7 +89,7 @@ static void render(const std::shared_ptr<AppState>& st, const std::string& label
         bool is_num = (cid == "latency" || cid == "throughput" || cid == "uptime");
         html += is_num ? "<th class=\"num\">" : "<th>";
         html += esc_html(hdr);
-        auto sd = col.unsafe_as<Column_RowSorting<TableFeatures, Obj>>().getIsSorted()();
+        auto sd = col.unsafe_as<Column_RowSorting<TableFeatures, Obj>>().getIsSorted();
         if (std::holds_alternative<SortDirection>(sd)) {
             html += (std::get<SortDirection>(sd) == SortDirection::asc) ? " &#9650;" : " &#9660;";
         }
@@ -101,16 +101,16 @@ static void render(const std::shared_ptr<AppState>& st, const std::string& label
     std::string top_host = "-";
     for (uint32_t i = 0; i < rows.size(); i++) {
         RowT r = rows[i];
-        std::string host = r.getValue()("host").to_string();
+        std::string host = r.getValue("host").to_string();
         if (i == 0) top_host = host;
-        html += "<tr><td>" + esc_html(r.getValue()("id").to_string()) + "</td>";
+        html += "<tr><td>" + esc_html(r.getValue("id").to_string()) + "</td>";
         html += "<td>" + esc_html(host) + "</td>";
-        html += "<td>" + esc_html(r.getValue()("region").to_string()) + "</td>";
-        std::snprintf(nbuf, sizeof nbuf, "%.1f", r.getValue()("latency").to_number());
+        html += "<td>" + esc_html(r.getValue("region").to_string()) + "</td>";
+        std::snprintf(nbuf, sizeof nbuf, "%.1f", r.getValue("latency").to_number());
         html += std::string("<td class=\"num\">") + nbuf + "</td>";
-        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue()("throughput").to_number());
+        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue("throughput").to_number());
         html += std::string("<td class=\"num\">") + nbuf + "</td>";
-        std::snprintf(nbuf, sizeof nbuf, "%.2f", r.getValue()("uptime").to_number());
+        std::snprintf(nbuf, sizeof nbuf, "%.2f", r.getValue("uptime").to_number());
         html += std::string("<td class=\"num\">") + nbuf + "%</td></tr>";
     }
     html += "</tbody></table>";
@@ -186,7 +186,7 @@ TS_EXPORT(start) void start() {
                 next = ts::Array<ColumnSort>{ sort_spec("host", false) };
                 label = "Sort: host asc";
             }
-            st->table.unsafe_as<Table_RowSorting<TableFeatures, Obj>>().setSorting()(next);
+            st->table.unsafe_as<Table_RowSorting<TableFeatures, Obj>>().setSorting(next);
             render(st, label);
         });
     }

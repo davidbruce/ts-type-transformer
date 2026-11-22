@@ -92,25 +92,24 @@ struct State {
 }
 
 fn render(st: &State) {
-    let rows = st.table.get_row_model().call().rows();
+    let rows = st.table.get_row_model().rows();
     let grp_col = st.grp_col.borrow().clone();
 
     let mut html = String::from("<table><thead><tr><th>Group / Host</th><th>Region</th><th>Role</th><th class=\"num\">CPU %</th><th class=\"num\">Mem GB</th><th class=\"num\">Nodes</th></tr></thead><tbody>");
     let mut group_cnt = 0usize;
     for r in rows.iter() {
-        let gv = r.get_value();
-        let is_grp = js::unchecked_cast::<RowColumnGrouping>(&r).get_is_grouped().call();
-        let cpu = gv.call("cpu").as_f64();
-        let mem = gv.call("mem").as_f64();
-        let nodes = gv.call("nodes").as_f64();
+        let is_grp = js::unchecked_cast::<RowColumnGrouping>(&r).get_is_grouped();
+        let cpu = r.get_value::<JsValue>("cpu").as_f64();
+        let mem = r.get_value::<JsValue>("mem").as_f64();
+        let nodes = r.get_value::<JsValue>("nodes").as_f64();
         if is_grp {
             group_cnt += 1;
-            let is_exp = js::unchecked_cast::<RowRowExpanding>(&r).get_is_expanded().call();
+            let is_exp = js::unchecked_cast::<RowRowExpanding>(&r).get_is_expanded();
             let marker = if is_exp { "[-]" } else { "[+]" };
             let sub_n = r.sub_rows().len();
-            let gval = gv.call(&grp_col).as_string();
-            let reg = gv.call("region").as_string();
-            let role = gv.call("role").as_string();
+            let gval = r.get_value::<JsValue>(&grp_col).as_string();
+            let reg = r.get_value::<JsValue>("region").as_string();
+            let role = r.get_value::<JsValue>("role").as_string();
             html.push_str("<tr class=\"group-row\"><td>");
             let _ = write!(html, "{marker} ");
             esc_html(&grp_col, &mut html);
@@ -123,11 +122,11 @@ fn render(st: &State) {
             let _ = write!(html, "</td><td class=\"num\">{cpu:.1}</td><td class=\"num\">{mem:.0}</td><td class=\"num\">{nodes:.0}</td></tr>");
         } else {
             html.push_str("<tr><td class=\"child-indent\">");
-            esc_html(&gv.call("host").as_string(), &mut html);
+            esc_html(&r.get_value::<JsValue>("host").as_string(), &mut html);
             html.push_str("</td><td>");
-            esc_html(&gv.call("region").as_string(), &mut html);
+            esc_html(&r.get_value::<JsValue>("region").as_string(), &mut html);
             html.push_str("</td><td>");
-            esc_html(&gv.call("role").as_string(), &mut html);
+            esc_html(&r.get_value::<JsValue>("role").as_string(), &mut html);
             let _ = write!(html, "</td><td class=\"num\">{cpu:.0}</td><td class=\"num\">{mem:.0}</td><td class=\"num\">{nodes:.0}</td></tr>");
         }
     }
@@ -200,13 +199,13 @@ pub extern "C" fn start() {
             let grp: TableColumnGrouping<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             let exp: TableRowExpanding<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             match idx {
-                0 => exp.toggle_all_rows_expanded().call(Some(true)),
-                1 => exp.toggle_all_rows_expanded().call(Some(false)),
+                0 => exp.toggle_all_rows_expanded(Some(true)),
+                1 => exp.toggle_all_rows_expanded(Some(false)),
                 _ => {
                     let key = if idx == 2 { "region" } else { "role" };
                     *st_c.grp_col.borrow_mut() = String::from(key);
-                    grp.set_grouping().call(Updater::T(JsArray::from([key])));
-                    exp.set_expanded().call(Updater::T(ExpandedState::Boolean(true)));
+                    grp.set_grouping(Updater::T(JsArray::from([key])));
+                    exp.set_expanded(Updater::T(ExpandedState::Boolean(true)));
                 }
             }
             render(&st_c);

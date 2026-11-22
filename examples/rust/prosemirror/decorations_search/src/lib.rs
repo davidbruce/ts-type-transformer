@@ -256,7 +256,7 @@ pub extern "C" fn start() {
             };
             let tr = view.state().tr();
             tr.set_meta("search", q);
-            view.dispatch().call(&tr);
+            view.dispatch(&tr);
         });
         btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
     }

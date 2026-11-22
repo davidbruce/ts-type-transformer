@@ -73,22 +73,19 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
   let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let get_rm = table_row_models_core.get_get_row_model(rows_view)
-  let get_core = table_row_models_core.get_get_core_row_model(rows_view)
-  let rows = row_model.get_rows(get_rm())
-  let total = list.length(row_model.get_rows(get_core()))
+  let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
+  let total = list.length(row_model.get_rows(table_row_models_core.get_core_row_model(rows_view)))
 
   let body =
     list.map(rows, fn(r) {
-      let gv = row_row.get_get_value(coerce(r))
       let str_val = fn(k) -> String {
-        case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.string) {
+        case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.string) {
           Ok(s) -> s
           Error(_) -> ""
         }
       }
       let int_val = fn(k) -> String {
-        let num = case decode.run(tt.call_string_to_t_value_fn(gv, k), decode.float) {
+        let num = case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.float) {
           Ok(n) -> n
           Error(_) -> 0.0
         }
@@ -120,7 +117,7 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
   let page_idx = store_field(table, ["pagination", "pageIndex"], decode.int)
   let page_size = store_field(table, ["pagination", "pageSize"], decode.int)
   let pag: t.TableRowPagination(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let page_cnt = float.round(tt.call_void_to_number_fn(table_row_pagination.get_get_page_count(pag)))
+  let page_cnt = float.round(table_row_pagination.get_page_count(pag))
   let msg =
     "Page "
     <> int.to_string(page_idx + 1)
@@ -185,39 +182,37 @@ pub fn main() {
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
   let pag: t.TableRowPagination(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let set_idx = table_row_pagination.get_set_page_index(pag)
-  let set_sz = table_row_pagination.get_set_page_size(pag)
 
   wire_btn(doc, "btn-0", fn() {
     let idx = store_field(table, ["pagination", "pageIndex"], decode.int)
     case idx > 0 {
-      True -> tt.call_table_row_pagination_set_page_index(set_idx, t.UpdaterT(int.to_float(idx - 1)))
+      True -> table_row_pagination.set_page_index(pag, t.UpdaterT(int.to_float(idx - 1)))
       False -> Nil
     }
     render(table, doc)
   })
   wire_btn(doc, "btn-1", fn() {
     let idx = store_field(table, ["pagination", "pageIndex"], decode.int)
-    let cnt = float.round(tt.call_void_to_number_fn(table_row_pagination.get_get_page_count(pag)))
+    let cnt = float.round(table_row_pagination.get_page_count(pag))
     case idx + 1 < cnt {
-      True -> tt.call_table_row_pagination_set_page_index(set_idx, t.UpdaterT(int.to_float(idx + 1)))
+      True -> table_row_pagination.set_page_index(pag, t.UpdaterT(int.to_float(idx + 1)))
       False -> Nil
     }
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
-    tt.call_table_row_pagination_set_page_index(set_idx, t.UpdaterT(0.0))
-    tt.call_table_row_pagination_set_page_index(set_sz, t.UpdaterT(5.0))
+    table_row_pagination.set_page_index(pag, t.UpdaterT(0.0))
+    table_row_pagination.set_page_size(pag, t.UpdaterT(5.0))
     render(table, doc)
   })
   wire_btn(doc, "btn-3", fn() {
-    tt.call_table_row_pagination_set_page_index(set_idx, t.UpdaterT(0.0))
-    tt.call_table_row_pagination_set_page_index(set_sz, t.UpdaterT(6.0))
+    table_row_pagination.set_page_index(pag, t.UpdaterT(0.0))
+    table_row_pagination.set_page_size(pag, t.UpdaterT(6.0))
     render(table, doc)
   })
   wire_btn(doc, "btn-4", fn() {
-    tt.call_table_row_pagination_set_page_index(set_idx, t.UpdaterT(0.0))
-    tt.call_table_row_pagination_set_page_index(set_sz, t.UpdaterT(9.0))
+    table_row_pagination.set_page_index(pag, t.UpdaterT(0.0))
+    table_row_pagination.set_page_size(pag, t.UpdaterT(9.0))
     render(table, doc)
   })
   render(table, doc)

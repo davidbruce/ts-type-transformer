@@ -87,7 +87,7 @@ pub extern "C" fn start() {
             }
         }
     });
-    m.on_with_evented_add_event_listener_type_click(
+    m.on_click(
         EventedAddEventListenerTypeClick::Click,
         &on_click,
         None,

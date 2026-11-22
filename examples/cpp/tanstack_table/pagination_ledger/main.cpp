@@ -69,19 +69,19 @@ static PaginationState current_page(const TableT& table) {
 }
 
 static void render(const std::shared_ptr<AppState>& st) {
-    ts::Array<RowT> rows = st->table.getRowModel()().rows();
-    ts::Array<RowT> core = st->table.getCoreRowModel()().rows();
+    ts::Array<RowT> rows = st->table.getRowModel().rows();
+    ts::Array<RowT> core = st->table.getCoreRowModel().rows();
 
     std::string html = "<table><thead><tr><th>Entry</th><th>Account</th><th>Category</th><th class=\"num\">Units</th><th class=\"num\">Amount (CHF)</th></tr></thead><tbody>";
     char nbuf[96];
     for (uint32_t i = 0; i < rows.size(); i++) {
         RowT r = rows[i];
-        html += "<tr><td>" + esc_html(r.getValue()("id").to_string()) + "</td>";
-        html += "<td>" + esc_html(r.getValue()("account").to_string()) + "</td>";
-        html += "<td>" + esc_html(r.getValue()("category").to_string()) + "</td>";
-        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue()("units").to_number());
+        html += "<tr><td>" + esc_html(r.getValue("id").to_string()) + "</td>";
+        html += "<td>" + esc_html(r.getValue("account").to_string()) + "</td>";
+        html += "<td>" + esc_html(r.getValue("category").to_string()) + "</td>";
+        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue("units").to_number());
         html += std::string("<td class=\"num\">") + nbuf + "</td>";
-        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue()("amount").to_number());
+        std::snprintf(nbuf, sizeof nbuf, "%.0f", r.getValue("amount").to_number());
         html += std::string("<td class=\"num\">") + nbuf + "</td></tr>";
     }
     html += "</tbody></table>";
@@ -90,7 +90,7 @@ static void render(const std::shared_ptr<AppState>& st) {
     PaginationState pg = current_page(st->table);
     int page_idx = int(pg.pageIndex() + 0.5);
     int page_sz = int(pg.pageSize() + 0.5);
-    int page_cnt = int(st->table.unsafe_as<Table_RowPagination<TableFeatures, Obj>>().getPageCount()() + 0.5);
+    int page_cnt = int(st->table.unsafe_as<Table_RowPagination<TableFeatures, Obj>>().getPageCount() + 0.5);
     std::snprintf(
         nbuf, sizeof nbuf,
         "Page %d / %d \xC2\xB7 pageSize %d \xC2\xB7 showing %zu of %zu rows",
@@ -153,15 +153,15 @@ TS_EXPORT(start) void start() {
             auto pag = st->table.unsafe_as<Table_RowPagination<TableFeatures, Obj>>();
             PaginationState pg = current_page(st->table);
             double idx = pg.pageIndex();
-            double max_idx = pag.getPageCount()() - 1.0;
+            double max_idx = pag.getPageCount() - 1.0;
             if (i == 0) {
-                if (idx > 0.0) pag.setPageIndex()(idx - 1.0);
+                if (idx > 0.0) pag.setPageIndex(idx - 1.0);
             } else if (i == 1) {
-                if (idx < max_idx) pag.setPageIndex()(idx + 1.0);
+                if (idx < max_idx) pag.setPageIndex(idx + 1.0);
             } else {
                 double new_sz = (i == 2) ? 5.0 : ((i == 3) ? 6.0 : 9.0);
-                pag.setPageIndex()(0.0);
-                pag.setPageSize()(new_sz);
+                pag.setPageIndex(0.0);
+                pag.setPageSize(new_sz);
             }
             render(st);
         });

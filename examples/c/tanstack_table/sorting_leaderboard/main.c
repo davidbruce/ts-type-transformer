@@ -80,13 +80,13 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
+    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_cb_from(add_sub, NULL));
     TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
     TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
+    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_cb_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_cb_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, NULL));
     return r;
 }
 
@@ -144,11 +144,9 @@ static Document g_doc;
 
 static void render(const char* label) {
     js_scope_open();
-    Table_RowModel rm = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
+    Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
-    JsArray_Table_Column_Core cols = table_call_Table_ColumnPinning_getCenterLeafColumns(
-        Table_Core_get_getAllLeafColumns(g_table)
-    );
+    JsArray_Table_Column_Core cols = Table_Core_getAllLeafColumns(g_table);
     (void)store_state(js_value(g_table));
 
     static char html[16384];
@@ -162,7 +160,7 @@ static void render(const char* label) {
         bool is_num = JsString_equals(cid, "latency") || JsString_equals(cid, "throughput") || JsString_equals(cid, "uptime");
         html_fmt(&out, "%s", is_num ? "<th class=\"num\">" : "<th>");
         html_js_esc(&out, hdr);
-        Table_boolean_or_SortDirection sd = table_call_Column_RowSorting_getIsSorted(Table_Column_RowSorting_get_getIsSorted((Table_Column_RowSorting){ col.h }));
+        Table_boolean_or_SortDirection sd = Table_Column_RowSorting_getIsSorted((Table_Column_RowSorting){ col.h });
         if (sd.tag == Table_boolean_or_SortDirection_Table_SortDirection) {
             if (sd.as.Table_SortDirection == Table_SortDirection_asc) html_fmt(&out, " &#9650;");
             else if (sd.as.Table_SortDirection == Table_SortDirection_desc) html_fmt(&out, " &#9660;");
@@ -174,17 +172,16 @@ static void render(const char* label) {
     uint32_t nrows = JsArray_Table_Row_Core_length(rows);
     for (uint32_t i = 0; i < nrows; i++) {
         Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
-        Table_string_fn gv = Table_Row_Core_get_getValue(row);
         html_fmt(&out, "<tr><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "id")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "id")));
         html_fmt(&out, "</td><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "host")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "host")));
         html_fmt(&out, "</td><td>");
-        html_js_esc(&out, js_to_string(table_call_string_fn(gv, "region")));
+        html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "region")));
         html_fmt(&out, "</td><td class=\"num\">%.1f</td><td class=\"num\">%d</td><td class=\"num\">%.2f%%</td></tr>",
-                 js_to_number(table_call_string_fn(gv, "latency")),
-                 (int)(js_to_number(table_call_string_fn(gv, "throughput")) + 0.5),
-                 js_to_number(table_call_string_fn(gv, "uptime")));
+                 js_to_number(Table_Row_Core_getValue(row, "latency")),
+                 (int)(js_to_number(Table_Row_Core_getValue(row, "throughput")) + 0.5),
+                 js_to_number(Table_Row_Core_getValue(row, "uptime")));
     }
     html_fmt(&out, "</tbody></table>");
     HTMLElement_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), html);
@@ -192,7 +189,7 @@ static void render(const char* label) {
     char top_host[128] = "-";
     if (nrows > 0) {
         Table_Row_Core first = JsArray_Table_Row_Core_get(rows, 0);
-        JsString th = js_to_string(table_call_string_fn(Table_Row_Core_get_getValue(first), "host"));
+        JsString th = js_to_string(Table_Row_Core_getValue(first, "host"));
         uint32_t len = JsString_copy(th, top_host, sizeof top_host - 1);
         top_host[len < sizeof top_host ? len : sizeof top_host - 1] = 0;
     }
@@ -223,10 +220,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         js_push_val(next, sort_spec("host", false));
         label = "Sort: host asc";
     }
-    table_call_Table_RowSorting_setSorting(
-        Table_RowSorting_get_setSorting((Table_RowSorting){ g_table.h }),
-        js_value(next)
-    );
+    Table_RowSorting_setSorting((Table_RowSorting){ g_table.h }, js_value(next));
     render(label);
     js_scope_close();
 }

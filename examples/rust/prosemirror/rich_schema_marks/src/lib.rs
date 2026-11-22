@@ -246,7 +246,7 @@ pub extern "C" fn start() {
                         true
                     };
                     app_c.borrow_mut().last_action = format!("{} {}", if added { "Added" } else { "Removed" }, label);
-                    view.dispatch().call(&tr);
+                    view.dispatch(&tr);
                 }
             } else if idx == 3 {
                 let view = app_c.borrow().view.as_ref().expect("missing view").clone();
@@ -265,7 +265,7 @@ pub extern "C" fn start() {
                     tr.set_block_type(sel.from(), Some(sel.to()), &ht, Some(&JsValue::from(&ha)));
                     app_c.borrow_mut().last_action = "Converted block -> heading[level=2]".to_string();
                 }
-                view.dispatch().call(&tr);
+                view.dispatch(&tr);
             } else {
                 let (view, fresh) = {
                     let mut st = app_c.borrow_mut();

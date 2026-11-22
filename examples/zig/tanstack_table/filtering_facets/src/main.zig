@@ -132,8 +132,8 @@ fn render(app: *App, label: []const u8) void {
     const scope = tt.JsScope.open();
     defer scope.deinit();
 
-    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel().call();
-    const core = app.table.as(tt.Table_RowModels_Core).getCoreRowModel().call();
+    const rm = app.table.as(tt.Table_RowModels_Core).getRowModel();
+    const core = app.table.as(tt.Table_RowModels_Core).getCoreRowModel();
     const rows = rm.getRows();
     const nrows = rows.len();
     const ntotal = core.getRows().len();
@@ -142,18 +142,18 @@ fn render(app: *App, label: []const u8) void {
     w.writeAll("<table><thead><tr><th>ID</th><th>Service</th><th>Tier</th><th>Region</th><th class=\"num\">Req/s</th><th class=\"num\">Errors</th></tr></thead><tbody>") catch return;
     for (0..nrows) |i| {
         const row = rows.get(@intCast(i));
-        const gv = row.as(tt.Row_Row).getValue();
+        const r_row = row.as(tt.Row_Row);
         w.writeAll("<tr><td>") catch return;
-        appendEsc(&w, gv.call("id").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("id").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, gv.call("service").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("service").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, gv.call("tier").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("tier").toString().copy(&tmp_buf)) catch return;
         w.writeAll("</td><td>") catch return;
-        appendEsc(&w, gv.call("region").toString().copy(&tmp_buf)) catch return;
+        appendEsc(&w, r_row.getValue("region").toString().copy(&tmp_buf)) catch return;
         w.print("</td><td class=\"num\">{d:.0}</td><td class=\"num\">{d:.0}</td></tr>", .{
-            gv.call("requests").toNumber(),
-            gv.call("errors").toNumber(),
+            r_row.getValue("requests").toNumber(),
+            r_row.getValue("errors").toNumber(),
         }) catch return;
     }
     w.writeAll("</tbody></table>") catch return;
@@ -169,32 +169,32 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
 
     const app = ctx.app;
     const cf = app.table.as(tt.Table_ColumnFiltering);
-    const gf = app.table.as(tt.Table_GlobalFiltering).getSetGlobalFilter().as(tt.Updater_fn);
+    const gf = app.table.as(tt.Table_GlobalFiltering);
     const filters = tt.JsArray.new();
     var label: []const u8 = "Filter: all services";
     if (ctx.id == 0) {
-        gf.call("");
+        gf.setGlobalFilter("");
         filters.push(.{ .id = "tier", .value = "core" });
         filters.push(.{ .id = "requests", .value = 400.0 });
-        cf.getSetColumnFilters().call(filters);
+        cf.setColumnFilters(filters);
         label = "Filter: tier = core & requests >= 400";
     } else if (ctx.id == 1) {
-        gf.call("");
-        cf.getSetColumnFilters().call(filters);
+        gf.setGlobalFilter("");
+        cf.setColumnFilters(filters);
         label = "Filter: all services";
     } else if (ctx.id == 2) {
-        gf.call("");
+        gf.setGlobalFilter("");
         filters.push(.{ .id = "tier", .value = "edge" });
-        cf.getSetColumnFilters().call(filters);
+        cf.setColumnFilters(filters);
         label = "Filter: tier = edge";
     } else if (ctx.id == 3) {
-        cf.getSetColumnFilters().call(filters);
-        gf.call("auth");
+        cf.setColumnFilters(filters);
+        gf.setGlobalFilter("auth");
         label = "Global search: \"auth\"";
     } else if (ctx.id == 4) {
-        gf.call("");
+        gf.setGlobalFilter("");
         filters.push(.{ .id = "errors", .value = 5.0 });
-        cf.getSetColumnFilters().call(filters);
+        cf.setColumnFilters(filters);
         label = "Filter: errors >= 5";
     }
     render(app, label);

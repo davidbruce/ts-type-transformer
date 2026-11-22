@@ -160,7 +160,7 @@ TS_EXPORT(start) void start() {
                     Transaction tr = st.tr();
                     tr.split(*split_pos);
                     app->last_op = "Split paragraph node";
-                    app->view.dispatch()(tr);
+                    app->view.dispatch(tr);
                 } else {
                     app->last_op = "No splittable paragraph found";
                     update_meta(app, doc);
@@ -192,7 +192,7 @@ TS_EXPORT(start) void start() {
                         Transaction tr = st.tr();
                         tr.wrap(*found, *wrapped);
                         app->last_op = "Wrapped paragraph block in blockquote";
-                        app->view.dispatch()(tr);
+                        app->view.dispatch(tr);
                         return;
                     }
                 }
@@ -212,7 +212,7 @@ TS_EXPORT(start) void start() {
                                 Transaction tr = st.tr();
                                 tr.lift(*r, *target);
                                 app->last_op = "Lifted blockquote child to root depth";
-                                app->view.dispatch()(tr);
+                                app->view.dispatch(tr);
                                 return;
                             }
                         }
@@ -230,7 +230,7 @@ TS_EXPORT(start) void start() {
                 Transaction tr = st.tr();
                 tr.insert(doc.content().size(), ts::Array<Node>{ hr, p_node(app->schema, msg) });
                 app->last_op = "Inserted horizontal_rule + note";
-                app->view.dispatch()(tr);
+                app->view.dispatch(tr);
             } else {
                 app->total_steps = 0;
                 app->note_counter = 0;

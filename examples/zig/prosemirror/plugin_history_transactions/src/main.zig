@@ -182,7 +182,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         const msg = std.fmt.bufPrint(&rbuf, "Revision #{d} recorded via Transform step.", .{app.rev}) catch "Revision recorded.";
         const tr = st.getTr().insert(st.getDoc().getContent().getSize(), pNode(app.schema, msg));
         if (!app.locked) app.last_action = "Appended revision paragraph";
-        app.view.getDispatch().call(tr);
+        app.view.dispatch(tr);
     } else if (ctx.id == 1) {
         const doc = st.getDoc();
         if (doc.getChildCount() >= 2.0) {
@@ -191,7 +191,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             if (tp > fp) {
                 const tr = st.getTr().addMark(fp, tp, app.schema.mark("strong", null));
                 if (!app.locked) app.last_action = "Bolded first body paragraph";
-                app.view.getDispatch().call(tr);
+                app.view.dispatch(tr);
             }
         }
     } else if (ctx.id == 2) {
@@ -209,7 +209,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
                 batch.deinit();
                 app.last_action = "Undid step(s) via Step.invert";
             }
-            app.view.getDispatch().call(tr);
+            app.view.dispatch(tr);
         }
     } else if (ctx.id == 3) {
         if (app.redo_len == 0) {
@@ -226,7 +226,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
                 batch.deinit();
                 app.last_action = "Redid inverted step(s)";
             }
-            app.view.getDispatch().call(tr);
+            app.view.dispatch(tr);
         }
     } else {
         app.locked = !app.locked;
@@ -246,7 +246,7 @@ export fn start() void {
 
     const pspec = state_mod.PluginSpec.init(.{
         .key = g_app.key,
-        .state = state_mod.StateField.init(.{
+        .state = state_mod.StateField.fromFields(.{
             .init = auditInit,
             .apply = auditApply,
         }),

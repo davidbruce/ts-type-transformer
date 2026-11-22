@@ -211,7 +211,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
     const app = ctx.app;
     app.active_btn = ctx.id;
     const tr = app.view.getState().getTr().setMeta2("search", QUERIES[ctx.id]);
-    app.view.getDispatch().call(tr);
+    app.view.dispatch(tr);
 }
 
 export fn start() void {
@@ -225,7 +225,7 @@ export fn start() void {
 
     const pspec = state_mod.PluginSpec.init(.{
         .key = g_app.key,
-        .state = state_mod.StateField.init(.{
+        .state = state_mod.StateField.fromFields(.{
             .init = searchInit,
             .apply = searchApply,
         }),

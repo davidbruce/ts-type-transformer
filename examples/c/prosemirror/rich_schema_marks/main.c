@@ -253,7 +253,7 @@ static void toggle_mark(const char* name, const char* added_msg, const char* rem
             Pm_Transaction_addMark(tr, f, t, m);
             g_last_action = added_msg;
         }
-        pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+        Pm_EditorView_dispatch(g_view, tr);
     }
     js_scope_close();
 }
@@ -281,7 +281,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), Pm_Schema_nodes_get_at(nodes, "heading"), ha);
             g_last_action = "Converted block -> heading[level=2]";
         }
-        pm_call_Transaction_fn(Pm_EditorView_get_dispatch(g_view), tr);
+        Pm_EditorView_dispatch(g_view, tr);
     } else if (idx == 4) {
         g_dispatches = 0;
         g_last_action = "Reset initial schema document";

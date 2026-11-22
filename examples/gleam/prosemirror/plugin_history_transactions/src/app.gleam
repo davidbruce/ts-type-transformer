@@ -297,7 +297,7 @@ pub fn main() {
       False -> pm_rt.ref_set(action_ref, "Appended Revision #" <> int.to_string(rev))
       True -> Nil
     }
-    editor_view.get_dispatch(view)(tr)
+    editor_view.dispatch(view, tr)
   })
 
   wire_btn(doc, "btn-1", fn() {
@@ -315,7 +315,7 @@ pub fn main() {
               False -> pm_rt.ref_set(action_ref, "Bolded first body paragraph")
               True -> Nil
             }
-            editor_view.get_dispatch(view)(tr)
+            editor_view.dispatch(view, tr)
           }
           False -> Nil
         }
@@ -345,7 +345,7 @@ pub fn main() {
           let _ = transform.step(tr, s)
           Nil
         })
-        editor_view.get_dispatch(view)(tr)
+        editor_view.dispatch(view, tr)
       }
     }
   })
@@ -371,7 +371,7 @@ pub fn main() {
           let _ = transform.step(tr, s)
           Nil
         })
-        editor_view.get_dispatch(view)(tr)
+        editor_view.dispatch(view, tr)
       }
     }
   })

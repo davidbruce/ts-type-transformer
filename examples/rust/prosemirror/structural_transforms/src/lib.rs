@@ -215,7 +215,7 @@ pub extern "C" fn start() {
                         let tr = es.tr();
                         tr.split(sp, None, None);
                         app_c.borrow_mut().last_op = format!("Split paragraph at pos {}", sp as usize);
-                        view.dispatch().call(&tr);
+                        view.dispatch(&tr);
                     } else {
                         let mut st = app_c.borrow_mut();
                         st.last_op = "No splittable paragraph found".to_string();
@@ -253,7 +253,7 @@ pub extern "C" fn start() {
                             let tr = es.tr();
                             tr.wrap(&r, wrapped);
                             app_c.borrow_mut().last_op = format!("Wrapped block [{}..{}] in blockquote", r.start() as usize, r.end() as usize);
-                            view.dispatch().call(&tr);
+                            view.dispatch(&tr);
                             return;
                         }
                     }
@@ -272,7 +272,7 @@ pub extern "C" fn start() {
                                     let tr = es.tr();
                                     tr.lift(&r, target);
                                     app_c.borrow_mut().last_op = format!("Lifted blockquote child to depth {}", target as usize);
-                                    view.dispatch().call(&tr);
+                                    view.dispatch(&tr);
                                     return;
                                 }
                             }
@@ -293,7 +293,7 @@ pub extern "C" fn start() {
                     };
                     let tr = es.tr();
                     tr.insert(doc.content().size(), JsArray::<Node>::from([hr, note]));
-                    view.dispatch().call(&tr);
+                    view.dispatch(&tr);
                 }
                 _ => {
                     let mut st = app_c.borrow_mut();

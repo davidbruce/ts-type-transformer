@@ -225,7 +225,7 @@ pub extern "C" fn start() {
                     };
                     let tr = es.tr();
                     tr.insert(es.doc().content().size(), node);
-                    view.dispatch().call(&tr);
+                    view.dispatch(&tr);
                 }
                 1 => {
                     let doc = es.doc();
@@ -242,7 +242,7 @@ pub extern "C" fn start() {
                                     st.last_action = format!("Bolded first paragraph [{}..{}]", fp as usize, tp as usize);
                                 }
                             }
-                            view.dispatch().call(&tr);
+                            view.dispatch(&tr);
                         }
                     }
                 }
@@ -267,7 +267,7 @@ pub extern "C" fn start() {
                         for s in &batch {
                             tr.step(s);
                         }
-                        view.dispatch().call(&tr);
+                        view.dispatch(&tr);
                     }
                 }
                 3 => {
@@ -291,7 +291,7 @@ pub extern "C" fn start() {
                         for s in &batch {
                             tr.step(s);
                         }
-                        view.dispatch().call(&tr);
+                        view.dispatch(&tr);
                     }
                 }
                 _ => {

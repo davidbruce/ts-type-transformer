@@ -179,7 +179,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         if (split_pos) |sp| {
             const tr = st.getTr().split(sp, null);
             app.last_op = "Split paragraph node";
-            app.view.getDispatch().call(tr);
+            app.view.dispatch(tr);
         } else {
             app.last_op = "No splittable paragraph found";
             updateMeta(app, doc);
@@ -211,7 +211,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
             if (tr_mod.findWrapping(r, qtype, null, null)) |wrapped| {
                 const tr = st.getTr().wrap(r, wrapped);
                 app.last_op = "Wrapped paragraph block in blockquote";
-                app.view.getDispatch().call(tr);
+                app.view.dispatch(tr);
                 return;
             }
         }
@@ -228,7 +228,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
                     if (tr_mod.liftTarget(r)) |target| {
                         const tr = st.getTr().lift(r, target);
                         app.last_op = "Lifted blockquote child to root depth";
-                        app.view.getDispatch().call(tr);
+                        app.view.dispatch(tr);
                         return;
                     }
                 }
@@ -247,7 +247,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
         const hr = app.schema.node("horizontal_rule", null, null);
         const tr = st.getTr().insert(doc.getContent().getSize(), &.{ hr, pNode(app.schema, msg) });
         app.last_op = "Inserted horizontal_rule + note";
-        app.view.getDispatch().call(tr);
+        app.view.dispatch(tr);
     } else {
         app.total_steps = 0;
         app.note_counter = 0;

@@ -80,13 +80,13 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
+    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_cb_from(add_sub, NULL));
     TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
     TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
+    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_cb_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_cb_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, NULL));
     return r;
 }
 
@@ -145,9 +145,9 @@ static void render(void) {
     Table_RowSelection sel = { g_table.h };
 
     JsArray_Table_Column_Core groups[3] = {
-        table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getStartVisibleLeafColumns(pin)),
-        table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getCenterVisibleLeafColumns(pin)),
-        table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnPinning_get_getEndVisibleLeafColumns(pin))
+        Table_ColumnPinning_getStartVisibleLeafColumns(pin),
+        Table_ColumnPinning_getCenterVisibleLeafColumns(pin),
+        Table_ColumnPinning_getEndVisibleLeafColumns(pin)
     };
 
     char col_ids[8][16];
@@ -174,20 +174,19 @@ static void render(void) {
     }
     html_fmt(&out, "</tr></thead><tbody>");
 
-    Table_RowModel rm = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
+    Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Table_Row_Core_length(rows);
     for (uint32_t i = 0; i < nrows; i++) {
         Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
-        Table_string_fn gv = Table_Row_Core_get_getValue(row);
-        bool is_sel = table_call_void_to_boolean_fn(Table_Row_RowSelection_get_getIsSelected((Table_Row_RowSelection){ row.h }));
+        bool is_sel = Table_Row_RowSelection_getIsSelected((Table_Row_RowSelection){ row.h });
         html_fmt(&out, "%s", is_sel ? "<tr class=\"selected-row\"><td>&#9632;</td>" : "<tr><td>&#9633;</td>");
         for (int c = 0; c < ncol; c++) {
             if (strcmp(col_ids[c], "cpu") == 0) {
-                html_fmt(&out, "<td class=\"num\">%d%%</td>", (int)(js_to_number(table_call_string_fn(gv, "cpu")) + 0.5));
+                html_fmt(&out, "<td class=\"num\">%d%%</td>", (int)(js_to_number(Table_Row_Core_getValue(row, "cpu")) + 0.5));
             } else {
                 html_fmt(&out, "<td>");
-                html_js_esc(&out, js_to_string(table_call_string_fn(gv, col_ids[c])));
+                html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, col_ids[c])));
                 html_fmt(&out, "</td>");
             }
         }
@@ -196,9 +195,9 @@ static void render(void) {
     html_fmt(&out, "</tbody></table>");
     HTMLElement_set_innerHTML(Document_getElementById(g_doc, "table-wrap"), html);
 
-    uint32_t vis_count = JsArray_Table_Column_Core_length(table_call_Table_ColumnPinning_getCenterLeafColumns(Table_ColumnVisibility_get_getVisibleLeafColumns(vis)));
-    uint32_t all_count = JsArray_Table_Column_Core_length(table_call_Table_ColumnPinning_getCenterLeafColumns(Table_Core_get_getAllLeafColumns(g_table)));
-    Table_RowModel sel_rm = table_call_void_to_RowModel_fn(Table_RowSelection_get_getSelectedRowModel(sel));
+    uint32_t vis_count = JsArray_Table_Column_Core_length(Table_ColumnVisibility_getVisibleLeafColumns(vis));
+    uint32_t all_count = JsArray_Table_Column_Core_length(Table_Core_getAllLeafColumns(g_table));
+    Table_RowModel sel_rm = Table_RowSelection_getSelectedRowModel(sel);
     uint32_t sel_count = JsArray_Table_Row_Core_length(Table_RowModel_get_rows(sel_rm));
 
     char meta[256];
@@ -213,10 +212,7 @@ static void apply_visibility(void) {
     JsValue cv = js_object();
     js_set_bool(cv, "zone", g_zone_visible);
     js_set_bool(cv, "owner", g_owner_visible);
-    table_call_Table_ColumnVisibility_setColumnVisibility(
-        Table_ColumnVisibility_get_setColumnVisibility((Table_ColumnVisibility){ g_table.h }),
-        cv
-    );
+    Table_ColumnVisibility_setColumnVisibility((Table_ColumnVisibility){ g_table.h }, cv);
     js_scope_close();
 }
 
@@ -234,15 +230,9 @@ static void on_click(void* ctx, PointerEvent ev) {
         g_owner_visible = !g_owner_visible;
         apply_visibility();
     } else if (idx == 2) {
-        table_call_Table_RowSelection_toggleAllPageRowsSelected(
-            Table_RowSelection_get_toggleAllRowsSelected(sel),
-            true
-        );
+        Table_RowSelection_toggleAllRowsSelected(sel, true);
     } else if (idx == 3) {
-        table_call_Table_RowSelection_toggleAllPageRowsSelected(
-            Table_RowSelection_get_toggleAllRowsSelected(sel),
-            false
-        );
+        Table_RowSelection_toggleAllRowsSelected(sel, false);
     } else if (idx == 4) {
         g_zone_visible = false;
         g_owner_visible = true;
@@ -254,12 +244,12 @@ static void on_click(void* ctx, PointerEvent ev) {
         JsValue cp = js_object();
         js_set_val(cp, "start", st);
         js_set_val(cp, "end", en);
-        table_call_Table_ColumnPinning_setColumnPinning(Table_ColumnPinning_get_setColumnPinning(pin), cp);
+        Table_ColumnPinning_setColumnPinning(pin, cp);
         JsValue s = js_object();
         js_set_bool(s, "0", true);
         js_set_bool(s, "2", true);
         js_set_bool(s, "4", true);
-        table_call_Table_RowSelection_setRowSelection(Table_RowSelection_get_setRowSelection(sel), s);
+        Table_RowSelection_setRowSelection(sel, s);
     }
     render();
     js_scope_close();

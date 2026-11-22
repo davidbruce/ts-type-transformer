@@ -70,7 +70,7 @@ pub extern "C" fn start() {
     let combined = path::join([out_dir.as_str(), "combined.log"]);
     for name in &logs {
         c.check(path::extname(name) == ".log");
-        let chunk = fs::read_file_sync_or_buffer_encoding(
+        let chunk = fs::read_file_sync_with_read_file_sync_options(
             &*path::join([in_dir.as_str(), name.as_str()]),
             BufferEncoding::Utf8,
         );
@@ -80,7 +80,7 @@ pub extern "C" fn start() {
     c.check(stages.get() == 2);
 
     // Stage 3: verify
-    let comb_text = fs::read_file_sync_or_buffer_encoding(&*combined, BufferEncoding::Utf8);
+    let comb_text = fs::read_file_sync_with_read_file_sync_options(&*combined, BufferEncoding::Utf8);
     c.check(fs::stat_sync(&*combined).size() == 21.0 && comb_text.contains("200 OK"));
 
     let missing = js::attempt(|| fs::read_file_sync(&*path::join([out_dir.as_str(), "missing.log"]), None));

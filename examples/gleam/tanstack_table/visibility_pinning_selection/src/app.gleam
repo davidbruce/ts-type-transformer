@@ -86,9 +86,9 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
   let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
   let rm_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
 
-  let start_cols = table_column_pinning.get_get_start_visible_leaf_columns(pin)()
-  let center_cols = table_column_pinning.get_get_center_visible_leaf_columns(pin)()
-  let end_cols = table_column_pinning.get_get_end_visible_leaf_columns(pin)()
+  let start_cols = table_column_pinning.get_start_visible_leaf_columns(pin)
+  let center_cols = table_column_pinning.get_center_visible_leaf_columns(pin)
+  let end_cols = table_column_pinning.get_end_visible_leaf_columns(pin)
   let ordered =
     list.flatten([
       list.map(start_cols, fn(c) { #(True, c) }),
@@ -116,12 +116,11 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
     })
     |> string.concat
 
-  let rows = row_model.get_rows(table_row_models_core.get_get_row_model(rm_view)())
+  let rows = row_model.get_rows(table_row_models_core.get_row_model(rm_view))
   let col_ids = list.map(ordered, fn(pair) { column_core_properties.get_id(pair.1) })
   let body_rows =
     list.map(rows, fn(r) {
-      let gv = row_row.get_get_value(coerce(r))
-      let is_sel = tt.call_void_to_boolean_fn(row_row_selection.get_get_is_selected(coerce(r)))
+      let is_sel = row_row_selection.get_is_selected(coerce(r))
       let row_open = case is_sel {
         True -> "<tr class=\"selected-row\"><td>&#9632;</td>"
         False -> "<tr><td>&#9633;</td>"
@@ -130,14 +129,14 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
         list.map(col_ids, fn(cid) {
           case cid == "cpu" {
             True -> {
-              let cpu = case decode.run(tt.call_string_to_t_value_fn(gv, "cpu"), decode.float) {
+              let cpu = case decode.run(row_row.get_value(coerce(r), "cpu", rt.codec_dynamic()), decode.float) {
                 Ok(n) -> n
                 Error(_) -> 0.0
               }
               "<td class=\"num\">" <> int.to_string(float.round(cpu)) <> "%</td>"
             }
             False -> {
-              let v = decode_str(tt.call_string_to_t_value_fn(gv, cid), "")
+              let v = decode_str(row_row.get_value(coerce(r), cid, rt.codec_dynamic()), "")
               "<td>" <> esc_html(v) <> "</td>"
             }
           }
@@ -153,9 +152,9 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
     None -> Nil
   }
 
-  let vis_n = list.length(table_column_visibility.get_get_visible_leaf_columns(vis)())
-  let all_n = list.length(table_columns.get_get_all_leaf_columns(cols_view)())
-  let sel_n = list.length(row_model.get_rows(table_row_selection.get_get_selected_row_model(sel)()))
+  let vis_n = list.length(table_column_visibility.get_visible_leaf_columns(vis))
+  let all_n = list.length(table_columns.get_all_leaf_columns(cols_view))
+  let sel_n = list.length(row_model.get_rows(table_row_selection.get_selected_row_model(sel)))
   let msg =
     int.to_string(vis_n)
     <> " / "
@@ -229,10 +228,6 @@ pub fn main() {
   let pin: t.TableColumnPinning(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
   let vis: t.TableColumnVisibility(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
   let sel: t.TableRowSelection(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let set_vis = table_column_visibility.get_set_column_visibility(vis)
-  let set_pin = table_column_pinning.get_set_column_pinning(pin)
-  let set_sel = table_row_selection.get_set_row_selection(sel)
-  let toggle_sel = table_row_selection.get_toggle_all_rows_selected(sel)
 
   wire_btn(doc, "btn-0", fn() {
     let next_zone = !is_col_visible(table, "zone", False)
@@ -241,7 +236,7 @@ pub fn main() {
       column_visibility_state.create()
       |> column_visibility_state.with_at("zone", next_zone)
       |> column_visibility_state.with_at("owner", keep_owner)
-    tt.call_table_column_visibility_set_column_visibility(set_vis, t.UpdaterT(cv))
+    table_column_visibility.set_column_visibility(vis, t.UpdaterT(cv))
     render(table, doc)
   })
   wire_btn(doc, "btn-1", fn() {
@@ -251,15 +246,15 @@ pub fn main() {
       column_visibility_state.create()
       |> column_visibility_state.with_at("zone", keep_zone)
       |> column_visibility_state.with_at("owner", next_owner)
-    tt.call_table_column_visibility_set_column_visibility(set_vis, t.UpdaterT(cv))
+    table_column_visibility.set_column_visibility(vis, t.UpdaterT(cv))
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
-    tt.call_table_row_selection_toggle_all_page_rows_selected(toggle_sel, Some(True), None)
+    table_row_selection.toggle_all_rows_selected(sel, Some(True), None)
     render(table, doc)
   })
   wire_btn(doc, "btn-3", fn() {
-    tt.call_table_row_selection_toggle_all_page_rows_selected(toggle_sel, Some(False), None)
+    table_row_selection.toggle_all_rows_selected(sel, Some(False), None)
     render(table, doc)
   })
   wire_btn(doc, "btn-4", fn() {
@@ -267,18 +262,18 @@ pub fn main() {
       column_visibility_state.create()
       |> column_visibility_state.with_at("zone", False)
       |> column_visibility_state.with_at("owner", True)
-    tt.call_table_column_visibility_set_column_visibility(set_vis, t.UpdaterT(cv))
+    table_column_visibility.set_column_visibility(vis, t.UpdaterT(cv))
     let cp =
       column_pinning_state.create()
       |> column_pinning_state.with_start(["id"])
       |> column_pinning_state.with_end(["status"])
-    tt.call_table_column_pinning_set_column_pinning(set_pin, t.UpdaterT(cp))
+    table_column_pinning.set_column_pinning(pin, t.UpdaterT(cp))
     let rs =
       row_selection_state.create()
       |> row_selection_state.with_at("0", True)
       |> row_selection_state.with_at("2", True)
       |> row_selection_state.with_at("4", True)
-    tt.call_table_row_selection_set_row_selection(set_sel, t.UpdaterT(rs))
+    table_row_selection.set_row_selection(sel, t.UpdaterT(rs))
     render(table, doc)
   })
   render(table, doc)

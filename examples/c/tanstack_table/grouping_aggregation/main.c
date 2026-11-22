@@ -80,13 +80,13 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_from(add_sub, NULL));
+    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_cb_from(add_sub, NULL));
     TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
     TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_from(untrack_cb, NULL));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_from(create_writable, NULL));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_from(create_readonly, NULL));
+    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_cb_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_cb_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, NULL));
     return r;
 }
 
@@ -142,7 +142,7 @@ static Document g_doc;
 
 static void render(void) {
     js_scope_open();
-    Table_RowModel rm = table_call_void_to_RowModel_fn(Table_RowModels_Core_get_getRowModel((Table_RowModels_Core){ g_table.h }));
+    Table_RowModel rm = Table_RowModels_Core_getRowModel((Table_RowModels_Core){ g_table.h });
     JsArray_Table_Row_Core rows = Table_RowModel_get_rows(rm);
     uint32_t nrows = JsArray_Table_Row_Core_length(rows);
 
@@ -159,32 +159,31 @@ static void render(void) {
     int groups = 0;
     for (uint32_t i = 0; i < nrows; i++) {
         Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
-        Table_string_fn gv = Table_Row_Core_get_getValue(row);
-        bool is_grp = table_call_void_to_boolean_fn(Table_Row_ColumnGrouping_get_getIsGrouped((Table_Row_ColumnGrouping){ row.h }));
-        double cpu = js_to_number(table_call_string_fn(gv, "cpu"));
-        double mem = js_to_number(table_call_string_fn(gv, "mem"));
-        double nodes = js_to_number(table_call_string_fn(gv, "nodes"));
+        bool is_grp = Table_Row_ColumnGrouping_getIsGrouped((Table_Row_ColumnGrouping){ row.h });
+        double cpu = js_to_number(Table_Row_Core_getValue(row, "cpu"));
+        double mem = js_to_number(Table_Row_Core_getValue(row, "mem"));
+        double nodes = js_to_number(Table_Row_Core_getValue(row, "nodes"));
         if (is_grp) {
             groups++;
-            bool is_exp = table_call_void_to_boolean_fn(Table_Row_RowExpanding_get_getIsExpanded((Table_Row_RowExpanding){ row.h }));
+            bool is_exp = Table_Row_RowExpanding_getIsExpanded((Table_Row_RowExpanding){ row.h });
             uint32_t sub_n = JsArray_Table_Row_Core_length(Table_Row_Core_get_subRows(row));
             html_fmt(&out, "<tr class=\"group-row\"><td>%s", is_exp ? "[-] " : "[+] ");
             html_esc(&out, grp_col);
             html_fmt(&out, "=");
-            html_js_esc(&out, js_to_string(table_call_string_fn(gv, grp_col)));
+            html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, grp_col)));
             html_fmt(&out, " (%u)</td><td>", sub_n);
-            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "region")));
+            html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "region")));
             html_fmt(&out, "</td><td>");
-            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "role")));
+            html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "role")));
             html_fmt(&out, "</td><td class=\"num\">%.1f</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
                      cpu, (int)(mem + 0.5), (int)(nodes + 0.5));
         } else {
             html_fmt(&out, "<tr><td class=\"child-indent\">");
-            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "host")));
+            html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "host")));
             html_fmt(&out, "</td><td>");
-            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "region")));
+            html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "region")));
             html_fmt(&out, "</td><td>");
-            html_js_esc(&out, js_to_string(table_call_string_fn(gv, "role")));
+            html_js_esc(&out, js_to_string(Table_Row_Core_getValue(row, "role")));
             html_fmt(&out, "</td><td class=\"num\">%d</td><td class=\"num\">%d</td><td class=\"num\">%d</td></tr>",
                      (int)(cpu + 0.5), (int)(mem + 0.5), (int)(nodes + 0.5));
         }
@@ -206,14 +205,14 @@ static void on_click(void* ctx, PointerEvent ev) {
     Table_ColumnGrouping grp = { g_table.h };
     Table_RowExpanding exp = { g_table.h };
     if (idx == 0) {
-        table_call_Row_RowExpanding_toggleExpanded(Table_RowExpanding_get_toggleAllRowsExpanded(exp), true);
+        Table_RowExpanding_toggleAllRowsExpanded(exp, true);
     } else if (idx == 1) {
-        table_call_Row_RowExpanding_toggleExpanded(Table_RowExpanding_get_toggleAllRowsExpanded(exp), false);
+        Table_RowExpanding_toggleAllRowsExpanded(exp, false);
     } else {
         JsArray next = JsArray_new();
         js_push_str(next, idx == 2 ? "region" : "role");
-        table_call_Table_ColumnGrouping_setGrouping(Table_ColumnGrouping_get_setGrouping(grp), js_value(next));
-        table_call_Table_RowExpanding_setExpanded(Table_RowExpanding_get_setExpanded(exp), js_bool(true));
+        Table_ColumnGrouping_setGrouping(grp, js_value(next));
+        Table_RowExpanding_setExpanded(exp, js_bool(true));
     }
     render();
     js_scope_close();

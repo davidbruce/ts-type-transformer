@@ -354,7 +354,7 @@ pub fn main() {
               pm_rt.ref_set(active_ref, btn_id)
               let tr = editor_state.get_tr(editor_view.get_state(view))
               let _ = transaction.set_meta(tr, t.StringOrPluginOrPluginKeyString("search"), dynamic.string(query))
-              editor_view.get_dispatch(view)(tr)
+              editor_view.dispatch(view, tr)
             },
             None,
           )
