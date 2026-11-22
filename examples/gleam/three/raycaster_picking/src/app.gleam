@@ -6,7 +6,6 @@ import dom/areas/core/node as dom_node
 import dom/areas/events/mouse_event
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
-import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -54,22 +53,6 @@ fn hex(value: Int) -> Float {
   int.to_float(value)
 }
 
-fn fmt2(x: Float) -> String {
-  let neg = x <. 0.0
-  let scaled = float.round(float.absolute_value(x) *. 100.0)
-  let whole = scaled / 100
-  let frac = scaled % 100
-  let frac_str = case frac < 10 {
-    True -> "0" <> int.to_string(frac)
-    False -> int.to_string(frac)
-  }
-  let sign = case neg && scaled > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> frac_str
-}
-
 type Specimen {
   Specimen(
     name: String,
@@ -95,7 +78,7 @@ fn nth_specimen(specs: List(Specimen), idx: Int) -> Specimen {
 }
 
 fn fmt_v3(v: t.Vector3(Nil)) -> String {
-  "(" <> fmt2(vector3.get_x(v)) <> ", " <> fmt2(vector3.get_y(v)) <> ", " <> fmt2(vector3.get_z(v)) <> ")"
+  "(" <> rt.to_fixed(vector3.get_x(v), 2) <> ", " <> rt.to_fixed(vector3.get_y(v), 2) <> ", " <> rt.to_fixed(vector3.get_z(v), 2) <> ")"
 }
 
 pub fn main() {
@@ -231,15 +214,15 @@ pub fn main() {
               hit_ref,
               sp.name
               <> " at d="
-              <> fmt2(intersection.get_distance(first))
+              <> rt.to_fixed(intersection.get_distance(first), 2)
               <> " "
               <> fmt_v3(pt)
               <> " box="
-              <> fmt2(vector3.get_x(sz))
+              <> rt.to_fixed(vector3.get_x(sz), 2)
               <> "x"
-              <> fmt2(vector3.get_y(sz))
+              <> rt.to_fixed(vector3.get_y(sz), 2)
               <> "x"
-              <> fmt2(vector3.get_z(sz)),
+              <> rt.to_fixed(vector3.get_z(sz), 2),
             )
           }
           None -> {
@@ -250,7 +233,7 @@ pub fn main() {
       }
       [] -> {
         rt.ref_set(sel_ref, -1)
-        rt.ref_set(hit_ref, "miss at ndc (" <> fmt2(nx) <> ", " <> fmt2(ny) <> ")")
+        rt.ref_set(hit_ref, "miss at ndc (" <> rt.to_fixed(nx, 2) <> ", " <> rt.to_fixed(ny, 2) <> ")")
       }
     }
     render_scene()

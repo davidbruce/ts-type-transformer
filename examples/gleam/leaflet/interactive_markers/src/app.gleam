@@ -1,7 +1,6 @@
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
-import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
@@ -103,25 +102,6 @@ pub fn main() {
   )
   popup.open_on(note, m)
 
-  let fmt2 = fn(v: Float) -> String {
-    let neg = v <. 0.0
-    let av = case neg {
-      True -> 0.0 -. v
-      False -> v
-    }
-    let scaled = float.round(av *. 100.0)
-    let whole = int.to_string(scaled / 100)
-    let frac = scaled % 100
-    let frac_s = case frac < 10 {
-      True -> "0" <> int.to_string(frac)
-      False -> int.to_string(frac)
-    }
-    case neg {
-      True -> "-" <> whole <> "." <> frac_s
-      False -> whole <> "." <> frac_s
-    }
-  }
-
   let clicks = runtime.ref_new(0)
   evented.on_click(
     m,
@@ -132,7 +112,7 @@ pub fn main() {
       case lat >. 0.0 {
         True -> {
           let n = runtime.ref_update(clicks, fn(c) { c + 1 })
-          let coords = fmt2(lat) <> "N, " <> fmt2(lng) <> "E"
+          let coords = runtime.to_fixed(lat, 2) <> "N, " <> runtime.to_fixed(lng, 2) <> "E"
           case n > 2 {
             True -> {
               div_overlay.set_lat_lng(note, t.LatLngExpressionLatLng(ll))

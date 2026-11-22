@@ -47,22 +47,6 @@ fn hex(value: Int) -> Float {
   int.to_float(value)
 }
 
-fn fmt2(x: Float) -> String {
-  let neg = x <. 0.0
-  let scaled = float.round(float.absolute_value(x) *. 100.0)
-  let whole = scaled / 100
-  let frac = scaled % 100
-  let frac_str = case frac < 10 {
-    True -> "0" <> int.to_string(frac)
-    False -> int.to_string(frac)
-  }
-  let sign = case neg && scaled > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> frac_str
-}
-
 fn wave_height(mode: Int, x: Float, z: Float) -> Float {
   case mode {
     1 -> {
@@ -240,9 +224,9 @@ pub fn main() {
         <> " vertices · "
         <> int.to_string(tri_count)
         <> " triangles · y=["
-        <> fmt2(min_y)
+        <> rt.to_fixed(min_y, 2)
         <> ", "
-        <> fmt2(max_y)
+        <> rt.to_fixed(max_y, 2)
         <> "] · wireframe: "
         <> case over { True -> "on" False -> "off" },
       ),

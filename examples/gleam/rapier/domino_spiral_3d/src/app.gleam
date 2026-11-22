@@ -32,7 +32,6 @@ import dom/areas/html/html_element_event_map as ev
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
 import dom/areas/html/html_element_tag_name_map as tag
-import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -70,18 +69,6 @@ fn spiral_pose(i: Int) -> #(Float, Float, Float, Float) {
   let x = -1.35 +. r *. sin(t)
   let z = -2.5 +. 2.6 -. r *. cos(t)
   #(x, dom_hy, z, 0.0 -. t)
-}
-
-fn fmt1(v: Float) -> String {
-  let neg = v <. 0.0
-  let n = float.round(float.absolute_value(v) *. 10.0)
-  let whole = n / 10
-  let frac = n % 10
-  let sign = case neg && n > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> int.to_string(frac)
 }
 
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
@@ -314,7 +301,7 @@ pub fn main() -> Nil {
         "18 bodies (marble + 14 dominoes + 3 cylinders) · fallen="
         <> int.to_string(fallen)
         <> " · ke="
-        <> fmt1(total_ke)
+        <> rp_rt.to_fixed(total_ke, 1)
         <> " · step="
         <> int.to_string(rp_rt.ref_get(step_ref))
         <> " ("

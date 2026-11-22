@@ -38,11 +38,6 @@ fn esc_html(s: String) -> String {
   |> string.replace(">", "&gt;")
 }
 
-fn fmt1(val: Float) -> String {
-  let scaled = float.round(val *. 10.0)
-  int.to_string(scaled / 10) <> "." <> int.to_string(scaled % 10)
-}
-
 fn col_def(key: String, header: String, agg_fn: Option(String)) {
   case agg_fn {
     Some(aname) ->
@@ -129,7 +124,7 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
             <> "</td><td>"
             <> esc_html(str_val("role"))
             <> "</td><td class=\"num\">"
-            <> fmt1(cpu)
+            <> rt.to_fixed(cpu, 1)
             <> "</td><td class=\"num\">"
             <> mem
             <> "</td><td class=\"num\">"

@@ -29,7 +29,6 @@ import dom/areas/html/html_element_event_map as ev
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
 import dom/areas/html/html_element_tag_name_map as tag
-import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -45,18 +44,6 @@ const rack_count = 10
 const ball_count = 11
 
 const ball_radius = 0.36
-
-fn fmt1(v: Float) -> String {
-  let neg = v <. 0.0
-  let n = float.round(float.absolute_value(v) *. 10.0)
-  let whole = n / 10
-  let frac = n % 10
-  let sign = case neg && n > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> int.to_string(frac)
-}
 
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
@@ -240,7 +227,7 @@ pub fn main() -> Nil {
         "11 spheres · moving="
         <> int.to_string(moving)
         <> " · ke="
-        <> fmt1(ke)
+        <> rp_rt.to_fixed(ke, 1)
         <> " · step="
         <> int.to_string(rp_rt.ref_get(step_ref))
         <> " ("

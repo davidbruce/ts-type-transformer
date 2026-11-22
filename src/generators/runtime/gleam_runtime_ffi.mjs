@@ -51,6 +51,9 @@ export function js_array(items) {
 export function js_to_list(a) {
   return toList(Array.from(a ?? []));
 }
+export function to_fixed(x, digits) {
+  return x.toFixed(digits);
+}
 // Codecs: how a type parameter's values cross, each way.
 export const $same = { to: (v) => v, from: (v) => v };
 export function codec_same() {

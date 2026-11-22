@@ -54,22 +54,6 @@ fn rot_z(theta: Float) -> rt.Rotation(Nil) {
   |> rotation.with_w(cos(theta *. 0.5))
 }
 
-fn fmt2(v: Float) -> String {
-  let neg = v <. 0.0
-  let n = float.round(float.absolute_value(v) *. 100.0)
-  let whole = n / 100
-  let frac = n % 100
-  let pad = case frac < 10 {
-    True -> "0"
-    False -> ""
-  }
-  let sign = case neg && n > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> pad <> int.to_string(frac)
-}
-
 fn start_loop(tick: fn() -> Nil) -> Nil {
   core.request_animation_frame(fn(_) {
     tick()
@@ -293,7 +277,7 @@ pub fn main() {
         "37 rays · hits="
         <> int.to_string(hits)
         <> "/37 · nearest_toi="
-        <> fmt2(min_toi)
+        <> rp_rt.to_fixed(min_toi, 2)
         <> " m · center="
         <> int.to_string(deg)
         <> " deg ("

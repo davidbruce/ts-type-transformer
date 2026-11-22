@@ -1,8 +1,6 @@
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
-import gleam/float
-import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import leaflet as leaflet
@@ -13,6 +11,7 @@ import leaflet/layer
 import leaflet/map
 import leaflet/map_options
 import leaflet/path_options
+import leaflet/runtime
 import leaflet/types as t
 
 pub fn main() {
@@ -97,9 +96,7 @@ pub fn main() {
     None,
   )
 
-  let avg_tenths = float.round(total_dist_km /. 5.0 *. 10.0)
-  let avg_str =
-    int.to_string(avg_tenths / 10) <> "." <> int.to_string(avg_tenths % 10)
+  let avg_str = runtime.to_fixed(total_dist_km /. 5.0, 1)
 
   case document.get_element_by_id(core.get_document(), "meta") {
     Some(meta) ->

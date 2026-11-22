@@ -43,22 +43,6 @@ fn hex(value: Int) -> Float {
   int.to_float(value)
 }
 
-fn fmt2(x: Float) -> String {
-  let neg = x <. 0.0
-  let scaled = float.round(float.absolute_value(x) *. 100.0)
-  let whole = scaled / 100
-  let frac = scaled % 100
-  let frac_str = case frac < 10 {
-    True -> "0" <> int.to_string(frac)
-    False -> int.to_string(frac)
-  }
-  let sign = case neg && scaled > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> frac_str
-}
-
 fn tower_height(mode: Int, gx: Int, gz: Int) -> Float {
   let fx = int.to_float(gx) -. 4.5
   let fz = int.to_float(gz) -. 4.5
@@ -225,7 +209,7 @@ pub fn main() {
     dom_node.set_text_content(cam_btn, Some("Camera: " <> cname))
     dom_node.set_text_content(
       meta_el,
-      Some("100 InstancedMesh towers · layout: " <> layout_name(mode) <> " · peak height: " <> fmt2(max_h) <> " · camera: " <> cname),
+      Some("100 InstancedMesh towers · layout: " <> layout_name(mode) <> " · peak height: " <> rt.to_fixed(max_h, 2) <> " · camera: " <> cname),
     )
   }
 

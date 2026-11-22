@@ -193,6 +193,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         "js_has",
         "js_array",
         "js_to_list",
+        "to_fixed",
     ] {
         g.values.insert((runtime_mod.clone(), reserved.into()));
     }

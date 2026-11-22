@@ -67,6 +67,10 @@ pub fn js_array(items: List(Dynamic)) -> Dynamic
 @external(javascript, "./runtime_ffi.mjs", "js_to_list")
 pub fn js_to_list(array: Dynamic) -> List(Dynamic)
 
+/// `x` with `digits` decimals, as JavaScript's `toFixed`: `to_fixed(2.5, 2)` is `"2.50"`.
+@external(javascript, "./runtime_ffi.mjs", "to_fixed")
+pub fn to_fixed(x: Float, digits: Int) -> String
+
 /// A typed key into a map of named values (such as DOM tag or event maps).
 pub type Key(map, value) {
   Key(raw: String)

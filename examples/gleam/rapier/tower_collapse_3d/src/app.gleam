@@ -53,34 +53,6 @@ const half_thin = 0.26
 
 const sphere_radius = 0.65
 
-fn fmt2(v: Float) -> String {
-  let neg = v <. 0.0
-  let n = float.round(float.absolute_value(v) *. 100.0)
-  let whole = n / 100
-  let frac = n % 100
-  let pad = case frac < 10 {
-    True -> "0"
-    False -> ""
-  }
-  let sign = case neg && n > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> pad <> int.to_string(frac)
-}
-
-fn fmt1(v: Float) -> String {
-  let neg = v <. 0.0
-  let n = float.round(float.absolute_value(v) *. 10.0)
-  let whole = n / 10
-  let frac = n % 10
-  let sign = case neg && n > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> int.to_string(frac)
-}
-
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
     Some(el) ->
@@ -256,9 +228,9 @@ pub fn main() -> Nil {
       meta_el,
       Some(
         "19 bodies (18 planks + sphere) · max_y="
-        <> fmt2(max_y)
+        <> rp_rt.to_fixed(max_y, 2)
         <> " m · ke="
-        <> fmt1(total_ke)
+        <> rp_rt.to_fixed(total_ke, 1)
         <> " · step="
         <> int.to_string(rp_rt.ref_get(step_ref))
         <> " ("

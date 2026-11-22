@@ -1449,6 +1449,7 @@ import bindings/derived_opts
 import bindings/event_map
 import bindings/factory
 import bindings/ping_event
+import bindings/runtime
 import bindings/tag_map
 import cell
 import gleam/io
@@ -1496,6 +1497,12 @@ pub fn main() {
     |> b.configure_opts_with_label("hi")
     |> b.configure_opts_with_count(3.0)
   check(b.configure(cfg) == "hi:3", "folded area synthetic")
+
+  check(runtime.to_fixed(2.5, 2) == "2.50", "to_fixed pads")
+  check(runtime.to_fixed(3.14159, 2) == "3.14", "to_fixed rounds")
+  check(runtime.to_fixed(-3.14159, 3) == "-3.142", "to_fixed negative")
+  check(runtime.to_fixed(1.005, 2) == "1.00", "to_fixed rounds the stored value, as JavaScript")
+  check(runtime.to_fixed(2.5, 0) == "3" && runtime.to_fixed(-7.0, 0) == "-7", "to_fixed with no digits")
 
   io.println("stage3d checks passed")
 }

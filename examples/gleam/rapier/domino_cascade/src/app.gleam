@@ -38,22 +38,6 @@ fn vec(x: Float, y: Float, z: Float) -> rt.Vector(Nil) {
   |> vector.with_z(z)
 }
 
-fn fmt2(v: Float) -> String {
-  let neg = v <. 0.0
-  let n = float.round(float.absolute_value(v) *. 100.0)
-  let whole = n / 100
-  let frac = n % 100
-  let pad = case frac < 10 {
-    True -> "0"
-    False -> ""
-  }
-  let sign = case neg && n > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> pad <> int.to_string(frac)
-}
-
 fn start_loop(tick: fn() -> Nil) -> Nil {
   core.request_animation_frame(fn(_) {
     tick()
@@ -301,7 +285,7 @@ pub fn main() {
         "9 cuboids + striker sphere · toppled="
         <> int.to_string(toppled)
         <> "/9 · striker_x="
-        <> fmt2(spx)
+        <> rp_rt.to_fixed(spx, 2)
         <> " m · step="
         <> int.to_string(rp_rt.ref_get(step_ref))
         <> " ("

@@ -65,21 +65,6 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
   }
 }
 
-fn fmt1(val: Float) -> String {
-  let scaled = float.round(val *. 10.0)
-  int.to_string(scaled / 10) <> "." <> int.to_string(scaled % 10)
-}
-
-fn fmt2(val: Float) -> String {
-  let scaled = float.round(val *. 100.0)
-  let frac = scaled % 100
-  let pad = case frac < 10 {
-    True -> "0"
-    False -> ""
-  }
-  int.to_string(scaled / 100) <> "." <> pad <> int.to_string(frac)
-}
-
 fn decode_str(v: Dynamic, fallback: String) -> String {
   case decode.run(v, decode.string) {
     Ok(s) -> s
@@ -126,9 +111,9 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
     list.map(rows, fn(r) {
       let str_val = fn(k) { decode_str(row_row.get_value(coerce(r), k, rt.codec_dynamic()), "") }
       let num_val = fn(k) { decode_num(row_row.get_value(coerce(r), k, rt.codec_dynamic())) }
-      let lat = fmt1(num_val("latency"))
+      let lat = rt.to_fixed(num_val("latency"), 1)
       let thr = int.to_string(float.round(num_val("throughput")))
-      let up = fmt2(num_val("uptime"))
+      let up = rt.to_fixed(num_val("uptime"), 2)
       "<tr><td>"
       <> esc_html(str_val("id"))
       <> "</td><td>"

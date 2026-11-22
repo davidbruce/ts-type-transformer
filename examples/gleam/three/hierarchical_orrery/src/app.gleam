@@ -37,22 +37,6 @@ fn hex(value: Int) -> Float {
   int.to_float(value)
 }
 
-fn fmt2(x: Float) -> String {
-  let neg = x <. 0.0
-  let scaled = float.round(float.absolute_value(x) *. 100.0)
-  let whole = scaled / 100
-  let frac = scaled % 100
-  let frac_str = case frac < 10 {
-    True -> "0" <> int.to_string(frac)
-    False -> int.to_string(frac)
-  }
-  let sign = case neg && scaled > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> frac_str
-}
-
 fn std_mat(color_hex: Int, rough: Float, metal: Float, flat: Bool) -> t.MeshStandardMaterial(Nil) {
   mesh_standard_material_parameters.create()
   |> mesh_standard_material_parameters.with_color(t.ColorRepresentationNumber(hex(color_hex)))
@@ -64,7 +48,7 @@ fn std_mat(color_hex: Int, rough: Float, metal: Float, flat: Bool) -> t.MeshStan
 }
 
 fn fmt_v3(v: t.Vector3(Nil)) -> String {
-  "(" <> fmt2(vector3.get_x(v)) <> ", " <> fmt2(vector3.get_y(v)) <> ", " <> fmt2(vector3.get_z(v)) <> ")"
+  "(" <> rt.to_fixed(vector3.get_x(v), 2) <> ", " <> rt.to_fixed(vector3.get_y(v), 2) <> ", " <> rt.to_fixed(vector3.get_z(v), 2) <> ")"
 }
 
 pub fn main() {

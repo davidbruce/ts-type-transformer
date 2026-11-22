@@ -17,7 +17,6 @@ import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import dom/types.{type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString}
 import dom/areas/html/html_element_tag_name_map as tag
-import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -37,22 +36,6 @@ fn vec(x: Float, y: Float, z: Float) -> rt.Vector(Nil) {
   |> vector.with_x(x)
   |> vector.with_y(y)
   |> vector.with_z(z)
-}
-
-fn fmt2(v: Float) -> String {
-  let neg = v <. 0.0
-  let n = float.round(float.absolute_value(v) *. 100.0)
-  let whole = n / 100
-  let frac = n % 100
-  let pad = case frac < 10 {
-    True -> "0"
-    False -> ""
-  }
-  let sign = case neg && n > 0 {
-    True -> "-"
-    False -> ""
-  }
-  sign <> int.to_string(whole) <> "." <> pad <> int.to_string(frac)
 }
 
 fn start_loop(tick: fn() -> Nil) -> Nil {
@@ -348,13 +331,13 @@ pub fn main() {
       meta_el,
       Some(
         "5 revolute joints · chain_tip=("
-        <> fmt2(tx)
+        <> rp_rt.to_fixed(tx, 2)
         <> ", "
-        <> fmt2(ty)
+        <> rp_rt.to_fixed(ty, 2)
         <> ") · bob=("
-        <> fmt2(bx)
+        <> rp_rt.to_fixed(bx, 2)
         <> ", "
-        <> fmt2(by)
+        <> rp_rt.to_fixed(by, 2)
         <> ") · step="
         <> int.to_string(rp_rt.ref_get(step_ref))
         <> " ("
