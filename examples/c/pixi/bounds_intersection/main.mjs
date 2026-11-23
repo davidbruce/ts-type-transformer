@@ -1,6 +1,6 @@
 import * as pixi from 'pixi.js';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as pixiEnv } from '../../bindings/pixi_js/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as pixiEnv } from './glue/pixi_js.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

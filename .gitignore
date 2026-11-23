@@ -23,6 +23,7 @@ examples/**/build/
 examples/**/zig-out/
 examples/**/.zig-cache/
 examples/**/bindings/
+examples/**/glue/
 examples/**/target/
 examples/**/*.wasm
 examples/**/manifest.toml

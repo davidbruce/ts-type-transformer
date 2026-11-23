@@ -1,8 +1,8 @@
 import * as babylonLite from '@babylonjs/lite';
 import * as rapier from '@dimforge/rapier3d-compat';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as babylonEnv } from '../../bindings/babylonjs_lite/glue.mjs';
-import { makeEnv as rapierEnv } from '../../bindings/dimforge_rapier3d_compat/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as babylonEnv } from './glue/babylonjs_lite.mjs';
+import { makeEnv as rapierEnv } from './glue/dimforge_rapier3d_compat.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

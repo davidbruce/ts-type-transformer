@@ -1,6 +1,6 @@
 import * as three from 'three';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as threeEnv } from '../../bindings/three/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as threeEnv } from './glue/three.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

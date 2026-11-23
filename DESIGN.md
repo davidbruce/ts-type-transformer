@@ -163,7 +163,8 @@ lib.es5.d.ts's too), and `--include Intl` adds a lib namespace to any input.
 
 `--emit c|cpp|zig|rust|fsharp --out <dir>` writes bindings for the lowered
 XML, and for wasm targets the JavaScript glue; `--glue-for <module.wasm>`
-trims the glue to what a compiled module imports. The generators
+trims the glue to what a compiled module imports, and `--glue-out <file>`
+writes only that glue (an echarts demo's is 0.1 MB, not 5.9). The generators
 (`src/generators/`) are thin and return errors: everything a config left in
 that a target cannot express, each kind once, with how often, where first,
 and the setting that lowers it.

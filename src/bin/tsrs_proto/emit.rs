@@ -9,6 +9,7 @@ pub fn bindings(
     xml: &str,
     out: &Path,
     glue_for: Option<&Path>,
+    glue_out: Option<&Path>,
     project_name: Option<&str>,
     refs: &[String],
 ) -> Result<(), String> {
@@ -21,6 +22,14 @@ pub fn bindings(
     };
     let req = EmitRequest { xml, pkg_name: &pkg_name, dest: &dest, refs, glue_for };
     let out = backend.emit(&req).map_err(|problems| problems.join("\n"))?;
+    // Only the glue a compiled module imports, for that module alone.
+    if let Some(file) = glue_out {
+        let glue = out.files.iter().find(|(p, _)| p == "glue.mjs").ok_or("no glue for this target")?;
+        if let Some(dir) = file.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
+        return std::fs::write(file, &glue.1).map_err(|e| format!("{}: {e}", file.display()));
+    }
     for (why, n) in &out.skipped {
         eprintln!("not bound: {n} x {why}");
     }

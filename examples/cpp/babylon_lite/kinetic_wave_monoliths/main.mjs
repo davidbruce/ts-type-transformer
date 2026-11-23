@@ -1,6 +1,6 @@
 import * as babylonLite from '@babylonjs/lite';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as babylonEnv } from '../../bindings/babylonjs_lite/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as babylonEnv } from './glue/babylonjs_lite.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

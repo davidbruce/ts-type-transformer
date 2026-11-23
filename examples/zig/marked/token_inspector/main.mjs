@@ -1,6 +1,6 @@
 import * as marked from 'marked';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as markedEnv } from '../../bindings/marked/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as markedEnv } from './glue/marked.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

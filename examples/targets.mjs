@@ -129,10 +129,8 @@ export function isDemoCompiled(targetRoot, targetSpec, item) {
   const bindingsDir = path.join(targetRoot, 'bindings');
   const needsDom = specs.some(s => s.needsDom);
   if (targetSpec.usesGlue) {
-    for (const s of specs) {
-      if (!fs.existsSync(path.join(bindingsDir, s.outDir, 'glue.mjs'))) return false;
-    }
-    if (needsDom && !fs.existsSync(path.join(bindingsDir, 'dom', 'glue.mjs'))) return false;
+    const demoDir = path.join(targetRoot, path.dirname(item.path));
+    if (demoGlueFiles({ demoDir, specs, domDirName: 'dom' }).some(g => !fs.existsSync(g.file))) return false;
   } else if (targetSpec.id === 'gleam') {
     for (const s of specs) {
       if (!fs.existsSync(path.join(bindingsDir, s.outDir, 'gleam.toml'))) return false;
@@ -501,6 +499,39 @@ export function createTargetViteConfig(targetRoot, targetId) {
   };
 }
 
+// The generator's arguments for the DOM and for a package, but `--out`.
+function domArgs({ cfg, domCfg, emit }) {
+  return ['lib.dom.d.ts', '--config', cfg, '--config', domCfg, '--emit', emit, '--name', 'dom'];
+}
+
+function packageArgs({ spec, fromDir, cfg, emit, domDir }) {
+  const args = ['--from', fromDir];
+  for (const n of spec.npm) args.push('--package', n);
+  args.push('--config', cfg, '--emit', emit);
+  if (emit === 'c' && spec.cPrefix) args.push('--prefix', spec.cPrefix);
+  if (spec.npm.length > 1) args.push('--name', spec.name);
+  if (spec.needsDom) args.push('--ref', domDir);
+  return args;
+}
+
+// Where a wasm demo's glue is: only what its module imports, beside it.
+function demoGlueFiles({ demoDir, specs, domDirName }) {
+  const files = [];
+  if (specs.some(s => s.needsDom)) files.push({ dom: true, file: path.join(demoDir, 'glue', `${domDirName}.mjs`) });
+  for (const spec of new Map(specs.map(s => [s.outDir, s])).values()) {
+    files.push({ spec, file: path.join(demoDir, 'glue', `${spec.outDir}.mjs`) });
+  }
+  return files;
+}
+
+async function trimDemoGlue({ tsrsProto, targetRoot, cfg, domCfg, emit, fromDir, bindingsDir, domDirName, demoDir, outPath, specs, buffered }) {
+  const domDir = path.join(bindingsDir, domDirName);
+  for (const { dom, spec, file } of demoGlueFiles({ demoDir, specs, domDirName })) {
+    const args = dom ? domArgs({ cfg, domCfg, emit }) : packageArgs({ spec, fromDir, cfg, emit, domDir });
+    await spawnAsync(tsrsProto, [...args, '--out', bindingsDir, '--glue-for', outPath, '--glue-out', file], { cwd: targetRoot, buffered });
+  }
+}
+
 export async function ensureTargetBindings({
   targetRoot,
   emit,
@@ -530,7 +561,7 @@ export async function ensureTargetBindings({
     onRegenerate?.(domDirName);
     await spawnAsync(
       tsrsProto,
-      ['lib.dom.d.ts', '--config', cfg, '--config', domCfg, '--emit', emit, '--name', 'dom', '--out', bindingsDir],
+      [...domArgs({ cfg, domCfg, emit }), '--out', bindingsDir],
       { cwd: targetRoot },
     );
   }
@@ -547,14 +578,7 @@ export async function ensureTargetBindings({
         fs.rmSync(pkgDir, { recursive: true, force: true });
       }
       onRegenerate?.(spec.outDir);
-      const args = ['--from', fromDir];
-      for (const n of spec.npm) args.push('--package', n);
-      args.push('--config', cfg, '--emit', emit);
-      if (emit === 'c' && spec.cPrefix) args.push('--prefix', spec.cPrefix);
-      if (spec.npm.length > 1) args.push('--name', spec.name);
-      if (spec.needsDom) args.push('--ref', domDir);
-      args.push('--out', bindingsDir);
-      await spawnAsync(tsrsProto, args, { cwd: targetRoot });
+      await spawnAsync(tsrsProto, [...packageArgs({ spec, fromDir, cfg, emit, domDir }), '--out', bindingsDir], { cwd: targetRoot });
     }
   }
 }
@@ -588,6 +612,9 @@ export function isDemoOutputCurrent({
     if (latestMtimeRecursive(path.join(bindingsDir, spec.outDir), bindingExt) > outMtime) return false;
   }
   if (specs.some(s => s.needsDom) && latestMtimeRecursive(path.join(bindingsDir, domDirName), bindingExt) > outMtime) {
+    return false;
+  }
+  if (targetSpec.usesGlue && demoGlueFiles({ demoDir, specs, domDirName }).some(g => !fs.existsSync(g.file) || fs.statSync(g.file).mtimeMs < outMtime)) {
     return false;
   }
   return true;
@@ -685,6 +712,9 @@ export async function runTargetBuild({
   await runPool(toBuild, jobs, async ({ ex, demoDir, outPath, spec, specs }) => {
     console.log(`Building ${targetId} ${ex.id}...`);
     await buildDemo({ ex, demoDir, outPath, spec, specs, bindingsDir, jobs, buffered });
+    if (targetSpec.usesGlue) {
+      await trimDemoGlue({ tsrsProto, targetRoot: root, cfg, domCfg, emit, fromDir, bindingsDir, domDirName, demoDir, outPath, specs, buffered });
+    }
   });
 
   const built = toBuild.length;

@@ -1,6 +1,6 @@
 import * as katex from 'katex';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as katexEnv } from '../../bindings/katex/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as katexEnv } from './glue/katex.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

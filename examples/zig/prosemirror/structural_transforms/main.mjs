@@ -2,8 +2,8 @@ import * as pmModel from 'prosemirror-model';
 import * as pmTransform from 'prosemirror-transform';
 import * as pmState from 'prosemirror-state';
 import * as pmView from 'prosemirror-view';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as pmEnv } from '../../bindings/prosemirror/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as pmEnv } from './glue/prosemirror.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

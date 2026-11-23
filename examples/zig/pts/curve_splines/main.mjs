@@ -1,5 +1,5 @@
 import * as pts from 'pts';
-import { createRuntime, makeEnv as ptsEnv } from '../../bindings/pts/glue.mjs';
+import { createRuntime, makeEnv as ptsEnv } from './glue/pts.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

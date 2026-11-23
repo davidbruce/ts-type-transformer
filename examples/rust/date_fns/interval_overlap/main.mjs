@@ -1,6 +1,6 @@
 import * as dateFns from 'date-fns';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as dateFnsEnv } from '../../bindings/date_fns/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as dateFnsEnv } from './glue/date_fns.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

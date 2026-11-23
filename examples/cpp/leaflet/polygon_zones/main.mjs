@@ -1,6 +1,6 @@
 import * as leaflet from 'leaflet';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as leafletEnv } from '../../bindings/leaflet/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as leafletEnv } from './glue/leaflet.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

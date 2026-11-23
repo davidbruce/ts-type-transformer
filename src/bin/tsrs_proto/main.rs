@@ -2,7 +2,7 @@
 // from the XML, bindings.
 // Usage: tsrs_proto <file.d.ts | lib.dom.d.ts> [--config target.toml ...]
 //                   [--set key=value] [--census]
-//                   [--emit c|cpp|zig|fsharp --out <dir> [--glue-for <module.wasm>]]
+//                   [--emit c|cpp|zig|fsharp --out <dir> [--glue-for <module.wasm> [--glue-out <file.mjs>]]]
 //        tsrs_proto --default-config
 
 mod emit;
@@ -134,6 +134,8 @@ fn main() {
     let mut prefix_arg: Option<String> = None;
     let mut project_refs: Vec<String> = Vec::new();
     let mut glue_for: Option<String> = None;
+    // With `--glue-for`: only the glue, to this file.
+    let mut glue_out: Option<String> = None;
     let mut libs_arg: Option<String> = None;
     // Lib namespaces to bind as well: `--include Intl`.
     let mut include: Vec<String> = Vec::new();
@@ -154,6 +156,7 @@ fn main() {
             "--prefix" => prefix_arg = Some(args.next().expect("C symbol prefix")),
             "--ref" => project_refs.push(args.next().expect("referenced binding .fsproj or directory")),
             "--glue-for" => glue_for = Some(args.next().expect("compiled module")),
+            "--glue-out" => glue_out = Some(args.next().expect("the glue's file")),
             "--lib" => libs_arg = Some(args.next().expect("comma-separated lib list")),
             "--include" => include.push(args.next().expect("a namespace of the lib files, such as Intl")),
             "--package" => packages.push(args.next().expect("a package name, such as date-fns")),
@@ -368,7 +371,7 @@ fn main() {
                 .or_else(|| {
                     is_lib.then(|| input.strip_prefix("lib.").and_then(|s| s.strip_suffix(".d.ts")).unwrap_or(&input).to_string())
                 });
-            if let Err(e) = emit::bindings(&target, &doc, &out, glue_for.as_deref().map(std::path::Path::new), derived_name.as_deref(), &project_refs) {
+            if let Err(e) = emit::bindings(&target, &doc, &out, glue_for.as_deref().map(std::path::Path::new), glue_out.as_deref().map(std::path::Path::new), derived_name.as_deref(), &project_refs) {
                 eprintln!("error: {e}");
                 std::process::exit(1);
             }

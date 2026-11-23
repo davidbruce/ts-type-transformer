@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as events from 'node:events';
-import { createRuntime, makeEnv as nodeEnv } from '../../bindings/node/glue.mjs';
+import { createRuntime, makeEnv as nodeEnv } from './glue/node.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

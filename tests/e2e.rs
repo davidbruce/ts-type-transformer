@@ -4248,20 +4248,59 @@ mod examples {
         stamp
     }
 
+    // The generator's arguments for the DOM's bindings, or a package's, but `--out`.
+    fn dom_args(cmd: &mut Command, target: &str) {
+        cmd.arg("lib.dom.d.ts").arg("--config").arg(config(target)).arg("--config").arg(root().join("examples/modules/dom.toml")).args(["--emit", target, "--name", "dom"]);
+    }
+
+    fn package_args(cmd: &mut Command, from: &Path, target: &str, bindings: &Path, s: &PackageSpec) {
+        cmd.arg("--from").arg(from);
+        for p in s.npm {
+            cmd.args(["--package", p]);
+        }
+        cmd.arg("--config").arg(config(target)).args(["--emit", target]);
+        if target == "c" && !s.c_prefix.is_empty() {
+            cmd.args(["--prefix", s.c_prefix]);
+        }
+        if s.npm.len() > 1 {
+            cmd.args(["--name", s.crate_name]);
+        }
+        if s.needs_dom {
+            cmd.args(["--ref"]).arg(bindings.join("dom"));
+        }
+    }
+
+    // A wasm demo's glue, as the examples build writes it: only what its
+    // module imports, in `glue/` beside it.
+    fn trim_glue(target: &str, out: &Path, bindings: &Path, spec: &PackageSpec) {
+        let bin = env!("CARGO_BIN_EXE_tsrs_proto");
+        let from = root().join("target/libraries");
+        let wasm = out.join("app.wasm");
+        let mut cmds = Vec::new();
+        if spec.needs_dom || spec.extra_specs.iter().any(|e| e.needs_dom) {
+            let mut cmd = Command::new(bin);
+            dom_args(&mut cmd, target);
+            cmds.push((cmd, "dom"));
+        }
+        let mut seen = std::collections::HashSet::new();
+        for s in std::iter::once(spec).chain(spec.extra_specs.iter().copied()).filter(|s| seen.insert(s.crate_name)) {
+            let mut cmd = Command::new(bin);
+            package_args(&mut cmd, &from, target, bindings, s);
+            cmds.push((cmd, s.crate_name));
+        }
+        for (mut cmd, name) in cmds {
+            run(cmd.arg("--out").arg(bindings).arg("--glue-for").arg(&wasm).arg("--glue-out").arg(out.join(format!("glue/{name}.mjs"))));
+        }
+    }
+
     fn ensure_bindings_for_spec(from: &Path, target: &str, target_root: &Path, spec: &PackageSpec) -> String {
         let bindings = target_root.join("bindings");
-        let cfg = config(target);
         let dom_dir_name = if target == "fsharp" { "Dom" } else { "dom" };
         let needs_dom = spec.needs_dom || spec.extra_specs.iter().any(|e| e.needs_dom);
         let dom_stamp = if needs_dom {
             ensure_pkg_bindings(from, target, &bindings, dom_dir_name, |cmd| {
-                cmd.arg("lib.dom.d.ts")
-                    .arg("--config")
-                    .arg(&cfg)
-                    .arg("--config")
-                    .arg(root().join("examples/modules/dom.toml"))
-                    .args(["--emit", target, "--name", "dom", "--out"])
-                    .arg(&bindings);
+                dom_args(cmd, target);
+                cmd.arg("--out").arg(&bindings);
             })
         } else {
             String::new()
@@ -4270,21 +4309,8 @@ mod examples {
         for s in std::iter::once(spec).chain(spec.extra_specs.iter().copied()) {
             let pkg_dir_name = if target == "fsharp" { s.fsharp_name } else { s.crate_name };
             let pkg_stamp = ensure_pkg_bindings(from, target, &bindings, pkg_dir_name, |cmd| {
-                cmd.arg("--from").arg(from);
-                for p in s.npm {
-                    cmd.args(["--package", p]);
-                }
-                cmd.arg("--config").arg(&cfg).args(["--emit", target]);
-                if target == "c" && !s.c_prefix.is_empty() {
-                    cmd.args(["--prefix", s.c_prefix]);
-                }
-                if s.npm.len() > 1 {
-                    cmd.args(["--name", s.crate_name]);
-                }
-                if s.needs_dom {
-                    cmd.args(["--ref"]).arg(bindings.join(dom_dir_name));
-                }
-                cmd.args(["--out"]).arg(&bindings);
+                package_args(cmd, from, target, &bindings, s);
+                cmd.arg("--out").arg(&bindings);
             });
             stamps.push(pkg_stamp);
         }
@@ -4604,6 +4630,9 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
                 run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
             }
             _ => unreachable!("unknown target {target}"),
+        }
+        if matches!(target, "c" | "cpp" | "zig" | "rust") {
+            trim_glue(target, &out, &bindings, spec);
         }
 
         if matches!(spec.verify, VerifyKind::NodeCli) {

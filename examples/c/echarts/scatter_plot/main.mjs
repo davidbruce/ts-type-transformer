@@ -1,6 +1,6 @@
 import * as echarts from 'echarts';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as echartsEnv } from '../../bindings/echarts/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as echartsEnv } from './glue/echarts.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

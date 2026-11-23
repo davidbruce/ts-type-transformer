@@ -1,6 +1,6 @@
 import * as tableCore from '@tanstack/table-core';
-import { createRuntime, makeEnv as domEnv } from '../../bindings/dom/glue.mjs';
-import { makeEnv as tableEnv } from '../../bindings/tanstack_table_core/glue.mjs';
+import { createRuntime, makeEnv as domEnv } from './glue/dom.mjs';
+import { makeEnv as tableEnv } from './glue/tanstack_table_core.mjs';
 
 let instance;
 const rt = createRuntime(() => instance);

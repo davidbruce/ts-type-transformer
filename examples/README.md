@@ -51,5 +51,5 @@ node ./node/event_bus/main.mjs
 
 - **Toolchains**: Versions used for Node, Rust, Zig, Gleam, and .NET/Fable are pinned in [mise.toml](../mise.toml), alongside `clang` / WASI SDK (`~/.wasi-sdk`) for C/C++ Wasm builds.
 - **Target configs**: Lowering/emission configs live in [targets/](targets/) and [modules/](modules/), orchestrated by [targets.mjs](targets.mjs) and [build.mjs](build.mjs).
-- **Bindings**: Running any build generates bindings under `examples/<target>/bindings/` (ignored by git).
+- **Bindings**: Running any build generates bindings under `examples/<target>/bindings/` (ignored by git). A wasm demo loads only the glue its module imports, written to `glue/` beside its `app.wasm` (`--glue-for`, `--glue-out`).
 - **Standalone Rust Wasm builds**: [rust/.cargo/config.toml](rust/.cargo/config.toml) configures `--export-table` for `wasm32-unknown-unknown` so standalone `cargo build --target wasm32-unknown-unknown` works alongside `node examples/rust/build.mjs`.
