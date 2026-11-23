@@ -22,6 +22,21 @@ thread_local! {
     static SETTLED: Cell<bool> = const { Cell::new(false) };
     static TICKS: Cell<f64> = const { Cell::new(0.0) };
     static CHAINED: Cell<f64> = const { Cell::new(0.0) };
+    static FREED: Cell<bool> = const { Cell::new(false) };
+}
+
+// Set when a closure is dropped: JavaScript collected its function.
+struct Freed;
+impl Drop for Freed {
+    fn drop(&mut self) {
+        FREED.with(|f| f.set(true));
+    }
+}
+
+// Nonzero until the dropped closure has been freed.
+#[unsafe(no_mangle)]
+pub extern "C" fn busy() -> i32 {
+    i32::from(!FREED.with(Cell::get))
 }
 
 // Promises are awaited, one after another; a rejection is an Err.
@@ -38,10 +53,17 @@ pub extern "C" fn finish() {
     check!(SETTLED.with(Cell::get));
     check!(TICKS.with(Cell::get) == 6.0);
     check!(CHAINED.with(Cell::get) == 44.0);
+    // A closure made with `new` and never released is freed with its function.
+    check!(FREED.with(Cell::get));
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
+    // Kept by nothing once dropped: JavaScript collects it, and its closure is freed.
+    let guard = Freed;
+    drop(Listener::new(move |_: f64| {
+        let _ = &guard;
+    }));
     // Promises: a closure is called with the Result once one settles.
     delayed(21.0).then(|r| AWAITED.with(|a| a.set(r.unwrap_or(0.0))));
     rejected("nope").then(|r| REASON.with(|a| a.set(matches!(r, Err(e) if e.message() == "nope"))));

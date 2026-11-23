@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::classes::{callback, emit_classes, union_enum};
 use super::types::{function, names_of, ns_module, rust_elem};
-use super::{camel, camel_variant, rust_function, rust_type, snake, Context, ProjectRef, PRELUDE, RUNTIME, RUNTIME_TYPES};
+use super::{camel, camel_variant, rust_function, rust_type, snake, Context, ProjectRef, PRELUDE, RUNTIME_TYPES};
 use super::super::comments::{Style, comment};
 use super::super::model::{Call, Model, NamedUnion, Ty};
 
@@ -177,10 +177,9 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
         );
     }
     let mut used_refs: BTreeSet<usize> = BTreeSet::new();
-    let mut impl_refs: HashSet<String> = HashSet::new();
     // Types declared elsewhere: resolve against referenced crates where possible, else opaque handles.
     for name in m.opaque.iter().filter(|n| !RUNTIME_TYPES.iter().any(|r| r.0 == n.as_str())) {
-        if let Some((ref_idx, qualified, is_handle)) = resolved_opaque.get(name) {
+        if let Some((ref_idx, qualified, _)) = resolved_opaque.get(name) {
             used_refs.insert(*ref_idx);
             let ref_crate = &refs[*ref_idx].crate_name;
             let short = qualified.trim_start_matches("::");
@@ -191,21 +190,6 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
                 format!("pub use {qualified} as {local_name};\n")
             };
             types_file += &reexport;
-            if impl_refs.insert(qualified.clone()) {
-                types_file += &format!(
-                    "impl crate::runtime::ToJs for {qualified} {{\n\
-                     \x20   fn lend(&self) -> crate::runtime::Lent {{ let (h, owned) = ::{ref_crate}::ToJs::lend(self).into_raw(); crate::runtime::Lent::from_raw(h, owned) }}\n\
-                     }}\n\
-                     impl crate::runtime::FromJs for {qualified} {{\n\
-                     \x20   fn from_handle(h: u32) -> Self {{ <{qualified} as ::{ref_crate}::FromJs>::from_handle(h) }}\n\
-                     }}\n\
-                     impl From<{qualified}> for crate::runtime::JsValue {{ fn from(x: {qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(&x))) }} }}\n\
-                     impl From<&{qualified}> for crate::runtime::JsValue {{ fn from(x: &{qualified}) -> Self {{ Self(crate::runtime::JsHandle(crate::runtime::give(x))) }} }}\n"
-                );
-                if *is_handle {
-                    types_file += &format!("impl crate::runtime::Is<{qualified}> for {qualified} {{}}\n");
-                }
-            }
             continue;
         }
         let arity = m.opaque_arity.get(name).copied().unwrap_or(0);
@@ -333,21 +317,15 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
         }
     }
 
-    let deps = if used_refs.is_empty() {
-        String::new()
-    } else {
-        let lines: String = used_refs
-            .iter()
-            .map(|&idx| format!("{} = {{ path = {:?} }}\n", refs[idx].crate_name, refs[idx].dep_path))
-            .collect();
-        format!("\n[dependencies]\n{lines}")
-    };
+    // Every crate shares one runtime, a crate beside it: one `JsValue`, one
+    // `ts_drop_closure` in a program.
+    let lines: String = used_refs.iter().map(|&idx| format!("{} = {{ path = {:?} }}\n", refs[idx].crate_name, refs[idx].dep_path)).collect();
+    let deps = format!("\n[dependencies]\nts_runtime = {{ path = \"../ts_runtime\" }}\n{lines}");
     let mut lib = format!(
-        "// Generated. Bindings: `use {crate_name}::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\nmod runtime;\npub use runtime::*;\nmod types;\npub use types::*;\n"
+        "// Generated. Bindings: `use {crate_name}::*;`.\n#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n\nmod raw;\n#[doc(hidden)]\npub use ::ts_runtime as runtime;\npub use ::ts_runtime::*;\nmod types;\npub use types::*;\n"
     );
     let mut out = vec![
         ("Cargo.toml".to_string(), format!("# Generated.\n[package]\nname = \"{crate_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n{deps}")),
-        ("src/runtime.rs".to_string(), RUNTIME.to_string()),
         ("src/types.rs".to_string(), types_file),
     ];
     // A namespace's module, by its own name (`pub mod stream;`), not taken
@@ -382,6 +360,7 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
     }
     out.push(("src/raw.rs".into(), format!("// Generated. The imports.\n#![allow(dead_code, unused_imports)]\nuse core::ffi::c_void;\n\n#[link(wasm_import_module = \"{wasm_module}\")]\nunsafe extern \"C\" {{\n{}}}\n", imports.into_values().collect::<String>())));
     out.push(("src/lib.rs".into(), lib));
+    out.extend(super::runtime_crate());
     let mut rust_types = BTreeMap::new();
     let is_top_exported = |rn: &str| !matches!(rn, "JsValue" | "Error" | "Date") && super::super::model::buffer_spec(rn).is_none();
     for c in &m.classes {

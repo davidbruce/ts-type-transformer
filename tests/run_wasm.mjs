@@ -25,7 +25,11 @@ instance.exports.run();
 // until it is done.
 await new Promise(r => setTimeout(r, 50));
 const deadline = Date.now() + 20000;
-while (instance.exports.busy?.() && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
+// A program waiting for a collection (a callback it dropped) gets one each time.
+while (instance.exports.busy?.() && Date.now() < deadline) {
+    globalThis.gc?.();
+    await new Promise(r => setTimeout(r, 10));
+}
 instance.exports.finish?.();
 if (failed.length || passed === 0) {
     console.error(`${failed.length} checks failed (test source lines: ${failed.join(', ')}); ${passed} passed`);

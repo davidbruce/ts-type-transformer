@@ -39,9 +39,12 @@ await runTargetBuild({
   beforeDemos: async ({ buildPkgs, buildDom, packages, bindingsDir, jobs, force }) => {
     const rlibsDir = path.join(bindingsDir, '.rlibs');
     fs.mkdirSync(rlibsDir, { recursive: true });
+    // Every crate shares the runtime's crate, written beside them.
+    const runtimeRlib = await ensureRlib('ts_runtime', bindingsDir, rlibsDir, [], force, false);
+    const rt = ['ts_runtime', runtimeRlib];
     let domRlib = null;
     if (buildDom) {
-      domRlib = await ensureRlib('dom', bindingsDir, rlibsDir, [], force, false);
+      domRlib = await ensureRlib('dom', bindingsDir, rlibsDir, [rt], force, false);
     }
     const specs = [...new Map(buildPkgs.map(p => [packages[p].outDir, packages[p]])).values()];
     await runPool(specs, jobs, spec =>
@@ -49,7 +52,7 @@ await runTargetBuild({
         spec.outDir,
         bindingsDir,
         rlibsDir,
-        spec.needsDom ? [['dom', domRlib]] : [],
+        spec.needsDom ? [rt, ['dom', domRlib]] : [rt],
         force,
         jobs > 1,
       ),

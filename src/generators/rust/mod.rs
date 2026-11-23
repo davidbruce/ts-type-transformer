@@ -146,6 +146,14 @@ impl Context {
 
 pub(super) const RUNTIME: &str = include_str!("../runtime/rust_runtime.rs");
 
+// The runtime's crate, `ts_runtime`, beside a package's: paths are from the package.
+pub fn runtime_crate() -> Vec<(String, String)> {
+    vec![
+        ("../ts_runtime/Cargo.toml".into(), "# Generated.\n[package]\nname = \"ts_runtime\"\nversion = \"0.1.0\"\nedition = \"2024\"\n".into()),
+        ("../ts_runtime/src/lib.rs".into(), format!("#![allow(non_camel_case_types, non_snake_case, clippy::all)]\n{RUNTIME}")),
+    ]
+}
+
 // What the model names that the runtime declares under another name.
 pub(super) const RUNTIME_TYPES: &[(&str, &str)] = &[("Promise", "JsPromise"), ("PromiseLike", "JsPromise")];
 

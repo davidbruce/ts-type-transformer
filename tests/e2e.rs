@@ -166,7 +166,8 @@ fn write_glue(c: &Case, model: &generators::model::Model) {
 }
 
 fn run_wasm(c: &Case, node: &Path) {
-    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("glue.mjs")).arg(c.out.join("test.wasm")));
+    // `--expose-gc`: a test may wait for a callback it dropped to be collected.
+    let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(c.fixture.join("impl.mjs")).arg(c.out.join("glue.mjs")).arg(c.out.join("test.wasm")));
     print!("{report}");
 }
 
@@ -372,7 +373,41 @@ fn rustc_wasm() -> Option<PathBuf> {
 const RUSTC_WASM: &[&str] = &["--edition", "2024", "--target", "wasm32-unknown-unknown", "-O", "-D", "warnings"];
 // A program, linked against the bindings.
 // Without the standard library's debug information, which is most of a megabyte.
-const RUSTC_PROGRAM: &[&str] = &["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "--extern", "bindings=libbindings.rlib"];
+const RUSTC_PROGRAM: &[&str] = &["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "--extern", "bindings=libbindings.rlib", "-L", "dependency=."];
+
+// The runtime every bindings crate shares, compiled once per run and kept in
+// `target/e2e-cache`; copied beside a crate as `libts_runtime.rlib`.
+fn ts_runtime_rlib(rustc: &Path) -> PathBuf {
+    use std::hash::{Hash, Hasher};
+    static RLIB: OnceLock<PathBuf> = OnceLock::new();
+    RLIB.get_or_init(|| {
+        let files = generators::rust::runtime_crate();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (&files, RUSTC_WASM).hash(&mut hasher);
+        let cache = root().join("target/e2e-cache");
+        let src = cache.join(format!("ts_runtime-{:x}", hasher.finish()));
+        let lib = src.join("libts_runtime.rlib");
+        if !lib.exists() {
+            for (path, text) in &files {
+                let path = src.join(path.trim_start_matches("../ts_runtime/"));
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, text).unwrap();
+            }
+            let tmp = src.join(format!("libts_runtime.{}.rlib", std::process::id()));
+            run(Command::new(rustc).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "ts_runtime", "-o"]).arg(&tmp).arg(src.join("src/lib.rs")));
+            fs::rename(tmp, &lib).unwrap();
+        }
+        lib
+    })
+    .clone()
+}
+
+// Puts the runtime's library in `dir`, for `--extern` and `-L dependency=.`.
+fn runtime_beside(rustc: &Path, dir: &Path) -> PathBuf {
+    let local = dir.join("libts_runtime.rlib");
+    fs::copy(ts_runtime_rlib(rustc), &local).unwrap();
+    local
+}
 
 // Writes the bindings crate in `bindings/` and compiles it to a library. The
 // library is kept in `target/e2e-cache`, and compiled again only when what
@@ -390,9 +425,11 @@ fn rust_bindings(rustc: &Path, out: &Path, model: &generators::model::Model) {
     write_files(&out.join("bindings"), files);
     if !(lib.exists() && fs::read_to_string(&stamp_file).is_ok_and(|s| s == stamp)) {
         fs::create_dir_all(&cache).unwrap();
-        run(Command::new(rustc).current_dir(out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "bindings", "-o"]).arg(&lib).arg("bindings/src/lib.rs"));
+        let rt = runtime_beside(rustc, out);
+        run(Command::new(rustc).current_dir(out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "bindings", "--extern"]).arg(format!("ts_runtime={}", rt.display())).arg("-o").arg(&lib).arg("bindings/src/lib.rs"));
         fs::write(stamp_file, stamp).unwrap();
     }
+    runtime_beside(rustc, out);
     fs::copy(lib, out.join("libbindings.rlib")).unwrap();
 }
 
@@ -892,7 +929,8 @@ fn c_union_release_and_unmatched_tag() {
          export const root = { Box, pick: k => (k === 0 ? 42 : k === 1 ? 'hi' : k === 2 ? new Box(7) : { unexpected: true }) };\n",
     )
     .unwrap();
-    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("glue.mjs")).arg(dir.join("test.wasm")));
+    // `--expose-gc`: a test may wait for a callback it dropped to be collected.
+    let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("glue.mjs")).arg(dir.join("test.wasm")));
     print!("{report}");
 }
 
@@ -1684,7 +1722,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
     run(Command::new(&clang).args(CLANGXX_WASM).arg("-I").arg(&bindings_dir).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.cpp")).args(&objects));
     let used = generators::wasm::imports(&fs::read(out.join("test.wasm")).unwrap());
     fs::write(out.join("glue.mjs"), generators::wasm::glue(&model, Some(&used))).unwrap();
-    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+    // `--expose-gc`: a test may wait for a callback it dropped to be collected.
+    let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
     assert!(report.contains("23 checks passed"), "{report}");
 }
 
@@ -1797,7 +1836,8 @@ pub export fn run() void {
     run(Command::new(&zig).current_dir(&out).args(ZIG_WASM));
     let used = generators::wasm::imports(&fs::read(out.join("test.wasm")).unwrap());
     fs::write(out.join("glue.mjs"), generators::wasm::glue(&model, Some(&used))).unwrap();
-    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+    // `--expose-gc`: a test may wait for a callback it dropped to be collected.
+    let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
     assert!(report.contains("22 checks passed"), "{report}");
 }
 
@@ -1894,7 +1934,8 @@ pub export fn run() void {
     run(Command::new(&zig).current_dir(&out).args(ZIG_WASM));
     let used = generators::wasm::imports(&fs::read(out.join("test.wasm")).unwrap());
     fs::write(out.join("glue.mjs"), generators::wasm::glue(&model, Some(&used))).unwrap();
-    let report = run(Command::new(node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+    // `--expose-gc`: a test may wait for a callback it dropped to be collected.
+    let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
     assert!(report.contains("checks passed"), "{report}");
 
     for (call, said) in [
@@ -2015,8 +2056,9 @@ fn rust_cross_project_refs() {
 
     let base_rlib = out.join("libbase_lib.rlib");
     let app_rlib = out.join("libapp_lib.rlib");
-    run(Command::new(&rustc).current_dir(&out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "base_lib", "-o"]).arg(&base_rlib).arg("bindings/base_lib/src/lib.rs"));
-    run(Command::new(&rustc).current_dir(&out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "app_lib", "--extern"]).arg(format!("base_lib={}", base_rlib.display())).arg("-o").arg(&app_rlib).arg("bindings/app_lib/src/lib.rs"));
+    let rt = format!("ts_runtime={}", runtime_beside(&rustc, &out).display());
+    run(Command::new(&rustc).current_dir(&out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "base_lib", "--extern", &rt, "-o"]).arg(&base_rlib).arg("bindings/base_lib/src/lib.rs"));
+    run(Command::new(&rustc).current_dir(&out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--crate-name", "app_lib", "--extern", &rt, "-L", "dependency=.", "--extern"]).arg(format!("base_lib={}", base_rlib.display())).arg("-o").arg(&app_rlib).arg("bindings/app_lib/src/lib.rs"));
     fs::write(
         out.join("test.rs"),
         "#![no_main]\n\
@@ -2040,7 +2082,7 @@ fn rust_cross_project_refs() {
     run(Command::new(&rustc)
         .current_dir(&out)
         .args(RUSTC_WASM)
-        .args(["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "--extern"])
+        .args(["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "-L", "dependency=.", "--extern"])
         .arg(format!("base_lib={}", base_rlib.display()))
         .arg("--extern")
         .arg(format!("app_lib={}", app_rlib.display()))
@@ -2350,7 +2392,7 @@ fn rust_arguments_are_values_not_wrappers() {
     let Some(rustc) = rustc_wasm() else { return };
     let compile = |c: &Case, source: &str| {
         fs::write(c.out.join("t.rs"), format!("#![no_main]\nuse bindings::*;\n{source}\n")).unwrap();
-        Command::new(&rustc).current_dir(&c.out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--extern", "bindings=libbindings.rlib", "-o", "t.rlib", "t.rs"]).output().unwrap()
+        Command::new(&rustc).current_dir(&c.out).args(RUSTC_WASM).args(["--crate-type", "rlib", "--extern", "bindings=libbindings.rlib", "-L", "dependency=.", "-o", "t.rlib", "t.rs"]).output().unwrap()
     };
     let data = case_in("data", "rust", "data-rust-arguments");
     rust_bindings(&rustc, &data.out, &model(&data.xml, "Rust"));
@@ -4539,15 +4581,16 @@ window.__result = { passed, failed, dom: [], domChecks: 1 };
                     .args(["--crate-type", "cdylib", "-C", "link-arg=--export-table", "-C", "strip=debuginfo", "-L"])
                     .arg(&rlibs_dir);
                 let needs_dom = spec.needs_dom || spec.extra_specs.iter().any(|e| e.needs_dom);
-                let dom_rlib = needs_dom.then(|| build_rust_rlib(&rustc, &bindings, "dom", &rlibs_dir, &[]));
+                let rt_rlib = build_rust_rlib(&rustc, &bindings, "ts_runtime", &rlibs_dir, &[]);
+                let dom_rlib = needs_dom.then(|| build_rust_rlib(&rustc, &bindings, "dom", &rlibs_dir, &[("ts_runtime", rt_rlib.as_path())]));
                 if let Some(ref dom_rlib) = dom_rlib {
                     cmd.arg("--extern").arg(format!("dom={}", dom_rlib.display()));
                 }
                 for s in std::iter::once(spec).chain(spec.extra_specs.iter().copied()) {
                     let externs: Vec<(&str, &Path)> = if s.needs_dom {
-                        vec![("dom", dom_rlib.as_ref().expect("dom rlib").as_path())]
+                        vec![("ts_runtime", rt_rlib.as_path()), ("dom", dom_rlib.as_ref().expect("dom rlib").as_path())]
                     } else {
-                        vec![]
+                        vec![("ts_runtime", rt_rlib.as_path())]
                     };
                     let pkg_rlib = build_rust_rlib(&rustc, &bindings, s.crate_name, &rlibs_dir, &externs);
                     cmd.arg("--extern").arg(format!("{}={}", s.crate_name, pkg_rlib.display()));

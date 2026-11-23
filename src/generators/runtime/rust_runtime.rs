@@ -8,7 +8,8 @@ use std::rc::Rc;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 #[allow(dead_code)]
-pub(crate) mod rt {
+#[doc(hidden)]
+pub mod rt {
     use core::ffi::c_void;
     #[link(wasm_import_module = "env")]
     unsafe extern "C" {
@@ -264,11 +265,13 @@ impl<T: FromJs> FromJs for Option<T> {
 
 // Declares a handle type, generic or not. `==` is whether two handles are
 // one JavaScript value.
+#[macro_export]
+#[doc(hidden)]
 macro_rules! handle {
     (@common [$($meta:tt)*] $name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
         $($meta)*
         #[repr(transparent)]
-        pub struct $name $(<$($p $(= $d)?),*>)? (pub $crate::runtime::JsHandle $(, pub core::marker::PhantomData<fn() -> ($($p,)*)>)?);
+        pub struct $name $(<$($p $(= $d)?),*>)? (pub $crate::JsHandle $(, pub core::marker::PhantomData<fn() -> ($($p,)*)>)?);
         impl $(<$($p),*>)? AsRef<$name $(<$($p),*>)?> for $name $(<$($p),*>)? {
             fn as_ref(&self) -> &Self {
                 self
@@ -279,29 +282,29 @@ macro_rules! handle {
                 $name(self.0.clone() $(, core::marker::PhantomData::<fn() -> ($($p,)*)>)?)
             }
         }
-        impl $(<$($p),*>)? AsRef<$crate::runtime::JsHandle> for $name $(<$($p),*>)? {
-            fn as_ref(&self) -> &$crate::runtime::JsHandle {
+        impl $(<$($p),*>)? AsRef<$crate::JsHandle> for $name $(<$($p),*>)? {
+            fn as_ref(&self) -> &$crate::JsHandle {
                 &self.0
             }
         }
         impl $(<$($p),*>)? PartialEq for $name $(<$($p),*>)? {
             fn eq(&self, o: &Self) -> bool {
-                $crate::runtime::js::same(&self.0, &o.0)
+                $crate::js::same(&self.0, &o.0)
             }
         }
-        impl $(<$($p),*>)? $crate::runtime::ToJs for $name $(<$($p),*>)? {
-            fn lend(&self) -> $crate::runtime::Lent {
-                $crate::runtime::Lent::borrow(self.0 .0)
+        impl $(<$($p),*>)? $crate::ToJs for $name $(<$($p),*>)? {
+            fn lend(&self) -> $crate::Lent {
+                $crate::Lent::borrow(self.0 .0)
             }
         }
-        impl $(<$($p),*>)? $crate::runtime::FromJs for $name $(<$($p),*>)? {
+        impl $(<$($p),*>)? $crate::FromJs for $name $(<$($p),*>)? {
             fn from_handle(h: u32) -> Self {
-                $name($crate::runtime::JsHandle(h) $(, core::marker::PhantomData::<fn() -> ($($p,)*)>)?)
+                $name($crate::JsHandle(h) $(, core::marker::PhantomData::<fn() -> ($($p,)*)>)?)
             }
         }
     };
     (@jsvalue $name:ident) => {
-        handle!(@common [] $name);
+        $crate::handle!(@common [] $name);
         impl core::fmt::Debug for $name {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 write!(f, "{}(#{})", stringify!($name), self.0 .0)
@@ -309,18 +312,18 @@ macro_rules! handle {
         }
     };
     (@custom_debug $name:ident) => {
-        handle!(@common [] $name);
-        impl From<$name> for $crate::runtime::JsValue {
+        $crate::handle!(@common [] $name);
+        impl From<$name> for $crate::JsValue {
             fn from(x: $name) -> Self {
-                $crate::runtime::JsValue(x.0)
+                $crate::JsValue(x.0)
             }
         }
     };
     ($(#[$meta:meta])* $name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
-        handle!(@common [$(#[$meta])*] $name $(<$($p $(= $d)?),*>)?);
-        impl $(<$($p),*>)? From<$name $(<$($p),*>)?> for $crate::runtime::JsValue {
+        $crate::handle!(@common [$(#[$meta])*] $name $(<$($p $(= $d)?),*>)?);
+        impl $(<$($p),*>)? From<$name $(<$($p),*>)?> for $crate::JsValue {
             fn from(x: $name $(<$($p),*>)?) -> Self {
-                $crate::runtime::JsValue(x.0)
+                $crate::JsValue(x.0)
             }
         }
         impl $(<$($p),*>)? core::fmt::Debug for $name $(<$($p),*>)? {
@@ -330,7 +333,6 @@ macro_rules! handle {
         }
     };
 }
-pub(crate) use handle;
 
 // A JavaScript value of no particular type, made from a number, a flag, a
 // string, or any object: `f(42.0)`, `f("text")`, `f(&element)`.
@@ -647,19 +649,28 @@ struct Closure<F> {
     drop_fn: unsafe fn(*mut c_void),
     f: core::cell::RefCell<F>,
 }
-pub(crate) fn closure<F: 'static>(f: F) -> *mut c_void {
+#[doc(hidden)]
+pub fn closure<F: 'static>(f: F) -> *mut c_void {
     unsafe fn drop_closure<F>(p: *mut c_void) {
         drop(unsafe { Box::from_raw(p as *mut Closure<F>) });
     }
     Box::into_raw(Box::new(Closure { drop_fn: drop_closure::<F>, f: core::cell::RefCell::new(f) })) as *mut c_void
 }
-pub(crate) unsafe fn closure_fn<'a, F: 'static>(ctx: *mut c_void) -> core::cell::RefMut<'a, F> {
+#[doc(hidden)]
+pub unsafe fn closure_fn<'a, F: 'static>(ctx: *mut c_void) -> core::cell::RefMut<'a, F> {
     unsafe { (*(ctx as *const Closure<F>)).f.borrow_mut() }
+}
+// Frees a closure once JavaScript has collected its function. One export for
+// every crate: each closure carries its own drop.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ts_drop_closure(ctx: *mut c_void) {
+    unsafe { ((*(ctx as *const ClosureHeader)).drop_fn)(ctx) };
 }
 
 // Forgets a callback when dropped: JavaScript calling it afterwards is an
 // error there, never a call into a closure that is gone.
-pub(crate) struct Forget(pub u32);
+#[doc(hidden)]
+pub struct Forget(pub u32);
 impl Drop for Forget {
     fn drop(&mut self) {
         unsafe { rt::js_callback_release(self.0) };

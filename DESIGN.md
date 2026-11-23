@@ -349,7 +349,9 @@ the time control returns to JavaScript is reported, not lost.
   inherited member is written once: the furthest ancestor that declares it
   writes it in `X.Methods(Self)`, and each subtype's member is an alias. 12 MB.
 - Rust (wasm32-unknown-unknown): a crate (`Cargo.toml`, `src/`), compiled
-  once: a DOM program then builds in under a second. A handle type per
+  once: a DOM program then builds in under a second. Every crate shares the
+  runtime's, `ts_runtime`, written beside it: one `JsValue` for the DOM and a
+  library, and one `ts_drop_closure` in a program. A handle type per
   JavaScript type, `Clone` retaining and `Drop` releasing it. Each type's
   members are a trait (`ElementMethods`) implemented for it and its subtypes;
   where two traits share a name, an inherent method says which. Names are
@@ -371,8 +373,8 @@ the time control returns to JavaScript is reported, not lost.
   &listener, None)`, `add_event_listener("ping", on_ping, &options)`). A
   nullable union argument is any member, the union or `None`. A defaulted type argument is stated with
   `query_selector_as::<T>`. `T extends Node` is `T: Is<Node>`. Callbacks are
-  closures, kept (`new`, `release`) or for the length of a call and free to
-  borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
+  closures, kept (`new`, `release`, or freed once JavaScript collects the
+  function) or for the length of a call and free to borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
 - Gleam (JavaScript target): no wasm and no glue, as F#; from the shared
   model, as the wasm targets, since Gleam has no methods, subtypes, overloads
   or optional arguments. Subtypes are phantom types along each class's chain
