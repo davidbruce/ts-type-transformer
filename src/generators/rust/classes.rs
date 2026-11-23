@@ -173,6 +173,9 @@ pub(super) fn emit_classes(
         trait_with_entries.insert(k.name.clone(), withs);
     }
     let this = "AsRef::<JsHandle>::as_ref(self).0";
+    // A class no other class here extends has no trait: its members are its
+    // own inherent methods, which it has anyway.
+    let extended: HashSet<&str> = m.classes.iter().flat_map(|k| k.ancestors.iter().map(String::as_str)).filter(|a| class_of(a).is_some()).collect();
     for c in &m.classes {
         let out = match module_of.get(&c.name) {
             Some(path) => namespaces.entry(path.clone()).or_default(),
@@ -252,8 +255,13 @@ pub(super) fn emit_classes(
                 }
             }
         }
-        *out += &format!("pub trait {name}Methods{bounds}: AsRef<JsHandle> {{\n{trait_body}}}\n");
-        *out += &format!("impl{bounds} {name}Methods{args} for {me} {{}}\n{dispatch}");
+        let leaf = !extended.contains(c.name.as_str());
+        if leaf {
+            *out += &dispatch;
+        } else {
+            *out += &format!("pub trait {name}Methods{bounds}: AsRef<JsHandle> {{\n{trait_body}}}\n");
+            *out += &format!("impl{bounds} {name}Methods{args} for {me} {{}}\n{dispatch}");
+        }
         // Statics, constants, a map's keys, non-primary/colliding/own inherent methods, and conversions.
         let mut inherent = String::new();
         let mut inherent_taken: HashSet<String> = HashSet::new();

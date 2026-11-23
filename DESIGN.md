@@ -354,7 +354,8 @@ the time control returns to JavaScript is reported, not lost.
   runtime's, `ts_runtime`, written beside it: one `JsValue` for the DOM and a
   library, and one `ts_drop_closure` in a program. A handle type per
   JavaScript type, `Clone` retaining and `Drop` releasing it. Each type's
-  members are a trait (`ElementMethods`) implemented for it and its subtypes;
+  members are a trait (`ElementMethods`) implemented for it and its subtypes,
+  and its own inherent methods; a type nothing extends has only those;
   where two traits share a name, an inherent method says which. Names are
   Rust's: `get_element_by_id`, `text_content()` and `set_text_content(..)`,
   `ShapeKind::Square`, `HTMLElementEventMap::CLICK`. Arguments are borrowed:

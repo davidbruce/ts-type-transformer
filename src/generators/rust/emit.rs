@@ -349,7 +349,8 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
         lib += &format!("pub mod {top};\n");
         out.push((format!("src/{top}.rs"), text));
     }
-    for c in m.classes.iter().filter(|c| module_of.contains_key(&c.name)) {
+    let extended: HashSet<&str> = m.classes.iter().flat_map(|k| k.ancestors.iter().map(String::as_str)).collect();
+    for c in m.classes.iter().filter(|c| module_of.contains_key(&c.name) && extended.contains(c.name.as_str())) {
         lib += &format!("#[allow(unused_imports)]\npub use {}Methods as _;\n", cx.tn(&c.name));
     }
     for (module, text) in modules {
