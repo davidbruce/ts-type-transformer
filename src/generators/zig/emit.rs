@@ -592,17 +592,22 @@ pub(super) fn files_with_imports(m: &Model, pkg_name: &str, refs: &[ProjectRef])
             }
             *out += "        };\n    }\n";
         }
+        // Each ancestor's members for this type, named once: `pub const x = M_Element.x;`.
+        let froms: BTreeSet<&str> = c.funcs.iter().filter_map(|f| inherited(f).map(|(from, _)| from)).chain(extras.iter().map(|&(_, from, _)| from)).collect();
+        for from in &froms {
+            *out += &format!("    const M_{from} = {from}.Methods(@This());\n");
+        }
         for f in &c.funcs {
             let own_name = &own_names[&f.name];
             match inherited(f) {
-                Some((from, name)) => *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(own_name), ident(&class_names[from][name])),
+                Some((from, name)) => *out += &format!("    pub const {} = M_{from}.{};\n", ident(own_name), ident(&class_names[from][name])),
                 None if shared(f) => *out += &format!("    pub const {0} = Methods(@This()).{0};\n", ident(own_name)),
                 None => func(out, externs, Some(&c.name), f, own_name, "    ", &m.unions, &m.callbacks, wasm_module, &mut emitted_imports),
             }
         }
         for &(zname, from, home_zname) in extras {
             emitted.insert(zname.to_string());
-            *out += &format!("    pub const {} = {from}.Methods(@This()).{};\n", ident(zname), ident(home_zname));
+            *out += &format!("    pub const {} = M_{from}.{};\n", ident(zname), ident(home_zname));
         }
         if let Some(elem) = c_elem {
             let elem_ty = typed(elem, false);

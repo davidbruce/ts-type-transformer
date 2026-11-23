@@ -1889,7 +1889,7 @@ export declare function anyLoose(): Loose;
     let bindings: String = files.iter().map(|(_, s)| s.as_str()).collect();
     assert!(bindings.contains("pub fn add(self: Counter, n_: anytype) Counter"), "a fluent method returns its receiver:\n{bindings}");
     assert_eq!(bindings.matches("pub fn bump(").count(), 1, "an inherited fluent method is written once:\n{bindings}");
-    assert!(bindings.contains("pub const bump = Base.Methods(@This()).bump;"), "the subtype aliases the ancestor's:\n{bindings}");
+    assert!(bindings.contains("const M_Base = Base.Methods(@This());") && bindings.contains("pub const bump = M_Base.bump;"), "the subtype aliases the ancestor's:\n{bindings}");
     assert!(bindings.contains("/// Takes `n`: an integer or a float."), "{bindings}");
     write_files(&out, files);
     fs::write(
