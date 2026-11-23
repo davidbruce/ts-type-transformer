@@ -585,7 +585,8 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
                 format!("import {module}.{{{}}}{suffix}\n", items.join(", "))
             })
             .collect();
-        files.push((format!("{path}.gleam"), format!("// Generated. Bindings for Gleam's JavaScript target.\n{imports}\n{}", unit.out)));
+        let whole: String = unit.used.iter().filter_map(|t| t.strip_prefix(super::classes::MODULE_MARK)).map(|m| format!("import {m} as {}\n", super::classes::module_alias(m))).collect();
+        files.push((format!("{path}.gleam"), format!("// Generated. Bindings for Gleam's JavaScript target.\n{imports}{whole}\n{}", unit.out)));
         if unit.ffi.is_empty() {
             continue;
         }

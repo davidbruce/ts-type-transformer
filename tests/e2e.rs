@@ -1473,7 +1473,7 @@ export function configure(opts) {
     assert!(tag_map_gl.contains("pub const box: Key(") && tag_map_gl.contains("= Key(\"box\")"), "KeyMap const:\n{tag_map_gl}");
     let box_el_gl = bindings.files.iter().find(|(p, _)| p == "bindings/box_el.gleam").map(|(_, s)| s.as_str()).unwrap();
     let box_el_ffi = bindings.files.iter().find(|(p, _)| p == "bindings/box_el_ffi.mjs").map(|(_, s)| s.as_str()).unwrap();
-    assert!(box_el_gl.contains("@external(javascript, \"./base_el_ffi.mjs\", \"base_id\")"), "inherited alias:\n{box_el_gl}");
+    assert!(box_el_gl.contains("import bindings/base_el as m_bindings_base_el") && box_el_gl.contains("pub const base_id = m_bindings_base_el.base_id"), "inherited alias:\n{box_el_gl}");
     assert!(!box_el_ffi.contains("export function base_id"), "zero duplicate JS:\n{box_el_ffi}");
 
     write_gleam_project(&out, &bindings);

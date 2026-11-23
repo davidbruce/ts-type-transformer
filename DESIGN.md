@@ -385,7 +385,9 @@ the time control returns to JavaScript is reported, not lost.
   and only an Element. A function's parameters are open (`Node(a)`, any
   subtype); what comes back, what a callback is given, what a list or
   variant holds, are closed (`Node(Nil)`). Members are their declaring
-  type's, in its module: `named.get_name(shape)`. A type parameter bound to a class is that
+  type's, in its module: `named.get_name(shape)`; a subtype's module names
+  them too, as constants of the ancestor's (`pub const add_to = m_leaflet_layer.add_to`),
+  but for the DOM, whose would be too many. A type parameter bound to a class is that
   class, open: `append_child(self: Node(a), node: Node(t)) -> Node(t)`.
   Members of bases off the chain (mixins) are the class's own, with an
   upcast to the base; `node.upcast(x)` closes a type at Node, for a list of

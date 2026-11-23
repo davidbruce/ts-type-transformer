@@ -3,16 +3,23 @@ use std::collections::{HashMap, HashSet};
 use super::bounds::{chain_root, mentions_any, secondary};
 use super::types::Gen;
 use super::{
-    codec_var, func_unit, function_name, gleam_const_literal, lower, relative, snake,
+    codec_var, func_unit, function_name, gleam_const_literal, lower, snake,
     JS_RESERVED, MAX_INHERITED_ALIASES,
 };
 use super::super::js::{access, global};
 use super::super::model::{base_args, map_types, subst, with_self_args, Call, Class, Func, Model, TParam, Ty};
 
+// In a module's noted names: a module it imports whole (an ancestor's, for its aliases).
+pub(super) const MODULE_MARK: &str = "module:";
+
+// How a module imports another whole: `import leaflet/layer as m_leaflet_layer`.
+pub(super) fn module_alias(module: &str) -> String {
+    format!("m_{}", module.replace('/', "_"))
+}
+
 #[derive(Clone)]
 pub(super) struct EmittedMethod {
     gleam_name: String,
-    js_name: String,
     ffi_path: String,
     func: Func,
 }
@@ -20,7 +27,6 @@ pub(super) struct EmittedMethod {
 #[derive(Clone)]
 pub(super) struct EmittedWith {
     gleam_name: String,
-    js_name: String,
     ffi_path: String,
     func: Func,
 }
@@ -123,40 +129,13 @@ impl<'m> Gen<'m> {
         (spec_names == expected_names).then_some(spec_crossing)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn emit_alias_decl(
-        &mut self,
-        c: &'m Class,
-        own: &[Ty],
-        spec_f: &Func,
-        spec_crossing: &[TParam],
-        gleam_name: &str,
-        js_name: &str,
-        ffi_path: &str,
-        return_self: bool,
-    ) {
-        self.setup_fn_bounds(spec_f, Some((&c.name, &c.type_params)));
-        *self.open.borrow_mut() = Some(0);
-        let self_ty = self.class_type(&c.name, own);
-        let mut params = vec![format!("self: {self_ty}")];
-        let mut taken: HashSet<String> = HashSet::from(["self".to_string()]);
-        for (p, t) in &spec_f.params {
-            let mut id = lower(p);
-            while JS_RESERVED.contains(&id.as_str()) || !taken.insert(id.clone()) {
-                id.push('_');
-            }
-            params.push(format!("{id}: {}", self.ty(t)));
-        }
-        *self.open.borrow_mut() = None;
-        for p in spec_crossing {
-            self.note("Codec");
-            params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
-        }
-        let ret = if return_self { self_ty } else { self.ty(&spec_f.ret) };
-        self.clear_fn_bounds();
+    // An inherited member: the ancestor's function itself, by its module. Its
+    // self is open (`Layer(sub)`), so a subtype's call keeps the subtype.
+    fn emit_alias_decl(&mut self, gleam_name: &str, ffi_path: &str) {
+        let module = ffi_path.strip_suffix("_ffi.mjs").unwrap_or(ffi_path);
+        self.note(&format!("{MODULE_MARK}{module}"));
         self.values.insert((self.unit.clone(), gleam_name.to_string()));
-        let rel_ffi = relative(&self.unit, ffi_path);
-        self.out += &format!("@external(javascript, \"{rel_ffi}\", \"{js_name}\")\npub fn {gleam_name}({}) -> {ret}\n\n", params.join(", "));
+        self.out += &format!("pub const {gleam_name} = {}.{gleam_name}\n\n", module_alias(module));
     }
 
     fn emit_inherited_aliases(
@@ -176,7 +155,6 @@ impl<'m> Gen<'m> {
             return;
         }
         let c_is_bag = c.funcs.iter().any(|f| matches!(f.call, Call::Create(_)));
-        let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
         for anc_name in chain {
             let Some(anc) = self.m.classes.iter().find(|k| k.name == anc_name) else { continue };
             let Some(sub_args) = (if anc.type_params.is_empty() { Some(Vec::new()) } else { base_args(self.m, c, &anc.name) }) else { continue };
@@ -186,8 +164,10 @@ impl<'m> Gen<'m> {
                         continue;
                     }
                     let spec_wf = map_types(&ew.func, &|t| subst(t, &anc.type_params, &sub_args));
-                    let Some(spec_crossing) = self.inherited_spec_crossing(&ew.func, anc, &spec_wf, c, &sub_args) else { continue };
-                    self.emit_alias_decl(c, &own, &spec_wf, &spec_crossing, &ew.gleam_name, &ew.js_name, &ew.ffi_path, true);
+                    if self.inherited_spec_crossing(&ew.func, anc, &spec_wf, c, &sub_args).is_none() {
+                        continue;
+                    }
+                    self.emit_alias_decl(&ew.gleam_name, &ew.ffi_path);
                 }
             }
             if emit_all_inherited && let Some(methods) = emitted_methods.get(&anc.name) {
@@ -196,8 +176,10 @@ impl<'m> Gen<'m> {
                         continue;
                     }
                     let spec_f = map_types(&em.func, &|t| subst(t, &anc.type_params, &sub_args));
-                    let Some(spec_crossing) = self.inherited_spec_crossing(&em.func, anc, &spec_f, c, &sub_args) else { continue };
-                    self.emit_alias_decl(c, &own, &spec_f, &spec_crossing, &em.gleam_name, &em.js_name, &em.ffi_path, spec_f.returns_this);
+                    if self.inherited_spec_crossing(&em.func, anc, &spec_f, c, &sub_args).is_none() {
+                        continue;
+                    }
+                    self.emit_alias_decl(&em.gleam_name, &em.ffi_path);
                 }
             }
         }
@@ -276,7 +258,6 @@ impl<'m> Gen<'m> {
                     if prefix.is_none() {
                         emitted.push(EmittedWith {
                             gleam_name: with_id,
-                            js_name: js_fn,
                             ffi_path: format!("{}_ffi.mjs", self.unit),
                             func: wf,
                         });
@@ -333,7 +314,6 @@ impl<'m> Gen<'m> {
                     if prefix.is_none() {
                         emitted.push(EmittedWith {
                             gleam_name: with_id,
-                            js_name: js_fn,
                             ffi_path: format!("{}_ffi.mjs", self.unit),
                             func: wf,
                         });
@@ -382,11 +362,10 @@ pub(super) fn emit_class_and_func_modules<'m>(
         for f in &c.funcs {
             let f = with_self_args(f, c);
             let id = g.value_name(&function_name(&f, &f.name));
-            let js_name = g.function(&id, &f, Some((&c.name, &c.type_params)));
+            g.function(&id, &f, Some((&c.name, &c.type_params)));
             if Class::has_self(&f) {
                 cls_methods.push(EmittedMethod {
                     gleam_name: id,
-                    js_name,
                     ffi_path: format!("{}_ffi.mjs", class_paths[&c.name]),
                     func: f,
                 });
