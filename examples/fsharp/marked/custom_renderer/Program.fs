@@ -35,8 +35,7 @@ let ext =
         renderer =
             MarkedExtensionRenderer.Create (
                 heading =
-                    RendererSpace.Create (fun args ->
-                        let h = unbox<Tokens.Heading> args.[0]
+                    (fun (h: Tokens.Heading) ->
                         !^ $"<h{int h.depth} class=\"wire-h\">§ {h.text}</h{int h.depth}>\n")
             )
     )
