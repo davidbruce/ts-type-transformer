@@ -261,7 +261,21 @@ fn family_names(
     synth_enums: &std::collections::HashMap<String, String>,
 ) -> Vec<String> {
     let own = crate::generators::own_marks(&sigs.iter().map(|s| s.marks.clone()).collect::<Vec<_>>());
-    let plain = own.iter().position(Vec::is_empty).unwrap_or(0);
+    // The first without marks, or one called with fewer of its arguments, as
+    // JavaScript mostly calls it: `createEngine(canvas)` before
+    // `createEngine(canvas, options)`.
+    let required = |s: &Signature| -> Vec<String> { s.params.iter().filter(|p| !p.optional && !p.rest).map(|p| crate::xml::type_key(&p.ty)).collect() };
+    let first = own.iter().position(Vec::is_empty).unwrap_or(0);
+    let full = required(sigs[first]);
+    let plain = (0..sigs.len())
+        .filter(|&i| own[i].is_empty())
+        .filter(|&i| {
+            let r = required(sigs[i]);
+            let ret = |s: &Signature| s.ret.as_ref().map(crate::xml::type_key);
+            i == first || !r.is_empty() && r.len() < full.len() && full[..r.len()] == r[..] && ret(sigs[i]) == ret(sigs[first])
+        })
+        .min_by_key(|&i| (required(sigs[i]).len(), i))
+        .unwrap_or(first);
     let order: Vec<usize> = std::iter::once(plain).chain((0..sigs.len()).filter(|&i| i != plain)).collect();
     let ordered: Vec<&Signature> = order.iter().map(|&i| sigs[i]).collect();
     let ordered_own: Vec<Vec<String>> = order.iter().map(|&i| own[i].clone()).collect();

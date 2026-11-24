@@ -3338,7 +3338,7 @@ fn webworker_bindings_and_worker() {
                      let mut v = bytes.to_vec();\n\
                      for b in &mut v { *b = b.wrapping_mul(2); }\n\
                      let reply = Uint8Array::<ArrayBufferLike>::from_slice(&v);\n\
-                     post_message(&reply, Vec::<Transferable>::new());\n\
+                     post_message(&reply, None);\n\
                  });\n\
                  set_onmessage(Some(&handler));\n\
              }\n",

@@ -486,7 +486,9 @@ not at all, a `requires` clause choosing. An overload whose parameters and
 constraints repeat an earlier one's is dropped: TypeScript would never
 choose it. An overload that only makes a parameter optional is named by it.
 The plain name goes to an overload with no fixed value where there is one
-(`on(type: string, fn)`), not to one literal.
+(`on(type: string, fn)`), not to one literal; and of those, to one called
+with fewer of the first's arguments that returns the same: `createEngine(canvas)`
+before `createEngine(canvas, options)`.
 
 ## Generated names
 
