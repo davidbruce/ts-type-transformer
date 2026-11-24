@@ -61,11 +61,11 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
         on_err,
       )
 
-      let scene = b.create_scene_context(engine, None)
+      let scene = b.create_scene_context(engine)
       let clear =
         gpu_color_dict.create()
         |> gpu_color_dict.with_r(0.05)
@@ -82,15 +82,16 @@ pub fn main() -> Nil {
           b.vec3(0.0, 1.6, 0.0),
         )
       b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control_with(camera, canvas, Some(scene), None)
 
-      let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.0)), Some(0.42))
+      let hemi =
+        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.0)), Some(0.42))
       hemispheric_light.set_diffuse_color(hemi, #(0.7, 0.7, 0.7))
       hemispheric_light.set_ground_color(hemi, #(0.08, 0.08, 0.08))
       b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
       let spot =
-        b.create_spot_light(
+        b.create_spot_light_with(
           #(0.0, 6.2, 3.0),
           #(0.0, -1.0, -0.55),
           3.141592653589793 /. 3.2,
@@ -101,7 +102,7 @@ pub fn main() -> Nil {
       spot_light.set_range(spot, 22.0)
       b.add_to_scene(scene, bt.scene_entity_light_base(spot))
 
-      let fill = b.create_directional_light(#(1.2, -1.5, -1.0), Some(0.65))
+      let fill = b.create_directional_light_with(#(1.2, -1.5, -1.0), Some(0.65))
       directional_light.set_diffuse(fill, #(0.8, 0.8, 0.8))
       b.add_to_scene(scene, bt.scene_entity_light_base(fill))
 
@@ -109,7 +110,7 @@ pub fn main() -> Nil {
         ground_options.create()
         |> ground_options.with_width(18.0)
         |> ground_options.with_height(18.0)
-      let floor = b.create_ground(engine, Some(floor_opts))
+      let floor = b.create_ground_with(engine, Some(floor_opts))
       mesh.set_material(floor, mk_std(0.1, 0.25, 24.0))
       b.add_to_scene(scene, bt.scene_entity_mesh(floor))
 
@@ -126,7 +127,7 @@ pub fn main() -> Nil {
             |> cylinder_options.with_height(1.1)
             |> cylinder_options.with_diameter(1.15)
             |> cylinder_options.with_tessellation(28.0)
-          let plinth = b.create_cylinder(engine, Some(copts))
+          let plinth = b.create_cylinder_with(engine, Some(copts))
           observable_vec3.set(scene_node.get_position(plinth), x, 0.55, z)
           mesh.set_material(plinth, plinth_mat)
           b.add_to_scene(scene, bt.scene_entity_mesh(plinth))
@@ -137,7 +138,7 @@ pub fn main() -> Nil {
             |> polyhedron_options.with_type(fi)
             |> polyhedron_options.with_size(0.62)
             |> polyhedron_options.with_flat(True)
-          let poly = b.create_polyhedron(engine, Some(popts))
+          let poly = b.create_polyhedron_with(engine, Some(popts))
           let pos = scene_node.get_position(poly)
           observable_vec3.set(pos, x, 2.05, z)
           mesh.set_material(poly, mk_std(v, 0.95, 18.0 +. fi *. 24.0))

@@ -1,12 +1,12 @@
 // Names that would be one Gleam identifier, each given its own. Every check must hold.
 import bindings as b
-import gleam/io
 import bindings/gizmo
+import bindings/namespaces/ns
+import bindings/namespaces/ns/node
 import bindings/ns_node
 import bindings/point
 import bindings/shape
-import bindings/namespaces/ns
-import bindings/namespaces/ns/node
+import gleam/io
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {

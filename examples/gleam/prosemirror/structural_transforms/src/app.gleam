@@ -10,7 +10,6 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
@@ -29,6 +28,7 @@ import prosemirror/areas/prosemirror_transform
 import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
+import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
@@ -55,14 +55,21 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     |> node_spec.with_group("block")
     |> node_spec.with_defining(True)
     |> node_spec.with_to_dom(fn(n) {
-      let lvl = case decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int) {
+      let lvl = case
+        decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int)
+      {
         Ok(1) -> "h1"
         _ -> "h2"
       }
       hole_spec(lvl)
     })
 
-  let tag_node = fn(content: String, grp: option.Option(String), tag: String, def: Bool) {
+  let tag_node = fn(
+    content: String,
+    grp: option.Option(String),
+    tag: String,
+    def: Bool,
+  ) {
     let s =
       node_spec.create()
       |> node_spec.with_content(content)
@@ -81,7 +88,9 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     node_spec.create()
     |> node_spec.with_group("block")
     |> node_spec.with_atom(True)
-    |> node_spec.with_to_dom(fn(_) { t.DOMOutputSpecArray([dynamic.string("hr")]) })
+    |> node_spec.with_to_dom(fn(_) {
+      t.DOMOutputSpecArray([dynamic.string("hr")])
+    })
 
   let text_spec =
     node_spec.create()
@@ -91,10 +100,22 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     node_spec.create()
     |> node_spec.with_at("doc", pm_rt.dynamic(doc_spec))
     |> node_spec.with_at("heading", pm_rt.dynamic(heading_spec))
-    |> node_spec.with_at("paragraph", pm_rt.dynamic(tag_node("inline*", Some("block"), "p", False)))
-    |> node_spec.with_at("blockquote", pm_rt.dynamic(tag_node("block+", Some("block"), "blockquote", True)))
-    |> node_spec.with_at("bullet_list", pm_rt.dynamic(tag_node("list_item+", Some("block"), "ul", False)))
-    |> node_spec.with_at("list_item", pm_rt.dynamic(tag_node("paragraph block*", None, "li", True)))
+    |> node_spec.with_at(
+      "paragraph",
+      pm_rt.dynamic(tag_node("inline*", Some("block"), "p", False)),
+    )
+    |> node_spec.with_at(
+      "blockquote",
+      pm_rt.dynamic(tag_node("block+", Some("block"), "blockquote", True)),
+    )
+    |> node_spec.with_at(
+      "bullet_list",
+      pm_rt.dynamic(tag_node("list_item+", Some("block"), "ul", False)),
+    )
+    |> node_spec.with_at(
+      "list_item",
+      pm_rt.dynamic(tag_node("paragraph block*", None, "li", True)),
+    )
     |> node_spec.with_at("horizontal_rule", pm_rt.dynamic(hr_spec))
     |> node_spec.with_at("text", pm_rt.dynamic(text_spec))
 
@@ -115,11 +136,23 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
 }
 
 fn p_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node(sch, t.StringOrNodeTypeString("paragraph"), None, Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, txt, None))), None)
+  schema.node_with(
+    sch,
+    t.StringOrNodeTypeString("paragraph"),
+    None,
+    Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, txt))),
+    None,
+  )
 }
 
 fn li_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node(sch, t.StringOrNodeTypeString("list_item"), None, Some(t.FragmentOrNodeOrNodeArrayNode(p_node(sch, txt))), None)
+  schema.node_with(
+    sch,
+    t.StringOrNodeTypeString("list_item"),
+    None,
+    Some(t.FragmentOrNodeOrNodeArrayNode(p_node(sch, txt))),
+    None,
+  )
 }
 
 fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
@@ -127,22 +160,33 @@ fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
     attrs.create()
     |> attrs.with_at("level", dynamic.int(2))
   let h =
-    schema.node(
+    schema.node_with(
       sch,
       t.StringOrNodeTypeString("heading"),
       Some(ha),
-      Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, "Structural Transform Pipeline", None))),
+      Some(
+        t.FragmentOrNodeOrNodeArrayNode(schema.text(
+          sch,
+          "Structural Transform Pipeline",
+        )),
+      ),
       None,
     )
-  let quote = schema.node(
-    sch,
-    t.StringOrNodeTypeString("blockquote"),
-    None,
-    Some(t.FragmentOrNodeOrNodeArrayNode(p_node(sch, "Blockquote content can be lifted back to top-level document depth."))),
-    None,
-  )
+  let quote =
+    schema.node_with(
+      sch,
+      t.StringOrNodeTypeString("blockquote"),
+      None,
+      Some(
+        t.FragmentOrNodeOrNodeArrayNode(p_node(
+          sch,
+          "Blockquote content can be lifted back to top-level document depth.",
+        )),
+      ),
+      None,
+    )
   let ulist =
-    schema.node(
+    schema.node_with(
       sch,
       t.StringOrNodeTypeString("bullet_list"),
       None,
@@ -155,15 +199,21 @@ fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
       ),
       None,
     )
-  schema.node(
+  schema.node_with(
     sch,
     t.StringOrNodeTypeString("doc"),
     None,
     Some(
       t.FragmentOrNodeOrNodeArrayArray([
         h,
-        p_node(sch, "ProseMirror transforms express structural edits as invertible steps."),
-        p_node(sch, "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly."),
+        p_node(
+          sch,
+          "ProseMirror transforms express structural edits as invertible steps.",
+        ),
+        p_node(
+          sch,
+          "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly.",
+        ),
         quote,
         ulist,
       ]),
@@ -179,8 +229,16 @@ fn make_state(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.EditorState(Nil) {
   |> editor_state.create
 }
 
-fn update_meta(doc, d: t.Node(Nil), steps_ref: pm_rt.Ref(Int), op_ref: pm_rt.Ref(String)) {
-  let names = list.map(node.get_children(d), fn(b) { node_type.get_name(node.get_type(b)) })
+fn update_meta(
+  doc,
+  d: t.Node(Nil),
+  steps_ref: pm_rt.Ref(Int),
+  op_ref: pm_rt.Ref(String),
+) {
+  let names =
+    list.map(node.get_children(d), fn(b) {
+      node_type.get_name(node.get_type(b))
+    })
   let op = pm_rt.ref_get(op_ref)
   let steps = pm_rt.ref_get(steps_ref)
   let msg =
@@ -201,12 +259,17 @@ fn update_meta(doc, d: t.Node(Nil), steps_ref: pm_rt.Ref(Int), op_ref: pm_rt.Ref
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
 
-fn find_para_split(children: List(t.Node(Nil)), d: t.Node(Nil), pos: Float) -> option.Option(Float) {
+fn find_para_split(
+  children: List(t.Node(Nil)),
+  d: t.Node(Nil),
+  pos: Float,
+) -> option.Option(Float) {
   case children {
     [] -> None
     [ch, ..rest] ->
@@ -216,7 +279,7 @@ fn find_para_split(children: List(t.Node(Nil)), d: t.Node(Nil), pos: Float) -> o
           case len >=. 8.0 {
             True -> {
               let mid = pos +. 1.0 +. int.to_float(float.round(len) / 2)
-              case prosemirror_transform.can_split(d, mid, None, None) {
+              case prosemirror_transform.can_split(d, mid) {
                 True -> Some(mid)
                 False -> find_para_split(rest, d, pos +. node.get_node_size(ch))
               }
@@ -229,20 +292,27 @@ fn find_para_split(children: List(t.Node(Nil)), d: t.Node(Nil), pos: Float) -> o
   }
 }
 
-fn find_para_wrap(children: List(t.Node(Nil)), d: t.Node(Nil), qtype, pos: Float) -> option.Option(t.NodeRange(Nil)) {
+fn find_para_wrap(
+  children: List(t.Node(Nil)),
+  d: t.Node(Nil),
+  qtype,
+  pos: Float,
+) -> option.Option(t.NodeRange(Nil)) {
   case children {
     [] -> None
     [ch, ..rest] ->
       case node_type.get_name(node.get_type(ch)) == "paragraph" {
         True -> {
           let rp = node.resolve(d, pos +. 1.0)
-          case resolved_pos.block_range(rp, None, None) {
+          case resolved_pos.block_range(rp) {
             Some(r) ->
-              case prosemirror_transform.find_wrapping(r, qtype, None, None) {
+              case prosemirror_transform.find_wrapping(r, qtype) {
                 Some(_) -> Some(r)
-                None -> find_para_wrap(rest, d, qtype, pos +. node.get_node_size(ch))
+                None ->
+                  find_para_wrap(rest, d, qtype, pos +. node.get_node_size(ch))
               }
-            None -> find_para_wrap(rest, d, qtype, pos +. node.get_node_size(ch))
+            None ->
+              find_para_wrap(rest, d, qtype, pos +. node.get_node_size(ch))
           }
         }
         False -> find_para_wrap(rest, d, qtype, pos +. node.get_node_size(ch))
@@ -250,14 +320,21 @@ fn find_para_wrap(children: List(t.Node(Nil)), d: t.Node(Nil), qtype, pos: Float
   }
 }
 
-fn find_quote_lift(children: List(t.Node(Nil)), d: t.Node(Nil), pos: Float) -> option.Option(#(t.NodeRange(Nil), Float)) {
+fn find_quote_lift(
+  children: List(t.Node(Nil)),
+  d: t.Node(Nil),
+  pos: Float,
+) -> option.Option(#(t.NodeRange(Nil), Float)) {
   case children {
     [] -> None
     [ch, ..rest] ->
-      case node_type.get_name(node.get_type(ch)) == "blockquote" && node.get_child_count(ch) >. 0.0 {
+      case
+        node_type.get_name(node.get_type(ch)) == "blockquote"
+        && node.get_child_count(ch) >. 0.0
+      {
         True -> {
           let rp = node.resolve(d, pos +. 2.0)
-          case resolved_pos.block_range(rp, None, None) {
+          case resolved_pos.block_range(rp) {
             Some(r) ->
               case prosemirror_transform.lift_target(r) {
                 Some(tgt) -> Some(#(r, tgt))
@@ -285,7 +362,9 @@ pub fn main() {
     |> direct_editor_props.with_dispatch_transaction(fn(tr) {
       case pm_rt.ref_get(view_ref) {
         Some(v) -> {
-          pm_rt.ref_update(steps_ref, fn(s) { s + list.length(transform.get_steps(tr)) })
+          pm_rt.ref_update(steps_ref, fn(s) {
+            s + list.length(transform.get_steps(tr))
+          })
           let next = editor_state.apply(editor_view.get_state(v), tr)
           editor_view.update_state(v, next)
           update_meta(doc, editor_state.get_doc(next), steps_ref, op_ref)
@@ -295,15 +374,24 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view = editor_view.new(Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))), props)
+  let view =
+    editor_view.new(
+      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
+      props,
+    )
   pm_rt.ref_set(view_ref, Some(view))
-  update_meta(doc, editor_state.get_doc(editor_view.get_state(view)), steps_ref, op_ref)
+  update_meta(
+    doc,
+    editor_state.get_doc(editor_view.get_state(view)),
+    steps_ref,
+    op_ref,
+  )
 
   wire_btn(doc, "btn-0", fn() {
     let st = editor_view.get_state(view)
     let d = editor_state.get_doc(st)
     let sel_from = selection.get_from(editor_state.get_selection(st))
-    let sp = case prosemirror_transform.can_split(d, sel_from, None, None) {
+    let sp = case prosemirror_transform.can_split(d, sel_from) {
       True -> Some(sel_from)
       False -> find_para_split(node.get_children(d), d, 0.0)
     }
@@ -311,8 +399,11 @@ pub fn main() {
       Some(p) -> {
         let tr =
           editor_state.get_tr(st)
-          |> transform.split(p, None, None)
-        pm_rt.ref_set(op_ref, "Split paragraph at pos " <> int.to_string(float.round(p)))
+          |> transform.split(p)
+        pm_rt.ref_set(
+          op_ref,
+          "Split paragraph at pos " <> int.to_string(float.round(p)),
+        )
         editor_view.dispatch(view, tr)
       }
       None -> {
@@ -325,14 +416,25 @@ pub fn main() {
   wire_btn(doc, "btn-1", fn() {
     let st = editor_view.get_state(view)
     let d = editor_state.get_doc(st)
-    let assert Some(qtype) = schema.nodes_get_at(schema.get_nodes(sch), "blockquote")
+    let assert Some(qtype) =
+      schema.nodes_get_at(schema.get_nodes(sch), "blockquote")
     let sel = editor_state.get_selection(st)
     let sf = selection.get_dollar_from(sel)
-    let from_sel = case resolved_pos.get_depth(sf) == 1.0 && node_type.get_name(node.get_type(resolved_pos.get_parent(sf))) == "paragraph" {
+    let from_sel = case
+      resolved_pos.get_depth(sf) == 1.0
+      && node_type.get_name(node.get_type(resolved_pos.get_parent(sf)))
+      == "paragraph"
+    {
       True ->
-        case resolved_pos.block_range(sf, Some(selection.get_dollar_to(sel)), None) {
+        case
+          resolved_pos.block_range_with(
+            sf,
+            Some(selection.get_dollar_to(sel)),
+            None,
+          )
+        {
           Some(r) ->
-            case prosemirror_transform.find_wrapping(r, qtype, None, None) {
+            case prosemirror_transform.find_wrapping(r, qtype) {
               Some(_) -> Some(r)
               None -> None
             }
@@ -346,12 +448,19 @@ pub fn main() {
     }
     case found {
       Some(r) ->
-        case prosemirror_transform.find_wrapping(r, qtype, None, None) {
+        case prosemirror_transform.find_wrapping(r, qtype) {
           Some(wrapped) -> {
             let tr =
               editor_state.get_tr(st)
               |> transform.wrap(r, wrapped)
-            pm_rt.ref_set(op_ref, "Wrapped block [" <> int.to_string(float.round(node_range.get_start(r))) <> ".." <> int.to_string(float.round(node_range.get_end(r))) <> "] in blockquote")
+            pm_rt.ref_set(
+              op_ref,
+              "Wrapped block ["
+                <> int.to_string(float.round(node_range.get_start(r)))
+                <> ".."
+                <> int.to_string(float.round(node_range.get_end(r)))
+                <> "] in blockquote",
+            )
             editor_view.dispatch(view, tr)
           }
           None -> Nil
@@ -371,7 +480,11 @@ pub fn main() {
         let tr =
           editor_state.get_tr(st)
           |> transform.lift(r, target)
-        pm_rt.ref_set(op_ref, "Lifted blockquote child to target depth " <> int.to_string(float.round(target)))
+        pm_rt.ref_set(
+          op_ref,
+          "Lifted blockquote child to target depth "
+            <> int.to_string(float.round(target)),
+        )
         editor_view.dispatch(view, tr)
       }
       None -> {
@@ -386,12 +499,23 @@ pub fn main() {
     let d = editor_state.get_doc(st)
     let n = pm_rt.ref_update(notes_ref, fn(cur) { cur + 1 })
     let sz = fragment.get_size(node.get_content(d))
-    let hr = schema.node(sch, t.StringOrNodeTypeString("horizontal_rule"), None, None, None)
-    let note = p_node(sch, "Appended structural section #" <> int.to_string(n) <> " at doc offset " <> int.to_string(float.round(sz)) <> ".")
+    let hr = schema.node(sch, t.StringOrNodeTypeString("horizontal_rule"))
+    let note =
+      p_node(
+        sch,
+        "Appended structural section #"
+          <> int.to_string(n)
+          <> " at doc offset "
+          <> int.to_string(float.round(sz))
+          <> ".",
+      )
     let tr =
       editor_state.get_tr(st)
       |> transform.insert(sz, t.FragmentOrNodeOrNodeArrayArray([hr, note]))
-    pm_rt.ref_set(op_ref, "Inserted horizontal_rule + note #" <> int.to_string(n))
+    pm_rt.ref_set(
+      op_ref,
+      "Inserted horizontal_rule + note #" <> int.to_string(n),
+    )
     editor_view.dispatch(view, tr)
   })
 

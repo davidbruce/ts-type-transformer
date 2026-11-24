@@ -35,7 +35,7 @@ fn stage_box(
     group_config.create()
     |> group_config.with_x(x)
     |> group_config.with_y(95.0)
-  let g = group.new(Some(gc))
+  let g = group.new_with(Some(gc))
 
   let rc =
     rect_config.create()
@@ -66,9 +66,9 @@ fn stage_box(
     |> text_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
 
   group.add(g, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(rc)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(t1)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(t2)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(rc)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(t1)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(t2)))),
   ])
   t.GroupOrShapeGroup(g)
 }
@@ -82,7 +82,7 @@ fn make_arrow(pts: List(Float)) -> t.GroupOrShape {
     |> arrow_config.with_fill(t.StringOrCanvasGradientString("#111111"))
     |> arrow_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
     |> arrow_config.with_stroke_width(2.0)
-  t.GroupOrShapeShape(shape.widen(arrow.new(Some(ac))))
+  t.GroupOrShapeShape(shape.widen(arrow.new_with(Some(ac))))
 }
 
 pub fn main() -> Nil {
@@ -93,7 +93,7 @@ pub fn main() -> Nil {
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
-  let l = layer.new(None)
+  let l = layer.new()
   stage.add(stg, l, [])
 
   let bg =
@@ -134,7 +134,7 @@ pub fn main() -> Nil {
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
   layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(bg)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg)))),
     stage_box(28.0, "01 PARSE", ".d.ts AST", "#ffffff", "#111111"),
     stage_box(194.0, "02 LOWER", "Typed IR", "#f7f7f7", "#111111"),
     stage_box(360.0, "03 EMIT", "6 Targets", "#efefef", "#111111"),
@@ -144,15 +144,17 @@ pub fn main() -> Nil {
     make_arrow([486.0, 129.0, 522.0, 129.0]),
     make_arrow([257.0, 163.0, 257.0, 251.0]),
     make_arrow([423.0, 163.0, 423.0, 251.0]),
-    t.GroupOrShapeShape(shape.widen(line.new(Some(fbc)))),
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(bar)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(btxt)))),
+    t.GroupOrShapeShape(shape.widen(line.new_with(Some(fbc)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bar)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(btxt)))),
   ])
 
   node.draw(l)
 
-  let rects = int.to_string(list.length(container.find(l, dynamic.string("Rect"))))
-  let arrows = int.to_string(list.length(container.find(l, dynamic.string("Arrow"))))
+  let rects =
+    int.to_string(list.length(container.find(l, dynamic.string("Rect"))))
+  let arrows =
+    int.to_string(list.length(container.find(l, dynamic.string("Arrow"))))
   let json_len = int.to_string(string.length(node.to_json(l)))
 
   let doc = core.get_document()

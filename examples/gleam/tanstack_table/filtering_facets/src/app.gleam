@@ -15,10 +15,10 @@ import tanstack_table_core as tt
 import tanstack_table_core/column_filter
 import tanstack_table_core/row_model
 import tanstack_table_core/row_row
+import tanstack_table_core/runtime as rt
 import tanstack_table_core/table_column_filtering
 import tanstack_table_core/table_global_filtering
 import tanstack_table_core/table_row_models_core
-import tanstack_table_core/runtime as rt
 import tanstack_table_core/types as t
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
@@ -51,7 +51,14 @@ fn col_def(key: String, header: String, filter_fn: Option(String)) {
   }
 }
 
-fn svc_row(id: String, service: String, tier: String, region: String, reqs: Float, errs: Float) {
+fn svc_row(
+  id: String,
+  service: String,
+  tier: String,
+  region: String,
+  reqs: Float,
+  errs: Float,
+) {
   rt.js_object([
     #("id", rt.dynamic(id)),
     #("service", rt.dynamic(service)),
@@ -70,26 +77,45 @@ fn filter_spec(id: String, value: Dynamic) -> t.ColumnFilter(Nil) {
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
 
-fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: String) {
-  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+fn render(
+  table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil),
+  doc,
+  label: String,
+) {
+  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
-  let total = list.length(row_model.get_rows(table_row_models_core.get_core_row_model(rows_view)))
+  let total =
+    list.length(
+      row_model.get_rows(table_row_models_core.get_core_row_model(rows_view)),
+    )
 
   let body =
     list.map(rows, fn(r) {
       let str_val = fn(k) -> String {
-        case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.string) {
+        case
+          decode.run(
+            row_row.get_value(coerce(r), k, rt.codec_dynamic()),
+            decode.string,
+          )
+        {
           Ok(s) -> s
           Error(_) -> ""
         }
       }
       let int_val = fn(k) -> String {
-        let num = case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.float) {
+        let num = case
+          decode.run(
+            row_row.get_value(coerce(r), k, rt.codec_dynamic()),
+            decode.float,
+          )
+        {
           Ok(n) -> n
           Error(_) -> 0.0
         }
@@ -119,7 +145,13 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
     Some(wrap) -> element.set_inner_html(wrap, html)
     None -> Nil
   }
-  let msg = label <> " · showing " <> int.to_string(list.length(rows)) <> " / " <> int.to_string(total) <> " services"
+  let msg =
+    label
+    <> " · showing "
+    <> int.to_string(list.length(rows))
+    <> " / "
+    <> int.to_string(total)
+    <> " services"
   case document.get_element_by_id(doc, "meta") {
     Some(meta) -> dom_node.set_text_content(meta, Some(msg))
     None -> Nil
@@ -131,7 +163,10 @@ pub fn main() {
     rt.js_object([
       #("includesString", rt.dynamic(tt.get_filter_fn_includes_string())),
       #("equalsString", rt.dynamic(tt.get_filter_fn_equals_string())),
-      #("greaterThanOrEqualTo", rt.dynamic(tt.get_filter_fn_greater_than_or_equal_to())),
+      #(
+        "greaterThanOrEqualTo",
+        rt.dynamic(tt.get_filter_fn_greater_than_or_equal_to()),
+      ),
     ])
   let features =
     rt.js_object([
@@ -184,13 +219,17 @@ pub fn main() {
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
   let cf: t.TableColumnFiltering(Nil) = coerce(table)
-  let gf: t.TableGlobalFiltering(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let gf: t.TableGlobalFiltering(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
     table_column_filtering.set_column_filters(
       cf,
-      t.UpdaterT([filter_spec("tier", rt.dynamic("core")), filter_spec("requests", rt.dynamic(400.0))]),
+      t.UpdaterT([
+        filter_spec("tier", rt.dynamic("core")),
+        filter_spec("requests", rt.dynamic(400.0)),
+      ]),
     )
     render(table, doc, "Filter: tier = core & requests >= 400")
   })
@@ -201,7 +240,10 @@ pub fn main() {
   })
   wire_btn(doc, "btn-2", fn() {
     table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
-    table_column_filtering.set_column_filters(cf, t.UpdaterT([filter_spec("tier", rt.dynamic("edge"))]))
+    table_column_filtering.set_column_filters(
+      cf,
+      t.UpdaterT([filter_spec("tier", rt.dynamic("edge"))]),
+    )
     render(table, doc, "Filter: tier = edge")
   })
   wire_btn(doc, "btn-3", fn() {
@@ -211,7 +253,10 @@ pub fn main() {
   })
   wire_btn(doc, "btn-4", fn() {
     table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
-    table_column_filtering.set_column_filters(cf, t.UpdaterT([filter_spec("errors", rt.dynamic(5.0))]))
+    table_column_filtering.set_column_filters(
+      cf,
+      t.UpdaterT([filter_spec("errors", rt.dynamic(5.0))]),
+    )
     render(table, doc, "Filter: errors >= 5")
   })
   render(table, doc, "Filter: tier = core & requests >= 400")

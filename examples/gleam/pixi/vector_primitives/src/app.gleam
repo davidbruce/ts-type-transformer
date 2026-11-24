@@ -15,7 +15,7 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke(
+  graphics.stroke_with(
     g,
     Some(
       runtime.js_object([
@@ -42,7 +42,7 @@ pub fn main() {
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -55,7 +55,7 @@ pub fn main() {
 
   let stage = application.get_stage(app)
 
-  let grid = graphics.new(None)
+  let grid = graphics.new()
   int.range(from: 1, to: 17, with: Nil, run: fn(_, i) {
     let x = int.to_float(i * 40)
     graphics.move_to(grid, x, 0.0) |> graphics.line_to(x, 400.0)
@@ -70,22 +70,22 @@ pub fn main() {
   container.add_child(stage, [grid])
 
   let rect_g =
-    graphics.new(None)
+    graphics.new()
     |> graphics.rect(40.0, 46.0, 140.0, 88.0)
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
   container.add_child(stage, [rect_g])
 
   let round_g =
-    graphics.new(None)
-    |> graphics.round_rect(216.0, 46.0, 156.0, 88.0, Some(16.0))
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0xf7f7f7))))
+    graphics.new()
+    |> graphics.round_rect_with(216.0, 46.0, 156.0, 88.0, Some(16.0))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xf7f7f7))))
     |> stroke_g(2.0, 0x111111)
   container.add_child(stage, [round_g])
 
   let circle_g =
-    graphics.new(None)
+    graphics.new()
     |> graphics.circle(458.0, 90.0, 44.0)
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0x404040))))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x404040))))
     |> graphics.circle(458.0, 90.0, 22.0)
     |> stroke_g(2.0, 0xffffff)
     |> graphics.circle(458.0, 90.0, 52.0)
@@ -93,33 +93,33 @@ pub fn main() {
   container.add_child(stage, [circle_g])
 
   let ellipse_g =
-    graphics.new(None)
+    graphics.new()
     |> graphics.ellipse(588.0, 90.0, 56.0, 36.0)
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0xd4d4d4))))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xd4d4d4))))
     |> stroke_g(1.5, 0x111111)
   container.add_child(stage, [ellipse_g])
 
   let poly_g =
-    graphics.new(None)
-    |> graphics.regular_poly(130.0, 274.0, 58.0, 6.0, Some(0.25), None)
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0x737373))))
+    graphics.new()
+    |> graphics.regular_poly_with(130.0, 274.0, 58.0, 6.0, Some(0.25), None)
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x737373))))
     |> stroke_g(2.0, 0x111111)
   container.add_child(stage, [poly_g])
 
   let star_g =
-    graphics.new(None)
-    |> graphics.star(340.0, 274.0, 5.0, 62.0, Some(26.0), Some(-0.314))
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
+    graphics.new()
+    |> graphics.star_with(340.0, 274.0, 5.0, 62.0, Some(26.0), Some(-0.314))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
   container.add_child(stage, [star_g])
 
   let diamond_g =
-    graphics.new(None)
+    graphics.new()
     |> graphics.move_to(548.0, 212.0)
     |> graphics.line_to(618.0, 274.0)
     |> graphics.line_to(548.0, 336.0)
     |> graphics.line_to(478.0, 274.0)
     |> graphics.close_path()
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0xb5b5b5))))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xb5b5b5))))
     |> stroke_g(1.5, 0x111111)
   container.add_child(stage, [diamond_g])
 

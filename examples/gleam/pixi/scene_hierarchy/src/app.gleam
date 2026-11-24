@@ -18,7 +18,7 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke(
+  graphics.stroke_with(
     g,
     Some(
       runtime.js_object([
@@ -45,7 +45,7 @@ pub fn main() {
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -59,7 +59,7 @@ pub fn main() {
   let stage = application.get_stage(app)
 
   let guide =
-    graphics.new(None)
+    graphics.new()
     |> graphics.move_to(40.0, 200.0)
     |> graphics.line_to(640.0, 200.0)
     |> graphics.move_to(340.0, 24.0)
@@ -69,42 +69,42 @@ pub fn main() {
     |> stroke_g(1.0, 0xd4d4d4)
   container.add_child(stage, [guide])
 
-  let root = container.new(None)
+  let root = container.new()
   container.set_x(root, 340.0)
   container.set_y(root, 200.0)
 
   int.range(from: 0, to: 3, with: Nil, run: fn(_, i) {
-    let arm = container.new(None)
+    let arm = container.new()
     container.set_rotation(arm, int.to_float(i) *. two_pi_3)
 
     let arm_bar =
-      graphics.new(None)
+      graphics.new()
       |> graphics.rect(0.0, -4.0, 110.0, 8.0)
-      |> graphics.fill(Some(runtime.dynamic(int.to_float(0x737373))))
+      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x737373))))
       |> graphics.circle(110.0, 0.0, 10.0)
-      |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
+      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
     container.add_child(arm, [arm_bar])
 
-    let sub = container.new(None)
+    let sub = container.new()
     container.set_x(sub, 110.0)
     container.set_rotation(sub, -0.45)
 
     let sub_bar =
-      graphics.new(None)
+      graphics.new()
       |> graphics.move_to(-32.0, 0.0)
       |> graphics.line_to(48.0, 0.0)
       |> stroke_g(2.0, 0x404040)
 
     let sat_box =
-      graphics.new(None)
+      graphics.new()
       |> graphics.rect(-12.0, -12.0, 24.0, 24.0)
-      |> graphics.fill(Some(runtime.dynamic(int.to_float(0x262626))))
+      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x262626))))
     container.set_x(sat_box, 48.0)
 
     let sat_orb =
-      graphics.new(None)
+      graphics.new()
       |> graphics.circle(0.0, 0.0, 14.0)
-      |> graphics.fill(Some(runtime.dynamic(int.to_float(0xd4d4d4))))
+      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xd4d4d4))))
       |> stroke_g(2.0, 0x111111)
     container.set_x(sat_orb, -32.0)
 
@@ -115,11 +115,11 @@ pub fn main() {
   })
 
   let hub =
-    graphics.new(None)
+    graphics.new()
     |> graphics.circle(0.0, 0.0, 18.0)
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
     |> graphics.circle(0.0, 0.0, 7.0)
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0xffffff))))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xffffff))))
   container.add_child(root, [hub])
 
   container.add_child(stage, [root])

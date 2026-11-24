@@ -1,12 +1,11 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
-import bindings/types as t
-import gleam/io
 import bindings/badge
 import bindings/figure
-import bindings/point
 import bindings/namespaces/util
-
+import bindings/point
+import bindings/types as t
+import gleam/io
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -27,7 +26,10 @@ pub fn main() {
 
   // Constants are read, never assigned.
   check(b.get_limit() == 10.0, "constant")
-  check(b.get_counter() == 0.0 && b.bump() == 1.0 && b.get_counter() == 1.0, "a variable read live")
+  check(
+    b.get_counter() == 0.0 && b.bump() == 1.0 && b.get_counter() == 1.0,
+    "a variable read live",
+  )
 
   // A union told apart by the classes as exported.
   let assert t.FigureOrBadgeFigure(fig) = b.pick(0.0)
@@ -39,7 +41,10 @@ pub fn main() {
   let assert t.PairOrPointPoint(_) = b.locate(1.0)
 
   // Rollup's namespace, by the name it is exported as: `util.half`.
-  check(util.half(4.0) == 2.0 && util.get_twice()(4.0) == 8.0, "a namespace's re-exports")
+  check(
+    util.half(4.0) == 2.0 && util.get_twice()(4.0) == 8.0,
+    "a namespace's re-exports",
+  )
 
   io.println("checks passed")
 }

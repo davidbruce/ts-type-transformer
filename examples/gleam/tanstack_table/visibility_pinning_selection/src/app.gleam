@@ -19,13 +19,13 @@ import tanstack_table_core/row_model
 import tanstack_table_core/row_row
 import tanstack_table_core/row_row_selection
 import tanstack_table_core/row_selection_state
+import tanstack_table_core/runtime as rt
 import tanstack_table_core/table_column_pinning
 import tanstack_table_core/table_column_visibility
 import tanstack_table_core/table_columns
 import tanstack_table_core/table_core_properties
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/table_row_selection
-import tanstack_table_core/runtime as rt
 import tanstack_table_core/types as t
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
@@ -43,10 +43,20 @@ fn esc_html(s: String) -> String {
 }
 
 fn col_def(key: String, header: String) {
-  rt.js_object([#("accessorKey", rt.dynamic(key)), #("header", rt.dynamic(header))])
+  rt.js_object([
+    #("accessorKey", rt.dynamic(key)),
+    #("header", rt.dynamic(header)),
+  ])
 }
 
-fn task_row(id: String, task: String, owner: String, zone: String, cpu: Float, status: String) {
+fn task_row(
+  id: String,
+  task: String,
+  owner: String,
+  zone: String,
+  cpu: Float,
+  status: String,
+) {
   rt.js_object([
     #("id", rt.dynamic(id)),
     #("task", rt.dynamic(task)),
@@ -59,14 +69,24 @@ fn task_row(id: String, task: String, owner: String, zone: String, cpu: Float, s
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
 
-fn is_col_visible(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), col_id: String, default: Bool) -> Bool {
+fn is_col_visible(
+  table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil),
+  col_id: String,
+  default: Bool,
+) -> Bool {
   let store = table_core_properties.get_store(coerce(table))
-  case decode.run(rt.dynamic(store), decode.at(["state", "columnVisibility", col_id], decode.bool)) {
+  case
+    decode.run(
+      rt.dynamic(store),
+      decode.at(["state", "columnVisibility", col_id], decode.bool),
+    )
+  {
     Ok(v) -> v
     Error(_) -> default
   }
@@ -80,11 +100,16 @@ fn decode_str(v: Dynamic, fallback: String) -> String {
 }
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
-  let pin: t.TableColumnPinning(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let vis: t.TableColumnVisibility(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let sel: t.TableRowSelection(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let rm_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let pin: t.TableColumnPinning(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
+  let vis: t.TableColumnVisibility(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
+  let sel: t.TableRowSelection(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
+  let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
+  let rm_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
 
   let start_cols = table_column_pinning.get_start_visible_leaf_columns(pin)
   let center_cols = table_column_pinning.get_center_visible_leaf_columns(pin)
@@ -100,7 +125,12 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
     list.map(ordered, fn(pair) {
       let #(pinned, col) = pair
       let cid = column_core_properties.get_id(col)
-      let hdr = case rt.js_get(rt.dynamic(column_core_properties.get_column_def(col)), "header") {
+      let hdr = case
+        rt.js_get(
+          rt.dynamic(column_core_properties.get_column_def(col)),
+          "header",
+        )
+      {
         Some(h) -> decode_str(h, cid)
         None -> cid
       }
@@ -117,7 +147,8 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
     |> string.concat
 
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rm_view))
-  let col_ids = list.map(ordered, fn(pair) { column_core_properties.get_id(pair.1) })
+  let col_ids =
+    list.map(ordered, fn(pair) { column_core_properties.get_id(pair.1) })
   let body_rows =
     list.map(rows, fn(r) {
       let is_sel = row_row_selection.get_is_selected(coerce(r))
@@ -129,14 +160,25 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
         list.map(col_ids, fn(cid) {
           case cid == "cpu" {
             True -> {
-              let cpu = case decode.run(row_row.get_value(coerce(r), "cpu", rt.codec_dynamic()), decode.float) {
+              let cpu = case
+                decode.run(
+                  row_row.get_value(coerce(r), "cpu", rt.codec_dynamic()),
+                  decode.float,
+                )
+              {
                 Ok(n) -> n
                 Error(_) -> 0.0
               }
-              "<td class=\"num\">" <> int.to_string(float.round(cpu)) <> "%</td>"
+              "<td class=\"num\">"
+              <> int.to_string(float.round(cpu))
+              <> "%</td>"
             }
             False -> {
-              let v = decode_str(row_row.get_value(coerce(r), cid, rt.codec_dynamic()), "")
+              let v =
+                decode_str(
+                  row_row.get_value(coerce(r), cid, rt.codec_dynamic()),
+                  "",
+                )
               "<td>" <> esc_html(v) <> "</td>"
             }
           }
@@ -146,7 +188,12 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
     })
     |> string.concat
 
-  let html = "<table><thead><tr><th>Sel</th>" <> header_cells <> "</tr></thead><tbody>" <> body_rows <> "</tbody></table>"
+  let html =
+    "<table><thead><tr><th>Sel</th>"
+    <> header_cells
+    <> "</tr></thead><tbody>"
+    <> body_rows
+    <> "</tbody></table>"
   case document.get_element_by_id(doc, "table-wrap") {
     Some(wrap) -> element.set_inner_html(wrap, html)
     None -> Nil
@@ -154,7 +201,10 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
 
   let vis_n = list.length(table_column_visibility.get_visible_leaf_columns(vis))
   let all_n = list.length(table_columns.get_all_leaf_columns(cols_view))
-  let sel_n = list.length(row_model.get_rows(table_row_selection.get_selected_row_model(sel)))
+  let sel_n =
+    list.length(
+      row_model.get_rows(table_row_selection.get_selected_row_model(sel)),
+    )
   let msg =
     int.to_string(vis_n)
     <> " / "
@@ -174,19 +224,50 @@ pub fn main() {
   let features =
     rt.js_object([
       #("coreReactivityFeature", rt.dynamic(store_reactivity_bindings())),
-      #("columnVisibilityFeature", rt.dynamic(tt.get_column_visibility_feature())),
+      #(
+        "columnVisibilityFeature",
+        rt.dynamic(tt.get_column_visibility_feature()),
+      ),
       #("columnPinningFeature", rt.dynamic(tt.get_column_pinning_feature())),
       #("rowSelectionFeature", rt.dynamic(tt.get_row_selection_feature())),
       #("coreRowModel", rt.dynamic(tt.create_core_row_model())),
     ])
   let data =
     rt.js_array([
-      task_row("T-101", "ingest-wal-sync", "a.meyer", "eu-ch-1", 42.0, "running"),
+      task_row(
+        "T-101",
+        "ingest-wal-sync",
+        "a.meyer",
+        "eu-ch-1",
+        42.0,
+        "running",
+      ),
       task_row("T-102", "index-compact", "b.rossi", "eu-ch-2", 68.0, "running"),
-      task_row("T-103", "snapshot-verify", "c.keller", "eu-de-1", 15.0, "queued"),
-      task_row("T-104", "ledger-reconcile", "d.weber", "eu-de-2", 79.0, "running"),
+      task_row(
+        "T-103",
+        "snapshot-verify",
+        "c.keller",
+        "eu-de-1",
+        15.0,
+        "queued",
+      ),
+      task_row(
+        "T-104",
+        "ledger-reconcile",
+        "d.weber",
+        "eu-de-2",
+        79.0,
+        "running",
+      ),
       task_row("T-105", "cert-rotation", "e.morel", "eu-fr-1", 24.0, "ready"),
-      task_row("T-106", "shard-rebalance", "f.novak", "eu-fr-2", 55.0, "running"),
+      task_row(
+        "T-106",
+        "shard-rebalance",
+        "f.novak",
+        "eu-fr-2",
+        55.0,
+        "running",
+      ),
       task_row("T-107", "backup-archive", "g.steiner", "eu-ch-1", 31.0, "ready"),
     ])
   let cols =
@@ -225,9 +306,12 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let pin: t.TableColumnPinning(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let vis: t.TableColumnVisibility(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
-  let sel: t.TableRowSelection(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let pin: t.TableColumnPinning(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
+  let vis: t.TableColumnVisibility(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
+  let sel: t.TableRowSelection(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     let next_zone = !is_col_visible(table, "zone", False)
@@ -250,11 +334,11 @@ pub fn main() {
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
-    table_row_selection.toggle_all_rows_selected(sel, Some(True), None)
+    table_row_selection.toggle_all_rows_selected_with(sel, Some(True), None)
     render(table, doc)
   })
   wire_btn(doc, "btn-3", fn() {
-    table_row_selection.toggle_all_rows_selected(sel, Some(False), None)
+    table_row_selection.toggle_all_rows_selected_with(sel, Some(False), None)
     render(table, doc)
   })
   wire_btn(doc, "btn-4", fn() {

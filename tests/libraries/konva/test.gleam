@@ -4,8 +4,8 @@
 import bindings/areas/konva/circle
 import bindings/areas/konva/circle_config
 import bindings/areas/konva/container
-import bindings/areas/konva/group
 import bindings/areas/konva/get_set
+import bindings/areas/konva/group
 import bindings/areas/konva/group_config
 import bindings/areas/konva/i_rect
 import bindings/areas/konva/konva_event_object
@@ -56,12 +56,15 @@ pub fn main() {
   node_config.set_width(cfg, Some(400.0))
   node_config.set_height(cfg, Some(300.0))
   let s = stage.new(cfg)
-  let l = layer.new(None)
+  let l = layer.new()
   let _ = stage.add(s, l, [])
   let passed =
     check(list.length(stage.get_layers(s)) == 1, "the stage has a layer")
     + check(option.is_some(node.get_stage(l)), "the layer knows its stage")
-    + check(node.get_class_name(s) == "Stage" && node.get_class_name(l) == "Layer", "class names")
+    + check(
+      node.get_class_name(s) == "Stage" && node.get_class_name(l) == "Layer",
+      "class names",
+    )
 
   // A rectangle from a config, with an id and a name.
   let rc = rect_config.create()
@@ -72,24 +75,55 @@ pub fn main() {
   rect_config.set_fill(rc, Some(t.StringOrCanvasGradientString("red")))
   rect_config.set_id(rc, Some("box"))
   rect_config.set_name(rc, Some("shape"))
-  let r = rect.new(Some(rc))
-  let _ = container.add(l, [t.GroupOrShapeShape(shape.widen(r))], t.group_or_shape_codec())
+  let r = rect.new_with(Some(rc))
+  let _ =
+    container.add(
+      l,
+      [t.GroupOrShapeShape(shape.widen(r))],
+      t.group_or_shape_codec(),
+    )
   let at = node.get_position(r)
-  let client = node.get_client_rect(r, None)
+  let client = node.get_client_rect(r)
   let passed =
     passed
     + check(pos.get_x(at) == 20.0 && pos.get_y(at) == 30.0, "position")
-    + check(i_rect.get_x(client) == 20.0 && i_rect.get_y(client) == 30.0, "client rect position")
-    + check(i_rect.get_width(client) == 100.0 && i_rect.get_height(client) == 50.0, "client rect size")
+    + check(
+      i_rect.get_x(client) == 20.0 && i_rect.get_y(client) == 30.0,
+      "client rect position",
+    )
+    + check(
+      i_rect.get_width(client) == 100.0 && i_rect.get_height(client) == 50.0,
+      "client rect size",
+    )
     + check(node.get_class_name(r) == "Rect", "class name of a rect")
-    + check(get_set.invoke(node.get_x(r), runtime.codec_float()) == 20.0, "the x property")
-    + check(get_set.invoke(node.get_y(r), runtime.codec_float()) == 30.0, "the y property")
-    + check(get_set.invoke(node.get_width(r), runtime.codec_float()) == 100.0, "the width property")
-    + check(get_set.invoke(shape.get_fill(r), t.string_or_canvas_gradient_codec()) == t.StringOrCanvasGradientString("red"), "the fill property")
+    + check(
+      get_set.invoke(node.get_x(r), runtime.codec_float()) == 20.0,
+      "the x property",
+    )
+    + check(
+      get_set.invoke(node.get_y(r), runtime.codec_float()) == 30.0,
+      "the y property",
+    )
+    + check(
+      get_set.invoke(node.get_width(r), runtime.codec_float()) == 100.0,
+      "the width property",
+    )
+    + check(
+      get_set.invoke(shape.get_fill(r), t.string_or_canvas_gradient_codec())
+        == t.StringOrCanvasGradientString("red"),
+      "the fill property",
+    )
     + check(node.get_parent(r) |> option.is_some, "the rect has a parent")
     + check(option.is_some(node.get_layer(r)), "the rect knows its layer")
-    + check(rect_config.get_fill(node.get_attrs(r)) == Some(t.StringOrCanvasGradientString("red")), "fill in the attrs")
-    + check(rect_config.get_id(node.get_attrs(r)) == Some("box"), "id in the attrs")
+    + check(
+      rect_config.get_fill(node.get_attrs(r))
+        == Some(t.StringOrCanvasGradientString("red")),
+      "fill in the attrs",
+    )
+    + check(
+      rect_config.get_id(node.get_attrs(r)) == Some("box"),
+      "id in the attrs",
+    )
 
   // A circle and a text, and a group holding both.
   let cc = circle_config.create()
@@ -97,29 +131,56 @@ pub fn main() {
   node_config.set_y(cc, Some(10.0))
   circle_config.set_radius(cc, Some(25.0))
   node_config.set_name(cc, Some("shape"))
-  let c = circle.new(Some(cc))
+  let c = circle.new_with(Some(cc))
   let tc = text_config.create()
   text_config.set_text(tc, Some("Hello Konva"))
   text_config.set_font_size(tc, Some(20.0))
   node_config.set_y(tc, Some(100.0))
-  let tx = text.new(Some(tc))
+  let tx = text.new_with(Some(tc))
   let gc = group_config.create()
   node_config.set_x(gc, Some(200.0))
   node_config.set_y(gc, Some(100.0))
   node_config.set_name(gc, Some("cluster"))
-  let g = group.new(Some(gc))
-  let _ = container.add(g, [t.GroupOrShapeShape(shape.widen(c)), t.GroupOrShapeShape(shape.widen(tx))], t.group_or_shape_codec())
+  let g = group.new_with(Some(gc))
+  let _ =
+    container.add(
+      g,
+      [
+        t.GroupOrShapeShape(shape.widen(c)),
+        t.GroupOrShapeShape(shape.widen(tx)),
+      ],
+      t.group_or_shape_codec(),
+    )
   let _ = container.add(l, [t.GroupOrShapeGroup(g)], t.group_or_shape_codec())
-  let circle_at = node.get_absolute_position(c, None)
-  let text_rect = node.get_client_rect(tx, None)
+  let circle_at = node.get_absolute_position(c)
+  let text_rect = node.get_client_rect(tx)
   let passed =
     passed
-    + check(list.length(container.get_children(g, None, t.group_or_shape_codec())) == 2, "the group has two children")
-    + check(list.length(container.get_children(l, None, t.group_or_shape_codec())) == 2, "the layer has two children")
-    + check(pos.get_x(circle_at) == 210.0 && pos.get_y(circle_at) == 110.0, "absolute position adds the group's")
+    + check(
+      list.length(container.get_children(g, None, t.group_or_shape_codec()))
+        == 2,
+      "the group has two children",
+    )
+    + check(
+      list.length(container.get_children(l, None, t.group_or_shape_codec()))
+        == 2,
+      "the layer has two children",
+    )
+    + check(
+      pos.get_x(circle_at) == 210.0 && pos.get_y(circle_at) == 110.0,
+      "absolute position adds the group's",
+    )
     + check(pos.get_x(node.get_position(c)) == 10.0, "own position does not")
-    + check(i_rect.get_width(text_rect) >. 20.0 && i_rect.get_height(text_rect) >. 10.0, "a text has a size")
-    + check(attr_string(node.get_attr(tx, "text", runtime.codec_string()), "text") == "Hello Konva", "the text's attr")
+    + check(
+      i_rect.get_width(text_rect) >. 20.0
+        && i_rect.get_height(text_rect) >. 10.0,
+      "a text has a size",
+    )
+    + check(
+      attr_string(node.get_attr(tx, "text", runtime.codec_string()), "text")
+        == "Hello Konva",
+      "the text's attr",
+    )
 
   // Finding by selector: id, name, type.
   let by_id = container.find_one(l, t.StringOrFunctionString("#box"))
@@ -130,8 +191,14 @@ pub fn main() {
     + check(option.is_some(by_id), "find_one by id")
     + check(list.length(by_name) == 2, "find by name reaches into the group")
     + check(list.length(rects) == 1, "find by type")
-    + check(container.find(l, runtime.dynamic("#nothing")) == [], "nothing found")
-    + check(option.is_some(container.find_one(l, t.StringOrFunctionString(".cluster"))), "find a group by name")
+    + check(
+      container.find(l, runtime.dynamic("#nothing")) == [],
+      "nothing found",
+    )
+    + check(
+      option.is_some(container.find_one(l, t.StringOrFunctionString(".cluster"))),
+      "find a group by name",
+    )
 
   // Moving and rotating.
   let by = vector2d.create()
@@ -141,7 +208,11 @@ pub fn main() {
   let _ = node.rotate(r, 90.0)
   let passed =
     passed
-    + check(pos.get_x(node.get_position(r)) == 25.0 && pos.get_y(node.get_position(r)) == 20.0, "move")
+    + check(
+      pos.get_x(node.get_position(r)) == 25.0
+        && pos.get_y(node.get_position(r)) == 20.0,
+      "move",
+    )
     + check(near(node.get_absolute_rotation(r), 90.0), "rotate")
   let to = vector2d.create()
   vector2d.set_x(to, 1.0)
@@ -149,36 +220,32 @@ pub fn main() {
   let _ = node.set_position(r, to)
   let passed =
     passed
-    + check(pos.get_x(node.get_position(r)) == 1.0 && pos.get_y(node.get_position(r)) == 2.0, "set_position")
+    + check(
+      pos.get_x(node.get_position(r)) == 1.0
+        && pos.get_y(node.get_position(r)) == 2.0,
+      "set_position",
+    )
 
   // Events: a click fired on the rect, with its target.
   let clicks = cell.new(0)
-  let _ =
-    node.on_click(
-      r,
-      fn(_) { cell.set(clicks, cell.get(clicks) + 1) },
-    )
-  let _ = node.fire(r, "click", None, None)
-  let _ = node.fire(r, "click", None, None)
+  let _ = node.on_click(r, fn(_) { cell.set(clicks, cell.get(clicks) + 1) })
+  let _ = node.fire(r, "click")
+  let _ = node.fire(r, "click")
   let passed =
-    passed
-    + check(cell.get(clicks) == 2, "the click listener ran twice")
+    passed + check(cell.get(clicks) == 2, "the click listener ran twice")
   let seen = cell.new("")
   let _ =
-    node.on_mouseover(
-      c,
-      fn(e) { cell.set(seen, "over " <> konva_type(e)) },
-    )
-  let _ = node.fire(c, "mouseover", None, None)
-  let passed = passed + check(cell.get(seen) == "over mouseover", "the event object's type")
+    node.on_mouseover(c, fn(e) { cell.set(seen, "over " <> konva_type(e)) })
+  let _ = node.fire(c, "mouseover")
+  let passed =
+    passed
+    + check(cell.get(seen) == "over mouseover", "the event object's type")
 
   // Visibility.
   let _ = node.hide(r)
-  let hidden = !node.is_visible_2(r, None)
+  let hidden = !node.is_visible_2(r)
   let _ = node.show(r)
-  let passed =
-    passed
-    + check(hidden && node.is_visible_2(r, None), "hide and show")
+  let passed = passed + check(hidden && node.is_visible_2(r), "hide and show")
 
   // Drawing, then the hit canvas finds the shape under a point.
   let _ = node.draw(l)
@@ -201,21 +268,37 @@ pub fn main() {
   let json = node.to_json(r)
   let passed =
     passed
-    + check(string.contains(json, "\"className\":\"Rect\""), "toJSON names the class")
+    + check(
+      string.contains(json, "\"className\":\"Rect\""),
+      "toJSON names the class",
+    )
     + check(string.contains(json, "\"id\":\"box\""), "toJSON holds the id")
   let layer_json = node.to_json(l)
   let passed =
     passed
-    + check(string.contains(layer_json, "\"className\":\"Layer\"") && string.contains(layer_json, "Circle"), "a layer's JSON holds its children")
+    + check(
+      string.contains(layer_json, "\"className\":\"Layer\"")
+        && string.contains(layer_json, "Circle"),
+      "a layer's JSON holds its children",
+    )
 
   // Destroying removes the node from its parent.
   let _ = node.destroy(c)
   let passed =
     passed
-    + check(container.find(l, runtime.dynamic("Circle")) == [], "a destroyed circle is gone")
-    + check(list.length(container.get_children(g, None, t.group_or_shape_codec())) == 1, "the group has one child left")
+    + check(
+      container.find(l, runtime.dynamic("Circle")) == [],
+      "a destroyed circle is gone",
+    )
+    + check(
+      list.length(container.get_children(g, None, t.group_or_shape_codec()))
+        == 1,
+      "the group has one child left",
+    )
   let _ = container.destroy_children(l)
-  let passed = passed + check(!container.has_children(l), "no children after destroy_children")
+  let passed =
+    passed
+    + check(!container.has_children(l), "no children after destroy_children")
   let _ = stage.destroy(s)
 
   io.println(int.to_string(passed) <> " checks passed")

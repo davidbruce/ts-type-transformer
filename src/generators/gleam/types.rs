@@ -5,7 +5,7 @@ use super::bounds::generic_args;
 use super::{codec_var, lower, relative, snake, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
 use super::super::comments::{Style, comment};
 use super::super::js::{call_expr, js_test, trim_trailing_undef};
-use super::super::model::{mentions, subst, Class, Func, Model, NamedUnion, TParam, Ty};
+use super::super::model::{mentions, subst, Call, Class, Func, Model, NamedUnion, TParam, Ty};
 
 pub(super) struct Gen<'m> {
     pub m: &'m Model,
@@ -542,8 +542,11 @@ impl<'m> Gen<'m> {
         out
     }
 
-    // One external function, `name`, and its JavaScript; returns its JS export name.
-    pub(super) fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) -> String {
+    // One external function, `name`, and its JavaScript; returns its JS export
+    // name, and the name of its form with its trailing optional arguments
+    // where `name` leaves them out (`create_element(doc, tag)`,
+    // `create_element_with(doc, tag, Some(options))`): one export for both.
+    pub(super) fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) -> (String, Option<String>) {
         self.setup_fn_bounds(f, owner);
         let mut params = Vec::new();
         let mut js_params = Vec::new();
@@ -591,14 +594,31 @@ impl<'m> Gen<'m> {
             Ty::Void => format!("{call};\n  return undefined;"),
             t => format!("return {};", self.to_gleam(t, &call)),
         };
+        let first = usize::from(self_ty.is_some());
         let ret = if f.returns_this { self_ty.unwrap_or_else(|| self.ty(&f.ret)) } else { self.ty(&f.ret) };
         // A name JavaScript reserves (`new`, `delete`) is `new_` there.
         let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
-        self.out += &f.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
-        self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
+        // Not a setter's value, a rest, or what codecs follow: JavaScript takes those by position.
+        let optional = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count();
+        let shortened = optional > 0 && !f.rest && params.len() == first + f.params.len() && !matches!(f.call, Call::Set(_) | Call::IndexSet);
+        let doc = f.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
+        // `_with`, else `_full` where a member has that name (ProseMirror's `can_replace_with`).
+        let free = |g: &Self, n: &str| !g.reserved_values.contains(n) && !g.values.contains(&(g.unit.clone(), n.to_string()));
+        let with = shortened.then(|| {
+            let with = [format!("{name}_with"), format!("{name}_full")].into_iter().find(|n| free(self, n)).unwrap_or_else(|| format!("{name}_with"));
+            self.fresh_value(&with)
+        });
+        if let Some(with) = &with {
+            self.out += &doc;
+            self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params[..params.len() - optional].join(", "));
+            self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {with}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
+        } else {
+            self.out += &doc;
+            self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
+        }
         self.ffi += &format!("export function {js}({}) {{\n  {body}\n}}\n", js_params.join(", "));
         self.clear_fn_bounds();
-        js
+        (js, with)
     }
 
     // A union as a custom type, and its conversions: told apart by its tests.

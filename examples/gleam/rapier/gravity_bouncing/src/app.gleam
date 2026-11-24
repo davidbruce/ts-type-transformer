@@ -2,10 +2,10 @@ import dimforge_rapier3d_compat as rapier
 import dimforge_rapier3d_compat/collider_desc
 import dimforge_rapier3d_compat/rigid_body
 import dimforge_rapier3d_compat/rigid_body_desc
-import dimforge_rapier3d_compat/vector
-import dimforge_rapier3d_compat/world
 import dimforge_rapier3d_compat/runtime as rp_rt
 import dimforge_rapier3d_compat/types as rt
+import dimforge_rapier3d_compat/vector
+import dimforge_rapier3d_compat/world
 import dom/areas/canvas/canvas_rendering_context2d as ctx2d
 import dom/areas/core
 import dom/areas/core/document
@@ -13,8 +13,10 @@ import dom/areas/core/node as dom_node
 import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
-import dom/types.{type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString}
 import dom/areas/html/html_element_tag_name_map as tag
+import dom/types.{
+  type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString,
+}
 import gleam/float
 import gleam/int
 import gleam/list
@@ -74,14 +76,14 @@ fn draw_dashed(
 pub fn main() {
   use ready <- rp_rt.promise_then(rapier.init())
   let assert Ok(_) = ready
-  let restitutions = [0.00, 0.35, 0.60, 0.80, 0.95]
+  let restitutions = [0.0, 0.35, 0.6, 0.8, 0.95]
   let x_coords = [-4.2, -2.1, 0.0, 2.1, 4.2]
   let ball_hex = ["#efefef", "#d4d4d4", "#b5b5b5", "#737373", "#262626"]
   let rest_labels = ["e=0.00", "e=0.35", "e=0.60", "e=0.80", "e=0.95"]
 
   let doc = core.get_document()
   let assert Some(canvas) = document.query_selector(doc, tag.canvas)
-  let assert Some(ctx) = html_canvas_element.get_context_2d(canvas, None)
+  let assert Some(ctx) = html_canvas_element.get_context_2d(canvas)
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
   let assert Some(grav_btn) = document.get_element_by_id(doc, "btn-gravity")
   let assert Some(pause_btn) = document.get_element_by_id(doc, "btn-pause")
@@ -102,7 +104,7 @@ pub fn main() {
       True -> -9.81
       False -> -1.62
     }
-    let w = world.new(vec(0.0, gy, 0.0), None, None, None, None, None, None, None, None, None, None, None, None, None)
+    let w = world.new(vec(0.0, gy, 0.0))
 
     let add_wall = fn(x: Float, y: Float, hx: Float, hy: Float) {
       let body =
@@ -110,7 +112,11 @@ pub fn main() {
           w,
           rigid_body_desc.fixed() |> rigid_body_desc.set_translation(x, y, 0.0),
         )
-      world.create_collider(w, collider_desc.cuboid(hx, hy, 2.0), Some(body))
+      world.create_collider_with(
+        w,
+        collider_desc.cuboid(hx, hy, 2.0),
+        Some(body),
+      )
       Nil
     }
     add_wall(0.0, -0.4, 7.0, 0.4)
@@ -123,14 +129,15 @@ pub fn main() {
         let rb =
           world.create_rigid_body(
             w,
-            rigid_body_desc.dynamic() |> rigid_body_desc.set_translation(wx, 5.6, 0.0),
+            rigid_body_desc.dynamic()
+              |> rigid_body_desc.set_translation(wx, 5.6, 0.0),
           )
         let cd =
           collider_desc.ball(0.42)
           |> collider_desc.set_restitution(rest)
           |> collider_desc.set_friction(0.2)
           |> collider_desc.set_density(1.2)
-        world.create_collider(w, cd, Some(rb))
+        world.create_collider_with(w, cd, Some(rb))
         rb
       })
     rp_rt.ref_set(world_ref, Some(w))
@@ -141,24 +148,32 @@ pub fn main() {
 
   let step_sim = fn() {
     case rp_rt.ref_get(world_ref) {
-      Some(w) -> world.step(w, None, None)
+      Some(w) -> world.step(w)
       None -> Nil
     }
     rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     let pts =
       list.index_map(rp_rt.ref_get(balls_ref), fn(rb, i) {
-        let p = rigid_body.translation(rb, None)
+        let p = rigid_body.translation(rb)
         #(i, vector.get_x(p), vector.get_y(p))
       })
-    rp_rt.ref_update(trails_ref, fn(old) { list.take(list.append(pts, old), 100) })
+    rp_rt.ref_update(trails_ref, fn(old) {
+      list.take(list.append(pts, old), 100)
+    })
     Nil
   }
 
   let render = fn() {
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#ffffff"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
+    )
     ctx2d.fill_rect(ctx, 0.0, 0.0, 680.0, 400.0)
 
-    ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#efefef"))
+    ctx2d.set_stroke_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#efefef"),
+    )
     ctx2d.set_line_width(ctx, 1.0)
     int.range(from: -6, to: 7, with: Nil, run: fn(_, gx) {
       let x = to_cx(int.to_float(gx))
@@ -175,9 +190,15 @@ pub fn main() {
       ctx2d.stroke(ctx)
     })
 
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#f7f7f7"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#f7f7f7"),
+    )
     ctx2d.fill_rect(ctx, 0.0, 350.0, 680.0, 50.0)
-    ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#d4d4d4"))
+    ctx2d.set_stroke_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#d4d4d4"),
+    )
     int.range(from: 0, to: 40, with: Nil, run: fn(_, i) {
       let hx = -20.0 +. int.to_float(i) *. 18.0
       ctx2d.begin_path(ctx)
@@ -185,14 +206,20 @@ pub fn main() {
       ctx2d.line_to(ctx, hx -. 24.0, 400.0)
       ctx2d.stroke(ctx)
     })
-    ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+    ctx2d.set_stroke_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#111111"),
+    )
     ctx2d.set_line_width(ctx, 1.5)
     ctx2d.begin_path(ctx)
     ctx2d.move_to(ctx, 0.0, 350.0)
     ctx2d.line_to(ctx, 680.0, 350.0)
     ctx2d.stroke(ctx)
 
-    ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#d4d4d4"))
+    ctx2d.set_stroke_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#d4d4d4"),
+    )
     ctx2d.set_line_width(ctx, 1.0)
     draw_dashed(ctx, to_cx(-5.0), to_cy(5.6), to_cx(5.0), to_cy(5.6), 40)
     list.each(x_coords, fn(wx) {
@@ -200,22 +227,26 @@ pub fn main() {
       draw_dashed(ctx, cx, to_cy(5.6), cx, 350.0, 20)
     })
 
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#b5b5b5"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#b5b5b5"),
+    )
     list.each(rp_rt.ref_get(trails_ref), fn(pt) {
       let #(_, tx, ty) = pt
       ctx2d.begin_path(ctx)
-      ctx2d.arc(ctx, to_cx(tx), to_cy(ty), 1.6, 0.0, two_pi, None)
-      ctx2d.fill(ctx, None)
+      ctx2d.arc(ctx, to_cx(tx), to_cy(ty), 1.6, 0.0, two_pi)
+      ctx2d.fill(ctx)
     })
 
     ctx2d.set_font(ctx, "11px ui-monospace, monospace")
-    let meta_items = list.zip(rp_rt.ref_get(balls_ref), list.zip(ball_hex, rest_labels))
+    let meta_items =
+      list.zip(rp_rt.ref_get(balls_ref), list.zip(ball_hex, rest_labels))
     let #(energy, max_y) =
       list.index_fold(meta_items, #(0.0, 0.0), fn(acc, item, i) {
         let #(e_sum, cur_max_y) = acc
         let #(rb, #(hex, lbl)) = item
-        let p = rigid_body.translation(rb, None)
-        let v = rigid_body.linvel(rb, None)
+        let p = rigid_body.translation(rb)
+        let v = rigid_body.linvel(rb)
         let py = vector.get_y(p)
         let vx = vector.get_x(v)
         let vy = vector.get_y(v)
@@ -224,28 +255,40 @@ pub fn main() {
         let cy = to_cy(py)
         let rpx = 0.42 *. 46.0
 
-        ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString(hex))
+        ctx2d.set_fill_style(
+          ctx,
+          StringOrCanvasGradientOrCanvasPatternString(hex),
+        )
         ctx2d.begin_path(ctx)
-        ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi, None)
-        ctx2d.fill(ctx, None)
+        ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
+        ctx2d.fill(ctx)
 
-        ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+        ctx2d.set_stroke_style(
+          ctx,
+          StringOrCanvasGradientOrCanvasPatternString("#111111"),
+        )
         ctx2d.set_line_width(ctx, 1.6)
         ctx2d.begin_path(ctx)
-        ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi, None)
+        ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
         ctx2d.stroke(ctx)
 
         let hl = case i >= 3 {
           True -> "#d4d4d4"
           False -> "#737373"
         }
-        ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString(hl))
+        ctx2d.set_fill_style(
+          ctx,
+          StringOrCanvasGradientOrCanvasPatternString(hl),
+        )
         ctx2d.begin_path(ctx)
-        ctx2d.arc(ctx, cx -. 5.0, cy -. 5.0, 2.8, 0.0, two_pi, None)
-        ctx2d.fill(ctx, None)
+        ctx2d.arc(ctx, cx -. 5.0, cy -. 5.0, 2.8, 0.0, two_pi)
+        ctx2d.fill(ctx)
 
-        ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
-        ctx2d.fill_text(ctx, lbl, cx -. 22.0, 368.0, None)
+        ctx2d.set_fill_style(
+          ctx,
+          StringOrCanvasGradientOrCanvasPatternString("#111111"),
+        )
+        ctx2d.fill_text(ctx, lbl, cx -. 22.0, 368.0)
 
         #(e_sum +. 0.5 *. { vx *. vx +. vy *. vy }, float.max(cur_max_y, py))
       })
@@ -282,17 +325,36 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() })
   }
 
   wire_click("btn-gravity", fn() {
     let earth = rp_rt.ref_update(earth_ref, fn(cur) { !cur })
     case rp_rt.ref_get(world_ref) {
-      Some(w) -> world.set_gravity(w, vec(0.0, case earth { True -> -9.81 False -> -1.62 }, 0.0))
+      Some(w) ->
+        world.set_gravity(
+          w,
+          vec(
+            0.0,
+            case earth {
+              True -> -9.81
+              False -> -1.62
+            },
+            0.0,
+          ),
+        )
       None -> Nil
     }
-    list.each(rp_rt.ref_get(balls_ref), fn(rb) { rigid_body.apply_impulse(rb, vec(0.0, 0.25, 0.0), True) })
-    dom_node.set_text_content(grav_btn, Some(case earth { True -> "Gravity: Earth" False -> "Gravity: Moon" }))
+    list.each(rp_rt.ref_get(balls_ref), fn(rb) {
+      rigid_body.apply_impulse(rb, vec(0.0, 0.25, 0.0), True)
+    })
+    dom_node.set_text_content(
+      grav_btn,
+      Some(case earth {
+        True -> "Gravity: Earth"
+        False -> "Gravity: Moon"
+      }),
+    )
     render()
   })
 
@@ -306,7 +368,13 @@ pub fn main() {
 
   wire_click("btn-pause", fn() {
     let p = rp_rt.ref_update(paused_ref, fn(cur) { !cur })
-    dom_node.set_text_content(pause_btn, Some(case p { True -> "Resume" False -> "Pause" }))
+    dom_node.set_text_content(
+      pause_btn,
+      Some(case p {
+        True -> "Resume"
+        False -> "Pause"
+      }),
+    )
     render()
   })
 

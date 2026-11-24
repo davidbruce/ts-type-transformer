@@ -25,14 +25,17 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "chart") {
     None -> Nil
     Some(box) -> {
-      let chart = ec.init(Some(box), None, None)
+      let chart = ec.init_with(Some(box), None, None)
       let opt =
         raw.create()
         |> unit.with_animation(False)
         |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
         |> unit.with_at(
           "color",
-          dynamic.array(list.map(["#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4"], dynamic.string)),
+          dynamic.array(list.map(
+            ["#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4"],
+            dynamic.string,
+          )),
         )
         |> unit.with_at(
           "legend",
@@ -48,8 +51,14 @@ pub fn main() -> Nil {
             obj([
               #("type", dynamic.string("pie")),
               #("name", dynamic.string("Subsystems")),
-              #("radius", dynamic.array([dynamic.string("44%"), dynamic.string("72%")])),
-              #("center", dynamic.array([dynamic.string("50%"), dynamic.string("46%")])),
+              #(
+                "radius",
+                dynamic.array([dynamic.string("44%"), dynamic.string("72%")]),
+              ),
+              #(
+                "center",
+                dynamic.array([dynamic.string("50%"), dynamic.string("46%")]),
+              ),
               #(
                 "itemStyle",
                 obj([
@@ -71,7 +80,7 @@ pub fn main() -> Nil {
             ]),
           ]),
         )
-      e_charts_type.set_option(chart, opt, None, None)
+      e_charts_type.set_option(chart, opt)
 
       case document.get_element_by_id(doc, "meta") {
         None -> Nil
@@ -80,7 +89,13 @@ pub fn main() -> Nil {
           let h = int.to_string(float.round(e_charts_type.get_height(chart)))
           node.set_text_content(
             meta,
-            Some("Canvas: " <> w <> "x" <> h <> " · 5 monochrome segments · Total 100"),
+            Some(
+              "Canvas: "
+              <> w
+              <> "x"
+              <> h
+              <> " · 5 monochrome segments · Total 100",
+            ),
           )
         }
       }

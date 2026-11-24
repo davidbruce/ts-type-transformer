@@ -18,7 +18,7 @@ fn sin(x: Float) -> Float
 fn cos(x: Float) -> Float
 
 fn mk_pt(x: Float, y: Float) -> t.Pt(Nil) {
-  let p = pt.make(2.0, None, None)
+  let p = pt.make(2.0)
   pt.set_x(p, x)
   pt.set_y(p, y)
   p
@@ -32,7 +32,7 @@ pub fn main() -> Nil {
     |> canvas_space_options.with_retina(True)
 
   let cs =
-    canvas_space.new(Some(t.StringOrElementString("#pt")), None)
+    canvas_space.new_with(Some(t.StringOrElementString("#pt")), None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 
@@ -51,7 +51,7 @@ pub fn main() -> Nil {
       let py = pt.get_y(pointer)
 
       let base_line = group.new([mk_pt(w *. 0.06, cy), mk_pt(w *. 0.94, cy)])
-      canvas_form.stroke_only(
+      canvas_form.stroke_only_with(
         form,
         t.CanvasFormFillCString("#e5e5e5"),
         Some(1.0),
@@ -67,8 +67,10 @@ pub fn main() -> Nil {
           let x = w *. { 0.08 +. 0.84 *. u }
           let y0 =
             cy
-            +. sin(time_ms *. 0.0014 +. fi *. 0.72) *. amp
-            +. cos(time_ms *. 0.0009 -. fi *. 0.45) *. { amp *. 0.42 }
+            +. sin(time_ms *. 0.0014 +. fi *. 0.72)
+            *. amp
+            +. cos(time_ms *. 0.0009 -. fi *. 0.45)
+            *. { amp *. 0.42 }
           let dx = float.absolute_value(x -. px)
           let y = case dx <. w *. 0.25 && { px >. 1.0 || py >. 1.0 } {
             True -> {
@@ -82,16 +84,20 @@ pub fn main() -> Nil {
         |> list.reverse
 
       let ctrls = group.new(pts_list)
-      let bs = curve.bspline(t.GroupLikeGroup(ctrls), Some(12.0), None)
+      let bs = curve.bspline_with(t.GroupLikeGroup(ctrls), Some(12.0), None)
       let card =
-        curve.cardinal(t.PtLikeIterableGroup(ctrls), Some(12.0), Some(0.35))
-      let cr = curve.catmull_rom(t.PtLikeIterableGroup(ctrls), Some(12.0))
+        curve.cardinal_with(
+          t.PtLikeIterableGroup(ctrls),
+          Some(12.0),
+          Some(0.35),
+        )
+      let cr = curve.catmull_rom_with(t.PtLikeIterableGroup(ctrls), Some(12.0))
 
       list.index_fold(group.to_list(cr), Nil, fn(_, p, i) {
         case i % 3 == 0 {
           True -> {
             let stem = group.new([mk_pt(pt.get_x(p), cy), p])
-            canvas_form.stroke_only(
+            canvas_form.stroke_only_with(
               form,
               t.CanvasFormFillCString("#d4d4d4"),
               Some(1.0),
@@ -105,7 +111,7 @@ pub fn main() -> Nil {
         }
       })
 
-      canvas_form.stroke_only(
+      canvas_form.stroke_only_with(
         form,
         t.CanvasFormFillCString("#d4d4d4"),
         Some(1.0),
@@ -113,21 +119,21 @@ pub fn main() -> Nil {
         None,
       )
       |> canvas_form.line(t.PtLikeIterableGroup(ctrls))
-      |> canvas_form.stroke_only(
+      |> canvas_form.stroke_only_with(
         t.CanvasFormFillCString("#b5b5b5"),
         Some(2.0),
         None,
         None,
       )
       |> canvas_form.line(t.PtLikeIterableGroup(bs))
-      |> canvas_form.stroke_only(
+      |> canvas_form.stroke_only_with(
         t.CanvasFormFillCString("#555555"),
         Some(1.8),
         None,
         None,
       )
       |> canvas_form.line(t.PtLikeIterableGroup(card))
-      |> canvas_form.stroke_only(
+      |> canvas_form.stroke_only_with(
         t.CanvasFormFillCString("#111111"),
         Some(2.6),
         None,
@@ -137,20 +143,20 @@ pub fn main() -> Nil {
 
       list.each(pts_list, fn(p) {
         canvas_form.fill(form, t.CanvasFormFillCString("#ffffff"))
-        |> canvas_form.stroke(
+        |> canvas_form.stroke_with(
           t.CanvasFormFillCString("#111111"),
           Some(1.5),
           None,
           None,
         )
-        |> canvas_form.point(t.PtLikePt(p), Some(4.5), Some("circle"))
+        |> canvas_form.point_with(t.PtLikePt(p), Some(4.5), Some("circle"))
         Nil
       })
     })
 
   canvas_space.add(cs, t.i_player_or_animate_callback_fn_i_player(player))
-  canvas_space.bind_mouse(cs, Some(True), None)
-  canvas_space.bind_touch(cs, Some(True), None, None)
-  canvas_space.play(cs, None)
+  canvas_space.bind_mouse_with(cs, Some(True), None)
+  canvas_space.bind_touch_with(cs, Some(True), None, None)
+  canvas_space.play(cs)
   Nil
 }

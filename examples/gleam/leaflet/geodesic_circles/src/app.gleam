@@ -3,7 +3,7 @@ import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import gleam/list
 import gleam/option.{None, Some}
-import leaflet as leaflet
+import leaflet
 import leaflet/circle
 import leaflet/circle_marker_options
 import leaflet/lat_lng
@@ -21,10 +21,10 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(m_opts))
+  let m = leaflet.map_with(t.StringOrHTMLElementString("map"), Some(m_opts))
 
-  let zurich = leaflet.lat_lng(47.3769, 8.5417, None)
-  map.set_view(m, t.LatLngExpressionLatLng(zurich), Some(8.0), None)
+  let zurich = leaflet.lat_lng(47.3769, 8.5417)
+  map.set_view_with(m, t.LatLngExpressionLatLng(zurich), Some(8.0), None)
   let outer_opts =
     circle_marker_options.create()
     |> path_options.with_color("#404040")
@@ -32,13 +32,17 @@ pub fn main() {
     |> path_options.with_fill_color("#d4d4d4")
     |> path_options.with_fill_opacity(0.25)
   let outer_circle =
-    leaflet.circle_with_radius(t.LatLngExpressionLatLng(zurich), 130_000.0, Some(outer_opts))
+    leaflet.circle_with_radius_with(
+      t.LatLngExpressionLatLng(zurich),
+      130_000.0,
+      Some(outer_opts),
+    )
     |> layer.add_to(t.MapOrLayerGroupMap(m))
 
   list.each(
     [
-      #(90_000.0, "#404040", "#a3a3a3", 0.30),
-      #(55_000.0, "#111111", "#737373", 0.40),
+      #(90_000.0, "#404040", "#a3a3a3", 0.3),
+      #(55_000.0, "#111111", "#737373", 0.4),
       #(25_000.0, "#111111", "#262626", 0.55),
     ],
     fn(spec) {
@@ -49,23 +53,28 @@ pub fn main() {
         |> path_options.with_weight(1.5)
         |> path_options.with_fill_color(fill)
         |> path_options.with_fill_opacity(op)
-      leaflet.circle_with_radius(t.LatLngExpressionLatLng(zurich), r, Some(opts))
+      leaflet.circle_with_radius_with(
+        t.LatLngExpressionLatLng(zurich),
+        r,
+        Some(opts),
+      )
       |> layer.add_to(t.MapOrLayerGroupMap(m))
       Nil
     },
   )
 
   let beacons = [
-    leaflet.lat_lng(47.5596, 7.5886, None),
-    leaflet.lat_lng(46.9480, 7.4474, None),
-    leaflet.lat_lng(47.0502, 8.3093, None),
-    leaflet.lat_lng(47.4245, 9.3767, None),
-    leaflet.lat_lng(46.8508, 9.5320, None),
+    leaflet.lat_lng(47.5596, 7.5886),
+    leaflet.lat_lng(46.948, 7.4474),
+    leaflet.lat_lng(47.0502, 8.3093),
+    leaflet.lat_lng(47.4245, 9.3767),
+    leaflet.lat_lng(46.8508, 9.532),
   ]
 
   let total_dist_km =
     list.fold(beacons, 0.0, fn(acc, pt) {
-      let d_km = lat_lng.distance_to(zurich, t.LatLngExpressionLatLng(pt)) /. 1000.0
+      let d_km =
+        lat_lng.distance_to(zurich, t.LatLngExpressionLatLng(pt)) /. 1000.0
 
       let b_opts =
         circle_marker_options.create()
@@ -74,7 +83,11 @@ pub fn main() {
         |> path_options.with_dash_array(t.StringOrNumberArrayString("3 3"))
         |> path_options.with_fill_color("#737373")
         |> path_options.with_fill_opacity(0.18)
-      leaflet.circle_with_radius(t.LatLngExpressionLatLng(pt), 18_000.0, Some(b_opts))
+      leaflet.circle_with_radius_with(
+        t.LatLngExpressionLatLng(pt),
+        18_000.0,
+        Some(b_opts),
+      )
       |> layer.add_to(t.MapOrLayerGroupMap(m))
 
       let d_opts =
@@ -84,7 +97,7 @@ pub fn main() {
         |> path_options.with_weight(1.5)
         |> path_options.with_fill_color("#111111")
         |> path_options.with_fill_opacity(1.0)
-      leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(d_opts))
+      leaflet.circle_marker_with(t.LatLngExpressionLatLng(pt), Some(d_opts))
       |> layer.add_to(t.MapOrLayerGroupMap(m))
 
       acc +. d_km
@@ -93,7 +106,6 @@ pub fn main() {
   map.fit_bounds(
     m,
     t.LatLngBoundsExpressionLatLngBounds(circle.get_bounds(outer_circle)),
-    None,
   )
 
   let avg_str = runtime.to_fixed(total_dist_km /. 5.0, 1)
@@ -102,7 +114,11 @@ pub fn main() {
     Some(meta) ->
       dom_node.set_text_content(
         meta,
-        Some("4 concentric rings (25–130 km) · 5 regional beacons (avg " <> avg_str <> " km)"),
+        Some(
+          "4 concentric rings (25–130 km) · 5 regional beacons (avg "
+          <> avg_str
+          <> " km)",
+        ),
       )
     None -> Nil
   }

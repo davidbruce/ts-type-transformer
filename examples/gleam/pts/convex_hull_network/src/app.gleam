@@ -20,7 +20,7 @@ fn sin(x: Float) -> Float
 fn cos(x: Float) -> Float
 
 fn mk_pt(x: Float, y: Float) -> t.Pt(Nil) {
-  let p = pt.make(2.0, None, None)
+  let p = pt.make(2.0)
   pt.set_x(p, x)
   pt.set_y(p, y)
   p
@@ -34,7 +34,7 @@ pub fn main() -> Nil {
     |> canvas_space_options.with_retina(True)
 
   let cs =
-    canvas_space.new(Some(t.StringOrElementString("#pt")), None)
+    canvas_space.new_with(Some(t.StringOrElementString("#pt")), None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 
@@ -48,9 +48,15 @@ pub fn main() -> Nil {
       let cy = pt.get_y(c)
       let px = pt.get_x(pointer)
       let py = pt.get_y(pointer)
-      let base_r = float.max(70.0, float.min(pt.get_x(size), pt.get_y(size)) *. 0.34)
+      let base_r =
+        float.max(70.0, float.min(pt.get_x(size), pt.get_y(size)) *. 0.34)
       let radial =
-        create.radial_pts(t.PtLikePt(c), base_r, 20.0, Some(time_ms *. 0.00025))
+        create.radial_pts_with(
+          t.PtLikePt(c),
+          base_r,
+          20.0,
+          Some(time_ms *. 0.00025),
+        )
 
       let scaled =
         list.index_map(group.to_list(radial), fn(p, i) {
@@ -74,13 +80,14 @@ pub fn main() -> Nil {
       }
 
       let cloud = group.new(cloud_pts)
-      let hull = polygon.convex_hull(t.PtLikeIterableGroup(cloud), Some(False))
+      let hull =
+        polygon.convex_hull_with(t.PtLikeIterableGroup(cloud), Some(False))
       let bbox = geom.bounding_box(t.PtIterableGroup(hull))
       let cent = polygon.centroid(t.PtLikeIterableGroup(hull))
       let hull_pts = group.to_list(hull)
       let hull_len = list.length(hull_pts)
 
-      canvas_form.stroke_only(
+      canvas_form.stroke_only_with(
         form,
         t.CanvasFormFillCString("#b5b5b5"),
         Some(1.0),
@@ -89,7 +96,7 @@ pub fn main() -> Nil {
       )
       |> canvas_form.rect(t.PtLikeIterableGroup(bbox))
       |> canvas_form.fill(t.CanvasFormFillCString("#f7f7f7"))
-      |> canvas_form.stroke(
+      |> canvas_form.stroke_with(
         t.CanvasFormFillCString("#111111"),
         Some(2.0),
         None,
@@ -97,26 +104,29 @@ pub fn main() -> Nil {
       )
       |> canvas_form.polygon(t.PtLikeIterableGroup(hull))
 
-      list.each(polygon.network(t.PtIterableGroup(hull), Some(0.0)), fn(seg) {
-        canvas_form.stroke_only(
-          form,
-          t.CanvasFormFillCString("#d4d4d4"),
-          Some(1.0),
-          None,
-          None,
-        )
-        |> canvas_form.line(t.PtLikeIterableGroup(seg))
-        Nil
-      })
+      list.each(
+        polygon.network_with(t.PtIterableGroup(hull), Some(0.0)),
+        fn(seg) {
+          canvas_form.stroke_only_with(
+            form,
+            t.CanvasFormFillCString("#d4d4d4"),
+            Some(1.0),
+            None,
+            None,
+          )
+          |> canvas_form.line(t.PtLikeIterableGroup(seg))
+          Nil
+        },
+      )
       case hull_len > 3 {
         True ->
           list.each(
-            polygon.network(
+            polygon.network_with(
               t.PtIterableGroup(hull),
               Some(int.to_float(hull_len / 2)),
             ),
             fn(seg) {
-              canvas_form.stroke_only(
+              canvas_form.stroke_only_with(
                 form,
                 t.CanvasFormFillCString("#d4d4d4"),
                 Some(1.0),
@@ -132,18 +142,18 @@ pub fn main() -> Nil {
 
       list.each(cloud_pts, fn(p) {
         canvas_form.fill_only(form, t.CanvasFormFillCString("#737373"))
-        |> canvas_form.point(t.PtLikePt(p), Some(3.0), Some("circle"))
+        |> canvas_form.point_with(t.PtLikePt(p), Some(3.0), Some("circle"))
         Nil
       })
       list.each(hull_pts, fn(h) {
         canvas_form.fill(form, t.CanvasFormFillCString("#111111"))
-        |> canvas_form.stroke(
+        |> canvas_form.stroke_with(
           t.CanvasFormFillCString("#ffffff"),
           Some(1.5),
           None,
           None,
         )
-        |> canvas_form.point(t.PtLikePt(h), Some(5.0), Some("circle"))
+        |> canvas_form.point_with(t.PtLikePt(h), Some(5.0), Some("circle"))
         Nil
       })
 
@@ -151,7 +161,7 @@ pub fn main() -> Nil {
       let y0 = pt.get_y(cent)
       let h_bar = group.new([mk_pt(x0 -. 10.0, y0), mk_pt(x0 +. 10.0, y0)])
       let v_bar = group.new([mk_pt(x0, y0 -. 10.0), mk_pt(x0, y0 +. 10.0)])
-      canvas_form.stroke_only(
+      canvas_form.stroke_only_with(
         form,
         t.CanvasFormFillCString("#111111"),
         Some(1.4),
@@ -161,19 +171,19 @@ pub fn main() -> Nil {
       |> canvas_form.line(t.PtLikeIterableGroup(h_bar))
       |> canvas_form.line(t.PtLikeIterableGroup(v_bar))
       |> canvas_form.fill(t.CanvasFormFillCString("#ffffff"))
-      |> canvas_form.stroke(
+      |> canvas_form.stroke_with(
         t.CanvasFormFillCString("#111111"),
         Some(1.6),
         None,
         None,
       )
-      |> canvas_form.point(t.PtLikePt(cent), Some(5.5), Some("circle"))
+      |> canvas_form.point_with(t.PtLikePt(cent), Some(5.5), Some("circle"))
       Nil
     })
 
   canvas_space.add(cs, t.i_player_or_animate_callback_fn_i_player(player))
-  canvas_space.bind_mouse(cs, Some(True), None)
-  canvas_space.bind_touch(cs, Some(True), None, None)
-  canvas_space.play(cs, None)
+  canvas_space.bind_mouse_with(cs, Some(True), None)
+  canvas_space.bind_touch_with(cs, Some(True), None, None)
+  canvas_space.play(cs)
   Nil
 }

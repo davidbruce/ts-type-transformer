@@ -50,7 +50,7 @@ fn mk_pbr(
     |> create_pbr_material_props.with_base_color_factor(#(v, v, v, 1.0))
     |> create_pbr_material_props.with_metallic_factor(metallic)
     |> create_pbr_material_props.with_roughness_factor(roughness)
-  b.create_pbr_material(Some(props))
+  b.create_pbr_material_with(Some(props))
 }
 
 pub fn main() -> Nil {
@@ -63,11 +63,11 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
         on_err,
       )
 
-      let scene = b.create_scene_context(engine, None)
+      let scene = b.create_scene_context(engine)
       let clear =
         gpu_color_dict.create()
         |> gpu_color_dict.with_r(0.06)
@@ -84,18 +84,19 @@ pub fn main() -> Nil {
           b.vec3(0.0, 2.1, 0.0),
         )
       b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control_with(camera, canvas, Some(scene), None)
 
-      let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
+      let hemi =
+        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.85, 0.85))
       hemispheric_light.set_ground_color(hemi, #(0.14, 0.14, 0.14))
       b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
-      let dir = b.create_directional_light(#(-1.2, -2.0, -1.1), Some(2.1))
+      let dir = b.create_directional_light_with(#(-1.2, -2.0, -1.1), Some(2.1))
       directional_light.set_diffuse(dir, #(1.0, 1.0, 1.0))
       b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
-      let key_light = b.create_point_light(#(3.2, 3.6, 2.4), Some(8.0))
+      let key_light = b.create_point_light_with(#(3.2, 3.6, 2.4), Some(8.0))
       point_light.set_diffuse(key_light, #(0.92, 0.92, 0.92))
       point_light.set_range(key_light, 14.0)
       b.add_to_scene(scene, bt.scene_entity_light_base(key_light))
@@ -104,7 +105,7 @@ pub fn main() -> Nil {
         ground_options.create()
         |> ground_options.with_width(16.0)
         |> ground_options.with_height(16.0)
-      let floor = b.create_ground(engine, Some(floor_opts))
+      let floor = b.create_ground_with(engine, Some(floor_opts))
       mesh.set_material(floor, mk_pbr(0.09, 0.1, 0.88))
       b.add_to_scene(scene, bt.scene_entity_mesh(floor))
 
@@ -112,7 +113,7 @@ pub fn main() -> Nil {
         disc_options.create()
         |> disc_options.with_radius(2.6)
         |> disc_options.with_tessellation(48.0)
-      let disc = b.create_disc(engine, Some(dopts))
+      let disc = b.create_disc_with(engine, Some(dopts))
       euler_proxy.set_x(scene_node.get_rotation(disc), 1.5707963267948966)
       observable_vec3.set(scene_node.get_position(disc), 0.0, 0.03, 0.0)
       mesh.set_material(disc, mk_pbr(0.22, 0.25, 0.65))
@@ -122,26 +123,26 @@ pub fn main() -> Nil {
         box_options.create()
         |> box_options.with_size(2.1)
       let src_box =
-        b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(sbopts)))
+        b.create_box_with(engine, Some(bt.NumberOrBoxOptionsBoxOptions(sbopts)))
       let copts =
         cylinder_options.create()
         |> cylinder_options.with_height(3.0)
         |> cylinder_options.with_diameter(1.18)
         |> cylinder_options.with_tessellation(16.0)
-      let cyl_y = b.create_cylinder(engine, Some(copts))
-      let cyl_x = b.create_cylinder(engine, Some(copts))
+      let cyl_y = b.create_cylinder_with(engine, Some(copts))
+      let cyl_x = b.create_cylinder_with(engine, Some(copts))
       euler_proxy.set_z(scene_node.get_rotation(cyl_x), 1.5707963267948966)
-      let cyl_z = b.create_cylinder(engine, Some(copts))
+      let cyl_z = b.create_cylinder_with(engine, Some(copts))
       euler_proxy.set_x(scene_node.get_rotation(cyl_z), 1.5707963267948966)
 
       let s1 =
         b.csg_subtract(
-          b.create_csg_from_mesh(src_box, None),
-          b.create_csg_from_mesh(cyl_y, None),
+          b.create_csg_from_mesh(src_box),
+          b.create_csg_from_mesh(cyl_y),
         )
-      let s2 = b.csg_subtract(s1, b.create_csg_from_mesh(cyl_x, None))
-      let s3 = b.csg_subtract(s2, b.create_csg_from_mesh(cyl_z, None))
-      let monolith = b.create_mesh_from_csg(engine, s3, Some("monolith"))
+      let s2 = b.csg_subtract(s1, b.create_csg_from_mesh(cyl_x))
+      let s3 = b.csg_subtract(s2, b.create_csg_from_mesh(cyl_z))
+      let monolith = b.create_mesh_from_csg_with(engine, s3, Some("monolith"))
       observable_vec3.set(scene_node.get_position(monolith), 0.0, 2.15, 0.0)
 
       let mprops =
@@ -160,25 +161,25 @@ pub fn main() -> Nil {
         |> clear_coat_props.with_intensity(0.9)
         |> clear_coat_props.with_roughness(0.1)
       b.set_pbr_clear_coat(mprops, cc)
-      mesh.set_material(monolith, b.create_pbr_material(Some(mprops)))
+      mesh.set_material(monolith, b.create_pbr_material_with(Some(mprops)))
       b.add_to_scene(scene, bt.scene_entity_mesh(monolith))
 
       let cbopts =
         box_options.create()
         |> box_options.with_size(0.82)
       let core_box =
-        b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(cbopts)))
+        b.create_box_with(engine, Some(bt.NumberOrBoxOptionsBoxOptions(cbopts)))
       let csopts =
         sphere_options.create()
         |> sphere_options.with_diameter(1.02)
         |> sphere_options.with_segments(14.0)
-      let core_sphere = b.create_sphere(engine, Some(csopts))
+      let core_sphere = b.create_sphere_with(engine, Some(csopts))
       let core_solid =
         b.csg_intersect(
-          b.create_csg_from_mesh(core_box, None),
-          b.create_csg_from_mesh(core_sphere, None),
+          b.create_csg_from_mesh(core_box),
+          b.create_csg_from_mesh(core_sphere),
         )
-      let core = b.create_mesh_from_csg(engine, core_solid, Some("core"))
+      let core = b.create_mesh_from_csg_with(engine, core_solid, Some("core"))
       observable_vec3.set(scene_node.get_position(core), 0.0, 2.15, 0.0)
       mesh.set_material(core, mk_pbr(0.18, 0.85, 0.16))
       b.add_to_scene(scene, bt.scene_entity_mesh(core))
@@ -188,7 +189,7 @@ pub fn main() -> Nil {
         |> torus_options.with_diameter(4.2)
         |> torus_options.with_thickness(0.09)
         |> torus_options.with_tessellation(48.0)
-      let outer_ring = b.create_torus(engine, Some(otopts))
+      let outer_ring = b.create_torus_with(engine, Some(otopts))
       observable_vec3.set(scene_node.get_position(outer_ring), 0.0, 2.15, 0.0)
       mesh.set_material(outer_ring, mk_pbr(0.55, 0.8, 0.25))
       b.add_to_scene(scene, bt.scene_entity_mesh(outer_ring))
@@ -198,7 +199,7 @@ pub fn main() -> Nil {
         |> torus_options.with_diameter(3.55)
         |> torus_options.with_thickness(0.07)
         |> torus_options.with_tessellation(48.0)
-      let inner_ring = b.create_torus(engine, Some(itopts))
+      let inner_ring = b.create_torus_with(engine, Some(itopts))
       observable_vec3.set(scene_node.get_position(inner_ring), 0.0, 2.15, 0.0)
       mesh.set_material(inner_ring, mk_pbr(0.88, 0.4, 0.3))
       b.add_to_scene(scene, bt.scene_entity_mesh(inner_ring))

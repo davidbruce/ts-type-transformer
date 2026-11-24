@@ -8,7 +8,6 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import marked/lexer
-import marked/tokens_list
 import marked/namespaces/tokens/blockquote as token_blockquote
 import marked/namespaces/tokens/br as token_br
 import marked/namespaces/tokens/checkbox as token_checkbox
@@ -32,6 +31,7 @@ import marked/namespaces/tokens/strong as token_strong
 import marked/namespaces/tokens/table as token_table
 import marked/namespaces/tokens/tag as token_tag
 import marked/namespaces/tokens/text as token_text
+import marked/tokens_list
 import marked/types as mt
 
 fn token_kind_raw(tok: mt.Token) -> #(String, String) {
@@ -58,7 +58,10 @@ fn token_kind_raw(tok: mt.Token) -> #(String, String) {
     mt.TokenTokensTable(x) -> #("table", token_table.get_raw(x))
     mt.TokenTokensTag(x) -> #("html", token_tag.get_raw(x))
     mt.TokenTokensText(x) -> #("text", token_text.get_raw(x))
-    mt.TokenTokensGeneric(x) -> #(token_generic.get_type(x), token_generic.get_raw(x))
+    mt.TokenTokensGeneric(x) -> #(
+      token_generic.get_type(x),
+      token_generic.get_raw(x),
+    )
   }
 }
 
@@ -69,14 +72,14 @@ pub fn main() -> Nil {
     Some(app) -> {
       let sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n"
-      let toks = lexer.lex_2(sample, None)
+      let toks = lexer.lex_2(sample)
       let items = tokens_list.to_list(toks)
 
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let title = document.create_element(doc, tag.h1, None)
+      let title = document.create_element(doc, tag.h1)
       node.set_text_content(title, Some("Marked Token Inspector (Gleam)"))
-      let badge = document.create_element(doc, tag.span, None)
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(
         badge,
@@ -86,31 +89,31 @@ pub fn main() -> Nil {
       node.append_child(head, badge)
       node.append_child(app, head)
 
-      let src_card = document.create_element(doc, tag.div, None)
+      let src_card = document.create_element(doc, tag.div)
       element.set_class_name(src_card, "card")
-      let src_lbl = document.create_element(doc, tag.div, None)
+      let src_lbl = document.create_element(doc, tag.div)
       element.set_class_name(src_lbl, "label")
       node.set_text_content(src_lbl, Some("Markdown Input"))
-      let src_pre = document.create_element(doc, tag.pre, None)
+      let src_pre = document.create_element(doc, tag.pre)
       element.set_class_name(src_pre, "src")
       node.set_text_content(src_pre, Some(sample))
       node.append_child(src_card, src_lbl)
       node.append_child(src_card, src_pre)
       node.append_child(app, src_card)
 
-      let tbl_card = document.create_element(doc, tag.div, None)
+      let tbl_card = document.create_element(doc, tag.div)
       element.set_class_name(tbl_card, "card")
-      let tbl_lbl = document.create_element(doc, tag.div, None)
+      let tbl_lbl = document.create_element(doc, tag.div)
       element.set_class_name(tbl_lbl, "label")
       node.set_text_content(tbl_lbl, Some("Lexer Token Stream"))
       node.append_child(tbl_card, tbl_lbl)
 
-      let table = document.create_element(doc, tag.table, None)
+      let table = document.create_element(doc, tag.table)
       element.set_class_name(table, "tok-table")
-      let thead = document.create_element(doc, tag.thead, None)
-      let hrow = document.create_element(doc, tag.tr, None)
+      let thead = document.create_element(doc, tag.thead)
+      let hrow = document.create_element(doc, tag.tr)
       list.each(["#", "Type", "Bytes", "Raw Snippet"], fn(col) {
-        let th = document.create_element(doc, tag.th, None)
+        let th = document.create_element(doc, tag.th)
         node.set_text_content(th, Some(col))
         node.append_child(hrow, th)
         Nil
@@ -118,11 +121,11 @@ pub fn main() -> Nil {
       node.append_child(thead, hrow)
       node.append_child(table, thead)
 
-      let tbody = document.create_element(doc, tag.tbody, None)
+      let tbody = document.create_element(doc, tag.tbody)
       list.index_fold(items, Nil, fn(_, tok, i) {
         let #(kind, raw) = token_kind_raw(tok)
         let snip = string.replace(raw, "\n", "↵")
-        let tr = document.create_element(doc, tag.tr, None)
+        let tr = document.create_element(doc, tag.tr)
 
         list.each(
           [
@@ -132,7 +135,7 @@ pub fn main() -> Nil {
             snip,
           ],
           fn(cell_txt) {
-            let td = document.create_element(doc, tag.td, None)
+            let td = document.create_element(doc, tag.td)
             node.set_text_content(td, Some(cell_txt))
             node.append_child(tr, td)
             Nil

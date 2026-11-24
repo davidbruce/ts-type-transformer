@@ -30,7 +30,7 @@ fn make_grid_line(pts: List(Float)) -> t.GroupOrShape {
     |> line_config.with_points(t.LinePointsArray(pts))
     |> line_config.with_stroke(t.StringOrCanvasGradientString("#e5e5e5"))
     |> line_config.with_stroke_width(1.0)
-  t.GroupOrShapeShape(shape.widen(line.new(Some(lc))))
+  t.GroupOrShapeShape(shape.widen(line.new_with(Some(lc))))
 }
 
 pub fn main() -> Nil {
@@ -41,7 +41,7 @@ pub fn main() -> Nil {
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
-  let l = layer.new(None)
+  let l = layer.new()
   stage.add(stg, l, [])
 
   let bg =
@@ -51,7 +51,7 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))])
+  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg))))])
 
   let vlines =
     int.range(from: 1, to: 17, with: [], run: fn(acc, i) {
@@ -73,7 +73,7 @@ pub fn main() -> Nil {
     group_config.create()
     |> group_config.with_x(40.0)
     |> group_config.with_y(55.0)
-  let group_a = group.new(Some(gac))
+  let group_a = group.new_with(Some(gac))
   let gab =
     rect_config.create()
     |> rect_config.with_width(160.0)
@@ -96,9 +96,9 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
   group.add(group_a, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(gab)))),
-    t.GroupOrShapeShape(shape.widen(circle.new(Some(gad)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(gal)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gab)))),
+    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(gad)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(gal)))),
   ])
 
   // Group B.
@@ -107,7 +107,7 @@ pub fn main() -> Nil {
     |> group_config.with_x(340.0)
     |> group_config.with_y(75.0)
     |> group_config.with_rotation(24.0)
-  let group_b = group.new(Some(gbc))
+  let group_b = group.new_with(Some(gbc))
   let gbo =
     rect_config.create()
     |> rect_config.with_width(150.0)
@@ -140,10 +140,10 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
   group.add(group_b, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(gbo)))),
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(gbi)))),
-    t.GroupOrShapeShape(shape.widen(circle.new(Some(gbd)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(gbl)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gbo)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gbi)))),
+    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(gbd)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(gbl)))),
   ])
 
   // Group C + nested inner group.
@@ -153,7 +153,7 @@ pub fn main() -> Nil {
     |> group_config.with_y(55.0)
     |> group_config.with_scale_x(1.15)
     |> group_config.with_scale_y(1.15)
-  let group_c = group.new(Some(gcc))
+  let group_c = group.new_with(Some(gcc))
   let gco =
     rect_config.create()
     |> rect_config.with_width(130.0)
@@ -175,18 +175,18 @@ pub fn main() -> Nil {
     |> group_config.with_x(25.0)
     |> group_config.with_y(25.0)
     |> group_config.with_rotation(15.0)
-  let inner_group = group.new(Some(icc))
+  let inner_group = group.new_with(Some(icc))
   let mc =
     circle_config.create()
     |> circle_config.with_x(40.0)
     |> circle_config.with_y(30.0)
     |> circle_config.with_radius(16.0)
     |> circle_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-  let marker = circle.new(Some(mc))
+  let marker = circle.new_with(Some(mc))
   group.add(inner_group, [t.GroupOrShapeShape(shape.widen(marker))])
   group.add(group_c, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(gco)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(gcl)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gco)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(gcl)))),
     t.GroupOrShapeGroup(inner_group),
   ])
 
@@ -196,8 +196,8 @@ pub fn main() -> Nil {
     t.GroupOrShapeGroup(group_c),
   ])
 
-  let abs = node.get_absolute_position(marker, None)
-  let bbox = node.get_client_rect(group_b, None)
+  let abs = node.get_absolute_position(marker)
+  let bbox = node.get_client_rect(group_b)
   let ax = int.to_string(float.round(pos.get_x(abs)))
   let ay = int.to_string(float.round(pos.get_y(abs)))
   let bw = int.to_string(float.round(i_rect.get_width(bbox)))
@@ -223,8 +223,8 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
   layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(strip)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(sum)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(strip)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(sum)))),
   ])
 
   node.draw(l)

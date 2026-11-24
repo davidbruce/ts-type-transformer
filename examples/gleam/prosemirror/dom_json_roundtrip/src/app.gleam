@@ -13,7 +13,6 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/dom_parser
@@ -31,6 +30,7 @@ import prosemirror/areas/prosemirror_state/editor_state_config
 import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
+import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
@@ -73,7 +73,9 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     |> node_spec.with_defining(True)
     |> node_spec.with_parse_dom([tag_rule("h1", 1), tag_rule("h2", 2)])
     |> node_spec.with_to_dom(fn(n) {
-      let lvl = case decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int) {
+      let lvl = case
+        decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int)
+      {
         Ok(1) -> "h1"
         _ -> "h2"
       }
@@ -125,26 +127,35 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
   schema.new(spec)
 }
 
-const spec_html = "<h2>DOMParser &amp; JSON Serialization</h2><p>ProseMirror converts <strong>HTML</strong> via <code>DOMParser</code> and renders back through <em>DOMSerializer</em>.</p><blockquote><p>Schema parseDOM rules keep DOM and JSON representations aligned.</p></blockquote><p>Trigger any action above to inspect live DOMSerializer HTML and Node.eq() round-trips.</p>"
+const spec_html =
+  "<h2>DOMParser &amp; JSON Serialization</h2><p>ProseMirror converts <strong>HTML</strong> via <code>DOMParser</code> and renders back through <em>DOMSerializer</em>.</p><blockquote><p>Schema parseDOM rules keep DOM and JSON representations aligned.</p></blockquote><p>Trigger any action above to inspect live DOMSerializer HTML and Node.eq() round-trips.</p>"
 
-const changelog_html = "<h2>Release 1.4 Notes</h2><p>Added <strong>typed bindings</strong> for <code>DOMParser</code> and <em>DOMSerializer</em>.</p><blockquote><p>All round-trips verified with Node.eq().</p></blockquote><p>Edit directly above to watch HTML output update live.</p>"
+const changelog_html =
+  "<h2>Release 1.4 Notes</h2><p>Added <strong>typed bindings</strong> for <code>DOMParser</code> and <em>DOMSerializer</em>.</p><blockquote><p>All round-trips verified with Node.eq().</p></blockquote><p>Edit directly above to watch HTML output update live.</p>"
 
 fn parse_html(doc, parser, html: String) -> t.Node(Nil) {
-  let div = document.create_element(doc, tag.div, None)
+  let div = document.create_element(doc, tag.div)
   element.set_inner_html(div, html)
-  dom_parser.parse(parser, div, None)
+  dom_parser.parse(parser, div)
 }
 
 fn describe_doc(d: t.Node(Nil)) -> String {
   let nb = float.round(node.get_child_count(d))
   let nsz = float.round(node.get_node_size(d))
-  let header = "doc(blocks=" <> int.to_string(nb) <> ", nodeSize=" <> int.to_string(nsz) <> ")"
+  let header =
+    "doc(blocks="
+    <> int.to_string(nb)
+    <> ", nodeSize="
+    <> int.to_string(nsz)
+    <> ")"
   let rows =
     list.index_map(node.get_children(d), fn(b, i) {
       let tname = node_type.get_name(node.get_type(b))
       let kind = case tname {
         "heading" -> {
-          let lvl = case decode.run(attrs.get_at(node.get_attrs(b), "level"), decode.int) {
+          let lvl = case
+            decode.run(attrs.get_at(node.get_attrs(b), "level"), decode.int)
+          {
             Ok(k) -> k
             Error(_) -> 2
           }
@@ -152,14 +163,31 @@ fn describe_doc(d: t.Node(Nil)) -> String {
         }
         _ -> tname
       }
-      "  [" <> int.to_string(i) <> "] " <> kind <> " (" <> int.to_string(float.round(node.get_node_size(b))) <> " bytes): " <> node.get_text_content(b)
+      "  ["
+      <> int.to_string(i)
+      <> "] "
+      <> kind
+      <> " ("
+      <> int.to_string(float.round(node.get_node_size(b)))
+      <> " bytes): "
+      <> node.get_text_content(b)
     })
   string.join([header, ..rows], "\n")
 }
 
-fn refresh_output(doc, serializer, d: t.Node(Nil), status_ref: pm_rt.Ref(String)) {
-  let div = document.create_element(doc, tag.div, None)
-  dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
+fn refresh_output(
+  doc,
+  serializer,
+  d: t.Node(Nil),
+  status_ref: pm_rt.Ref(String),
+) {
+  let div = document.create_element(doc, tag.div)
+  dom_serializer.serialize_fragment_with(
+    serializer,
+    node.get_content(d),
+    None,
+    Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))),
+  )
   let html_out = element.get_inner_html(div)
   let status = pm_rt.ref_get(status_ref)
   let full =
@@ -189,7 +217,8 @@ fn refresh_output(doc, serializer, d: t.Node(Nil), status_ref: pm_rt.Ref(String)
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
@@ -215,16 +244,30 @@ pub fn main() {
         Some(v) -> {
           let next = editor_state.apply(editor_view.get_state(v), tr)
           editor_view.update_state(v, next)
-          refresh_output(doc, serializer, editor_state.get_doc(next), status_ref)
+          refresh_output(
+            doc,
+            serializer,
+            editor_state.get_doc(next),
+            status_ref,
+          )
         }
         None -> Nil
       }
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view = editor_view.new(Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))), props)
+  let view =
+    editor_view.new(
+      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
+      props,
+    )
   pm_rt.ref_set(view_ref, Some(view))
-  refresh_output(doc, serializer, editor_state.get_doc(editor_view.get_state(view)), status_ref)
+  refresh_output(
+    doc,
+    serializer,
+    editor_state.get_doc(editor_view.get_state(view)),
+    status_ref,
+  )
 
   wire_btn(doc, "btn-0", fn() {
     pm_rt.ref_set(status_ref, "Parsed Spec HTML via DOMParser")
@@ -251,7 +294,11 @@ pub fn main() {
   wire_btn(doc, "btn-2", fn() {
     let d = editor_state.get_doc(editor_view.get_state(view))
     let rebuilt = node.from_json(sch, node.to_json(d))
-    pm_rt.ref_set(status_ref, "JSON toJSON->fromJSON eq() = " <> string.lowercase(bool.to_string(node.eq(d, rebuilt))))
+    pm_rt.ref_set(
+      status_ref,
+      "JSON toJSON->fromJSON eq() = "
+        <> string.lowercase(bool.to_string(node.eq(d, rebuilt))),
+    )
     refresh_output(doc, serializer, d, status_ref)
   })
 
@@ -260,13 +307,19 @@ pub fn main() {
     let d = editor_state.get_doc(st)
     case node.get_child_count(d) >=. 2.0 {
       True -> {
-        let insert_pos = node.get_node_size(node.child(d, 0.0)) +. node.get_node_size(node.child(d, 1.0)) -. 1.0
-        let mc = schema.mark(sch, t.StringOrMarkTypeString("code"), None)
-        let span = schema.text(sch, " roundtrip()", Some([mc]))
+        let insert_pos =
+          node.get_node_size(node.child(d, 0.0))
+          +. node.get_node_size(node.child(d, 1.0))
+          -. 1.0
+        let mc = schema.mark(sch, t.StringOrMarkTypeString("code"))
+        let span = schema.text_with(sch, " roundtrip()", Some([mc]))
         let tr =
           editor_state.get_tr(st)
           |> transform.insert(insert_pos, t.FragmentOrNodeOrNodeArrayNode(span))
-        pm_rt.ref_set(status_ref, "Inserted code span at pos " <> int.to_string(float.round(insert_pos)))
+        pm_rt.ref_set(
+          status_ref,
+          "Inserted code span at pos " <> int.to_string(float.round(insert_pos)),
+        )
         editor_view.dispatch(view, tr)
       }
       False -> Nil
@@ -275,10 +328,19 @@ pub fn main() {
 
   wire_btn(doc, "btn-4", fn() {
     let d = editor_state.get_doc(editor_view.get_state(view))
-    let div = document.create_element(doc, tag.div, None)
-    dom_serializer.serialize_fragment(serializer, node.get_content(d), None, Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))))
-    let reparsed = dom_parser.parse(parser, div, None)
-    pm_rt.ref_set(status_ref, "DOM serializeFragment->parse eq() = " <> string.lowercase(bool.to_string(node.eq(d, reparsed))))
+    let div = document.create_element(doc, tag.div)
+    dom_serializer.serialize_fragment_with(
+      serializer,
+      node.get_content(d),
+      None,
+      Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))),
+    )
+    let reparsed = dom_parser.parse(parser, div)
+    pm_rt.ref_set(
+      status_ref,
+      "DOM serializeFragment->parse eq() = "
+        <> string.lowercase(bool.to_string(node.eq(d, reparsed))),
+    )
     let c =
       editor_state_config.create()
       |> editor_state_config.with_schema(sch)

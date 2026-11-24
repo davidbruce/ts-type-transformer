@@ -1,13 +1,12 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
-import bindings/namespaces/geometry
-import bindings/types as t
-import gleam/io
 import bindings/clock
-import bindings/settings
+import bindings/namespaces/geometry
 import bindings/namespaces/geometry/deep
 import bindings/namespaces/geometry/point
-
+import bindings/settings
+import bindings/types as t
+import gleam/io
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -31,13 +30,22 @@ pub fn main() {
   let p = geometry.point(0.0, 0.0)
   let q = geometry.point(3.0, 4.0)
   check(geometry.distance(p, q) == 5.0 && point.get_x(q) == 3.0, "namespace")
-  check(geometry.get_unit() == 1.0 && deep.twice(4.0) == 8.0, "nested namespace")
+  check(
+    geometry.get_unit() == 1.0 && deep.twice(4.0) == 8.0,
+    "nested namespace",
+  )
 
   // Rest parameters take a list.
-  check(b.join("-", ["a", "b", "c"]) == "a-b-c" && b.join("-", []) == "", "rest")
+  check(
+    b.join("-", ["a", "b", "c"]) == "a-b-c" && b.join("-", []) == "",
+    "rest",
+  )
 
   // Numeric enums.
-  check(b.bump(t.LevelLow) == t.LevelHigh && b.bump(t.LevelHigh) == t.LevelHigh, "numeric enum")
+  check(
+    b.bump(t.LevelLow) == t.LevelHigh && b.bump(t.LevelHigh) == t.LevelHigh,
+    "numeric enum",
+  )
 
   io.println("checks passed")
 }

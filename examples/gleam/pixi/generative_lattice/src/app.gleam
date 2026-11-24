@@ -21,7 +21,7 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke(
+  graphics.stroke_with(
     g,
     Some(
       runtime.js_object([
@@ -57,7 +57,7 @@ pub fn main() {
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -70,19 +70,18 @@ pub fn main() {
 
   let stage = application.get_stage(app)
 
-  let guides = graphics.new(None)
+  let guides = graphics.new()
   list.each([42.0, 82.0, 122.0, 162.0], fn(r) {
     graphics.circle(guides, 340.0, 200.0, r)
     |> stroke_g(1.0, 0xe5e5e5)
     Nil
   })
 
-  let unit_x = point.new(Some(1.0), Some(0.0))
+  let unit_x = point.new_with(Some(1.0), Some(0.0))
   int.range(from: 0, to: 12, with: Nil, run: fn(_, step) {
     let theta = int.to_float(step) *. { two_pi /. 12.0 }
-    let spoke =
-      matrix.rotate(matrix.new(None, None, None, None, None, None), theta)
-    let dir = matrix.apply(spoke, unit_x, None)
+    let spoke = matrix.rotate(matrix.new(), theta)
+    let dir = matrix.apply(spoke, unit_x)
     graphics.move_to(guides, 340.0, 200.0)
     |> graphics.line_to(
       340.0 +. point_data.get_x(dir) *. 182.0,
@@ -93,7 +92,7 @@ pub fn main() {
   stroke_g(guides, 1.0, 0xd4d4d4)
   container.add_child(stage, [guides])
 
-  let tiles = graphics.new(None)
+  let tiles = graphics.new()
   int.range(from: 0, to: 4, with: Nil, run: fn(_, r_idx) {
     let #(radius, fill_hex) = ring_spec(r_idx)
     let s = 8.0 +. int.to_float(r_idx) *. 2.5
@@ -101,29 +100,28 @@ pub fn main() {
     int.range(from: 0, to: 12, with: Nil, run: fn(_, step) {
       let theta =
         int.to_float(step) *. { two_pi /. 12.0 } +. int.to_float(r_idx) *. 0.13
-      let dir_m =
-        matrix.rotate(matrix.new(None, None, None, None, None, None), theta)
-      let dir = matrix.apply(dir_m, unit_x, None)
+      let dir_m = matrix.rotate(matrix.new(), theta)
+      let dir = matrix.apply(dir_m, unit_x)
 
       let tile_m =
-        matrix.new(None, None, None, None, None, None)
+        matrix.new()
         |> matrix.rotate(theta +. int.to_float(r_idx) *. 0.2)
         |> matrix.translate(
           340.0 +. radius *. point_data.get_x(dir),
           200.0 +. radius *. point_data.get_y(dir),
         )
 
-      let p0 = matrix.apply(tile_m, point.new(Some(0.0), Some(0.0 -. s)), None)
-      let p1 = matrix.apply(tile_m, point.new(Some(hw), Some(0.0)), None)
-      let p2 = matrix.apply(tile_m, point.new(Some(0.0), Some(s)), None)
-      let p3 = matrix.apply(tile_m, point.new(Some(0.0 -. hw), Some(0.0)), None)
+      let p0 = matrix.apply(tile_m, point.new_with(Some(0.0), Some(0.0 -. s)))
+      let p1 = matrix.apply(tile_m, point.new_with(Some(hw), Some(0.0)))
+      let p2 = matrix.apply(tile_m, point.new_with(Some(0.0), Some(s)))
+      let p3 = matrix.apply(tile_m, point.new_with(Some(0.0 -. hw), Some(0.0)))
 
       graphics.move_to(tiles, point_data.get_x(p0), point_data.get_y(p0))
       |> graphics.line_to(point_data.get_x(p1), point_data.get_y(p1))
       |> graphics.line_to(point_data.get_x(p2), point_data.get_y(p2))
       |> graphics.line_to(point_data.get_x(p3), point_data.get_y(p3))
       |> graphics.close_path()
-      |> graphics.fill(Some(runtime.dynamic(int.to_float(fill_hex))))
+      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(fill_hex))))
       |> stroke_g(1.2, 0x111111)
       Nil
     })
@@ -131,9 +129,9 @@ pub fn main() {
   container.add_child(stage, [tiles])
 
   let center_dot =
-    graphics.new(None)
+    graphics.new()
     |> graphics.circle(340.0, 200.0, 8.0)
-    |> graphics.fill(Some(runtime.dynamic(int.to_float(0x111111))))
+    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
   container.add_child(stage, [center_dot])
 
   application.render(app)

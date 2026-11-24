@@ -4,7 +4,7 @@ import dom/areas/core/node as dom_node
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import leaflet as leaflet
+import leaflet
 import leaflet/circle_marker_options
 import leaflet/lat_lng_bounds
 import leaflet/layer
@@ -30,7 +30,8 @@ fn poly_opts(
     |> path_options.with_fill_color(fill_color)
     |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) -> path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    Some(d) ->
+      path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
     None -> opts
   }
 }
@@ -42,33 +43,39 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(m_opts))
+  let m = leaflet.map_with(t.StringOrHTMLElementString("map"), Some(m_opts))
 
   let mid_pts = [
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.2, 7.6, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(48.0, 8.6, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.5, 9.7, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.8, 9.5, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.6, 8.4, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.9, 7.3, None)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.2, 7.6)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(48.0, 8.6)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.5, 9.7)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.8, 9.5)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.6, 8.4)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.9, 7.3)),
   ]
   let core_pts = [
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.35, 8.2, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.55, 8.75, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.15, 9.0, None)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.95, 8.4, None)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.35, 8.2)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.55, 8.75)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.15, 9.0)),
+    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.95, 8.4)),
   ]
 
   let mid_poly =
-    leaflet.polygon(mid_pts, Some(poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55)))
+    leaflet.polygon_with(
+      mid_pts,
+      Some(poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55)),
+    )
   let core_poly =
-    leaflet.polygon(core_pts, Some(poly_opts("#111111", 2.5, None, "#404040", 0.75)))
+    leaflet.polygon_with(
+      core_pts,
+      Some(poly_opts("#111111", 2.5, None, "#404040", 0.75)),
+    )
 
   let mid_bounds = polyline.get_bounds(mid_poly)
   let core_bounds = polyline.get_bounds(core_poly)
   let padded = lat_lng_bounds.pad(mid_bounds, 0.18)
   let hull_rect =
-    leaflet.rectangle(
+    leaflet.rectangle_with(
       t.LatLngBoundsExpressionLatLngBounds(padded),
       Some(poly_opts("#737373", 1.5, Some("4 4"), "#efefef", 0.05)),
     )
@@ -78,26 +85,32 @@ pub fn main() {
   layer.add_to(core_poly, t.MapOrLayerGroupMap(m))
 
   let probes = [
-    leaflet.lat_lng(47.25, 8.6, None),
-    leaflet.lat_lng(47.15, 8.55, None),
-    leaflet.lat_lng(47.7, 8.6, None),
-    leaflet.lat_lng(47.0, 9.2, None),
-    leaflet.lat_lng(46.8, 7.9, None),
-    leaflet.lat_lng(47.85, 7.5, None),
-    leaflet.lat_lng(47.9, 9.7, None),
-    leaflet.lat_lng(46.55, 9.6, None),
+    leaflet.lat_lng(47.25, 8.6),
+    leaflet.lat_lng(47.15, 8.55),
+    leaflet.lat_lng(47.7, 8.6),
+    leaflet.lat_lng(47.0, 9.2),
+    leaflet.lat_lng(46.8, 7.9),
+    leaflet.lat_lng(47.85, 7.5),
+    leaflet.lat_lng(47.9, 9.7),
+    leaflet.lat_lng(46.55, 9.6),
   ]
 
   let #(in_core, in_mid, exterior) =
     list.fold(probes, #(0, 0, 0), fn(acc, pt) {
       let #(c_cnt, m_cnt, e_cnt) = acc
       let #(fill_hex, next_acc) = case
-        lat_lng_bounds.contains(core_bounds, t.LatLngBoundsExtendLatlngOrBoundsLatLng(pt))
+        lat_lng_bounds.contains(
+          core_bounds,
+          t.LatLngBoundsExtendLatlngOrBoundsLatLng(pt),
+        )
       {
         True -> #("#111111", #(c_cnt + 1, m_cnt, e_cnt))
         False ->
           case
-            lat_lng_bounds.contains(mid_bounds, t.LatLngBoundsExtendLatlngOrBoundsLatLng(pt))
+            lat_lng_bounds.contains(
+              mid_bounds,
+              t.LatLngBoundsExtendLatlngOrBoundsLatLng(pt),
+            )
           {
             True -> #("#737373", #(c_cnt, m_cnt + 1, e_cnt))
             False -> #("#ffffff", #(c_cnt, m_cnt, e_cnt + 1))
@@ -110,12 +123,12 @@ pub fn main() {
         |> path_options.with_weight(2.0)
         |> path_options.with_fill_color(fill_hex)
         |> path_options.with_fill_opacity(1.0)
-      leaflet.circle_marker(t.LatLngExpressionLatLng(pt), Some(cm_opts))
+      leaflet.circle_marker_with(t.LatLngExpressionLatLng(pt), Some(cm_opts))
       |> layer.add_to(t.MapOrLayerGroupMap(m))
       next_acc
     })
 
-  map.fit_bounds(m, t.LatLngBoundsExpressionLatLngBounds(padded), None)
+  map.fit_bounds(m, t.LatLngBoundsExpressionLatLngBounds(padded))
 
   case document.get_element_by_id(core.get_document(), "meta") {
     Some(meta) ->

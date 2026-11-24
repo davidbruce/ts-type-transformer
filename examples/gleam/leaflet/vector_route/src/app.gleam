@@ -5,7 +5,7 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import leaflet as leaflet
+import leaflet
 import leaflet/circle_marker_options
 import leaflet/lat_lng
 import leaflet/layer
@@ -39,7 +39,8 @@ fn poly_opts(
     |> path_options.with_weight(weight)
     |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) -> path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    Some(d) ->
+      path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
     None -> opts
   }
 }
@@ -47,20 +48,22 @@ fn poly_opts(
 fn pair_distances_km(pts: List(t.LatLng(Nil))) -> Float {
   case pts {
     [a, b, ..rest] ->
-      lat_lng.distance_to(a, t.LatLngExpressionLatLng(b)) /. 1000.0
+      lat_lng.distance_to(a, t.LatLngExpressionLatLng(b))
+      /. 1000.0
       +. pair_distances_km([b, ..rest])
     _ -> 0.0
   }
 }
 
 pub fn main() {
-  let m = leaflet.map(t.StringOrHTMLElementString("map"), Some(make_map_opts()))
-  let london = leaflet.lat_lng(51.505, -0.09, None)
-  let paris = leaflet.lat_lng(48.8566, 2.3522, None)
-  let zurich = leaflet.lat_lng(47.3769, 8.5417, None)
-  let munich = leaflet.lat_lng(48.1351, 11.5820, None)
-  let prague = leaflet.lat_lng(50.0755, 14.4378, None)
-  let berlin = leaflet.lat_lng(52.5200, 13.4050, None)
+  let m =
+    leaflet.map_with(t.StringOrHTMLElementString("map"), Some(make_map_opts()))
+  let london = leaflet.lat_lng(51.505, -0.09)
+  let paris = leaflet.lat_lng(48.8566, 2.3522)
+  let zurich = leaflet.lat_lng(47.3769, 8.5417)
+  let munich = leaflet.lat_lng(48.1351, 11.582)
+  let prague = leaflet.lat_lng(50.0755, 14.4378)
+  let berlin = leaflet.lat_lng(52.52, 13.405)
 
   let hubs = [
     #("London", london),
@@ -73,10 +76,10 @@ pub fn main() {
 
   let grat_opts = poly_opts("#e5e5e5", 1.0, None, 0.0)
   list.each([46.0, 48.0, 50.0, 52.0, 54.0], fn(lat) {
-    leaflet.polyline(
+    leaflet.polyline_with(
       [
-        runtime.dynamic(leaflet.lat_lng(lat, -2.0, None)),
-        runtime.dynamic(leaflet.lat_lng(lat, 17.0, None)),
+        runtime.dynamic(leaflet.lat_lng(lat, -2.0)),
+        runtime.dynamic(leaflet.lat_lng(lat, 17.0)),
       ],
       Some(grat_opts),
     )
@@ -84,10 +87,10 @@ pub fn main() {
     Nil
   })
   list.each([0.0, 4.0, 8.0, 12.0, 16.0], fn(lng) {
-    leaflet.polyline(
+    leaflet.polyline_with(
       [
-        runtime.dynamic(leaflet.lat_lng(45.0, lng, None)),
-        runtime.dynamic(leaflet.lat_lng(55.0, lng, None)),
+        runtime.dynamic(leaflet.lat_lng(45.0, lng)),
+        runtime.dynamic(leaflet.lat_lng(55.0, lng)),
       ],
       Some(grat_opts),
     )
@@ -97,21 +100,24 @@ pub fn main() {
 
   let primary_pts = list.map(hubs, fn(h) { runtime.dynamic(h.1) })
   let primary_line =
-    leaflet.polyline(primary_pts, Some(poly_opts("#111111", 3.0, None, 0.0)))
+    leaflet.polyline_with(
+      primary_pts,
+      Some(poly_opts("#111111", 3.0, None, 0.0)),
+    )
     |> layer.add_to(t.MapOrLayerGroupMap(m))
 
-  leaflet.polyline(
+  leaflet.polyline_with(
     [
       runtime.dynamic(london),
-      runtime.dynamic(leaflet.lat_lng(50.8503, 4.3517, None)),
-      runtime.dynamic(leaflet.lat_lng(52.3676, 4.9041, None)),
+      runtime.dynamic(leaflet.lat_lng(50.8503, 4.3517)),
+      runtime.dynamic(leaflet.lat_lng(52.3676, 4.9041)),
       runtime.dynamic(berlin),
     ],
     Some(poly_opts("#737373", 1.5, Some("5 5"), 0.0)),
   )
   |> layer.add_to(t.MapOrLayerGroupMap(m))
 
-  let nodes = leaflet.layer_group(None, None)
+  let nodes = leaflet.layer_group()
   let node_opts =
     circle_marker_options.create()
     |> circle_marker_options.with_radius(6.0)
@@ -122,8 +128,8 @@ pub fn main() {
 
   list.each(hubs, fn(h) {
     let cm =
-      leaflet.circle_marker(t.LatLngExpressionLatLng(h.1), Some(node_opts))
-      |> layer.bind_tooltip(t.LayerBindTooltipContentString(h.0), None)
+      leaflet.circle_marker_with(t.LatLngExpressionLatLng(h.1), Some(node_opts))
+      |> layer.bind_tooltip_with(t.LayerBindTooltipContentString(h.0), None)
     layer_group.add_layer(nodes, cm)
     Nil
   })
@@ -132,7 +138,6 @@ pub fn main() {
   map.fit_bounds(
     m,
     t.LatLngBoundsExpressionLatLngBounds(polyline.get_bounds(primary_line)),
-    None,
   )
 
   let total_km = pair_distances_km(list.map(hubs, fn(h) { h.1 }))
@@ -141,7 +146,9 @@ pub fn main() {
     Some(meta) ->
       dom_node.set_text_content(
         meta,
-        Some("6 hubs · 2 routes · " <> km_str <> " km total · EPSG:3857 vector SVG"),
+        Some(
+          "6 hubs · 2 routes · " <> km_str <> " km total · EPSG:3857 vector SVG",
+        ),
       )
     None -> Nil
   }

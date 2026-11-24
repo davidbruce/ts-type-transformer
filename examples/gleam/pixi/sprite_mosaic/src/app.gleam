@@ -42,7 +42,7 @@ pub fn main() {
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -56,9 +56,9 @@ pub fn main() {
   let stage = application.get_stage(app)
 
   let frame =
-    graphics.new(None)
+    graphics.new()
     |> graphics.rect(32.0, 20.0, 616.0, 360.0)
-    |> graphics.stroke(
+    |> graphics.stroke_with(
       Some(
         runtime.js_object([
           #("width", runtime.dynamic(1.5)),
@@ -71,7 +71,7 @@ pub fn main() {
   let white = texture.get_white()
   int.range(from: 0, to: 6, with: Nil, run: fn(_, row) {
     int.range(from: 0, to: 10, with: Nil, run: fn(_, col) {
-      let s = sprite.from(runtime.dynamic(white), None)
+      let s = sprite.from(runtime.dynamic(white))
       let idx = { row * 3 + col * 5 } % 8
       let c_f = int.to_float(col)
       let r_f = int.to_float(row)
@@ -79,7 +79,7 @@ pub fn main() {
       container.set_width(s, 52.0)
       container.set_height(s, 48.0)
       sprite.get_anchor(s)
-      |> observable_point.set(Some(0.5), Some(0.5))
+      |> observable_point.set_with(Some(0.5), Some(0.5))
       container.set_x(s, 70.0 +. c_f *. 60.0)
       container.set_y(s, 56.0 +. r_f *. 56.0)
       container.set_rotation(

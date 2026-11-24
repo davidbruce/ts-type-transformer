@@ -359,16 +359,15 @@ pub(super) fn emit_class_and_func_modules<'m>(
             g.out += &format!("pub const {id} = {gleam}\n\n");
         }
         let mut cls_methods = Vec::new();
-        for f in &c.funcs {
+        // Every member's own name first: a `_with` form takes one none has (`can_replace_with` is ProseMirror's).
+        let ids: Vec<String> = c.funcs.iter().map(|f| g.value_name(&function_name(&with_self_args(f, c), &f.name))).collect();
+        for (f, id) in c.funcs.iter().zip(ids) {
             let f = with_self_args(f, c);
-            let id = g.value_name(&function_name(&f, &f.name));
-            g.function(&id, &f, Some((&c.name, &c.type_params)));
+            let (_, with) = g.function(&id, &f, Some((&c.name, &c.type_params)));
             if Class::has_self(&f) {
-                cls_methods.push(EmittedMethod {
-                    gleam_name: id,
-                    ffi_path: format!("{}_ffi.mjs", class_paths[&c.name]),
-                    func: f,
-                });
+                for gleam_name in [Some(id), with].into_iter().flatten() {
+                    cls_methods.push(EmittedMethod { gleam_name, ffi_path: format!("{}_ffi.mjs", class_paths[&c.name]), func: f.clone() });
+                }
             }
         }
         emitted_methods.insert(c.name.clone(), cls_methods);
@@ -531,14 +530,22 @@ pub(super) fn emit_class_and_func_modules<'m>(
             }
         }
     }
-    // Top-level and namespaced functions.
-    for f in &m.funcs {
-        let unit = func_unit(m, paths, pkg, f);
+    // Top-level and namespaced functions: every one's own name first.
+    let ids: Vec<(String, String)> = m
+        .funcs
+        .iter()
+        .map(|f| {
+            let unit = func_unit(m, paths, pkg, f);
+            g.switch(&unit);
+            let id = match m.func_namespaces.get(&f.import) {
+                Some((_, own, _, _)) => g.fresh_value(&function_name(f, own)),
+                None => g.value_name(&function_name(f, &f.name)),
+            };
+            (unit, id)
+        })
+        .collect();
+    for (f, (unit, id)) in m.funcs.iter().zip(ids) {
         g.switch(&unit);
-        let id = match m.func_namespaces.get(&f.import) {
-            Some((_, own, _, _)) => g.fresh_value(&function_name(f, own)),
-            None => g.value_name(&function_name(f, &f.name)),
-        };
         g.function(&id, f, None);
     }
     // Pass 3: folded single-owner synthetic option bags / result structs.

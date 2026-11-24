@@ -1,11 +1,11 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
+import bindings/named
+import bindings/shape
 import bindings/types as t
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
-import bindings/named
-import bindings/shape
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -23,7 +23,10 @@ pub fn main() {
 
   // A string enum is a custom type, in both directions.
   check(shape.get_kind(s) == t.ShapeKindSquare, "enum out")
-  check(shape.get_kind(shape.new(t.ShapeKindCircle, 1.0)) == t.ShapeKindCircle, "enum in")
+  check(
+    shape.get_kind(shape.new(t.ShapeKindCircle, 1.0)) == t.ShapeKindCircle,
+    "enum in",
+  )
 
   // Properties.
   shape.set_size(s, 4.0)
@@ -40,17 +43,26 @@ pub fn main() {
   // Overloads are renamed.
   let big = shape.scale(s, 2.0)
   check(shape.get_size(big) == 8.0, "overload")
-  check(named.get_name(shape.scale_with_name(s, 2.0, "big")) == "big", "renamed overload")
+  check(
+    named.get_name(shape.scale_with_name(s, 2.0, "big")) == "big",
+    "renamed overload",
+  )
 
   // An optional argument is an Option.
-  shape.resize(s, 2.6, None)
+  shape.resize(s, 2.6)
   check(shape.get_size(s) == 2.6, "absent argument")
-  shape.resize(s, 2.6, Some(True))
+  shape.resize_with(s, 2.6, Some(True))
   check(shape.get_size(s) == 3.0, "given argument")
 
   // A union is a custom type.
-  check(shape.label(s, t.StringOrNumberString("a")) == "string:a", "union string")
-  check(shape.label(s, t.StringOrNumberNumber(7.0)) == "number:7", "union number")
+  check(
+    shape.label(s, t.StringOrNumberString("a")) == "string:a",
+    "union string",
+  )
+  check(
+    shape.label(s, t.StringOrNumberNumber(7.0)) == "number:7",
+    "union number",
+  )
 
   // A nullable value is an Option.
   check(shape.get_parent(s) == None, "null")
@@ -62,8 +74,8 @@ pub fn main() {
   check(b.total_area(s, shape.unit()) == 10.0, "function")
   check(b.largest(s, None) == Some(s), "null argument")
   check(b.largest(shape.unit(), Some(s)) == Some(s), "nullable result")
-  check(shape.area(b.or_unit(None)) == 1.0, "undefined argument")
-  check(b.or_unit(Some(s)) == s, "defined argument")
+  check(shape.area(b.or_unit()) == 1.0, "undefined argument")
+  check(b.or_unit_with(Some(s)) == s, "defined argument")
   check(b.find("nothing") == None, "undefined result")
   check(option.map(b.find("unit"), shape.area) == Some(1.0), "defined result")
 

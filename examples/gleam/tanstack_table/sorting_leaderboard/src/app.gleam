@@ -17,10 +17,10 @@ import tanstack_table_core/column_row_sorting
 import tanstack_table_core/column_sort
 import tanstack_table_core/row_model
 import tanstack_table_core/row_row
+import tanstack_table_core/runtime as rt
 import tanstack_table_core/table_columns
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/table_row_sorting
-import tanstack_table_core/runtime as rt
 import tanstack_table_core/types as t
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
@@ -38,10 +38,20 @@ fn esc_html(s: String) -> String {
 }
 
 fn col_def(key: String, header: String) {
-  rt.js_object([#("accessorKey", rt.dynamic(key)), #("header", rt.dynamic(header))])
+  rt.js_object([
+    #("accessorKey", rt.dynamic(key)),
+    #("header", rt.dynamic(header)),
+  ])
 }
 
-fn node_row(id: String, host: String, region: String, lat: Float, thr: Float, up: Float) {
+fn node_row(
+  id: String,
+  host: String,
+  region: String,
+  lat: Float,
+  thr: Float,
+  up: Float,
+) {
   rt.js_object([
     #("id", rt.dynamic(id)),
     #("host", rt.dynamic(host)),
@@ -60,7 +70,8 @@ fn sort_spec(id: String, desc: Bool) -> t.ColumnSort(Nil) {
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
@@ -79,27 +90,41 @@ fn decode_num(v: Dynamic) -> Float {
   }
 }
 
-fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: String) {
-  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+fn render(
+  table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil),
+  doc,
+  label: String,
+) {
+  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
 
-  let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
   let cols = table_columns.get_all_leaf_columns(cols_view)
 
   let header_cells =
     list.map(cols, fn(col) {
       let cid = column_core_properties.get_id(col)
-      let hdr = case rt.js_get(rt.dynamic(column_core_properties.get_column_def(col)), "header") {
+      let hdr = case
+        rt.js_get(
+          rt.dynamic(column_core_properties.get_column_def(col)),
+          "header",
+        )
+      {
         Some(h) -> decode_str(h, cid)
         None -> cid
       }
-      let csort: t.ColumnRowSorting(t.TableFeatures(Nil), Dynamic, Nil) = coerce(col)
+      let csort: t.ColumnRowSorting(t.TableFeatures(Nil), Dynamic, Nil) =
+        coerce(col)
       let mark = case column_row_sorting.get_is_sorted(csort) {
         t.BooleanOrSortDirectionSortDirection(t.SortDirectionAsc) -> " &#9650;"
         t.BooleanOrSortDirectionSortDirection(t.SortDirectionDesc) -> " &#9660;"
         _ -> ""
       }
-      let cls = case cid == "latency" || cid == "throughput" || cid == "uptime" {
+      let cls = case
+        cid == "latency" || cid == "throughput" || cid == "uptime"
+      {
         True -> " class=\"num\""
         False -> ""
       }
@@ -109,8 +134,12 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
 
   let body_rows =
     list.map(rows, fn(r) {
-      let str_val = fn(k) { decode_str(row_row.get_value(coerce(r), k, rt.codec_dynamic()), "") }
-      let num_val = fn(k) { decode_num(row_row.get_value(coerce(r), k, rt.codec_dynamic())) }
+      let str_val = fn(k) {
+        decode_str(row_row.get_value(coerce(r), k, rt.codec_dynamic()), "")
+      }
+      let num_val = fn(k) {
+        decode_num(row_row.get_value(coerce(r), k, rt.codec_dynamic()))
+      }
       let lat = rt.to_fixed(num_val("latency"), 1)
       let thr = int.to_string(float.round(num_val("throughput")))
       let up = rt.to_fixed(num_val("uptime"), 2)
@@ -130,16 +159,30 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc, label: St
     })
     |> string.concat
 
-  let html = "<table><thead><tr>" <> header_cells <> "</tr></thead><tbody>" <> body_rows <> "</tbody></table>"
+  let html =
+    "<table><thead><tr>"
+    <> header_cells
+    <> "</tr></thead><tbody>"
+    <> body_rows
+    <> "</tbody></table>"
   case document.get_element_by_id(doc, "table-wrap") {
     Some(wrap) -> element.set_inner_html(wrap, html)
     None -> Nil
   }
   let top_host = case rows {
-    [first, ..] -> decode_str(row_row.get_value(coerce(first), "host", rt.codec_dynamic()), "-")
+    [first, ..] ->
+      decode_str(
+        row_row.get_value(coerce(first), "host", rt.codec_dynamic()),
+        "-",
+      )
     [] -> "-"
   }
-  let msg = label <> " · " <> int.to_string(list.length(rows)) <> " rows · top node: " <> top_host
+  let msg =
+    label
+    <> " · "
+    <> int.to_string(list.length(rows))
+    <> " rows · top node: "
+    <> top_host
   case document.get_element_by_id(doc, "meta") {
     Some(meta) -> dom_node.set_text_content(meta, Some(msg))
     None -> Nil
@@ -183,7 +226,15 @@ pub fn main() {
     ])
   let init_state =
     rt.js_object([
-      #("sorting", rt.dynamic(rt.js_array([rt.dynamic(sort_spec("region", False)), rt.dynamic(sort_spec("latency", False))]))),
+      #(
+        "sorting",
+        rt.dynamic(
+          rt.js_array([
+            rt.dynamic(sort_spec("region", False)),
+            rt.dynamic(sort_spec("latency", False)),
+          ]),
+        ),
+      ),
     ])
   let options =
     rt.js_object([
@@ -194,18 +245,28 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let tsort: t.TableRowSorting(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let tsort: t.TableRowSorting(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
-    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("region", False), sort_spec("latency", False)]))
+    table_row_sorting.set_sorting(
+      tsort,
+      t.UpdaterT([sort_spec("region", False), sort_spec("latency", False)]),
+    )
     render(table, doc, "Sort: region asc, latency asc")
   })
   wire_btn(doc, "btn-1", fn() {
-    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("latency", False)]))
+    table_row_sorting.set_sorting(
+      tsort,
+      t.UpdaterT([sort_spec("latency", False)]),
+    )
     render(table, doc, "Sort: latency asc")
   })
   wire_btn(doc, "btn-2", fn() {
-    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("throughput", True)]))
+    table_row_sorting.set_sorting(
+      tsort,
+      t.UpdaterT([sort_spec("throughput", True)]),
+    )
     render(table, doc, "Sort: throughput desc")
   })
   wire_btn(doc, "btn-3", fn() {

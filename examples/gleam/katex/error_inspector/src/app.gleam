@@ -5,7 +5,7 @@ import dom/areas/core/node
 import dom/areas/html/html_element_tag_name_map as tag
 import gleam/list
 import gleam/option.{None, Some}
-import katex as katex
+import katex
 import katex/katex_options
 import katex/runtime as kr
 
@@ -14,11 +14,11 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let title = document.create_element(doc, tag.h1, None)
+      let title = document.create_element(doc, tag.h1)
       node.set_text_content(title, Some("ParseError Inspector (Gleam)"))
-      let badge = document.create_element(doc, tag.span, None)
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("throwOnError: false vs true"))
       node.append_child(head, title)
@@ -42,35 +42,35 @@ pub fn main() -> Nil {
       ]
 
       list.each(bad_inputs, fn(tex) {
-        let row = document.create_element(doc, tag.div, None)
+        let row = document.create_element(doc, tag.div)
         element.set_class_name(row, "row")
 
-        let left = document.create_element(doc, tag.div, None)
+        let left = document.create_element(doc, tag.div)
         element.set_class_name(left, "cell mode-html")
-        let l_lbl = document.create_element(doc, tag.div, None)
+        let l_lbl = document.create_element(doc, tag.div)
         element.set_class_name(l_lbl, "label")
         node.set_text_content(l_lbl, Some("throwOnError: false (#555555)"))
-        let l_slot = document.create_element(doc, tag.div, None)
+        let l_slot = document.create_element(doc, tag.div)
         element.set_class_name(l_slot, "slot")
         element.set_inner_html(
           l_slot,
-          katex.render_to_string(tex, Some(lenient)),
+          katex.render_to_string_with(tex, Some(lenient)),
         )
         node.append_child(left, l_lbl)
         node.append_child(left, l_slot)
 
-        let right = document.create_element(doc, tag.div, None)
+        let right = document.create_element(doc, tag.div)
         element.set_class_name(right, "cell")
-        let r_lbl = document.create_element(doc, tag.div, None)
+        let r_lbl = document.create_element(doc, tag.div)
         element.set_class_name(r_lbl, "label")
         node.set_text_content(
           r_lbl,
           Some("throwOnError: true (caught ParseError)"),
         )
-        let r_err = document.create_element(doc, tag.div, None)
+        let r_err = document.create_element(doc, tag.div)
         element.set_class_name(r_err, "err")
         let msg = case
-          kr.attempt(fn() { katex.render_to_string(tex, Some(strict)) })
+          kr.attempt(fn() { katex.render_to_string_with(tex, Some(strict)) })
         {
           Ok(_) -> "(did not throw)"
           Error(e) -> kr.js_error_message(e)

@@ -10,7 +10,6 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
-import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
@@ -30,6 +29,7 @@ import prosemirror/areas/prosemirror_transform/step
 import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
+import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
@@ -55,7 +55,9 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     |> node_spec.with_content("inline*")
     |> node_spec.with_group("block")
     |> node_spec.with_to_dom(fn(n) {
-      let lvl = case decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int) {
+      let lvl = case
+        decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int)
+      {
         Ok(1) -> "h1"
         _ -> "h2"
       }
@@ -96,7 +98,13 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
 }
 
 fn p_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node(sch, t.StringOrNodeTypeString("paragraph"), None, Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, txt, None))), None)
+  schema.node_with(
+    sch,
+    t.StringOrNodeTypeString("paragraph"),
+    None,
+    Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, txt))),
+    None,
+  )
 }
 
 fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
@@ -104,23 +112,37 @@ fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
     attrs.create()
     |> attrs.with_at("level", dynamic.int(2))
   let h =
-    schema.node(
+    schema.node_with(
       sch,
       t.StringOrNodeTypeString("heading"),
       Some(ha),
-      Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, "Step-Inversion Undo & Transaction Filter", None))),
+      Some(
+        t.FragmentOrNodeOrNodeArrayNode(schema.text(
+          sch,
+          "Step-Inversion Undo & Transaction Filter",
+        )),
+      ),
       None,
     )
-  schema.node(
+  schema.node_with(
     sch,
     t.StringOrNodeTypeString("doc"),
     None,
     Some(
       t.FragmentOrNodeOrNodeArrayArray([
         h,
-        p_node(sch, "Every document change produces atomic Transform steps that can be inverted against prior snapshots."),
-        p_node(sch, "A ProseMirror Plugin inspects transactions in filterTransaction and can enforce a read-only lock."),
-        p_node(sch, "Click Append Revision or Bold First Line, then step backward with Undo and forward with Redo."),
+        p_node(
+          sch,
+          "Every document change produces atomic Transform steps that can be inverted against prior snapshots.",
+        ),
+        p_node(
+          sch,
+          "A ProseMirror Plugin inspects transactions in filterTransaction and can enforce a read-only lock.",
+        ),
+        p_node(
+          sch,
+          "Click Append Revision or Bold First Line, then step backward with Undo and forward with Redo.",
+        ),
       ]),
     ),
     None,
@@ -166,7 +188,9 @@ fn update_meta(
     <> " · blocked="
     <> int.to_string(blocked)
     <> " · blocks="
-    <> int.to_string(float.round(node.get_child_count(editor_state.get_doc(st))))
+    <> int.to_string(
+      float.round(node.get_child_count(editor_state.get_doc(st))),
+    )
   case document.get_element_by_id(doc, "meta") {
     Some(meta) -> dom_node.set_text_content(meta, Some(msg))
     None -> Nil
@@ -183,7 +207,8 @@ fn update_meta(
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
@@ -191,7 +216,7 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 pub fn main() {
   let doc = core.get_document()
   let sch = build_schema()
-  let audit_key = plugin_key.new(Some("audit"))
+  let audit_key = plugin_key.new_with(Some("audit"))
 
   let view_ref = pm_rt.ref_new(None)
   let locked_ref = pm_rt.ref_new(False)
@@ -226,7 +251,10 @@ pub fn main() {
       case pm_rt.ref_get(locked_ref) && transform.get_doc_changed(tr) {
         True -> {
           pm_rt.ref_update(blocked_ref, fn(b) { b + 1 })
-          pm_rt.ref_set(action_ref, "Blocked document mutation (filterTransaction=false)")
+          pm_rt.ref_set(
+            action_ref,
+            "Blocked document mutation (filterTransaction=false)",
+          )
           False
         }
         False -> True
@@ -256,7 +284,15 @@ pub fn main() {
                   let inv =
                     list.map2(steps, docs, fn(s, d) { step.invert(s, d) })
                     |> list.reverse
-                  case decode.run(transaction.get_meta(tr, t.StringOrPluginOrPluginKeyString("history")), decode.string) {
+                  case
+                    decode.run(
+                      transaction.get_meta(
+                        tr,
+                        t.StringOrPluginOrPluginKeyString("history"),
+                      ),
+                      decode.string,
+                    )
+                  {
                     Ok("undo") -> {
                       pm_rt.ref_update(redo_ref, fn(stack) { [inv, ..stack] })
                       Nil
@@ -273,29 +309,59 @@ pub fn main() {
                 }
                 False -> Nil
               }
-              editor_view.update_state(v, editor_state.apply_transaction_result_get_state(res))
+              editor_view.update_state(
+                v,
+                editor_state.apply_transaction_result_get_state(res),
+              )
             }
           }
-          update_meta(doc, audit_key, editor_view.get_state(v), undo_ref, redo_ref, locked_ref, blocked_ref, action_ref)
+          update_meta(
+            doc,
+            audit_key,
+            editor_view.get_state(v),
+            undo_ref,
+            redo_ref,
+            locked_ref,
+            blocked_ref,
+            action_ref,
+          )
         }
         None -> Nil
       }
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view = editor_view.new(Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))), props)
+  let view =
+    editor_view.new(
+      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
+      props,
+    )
   pm_rt.ref_set(view_ref, Some(view))
-  update_meta(doc, audit_key, editor_view.get_state(view), undo_ref, redo_ref, locked_ref, blocked_ref, action_ref)
+  update_meta(
+    doc,
+    audit_key,
+    editor_view.get_state(view),
+    undo_ref,
+    redo_ref,
+    locked_ref,
+    blocked_ref,
+    action_ref,
+  )
 
   wire_btn(doc, "btn-0", fn() {
     let rev = pm_rt.ref_update(rev_ref, fn(r) { r + 1 })
     let st = editor_view.get_state(view)
-    let msg = "Revision #" <> int.to_string(rev) <> " recorded via Transform step."
+    let msg =
+      "Revision #" <> int.to_string(rev) <> " recorded via Transform step."
     let tr =
       editor_state.get_tr(st)
-      |> transform.insert(fragment.get_size(node.get_content(editor_state.get_doc(st))), t.FragmentOrNodeOrNodeArrayNode(p_node(sch, msg)))
+      |> transform.insert(
+        fragment.get_size(node.get_content(editor_state.get_doc(st))),
+        t.FragmentOrNodeOrNodeArrayNode(p_node(sch, msg)),
+      )
     case pm_rt.ref_get(locked_ref) {
-      False -> pm_rt.ref_set(action_ref, "Appended Revision #" <> int.to_string(rev))
+      False ->
+        pm_rt.ref_set(action_ref, "Appended Revision #" <> int.to_string(rev))
       True -> Nil
     }
     editor_view.dispatch(view, tr)
@@ -312,7 +378,11 @@ pub fn main() {
           True -> {
             let tr =
               editor_state.get_tr(st)
-              |> transform.add_mark(fp, tp, schema.mark(sch, t.StringOrMarkTypeString("strong"), None))
+              |> transform.add_mark(
+                fp,
+                tp,
+                schema.mark(sch, t.StringOrMarkTypeString("strong")),
+              )
             case pm_rt.ref_get(locked_ref) {
               False -> pm_rt.ref_set(action_ref, "Bolded first body paragraph")
               True -> Nil
@@ -331,19 +401,36 @@ pub fn main() {
     case pm_rt.ref_get(undo_ref) {
       [] -> {
         pm_rt.ref_set(action_ref, "Undo stack empty")
-        update_meta(doc, audit_key, st, undo_ref, redo_ref, locked_ref, blocked_ref, action_ref)
+        update_meta(
+          doc,
+          audit_key,
+          st,
+          undo_ref,
+          redo_ref,
+          locked_ref,
+          blocked_ref,
+          action_ref,
+        )
       }
       [batch, ..rest] -> {
         case pm_rt.ref_get(locked_ref) {
           False -> {
             pm_rt.ref_set(undo_ref, rest)
-            pm_rt.ref_set(action_ref, "Undid " <> int.to_string(list.length(batch)) <> " step(s) via Step.invert")
+            pm_rt.ref_set(
+              action_ref,
+              "Undid "
+                <> int.to_string(list.length(batch))
+                <> " step(s) via Step.invert",
+            )
           }
           True -> Nil
         }
         let tr =
           editor_state.get_tr(st)
-          |> transaction.set_meta(t.StringOrPluginOrPluginKeyString("history"), dynamic.string("undo"))
+          |> transaction.set_meta(
+            t.StringOrPluginOrPluginKeyString("history"),
+            dynamic.string("undo"),
+          )
         list.each(batch, fn(s) {
           transform.step(tr, s)
           Nil
@@ -358,19 +445,36 @@ pub fn main() {
     case pm_rt.ref_get(redo_ref) {
       [] -> {
         pm_rt.ref_set(action_ref, "Redo stack empty")
-        update_meta(doc, audit_key, st, undo_ref, redo_ref, locked_ref, blocked_ref, action_ref)
+        update_meta(
+          doc,
+          audit_key,
+          st,
+          undo_ref,
+          redo_ref,
+          locked_ref,
+          blocked_ref,
+          action_ref,
+        )
       }
       [batch, ..rest] -> {
         case pm_rt.ref_get(locked_ref) {
           False -> {
             pm_rt.ref_set(redo_ref, rest)
-            pm_rt.ref_set(action_ref, "Redid " <> int.to_string(list.length(batch)) <> " inverted step(s)")
+            pm_rt.ref_set(
+              action_ref,
+              "Redid "
+                <> int.to_string(list.length(batch))
+                <> " inverted step(s)",
+            )
           }
           True -> Nil
         }
         let tr =
           editor_state.get_tr(st)
-          |> transaction.set_meta(t.StringOrPluginOrPluginKeyString("history"), dynamic.string("redo"))
+          |> transaction.set_meta(
+            t.StringOrPluginOrPluginKeyString("history"),
+            dynamic.string("redo"),
+          )
         list.each(batch, fn(s) {
           transform.step(tr, s)
           Nil
@@ -386,6 +490,15 @@ pub fn main() {
       True -> "Enabled read-only lock"
       False -> "Disabled read-only lock"
     })
-    update_meta(doc, audit_key, editor_view.get_state(view), undo_ref, redo_ref, locked_ref, blocked_ref, action_ref)
+    update_meta(
+      doc,
+      audit_key,
+      editor_view.get_state(view),
+      undo_ref,
+      redo_ref,
+      locked_ref,
+      blocked_ref,
+      action_ref,
+    )
   })
 }

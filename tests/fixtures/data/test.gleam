@@ -1,15 +1,15 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
-import bindings/runtime as r
-import bindings/types as t
-import gleam/io
-import gleam/option.{None, Some}
 import bindings/box
 import bindings/item
 import bindings/options
 import bindings/pipe
+import bindings/runtime as r
 import bindings/source
 import bindings/tagged
+import bindings/types as t
+import gleam/io
+import gleam/option.{None, Some}
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -30,8 +30,14 @@ pub fn main() {
 
   // Built by JavaScript, read here. A missing optional property is None.
   let d = b.defaults()
-  check(options.get_width(d) == 4.0 && options.get_mode(d) == t.OptionsModeFit, "read")
-  check(options.get_height(d) == None && options.get_title(d) == None, "missing")
+  check(
+    options.get_width(d) == 4.0 && options.get_mode(d) == t.OptionsModeFit,
+    "read",
+  )
+  check(
+    options.get_height(d) == None && options.get_title(d) == None,
+    "missing",
+  )
 
   // Partial<Options>, Pick<Options, ...>, keyof Options.
   let changes = b.patch_changes_create()
@@ -47,7 +53,11 @@ pub fn main() {
   let table = b.lookup_table_create()
   b.lookup_table_set_at(table, "a", 7.0)
   check(b.lookup(table, "a") == 7.0 && b.lookup(table, "b") == -1.0, "Record")
-  check(b.lookup_table_get_at(table, "a") == Some(7.0) && b.lookup_table_get_at(table, "b") == None, "index")
+  check(
+    b.lookup_table_get_at(table, "a") == Some(7.0)
+      && b.lookup_table_get_at(table, "b") == None,
+    "index",
+  )
 
   // An intersection, and an inline object type.
   let tagged = tagged.create()
@@ -66,20 +76,40 @@ pub fn main() {
   check(b.total([1.0, 2.0]) == 3.0, "List(Float)")
   check(b.flip(#("x", 7.0)) == #(7.0, "x"), "Pair(String, Float)")
   let assert [first, ..] = b.items()
-  check(item.get_id(first) == 1.0 && item.get_tags(first) == ["a", "b"], "array of objects")
+  check(
+    item.get_id(first) == 1.0 && item.get_tags(first) == ["a", "b"],
+    "array of objects",
+  )
 
   // Generics are Gleam's. A value of T crosses by the codec of T: a handle
   // (`Box(t)`) as it is, so it needs none.
   let float = r.codec_float()
   let bx = b.wrap(21.0, float)
   check(box.get_value(bx, float) == 21.0, "generic")
-  check(box.get_value(box.map(bx, fn(v) { v *. 2.0 }, float, float), float) == 42.0, "generic callback")
-  check(b.first(b.range(4.0), float) == Some(0.0) && b.first([], float) == None, "generic function")
+  check(
+    box.get_value(box.map(bx, fn(v) { v *. 2.0 }, float, float), float) == 42.0,
+    "generic callback",
+  )
+  check(
+    b.first(b.range(4.0), float) == Some(0.0) && b.first([], float) == None,
+    "generic function",
+  )
   // What a Box holds is converted as T is: an Id, a variant, not JavaScript's string.
   let assert t.IdString(three) = box.get_value(b.boxed_id(), t.id_codec())
   check(three == "three", "Box(Id)")
-  let assert [t.IdNumber(1.0), ..] = box.get_value(b.wrap([t.IdNumber(1.0)], r.codec_list(t.id_codec())), r.codec_list(t.id_codec()))
-  check(box.get_value(b.wrap(Some("x"), r.codec_option(r.codec_string())), r.codec_option(r.codec_string())) == Some("x"), "Box(Option(String))")
+  let assert [t.IdNumber(1.0), ..] =
+    box.get_value(
+      b.wrap([t.IdNumber(1.0)], r.codec_list(t.id_codec())),
+      r.codec_list(t.id_codec()),
+    )
+  check(
+    box.get_value(
+      b.wrap(Some("x"), r.codec_option(r.codec_string())),
+      r.codec_option(r.codec_string()),
+    )
+      == Some("x"),
+    "Box(Option(String))",
+  )
 
   // A generic union, and a union in an array.
   check(b.unbox(t.EitherT(5.0), float) == 5.0, "union of T")

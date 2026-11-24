@@ -20,12 +20,12 @@ fn fmt_signed(v: Float) -> String {
 }
 
 fn add_kv(doc, row, label: String, val: String) -> Nil {
-  let box = document.create_element(doc, tag.div, None)
+  let box = document.create_element(doc, tag.div)
   element.set_class_name(box, "kv")
-  let lbl = document.create_element(doc, tag.span, None)
+  let lbl = document.create_element(doc, tag.span)
   element.set_class_name(lbl, "label")
   node.set_text_content(lbl, Some(label))
-  let s = document.create_element(doc, tag.div, None)
+  let s = document.create_element(doc, tag.div)
   element.set_class_name(s, "val")
   node.set_text_content(s, Some(val))
   node.append_child(box, lbl)
@@ -42,49 +42,57 @@ pub fn main() -> Nil {
       let day = dt.DateOrStringOrNumberDate
       let arg = dt.DateArgDateType
 
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let h1 = document.create_element(doc, tag.h1, None)
+      let h1 = document.create_element(doc, tag.h1)
       node.set_text_content(h1, Some("Date-fns Arithmetic & Durations (Gleam)"))
-      let badge = document.create_element(doc, tag.span, None)
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("Base 2024-03-15"))
       node.append_child(head, h1)
       node.append_child(head, badge)
       node.append_child(app, head)
 
-      let base_d = df.parse_iso("2024-03-15", None)
-      let jan31 = df.parse_iso("2024-01-31", None)
+      let base_d = df.parse_iso("2024-03-15")
+      let jan31 = df.parse_iso("2024-01-31")
       let dur =
         duration.create()
         |> duration.with_months(1.0)
         |> duration.with_days(2.0)
 
       let ops = [
-        #("addDays(base, 3)", df.add_days(arg(base_d), 3.0, None), "yyyy-MM-dd"),
-        #("subDays(base, 15)", df.sub_days(arg(base_d), 15.0, None), "yyyy-MM-dd"),
-        #("addWeeks(base, 2)", df.add_weeks(arg(base_d), 2.0, None), "yyyy-MM-dd"),
-        #("addMonths(jan31, 1)", df.add_months(arg(jan31), 1.0, None), "yyyy-MM-dd"),
-        #("subMonths(base, 3)", df.sub_months(arg(base_d), 3.0, None), "yyyy-MM-dd"),
-        #("addYears(base, 1)", df.add_years(arg(base_d), 1.0, None), "yyyy-MM-dd"),
-        #("startOfWeek(base)", df.start_of_week(arg(base_d), None), "yyyy-MM-dd"),
-        #("endOfMonth(base)", df.end_of_month(arg(base_d), None), "yyyy-MM-dd HH:mm:ss"),
-        #("add(base, { months: 1, days: 2 })", df.add(arg(base_d), dur, None), "yyyy-MM-dd"),
+        #("addDays(base, 3)", df.add_days(arg(base_d), 3.0), "yyyy-MM-dd"),
+        #("subDays(base, 15)", df.sub_days(arg(base_d), 15.0), "yyyy-MM-dd"),
+        #("addWeeks(base, 2)", df.add_weeks(arg(base_d), 2.0), "yyyy-MM-dd"),
+        #("addMonths(jan31, 1)", df.add_months(arg(jan31), 1.0), "yyyy-MM-dd"),
+        #("subMonths(base, 3)", df.sub_months(arg(base_d), 3.0), "yyyy-MM-dd"),
+        #("addYears(base, 1)", df.add_years(arg(base_d), 1.0), "yyyy-MM-dd"),
+        #("startOfWeek(base)", df.start_of_week(arg(base_d)), "yyyy-MM-dd"),
+        #(
+          "endOfMonth(base)",
+          df.end_of_month(arg(base_d)),
+          "yyyy-MM-dd HH:mm:ss",
+        ),
+        #(
+          "add(base, { months: 1, days: 2 })",
+          df.add(arg(base_d), dur),
+          "yyyy-MM-dd",
+        ),
         #("base (immutable check)", base_d, "yyyy-MM-dd"),
       ]
 
-      let card = document.create_element(doc, tag.div, None)
+      let card = document.create_element(doc, tag.div)
       element.set_class_name(card, "card")
-      let lbl = document.create_element(doc, tag.div, None)
+      let lbl = document.create_element(doc, tag.div)
       element.set_class_name(lbl, "label")
       node.set_text_content(lbl, Some("Immutable Date Stepping"))
       node.append_child(card, lbl)
 
-      let tbl = document.create_element(doc, tag.table, None)
-      let thead = document.create_element(doc, tag.thead, None)
-      let hrow = document.create_element(doc, tag.tr, None)
+      let tbl = document.create_element(doc, tag.table)
+      let thead = document.create_element(doc, tag.thead)
+      let hrow = document.create_element(doc, tag.tr)
       list.each(["Operation", "Result", "Δ Days (vs base)", "Δ Hours"], fn(h) {
-        let th = document.create_element(doc, tag.th, None)
+        let th = document.create_element(doc, tag.th)
         node.set_text_content(th, Some(h))
         node.append_child(hrow, th)
         Nil
@@ -92,25 +100,27 @@ pub fn main() -> Nil {
       node.append_child(thead, hrow)
       node.append_child(tbl, thead)
 
-      let tbody = document.create_element(doc, tag.tbody, None)
+      let tbody = document.create_element(doc, tag.tbody)
       list.each(ops, fn(item) {
         let #(name, res, fmt) = item
-        let tr = document.create_element(doc, tag.tr, None)
-        let td_op = document.create_element(doc, tag.td, None)
-        let code = document.create_element(doc, tag.code, None)
+        let tr = document.create_element(doc, tag.tr)
+        let td_op = document.create_element(doc, tag.td)
+        let code = document.create_element(doc, tag.code)
         node.set_text_content(code, Some(name))
         node.append_child(td_op, code)
-        let td_res = document.create_element(doc, tag.td, None)
-        node.set_text_content(td_res, Some(df.format_date(day(res), fmt, None)))
-        let td_dd = document.create_element(doc, tag.td, None)
+        let td_res = document.create_element(doc, tag.td)
+        node.set_text_content(td_res, Some(df.format_date(day(res), fmt)))
+        let td_dd = document.create_element(doc, tag.td)
         node.set_text_content(
           td_dd,
-          Some(fmt_signed(df.difference_in_calendar_days(day(res), day(base_d), None))),
+          Some(
+            fmt_signed(df.difference_in_calendar_days(day(res), day(base_d))),
+          ),
         )
-        let td_dh = document.create_element(doc, tag.td, None)
+        let td_dh = document.create_element(doc, tag.td)
         node.set_text_content(
           td_dh,
-          Some(fmt_signed(df.difference_in_hours(day(res), day(base_d), None))),
+          Some(fmt_signed(df.difference_in_hours(day(res), day(base_d)))),
         )
         node.append_child(tr, td_op)
         node.append_child(tr, td_res)
@@ -123,16 +133,16 @@ pub fn main() -> Nil {
       node.append_child(card, tbl)
       node.append_child(app, card)
 
-      let footer = document.create_element(doc, tag.div, None)
+      let footer = document.create_element(doc, tag.div)
       element.set_class_name(footer, "card")
-      let f_lbl = document.create_element(doc, tag.div, None)
+      let f_lbl = document.create_element(doc, tag.div)
       element.set_class_name(f_lbl, "label")
       node.set_text_content(f_lbl, Some("Duration & Unit Conversions"))
       node.append_child(footer, f_lbl)
 
-      let srow = document.create_element(doc, tag.div, None)
+      let srow = document.create_element(doc, tag.div)
       element.set_class_name(srow, "summary-row")
-      add_kv(doc, srow, "formatDuration(dur)", df.format_duration(dur, None))
+      add_kv(doc, srow, "formatDuration(dur)", df.format_duration(dur))
       add_kv(doc, srow, "formatISODuration(dur)", df.format_iso_duration(dur))
       add_kv(
         doc,

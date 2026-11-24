@@ -49,11 +49,11 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
         on_err,
       )
 
-      let scene = b.create_scene_context(engine, None)
+      let scene = b.create_scene_context(engine)
       let clear =
         gpu_color_dict.create()
         |> gpu_color_dict.with_r(0.05)
@@ -70,18 +70,19 @@ pub fn main() -> Nil {
           b.vec3(0.0, 1.6, 0.0),
         )
       b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control_with(camera, canvas, Some(scene), None)
 
-      let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.75))
+      let hemi =
+        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.2)), Some(0.75))
       hemispheric_light.set_diffuse_color(hemi, #(0.75, 0.85, 1.0))
       hemispheric_light.set_ground_color(hemi, #(0.12, 0.14, 0.22))
       b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
-      let dir = b.create_directional_light(#(-1.0, -2.0, -1.2), Some(2.2))
+      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.2), Some(2.2))
       directional_light.set_diffuse(dir, #(1.0, 0.96, 0.9))
       b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
-      let orb_light = b.create_point_light(#(2.8, 1.6, 0.0), Some(8.0))
+      let orb_light = b.create_point_light_with(#(2.8, 1.6, 0.0), Some(8.0))
       point_light.set_diffuse(orb_light, #(1.0, 0.45, 0.35))
       point_light.set_range(orb_light, 12.0)
       b.add_to_scene(scene, bt.scene_entity_light_base(orb_light))
@@ -96,7 +97,7 @@ pub fn main() -> Nil {
         ))
         |> create_pbr_material_props.with_metallic_factor(0.75)
         |> create_pbr_material_props.with_roughness_factor(0.22)
-      let knot_mat = b.create_pbr_material(Some(knot_props))
+      let knot_mat = b.create_pbr_material_with(Some(knot_props))
 
       let knot_opts =
         torus_knot_options.create()
@@ -104,7 +105,7 @@ pub fn main() -> Nil {
         |> torus_knot_options.with_tube(0.34)
         |> torus_knot_options.with_radial_segments(48.0)
         |> torus_knot_options.with_tubular_segments(160.0)
-      let knot = b.create_torus_knot(engine, Some(knot_opts))
+      let knot = b.create_torus_knot_with(engine, Some(knot_opts))
       observable_vec3.set(scene_node.get_position(knot), 0.0, 2.0, 0.0)
       mesh.set_material(knot, knot_mat)
       b.add_to_scene(scene, bt.scene_entity_mesh(knot))
@@ -119,22 +120,22 @@ pub fn main() -> Nil {
         ))
         |> create_pbr_material_props.with_metallic_factor(0.2)
         |> create_pbr_material_props.with_roughness_factor(0.35)
-      let orb_mat = b.create_pbr_material(Some(orb_props))
+      let orb_mat = b.create_pbr_material_with(Some(orb_props))
 
       let orb_opts =
         sphere_options.create()
         |> sphere_options.with_diameter(0.55)
         |> sphere_options.with_segments(32.0)
-      let orb = b.create_sphere(engine, Some(orb_opts))
+      let orb = b.create_sphere_with(engine, Some(orb_opts))
       mesh.set_material(orb, orb_mat)
       b.add_to_scene(scene, bt.scene_entity_mesh(orb))
 
-      let ground_mat = b.create_grid_material(None)
+      let ground_mat = b.create_grid_material()
       let ground_opts =
         ground_options.create()
         |> ground_options.with_width(16.0)
         |> ground_options.with_height(16.0)
-      let ground = b.create_ground(engine, Some(ground_opts))
+      let ground = b.create_ground_with(engine, Some(ground_opts))
       mesh.set_material(ground, ground_mat)
       b.add_to_scene(scene, bt.scene_entity_mesh(ground))
 

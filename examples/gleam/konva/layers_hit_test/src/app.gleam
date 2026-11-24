@@ -16,14 +16,14 @@ import konva/line_config
 import konva/node
 import konva/rect
 import konva/rect_config
+import konva/runtime
 import konva/shape
 import konva/stage
 import konva/stage_config
 import konva/text
 import konva/text_config
-import konva/vector2d
-import konva/runtime
 import konva/types as t
+import konva/vector2d
 
 fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
   let lc =
@@ -31,7 +31,7 @@ fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
     |> line_config.with_points(t.LinePointsArray(pts))
     |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
     |> line_config.with_stroke_width(sw)
-  t.GroupOrShapeShape(shape.widen(line.new(Some(lc))))
+  t.GroupOrShapeShape(shape.widen(line.new_with(Some(lc))))
 }
 
 fn make_card(id: String, x: Float, y: Float, fill_hex: String) -> t.Rect(Nil) {
@@ -46,7 +46,7 @@ fn make_card(id: String, x: Float, y: Float, fill_hex: String) -> t.Rect(Nil) {
     |> rect_config.with_fill(t.StringOrCanvasGradientString(fill_hex))
     |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
     |> rect_config.with_stroke_width(2.0)
-  rect.new(Some(rc))
+  rect.new_with(Some(rc))
 }
 
 pub fn main() -> Nil {
@@ -57,8 +57,8 @@ pub fn main() -> Nil {
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
-  let bg_layer = layer.new(None)
-  let fg_layer = layer.new(None)
+  let bg_layer = layer.new()
+  let fg_layer = layer.new()
   stage.add(stg, bg_layer, [])
   stage.add(stg, fg_layer, [])
 
@@ -70,7 +70,9 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  layer.add(bg_layer, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bgr))))])
+  layer.add(bg_layer, [
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bgr)))),
+  ])
 
   let vlines =
     int.range(from: 1, to: 17, with: [], run: fn(acc, i) {
@@ -106,8 +108,8 @@ pub fn main() -> Nil {
   layer.add(bg_layer, vlines)
   layer.add(bg_layer, hlines)
   layer.add(bg_layer, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(frame)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(l1)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(frame)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(l1)))),
   ])
 
   // Layer 2: Stacked cards & badge.
@@ -141,19 +143,19 @@ pub fn main() -> Nil {
 
   let gc = group_config.create() |> group_config.with_listening(False)
   let overlay =
-    group.new(Some(gc))
+    group.new_with(Some(gc))
     |> group.add([
-      t.GroupOrShapeShape(shape.widen(circle.new(Some(dc)))),
+      t.GroupOrShapeShape(shape.widen(circle.new_with(Some(dc)))),
       make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5),
       make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5),
-      t.GroupOrShapeShape(shape.widen(text.new(Some(l2)))),
-  ])
+      t.GroupOrShapeShape(shape.widen(text.new_with(Some(l2)))),
+    ])
 
   layer.add(fg_layer, [
     t.GroupOrShapeShape(shape.widen(card_a)),
     t.GroupOrShapeShape(shape.widen(card_b)),
     t.GroupOrShapeShape(shape.widen(card_c)),
-    t.GroupOrShapeShape(shape.widen(circle.new(Some(bc)))),
+    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(bc)))),
     t.GroupOrShapeGroup(overlay),
   ])
 
@@ -177,7 +179,12 @@ pub fn main() -> Nil {
     let hit_id = case stage.get_intersection(stg, pt) {
       None -> "none"
       Some(s) ->
-        case decode.run(node.get_attr(s, "id", runtime.codec_string()), decode.string) {
+        case
+          decode.run(
+            node.get_attr(s, "id", runtime.codec_string()),
+            decode.string,
+          )
+        {
           Ok(id_str) -> id_str
           Error(_) -> "unknown"
         }
@@ -208,7 +215,7 @@ pub fn main() -> Nil {
   node.on_click(card_a, fn(_) { handle_click(card_a, "card-a") })
   node.on_click(card_b, fn(_) { handle_click(card_b, "card-b") })
   node.on_click(card_c, fn(_) { handle_click(card_c, "card-c") })
-  node.fire(card_a, "click", None, None)
-  node.fire(card_a, "click", None, None)
+  node.fire(card_a, "click")
+  node.fire(card_a, "click")
   Nil
 }

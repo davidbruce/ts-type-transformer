@@ -21,7 +21,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "chart") {
     None -> Nil
     Some(box) -> {
-      let chart = ec.init(Some(box), None, None)
+      let chart = ec.init_with(Some(box), None, None)
       let opt =
         raw.create()
         |> unit.with_animation(False)
@@ -56,7 +56,10 @@ pub fn main() -> Nil {
             #("type", dynamic.string("category")),
             #(
               "data",
-              dynamic.array(list.map(["Jan", "Feb", "Mar", "Apr", "May", "Jun"], dynamic.string)),
+              dynamic.array(list.map(
+                ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+                dynamic.string,
+              )),
             ),
             #(
               "axisLine",
@@ -87,13 +90,16 @@ pub fn main() -> Nil {
               #("barWidth", dynamic.string("46%")),
               #(
                 "data",
-                dynamic.array(list.map([42.0, 68.0, 55.0, 84.0, 71.0, 93.0], dynamic.float)),
+                dynamic.array(list.map(
+                  [42.0, 68.0, 55.0, 84.0, 71.0, 93.0],
+                  dynamic.float,
+                )),
               ),
               #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
             ]),
           ]),
         )
-      e_charts_type.set_option(chart, opt, None, None)
+      e_charts_type.set_option(chart, opt)
 
       case document.get_element_by_id(doc, "meta") {
         None -> Nil
@@ -102,7 +108,9 @@ pub fn main() -> Nil {
           let h = int.to_string(float.round(e_charts_type.get_height(chart)))
           node.set_text_content(
             meta,
-            Some("Canvas: " <> w <> "x" <> h <> " · 6 bars · Monochrome #111111"),
+            Some(
+              "Canvas: " <> w <> "x" <> h <> " · 6 bars · Monochrome #111111",
+            ),
           )
         }
       }

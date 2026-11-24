@@ -1,6 +1,6 @@
 import gleam/int
 import gleam/io
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import node/areas/path
 import node/areas/path/format_input_path_object as path_format
 import node/areas/path/parsed_path
@@ -16,8 +16,7 @@ pub fn main() -> Nil {
   let joined =
     path.join(["/workspace", "packages", "core", "..", "cli", "index.ts"])
   let norm = path.normalize("/var//log/./app/../http/access.log")
-  let resolved =
-    path.resolve(["/srv/app", "../shared", "config/prod.json"])
+  let resolved = path.resolve(["/srv/app", "../shared", "config/prod.json"])
   let rel = path.relative("/srv/app/src/ui", "/srv/app/dist/assets")
 
   let parsed = path.parse("/srv/app/archive.tar.gz")
@@ -39,13 +38,17 @@ pub fn main() -> Nil {
     + check(norm == "/var/log/http/access.log", "path.normalize")
     + check(resolved == "/srv/shared/config/prod.json", "path.resolve")
     + check(rel == "../../dist/assets", "path.relative")
-    + check(path.dirname("/srv/app/archive.tar.gz") == "/srv/app", "path.dirname")
     + check(
-      path.basename("/srv/app/archive.tar.gz", None) == "archive.tar.gz",
+      path.dirname("/srv/app/archive.tar.gz") == "/srv/app",
+      "path.dirname",
+    )
+    + check(
+      path.basename("/srv/app/archive.tar.gz") == "archive.tar.gz",
       "path.basename",
     )
     + check(
-      path.basename("/srv/app/archive.tar.gz", Some(".gz")) == "archive.tar",
+      path.basename_with("/srv/app/archive.tar.gz", Some(".gz"))
+        == "archive.tar",
       "path.basename suffix",
     )
     + check(path.extname("/srv/app/archive.tar.gz") == ".gz", "path.extname")
@@ -55,16 +58,16 @@ pub fn main() -> Nil {
     )
     + check(
       p_root == "/"
-      && p_dir == "/srv/app"
-      && p_base == "archive.tar.gz"
-      && p_name == "archive.tar"
-      && p_ext == ".gz",
+        && p_dir == "/srv/app"
+        && p_base == "archive.tar.gz"
+        && p_name == "archive.tar"
+        && p_ext == ".gz",
       "path.parse",
     )
     + check(formatted == "/etc/service/daemon.conf", "path.format")
     + check(
       path.matches_glob("/src/components/Button.tsx", "/src/**/*.tsx")
-      && !path.matches_glob("/src/components/Button.css", "/src/**/*.tsx"),
+        && !path.matches_glob("/src/components/Button.css", "/src/**/*.tsx"),
       "path.matchesGlob",
     )
 

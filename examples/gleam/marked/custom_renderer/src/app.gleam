@@ -63,7 +63,7 @@ pub fn main() -> Nil {
       let md =
         "# Wireframe Spec\n\n## Custom Pipeline\n\nParagraph with *italic* and **bold** and `code`.\n"
 
-      let strip = document.create_element(doc, tag.div, None)
+      let strip = document.create_element(doc, tag.div)
       element.set_class_name(strip, "tok-strip")
 
       let renderer =
@@ -89,7 +89,7 @@ pub fn main() -> Nil {
         marked_extension.create()
         |> marked_extension.with_renderer(renderer)
         |> marked_extension.with_walk_tokens(fn(token) {
-          let pill = document.create_element(doc, tag.span, None)
+          let pill = document.create_element(doc, tag.span)
           element.set_class_name(pill, "tok-pill")
           node.set_text_content(pill, Some(token_type(token)))
           node.append_child(strip, pill)
@@ -109,14 +109,14 @@ pub fn main() -> Nil {
 
       let visited = float.round(element.get_child_element_count(strip))
 
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let title = document.create_element(doc, tag.h1, None)
+      let title = document.create_element(doc, tag.h1)
       node.set_text_content(
         title,
         Some("Marked Custom Renderer & Walker (Gleam)"),
       )
-      let badge = document.create_element(doc, tag.span, None)
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(
         badge,
@@ -126,26 +126,26 @@ pub fn main() -> Nil {
       node.append_child(head, badge)
       node.append_child(app, head)
 
-      let grid = document.create_element(doc, tag.div, None)
+      let grid = document.create_element(doc, tag.div)
       element.set_class_name(grid, "grid")
 
-      let def_card = document.create_element(doc, tag.div, None)
+      let def_card = document.create_element(doc, tag.div)
       element.set_class_name(def_card, "card")
-      let def_lbl = document.create_element(doc, tag.div, None)
+      let def_lbl = document.create_element(doc, tag.div)
       element.set_class_name(def_lbl, "label")
       node.set_text_content(def_lbl, Some("Default Renderer"))
-      let def_out = document.create_element(doc, tag.div, None)
+      let def_out = document.create_element(doc, tag.div)
       element.set_class_name(def_out, "md-out")
       element.set_inner_html(def_out, def_html)
       node.append_child(def_card, def_lbl)
       node.append_child(def_card, def_out)
 
-      let cust_card = document.create_element(doc, tag.div, None)
+      let cust_card = document.create_element(doc, tag.div)
       element.set_class_name(cust_card, "card")
-      let cust_lbl = document.create_element(doc, tag.div, None)
+      let cust_lbl = document.create_element(doc, tag.div)
       element.set_class_name(cust_lbl, "label")
       node.set_text_content(cust_lbl, Some("Custom Heading Renderer"))
-      let cust_out = document.create_element(doc, tag.div, None)
+      let cust_out = document.create_element(doc, tag.div)
       element.set_class_name(cust_out, "md-out")
       element.set_inner_html(cust_out, cust_html)
       node.append_child(cust_card, cust_lbl)
@@ -155,9 +155,9 @@ pub fn main() -> Nil {
       node.append_child(grid, cust_card)
       node.append_child(app, grid)
 
-      let walk_card = document.create_element(doc, tag.div, None)
+      let walk_card = document.create_element(doc, tag.div)
       element.set_class_name(walk_card, "card")
-      let walk_lbl = document.create_element(doc, tag.div, None)
+      let walk_lbl = document.create_element(doc, tag.div)
       element.set_class_name(walk_lbl, "label")
       node.set_text_content(walk_lbl, Some("Visited Tokens (walkTokens)"))
       node.append_child(walk_card, walk_lbl)

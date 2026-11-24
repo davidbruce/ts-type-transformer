@@ -399,7 +399,9 @@ the time control returns to JavaScript is reported, not lost.
   function) or for the length of a call and free to borrow (`scoped`); promises are awaited under `js::spawn`. The DOM: 12 MB.
 - Gleam (JavaScript target): no wasm and no glue, as F#; from the shared
   model, as the wasm targets, since Gleam has no methods, subtypes, overloads
-  or optional arguments. Subtypes are phantom types along each class's chain
+  or optional arguments. A function with trailing optional arguments is two, one
+  export: `create_element(doc, tag)` without them, `create_element_with(doc,
+  tag, Some(options))` with them (`_full` where a member is named `_with`). Subtypes are phantom types along each class's chain
   of first bases: `Node(a)` is opaque, `Element(a) = Node(ElementTag(a))`,
   so an `Element(Nil)` is a `Node` to any function that takes a `Node(a)`,
   and only an Element. A function's parameters are open (`Node(a)`, any

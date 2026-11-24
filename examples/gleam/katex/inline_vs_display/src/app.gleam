@@ -5,7 +5,7 @@ import dom/areas/core/node
 import dom/areas/html/html_element_tag_name_map as tag
 import gleam/list
 import gleam/option.{None, Some}
-import katex as katex
+import katex
 import katex/katex_options
 
 pub fn main() -> Nil {
@@ -13,11 +13,11 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let title = document.create_element(doc, tag.h1, None)
+      let title = document.create_element(doc, tag.h1)
       node.set_text_content(title, Some("Inline vs Display Mode (Gleam)"))
-      let badge = document.create_element(doc, tag.span, None)
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("displayMode: false vs true"))
       node.append_child(head, title)
@@ -40,7 +40,7 @@ pub fn main() -> Nil {
 
       list.each(items, fn(item) {
         let #(name, tex) = item
-        let row = document.create_element(doc, tag.div, None)
+        let row = document.create_element(doc, tag.div)
         element.set_class_name(row, "row")
         list.each(
           [
@@ -49,14 +49,17 @@ pub fn main() -> Nil {
           ],
           fn(pair) {
             let #(label, opts) = pair
-            let cell = document.create_element(doc, tag.div, None)
+            let cell = document.create_element(doc, tag.div)
             element.set_class_name(cell, "cell")
-            let lbl = document.create_element(doc, tag.div, None)
+            let lbl = document.create_element(doc, tag.div)
             element.set_class_name(lbl, "label")
             node.set_text_content(lbl, Some(label))
-            let slot = document.create_element(doc, tag.div, None)
+            let slot = document.create_element(doc, tag.div)
             element.set_class_name(slot, "slot")
-            element.set_inner_html(slot, katex.render_to_string(tex, Some(opts)))
+            element.set_inner_html(
+              slot,
+              katex.render_to_string_with(tex, Some(opts)),
+            )
             node.append_child(cell, lbl)
             node.append_child(cell, slot)
             node.append_child(row, cell)

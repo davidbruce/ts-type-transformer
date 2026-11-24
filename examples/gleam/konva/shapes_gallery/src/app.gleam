@@ -34,7 +34,7 @@ fn add_caption(l: t.Layer(Nil), x: Float, y: Float, label: String) -> Nil {
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
-  layer.add(l, [t.GroupOrShapeShape(shape.widen(text.new(Some(tc))))])
+  layer.add(l, [t.GroupOrShapeShape(shape.widen(text.new_with(Some(tc))))])
   Nil
 }
 
@@ -46,7 +46,7 @@ pub fn main() -> Nil {
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
-  let l = layer.new(None)
+  let l = layer.new()
   stage.add(stg, l, [])
 
   let bg =
@@ -154,16 +154,16 @@ pub fn main() -> Nil {
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
   layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(bg)))),
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(r1)))),
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(r2)))),
-    t.GroupOrShapeShape(shape.widen(circle.new(Some(cc)))),
-    t.GroupOrShapeShape(shape.widen(regular_polygon.new(Some(pc)))),
-    t.GroupOrShapeShape(shape.widen(star.new(Some(st)))),
-    t.GroupOrShapeShape(shape.widen(ring.new(Some(rc)))),
-    t.GroupOrShapeShape(shape.widen(wedge.new(Some(wc)))),
-    t.GroupOrShapeShape(shape.widen(rect.new(Some(tf)))),
-    t.GroupOrShapeShape(shape.widen(text.new(Some(txt)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(r1)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(r2)))),
+    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(cc)))),
+    t.GroupOrShapeShape(shape.widen(regular_polygon.new_with(Some(pc)))),
+    t.GroupOrShapeShape(shape.widen(star.new_with(Some(st)))),
+    t.GroupOrShapeShape(shape.widen(ring.new_with(Some(rc)))),
+    t.GroupOrShapeShape(shape.widen(wedge.new_with(Some(wc)))),
+    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(tf)))),
+    t.GroupOrShapeShape(shape.widen(text.new_with(Some(txt)))),
   ])
 
   add_caption(l, 40.0, 142.0, "Rect (filled)")
@@ -177,7 +177,7 @@ pub fn main() -> Nil {
 
   node.draw(l)
 
-  let count = int.to_string(list.length(layer.get_children(l, None)))
+  let count = int.to_string(list.length(layer.get_children(l)))
   let doc = core.get_document()
   case document.get_element_by_id(doc, "meta") {
     None -> Nil

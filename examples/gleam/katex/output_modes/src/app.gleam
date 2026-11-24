@@ -6,19 +6,19 @@ import dom/areas/html/html_element_tag_name_map as tag
 import gleam/int
 import gleam/option.{None, Some}
 import gleam/string
-import katex as katex
+import katex
 import katex/katex_options
 import katex/types as kt
 
 fn add_card(doc, grid, label: String, cls: String, html: String) -> Nil {
-  let card = document.create_element(doc, tag.div, None)
+  let card = document.create_element(doc, tag.div)
   element.set_class_name(card, cls)
-  let row = document.create_element(doc, tag.div, None)
+  let row = document.create_element(doc, tag.div)
   element.set_class_name(row, "head")
-  let lbl = document.create_element(doc, tag.div, None)
+  let lbl = document.create_element(doc, tag.div)
   element.set_class_name(lbl, "label")
   node.set_text_content(lbl, Some(label))
-  let badge = document.create_element(doc, tag.span, None)
+  let badge = document.create_element(doc, tag.span)
   element.set_class_name(badge, "badge")
   node.set_text_content(
     badge,
@@ -26,7 +26,7 @@ fn add_card(doc, grid, label: String, cls: String, html: String) -> Nil {
   )
   node.append_child(row, lbl)
   node.append_child(row, badge)
-  let slot = document.create_element(doc, tag.div, None)
+  let slot = document.create_element(doc, tag.div)
   element.set_class_name(slot, "slot")
   element.set_inner_html(slot, html)
   node.append_child(card, row)
@@ -40,11 +40,11 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let title = document.create_element(doc, tag.h1, None)
+      let title = document.create_element(doc, tag.h1)
       node.set_text_content(title, Some("Output & Layout Options (Gleam)"))
-      let badge = document.create_element(doc, tag.span, None)
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(
         badge,
@@ -54,7 +54,7 @@ pub fn main() -> Nil {
       node.append_child(head, badge)
       node.append_child(app, head)
 
-      let grid = document.create_element(doc, tag.div, None)
+      let grid = document.create_element(doc, tag.div)
       element.set_class_name(grid, "grid")
       node.append_child(app, grid)
 
@@ -66,7 +66,7 @@ pub fn main() -> Nil {
         grid,
         "output: html",
         "card mode-html",
-        katex.render_to_string("a^2 + b^2 = c^2", Some(o_html)),
+        katex.render_to_string_with("a^2 + b^2 = c^2", Some(o_html)),
       )
 
       let o_math =
@@ -77,7 +77,7 @@ pub fn main() -> Nil {
         grid,
         "output: mathml",
         "card",
-        katex.render_to_string("\\frac{1}{1 + x^2}", Some(o_math)),
+        katex.render_to_string_with("\\frac{1}{1 + x^2}", Some(o_math)),
       )
 
       let o_both =
@@ -88,7 +88,7 @@ pub fn main() -> Nil {
         grid,
         "output: htmlAndMathml",
         "card",
-        katex.render_to_string("\\sqrt{\\alpha + \\beta}", Some(o_both)),
+        katex.render_to_string_with("\\sqrt{\\alpha + \\beta}", Some(o_both)),
       )
 
       let o_leq =
@@ -100,7 +100,7 @@ pub fn main() -> Nil {
         grid,
         "displayMode + leqno",
         "card",
-        katex.render_to_string(
+        katex.render_to_string_with(
           "\\int_0^1 x^2\\,dx = \\frac{1}{3} \\tag{1}",
           Some(o_leq),
         ),
@@ -111,15 +111,15 @@ pub fn main() -> Nil {
         |> katex_options.with_display_mode(True)
         |> katex_options.with_fleqn(True)
         |> katex_options.with_max_size(2.0)
-        |> katex_options.with_strict(
-          kt.BooleanOrStringOrStrictFunctionBoolean(False),
-        )
+        |> katex_options.with_strict(kt.BooleanOrStringOrStrictFunctionBoolean(
+          False,
+        ))
       add_card(
         doc,
         grid,
         "fleqn + maxSize(2) + strict(false)",
         "card",
-        katex.render_to_string(
+        katex.render_to_string_with(
           "\\text{café} + \\rule{10em}{0.4em} + é",
           Some(o_fl),
         ),

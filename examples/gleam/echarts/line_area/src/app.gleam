@@ -21,7 +21,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "chart") {
     None -> Nil
     Some(box) -> {
-      let chart = ec.init(Some(box), None, None)
+      let chart = ec.init_with(Some(box), None, None)
       let opt =
         raw.create()
         |> unit.with_animation(False)
@@ -50,7 +50,10 @@ pub fn main() -> Nil {
             #("boundaryGap", dynamic.bool(False)),
             #(
               "data",
-              dynamic.array(list.map(["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"], dynamic.string)),
+              dynamic.array(list.map(
+                ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"],
+                dynamic.string,
+              )),
             ),
             #(
               "axisLine",
@@ -81,14 +84,23 @@ pub fn main() -> Nil {
               #("smooth", dynamic.bool(True)),
               #(
                 "data",
-                dynamic.array(list.map([28.0, 44.0, 39.0, 62.0, 58.0, 76.0, 81.0, 89.0], dynamic.float)),
+                dynamic.array(list.map(
+                  [28.0, 44.0, 39.0, 62.0, 58.0, 76.0, 81.0, 89.0],
+                  dynamic.float,
+                )),
               ),
               #(
                 "lineStyle",
-                obj([#("color", dynamic.string("#111111")), #("width", dynamic.float(2.0))]),
+                obj([
+                  #("color", dynamic.string("#111111")),
+                  #("width", dynamic.float(2.0)),
+                ]),
               ),
               #("itemStyle", obj([#("color", dynamic.string("#111111"))])),
-              #("areaStyle", obj([#("color", dynamic.string("rgba(17,17,17,0.12)"))])),
+              #(
+                "areaStyle",
+                obj([#("color", dynamic.string("rgba(17,17,17,0.12)"))]),
+              ),
             ]),
             obj([
               #("type", dynamic.string("line")),
@@ -96,7 +108,10 @@ pub fn main() -> Nil {
               #("smooth", dynamic.bool(False)),
               #(
                 "data",
-                dynamic.array(list.map([35.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0], dynamic.float)),
+                dynamic.array(list.map(
+                  [35.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0],
+                  dynamic.float,
+                )),
               ),
               #(
                 "lineStyle",
@@ -110,7 +125,7 @@ pub fn main() -> Nil {
             ]),
           ]),
         )
-      e_charts_type.set_option(chart, opt, None, None)
+      e_charts_type.set_option(chart, opt)
 
       case document.get_element_by_id(doc, "meta") {
         None -> Nil
@@ -119,7 +134,13 @@ pub fn main() -> Nil {
           let h = int.to_string(float.round(e_charts_type.get_height(chart)))
           node.set_text_content(
             meta,
-            Some("Canvas: " <> w <> "x" <> h <> " · 2 series (Throughput + Baseline)"),
+            Some(
+              "Canvas: "
+              <> w
+              <> "x"
+              <> h
+              <> " · 2 series (Throughput + Baseline)",
+            ),
           )
         }
       }

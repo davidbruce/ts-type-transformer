@@ -11,7 +11,6 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import prosemirror/mark_spec_attrs
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
@@ -28,6 +27,7 @@ import prosemirror/areas/prosemirror_state/selection
 import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
+import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
@@ -54,7 +54,9 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     |> node_spec.with_group("block")
     |> node_spec.with_defining(True)
     |> node_spec.with_to_dom(fn(n) {
-      let lvl = case decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int) {
+      let lvl = case
+        decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int)
+      {
         Ok(1) -> "h1"
         _ -> "h2"
       }
@@ -92,7 +94,9 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     node_spec.create()
     |> node_spec.with_group("block")
     |> node_spec.with_atom(True)
-    |> node_spec.with_to_dom(fn(_) { t.DOMOutputSpecArray([dynamic.string("hr")]) })
+    |> node_spec.with_to_dom(fn(_) {
+      t.DOMOutputSpecArray([dynamic.string("hr")])
+    })
 
   let text_spec =
     node_spec.create()
@@ -130,64 +134,87 @@ fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
     attrs.create()
     |> attrs.with_at("level", dynamic.int(2))
   let h =
-    schema.node(
+    schema.node_with(
       sch,
       t.StringOrNodeTypeString("heading"),
       Some(ha),
-      Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, "ProseMirror Document Schema", None))),
+      Some(
+        t.FragmentOrNodeOrNodeArrayNode(schema.text(
+          sch,
+          "ProseMirror Document Schema",
+        )),
+      ),
       None,
     )
-  let ms = schema.mark(sch, t.StringOrMarkTypeString("strong"), None)
-  let me = schema.mark(sch, t.StringOrMarkTypeString("em"), None)
-  let mc = schema.mark(sch, t.StringOrMarkTypeString("code"), None)
+  let ms = schema.mark(sch, t.StringOrMarkTypeString("strong"))
+  let me = schema.mark(sch, t.StringOrMarkTypeString("em"))
+  let mc = schema.mark(sch, t.StringOrMarkTypeString("code"))
   let p1 =
-    schema.node(
+    schema.node_with(
       sch,
       t.StringOrNodeTypeString("paragraph"),
       None,
       Some(
         t.FragmentOrNodeOrNodeArrayArray([
-          schema.text(sch, "Inline marks compose cleanly: ", None),
-          schema.text(sch, "bold", Some([ms])),
-          schema.text(sch, ", ", None),
-          schema.text(sch, "italic", Some([me])),
-          schema.text(sch, ", and ", None),
-          schema.text(sch, "inline_code", Some([mc])),
-          schema.text(sch, " spans.", None),
+          schema.text(sch, "Inline marks compose cleanly: "),
+          schema.text_with(sch, "bold", Some([ms])),
+          schema.text(sch, ", "),
+          schema.text_with(sch, "italic", Some([me])),
+          schema.text(sch, ", and "),
+          schema.text_with(sch, "inline_code", Some([mc])),
+          schema.text(sch, " spans."),
         ]),
       ),
       None,
     )
   let q_inner =
-    schema.node(
-      sch,
-      t.StringOrNodeTypeString("paragraph"),
-      None,
-      Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, "Every document conforms to a strict schema enforced on every transaction.", None))),
-      None,
-    )
-  let quote = schema.node(sch, t.StringOrNodeTypeString("blockquote"), None, Some(t.FragmentOrNodeOrNodeArrayNode(q_inner)), None)
-  let cb =
-    schema.node(
-      sch,
-      t.StringOrNodeTypeString("code_block"),
-      None,
-      Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, "schema.node(\"paragraph\", null, [schema.text(\"typed\")])", None))),
-      None,
-    )
-  let outro =
-    schema.node(
+    schema.node_with(
       sch,
       t.StringOrNodeTypeString("paragraph"),
       None,
       Some(
-        t.FragmentOrNodeOrNodeArrayNode(
-          schema.text(sch, "Select any text in this editor and click a toolbar action to toggle marks or switch block types.", None),
-        ),
+        t.FragmentOrNodeOrNodeArrayNode(schema.text(
+          sch,
+          "Every document conforms to a strict schema enforced on every transaction.",
+        )),
       ),
       None,
     )
-  schema.node(
+  let quote =
+    schema.node_with(
+      sch,
+      t.StringOrNodeTypeString("blockquote"),
+      None,
+      Some(t.FragmentOrNodeOrNodeArrayNode(q_inner)),
+      None,
+    )
+  let cb =
+    schema.node_with(
+      sch,
+      t.StringOrNodeTypeString("code_block"),
+      None,
+      Some(
+        t.FragmentOrNodeOrNodeArrayNode(schema.text(
+          sch,
+          "schema.node(\"paragraph\", null, [schema.text(\"typed\")])",
+        )),
+      ),
+      None,
+    )
+  let outro =
+    schema.node_with(
+      sch,
+      t.StringOrNodeTypeString("paragraph"),
+      None,
+      Some(
+        t.FragmentOrNodeOrNodeArrayNode(schema.text(
+          sch,
+          "Select any text in this editor and click a toolbar action to toggle marks or switch block types.",
+        )),
+      ),
+      None,
+    )
+  schema.node_with(
     sch,
     t.StringOrNodeTypeString("doc"),
     None,
@@ -217,7 +244,10 @@ fn target_range(st: t.EditorState(Nil)) -> #(Float, Float) {
           let len = fragment.get_size(node.get_content(c1))
           case len >. 0.0 {
             True -> #(start_pos, start_pos +. float.min(len, 12.0))
-            False -> #(1.0, float.min(fragment.get_size(node.get_content(d)), 2.0))
+            False -> #(
+              1.0,
+              float.min(fragment.get_size(node.get_content(d)), 2.0),
+            )
           }
         }
         False -> #(1.0, float.min(fragment.get_size(node.get_content(d)), 2.0))
@@ -237,7 +267,13 @@ fn set_btn_active(doc, id: String, on: Bool) {
   }
 }
 
-fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_ref: pm_rt.Ref(Int), action_ref: pm_rt.Ref(String)) {
+fn update_meta(
+  sch,
+  doc,
+  st: t.EditorState(Nil),
+  dispatches_ref: pm_rt.Ref(Int),
+  action_ref: pm_rt.Ref(String),
+) {
   let #(f, t) = target_range(st)
   let d = editor_state.get_doc(st)
   let marks = schema.get_marks(sch)
@@ -252,7 +288,14 @@ fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_ref: pm_rt.Ref(Int),
   set_btn_active(doc, "btn-1", he)
   set_btn_active(doc, "btn-2", hc)
 
-  let bname = node_type.get_name(node.get_type(resolved_pos.get_parent(selection.get_dollar_from(editor_state.get_selection(st)))))
+  let bname =
+    node_type.get_name(
+      node.get_type(
+        resolved_pos.get_parent(
+          selection.get_dollar_from(editor_state.get_selection(st)),
+        ),
+      ),
+    )
   let active =
     [
       case hb {
@@ -299,7 +342,8 @@ fn update_meta(sch, doc, st: t.EditorState(Nil), dispatches_ref: pm_rt.Ref(Int),
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
@@ -309,7 +353,8 @@ pub fn main() {
   let sch = build_schema()
   let view_ref = pm_rt.ref_new(None)
   let dispatches_ref = pm_rt.ref_new(0)
-  let action_ref = pm_rt.ref_new("Initialized schema with 7 node types & 3 marks")
+  let action_ref =
+    pm_rt.ref_new("Initialized schema with 7 node types & 3 marks")
 
   let props =
     direct_editor_props.create()
@@ -327,7 +372,11 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view = editor_view.new(Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))), props)
+  let view =
+    editor_view.new(
+      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
+      props,
+    )
   pm_rt.ref_set(view_ref, Some(view))
   update_meta(sch, doc, editor_view.get_state(view), dispatches_ref, action_ref)
 
@@ -338,13 +387,25 @@ pub fn main() {
       True -> {
         let assert Some(mt) = schema.marks_get_at(schema.get_marks(sch), mkey)
         let tr = editor_state.get_tr(st)
-        case node.range_has_mark(editor_state.get_doc(st), f, t, t.MarkOrMarkTypeMarkType(mt)) {
+        case
+          node.range_has_mark(
+            editor_state.get_doc(st),
+            f,
+            t,
+            t.MarkOrMarkTypeMarkType(mt),
+          )
+        {
           True -> {
-            transform.remove_mark(tr, f, t, Some(t.MarkOrMarkTypeMarkType(mt)))
+            transform.remove_mark_with(
+              tr,
+              f,
+              t,
+              Some(t.MarkOrMarkTypeMarkType(mt)),
+            )
             pm_rt.ref_set(action_ref, "Removed " <> label)
           }
           False -> {
-            let m = schema.mark(sch, t.StringOrMarkTypeMarkType(mt), None)
+            let m = schema.mark(sch, t.StringOrMarkTypeMarkType(mt))
             transform.add_mark(tr, f, t, m)
             pm_rt.ref_set(action_ref, "Added " <> label)
           }
@@ -361,13 +422,21 @@ pub fn main() {
   wire_btn(doc, "btn-3", fn() {
     let st = editor_view.get_state(view)
     let sel = editor_state.get_selection(st)
-    let pname = node_type.get_name(node.get_type(resolved_pos.get_parent(selection.get_dollar_from(sel))))
+    let pname =
+      node_type.get_name(
+        node.get_type(resolved_pos.get_parent(selection.get_dollar_from(sel))),
+      )
     let tr = editor_state.get_tr(st)
     let nodes = schema.get_nodes(sch)
     case pname == "heading" {
       True -> {
         let assert Some(pt) = schema.nodes_get_at(nodes, "paragraph")
-        transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), pt, None)
+        transform.set_block_type(
+          tr,
+          selection.get_from(sel),
+          Some(selection.get_to(sel)),
+          pt,
+        )
         pm_rt.ref_set(action_ref, "Converted heading -> paragraph")
       }
       False -> {
@@ -375,7 +444,13 @@ pub fn main() {
         let ha =
           attrs.create()
           |> attrs.with_at("level", dynamic.int(2))
-        transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), ht, Some(t.attrs_or_transform_set_block_type_attrs_attrs(ha)))
+        transform.set_block_type_with(
+          tr,
+          selection.get_from(sel),
+          Some(selection.get_to(sel)),
+          ht,
+          Some(t.attrs_or_transform_set_block_type_attrs_attrs(ha)),
+        )
         pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }
     }

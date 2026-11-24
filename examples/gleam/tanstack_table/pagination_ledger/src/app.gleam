@@ -15,10 +15,10 @@ import tanstack_table_core as tt
 import tanstack_table_core/pagination_state
 import tanstack_table_core/row_model
 import tanstack_table_core/row_row
+import tanstack_table_core/runtime as rt
 import tanstack_table_core/table_core_properties
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/table_row_pagination
-import tanstack_table_core/runtime as rt
 import tanstack_table_core/types as t
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
@@ -36,7 +36,10 @@ fn esc_html(s: String) -> String {
 }
 
 fn col_def(key: String, header: String) {
-  rt.js_object([#("accessorKey", rt.dynamic(key)), #("header", rt.dynamic(header))])
+  rt.js_object([
+    #("accessorKey", rt.dynamic(key)),
+    #("header", rt.dynamic(header)),
+  ])
 }
 
 fn pad3(n: Int) -> String {
@@ -58,34 +61,54 @@ fn at(xs: List(String), i: Int) -> String {
   }
 }
 
-fn store_field(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), path: List(String), decoder: decode.Decoder(a)) -> a {
+fn store_field(
+  table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil),
+  path: List(String),
+  decoder: decode.Decoder(a),
+) -> a {
   let store = table_core_properties.get_store(coerce(table))
-  let assert Ok(v) = decode.run(rt.dynamic(store), decode.at(["state", ..path], decoder))
+  let assert Ok(v) =
+    decode.run(rt.dynamic(store), decode.at(["state", ..path], decoder))
   v
 }
 
 fn wire_btn(doc, id: String, action: fn() -> Nil) {
   case document.get_element_by_id(doc, id) {
-    Some(btn) -> html_element.add_event_listener(btn, ev.click, fn(_) { action() }, None)
+    Some(btn) ->
+      html_element.add_event_listener(btn, ev.click, fn(_) { action() })
     None -> Nil
   }
 }
 
 fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
-  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
-  let total = list.length(row_model.get_rows(table_row_models_core.get_core_row_model(rows_view)))
+  let total =
+    list.length(
+      row_model.get_rows(table_row_models_core.get_core_row_model(rows_view)),
+    )
 
   let body =
     list.map(rows, fn(r) {
       let str_val = fn(k) -> String {
-        case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.string) {
+        case
+          decode.run(
+            row_row.get_value(coerce(r), k, rt.codec_dynamic()),
+            decode.string,
+          )
+        {
           Ok(s) -> s
           Error(_) -> ""
         }
       }
       let int_val = fn(k) -> String {
-        let num = case decode.run(row_row.get_value(coerce(r), k, rt.codec_dynamic()), decode.float) {
+        let num = case
+          decode.run(
+            row_row.get_value(coerce(r), k, rt.codec_dynamic()),
+            decode.float,
+          )
+        {
           Ok(n) -> n
           Error(_) -> 0.0
         }
@@ -116,7 +139,8 @@ fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
 
   let page_idx = store_field(table, ["pagination", "pageIndex"], decode.int)
   let page_size = store_field(table, ["pagination", "pageSize"], decode.int)
-  let pag: t.TableRowPagination(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let pag: t.TableRowPagination(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
   let page_cnt = float.round(table_row_pagination.get_page_count(pag))
   let msg =
     "Page "
@@ -181,12 +205,17 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let pag: t.TableRowPagination(t.TableFeatures(Nil), Dynamic, Nil) = coerce(table)
+  let pag: t.TableRowPagination(t.TableFeatures(Nil), Dynamic, Nil) =
+    coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     let idx = store_field(table, ["pagination", "pageIndex"], decode.int)
     case idx > 0 {
-      True -> table_row_pagination.set_page_index(pag, t.UpdaterT(int.to_float(idx - 1)))
+      True ->
+        table_row_pagination.set_page_index(
+          pag,
+          t.UpdaterT(int.to_float(idx - 1)),
+        )
       False -> Nil
     }
     render(table, doc)
@@ -195,7 +224,11 @@ pub fn main() {
     let idx = store_field(table, ["pagination", "pageIndex"], decode.int)
     let cnt = float.round(table_row_pagination.get_page_count(pag))
     case idx + 1 < cnt {
-      True -> table_row_pagination.set_page_index(pag, t.UpdaterT(int.to_float(idx + 1)))
+      True ->
+        table_row_pagination.set_page_index(
+          pag,
+          t.UpdaterT(int.to_float(idx + 1)),
+        )
       False -> Nil
     }
     render(table, doc)

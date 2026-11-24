@@ -6,11 +6,11 @@ import bindings/marked as marked_class
 import bindings/marked_extension
 import bindings/marked_extension_renderer
 import bindings/marked_options_no_async
-import bindings/tokens_list
 import bindings/namespaces/tokens/generic as token_generic
 import bindings/namespaces/tokens/heading as token_heading
 import bindings/namespaces/tokens/paragraph as token_paragraph
 import bindings/runtime
+import bindings/tokens_list
 import bindings/types as t
 import cell
 import gleam/dynamic.{type Dynamic}
@@ -74,12 +74,34 @@ pub fn main() {
   // Block Markdown to HTML, through the module's function.
   let html = marked.marked("# Title\n\nHello **world** and *you*.", plain)
   let passed =
-    check(html == "<h1>Title</h1>\n<p>Hello <strong>world</strong> and <em>you</em>.</p>\n", "marked")
-    + check(has(marked.marked("- a\n- b\n- c", plain), "<ul>\n<li>a</li>"), "a list")
-    + check(has(marked.marked("```js\nlet x = 1;\n```", plain), "<pre><code class=\"language-js\">let x = 1;\n</code></pre>"), "a code block")
-    + check(has(marked.marked("[a link](http://example.com \"t\")", plain), "<a href=\"http://example.com\" title=\"t\">a link</a>"), "a link")
+    check(
+      html
+        == "<h1>Title</h1>\n<p>Hello <strong>world</strong> and <em>you</em>.</p>\n",
+      "marked",
+    )
+    + check(
+      has(marked.marked("- a\n- b\n- c", plain), "<ul>\n<li>a</li>"),
+      "a list",
+    )
+    + check(
+      has(
+        marked.marked("```js\nlet x = 1;\n```", plain),
+        "<pre><code class=\"language-js\">let x = 1;\n</code></pre>",
+      ),
+      "a code block",
+    )
+    + check(
+      has(
+        marked.marked("[a link](http://example.com \"t\")", plain),
+        "<a href=\"http://example.com\" title=\"t\">a link</a>",
+      ),
+      "a link",
+    )
     + check(has(marked.marked("> quoted", plain), "<blockquote>"), "a quote")
-    + check(has(marked.marked("| a | b |\n|---|---|\n| 1 | 2 |", plain), "<th>a</th>"), "a table (gfm)")
+    + check(
+      has(marked.marked("| a | b |\n|---|---|\n| 1 | 2 |", plain), "<th>a</th>"),
+      "a table (gfm)",
+    )
     + check(has(marked.marked("a <b> & c", plain), "&amp;"), "escapes")
 
   // Options: made here, as a record of optional fields.
@@ -89,18 +111,28 @@ pub fn main() {
     passed
     + check(has(marked.marked("a\nb", breaks), "a<br>b"), "breaks: true")
     + check(!has(marked.marked("a\nb", plain), "<br>"), "no breaks by default")
-    + check(marked_options_no_async.get_breaks(breaks) == Some(True), "option read back")
+    + check(
+      marked_options_no_async.get_breaks(breaks) == Some(True),
+      "option read back",
+    )
   let no_gfm = marked_options_no_async.create()
   marked_options_no_async.set_gfm(no_gfm, Some(False))
   let passed =
     passed
-    + check(has(marked.marked("~~gone~~", plain), "<del>gone</del>"), "gfm strikethrough")
+    + check(
+      has(marked.marked("~~gone~~", plain), "<del>gone</del>"),
+      "gfm strikethrough",
+    )
     + check(!has(marked.marked("~~gone~~", no_gfm), "<del>"), "gfm: false")
 
   // The optional-options form gives a string or a promise.
   let passed =
     passed
-    + check(marked.marked_with_opt_marked_options("*x*", None) == t.StringOrPromiseString("<p><em>x</em></p>\n"), "marked with no options")
+    + check(
+      marked.marked_with_opt_marked_options("*x*")
+        == t.StringOrPromiseString("<p><em>x</em></p>\n"),
+      "marked with no options",
+    )
 
   // An instance: parse and parseInline.
   // The module's parse is a Dynamic and its parseInline is not bound at all
@@ -111,35 +143,67 @@ pub fn main() {
   let call = marked_class.parse_call_options_no_async_create()
   let passed =
     passed
-    + check(marked_class.parse_invoke(parse, "## Two", call, runtime.codec_string()) == "<h2>Two</h2>\n", "parse")
-    + check(marked_class.parse_invoke(parse_inline, "**bold** `code`", call, runtime.codec_string()) == "<strong>bold</strong> <code>code</code>", "parseInline")
-    + check(marked_class.parse_invoke(parse_inline, "# not a heading", call, runtime.codec_string()) == "# not a heading", "parseInline has no blocks")
+    + check(
+      marked_class.parse_invoke(parse, "## Two", call, runtime.codec_string())
+        == "<h2>Two</h2>\n",
+      "parse",
+    )
+    + check(
+      marked_class.parse_invoke(
+        parse_inline,
+        "**bold** `code`",
+        call,
+        runtime.codec_string(),
+      )
+        == "<strong>bold</strong> <code>code</code>",
+      "parseInline",
+    )
+    + check(
+      marked_class.parse_invoke(
+        parse_inline,
+        "# not a heading",
+        call,
+        runtime.codec_string(),
+      )
+        == "# not a heading",
+      "parseInline has no blocks",
+    )
 
   // The lexer: tokens, their types and fields.
-  let tokens = lexer.lex_2("# Head\n\nSome *text*.\n\n- one\n- two\n", None)
+  let tokens = lexer.lex_2("# Head\n\nSome *text*.\n\n- one\n- two\n")
   let list_of = tokens_list.to_list(tokens)
   let types = list.map(list_of, token_type)
   let passed =
     passed
     + check(tokens_list.get_length(tokens) == 5.0, "token count")
-    + check(types == ["heading", "space", "paragraph", "space", "list"], "token types")
+    + check(
+      types == ["heading", "space", "paragraph", "space", "list"],
+      "token types",
+    )
   let assert [t.TokenTokensHeading(heading), ..] = list_of
   let passed =
     passed
     + check(token_heading.get_depth(heading) == 1.0, "heading depth")
     + check(token_heading.get_text(heading) == "Head", "heading text")
     + check(token_heading.get_raw(heading) == "# Head", "heading raw")
-  let assert Ok(t.TokenTokensParagraph(paragraph)) = list.drop(list_of, 2) |> list.first
+  let assert Ok(t.TokenTokensParagraph(paragraph)) =
+    list.drop(list_of, 2) |> list.first
   let inner = token_paragraph.get_tokens(paragraph)
   let passed =
     passed
-    + check(list.map(inner, token_type) == ["text", "em", "text"], "inline tokens")
+    + check(
+      list.map(inner, token_type) == ["text", "em", "text"],
+      "inline tokens",
+    )
   let assert Some(first) = tokens_list.get_at(tokens, 0.0)
   let passed =
     passed
     + check(token_type(first) == "heading", "get_at")
-    + check(list.length(lexer.lex_inline("a *b* c", None)) == 3, "lex_inline")
-    + check(tokens_list.get_length(marked.get_lexer()("a\n\nb", None)) == 3.0, "the lexer function")
+    + check(list.length(lexer.lex_inline("a *b* c")) == 3, "lex_inline")
+    + check(
+      tokens_list.get_length(marked.get_lexer()("a\n\nb", None)) == 3.0,
+      "the lexer function",
+    )
 
   // A Marked instance with options.
   let soft = marked_extension.create()
@@ -147,8 +211,25 @@ pub fn main() {
   let inst = marked_class.new([soft])
   let passed =
     passed
-    + check(has(marked_class.parse_invoke(marked_class.get_parse(inst), "a\nb", call, runtime.codec_string()), "a<br>b"), "an instance with breaks")
-    + check(!has(marked_class.parse_invoke(parse, "a\nb", call, runtime.codec_string()), "<br>"), "a plain instance is unchanged")
+    + check(
+      has(
+        marked_class.parse_invoke(
+          marked_class.get_parse(inst),
+          "a\nb",
+          call,
+          runtime.codec_string(),
+        ),
+        "a<br>b",
+      ),
+      "an instance with breaks",
+    )
+    + check(
+      !has(
+        marked_class.parse_invoke(parse, "a\nb", call, runtime.codec_string()),
+        "<br>",
+      ),
+      "a plain instance is unchanged",
+    )
 
   // A renderer function: called with the heading's token.
   let rendered = cell.new([])
@@ -157,19 +238,40 @@ pub fn main() {
     renderer,
     Some(fn(heading) {
       let token = runtime.dynamic(heading)
-      cell.set(rendered, [#(field_string(token, "text"), field_float(token, "depth")), ..cell.get(rendered)])
-      t.BooleanOrRendererOutputRendererOutput("<h" <> int.to_string(float.round(field_float(token, "depth"))) <> " class=\"x\">" <> field_string(token, "text") <> "</h>\n")
+      cell.set(rendered, [
+        #(field_string(token, "text"), field_float(token, "depth")),
+        ..cell.get(rendered)
+      ])
+      t.BooleanOrRendererOutputRendererOutput(
+        "<h"
+        <> int.to_string(float.round(field_float(token, "depth")))
+        <> " class=\"x\">"
+        <> field_string(token, "text")
+        <> "</h>\n",
+      )
     }),
     runtime.codec_string(),
   )
   let ext = marked_extension.create()
   marked_extension.set_renderer(ext, Some(renderer))
   let with_renderer = marked_class.new([ext])
-  let heading_html = marked_class.parse_invoke(marked_class.get_parse(with_renderer), "# Hi\n\n## There", call, runtime.codec_string())
+  let heading_html =
+    marked_class.parse_invoke(
+      marked_class.get_parse(with_renderer),
+      "# Hi\n\n## There",
+      call,
+      runtime.codec_string(),
+    )
   let passed =
     passed
-    + check(heading_html == "<h1 class=\"x\">Hi</h>\n<h2 class=\"x\">There</h>\n", "a renderer's output is used")
-    + check(list.reverse(cell.get(rendered)) == [#("Hi", 1.0), #("There", 2.0)], "a renderer gets its token")
+    + check(
+      heading_html == "<h1 class=\"x\">Hi</h>\n<h2 class=\"x\">There</h>\n",
+      "a renderer's output is used",
+    )
+    + check(
+      list.reverse(cell.get(rendered)) == [#("Hi", 1.0), #("There", 2.0)],
+      "a renderer gets its token",
+    )
 
   // A preprocess hook: the markdown arrives as the one argument.
   let hooks = marked_extension.hooks_create()
@@ -185,7 +287,13 @@ pub fn main() {
   let passed =
     passed
     + check(
-      marked_class.parse_invoke(marked_class.get_parse(preprocessed), "foo *foo*", call, runtime.codec_string()) == "<p>bar <em>bar</em></p>\n",
+      marked_class.parse_invoke(
+        marked_class.get_parse(preprocessed),
+        "foo *foo*",
+        call,
+        runtime.codec_string(),
+      )
+        == "<p>bar <em>bar</em></p>\n",
       "a preprocess hook",
     )
 
@@ -200,11 +308,22 @@ pub fn main() {
     }),
   )
   let walked = marked_class.new([walker])
-  let _ = marked_class.parse_invoke(marked_class.get_parse(walked), "# A\n\n*b*", call, runtime.codec_string())
+  let _ =
+    marked_class.parse_invoke(
+      marked_class.get_parse(walked),
+      "# A\n\n*b*",
+      call,
+      runtime.codec_string(),
+    )
   let kinds = list.reverse(cell.get(seen))
   let passed =
     passed
-    + check(list.contains(kinds, "heading") && list.contains(kinds, "paragraph") && list.contains(kinds, "em"), "walkTokens reaches nested tokens")
+    + check(
+      list.contains(kinds, "heading")
+        && list.contains(kinds, "paragraph")
+        && list.contains(kinds, "em"),
+      "walkTokens reaches nested tokens",
+    )
 
   io.println(int.to_string(passed) <> " checks passed")
 }

@@ -64,7 +64,7 @@ fn make_circle(
     Some(f) -> circle_config.with_fill(cc, t.StringOrCanvasGradientString(f))
     None -> cc
   }
-  t.GroupOrShapeShape(shape.widen(circle.new(Some(cc))))
+  t.GroupOrShapeShape(shape.widen(circle.new_with(Some(cc))))
 }
 
 fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
@@ -73,7 +73,7 @@ fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
     |> line_config.with_points(t.LinePointsArray(pts))
     |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
     |> line_config.with_stroke_width(sw)
-  t.GroupOrShapeShape(shape.widen(line.new(Some(lc))))
+  t.GroupOrShapeShape(shape.widen(line.new_with(Some(lc))))
 }
 
 pub fn main() -> Nil {
@@ -87,7 +87,7 @@ pub fn main() -> Nil {
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
 
-  let l = layer.new(None)
+  let l = layer.new()
   stage.add(stg, l, [])
 
   let bg =
@@ -97,7 +97,7 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new(Some(bg))))])
+  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg))))])
 
   let rings = [
     make_circle(cx, cy, 160.0, "#d4d4d4", 1.0, None),
@@ -167,7 +167,7 @@ pub fn main() -> Nil {
         |> rect_config.with_fill(t.StringOrCanvasGradientString(fill_col))
         |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
         |> rect_config.with_stroke_width(1.5)
-      [t.GroupOrShapeShape(shape.widen(rect.new(Some(pc)))), ..acc]
+      [t.GroupOrShapeShape(shape.widen(rect.new_with(Some(pc)))), ..acc]
     })
     |> list.reverse
   let nodes =
@@ -226,7 +226,7 @@ pub fn main() -> Nil {
           |> text_config.with_font_size(11.0)
           |> text_config.with_font_family("monospace")
           |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
-        t.GroupOrShapeShape(shape.widen(text.new(Some(tc))))
+        t.GroupOrShapeShape(shape.widen(text.new_with(Some(tc))))
       },
     )
 
@@ -236,14 +236,14 @@ pub fn main() -> Nil {
   layer.add(l, petals)
   layer.add(l, nodes)
   layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(regular_polygon.new(Some(cp)))),
-    t.GroupOrShapeShape(shape.widen(circle.new(Some(cd)))),
+    t.GroupOrShapeShape(shape.widen(regular_polygon.new_with(Some(cp)))),
+    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(cd)))),
   ])
   layer.add(l, compass)
 
   node.draw(l)
 
-  let count = int.to_string(list.length(layer.get_children(l, None)))
+  let count = int.to_string(list.length(layer.get_children(l)))
   let doc = core.get_document()
   case document.get_element_by_id(doc, "meta") {
     None -> Nil

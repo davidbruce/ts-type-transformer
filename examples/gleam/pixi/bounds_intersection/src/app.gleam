@@ -15,7 +15,7 @@ import pixi_js/types as t
 
 fn mk_rect(x: Float, y: Float, w: Float, h: Float) -> t.Rectangle(Nil) {
   let n = fn(v) { Some(t.NumberOrStringNumber(v)) }
-  rectangle.new(n(x), n(y), n(w), n(h))
+  rectangle.new_with(n(x), n(y), n(w), n(h))
 }
 
 fn stroke_g(
@@ -23,7 +23,7 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke(
+  graphics.stroke_with(
     g,
     Some(
       runtime.js_object([
@@ -50,7 +50,7 @@ pub fn main() {
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -64,7 +64,8 @@ pub fn main() {
   let stage = application.get_stage(app)
 
   let query = mk_rect(190.0, 105.0, 260.0, 170.0)
-  let padded = rectangle.pad(rectangle.clone(query), Some(10.0), Some(10.0))
+  let padded =
+    rectangle.pad_with(rectangle.clone(query), Some(10.0), Some(10.0))
   let hull = rectangle.clone(query)
 
   let candidates = [
@@ -78,7 +79,7 @@ pub fn main() {
     mk_rect(505.0, 245.0, 130.0, 110.0),
   ]
 
-  let g = graphics.new(None)
+  let g = graphics.new()
   let #(contained, intersecting, disjoint) =
     list.fold(candidates, #(0, 0, 0), fn(acc, c) {
       let #(cnt_c, cnt_i, cnt_d) = acc
@@ -93,20 +94,24 @@ pub fn main() {
         )
       case rectangle.contains_rect(query, c) {
         True -> {
-          graphics.fill(g, Some(runtime.dynamic(int.to_float(0x111111))))
+          graphics.fill_with(g, Some(runtime.dynamic(int.to_float(0x111111))))
           #(cnt_c + 1, cnt_i, cnt_d)
         }
         False ->
-          case rectangle.intersects(query, c, None) {
+          case rectangle.intersects(query, c) {
             True -> {
               g
-              |> graphics.fill(Some(runtime.dynamic(int.to_float(0x737373))))
+              |> graphics.fill_with(
+                Some(runtime.dynamic(int.to_float(0x737373))),
+              )
               |> stroke_g(2.0, 0x111111)
               #(cnt_c, cnt_i + 1, cnt_d)
             }
             False -> {
               g
-              |> graphics.fill(Some(runtime.dynamic(int.to_float(0xe5e5e5))))
+              |> graphics.fill_with(
+                Some(runtime.dynamic(int.to_float(0xe5e5e5))),
+              )
               |> stroke_g(1.0, 0xa3a3a3)
               #(cnt_c, cnt_i, cnt_d + 1)
             }

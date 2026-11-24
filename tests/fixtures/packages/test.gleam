@@ -1,14 +1,14 @@
 // Two packages that both export `Node`, `pick` and `util`: each call reaches
 // its own package's. Every check must hold.
 import bindings/areas/pa
-import bindings/areas/pb
+import bindings/areas/pa/node
+import bindings/areas/pa/point
 import bindings/areas/pa/util
+import bindings/areas/pb
+import bindings/areas/pb/node as pb_node
 import bindings/areas/pb/util as pb_util
 import bindings/types as t
 import gleam/io
-import bindings/areas/pa/node
-import bindings/areas/pa/point
-import bindings/areas/pb/node as pb_node
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {

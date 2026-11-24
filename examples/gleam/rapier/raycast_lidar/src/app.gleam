@@ -4,10 +4,10 @@ import dimforge_rapier3d_compat/ray
 import dimforge_rapier3d_compat/ray_collider_intersection
 import dimforge_rapier3d_compat/rigid_body_desc
 import dimforge_rapier3d_compat/rotation
-import dimforge_rapier3d_compat/vector
-import dimforge_rapier3d_compat/world
 import dimforge_rapier3d_compat/runtime as rp_rt
 import dimforge_rapier3d_compat/types as rt
+import dimforge_rapier3d_compat/vector
+import dimforge_rapier3d_compat/world
 import dom/areas/canvas/canvas_rendering_context2d as ctx2d
 import dom/areas/core
 import dom/areas/core/document
@@ -15,8 +15,10 @@ import dom/areas/core/node as dom_node
 import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
-import dom/types.{type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString}
 import dom/areas/html/html_element_tag_name_map as tag
+import dom/types.{
+  type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString,
+}
 import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
@@ -82,16 +84,22 @@ fn draw_box(
   let px3 = to_cx(cx +. c *. { 0.0 -. hx } -. s *. hy)
   let py3 = to_cy(cy +. s *. { 0.0 -. hx } +. c *. hy)
 
-  ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString(fill_hex))
+  ctx2d.set_fill_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString(fill_hex),
+  )
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
   ctx2d.line_to(ctx, px1, py1)
   ctx2d.line_to(ctx, px2, py2)
   ctx2d.line_to(ctx, px3, py3)
   ctx2d.close_path(ctx)
-  ctx2d.fill(ctx, None)
+  ctx2d.fill(ctx)
 
-  ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+  ctx2d.set_stroke_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString("#111111"),
+  )
   ctx2d.set_line_width(ctx, 1.5)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
@@ -112,14 +120,20 @@ fn draw_circle(
   let cx = to_cx(wx)
   let cy = to_cy(wy)
   let rpx = r *. 46.0
-  ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString(fill_hex))
+  ctx2d.set_fill_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString(fill_hex),
+  )
   ctx2d.begin_path(ctx)
-  ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi, None)
-  ctx2d.fill(ctx, None)
-  ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+  ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
+  ctx2d.fill(ctx)
+  ctx2d.set_stroke_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString("#111111"),
+  )
   ctx2d.set_line_width(ctx, 1.5)
   ctx2d.begin_path(ctx)
-  ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi, None)
+  ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
   ctx2d.stroke(ctx)
 }
 
@@ -133,11 +147,11 @@ pub fn main() {
 
   let doc = core.get_document()
   let assert Some(canvas) = document.query_selector(doc, tag.canvas)
-  let assert Some(ctx) = html_canvas_element.get_context_2d(canvas, None)
+  let assert Some(ctx) = html_canvas_element.get_context_2d(canvas)
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
   let assert Some(sweep_btn) = document.get_element_by_id(doc, "btn-sweep")
 
-  let w = world.new(vec(0.0, 0.0, 0.0), None, None, None, None, None, None, None, None, None, None, None, None, None)
+  let w = world.new(vec(0.0, 0.0, 0.0))
 
   let add_box = fn(cx: Float, cy: Float, theta: Float, hx: Float, hy: Float) {
     let desc =
@@ -145,7 +159,7 @@ pub fn main() {
       |> rigid_body_desc.set_translation(cx, cy, 0.0)
       |> rigid_body_desc.set_rotation(rot_z(theta))
     let rb = world.create_rigid_body(w, desc)
-    world.create_collider(w, collider_desc.cuboid(hx, hy, 1.0), Some(rb))
+    world.create_collider_with(w, collider_desc.cuboid(hx, hy, 1.0), Some(rb))
     Nil
   }
   let add_sphere = fn(cx: Float, cy: Float, r: Float) {
@@ -154,28 +168,34 @@ pub fn main() {
         w,
         rigid_body_desc.fixed() |> rigid_body_desc.set_translation(cx, cy, 0.0),
       )
-    world.create_collider(w, collider_desc.ball(r), Some(rb))
+    world.create_collider_with(w, collider_desc.ball(r), Some(rb))
     Nil
   }
 
   add_box(0.0, -0.35, 0.0, 7.0, 0.35)
-  add_box(-1.6, 0.85, 0.0, 0.70, 0.85)
+  add_box(-1.6, 0.85, 0.0, 0.7, 0.85)
   add_box(2.2, 1.35, 0.0, 0.65, 1.35)
   add_box(0.2, 1.2, -0.42, 1.3, 0.18)
   add_box(0.4, 4.4, 0.0, 1.9, 0.22)
   add_sphere(-2.5, 3.6, 0.65)
   add_sphere(4.2, 3.2, 0.75)
-  world.step(w, None, None)
+  world.step(w)
 
   let auto_ref = rp_rt.ref_new(True)
   let phase_ref = rp_rt.ref_new(0.0)
   let offset_ref = rp_rt.ref_new(0.0)
 
   let render = fn() {
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#ffffff"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
+    )
     ctx2d.fill_rect(ctx, 0.0, 0.0, 680.0, 400.0)
 
-    ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#efefef"))
+    ctx2d.set_stroke_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#efefef"),
+    )
     ctx2d.set_line_width(ctx, 1.0)
     int.range(from: -6, to: 7, with: Nil, run: fn(_, gx) {
       let x = to_cx(int.to_float(gx))
@@ -193,14 +213,18 @@ pub fn main() {
     })
 
     draw_box(ctx, 0.0, -0.35, 0.0, 7.0, 0.35, "#f7f7f7")
-    draw_box(ctx, -1.6, 0.85, 0.0, 0.70, 0.85, "#efefef")
+    draw_box(ctx, -1.6, 0.85, 0.0, 0.7, 0.85, "#efefef")
     draw_box(ctx, 2.2, 1.35, 0.0, 0.65, 1.35, "#efefef")
     draw_box(ctx, 0.2, 1.2, -0.42, 1.3, 0.18, "#d4d4d4")
     draw_box(ctx, 0.4, 4.4, 0.0, 1.9, 0.22, "#efefef")
     draw_circle(ctx, -2.5, 3.6, 0.65, "#d4d4d4")
     draw_circle(ctx, 4.2, 3.2, 0.75, "#d4d4d4")
 
-    let base_angle = -0.35 +. rp_rt.ref_get(offset_ref) +. 0.28 *. sin(rp_rt.ref_get(phase_ref))
+    let base_angle =
+      -0.35
+      +. rp_rt.ref_get(offset_ref)
+      +. 0.28
+      *. sin(rp_rt.ref_get(phase_ref))
     let ox = to_cx(emitter_x)
     let oy = to_cy(emitter_y)
     let origin = vec(emitter_x, emitter_y, 0.0)
@@ -213,7 +237,7 @@ pub fn main() {
         let dx = cos(angle)
         let dy = sin(angle)
         let r = ray.new(origin, vec(dx, dy, 0.0))
-        case world.cast_ray_and_get_normal(w, r, max_toi, True, None, None, None, None, None) {
+        case world.cast_ray_and_get_normal(w, r, max_toi, True) {
           Some(hit) -> {
             let toi = ray_collider_intersection.get_time_of_impact(hit)
             let pt = ray.point_at(r, toi)
@@ -222,7 +246,10 @@ pub fn main() {
             let hx = to_cx(ptx)
             let hy = to_cy(pty)
 
-            ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#737373"))
+            ctx2d.set_stroke_style(
+              ctx,
+              StringOrCanvasGradientOrCanvasPatternString("#737373"),
+            )
             ctx2d.set_line_width(ctx, 1.0)
             ctx2d.begin_path(ctx)
             ctx2d.move_to(ctx, ox, oy)
@@ -230,40 +257,63 @@ pub fn main() {
             ctx2d.stroke(ctx)
 
             let n = ray_collider_intersection.get_normal(hit)
-            ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+            ctx2d.set_stroke_style(
+              ctx,
+              StringOrCanvasGradientOrCanvasPatternString("#111111"),
+            )
             ctx2d.set_line_width(ctx, 1.4)
             ctx2d.begin_path(ctx)
             ctx2d.move_to(ctx, hx, hy)
-            ctx2d.line_to(ctx, to_cx(ptx +. vector.get_x(n) *. 0.45), to_cy(pty +. vector.get_y(n) *. 0.45))
+            ctx2d.line_to(
+              ctx,
+              to_cx(ptx +. vector.get_x(n) *. 0.45),
+              to_cy(pty +. vector.get_y(n) *. 0.45),
+            )
             ctx2d.stroke(ctx)
 
-            ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+            ctx2d.set_fill_style(
+              ctx,
+              StringOrCanvasGradientOrCanvasPatternString("#111111"),
+            )
             ctx2d.begin_path(ctx)
-            ctx2d.arc(ctx, hx, hy, 2.8, 0.0, two_pi, None)
-            ctx2d.fill(ctx, None)
+            ctx2d.arc(ctx, hx, hy, 2.8, 0.0, two_pi)
+            ctx2d.fill(ctx)
 
             #(hit_count + 1, float.min(cur_min, toi))
           }
           None -> {
-            ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#e5e5e5"))
+            ctx2d.set_stroke_style(
+              ctx,
+              StringOrCanvasGradientOrCanvasPatternString("#e5e5e5"),
+            )
             ctx2d.set_line_width(ctx, 0.9)
             ctx2d.begin_path(ctx)
             ctx2d.move_to(ctx, ox, oy)
-            ctx2d.line_to(ctx, to_cx(emitter_x +. dx *. max_toi), to_cy(emitter_y +. dy *. max_toi))
+            ctx2d.line_to(
+              ctx,
+              to_cx(emitter_x +. dx *. max_toi),
+              to_cy(emitter_y +. dy *. max_toi),
+            )
             ctx2d.stroke(ctx)
             acc
           }
         }
       })
 
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#111111"),
+    )
     ctx2d.begin_path(ctx)
-    ctx2d.arc(ctx, ox, oy, 6.0, 0.0, two_pi, None)
-    ctx2d.fill(ctx, None)
-    ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#ffffff"))
+    ctx2d.arc(ctx, ox, oy, 6.0, 0.0, two_pi)
+    ctx2d.fill(ctx)
+    ctx2d.set_stroke_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
+    )
     ctx2d.set_line_width(ctx, 1.5)
     ctx2d.begin_path(ctx)
-    ctx2d.arc(ctx, ox, oy, 3.0, 0.0, two_pi, None)
+    ctx2d.arc(ctx, ox, oy, 3.0, 0.0, two_pi)
     ctx2d.stroke(ctx)
 
     let deg = float.round(base_angle *. 180.0 /. pi)
@@ -291,12 +341,18 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() })
   }
 
   wire_click("btn-sweep", fn() {
     let a = rp_rt.ref_update(auto_ref, fn(cur) { !cur })
-    dom_node.set_text_content(sweep_btn, Some(case a { True -> "Sweep: Auto" False -> "Sweep: Manual" }))
+    dom_node.set_text_content(
+      sweep_btn,
+      Some(case a {
+        True -> "Sweep: Auto"
+        False -> "Sweep: Manual"
+      }),
+    )
     render()
   })
 

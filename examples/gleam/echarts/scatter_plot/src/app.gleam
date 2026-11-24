@@ -42,7 +42,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "chart") {
     None -> Nil
     Some(box) -> {
-      let chart = ec.init(Some(box), None, None)
+      let chart = ec.init_with(Some(box), None, None)
       let opt =
         raw.create()
         |> unit.with_animation(False)
@@ -121,7 +121,7 @@ pub fn main() -> Nil {
             ]),
           ]),
         )
-      e_charts_type.set_option(chart, opt, None, None)
+      e_charts_type.set_option(chart, opt)
 
       case document.get_element_by_id(doc, "meta") {
         None -> Nil
@@ -130,7 +130,13 @@ pub fn main() -> Nil {
           let h = int.to_string(float.round(e_charts_type.get_height(chart)))
           node.set_text_content(
             meta,
-            Some("Canvas: " <> w <> "x" <> h <> " · 20 data points across 2 clusters"),
+            Some(
+              "Canvas: "
+              <> w
+              <> "x"
+              <> h
+              <> " · 20 data points across 2 clusters",
+            ),
           )
         }
       }

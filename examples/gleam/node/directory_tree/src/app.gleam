@@ -2,14 +2,14 @@ import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/string
 import node/areas/fs
 import node/areas/fs/rm_options
 import node/areas/fs/stats
 import node/areas/fs/stats_base
-import node/mkdir_options
 import node/areas/path
+import node/mkdir_options
 import node/types as t
 
 fn check(ok: Bool, what: String) -> Int {
@@ -27,30 +27,25 @@ fn write_text(p: String, body: String) -> Nil {
   fs.write_file_sync(
     t.PathOrFileDescriptorString(p),
     t.StringOrNodeJSArrayBufferViewString(body),
-    None,
   )
 }
 
 fn walk_dir(dir: String, counts: #(Int, Int, Float)) -> #(Int, Int, Float) {
-  let entries = list.sort(fs.readdir_sync(str(dir), None), string.compare)
+  let entries = list.sort(fs.readdir_sync(str(dir)), string.compare)
   list.fold(entries, counts, fn(acc, name) {
     let #(dirs, files, bytes) = acc
     let full = path.join([dir, name])
     let st = fs.stat_sync(str(full))
     case stats_base.is_directory(st), stats_base.is_file(st) {
       True, _ -> walk_dir(full, #(dirs + 1, files, bytes))
-      False, True -> #(
-        dirs,
-        files + 1,
-        bytes +. stats.get_size(st),
-      )
+      False, True -> #(dirs, files + 1, bytes +. stats.get_size(st))
       False, False -> acc
     }
   })
 }
 
 pub fn main() -> Nil {
-  let root = fs.mkdtemp_sync("/tmp/tsrs-node-tree-", None)
+  let root = fs.mkdtemp_sync("/tmp/tsrs-node-tree-")
   let passed = check(fs.exists_sync(str(root)), "temp tree created")
 
   let mk = mkdir_options.create()
@@ -75,7 +70,7 @@ pub fn main() -> Nil {
     rm_options.create()
     |> rm_options.with_recursive(True)
     |> rm_options.with_force(True)
-  fs.rm_sync(str(root), Some(rm))
+  fs.rm_sync_with(str(root), Some(rm))
 
   let passed =
     passed

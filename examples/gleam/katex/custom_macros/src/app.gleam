@@ -5,7 +5,7 @@ import dom/areas/core/node
 import dom/areas/html/html_element_tag_name_map as tag
 import gleam/list
 import gleam/option.{None, Some}
-import katex as katex
+import katex
 import katex/katex_options
 import katex/katex_options_macros
 import katex/runtime as kr
@@ -15,11 +15,11 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let title = document.create_element(doc, tag.h1, None)
+      let title = document.create_element(doc, tag.h1)
       node.set_text_content(title, Some("Custom Macros (Gleam)"))
-      let badge = document.create_element(doc, tag.span, None)
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("\\RR, \\NN, \\dd, \\norm"))
       node.append_child(head, title)
@@ -41,12 +41,12 @@ pub fn main() -> Nil {
         |> katex_options.with_display_mode(True)
         |> katex_options.with_macros(macros)
 
-      let legend = document.create_element(doc, tag.div, None)
+      let legend = document.create_element(doc, tag.div)
       element.set_class_name(legend, "card")
-      let leg_lbl = document.create_element(doc, tag.div, None)
+      let leg_lbl = document.create_element(doc, tag.div)
       element.set_class_name(leg_lbl, "label")
       node.set_text_content(leg_lbl, Some("Defined Macros"))
-      let leg_pre = document.create_element(doc, tag.pre, None)
+      let leg_pre = document.create_element(doc, tag.pre)
       element.set_class_name(leg_pre, "tex")
       node.set_text_content(
         leg_pre,
@@ -58,7 +58,7 @@ pub fn main() -> Nil {
       node.append_child(legend, leg_pre)
       node.append_child(app, legend)
 
-      let grid = document.create_element(doc, tag.div, None)
+      let grid = document.create_element(doc, tag.div)
       element.set_class_name(grid, "grid")
       node.append_child(app, grid)
 
@@ -74,17 +74,20 @@ pub fn main() -> Nil {
 
       list.each(exprs, fn(item) {
         let #(name, tex) = item
-        let card = document.create_element(doc, tag.div, None)
+        let card = document.create_element(doc, tag.div)
         element.set_class_name(card, "card")
-        let lbl = document.create_element(doc, tag.div, None)
+        let lbl = document.create_element(doc, tag.div)
         element.set_class_name(lbl, "label")
         node.set_text_content(lbl, Some(name))
-        let src = document.create_element(doc, tag.pre, None)
+        let src = document.create_element(doc, tag.pre)
         element.set_class_name(src, "tex")
         node.set_text_content(src, Some(tex))
-        let slot = document.create_element(doc, tag.div, None)
+        let slot = document.create_element(doc, tag.div)
         element.set_class_name(slot, "slot")
-        element.set_inner_html(slot, katex.render_to_string(tex, Some(opts)))
+        element.set_inner_html(
+          slot,
+          katex.render_to_string_with(tex, Some(opts)),
+        )
         node.append_child(card, lbl)
         node.append_child(card, src)
         node.append_child(card, slot)

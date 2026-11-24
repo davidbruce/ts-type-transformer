@@ -13,8 +13,8 @@ import gleam/option.{None, Some}
 fn make_span(s_iso: String, e_iso: String) {
   let dc = dt.date_codec()
   let arg = dt.DateArgDateType
-  let s = df.parse_iso(s_iso, None)
-  let e = df.parse_iso(e_iso, None)
+  let s = df.parse_iso(s_iso)
+  let e = df.parse_iso(e_iso)
   interval.create()
   |> interval.with_start(arg(s), dt.date_arg_codec(dc))
   |> interval.with_end(arg(e), dt.date_arg_codec(dc))
@@ -28,11 +28,14 @@ pub fn main() -> Nil {
       let dc = dt.date_codec()
       let arg = dt.DateArgDateType
 
-      let head = document.create_element(doc, tag.div, None)
+      let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
-      let h1 = document.create_element(doc, tag.h1, None)
-      node.set_text_content(h1, Some("Date-fns Interval Overlap & Clamp (Gleam)"))
-      let badge = document.create_element(doc, tag.span, None)
+      let h1 = document.create_element(doc, tag.h1)
+      node.set_text_content(
+        h1,
+        Some("Date-fns Interval Overlap & Clamp (Gleam)"),
+      )
+      let badge = document.create_element(doc, tag.span)
       element.set_class_name(badge, "badge")
       node.set_text_content(badge, Some("March 2024 · 31 days"))
       node.append_child(head, h1)
@@ -40,7 +43,8 @@ pub fn main() -> Nil {
       node.append_child(app, head)
 
       let win_span = make_span("2024-03-01", "2024-03-31")
-      let month_days = df.each_day_of_interval(win_span, None, runtime.codec_dynamic())
+      let month_days =
+        df.each_day_of_interval(win_span, None, runtime.codec_dynamic())
 
       let sprint_a = make_span("2024-03-08", "2024-03-18")
       let tracks = [
@@ -50,33 +54,35 @@ pub fn main() -> Nil {
         #("Post-Release", make_span("2024-03-22", "2024-03-29"), False),
       ]
 
-      let gantt_card = document.create_element(doc, tag.div, None)
+      let gantt_card = document.create_element(doc, tag.div)
       element.set_class_name(gantt_card, "card")
-      let g_lbl = document.create_element(doc, tag.div, None)
+      let g_lbl = document.create_element(doc, tag.div)
       element.set_class_name(g_lbl, "label")
       node.set_text_content(
         g_lbl,
-        Some("31-Day Gantt & Overlap Matrix (dark = active, grey = overlaps Sprint A)"),
+        Some(
+          "31-Day Gantt & Overlap Matrix (dark = active, grey = overlaps Sprint A)",
+        ),
       )
       node.append_child(gantt_card, g_lbl)
 
-      let gantt = document.create_element(doc, tag.div, None)
+      let gantt = document.create_element(doc, tag.div)
       element.set_class_name(gantt, "gantt")
 
-      let ghead = document.create_element(doc, tag.div, None)
+      let ghead = document.create_element(doc, tag.div)
       element.set_class_name(ghead, "gantt-head")
-      let h_track = document.create_element(doc, tag.div, None)
+      let h_track = document.create_element(doc, tag.div)
       node.set_text_content(h_track, Some("Track"))
-      let hslots = document.create_element(doc, tag.div, None)
+      let hslots = document.create_element(doc, tag.div)
       element.set_class_name(hslots, "slots")
       list.each(month_days, fn(d) {
-        let lbl = document.create_element(doc, tag.div, None)
+        let lbl = document.create_element(doc, tag.div)
         element.set_class_name(lbl, "slot-lbl")
-        node.set_text_content(lbl, Some(df.format_date(d, "d", None)))
+        node.set_text_content(lbl, Some(df.format_date(d, "d")))
         node.append_child(hslots, lbl)
         Nil
       })
-      let h_ref = document.create_element(doc, tag.div, None)
+      let h_ref = document.create_element(doc, tag.div)
       node.set_text_content(h_ref, Some("vs Ref"))
       node.append_child(ghead, h_track)
       node.append_child(ghead, hslots)
@@ -85,40 +91,40 @@ pub fn main() -> Nil {
 
       list.each(tracks, fn(t) {
         let #(name, span, is_ref) = t
-        let row = document.create_element(doc, tag.div, None)
+        let row = document.create_element(doc, tag.div)
         element.set_class_name(row, "gantt-row")
 
-        let meta = document.create_element(doc, tag.div, None)
+        let meta = document.create_element(doc, tag.div)
         element.set_class_name(meta, "track-meta")
-        let s_name = document.create_element(doc, tag.span, None)
+        let s_name = document.create_element(doc, tag.span)
         element.set_class_name(s_name, "track-name")
         node.set_text_content(s_name, Some(name))
-        let dur = df.interval_to_duration(span, None)
-        let s_dur = document.create_element(doc, tag.span, None)
+        let dur = df.interval_to_duration(span)
+        let s_dur = document.create_element(doc, tag.span)
         element.set_class_name(s_dur, "track-dur")
-        node.set_text_content(s_dur, Some(df.format_duration(dur, None)))
+        node.set_text_content(s_dur, Some(df.format_duration(dur)))
         node.append_child(meta, s_name)
         node.append_child(meta, s_dur)
         node.append_child(row, meta)
 
-        let slots = document.create_element(doc, tag.div, None)
+        let slots = document.create_element(doc, tag.div)
         element.set_class_name(slots, "slots")
         list.each(month_days, fn(d) {
-          let in_track = df.is_within_interval(d, span, None)
-          let in_ref = df.is_within_interval(d, sprint_a, None)
+          let in_track = df.is_within_interval(d, span)
+          let in_ref = df.is_within_interval(d, sprint_a)
           let cls = case in_track, is_ref, in_ref {
             True, False, True -> "slot overlap"
             True, _, _ -> "slot active"
             False, _, _ -> "slot"
           }
-          let slot = document.create_element(doc, tag.div, None)
+          let slot = document.create_element(doc, tag.div)
           element.set_class_name(slot, cls)
           node.append_child(slots, slot)
           Nil
         })
         node.append_child(row, slots)
 
-        let overlaps = df.are_intervals_overlapping(span, sprint_a, None)
+        let overlaps = df.are_intervals_overlapping(span, sprint_a)
         let b_text = case is_ref, overlaps {
           True, _ -> "REF"
           False, True -> "OVERLAP"
@@ -128,7 +134,7 @@ pub fn main() -> Nil {
           True -> "pill"
           False -> "pill-muted"
         }
-        let pill = document.create_element(doc, tag.span, None)
+        let pill = document.create_element(doc, tag.span)
         element.set_class_name(pill, b_cls)
         node.set_text_content(pill, Some(b_text))
         node.append_child(row, pill)
@@ -139,9 +145,9 @@ pub fn main() -> Nil {
       node.append_child(gantt_card, gantt)
       node.append_child(app, gantt_card)
 
-      let clamp_card = document.create_element(doc, tag.div, None)
+      let clamp_card = document.create_element(doc, tag.div)
       element.set_class_name(clamp_card, "card")
-      let c_lbl = document.create_element(doc, tag.div, None)
+      let c_lbl = document.create_element(doc, tag.div)
       element.set_class_name(c_lbl, "label")
       node.set_text_content(
         c_lbl,
@@ -149,11 +155,11 @@ pub fn main() -> Nil {
       )
       node.append_child(clamp_card, c_lbl)
 
-      let tbl = document.create_element(doc, tag.table, None)
-      let thead = document.create_element(doc, tag.thead, None)
-      let hrow = document.create_element(doc, tag.tr, None)
+      let tbl = document.create_element(doc, tag.table)
+      let thead = document.create_element(doc, tag.thead)
+      let hrow = document.create_element(doc, tag.tr)
       list.each(["Probe Date", "Clamped Output", "Rule"], fn(h) {
-        let th = document.create_element(doc, tag.th, None)
+        let th = document.create_element(doc, tag.th)
         node.set_text_content(th, Some(h))
         node.append_child(hrow, th)
         Nil
@@ -161,7 +167,7 @@ pub fn main() -> Nil {
       node.append_child(thead, hrow)
       node.append_child(tbl, thead)
 
-      let tbody = document.create_element(doc, tag.tbody, None)
+      let tbody = document.create_element(doc, tag.tbody)
       list.each(
         [
           #("2024-03-02", "Clamped to start"),
@@ -170,7 +176,7 @@ pub fn main() -> Nil {
         ],
         fn(p) {
           let #(iso, rule) = p
-          let probe = df.parse_iso(iso, None)
+          let probe = df.parse_iso(iso)
           let clamped =
             df.clamp(
               arg(probe),
@@ -179,10 +185,10 @@ pub fn main() -> Nil {
               dt.date_arg_codec(dc),
               runtime.codec_dynamic(),
             )
-          let out_txt = df.format_date(clamped, "yyyy-MM-dd", None)
-          let tr = document.create_element(doc, tag.tr, None)
+          let out_txt = df.format_date(clamped, "yyyy-MM-dd")
+          let tr = document.create_element(doc, tag.tr)
           list.each([iso, out_txt, rule], fn(txt) {
-            let td = document.create_element(doc, tag.td, None)
+            let td = document.create_element(doc, tag.td)
             node.set_text_content(td, Some(txt))
             node.append_child(tr, td)
             Nil

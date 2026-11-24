@@ -1,13 +1,13 @@
 import gleam/float
 import gleam/int
 import gleam/io
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import node/areas/fs
 import node/areas/fs/rm_options
 import node/areas/fs/stats
 import node/areas/fs/stats_base
-import node/buffer
 import node/areas/path
+import node/buffer
 import node/types as t
 
 fn check(ok: Bool, what: String) -> Int {
@@ -22,16 +22,11 @@ fn str(s: String) {
 }
 
 fn read_text(p: String) -> String {
-  buffer.to_string(
-    fs.read_file_sync(t.PathOrFileDescriptorString(p), None),
-    None,
-    None,
-    None,
-  )
+  buffer.to_string(fs.read_file_sync(t.PathOrFileDescriptorString(p)))
 }
 
 pub fn main() -> Nil {
-  let dir = fs.mkdtemp_sync("/tmp/tsrs-node-ws-", None)
+  let dir = fs.mkdtemp_sync("/tmp/tsrs-node-ws-")
   let st_dir = fs.stat_sync(str(dir))
   let passed =
     check(
@@ -43,7 +38,6 @@ pub fn main() -> Nil {
   fs.write_file_sync(
     t.PathOrFileDescriptorString(notes),
     t.StringOrNodeJSArrayBufferViewString("alpha\nbeta\n"),
-    None,
   )
   let st1 = fs.stat_sync(str(notes))
   let s1 = stats.get_size(st1)
@@ -57,7 +51,6 @@ pub fn main() -> Nil {
   fs.append_file_sync(
     t.PathOrFileDescriptorString(notes),
     t.StringOrUint8ArrayString("gamma\n"),
-    None,
   )
   let text = read_text(notes)
   let st2 = fs.stat_sync(str(notes))
@@ -68,7 +61,7 @@ pub fn main() -> Nil {
 
   let backup = path.join([dir, "backup.txt"])
   let archive = path.join([dir, "archive.txt"])
-  fs.copy_file_sync(str(notes), str(backup), None)
+  fs.copy_file_sync(str(notes), str(backup))
   let passed = passed + check(fs.exists_sync(str(backup)), "copyFileSync")
 
   fs.rename_sync(str(backup), str(archive))
@@ -87,7 +80,7 @@ pub fn main() -> Nil {
     rm_options.create()
     |> rm_options.with_recursive(True)
     |> rm_options.with_force(True)
-  fs.rm_sync(str(dir), Some(rm))
+  fs.rm_sync_with(str(dir), Some(rm))
   let passed =
     passed
     + check(!fs.exists_sync(str(dir)), "rmSync recursive")

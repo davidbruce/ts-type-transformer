@@ -4,10 +4,10 @@ import dimforge_rapier3d_compat/joint_data
 import dimforge_rapier3d_compat/rigid_body
 import dimforge_rapier3d_compat/rigid_body_desc
 import dimforge_rapier3d_compat/rotation
-import dimforge_rapier3d_compat/vector
-import dimforge_rapier3d_compat/world
 import dimforge_rapier3d_compat/runtime as rp_rt
 import dimforge_rapier3d_compat/types as rt
+import dimforge_rapier3d_compat/vector
+import dimforge_rapier3d_compat/world
 import dom/areas/canvas/canvas_rendering_context2d as ctx2d
 import dom/areas/core
 import dom/areas/core/document
@@ -15,8 +15,10 @@ import dom/areas/core/node as dom_node
 import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
-import dom/types.{type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString}
 import dom/areas/html/html_element_tag_name_map as tag
+import dom/types.{
+  type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString,
+}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -72,16 +74,22 @@ fn draw_rot_box(
   let px3 = to_cx(cx +. r00 *. { 0.0 -. hx } +. r01 *. hy)
   let py3 = to_cy(cy +. r10 *. { 0.0 -. hx } +. r11 *. hy)
 
-  ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString(fill_hex))
+  ctx2d.set_fill_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString(fill_hex),
+  )
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
   ctx2d.line_to(ctx, px1, py1)
   ctx2d.line_to(ctx, px2, py2)
   ctx2d.line_to(ctx, px3, py3)
   ctx2d.close_path(ctx)
-  ctx2d.fill(ctx, None)
+  ctx2d.fill(ctx)
 
-  ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+  ctx2d.set_stroke_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString("#111111"),
+  )
   ctx2d.set_line_width(ctx, 1.5)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
@@ -95,14 +103,20 @@ fn draw_rot_box(
 fn draw_pivot(ctx: CanvasRenderingContext2D(Nil), wx: Float, wy: Float) -> Nil {
   let cx = to_cx(wx)
   let cy = to_cy(wy)
-  ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#ffffff"))
+  ctx2d.set_fill_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
+  )
   ctx2d.begin_path(ctx)
-  ctx2d.arc(ctx, cx, cy, 4.0, 0.0, two_pi, None)
-  ctx2d.fill(ctx, None)
-  ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+  ctx2d.arc(ctx, cx, cy, 4.0, 0.0, two_pi)
+  ctx2d.fill(ctx)
+  ctx2d.set_stroke_style(
+    ctx,
+    StringOrCanvasGradientOrCanvasPatternString("#111111"),
+  )
   ctx2d.set_line_width(ctx, 1.6)
   ctx2d.begin_path(ctx)
-  ctx2d.arc(ctx, cx, cy, 4.0, 0.0, two_pi, None)
+  ctx2d.arc(ctx, cx, cy, 4.0, 0.0, two_pi)
   ctx2d.stroke(ctx)
 }
 
@@ -114,7 +128,7 @@ pub fn main() {
 
   let doc = core.get_document()
   let assert Some(canvas) = document.query_selector(doc, tag.canvas)
-  let assert Some(ctx) = html_canvas_element.get_context_2d(canvas, None)
+  let assert Some(ctx) = html_canvas_element.get_context_2d(canvas)
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
   let assert Some(pause_btn) = document.get_element_by_id(doc, "btn-pause")
 
@@ -132,25 +146,32 @@ pub fn main() {
       Some(old_w) -> world.free(old_w)
       None -> Nil
     }
-    let w = world.new(vec(0.0, -9.81, 0.0), None, None, None, None, None, None, None, None, None, None, None, None, None)
+    let w = world.new(vec(0.0, -9.81, 0.0))
 
     let gantry =
       world.create_rigid_body(
         w,
-        rigid_body_desc.fixed() |> rigid_body_desc.set_translation(0.0, 6.2, 0.0),
+        rigid_body_desc.fixed()
+          |> rigid_body_desc.set_translation(0.0, 6.2, 0.0),
       )
-    world.create_collider(w, collider_desc.cuboid(6.0, 0.22, 0.6), Some(gantry))
+    world.create_collider_with(
+      w,
+      collider_desc.cuboid(6.0, 0.22, 0.6),
+      Some(gantry),
+    )
     let z_axis = vec(0.0, 0.0, 1.0)
 
     let add_link = fn(x: Float, y: Float, density: Float) {
       let rb =
         world.create_rigid_body(
           w,
-          rigid_body_desc.dynamic() |> rigid_body_desc.set_translation(x, y, 0.0),
+          rigid_body_desc.dynamic()
+            |> rigid_body_desc.set_translation(x, y, 0.0),
         )
-      world.create_collider(
+      world.create_collider_with(
         w,
-        collider_desc.cuboid(link_hx, link_hy, 0.2) |> collider_desc.set_density(density),
+        collider_desc.cuboid(link_hx, link_hy, 0.2)
+          |> collider_desc.set_density(density),
         Some(rb),
       )
       rb
@@ -160,17 +181,48 @@ pub fn main() {
     let l2 = add_link(-3.3, 4.1, 1.4)
     let l3 = add_link(-3.8, 2.8, 1.6)
 
-    world.create_impulse_joint(w, joint_data.revolute(vec(-2.2, -0.22, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), gantry, l1, True)
-    world.create_impulse_joint(w, joint_data.revolute(vec(0.0, 0.0 -. link_hy -. 0.06, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), l1, l2, True)
-    world.create_impulse_joint(w, joint_data.revolute(vec(0.0, 0.0 -. link_hy -. 0.06, 0.0), vec(0.0, link_hy +. 0.06, 0.0), z_axis), l2, l3, True)
+    world.create_impulse_joint(
+      w,
+      joint_data.revolute(
+        vec(-2.2, -0.22, 0.0),
+        vec(0.0, link_hy +. 0.06, 0.0),
+        z_axis,
+      ),
+      gantry,
+      l1,
+      True,
+    )
+    world.create_impulse_joint(
+      w,
+      joint_data.revolute(
+        vec(0.0, 0.0 -. link_hy -. 0.06, 0.0),
+        vec(0.0, link_hy +. 0.06, 0.0),
+        z_axis,
+      ),
+      l1,
+      l2,
+      True,
+    )
+    world.create_impulse_joint(
+      w,
+      joint_data.revolute(
+        vec(0.0, 0.0 -. link_hy -. 0.06, 0.0),
+        vec(0.0, link_hy +. 0.06, 0.0),
+        z_axis,
+      ),
+      l2,
+      l3,
+      True,
+    )
     rigid_body.apply_impulse(l3, vec(-1.4, 0.0, 0.0), True)
 
     let arm =
       world.create_rigid_body(
         w,
-        rigid_body_desc.dynamic() |> rigid_body_desc.set_translation(3.1, 5.2, 0.0),
+        rigid_body_desc.dynamic()
+          |> rigid_body_desc.set_translation(3.1, 5.2, 0.0),
       )
-    world.create_collider(
+    world.create_collider_with(
       w,
       collider_desc.cuboid(0.14, 0.85, 0.2) |> collider_desc.set_density(1.2),
       Some(arm),
@@ -178,16 +230,29 @@ pub fn main() {
     let bob =
       world.create_rigid_body(
         w,
-        rigid_body_desc.dynamic() |> rigid_body_desc.set_translation(3.8, 3.6, 0.0),
+        rigid_body_desc.dynamic()
+          |> rigid_body_desc.set_translation(3.8, 3.6, 0.0),
       )
-    world.create_collider(
+    world.create_collider_with(
       w,
       collider_desc.ball(0.42) |> collider_desc.set_density(3.0),
       Some(bob),
     )
 
-    world.create_impulse_joint(w, joint_data.revolute(vec(2.3, -0.22, 0.0), vec(0.0, 0.88, 0.0), z_axis), gantry, arm, True)
-    world.create_impulse_joint(w, joint_data.revolute(vec(0.0, -0.88, 0.0), vec(0.0, 0.72, 0.0), z_axis), arm, bob, True)
+    world.create_impulse_joint(
+      w,
+      joint_data.revolute(vec(2.3, -0.22, 0.0), vec(0.0, 0.88, 0.0), z_axis),
+      gantry,
+      arm,
+      True,
+    )
+    world.create_impulse_joint(
+      w,
+      joint_data.revolute(vec(0.0, -0.88, 0.0), vec(0.0, 0.72, 0.0), z_axis),
+      arm,
+      bob,
+      True,
+    )
     rigid_body.apply_impulse(bob, vec(1.8, 0.2, 0.0), True)
 
     rp_rt.ref_set(world_ref, Some(w))
@@ -201,16 +266,20 @@ pub fn main() {
 
   let step_sim = fn() {
     case rp_rt.ref_get(world_ref) {
-      Some(w) -> world.step(w, None, None)
+      Some(w) -> world.step(w)
       None -> Nil
     }
     rp_rt.ref_update(step_ref, fn(s) { s + 1 })
     case rp_rt.ref_get(chain_ref), rp_rt.ref_get(bob_ref) {
       [_, _, l3], Some(bob) -> {
-        let pa = rigid_body.translation(l3, None)
-        let pb = rigid_body.translation(bob, None)
-        rp_rt.ref_update(trail_a_ref, fn(t) { list.take([#(vector.get_x(pa), vector.get_y(pa)), ..t], 36) })
-        rp_rt.ref_update(trail_b_ref, fn(t) { list.take([#(vector.get_x(pb), vector.get_y(pb)), ..t], 36) })
+        let pa = rigid_body.translation(l3)
+        let pb = rigid_body.translation(bob)
+        rp_rt.ref_update(trail_a_ref, fn(t) {
+          list.take([#(vector.get_x(pa), vector.get_y(pa)), ..t], 36)
+        })
+        rp_rt.ref_update(trail_b_ref, fn(t) {
+          list.take([#(vector.get_x(pb), vector.get_y(pb)), ..t], 36)
+        })
         Nil
       }
       _, _ -> Nil
@@ -218,10 +287,16 @@ pub fn main() {
   }
 
   let render = fn() {
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#ffffff"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
+    )
     ctx2d.fill_rect(ctx, 0.0, 0.0, 680.0, 400.0)
 
-    ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#efefef"))
+    ctx2d.set_stroke_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#efefef"),
+    )
     ctx2d.set_line_width(ctx, 1.0)
     int.range(from: -6, to: 7, with: Nil, run: fn(_, gx) {
       let x = to_cx(int.to_float(gx))
@@ -240,46 +315,73 @@ pub fn main() {
 
     draw_rot_box(ctx, 0.0, 6.2, 0.0, 0.0, 0.0, 1.0, 6.0, 0.22, "#efefef")
 
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#b5b5b5"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#b5b5b5"),
+    )
     list.each(rp_rt.ref_get(trail_a_ref), fn(pt) {
       let #(tx, ty) = pt
       ctx2d.begin_path(ctx)
-      ctx2d.arc(ctx, to_cx(tx), to_cy(ty), 1.6, 0.0, two_pi, None)
-      ctx2d.fill(ctx, None)
+      ctx2d.arc(ctx, to_cx(tx), to_cy(ty), 1.6, 0.0, two_pi)
+      ctx2d.fill(ctx)
     })
     list.each(rp_rt.ref_get(trail_b_ref), fn(pt) {
       let #(tx, ty) = pt
       ctx2d.begin_path(ctx)
-      ctx2d.arc(ctx, to_cx(tx), to_cy(ty), 1.6, 0.0, two_pi, None)
-      ctx2d.fill(ctx, None)
+      ctx2d.arc(ctx, to_cx(tx), to_cy(ty), 1.6, 0.0, two_pi)
+      ctx2d.fill(ctx)
     })
 
     let #(#(tx, ty), pins) =
-      list.index_fold(rp_rt.ref_get(chain_ref), #(#(0.0, 0.0), []), fn(acc, rb, i) {
-        let #(cur_tip, cur_pins) = acc
-        let p = rigid_body.translation(rb, None)
-        let q = rigid_body.rotation(rb, None)
-        let px = vector.get_x(p)
-        let py = vector.get_y(p)
-        let qx = rotation.get_x(q)
-        let qy = rotation.get_y(q)
-        let qz = rotation.get_z(q)
-        let qw = rotation.get_w(q)
-        draw_rot_box(ctx, px, py, qx, qy, qz, qw, link_hx, link_hy, case i == 2 { True -> "#d4d4d4" False -> "#f7f7f7" })
-        case i < 2 {
-          True -> {
-            let r01 = 2.0 *. { qx *. qy -. qw *. qz }
-            let r11 = 1.0 -. 2.0 *. { qx *. qx +. qz *. qz }
-            #(cur_tip, [#(px -. r01 *. { link_hy +. 0.06 }, py -. r11 *. { link_hy +. 0.06 }), ..cur_pins])
+      list.index_fold(
+        rp_rt.ref_get(chain_ref),
+        #(#(0.0, 0.0), []),
+        fn(acc, rb, i) {
+          let #(cur_tip, cur_pins) = acc
+          let p = rigid_body.translation(rb)
+          let q = rigid_body.rotation(rb)
+          let px = vector.get_x(p)
+          let py = vector.get_y(p)
+          let qx = rotation.get_x(q)
+          let qy = rotation.get_y(q)
+          let qz = rotation.get_z(q)
+          let qw = rotation.get_w(q)
+          draw_rot_box(
+            ctx,
+            px,
+            py,
+            qx,
+            qy,
+            qz,
+            qw,
+            link_hx,
+            link_hy,
+            case i == 2 {
+              True -> "#d4d4d4"
+              False -> "#f7f7f7"
+            },
+          )
+          case i < 2 {
+            True -> {
+              let r01 = 2.0 *. { qx *. qy -. qw *. qz }
+              let r11 = 1.0 -. 2.0 *. { qx *. qx +. qz *. qz }
+              #(cur_tip, [
+                #(
+                  px -. r01 *. { link_hy +. 0.06 },
+                  py -. r11 *. { link_hy +. 0.06 },
+                ),
+                ..cur_pins
+              ])
+            }
+            False -> #(#(px, py), cur_pins)
           }
-          False -> #(#(px, py), cur_pins)
-        }
-      })
+        },
+      )
 
     let #(bx, by) = case rp_rt.ref_get(arm_ref), rp_rt.ref_get(bob_ref) {
       Some(arm), Some(bob) -> {
-        let ap = rigid_body.translation(arm, None)
-        let aq = rigid_body.rotation(arm, None)
+        let ap = rigid_body.translation(arm)
+        let aq = rigid_body.rotation(arm)
         let apx = vector.get_x(ap)
         let apy = vector.get_y(ap)
         let aqx = rotation.get_x(aq)
@@ -288,19 +390,25 @@ pub fn main() {
         let aqw = rotation.get_w(aq)
         draw_rot_box(ctx, apx, apy, aqx, aqy, aqz, aqw, 0.14, 0.85, "#f7f7f7")
 
-        let bp = rigid_body.translation(bob, None)
+        let bp = rigid_body.translation(bob)
         let bpx = vector.get_x(bp)
         let bpy = vector.get_y(bp)
         let bcx = to_cx(bpx)
         let bcy = to_cy(bpy)
-        ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#262626"))
+        ctx2d.set_fill_style(
+          ctx,
+          StringOrCanvasGradientOrCanvasPatternString("#262626"),
+        )
         ctx2d.begin_path(ctx)
-        ctx2d.arc(ctx, bcx, bcy, 0.42 *. 46.0, 0.0, two_pi, None)
-        ctx2d.fill(ctx, None)
-        ctx2d.set_stroke_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#111111"))
+        ctx2d.arc(ctx, bcx, bcy, 0.42 *. 46.0, 0.0, two_pi)
+        ctx2d.fill(ctx)
+        ctx2d.set_stroke_style(
+          ctx,
+          StringOrCanvasGradientOrCanvasPatternString("#111111"),
+        )
         ctx2d.set_line_width(ctx, 1.6)
         ctx2d.begin_path(ctx)
-        ctx2d.arc(ctx, bcx, bcy, 0.42 *. 46.0, 0.0, two_pi, None)
+        ctx2d.arc(ctx, bcx, bcy, 0.42 *. 46.0, 0.0, two_pi)
         ctx2d.stroke(ctx)
 
         let arm_r01 = 2.0 *. { aqx *. aqy -. aqw *. aqz }
@@ -318,10 +426,13 @@ pub fn main() {
     })
     draw_pivot(ctx, 2.3, 5.98)
 
-    ctx2d.set_fill_style(ctx, StringOrCanvasGradientOrCanvasPatternString("#555555"))
+    ctx2d.set_fill_style(
+      ctx,
+      StringOrCanvasGradientOrCanvasPatternString("#555555"),
+    )
     ctx2d.set_font(ctx, "11px ui-monospace, monospace")
-    ctx2d.fill_text(ctx, "3-Link Revolute Chain", to_cx(-3.5), 36.0, None)
-    ctx2d.fill_text(ctx, "2-Body Bob Pendulum", to_cx(1.1), 36.0, None)
+    ctx2d.fill_text(ctx, "3-Link Revolute Chain", to_cx(-3.5), 36.0)
+    ctx2d.fill_text(ctx, "2-Body Bob Pendulum", to_cx(1.1), 36.0)
 
     let p_state = case rp_rt.ref_get(paused_ref) {
       True -> "paused"
@@ -353,7 +464,7 @@ pub fn main() {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() })
   }
 
   wire_click("btn-kick", fn() {
@@ -369,7 +480,13 @@ pub fn main() {
 
   wire_click("btn-pause", fn() {
     let p = rp_rt.ref_update(paused_ref, fn(cur) { !cur })
-    dom_node.set_text_content(pause_btn, Some(case p { True -> "Resume" False -> "Pause" }))
+    dom_node.set_text_content(
+      pause_btn,
+      Some(case p {
+        True -> "Resume"
+        False -> "Pause"
+      }),
+    )
     render()
   })
 

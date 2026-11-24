@@ -3,7 +3,7 @@ import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import node/areas/events/event_emitter as events
 import node/namespaces/node_js/event_emitter as emitter
 import node/runtime
@@ -17,7 +17,7 @@ fn check(ok: Bool, what: String) -> Int {
 
 pub fn main() -> Nil {
   let bus =
-    events.new(None)
+    events.new()
     |> emitter.set_max_listeners(12.0)
   let passed = check(emitter.get_max_listeners(bus) == 12.0, "maxListeners")
 
@@ -60,7 +60,7 @@ pub fn main() -> Nil {
   let passed =
     passed
     + check(
-      emitter.listener_count(bus, ev_metric, None) == 2.0,
+      emitter.listener_count(bus, ev_metric) == 2.0,
       "initial listenerCount",
     )
     + check(list.length(emitter.event_names(bus)) == 2, "eventNames")
@@ -74,12 +74,12 @@ pub fn main() -> Nil {
     passed
     + check(
       emitted1
-      && runtime.ref_get(metric_calls) == 1
-      && runtime.ref_get(once_calls) == 1,
+        && runtime.ref_get(metric_calls) == 1
+        && runtime.ref_get(once_calls) == 1,
       "first metric emit",
     )
     + check(
-      emitter.listener_count(bus, ev_metric, None) == 1.0,
+      emitter.listener_count(bus, ev_metric) == 1.0,
       "once removes itself",
     )
 
@@ -92,9 +92,9 @@ pub fn main() -> Nil {
     passed
     + check(
       emitted2
-      && runtime.ref_get(metric_calls) == 2
-      && runtime.ref_get(metric_sum) == 303.0
-      && runtime.ref_get(once_calls) == 1,
+        && runtime.ref_get(metric_calls) == 2
+        && runtime.ref_get(metric_sum) == 303.0
+        && runtime.ref_get(once_calls) == 1,
       "second metric emit",
     )
     + check(!emitter.emit(bus, ev_idle, []), "idle emit false")
@@ -103,18 +103,17 @@ pub fn main() -> Nil {
   let passed =
     passed
     + check(
-      emitter.listener_count(bus, ev_metric, None) == 0.0
-      && !emitter.emit(bus, ev_metric, [runtime.dynamic(1.0)]),
+      emitter.listener_count(bus, ev_metric) == 0.0
+        && !emitter.emit(bus, ev_metric, [runtime.dynamic(1.0)]),
       "removeListener",
     )
     + check(runtime.ref_get(metric_calls) == 2, "metric count unchanged")
 
-  emitter.remove_all_listeners(bus, Some(ev_shutdown))
+  emitter.remove_all_listeners_with(bus, Some(ev_shutdown))
   let passed =
     passed
     + check(
-      emitter.event_names(bus) == []
-      && runtime.ref_get(shutdown_calls) == 0,
+      emitter.event_names(bus) == [] && runtime.ref_get(shutdown_calls) == 0,
       "removeAllListeners",
     )
 

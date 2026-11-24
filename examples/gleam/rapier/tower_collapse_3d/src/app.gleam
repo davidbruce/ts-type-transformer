@@ -76,7 +76,7 @@ fn mk_pbr(
     |> create_pbr_material_props.with_base_color_factor(#(r, g, bl, 1.0))
     |> create_pbr_material_props.with_metallic_factor(metallic)
     |> create_pbr_material_props.with_roughness_factor(roughness)
-  b.create_pbr_material(Some(props))
+  b.create_pbr_material_with(Some(props))
 }
 
 pub fn main() -> Nil {
@@ -106,23 +106,7 @@ pub fn main() -> Nil {
       Some(old_w) -> world.free(old_w)
       None -> Nil
     }
-    let w =
-      world.new(
-        vector3.new(0.0, -9.81, 0.0),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-      )
+    let w = world.new(vector3.new(0.0, -9.81, 0.0))
 
     let floor_body =
       world.create_rigid_body(
@@ -130,7 +114,7 @@ pub fn main() -> Nil {
         rigid_body_desc.fixed()
           |> rigid_body_desc.set_translation(0.0, -0.3, 0.0),
       )
-    world.create_collider(
+    world.create_collider_with(
       w,
       collider_desc.cuboid(10.0, 0.3, 10.0)
         |> collider_desc.set_friction(0.75)
@@ -159,7 +143,7 @@ pub fn main() -> Nil {
           |> collider_desc.set_friction(0.65)
           |> collider_desc.set_restitution(0.12)
           |> collider_desc.set_density(1.0)
-        world.create_collider(w, cd, Some(rb))
+        world.create_collider_with(w, cd, Some(rb))
         [rb, ..acc]
       })
       |> list.reverse
@@ -171,7 +155,7 @@ pub fn main() -> Nil {
           |> rigid_body_desc.set_translation(-6.2, 1.55, 0.12)
           |> rigid_body_desc.set_linvel(13.5, 1.1, -0.25),
       )
-    world.create_collider(
+    world.create_collider_with(
       w,
       collider_desc.ball(sphere_radius)
         |> collider_desc.set_density(4.5)
@@ -191,8 +175,8 @@ pub fn main() -> Nil {
     pair: #(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)),
   ) {
     let #(pos, rot) = pair
-    let p = rigid_body.translation(rb, None)
-    let q = rigid_body.rotation(rb, None)
+    let p = rigid_body.translation(rb)
+    let q = rigid_body.rotation(rb)
     observable_vec3.set(pos, vector.get_x(p), vector.get_y(p), vector.get_z(p))
     observable_quat.set(
       rot,
@@ -218,8 +202,8 @@ pub fn main() -> Nil {
     let #(max_y, plank_ke) =
       list.fold(rp_rt.ref_get(planks_ref), #(0.0, 0.0), fn(acc, rb) {
         let #(cur_max, cur_ke) = acc
-        let p = rigid_body.translation(rb, None)
-        let v = rigid_body.linvel(rb, None)
+        let p = rigid_body.translation(rb)
+        let v = rigid_body.linvel(rb)
         let vx = vector.get_x(v)
         let vy = vector.get_y(v)
         let vz = vector.get_z(v)
@@ -229,7 +213,7 @@ pub fn main() -> Nil {
       })
     let total_ke = case rp_rt.ref_get(striker_ref) {
       Some(rb) -> {
-        let v = rigid_body.linvel(rb, None)
+        let v = rigid_body.linvel(rb)
         let vx = vector.get_x(v)
         let vy = vector.get_y(v)
         let vz = vector.get_z(v)
@@ -259,7 +243,7 @@ pub fn main() -> Nil {
 
   let step_sim = fn() {
     case rp_rt.ref_get(world_ref) {
-      Some(w) -> world.step(w, None, None)
+      Some(w) -> world.step(w)
       None -> Nil
     }
     rp_rt.ref_update(step_ref, fn(s) { s + 1 })
@@ -270,7 +254,7 @@ pub fn main() -> Nil {
   build_world()
   int.range(from: 0, to: 18, with: Nil, run: fn(_, _) {
     case rp_rt.ref_get(world_ref) {
-      Some(w) -> world.step(w, None, None)
+      Some(w) -> world.step(w)
       None -> Nil
     }
     rp_rt.ref_update(step_ref, fn(s) { s + 1 })
@@ -280,7 +264,7 @@ pub fn main() -> Nil {
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(btn) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener(btn, ev.click, fn(_) { cb() }, None)
+    html_element.add_event_listener(btn, ev.click, fn(_) { cb() })
   }
 
   wire_click("btn-launch", fn() {
@@ -324,7 +308,7 @@ pub fn main() -> Nil {
     build_world()
     int.range(from: 0, to: 12, with: Nil, run: fn(_, _) {
       case rp_rt.ref_get(world_ref) {
-        Some(w) -> world.step(w, None, None)
+        Some(w) -> world.step(w)
         None -> Nil
       }
       rp_rt.ref_update(step_ref, fn(s) { s + 1 })
@@ -341,11 +325,11 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
         on_err,
       )
 
-      let scene = b.create_scene_context(engine, None)
+      let scene = b.create_scene_context(engine)
       let clear =
         gpu_color_dict.create()
         |> gpu_color_dict.with_r(0.06)
@@ -357,14 +341,15 @@ pub fn main() -> Nil {
       let camera =
         b.create_arc_rotate_camera(0.85, 1.12, 11.5, b.vec3(0.0, 1.5, 0.0))
       b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control(camera, canvas, Some(scene), None)
+      b.attach_control_with(camera, canvas, Some(scene), None)
 
-      let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
+      let hemi =
+        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.88, 0.95))
       hemispheric_light.set_ground_color(hemi, #(0.14, 0.14, 0.16))
       b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
-      let dir = b.create_directional_light(#(-1.0, -2.0, -1.2), Some(2.1))
+      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.2), Some(2.1))
       directional_light.set_diffuse(dir, #(1.0, 0.97, 0.92))
       b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
@@ -372,8 +357,8 @@ pub fn main() -> Nil {
         ground_options.create()
         |> ground_options.with_width(20.0)
         |> ground_options.with_height(20.0)
-      let ground = b.create_ground(engine, Some(ground_opts))
-      mesh.set_material(ground, b.create_grid_material(None))
+      let ground = b.create_ground_with(engine, Some(ground_opts))
+      mesh.set_material(ground, b.create_grid_material())
       b.add_to_scene(scene, bt.scene_entity_mesh(ground))
 
       let mat0 = mk_pbr(0.86, 0.86, 0.86, 0.15, 0.45)
@@ -393,7 +378,10 @@ pub fn main() -> Nil {
             |> box_options.with_height(half_height *. 2.0)
             |> box_options.with_depth(d_box)
           let m =
-            b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(bopts)))
+            b.create_box_with(
+              engine,
+              Some(bt.NumberOrBoxOptionsBoxOptions(bopts)),
+            )
           let mat = case layer % 3 {
             0 -> mat0
             1 -> mat1
@@ -413,7 +401,7 @@ pub fn main() -> Nil {
         sphere_options.create()
         |> sphere_options.with_diameter(sphere_radius *. 2.0)
         |> sphere_options.with_segments(24.0)
-      let sm = b.create_sphere(engine, Some(sopts))
+      let sm = b.create_sphere_with(engine, Some(sopts))
       mesh.set_material(sm, mk_pbr(0.95, 0.42, 0.28, 0.55, 0.22))
       b.add_to_scene(scene, bt.scene_entity_mesh(sm))
       rp_rt.ref_set(

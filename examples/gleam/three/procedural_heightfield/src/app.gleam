@@ -6,7 +6,7 @@ import dom/areas/html/html_element_event_map as ev
 import gleam/float
 import gleam/int
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/result
 import three/ambient_light
 import three/box3
@@ -26,12 +26,12 @@ import three/perspective_camera
 import three/points
 import three/points_material
 import three/points_material_parameters
+import three/runtime as rt
 import three/scene
+import three/types as t
 import three/vector3
 import three/web_gl_renderer
 import three/web_gl_renderer_parameters
-import three/runtime as rt
-import three/types as t
 
 @external(javascript, "./app_ffi.mjs", "sin")
 fn sin(x: Float) -> Float
@@ -54,7 +54,8 @@ fn wave_height(mode: Int, x: Float, z: Float) -> Float {
       0.78 *. cos(r *. 2.2) /. { 1.0 +. 0.18 *. r *. r }
     }
     2 -> 0.065 *. { x *. x -. z *. z } +. 0.18 *. sin(x *. 1.6)
-    _ -> 0.55 *. cos(x *. 1.4) *. sin(z *. 1.4) +. 0.25 *. cos({ x +. z } *. 1.1)
+    _ ->
+      0.55 *. cos(x *. 1.4) *. sin(z *. 1.4) +. 0.25 *. cos({ x +. z } *. 1.1)
   }
 }
 
@@ -119,29 +120,55 @@ pub fn main() {
     web_gl_renderer_parameters.create()
     |> web_gl_renderer_parameters.with_antialias(True)
     |> web_gl_renderer_parameters.with_preserve_drawing_buffer(True)
-  let renderer = web_gl_renderer.new(Some(rp))
+  let renderer = web_gl_renderer.new_with(Some(rp))
   web_gl_renderer.set_pixel_ratio(renderer, 1.0)
-  web_gl_renderer.set_size(renderer, width, height, None)
+  web_gl_renderer.set_size(renderer, width, height)
 
   let assert Some(stage) = document.get_element_by_id(doc, "stage")
   dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
 
   let sc = scene.new()
-  scene.set_background(sc, Some(t.ColorOrTextureColor(color.new(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))))))
-  let cam = perspective_camera.new(Some(42.0), Some(width /. height), Some(0.1), Some(100.0))
+  scene.set_background(
+    sc,
+    Some(
+      t.ColorOrTextureColor(
+        color.new_with(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))),
+      ),
+    ),
+  )
+  let cam =
+    perspective_camera.new_with(
+      Some(42.0),
+      Some(width /. height),
+      Some(0.1),
+      Some(100.0),
+    )
 
-  object3d.add(sc, [ambient_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(1.2))])
-  let key = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(2.2))
+  object3d.add(sc, [
+    ambient_light.new_with(
+      Some(t.ColorRepresentationNumber(hex(0xffffff))),
+      Some(1.2),
+    ),
+  ])
+  let key =
+    directional_light.new_with(
+      Some(t.ColorRepresentationNumber(hex(0xffffff))),
+      Some(2.2),
+    )
   object3d.get_position(key)
-  |> vector3.set(6.0, 10.0, Some(8.0))
+  |> vector3.set_with(6.0, 10.0, Some(8.0))
   object3d.add(sc, [key])
-  let rim = directional_light.new(Some(t.ColorRepresentationNumber(hex(0xffffff))), Some(0.9))
+  let rim =
+    directional_light.new_with(
+      Some(t.ColorRepresentationNumber(hex(0xffffff))),
+      Some(0.9),
+    )
   object3d.get_position(rim)
-  |> vector3.set(-7.0, 5.0, Some(-6.0))
+  |> vector3.set_with(-7.0, 5.0, Some(-6.0))
   object3d.add(sc, [rim])
 
   let grid =
-    grid_helper.new(
+    grid_helper.new_with(
       Some(9.0),
       Some(12.0),
       Some(t.ColorRepresentationNumber(hex(0x999999))),
@@ -152,38 +179,77 @@ pub fn main() {
 
   let geo = buffer_geometry.new()
   let vert_count = grid_n * grid_n
-  let pos_attr = float32_buffer_attribute.new(rt.dynamic(vert_count * 3), 3.0, None)
+  let pos_attr = float32_buffer_attribute.new(rt.dynamic(vert_count * 3), 3.0)
   let indices = build_indices()
   let tri_count = list.length(indices) / 3
-  buffer_geometry.set_attribute(geo, "position", t.WebGLAttributesGetAttributeBufferAttribute(buffer_attribute.upcast(pos_attr)), rt.codec_string())
-  buffer_geometry.set_index(geo, Some(t.BufferAttributeOrNumberArrayArray(indices)))
+  buffer_geometry.set_attribute(
+    geo,
+    "position",
+    t.WebGLAttributesGetAttributeBufferAttribute(buffer_attribute.upcast(
+      pos_attr,
+    )),
+    rt.codec_string(),
+  )
+  buffer_geometry.set_index(
+    geo,
+    Some(t.BufferAttributeOrNumberArrayArray(indices)),
+  )
 
   let smp =
     mesh_standard_material_parameters.create()
-    |> mesh_standard_material_parameters.with_color(t.ColorRepresentationNumber(hex(0xb5b5b5)))
+    |> mesh_standard_material_parameters.with_color(
+      t.ColorRepresentationNumber(hex(0xb5b5b5)),
+    )
     |> mesh_standard_material_parameters.with_roughness(0.72)
     |> mesh_standard_material_parameters.with_metalness(0.05)
     |> mesh_standard_material_parameters.with_flat_shading(True)
-  let surf = mesh.new(Some(geo), Some(mesh_standard_material.new(Some(smp))), t.mesh_standard_material_codec())
+  let surf =
+    mesh.new(
+      Some(geo),
+      Some(mesh_standard_material.new_with(Some(smp))),
+      t.mesh_standard_material_codec(),
+    )
   object3d.add(sc, [surf])
 
   let wmp =
     mesh_basic_material_parameters.create()
-    |> mesh_basic_material_parameters.with_color(t.ColorRepresentationNumber(hex(0x262626)))
+    |> mesh_basic_material_parameters.with_color(
+      t.ColorRepresentationNumber(hex(0x262626)),
+    )
     |> mesh_basic_material_parameters.with_wireframe(True)
-  let wire_mesh = mesh.new(Some(geo), Some(mesh_basic_material.new(Some(wmp))), t.mesh_basic_material_codec())
+  let wire_mesh =
+    mesh.new(
+      Some(geo),
+      Some(mesh_basic_material.new_with(Some(wmp))),
+      t.mesh_basic_material_codec(),
+    )
   vector3.set_y(object3d.get_position(wire_mesh), 0.015)
   object3d.add(sc, [wire_mesh])
 
   let pt_count = { grid_n / 2 } * { grid_n / 2 }
   let pts_geo = buffer_geometry.new()
-  let pts_attr = float32_buffer_attribute.new(rt.dynamic(pt_count * 3), 3.0, None)
-  buffer_geometry.set_attribute(pts_geo, "position", t.WebGLAttributesGetAttributeBufferAttribute(buffer_attribute.upcast(pts_attr)), rt.codec_string())
+  let pts_attr = float32_buffer_attribute.new(rt.dynamic(pt_count * 3), 3.0)
+  buffer_geometry.set_attribute(
+    pts_geo,
+    "position",
+    t.WebGLAttributesGetAttributeBufferAttribute(buffer_attribute.upcast(
+      pts_attr,
+    )),
+    rt.codec_string(),
+  )
   let pmp =
     points_material_parameters.create()
-    |> points_material_parameters.with_color(t.ColorRepresentationNumber(hex(0x111111)))
+    |> points_material_parameters.with_color(
+      t.ColorRepresentationNumber(hex(0x111111)),
+    )
     |> points_material_parameters.with_size(0.14)
-  let pts = points.new(Some(pts_geo), Some(points_material.new(Some(pmp))), t.buffer_geometry_codec(), t.points_material_codec())
+  let pts =
+    points.new(
+      Some(pts_geo),
+      Some(points_material.new_with(Some(pmp))),
+      t.buffer_geometry_codec(),
+      t.points_material_codec(),
+    )
   object3d.add(sc, [pts])
 
   let assert Some(wire_btn) = document.get_element_by_id(doc, "btn-wire")
@@ -205,10 +271,16 @@ pub fn main() {
 
     let r = 9.2
     object3d.get_position(cam)
-    |> vector3.set(r *. sin(az), 5.4, Some(r *. cos(az)))
-    object3d.look_at(cam, vector3.new(Some(0.0), Some(0.0), Some(0.0)))
+    |> vector3.set_with(r *. sin(az), 5.4, Some(r *. cos(az)))
+    object3d.look_at(cam, vector3.new_with(Some(0.0), Some(0.0), Some(0.0)))
     object3d.set_visible(wire_mesh, over)
-    dom_node.set_text_content(wire_btn, Some(case over { True -> "Wireframe: On" False -> "Wireframe: Off" }))
+    dom_node.set_text_content(
+      wire_btn,
+      Some(case over {
+        True -> "Wireframe: On"
+        False -> "Wireframe: Off"
+      }),
+    )
     web_gl_renderer.render(renderer, sc, cam)
 
     let assert Some(bb) = buffer_geometry.get_bounding_box(geo)
@@ -228,14 +300,17 @@ pub fn main() {
         <> ", "
         <> rt.to_fixed(max_y, 2)
         <> "] · wireframe: "
-        <> case over { True -> "on" False -> "off" },
+        <> case over {
+          True -> "on"
+          False -> "off"
+        },
       ),
     )
   }
 
   let wire_click = fn(id: String, cb: fn() -> Nil) {
     let assert Some(b) = document.get_element_by_id(doc, id)
-    html_element.add_event_listener(b, ev.click, fn(_) { cb() }, None)
+    html_element.add_event_listener(b, ev.click, fn(_) { cb() })
   }
 
   wire_click("btn-p0", fn() {
