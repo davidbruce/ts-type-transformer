@@ -14,8 +14,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let day = dt.DateOrStringOrNumberDate
-      let arg = dt.DateArgDateType
+      let day = dt.DateArgDate
 
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
@@ -32,7 +31,7 @@ pub fn main() -> Nil {
       node.append_child(app, head)
 
       let sample = df.parse_iso("2024-03-15T14:30:45")
-      let parsed = df.parse("15/03/2024", "dd/MM/yyyy", arg(sample))
+      let parsed = df.parse("15/03/2024", "dd/MM/yyyy", day(sample))
 
       let fmt_card = document.create_element(doc, tag.div)
       element.set_class_name(fmt_card, "card")

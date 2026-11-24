@@ -175,7 +175,7 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     let name = unique_with_limit(base, SYNTH_NAME_MAX, &mut names);
                     // Enclosing type parameters the type mentions become its own.
                     let free = free_type_params(t);
-                    let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
+                    let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None, self_bounded: false }).collect();
                     let args = free.into_iter().map(Type::Ref).collect();
                     let body = std::mem::replace(t, Type::This);
                     added.push(match body {

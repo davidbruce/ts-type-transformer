@@ -1,6 +1,6 @@
 #![no_main]
 
-use date_fns::{Date, DateArg, Interval};
+use date_fns::{Date, Interval};
 use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
@@ -18,12 +18,10 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn make_span(s_iso: &str, e_iso: &str) -> Interval<DateArg<Date>, DateArg<Date>> {
+fn make_span(s_iso: &str, e_iso: &str) -> Interval {
     let s: Date = date_fns::parse_iso(s_iso);
     let e: Date = date_fns::parse_iso(e_iso);
-    Interval::default()
-        .with_start(DateArg::DateType(s))
-        .with_end(DateArg::DateType(e))
+    Interval::default().with_start(s).with_end(e)
 }
 
 #[unsafe(no_mangle)]
@@ -48,7 +46,7 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let win_span = make_span("2024-03-01", "2024-03-31");
-    let month_days = date_fns::each_day_of_interval(win_span);
+    let month_days = date_fns::each_day_of_interval(&win_span);
 
     let sprint_a = make_span("2024-03-08", "2024-03-18");
     let tracks = [
@@ -157,7 +155,7 @@ pub extern "C" fn start() {
         ("2024-03-28", "Clamped to end"),
     ] {
         let probe: Date = date_fns::parse_iso(iso);
-        let clamped = date_fns::clamp(DateArg::DateType(probe), sprint_a.clone());
+        let clamped = date_fns::clamp(probe, &sprint_a);
         let out_txt = date_fns::format_date(clamped, "yyyy-MM-dd");
         let tr = make_el(&doc, "tr", "", None);
         append(&tr, make_el(&doc, "td", "", Some(iso)));

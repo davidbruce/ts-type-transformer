@@ -13,8 +13,8 @@ fn build_opts() -> ApplicationInitOptions {
         .with_auto_start(false)
 }
 
-fn add<C: JsType, D: JsType>(parent: &Container<C>, child: D) {
-    parent.add_child(JsArray::<D>::from([child]));
+fn add(parent: &Container, child: impl Into<Container>) {
+    parent.add_child(JsArray::<Container>::from([child.into()]));
 }
 
 fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
@@ -51,11 +51,11 @@ pub extern "C" fn start() {
         stroke_g(&guide, 1.0, 0xd4d4d4);
         add(&stage, guide);
 
-        let root = Container::<JsValue>::new();
+        let root = Container::new();
         root.position().set_with(340.0, 200.0);
 
         for i in 0..3 {
-            let arm = Container::<JsValue>::new();
+            let arm = Container::new();
             arm.set_rotation(i as f64 * 2.0 * std::f64::consts::PI / 3.0);
 
             let arm_bar = Graphics::new_with(JsNone);
@@ -65,7 +65,7 @@ pub extern "C" fn start() {
             arm_bar.circle(110.0, 0.0, 10.0).fill_with(0x111111 as f64);
             add(&arm, arm_bar);
 
-            let sub = Container::<JsValue>::new();
+            let sub = Container::new();
             sub.set_x(110.0);
             sub.set_rotation(-0.45);
 

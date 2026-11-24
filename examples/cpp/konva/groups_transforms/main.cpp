@@ -6,8 +6,8 @@
 
 using namespace konva;
 
-static Line<LineConfig> make_line(double x1, double y1, double x2, double y2, const char* stroke, double sw) {
-    return Line<LineConfig>::create({{.stroke = stroke, .strokeWidth = sw, .points = ts::Array<double>::of(x1, y1, x2, y2)}});
+static Line make_line(double x1, double y1, double x2, double y2, const char* stroke, double sw) {
+    return Line::create({{.stroke = stroke, .strokeWidth = sw, .points = ts::Array<double>::of(x1, y1, x2, y2)}});
 }
 
 static Rect make_rect(double x, double y, double w, double h, const char* fill, const char* stroke, double sw) {

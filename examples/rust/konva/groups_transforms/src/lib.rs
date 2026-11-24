@@ -2,13 +2,12 @@
 
 use konva::*;
 
-fn make_line(pts: [f64; 4]) -> GroupOrShape {
+fn make_line(pts: [f64; 4]) -> Line {
     let lc = LineConfig::default()
         .with_points(JsArray::from(pts))
         .with_stroke("#e5e5e5")
         .with_stroke_width(1.0);
-    let ln = Line::new_with(Some(lc));
-    Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
+    Line::new_with(&lc)
 }
 
 #[unsafe(no_mangle)]
@@ -61,9 +60,9 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     group_a.add([
-        GroupOrShape::from(Rect::new_with(&gab)),
-        GroupOrShape::from(Circle::new_with(&gad)),
-        GroupOrShape::from(Text::new_with(&gal)),
+        Node::from(Rect::new_with(&gab)),
+        Node::from(Circle::new_with(&gad)),
+        Node::from(Text::new_with(&gal)),
     ]);
     layer.add([group_a]);
 
@@ -101,12 +100,12 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     group_b.add([
-        GroupOrShape::from(Rect::new_with(&gbo)),
-        GroupOrShape::from(Rect::new_with(&gbi)),
-        GroupOrShape::from(Circle::new_with(&gbd)),
-        GroupOrShape::from(Text::new_with(&gbl)),
+        Node::from(Rect::new_with(&gbo)),
+        Node::from(Rect::new_with(&gbi)),
+        Node::from(Circle::new_with(&gbd)),
+        Node::from(Text::new_with(&gbl)),
     ]);
-    layer.add([GroupOrShape::from(&group_b)]);
+    layer.add([Node::from(group_b.clone())]);
 
     // Group C + nested inner group.
     let gcc = GroupConfig::default()
@@ -140,11 +139,11 @@ pub extern "C" fn start() {
         .with_radius(16.0)
         .with_fill("#111111");
     let marker = Circle::new_with(&mc);
-    inner_group.add([GroupOrShape::from(&marker)]);
+    inner_group.add([Node::from(marker.clone())]);
     group_c.add([
-        GroupOrShape::from(Rect::new_with(&gco)),
-        GroupOrShape::from(Text::new_with(&gcl)),
-        GroupOrShape::from(inner_group),
+        Node::from(Rect::new_with(&gco)),
+        Node::from(Text::new_with(&gcl)),
+        Node::from(inner_group),
     ]);
     layer.add([group_c]);
 
@@ -172,8 +171,8 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     layer.add([
-        GroupOrShape::from(Rect::new_with(&strip)),
-        GroupOrShape::from(Text::new_with(&sum)),
+        Node::from(Rect::new_with(&strip)),
+        Node::from(Text::new_with(&sum)),
     ]);
 
     layer.draw();

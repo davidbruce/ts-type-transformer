@@ -6,6 +6,7 @@ import gleam/list
 import gleam/option.{None, Some}
 import konva/circle
 import konva/circle_config
+import konva/container
 import konva/layer
 import konva/node
 import konva/rect
@@ -14,7 +15,6 @@ import konva/regular_polygon
 import konva/regular_polygon_config
 import konva/ring
 import konva/ring_config
-import konva/shape
 import konva/stage
 import konva/stage_config
 import konva/star
@@ -34,7 +34,7 @@ fn add_caption(l: t.Layer(Nil), x: Float, y: Float, label: String) -> Nil {
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
-  layer.add(l, [t.GroupOrShapeShape(shape.widen(text.new_with(Some(tc))))])
+  container.add(l, [text.new_with(Some(tc))])
   Nil
 }
 
@@ -153,17 +153,17 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
-  layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg)))),
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(r1)))),
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(r2)))),
-    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(cc)))),
-    t.GroupOrShapeShape(shape.widen(regular_polygon.new_with(Some(pc)))),
-    t.GroupOrShapeShape(shape.widen(star.new_with(Some(st)))),
-    t.GroupOrShapeShape(shape.widen(ring.new_with(Some(rc)))),
-    t.GroupOrShapeShape(shape.widen(wedge.new_with(Some(wc)))),
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(tf)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(txt)))),
+  container.add(l, [
+    node.upcast(rect.new_with(Some(bg))),
+    node.upcast(rect.new_with(Some(r1))),
+    node.upcast(rect.new_with(Some(r2))),
+    node.upcast(circle.new_with(Some(cc))),
+    node.upcast(regular_polygon.new_with(Some(pc))),
+    node.upcast(star.new_with(Some(st))),
+    node.upcast(ring.new_with(Some(rc))),
+    node.upcast(wedge.new_with(Some(wc))),
+    node.upcast(rect.new_with(Some(tf))),
+    node.upcast(text.new_with(Some(txt))),
   ])
 
   add_caption(l, 40.0, 142.0, "Rect (filled)")

@@ -6,6 +6,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import konva/circle
 import konva/circle_config
+import konva/container
 import konva/layer
 import konva/line
 import konva/line_config
@@ -14,7 +15,6 @@ import konva/rect
 import konva/rect_config
 import konva/regular_polygon
 import konva/regular_polygon_config
-import konva/shape
 import konva/stage
 import konva/stage_config
 import konva/text
@@ -52,7 +52,7 @@ fn make_circle(
   stroke_col: String,
   sw: Float,
   fill_opt: Option(String),
-) -> t.GroupOrShape {
+) -> t.Node(Nil) {
   let cc =
     circle_config.create()
     |> circle_config.with_x(x)
@@ -64,16 +64,16 @@ fn make_circle(
     Some(f) -> circle_config.with_fill(cc, t.StringOrCanvasGradientString(f))
     None -> cc
   }
-  t.GroupOrShapeShape(shape.widen(circle.new_with(Some(cc))))
+  node.upcast(circle.new_with(Some(cc)))
 }
 
-fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
+fn make_line(pts: List(Float), col: String, sw: Float) -> t.Node(Nil) {
   let lc =
     line_config.create()
     |> line_config.with_points(t.LinePointsArray(pts))
     |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
     |> line_config.with_stroke_width(sw)
-  t.GroupOrShapeShape(shape.widen(line.new_with(Some(lc))))
+  node.upcast(line.new_with(Some(lc)))
 }
 
 pub fn main() -> Nil {
@@ -97,7 +97,7 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg))))])
+  container.add(l, [rect.new_with(Some(bg))])
 
   let rings = [
     make_circle(cx, cy, 160.0, "#d4d4d4", 1.0, None),
@@ -167,7 +167,7 @@ pub fn main() -> Nil {
         |> rect_config.with_fill(t.StringOrCanvasGradientString(fill_col))
         |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
         |> rect_config.with_stroke_width(1.5)
-      [t.GroupOrShapeShape(shape.widen(rect.new_with(Some(pc)))), ..acc]
+      [node.upcast(rect.new_with(Some(pc))), ..acc]
     })
     |> list.reverse
   let nodes =
@@ -226,20 +226,20 @@ pub fn main() -> Nil {
           |> text_config.with_font_size(11.0)
           |> text_config.with_font_family("monospace")
           |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
-        t.GroupOrShapeShape(shape.widen(text.new_with(Some(tc))))
+        node.upcast(text.new_with(Some(tc)))
       },
     )
 
-  layer.add(l, rings)
-  layer.add(l, spokes)
-  layer.add(l, ticks)
-  layer.add(l, petals)
-  layer.add(l, nodes)
-  layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(regular_polygon.new_with(Some(cp)))),
-    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(cd)))),
+  container.add(l, rings)
+  container.add(l, spokes)
+  container.add(l, ticks)
+  container.add(l, petals)
+  container.add(l, nodes)
+  container.add(l, [
+    node.upcast(regular_polygon.new_with(Some(cp))),
+    node.upcast(circle.new_with(Some(cd))),
   ])
-  layer.add(l, compass)
+  container.add(l, compass)
 
   node.draw(l)
 

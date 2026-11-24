@@ -20,8 +20,8 @@ TS_EXPORT(start) void start() {
 
     std::vector<std::string> visited;
 
-    using Mk = marked::Marked<std::string, std::string>;
-    auto rend = marked::MarkedExtension_renderer<std::string, std::string>({.heading = [](ts::Tuple<marked::Tokens_Heading> args) {
+    using Mk = marked::Marked;
+    auto rend = marked::MarkedExtension_renderer({.heading = [](ts::Tuple<marked::Tokens_Heading> args) {
         auto h = args.get<0>();
         auto d = std::to_string(int(h.depth()));
         return std::string("<h") + d + " class=\"wire-h\">\xC2\xA7 " + h.text() + "</h" + d + ">\n";
@@ -33,7 +33,7 @@ TS_EXPORT(start) void start() {
             else visited.push_back(std::string(X::type));
         }, token);
     };
-    auto ext = marked::MarkedExtension<std::string, std::string>({.renderer = rend, .walkTokens = on_token});
+    auto ext = marked::MarkedExtension({.renderer = rend, .walkTokens = on_token});
 
     Mk custom_m = Mk(ext);
     std::string def_html = marked::marked(md, marked::marked_options_no_async::create());

@@ -178,7 +178,7 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
                 let name = unique_with_limit(base, SYNTH_NAME_MAX, names);
                 // Type parameters the union mentions become its own.
                 let free = free_type_params(t);
-                let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None }).collect();
+                let type_params = free.iter().map(|r| TypeParam { name: r.name.clone(), sym: r.sym, tid: r.tid, constraint: None, default: None, self_bounded: false }).collect();
                 free_of.insert(name.clone(), free);
                 added.push(Decl::Alias(Alias { name: name.clone(), sym: None, type_params, extends: Vec::new(), ty: t.clone(), computed: false, synthetic: true, doc: None }));
                 name

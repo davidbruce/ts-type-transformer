@@ -111,18 +111,18 @@ pub fn main() {
   let name =
     column_helper.accessor(
       helper,
-      "name",
+      t.AccessorFnOrStringString("name"),
       runtime.dynamic(name_options),
-      runtime.codec_string(),
+      runtime.codec_dynamic(),
     )
   let age_options = header_options.create()
   header_options.set_header(age_options, "Age")
   let age =
     column_helper.accessor(
       helper,
-      "age",
+      t.AccessorFnOrStringString("age"),
       runtime.dynamic(age_options),
-      runtime.codec_string(),
+      runtime.codec_dynamic(),
     )
   let passed =
     passed
@@ -391,11 +391,7 @@ pub fn main() {
       list.map(row_model.get_rows(core_model), name_of) == ["bo", "al", "cy"],
       "createCoreRowModel lists rows",
     )
-  let model_view: t.TableRowModelsCore(
-    t.TableFeatures(Nil),
-    dynamic.Dynamic,
-    Nil,
-  ) = coerce(tbl)
+  let model_view: t.TableRowModelsCore(dynamic.Dynamic, Nil) = coerce(tbl)
   let unsorted_model = table_row_models_core.get_row_model(model_view)
   let passed =
     passed
@@ -409,8 +405,7 @@ pub fn main() {
   let by_age = column_sort.create()
   column_sort.set_id(by_age, "age")
   column_sort.set_desc(by_age, False)
-  let sortable: t.TableRowSorting(t.TableFeatures(Nil), dynamic.Dynamic, Nil) =
-    coerce(tbl)
+  let sortable: t.TableRowSorting(dynamic.Dynamic, Nil) = coerce(tbl)
   table_row_sorting.set_sorting(sortable, t.UpdaterT([by_age]))
   let sorted_model = table_row_models_core.get_row_model(model_view)
   let passed =

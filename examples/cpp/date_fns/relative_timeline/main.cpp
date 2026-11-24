@@ -34,7 +34,7 @@ TS_EXPORT(start) void start() {
     tl_card.appendChild(make_el(doc, "div", "label", "Milestones Relative to 2024-03-15"));
     auto timeline = make_el(doc, "div", "timeline", "");
 
-    auto all_dates = ts::Array<date_fns::DateArg<>>::create();
+    auto all_dates = ts::Array<date_fns::DateArg>::create();
     for (const auto& e : entries) {
         auto d = date_fns::parseISO(e.iso);
         all_dates.push(d);

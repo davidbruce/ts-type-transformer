@@ -28,12 +28,12 @@ static const char* wave_name(int mode) {
 
 struct AppState {
     WebGLRenderer renderer;
-    Scene<> scene;
+    Scene scene;
     PerspectiveCamera camera;
-    BufferGeometry<> geo;
+    BufferGeometry geo;
     Float32BufferAttribute pos_attr;
     Float32BufferAttribute pts_attr;
-    Mesh<> wire_mesh;
+    Mesh wire_mesh;
     dom::HTMLElement wire_btn;
     dom::HTMLElement meta;
     int tri_count = 0;
@@ -92,7 +92,7 @@ TS_EXPORT(start) void start() {
     renderer.setSize(width, height);
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
-    Scene scene = Scene<>::create();
+    Scene scene = Scene::create();
     scene.background(Color(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
 
@@ -104,7 +104,7 @@ TS_EXPORT(start) void start() {
     GridHelper grid = GridHelper(9.0, 12.0, 0x999999, 0xe5e5e5);
     grid.position().y(-1.1);
 
-    BufferGeometry geo = BufferGeometry<>::create();
+    BufferGeometry geo = BufferGeometry::create();
     Float32BufferAttribute pos_attr = Float32BufferAttribute(GRID_N * GRID_N * 3, 3.0);
     ts::Array<double> indices = ts::Array<double>::create();
     for (int iz = 0; iz < GRID_N - 1; iz++) {
@@ -132,7 +132,7 @@ TS_EXPORT(start) void start() {
     wire_mesh.position().y(0.015);
 
     int pt_count = (GRID_N / 2) * (GRID_N / 2);
-    BufferGeometry pts_geo = BufferGeometry<>::create();
+    BufferGeometry pts_geo = BufferGeometry::create();
     Float32BufferAttribute pts_attr = Float32BufferAttribute(pt_count * 3, 3.0);
     pts_geo.setAttribute("position", pts_attr);
 

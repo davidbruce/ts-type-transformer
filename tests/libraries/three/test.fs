@@ -95,9 +95,9 @@ check (ball.distanceToPoint (Vector3.Create (5.0, 0.0, 0.0)) = 3.0) "Sphere dist
 check (ball.intersectsBox (Box3.Create (Vector3.Create (1.0, 1.0, 1.0), Vector3.Create (4.0, 4.0, 4.0)))) "Sphere intersectsBox"
 
 // A scene graph: positions are relative to the parent.
-let parent = Group.Create<Object3DEventMap> ()
+let parent = Group.Create ()
 parent.position.set (10.0, 0.0, 0.0) |> ignore
-let child = Object3D.Create<Object3DEventMap> ()
+let child = Object3D.Create ()
 child.position.set (0.0, 5.0, 0.0) |> ignore
 child.name <- "child"
 parent.add child |> ignore
@@ -125,7 +125,7 @@ check (parent.children.Count = 0 && isNull (box child.parent)) "remove"
 let geometry = BoxGeometry.Create (2.0, 2.0, 2.0)
 check (geometry.parameters.width = 2.0) "BoxGeometry parameters"
 let material = MeshBasicMaterial.Create ()
-let mesh = Mesh.Create (geometry, material)
+let mesh = Mesh.Create (geometry, MaterialOrMaterialArray.Material material)
 check (mesh.isMesh && mesh.``type`` = "Mesh") "Mesh"
 check (obj.ReferenceEquals (mesh.geometry, geometry)) "mesh.geometry"
 check (material.isMeshBasicMaterial) "material"
@@ -148,12 +148,12 @@ check (geometry.index.Value.count = 36.0) "index: 12 triangles"
 mesh.position.set (0.0, 0.0, -5.0) |> ignore
 mesh.updateMatrixWorld true
 let caster = Raycaster.Create (Vector3.Create (0.0, 0.0, 5.0), Vector3.Create (0.0, 0.0, -1.0))
-let hits = caster.intersectObject<Object3D<Object3DEventMap>> (mesh, false)
+let hits = caster.intersectObject (mesh, false)
 check (hits.Count >= 1) "the ray hits the mesh"
 check (near hits.[0].distance 9.0) "distance to the near face"
 check (near hits.[0].point.z -4.0) "the point of the hit"
 check (obj.ReferenceEquals (hits.[0].object, mesh)) "the object hit"
 let missing = Raycaster.Create (Vector3.Create (50.0, 0.0, 5.0), Vector3.Create (0.0, 0.0, -1.0))
-check (missing.intersectObject<Object3D<Object3DEventMap>>(mesh, false).Count = 0) "a ray that misses"
+check (missing.intersectObject(mesh, false).Count = 0) "a ray that misses"
 
 printfn "%d checks passed" passed

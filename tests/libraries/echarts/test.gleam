@@ -161,14 +161,11 @@ pub fn main() {
   let _ =
     eventful.on(
       e_charts_type.upcast(chart) |> chart_as_eventful,
-      "highlight",
+      runtime.dynamic("highlight"),
       fn(_) {
         cell.set(seen, cell.get(seen) + 1)
         None
       },
-      None,
-      runtime.codec_dynamic(),
-      runtime.codec_string(),
     )
   let action = payload_of("highlight")
   e_charts_type.dispatch_action(chart, action)

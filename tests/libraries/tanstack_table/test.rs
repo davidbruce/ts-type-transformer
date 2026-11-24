@@ -159,7 +159,7 @@ pub extern "C" fn run() {
     };
     let columns = JsArray::<JsValue>::from(vec![column("name", "Name"), column("age", "Age")]);
     let sorted_model = JsValue(
-        create_sorted_row_model::<TableFeatures, JsValue>()
+        create_sorted_row_model::<JsValue>()
             .0
             .clone(),
     );
@@ -175,7 +175,7 @@ pub extern "C" fn run() {
         ("data", &JsValue(data.0.clone())),
         ("columns", &JsValue(columns.0.clone())),
     ]);
-    let table = construct_table(&TableOptionsCore::<TableFeatures, JsValue>(
+    let table = construct_table(&TableOptionsCore::<JsValue>(
         options.0.clone(),
         PhantomData,
     ));
@@ -202,7 +202,7 @@ pub extern "C" fn run() {
     let model = table.get_core_row_model();
     let rows = model.rows();
     check!(rows.len() == 3);
-    let name_of = |r: &RowCore<TableFeatures, JsValue>| {
+    let name_of = |r: &RowCore<JsValue>| {
         MakeObjectMapResult::<JsValue>(r.original().0.clone(), PhantomData)
             .at("name")
             .unwrap()
@@ -218,7 +218,7 @@ pub extern "C" fn run() {
     by_age.set_id("age");
     by_age.set_desc(false);
     // The table's sorting members are on a type its core type is not: a view.
-    let sortable = TableRowSorting::<TableFeatures, JsValue>(table.0.clone(), PhantomData);
+    let sortable = TableRowSorting::<JsValue>(table.0.clone(), PhantomData);
     let sorts = JsArray::<ColumnSort>::from(vec![by_age]);
     sortable.set_sorting(Updater::T(sorts));
     let model = table.get_row_model();

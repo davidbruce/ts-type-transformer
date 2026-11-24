@@ -28,21 +28,21 @@ let features: TableFeatures =
         createObj [
             "coreReactivityFeature" ==> storeReactivityBindings ()
             "rowSortingFeature" ==> rowSortingFeature
-            "coreRowModel" ==> box (createCoreRowModel<TableFeatures, obj> ())
-            "sortedRowModel" ==> box (createSortedRowModel<TableFeatures, obj> ())
+            "coreRowModel" ==> box (createCoreRowModel<obj> ())
+            "sortedRowModel" ==> box (createSortedRowModel<obj> ())
         ]
     )
 
 // Columns from the helper: a string accessor, with a header.
-let helper = createColumnHelper<TableFeatures, obj> ()
+let helper = createColumnHelper<obj> ()
 let named (header: string) =
     U6.Case2 (ColumnHelperAccessorColumnHeaderString.Create (header = header))
-let nameColumn = helper.accessor<string, obj> ("name", named "Name")
-let ageColumn = helper.accessor<string, obj> ("age", named "Age")
+let nameColumn = helper.accessor<obj> (U2.Case2 "name", named "Name")
+let ageColumn = helper.accessor<obj> (U2.Case2 "age", named "Age")
 // An accessor function with an explicit id.
 let doubleColumn =
-    helper.accessor<obj -> obj, obj> (
-        (fun (p: obj) -> box ((p?age: float) * 2.0)),
+    helper.accessor<obj> (
+        U2.Case1 (System.Func<_, _, _> (fun (p: obj) (_: float) -> CellDataOrUnknownArrayOrReadonlyArray.CellData (box ((p?age: float) * 2.0)))),
         U6.Case1 (ColumnHelperAccessorColumnHeaderColumnHelperAccessorColumnFooter.Create (id = "double", header = U2.Case1 "Double"))
     )
 
@@ -51,7 +51,7 @@ let people =
 
 // FINDING 18: TableOptions_Core (an intersection of four interfaces) has no Create and its fields are
 // read-only, and the helper's columns are not ColumnDefBase_Core: the options are an object made by hand.
-let options (initialSorting: ColumnSort list) (extra: (string * obj) list) : TableOptions_Core<TableFeatures, obj> =
+let options (initialSorting: ColumnSort list) (extra: (string * obj) list) : TableOptions_Core<obj> =
     unbox (
         createObj (
             [ "features" ==> features
@@ -65,14 +65,14 @@ let options (initialSorting: ColumnSort list) (extra: (string * obj) list) : Tab
 // FINDING 19: `Table` is only the core (`Table_Core`): the feature APIs (`setSorting` of Table_RowSorting)
 // are on separate interfaces the table is not, so a table is cast to use them; and `table.store`
 // is an empty interface (the type is from @tanstack/store), so the state is read by hand.
-let sorting (t: Table<TableFeatures, obj>) = unbox<Table_RowSorting<TableFeatures, obj>> t
-let stateOf (t: Table<TableFeatures, obj>) : obj = (box t.store)?get ()
-let sortedIds (t: Table<TableFeatures, obj>) : string list =
+let sorting (t: Table<obj>) = unbox<Table_RowSorting<obj>> t
+let stateOf (t: Table<obj>) : obj = (box t.store)?get ()
+let sortedIds (t: Table<obj>) : string list =
     [ for s in (stateOf t)?sorting |> unbox<ResizeArray<ColumnSort>> -> s.id + (if s.desc then " desc" else " asc") ]
 
-let table = constructTable<TableFeatures, obj> (options [ ColumnSort.Create (false, "age") ] [])
+let table = constructTable<obj> (options [ ColumnSort.Create (false, "age") ] [])
 check (table.getCoreRowModel().rows.Count = 3) "the core row model has a row per datum"
-let names (rows: ResizeArray<Row<TableFeatures, obj>>) = [ for r in rows -> r.getValue<string> "name" ]
+let names (rows: ResizeArray<Row<obj>>) = [ for r in rows -> r.getValue<string> "name" ]
 check (names (table.getCoreRowModel().rows) = [ "Bo"; "Al"; "Cy" ]) "the core model keeps the data's order"
 check (names (table.getRowModel().rows) = [ "Al"; "Bo"; "Cy" ]) "the row model is sorted by age, ascending"
 check (sortedIds table = [ "age asc" ]) "the state holds the initial sorting"
@@ -94,7 +94,7 @@ check (table.getColumn("age").IsSome && table.getColumn("nope").IsNone) "getColu
 check (table.getAllLeafColumns().Count = 3) "leaf columns"
 let cells = rows.[0].getAllCells ()
 check (cells.Count = 3 && cells.[0].id = "1_name") "cells"
-check (string (cells.[1].getValue<obj> ()) = "25") "a cell's value"
+check (string (cells.[1].getValue ()) = "25") "a cell's value"
 check (obj.ReferenceEquals (cells.[0].row, rows.[0])) "a cell knows its row"
 check (columns.[0].columnDef?header = "Name") "the column's header"
 
@@ -119,7 +119,7 @@ check (table.getCoreRowModel().rows.Count = 3) "the core model is unaffected"
 
 // A column sorts itself.
 let age = (table.getColumn "age").Value
-let ageSorting = unbox<Column_RowSorting<TableFeatures, obj>> age
+let ageSorting = unbox<Column_RowSorting<obj>> age
 check (ageSorting.getCanSort ()) "getCanSort"
 ageSorting.toggleSorting (false)
 check (sortedIds table = [ "age asc" ]) "toggleSorting"
@@ -134,7 +134,7 @@ let onSortingChange: Updater<SortingState> -> unit =
             | U2.Case1 v -> changes.Add (string v.Count)
             | U2.Case2 _ -> changes.Add "fn"
     f
-let controlled = constructTable<TableFeatures, obj> (options [] [ "onSortingChange" ==> onSortingChange ])
+let controlled = constructTable<obj> (options [] [ "onSortingChange" ==> onSortingChange ])
 check (names (controlled.getRowModel().rows) = [ "Bo"; "Al"; "Cy" ]) "no initial sorting"
 (sorting controlled).setSorting (U2.Case1 (ResizeArray [ ColumnSort.Create (false, "age") ]))
 check (changes.Count = 1 && changes.[0] = "fn") "onSortingChange was called, with an updater function"

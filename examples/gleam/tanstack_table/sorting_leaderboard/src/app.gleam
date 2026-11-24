@@ -90,17 +90,11 @@ fn decode_num(v: Dynamic) -> Float {
   }
 }
 
-fn render(
-  table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil),
-  doc,
-  label: String,
-) {
-  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
+fn render(table: t.TableCore(Dynamic, Nil), doc, label: String) {
+  let rows_view: t.TableRowModelsCore(Dynamic, Nil) = coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
 
-  let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
+  let cols_view: t.TableColumns(Dynamic, Nil) = coerce(table)
   let cols = table_columns.get_all_leaf_columns(cols_view)
 
   let header_cells =
@@ -115,8 +109,7 @@ fn render(
         Some(h) -> decode_str(h, cid)
         None -> cid
       }
-      let csort: t.ColumnRowSorting(t.TableFeatures(Nil), Dynamic, Nil) =
-        coerce(col)
+      let csort: t.ColumnRowSorting(Dynamic, Nil) = coerce(col)
       let mark = case column_row_sorting.get_is_sorted(csort) {
         t.BooleanOrSortDirectionSortDirection(t.SortDirectionAsc) -> " &#9650;"
         t.BooleanOrSortDirectionSortDirection(t.SortDirectionDesc) -> " &#9660;"
@@ -245,8 +238,7 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let tsort: t.TableRowSorting(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
+  let tsort: t.TableRowSorting(Dynamic, Nil) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     table_row_sorting.set_sorting(

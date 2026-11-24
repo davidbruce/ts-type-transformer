@@ -17,7 +17,6 @@ import konva/line_config
 import konva/node
 import konva/rect
 import konva/rect_config
-import konva/shape
 import konva/stage
 import konva/stage_config
 import konva/text
@@ -30,7 +29,7 @@ fn stage_box(
   sub: String,
   fill_hex: String,
   ink_hex: String,
-) -> t.GroupOrShape {
+) -> t.Node(Nil) {
   let gc =
     group_config.create()
     |> group_config.with_x(x)
@@ -65,15 +64,15 @@ fn stage_box(
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
 
-  group.add(g, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(rc)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(t1)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(t2)))),
+  container.add(g, [
+    node.upcast(rect.new_with(Some(rc))),
+    node.upcast(text.new_with(Some(t1))),
+    node.upcast(text.new_with(Some(t2))),
   ])
-  t.GroupOrShapeGroup(g)
+  node.upcast(g)
 }
 
-fn make_arrow(pts: List(Float)) -> t.GroupOrShape {
+fn make_arrow(pts: List(Float)) -> t.Node(Nil) {
   let ac =
     arrow_config.create()
     |> line_config.with_points(t.LinePointsArray(pts))
@@ -82,7 +81,7 @@ fn make_arrow(pts: List(Float)) -> t.GroupOrShape {
     |> arrow_config.with_fill(t.StringOrCanvasGradientString("#111111"))
     |> arrow_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
     |> arrow_config.with_stroke_width(2.0)
-  t.GroupOrShapeShape(shape.widen(arrow.new_with(Some(ac))))
+  node.upcast(arrow.new_with(Some(ac)))
 }
 
 pub fn main() -> Nil {
@@ -133,8 +132,8 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
 
-  layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg)))),
+  container.add(l, [
+    node.upcast(rect.new_with(Some(bg))),
     stage_box(28.0, "01 PARSE", ".d.ts AST", "#ffffff", "#111111"),
     stage_box(194.0, "02 LOWER", "Typed IR", "#f7f7f7", "#111111"),
     stage_box(360.0, "03 EMIT", "6 Targets", "#efefef", "#111111"),
@@ -144,9 +143,9 @@ pub fn main() -> Nil {
     make_arrow([486.0, 129.0, 522.0, 129.0]),
     make_arrow([257.0, 163.0, 257.0, 251.0]),
     make_arrow([423.0, 163.0, 423.0, 251.0]),
-    t.GroupOrShapeShape(shape.widen(line.new_with(Some(fbc)))),
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bar)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(btxt)))),
+    node.upcast(line.new_with(Some(fbc))),
+    node.upcast(rect.new_with(Some(bar))),
+    node.upcast(text.new_with(Some(btxt))),
   ])
 
   node.draw(l)

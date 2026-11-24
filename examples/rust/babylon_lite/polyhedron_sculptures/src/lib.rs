@@ -24,7 +24,10 @@ fn mk_std(diff: f64, spec: f64, power: f64) -> StandardMaterialProps {
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     babylonjs_lite::js::spawn(async {
-        let Some(canvas) = dom::document().query_selector_as::<HTMLCanvasElement>("canvas") else {
+        let Some(canvas) = dom::document()
+            .query_selector("canvas")
+            .map(|e| dom::js::unchecked_cast::<HTMLCanvasElement>(&e))
+        else {
             set_status_error("missing <canvas> element");
             return;
         };

@@ -83,13 +83,8 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
   }
 }
 
-fn render(
-  table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil),
-  doc,
-  label: String,
-) {
-  let rows_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
+fn render(table: t.TableCore(Dynamic, Nil), doc, label: String) {
+  let rows_view: t.TableRowModelsCore(Dynamic, Nil) = coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
   let total =
     list.length(
@@ -219,8 +214,7 @@ pub fn main() {
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
   let cf: t.TableColumnFiltering(Nil) = coerce(table)
-  let gf: t.TableGlobalFiltering(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
+  let gf: t.TableGlobalFiltering(Dynamic, Nil) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))

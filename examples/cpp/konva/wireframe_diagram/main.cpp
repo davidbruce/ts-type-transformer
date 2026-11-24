@@ -39,14 +39,14 @@ TS_EXPORT(start) void start() {
     add_arrow(layer, 423, 163, 423, 251);
 
     layer.add(
-        Line<LineConfig>::create({{.stroke = "#737373", .strokeWidth = 1.5, .dash = ts::Array<double>::of(6.0, 4.0), .points = ts::Array<double>::of(589, 163, 589, 212, 91, 212, 91, 168)}}),
+        Line::create({{.stroke = "#737373", .strokeWidth = 1.5, .dash = ts::Array<double>::of(6.0, 4.0), .points = ts::Array<double>::of(589, 163, 589, 212, 91, 212, 91, 168)}}),
         Rect::create({{.x = 28, .y = 255, .width = 624, .height = 58, .fill = "#f7f7f7", .stroke = "#111111", .strokeWidth = 1.5, .cornerRadius = 3.0}}),
         Text::create({{.x = 180, .y = 278, .fill = "#111111", .text = "Shared DOM & Package Handle Runtime", .fontFamily = "monospace", .fontSize = 12}})
     );
     layer.draw();
 
-    size_t rects = layer.find<Rect>(ts::Value::string("Rect")).size();
-    size_t arrows = layer.find<Arrow>(ts::Value::string("Arrow")).size();
+    size_t rects = layer.find(ts::Value::string("Rect")).size();
+    size_t arrows = layer.find(ts::Value::string("Arrow")).size();
     size_t json_len = layer.toJSON().size();
 
     dom::get_document().getElementById("meta")->textContent(

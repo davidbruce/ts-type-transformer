@@ -47,23 +47,23 @@ let main () =
     grid.position.y <- -0.85
     scene.add grid |> ignore
 
-    let geos: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>[] =
+    let geos: BufferGeometry[] =
         [|
-            BoxGeometry.Create(1.05, 1.05, 1.05) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            ConeGeometry.Create(0.62, 1.25, 20.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            CylinderGeometry.Create(0.48, 0.48, 1.2, 24.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            SphereGeometry.Create(0.62, 24.0, 18.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            OctahedronGeometry.Create(0.68, 0.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            DodecahedronGeometry.Create(0.62, 0.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            TorusGeometry.Create(0.5, 0.18, 14.0, 36.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            IcosahedronGeometry.Create(0.64, 0.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
-            TetrahedronGeometry.Create(0.72, 0.0) :> BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>
+            BoxGeometry.Create(1.05, 1.05, 1.05) :> BufferGeometry
+            ConeGeometry.Create(0.62, 1.25, 20.0) :> BufferGeometry
+            CylinderGeometry.Create(0.48, 0.48, 1.2, 24.0) :> BufferGeometry
+            SphereGeometry.Create(0.62, 24.0, 18.0) :> BufferGeometry
+            OctahedronGeometry.Create(0.68, 0.0) :> BufferGeometry
+            DodecahedronGeometry.Create(0.62, 0.0) :> BufferGeometry
+            TorusGeometry.Create(0.5, 0.18, 14.0, 36.0) :> BufferGeometry
+            IcosahedronGeometry.Create(0.64, 0.0) :> BufferGeometry
+            TetrahedronGeometry.Create(0.72, 0.0) :> BufferGeometry
         |]
     let names =
         [| "Box"; "Cone"; "Cylinder"; "Sphere"; "Octahedron"; "Dodecahedron"; "Torus"; "Icosahedron"; "Tetrahedron" |]
 
     let mats = ResizeArray<MeshStandardMaterial>()
-    let meshes = ResizeArray<Object3D<Object3DEventMap>>()
+    let meshes = ResizeArray<Object3D>()
     for i in 0 .. 8 do
         let gx = i % 3 - 1
         let gz = i / 3 - 1
@@ -79,14 +79,14 @@ let main () =
         let m =
             Mesh.Create(
                 geos.[i],
-                mat
+                MaterialOrMaterialArray.Material mat
             )
         m.name <- names.[i]
         m.position.set (float gx * 2.1, 0.0, float gz * 2.1) |> ignore
         m.rotation.set (0.2, 0.35 * float i, 0.0) |> ignore
         scene.add m |> ignore
         mats.Add mat
-        meshes.Add (m :> Object3D<Object3DEventMap>)
+        meshes.Add (m :> Object3D)
 
     let box = Box3.Create(Vector3.Create(-0.5, -0.5, -0.5), Vector3.Create(0.5, 0.5, 0.5))
     let boxHelper = Box3Helper.Create(box, float 0x111111)

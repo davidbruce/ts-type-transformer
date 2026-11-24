@@ -98,7 +98,7 @@ pub extern "C" fn start() {
                 ),
         ])),
     );
-    chart.set_option(opt);
+    chart.set_option(&opt);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
     meta.set_text_content(&format!(

@@ -53,7 +53,7 @@ pub extern "C" fn start() {
 
     let sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n";
-    let list = Lexer::<String, String>::lex_2(sample);
+    let list = Lexer::lex_2(sample);
     let count = list.length() as usize;
 
     let head = make_el(&doc, "div", "head", None);

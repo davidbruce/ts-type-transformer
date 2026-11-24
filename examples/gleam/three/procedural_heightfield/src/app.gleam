@@ -184,11 +184,10 @@ pub fn main() {
   let tri_count = list.length(indices) / 3
   buffer_geometry.set_attribute(
     geo,
-    "position",
+    rt.dynamic("position"),
     t.WebGLAttributesGetAttributeBufferAttribute(buffer_attribute.upcast(
       pos_attr,
     )),
-    rt.codec_string(),
   )
   buffer_geometry.set_index(
     geo,
@@ -204,10 +203,13 @@ pub fn main() {
     |> mesh_standard_material_parameters.with_metalness(0.05)
     |> mesh_standard_material_parameters.with_flat_shading(True)
   let surf =
-    mesh.new(
+    mesh.new_with(
       Some(geo),
-      Some(mesh_standard_material.new_with(Some(smp))),
-      t.mesh_standard_material_codec(),
+      Some(
+        t.material_or_material_array_material(
+          mesh_standard_material.new_with(Some(smp)),
+        ),
+      ),
     )
   object3d.add(sc, [surf])
 
@@ -218,10 +220,13 @@ pub fn main() {
     )
     |> mesh_basic_material_parameters.with_wireframe(True)
   let wire_mesh =
-    mesh.new(
+    mesh.new_with(
       Some(geo),
-      Some(mesh_basic_material.new_with(Some(wmp))),
-      t.mesh_basic_material_codec(),
+      Some(
+        t.material_or_material_array_material(
+          mesh_basic_material.new_with(Some(wmp)),
+        ),
+      ),
     )
   vector3.set_y(object3d.get_position(wire_mesh), 0.015)
   object3d.add(sc, [wire_mesh])
@@ -231,11 +236,10 @@ pub fn main() {
   let pts_attr = float32_buffer_attribute.new(rt.dynamic(pt_count * 3), 3.0)
   buffer_geometry.set_attribute(
     pts_geo,
-    "position",
+    rt.dynamic("position"),
     t.WebGLAttributesGetAttributeBufferAttribute(buffer_attribute.upcast(
       pts_attr,
     )),
-    rt.codec_string(),
   )
   let pmp =
     points_material_parameters.create()
@@ -244,11 +248,13 @@ pub fn main() {
     )
     |> points_material_parameters.with_size(0.14)
   let pts =
-    points.new(
+    points.new_with(
       Some(pts_geo),
-      Some(points_material.new_with(Some(pmp))),
-      t.buffer_geometry_codec(),
-      t.points_material_codec(),
+      Some(
+        t.material_or_material_array_material(
+          points_material.new_with(Some(pmp)),
+        ),
+      ),
     )
   object3d.add(sc, [pts])
 

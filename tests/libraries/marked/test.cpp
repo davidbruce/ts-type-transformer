@@ -31,7 +31,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(has(html, "<ul>\n<li>a</li>\n<li>b</li>\n</ul>"));
 
     // An options object made here: breaks turns a newline into <br>.
-    MarkedOptions<std::string, std::string> breaks = MarkedOptions<std::string, std::string>::create();
+    MarkedOptions breaks = MarkedOptions::create();
     breaks.breaks(true);
     CHECK(breaks.breaks() == true);
     CHECK(!breaks.gfm());
@@ -52,8 +52,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     static_cast<ts::Handle&>(tokenArray) = viaConst;
     ts::Value out = marked_ns::get_parser()(tokenArray, std::nullopt);
     CHECK(out.to_string() == "<h1>T</h1>\n<p>para</p>\n");
-    using Mk = Marked<std::string, std::string>;
-    Mk md = Mk::create(ts::Array<MarkedExtension<std::string, std::string>>::create());
+    Marked md = Marked::create(ts::Array<MarkedExtension>::create());
     TokensList list = md.lexer("# H *x*\n\npara **b**\n\n- x\n- y\n\n```js\nlet a\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n");
     CHECK(list.length() == 9);
     std::string types;
@@ -90,39 +89,39 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(table.rows()[0][1].text() == "2");
 
     // The static lexer, and inline tokens.
-    TokensList quick = ::Lexer<std::string, std::string>::lex_static("*a* b");
+    TokensList quick = ::Lexer::lex_static("*a* b");
     CHECK(quick.length() == 1);
-    ts::Array<Token> inlineTokens = ::Lexer<std::string, std::string>::lexInline("`c` and **d**");
+    ts::Array<Token> inlineTokens = ::Lexer::lexInline("`c` and **d**");
     CHECK(inlineTokens.size() == 3);
 
     // A Marked instance made with an extension holding options.
-    MarkedExtension<std::string, std::string> opts = MarkedExtension<std::string, std::string>::create();
+    MarkedExtension opts = MarkedExtension::create();
     opts.breaks(true);
-    Mk instance = Mk::create({opts});
+    Marked instance = Marked::create({opts});
     CHECK(std::get<std::string>(instance.parse().invoke("a\nb")) == "<p>a<br>b</p>\n");
     CHECK(std::get<std::string>(instance.parseInline().invoke("**bold** and _it_")) == "<strong>bold</strong> and <em>it</em>");
     // The shared instance is untouched.
     CHECK(std::get<std::string>(md.parse().invoke("a\nb")) == "<p>a\nb</p>\n");
 
     // use with a renderer: heading is given its token.
-    MarkedExtension<std::string, std::string> ext = MarkedExtension<std::string, std::string>::create();
-    MarkedExtension_renderer<std::string, std::string> rend = MarkedExtension_renderer<std::string, std::string>::create();
-    rend.heading(MarkedExtension_renderer_heading<std::string, std::string>([](ts::Tuple<Tokens_Heading> args) {
+    MarkedExtension ext = MarkedExtension::create();
+    MarkedExtension_renderer rend = MarkedExtension_renderer::create();
+    rend.heading(MarkedExtension_renderer_heading([](ts::Tuple<Tokens_Heading> args) {
         Tokens_Heading t = args.get<0>();
         return std::string("H") + std::to_string(int(t.depth())) + ":" + t.text() + "|";
     }));
     ext.renderer(rend);
-    Mk custom = Mk::create({ext});
+    Marked custom = Marked::create({ext});
     CHECK(std::get<std::string>(custom.parse().invoke("## x")) == "H2:x|");
 
     // walkTokens visits every token, nested ones too.
     int visited = 0;
-    MarkedExtension<std::string, std::string> walker = MarkedExtension<std::string, std::string>::create();
+    MarkedExtension walker = MarkedExtension::create();
     walker.walkTokens(MarkedExtension_walkTokens([&](const Token& token) {
         visited++;
         (void)token;
     }));
-    Mk walked = Mk::create({walker});
+    Marked walked = Marked::create({walker});
     CHECK(std::get<std::string>(walked.parse().invoke("# a *b*")) == "<h1>a <em>b</em></h1>\n");
     CHECK(visited >= 4);
 }

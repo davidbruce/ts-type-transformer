@@ -24,11 +24,11 @@ let private features =
     TableFeatures.Create(
         coreReactivityFeature = storeReactivityBindings (),
         rowPaginationFeature = rowPaginationFeature,
-        coreRowModel = unbox (createCoreRowModel<TableFeatures, LedgerRow> ()),
-        paginatedRowModel = unbox (createPaginatedRowModel<TableFeatures, LedgerRow> ())
+        coreRowModel = unbox (createCoreRowModel<LedgerRow> ()),
+        paginatedRowModel = unbox (createPaginatedRowModel<LedgerRow> ())
     )
 
-let private col (key: string) (header: string) : ColumnDefBase_Core<TableFeatures, LedgerRow, CellData> =
+let private col (key: string) (header: string) : ColumnDefBase_Core<LedgerRow> =
     unbox {| accessorKey = key; header = header |}
 
 let private accounts = [| "ops-pool"; "clearing-ch"; "reserve-de" |]
@@ -63,8 +63,8 @@ let private options =
         )
     )
 
-let private table = constructTable<TableFeatures, LedgerRow> options
-let private pag = unbox<Table_RowPagination<TableFeatures, LedgerRow>> table
+let private table = constructTable<LedgerRow> options
+let private pag = unbox<Table_RowPagination<LedgerRow>> table
 
 let private readPagination () : PaginationState =
     let state: obj = (box table.store)?get ()

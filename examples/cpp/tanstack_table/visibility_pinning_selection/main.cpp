@@ -10,10 +10,10 @@
 using namespace tanstack_table_core;
 using V = ts::Value;
 using Obj = RowData_map;
-using TableT = Table_Core<TableFeatures, Obj>;
-using RowT = Row_Core<TableFeatures, Obj>;
-using ColT = Column_Core<TableFeatures, Obj, V>;
-using ColP = Column_CoreProperties<TableFeatures, Obj, V>;
+using TableT = Table_Core<Obj>;
+using RowT = Row_Core<Obj>;
+using ColT = Column_Core<Obj, V>;
+using ColP = Column_CoreProperties<Obj>;
 
 static V unsub_obj() {
     return Obj::create().set_at("unsubscribe", void_fn([] {}));
@@ -76,9 +76,9 @@ struct AppState {
 };
 
 static void render(const std::shared_ptr<AppState>& st) {
-    auto pin = st->table.unsafe_as<Table_ColumnPinning<TableFeatures, Obj>>();
-    auto vis = st->table.unsafe_as<Table_ColumnVisibility<TableFeatures, Obj>>();
-    auto sel = st->table.unsafe_as<Table_RowSelection<TableFeatures, Obj>>();
+    auto pin = st->table.unsafe_as<Table_ColumnPinning<Obj>>();
+    auto vis = st->table.unsafe_as<Table_ColumnVisibility<Obj>>();
+    auto sel = st->table.unsafe_as<Table_RowSelection<Obj>>();
 
     ts::Array<ColT> groups[3] = {
         pin.getStartVisibleLeafColumns(),
@@ -122,7 +122,7 @@ static void render(const std::shared_ptr<AppState>& st) {
     st->wrap.innerHTML(html);
 
     size_t vis_n = vis.getVisibleLeafColumns().size();
-    size_t all_n = st->table.unsafe_as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns().size();
+    size_t all_n = st->table.unsafe_as<Table_Columns<Obj>>().getAllLeafColumns().size();
     size_t sel_n = sel.getSelectedRowModel().rows().size();
     std::snprintf(
         nbuf, sizeof nbuf,
@@ -133,7 +133,7 @@ static void render(const std::shared_ptr<AppState>& st) {
 }
 
 static void apply_vis(const std::shared_ptr<AppState>& st) {
-    st->table.unsafe_as<Table_ColumnVisibility<TableFeatures, Obj>>().setColumnVisibility(
+    st->table.unsafe_as<Table_ColumnVisibility<Obj>>().setColumnVisibility(
         ColumnVisibilityState::create().set_at("zone", st->zone_vis).set_at("owner", st->owner_vis)
     );
 }
@@ -144,7 +144,7 @@ TS_EXPORT(start) void start() {
         .set_at("columnVisibilityFeature", get_columnVisibilityFeature())
         .set_at("columnPinningFeature", get_columnPinningFeature())
         .set_at("rowSelectionFeature", get_rowSelectionFeature())
-        .set_at("coreRowModel", createCoreRowModel<TableFeatures, Obj>());
+        .set_at("coreRowModel", createCoreRowModel<Obj>());
 
     ts::Array<Obj> data{
         task_row("T-101", "ingest-wal-sync", "a.meyer", "eu-ch-1", 42, "running"),
@@ -181,7 +181,7 @@ TS_EXPORT(start) void start() {
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(opts.unsafe_as<TableOptions_Core<TableFeatures, Obj>>()),
+        constructTable<Obj>(opts.unsafe_as<TableOptions_Core<Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
         false,
@@ -191,8 +191,8 @@ TS_EXPORT(start) void start() {
     const char* btn_ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };
     for (int i = 0; i < 5; i++) {
         doc.getElementById(btn_ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
-            auto pin = st->table.unsafe_as<Table_ColumnPinning<TableFeatures, Obj>>();
-            auto sel = st->table.unsafe_as<Table_RowSelection<TableFeatures, Obj>>();
+            auto pin = st->table.unsafe_as<Table_ColumnPinning<Obj>>();
+            auto sel = st->table.unsafe_as<Table_RowSelection<Obj>>();
             if (i == 0) {
                 st->zone_vis = !st->zone_vis;
                 apply_vis(st);

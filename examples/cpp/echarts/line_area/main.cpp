@@ -8,20 +8,20 @@ TS_EXPORT(start) void start() {
     ECharts chart = echarts::init(*doc.getElementById("chart"));
 
     auto s0 = LineSeriesOption({
-        .lineStyle = LineStyleOption<Color>({.width = 2, .color = "#111111"}),
+        .lineStyle = LineStyleOption({.width = 2, .color = "#111111"}),
         .areaStyle = LineSeriesOption_areaStyle({.color = "rgba(17,17,17,0.12)"}),
         .smooth = true,
         .data = ts::Array<double>::of(28, 44, 39, 62, 58, 76, 81, 89),
         .name = "Throughput",
-        .itemStyle = ItemStyleOption<DefaultLabelFormatterCallbackParams>({.color = "#111111"}),
+        .itemStyle = ItemStyleOption({.color = "#111111"}),
     });
 
     auto s1 = LineSeriesOption({
-        .lineStyle = LineStyleOption<Color>({.width = 1.5, .color = "#737373", .type = "dashed"}),
+        .lineStyle = LineStyleOption({.width = 1.5, .color = "#737373", .type = "dashed"}),
         .smooth = false,
         .data = ts::Array<double>::of(35, 38, 42, 46, 50, 54, 58, 62),
         .name = "Baseline",
-        .itemStyle = ItemStyleOption<DefaultLabelFormatterCallbackParams>({.color = "#737373"}),
+        .itemStyle = ItemStyleOption({.color = "#737373"}),
     });
 
     EChartsOption opt({
@@ -30,18 +30,18 @@ TS_EXPORT(start) void start() {
         .grid = GridComponentOption({.top = 48, .right = 24, .bottom = 36, .left = 48}),
         .xAxis = XAXisComponentOption_xAxis({
             .boundaryGap = false,
-            .axisLabel = AxisLabelOption<std::string>({.color = "#555555"}),
+            .axisLabel = AxisLabelOption({.color = "#555555"}),
             .data = ts::Array<std::string>::of("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"),
-            .axisLine = AxisLineOption({.lineStyle = LineStyleOption<Color>({.color = "#111111"})}),
+            .axisLine = AxisLineOption({.lineStyle = LineStyleOption({.color = "#111111"})}),
         }),
         .yAxis = YAXisComponentOption_yAxis_value({
-            .axisLabel = AxisLabelOption<std::string>({.color = "#555555"}),
-            .splitLine = SplitLineOption({.lineStyle = LineStyleOption<SplitLineOption_lineStyle>({.color = "#e5e5e5"})}),
+            .axisLabel = AxisLabelOption({.color = "#555555"}),
+            .splitLine = SplitLineOption({.lineStyle = LineStyleOption({.color = "#e5e5e5"})}),
             .min = 0,
             .max = 100,
         }),
         .tooltip = TooltipComponentOption({.trigger = TooltipComponentOption_trigger::axis}),
-        .legend = PlainLegendComponentOption({.textStyle = LabelOption<DetailOption_object>({.color = "#111111"}), .top = 8}),
+        .legend = PlainLegendComponentOption({.textStyle = LabelOption({.color = "#111111"}), .top = 8}),
         .series = ts::Array<LineSeriesOption>::of(s0, s1),
     });
     chart.setOption(opt);

@@ -54,20 +54,7 @@ fn hex(value: Int) -> Float {
 }
 
 type Specimen {
-  Specimen(
-    name: String,
-    mat: t.MeshStandardMaterial(Nil),
-    obj: t.Mesh(
-      t.BufferGeometry(
-        t.NormalBufferAttributes(Nil),
-        t.BufferGeometryEventMap(Nil),
-        Nil,
-      ),
-      t.MeshStandardMaterial(Nil),
-      t.Object3DEventMap(Nil),
-      Nil,
-    ),
-  )
+  Specimen(name: String, mat: t.MeshStandardMaterial(Nil), obj: t.Mesh(Nil))
 }
 
 fn find_by_id(
@@ -167,16 +154,7 @@ pub fn main() {
   vector3.set_y(object3d.get_position(grid), -0.85)
   object3d.add(sc, [grid])
 
-  let defs: List(
-    #(
-      String,
-      t.BufferGeometry(
-        t.NormalBufferAttributes(Nil),
-        t.BufferGeometryEventMap(Nil),
-        Nil,
-      ),
-    ),
-  ) = [
+  let defs: List(#(String, t.BufferGeometry(Nil))) = [
     #(
       "Box",
       buffer_geometry.upcast(box_geometry.new_with(
@@ -279,7 +257,11 @@ pub fn main() {
         |> mesh_standard_material_parameters.with_flat_shading(i >= 4)
         |> Some
         |> mesh_standard_material.new_with
-      let m = mesh.new(Some(geo), Some(mat), t.mesh_standard_material_codec())
+      let m =
+        mesh.new_with(
+          Some(geo),
+          Some(t.material_or_material_array_material(mat)),
+        )
       object3d.set_name(m, name)
       object3d.get_position(m)
       |> vector3.set_with(gx *. 2.1, 0.0, Some(gz *. 2.1))

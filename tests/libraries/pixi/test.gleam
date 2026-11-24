@@ -172,8 +172,8 @@ pub fn main() {
       "and not a point outside",
     )
   // FINDING 10 (awkward): `addChild<U extends ContainerChild[]>(...children: U): U[0]` is
-  // add_child(self, children: u, codec) with u the whole rest array, so a list and
-  // a list codec; and what comes back is Container(Dynamic, Nil), not the child.
+  // add_child(self, children: List(Container(_))), the whole rest array as a list; and
+  // what comes back is Container(Nil), not the child.
   let _ = container.add_child(root, [box])
   container.set_x(box, 30.0)
   container.set_y(box, 40.0)
@@ -181,10 +181,7 @@ pub fn main() {
   let root_width = container.get_width(root)
   let passed =
     passed
-    + check(
-      list.length(container.get_children(root, t.graphics_codec())) == 1,
-      "one child",
-    )
+    + check(list.length(container.get_children(root)) == 1, "one child")
     + check(container.get_x(box) == 30.0, "child's own position")
     + check(
       matrix.get_tx(container.get_local_transform(box)) == 30.0
@@ -225,10 +222,7 @@ pub fn main() {
   let _ = container.remove_child(root, [box])
   let passed =
     passed
-    + check(
-      container.get_children(root, t.graphics_codec()) == [],
-      "the child is removed",
-    )
+    + check(container.get_children(root) == [], "the child is removed")
     + check(option.is_none(container.get_parent(box)), "and has no parent")
 
   // Circles and polygons.
@@ -297,7 +291,7 @@ pub fn main() {
         "the application's screen",
       )
       + check(
-        list.length(container.get_children(stage, runtime.codec_dynamic())) == 1,
+        list.length(container.get_children(stage)) == 1,
         "the stage holds the dot",
       )
     application.destroy(app)

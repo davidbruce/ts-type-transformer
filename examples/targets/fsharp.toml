@@ -3,6 +3,7 @@
 classes = "pair"
 type_ops = "evaluate"
 intersections = "merge"
+generics = "checking"
 nullable = "wrap"
 literals = "enum"
 keyed_params = "map"

@@ -22,7 +22,7 @@ TS_EXPORT(start) void start() {
         passed++;
     };
 
-    auto bus = EventEmitter<ts::Value>::create();
+    auto bus = EventEmitter::create();
     int stages = 0;
     int done_count = 0;
 

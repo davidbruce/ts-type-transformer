@@ -17,7 +17,7 @@ let private parseTag (tag: string) : TagParseRule =
 let private parseTagWithLevel (tag: string) (level: int) : TagParseRule =
     TagParseRule.Create (tag = tag, attrs = JsRecord.Create [ "level", box level ])
 
-let private buildSchema () : Schema<obj, obj> =
+let private buildSchema () : Schema =
     let docSpec = NodeSpec.Create (content = "block+")
 
     let levelAttr = AttributeSpec.Create (``default`` = box 2)

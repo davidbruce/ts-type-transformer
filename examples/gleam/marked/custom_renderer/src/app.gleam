@@ -68,22 +68,19 @@ pub fn main() -> Nil {
 
       let renderer =
         marked_extension_renderer.create()
-        |> marked_extension_renderer.with_heading(
-          fn(heading) {
-            let tok = mr.dynamic(heading)
-            let d = int.to_string(float.round(field_float(tok, "depth")))
-            mt.BooleanOrRendererOutputRendererOutput(
-              "<h"
-              <> d
-              <> " class=\"wire-h\">§ "
-              <> field_string(tok, "text")
-              <> "</h"
-              <> d
-              <> ">\n",
-            )
-          },
-          mr.codec_string(),
-        )
+        |> marked_extension_renderer.with_heading(fn(heading) {
+          let tok = mr.dynamic(heading)
+          let d = int.to_string(float.round(field_float(tok, "depth")))
+          mt.StringOrBooleanString(
+            "<h"
+            <> d
+            <> " class=\"wire-h\">§ "
+            <> field_string(tok, "text")
+            <> "</h"
+            <> d
+            <> ">\n",
+          )
+        })
 
       let ext =
         marked_extension.create()
@@ -97,15 +94,10 @@ pub fn main() -> Nil {
         })
 
       let custom_m = marked_class.new([ext])
-      let call = marked_class.parse_call_options_no_async_create()
+      let call = marked_options_no_async.create()
       let def_html = marked.marked(md, marked_options_no_async.create())
       let cust_html =
-        marked_class.parse_invoke(
-          marked_class.get_parse(custom_m),
-          md,
-          call,
-          mr.codec_string(),
-        )
+        marked_class.parse_invoke(marked_class.get_parse(custom_m), md, call)
 
       let visited = float.round(element.get_child_element_count(strip))
 

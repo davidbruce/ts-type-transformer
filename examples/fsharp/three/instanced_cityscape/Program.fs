@@ -59,12 +59,12 @@ let main () =
     let plinth =
         Mesh.Create(
             PlaneGeometry.Create(8.6, 8.6),
-            MeshStandardMaterial.Create(
+            MaterialOrMaterialArray.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0xe5e5e5,
                     roughness = 0.85
                 )
-            )
+            ))
         )
     plinth.rotation.x <- -Math.PI / 2.0
     plinth.position.y <- -0.01
@@ -91,7 +91,7 @@ let main () =
     let inst =
         InstancedMesh.Create(
             Some towerGeo,
-            Some towerMat,
+            Some (MaterialOrMaterialArray.Material towerMat),
             100.0
         )
     scene.add (inst) |> ignore

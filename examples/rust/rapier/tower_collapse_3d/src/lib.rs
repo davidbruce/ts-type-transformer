@@ -217,7 +217,10 @@ pub extern "C" fn start() {
             btn.add_event_listener(dom::HTMLElementEventMap::CLICK, &cb, None);
         }
 
-        let Some(canvas) = doc.query_selector_as::<HTMLCanvasElement>("canvas") else {
+        let Some(canvas) = doc
+            .query_selector("canvas")
+            .map(|e| dom::js::unchecked_cast::<HTMLCanvasElement>(&e))
+        else {
             set_status_error("missing <canvas> element");
             return;
         };

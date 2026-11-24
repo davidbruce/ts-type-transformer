@@ -27,9 +27,9 @@ let private features =
         columnGroupingFeature = columnGroupingFeature,
         rowAggregationFeature = rowAggregationFeature,
         rowExpandingFeature = rowExpandingFeature,
-        coreRowModel = unbox (createCoreRowModel<TableFeatures, HostRow> ()),
-        groupedRowModel = unbox (createGroupedRowModel<TableFeatures, HostRow> ()),
-        expandedRowModel = unbox (createExpandedRowModel<TableFeatures, HostRow> ()),
+        coreRowModel = unbox (createCoreRowModel<HostRow> ()),
+        groupedRowModel = unbox (createGroupedRowModel<HostRow> ()),
+        expandedRowModel = unbox (createExpandedRowModel<HostRow> ()),
         aggregationFns = JsRecord.Create [
             "sum", unbox aggregationFn_sum
             "mean", unbox aggregationFn_mean
@@ -37,7 +37,7 @@ let private features =
         ]
     )
 
-let private col (key: string) (header: string) (aggFn: string option) : ColumnDefBase_Core<TableFeatures, HostRow, CellData> =
+let private col (key: string) (header: string) (aggFn: string option) : ColumnDefBase_Core<HostRow> =
     match aggFn with
     | Some fnName -> unbox {| accessorKey = key; header = header; aggregationFn = fnName |}
     | None -> unbox {| accessorKey = key; header = header |}
@@ -76,9 +76,9 @@ let private options =
         )
     )
 
-let private table = constructTable<TableFeatures, HostRow> options
-let private grp = unbox<Table_ColumnGrouping<TableFeatures, HostRow>> table
-let private exp = unbox<Table_RowExpanding<TableFeatures, HostRow>> table
+let private table = constructTable<HostRow> options
+let private grp = unbox<Table_ColumnGrouping<HostRow>> table
+let private exp = unbox<Table_RowExpanding<HostRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
     let btn = (document.getElementById id).Value

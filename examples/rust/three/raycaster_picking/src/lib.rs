@@ -72,7 +72,7 @@ fn cast_at_ndc(st: &mut AppState, nx: f64, ny: f64) {
         .set_from_camera(&Vector2::new_with(nx, ny), &st.camera);
     let hits = st
         .raycaster
-        .intersect_objects::<Object3D>(st.mesh_arr.clone(), false, None);
+        .intersect_objects_with(st.mesh_arr.clone(), false, None);
     if hits.len() > 0 {
         let hit = hits.get(0);
         let hobj = hit.object();
@@ -147,7 +147,7 @@ pub extern "C" fn start() {
     grid.position().set_y(-0.85);
     scene.add([grid]);
 
-    let geos: Vec<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>> = vec![
+    let geos: Vec<BufferGeometry> = vec![
         BoxGeometry::new_with(1.05, 1.05, 1.05, None, None, None).into(),
         ConeGeometry::new_with(0.62, 1.25, 20.0, None, None, None, None).into(),
         CylinderGeometry::new_with(0.48, 0.48, 1.2, 24.0, None, None, None, None).into(),
@@ -170,7 +170,7 @@ pub extern "C" fn start() {
             .with_metalness(0.1)
             .with_flat_shading(i >= 4);
         let mat = MeshStandardMaterial::new_with(&mp);
-        let m = Mesh::new_with(Some(geo), Some(mat.clone()));
+        let m = Mesh::new_with(&geo, &mat);
         m.set_name(NAMES[i]);
         m.position().set_with(gx * 2.1, 0.0, gz * 2.1);
         m.rotation().set(0.2, 0.35 * i as f64, 0.0);

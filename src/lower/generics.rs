@@ -12,10 +12,223 @@ use super::hoist::collect_bodies;
 use super::overloads::name_part;
 use super::walk::{each_member_list, walk, walk_type};
 
-// With `keep_keyed`, type parameters over the keys of a map stay: `keyed_params = "map"`.
-pub(super) fn erase_generics(decls: &mut [Decl], keep_keyed: bool) {
-    let keep = if keep_keyed { keyed_syms(decls) } else { HashSet::new() };
-    erase_type_params(decls, true, &|p| p.sym.is_none_or(|s| !keep.contains(&s)), &keep);
+// `generics = "erase"` erases every type parameter, `"checking"` those that
+// only TypeScript's checking uses (`Shape<Config extends ShapeConfig =
+// ShapeConfig>`, an event map); one the user fills stays (`Array<T>`,
+// `map<U>(f): U[]`). With `keep_keyed`, type parameters over the keys of a map
+// stay too: `keyed_params = "map"`.
+pub(super) fn erase_generics(decls: &mut [Decl], keep_keyed: bool, checking: bool) {
+    let mut keep = if keep_keyed { keyed_syms(decls) } else { HashSet::new() };
+    let aliases = alias_bodies(decls);
+    let mut owners: HashMap<P<Symbol>, (Vec<TypeParam>, bool)> = HashMap::new();
+    declared_params(decls, &mut owners);
+    let mut filled: HashSet<P<Symbol>> =
+        owners.values().flat_map(|(ps, holds)| ps.iter().filter(|p| kept_declared(p, *holds, &aliases))).filter_map(|p| p.sym).collect();
+    each_signature(decls, &mut |s| filled.extend(s.type_params.iter().filter(|p| kept_in_signature(p, s, &aliases)).filter_map(|p| p.sym)));
+    if checking {
+        keep.extend(filled.iter().copied());
+    }
+    let used = instantiations(decls, &owners, &keep);
+    let value = |p: &TypeParam| -> Option<Option<Type>> {
+        let s = p.sym?;
+        if keep.contains(&s) {
+            return None;
+        }
+        // One the user fills, where none can stay: as before.
+        if filled.contains(&s) {
+            return Some(p.constraint.clone().or_else(|| p.default.clone()));
+        }
+        Some(erased_to(p, used.get(&s), &aliases))
+    };
+    erase_type_params(decls, true, &value, &keep);
+    // `LineStyleOption<ZRColor[]>` is `LineStyleOption`.
+    walk(decls, &mut |t, _| {
+        if let Type::Ref(r) = t
+            && r.kind != "typeParameter"
+            && let Some((params, _)) = r.sym.and_then(|s| owners.get(&s))
+        {
+            let mut i = 0;
+            r.args.retain(|_| {
+                i += 1;
+                params.get(i - 1).is_none_or(|p| p.sym.is_some_and(|s| keep.contains(&s)))
+            });
+        }
+        true
+    });
+}
+
+// The type parameters of interfaces, classes and aliases, by declaration,
+// with whether it holds values (`Array<T>`, `NodeListOf<TNode>`, TanStack's
+// `Table<TData>`): a class, or an interface with methods or an index.
+fn declared_params(decls: &[Decl], out: &mut HashMap<P<Symbol>, (Vec<TypeParam>, bool)>) {
+    for d in decls {
+        match d {
+            Decl::Interface(i) if !i.type_params.is_empty() => {
+                let holds = i.class.is_some() || i.members.iter().any(|m| matches!(m.kind, MemberKind::Method | MemberKind::Call | MemberKind::Index));
+                out.extend(i.sym.map(|s| (s, (i.type_params.clone(), holds))));
+            }
+            Decl::Alias(a) if !a.type_params.is_empty() => {
+                out.extend(a.sym.map(|s| (s, (a.type_params.clone(), false))));
+            }
+            Decl::Namespace(n) => declared_params(&n.decls, out),
+            _ => {}
+        }
+    }
+}
+
+fn alias_bodies(decls: &[Decl]) -> HashMap<P<Symbol>, Type> {
+    fn of(decls: &[Decl], out: &mut HashMap<P<Symbol>, Type>) {
+        for d in decls {
+            match d {
+                Decl::Alias(a) if a.type_params.is_empty() => {
+                    out.extend(a.sym.map(|s| (s, a.ty.clone())));
+                }
+                Decl::Namespace(n) => of(&n.decls, out),
+                _ => {}
+            }
+        }
+    }
+    let mut out = HashMap::new();
+    of(decls, &mut out);
+    out
+}
+
+// Says nothing of a value: `any`, `unknown`, `object`, `{}`.
+fn meaningless(t: &Type) -> bool {
+    match t {
+        Type::Erased(_) => true,
+        Type::Primitive(p) => matches!(p.as_str(), "any" | "unknown" | "object" | "never"),
+        Type::Object(ms) => ms.iter().all(|m| m.kind == MemberKind::Index && m.sig.as_ref().and_then(|s| s.ret.as_ref()).is_some_and(meaningless)),
+        _ => false,
+    }
+}
+
+// A constraint that says what a value is: not `unknown`, `object`,
+// `Record<string, unknown>` (TanStack's `RowData`), or an F-bound (`T extends EventMap<T>`).
+fn useful_constraint(p: &TypeParam, aliases: &HashMap<P<Symbol>, Type>) -> bool {
+    let Some(c) = &p.constraint else { return false };
+    if f_bounded(p) {
+        return false;
+    }
+    let resolved = match c {
+        Type::Ref(r) if r.kind == "typeAlias" && r.args.is_empty() => r.sym.and_then(|s| aliases.get(&s)).unwrap_or(c),
+        _ => c,
+    };
+    match resolved {
+        Type::Union(parts) => !parts.iter().any(meaningless),
+        t => !meaningless(t),
+    }
+}
+
+fn f_bounded(p: &TypeParam) -> bool {
+    p.self_bounded || p.sym.zip(p.constraint.as_ref()).is_some_and(|(s, c)| mentions(c, &HashSet::from([s])))
+}
+
+// A declaration's type parameter the user fills: one of a type that holds
+// values, without a default (`Array<T>`, `NodeListOf<TNode extends Node>`);
+// one nothing narrows, without a default or defaulting to `any`
+// (prosemirror's `OrderedMap<T = any>`, TanStack's `TableOptions<TData>`),
+// or following one. Not an option bag's (`ContextOptions<DateType extends Date>`).
+fn kept_declared(p: &TypeParam, holds: bool, aliases: &HashMap<P<Symbol>, Type>) -> bool {
+    if f_bounded(p) {
+        return false;
+    }
+    match &p.default {
+        None => holds || !useful_constraint(p, aliases),
+        // Following another (Konva's `GetSet<Type, This, SetType = Type>`): as that one.
+        Some(d) if mentions_type_param(d) => !useful_constraint(p, aliases),
+        Some(d) => meaningless(d) && !d.is_prim("never") && !useful_constraint(p, aliases),
+    }
+}
+
+// A signature's, where what the caller gets back depends on it
+// (`map<U>(f: (v: T) => U): U[]`, `then<TResult1 = T>`) and nothing fixes it
+// (marked's `parse<ParserOutput = string>`); constrained, only where the
+// caller's own value comes back (`appendChild<T extends Node>(node: T): T`,
+// not date-fns' `addDays<D extends Date>(date: DateArg<D>): D`).
+fn kept_in_signature(p: &TypeParam, s: &Signature, aliases: &HashMap<P<Symbol>, Type>) -> bool {
+    let Some(sym) = p.sym else { return false };
+    let fixed = p.default.as_ref().is_some_and(|d| !meaningless(d) && !mentions_type_param(d));
+    if f_bounded(p) || fixed {
+        return false;
+    }
+    let Some(ret) = &s.ret else { return false };
+    if !useful_constraint(p, aliases) {
+        return mentions(ret, &HashSet::from([sym]));
+    }
+    let is_it = |t: &Type| matches!(t, Type::Ref(r) if r.kind == "typeParameter" && r.sym == Some(sym));
+    let held = |t: &Type| match t {
+        Type::Array(e) => is_it(e),
+        Type::Union(parts) => parts.iter().any(|p| is_it(p)) && parts.iter().all(|p| is_it(p) || p.is_prim("null") || p.is_prim("undefined")),
+        t => is_it(t),
+    };
+    held(ret) && s.params.iter().any(|q| held(&q.ty))
+}
+
+// What the library itself instantiates each declaration's erased type
+// parameters with: `LineStyleOption<ZRColor | ZRColor[]>`, and bare
+// `LineStyleOption`, its default.
+fn instantiations(decls: &mut [Decl], owners: &HashMap<P<Symbol>, (Vec<TypeParam>, bool)>, keep: &HashSet<P<Symbol>>) -> HashMap<P<Symbol>, Vec<Type>> {
+    let mut out: HashMap<P<Symbol>, Vec<Type>> = HashMap::new();
+    walk(decls, &mut |t, _| {
+        if let Type::Ref(r) = t
+            && r.kind != "typeParameter"
+            && let Some((params, _)) = r.sym.and_then(|s| owners.get(&s))
+        {
+            for (i, p) in params.iter().enumerate() {
+                let Some(s) = p.sym.filter(|s| !keep.contains(s)) else { continue };
+                let Some(arg) = r.args.get(i).or(p.default.as_ref()) else { continue };
+                if mentions_type_param(arg) || meaningless(arg) {
+                    continue;
+                }
+                let parts = match arg {
+                    Type::Union(parts) => parts.clone(),
+                    a => vec![a.clone()],
+                };
+                out.entry(s).or_default().extend(parts.into_iter().filter(|a| !meaningless(a)));
+            }
+        }
+        true
+    });
+    out
+}
+
+fn mentions_type_param(t: &Type) -> bool {
+    let mut found = false;
+    let mut probe = t.clone();
+    walk_type(&mut probe, &mut Vec::new(), &mut |t, _| {
+        found |= matches!(t, Type::Ref(r) if r.kind == "typeParameter") || matches!(t, Type::This);
+        !found
+    });
+    found
+}
+
+// What an erased type parameter stands for: where its constraint says what a
+// value is, its default if that is a type (what TypeScript gives a reference
+// that does not say: pixi's `toGlobal<P extends PointData = Point>` gives a
+// `Point`), else the constraint; else what the library instantiates it
+// with, else its default.
+fn erased_to(p: &TypeParam, used: Option<&Vec<Type>>, aliases: &HashMap<P<Symbol>, Type>) -> Option<Type> {
+    if useful_constraint(p, aliases) {
+        return match &p.default {
+            Some(d) if !meaningless(d) && !mentions_type_param(d) => Some(d.clone()),
+            _ => p.constraint.clone(),
+        };
+    }
+    // An event map's (`T extends EventMap<T> = any`): the library's own maps say nothing of one.
+    if f_bounded(p) {
+        return p.default.clone();
+    }
+    if let Some(used) = used {
+        let mut seen = HashSet::new();
+        let mut parts: Vec<Type> = used.iter().filter(|t| seen.insert(type_key(t))).cloned().collect();
+        match parts.len() {
+            0 => {}
+            1 => return parts.pop(),
+            _ => return Some(Type::Union(parts)),
+        }
+    }
+    p.default.clone().or_else(|| p.constraint.clone())
 }
 
 // `K extends keyof M`, for a map `M` that is not generic: the map.
@@ -47,20 +260,17 @@ pub(super) fn mentions(t: &Type, syms: &HashSet<P<Symbol>>) -> bool {
     found
 }
 
-// Removes the type parameters `erase` picks, replacing each use by its
-// constraint, or with none its default (`Marked<ParserOutput = string>` is a
-// string). `declarations` includes those of interfaces and aliases, not
-// only those of signatures.
-fn erase_type_params(decls: &mut [Decl], declarations: bool, erase: &dyn Fn(&TypeParam) -> bool, keep: &HashSet<P<Symbol>>) {
+// Removes the type parameters `value` gives a value, replacing each use by it
+// (`None`: `any`). `declarations` includes those of interfaces and aliases,
+// not only those of signatures.
+fn erase_type_params(decls: &mut [Decl], declarations: bool, value: &dyn Fn(&TypeParam) -> Option<Option<Type>>, keep: &HashSet<P<Symbol>>) {
     // Type parameters have unique identities, so no scoping is needed.
     let mut constraints: Constraints = HashMap::new();
     let mut collect = |params: &mut Vec<TypeParam>| {
         params.retain(|p| {
-            if !erase(p) {
-                return true;
-            }
+            let Some(v) = value(p) else { return true };
             if let Some(s) = p.sym {
-                constraints.insert((s, p.tid), p.constraint.clone().or_else(|| p.default.clone()));
+                constraints.insert((s, p.tid), v);
             }
             false
         });
@@ -200,7 +410,7 @@ pub(super) fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
         Type::Union(parts) => parts.iter().all(|p| matches!(p, Type::Literal { .. })),
         _ => false,
     };
-    erase_type_params(decls, false, &|p| p.constraint.as_ref().is_some_and(only_literals), &HashSet::new());
+    erase_type_params(decls, false, &|p| p.constraint.as_ref().is_some_and(only_literals).then(|| p.constraint.clone().or_else(|| p.default.clone())), &HashSet::new());
     // `createEvent(type: "MouseEvent")`: the parameter has one value. Keep it.
     each_signature(decls, &mut |s| {
         for p in s.params.iter_mut().filter(|p| !p.rest) {

@@ -28,10 +28,10 @@ let strongSpec = createEmpty<MarkSpec>
 strongSpec.toDOM <- Some (fun (_: Mark) (_: bool) -> DOMOutputSpec.Tuple (ResizeArray<obj> [ box "strong"; box 0 ]))
 
 let schema =
-    Schema.Create<obj, obj> (
+    Schema.Create (
         SchemaSpec.Create (
-            nodes = U2.Case1 (createObj [ "doc" ==> docSpec; "paragraph" ==> paragraphSpec; "text" ==> textSpec ]),
-            marks = U2.Case1 (createObj [ "strong" ==> strongSpec ])
+            nodes = SchemaSpecNodes.JsRecord (JsRecord.Create [ "doc", docSpec; "paragraph", paragraphSpec; "text", textSpec ]),
+            marks = SchemaSpecMarks.JsRecord (JsRecord.Create [ "strong", strongSpec ])
         )
     )
 check (schema.nodes.["doc"].name = "doc") "the schema's doc type"

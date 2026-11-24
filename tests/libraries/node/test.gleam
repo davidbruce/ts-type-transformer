@@ -83,7 +83,7 @@ pub fn main() {
   let write = fn(p, text) {
     fs.write_file_sync(
       t.PathOrFileDescriptorString(p),
-      t.StringOrNodeJSArrayBufferViewString(text),
+      t.WriteFileDataString(text),
     )
   }
   let passed =

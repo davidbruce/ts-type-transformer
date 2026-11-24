@@ -7,8 +7,8 @@
 
 using namespace konva;
 
-static Line<LineConfig> make_line(double x1, double y1, double x2, double y2, const char* color, double width) {
-    return Line<LineConfig>::create({{.stroke = color, .strokeWidth = width, .points = ts::Array<double>::of(x1, y1, x2, y2)}});
+static Line make_line(double x1, double y1, double x2, double y2, const char* color, double width) {
+    return Line::create({{.stroke = color, .strokeWidth = width, .points = ts::Array<double>::of(x1, y1, x2, y2)}});
 }
 
 static Rect make_card(const char* id, double x, double y, const char* fill) {
@@ -74,8 +74,8 @@ TS_EXPORT(start) void start() {
     });
 
     for (size_t i = 0; i < st->cards.size(); i++) {
-        KonvaEventListener<Node<RectConfig>, PointerEvent> on_click(
-            [st, i](KonvaEventObject<PointerEvent, Node<RectConfig>>) {
+        KonvaEventListener<Node, PointerEvent> on_click(
+            [st, i](KonvaEventObject<PointerEvent>) {
                 st->cards[i].moveToTop();
                 st->overlay.moveToTop();
                 st->fg_layer.draw();

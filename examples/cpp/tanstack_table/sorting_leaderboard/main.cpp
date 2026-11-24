@@ -9,10 +9,10 @@
 using namespace tanstack_table_core;
 using V = ts::Value;
 using Obj = RowData_map;
-using TableT = Table_Core<TableFeatures, Obj>;
-using RowT = Row_Core<TableFeatures, Obj>;
-using ColT = Column_Core<TableFeatures, Obj, V>;
-using ColP = Column_CoreProperties<TableFeatures, Obj, V>;
+using TableT = Table_Core<Obj>;
+using RowT = Row_Core<Obj>;
+using ColT = Column_Core<Obj, V>;
+using ColP = Column_CoreProperties<Obj>;
 
 static V unsub_obj() {
     return Obj::create().set_at("unsubscribe", void_fn([] {}));
@@ -76,9 +76,9 @@ struct AppState {
 };
 
 static void render(const std::shared_ptr<AppState>& st, const std::string& label) {
-    RowModel<TableFeatures, Obj> rm = st->table.getRowModel();
+    RowModel<Obj> rm = st->table.getRowModel();
     ts::Array<RowT> rows = rm.rows();
-    ts::Array<ColT> cols = st->table.unsafe_as<Table_Columns<TableFeatures, Obj>>().getAllLeafColumns();
+    ts::Array<ColT> cols = st->table.unsafe_as<Table_Columns<Obj>>().getAllLeafColumns();
 
     std::string html = "<table><thead><tr>";
     for (uint32_t i = 0; i < cols.size(); i++) {
@@ -89,7 +89,7 @@ static void render(const std::shared_ptr<AppState>& st, const std::string& label
         bool is_num = (cid == "latency" || cid == "throughput" || cid == "uptime");
         html += is_num ? "<th class=\"num\">" : "<th>";
         html += esc_html(hdr);
-        auto sd = col.unsafe_as<Column_RowSorting<TableFeatures, Obj>>().getIsSorted();
+        auto sd = col.unsafe_as<Column_RowSorting<Obj>>().getIsSorted();
         if (std::holds_alternative<SortDirection>(sd)) {
             html += (std::get<SortDirection>(sd) == SortDirection::asc) ? " &#9650;" : " &#9660;";
         }
@@ -129,8 +129,8 @@ TS_EXPORT(start) void start() {
     auto features = Obj::create()
         .set_at("coreReactivityFeature", make_reactivity())
         .set_at("rowSortingFeature", get_rowSortingFeature())
-        .set_at("coreRowModel", createCoreRowModel<TableFeatures, Obj>())
-        .set_at("sortedRowModel", createSortedRowModel<TableFeatures, Obj>())
+        .set_at("coreRowModel", createCoreRowModel<Obj>())
+        .set_at("sortedRowModel", createSortedRowModel<Obj>())
         .set_at("sortFns", sort_fns);
 
     ts::Array<Obj> data{
@@ -163,7 +163,7 @@ TS_EXPORT(start) void start() {
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(opts.unsafe_as<TableOptions_Core<TableFeatures, Obj>>()),
+        constructTable<Obj>(opts.unsafe_as<TableOptions_Core<Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
     });
@@ -186,7 +186,7 @@ TS_EXPORT(start) void start() {
                 next = ts::Array<ColumnSort>{ sort_spec("host", false) };
                 label = "Sort: host asc";
             }
-            st->table.unsafe_as<Table_RowSorting<TableFeatures, Obj>>().setSorting(next);
+            st->table.unsafe_as<Table_RowSorting<Obj>>().setSorting(next);
             render(st, label);
         });
     }

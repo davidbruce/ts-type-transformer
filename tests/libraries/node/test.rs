@@ -124,7 +124,7 @@ fn files() {
 }
 
 fn emitter() {
-    let em = EventEmitter::<JsValue>::new();
+    let em = EventEmitter::new();
     let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
     let on_greet = AnyArrayFn::new({
         let log = log.clone();

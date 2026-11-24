@@ -3,13 +3,12 @@
 use core::f64::consts::PI;
 use konva::*;
 
-fn make_line(pts: [f64; 4], color: &str, width: f64) -> GroupOrShape {
+fn make_line(pts: [f64; 4], color: &str, width: f64) -> Line {
     let lc = LineConfig::default()
         .with_points(JsArray::from(pts))
         .with_stroke(color)
         .with_stroke_width(width);
-    let ln = Line::new_with(Some(lc));
-    Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
+    Line::new_with(&lc)
 }
 
 #[unsafe(no_mangle)]
@@ -120,8 +119,8 @@ pub extern "C" fn start() {
         .with_radius(9.0)
         .with_fill("#ffffff");
     layer.add([
-        GroupOrShape::from(RegularPolygon::new_with(&cp)),
-        GroupOrShape::from(Circle::new_with(&cd)),
+        Node::from(RegularPolygon::new_with(&cp)),
+        Node::from(Circle::new_with(&cd)),
     ]);
 
     for (x, y, label) in [

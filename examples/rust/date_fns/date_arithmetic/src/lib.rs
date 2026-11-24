@@ -1,6 +1,6 @@
 #![no_main]
 
-use date_fns::{Date, DateArg, Duration};
+use date_fns::{Date, Duration};
 use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
@@ -16,10 +16,6 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
-}
-
-fn day(d: &Date) -> DateArg<Date> {
-    DateArg::DateType(d.clone())
 }
 
 fn fmt_signed(v: i32) -> String {
@@ -65,47 +61,47 @@ pub extern "C" fn start() {
     let ops = [
         (
             "addDays(base, 3)",
-            date_fns::add_days(day(&base_d), 3.0),
+            date_fns::add_days(&base_d, 3.0),
             "yyyy-MM-dd",
         ),
         (
             "subDays(base, 15)",
-            date_fns::sub_days(day(&base_d), 15.0),
+            date_fns::sub_days(&base_d, 15.0),
             "yyyy-MM-dd",
         ),
         (
             "addWeeks(base, 2)",
-            date_fns::add_weeks(day(&base_d), 2.0),
+            date_fns::add_weeks(&base_d, 2.0),
             "yyyy-MM-dd",
         ),
         (
             "addMonths(jan31, 1)",
-            date_fns::add_months(day(&jan31), 1.0),
+            date_fns::add_months(&jan31, 1.0),
             "yyyy-MM-dd",
         ),
         (
             "subMonths(base, 3)",
-            date_fns::sub_months(day(&base_d), 3.0),
+            date_fns::sub_months(&base_d, 3.0),
             "yyyy-MM-dd",
         ),
         (
             "addYears(base, 1)",
-            date_fns::add_years(day(&base_d), 1.0),
+            date_fns::add_years(&base_d, 1.0),
             "yyyy-MM-dd",
         ),
         (
             "startOfWeek(base)",
-            date_fns::start_of_week(day(&base_d)),
+            date_fns::start_of_week(&base_d),
             "yyyy-MM-dd",
         ),
         (
             "endOfMonth(base)",
-            date_fns::end_of_month(day(&base_d)),
+            date_fns::end_of_month(&base_d),
             "yyyy-MM-dd HH:mm:ss",
         ),
         (
             "add(base, { months: 1, days: 2 })",
-            date_fns::add(day(&base_d), &dur),
+            date_fns::add(&base_d, &dur),
             "yyyy-MM-dd",
         ),
         ("base (immutable check)", base_d.clone(), "yyyy-MM-dd"),

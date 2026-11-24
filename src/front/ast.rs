@@ -44,7 +44,7 @@ impl<'c> Front<'c> {
         Some(Interface {
             name: self.output_name(sym),
             sym: Some(sym),
-            type_params: self.type_params(declared_type_params(sym, node)),
+            type_params: self.declared_type_params(sym, node),
             extends,
             ancestors: Vec::new(),
             ancestor_syms: Vec::new(),
@@ -152,7 +152,7 @@ impl<'c> Front<'c> {
         Some(Interface {
             name: self.output_name(sym),
             sym: Some(sym),
-            type_params: self.type_params(declared_type_params(sym, node)),
+            type_params: self.declared_type_params(sym, node),
             extends,
             ancestors: Vec::new(),
             ancestor_syms: Vec::new(),
@@ -240,19 +240,41 @@ impl<'c> Front<'c> {
         out
     }
 
+    // A merged declaration's type parameters, with a default any of its
+    // declarations gives (pixi's `interface Container<C extends ContainerChild>`
+    // beside `class Container<C extends ContainerChild = ContainerChild>`).
+    fn declared_type_params(&mut self, sym: P<Symbol>, node: P<Node>) -> Vec<TypeParam> {
+        let mut params = self.type_params(declared_type_params(sym, node));
+        for d in sym.declarations().iter().filter(|d| matches!(d.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration)) {
+            for &n in d.type_parameters() {
+                let tp = n.as_type_parameter_declaration();
+                let name = text(tp.name());
+                if let (Some(p), Some(default)) = (params.iter_mut().find(|p| p.name == name && p.default.is_none()), tp.default_type()) {
+                    p.default = Some(self.ty(default));
+                }
+            }
+        }
+        params
+    }
+
     pub(super) fn type_params(&mut self, nodes: &[P<Node>]) -> Vec<TypeParam> {
         nodes.iter().map(|&p| self.type_param(p)).collect()
     }
 
     fn type_param(&mut self, p: P<Node>) -> TypeParam {
         let tp = p.as_type_parameter_declaration();
-        TypeParam {
-            name: text(tp.name()),
-            sym: self.c.get_symbol_of_declaration_exported(p),
-            tid: None,
-            constraint: tp.constraint().map(|k| self.ty(k)),
-            default: tp.default_type().map(|d| self.ty(d)),
-        }
+        let sym = self.c.get_symbol_of_declaration_exported(p);
+        let constraint = tp.constraint().map(|k| self.ty(k));
+        let self_bounded = constraint.as_ref().is_some_and(|c| {
+            let mut found = false;
+            let mut c = c.clone();
+            crate::lower::visit(&mut c, &mut |t| {
+                found |= matches!(t, Type::Ref(r) if r.kind == "typeParameter" && r.sym.is_some() && r.sym == sym);
+                !found
+            });
+            found
+        });
+        TypeParam { name: text(tp.name()), sym, tid: None, constraint, default: tp.default_type().map(|d| self.ty(d)), self_bounded }
     }
 
     pub(super) fn signature(&mut self, node: P<Node>) -> Signature {

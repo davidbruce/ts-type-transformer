@@ -1,6 +1,5 @@
 import date_fns as df
 import date_fns/interval
-import date_fns/runtime
 import date_fns/types as dt
 import dom/areas/core
 import dom/areas/core/document
@@ -32,9 +31,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let dc = dt.date_codec()
-      let day = dt.DateOrStringOrNumberDate
-      let arg = dt.DateArgDateType
+      let day = dt.DateArgDate
 
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
@@ -48,8 +45,8 @@ pub fn main() -> Nil {
       node.append_child(app, head)
 
       let ref_day = df.parse_iso("2024-03-15")
-      let month_start = df.start_of_month(arg(ref_day))
-      let month_end = df.end_of_month(arg(ref_day))
+      let month_start = df.start_of_month(day(ref_day))
+      let month_end = df.end_of_month(day(ref_day))
       let offset = float.round(df.get_day(day(month_start)))
 
       let metrics = document.create_element(doc, tag.div)
@@ -110,9 +107,9 @@ pub fn main() -> Nil {
 
       let span =
         interval.create()
-        |> interval.with_start(arg(month_start), dt.date_arg_codec(dc))
-        |> interval.with_end(arg(month_end), dt.date_arg_codec(dc))
-      let days = df.each_day_of_interval(span, None, runtime.codec_dynamic())
+        |> interval.with_start(day(month_start))
+        |> interval.with_end(day(month_end))
+      let days = df.each_day_of_interval(span)
 
       list.each(days, fn(d) {
         let is_ref = df.is_same_day(d, day(ref_day))

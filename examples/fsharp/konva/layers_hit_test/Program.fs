@@ -13,17 +13,17 @@ let private fgLayer = Layer.Create ()
 stage.add bgLayer |> ignore
 stage.add fgLayer |> ignore
 
-let private addTo (l: Layer) (s: Shape<ShapeConfig>) =
+let private addTo (l: Layer) (s: Shape) =
     l.add s |> ignore
 
-let private addLineTo (l: Layer) (line: Line<LineConfig>) =
-    l.add (line.asShape ()) |> ignore
+let private addLineTo (l: Layer) (line: Line) =
+    l.add line |> ignore
 
 // Layer 1: Blueprint Grid (distinct colors: #ffffff, #e5e5e5, #b5b5b5, #737373).
 addTo bgLayer (
     Rect.Create(
         RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
-    ).asShape ()
+    )
 )
 
 for x in 40 .. 40 .. 640 do
@@ -59,7 +59,7 @@ addTo bgLayer (
             strokeWidth = 1.5,
             dash = ResizeArray [ 6.0; 4.0 ]
         )
-    ).asShape ()
+    )
 )
 
 addTo bgLayer (
@@ -72,7 +72,7 @@ addTo bgLayer (
             fontFamily = "monospace",
             fill = "#737373"
         )
-    ).asShape ()
+    )
 )
 
 // Layer 2: Overlapping interactive cards & badge.
@@ -91,7 +91,7 @@ let private makeCard idVal x y fillHex =
                 strokeWidth = 2.0
             )
         )
-    addTo fgLayer (r.asShape ())
+    addTo fgLayer r
     r
 
 let private cardA = makeCard "card-a" 110.0 80.0 "#efefef"
@@ -101,14 +101,14 @@ let private cardC = makeCard "card-c" 310.0 170.0 "#ffffff"
 addTo fgLayer (
     Circle.Create(
         CircleConfig.Create (id = "badge", x = 555.0, y = 135.0, radius = 38.0, fill = "#111111")
-    ).asShape ()
+    )
 )
 
 // Crosshair marker at (250, 160) & foreground label in a non-listening overlay group.
 let private overlay = Group.Create (GroupConfig.Create (listening = false))
 
 overlay.add (
-    (Circle.Create(
+    Circle.Create(
         CircleConfig.Create (
             x = 250.0,
             y = 160.0,
@@ -117,22 +117,22 @@ overlay.add (
             stroke = "#111111",
             strokeWidth = 2.0
         )
-    )).asShape ()
+    )
 ) |> ignore
 
 for (pts: float list) in [ [ 238.0; 160.0; 262.0; 160.0 ]; [ 250.0; 148.0; 250.0; 172.0 ] ] do
     overlay.add (
-        (Line.Create (
+        Line.Create (
             LineConfig.Create (
                 points = !^(ResizeArray pts),
                 stroke = "#111111",
                 strokeWidth = 1.5
             )
-        )).asShape ()
+        )
     ) |> ignore
 
 overlay.add (
-    (Text.Create(
+    Text.Create(
         TextConfig.Create (
             x = 32.0,
             y = 354.0,
@@ -141,7 +141,7 @@ overlay.add (
             fontFamily = "monospace",
             fill = "#111111"
         )
-    )).asShape ()
+    )
 ) |> ignore
 
 fgLayer.add overlay |> ignore

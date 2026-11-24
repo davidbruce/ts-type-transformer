@@ -36,7 +36,7 @@ let main =
         app.stage.addChild frame |> ignore
 
         let shades = [| 0x111111; 0x262626; 0x404040; 0x555555; 0x737373; 0xa3a3a3; 0xd4d4d4; 0xe5e5e5 |]
-        let whiteTex : Texture<TextureSource<obj>> = unbox Texture.WHITE
+        let whiteTex : Texture = Texture.WHITE
 
         for row in 0 .. 5 do
             for col in 0 .. 9 do

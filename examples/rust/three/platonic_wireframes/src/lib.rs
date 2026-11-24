@@ -19,7 +19,7 @@ struct AppState {
 fn add_solid(
     scene: &Scene,
     wire_group: &Group,
-    geo: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
+    geo: BufferGeometry,
     hex: u32,
     rough: f64,
     metal: f64,
@@ -37,13 +37,13 @@ fn add_solid(
         .with_flat_shading(flat);
     let mat = MeshStandardMaterial::new_with(&mp);
 
-    let mesh = Mesh::new_with(Some(geo.clone()), Some(mat));
+    let mesh = Mesh::new_with(&geo, mat);
     mesh.position().set_with(x, y, z);
     mesh.rotation().set(0.25, 0.45, 0.0);
     scene.add([mesh]);
 
-    let egeo = EdgesGeometry::new_with(Some(geo), thresh);
-    let segs = LineSegments::new_with(Some(egeo), Some(line_mat.clone()));
+    let egeo = EdgesGeometry::new_with(&geo, thresh);
+    let segs = LineSegments::new_with(&egeo, line_mat);
     segs.position().set_with(x, y, z);
     segs.rotation().set(0.25, 0.45, 0.0);
     wire_group.add([segs]);

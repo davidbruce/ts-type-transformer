@@ -29,7 +29,7 @@ TS_EXPORT(start) void start() {
 
     for (int i = 0; i < 12; i++) {
         double a = static_cast<double>(i) * PI / 6.0;
-        layer.add(Line<LineConfig>::create({{.stroke = "#d4d4d4", .strokeWidth = 1, .points = ts::Array<double>::of(
+        layer.add(Line::create({{.stroke = "#d4d4d4", .strokeWidth = 1, .points = ts::Array<double>::of(
             cx + 36.0 * std::cos(a), cy + 36.0 * std::sin(a),
             cx + 160.0 * std::cos(a), cy + 160.0 * std::sin(a)
         )}}));
@@ -38,7 +38,7 @@ TS_EXPORT(start) void start() {
     for (int i = 0; i < 24; i++) {
         double a = static_cast<double>(i) * PI / 12.0;
         double r0 = (i % 2 == 0) ? 148.0 : 154.0;
-        layer.add(Line<LineConfig>::create({{.stroke = "#111111", .strokeWidth = i % 2 == 0 ? 2.0 : 1.0, .points = ts::Array<double>::of(
+        layer.add(Line::create({{.stroke = "#111111", .strokeWidth = i % 2 == 0 ? 2.0 : 1.0, .points = ts::Array<double>::of(
             cx + r0 * std::cos(a), cy + r0 * std::sin(a),
             cx + 166.0 * std::cos(a), cy + 166.0 * std::sin(a)
         )}}));

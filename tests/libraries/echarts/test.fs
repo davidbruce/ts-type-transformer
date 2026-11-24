@@ -108,17 +108,17 @@ check (chart.getDataURL () |> fun u -> u.StartsWith "data:image/png") "getDataUR
 let mutable fired = 0
 let mutable seen: (float * string) list = []
 let handler =
-    Echarts.OnHandler.Create(fun args ->
+    Echarts.ExtensionAPIOnHandler.Create(fun args ->
         fired <- fired + 1
         seen <- seen @ [ (unbox<float> args.[0], unbox<string> args.[1]) ]
         U2.Case2 ())
-chart.on<obj, string> ("ping", handler) |> ignore
-chart.trigger<string> ("ping", box 1, box "a") |> ignore
-chart.trigger<string> ("ping", box 2, box "b") |> ignore
+chart.on ("ping", handler) |> ignore
+chart.trigger ("ping", box 1, box "a") |> ignore
+chart.trigger ("ping", box 2, box "b") |> ignore
 check (fired = 2) "an event reaches its handler"
 check (seen = [ (1.0, "a"); (2.0, "b") ]) "it reads all triggered arguments"
 chart.off "ping" |> ignore
-chart.trigger<string> ("ping", box 3) |> ignore
+chart.trigger ("ping", box 3) |> ignore
 check (fired = 2) "off"
 
 // Resize and clear.

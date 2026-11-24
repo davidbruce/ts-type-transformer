@@ -4,7 +4,7 @@ import dom/areas/core/element
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
-import gleam/dynamic.{type Dynamic}
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
 import gleam/list
@@ -39,7 +39,7 @@ fn hole_spec(tag: String) -> t.DOMOutputSpec {
   t.DOMOutputSpecArray([dynamic.string(tag), dynamic.int(0)])
 }
 
-fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
+fn build_schema() -> t.Schema(Nil) {
   let doc_spec =
     node_spec.create()
     |> node_spec.with_content("block+")
@@ -90,26 +90,30 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     |> node_spec.with_group("inline")
 
   let nodes =
-    node_spec.create()
-    |> node_spec.with_at("doc", pm_rt.dynamic(doc_spec))
-    |> node_spec.with_at("heading", pm_rt.dynamic(heading_spec))
-    |> node_spec.with_at("paragraph", pm_rt.dynamic(para_spec))
-    |> node_spec.with_at("code_block", pm_rt.dynamic(cb_spec))
-    |> node_spec.with_at("text", pm_rt.dynamic(text_spec))
+    schema_spec.nodes_create()
+    |> schema_spec.nodes_with_at("doc", doc_spec)
+    |> schema_spec.nodes_with_at("heading", heading_spec)
+    |> schema_spec.nodes_with_at("paragraph", para_spec)
+    |> schema_spec.nodes_with_at("code_block", cb_spec)
+    |> schema_spec.nodes_with_at("text", text_spec)
 
   let make_mark = fn(tag: String) {
     mark_spec.create()
     |> mark_spec.with_to_dom(fn(_, _) { hole_spec(tag) })
   }
   let marks =
-    mark_spec.create()
-    |> mark_spec.with_at("strong", pm_rt.dynamic(make_mark("strong")))
-    |> mark_spec.with_at("code", pm_rt.dynamic(make_mark("code")))
+    schema_spec.marks_create()
+    |> schema_spec.marks_with_at("strong", make_mark("strong"))
+    |> schema_spec.marks_with_at("code", make_mark("code"))
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(pm_rt.dynamic(nodes))
-    |> schema_spec.with_marks(pm_rt.dynamic(marks))
+    |> schema_spec.with_nodes(t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(
+      nodes,
+    ))
+    |> schema_spec.with_marks(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(
+      marks,
+    ))
   schema.new(spec)
 }
 
@@ -123,7 +127,7 @@ fn p_node(sch, txt: String) -> t.Node(Nil) {
   )
 }
 
-fn make_initial_doc(sch: t.Schema(Dynamic, Dynamic, Nil)) -> t.Node(Nil) {
+fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   let ha =
     attrs.create()
     |> attrs.with_at("level", dynamic.int(2))

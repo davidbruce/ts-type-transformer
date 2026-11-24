@@ -15,7 +15,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("intersections", "merge", "A & B", "one object type with the members of both"),
     ("inheritance", "flatten", "<extends>", "inherited members copied into each type"),
     ("aliases", "expand", "generic aliases of other than an object, a function or a union (`type List<T> = T[]`)", "each use is the alias's type with its arguments: `number[]`"),
-    ("generics", "erase", "type parameters", "their constraint, or any"),
+    ("generics", "erase|checking", "type parameters", "erase: every one, as its constraint where that says what a value is, else what the library instantiates it with, else its default. checking: so only those the user does not fill (`Shape<Config extends ShapeConfig = ShapeConfig>`, an event map); `Array<T>` and `map<U>(f): U[]` stay"),
     ("constraints", "nominal|exact", "a declaration's type parameter constraints, which TypeScript checks by shape", "kept only where every use in the output names a type declared to extend it, or a type parameter constrained so (nominal), or to it alone (exact)"),
     ("nullable", "wrap", "T | null | undefined", "<nullable> around T"),
     ("literals", "enum", "literal types", "enums for string unions, const= for constants"),
@@ -163,6 +163,10 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
                         o.param_unions = chosen != "keep";
                         o.untyped_param_unions = chosen == "untyped";
                     }
+                    if key == "generics" {
+                        o.generics = chosen != "keep";
+                        o.checking_generics = chosen == "checking";
+                    }
                     if key == "constraints" {
                         o.constraints = chosen != "keep";
                         o.exact_constraints = chosen == "exact";
@@ -234,6 +238,8 @@ pub fn describe(mut o: Options) -> Vec<(&'static str, &'static str)> {
                 "map"
             } else if *key == "union_params" && o.untyped_param_unions {
                 "untyped"
+            } else if *key == "generics" && o.checking_generics {
+                "checking"
             } else if *key == "constraints" && o.exact_constraints {
                 "exact"
             } else if *o.slot(key).unwrap() {

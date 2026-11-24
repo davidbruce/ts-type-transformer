@@ -37,7 +37,7 @@ pub fn main() -> Nil {
   let notes = path.join([dir, "notes.txt"])
   fs.write_file_sync(
     t.PathOrFileDescriptorString(notes),
-    t.StringOrNodeJSArrayBufferViewString("alpha\nbeta\n"),
+    t.WriteFileDataString("alpha\nbeta\n"),
   )
   let st1 = fs.stat_sync(str(notes))
   let s1 = stats.get_size(st1)

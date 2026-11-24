@@ -36,17 +36,17 @@ static Schema make_schema(void) {
     NodeSpec_set_toDOM(paragraph, Node_to_DOMOutputSpec_fn_from(paragraph_dom, 0));
     NodeSpec text = NodeSpec_create();
     NodeSpec_set_group(text, "inline");
-    Attrs nodes = Attrs_create();
-    Attrs_set_at(nodes, "doc", (JsValue){ doc.h });
-    Attrs_set_at(nodes, "paragraph", (JsValue){ paragraph.h });
-    Attrs_set_at(nodes, "text", (JsValue){ text.h });
+    SchemaSpec_nodes nodes = SchemaSpec_nodes_create();
+    SchemaSpec_nodes_set_at(nodes, "doc", doc);
+    SchemaSpec_nodes_set_at(nodes, "paragraph", paragraph);
+    SchemaSpec_nodes_set_at(nodes, "text", text);
     MarkSpec strong = MarkSpec_create();
     MarkSpec_set_toDOM(strong, Mark_boolean_to_DOMOutputSpec_fn_from(strong_dom, 0));
-    Attrs marks = Attrs_create();
-    Attrs_set_at(marks, "strong", (JsValue){ strong.h });
+    SchemaSpec_marks marks = SchemaSpec_marks_create();
+    SchemaSpec_marks_set_at(marks, "strong", strong);
     SchemaSpec spec = SchemaSpec_create();
-    SchemaSpec_set_nodes(spec, obj(nodes));
-    SchemaSpec_set_marks(spec, obj(marks));
+    SchemaSpec_set_nodes(spec, nodes);
+    SchemaSpec_set_marks(spec, marks);
     return Schema_new(spec);
 }
 

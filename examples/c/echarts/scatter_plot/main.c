@@ -6,7 +6,7 @@
 #define Bound(x) Echarts_AngleAxisComponentOption_category_min_of(x)
 
 static Echarts_LineStyleOption line_color(const char* hex) {
-    return Echarts_LineStyleOption_create(.color = Echarts_Color_of(hex));
+    return Echarts_LineStyleOption_create(.color = Echarts_LineStyle_or_string_or_Color_array_of(hex));
 }
 
 #define VALUE_AXIS(T) T##_create( \
@@ -36,12 +36,12 @@ __attribute__((export_name("start"))) void start(void) {
 
     Echarts_ScatterSeriesOption s0 = Echarts_ScatterSeriesOption_create(
         .name = Echarts_OptionName_of("Cluster A"), .symbol = Echarts_string_or_SymbolCallback_of("circle"), .symbolSize = Echarts_number_or_number_array_or_SymbolSizeCallback_of(10),
-        .itemStyle = Echarts_ItemStyleOption_create(.color = Echarts_ItemStyleOption_color_of("#111111")),
+        .itemStyle = Echarts_ItemStyleOption_create(.color = Echarts_ItemStyle_or_SVGPatternObject_of("#111111")),
         .data = Echarts_ScatterSeriesOption_data_of(make_pts(ca_pts, 10)));
     Echarts_ScatterSeriesOption s1 = Echarts_ScatterSeriesOption_create(
         .name = Echarts_OptionName_of("Cluster B"), .symbol = Echarts_string_or_SymbolCallback_of("rect"), .symbolSize = Echarts_number_or_number_array_or_SymbolSizeCallback_of(10),
         .itemStyle = Echarts_ItemStyleOption_create(
-            .color = Echarts_ItemStyleOption_color_of("#ffffff"), .borderColor = Echarts_Color_of("#111111"), .borderWidth = 2),
+            .color = Echarts_ItemStyle_or_SVGPatternObject_of("#ffffff"), .borderColor = Echarts_Color_of("#111111"), .borderWidth = 2),
         .data = Echarts_ScatterSeriesOption_data_of(make_pts(cb_pts, 10)));
 
     JsArray series = JsArray_new();

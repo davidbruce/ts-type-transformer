@@ -108,6 +108,8 @@ pub struct TypeParam {
     pub tid: Option<u32>,
     pub constraint: Option<Type>,
     pub default: Option<Type>,
+    // Its constraint names it, as written (`T extends EventMap<T>`): evaluating may lose that.
+    pub self_bounded: bool,
 }
 
 #[derive(Clone)]

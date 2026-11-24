@@ -85,7 +85,7 @@ fn host_row(region: &str, host: &str, role: &str, cpu: f64, mem: f64) -> JsValue
 }
 
 struct State {
-    table: TableCore<TableFeatures, JsValue>,
+    table: TableCore<JsValue>,
     wrap: dom::HTMLElement,
     meta: dom::HTMLElement,
     grp_col: RefCell<String>,
@@ -159,17 +159,11 @@ pub extern "C" fn start() {
         .with("columnGroupingFeature", column_grouping_feature())
         .with("rowAggregationFeature", row_aggregation_feature())
         .with("rowExpandingFeature", row_expanding_feature())
-        .with(
-            "coreRowModel",
-            create_core_row_model::<TableFeatures, JsValue>(),
-        )
-        .with(
-            "groupedRowModel",
-            create_grouped_row_model_as::<TableFeatures, JsValue>(),
-        )
+        .with("coreRowModel", create_core_row_model::<JsValue>())
+        .with("groupedRowModel", create_grouped_row_model_as::<JsValue>())
         .with(
             "expandedRowModel",
-            create_expanded_row_model_as::<TableFeatures, JsValue>(),
+            create_expanded_row_model_as::<JsValue>(),
         )
         .with("aggregationFns", agg_fns);
 
@@ -202,7 +196,7 @@ pub extern "C" fn start() {
         .with("data", data)
         .with("columns", cols)
         .with("initialState", init_state)
-        .unchecked_into::<TableOptionsCore<TableFeatures, JsValue>>();
+        .unchecked_into::<TableOptionsCore<JsValue>>();
 
     let doc = dom::document();
     let st = Rc::new(State {
@@ -218,8 +212,8 @@ pub extern "C" fn start() {
         let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let grp: TableColumnGrouping<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
-            let exp: TableRowExpanding<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
+            let grp: TableColumnGrouping<JsValue> = js::unchecked_cast(&st_c.table);
+            let exp: TableRowExpanding<JsValue> = js::unchecked_cast(&st_c.table);
             match idx {
                 0 => exp.toggle_all_rows_expanded_with(true),
                 1 => exp.toggle_all_rows_expanded_with(false),

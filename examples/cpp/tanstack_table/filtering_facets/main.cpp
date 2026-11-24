@@ -8,8 +8,8 @@
 using namespace tanstack_table_core;
 using V = ts::Value;
 using Obj = RowData_map;
-using TableT = Table_Core<TableFeatures, Obj>;
-using RowT = Row_Core<TableFeatures, Obj>;
+using TableT = Table_Core<Obj>;
+using RowT = Row_Core<Obj>;
 
 static V unsub_obj() {
     return Obj::create().set_at("unsubscribe", void_fn([] {}));
@@ -108,8 +108,8 @@ TS_EXPORT(start) void start() {
         .set_at("coreReactivityFeature", make_reactivity())
         .set_at("columnFilteringFeature", get_columnFilteringFeature())
         .set_at("globalFilteringFeature", get_globalFilteringFeature())
-        .set_at("coreRowModel", createCoreRowModel<TableFeatures, Obj>())
-        .set_at("filteredRowModel", createFilteredRowModel<TableFeatures, Obj>())
+        .set_at("coreRowModel", createCoreRowModel<Obj>())
+        .set_at("filteredRowModel", createFilteredRowModel<Obj>())
         .set_at("filterFns", filter_fns);
 
     ts::Array<Obj> data{
@@ -146,7 +146,7 @@ TS_EXPORT(start) void start() {
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(opts.unsafe_as<TableOptions_Core<TableFeatures, Obj>>()),
+        constructTable<Obj>(opts.unsafe_as<TableOptions_Core<Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
     });
@@ -155,7 +155,7 @@ TS_EXPORT(start) void start() {
     for (int i = 0; i < 5; i++) {
         doc.getElementById(btn_ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
             auto cf = st->table.unsafe_as<Table_ColumnFiltering>();
-            auto gf = st->table.unsafe_as<Table_GlobalFiltering<TableFeatures, Obj>>();
+            auto gf = st->table.unsafe_as<Table_GlobalFiltering<Obj>>();
             ts::Array<ColumnFilter> next = ts::Array<ColumnFilter>::create();
             std::string label = "Filter: all services";
             if (i == 0) {

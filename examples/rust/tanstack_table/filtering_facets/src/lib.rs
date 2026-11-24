@@ -89,7 +89,7 @@ fn filter_spec(id: &str, value: JsValue) -> ColumnFilter {
 }
 
 struct State {
-    table: TableCore<TableFeatures, JsValue>,
+    table: TableCore<JsValue>,
     wrap: dom::HTMLElement,
     meta: dom::HTMLElement,
 }
@@ -132,8 +132,8 @@ pub extern "C" fn start() {
         .with("coreReactivityFeature", make_reactivity())
         .with("columnFilteringFeature", column_filtering_feature())
         .with("globalFilteringFeature", global_filtering_feature())
-        .with("coreRowModel", create_core_row_model::<TableFeatures, JsValue>())
-        .with("filteredRowModel", create_filtered_row_model_as::<TableFeatures, JsValue>())
+        .with("coreRowModel", create_core_row_model::<JsValue>())
+        .with("filteredRowModel", create_filtered_row_model_as::<JsValue>())
         .with("filterFns", filter_fns);
 
     let data = JsArray::<JsValue>::from([
@@ -167,7 +167,7 @@ pub extern "C" fn start() {
         .with("data", data)
         .with("columns", cols)
         .with("initialState", init_state)
-        .unchecked_into::<TableOptionsCore<TableFeatures, JsValue>>();
+        .unchecked_into::<TableOptionsCore<JsValue>>();
 
     let doc = dom::document();
     let st = Rc::new(State {
@@ -181,7 +181,7 @@ pub extern "C" fn start() {
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
             let cf: TableColumnFiltering = js::unchecked_cast(&st_c.table);
-            let gf: TableGlobalFiltering<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
+            let gf: TableGlobalFiltering<JsValue> = js::unchecked_cast(&st_c.table);
             let label = match idx {
                 0 => {
                     gf.set_global_filter(Updater::T(JsValue::from("")));

@@ -11,16 +11,16 @@ let private stage =
 let private layer = Layer.Create ()
 stage.add layer |> ignore
 
-let private addShape (target: Container<GroupOrShape, _>) (s: Shape<ShapeConfig>) =
+let private addShape (target: Container) (s: Shape) =
     target.add s |> ignore
 
-let private addLine (target: Container<GroupOrShape, _>) (l: Line<'C>) =
-    target.add (l.asShape ()) |> ignore
+let private addLine (target: Container) (l: Line) =
+    target.add l |> ignore
 
 addShape layer (
     Rect.Create(
         RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
-    ).asShape ()
+    )
 )
 
 let private addStageBox x title subtitle fillHex inkHex =
@@ -36,7 +36,7 @@ let private addStageBox x title subtitle fillHex inkHex =
                 stroke = "#111111",
                 strokeWidth = 2.0
             )
-        ).asShape ()
+        )
     )
 
     addShape g (
@@ -50,7 +50,7 @@ let private addStageBox x title subtitle fillHex inkHex =
                 fontFamily = "monospace",
                 fill = !^inkHex
             )
-        ).asShape ()
+        )
     )
 
     addShape g (
@@ -63,7 +63,7 @@ let private addStageBox x title subtitle fillHex inkHex =
                 fontFamily = "monospace",
                 fill = !^inkHex
             )
-        ).asShape ()
+        )
     )
 
     layer.add g |> ignore
@@ -116,7 +116,7 @@ addShape layer (
             stroke = "#111111",
             strokeWidth = 1.5
         )
-    ).asShape ()
+    )
 )
 
 addShape layer (
@@ -129,13 +129,13 @@ addShape layer (
             fontFamily = "monospace",
             fill = "#111111"
         )
-    ).asShape ()
+    )
 )
 
 layer.draw () |> ignore
 
-let private rects = layer.find<Node<NodeConfig>> "Rect"
-let private arrows = layer.find<Node<NodeConfig>> "Arrow"
+let private rects = layer.find "Rect"
+let private arrows = layer.find "Arrow"
 let private jsonLen = layer.toJSON().Length
 
 let private meta = (document.getElementById "meta").Value

@@ -13,13 +13,13 @@ TS_EXPORT(start) void start() {
         .title = TitleComponentOption({.top = 12, .left = 16, .text = "Monthly Output", .textStyle = TitleTextStyleOption({.color = "#111111", .fontSize = 13})}),
         .grid = GridComponentOption({.top = 48, .right = 24, .bottom = 36, .left = 48}),
         .xAxis = XAXisComponentOption_xAxis({
-            .axisLabel = AxisLabelOption<std::string>({.color = "#555555"}),
+            .axisLabel = AxisLabelOption({.color = "#555555"}),
             .data = ts::Array<std::string>::of("Jan", "Feb", "Mar", "Apr", "May", "Jun"),
-            .axisLine = AxisLineOption({.lineStyle = LineStyleOption<Color>({.color = "#111111"})}),
+            .axisLine = AxisLineOption({.lineStyle = LineStyleOption({.color = "#111111"})}),
         }),
         .yAxis = YAXisComponentOption_yAxis_value({
-            .axisLabel = AxisLabelOption<std::string>({.color = "#555555"}),
-            .splitLine = SplitLineOption({.lineStyle = LineStyleOption<SplitLineOption_lineStyle>({.color = "#e5e5e5"})}),
+            .axisLabel = AxisLabelOption({.color = "#555555"}),
+            .splitLine = SplitLineOption({.lineStyle = LineStyleOption({.color = "#e5e5e5"})}),
             .min = 0,
             .max = 100,
         }),
@@ -27,7 +27,7 @@ TS_EXPORT(start) void start() {
             .data = ts::Array<double>::of(42, 68, 55, 84, 71, 93),
             .name = "Units",
             .barWidth = "46%",
-            .itemStyle = BarItemStyleOption<>({.color = "#111111"}),
+            .itemStyle = BarItemStyleOption({.color = "#111111"}),
         }),
     });
     chart.setOption(opt);

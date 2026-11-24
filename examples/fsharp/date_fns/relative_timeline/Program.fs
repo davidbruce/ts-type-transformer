@@ -59,7 +59,7 @@ let timeline =
 
 app.appendChild (wrap "div" "card" [ el "div" "label" "Milestones Relative to 2024-03-15"; timeline ]) |> ignore
 
-let dateArgs: ResizeArray<DateArg<JS.Date>> = ResizeArray [ for d, _ in milestones -> !^d ]
+let dateArgs: ResizeArray<DateArg> = ResizeArray [ for d, _ in milestones -> !^d ]
 let earliest: JS.Date = min dateArgs
 let latest: JS.Date = max dateArgs
 let totalSpan = int (differenceInCalendarDays (latest, earliest))

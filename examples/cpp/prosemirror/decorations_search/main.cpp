@@ -9,7 +9,7 @@
 #include "prosemirror/prosemirror.hpp"
 
 using namespace prosemirror;
-using Sch = Schema<ts::Value, ts::Value>;
+using Sch = Schema;
 
 static DOMOutputSpec hole_spec(std::string_view tag) {
     return DOMOutputSpec(ts::Array<>::of(tag, 0));
@@ -46,7 +46,7 @@ static Sch make_schema() {
 
     NodeSpec text({.group = "inline"});
 
-    auto nodes = NodeSpec::create()
+    auto nodes = SchemaSpec_nodes::create()
         .set_at("doc", doc)
         .set_at("heading", heading)
         .set_at("paragraph", para)
@@ -56,7 +56,7 @@ static Sch make_schema() {
     auto make_mark = [](const char* tag) {
         return MarkSpec({.toDOM = [tag](Mark, bool) { return hole_spec(tag); }});
     };
-    auto marks = MarkSpec::create()
+    auto marks = SchemaSpec_marks::create()
         .set_at("strong", make_mark("strong"))
         .set_at("code", make_mark("code"));
 

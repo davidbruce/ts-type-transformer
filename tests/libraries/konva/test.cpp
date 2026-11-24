@@ -56,7 +56,7 @@ static void exercise() {
     rect.strokeWidth().invoke(ts::Value::number(6));
     CHECK(rect.strokeWidth().invoke() == 6);
     rect.strokeWidth().invoke(ts::Value::number(4));
-    layer.add(ts::Array<Group_or_Shape>{rect});
+    layer.add(ts::Array<::Node>{rect});
     CHECK(layer.getChildren().size() == 1);
     CHECK(rect.getLayer() == layer);
     CHECK(rect.getStage() == stage);
@@ -94,8 +94,8 @@ static void exercise() {
     gc.y(100);
     gc.name("cluster");
     ::Group group = ::Group::create(gc);
-    group.add(ts::Array<Group_or_Shape>{circle, label});
-    layer.add(ts::Array<Group_or_Shape>{group});
+    group.add(ts::Array<::Node>{circle, label});
+    layer.add(ts::Array<::Node>{group});
     CHECK(group.getChildren().size() == 2);
     CHECK(layer.getChildren().size() == 2);
     CHECK(circle.getParent().has_value() && *circle.getParent() == group);
@@ -144,18 +144,18 @@ static void exercise() {
     CHECK(near(dotbox.width(), 80));
 
     // Finding by name, by id and by type.
-    ts::Array<::Rect> boxes = layer.find<::Rect>(str("#box"));
+    ts::Array<::Node> boxes = layer.find(str("#box"));
     CHECK(boxes.size() == 1);
-    CHECK(layer.find<::Node<NodeConfig>>(str(".shape")).size() == 3);
-    CHECK(layer.find<::Circle>(str("Circle")).size() == 1);
+    CHECK(layer.find(str(".shape")).size() == 3);
+    CHECK(layer.find(str("Circle")).size() == 1);
     CHECK(layer.findOne(string_or_Function(std::string("#box"))).has_value());
     CHECK(!layer.findOne(string_or_Function(std::string("#nothing"))).has_value());
-    CHECK(group.find<::Node<NodeConfig>>(str(".shape")).size() == 2);
+    CHECK(group.find(str(".shape")).size() == 2);
 
     // Events: on_click, fired by hand; bubbling to the layer.
     int clicks = 0;
     std::string target;
-    KonvaEventListener<::Node<RectConfig>, PointerEvent> onClick = [&](KonvaEventObject<PointerEvent, ::Node<RectConfig>> e) {
+    KonvaEventListener<::Node, PointerEvent> onClick = [&](KonvaEventObject<PointerEvent> e) {
         clicks++;
         target = e.type();
     };

@@ -22,8 +22,8 @@ struct AppState {
     moon_pivot: Group,
     outer_pivot: Group,
     outer_station: Group,
-    moon: Mesh<OctahedronGeometry, MeshStandardMaterial>,
-    station_body: Mesh<IcosahedronGeometry, MeshStandardMaterial>,
+    moon: Mesh,
+    station_body: Mesh,
     tilt_btn: dom::HTMLElement,
     meta: dom::HTMLElement,
     epoch: f64,
@@ -102,19 +102,15 @@ pub extern "C" fn start() {
     scene.add([grid]);
 
     let pedestal = Mesh::new_with(
-        Some(CylinderGeometry::new_with(
-            0.55, 0.75, 0.35, 24.0, None, None, None, None,
-        )),
-        Some(std_mat(0x262626, 0.7, 0.05, false)),
+        &CylinderGeometry::new_with(0.55, 0.75, 0.35, 24.0, None, None, None, None),
+        std_mat(0x262626, 0.7, 0.05, false),
     );
     pedestal.position().set_y(-1.3);
     scene.add([pedestal]);
 
     let core = Mesh::new_with(
-        Some(SphereGeometry::new_with(
-            0.65, 24.0, 18.0, None, None, None, None,
-        )),
-        Some(std_mat(0x111111, 0.45, 0.2, false)),
+        &SphereGeometry::new_with(0.65, 24.0, 18.0, None, None, None, None),
+        std_mat(0x111111, 0.45, 0.2, false),
     );
     scene.add([core]);
 
@@ -123,10 +119,8 @@ pub extern "C" fn start() {
 
     let tp1 = MeshBasicMaterialParameters::default().with_color(0x999999 as f64);
     let inner_track = Mesh::new_with(
-        Some(TorusGeometry::new_with(
-            2.1, 0.025, 8.0, 64.0, None, None, None,
-        )),
-        Some(MeshBasicMaterial::new_with(&tp1)),
+        &TorusGeometry::new_with(2.1, 0.025, 8.0, 64.0, None, None, None),
+        MeshBasicMaterial::new_with(&tp1),
     );
     inner_track.rotation().set_x(std::f64::consts::FRAC_PI_2);
     inner_pivot.add([inner_track]);
@@ -136,18 +130,16 @@ pub extern "C" fn start() {
     inner_pivot.add([inner_planet.clone()]);
 
     let planet = Mesh::new_with(
-        Some(SphereGeometry::new_with(
-            0.36, 20.0, 16.0, None, None, None, None,
-        )),
-        Some(std_mat(0x555555, 0.55, 0.1, false)),
+        &SphereGeometry::new_with(0.36, 20.0, 16.0, None, None, None, None),
+        std_mat(0x555555, 0.55, 0.1, false),
     );
     inner_planet.add([planet]);
 
     let moon_pivot = Group::new();
     inner_planet.add([moon_pivot.clone()]);
     let moon = Mesh::new_with(
-        Some(OctahedronGeometry::new_with(0.18, 0.0)),
-        Some(std_mat(0xd4d4d4, 0.4, 0.1, true)),
+        &OctahedronGeometry::new_with(0.18, 0.0),
+        std_mat(0xd4d4d4, 0.4, 0.1, true),
     );
     moon.position().set_with(0.75, 0.0, 0.0);
     moon_pivot.add([moon.clone()]);
@@ -157,10 +149,8 @@ pub extern "C" fn start() {
 
     let tp2 = MeshBasicMaterialParameters::default().with_color(0xb5b5b5 as f64);
     let outer_track = Mesh::new_with(
-        Some(TorusGeometry::new_with(
-            3.8, 0.025, 8.0, 80.0, None, None, None,
-        )),
-        Some(MeshBasicMaterial::new_with(&tp2)),
+        &TorusGeometry::new_with(3.8, 0.025, 8.0, 80.0, None, None, None),
+        MeshBasicMaterial::new_with(&tp2),
     );
     outer_track.rotation().set_x(std::f64::consts::FRAC_PI_2);
     outer_pivot.add([outer_track]);
@@ -170,16 +160,14 @@ pub extern "C" fn start() {
     outer_pivot.add([outer_station.clone()]);
 
     let station_body = Mesh::new_with(
-        Some(IcosahedronGeometry::new_with(0.42, 0.0)),
-        Some(std_mat(0x404040, 0.5, 0.1, true)),
+        &IcosahedronGeometry::new_with(0.42, 0.0),
+        std_mat(0x404040, 0.5, 0.1, true),
     );
     outer_station.add([station_body.clone()]);
 
     let halo = Mesh::new_with(
-        Some(TorusGeometry::new_with(
-            0.68, 0.06, 10.0, 32.0, None, None, None,
-        )),
-        Some(std_mat(0x111111, 0.4, 0.1, false)),
+        &TorusGeometry::new_with(0.68, 0.06, 10.0, 32.0, None, None, None),
+        std_mat(0x111111, 0.4, 0.1, false),
     );
     halo.rotation().set_x(0.8);
     outer_station.add([halo]);

@@ -61,9 +61,9 @@ pub extern "C" fn run() {
     check!(paragraphs.length() == 1.0);
     check!(paragraphs.item(0.0).text_content() == "seed text");
 
-    // The same method takes a selector: an Element, or the type it is said to find.
+    // The same method takes a selector and finds an Element; the type it is said to be is a cast.
     check!(el.query_selector("p") == Some(copy.clone().into()));
-    check!(el.query_selector_as::<HTMLParagraphElement>("p") == Some(copy.clone()));
+    check!(el.query_selector("p").map(|e| js::unchecked_cast::<HTMLParagraphElement>(&e)) == Some(copy.clone()));
     check!(el.query_selector_all("p, span").length() == 1.0);
 
     // A typed key selects the event type: the listener of "click" takes a PointerEvent.

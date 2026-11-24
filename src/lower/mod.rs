@@ -37,6 +37,8 @@ pub struct Options {
     pub intersections: bool,
     pub inheritance: bool,
     pub generics: bool,
+    // Only type parameters TypeScript's checking alone uses (`generics = "checking"`).
+    pub checking_generics: bool,
     pub aliases: bool,
     pub constraints: bool,
     // A type parameter meets a constraint only with that one (`constraints = "exact"`).
@@ -73,7 +75,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Options {
-            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, aliases: false, constraints: false, exact_constraints: false, nullable: false,
+            classes: false, typeops: false, intersections: false, inheritance: false, generics: false, checking_generics: false, aliases: false, constraints: false, exact_constraints: false, nullable: false,
             literals: false, anonymous: false, optionals: false, param_unions: false, untyped_param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false, pascal_types: false,
         }
@@ -153,7 +155,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         expand_aliases(front, decls);
     }
     if o.generics {
-        erase_generics(decls, o.map_keyed);
+        erase_generics(decls, o.map_keyed, o.checking_generics);
     }
     if o.nullable {
         walk(decls, &mut |t, _| {

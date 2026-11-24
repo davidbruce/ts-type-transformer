@@ -30,11 +30,10 @@ struct AppState {
     renderer: WebGLRenderer,
     scene: Scene,
     camera: PerspectiveCamera,
-    geo: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
+    geo: BufferGeometry,
     pos_attr: Float32BufferAttribute,
     pts_attr: Float32BufferAttribute,
-    wire_mesh:
-        Mesh<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>, MeshBasicMaterial>,
+    wire_mesh: Mesh,
     wire_btn: dom::HTMLElement,
     meta: dom::HTMLElement,
     tri_count: usize,
@@ -158,16 +157,13 @@ pub extern "C" fn start() {
         .with_roughness(0.72)
         .with_metalness(0.05)
         .with_flat_shading(true);
-    let surf = Mesh::new_with(
-        Some(geo.clone()),
-        Some(MeshStandardMaterial::new_with(&smp)),
-    );
+    let surf = Mesh::new_with(&geo, MeshStandardMaterial::new_with(&smp));
     scene.add([surf]);
 
     let wmp = MeshBasicMaterialParameters::default()
         .with_color(0x262626 as f64)
         .with_wireframe(true);
-    let wire_mesh = Mesh::new_with(Some(geo.clone()), Some(MeshBasicMaterial::new_with(&wmp)));
+    let wire_mesh = Mesh::new_with(&geo, MeshBasicMaterial::new_with(&wmp));
     wire_mesh.position().set_y(0.015);
     scene.add([wire_mesh.clone()]);
 
@@ -181,7 +177,7 @@ pub extern "C" fn start() {
     let pmp = PointsMaterialParameters::default()
         .with_color(0x111111 as f64)
         .with_size(0.14);
-    let pts = Points::new_with(Some(pts_geo), Some(PointsMaterial::new_with(&pmp)));
+    let pts = Points::new_with(&pts_geo, PointsMaterial::new_with(&pmp));
     scene.add([pts]);
 
     let st = Rc::new(RefCell::new(AppState {

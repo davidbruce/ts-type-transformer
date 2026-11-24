@@ -82,11 +82,11 @@ pub extern "C" fn run() {
     check!(text.text().invoke() == "hi");
 
     // Shapes added to the layer, in order; a group holding one of them.
-    layer.add([GroupOrShape::from(&rect), GroupOrShape::from(&circle)]);
+    layer.add([Node::from(rect.clone()), Node::from(circle.clone())]);
     check!(layer.get_children().len() == 2);
     let group = Group::new();
     group.set_position(&point(50.0, 10.0));
-    group.add([GroupOrShape::from(&text)]);
+    group.add([Node::from(text.clone())]);
     layer.add([group.clone()]);
     check!(layer.get_children().len() == 3);
     check!(group.get_children().len() == 1);
@@ -123,19 +123,14 @@ pub extern "C" fn run() {
             .find_one("#r1")
             .is_some_and(|n| n.get_class_name() == "Rect")
     );
-    check!(layer.find::<Node<NodeConfig>>(JsValue::from(".box")).len() == 1);
-    check!(
-        layer
-            .find::<Node<NodeConfig>>(JsValue::from("Circle"))
-            .len()
-            == 1
-    );
-    check!(layer.find::<Node<NodeConfig>>(JsValue::from("Shape")).len() == 3);
+    check!(layer.find(JsValue::from(".box")).len() == 1);
+    check!(layer.find(JsValue::from("Circle")).len() == 1);
+    check!(layer.find(JsValue::from("Shape")).len() == 3);
     check!(layer.find_one("#nothing").is_none());
 
     // Events: a listener on the circle, fired, and removed.
     let clicks = Rc::new(Cell::new(0));
-    let on_click = KonvaEventListener::<Node<CircleConfig>, PointerEvent>::new({
+    let on_click = KonvaEventListener::<Node, PointerEvent>::new({
         let clicks = clicks.clone();
         move |_| clicks.set(clicks.get() + 1)
     });

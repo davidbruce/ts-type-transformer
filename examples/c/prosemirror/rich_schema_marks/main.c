@@ -65,25 +65,25 @@ static Pm_Schema make_schema(void) {
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
-    Pm_Attrs nodes = Pm_Attrs_create();
-    js_set_val(nodes, "doc", doc);
-    js_set_val(nodes, "heading", heading);
-    js_set_val(nodes, "paragraph", para);
-    js_set_val(nodes, "blockquote", quote);
-    js_set_val(nodes, "code_block", cblock);
-    js_set_val(nodes, "horizontal_rule", hr);
-    js_set_val(nodes, "text", text);
+    Pm_SchemaSpec_nodes nodes = Pm_SchemaSpec_nodes_create();
+    Pm_SchemaSpec_nodes_set_at(nodes, "doc", doc);
+    Pm_SchemaSpec_nodes_set_at(nodes, "heading", heading);
+    Pm_SchemaSpec_nodes_set_at(nodes, "paragraph", para);
+    Pm_SchemaSpec_nodes_set_at(nodes, "blockquote", quote);
+    Pm_SchemaSpec_nodes_set_at(nodes, "code_block", cblock);
+    Pm_SchemaSpec_nodes_set_at(nodes, "horizontal_rule", hr);
+    Pm_SchemaSpec_nodes_set_at(nodes, "text", text);
 
     Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"strong"));
     Pm_MarkSpec em = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"em"));
     Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"code"));
 
-    Pm_Attrs marks = Pm_Attrs_create();
-    js_set_val(marks, "strong", strong);
-    js_set_val(marks, "em", em);
-    js_set_val(marks, "code", code);
+    Pm_SchemaSpec_marks marks = Pm_SchemaSpec_marks_create();
+    Pm_SchemaSpec_marks_set_at(marks, "strong", strong);
+    Pm_SchemaSpec_marks_set_at(marks, "em", em);
+    Pm_SchemaSpec_marks_set_at(marks, "code", code);
 
-    return Pm_Schema_new(Pm_SchemaSpec_create(.nodes = js_value(nodes), .marks = js_value(marks)));
+    return Pm_Schema_new(Pm_SchemaSpec_create(.nodes = Pm_SchemaSpec_nodes_or_OrderedMap_of(nodes), .marks = Pm_SchemaSpec_marks_or_OrderedMap_of(marks)));
 }
 
 static Pm_Node t_node(const char* t) {

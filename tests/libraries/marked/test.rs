@@ -74,13 +74,13 @@ pub extern "C" fn run() {
     // GFM tables and task lists; and gfm switched off.
     let table = "| a | b |\n|---|:-:|\n| 1 | 2 |";
     check!(html(marked_with_opt_marked_options(table)).contains("<table>"));
-    let plain = MarkedOptions::<String, String>::create();
+    let plain = MarkedOptions::create();
     plain.set_gfm(Some(false));
     check!(plain.gfm() == Some(false));
     check!(!html(marked_with_opt_marked_options_with(table, Some(&plain))).contains("<table>"));
 
     // Options: breaks turns a newline into <br>.
-    let breaks = MarkedOptions::<String, String>::create();
+    let breaks = MarkedOptions::create();
     breaks.set_breaks(Some(true));
     check!(html(marked_with_opt_marked_options_with("a\nb", Some(&breaks))).contains("a<br>b"));
     check!(!html(marked_with_opt_marked_options("a\nb")).contains("<br>"));
@@ -92,13 +92,12 @@ pub extern "C" fn run() {
 
     // An inline parse has no paragraph.
     // marked's `markedInstance` is not exported, so an instance is made here.
-    let plain_instance =
-        Marked::<String, String>::new(Vec::<MarkedExtension<String, String>>::new());
+    let plain_instance = Marked::new(Vec::<MarkedExtension>::new());
     let inline = plain_instance.parse_inline().invoke_2("a *b* `c`");
-    check!(html_of(inline) == "a <em>b</em> <code>c</code>");
+    check!(html(inline) == "a <em>b</em> <code>c</code>");
 
     // The lexer: tokens of a document, the type of each, and their children.
-    let list = Lexer::<String, String>::lex_2("# Head\n\npara with **bold**\n\n- a\n- b\n");
+    let list = Lexer::lex_2("# Head\n\npara with **bold**\n\n- a\n- b\n");
     let types: Vec<String> = (0..list.length() as usize)
         .map(|i| token_type(&list.at(i as f64).unwrap()))
         .collect();
@@ -122,10 +121,10 @@ pub extern "C" fn run() {
     check!(list_token.items().get(1).text() == "b");
 
     // A Marked instance keeps its own options, apart from the global ones.
-    let ext = MarkedExtension::<String, String>::create();
+    let ext = MarkedExtension::create();
     ext.set_breaks(Some(true));
-    let m = Marked::<String, String>::new(vec![ext]);
-    check!(html_of(m.parse().invoke_2("x\ny")).contains("x<br>y"));
+    let m = Marked::new(vec![ext]);
+    check!(html(m.parse().invoke_2("x\ny")).contains("x<br>y"));
     check!(m.defaults().breaks() == Some(true));
     check!(!html(marked_with_opt_marked_options("x\ny")).contains("<br>"));
     let toks = m.lexer("hi *there*");
@@ -133,7 +132,7 @@ pub extern "C" fn run() {
 
     // A walkTokens extension sees every token, and may change them.
     let seen = Rc::new(Cell::new(0));
-    let ext = MarkedExtension::<String, String>::create();
+    let ext = MarkedExtension::create();
     let walk = MarkedExtensionWalkTokens::new({
         let seen = seen.clone();
         move |t: Token| {
@@ -145,16 +144,16 @@ pub extern "C" fn run() {
         }
     });
     ext.set_walk_tokens(Some(&walk));
-    let m2 = Marked::<String, String>::new(vec![ext]);
-    let out = html_of(m2.parse().invoke_2("# Top\n\ntext"));
+    let m2 = Marked::new(vec![ext]);
+    let out = html(m2.parse().invoke_2("# Top\n\ntext"));
     check!(out.contains("<h2>Top</h2>"));
     check!(seen.get() >= 4);
 
     // A renderer extension replaces how one token is written.
-    let ext = MarkedExtension::<String, String>::create();
-    let renderer = MarkedExtensionRenderer::<String, String>::create();
-    let heading = MarkedExtensionRendererHeading::<String, String>::new(|h: tokens::Heading| {
-        BooleanOrRendererOutput::RendererOutput(format!(
+    let ext = MarkedExtension::create();
+    let renderer = MarkedExtensionRenderer::create();
+    let heading = MarkedExtensionRendererHeading::new(|h: tokens::Heading| {
+        StringOrBoolean::String(format!(
             "<h{0} class=\"x\">{1}</h{0}>",
             h.depth() as u32,
             h.text()
@@ -162,13 +161,6 @@ pub extern "C" fn run() {
     });
     renderer.set_heading(Some(&heading));
     ext.set_renderer(Some(&renderer));
-    let m3 = Marked::<String, String>::new(vec![ext]);
-    check!(html_of(m3.parse().invoke_2("## Sub")) == "<h2 class=\"x\">Sub</h2>");
-}
-
-fn html_of(r: ParserOutputOrPromise<String>) -> String {
-    match r {
-        ParserOutputOrPromise::ParserOutput(s) => s,
-        ParserOutputOrPromise::JsPromise(_) => String::from("<promise>"),
-    }
+    let m3 = Marked::new(vec![ext]);
+    check!(html(m3.parse().invoke_2("## Sub")) == "<h2 class=\"x\">Sub</h2>");
 }

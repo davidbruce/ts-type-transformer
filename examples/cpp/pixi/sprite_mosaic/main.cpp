@@ -6,7 +6,7 @@
 using namespace pixi_js;
 
 static ts::Task run_app() {
-    Application app = Application<>::create();
+    Application app = Application::create();
     if (auto res = co_await app.init({{.backgroundColor = 0xffffff, .preserveDrawingBuffer = true, .preference = "webgl", .width = 680, .height = 400, .antialias = true, .autoStart = false}}); !res) co_return;
 
     dom::Document doc = dom::get_document();
@@ -14,7 +14,7 @@ static ts::Task run_app() {
         stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
-    Container<ts::Value> stage = app.stage();
+    Container stage = app.stage();
 
     Graphics frame = Graphics::create();
     frame.rect(32.0, 20.0, 616.0, 360.0);
@@ -25,7 +25,7 @@ static ts::Task run_app() {
         0x111111, 0x262626, 0x404040, 0x555555,
         0x737373, 0xa3a3a3, 0xd4d4d4, 0xe5e5e5
     };
-    Texture<TextureSource<ts::Value>> white = Texture<BufferImageSource>::WHITE();
+    Texture white = Texture::WHITE();
 
     for (int row = 0; row < 6; row++) {
         for (int col = 0; col < 10; col++) {

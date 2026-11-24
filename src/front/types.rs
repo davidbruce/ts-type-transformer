@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use tsrs_ast::{self as ast, Kind, Node, Symbol, SymbolFlags};
 use tsrs_checker::checker::Checker;
 use tsrs_checker::types::{
-    ElementFlags, LiteralValue, ObjectFlags, Signature as CSignature, SignatureKind,
+    ElementFlags, LiteralValue, MappedType, ObjectFlags, Signature as CSignature, SignatureKind,
     Type as CType, TypeFlags, TypeId,
 };
 use tsrs_core::P;
@@ -312,7 +312,7 @@ impl<'c> Front<'c> {
         }
         self.in_progress.pop();
         if members.is_empty() && of.intersects(ObjectFlags::Mapped) {
-            return self.erased("generic mapped type");
+            return self.mapped_over_parameter(t).unwrap_or_else(|| self.erased("generic mapped type"));
         }
         // `(a) => b` and `new (a) => b` are objects with a single signature.
         if let [m] = members.as_slice()
@@ -322,6 +322,36 @@ impl<'c> Front<'c> {
             return if m.kind == MemberKind::Call { Type::Function(sig) } else { Type::Constructor(sig) };
         }
         Type::Object(members)
+    }
+
+    // A mapped type over a type parameter's keys, whatever they turn out to
+    // be: a record of what it maps them to, keyed as the parameter is
+    // constrained (prosemirror's `{ [name in Nodes]: NodeSpec }`, `Nodes extends string`).
+    fn mapped_over_parameter(&mut self, t: P<CType>) -> Option<Type> {
+        MappedType::resolve_components(self.c, t);
+        let m = t.as_mapped_type();
+        if m.name_type().is_some() {
+            return None;
+        }
+        // Not `keyof X<T>` (`Partial<TableState<TFeatures>>`), whose keys are X's.
+        let keys = m.constraint_type().filter(|k| k.flags().intersects(TypeFlags::TypeParameter))?;
+        let template = m.template_type()?;
+        let base = self.c.get_base_constraint_of_type_exported(keys).unwrap_or(keys);
+        let string = TypeFlags::String | TypeFlags::StringLiteral | TypeFlags::TemplateLiteral | TypeFlags::Any;
+        let key = if base.flags().intersects(string) {
+            "string"
+        } else if base.flags().intersects(TypeFlags::Number | TypeFlags::NumberLiteral) {
+            "number"
+        } else if base.flags().intersects(TypeFlags::Union) && base.types().iter().any(|k| k.flags().intersects(string)) {
+            "string"
+        } else {
+            return None;
+        };
+        self.count("widened: mapped type over a type parameter -> record");
+        let mut index = Member::new(MemberKind::Index, String::new());
+        let key = Param { name: "key".into(), optional: false, rest: false, constant: None, ty: Type::prim(key) };
+        index.sig = Some(Signature { params: vec![key], ret: Some(self.from_type(template)), ..Default::default() });
+        Some(Type::Object(vec![index]))
     }
 
     // All members of a type, inherited ones included, as the checker resolves them.
@@ -646,6 +676,7 @@ impl<'c> Front<'c> {
                 tid: Some(tp.id().0),
                 constraint,
                 default: None,
+                self_bounded: false,
             });
         }
         if let Some(this) = sig.this_parameter() {

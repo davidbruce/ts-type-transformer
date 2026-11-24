@@ -163,9 +163,9 @@ fn shapes() {
 
 fn scene() {
     // A hierarchy: a group moved, with a child offset inside it.
-    let group = Group::<Object3DEventMap>::new();
+    let group = Group::new();
     group.position().set_with(10.0, 0.0, Some(0.0));
-    let child = Object3D::<Object3DEventMap>::new();
+    let child = Object3D::new();
     child.set_name("child");
     child.position().set_with(0.0, 5.0, Some(0.0));
     group.add([child.clone()]);
@@ -213,7 +213,7 @@ fn scene() {
     let seen = std::rc::Rc::new(std::cell::Cell::new(0));
     let count = Object3DFn::new({
         let seen = seen.clone();
-        move |_: Object3D<Object3DEventMap>| seen.set(seen.get() + 1)
+        move |_: Object3D| seen.set(seen.get() + 1)
     });
     group.traverse(&count);
     check!(seen.get() == 2);
@@ -226,13 +226,16 @@ fn scene() {
     params.set_color(ColorRepresentation::Number(f64::from(0x00ff00)));
     let material = MeshBasicMaterial::new_with(Some(&params));
     check!(material.color().get_hex() == f64::from(0x00ff00));
-    let mesh = Mesh::<BoxGeometry, MeshBasicMaterial, Object3DEventMap>::new_with(
-        Some(geometry.clone()),
-        Some(material.clone()),
-    );
+    let mesh = Mesh::new_with(&geometry, &material);
     check!(mesh.type_() == "Mesh");
     check!(mesh.geometry().type_() == "BoxGeometry");
-    check!(mesh.geometry().parameters().width() == 2.0);
+    // A Mesh's geometry is a BufferGeometry: cast back to the BoxGeometry it is.
+    check!(
+        js::unchecked_cast::<BoxGeometry>(&mesh.geometry())
+            .parameters()
+            .width()
+            == 2.0
+    );
     mesh.position().set_with(0.0, 0.0, Some(-5.0));
     mesh.update_matrix_world_with(Some(true));
 
@@ -242,7 +245,7 @@ fn scene() {
         None,
         None,
     );
-    let hits = raycaster.intersect_object::<JsValue>(&Object3D::from(mesh.clone()), None, None);
+    let hits = raycaster.intersect_object(&mesh);
     check!(hits.len() >= 1);
     // The near face of the box is at z = -4: distance 9 from the ray's origin.
     check!(near(hits.get(0).distance(), 9.0));
@@ -252,17 +255,14 @@ fn scene() {
         None,
         None,
     );
-    check!(
-        miss.intersect_object::<JsValue>(&Object3D::from(mesh.clone()), None, None)
-            .is_empty()
-    );
+    check!(miss.intersect_object(&mesh).is_empty());
 
     // Geometry attributes: a box has 24 vertices with positions, normals and uvs.
     // FINDING 8: `getAttribute<K extends keyof Attributes>(name: K)` is
-    // `get_attribute<K: JsType>(name: K) -> WebGLAttributesGetAttribute`: the
-    // name must be a String (not &str), and the attribute comes back as a
-    // union to match, though a box's are all BufferAttributes.
-    let attr = |name: &str| match geometry.get_attribute(name.to_string()) {
+    // `get_attribute(name: impl Into<JsValue>) -> WebGLAttributesGetAttribute`:
+    // the attribute comes back as a union to match, though a box's are all
+    // BufferAttributes.
+    let attr = |name: &str| match geometry.get_attribute(name) {
         WebGLAttributesGetAttribute::BufferAttribute(a) => a,
         _ => panic!("not a BufferAttribute"),
     };

@@ -332,11 +332,18 @@ pub fn main() {
   let material = mesh_basic_material.new()
   mesh_basic_material.set_color(material, red)
   let cube =
-    mesh.new(Some(geometry), Some(material), t.mesh_basic_material_codec())
+    mesh.new_with(
+      Some(geometry),
+      Some(t.material_or_material_array_material(material)),
+    )
   object3d.set_name(cube, "cube")
   let _ = object3d.add(parent, [cube])
   object3d.update_matrix_world_with(parent, Some(True))
   let params = box_geometry.get_parameters(geometry)
+  // A mesh's material is a Material or a list of them: this one is a MeshBasicMaterial.
+  let assert t.MaterialOrMaterialArrayMaterial(cube_material) =
+    mesh.get_material(cube)
+  let assert Ok(cube_material) = mesh_basic_material.from(cube_material)
   let passed =
     passed
     + check(object3d.get_type(cube) == "Mesh", "mesh type")
@@ -350,12 +357,7 @@ pub fn main() {
       "material colour",
     )
     + check(
-      color.get_hex(
-        mesh_basic_material.get_color(mesh.get_material(
-          cube,
-          t.mesh_basic_material_codec(),
-        )),
-      )
+      color.get_hex(mesh_basic_material.get_color(cube_material))
         == 16_711_680.0,
       "the mesh's material",
     )
@@ -398,8 +400,7 @@ pub fn main() {
     )
 
   // Attributes: positions of 24 vertices, 36 indices.
-  let attributes =
-    buffer_geometry.get_attributes(geometry, t.normal_buffer_attributes_codec())
+  let attributes = buffer_geometry.get_attributes(geometry)
   let assert Some(t.NormalBufferAttributesIndexResultBufferAttribute(position)) =
     normal_buffer_attributes.get_at(attributes, "position")
   let assert Some(t.NormalBufferAttributesIndexResultBufferAttribute(uv)) =

@@ -17,8 +17,8 @@ fn build_opts() -> ApplicationInitOptions {
         .with_auto_start(false)
 }
 
-fn add<C: JsType, D: JsType>(parent: &Container<C>, child: D) {
-    parent.add_child(JsArray::<D>::from([child]));
+fn add(parent: &Container, child: impl Into<Container>) {
+    parent.add_child(JsArray::<Container>::from([child.into()]));
 }
 
 fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {

@@ -40,7 +40,7 @@ fn list(items: Vec<JsValue>) -> JsValue {
     JsValue(JsArray::<JsValue>::from(items).0.clone())
 }
 
-fn make_schema() -> Schema<JsValue, JsValue> {
+fn make_schema() -> Schema {
     // How a node and a mark are drawn in a view: [tag, 0] puts the content in the tag.
     let tag = |name: &'static str| {
         DOMOutputSpec::Array(JsArray::<JsValue>::from(vec![
@@ -57,19 +57,19 @@ fn make_schema() -> Schema<JsValue, JsValue> {
     paragraph.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(move |_: Node| tag("p"))));
     let text = NodeSpec::create();
     text.set_group(Some("inline"));
-    let nodes = object(&[
-        ("doc", value(&doc)),
-        ("paragraph", value(&paragraph)),
-        ("text", value(&text)),
-    ]);
+    let nodes = SchemaSpecNodes::create();
+    nodes.set_at("doc", &doc);
+    nodes.set_at("paragraph", &paragraph);
+    nodes.set_at("text", &text);
     let strong = MarkSpec::create();
     strong.set_to_dom(Some(&MarkBooleanToDOMOutputSpecFn::new(
         move |_: Mark, _: bool| tag("strong"),
     )));
-    let marks = object(&[("strong", JsValue::from(&strong))]);
-    let spec = SchemaSpec::<JsValue, JsValue>::create();
-    spec.set_nodes(value(&nodes));
-    spec.set_marks(value(&marks));
+    let marks = SchemaSpecMarks::create();
+    marks.set_at("strong", &strong);
+    let spec = SchemaSpec::create();
+    spec.set_nodes(&nodes);
+    spec.set_marks(&marks);
     Schema::new(&spec)
 }
 
@@ -171,7 +171,7 @@ pub extern "C" fn run() {
     editor_view(&doc);
 }
 
-fn state_and_transactions(schema: &Schema<JsValue, JsValue>, doc: &Node) {
+fn state_and_transactions(schema: &Schema, doc: &Node) {
     // A state on the document: the selection starts at the document's start.
     let config = EditorStateConfig::create();
     config.set_doc(Some(doc));

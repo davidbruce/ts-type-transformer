@@ -80,12 +80,7 @@ fn layout_name(mode: Int) -> String {
 }
 
 fn update_towers(
-  inst: t.InstancedMesh(
-    t.BoxGeometry(Nil),
-    t.MeshStandardMaterial(Nil),
-    t.Object3DEventMap(Nil),
-    Nil,
-  ),
+  inst: t.InstancedMesh(Nil),
   mode: Int,
   pos: t.Vector3(Nil),
   rot_q: t.Quaternion(Nil),
@@ -191,10 +186,13 @@ pub fn main() {
     )
     |> mesh_standard_material_parameters.with_roughness(0.85)
   let plinth =
-    mesh.new(
+    mesh.new_with(
       Some(plane_geometry.new_with(Some(8.6), Some(8.6), None, None)),
-      Some(mesh_standard_material.new_with(Some(pmp))),
-      t.mesh_standard_material_codec(),
+      Some(
+        t.material_or_material_array_material(
+          mesh_standard_material.new_with(Some(pmp)),
+        ),
+      ),
     )
   euler.set_x(object3d.get_rotation(plinth), 0.0 -. pi /. 2.0)
   vector3.set_y(object3d.get_position(plinth), -0.01)
@@ -222,9 +220,8 @@ pub fn main() {
   let inst =
     instanced_mesh.new(
       Some(tgeo),
-      Some(tmat),
+      Some(t.material_or_material_array_material(tmat)),
       100.0,
-      t.mesh_standard_material_codec(),
     )
   object3d.add(sc, [inst])
 

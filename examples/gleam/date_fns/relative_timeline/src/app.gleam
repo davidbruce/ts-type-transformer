@@ -16,8 +16,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let day = dt.DateOrStringOrNumberDate
-      let arg = dt.DateArgDateType
+      let day = dt.DateArgDate
 
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
@@ -117,7 +116,7 @@ pub fn main() -> Nil {
       node.append_child(tl_card, timeline)
       node.append_child(app, tl_card)
 
-      let date_args = list.map(milestones, fn(item) { arg(item.0) })
+      let date_args = list.map(milestones, fn(item) { day(item.0) })
       let earliest = df.min(date_args)
       let latest = df.max(date_args)
       let span_days =

@@ -62,12 +62,12 @@ text.setText "hi" |> ignore
 check (text.text.Invoke () = "hi") "setText"
 
 // Shapes added to the layer, in order; a group holding one of them.
-layer.add (GroupOrShape.Shape_2 (rect.asShape2 ()), GroupOrShape.Shape_2 (circle.asShape2 ())) |> ignore
+layer.add<Node_2> (rect, circle) |> ignore
 check (layer.getChildren().Count = 2) "layer has two shapes"
 let group = Group_2.Create ()
 group.setPosition (Vector2d_2.Create (50.0, 10.0)) |> ignore
-group.add (GroupOrShape.Shape_2 (text.asShape2 ())) |> ignore
-layer.add (GroupOrShape.Group_2 group) |> ignore
+group.add text |> ignore
+layer.add group |> ignore
 check (layer.getChildren().Count = 3) "layer has three children"
 check (group.getChildren().Count = 1) "group has one child"
 check (obj.ReferenceEquals(text.getParent (), group)) "text parent is group"
@@ -94,12 +94,12 @@ let bbox = circle.getClientRect ()
 check (near bbox.x 175.0 && near bbox.y 75.0 && near bbox.width 50.0 && near bbox.height 50.0) "getClientRect"
 
 // Finding nodes: by id, by name, by class.
-let found = layer.findOne<Node_2<NodeConfig_2>> (StringOrFunction.String "#r1")
+let found = layer.findOne (StringOrFunction.String "#r1")
 check (found.IsSome && found.Value.getClassName () = "Rect") "findOne by id"
-check (layer.find<Node_2<NodeConfig_2>>(box ".box").Count = 1) "find by name"
-check (layer.find<Node_2<NodeConfig_2>>(box "Circle").Count = 1) "find by class"
-check (layer.find<Node_2<NodeConfig_2>>(box "Shape").Count = 3) "find all shapes"
-check (layer.findOne<Node_2<NodeConfig_2>>(StringOrFunction.String "#nothing").IsNone) "findOne missing"
+check (layer.find(box ".box").Count = 1) "find by name"
+check (layer.find(box "Circle").Count = 1) "find by class"
+check (layer.find(box "Shape").Count = 3) "find all shapes"
+check (layer.findOne(StringOrFunction.String "#nothing").IsNone) "findOne missing"
 
 // Events: a listener on the circle, fired, and removed.
 let mutable clicks = 0

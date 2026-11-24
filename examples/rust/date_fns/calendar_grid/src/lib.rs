@@ -1,6 +1,6 @@
 #![no_main]
 
-use date_fns::{Date, DateArg, Interval};
+use date_fns::{Date, Interval};
 use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
@@ -16,10 +16,6 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
-}
-
-fn day(d: &Date) -> DateArg<Date> {
-    DateArg::DateType(d.clone())
 }
 
 fn add_metric(doc: &Document, metrics: &HTMLElement, label: &str, val: &str) {
@@ -43,8 +39,8 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let ref_day: Date = date_fns::parse_iso("2024-03-15");
-    let month_start: Date = date_fns::start_of_month(day(&ref_day));
-    let month_end: Date = date_fns::end_of_month(day(&ref_day));
+    let month_start: Date = date_fns::start_of_month(&ref_day);
+    let month_end: Date = date_fns::end_of_month(&ref_day);
     let offset = date_fns::get_day(&month_start) as usize;
 
     let metrics = make_el(&doc, "div", "metrics", None);
@@ -101,10 +97,10 @@ pub extern "C" fn start() {
         append(&grid, make_el(&doc, "div", "day-cell empty", None));
     }
 
-    let span: Interval<DateArg<Date>, DateArg<Date>> = Interval::default()
-        .with_start(day(&month_start))
-        .with_end(day(&month_end));
-    let days = date_fns::each_day_of_interval(span);
+    let span = Interval::default()
+        .with_start(&month_start)
+        .with_end(&month_end);
+    let days = date_fns::each_day_of_interval(&span);
     for i in 0..days.len() {
         let item = days.get(i);
         let is_ref = date_fns::is_same_day(item.clone(), &ref_day);

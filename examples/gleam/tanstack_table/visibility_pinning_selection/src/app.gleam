@@ -76,7 +76,7 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 }
 
 fn is_col_visible(
-  table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil),
+  table: t.TableCore(Dynamic, Nil),
   col_id: String,
   default: Bool,
 ) -> Bool {
@@ -99,17 +99,12 @@ fn decode_str(v: Dynamic, fallback: String) -> String {
   }
 }
 
-fn render(table: t.TableCore(t.TableFeatures(Nil), Dynamic, Nil), doc) {
-  let pin: t.TableColumnPinning(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
-  let vis: t.TableColumnVisibility(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
-  let sel: t.TableRowSelection(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
-  let cols_view: t.TableColumns(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
-  let rm_view: t.TableRowModelsCore(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
+fn render(table: t.TableCore(Dynamic, Nil), doc) {
+  let pin: t.TableColumnPinning(Dynamic, Nil) = coerce(table)
+  let vis: t.TableColumnVisibility(Dynamic, Nil) = coerce(table)
+  let sel: t.TableRowSelection(Dynamic, Nil) = coerce(table)
+  let cols_view: t.TableColumns(Dynamic, Nil) = coerce(table)
+  let rm_view: t.TableRowModelsCore(Dynamic, Nil) = coerce(table)
 
   let start_cols = table_column_pinning.get_start_visible_leaf_columns(pin)
   let center_cols = table_column_pinning.get_center_visible_leaf_columns(pin)
@@ -306,12 +301,9 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let pin: t.TableColumnPinning(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
-  let vis: t.TableColumnVisibility(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
-  let sel: t.TableRowSelection(t.TableFeatures(Nil), Dynamic, Nil) =
-    coerce(table)
+  let pin: t.TableColumnPinning(Dynamic, Nil) = coerce(table)
+  let vis: t.TableColumnVisibility(Dynamic, Nil) = coerce(table)
+  let sel: t.TableRowSelection(Dynamic, Nil) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     let next_zone = !is_col_visible(table, "zone", False)

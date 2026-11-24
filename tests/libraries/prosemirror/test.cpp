@@ -6,7 +6,7 @@
 extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
-using Sch = Schema<ts::Value, ts::Value>;
+using Sch = Schema;
 
 // A generated object where a ts::Value is wanted (an object given as data).
 static ts::Value val_of(const ts::Handle& h) {
@@ -16,7 +16,7 @@ static ts::Value val_of(const ts::Handle& h) {
 }
 static ts::Value str(std::string_view s) { return ts::Value::string(s); }
 
-// FINDING 22: Node.fromJSON, SchemaSpec.nodes, marks... take `ts::Value`/`object`
+// FINDING 22: Node.fromJSON takes `ts::Value`/`object`
 // and there is no way to make a plain JavaScript object or array of values;
 // `Attrs` (index signature, `{}` with set_at) stands in.
 static Attrs object() { return Attrs::create(); }
@@ -36,10 +36,10 @@ static Sch make_schema() {
     }));
     NodeSpec text = NodeSpec::create();
     text.group("inline");
-    NodeSpec nodes = NodeSpec::create();
-    nodes.set_at("doc", val_of(doc));
-    nodes.set_at("paragraph", val_of(paragraph));
-    nodes.set_at("text", val_of(text));
+    SchemaSpec_nodes nodes = SchemaSpec_nodes::create();
+    nodes.set_at("doc", doc);
+    nodes.set_at("paragraph", paragraph);
+    nodes.set_at("text", text);
 
     MarkSpec strong = MarkSpec::create();
     strong.toDOM(Mark_boolean_to_DOMOutputSpec_fn([](Mark, bool) {
@@ -48,12 +48,12 @@ static Sch make_schema() {
         spec.push(ts::Value::number(0));
         return DOMOutputSpec(spec);
     }));
-    MarkSpec marks = MarkSpec::create();
-    marks.set_at("strong", val_of(strong));
+    SchemaSpec_marks marks = SchemaSpec_marks::create();
+    marks.set_at("strong", strong);
 
-    SchemaSpec<ts::Value, ts::Value> spec = SchemaSpec<ts::Value, ts::Value>::create();
-    spec.nodes(val_of(nodes));
-    spec.marks(val_of(marks));
+    SchemaSpec spec = SchemaSpec::create();
+    spec.nodes(nodes);
+    spec.marks(marks);
     return Sch::create(spec);
 }
 

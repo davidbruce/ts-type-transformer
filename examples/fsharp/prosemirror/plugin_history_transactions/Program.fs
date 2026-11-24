@@ -13,7 +13,7 @@ open Prosemirror.ProsemirrorView
 let private tagSpec (tag: string) : DOMOutputSpec =
     !^(ResizeArray<obj> [ box tag; box 0 ])
 
-let private buildSchema () : Schema<obj, obj> =
+let private buildSchema () : Schema =
     let docSpec = NodeSpec.Create (content = "block+")
 
     let levelAttr = AttributeSpec.Create (``default`` = box 2)

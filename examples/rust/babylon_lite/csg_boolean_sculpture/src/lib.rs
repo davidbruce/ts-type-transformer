@@ -24,7 +24,10 @@ fn mk_pbr(v: f64, metallic: f64, roughness: f64) -> PbrMaterialProps {
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     babylonjs_lite::js::spawn(async {
-        let Some(canvas) = dom::document().query_selector_as::<HTMLCanvasElement>("canvas") else {
+        let Some(canvas) = dom::document()
+            .query_selector("canvas")
+            .map(|e| dom::js::unchecked_cast::<HTMLCanvasElement>(&e))
+        else {
             set_status_error("missing <canvas> element");
             return;
         };

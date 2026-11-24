@@ -17,7 +17,7 @@ pub extern "C" fn start() {
 
     let legend = PlainLegendComponentOption::default()
         .with_bottom(8.0)
-        .with_text_style(&LabelOption::<DetailOptionObject>::default().with_color("#111111"));
+        .with_text_style(&LabelOption::default().with_color("#111111"));
     let tooltip =
         TooltipComponentOption::default().with_trigger(TooltipComponentOptionTrigger::Item);
 
@@ -26,7 +26,7 @@ pub extern "C" fn start() {
         .with_radius(JsArray::<PositionSizeOption>::from(["44%", "72%"]))
         .with_center(JsArray::<PositionSizeOption>::from(["50%", "46%"]))
         .with_item_style(
-            &PieItemStyleOption::<PieCallbackDataParams>::default()
+            &PieItemStyleOption::default()
                 .with_border_color("#ffffff")
                 .with_border_width(2.0),
         )
@@ -47,7 +47,7 @@ pub extern "C" fn start() {
     opt.set_legend(&legend);
     opt.set_tooltip(&tooltip);
     opt.set_series(&pie);
-    chart.set_option(opt);
+    chart.set_option(&opt);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
     meta.set_text_content(&format!(

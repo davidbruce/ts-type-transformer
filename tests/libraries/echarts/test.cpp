@@ -107,13 +107,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
         seen += std::to_string(args.size()) + ":";
         return std::nullopt;
     };
-    chart.on<ts::Value, std::string>(std::string("custom"), handler);
-    chart.trigger<std::string>(std::string("custom"), ts::Array<>::create());
-    chart.trigger<std::string>(std::string("custom"), ts::Array<>{ts::Value::number(1), ts::Value::string("x")});
+    chart.on(ts::Value::string("custom"), handler);
+    chart.trigger(ts::Value::string("custom"), ts::Array<>::create());
+    chart.trigger(ts::Value::string("custom"), ts::Array<>{ts::Value::number(1), ts::Value::string("x")});
     CHECK(heard == 2);
     CHECK(seen == "0:2:");
     chart.off(ts::Value::string("custom"));
-    chart.trigger<std::string>(std::string("custom"), ts::Array<>::create());
+    chart.trigger(ts::Value::string("custom"), ts::Array<>::create());
     CHECK(heard == 2);
     handler.release();
 

@@ -8,8 +8,8 @@
 using namespace tanstack_table_core;
 using V = ts::Value;
 using Obj = RowData_map;
-using TableT = Table_Core<TableFeatures, Obj>;
-using RowT = Row_Core<TableFeatures, Obj>;
+using TableT = Table_Core<Obj>;
+using RowT = Row_Core<Obj>;
 
 static V unsub_obj() {
     return Obj::create().set_at("unsubscribe", void_fn([] {}));
@@ -74,7 +74,7 @@ struct AppState {
 static void render(const std::shared_ptr<AppState>& st) {
     ts::Array<RowT> rows = st->table.getRowModel().rows();
     V store_v = functionalUpdate<V>(
-        st->table.unsafe_as<Table_CoreProperties<TableFeatures, Obj>>().store().unsafe_as<Obj>().at("get"),
+        st->table.unsafe_as<Table_CoreProperties<Obj>>().store().unsafe_as<Obj>().at("get"),
         V()
     );
     auto grp_arr = store_v.unsafe_as<Obj>().at("grouping").unsafe_as<ts::Array<std::string>>();
@@ -92,7 +92,7 @@ static void render(const std::shared_ptr<AppState>& st) {
         if (is_grp) {
             group_cnt++;
             bool is_exp = r.unsafe_as<Row_RowExpanding>().getIsExpanded();
-            uint32_t sub_n = r.unsafe_as<Row_CoreProperties<TableFeatures, Obj>>().subRows().size();
+            uint32_t sub_n = r.unsafe_as<Row_CoreProperties<Obj>>().subRows().size();
             std::string gval = r.getValue(grp_col).to_string();
             std::snprintf(nbuf, sizeof nbuf, "%s %s=%s (%zu)", is_exp ? "[-]" : "[+]", esc_html(grp_col).c_str(), esc_html(gval).c_str(), static_cast<size_t>(sub_n));
             html += std::string("<tr class=\"group-row\"><td>") + nbuf + "</td>";
@@ -126,9 +126,9 @@ TS_EXPORT(start) void start() {
         .set_at("columnGroupingFeature", get_columnGroupingFeature())
         .set_at("rowAggregationFeature", get_rowAggregationFeature())
         .set_at("rowExpandingFeature", get_rowExpandingFeature())
-        .set_at("coreRowModel", createCoreRowModel<TableFeatures, Obj>())
-        .set_at("groupedRowModel", createGroupedRowModel<TableFeatures, Obj>())
-        .set_at("expandedRowModel", createExpandedRowModel<TableFeatures, Obj>())
+        .set_at("coreRowModel", createCoreRowModel<Obj>())
+        .set_at("groupedRowModel", createGroupedRowModel<Obj>())
+        .set_at("expandedRowModel", createExpandedRowModel<Obj>())
         .set_at("aggregationFns", agg_fns);
 
     ts::Array<Obj> data{
@@ -163,7 +163,7 @@ TS_EXPORT(start) void start() {
 
     dom::Document doc = dom::get_document();
     auto st = std::make_shared<AppState>(AppState{
-        constructTable<TableFeatures, Obj>(opts.unsafe_as<TableOptions_Core<TableFeatures, Obj>>()),
+        constructTable<Obj>(opts.unsafe_as<TableOptions_Core<Obj>>()),
         *doc.getElementById("table-wrap"),
         *doc.getElementById("meta"),
     });
@@ -171,8 +171,8 @@ TS_EXPORT(start) void start() {
     const char* btn_ids[4] = { "btn-0", "btn-1", "btn-2", "btn-3" };
     for (int i = 0; i < 4; i++) {
         doc.getElementById(btn_ids[i])->addEventListener(dom::HTMLElementEventMapKeys::click, [st, i](dom::PointerEvent) {
-            auto grp = st->table.unsafe_as<Table_ColumnGrouping<TableFeatures, Obj>>();
-            auto exp = st->table.unsafe_as<Table_RowExpanding<TableFeatures, Obj>>();
+            auto grp = st->table.unsafe_as<Table_ColumnGrouping<Obj>>();
+            auto exp = st->table.unsafe_as<Table_RowExpanding<Obj>>();
             if (i == 0) {
                 exp.toggleAllRowsExpanded(true);
             } else if (i == 1) {

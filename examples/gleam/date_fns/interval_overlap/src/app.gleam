@@ -1,6 +1,5 @@
 import date_fns as df
 import date_fns/interval
-import date_fns/runtime
 import date_fns/types as dt
 import dom/areas/core
 import dom/areas/core/document
@@ -11,13 +10,11 @@ import gleam/list
 import gleam/option.{None, Some}
 
 fn make_span(s_iso: String, e_iso: String) {
-  let dc = dt.date_codec()
-  let arg = dt.DateArgDateType
   let s = df.parse_iso(s_iso)
   let e = df.parse_iso(e_iso)
   interval.create()
-  |> interval.with_start(arg(s), dt.date_arg_codec(dc))
-  |> interval.with_end(arg(e), dt.date_arg_codec(dc))
+  |> interval.with_start(dt.DateArgDate(s))
+  |> interval.with_end(dt.DateArgDate(e))
 }
 
 pub fn main() -> Nil {
@@ -25,8 +22,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let dc = dt.date_codec()
-      let arg = dt.DateArgDateType
+      let arg = dt.DateArgDate
 
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
@@ -43,8 +39,7 @@ pub fn main() -> Nil {
       node.append_child(app, head)
 
       let win_span = make_span("2024-03-01", "2024-03-31")
-      let month_days =
-        df.each_day_of_interval(win_span, None, runtime.codec_dynamic())
+      let month_days = df.each_day_of_interval(win_span)
 
       let sprint_a = make_span("2024-03-08", "2024-03-18")
       let tracks = [
@@ -177,14 +172,7 @@ pub fn main() -> Nil {
         fn(p) {
           let #(iso, rule) = p
           let probe = df.parse_iso(iso)
-          let clamped =
-            df.clamp(
-              arg(probe),
-              sprint_a,
-              None,
-              dt.date_arg_codec(dc),
-              runtime.codec_dynamic(),
-            )
+          let clamped = df.clamp(arg(probe), sprint_a)
           let out_txt = df.format_date(clamped, "yyyy-MM-dd")
           let tr = document.create_element(doc, tag.tr)
           list.each([iso, out_txt, rule], fn(txt) {

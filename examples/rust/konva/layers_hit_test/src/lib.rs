@@ -4,13 +4,12 @@ use core::cell::Cell;
 use konva::*;
 use std::rc::Rc;
 
-fn make_line(pts: [f64; 4], col: &str, width: f64) -> GroupOrShape {
+fn make_line(pts: [f64; 4], col: &str, width: f64) -> Line {
     let lc = LineConfig::default()
         .with_points(JsArray::from(pts))
         .with_stroke(col)
         .with_stroke_width(width);
-    let ln = Line::new_with(Some(lc));
-    Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
+    Line::new_with(&lc)
 }
 
 fn make_card(id: &str, x: f64, y: f64, fill: &str) -> Rect {
@@ -74,8 +73,8 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#737373");
     bg_layer.add([
-        GroupOrShape::from(Rect::new_with(&frame)),
-        GroupOrShape::from(Text::new_with(&l1)),
+        Node::from(Rect::new_with(&frame)),
+        Node::from(Text::new_with(&l1)),
     ]);
 
     // Layer 2: Stacked cards & badge.
@@ -105,18 +104,18 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     overlay.add([
-        GroupOrShape::from(Circle::new_with(&dc)),
-        make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5),
-        make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5),
-        GroupOrShape::from(Text::new_with(&l2)),
+        Node::from(Circle::new_with(&dc)),
+        Node::from(make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5)),
+        Node::from(make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5)),
+        Node::from(Text::new_with(&l2)),
     ]);
 
     fg_layer.add([
-        GroupOrShape::from(&card_a),
-        GroupOrShape::from(&card_b),
-        GroupOrShape::from(&card_c),
-        GroupOrShape::from(Circle::new_with(&bc)),
-        GroupOrShape::from(&overlay),
+        Node::from(card_a.clone()),
+        Node::from(card_b.clone()),
+        Node::from(card_c.clone()),
+        Node::from(Circle::new_with(&bc)),
+        Node::from(overlay.clone()),
     ]);
 
     card_a.move_to_top();

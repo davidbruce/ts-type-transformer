@@ -47,13 +47,9 @@ fn hex(value: Int) -> Float {
 }
 
 fn add_solid(
-  sc: t.Scene(t.Object3DEventMap(Nil), Nil),
-  wire_grp: t.Group(t.Object3DEventMap(Nil), Nil),
-  geo: t.BufferGeometry(
-    t.NormalBufferAttributes(Nil),
-    t.BufferGeometryEventMap(Nil),
-    Nil,
-  ),
+  sc: t.Scene(Nil),
+  wire_grp: t.Group(Nil),
+  geo: t.BufferGeometry(Nil),
   color_hex: Int,
   rough: Float,
   metal: Float,
@@ -75,7 +71,8 @@ fn add_solid(
     |> Some
     |> mesh_standard_material.new_with
 
-  let m = mesh.new(Some(geo), Some(mat), t.mesh_standard_material_codec())
+  let m =
+    mesh.new_with(Some(geo), Some(t.material_or_material_array_material(mat)))
   object3d.get_position(m)
   |> vector3.set_with(x, y, Some(z))
   euler.set_x(object3d.get_rotation(m), 0.25)
@@ -84,7 +81,10 @@ fn add_solid(
 
   let egeo = edges_geometry.new_with(Some(geo), Some(thresh))
   let segs =
-    line_segments.new(Some(egeo), Some(line_mat), t.line_basic_material_codec())
+    line_segments.new_with(
+      Some(egeo),
+      Some(t.material_or_material_array_material(line_mat)),
+    )
   object3d.get_position(segs)
   |> vector3.set_with(x, y, Some(z))
   euler.set_x(object3d.get_rotation(segs), 0.25)

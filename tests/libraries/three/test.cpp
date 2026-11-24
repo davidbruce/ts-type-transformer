@@ -133,13 +133,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(around.min().x() == -2 && around.max().y() == 2);
 
     // ---- a scene graph ----
-    Group<> root = Group<>::create();
+    Group root = Group::create();
     root.name("root");
     root.position().set(10, 0, 0);
-    Group<> arm = Group<>::create();
+    Group arm = Group::create();
     arm.name("arm");
     arm.position().set(0, 5, 0);
-    Object3D<> hand = Object3D<>::create();
+    Object3D hand = Object3D::create();
     hand.name("hand");
     hand.position().set(0, 0, 2);
     // A Group where an Object3D is wanted: a derived-to-base conversion.
@@ -167,7 +167,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // traverse visits each object
     int visited = 0;
     std::string names;
-    root.traverse(Object3D_fn([&](Object3D<> o) {
+    root.traverse(Object3D_fn([&](Object3D o) {
         visited++;
         names += o.name() + ",";
     }));
@@ -183,7 +183,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     params.color(ColorRepresentation(std::string("#00ff00")));
     MeshBasicMaterial material = MeshBasicMaterial::create(params);
     CHECK(material.color().getHexString() == "00ff00");
-    Mesh<> mesh = Mesh<>::create(geometry, Material_or_Material_array(material));
+    Mesh mesh = Mesh::create(geometry, Material_or_Material_array(material));
     mesh.name("cube");
     mesh.position().set(0, 0, 0);
     CHECK(mesh.type() == "Mesh");
@@ -204,15 +204,15 @@ extern "C" __attribute__((export_name("run"))) void run() {
     root.updateMatrixWorld(true);
     Raycaster caster = Raycaster::create(Vector3::create(10.5, 0.25, 20), Vector3::create(0, 0, -1));
     CHECK(caster.near() == 0);
-    ts::Array<Intersection<Object3D<>>> hits = caster.intersectObject<Object3D<>>(mesh);
+    ts::Array<Intersection> hits = caster.intersectObject(mesh);
     CHECK(hits.size() == 1);
-    Intersection<Object3D<>> hit = hits[0];
+    Intersection hit = hits[0];
     CHECK(near(hit.distance(), 19));
     CHECK(near(hit.point().x(), 10.5) && near(hit.point().y(), 0.25) && near(hit.point().z(), 1));
     CHECK(hit.object().name() == "cube");
     // Missing it: a ray beside the cube.
     Raycaster wide = Raycaster::create(Vector3::create(50, 0, 20), Vector3::create(0, 0, -1));
-    CHECK(wide.intersectObject<Object3D<>>(mesh).size() == 0);
+    CHECK(wide.intersectObject(mesh).size() == 0);
     // Through the whole graph, recursively.
-    CHECK(caster.intersectObject<Object3D<>>(root, true).size() == 1);
+    CHECK(caster.intersectObject(root, true).size() == 1);
 }

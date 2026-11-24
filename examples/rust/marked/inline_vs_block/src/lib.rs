@@ -1,7 +1,7 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use marked::{Marked, MarkedExtension, ParserOutputOrPromise};
+use marked::{Marked, MarkedExtension, StringOrPromise};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -18,10 +18,10 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn html_of(r: ParserOutputOrPromise<String>) -> String {
+fn html_of(r: StringOrPromise) -> String {
     match r {
-        ParserOutputOrPromise::ParserOutput(s) => s,
-        ParserOutputOrPromise::JsPromise(_) => String::new(),
+        StringOrPromise::String(s) => s,
+        StringOrPromise::JsPromise(_) => String::new(),
     }
 }
 
@@ -51,7 +51,7 @@ pub extern "C" fn start() {
     );
     append(&app, head);
 
-    let m = Marked::new(Vec::<MarkedExtension<String, String>>::new());
+    let m = Marked::new(Vec::<MarkedExtension>::new());
     let snippets = [
         "Hello **world** and *italics*",
         "# Heading stays literal inline",

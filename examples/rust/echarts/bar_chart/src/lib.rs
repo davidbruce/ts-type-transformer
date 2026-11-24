@@ -26,17 +26,19 @@ pub extern "C" fn start() {
 
     let x_axis = XAXisComponentOptionXAxis::default()
         .with_data(["Jan", "Feb", "Mar", "Apr", "May", "Jun"])
-        .with_axis_line(&AxisLineOption::default().with_line_style(
-            &LineStyleOption::<JsValue>::default().with_color(JsValue::from("#111111")),
-        ))
+        .with_axis_line(
+            &AxisLineOption::default()
+                .with_line_style(&LineStyleOption::default().with_color(JsValue::from("#111111"))),
+        )
         .with_axis_label(&AxisLabelOption::default().with_color("#555555"));
 
     let y_axis = YAXisComponentOptionYAxisValue::default()
         .with_min(0.0)
         .with_max(100.0)
-        .with_split_line(&SplitLineOption::default().with_line_style(
-            &LineStyleOption::<JsValue>::default().with_color(JsValue::from("#e5e5e5")),
-        ))
+        .with_split_line(
+            &SplitLineOption::default()
+                .with_line_style(&LineStyleOption::default().with_color(JsValue::from("#e5e5e5"))),
+        )
         .with_axis_label(&AxisLabelOption::default().with_color("#555555"));
 
     let bars = BarSeriesOption::default()
@@ -52,7 +54,7 @@ pub extern "C" fn start() {
     opt.set_x_axis(&x_axis);
     opt.set_y_axis(&y_axis);
     opt.set_series(&bars);
-    chart.set_option(opt);
+    chart.set_option(&opt);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
     meta.set_text_content(&format!(

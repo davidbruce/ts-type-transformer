@@ -52,8 +52,8 @@ check (near turned.x 0.0 && near turned.y 1.0) "rotate"
 check (m.equals (m.clone ())) "matrix equals"
 
 // A scene graph: children, positions, transforms.
-let stage = Container.Create<obj> ()
-let box = Container.Create<obj> ()
+let stage = Container.Create ()
+let box = Container.Create ()
 box.position.set (100.0, 50.0) |> ignore
 stage.addChild box |> ignore
 check (stage.children.Count = 1) "addChild"
@@ -84,7 +84,7 @@ check (gp.x = 10.0 && gp.y = 10.0) "getBounds"
 check (near gp.width 100.0 && near gp.height 50.0) "getBounds size"
 
 // A Sprite with the white texture: 1 by 1, scaled by its size.
-let sprite = Sprite.Create (SpriteOptionsOrTexture.Texture (unbox Texture.WHITE)) // FINDING 22: Texture.WHITE is a Texture<BufferImageSource>, not a Texture<TextureSource<obj>>
+let sprite = Sprite.Create (SpriteOptionsOrTexture.Texture Texture.WHITE)
 check (sprite.width = 1.0 && sprite.height = 1.0) "the white texture is 1 by 1"
 sprite.width <- 40.0
 sprite.height <- 30.0
@@ -116,7 +116,7 @@ check box.destroyed "destroy"
 
 // An Application: its renderer is made asynchronously (`init`) with named options.
 async {
-    let app = Application.Create<obj> ()
+    let app = Application.Create ()
     do! Async.AwaitPromise (app.init (InitOptions.Create (width = 200.0, height = 100.0)))
     check (not (isNull app.canvas)) "the application's canvas"
     check (app.screen.width = 200.0 && app.screen.height = 100.0) "the screen has the requested size"

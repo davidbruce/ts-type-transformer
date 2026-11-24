@@ -116,7 +116,7 @@ let refs = Lexer.lex "[x][a]\n\n[a]: https://a.example \"A\"\n"
 check (refs.links.["a"].href = "https://a.example") "reference links"
 
 // A Marked instance has its own options.
-let m = Marked.Create<string, string> ()
+let m = Marked.Create ()
 check (not (isNull (box m)) && not (isNull (box m.defaults))) "Marked instance"
 check (m.lexer("# T").length = 1.0) "instance lexer"
 let tl = m.lexer "x *y*"
@@ -125,11 +125,11 @@ check (m.parser (ResizeArray [ tl.[0.0] ]) = "<p>x <em>y</em></p>\n") "instance 
 // FINDING 5: `marked.parse`, `Marked#parse` and `Marked#parseInline` are typed `obj`: not callable.
 // Custom renderer and walkTokens extension.
 let seen = ResizeArray<string>()
-let ext = createEmpty<MarkedExtension<string, string>>
+let ext = createEmpty<MarkedExtension>
 ext.renderer <- Some (
     MarkedExtensionRenderer.Create (
         heading = (fun (h: Tokens.Heading) ->
-            U2.Case2 (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
+            StringOrBoolean.String (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
     )
 )
 ext.walkTokens <- Some (fun (t: Token) ->

@@ -10,9 +10,9 @@ using namespace three;
 
 struct AppState {
     WebGLRenderer renderer;
-    Scene<> scene;
+    Scene scene;
     PerspectiveCamera camera;
-    Group<> wire_group;
+    Group wire_group;
     dom::HTMLElement wire_btn;
     dom::HTMLElement meta;
     bool wire_visible = true;
@@ -20,7 +20,7 @@ struct AppState {
 };
 
 static void add_solid(const std::shared_ptr<AppState>& st,
-                      const BufferGeometry<>& geo,
+                      const BufferGeometry& geo,
                       uint32_t hex, double rough, double metal, bool flat,
                       double x, double y, double z, double thresh,
                       const LineBasicMaterial& line_mat) {
@@ -63,7 +63,7 @@ TS_EXPORT(start) void start() {
     renderer.setSize(width, height);
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
-    Scene scene = Scene<>::create();
+    Scene scene = Scene::create();
     scene.background(Color(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
 
@@ -75,7 +75,7 @@ TS_EXPORT(start) void start() {
     GridHelper grid = GridHelper(12.0, 12.0, 0x737373, 0xd4d4d4);
     grid.position().y(-1.2);
 
-    Group wire_group = Group<>::create();
+    Group wire_group = Group::create();
     scene.add(AmbientLight(0xffffff, 1.2), key, rim, grid, wire_group);
 
     auto st = std::make_shared<AppState>(AppState{

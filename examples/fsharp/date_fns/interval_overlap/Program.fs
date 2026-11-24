@@ -19,7 +19,7 @@ let private wrap (tag: string) (cls: string) (children: Dom.HTMLElement list) =
         node.appendChild ch |> ignore
     node
 
-let private makeSpan (sIso: string) (eIso: string) : Interval<DateArg<JS.Date>, DateArg<JS.Date>> =
+let private makeSpan (sIso: string) (eIso: string) : Interval =
     let s: JS.Date = parseISO sIso
     let e: JS.Date = parseISO eIso
     Interval.Create (s, e)

@@ -24,7 +24,7 @@ TS_EXPORT(start) void start() {
 
     std::string sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n";
-    auto tokens = marked::Lexer<std::string, std::string>::lex_static(sample);
+    auto tokens = marked::Lexer::lex_static(sample);
 
     auto head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Marked Token Inspector (C++)"));

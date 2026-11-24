@@ -76,12 +76,7 @@ pub fn main() {
   rect_config.set_id(rc, Some("box"))
   rect_config.set_name(rc, Some("shape"))
   let r = rect.new_with(Some(rc))
-  let _ =
-    container.add(
-      l,
-      [t.GroupOrShapeShape(shape.widen(r))],
-      t.group_or_shape_codec(),
-    )
+  let _ = container.add(l, [r])
   let at = node.get_position(r)
   let client = node.get_client_rect(r)
   let passed =
@@ -116,12 +111,12 @@ pub fn main() {
     + check(node.get_parent(r) |> option.is_some, "the rect has a parent")
     + check(option.is_some(node.get_layer(r)), "the rect knows its layer")
     + check(
-      rect_config.get_fill(node.get_attrs(r))
-        == Some(t.StringOrCanvasGradientString("red")),
+      decode.run(node_config.get_at(node.get_attrs(r), "fill"), decode.string)
+        == Ok("red"),
       "fill in the attrs",
     )
     + check(
-      rect_config.get_id(node.get_attrs(r)) == Some("box"),
+      node_config.get_id(node.get_attrs(r)) == Some("box"),
       "id in the attrs",
     )
 
@@ -142,28 +137,18 @@ pub fn main() {
   node_config.set_y(gc, Some(100.0))
   node_config.set_name(gc, Some("cluster"))
   let g = group.new_with(Some(gc))
-  let _ =
-    container.add(
-      g,
-      [
-        t.GroupOrShapeShape(shape.widen(c)),
-        t.GroupOrShapeShape(shape.widen(tx)),
-      ],
-      t.group_or_shape_codec(),
-    )
-  let _ = container.add(l, [t.GroupOrShapeGroup(g)], t.group_or_shape_codec())
+  let _ = container.add(g, [node.upcast(c), node.upcast(tx)])
+  let _ = container.add(l, [g])
   let circle_at = node.get_absolute_position(c)
   let text_rect = node.get_client_rect(tx)
   let passed =
     passed
     + check(
-      list.length(container.get_children(g, None, t.group_or_shape_codec()))
-        == 2,
+      list.length(container.get_children(g)) == 2,
       "the group has two children",
     )
     + check(
-      list.length(container.get_children(l, None, t.group_or_shape_codec()))
-        == 2,
+      list.length(container.get_children(l)) == 2,
       "the layer has two children",
     )
     + check(
@@ -177,7 +162,7 @@ pub fn main() {
       "a text has a size",
     )
     + check(
-      attr_string(node.get_attr(tx, "text", runtime.codec_string()), "text")
+      attr_string(node.get_attr(tx, t.AnyStringString("text")), "text")
         == "Hello Konva",
       "the text's attr",
     )
@@ -291,8 +276,7 @@ pub fn main() {
       "a destroyed circle is gone",
     )
     + check(
-      list.length(container.get_children(g, None, t.group_or_shape_codec()))
-        == 1,
+      list.length(container.get_children(g)) == 1,
       "the group has one child left",
     )
   let _ = container.destroy_children(l)

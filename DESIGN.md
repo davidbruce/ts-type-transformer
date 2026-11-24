@@ -53,7 +53,8 @@ are errors. Example targets are in `examples/targets/`.
 | `intersections` | `merge` | `A & B` | one merged object type | yes |
 | `inheritance` | `flatten` | `<extends>` | inherited members copied in, base type arguments applied; `<ancestor>` list kept | yes |
 | `aliases` | `expand` | generic aliases of other than an object, function or union: `type List<T> = T[]` | each use is the type with its arguments: `number[]` | no |
-| `generics` | `erase` | type parameters | their constraint, or `any` | no |
+| `generics` | `erase` | type parameters | their constraint where it says what a value is, else what the library instantiates them with, else their default | no |
+| `generics` | `checking` | the same, but those the user fills | as `erase`; `Array<T>`, `map<U>(f): U[]` stay | no |
 | `constraints` | `nominal` | a declaration's type parameter constraints, which TypeScript checks by shape | kept only where every use in the output names a type declared to extend it, or a type parameter so constrained, as C++'s `ts::extends` checks | no |
 | `constraints` | `exact` | the same | as `nominal`, but a type parameter meets only the constraint it has: Rust's `T: Is<Readable>` is not `Is<Stream>` | no |
 | `nullable` | `wrap` | `T \| null \| undefined` | `<nullable absent="null\|undefined\|either">` | no |
@@ -68,6 +69,26 @@ are errors. Example targets are in `examples/targets/`.
 | `keyed_params` | `map` | the same | kept generic, `keyof M` and `M[K]` as written, for targets with type-level keys | no |
 | `overloads` | `rename` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
 | `redeclarations` | `drop` | a method a type declares again as its ancestor does, but for `this` | the ancestor's alone | no |
+
+`generics = "checking"` erases what only TypeScript's checking uses and
+keeps what the user fills: a type parameter of a class or of an interface
+with methods or an index, without a default (`Array<T>`, `NodeListOf<TNode
+extends Node>`, TanStack's `Table<TData>`); one nothing constrains, without
+a default or defaulting to `any` (prosemirror's `OrderedMap<T = any>`), or
+defaulting to another (Konva's `GetSet<Type, This, SetType = Type>`); a
+function's that its result depends on, unconstrained (`map<U>(f): U[]`) or
+handing the caller's value back (`appendChild<T extends Node>(node: T): T`).
+The rest goes. Where its constraint says what a value is, to its default if
+that is a type (what a reference that does not say gets: pixi's
+`toGlobal<P extends PointData = Point>` gives a `Point`), else to the
+constraint (date-fns' `DateType extends Date`; prosemirror's `Nodes extends
+string`, over which `{ [name in Nodes]: NodeSpec }` is a record). An event
+map's (`T extends EventMap<T> = any`), to its default. Else to what the
+library instantiates it with (ECharts' `LineStyleOption<Clr = ZRColor>` is
+used with `ZRColor | ZRColor[]` too, so split lines take an array of
+colours), else to its default. `erase` erases every one so; one the user
+fills, to its constraint or default. A merged declaration's parameter has
+the default any of its declarations gives.
 
 A rest parameter of a tuple of fixed length is its elements, as TypeScript
 has it: pixi's `stroke(...args: Parameters<GraphicsContext['stroke']>)` is
@@ -399,8 +420,8 @@ the time control returns to JavaScript is reported, not lost.
   `query_selector("p.intro")`), and where they differ in other parameters too,
   the key fixes their types (`add_event_listener(HTMLElementEventMap::CLICK,
   &listener, None)`, `add_event_listener("ping", on_ping, &options)`). A
-  nullable union argument is any member, the union or `None`. A defaulted type argument is stated with
-  `query_selector_as::<T>`; a constructor of a generic class takes the
+  nullable union argument is any member, the union or `None`. A kept defaulted type argument is stated with
+  `name_as::<T>`; a constructor of a generic class takes the
   class's parameters it does not name at their defaults, as `HashMap::new`
   (`Mesh::new_with(&geometry, &material)`, `Application::new()`), and a
   shorter form those its arguments left out alone named (date-fns'
@@ -459,13 +480,14 @@ the time control returns to JavaScript is reported, not lost.
   `JsAsyncIterator<'T>`, a subclass of Array a `seq<T>` with an indexer;
   constraints of methods, functions and interfaces are F# constraints, kept
   through keyed values (`getElementsByTagName<'K when 'K :> Element>`). An
-  index signature is `JsRecord<string, T>`; `f(a, b?, ...rest)` is two
+  index signature is `JsRecord<string, T>`. In an erased union a function of
+  two or more arguments is a `System.Func`: Fable keeps a function value
+  curried (TanStack's `AccessorFn<'TData> | string`). `f(a, b?, ...rest)` is two
   overloads. A union argument is an overload of each member too, a generic
-  alias's with its arguments put in (date-fns' `DateArg<'D>`:
-  `addDays (date, 3.0)`, no `!^`), and a function's type parameter no
-  required argument names, defaulted to one that does, is that one
-  (`ResultDate = DateType`): the result follows the argument. date-fns'
-  bindings grow a fifth. A library that is a module is imported (`[<Import("Pt",
+  alias's with its arguments put in (date-fns' `DateArg`: `addDays (date,
+  3.0)`, no `!^`), and a function's kept type parameter no required argument
+  names, defaulted to one that does, is that one: the result follows the
+  argument. A library that is a module is imported (`[<Import("Pt",
   "pts")>]`): values, functions and classes, and a union case of a class is
   tested by `instanceof` on the import. The built-ins Fable has are its
   types (`JS.Uint8Array`, `JS.DataView`, `JS.Date`); an `Error` is an `exn`,
@@ -710,5 +732,4 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 - Gleam: no async iteration; builtins are opaque.
 - All twelve real libraries compile in every target (72 of 72). A type
   that expands without end converts to a budget, then `any`.
-- Each construct has one lowering strategy so far. Values are strings so more
-  can be added (`generics = "monomorphize"`).
+- Strategies are strings, so more can be added (`generics = "monomorphize"`).

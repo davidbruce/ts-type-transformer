@@ -71,7 +71,7 @@ fn col_def(key: &str, hdr: &str) -> JsValue {
 }
 
 struct State {
-    table: TableCore<TableFeatures, JsValue>,
+    table: TableCore<JsValue>,
     wrap: dom::HTMLElement,
     meta: dom::HTMLElement,
     page_idx: Cell<u32>,
@@ -100,7 +100,7 @@ fn render(st: &State) {
     html.push_str("</tbody></table>");
     st.wrap.set_inner_html(&html);
 
-    let pag: TableRowPagination<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
+    let pag: TableRowPagination<JsValue> = js::unchecked_cast(&st.table);
     let page_cnt = pag.get_page_count() as u32;
     let msg = format!(
         "Page {} / {} \u{00B7} pageSize {} \u{00B7} showing {} of {} rows",
@@ -118,8 +118,8 @@ pub extern "C" fn start() {
     let features = JsValue::object()
         .with("coreReactivityFeature", make_reactivity())
         .with("rowPaginationFeature", row_pagination_feature())
-        .with("coreRowModel", create_core_row_model::<TableFeatures, JsValue>())
-        .with("paginatedRowModel", create_paginated_row_model_as::<TableFeatures, JsValue>());
+        .with("coreRowModel", create_core_row_model::<JsValue>())
+        .with("paginatedRowModel", create_paginated_row_model_as::<JsValue>());
 
     let accounts = ["ops-pool", "clearing-ch", "reserve-de"];
     let cats = ["compute", "storage", "egress", "audit"];
@@ -153,7 +153,7 @@ pub extern "C" fn start() {
         .with("data", data)
         .with("columns", cols)
         .with("initialState", init_state)
-        .unchecked_into::<TableOptionsCore<TableFeatures, JsValue>>();
+        .unchecked_into::<TableOptionsCore<JsValue>>();
 
     let doc = dom::document();
     let st = Rc::new(State {
@@ -168,7 +168,7 @@ pub extern "C" fn start() {
         let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let pag: TableRowPagination<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
+            let pag: TableRowPagination<JsValue> = js::unchecked_cast(&st_c.table);
             let page_cnt = pag.get_page_count() as u32;
             match idx {
                 0 => {

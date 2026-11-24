@@ -39,8 +39,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let day = dt.DateOrStringOrNumberDate
-      let arg = dt.DateArgDateType
+      let day = dt.DateArgDate
 
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
@@ -61,21 +60,21 @@ pub fn main() -> Nil {
         |> duration.with_days(2.0)
 
       let ops = [
-        #("addDays(base, 3)", df.add_days(arg(base_d), 3.0), "yyyy-MM-dd"),
-        #("subDays(base, 15)", df.sub_days(arg(base_d), 15.0), "yyyy-MM-dd"),
-        #("addWeeks(base, 2)", df.add_weeks(arg(base_d), 2.0), "yyyy-MM-dd"),
-        #("addMonths(jan31, 1)", df.add_months(arg(jan31), 1.0), "yyyy-MM-dd"),
-        #("subMonths(base, 3)", df.sub_months(arg(base_d), 3.0), "yyyy-MM-dd"),
-        #("addYears(base, 1)", df.add_years(arg(base_d), 1.0), "yyyy-MM-dd"),
-        #("startOfWeek(base)", df.start_of_week(arg(base_d)), "yyyy-MM-dd"),
+        #("addDays(base, 3)", df.add_days(day(base_d), 3.0), "yyyy-MM-dd"),
+        #("subDays(base, 15)", df.sub_days(day(base_d), 15.0), "yyyy-MM-dd"),
+        #("addWeeks(base, 2)", df.add_weeks(day(base_d), 2.0), "yyyy-MM-dd"),
+        #("addMonths(jan31, 1)", df.add_months(day(jan31), 1.0), "yyyy-MM-dd"),
+        #("subMonths(base, 3)", df.sub_months(day(base_d), 3.0), "yyyy-MM-dd"),
+        #("addYears(base, 1)", df.add_years(day(base_d), 1.0), "yyyy-MM-dd"),
+        #("startOfWeek(base)", df.start_of_week(day(base_d)), "yyyy-MM-dd"),
         #(
           "endOfMonth(base)",
-          df.end_of_month(arg(base_d)),
+          df.end_of_month(day(base_d)),
           "yyyy-MM-dd HH:mm:ss",
         ),
         #(
           "add(base, { months: 1, days: 2 })",
-          df.add(arg(base_d), dur),
+          df.add(day(base_d), dur),
           "yyyy-MM-dd",
         ),
         #("base (immutable check)", base_d, "yyyy-MM-dd"),

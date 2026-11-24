@@ -22,7 +22,7 @@ fn tag_rule(tag: &str, level: i32) -> TagParseRule {
     r
 }
 
-fn build_schema() -> Schema<JsValue, JsValue> {
+fn build_schema() -> Schema {
     let doc = NodeSpec::default().with_content("block+");
 
     let lvl = <AttributeSpec as Default>::default().with_default(2.0);
@@ -60,12 +60,12 @@ fn build_schema() -> Schema<JsValue, JsValue> {
 
     let text = NodeSpec::default().with_group("inline");
 
-    let nodes = JsValue::object()
-        .with("doc", &doc)
-        .with("heading", &heading)
-        .with("paragraph", &para)
-        .with("blockquote", &quote)
-        .with("text", &text);
+    let nodes = SchemaSpecNodes::default();
+    nodes.set_at("doc", &doc);
+    nodes.set_at("heading", &heading);
+    nodes.set_at("paragraph", &para);
+    nodes.set_at("blockquote", &quote);
+    nodes.set_at("text", &text);
 
     let make_mark = |tag: &'static str| {
         MarkSpec::default()
@@ -74,14 +74,12 @@ fn build_schema() -> Schema<JsValue, JsValue> {
                 move |_: Mark, _: bool| hole_spec(tag),
             ))
     };
-    let marks = JsValue::object()
-        .with("strong", &make_mark("strong"))
-        .with("em", &make_mark("em"))
-        .with("code", &make_mark("code"));
+    let marks = SchemaSpecMarks::default();
+    marks.set_at("strong", &make_mark("strong"));
+    marks.set_at("em", &make_mark("em"));
+    marks.set_at("code", &make_mark("code"));
 
-    let spec = SchemaSpec::<JsValue, JsValue>::default()
-        .with_nodes(nodes)
-        .with_marks(marks);
+    let spec = SchemaSpec::default().with_nodes(nodes).with_marks(marks);
     Schema::new(&spec)
 }
 
@@ -89,7 +87,7 @@ const SPEC_HTML: &str = "<h2>DOMParser &amp; JSON Serialization</h2><p>ProseMirr
 const CHANGELOG_HTML: &str = "<h2>Release 1.4 Notes</h2><p>Added <strong>typed bindings</strong> for <code>DOMParser</code> and <em>DOMSerializer</em>.</p><blockquote><p>All round-trips verified with Node.eq().</p></blockquote><p>Edit directly above to watch HTML output update live.</p>";
 
 struct AppState {
-    schema: Schema<JsValue, JsValue>,
+    schema: Schema,
     parser: DOMParser,
     serializer: DOMSerializer,
     view: Option<EditorView>,

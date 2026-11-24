@@ -650,10 +650,11 @@ struct Array : virtual Handle {
     Array(std::initializer_list<T> items) : Handle(handle, ts_raw_js_array_new()) {
         for (const T& x : items) push(x);
     }
-    // An array of any value takes any array, and an array of a union one of what the union takes.
+    // An array of any value takes any array, an array of a union one of what the union takes,
+    // and an array of a class one of its subclass, as TypeScript has it (`Sub[]` is a `Base[]`).
     // Not a type that extends Array: it is also taken where another parameter would take it.
     template <class A, class U = typename array_elem<A>::type>
-        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_variant<T> && in_accepts<T, U>)))
+        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_variant<T> && in_accepts<T, U>) || std::is_base_of_v<T, U>))
     Array(const A& o) : Handle(o) {}
     static Array create() { return Array(handle, ts_raw_js_array_new()); }
     template <class... Us>

@@ -20,7 +20,7 @@ TS_EXPORT(start) void start() {
         passed++;
     };
 
-    auto emitter = EventEmitter<ts::Value>::create();
+    auto emitter = EventEmitter::create();
     emitter.setMaxListeners(12);
     check(emitter.getMaxListeners() == 12);
 

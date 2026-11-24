@@ -72,7 +72,7 @@ pub extern "C" fn run() {
         num(36.0),
     ])));
     option.set_series(&JsValue(bars.0.clone()));
-    chart.set_option(option.clone());
+    chart.set_option(&option);
 
     // Read back what was set: the series, with its data.
     let read = chart.get_option();
@@ -91,7 +91,7 @@ pub extern "C" fn run() {
         "data",
         list(vec![num(5.0), num(20.0), num(36.0), num(7.0)]),
     )])]));
-    chart.set_option(more);
+    chart.set_option(&more);
     let merged = as_array(&as_obj(&as_array(&chart.get_option().at("series")).get(0)).at("data"));
     check!(merged.len() == 4);
 
@@ -122,12 +122,11 @@ pub extern "C" fn run() {
             None
         }
     });
-    // (The event name is a generic parameter: a String, not a &str.)
-    chart.on("custom".to_string(), &handler, None::<JsValue>);
-    chart.trigger("custom".to_string(), vec![num(42.0), num(1.0)]);
+    chart.on("custom", &handler);
+    chart.trigger("custom", vec![num(42.0), num(1.0)]);
     check!(heard.get() == 42.0 && count.get() == 2);
     chart.off_with(Some(&text("custom")), None);
-    chart.trigger("custom".to_string(), vec![num(7.0)]);
+    chart.trigger("custom", vec![num(7.0)]);
     check!(heard.get() == 42.0);
 
     // Resized, cleared, then disposed.

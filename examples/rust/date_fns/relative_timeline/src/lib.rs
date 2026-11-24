@@ -58,10 +58,10 @@ pub extern "C" fn start() {
     );
     let timeline = make_el(&doc, "div", "timeline", None);
 
-    let mut all_dates: Vec<DateArg<Date>> = Vec::new();
+    let mut all_dates: Vec<DateArg> = Vec::new();
     for (iso, title) in raw {
         let d: Date = date_fns::parse_iso(iso);
-        all_dates.push(DateArg::DateType(d.clone()));
+        all_dates.push(DateArg::Date(d.clone()));
 
         let same = date_fns::is_same_day(&d, &anchor);
         let row = make_el(

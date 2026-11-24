@@ -16,13 +16,13 @@ TS_EXPORT(start) void start() {
         .animation = false,
         .color = ts::Array<std::string>::of("#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4"),
         .tooltip = TooltipComponentOption({.trigger = TooltipComponentOption_trigger::item}),
-        .legend = PlainLegendComponentOption({.textStyle = LabelOption<DetailOption_object>({.color = "#111111"}), .bottom = 8}),
+        .legend = PlainLegendComponentOption({.textStyle = LabelOption({.color = "#111111"}), .bottom = 8}),
         .series = PieSeriesOption({
             .data = ts::Array<PieSeriesOption_data>::of(slice("Runtime", 34), slice("Bindings", 26), slice("Glue", 18), slice("Parser", 14), slice("Tests", 8)),
             .center = ts::Array<PositionSizeOption>::of("50%", "46%"),
             .radius = ts::Array<PositionSizeOption>::of("44%", "72%"),
             .name = "Subsystems",
-            .itemStyle = PieItemStyleOption<ts::Value>({.borderColor = "#ffffff", .borderWidth = 2}),
+            .itemStyle = PieItemStyleOption({.borderColor = "#ffffff", .borderWidth = 2}),
             .label = PieLabelOption({.color = "#111111"}),
         }),
     });

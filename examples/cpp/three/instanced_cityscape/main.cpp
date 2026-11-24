@@ -31,10 +31,10 @@ static const char* layout_name(int mode) {
 
 struct AppState {
     WebGLRenderer renderer;
-    Scene<> scene;
+    Scene scene;
     OrthographicCamera ortho_cam;
     PerspectiveCamera persp_cam;
-    InstancedMesh<> inst;
+    InstancedMesh inst;
     dom::HTMLElement cam_btn;
     dom::HTMLElement meta;
     bool use_ortho = true;
@@ -110,7 +110,7 @@ TS_EXPORT(start) void start() {
     renderer.setSize(width, height);
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
-    Scene scene = Scene<>::create();
+    Scene scene = Scene::create();
     scene.background(Color(0xf7f7f7));
     OrthographicCamera ortho_cam = OrthographicCamera(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0);
     PerspectiveCamera persp_cam = PerspectiveCamera(40.0, aspect, 0.1, 100.0);

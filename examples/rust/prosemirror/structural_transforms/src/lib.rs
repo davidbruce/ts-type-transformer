@@ -13,7 +13,7 @@ fn hole_spec(tag: &str) -> DOMOutputSpec {
     DOMOutputSpec::Array(JsArray::from([JsValue::from(tag), JsValue::from(0.0)]))
 }
 
-fn build_schema() -> Schema<JsValue, JsValue> {
+fn build_schema() -> Schema {
     let doc = NodeSpec::default().with_content("block+");
 
     let lvl = <AttributeSpec as Default>::default().with_default(2.0);
@@ -50,45 +50,43 @@ fn build_schema() -> Schema<JsValue, JsValue> {
 
     let text = NodeSpec::default().with_group("inline");
 
-    let nodes = JsValue::object()
-        .with("doc", &doc)
-        .with("heading", &heading)
-        .with("paragraph", &tag_node("inline*", Some("block"), "p", false))
-        .with(
-            "blockquote",
-            &tag_node("block+", Some("block"), "blockquote", true),
-        )
-        .with(
-            "bullet_list",
-            &tag_node("list_item+", Some("block"), "ul", false),
-        )
-        .with("list_item", &tag_node("paragraph block*", None, "li", true))
-        .with("horizontal_rule", &hr)
-        .with("text", &text);
+    let nodes = SchemaSpecNodes::default();
+    nodes.set_at("doc", &doc);
+    nodes.set_at("heading", &heading);
+    nodes.set_at("paragraph", &tag_node("inline*", Some("block"), "p", false));
+    nodes.set_at(
+        "blockquote",
+        &tag_node("block+", Some("block"), "blockquote", true),
+    );
+    nodes.set_at(
+        "bullet_list",
+        &tag_node("list_item+", Some("block"), "ul", false),
+    );
+    nodes.set_at("list_item", &tag_node("paragraph block*", None, "li", true));
+    nodes.set_at("horizontal_rule", &hr);
+    nodes.set_at("text", &text);
 
     let make_mark = |tag: &'static str| {
         MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(
             move |_: Mark, _: bool| hole_spec(tag),
         ))
     };
-    let marks = JsValue::object()
-        .with("strong", &make_mark("strong"))
-        .with("code", &make_mark("code"));
+    let marks = SchemaSpecMarks::default();
+    marks.set_at("strong", &make_mark("strong"));
+    marks.set_at("code", &make_mark("code"));
 
-    let spec = SchemaSpec::<JsValue, JsValue>::default()
-        .with_nodes(nodes)
-        .with_marks(marks);
+    let spec = SchemaSpec::default().with_nodes(nodes).with_marks(marks);
     Schema::new(&spec)
 }
 
-fn p_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
+fn p_node(schema: &Schema, t: &str) -> Node {
     schema.node_with("paragraph", None, schema.text(t), None)
 }
-fn li_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
+fn li_node(schema: &Schema, t: &str) -> Node {
     schema.node_with("list_item", None, p_node(schema, t), None)
 }
 
-fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
+fn make_initial_doc(schema: &Schema) -> Node {
     let ha = Attrs::default();
     ha.set_at("level", 2.0);
     let h = schema.node_with(
@@ -136,7 +134,7 @@ fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     )
 }
 
-fn make_state(schema: &Schema<JsValue, JsValue>) -> EditorState {
+fn make_state(schema: &Schema) -> EditorState {
     let cfg = EditorStateConfig::default()
         .with_schema(schema)
         .with_doc(&make_initial_doc(schema));
@@ -144,7 +142,7 @@ fn make_state(schema: &Schema<JsValue, JsValue>) -> EditorState {
 }
 
 struct AppState {
-    schema: Schema<JsValue, JsValue>,
+    schema: Schema,
     view: Option<EditorView>,
     meta: dom::HTMLElement,
     total_steps: usize,

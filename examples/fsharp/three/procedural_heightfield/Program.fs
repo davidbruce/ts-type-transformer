@@ -79,7 +79,7 @@ let main () =
             indices.Add c
             indices.Add d
 
-    geo.setAttribute ("position", posAttr :> BufferAttribute<BufferAttributeEventMap>) |> ignore
+    geo.setAttribute ("position", posAttr :> BufferAttribute) |> ignore
     geo.setIndex (BufferAttributeOrNumberArray.Array indices) |> ignore
 
     let surfMat =
@@ -91,7 +91,7 @@ let main () =
                 flatShading = true
             )
         )
-    let surfaceMesh = Mesh.Create(geo, surfMat)
+    let surfaceMesh = Mesh.Create(geo, MaterialOrMaterialArray.Material surfMat)
     scene.add (surfaceMesh) |> ignore
 
     let wireMat =
@@ -101,14 +101,14 @@ let main () =
                 wireframe = true
             )
         )
-    let wireMesh = Mesh.Create(geo, wireMat)
+    let wireMesh = Mesh.Create(geo, MaterialOrMaterialArray.Material wireMat)
     wireMesh.position.y <- 0.015
     scene.add (wireMesh) |> ignore
 
     let ptCount = (gridN / 2) * (gridN / 2)
     let ptsGeo = BufferGeometry.Create()
     let ptsAttr = Float32BufferAttribute.Create(float (ptCount * 3), 3.0)
-    ptsGeo.setAttribute ("position", ptsAttr :> BufferAttribute<BufferAttributeEventMap>) |> ignore
+    ptsGeo.setAttribute ("position", ptsAttr :> BufferAttribute) |> ignore
     let ptsMat =
         PointsMaterial.Create(
             PointsMaterialParameters.Create(
@@ -116,7 +116,7 @@ let main () =
                 size = 0.14
             )
         )
-    let ptsObj = Points.Create(ptsGeo, ptsMat)
+    let ptsObj = Points.Create(ptsGeo, MaterialOrMaterialArray.Material ptsMat)
     scene.add (ptsObj) |> ignore
 
     let wireBtn = (document.getElementById "btn-wire").Value

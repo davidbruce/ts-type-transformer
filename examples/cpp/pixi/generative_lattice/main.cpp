@@ -11,7 +11,7 @@ static void stroke_g(const Graphics& g, double width, double color_hex) {
 }
 
 static ts::Task run_app() {
-    Application app = Application<>::create();
+    Application app = Application::create();
     if (auto res = co_await app.init({{.backgroundColor = 0xffffff, .preserveDrawingBuffer = true, .preference = "webgl", .width = 680, .height = 400, .antialias = true, .autoStart = false}}); !res) co_return;
 
     dom::Document doc = dom::get_document();
@@ -19,7 +19,7 @@ static ts::Task run_app() {
         stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
-    Container<ts::Value> stage = app.stage();
+    Container stage = app.stage();
 
     static constexpr double rings[4] = { 42.0, 82.0, 122.0, 162.0 };
     static constexpr int ring_colors[4] = { 0x111111, 0x555555, 0xa3a3a3, 0xe5e5e5 };

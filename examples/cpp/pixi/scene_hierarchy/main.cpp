@@ -12,7 +12,7 @@ static void stroke_g(const Graphics& g, double width, double color_hex) {
 }
 
 static ts::Task run_app() {
-    Application app = Application<>::create();
+    Application app = Application::create();
     if (auto res = co_await app.init({{.backgroundColor = 0xffffff, .preserveDrawingBuffer = true, .preference = "webgl", .width = 680, .height = 400, .antialias = true, .autoStart = false}}); !res) co_return;
 
     dom::Document doc = dom::get_document();
@@ -20,7 +20,7 @@ static ts::Task run_app() {
         stage_el->appendChild(app.canvas().unsafe_as<dom::Node>());
     }
 
-    Container<ts::Value> stage = app.stage();
+    Container stage = app.stage();
 
     Graphics guide = Graphics::create();
     guide.moveTo(40.0, 200.0).lineTo(640.0, 200.0).moveTo(340.0, 24.0).lineTo(340.0, 376.0);
@@ -28,18 +28,18 @@ static ts::Task run_app() {
     guide.circle(340.0, 200.0, 110.0);
     stroke_g(guide, 1.0, 0xd4d4d4);
 
-    Container<ts::Value> root = Container<ts::Value>::create();
+    Container root = Container::create();
     root.position().set(340.0, 200.0);
 
     for (int i = 0; i < 3; i++) {
-        Container<ts::Value> arm = Container<ts::Value>::create();
+        Container arm = Container::create();
         arm.rotation(double(i) * 2.0 * M_PI / 3.0);
 
         Graphics arm_bar = Graphics::create();
         arm_bar.rect(0.0, -4.0, 110.0, 8.0).fill(0x737373);
         arm_bar.circle(110.0, 0.0, 10.0).fill(0x111111);
 
-        Container<ts::Value> sub = Container<ts::Value>::create();
+        Container sub = Container::create();
         sub.x(110.0);
         sub.rotation(-0.45);
 

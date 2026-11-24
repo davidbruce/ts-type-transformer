@@ -27,10 +27,10 @@ let private features =
         columnVisibilityFeature = columnVisibilityFeature,
         columnPinningFeature = columnPinningFeature,
         rowSelectionFeature = rowSelectionFeature,
-        coreRowModel = unbox (createCoreRowModel<TableFeatures, TaskRow> ())
+        coreRowModel = unbox (createCoreRowModel<TaskRow> ())
     )
 
-let private col (key: string) (header: string) : ColumnDefBase_Core<TableFeatures, TaskRow, CellData> =
+let private col (key: string) (header: string) : ColumnDefBase_Core<TaskRow> =
     unbox {| accessorKey = key; header = header |}
 
 let private data =
@@ -66,10 +66,10 @@ let private options =
         )
     )
 
-let private table = constructTable<TableFeatures, TaskRow> options
-let private vis = unbox<Table_ColumnVisibility<TableFeatures, TaskRow>> table
-let private pin = unbox<Table_ColumnPinning<TableFeatures, TaskRow>> table
-let private sel = unbox<Table_RowSelection<TableFeatures, TaskRow>> table
+let private table = constructTable<TaskRow> options
+let private vis = unbox<Table_ColumnVisibility<TaskRow>> table
+let private pin = unbox<Table_ColumnPinning<TaskRow>> table
+let private sel = unbox<Table_RowSelection<TaskRow>> table
 
 let private isColVisible (cv: obj) (key: string) : bool =
     if isNull cv || jsTypeof (cv?(key)) <> "boolean" then true else unbox<bool> cv?(key)

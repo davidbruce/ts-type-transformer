@@ -33,7 +33,7 @@ fn read_text(p: String) -> String {
 fn write_text(p: String, body: String) -> Nil {
   fs.write_file_sync(
     t.PathOrFileDescriptorString(p),
-    t.StringOrNodeJSArrayBufferViewString(body),
+    t.WriteFileDataString(body),
   )
 }
 

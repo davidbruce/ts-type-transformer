@@ -14,16 +14,16 @@ TS_EXPORT(start) void start() {
 
     /* ---- Radar ---- */
     auto item0 = RadarSeriesDataItemOption({
-        .lineStyle = LineStyleOption<Color>({.width = 2, .color = "#111111"}),
-        .areaStyle = AreaStyleOption<Color>({.color = "rgba(17,17,17,0.12)"}),
-        .itemStyle = ItemStyleOption<DefaultLabelFormatterCallbackParams>({.color = "#111111"}),
+        .lineStyle = LineStyleOption({.width = 2, .color = "#111111"}),
+        .areaStyle = AreaStyleOption({.color = "rgba(17,17,17,0.12)"}),
+        .itemStyle = ItemStyleOption({.color = "#111111"}),
         .name = "WASM Target",
         .value = ts::Array<double>::of(92, 86, 88, 96, 84),
     });
 
     auto item1 = RadarSeriesDataItemOption({
-        .lineStyle = LineStyleOption<Color>({.width = 1.5, .color = "#737373", .type = "dashed"}),
-        .itemStyle = ItemStyleOption<DefaultLabelFormatterCallbackParams>({.color = "#737373"}),
+        .lineStyle = LineStyleOption({.width = 1.5, .color = "#737373", .type = "dashed"}),
+        .itemStyle = ItemStyleOption({.color = "#737373"}),
         .name = "Baseline",
         .value = ts::Array<double>::of(70, 68, 74, 72, 66),
     });
@@ -33,9 +33,9 @@ TS_EXPORT(start) void start() {
         .animation = false,
         .radar = RadarComponentOption({
             .radius = "62%",
-            .axisLine = AxisLineOption({.lineStyle = LineStyleOption<Color>({.color = "#b5b5b5"})}),
-            .splitLine = SplitLineOption({.lineStyle = LineStyleOption<SplitLineOption_lineStyle>({.color = "#d4d4d4"})}),
-            .splitArea = SplitAreaOption({.areaStyle = AreaStyleOption<ts::Array<>>({.color = ts::Array<std::string>::of("#ffffff", "#f7f7f7")})}),
+            .axisLine = AxisLineOption({.lineStyle = LineStyleOption({.color = "#b5b5b5"})}),
+            .splitLine = SplitLineOption({.lineStyle = LineStyleOption({.color = "#d4d4d4"})}),
+            .splitArea = SplitAreaOption({.areaStyle = AreaStyleOption({.color = ts::Array<std::string>::of("#ffffff", "#f7f7f7")})}),
             .axisName = RadarComponentOption_axisName({.color = "#111111"}),
             .indicator = ts::Array<RadarIndicatorOption>::of(
                 indicator("Throughput"),
@@ -45,7 +45,7 @@ TS_EXPORT(start) void start() {
                 indicator("Bundle")
             ),
         }),
-        .legend = PlainLegendComponentOption({.textStyle = LabelOption<DetailOption_object>({.color = "#111111"}), .bottom = 6}),
+        .legend = PlainLegendComponentOption({.textStyle = LabelOption({.color = "#111111"}), .bottom = 6}),
         .series = RadarSeriesOption({.data = ts::Array<RadarSeriesOption_data>::of(item0, item1)}),
     });
     radar.setOption(radar_opt);
@@ -58,11 +58,11 @@ TS_EXPORT(start) void start() {
             .min = 0,
             .max = 100,
             .axisLine = GaugeSeriesOption_axisLine({.lineStyle = GaugeSeriesOption_axisLine_lineStyle({.width = 14, .color = ts::Array<ts::Array<>>::of(ts::Array<>::of(1.0, "#e5e5e5"))})}),
-            .progress = ProgressOption({.show = true, .width = 14, .itemStyle = ItemStyleOption<ts::Value>({.color = "#111111"})}),
-            .splitLine = GaugeSeriesOption_splitLine({.lineStyle = LineStyleOption<Color>({.color = "#111111"})}),
-            .axisTick = GaugeSeriesOption_axisTick({.lineStyle = LineStyleOption<Color>({.color = "#737373"})}),
+            .progress = ProgressOption({.show = true, .width = 14, .itemStyle = ItemStyleOption({.color = "#111111"})}),
+            .splitLine = GaugeSeriesOption_splitLine({.lineStyle = LineStyleOption({.color = "#111111"})}),
+            .axisTick = GaugeSeriesOption_axisTick({.lineStyle = LineStyleOption({.color = "#737373"})}),
             .axisLabel = GaugeSeriesOption_axisLabel({.color = "#555555"}),
-            .pointer = PointerOption({.itemStyle = ItemStyleOption<ts::Value>({.color = "#111111"})}),
+            .pointer = PointerOption({.itemStyle = ItemStyleOption({.color = "#111111"})}),
             .title = TitleOption({.color = "#555555", .fontSize = 12}),
             .detail = DetailOption({.color = "#111111", .fontSize = 22, .formatter = "{value}%", .valueAnimation = false}),
             .data = ts::Array<number_or_string_or_GaugeDataItemOption>::of(GaugeDataItemOption({.name = "Score", .value = 84})),

@@ -32,9 +32,9 @@ fn add_stage_box(layer: &Layer, x: f64, title: &str, sub: &str, fill: &str, ink:
         .with_fill(ink);
 
     g.add([
-        GroupOrShape::from(Rect::new_with(&rc)),
-        GroupOrShape::from(Text::new_with(&t1)),
-        GroupOrShape::from(Text::new_with(&t2)),
+        Node::from(Rect::new_with(&rc)),
+        Node::from(Text::new_with(&t1)),
+        Node::from(Text::new_with(&t2)),
     ]);
     layer.add([g]);
 }
@@ -87,10 +87,7 @@ pub extern "C" fn start() {
         .with_stroke("#737373")
         .with_stroke_width(1.5)
         .with_dash([6.0, 4.0]);
-    let fb = Line::new_with(Some(fbc));
-    layer.add([GroupOrShape::from(
-        Shape::<LineConfig>::from(fb).upcast::<ShapeConfig>(),
-    )]);
+    layer.add([Line::new_with(&fbc)]);
 
     let bar = RectConfig::default()
         .with_x(28.0)
@@ -110,14 +107,14 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     layer.add([
-        GroupOrShape::from(Rect::new_with(&bar)),
-        GroupOrShape::from(Text::new_with(&btxt)),
+        Node::from(Rect::new_with(&bar)),
+        Node::from(Text::new_with(&btxt)),
     ]);
 
     layer.draw();
 
-    let rects = layer.find::<Node<NodeConfig>>("Rect").len();
-    let arrows = layer.find::<Node<NodeConfig>>("Arrow").len();
+    let rects = layer.find("Rect").len();
+    let arrows = layer.find("Arrow").len();
     let json_len = layer.to_json().len();
 
     let msg = format!(

@@ -6,7 +6,7 @@
 #define Bound(x) Echarts_AngleAxisComponentOption_category_min_of(x)
 
 static Echarts_LineStyleOption line_color(const char* hex) {
-    return Echarts_LineStyleOption_create(.color = Echarts_Color_of(hex));
+    return Echarts_LineStyleOption_create(.color = Echarts_LineStyle_or_string_or_Color_array_of(hex));
 }
 
 __attribute__((export_name("start"))) void start(void) {
@@ -40,7 +40,7 @@ __attribute__((export_name("start"))) void start(void) {
             .axisLabel = Echarts_AxisLabelOption_create(.color = js_string("#555555")))),
         .series = EChartsOption_series_of(Echarts_BarSeriesOption_create(
             .name = Echarts_OptionName_of("Units"), .barWidth = Position("46%"), .data = vals,
-            .itemStyle = Echarts_BarItemStyleOption_create(.color = Echarts_ItemStyleOption_color_of("#111111")))));
+            .itemStyle = Echarts_BarItemStyleOption_create(.color = Echarts_ItemStyle_or_SVGPatternObject_of("#111111")))));
     ECharts_setOption(chart, opt);
 
     char meta[96];

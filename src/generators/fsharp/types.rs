@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use roxmltree::Node;
 
 use super::super::{attr, elements, flag, named, only_child};
 use super::{Gen, T};
 use super::syntax::{
-    add_opt, erased_union, fable_builtin, find_decl, ident, is_base, is_plain_ident, only_child_type, type_ident, type_path,
+    add_opt, erased_union, fable_builtin, find_decl, ident, is_base, is_plain_ident, only_child_type, subst_params, type_ident, type_path,
 };
 
 pub(super) struct CallbackSig {
@@ -111,7 +111,7 @@ impl Gen {
             "union" => {
                 let mut parts: Vec<String> = Vec::new();
                 for p in elements(n) {
-                    let t = self.ty(p, owner);
+                    let t = self.union_member(p, owner);
                     if !parts.contains(&t) {
                         parts.push(t);
                     }
@@ -375,6 +375,38 @@ impl Gen {
             break;
         }
         false
+    }
+
+    // In an erased union a function is a value, which Fable keeps curried:
+    // one of two or more arguments is a delegate, so JavaScript gets
+    // `(row, index) => ..` (TanStack's `AccessorFn<'TData> | string`).
+    fn union_member(&mut self, p: Node, owner: &str) -> String {
+        let mut args: HashMap<String, String> = HashMap::new();
+        let f = if p.has_tag_name("functionType") {
+            Some(p)
+        } else if p.has_tag_name("ref") && attr(p, "kind") == "typeAlias" {
+            let root = p.document().root_element();
+            let decl = p.attribute("to").and_then(|to| find_decl(root, to)).filter(|d| d.has_tag_name("typeAlias"));
+            let params: Vec<Node> = decl.map(|d| named(d, "typeParameter").collect()).unwrap_or_default();
+            let given: Vec<Node> = elements(p).collect();
+            if params.len() == given.len() {
+                for (tp, a) in params.iter().zip(&given) {
+                    let rendered = self.ty(*a, owner);
+                    args.insert(attr(*tp, "name").to_string(), rendered);
+                }
+                decl.map(only_child_type).filter(|b| b.has_tag_name("functionType"))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        match f {
+            Some(f) if named(f, "parameter").count() >= 2 && !named(f, "parameter").any(|q| flag(q, "rest")) => {
+                subst_params(&self.fn_type_inner(f, owner, true), &args)
+            }
+            _ => self.ty(p, owner),
+        }
     }
 
     pub(super) fn fn_type(&mut self, n: Node, owner: &str) -> String {

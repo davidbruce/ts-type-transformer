@@ -25,8 +25,8 @@ let private features =
     TableFeatures.Create(
         coreReactivityFeature = storeReactivityBindings (),
         rowSortingFeature = rowSortingFeature,
-        coreRowModel = unbox (createCoreRowModel<TableFeatures, NodeRow> ()),
-        sortedRowModel = unbox (createSortedRowModel<TableFeatures, NodeRow> ()),
+        coreRowModel = unbox (createCoreRowModel<NodeRow> ()),
+        sortedRowModel = unbox (createSortedRowModel<NodeRow> ()),
         sortFns = JsRecord.Create [
             "alphanumeric", unbox sortFn_alphanumeric
             "basic", unbox sortFn_basic
@@ -34,7 +34,7 @@ let private features =
         ]
     )
 
-let private col (key: string) (header: string) : ColumnDefBase_Core<TableFeatures, NodeRow, CellData> =
+let private col (key: string) (header: string) : ColumnDefBase_Core<NodeRow> =
     unbox {| accessorKey = key; header = header |}
 
 let private data =
@@ -69,8 +69,8 @@ let private options =
         )
     )
 
-let private table = constructTable<TableFeatures, NodeRow> options
-let private tableSort = unbox<Table_RowSorting<TableFeatures, NodeRow>> table
+let private table = constructTable<NodeRow> options
+let private tableSort = unbox<Table_RowSorting<NodeRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
     let btn = (document.getElementById id).Value
@@ -83,7 +83,7 @@ let private render (label: string) =
         [
             yield "<table><thead><tr>"
             for c in cols do
-                let cSort = unbox<Column_RowSorting<TableFeatures, NodeRow>> c
+                let cSort = unbox<Column_RowSorting<NodeRow>> c
                 let mark =
                     match cSort.getIsSorted () with
                     | BooleanOrSortDirection.SortDirection SortDirection.Asc -> " \u25b2"

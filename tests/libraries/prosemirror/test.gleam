@@ -75,10 +75,10 @@ pub fn main() {
   node_spec.set_to_dom(para_spec, Some(fn(_) { tag_spec("p") }))
   let text_spec = node_spec.create()
   node_spec.set_group(text_spec, Some("inline"))
-  let nodes = node_spec.create()
-  node_spec.set_at(nodes, "doc", runtime.dynamic(doc_spec))
-  node_spec.set_at(nodes, "paragraph", runtime.dynamic(para_spec))
-  node_spec.set_at(nodes, "text", runtime.dynamic(text_spec))
+  let nodes = schema_spec.nodes_create()
+  schema_spec.nodes_set_at(nodes, "doc", doc_spec)
+  schema_spec.nodes_set_at(nodes, "paragraph", para_spec)
+  schema_spec.nodes_set_at(nodes, "text", text_spec)
 
   let strong_spec = mark_spec.create()
   mark_spec.set_to_dom(strong_spec, Some(fn(_, _) { tag_spec("strong") }))
@@ -91,14 +91,17 @@ pub fn main() {
   mark_spec_attrs.set_at(link_attrs, "href", href)
   mark_spec.set_attrs(link_spec, Some(link_attrs))
   mark_spec.set_to_dom(link_spec, Some(fn(_, _) { tag_spec("a") }))
-  let marks = mark_spec.create()
-  mark_spec.set_at(marks, "strong", runtime.dynamic(strong_spec))
-  mark_spec.set_at(marks, "em", runtime.dynamic(em_spec))
-  mark_spec.set_at(marks, "link", runtime.dynamic(link_spec))
+  let marks = schema_spec.marks_create()
+  schema_spec.marks_set_at(marks, "strong", strong_spec)
+  schema_spec.marks_set_at(marks, "em", em_spec)
+  schema_spec.marks_set_at(marks, "link", link_spec)
 
   let spec = schema_spec.create()
-  schema_spec.set_nodes(spec, runtime.dynamic(nodes))
-  schema_spec.set_marks(spec, runtime.dynamic(marks))
+  schema_spec.set_nodes(spec, t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(nodes))
+  schema_spec.set_marks(
+    spec,
+    Some(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(marks)),
+  )
   let sch = schema.new(spec)
   let assert Some(paragraph_type) =
     schema.nodes_get_at(schema.get_nodes(sch), "paragraph")

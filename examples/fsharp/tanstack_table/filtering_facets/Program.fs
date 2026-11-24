@@ -26,8 +26,8 @@ let private features =
         coreReactivityFeature = storeReactivityBindings (),
         columnFilteringFeature = columnFilteringFeature,
         globalFilteringFeature = globalFilteringFeature,
-        coreRowModel = unbox (createCoreRowModel<TableFeatures, ServiceRow> ()),
-        filteredRowModel = unbox (createFilteredRowModel<TableFeatures, ServiceRow> ()),
+        coreRowModel = unbox (createCoreRowModel<ServiceRow> ()),
+        filteredRowModel = unbox (createFilteredRowModel<ServiceRow> ()),
         filterFns = JsRecord.Create [
             "includesString", unbox filterFn_includesString
             "equalsString", unbox filterFn_equalsString
@@ -35,7 +35,7 @@ let private features =
         ]
     )
 
-let private col (key: string) (header: string) (filterFn: string option) : ColumnDefBase_Core<TableFeatures, ServiceRow, CellData> =
+let private col (key: string) (header: string) (filterFn: string option) : ColumnDefBase_Core<ServiceRow> =
     match filterFn with
     | Some fnName -> unbox {| accessorKey = key; header = header; filterFn = fnName |}
     | None -> unbox {| accessorKey = key; header = header |}
@@ -77,9 +77,9 @@ let private options =
         )
     )
 
-let private table = constructTable<TableFeatures, ServiceRow> options
+let private table = constructTable<ServiceRow> options
 let private colFilt = unbox<Table_ColumnFiltering> table
-let private globFilt = unbox<Table_GlobalFiltering<TableFeatures, ServiceRow>> table
+let private globFilt = unbox<Table_GlobalFiltering<ServiceRow>> table
 
 let private wireBtn (id: string) (action: unit -> unit) =
     let btn = (document.getElementById id).Value

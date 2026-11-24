@@ -81,7 +81,7 @@ fn task_row(id: &str, task: &str, owner: &str, zone: &str, cpu: f64, status: &st
 }
 
 struct State {
-    table: TableCore<TableFeatures, JsValue>,
+    table: TableCore<JsValue>,
     wrap: dom::HTMLElement,
     meta: dom::HTMLElement,
     zone_vis: Cell<bool>,
@@ -92,14 +92,14 @@ fn apply_vis(st: &State) {
     let cv = ColumnVisibilityState::default();
     cv.set_at("zone", st.zone_vis.get());
     cv.set_at("owner", st.owner_vis.get());
-    let vis: TableColumnVisibility<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
+    let vis: TableColumnVisibility<JsValue> = js::unchecked_cast(&st.table);
     vis.set_column_visibility(Updater::T(cv));
 }
 
 fn render(st: &State) {
-    let pin: TableColumnPinning<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
-    let vis: TableColumnVisibility<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
-    let sel: TableRowSelection<TableFeatures, JsValue> = js::unchecked_cast(&st.table);
+    let pin: TableColumnPinning<JsValue> = js::unchecked_cast(&st.table);
+    let vis: TableColumnVisibility<JsValue> = js::unchecked_cast(&st.table);
+    let sel: TableRowSelection<JsValue> = js::unchecked_cast(&st.table);
 
     let groups = [
         (true, pin.get_start_visible_leaf_columns()),
@@ -174,10 +174,7 @@ pub extern "C" fn start() {
         .with("columnVisibilityFeature", column_visibility_feature())
         .with("columnPinningFeature", column_pinning_feature())
         .with("rowSelectionFeature", row_selection_feature())
-        .with(
-            "coreRowModel",
-            create_core_row_model::<TableFeatures, JsValue>(),
-        );
+        .with("coreRowModel", create_core_row_model::<JsValue>());
 
     let data = JsArray::<JsValue>::from([
         task_row(
@@ -265,7 +262,7 @@ pub extern "C" fn start() {
         .with("data", data)
         .with("columns", cols)
         .with("initialState", init_state)
-        .unchecked_into::<TableOptionsCore<TableFeatures, JsValue>>();
+        .unchecked_into::<TableOptionsCore<JsValue>>();
 
     let doc = dom::document();
     let st = Rc::new(State {
@@ -285,8 +282,8 @@ pub extern "C" fn start() {
         let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let pin: TableColumnPinning<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
-            let sel: TableRowSelection<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
+            let pin: TableColumnPinning<JsValue> = js::unchecked_cast(&st_c.table);
+            let sel: TableRowSelection<JsValue> = js::unchecked_cast(&st_c.table);
             match idx {
                 0 => {
                     st_c.zone_vis.set(!st_c.zone_vis.get());

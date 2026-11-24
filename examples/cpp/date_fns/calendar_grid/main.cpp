@@ -1,7 +1,7 @@
 #include "dom/dom.hpp"
 #include "date_fns/date_fns.hpp"
 
-using Span = date_fns::Interval<date_fns::DateArg<>, date_fns::DateArg<>>;
+using Span = date_fns::Interval;
 
 static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::string_view cls, std::string_view text) {
     dom::HTMLElement el = doc.createElement(tag);
@@ -55,7 +55,7 @@ TS_EXPORT(start) void start() {
     auto span = Span({.start = month_start, .end = month_end});
     auto days = date_fns::eachDayOfInterval(span);
     for (size_t i = 0; i < days.size(); i++) {
-        date_fns::Date_or_string_or_number item = days[i];
+        date_fns::DateArg item = days[i];
         bool is_ref = date_fns::isSameDay(item, ref_day);
         bool is_wknd = date_fns::isWeekend(item);
         std::string cls = is_ref ? "day-cell today" : (is_wknd ? "day-cell weekend" : "day-cell");

@@ -1,6 +1,6 @@
 #![no_main]
 
-use date_fns::{Date, DateArg};
+use date_fns::Date;
 use dom::{Document, HTMLElement};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
@@ -40,11 +40,7 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let sample: Date = date_fns::parse_iso("2024-03-15T14:30:45");
-    let parsed: Date = date_fns::parse(
-        "15/03/2024",
-        "dd/MM/yyyy",
-        DateArg::DateType(sample.clone()),
-    );
+    let parsed: Date = date_fns::parse("15/03/2024", "dd/MM/yyyy", &sample);
 
     let fmt_card = make_el(&doc, "div", "card", None);
     append(

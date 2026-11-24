@@ -51,7 +51,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(st.mtimeMs() > 0);
 
     // Read back: a Buffer of bytes, which prints as utf8 text.
-    Buffer<ArrayBuffer> buf = fs::readFileSync(file);
+    Buffer buf = fs::readFileSync(file);
     CHECK(buf.byte_length() == 13);
     CHECK(buf.toString() == "héllo\nworld\n");
     std::vector<uint8_t> bytes = buf.to_vector();
@@ -91,7 +91,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // A missing file throws: an error to take, with Node's code and message.
     CHECK(!ts::take_error());
-    ts::Result<Buffer<ArrayBuffer>> missing = ts::attempt([&] { return fs::readFileSync(join(dir, "nope.txt")); });
+    ts::Result<Buffer> missing = ts::attempt([&] { return fs::readFileSync(join(dir, "nope.txt")); });
     CHECK(!missing);
     CHECK(has(missing.error().message(), "ENOENT"));
     CHECK(has(missing.error().message(), "nope.txt"));
@@ -109,9 +109,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(!ts::take_error());
 
     // ---- events ----
-    EventEmitter<ts::Value> emitter = EventEmitter<ts::Value>::create();
+    EventEmitter emitter = EventEmitter::create();
     ts::Value ping = ts::Value::string("ping");
-    CHECK(emitter.listenerCount<void>(ping) == 0);
+    CHECK(emitter.listenerCount(ping) == 0);
 
     int pings = 0;
     // A rest-parameter listener is given all the arguments, gathered.
@@ -121,11 +121,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
         heard += std::to_string(args.size()) + ":";
         if (args.size() == 2) CHECK(ts::Value(args[0]).to_number() == 5 && ts::Value(args[1]).to_string() == "x");
     };
-    emitter.on<void>(ping, onPing);
-    CHECK(emitter.listenerCount<void>(ping) == 1);
-    CHECK(emitter.emit<void>(ping, ts::Array<>{ts::Value::number(5), ts::Value::string("x")}));
+    emitter.on(ping, onPing);
+    CHECK(emitter.listenerCount(ping) == 1);
+    CHECK(emitter.emit(ping, ts::Array<>{ts::Value::number(5), ts::Value::string("x")}));
     CHECK(pings == 1);
-    emitter.emit<void>(ping, ts::Array<>{ts::Value::number(7)});
+    emitter.emit(ping, ts::Array<>{ts::Value::number(7)});
     CHECK(pings == 2);
     CHECK(heard == "2:1:");
 
@@ -133,17 +133,17 @@ extern "C" __attribute__((export_name("run"))) void run() {
     int onces = 0;
     any_array_fn onOnce = [&](ts::Array<>) { onces++; };
     ts::Value shot = ts::Value::string("shot");
-    emitter.once<void>(shot, onOnce);
-    CHECK(emitter.listenerCount<void>(shot) == 1);
-    CHECK(emitter.emit<void>(shot, ts::Array<>{}));
-    CHECK(!emitter.emit<void>(shot, ts::Array<>{}));
+    emitter.once(shot, onOnce);
+    CHECK(emitter.listenerCount(shot) == 1);
+    CHECK(emitter.emit(shot, ts::Array<>{}));
+    CHECK(!emitter.emit(shot, ts::Array<>{}));
     CHECK(onces == 1);
-    CHECK(emitter.listenerCount<void>(shot) == 0);
+    CHECK(emitter.listenerCount(shot) == 0);
 
     // Removal; an event with no listener emits false.
-    emitter.removeListener<void>(ping, onPing);
-    CHECK(emitter.listenerCount<void>(ping) == 0);
-    CHECK(!emitter.emit<void>(ping, ts::Array<>{ts::Value::number(1)}));
+    emitter.removeListener(ping, onPing);
+    CHECK(emitter.listenerCount(ping) == 0);
+    CHECK(!emitter.emit(ping, ts::Array<>{ts::Value::number(1)}));
     CHECK(pings == 2);
 
     // Several listeners, in the order added; prependListener goes first.
@@ -152,15 +152,15 @@ extern "C" __attribute__((export_name("run"))) void run() {
     any_array_fn b = [&](ts::Array<>) { order += "b"; };
     any_array_fn c = [&](ts::Array<>) { order += "c"; };
     ts::Value ev = ts::Value::string("ev");
-    emitter.on<void>(ev, a);
-    emitter.on<void>(ev, b);
-    emitter.prependListener<void>(ev, c);
-    emitter.emit<void>(ev, ts::Array<>{});
+    emitter.on(ev, a);
+    emitter.on(ev, b);
+    emitter.prependListener(ev, c);
+    emitter.emit(ev, ts::Array<>{});
     CHECK(order == "cab");
-    CHECK(emitter.listenerCount<void>(ev) == 3);
+    CHECK(emitter.listenerCount(ev) == 3);
     CHECK(emitter.eventNames().size() == 1);
-    emitter.removeAllListeners<void>(ev);
-    CHECK(emitter.listenerCount<void>(ev) == 0);
+    emitter.removeAllListeners(ev);
+    CHECK(emitter.listenerCount(ev) == 0);
     emitter.setMaxListeners(20);
     CHECK(emitter.getMaxListeners() == 20);
 

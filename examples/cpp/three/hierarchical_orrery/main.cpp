@@ -14,14 +14,14 @@ static MeshStandardMaterial std_mat(uint32_t hex, double rough, double metal, bo
 
 struct AppState {
     WebGLRenderer renderer;
-    Scene<> scene;
+    Scene scene;
     PerspectiveCamera camera;
-    Group<> inner_pivot;
-    Group<> moon_pivot;
-    Group<> outer_pivot;
-    Group<> outer_station;
-    Mesh<> moon;
-    Mesh<> station_body;
+    Group inner_pivot;
+    Group moon_pivot;
+    Group outer_pivot;
+    Group outer_station;
+    Mesh moon;
+    Mesh station_body;
     dom::HTMLElement tilt_btn;
     dom::HTMLElement meta;
     double epoch = 0.6;
@@ -59,7 +59,7 @@ TS_EXPORT(start) void start() {
     renderer.setSize(width, height);
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
-    Scene scene = Scene<>::create();
+    Scene scene = Scene::create();
     scene.background(Color(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
     camera.position().set(5.6, 5.2, 7.6);
@@ -78,25 +78,25 @@ TS_EXPORT(start) void start() {
 
     Mesh core = Mesh(SphereGeometry(0.65, 24.0, 18.0), std_mat(0x111111, 0.45, 0.2, false));
 
-    Group inner_pivot = Group<>::create();
+    Group inner_pivot = Group::create();
     Mesh inner_track = Mesh(TorusGeometry(2.1, 0.025, 8.0, 64.0), MeshBasicMaterial::create({{.color = 0x999999}}));
     inner_track.rotation().x(M_PI / 2.0);
 
-    Group inner_planet = Group<>::create();
+    Group inner_planet = Group::create();
     inner_planet.position().set(2.1, 0.0, 0.0);
 
-    Group moon_pivot = Group<>::create();
+    Group moon_pivot = Group::create();
     Mesh moon = Mesh(OctahedronGeometry(0.18, 0.0), std_mat(0xd4d4d4, 0.4, 0.1, true));
     moon.position().set(0.75, 0.0, 0.0);
     moon_pivot.add(moon);
     inner_planet.add(Mesh(SphereGeometry(0.36, 20.0, 16.0), std_mat(0x555555, 0.55, 0.1, false)), moon_pivot);
     inner_pivot.add(inner_track, inner_planet);
 
-    Group outer_pivot = Group<>::create();
+    Group outer_pivot = Group::create();
     Mesh outer_track = Mesh(TorusGeometry(3.8, 0.025, 8.0, 80.0), MeshBasicMaterial::create({{.color = 0xb5b5b5}}));
     outer_track.rotation().x(M_PI / 2.0);
 
-    Group outer_station = Group<>::create();
+    Group outer_station = Group::create();
     outer_station.position().set(3.8, 0.0, 0.0);
     Mesh station_body = Mesh(IcosahedronGeometry(0.42, 0.0), std_mat(0x404040, 0.5, 0.1, true));
     Mesh halo = Mesh(TorusGeometry(0.68, 0.06, 10.0, 32.0), std_mat(0x111111, 0.4, 0.1, false));

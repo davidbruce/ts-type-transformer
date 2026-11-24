@@ -85,7 +85,7 @@ fn sort_spec(id: &str, desc: bool) -> ColumnSort {
 }
 
 struct State {
-    table: TableCore<TableFeatures, JsValue>,
+    table: TableCore<JsValue>,
     wrap: dom::HTMLElement,
     meta: dom::HTMLElement,
 }
@@ -104,7 +104,7 @@ fn render(st: &State, label: &str) {
         let is_num = cid == "latency" || cid == "throughput" || cid == "uptime";
         html.push_str(if is_num { "<th class=\"num\">" } else { "<th>" });
         esc_html(&hdr, &mut html);
-        let csort: ColumnRowSorting<TableFeatures, JsValue> = js::unchecked_cast(&col);
+        let csort: ColumnRowSorting<JsValue> = js::unchecked_cast(&col);
         match csort.get_is_sorted() {
             BooleanOrSortDirection::SortDirection(SortDirection::Asc) => html.push_str(" &#9650;"),
             BooleanOrSortDirection::SortDirection(SortDirection::Desc) => html.push_str(" &#9660;"),
@@ -151,8 +151,8 @@ pub extern "C" fn start() {
     let features = JsValue::object()
         .with("coreReactivityFeature", make_reactivity())
         .with("rowSortingFeature", row_sorting_feature())
-        .with("coreRowModel", create_core_row_model::<TableFeatures, JsValue>())
-        .with("sortedRowModel", create_sorted_row_model::<TableFeatures, JsValue>())
+        .with("coreRowModel", create_core_row_model::<JsValue>())
+        .with("sortedRowModel", create_sorted_row_model::<JsValue>())
         .with("sortFns", sort_fns);
 
     let data = JsArray::<JsValue>::from([
@@ -181,7 +181,7 @@ pub extern "C" fn start() {
         .with("data", data)
         .with("columns", cols)
         .with("initialState", init_state)
-        .unchecked_into::<TableOptionsCore<TableFeatures, JsValue>>();
+        .unchecked_into::<TableOptionsCore<JsValue>>();
 
     let doc = dom::document();
     let st = Rc::new(State {
@@ -194,7 +194,7 @@ pub extern "C" fn start() {
         let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
-            let tsort: TableRowSorting<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
+            let tsort: TableRowSorting<JsValue> = js::unchecked_cast(&st_c.table);
             let (next, label) = match idx {
                 0 => (vec![sort_spec("region", false), sort_spec("latency", false)], "Sort: region asc, latency asc"),
                 1 => (vec![sort_spec("latency", false)], "Sort: latency asc"),

@@ -2,9 +2,8 @@
 
 use dom::{Document, HTMLElement};
 use marked::{
-    BooleanOrRendererOutput, Marked, MarkedExtension, MarkedExtensionRenderer,
-    MarkedExtensionRendererHeading, MarkedExtensionWalkTokens, ParserOutputOrPromise,
-    StringOrPromise, Token, tokens,
+    Marked, MarkedExtension, MarkedExtensionRenderer, MarkedExtensionRendererHeading,
+    MarkedExtensionWalkTokens, StringOrBoolean, StringOrPromise, Token, tokens,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -62,13 +61,13 @@ pub extern "C" fn start() {
     let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
     let heading = MarkedExtensionRendererHeading::new(|h: tokens::Heading| {
-        BooleanOrRendererOutput::RendererOutput(format!(
+        StringOrBoolean::String(format!(
             "<h{0} class=\"wire-h\">\u{00A7} {1}</h{0}>\n",
             h.depth() as u32,
             h.text()
         ))
     });
-    let renderer = MarkedExtensionRenderer::<String, String>::default().with_heading(&heading);
+    let renderer = MarkedExtensionRenderer::default().with_heading(&heading);
 
     let walk = MarkedExtensionWalkTokens::new({
         let seen = seen.clone();
@@ -77,7 +76,7 @@ pub extern "C" fn start() {
             None
         }
     });
-    let ext = MarkedExtension::<String, String>::default()
+    let ext = MarkedExtension::default()
         .with_renderer(&renderer)
         .with_walk_tokens(&walk);
 
@@ -87,8 +86,8 @@ pub extern "C" fn start() {
         StringOrPromise::JsPromise(_) => String::new(),
     };
     let cust_html = match custom_m.parse().invoke_2(md) {
-        ParserOutputOrPromise::ParserOutput(s) => s,
-        ParserOutputOrPromise::JsPromise(_) => String::new(),
+        StringOrPromise::String(s) => s,
+        StringOrPromise::JsPromise(_) => String::new(),
     };
 
     let visited = seen.borrow();

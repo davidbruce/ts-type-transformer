@@ -8,6 +8,7 @@ import gleam/list
 import gleam/option.{None, Some}
 import konva/circle
 import konva/circle_config
+import konva/container
 import konva/group
 import konva/group_config
 import konva/layer
@@ -17,7 +18,6 @@ import konva/node
 import konva/rect
 import konva/rect_config
 import konva/runtime
-import konva/shape
 import konva/stage
 import konva/stage_config
 import konva/text
@@ -25,13 +25,13 @@ import konva/text_config
 import konva/types as t
 import konva/vector2d
 
-fn make_line(pts: List(Float), col: String, sw: Float) -> t.GroupOrShape {
+fn make_line(pts: List(Float), col: String, sw: Float) -> t.Node(Nil) {
   let lc =
     line_config.create()
     |> line_config.with_points(t.LinePointsArray(pts))
     |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
     |> line_config.with_stroke_width(sw)
-  t.GroupOrShapeShape(shape.widen(line.new_with(Some(lc))))
+  node.upcast(line.new_with(Some(lc)))
 }
 
 fn make_card(id: String, x: Float, y: Float, fill_hex: String) -> t.Rect(Nil) {
@@ -70,8 +70,8 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  layer.add(bg_layer, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bgr)))),
+  container.add(bg_layer, [
+    node.upcast(rect.new_with(Some(bgr))),
   ])
 
   let vlines =
@@ -105,11 +105,11 @@ pub fn main() -> Nil {
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#737373"))
 
-  layer.add(bg_layer, vlines)
-  layer.add(bg_layer, hlines)
-  layer.add(bg_layer, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(frame)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(l1)))),
+  container.add(bg_layer, vlines)
+  container.add(bg_layer, hlines)
+  container.add(bg_layer, [
+    node.upcast(rect.new_with(Some(frame))),
+    node.upcast(text.new_with(Some(l1))),
   ])
 
   // Layer 2: Stacked cards & badge.
@@ -144,23 +144,23 @@ pub fn main() -> Nil {
   let gc = group_config.create() |> group_config.with_listening(False)
   let overlay =
     group.new_with(Some(gc))
-    |> group.add([
-      t.GroupOrShapeShape(shape.widen(circle.new_with(Some(dc)))),
+    |> container.add([
+      node.upcast(circle.new_with(Some(dc))),
       make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5),
       make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5),
-      t.GroupOrShapeShape(shape.widen(text.new_with(Some(l2)))),
+      node.upcast(text.new_with(Some(l2))),
     ])
 
-  layer.add(fg_layer, [
-    t.GroupOrShapeShape(shape.widen(card_a)),
-    t.GroupOrShapeShape(shape.widen(card_b)),
-    t.GroupOrShapeShape(shape.widen(card_c)),
-    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(bc)))),
-    t.GroupOrShapeGroup(overlay),
+  container.add(fg_layer, [
+    node.upcast(card_a),
+    node.upcast(card_b),
+    node.upcast(card_c),
+    node.upcast(circle.new_with(Some(bc))),
+    node.upcast(overlay),
   ])
 
   node.move_to_top(card_a)
-  group.move_to_top(overlay)
+  node.move_to_top(overlay)
   node.draw(bg_layer)
   node.draw(fg_layer)
 
@@ -168,7 +168,7 @@ pub fn main() -> Nil {
   let doc = core.get_document()
   let handle_click = fn(card: t.Rect(Nil), card_id: String) {
     node.move_to_top(card)
-    group.move_to_top(overlay)
+    node.move_to_top(overlay)
     node.draw(fg_layer)
     let clicks = int.to_string(runtime.ref_update(counter, fn(n) { n + 1 }))
     let z = int.to_string(float.round(node.get_z_index(card)))
@@ -180,10 +180,7 @@ pub fn main() -> Nil {
       None -> "none"
       Some(s) ->
         case
-          decode.run(
-            node.get_attr(s, "id", runtime.codec_string()),
-            decode.string,
-          )
+          decode.run(node.get_attr(s, t.AnyStringString("id")), decode.string)
         {
           Ok(id_str) -> id_str
           Error(_) -> "unknown"

@@ -64,7 +64,7 @@ let main () =
         )
 
     let addSolid
-        (geo: BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>)
+        (geo: BufferGeometry)
         (hex: int)
         (rough: float)
         (metal: float)
@@ -83,7 +83,7 @@ let main () =
                     flatShading = flat
                 )
             )
-        let mesh = Mesh.Create(geo, mat)
+        let mesh = Mesh.Create(geo, MaterialOrMaterialArray.Material mat)
         mesh.position.set (x, y, z) |> ignore
         mesh.rotation.set (0.25, 0.45, 0.0) |> ignore
         scene.add (mesh) |> ignore
@@ -92,7 +92,7 @@ let main () =
         let segs =
             LineSegments.Create(
                 edgesGeo,
-                lineMat
+                MaterialOrMaterialArray.Material lineMat
             )
         segs.position.set (x, y, z) |> ignore
         segs.rotation.set (0.25, 0.45, 0.0) |> ignore

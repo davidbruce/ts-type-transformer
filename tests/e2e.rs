@@ -2449,7 +2449,7 @@ fn lowered_constructs_are_absent() {
                 let inline = |parent: &str| on("anonymous") && !matches!(parent, "typeAlias" | "var");
                 let bad = match tag {
                     "extends" if in_decl => on("inheritance"),
-                    "typeParameter" => on("generics"),
+                    "typeParameter" => attr(lowering, "generics") == "erase",
                     "keyof" | "indexedAccess" | "conditional" | "mapped" | "template" | "infer" | "typeof" | "predicate" | "raw" => on("type_ops"),
                     "intersection" => on("intersections"),
                     "literal" => on("literals"),

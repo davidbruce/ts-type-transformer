@@ -17,10 +17,10 @@ static const char* NAMES[9] = {
 struct AppState {
     WebGLRenderer renderer;
     dom::HTMLCanvasElement canvas;
-    Scene<> scene;
+    Scene scene;
     PerspectiveCamera camera;
     std::vector<MeshStandardMaterial> mats;
-    ts::Array<Object3D<>> meshes;
+    ts::Array<Object3D> meshes;
     Box3 box;
     Box3Helper helper;
     Raycaster raycaster;
@@ -56,7 +56,7 @@ static void cast_at_ndc(const std::shared_ptr<AppState>& st, double nx, double n
     st->raycaster.setFromCamera(Vector2(nx, ny), st->camera);
     auto hits = st->raycaster.intersectObjects(st->meshes, false);
     if (hits.size() > 0) {
-        Intersection<Object3D<>> hit = hits[0];
+        Intersection hit = hits[0];
         double hid = hit.object().id();
         int found = -1;
         for (int i = 0; i < 9; i++) {
@@ -100,7 +100,7 @@ TS_EXPORT(start) void start() {
     dom::HTMLCanvasElement canvas = renderer.domElement();
     doc.getElementById("stage")->appendChild(canvas);
 
-    Scene scene = Scene<>::create();
+    Scene scene = Scene::create();
     scene.background(Color(0xf7f7f7));
     PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
 
@@ -113,7 +113,7 @@ TS_EXPORT(start) void start() {
     grid.position().y(-0.85);
     scene.add(AmbientLight(0xffffff, 1.2), key, rim, grid);
 
-    std::vector<BufferGeometry<>> geos{
+    std::vector<BufferGeometry> geos{
         BoxGeometry(1.05, 1.05, 1.05),
         ConeGeometry(0.62, 1.25, 20.0),
         CylinderGeometry(0.48, 0.48, 1.2, 24.0),
@@ -126,7 +126,7 @@ TS_EXPORT(start) void start() {
     };
 
     std::vector<MeshStandardMaterial> mats;
-    ts::Array<Object3D<>> meshes = ts::Array<Object3D<>>::create();
+    ts::Array<Object3D> meshes = ts::Array<Object3D>::create();
     for (int i = 0; i < 9; i++) {
         int gx = (i % 3) - 1;
         int gz = (i / 3) - 1;

@@ -6,7 +6,7 @@ import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import dom/areas/html/html_element_tag_name_map as tag
 import gleam/bool
-import gleam/dynamic.{type Dynamic}
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/float
 import gleam/int
@@ -53,7 +53,7 @@ fn tag_rule(tag: String, level: Int) -> t.TagParseRule(Nil) {
   }
 }
 
-fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
+fn build_schema() -> t.Schema(Nil) {
   let doc_spec =
     node_spec.create()
     |> node_spec.with_content("block+")
@@ -102,12 +102,12 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     |> node_spec.with_group("inline")
 
   let nodes =
-    node_spec.create()
-    |> node_spec.with_at("doc", pm_rt.dynamic(doc_spec))
-    |> node_spec.with_at("heading", pm_rt.dynamic(heading_spec))
-    |> node_spec.with_at("paragraph", pm_rt.dynamic(para_spec))
-    |> node_spec.with_at("blockquote", pm_rt.dynamic(quote_spec))
-    |> node_spec.with_at("text", pm_rt.dynamic(text_spec))
+    schema_spec.nodes_create()
+    |> schema_spec.nodes_with_at("doc", doc_spec)
+    |> schema_spec.nodes_with_at("heading", heading_spec)
+    |> schema_spec.nodes_with_at("paragraph", para_spec)
+    |> schema_spec.nodes_with_at("blockquote", quote_spec)
+    |> schema_spec.nodes_with_at("text", text_spec)
 
   let make_mark = fn(tag: String) {
     mark_spec.create()
@@ -115,15 +115,19 @@ fn build_schema() -> t.Schema(Dynamic, Dynamic, Nil) {
     |> mark_spec.with_to_dom(fn(_, _) { hole_spec(tag) })
   }
   let marks =
-    mark_spec.create()
-    |> mark_spec.with_at("strong", pm_rt.dynamic(make_mark("strong")))
-    |> mark_spec.with_at("em", pm_rt.dynamic(make_mark("em")))
-    |> mark_spec.with_at("code", pm_rt.dynamic(make_mark("code")))
+    schema_spec.marks_create()
+    |> schema_spec.marks_with_at("strong", make_mark("strong"))
+    |> schema_spec.marks_with_at("em", make_mark("em"))
+    |> schema_spec.marks_with_at("code", make_mark("code"))
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(pm_rt.dynamic(nodes))
-    |> schema_spec.with_marks(pm_rt.dynamic(marks))
+    |> schema_spec.with_nodes(t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(
+      nodes,
+    ))
+    |> schema_spec.with_marks(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(
+      marks,
+    ))
   schema.new(spec)
 }
 

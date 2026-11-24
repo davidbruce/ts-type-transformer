@@ -18,7 +18,7 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn render_with(src: &str, opts: &MarkedOptions<String, String>) -> String {
+fn render_with(src: &str, opts: &MarkedOptions) -> String {
     match marked::marked_with_opt_marked_options_with(src, opts) {
         StringOrPromise::String(s) => s,
         StringOrPromise::JsPromise(_) => String::new(),
@@ -49,8 +49,8 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let gfm_src = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n";
-    let gfm_on = MarkedOptions::<String, String>::default().with_gfm(true);
-    let gfm_off = MarkedOptions::<String, String>::default().with_gfm(false);
+    let gfm_on = MarkedOptions::default().with_gfm(true);
+    let gfm_off = MarkedOptions::default().with_gfm(false);
 
     let gfm_sec = make_el(&doc, "div", "section", None);
     append(
@@ -70,8 +70,8 @@ pub extern "C" fn start() {
     append(&app, gfm_sec);
 
     let breaks_src = "Line one\nLine two\nLine three";
-    let br_off = MarkedOptions::<String, String>::default().with_breaks(false);
-    let br_on = MarkedOptions::<String, String>::default().with_breaks(true);
+    let br_off = MarkedOptions::default().with_breaks(false);
+    let br_on = MarkedOptions::default().with_breaks(true);
 
     let br_sec = make_el(&doc, "div", "section", None);
     append(

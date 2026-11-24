@@ -11,16 +11,16 @@ let private stage =
 let private layer = Layer.Create ()
 stage.add layer |> ignore
 
-let private addShape (target: Container<GroupOrShape, _>) (s: Shape<ShapeConfig>) =
+let private addShape (target: Container) (s: Shape) =
     target.add s |> ignore
 
-let private addLine (target: Container<GroupOrShape, _>) (line: Line<LineConfig>) =
-    target.add (line.asShape ()) |> ignore
+let private addLine (target: Container) (line: Line) =
+    target.add line |> ignore
 
 addShape layer (
     Rect.Create(
         RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
-    ).asShape ()
+    )
 )
 
 for x in 40 .. 40 .. 640 do
@@ -51,17 +51,17 @@ let private groupA = Group.Create (GroupConfig.Create (x = 40.0, y = 55.0))
 addShape groupA (
     Rect.Create(
         RectConfig.Create (width = 160.0, height = 120.0, fill = "#f7f7f7", stroke = "#111111", strokeWidth = 1.5)
-    ).asShape ()
+    )
 )
 addShape groupA (
     Circle.Create(
         CircleConfig.Create (x = 80.0, y = 60.0, radius = 24.0, fill = "#111111")
-    ).asShape ()
+    )
 )
 addShape groupA (
     Text.Create(
         TextConfig.Create (x = 12.0, y = 10.0, text = "Group A · 0°", fontSize = 11.0, fontFamily = "monospace", fill = "#111111")
-    ).asShape ()
+    )
 )
 layer.add groupA |> ignore
 
@@ -71,7 +71,7 @@ let private groupB = Group.Create (GroupConfig.Create (x = 340.0, y = 75.0, rota
 addShape groupB (
     Rect.Create(
         RectConfig.Create (width = 150.0, height = 110.0, fill = "#efefef", stroke = "#111111", strokeWidth = 2.0)
-    ).asShape ()
+    )
 )
 addShape groupB (
     Rect.Create(
@@ -85,17 +85,17 @@ addShape groupB (
             strokeWidth = 1.5,
             dash = ResizeArray [ 4.0; 3.0 ]
         )
-    ).asShape ()
+    )
 )
 addShape groupB (
     Circle.Create(
         CircleConfig.Create (x = 75.0, y = 55.0, radius = 14.0, fill = "#404040")
-    ).asShape ()
+    )
 )
 addShape groupB (
     Text.Create(
         TextConfig.Create (x = 10.0, y = 8.0, text = "Group B · 24°", fontSize = 11.0, fontFamily = "monospace", fill = "#111111")
-    ).asShape ()
+    )
 )
 layer.add groupB |> ignore
 
@@ -105,17 +105,17 @@ let private groupC = Group.Create (GroupConfig.Create (x = 495.0, y = 55.0, scal
 addShape groupC (
     Rect.Create(
         RectConfig.Create (width = 130.0, height = 110.0, fill = "#ffffff", stroke = "#111111", strokeWidth = 2.0)
-    ).asShape ()
+    )
 )
 addShape groupC (
     Text.Create(
         TextConfig.Create (x = 8.0, y = 8.0, text = "Group C · 1.15x", fontSize = 10.0, fontFamily = "monospace", fill = "#111111")
-    ).asShape ()
+    )
 )
 
 let private innerGroup = Group.Create (GroupConfig.Create (x = 25.0, y = 25.0, rotation = 15.0))
 let private marker = Circle.Create (CircleConfig.Create (x = 40.0, y = 30.0, radius = 16.0, fill = "#111111"))
-addShape innerGroup (marker.asShape ())
+addShape innerGroup marker
 groupC.add innerGroup |> ignore
 layer.add groupC |> ignore
 
@@ -127,12 +127,12 @@ let private stripTxt =
 addShape layer (
     Rect.Create(
         RectConfig.Create (x = 28.0, y = 308.0, width = 624.0, height = 60.0, fill = "#f7f7f7", stroke = "#111111", strokeWidth = 1.5)
-    ).asShape ()
+    )
 )
 addShape layer (
     Text.Create(
         TextConfig.Create (x = 44.0, y = 331.0, text = stripTxt, fontSize = 12.0, fontFamily = "monospace", fill = "#111111")
-    ).asShape ()
+    )
 )
 
 layer.draw () |> ignore

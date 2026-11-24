@@ -11,7 +11,7 @@ let private stage =
 let private layer = Layer.Create ()
 stage.add layer |> ignore
 
-let private addShape (s: Shape<ShapeConfig>) =
+let private addShape (s: Shape) =
     layer.add s |> ignore
 
 let private addCaption x y caption =
@@ -25,14 +25,14 @@ let private addCaption x y caption =
                 fontFamily = "monospace",
                 fill = "#555555"
             )
-        ).asShape ()
+        )
     )
 
 // Full monochrome canvas backing so pixel inspection sees >= 2 distinct colors.
 addShape (
     Rect.Create(
         RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
-    ).asShape ()
+    )
 )
 
 // Row 1: Rounded filled Rect, dashed Rect, Circle, Hexagon.
@@ -46,7 +46,7 @@ addShape (
             cornerRadius = 8.0,
             fill = "#111111"
         )
-    ).asShape ()
+    )
 )
 addCaption 40.0 142.0 "Rect (filled)"
 
@@ -62,7 +62,7 @@ addShape (
             strokeWidth = 2.0,
             dash = ResizeArray [ 6.0; 4.0 ]
         )
-    ).asShape ()
+    )
 )
 addCaption 195.0 142.0 "Rect (dashed)"
 
@@ -76,7 +76,7 @@ addShape (
             stroke = "#111111",
             strokeWidth = 2.0
         )
-    ).asShape ()
+    )
 )
 addCaption 395.0 142.0 "Circle"
 
@@ -91,7 +91,7 @@ addShape (
             stroke = "#111111",
             strokeWidth = 2.0
         )
-    ).asShape ()
+    )
 )
 addCaption 548.0 142.0 "Hexagon"
 
@@ -108,7 +108,7 @@ addShape (
             stroke = "#111111",
             strokeWidth = 2.0
         )
-    ).asShape ()
+    )
 )
 addCaption 62.0 325.0 "Star (5pt)"
 
@@ -123,7 +123,7 @@ addShape (
             stroke = "#111111",
             strokeWidth = 2.0
         )
-    ).asShape ()
+    )
 )
 addCaption 236.0 325.0 "Ring"
 
@@ -139,7 +139,7 @@ addShape (
             stroke = "#555555",
             strokeWidth = 1.0
         )
-    ).asShape ()
+    )
 )
 addCaption 382.0 325.0 "Wedge 270°"
 
@@ -154,7 +154,7 @@ addShape (
             stroke = "#111111",
             strokeWidth = 1.5
         )
-    ).asShape ()
+    )
 )
 
 addShape (
@@ -167,7 +167,7 @@ addShape (
             fontFamily = "monospace",
             fill = "#111111"
         )
-    ).asShape ()
+    )
 )
 addCaption 558.0 325.0 "Text"
 

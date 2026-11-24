@@ -27,7 +27,7 @@ TS_EXPORT(start) void start() {
     head.appendChild(make_el(doc, "span", "badge", "parse vs parseInline"));
     app.appendChild(head);
 
-    auto md = marked::Marked<std::string, std::string>::create();
+    auto md = marked::Marked::create();
 
     const char* snippets[] = {
         "Hello **world** and *italics*",

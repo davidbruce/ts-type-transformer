@@ -103,7 +103,7 @@ pub extern "C" fn start() {
                 ]),
             )])),
     );
-    radar.set_option(radar_opt);
+    radar.set_option(&radar_opt);
 
     let gauge_opt = EChartsCoreOption::default().with_animation(false);
     gauge_opt.set_at("backgroundColor", "#ffffff");
@@ -167,7 +167,7 @@ pub extern "C" fn start() {
                     .with("name", "Score")]),
             )])),
     );
-    gauge.set_option(gauge_opt);
+    gauge.set_option(&gauge_opt);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
     meta.set_text_content(&format!(

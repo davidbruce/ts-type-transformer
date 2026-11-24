@@ -6,7 +6,7 @@ import dom/areas/html/html_element_tag_name_map as tag
 import gleam/list
 import gleam/option.{None, Some}
 import marked/marked as marked_class
-import marked/runtime as mr
+import marked/marked_options_no_async
 
 fn make_result_card(doc, title: String, html: String) {
   let card = document.create_element(doc, tag.div)
@@ -45,7 +45,7 @@ pub fn main() -> Nil {
       let inst = marked_class.new([])
       let parse_fn = marked_class.get_parse(inst)
       let inline_fn = marked_class.get_parse_inline(inst)
-      let call = marked_class.parse_call_options_no_async_create()
+      let call = marked_options_no_async.create()
 
       let snippets = [
         "Hello **world** and *italics*",
@@ -66,10 +66,8 @@ pub fn main() -> Nil {
 
         let grid = document.create_element(doc, tag.div)
         element.set_class_name(grid, "grid")
-        let block_html =
-          marked_class.parse_invoke(parse_fn, s, call, mr.codec_string())
-        let inl_html =
-          marked_class.parse_invoke(inline_fn, s, call, mr.codec_string())
+        let block_html = marked_class.parse_invoke(parse_fn, s, call)
+        let inl_html = marked_class.parse_invoke(inline_fn, s, call)
         node.append_child(
           grid,
           make_result_card(doc, "Block (parse)", block_html),

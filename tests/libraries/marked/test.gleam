@@ -140,31 +140,20 @@ pub fn main() {
   let instance = marked_class.new([])
   let parse = marked_class.get_parse(instance)
   let parse_inline = marked_class.get_parse_inline(instance)
-  let call = marked_class.parse_call_options_no_async_create()
+  let call = marked_options_no_async.create()
   let passed =
     passed
     + check(
-      marked_class.parse_invoke(parse, "## Two", call, runtime.codec_string())
-        == "<h2>Two</h2>\n",
+      marked_class.parse_invoke(parse, "## Two", call) == "<h2>Two</h2>\n",
       "parse",
     )
     + check(
-      marked_class.parse_invoke(
-        parse_inline,
-        "**bold** `code`",
-        call,
-        runtime.codec_string(),
-      )
+      marked_class.parse_invoke(parse_inline, "**bold** `code`", call)
         == "<strong>bold</strong> <code>code</code>",
       "parseInline",
     )
     + check(
-      marked_class.parse_invoke(
-        parse_inline,
-        "# not a heading",
-        call,
-        runtime.codec_string(),
-      )
+      marked_class.parse_invoke(parse_inline, "# not a heading", call)
         == "# not a heading",
       "parseInline has no blocks",
     )
@@ -213,21 +202,13 @@ pub fn main() {
     passed
     + check(
       has(
-        marked_class.parse_invoke(
-          marked_class.get_parse(inst),
-          "a\nb",
-          call,
-          runtime.codec_string(),
-        ),
+        marked_class.parse_invoke(marked_class.get_parse(inst), "a\nb", call),
         "a<br>b",
       ),
       "an instance with breaks",
     )
     + check(
-      !has(
-        marked_class.parse_invoke(parse, "a\nb", call, runtime.codec_string()),
-        "<br>",
-      ),
+      !has(marked_class.parse_invoke(parse, "a\nb", call), "<br>"),
       "a plain instance is unchanged",
     )
 
@@ -242,7 +223,7 @@ pub fn main() {
         #(field_string(token, "text"), field_float(token, "depth")),
         ..cell.get(rendered)
       ])
-      t.BooleanOrRendererOutputRendererOutput(
+      t.StringOrBooleanString(
         "<h"
         <> int.to_string(float.round(field_float(token, "depth")))
         <> " class=\"x\">"
@@ -250,7 +231,6 @@ pub fn main() {
         <> "</h>\n",
       )
     }),
-    runtime.codec_string(),
   )
   let ext = marked_extension.create()
   marked_extension.set_renderer(ext, Some(renderer))
@@ -260,7 +240,6 @@ pub fn main() {
       marked_class.get_parse(with_renderer),
       "# Hi\n\n## There",
       call,
-      runtime.codec_string(),
     )
   let passed =
     passed
@@ -291,7 +270,6 @@ pub fn main() {
         marked_class.get_parse(preprocessed),
         "foo *foo*",
         call,
-        runtime.codec_string(),
       )
         == "<p>bar <em>bar</em></p>\n",
       "a preprocess hook",
@@ -313,7 +291,6 @@ pub fn main() {
       marked_class.get_parse(walked),
       "# A\n\n*b*",
       call,
-      runtime.codec_string(),
     )
   let kinds = list.reverse(cell.get(seen))
   let passed =

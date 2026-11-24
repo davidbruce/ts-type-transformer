@@ -18,13 +18,13 @@ macro_rules! check {
 }
 
 // FINDING 13: `addChild<U extends C[]>(...children: U): U[0]` is bound as
-// `add_child<U: JsType>(children: U)`, and the glue spreads it: a JsArray is
-// what is given (a bare child throws "Spread syntax requires ...iterable").
-fn add<C: JsType, D: JsType>(parent: &Container<C>, child: D) {
-    parent.add_child(JsArray::<D>::from(vec![child]));
+// `add_child(children: impl Into<JsArray<Container>>)`, and the glue spreads
+// it: a JsArray is what is given.
+fn add(parent: &Container, child: impl Into<Container>) {
+    parent.add_child(JsArray::<Container>::from(vec![child.into()]));
 }
-fn remove<C: JsType, D: JsType>(parent: &Container<C>, child: D) {
-    parent.remove_child(JsArray::<D>::from(vec![child]));
+fn remove(parent: &Container, child: impl Into<Container>) {
+    parent.remove_child(JsArray::<Container>::from(vec![child.into()]));
 }
 
 fn near(a: f64, b: f64) -> bool {
@@ -142,10 +142,10 @@ fn math() {
 
 fn scene() {
     // A parent container moved and scaled, with a child offset inside it.
-    let parent = Container::<JsValue>::new();
+    let parent = Container::new();
     parent.set_x(100.0);
     parent.set_y(50.0);
-    let child = Container::<JsValue>::new();
+    let child = Container::new();
     child.set_x(10.0);
     child.set_y(20.0);
     add(&parent, child.clone());
@@ -181,9 +181,9 @@ fn scene() {
     check!(near(local.width(), 40.0));
 
     // A point in the graphics' space and in the world's.
-    let at: Point = g.to_global(&Point::new_with(Some(1.0), Some(1.0)));
+    let at = g.to_global(&Point::new_with(Some(1.0), Some(1.0)));
     check!(near(at.x(), 122.0) && near(at.y(), 92.0));
-    let back: Point = g.to_local(&Point::new_with(Some(122.0), Some(92.0)));
+    let back = g.to_local(&Point::new_with(Some(122.0), Some(92.0)));
     check!(near(back.x(), 1.0) && near(back.y(), 1.0));
 
     // Rotation, alpha and visibility.
@@ -200,10 +200,8 @@ fn scene() {
     check!(child.parent().is_none());
 
     // A sprite from the built-in white texture, sized and anchored.
-    // (Awkward: a static of the generic class needs its type parameter given, though unused.)
-    let white = Texture::<TextureSource<JsValue>>::white();
-    check!(white.frame().width() >= 1.0 && white.frame().height() >= 1.0);
-    let texture = white.upcast::<TextureSource<JsValue>>();
+    let texture = Texture::white();
+    check!(texture.frame().width() >= 1.0 && texture.frame().height() >= 1.0);
     let sprite = Sprite::new_with(SpriteOptionsOrTexture::from(texture.clone()));
     sprite.set_width(64.0);
     sprite.set_height(32.0);

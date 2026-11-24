@@ -12,16 +12,16 @@ let private stage =
 let private layer = Layer.Create ()
 stage.add layer |> ignore
 
-let private addShape (s: Shape<ShapeConfig>) =
+let private addShape (s: Shape) =
     layer.add s |> ignore
 
-let private addLine (l: Line<LineConfig>) =
-    layer.add (l.asShape ()) |> ignore
+let private addLine (l: Line) =
+    layer.add l |> ignore
 
 addShape (
     Rect.Create(
         RectConfig.Create (x = 0.0, y = 0.0, width = 680.0, height = 400.0, fill = "#ffffff")
-    ).asShape ()
+    )
 )
 
 let private cx = 340.0
@@ -47,7 +47,7 @@ for r, strokeCol, fillOpt, sw in [
                 strokeWidth = sw,
                 ?fill = fillVal
             )
-        ).asShape ()
+        )
     )
 
 for i in 0 .. 11 do
@@ -90,7 +90,7 @@ for i in 0 .. 7 do
                 stroke = "#111111",
                 strokeWidth = 1.5
             )
-        ).asShape ()
+        )
     )
 
 for i in 0 .. 11 do
@@ -105,19 +105,19 @@ for i in 0 .. 11 do
                 stroke = "#111111",
                 strokeWidth = 1.5
             )
-        ).asShape ()
+        )
     )
 
 addShape (
     RegularPolygon.Create(
         RegularPolygonConfig.Create (sides = 8.0, radius = 26.0, x = cx, y = cy, fill = "#111111")
-    ).asShape ()
+    )
 )
 
 addShape (
     Circle.Create(
         CircleConfig.Create (x = cx, y = cy, radius = 9.0, fill = "#ffffff")
-    ).asShape ()
+    )
 )
 
 for lx, ly, label in [ (516.0, 194.0, "0°"); (332.0, 376.0, "90°"); (140.0, 194.0, "180°"); (328.0, 14.0, "270°") ] do
@@ -131,7 +131,7 @@ for lx, ly, label in [ (516.0, 194.0, "0°"); (332.0, 376.0, "90°"); (140.0, 19
                 fontFamily = "monospace",
                 fill = "#555555"
             )
-        ).asShape ()
+        )
     )
 
 layer.draw () |> ignore

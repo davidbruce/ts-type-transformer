@@ -79,7 +79,7 @@ check (clicks = 2) "off removes it"
 // a field only PolylineOptions has (smoothFactor) selects it.
 let style = PolylineOptions.Create (smoothFactor = 1.0, color = "red", weight = 5.0)
 let line =
-    Leaflet.polyline<obj, obj> (ResizeArray [ PolylineNewLatlngs.LatLng london; PolylineNewLatlngs.LatLng paris ], style)
+    Leaflet.polyline<obj> (ResizeArray [ PolylineNewLatlngs.LatLng london; PolylineNewLatlngs.LatLng paris ], style)
 line.addTo (MapOrLayerGroup.Map m) |> ignore
 check (m.hasLayer line) "a polyline on the map"
 check (line.getBounds().contains paris) "polyline bounds contain its points"

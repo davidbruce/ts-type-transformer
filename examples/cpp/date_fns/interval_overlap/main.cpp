@@ -1,7 +1,7 @@
 #include "dom/dom.hpp"
 #include "date_fns/date_fns.hpp"
 
-using Span = date_fns::Interval<date_fns::DateArg<>, date_fns::DateArg<>>;
+using Span = date_fns::Interval;
 
 static dom::HTMLElement make_el(dom::Document doc, std::string_view tag, std::string_view cls, std::string_view text) {
     dom::HTMLElement el = doc.createElement(tag);
@@ -58,7 +58,7 @@ TS_EXPORT(start) void start() {
 
         dom::HTMLElement slots = make_el(doc, "div", "slots", "");
         for (size_t i = 0; i < month_days.size(); i++) {
-            date_fns::Date_or_string_or_number d = month_days[i];
+            date_fns::DateArg d = month_days[i];
             bool in_track = date_fns::isWithinInterval(d, t.span);
             bool in_ref = date_fns::isWithinInterval(d, sprint_a);
             const char* cls = (in_track && !t.is_ref && in_ref) ? "slot overlap" : (in_track ? "slot active" : "slot");

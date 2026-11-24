@@ -42,7 +42,7 @@ fn std_mat(
   rough: Float,
   metal: Float,
   flat: Bool,
-) -> t.MeshStandardMaterial(Nil) {
+) -> t.MaterialOrMaterialArray {
   mesh_standard_material_parameters.create()
   |> mesh_standard_material_parameters.with_color(
     t.ColorRepresentationNumber(hex(color_hex)),
@@ -52,6 +52,7 @@ fn std_mat(
   |> mesh_standard_material_parameters.with_flat_shading(flat)
   |> Some
   |> mesh_standard_material.new_with
+  |> t.material_or_material_array_material
 }
 
 fn fmt_v3(v: t.Vector3(Nil)) -> String {
@@ -134,7 +135,7 @@ pub fn main() {
   object3d.add(sc, [grid])
 
   let pedestal =
-    mesh.new(
+    mesh.new_with(
       Some(cylinder_geometry.new_with(
         Some(0.55),
         Some(0.75),
@@ -146,13 +147,12 @@ pub fn main() {
         None,
       )),
       Some(std_mat(0x262626, 0.7, 0.05, False)),
-      t.mesh_standard_material_codec(),
     )
   vector3.set_y(object3d.get_position(pedestal), -1.3)
   object3d.add(sc, [pedestal])
 
   let core_sphere =
-    mesh.new(
+    mesh.new_with(
       Some(sphere_geometry.new_with(
         Some(0.65),
         Some(24.0),
@@ -163,7 +163,6 @@ pub fn main() {
         None,
       )),
       Some(std_mat(0x111111, 0.45, 0.2, False)),
-      t.mesh_standard_material_codec(),
     )
   object3d.add(sc, [core_sphere])
 
@@ -175,7 +174,7 @@ pub fn main() {
       t.ColorRepresentationNumber(hex(0x999999)),
     )
   let inner_track =
-    mesh.new(
+    mesh.new_with(
       Some(torus_geometry.new_with(
         Some(2.1),
         Some(0.025),
@@ -185,8 +184,11 @@ pub fn main() {
         None,
         None,
       )),
-      Some(mesh_basic_material.new_with(Some(tp1))),
-      t.mesh_basic_material_codec(),
+      Some(
+        t.material_or_material_array_material(
+          mesh_basic_material.new_with(Some(tp1)),
+        ),
+      ),
     )
   euler.set_x(object3d.get_rotation(inner_track), pi /. 2.0)
   object3d.add(inner_pivot, [inner_track])
@@ -196,7 +198,7 @@ pub fn main() {
   |> vector3.set_with(2.1, 0.0, Some(0.0))
   object3d.add(inner_pivot, [inner_planet])
   let planet =
-    mesh.new(
+    mesh.new_with(
       Some(sphere_geometry.new_with(
         Some(0.36),
         Some(20.0),
@@ -207,17 +209,15 @@ pub fn main() {
         None,
       )),
       Some(std_mat(0x555555, 0.55, 0.1, False)),
-      t.mesh_standard_material_codec(),
     )
   object3d.add(inner_planet, [planet])
 
   let moon_pivot = group.new()
   object3d.add(inner_planet, [moon_pivot])
   let moon =
-    mesh.new(
+    mesh.new_with(
       Some(octahedron_geometry.new_with(Some(0.18), Some(0.0))),
       Some(std_mat(0xd4d4d4, 0.4, 0.1, True)),
-      t.mesh_standard_material_codec(),
     )
   object3d.get_position(moon)
   |> vector3.set_with(0.75, 0.0, Some(0.0))
@@ -231,7 +231,7 @@ pub fn main() {
       t.ColorRepresentationNumber(hex(0xb5b5b5)),
     )
   let outer_track =
-    mesh.new(
+    mesh.new_with(
       Some(torus_geometry.new_with(
         Some(3.8),
         Some(0.025),
@@ -241,8 +241,11 @@ pub fn main() {
         None,
         None,
       )),
-      Some(mesh_basic_material.new_with(Some(tp2))),
-      t.mesh_basic_material_codec(),
+      Some(
+        t.material_or_material_array_material(
+          mesh_basic_material.new_with(Some(tp2)),
+        ),
+      ),
     )
   euler.set_x(object3d.get_rotation(outer_track), pi /. 2.0)
   object3d.add(outer_pivot, [outer_track])
@@ -252,15 +255,14 @@ pub fn main() {
   |> vector3.set_with(3.8, 0.0, Some(0.0))
   object3d.add(outer_pivot, [outer_station])
   let station_body =
-    mesh.new(
+    mesh.new_with(
       Some(icosahedron_geometry.new_with(Some(0.42), Some(0.0))),
       Some(std_mat(0x404040, 0.5, 0.1, True)),
-      t.mesh_standard_material_codec(),
     )
   object3d.add(outer_station, [station_body])
 
   let halo =
-    mesh.new(
+    mesh.new_with(
       Some(torus_geometry.new_with(
         Some(0.68),
         Some(0.06),
@@ -271,7 +273,6 @@ pub fn main() {
         None,
       )),
       Some(std_mat(0x111111, 0.4, 0.1, False)),
-      t.mesh_standard_material_codec(),
     )
   euler.set_x(object3d.get_rotation(halo), 0.8)
   object3d.add(outer_station, [halo])

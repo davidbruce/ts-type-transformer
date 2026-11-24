@@ -7,6 +7,7 @@ import gleam/list
 import gleam/option.{None, Some}
 import konva/circle
 import konva/circle_config
+import konva/container
 import konva/group
 import konva/group_config
 import konva/i_rect
@@ -17,20 +18,19 @@ import konva/node
 import konva/node_get_absolute_position_result as pos
 import konva/rect
 import konva/rect_config
-import konva/shape
 import konva/stage
 import konva/stage_config
 import konva/text
 import konva/text_config
 import konva/types as t
 
-fn make_grid_line(pts: List(Float)) -> t.GroupOrShape {
+fn make_grid_line(pts: List(Float)) -> t.Node(Nil) {
   let lc =
     line_config.create()
     |> line_config.with_points(t.LinePointsArray(pts))
     |> line_config.with_stroke(t.StringOrCanvasGradientString("#e5e5e5"))
     |> line_config.with_stroke_width(1.0)
-  t.GroupOrShapeShape(shape.widen(line.new_with(Some(lc))))
+  node.upcast(line.new_with(Some(lc)))
 }
 
 pub fn main() -> Nil {
@@ -51,7 +51,7 @@ pub fn main() -> Nil {
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
     |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  layer.add(l, [t.GroupOrShapeShape(shape.widen(rect.new_with(Some(bg))))])
+  container.add(l, [rect.new_with(Some(bg))])
 
   let vlines =
     int.range(from: 1, to: 17, with: [], run: fn(acc, i) {
@@ -65,8 +65,8 @@ pub fn main() -> Nil {
       [make_grid_line([0.0, y, 680.0, y]), ..acc]
     })
     |> list.reverse
-  layer.add(l, vlines)
-  layer.add(l, hlines)
+  container.add(l, vlines)
+  container.add(l, hlines)
 
   // Group A.
   let gac =
@@ -95,10 +95,10 @@ pub fn main() -> Nil {
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-  group.add(group_a, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gab)))),
-    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(gad)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(gal)))),
+  container.add(group_a, [
+    node.upcast(rect.new_with(Some(gab))),
+    node.upcast(circle.new_with(Some(gad))),
+    node.upcast(text.new_with(Some(gal))),
   ])
 
   // Group B.
@@ -139,11 +139,11 @@ pub fn main() -> Nil {
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-  group.add(group_b, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gbo)))),
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gbi)))),
-    t.GroupOrShapeShape(shape.widen(circle.new_with(Some(gbd)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(gbl)))),
+  container.add(group_b, [
+    node.upcast(rect.new_with(Some(gbo))),
+    node.upcast(rect.new_with(Some(gbi))),
+    node.upcast(circle.new_with(Some(gbd))),
+    node.upcast(text.new_with(Some(gbl))),
   ])
 
   // Group C + nested inner group.
@@ -183,18 +183,14 @@ pub fn main() -> Nil {
     |> circle_config.with_radius(16.0)
     |> circle_config.with_fill(t.StringOrCanvasGradientString("#111111"))
   let marker = circle.new_with(Some(mc))
-  group.add(inner_group, [t.GroupOrShapeShape(shape.widen(marker))])
-  group.add(group_c, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(gco)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(gcl)))),
-    t.GroupOrShapeGroup(inner_group),
+  container.add(inner_group, [marker])
+  container.add(group_c, [
+    node.upcast(rect.new_with(Some(gco))),
+    node.upcast(text.new_with(Some(gcl))),
+    node.upcast(inner_group),
   ])
 
-  layer.add(l, [
-    t.GroupOrShapeGroup(group_a),
-    t.GroupOrShapeGroup(group_b),
-    t.GroupOrShapeGroup(group_c),
-  ])
+  container.add(l, [group_a, group_b, group_c])
 
   let abs = node.get_absolute_position(marker)
   let bbox = node.get_client_rect(group_b)
@@ -222,9 +218,9 @@ pub fn main() -> Nil {
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
     |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-  layer.add(l, [
-    t.GroupOrShapeShape(shape.widen(rect.new_with(Some(strip)))),
-    t.GroupOrShapeShape(shape.widen(text.new_with(Some(sum)))),
+  container.add(l, [
+    node.upcast(rect.new_with(Some(strip))),
+    node.upcast(text.new_with(Some(sum))),
   ])
 
   node.draw(l)

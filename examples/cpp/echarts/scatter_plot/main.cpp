@@ -6,8 +6,8 @@ using namespace echarts;
 template <class Axis>
 static Axis make_value_axis() {
     return Axis({
-        .axisLabel = AxisLabelOption<std::string>({.color = "#555555"}),
-        .splitLine = SplitLineOption({.lineStyle = LineStyleOption<SplitLineOption_lineStyle>({.color = "#e5e5e5"})}),
+        .axisLabel = AxisLabelOption({.color = "#555555"}),
+        .splitLine = SplitLineOption({.lineStyle = LineStyleOption({.color = "#e5e5e5"})}),
         .min = 0,
         .max = 100,
     });
@@ -31,7 +31,7 @@ TS_EXPORT(start) void start() {
         .symbol = "circle",
         .symbolSize = 10,
         .name = "Cluster A",
-        .itemStyle = ItemStyleOption<DefaultLabelFormatterCallbackParams>({.color = "#111111"}),
+        .itemStyle = ItemStyleOption({.color = "#111111"}),
     });
 
     auto s1 = ScatterSeriesOption({
@@ -39,7 +39,7 @@ TS_EXPORT(start) void start() {
         .symbol = "rect",
         .symbolSize = 10,
         .name = "Cluster B",
-        .itemStyle = ItemStyleOption<DefaultLabelFormatterCallbackParams>({.borderColor = "#111111", .borderWidth = 2, .color = "#ffffff"}),
+        .itemStyle = ItemStyleOption({.borderColor = "#111111", .borderWidth = 2, .color = "#ffffff"}),
     });
 
     EChartsOption opt({
@@ -48,7 +48,7 @@ TS_EXPORT(start) void start() {
         .grid = GridComponentOption({.top = 48, .right = 24, .bottom = 36, .left = 48}),
         .xAxis = make_value_axis<XAXisComponentOption_xAxis_value>(),
         .yAxis = make_value_axis<YAXisComponentOption_yAxis_value>(),
-        .legend = PlainLegendComponentOption({.textStyle = LabelOption<DetailOption_object>({.color = "#111111"}), .top = 8}),
+        .legend = PlainLegendComponentOption({.textStyle = LabelOption({.color = "#111111"}), .top = 8}),
         .series = ts::Array<ScatterSeriesOption>::of(s0, s1),
     });
     chart.setOption(opt);
