@@ -55,8 +55,10 @@ pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
                 (format!("impl Optional<{u}>"), vec![format!("Optional::<{u}>::into_option({x}).lend().h")])
             }
             Ty::Param(_) => (ty(t, cx), lend(x)),
-            // Any value, or None: `JsValue::from(None)` is null.
-            Ty::Any => into(VALUE.into()),
+            // Any value, or None: `JsValue::from(None)` is null. So for a union
+            // nothing types: `fill(0x111111 as f64)`, `fill("red")`, `fill(None)`.
+            Ty::Any | Ty::Union(_) | Ty::NamedUnion(_) => into(VALUE.into()),
+            Ty::Generic(n, _) if cx.is_union(n) => into(VALUE.into()),
             // The value by reference, `Some` of it, or None.
             inner => (format!("impl Nullable<{}>", ty(inner, cx)), vec![format!("{x}.arg().lend().h")]),
         },

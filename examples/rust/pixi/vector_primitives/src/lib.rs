@@ -25,7 +25,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
     let ss = StrokeStyle::default()
         .with_width(width)
         .with_color(color_hex as f64);
-    g.stroke(&JsValue::from(ss));
+    g.stroke(&ss);
 }
 
 #[unsafe(no_mangle)]
@@ -59,20 +59,20 @@ pub extern "C" fn start() {
         let rect_g = Graphics::new(JsNone);
         rect_g
             .rect(40.0, 46.0, 140.0, 88.0)
-            .fill(&JsValue::from(0x111111 as f64));
+            .fill(0x111111 as f64);
         add(&stage, rect_g);
 
         let round_g = Graphics::new(JsNone);
         round_g
             .round_rect(216.0, 46.0, 156.0, 88.0, 16.0)
-            .fill(&JsValue::from(0xf7f7f7 as f64));
+            .fill(0xf7f7f7 as f64);
         stroke_g(&round_g, 2.0, 0x111111);
         add(&stage, round_g);
 
         let circle_g = Graphics::new(JsNone);
         circle_g
             .circle(458.0, 90.0, 44.0)
-            .fill(&JsValue::from(0x404040 as f64));
+            .fill(0x404040 as f64);
         circle_g.circle(458.0, 90.0, 22.0);
         stroke_g(&circle_g, 2.0, 0xffffff);
         circle_g.circle(458.0, 90.0, 52.0);
@@ -82,21 +82,21 @@ pub extern "C" fn start() {
         let ellipse_g = Graphics::new(JsNone);
         ellipse_g
             .ellipse(588.0, 90.0, 56.0, 36.0)
-            .fill(&JsValue::from(0xd4d4d4 as f64));
+            .fill(0xd4d4d4 as f64);
         stroke_g(&ellipse_g, 1.5, 0x111111);
         add(&stage, ellipse_g);
 
         let poly_g = Graphics::new(JsNone);
         poly_g
             .regular_poly(130.0, 274.0, 58.0, 6.0, 0.25, None)
-            .fill(&JsValue::from(0x737373 as f64));
+            .fill(0x737373 as f64);
         stroke_g(&poly_g, 2.0, 0x111111);
         add(&stage, poly_g);
 
         let star_g = Graphics::new(JsNone);
         star_g
             .star(340.0, 274.0, 5.0, 62.0, 26.0, -0.314)
-            .fill(&JsValue::from(0x111111 as f64));
+            .fill(0x111111 as f64);
         add(&stage, star_g);
 
         let diamond_g = Graphics::new(JsNone);
@@ -106,7 +106,7 @@ pub extern "C" fn start() {
             .line_to(548.0, 336.0)
             .line_to(478.0, 274.0)
             .close_path()
-            .fill(&JsValue::from(0xb5b5b5 as f64));
+            .fill(0xb5b5b5 as f64);
         stroke_g(&diamond_g, 1.5, 0x111111);
         add(&stage, diamond_g);
 

@@ -21,7 +21,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
     let ss = StrokeStyle::default()
         .with_width(width)
         .with_color(color_hex as f64);
-    g.stroke(&JsValue::from(ss));
+    g.stroke(&ss);
 }
 
 #[unsafe(no_mangle)]
@@ -65,14 +65,14 @@ pub extern "C" fn start() {
             g.rect(c.x(), c.y(), c.width(), c.height());
             if query.contains_rect(c) {
                 contained += 1;
-                g.fill(&JsValue::from(0x111111 as f64));
+                g.fill(0x111111 as f64);
             } else if query.intersects(c, None) {
                 intersecting += 1;
-                g.fill(&JsValue::from(0x737373 as f64));
+                g.fill(0x737373 as f64);
                 stroke_g(&g, 2.0, 0x111111);
             } else {
                 disjoint += 1;
-                g.fill(&JsValue::from(0xe5e5e5 as f64));
+                g.fill(0xe5e5e5 as f64);
                 stroke_g(&g, 1.0, 0xa3a3a3);
             }
         }

@@ -21,7 +21,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
     let ss = StrokeStyle::default()
         .with_width(width)
         .with_color(color_hex as f64);
-    g.stroke(&JsValue::from(ss));
+    g.stroke(&ss);
 }
 
 #[unsafe(no_mangle)]
@@ -86,7 +86,7 @@ pub extern "C" fn start() {
                 }
                 tiles
                     .close_path()
-                    .fill(&JsValue::from(ring_colors[r_idx] as f64));
+                    .fill(ring_colors[r_idx] as f64);
                 stroke_g(&tiles, 1.2, 0x111111);
             }
         }
@@ -95,7 +95,7 @@ pub extern "C" fn start() {
         let center_dot = Graphics::new(JsNone);
         center_dot
             .circle(340.0, 200.0, 8.0)
-            .fill(&JsValue::from(0x111111 as f64));
+            .fill(0x111111 as f64);
         add(&stage, center_dot);
 
         app.render();

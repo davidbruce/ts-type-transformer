@@ -380,8 +380,10 @@ the time control returns to JavaScript is reported, not lost.
   an object is `&impl AsRef<T>`, so any subtype goes in; a union or an array
   is `impl Into<..>`, so `describe(42.0)` and `join("-", ["a", "b"])` work, and
   so does a union whose members no test tells apart (`loose(&a)`), which only
-  a value goes into and a getter gives as a `JsValue`; a parameter of `any` is
-  `impl Into<JsValue>`: `&handle`, `4.0`, `"text"`; a value of a type parameter
+  a value goes into and a getter gives as a `JsValue`; a parameter of `any`,
+  or of a union nothing types (Pixi's `fill`, of colors another package
+  declares), is `impl Into<JsValue>`: `&handle`, `4.0`, `"text"`, and `None`
+  where it is optional; a value of a type parameter
   goes by value. An optional or nullable argument is its value or `None`: a
   string is `"x"`, `&text` or `None`, an object `&opts`, `Some(&opts)` or
   `None`, a number or flag `500.0`, `Some(500.0)` or `None`

@@ -38,7 +38,7 @@ pub extern "C" fn start() {
         let ss = StrokeStyle::default()
             .with_width(1.5)
             .with_color(0xd4d4d4 as f64);
-        frame.stroke(&JsValue::from(ss));
+        frame.stroke(&ss);
         add(&stage, frame);
 
         let shades: [u32; 8] = [

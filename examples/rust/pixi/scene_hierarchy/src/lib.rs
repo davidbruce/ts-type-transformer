@@ -21,7 +21,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
     let ss = StrokeStyle::default()
         .with_width(width)
         .with_color(color_hex as f64);
-    g.stroke(&JsValue::from(ss));
+    g.stroke(&ss);
 }
 
 #[unsafe(no_mangle)]
@@ -57,10 +57,10 @@ pub extern "C" fn start() {
             let arm_bar = Graphics::new(JsNone);
             arm_bar
                 .rect(0.0, -4.0, 110.0, 8.0)
-                .fill(&JsValue::from(0x737373 as f64));
+                .fill(0x737373 as f64);
             arm_bar
                 .circle(110.0, 0.0, 10.0)
-                .fill(&JsValue::from(0x111111 as f64));
+                .fill(0x111111 as f64);
             add(&arm, arm_bar);
 
             let sub = Container::<JsValue>::new(None);
@@ -75,14 +75,14 @@ pub extern "C" fn start() {
             let sat_box = Graphics::new(JsNone);
             sat_box
                 .rect(-12.0, -12.0, 24.0, 24.0)
-                .fill(&JsValue::from(0x262626 as f64));
+                .fill(0x262626 as f64);
             sat_box.set_x(48.0);
             add(&sub, sat_box);
 
             let sat_orb = Graphics::new(JsNone);
             sat_orb
                 .circle(0.0, 0.0, 14.0)
-                .fill(&JsValue::from(0xd4d4d4 as f64));
+                .fill(0xd4d4d4 as f64);
             stroke_g(&sat_orb, 2.0, 0x111111);
             sat_orb.set_x(-32.0);
             add(&sub, sat_orb);
@@ -93,9 +93,9 @@ pub extern "C" fn start() {
 
         let hub = Graphics::new(JsNone);
         hub.circle(0.0, 0.0, 18.0)
-            .fill(&JsValue::from(0x111111 as f64));
+            .fill(0x111111 as f64);
         hub.circle(0.0, 0.0, 7.0)
-            .fill(&JsValue::from(0xffffff as f64));
+            .fill(0xffffff as f64);
         add(&root, hub);
 
         add(&stage, root.clone());
