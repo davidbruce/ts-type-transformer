@@ -61,6 +61,7 @@ are errors. Example targets are in `examples/targets/`.
 | `anonymous` | `hoist` | inline object and function types | named synthetic declarations | no |
 | `optional_params` | `overloads` | optional parameters | one overload per arity | no |
 | `union_params` | `overloads` | union-typed parameters | one overload per member | no |
+| `union_params` | `untyped` | the same, where a member has no type of its own (`string \| symbol`) | one overload per member; other unions stay | no |
 | `unions` | `erase` | remaining unions | common supertype, else `any` | yes |
 | `unions` | `name` | inline unions | a named declaration: `boolean_or_Options`, or named by where it appears | no |
 | `keyed_params` | `expand` | `f<K extends keyof M>(key: K, value: M[K])` | one overload per key: `addEventListener_click`, `createElement_div` | yes |
@@ -293,7 +294,7 @@ the time control returns to JavaScript is reported, not lost.
   parameter, a setter, an array's `push` and a family's overload take the
   union or any member whose C type tells it apart (`leaflet_marker(ll, opts)`,
   `Popup_setContent(note, "text")`): the macro applies `U_of`, and a value
-  that is no member is `ts_no_member`. A subtype of a member is upcast first.
+  that is no member is `ts_no_member`. A subtype of a member is upcast first (where the member has at most 40).
   An object an interface only holds properties of is made in one expression,
   `X_create(.a = 1, .name = "x")`: a struct of the settable properties, own
   and inherited, and an object with those named set, and no others; `false`,

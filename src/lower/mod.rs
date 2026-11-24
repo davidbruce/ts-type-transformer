@@ -46,6 +46,8 @@ pub struct Options {
     pub anonymous: bool,
     pub optionals: bool,
     pub param_unions: bool,
+    // Of union parameters, only those with a member of no type of its own.
+    pub untyped_param_unions: bool,
     pub unions: bool,
     pub overloads: bool,
     pub keyed: bool,
@@ -72,7 +74,7 @@ impl Default for Options {
     fn default() -> Self {
         Options {
             classes: false, typeops: false, intersections: false, inheritance: false, generics: false, aliases: false, constraints: false, exact_constraints: false, nullable: false,
-            literals: false, anonymous: false, optionals: false, param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
+            literals: false, anonymous: false, optionals: false, param_unions: false, untyped_param_unions: false, unions: false, overloads: false, keyed: false, redeclared: false, map_keyed: false, name_unions: false, keyed_limit: 256,
             union_param_limit: 16, intersection_limit: 64, separator: "_", numbered_overloads: false, pascal_types: false,
         }
     }

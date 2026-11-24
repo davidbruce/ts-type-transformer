@@ -47,10 +47,17 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         }
     };
 
+    let mut subtypes: HashMap<String, Vec<String>> = HashMap::new();
+    for c in &m.classes {
+        for a in all_ancestors(m, &c.name) {
+            subtypes.entry(a).or_default().push(c.name.clone());
+        }
+    }
     let mut cx = Ctx {
         decodable: m.unions.iter().filter(|u| u.decodable() && u.type_params.is_empty()).map(|u| u.name.clone()).collect(),
         typed: HashSet::new(),
         of: HashMap::new(),
+        subtypes,
     };
     // A union only a value goes into is typed where a member can be told by its C type: else a value stays one.
     cx.of = m.unions.iter().filter(|u| cx.decodable(&u.name) || typable(u)).filter_map(|u| Some((u.name.clone(), of_choices(u, &cx)?.into_iter().map(|c| c.0).chain((!cx.decodable(&u.name)).then(|| "JsValue".to_string())).collect()))).collect();

@@ -48,7 +48,7 @@ __attribute__((export_name("run"))) void run(void) {
     // Union parameter: an overload per member, chosen by the argument's type.
     CHECK(str_eq(Shape_label(s, "a"), "string:a"));
     CHECK(str_eq(Shape_label(s, 7), "number:7"));
-    CHECK(str_eq(Shape_label_with_number(s, 7.5), "number:7.5"));
+    CHECK(str_eq(Shape_label(s, 7.5), "number:7.5"));
 
     // Nullable.
     CHECK(Shape_get_parent(s).h == 0);

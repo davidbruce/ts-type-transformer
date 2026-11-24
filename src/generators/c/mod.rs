@@ -22,6 +22,8 @@ pub(super) struct Ctx {
     // Unions made from a member by `U_of(x)`.
     // with the C types it tells members by.
     pub of: HashMap<String, Vec<String>>,
+    // Each class's subclasses here, for a union to take one as the member it is.
+    pub subtypes: HashMap<String, Vec<String>>,
 }
 
 impl Ctx {

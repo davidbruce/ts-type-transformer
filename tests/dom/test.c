@@ -102,7 +102,7 @@ __attribute__((export_name("run"))) void run(void) {
         .tag = EventListenerOrEventListenerObject_EventListener,
         .as.EventListener = EventListener_from(on_ping, &pings),
     };
-    Element_addEventListener_with_AddEventListenerOptions(box, "ping", ping_listener, once);
+    Element_addEventListener(box, "ping", ping_listener, once);
     EventTarget_dispatchEvent(box, Event_new("ping"));
     EventTarget_dispatchEvent(box, Event_new("ping"));
     CHECK(pings.count == 1);

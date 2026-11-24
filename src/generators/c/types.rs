@@ -230,6 +230,12 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     }
     if let Some(choices) = of_choices(u, cx) {
         functions += &format!("static inline {n} {n}_of_self({n} u) {{ return u; }}\n");
+        for (sub, base, f) in subtype_arms(u, cx) {
+            let name = format!("{n}_of_{f}_from_{sub}");
+            if choices.iter().any(|(_, c)| *c == name) {
+                functions += &format!("static inline {n} {name}({sub} v) {{ return {n}_of_{f}(({base}){{ v.h }}); }}\n");
+            }
+        }
         let mut choices: Vec<String> = choices.iter().map(|(t, f)| format!("{t}: {f}")).collect();
         if !cx.decodable(n) {
             choices.push(format!("JsValue: {n}_of_ts_value"));
@@ -243,6 +249,10 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
 pub(super) fn of_choices(u: &NamedUnion, cx: &Ctx) -> Option<Vec<(String, String)>> {
     let n = &u.name;
     let has_num = u.parts.contains(&Ty::Num);
+    // An enum's values are ints, as a number's or a flag's may be: one enum
+    // member, and no other that takes an int, is told apart by its type.
+    let enums = u.parts.iter().filter(|p| matches!(p, Ty::Enum(_) | Ty::NumEnum(_))).count();
+    let enum_ok = enums == 1 && !u.parts.iter().any(|p| *p == Ty::Num || *p == Ty::Bool);
     let mut seen = std::collections::BTreeSet::new();
     let per_member: Option<Vec<Vec<(String, String)>>> = u
         .parts
@@ -252,12 +262,38 @@ pub(super) fn of_choices(u: &NamedUnion, cx: &Ctx) -> Option<Vec<(String, String
             let pairs: Vec<(String, String)> = if *p == Ty::Str {
                 [("JsString", "string"), ("const char*", "cstr"), ("char*", "cstr")].iter().map(|(t, suffix)| ((*t).to_string(), format!("{n}_of_{suffix}"))).collect()
             } else {
-                generic_types(p, has_num, cx)?.into_iter().map(|t| (t, format!("{n}_of_{f}"))).collect()
+                match p {
+                    Ty::Enum(_) | Ty::NumEnum(_) if enum_ok => vec![(typed(p, true, cx), format!("{n}_of_{f}"))],
+                    _ => generic_types(p, has_num, cx)?.into_iter().map(|t| (t, format!("{n}_of_{f}"))).collect(),
+                }
             };
             pairs.iter().all(|(t, _)| seen.insert(t.clone())).then_some(pairs)
         })
         .collect();
-    Some(per_member?.concat())
+    let mut out = per_member?.concat();
+    // A subclass of a member is that member: `Mesh_new(geometry, basic_material)`.
+    for (sub, _, f) in subtype_arms(u, cx) {
+        if seen.insert(sub.clone()) {
+            out.push((sub.clone(), format!("{n}_of_{f}_from_{sub}")));
+        }
+    }
+    Some(out)
+}
+
+// A union's members that are classes with subclasses here, but not too many:
+// (subclass, member, the member's field).
+pub(super) fn subtype_arms(u: &NamedUnion, cx: &Ctx) -> Vec<(String, String, String)> {
+    const MAX_SUBTYPES: usize = 40;
+    u.parts
+        .iter()
+        .zip(union_fields(u))
+        .filter_map(|(p, f)| match p {
+            Ty::Obj(base) => cx.subtypes.get(base).filter(|subs| subs.len() <= MAX_SUBTYPES).map(|subs| subs.iter().map(|s| (s.clone(), base.clone(), f.clone())).collect::<Vec<_>>()),
+            _ => None,
+        })
+        .flatten()
+        .filter(|(s, ..)| !u.parts.contains(&Ty::Obj(s.clone())))
+        .collect()
 }
 
 // A union a value can be made of: its members have C types and names of their own.

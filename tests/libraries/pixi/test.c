@@ -19,7 +19,7 @@ static bool contains(JsString s, const char* needle) {
 static bool near(double a, double b) { return (a > b ? a - b : b - a) < 1e-6; }
 static JsOptionalDouble D(double x) { return js_some_double(x); }
 static Rectangle Rect(double x, double y, double w, double h) {
-    return Rectangle_new_with_number_and_number_and_number_and_number(D(x), D(y), D(w), D(h));
+    return Rectangle_new(x, y, w, h);
 }
 
 // An application on the page's canvas: its init is a promise.
@@ -159,7 +159,7 @@ __attribute__((export_name("run"))) void run(void) {
     // A sprite of the white texture, sized.
     Texture white = Texture_get_WHITE();
     CHECK(Texture_get_width(white) > 0 && Texture_get_height(white) > 0);
-    Sprite sprite = Sprite_new_with_Texture(white);
+    Sprite sprite = Sprite_new(white);
     Sprite_set_width(sprite, 30);
     Container_set_height(sprite, 20);
     CHECK(Container_get_width(sprite) == 30 && Container_get_height(sprite) == 20);
@@ -174,8 +174,8 @@ __attribute__((export_name("run"))) void run(void) {
 
     // Labels and finding children.
     FindMixin_set_label(sprite, "the-sprite");
-    CHECK(js_same((JsValue){ FindMixin_getChildByLabel_with_string(root, "the-sprite", js_none_bool()).h }, (JsValue){ sprite.h }));
-    CHECK(FindMixin_getChildByLabel_with_string(root, "nothing", js_none_bool()).h == 0);
+    CHECK(js_same((JsValue){ FindMixin_getChildByLabel(root, "the-sprite", js_none_bool()).h }, (JsValue){ sprite.h }));
+    CHECK(FindMixin_getChildByLabel(root, "nothing", js_none_bool()).h == 0);
 
     // Removing a child.
     JsArray_Container gone = JsArray_Container_new();

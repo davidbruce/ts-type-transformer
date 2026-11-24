@@ -108,18 +108,18 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(str_is(Node_get_text(Node_child(para, 0)), "Hello world"));
     CHECK(str_is(NodeType_get_name(Node_get_type(para)), "paragraph"));
     // Nodes made by the schema are equal to the ones from JSON.
-    Node made = Schema_node_with_string_and_Node_array(schema, "paragraph", (Attrs){ 0 }, (JsArray_Node){ 0 }, (JsArray_Mark){ 0 });
+    Node made = Schema_node(schema, "paragraph", (Attrs){ 0 }, (JsArray_Node){ 0 }, (JsArray_Mark){ 0 });
     CHECK(Node_get_childCount(made) == 0 && Node_get_nodeSize(made) == 2);
     JsArray_Node one_text = JsArray_Node_new();
     JsArray_Node_push(one_text, Schema_text(schema, "Hello world", (JsArray_Mark){ 0 }));
-    Node same_para = Schema_node_with_string_and_Node_array(schema, "paragraph", (Attrs){ 0 }, one_text, (JsArray_Mark){ 0 });
+    Node same_para = Schema_node(schema, "paragraph", (Attrs){ 0 }, one_text, (JsArray_Mark){ 0 });
     CHECK(Node_eq(same_para, para));
     CHECK(!Node_eq(made, para));
     // Text between positions, and cutting.
     CHECK(str_is(Node_textBetween(doc, 1, 6, (const char*)0, (const char*)0), "Hello"));
     CHECK(str_is(text_of(Node_cut(doc, 1, js_some_double(6))), "Hello"));
     // An invalid node is rejected by the schema: a doc needs a paragraph.
-    Node invalid_doc = Schema_node_with_string_and_Node_array(schema, "doc", (Attrs){ 0 }, (JsArray_Node){ 0 }, (JsArray_Mark){ 0 });
+    Node invalid_doc = Schema_node(schema, "doc", (Attrs){ 0 }, (JsArray_Node){ 0 }, (JsArray_Mark){ 0 });
     CHECK(invalid_doc.h == 0 && js_failed());
     JsValue invalid = js_take_error();
     JsString why = js_error_message(invalid);
@@ -175,7 +175,7 @@ __attribute__((export_name("run"))) void run(void) {
     Transform_delete(del, 1, 5);
     CHECK(str_is(text_of(Transform_get_doc(del)), "Hello world"));
     Transaction swap = EditorState_get_tr(state);
-    Transform_replaceWith_with_Node(swap, 7, 12, Schema_text(schema, "there", (JsArray_Mark){ 0 }));
+    Transform_replaceWith(swap, 7, 12, Schema_text(schema, "there", (JsArray_Mark){ 0 }));
     CHECK(str_is(text_of(Transform_get_doc(swap)), "Hello there"));
     CHECK(JsArray_Step_length(Transform_get_steps(swap)) == 1);
 

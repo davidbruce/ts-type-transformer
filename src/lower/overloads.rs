@@ -41,6 +41,10 @@ fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
                     },
                     _ => continue,
                 };
+                // A union of members with types of their own stays one parameter.
+                if o.untyped_param_unions && !parts.iter().any(|p| matches!(p, Type::Primitive(n) if matches!(n.as_str(), "symbol" | "bigint" | "unknown" | "any" | "object"))) {
+                    continue;
+                }
                 // Too many combinations: leave the union for a later pass.
                 if variants.len() * parts.len() > o.union_param_limit {
                     continue;

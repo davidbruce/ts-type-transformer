@@ -41,8 +41,8 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(km > 340 && km < 345);
     CHECK(near(LatLng_get_lat(paris), 48.8566, 1e-12) && !LatLng_get_alt(paris).has);
     LatLngBounds bounds = latLngBounds(E(london), E(london));
-    LatLngBounds_extend(bounds, E(paris));
-    CHECK(LatLngBounds_contains_with_LatLngExpression(bounds, E(latLng(50, 1))));
+    LatLngBounds_extend(bounds, paris);
+    CHECK(LatLngBounds_contains(bounds, latLng(50, 1)));
     CHECK(LatLng_get_lat(LatLngBounds_getNorthEast(bounds)) == 51.505);
     CHECK(near(LatLngBounds_getWest(bounds), -0.09, 1e-12) && near(LatLngBounds_getEast(bounds), 2.3522, 1e-12));
     CHECK(near(LatLng_get_lat(LatLngBounds_getCenter(bounds)), (51.505 + 48.8566) / 2, 1e-9));
@@ -79,8 +79,8 @@ __attribute__((export_name("run"))) void run(void) {
     // Fitting the bounds zooms out to show both cities.
     Map_fitBounds(m, LatLngBoundsExpression_of(bounds), (FitBoundsOptions){ 0 });
     CHECK(Map_getZoom(m) < 13);
-    CHECK(LatLngBounds_contains_with_LatLngExpression(Map_getBounds(m), E(paris)));
-    CHECK(LatLngBounds_contains_with_LatLngExpression(Map_getBounds(m), E(london)));
+    CHECK(LatLngBounds_contains(Map_getBounds(m), paris));
+    CHECK(LatLngBounds_contains(Map_getBounds(m), london));
 
     // An event fired on the map reaches the listener, with its position.
     LeafletMouseEventHandlerFn handler = LeafletMouseEventHandlerFn_from(on_click, 0);

@@ -161,7 +161,7 @@ __attribute__((export_name("run"))) void run(void) {
     Dictionary_set_at(action, "type", js_string("highlight"));
     Dictionary_set_at(action, "seriesIndex", js_number(0));
     Dictionary_set_at(action, "dataIndex", js_number(1));
-    EChartsType_dispatchAction(chart, (Payload){ action.h }, js_none_bool());
+    EChartsType_dispatchAction(chart, (Payload){ action.h });
     CHECK(highlights >= 1);
     CHECK(highlight_event_ok);
 

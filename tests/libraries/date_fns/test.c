@@ -7,7 +7,7 @@ TS_IMPORT(check) void check(int ok, int line);
 
 // A date alone, formatted.
 static bool fmt(Date d, const char* pattern, const char* expected) {
-    JsString s = date_fns_formatDate_with_Date(d, pattern, (DateFns_FormatDateOptions){ 0 });
+    JsString s = date_fns_formatDate(d, pattern, (DateFns_FormatDateOptions){ 0 });
     bool ok = JsString_equals(s, expected);
     js_release(s);
     return ok;
@@ -49,17 +49,17 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(fmt(date_fns_addHours(DateFns_DateArg_of_Date(at_noon), 5), "HH:mm", "17:00"));
 
     // Compared: dates, ISO strings and timestamps alike.
-    CHECK(date_fns_differenceInDays_with_Date_and_Date(monday, friday) == 3);
-    CHECK(date_fns_differenceInDays_with_Date_and_Date(monday, friday, (DateFns_DifferenceInDaysOptions){ 0 }) == 3);
-    CHECK(date_fns_differenceInCalendarMonths_with_Date_and_Date(last, earlier, (DateFns_DifferenceInCalendarMonthsOptions){ 0 }) == 1);
-    CHECK(date_fns_isAfter_with_Date(monday, "2024-03-15"));
-    CHECK(date_fns_isBefore_with_Date_and_Date(friday, monday));
-    CHECK(date_fns_isEqual_with_Date_and_Date(friday, friday));
-    CHECK(date_fns_compareAsc_with_Date_and_number(friday, Date_time(monday)) == -1);
-    CHECK(date_fns_compareDesc_with_Date_and_Date(friday, monday) == 1);
-    CHECK(date_fns_isSameDay_with_Date_and_Date(friday, friday, (DateFns_IsSameDayOptions){ 0 }));
-    CHECK(!date_fns_isSameMonth_with_Date_and_Date(friday, earlier, (DateFns_IsSameMonthOptions){ 0 }));
-    JsString dist = date_fns_formatDistance_with_Date_and_Date(monday, friday, (DateFns_FormatDistanceOptions){ 0 });
+    CHECK(date_fns_differenceInDays(monday, friday) == 3);
+    CHECK(date_fns_differenceInDays(monday, friday, (DateFns_DifferenceInDaysOptions){ 0 }) == 3);
+    CHECK(date_fns_differenceInCalendarMonths(last, earlier, (DateFns_DifferenceInCalendarMonthsOptions){ 0 }) == 1);
+    CHECK(date_fns_isAfter(monday, "2024-03-15"));
+    CHECK(date_fns_isBefore(friday, monday));
+    CHECK(date_fns_isEqual(friday, friday));
+    CHECK(date_fns_compareAsc(friday, Date_time(monday)) == -1);
+    CHECK(date_fns_compareDesc(friday, monday) == 1);
+    CHECK(date_fns_isSameDay(friday, friday, (DateFns_IsSameDayOptions){ 0 }));
+    CHECK(!date_fns_isSameMonth(friday, earlier, (DateFns_IsSameMonthOptions){ 0 }));
+    JsString dist = date_fns_formatDistance(monday, friday, (DateFns_FormatDistanceOptions){ 0 });
     CHECK(JsString_equals(dist, "3 days"));
     js_release(dist);
     JsArray_DateFns_DateArg two = JsArray_DateFns_DateArg_new();

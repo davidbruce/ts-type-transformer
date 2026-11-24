@@ -40,7 +40,7 @@
       <attribute name="literals"><choice><value>keep</value><value>enum</value></choice></attribute>
       <attribute name="anonymous"><choice><value>keep</value><value>hoist</value></choice></attribute>
       <attribute name="optional_params"><choice><value>keep</value><value>overloads</value></choice></attribute>
-      <attribute name="union_params"><choice><value>keep</value><value>overloads</value></choice></attribute>
+      <attribute name="union_params"><choice><value>keep</value><value>overloads</value><value>untyped</value></choice></attribute>
       <attribute name="unions"><choice><value>keep</value><value>erase</value><value>name</value></choice></attribute>
       <attribute name="overloads"><choice><value>keep</value><value>rename</value></choice></attribute>
       <attribute name="redeclarations"><choice><value>keep</value><value>drop</value></choice></attribute>

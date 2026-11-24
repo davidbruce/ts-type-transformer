@@ -21,7 +21,7 @@ pub const CONSTRUCTS: &[(&str, &str, &str, &str)] = &[
     ("literals", "enum", "literal types", "enums for string unions, const= for constants"),
     ("anonymous", "hoist", "inline object and function types", "named declarations"),
     ("optional_params", "overloads", "optional parameters", "one overload per arity"),
-    ("union_params", "overloads", "union-typed parameters", "one overload per union member"),
+    ("union_params", "overloads|untyped", "union-typed parameters", "overloads: one overload per union member. untyped: so only a union with a member of no type of its own (`string | symbol`)"),
     ("unions", "erase|name", "other unions", "erase: their common supertype, or any. name: a named declaration"),
     ("overloads", "rename", "same-named members", "unique names, with jsName"),
     ("redeclarations", "drop", "a method a type declares again as its ancestor declares it, but for the type of `this`", "the ancestor's alone"),
@@ -159,6 +159,10 @@ pub fn load(paths: &[String], overrides: &[String]) -> Result<(Options, Modules,
                     if key == "keyed_params" {
                         o.map_keyed = chosen == "map";
                     }
+                    if key == "union_params" {
+                        o.param_unions = chosen != "keep";
+                        o.untyped_param_unions = chosen == "untyped";
+                    }
                     if key == "constraints" {
                         o.constraints = chosen != "keep";
                         o.exact_constraints = chosen == "exact";
@@ -228,6 +232,8 @@ pub fn describe(mut o: Options) -> Vec<(&'static str, &'static str)> {
                 "name"
             } else if *key == "keyed_params" && o.map_keyed {
                 "map"
+            } else if *key == "union_params" && o.untyped_param_unions {
+                "untyped"
             } else if *key == "constraints" && o.exact_constraints {
                 "exact"
             } else if *o.slot(key).unwrap() {
