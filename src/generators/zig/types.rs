@@ -176,7 +176,8 @@ pub(super) fn callback_result(t: &Ty, call: &str) -> String {
         Ty::Nullable(inner, _) if matches!(**inner, Ty::Enum(_)) => format!("return if ({call}) |v| @intFromEnum(v) else -1;"),
         Ty::Nullable(inner, _) if **inner == Ty::Num => format!("return if ({call}) |v| raw.js_from_number(v) else 0;"),
         Ty::Nullable(..) => format!("const r = {call}; return if (r) |v| Lent.of(v).h else 0;"),
-        Ty::NamedUnion(_) => format!("const r = {call}; return switch (r) {{ inline else => |v| Lent.of(v).h }};"),
+        // The union, or any of its members: `return "<h1>";` for `string | false`.
+        Ty::NamedUnion(_) => format!("return Lent.unionVal({}, {call}).h;", typed(t, false)),
         _ => format!("return {call}.h;"),
     }
 }

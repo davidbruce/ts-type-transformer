@@ -52,13 +52,13 @@ static JsValue atom_set(void* ctx, JsValue updater) {
 }
 static void no_unsubscribe(void* ctx) { (void)ctx; }
 static JsValue atom_subscribe(void* ctx, JsValue observer) {
-    Table_RowData_map subscription = table_makeObjectMap();
+    Table_RowData_map subscription = (Table_RowData_map){ table_makeObjectMap().h };
     Table_RowData_map_set_at(subscription, "unsubscribe", (JsValue){ Table_void_fn_from(no_unsubscribe, 0).h });
     return (JsValue){ subscription.h };
 }
 
 static JsValue make_atom(AtomState* a) {
-    Table_RowData_map atom = table_makeObjectMap();
+    Table_RowData_map atom = (Table_RowData_map){ table_makeObjectMap().h };
     Table_RowData_map_set_at(atom, "get", (JsValue){ Table_void_to_any_fn_from(atom_get, a).h });
     if (!a->readonly) Table_RowData_map_set_at(atom, "set", (JsValue){ Table_Updater_fn2_from(atom_set, a).h });
     Table_RowData_map_set_at(atom, "subscribe", (JsValue){ Table_Updater_fn2_from(atom_subscribe, 0).h });
@@ -93,19 +93,19 @@ static void on_sorting_change(void* ctx, JsValue updater) {
 }
 
 static JsValue person(const char* name, double age) {
-    Table_RowData_map p = table_makeObjectMap();
+    Table_RowData_map p = (Table_RowData_map){ table_makeObjectMap().h };
     Table_RowData_map_set_at(p, "name", js_string(name));
     Table_RowData_map_set_at(p, "age", js_number(age));
     return (JsValue){ p.h };
 }
 static JsValue column(const char* key, const char* header) {
-    Table_RowData_map c = table_makeObjectMap();
+    Table_RowData_map c = (Table_RowData_map){ table_makeObjectMap().h };
     Table_RowData_map_set_at(c, "accessorKey", js_string(key));
     Table_RowData_map_set_at(c, "header", js_string(header));
     return (JsValue){ c.h };
 }
 static JsValue sort_by(const char* id, bool desc) {
-    Table_RowData_map s = table_makeObjectMap();
+    Table_RowData_map s = (Table_RowData_map){ table_makeObjectMap().h };
     Table_RowData_map_set_at(s, "id", js_string(id));
     Table_RowData_map_set_at(s, "desc", js_bool(desc));
     JsArray list = JsArray_new();
@@ -166,7 +166,7 @@ __attribute__((export_name("run"))) void run(void) {
     // `readonly` in the d.ts), so a table's options cannot be filled in
     // through the typed API: they are a plain object made with makeObjectMap
     // and cast to the options type.
-    Table_RowData_map features = table_makeObjectMap();
+    Table_RowData_map features = (Table_RowData_map){ table_makeObjectMap().h };
     Table_RowData_map_set_at(features, "coreReactivityFeature", (JsValue){ reactivity.h });
     Table_RowData_map_set_at(features, "rowSortingFeature", (JsValue){ table_get_rowSortingFeature().h });
     Table_RowData_map_set_at(features, "sortedRowModel", (JsValue){ table_createSortedRowModel().h });
@@ -180,7 +180,7 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_Table_RowData_push(data, Table_RowData_of_Table_RowData_map((Table_RowData_map){ person("Carol", 35).h }));
     JsArray_Table_RowData_push(data, Table_RowData_of_Table_RowData_map((Table_RowData_map){ person("Dave", 25).h }));
 
-    Table_RowData_map options = table_makeObjectMap();
+    Table_RowData_map options = (Table_RowData_map){ table_makeObjectMap().h };
     Table_RowData_map_set_at(options, "features", (JsValue){ features.h });
     Table_RowData_map_set_at(options, "columns", (JsValue){ columns.h });
     Table_RowData_map_set_at(options, "data", (JsValue){ data.h });

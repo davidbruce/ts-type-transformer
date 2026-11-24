@@ -146,10 +146,10 @@ __attribute__((export_name("run"))) void run(void) {
     // An instance, with its own parse and parseInline.
     JsArray_MarkedExtension none = JsArray_MarkedExtension_new();
     Marked m = Marked_new(none);
-    JsString inline_html = js_to_string(Marked_parse_invoke(Marked_get_parseInline(m), "a *b* `c`", (Marked_parse_call_options_no_async){ 0 }));
+    JsString inline_html = Marked_parse_invoke(Marked_get_parseInline(m), "a *b* `c`", (marked_options_no_async){ 0 });
     CHECK(JsString_equals(inline_html, "a <em>b</em> <code>c</code>"));
     js_release(inline_html);
-    JsString block = js_to_string(Marked_parse_invoke(Marked_get_parse(m), "para *x*", (Marked_parse_call_options_no_async){ 0 }));
+    JsString block = Marked_parse_invoke(Marked_get_parse(m), "para *x*", (marked_options_no_async){ 0 });
     CHECK(JsString_equals(block, "<p>para <em>x</em></p>\n"));
     js_release(block);
 
@@ -211,13 +211,13 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_MarkedExtension exts = JsArray_MarkedExtension_new();
     JsArray_MarkedExtension_push(exts, ext);
     Marked styled = Marked_new(exts);
-    JsString custom = js_to_string(Marked_parse_invoke(Marked_get_parse(styled), "## Sub\n\nbody", (Marked_parse_call_options_no_async){ 0 }));
+    JsString custom = Marked_parse_invoke(Marked_get_parse(styled), "## Sub\n\nbody", (marked_options_no_async){ 0 });
     CHECK(contains(custom, "<h2 class=\"title\">Sub</h2>"));
     CHECK(contains(custom, "<p>body</p>"));
     CHECK(headings_rendered == 1);
     js_release(custom);
     // The default instance is untouched.
-    JsString default_h = js_to_string(Marked_parse_invoke(Marked_get_parse(m), "## Sub", (Marked_parse_call_options_no_async){ 0 }));
+    JsString default_h = Marked_parse_invoke(Marked_get_parse(m), "## Sub", (marked_options_no_async){ 0 });
     CHECK(JsString_equals(default_h, "<h2>Sub</h2>\n"));
     js_release(default_h);
 
@@ -227,7 +227,7 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_MarkedExtension wexts = JsArray_MarkedExtension_new();
     JsArray_MarkedExtension_push(wexts, walker);
     Marked walking = Marked_new(wexts);
-    JsString demoted = js_to_string(Marked_parse_invoke(Marked_get_parse(walking), "# Big\n\ntext", (Marked_parse_call_options_no_async){ 0 }));
+    JsString demoted = Marked_parse_invoke(Marked_get_parse(walking), "# Big\n\ntext", (marked_options_no_async){ 0 });
     CHECK(contains(demoted, "<h2>Big</h2>"));
     CHECK(walked_headings == 1 && walked >= 4);
     js_release(demoted);
@@ -239,7 +239,7 @@ __attribute__((export_name("run"))) void run(void) {
     MarkedExtension_set_breaks(gfm_off, js_some_bool(true));
     JsArray_MarkedExtension_push(more, gfm_off);
     Marked_use(grown, more);
-    JsString broken = js_to_string(Marked_parse_invoke(Marked_get_parse(grown), "x\ny", (Marked_parse_call_options_no_async){ 0 }));
+    JsString broken = Marked_parse_invoke(Marked_get_parse(grown), "x\ny", (marked_options_no_async){ 0 });
     CHECK(contains(broken, "x<br>y"));
     js_release(broken);
 

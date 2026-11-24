@@ -48,7 +48,8 @@ pub(super) fn mentions(t: &Type, syms: &HashSet<P<Symbol>>) -> bool {
 }
 
 // Removes the type parameters `erase` picks, replacing each use by its
-// constraint. `declarations` includes those of interfaces and aliases, not
+// constraint, or with none its default (`Marked<ParserOutput = string>` is a
+// string). `declarations` includes those of interfaces and aliases, not
 // only those of signatures.
 fn erase_type_params(decls: &mut [Decl], declarations: bool, erase: &dyn Fn(&TypeParam) -> bool, keep: &HashSet<P<Symbol>>) {
     // Type parameters have unique identities, so no scoping is needed.
@@ -59,7 +60,7 @@ fn erase_type_params(decls: &mut [Decl], declarations: bool, erase: &dyn Fn(&Typ
                 return true;
             }
             if let Some(s) = p.sym {
-                constraints.insert((s, p.tid), p.constraint.clone());
+                constraints.insert((s, p.tid), p.constraint.clone().or_else(|| p.default.clone()));
             }
             false
         });

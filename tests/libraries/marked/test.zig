@@ -58,9 +58,9 @@ export fn run() void {
 
     // A Marked instance: the same, and its own options.
     const m = b.Marked.new(b.JsArrayOf(b.MarkedExtension).new());
-    const out = m.getParse().invoke2("hello *world*", null);
+    const out = m.getParse().invoke("hello *world*", .{});
     expect(has(.{ .h = out.h }, "<p>hello <em>world</em></p>"), @src());
-    const inl = m.getParseInline().invoke2("hello *world*", null);
+    const inl = m.getParseInline().invoke("hello *world*", .{});
     expect(has(.{ .h = inl.h }, "<em>world</em>") and !has(.{ .h = inl.h }, "<p>"), @src());
 
     // The lexer: block tokens.
@@ -107,7 +107,7 @@ export fn run() void {
     renderer.setHeading(b.MarkedExtension_renderer_heading.from(renderHeading, null));
     ext.setRenderer(renderer);
     const custom = b.Marked.new(b.JsArrayOf(b.MarkedExtension).of(&.{ext}));
-    const styled = custom.getParse().invoke2("# Hi\n\ntext", null);
+    const styled = custom.getParse().invoke("# Hi\n\ntext", .{});
     expect(has(.{ .h = styled.h }, "<h1 class=\"mine\">Hi</h1>") and has(.{ .h = styled.h }, "<p>text</p>"), @src());
 
     // A codespan renderer on an existing instance, via use(); the instance is returned for chaining.
@@ -117,7 +117,7 @@ export fn run() void {
     ext2.setRenderer(r2);
     const chained = custom.use(b.JsArrayOf(b.MarkedExtension).of(&.{ext2}));
     expect(chained.h == custom.h or b.jsSame(chained, custom), @src());
-    const both = custom.getParse().invoke2("# Hi\n\nuse `x` here", null);
+    const both = custom.getParse().invoke("# Hi\n\nuse `x` here", .{});
     expect(has(.{ .h = both.h }, "<h1 class=\"mine\">") and has(.{ .h = both.h }, "<tt>x</tt>"), @src());
 
     // A preprocess hook sees the markdown first.
@@ -126,7 +126,7 @@ export fn run() void {
     hooks.setPreprocess(b.MarkedExtension_hooks_preprocess.from(preprocess, null));
     ext3.setHooks(hooks);
     const hooked = b.Marked.new(b.JsArrayOf(b.MarkedExtension).of(&.{ext3}));
-    const hr = hooked.getParse().invoke2("original", null);
+    const hr = hooked.getParse().invoke("original", .{});
     expect(has(.{ .h = hr.h }, "<p>replaced</p>"), @src());
 }
 
