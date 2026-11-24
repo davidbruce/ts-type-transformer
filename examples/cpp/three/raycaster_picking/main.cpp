@@ -33,7 +33,7 @@ struct AppState {
 static void update_camera(const std::shared_ptr<AppState>& st) {
     double r = 8.4;
     st->camera.position().set(r * std::sin(st->yaw), 5.1, r * std::cos(st->yaw));
-    st->camera.lookAt(Vector3::create(0.0, 0.0, 0.0));
+    st->camera.lookAt(Vector3(0.0, 0.0, 0.0));
     st->camera.updateMatrixWorld(true);
     st->scene.updateMatrixWorld(true);
 }
@@ -53,7 +53,7 @@ static void render_scene(const std::shared_ptr<AppState>& st) {
 }
 
 static void cast_at_ndc(const std::shared_ptr<AppState>& st, double nx, double ny) {
-    st->raycaster.setFromCamera(Vector2::create(nx, ny), st->camera);
+    st->raycaster.setFromCamera(Vector2(nx, ny), st->camera);
     auto hits = st->raycaster.intersectObjects<Object3D<>>(st->meshes, false);
     if (hits.size() > 0) {
         Intersection<Object3D<>> hit = hits[0];
@@ -101,28 +101,28 @@ TS_EXPORT(start) void start() {
     doc.getElementById("stage")->appendChild(canvas);
 
     Scene scene = Scene<>::create();
-    scene.background(Color::create(0xf7f7f7));
-    PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
+    scene.background(Color(0xf7f7f7));
+    PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
 
-    DirectionalLight key = DirectionalLight::create(0xffffff, 2.2);
+    DirectionalLight key = DirectionalLight(0xffffff, 2.2);
     key.position().set(6.0, 10.0, 8.0);
-    DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
+    DirectionalLight rim = DirectionalLight(0xffffff, 0.9);
     rim.position().set(-7.0, 5.0, -6.0);
 
-    GridHelper grid = GridHelper::create(9.0, 9.0, 0x999999, 0xd4d4d4);
+    GridHelper grid = GridHelper(9.0, 9.0, 0x999999, 0xd4d4d4);
     grid.position().y(-0.85);
-    scene.add(AmbientLight::create(0xffffff, 1.2), key, rim, grid);
+    scene.add(AmbientLight(0xffffff, 1.2), key, rim, grid);
 
     std::vector<BufferGeometry<>> geos{
-        BoxGeometry::create(1.05, 1.05, 1.05),
-        ConeGeometry::create(0.62, 1.25, 20.0),
-        CylinderGeometry::create(0.48, 0.48, 1.2, 24.0),
-        SphereGeometry::create(0.62, 24.0, 18.0),
-        OctahedronGeometry::create(0.68, 0.0),
-        DodecahedronGeometry::create(0.62, 0.0),
-        TorusGeometry::create(0.5, 0.18, 14.0, 36.0),
-        IcosahedronGeometry::create(0.64, 0.0),
-        TetrahedronGeometry::create(0.72, 0.0),
+        BoxGeometry(1.05, 1.05, 1.05),
+        ConeGeometry(0.62, 1.25, 20.0),
+        CylinderGeometry(0.48, 0.48, 1.2, 24.0),
+        SphereGeometry(0.62, 24.0, 18.0),
+        OctahedronGeometry(0.68, 0.0),
+        DodecahedronGeometry(0.62, 0.0),
+        TorusGeometry(0.5, 0.18, 14.0, 36.0),
+        IcosahedronGeometry(0.64, 0.0),
+        TetrahedronGeometry(0.72, 0.0),
     };
 
     std::vector<MeshStandardMaterial> mats;
@@ -131,7 +131,7 @@ TS_EXPORT(start) void start() {
         int gx = (i % 3) - 1;
         int gz = (i / 3) - 1;
         MeshStandardMaterial mat = MeshStandardMaterial::create({{.color = 0xd4d4d4, .roughness = 0.55, .metalness = 0.1, .flatShading = i >= 4}});
-        Mesh m = Mesh<>::create(geos[i], mat);
+        Mesh m = Mesh(geos[i], mat);
         m.name(NAMES[i]);
         m.position().set(double(gx) * 2.1, 0.0, double(gz) * 2.1);
         m.rotation().set(0.2, 0.35 * double(i), 0.0);
@@ -140,8 +140,8 @@ TS_EXPORT(start) void start() {
         meshes.push(m);
     }
 
-    Box3 box = Box3::create(Vector3::create(-0.5, -0.5, -0.5), Vector3::create(0.5, 0.5, 0.5));
-    Box3Helper helper = Box3Helper::create(box, 0x111111);
+    Box3 box = Box3(Vector3(-0.5, -0.5, -0.5), Vector3(0.5, 0.5, 0.5));
+    Box3Helper helper = Box3Helper(box, 0x111111);
     helper.visible(false);
     scene.add(helper);
 

@@ -71,7 +71,7 @@ static void draw_rot_box(const dom::CanvasRenderingContext2D& ctx, double cx, do
 
 static void build_scene(const std::shared_ptr<AppState>& st) {
     if (st->world) st->world->free();
-    st->world = World::create(Vector3::create(0.0, -9.81, 0.0));
+    st->world = World(Vector3(0.0, -9.81, 0.0));
 
     RigidBody floor = st->world->createRigidBody(RigidBodyDesc::fixed().setTranslation(0.0, -0.35, 0.0));
     st->world->createCollider(ColliderDesc::cuboid(7.2, 0.35, 2.0).setFriction(0.8), floor);
@@ -87,7 +87,7 @@ static void build_scene(const std::shared_ptr<AppState>& st) {
 
     st->striker = st->world->createRigidBody(RigidBodyDesc::dynamic().setTranslation(-5.3, 1.05, 0.0));
     st->world->createCollider(ColliderDesc::ball(0.40).setDensity(2.8).setRestitution(0.45).setFriction(0.25), st->striker);
-    st->striker.applyImpulse(Vector3::create(4.8, 0.2, 0.0), true);
+    st->striker.applyImpulse(Vector3(4.8, 0.2, 0.0), true);
 
     st->step_count = 0;
     st->trail_count = 0;
@@ -186,7 +186,7 @@ static ts::Task run_app() {
         dom::HTMLElement btn = *doc.getElementById(ids[i]);
         ts::Listener<dom::PointerEvent> cb = [st, i](dom::PointerEvent) {
             if (i == 0) {
-                st->striker.applyImpulse(Vector3::create(3.5, 0.6, 0.0), true);
+                st->striker.applyImpulse(Vector3(3.5, 0.6, 0.0), true);
                 render(st);
             } else if (i == 1) {
                 st->paused = !st->paused;

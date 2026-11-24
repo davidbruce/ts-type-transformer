@@ -47,7 +47,7 @@ static void render_city(const std::shared_ptr<AppState>& st) {
     Quaternion rot_q = Quaternion::create();
     Vector3 scale = Vector3::create();
     Matrix4 mtx = Matrix4::create();
-    Vector3 axis_y = Vector3::create(0.0, 1.0, 0.0);
+    Vector3 axis_y = Vector3(0.0, 1.0, 0.0);
     Color col = Color::create();
 
     double max_h = 0.0;
@@ -80,7 +80,7 @@ static void render_city(const std::shared_ptr<AppState>& st) {
     double radius = 11.5;
     double cx = radius * std::cos(st->cam_yaw);
     double cz = radius * std::sin(st->cam_yaw);
-    Vector3 target = Vector3::create(0.0, 0.9, 0.0);
+    Vector3 target = Vector3(0.0, 0.9, 0.0);
     st->ortho_cam.position().set(cx, 8.2, cz);
     st->ortho_cam.lookAt(target);
     st->persp_cam.position().set(cx, 7.6, cz);
@@ -111,30 +111,30 @@ TS_EXPORT(start) void start() {
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
     Scene scene = Scene<>::create();
-    scene.background(Color::create(0xf7f7f7));
-    OrthographicCamera ortho_cam = OrthographicCamera::create(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0);
-    PerspectiveCamera persp_cam = PerspectiveCamera::create(40.0, aspect, 0.1, 100.0);
+    scene.background(Color(0xf7f7f7));
+    OrthographicCamera ortho_cam = OrthographicCamera(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0);
+    PerspectiveCamera persp_cam = PerspectiveCamera(40.0, aspect, 0.1, 100.0);
 
-    DirectionalLight key = DirectionalLight::create(0xffffff, 2.1);
+    DirectionalLight key = DirectionalLight(0xffffff, 2.1);
     key.position().set(8.0, 12.0, 6.0);
-    DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
+    DirectionalLight rim = DirectionalLight(0xffffff, 0.9);
     rim.position().set(-7.0, 6.0, -8.0);
 
-    Mesh plinth = Mesh<>::create(
-        PlaneGeometry::create(8.6, 8.6),
+    Mesh plinth = Mesh(
+        PlaneGeometry(8.6, 8.6),
         MeshStandardMaterial::create({{.color = 0xe5e5e5, .roughness = 0.85}})
     );
     plinth.rotation().x(-M_PI / 2.0);
     plinth.position().y(-0.01);
 
-    GridHelper grid = GridHelper::create(9.0, 10.0, 0x999999, 0xd4d4d4);
+    GridHelper grid = GridHelper(9.0, 10.0, 0x999999, 0xd4d4d4);
 
-    InstancedMesh inst = InstancedMesh<>::create(
-        BoxGeometry::create(0.54, 1.0, 0.54),
+    InstancedMesh inst = InstancedMesh(
+        BoxGeometry(0.54, 1.0, 0.54),
         MeshStandardMaterial::create({{.color = 0xffffff, .roughness = 0.65, .metalness = 0.08}}),
         100.0
     );
-    scene.add(AmbientLight::create(0xffffff, 1.25), key, rim, plinth, grid, inst);
+    scene.add(AmbientLight(0xffffff, 1.25), key, rim, plinth, grid, inst);
 
     auto st = std::make_shared<AppState>(AppState{
         renderer, scene, ortho_cam, persp_cam, inst,

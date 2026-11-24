@@ -90,7 +90,7 @@ static void render(const std::shared_ptr<AppState>& st) {
 
     double base_angle = -0.35 + st->manual_offset + 0.28 * std::sin(st->phase);
     double ox = to_cx(EMITTER_X), oy = to_cy(EMITTER_Y);
-    Vector3 origin = Vector3::create(EMITTER_X, EMITTER_Y, 0.0);
+    Vector3 origin = Vector3(EMITTER_X, EMITTER_Y, 0.0);
 
     int hits = 0;
     double min_toi = MAX_TOI;
@@ -98,7 +98,7 @@ static void render(const std::shared_ptr<AppState>& st) {
         double frac = double(i) / double(RAY_COUNT - 1) - 0.5;
         double angle = base_angle + frac * 1.35;
         double dx = std::cos(angle), dy = std::sin(angle);
-        Ray ray = Ray::create(origin, Vector3::create(dx, dy, 0.0));
+        Ray ray = Ray(origin, Vector3(dx, dy, 0.0));
         if (auto hit = st->world->castRayAndGetNormal(ray, MAX_TOI, true)) {
             hits++;
             double toi = hit->timeOfImpact();
@@ -153,11 +153,11 @@ static ts::Task run_app() {
     st->ctx = *canvas.getContext_2d();
     st->meta = *doc.getElementById("meta");
     st->sweep_btn = *doc.getElementById("btn-sweep");
-    st->world = World::create(Vector3::create(0.0, 0.0, 0.0));
+    st->world = World(Vector3(0.0, 0.0, 0.0));
 
     auto add_box = [&](double cx, double cy, double theta, double hx, double hy) {
         RigidBody rb = st->world->createRigidBody(
-            RigidBodyDesc::fixed().setTranslation(cx, cy, 0.0).setRotation(Quaternion::create(0.0, 0.0, std::sin(theta * 0.5), std::cos(theta * 0.5)))
+            RigidBodyDesc::fixed().setTranslation(cx, cy, 0.0).setRotation(Quaternion(0.0, 0.0, std::sin(theta * 0.5), std::cos(theta * 0.5)))
         );
         st->world->createCollider(ColliderDesc::cuboid(hx, hy, 1.0), rb);
     };

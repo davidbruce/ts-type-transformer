@@ -55,12 +55,12 @@ static void set_status_error(std::string_view message) {
 
 static void build_world(const std::shared_ptr<AppState>& st) {
     if (st->world) st->world->free();
-    st->world = rp::World::create(rp::Vector3::create(0.0, -9.81, 0.0));
+    st->world = rp::World(rp::Vector3(0.0, -9.81, 0.0));
 
     rp::RigidBody floor_body = st->world->createRigidBody(rp::RigidBodyDesc::fixed().setTranslation(0.0, -0.3, 0.0));
     st->world->createCollider(rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).setFriction(0.75).setRestitution(0.1), floor_body);
 
-    rp::Quaternion ramp_rot = rp::Quaternion::create(0.0, 0.0, std::sin(RAMP_ANGLE * 0.5), std::cos(RAMP_ANGLE * 0.5));
+    rp::Quaternion ramp_rot = rp::Quaternion(0.0, 0.0, std::sin(RAMP_ANGLE * 0.5), std::cos(RAMP_ANGLE * 0.5));
     rp::RigidBody ramp_body = st->world->createRigidBody(
         rp::RigidBodyDesc::fixed().setTranslation(RAMP_X, RAMP_Y, RAMP_Z).setRotation(ramp_rot)
     );
@@ -77,7 +77,7 @@ static void build_world(const std::shared_ptr<AppState>& st) {
     st->doms.clear();
     for (int i = 0; i < DOM_COUNT; i++) {
         Pose pose = spiral_pose(i);
-        rp::Quaternion q = rp::Quaternion::create(0.0, std::sin(pose.yaw * 0.5), 0.0, std::cos(pose.yaw * 0.5));
+        rp::Quaternion q = rp::Quaternion(0.0, std::sin(pose.yaw * 0.5), 0.0, std::cos(pose.yaw * 0.5));
         rp::RigidBody rb = st->world->createRigidBody(
             rp::RigidBodyDesc::dynamic().setTranslation(pose.x, pose.y, pose.z).setRotation(q)
         );
@@ -180,15 +180,15 @@ static ts::Task run_app() {
         ts::Listener<dom::PointerEvent> cb = [st, i](dom::PointerEvent) {
             if (i == 0) {
                 if (st->marble) {
-                    st->marble->setTranslation(rp::Vector3::create(-4.75, 2.02, -2.5), true);
-                    st->marble->setLinvel(rp::Vector3::create(3.0, 0.0, 0.0), true);
-                    st->marble->setAngvel(rp::Vector3::create(0.0, 0.0, 0.0), true);
+                    st->marble->setTranslation(rp::Vector3(-4.75, 2.02, -2.5), true);
+                    st->marble->setLinvel(rp::Vector3(3.0, 0.0, 0.0), true);
+                    st->marble->setAngvel(rp::Vector3(0.0, 0.0, 0.0), true);
                 }
                 sync_meshes(st);
                 update_meta(st);
             } else if (i == 1) {
                 if (!st->doms.empty()) {
-                    st->doms[0].applyImpulse(rp::Vector3::create(1.6, 0.0, 0.0), true);
+                    st->doms[0].applyImpulse(rp::Vector3(1.6, 0.0, 0.0), true);
                 }
                 update_meta(st);
             } else if (i == 2) {

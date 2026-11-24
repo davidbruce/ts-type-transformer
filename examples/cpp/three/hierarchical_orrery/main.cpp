@@ -60,51 +60,51 @@ TS_EXPORT(start) void start() {
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
     Scene scene = Scene<>::create();
-    scene.background(Color::create(0xf7f7f7));
-    PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
+    scene.background(Color(0xf7f7f7));
+    PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
     camera.position().set(5.6, 5.2, 7.6);
-    camera.lookAt(Vector3::create(0.0, -0.1, 0.0));
+    camera.lookAt(Vector3(0.0, -0.1, 0.0));
 
-    DirectionalLight key = DirectionalLight::create(0xffffff, 2.2);
+    DirectionalLight key = DirectionalLight(0xffffff, 2.2);
     key.position().set(6.0, 10.0, 8.0);
-    DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
+    DirectionalLight rim = DirectionalLight(0xffffff, 0.9);
     rim.position().set(-7.0, 5.0, -6.0);
 
-    GridHelper grid = GridHelper::create(12.0, 12.0, 0x999999, 0xe5e5e5);
+    GridHelper grid = GridHelper(12.0, 12.0, 0x999999, 0xe5e5e5);
     grid.position().y(-1.5);
 
-    Mesh pedestal = Mesh<>::create(CylinderGeometry::create(0.55, 0.75, 0.35, 24.0), std_mat(0x262626, 0.7, 0.05, false));
+    Mesh pedestal = Mesh(CylinderGeometry(0.55, 0.75, 0.35, 24.0), std_mat(0x262626, 0.7, 0.05, false));
     pedestal.position().y(-1.3);
 
-    Mesh core = Mesh<>::create(SphereGeometry::create(0.65, 24.0, 18.0), std_mat(0x111111, 0.45, 0.2, false));
+    Mesh core = Mesh(SphereGeometry(0.65, 24.0, 18.0), std_mat(0x111111, 0.45, 0.2, false));
 
     Group inner_pivot = Group<>::create();
-    Mesh inner_track = Mesh<>::create(TorusGeometry::create(2.1, 0.025, 8.0, 64.0), MeshBasicMaterial::create({{.color = 0x999999}}));
+    Mesh inner_track = Mesh(TorusGeometry(2.1, 0.025, 8.0, 64.0), MeshBasicMaterial::create({{.color = 0x999999}}));
     inner_track.rotation().x(M_PI / 2.0);
 
     Group inner_planet = Group<>::create();
     inner_planet.position().set(2.1, 0.0, 0.0);
 
     Group moon_pivot = Group<>::create();
-    Mesh moon = Mesh<>::create(OctahedronGeometry::create(0.18, 0.0), std_mat(0xd4d4d4, 0.4, 0.1, true));
+    Mesh moon = Mesh(OctahedronGeometry(0.18, 0.0), std_mat(0xd4d4d4, 0.4, 0.1, true));
     moon.position().set(0.75, 0.0, 0.0);
     moon_pivot.add(moon);
-    inner_planet.add(Mesh<>::create(SphereGeometry::create(0.36, 20.0, 16.0), std_mat(0x555555, 0.55, 0.1, false)), moon_pivot);
+    inner_planet.add(Mesh(SphereGeometry(0.36, 20.0, 16.0), std_mat(0x555555, 0.55, 0.1, false)), moon_pivot);
     inner_pivot.add(inner_track, inner_planet);
 
     Group outer_pivot = Group<>::create();
-    Mesh outer_track = Mesh<>::create(TorusGeometry::create(3.8, 0.025, 8.0, 80.0), MeshBasicMaterial::create({{.color = 0xb5b5b5}}));
+    Mesh outer_track = Mesh(TorusGeometry(3.8, 0.025, 8.0, 80.0), MeshBasicMaterial::create({{.color = 0xb5b5b5}}));
     outer_track.rotation().x(M_PI / 2.0);
 
     Group outer_station = Group<>::create();
     outer_station.position().set(3.8, 0.0, 0.0);
-    Mesh station_body = Mesh<>::create(IcosahedronGeometry::create(0.42, 0.0), std_mat(0x404040, 0.5, 0.1, true));
-    Mesh halo = Mesh<>::create(TorusGeometry::create(0.68, 0.06, 10.0, 32.0), std_mat(0x111111, 0.4, 0.1, false));
+    Mesh station_body = Mesh(IcosahedronGeometry(0.42, 0.0), std_mat(0x404040, 0.5, 0.1, true));
+    Mesh halo = Mesh(TorusGeometry(0.68, 0.06, 10.0, 32.0), std_mat(0x111111, 0.4, 0.1, false));
     halo.rotation().x(0.8);
     outer_station.add(station_body, halo);
     outer_pivot.add(outer_track, outer_station);
 
-    scene.add(AmbientLight::create(0xffffff, 1.2), key, rim, grid, pedestal, core, inner_pivot, outer_pivot);
+    scene.add(AmbientLight(0xffffff, 1.2), key, rim, grid, pedestal, core, inner_pivot, outer_pivot);
 
     auto st = std::make_shared<AppState>(AppState{
         renderer, scene, camera, inner_pivot, moon_pivot, outer_pivot, outer_station, moon, station_body,

@@ -8,7 +8,7 @@
 using namespace pts;
 
 TS_EXPORT(start) void start() {
-    auto space = CanvasSpace::create("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
+    auto space = CanvasSpace("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
     auto form = space.getForm();
 
     auto player = IPlayer::create();

@@ -139,7 +139,7 @@ TS_EXPORT(start) void start() {
         },
     });
 
-    app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
+    app->view = EditorView(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     app->status = "Parsed Spec HTML via DOMParser";
     refresh_output(app, app->view.state().doc());
 

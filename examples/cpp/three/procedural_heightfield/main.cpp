@@ -69,7 +69,7 @@ static void rebuild_field(const std::shared_ptr<AppState>& st) {
 
     double r = 9.2;
     st->camera.position().set(r * std::sin(st->azimuth), 5.4, r * std::cos(st->azimuth));
-    st->camera.lookAt(Vector3::create(0.0, 0.0, 0.0));
+    st->camera.lookAt(Vector3(0.0, 0.0, 0.0));
     st->wire_mesh.visible(st->overlay_on);
     st->wire_btn.textContent(st->overlay_on ? "Wireframe: On" : "Wireframe: Off");
     st->renderer.render(st->scene, st->camera);
@@ -93,19 +93,19 @@ TS_EXPORT(start) void start() {
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
     Scene scene = Scene<>::create();
-    scene.background(Color::create(0xf7f7f7));
-    PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
+    scene.background(Color(0xf7f7f7));
+    PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
 
-    DirectionalLight key = DirectionalLight::create(0xffffff, 2.2);
+    DirectionalLight key = DirectionalLight(0xffffff, 2.2);
     key.position().set(6.0, 10.0, 8.0);
-    DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
+    DirectionalLight rim = DirectionalLight(0xffffff, 0.9);
     rim.position().set(-7.0, 5.0, -6.0);
 
-    GridHelper grid = GridHelper::create(9.0, 12.0, 0x999999, 0xe5e5e5);
+    GridHelper grid = GridHelper(9.0, 12.0, 0x999999, 0xe5e5e5);
     grid.position().y(-1.1);
 
     BufferGeometry geo = BufferGeometry<>::create();
-    Float32BufferAttribute pos_attr = Float32BufferAttribute::create(GRID_N * GRID_N * 3, 3.0);
+    Float32BufferAttribute pos_attr = Float32BufferAttribute(GRID_N * GRID_N * 3, 3.0);
     ts::Array<double> indices = ts::Array<double>::create();
     for (int iz = 0; iz < GRID_N - 1; iz++) {
         for (int ix = 0; ix < GRID_N - 1; ix++) {
@@ -121,25 +121,25 @@ TS_EXPORT(start) void start() {
     geo.setAttribute("position", pos_attr);
     geo.setIndex(indices);
 
-    Mesh surface = Mesh<>::create(
+    Mesh surface = Mesh(
         geo,
         MeshStandardMaterial::create(
             {{.color = 0xb5b5b5, .roughness = 0.72, .metalness = 0.05, .flatShading = true}}
         )
     );
 
-    Mesh wire_mesh = Mesh<>::create(geo, MeshBasicMaterial::create({{.color = 0x262626, .wireframe = true}}));
+    Mesh wire_mesh = Mesh(geo, MeshBasicMaterial::create({{.color = 0x262626, .wireframe = true}}));
     wire_mesh.position().y(0.015);
 
     int pt_count = (GRID_N / 2) * (GRID_N / 2);
     using PointsGeo = BufferGeometry<NormalOrGLBufferAttributes, BufferGeometryEventMap>;
     PointsGeo pts_geo = PointsGeo::create();
-    Float32BufferAttribute pts_attr = Float32BufferAttribute::create(pt_count * 3, 3.0);
+    Float32BufferAttribute pts_attr = Float32BufferAttribute(pt_count * 3, 3.0);
     pts_geo.setAttribute("position", pts_attr);
 
     scene.add(
-        AmbientLight::create(0xffffff, 1.2), key, rim, grid,
-        surface, wire_mesh, three::Points<PointsGeo>::create(pts_geo, PointsMaterial::create({{.color = 0x111111, .size = 0.14}}))
+        AmbientLight(0xffffff, 1.2), key, rim, grid,
+        surface, wire_mesh, three::Points<PointsGeo>(pts_geo, PointsMaterial::create({{.color = 0x111111, .size = 0.14}}))
     );
 
     auto st = std::make_shared<AppState>(AppState{

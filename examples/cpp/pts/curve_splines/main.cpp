@@ -12,7 +12,7 @@ static Pt mk_pt(double x, double y) {
 }
 
 TS_EXPORT(start) void start() {
-    auto space = CanvasSpace::create("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
+    auto space = CanvasSpace("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
     auto form = space.getForm();
 
     auto player = IPlayer::create();
@@ -26,7 +26,7 @@ TS_EXPORT(start) void start() {
         int count = 11;
 
         form.strokeOnly("#e5e5e5", 1.0)
-            .line(Group::create(mk_pt(w * 0.06, c.y()), mk_pt(w * 0.94, c.y())));
+            .line(Group(mk_pt(w * 0.06, c.y()), mk_pt(w * 0.94, c.y())));
 
         auto arr = ts::Array<Pt>::create();
         for (int i = 0; i < count; i++) {
@@ -44,7 +44,7 @@ TS_EXPORT(start) void start() {
             arr.push(mk_pt(x, y));
         }
 
-        Group ctrls = Group::create(arr);
+        Group ctrls = Group(arr);
         Group bs = Curve::bspline(ctrls, 12.0);
         Group card = Curve::cardinal(ctrls, 12.0, 0.35);
         Group cr = Curve::catmullRom(ctrls, 12.0);
@@ -53,7 +53,7 @@ TS_EXPORT(start) void start() {
         for (uint32_t i = 0; i < cr_len; i += 3) {
             Pt p = cr[i];
             form.strokeOnly("#d4d4d4", 1.0)
-                .line(Group::create(mk_pt(p.x(), c.y()), p));
+                .line(Group(mk_pt(p.x(), c.y()), p));
         }
 
         form.strokeOnly("#d4d4d4", 1.0).line(ctrls);

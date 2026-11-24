@@ -93,7 +93,7 @@ static void update_meta(const std::shared_ptr<AppState>& app, EditorState st) {
 TS_EXPORT(start) void start() {
     auto app = std::make_shared<AppState>();
     app->schema = make_schema();
-    app->audit_key = PluginKey<ts::Value>::create("audit");
+    app->audit_key = PluginKey<ts::Value>("audit");
     app->doc = dom::get_document();
     app->meta = *app->doc.getElementById("meta");
 
@@ -119,7 +119,7 @@ TS_EXPORT(start) void start() {
     EditorStateConfig scfg({
         .schema = app->schema,
         .doc = make_initial_doc(app->schema),
-        .plugins = ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>::create(pspec) },
+        .plugins = ts::Array<Plugin<ts::Value>>{ Plugin<ts::Value>(pspec) },
     });
 
     DirectEditorProps props({
@@ -151,7 +151,7 @@ TS_EXPORT(start) void start() {
         },
     });
 
-    app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
+    app->view = EditorView(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     update_meta(app, app->view.state());
 
     const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };

@@ -41,7 +41,7 @@ static void set_status_error(std::string_view message) {
 
 static void build_world(const std::shared_ptr<AppState>& st) {
     if (st->world) st->world->free();
-    st->world = rp::World::create(rp::Vector3::create(0.0, -9.81, 0.0));
+    st->world = rp::World(rp::Vector3(0.0, -9.81, 0.0));
 
     rp::RigidBody floor_body = st->world->createRigidBody(rp::RigidBodyDesc::fixed().setTranslation(0.0, -0.3, 0.0));
     st->world->createCollider(rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).setFriction(0.75).setRestitution(0.1), floor_body);
@@ -145,9 +145,9 @@ static ts::Task run_app() {
                 double sz = dist * std::sin(angle);
                 double sy = 1.2 + double(st->shot_idx % 3) * 0.45;
                 if (st->striker) {
-                    st->striker->setTranslation(rp::Vector3::create(sx, sy, sz), true);
-                    st->striker->setLinvel(rp::Vector3::create(14.4 * std::cos(angle), 0.9, -14.4 * std::sin(angle)), true);
-                    st->striker->setAngvel(rp::Vector3::create(0.0, 0.0, 0.0), true);
+                    st->striker->setTranslation(rp::Vector3(sx, sy, sz), true);
+                    st->striker->setLinvel(rp::Vector3(14.4 * std::cos(angle), 0.9, -14.4 * std::sin(angle)), true);
+                    st->striker->setAngvel(rp::Vector3(0.0, 0.0, 0.0), true);
                 }
                 sync_meshes(st);
                 update_meta(st);

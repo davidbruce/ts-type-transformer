@@ -34,7 +34,7 @@ static void set_status_error(std::string_view message) {
 
 static void build_world(const std::shared_ptr<AppState>& st, bool shoot_cue) {
     if (st->world) st->world->free();
-    st->world = rp::World::create(rp::Vector3::create(0.0, -9.81, 0.0));
+    st->world = rp::World(rp::Vector3(0.0, -9.81, 0.0));
 
     rp::RigidBody bed = st->world->createRigidBody(rp::RigidBodyDesc::fixed().setTranslation(0.0, -0.25, 0.0));
     st->world->createCollider(rp::ColliderDesc::cuboid(4.6, 0.25, 7.6).setFriction(0.14).setRestitution(0.35), bed);
@@ -143,7 +143,7 @@ static ts::Task run_app() {
             } else if (i == 1) {
                 for (size_t idx = 0; idx < st->balls.size(); idx++) {
                     double ang = double(idx) * 1.15;
-                    st->balls[idx].applyImpulse(rp::Vector3::create(std::cos(ang) * 1.4, 0.25, std::sin(ang) * 1.4), true);
+                    st->balls[idx].applyImpulse(rp::Vector3(std::cos(ang) * 1.4, 0.25, std::sin(ang) * 1.4), true);
                 }
                 update_meta(st);
             } else if (i == 2) {

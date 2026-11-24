@@ -24,7 +24,7 @@ TS_EXPORT(start) void start() {
     for (int i = 0; i < 4; i++) {
         CircleConfig cc({.x = cx, .y = cy, .stroke = ring_stroke[i], .strokeWidth = ring_sw[i], .radius = ring_r[i]});
         if (i == 3) cc.fill("#f7f7f7");
-        layer.add(Circle::create(cc));
+        layer.add(Circle(cc));
     }
 
     for (int i = 0; i < 12; i++) {

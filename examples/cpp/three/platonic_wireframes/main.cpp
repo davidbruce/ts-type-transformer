@@ -26,13 +26,13 @@ static void add_solid(const std::shared_ptr<AppState>& st,
                       const LineBasicMaterial& line_mat) {
     MeshStandardMaterial mat = MeshStandardMaterial::create({{.color = hex, .roughness = rough, .metalness = metal, .flatShading = flat}});
 
-    Mesh mesh = Mesh<>::create(geo, mat);
+    Mesh mesh = Mesh(geo, mat);
     mesh.position().set(x, y, z);
     mesh.rotation().set(0.25, 0.45, 0.0);
     st->scene.add(mesh);
 
-    EdgesGeometry egeo = EdgesGeometry<>::create(geo, thresh);
-    LineSegments segs = LineSegments<>::create(egeo, line_mat);
+    EdgesGeometry egeo = EdgesGeometry(geo, thresh);
+    LineSegments segs = LineSegments(egeo, line_mat);
     segs.position().set(x, y, z);
     segs.rotation().set(0.25, 0.45, 0.0);
     st->wire_group.add(segs);
@@ -41,7 +41,7 @@ static void add_solid(const std::shared_ptr<AppState>& st,
 static void update_view(const std::shared_ptr<AppState>& st) {
     double r = 8.6;
     st->camera.position().set(r * std::sin(st->azimuth), 3.6, r * std::cos(st->azimuth));
-    st->camera.lookAt(Vector3::create(0.0, 0.0, 0.0));
+    st->camera.lookAt(Vector3(0.0, 0.0, 0.0));
     st->wire_group.visible(st->wire_visible);
     st->wire_btn.textContent(st->wire_visible ? "Wireframes: On" : "Wireframes: Off");
     st->renderer.render(st->scene, st->camera);
@@ -64,19 +64,19 @@ TS_EXPORT(start) void start() {
     doc.getElementById("stage")->appendChild(renderer.domElement());
 
     Scene scene = Scene<>::create();
-    scene.background(Color::create(0xf7f7f7));
-    PerspectiveCamera camera = PerspectiveCamera::create(42.0, width / height, 0.1, 100.0);
+    scene.background(Color(0xf7f7f7));
+    PerspectiveCamera camera = PerspectiveCamera(42.0, width / height, 0.1, 100.0);
 
-    DirectionalLight key = DirectionalLight::create(0xffffff, 2.2);
+    DirectionalLight key = DirectionalLight(0xffffff, 2.2);
     key.position().set(6.0, 10.0, 8.0);
-    DirectionalLight rim = DirectionalLight::create(0xffffff, 0.9);
+    DirectionalLight rim = DirectionalLight(0xffffff, 0.9);
     rim.position().set(-7.0, 5.0, -6.0);
 
-    GridHelper grid = GridHelper::create(12.0, 12.0, 0x737373, 0xd4d4d4);
+    GridHelper grid = GridHelper(12.0, 12.0, 0x737373, 0xd4d4d4);
     grid.position().y(-1.2);
 
     Group wire_group = Group<>::create();
-    scene.add(AmbientLight::create(0xffffff, 1.2), key, rim, grid, wire_group);
+    scene.add(AmbientLight(0xffffff, 1.2), key, rim, grid, wire_group);
 
     auto st = std::make_shared<AppState>(AppState{
         renderer, scene, camera, wire_group,
@@ -87,11 +87,11 @@ TS_EXPORT(start) void start() {
 
     LineBasicMaterial line_mat = LineBasicMaterial::create({{.color = 0x111111}});
 
-    add_solid(st, BoxGeometry::create(1.45, 1.45, 1.45), 0x262626, 0.65, 0.1, false, -3.2, 0.0, -0.6, 1.0, line_mat);
-    add_solid(st, IcosahedronGeometry::create(0.95, 0.0), 0xd4d4d4, 0.55, 0.08, true, -1.55, 0.1, 0.55, 1.0, line_mat);
-    add_solid(st, TorusKnotGeometry::create(0.72, 0.24, 96.0, 16.0), 0x737373, 0.45, 0.15, false, 0.0, 0.25, -0.2, 24.0, line_mat);
-    add_solid(st, OctahedronGeometry::create(0.95, 0.0), 0xefefef, 0.5, 0.05, true, 1.6, 0.1, 0.55, 1.0, line_mat);
-    add_solid(st, TorusGeometry::create(0.72, 0.23, 16.0, 48.0), 0x404040, 0.55, 0.12, false, 3.2, 0.05, -0.5, 22.0, line_mat);
+    add_solid(st, BoxGeometry(1.45, 1.45, 1.45), 0x262626, 0.65, 0.1, false, -3.2, 0.0, -0.6, 1.0, line_mat);
+    add_solid(st, IcosahedronGeometry(0.95, 0.0), 0xd4d4d4, 0.55, 0.08, true, -1.55, 0.1, 0.55, 1.0, line_mat);
+    add_solid(st, TorusKnotGeometry(0.72, 0.24, 96.0, 16.0), 0x737373, 0.45, 0.15, false, 0.0, 0.25, -0.2, 24.0, line_mat);
+    add_solid(st, OctahedronGeometry(0.95, 0.0), 0xefefef, 0.5, 0.05, true, 1.6, 0.1, 0.55, 1.0, line_mat);
+    add_solid(st, TorusGeometry(0.72, 0.23, 16.0, 48.0), 0x404040, 0.55, 0.12, false, 3.2, 0.05, -0.5, 22.0, line_mat);
 
     const char* ids[4] = { "btn-wire", "btn-left", "btn-right", "btn-reset" };
     for (int i = 0; i < 4; i++) {

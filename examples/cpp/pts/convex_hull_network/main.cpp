@@ -12,7 +12,7 @@ static Pt mk_pt(double x, double y) {
 }
 
 TS_EXPORT(start) void start() {
-    auto space = CanvasSpace::create("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
+    auto space = CanvasSpace("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
     auto form = space.getForm();
 
     auto player = IPlayer::create();
@@ -35,7 +35,7 @@ TS_EXPORT(start) void start() {
             cloud_arr.push(mk_pt(pointer.x(), pointer.y()));
         }
 
-        Group cloud = Group::create(cloud_arr);
+        Group cloud = Group(cloud_arr);
         Group hull = Polygon::convexHull(cloud, false);
         Group bbox = Geom::boundingBox(hull);
         Pt cent = Polygon::centroid(hull);
@@ -65,9 +65,9 @@ TS_EXPORT(start) void start() {
         }
 
         form.strokeOnly("#111111", 1.4)
-            .line(Group::create(mk_pt(cent.x() - 10.0, cent.y()), mk_pt(cent.x() + 10.0, cent.y())));
+            .line(Group(mk_pt(cent.x() - 10.0, cent.y()), mk_pt(cent.x() + 10.0, cent.y())));
         form.strokeOnly("#111111", 1.4)
-            .line(Group::create(mk_pt(cent.x(), cent.y() - 10.0), mk_pt(cent.x(), cent.y() + 10.0)));
+            .line(Group(mk_pt(cent.x(), cent.y() - 10.0), mk_pt(cent.x(), cent.y() + 10.0)));
         form.fill("#ffffff")
             .stroke("#111111", 1.6)
             .point(cent, 5.5, "circle");

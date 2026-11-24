@@ -80,11 +80,11 @@ static void draw_pivot(const dom::CanvasRenderingContext2D& ctx, double wx, doub
 
 static void build_scene(const std::shared_ptr<AppState>& st) {
     if (st->world) st->world->free();
-    st->world = World::create(Vector3::create(0.0, -9.81, 0.0));
+    st->world = World(Vector3(0.0, -9.81, 0.0));
 
     RigidBody gantry = st->world->createRigidBody(RigidBodyDesc::fixed().setTranslation(0.0, 6.2, 0.0));
     st->world->createCollider(ColliderDesc::cuboid(6.0, 0.22, 0.6), gantry);
-    Vector3 z_axis = Vector3::create(0.0, 0.0, 1.0);
+    Vector3 z_axis = Vector3(0.0, 0.0, 1.0);
 
     double cx[3] = { -2.8, -3.3, -3.8 }, cy[3] = { 5.4, 4.1, 2.8 };
     for (int i = 0; i < 3; i++) {
@@ -92,18 +92,18 @@ static void build_scene(const std::shared_ptr<AppState>& st) {
         st->world->createCollider(ColliderDesc::cuboid(LINK_HX, LINK_HY, 0.2).setDensity(i == 2 ? 1.6 : 1.4), st->chain[i]);
     }
     st->world->createImpulseJoint(
-        JointData::revolute(Vector3::create(-2.2, -0.22, 0.0), Vector3::create(0.0, LINK_HY + 0.06, 0.0), z_axis),
+        JointData::revolute(Vector3(-2.2, -0.22, 0.0), Vector3(0.0, LINK_HY + 0.06, 0.0), z_axis),
         gantry, st->chain[0], true
     );
     st->world->createImpulseJoint(
-        JointData::revolute(Vector3::create(0.0, -LINK_HY - 0.06, 0.0), Vector3::create(0.0, LINK_HY + 0.06, 0.0), z_axis),
+        JointData::revolute(Vector3(0.0, -LINK_HY - 0.06, 0.0), Vector3(0.0, LINK_HY + 0.06, 0.0), z_axis),
         st->chain[0], st->chain[1], true
     );
     st->world->createImpulseJoint(
-        JointData::revolute(Vector3::create(0.0, -LINK_HY - 0.06, 0.0), Vector3::create(0.0, LINK_HY + 0.06, 0.0), z_axis),
+        JointData::revolute(Vector3(0.0, -LINK_HY - 0.06, 0.0), Vector3(0.0, LINK_HY + 0.06, 0.0), z_axis),
         st->chain[1], st->chain[2], true
     );
-    st->chain[2].applyImpulse(Vector3::create(-1.4, 0.0, 0.0), true);
+    st->chain[2].applyImpulse(Vector3(-1.4, 0.0, 0.0), true);
 
     st->arm = st->world->createRigidBody(RigidBodyDesc::dynamic().setTranslation(3.1, 5.2, 0.0));
     st->world->createCollider(ColliderDesc::cuboid(0.14, 0.85, 0.2).setDensity(1.2), st->arm);
@@ -111,14 +111,14 @@ static void build_scene(const std::shared_ptr<AppState>& st) {
     st->world->createCollider(ColliderDesc::ball(0.42).setDensity(3.0), st->bob);
 
     st->world->createImpulseJoint(
-        JointData::revolute(Vector3::create(2.3, -0.22, 0.0), Vector3::create(0.0, 0.88, 0.0), z_axis),
+        JointData::revolute(Vector3(2.3, -0.22, 0.0), Vector3(0.0, 0.88, 0.0), z_axis),
         gantry, st->arm, true
     );
     st->world->createImpulseJoint(
-        JointData::revolute(Vector3::create(0.0, -0.88, 0.0), Vector3::create(0.0, 0.72, 0.0), z_axis),
+        JointData::revolute(Vector3(0.0, -0.88, 0.0), Vector3(0.0, 0.72, 0.0), z_axis),
         st->arm, st->bob, true
     );
-    st->bob.applyImpulse(Vector3::create(1.8, 0.2, 0.0), true);
+    st->bob.applyImpulse(Vector3(1.8, 0.2, 0.0), true);
 
     st->step_count = 0;
     st->trail_count = 0;
@@ -228,8 +228,8 @@ static ts::Task run_app() {
         dom::HTMLElement btn = *doc.getElementById(ids[i]);
         ts::Listener<dom::PointerEvent> cb = [st, i](dom::PointerEvent) {
             if (i == 0) {
-                st->chain[2].applyImpulse(Vector3::create(1.6, 0.3, 0.0), true);
-                st->bob.applyImpulse(Vector3::create(-2.0, 0.4, 0.0), true);
+                st->chain[2].applyImpulse(Vector3(1.6, 0.3, 0.0), true);
+                st->bob.applyImpulse(Vector3(-2.0, 0.4, 0.0), true);
                 render(st);
             } else if (i == 1) {
                 st->paused = !st->paused;

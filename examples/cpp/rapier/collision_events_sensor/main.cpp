@@ -79,12 +79,12 @@ static void draw_segs(const dom::CanvasRenderingContext2D& ctx, double x1, doubl
 static void build_scene(const std::shared_ptr<AppState>& st) {
     if (st->queue) st->queue->free();
     if (st->world) st->world->free();
-    st->world = World::create(Vector3::create(0.0, -9.81, 0.0));
-    st->queue = EventQueue::create(true);
+    st->world = World(Vector3(0.0, -9.81, 0.0));
+    st->queue = EventQueue(true);
 
     auto add_ramp = [&](double cx, double cy, double hx, double hy, double theta) {
         RigidBody rb = st->world->createRigidBody(
-            RigidBodyDesc::fixed().setTranslation(cx, cy, 0.0).setRotation(Quaternion::create(0.0, 0.0, std::sin(theta * 0.5), std::cos(theta * 0.5)))
+            RigidBodyDesc::fixed().setTranslation(cx, cy, 0.0).setRotation(Quaternion(0.0, 0.0, std::sin(theta * 0.5), std::cos(theta * 0.5)))
         );
         st->world->createCollider(ColliderDesc::cuboid(hx, hy, 1.0).setFriction(0.15).setRestitution(0.35), rb);
     };
@@ -225,9 +225,9 @@ static ts::Task run_app() {
         dom::HTMLElement btn = *doc.getElementById(ids[i]);
         ts::Listener<dom::PointerEvent> cb = [st, i](dom::PointerEvent) {
             if (i == 0) {
-                Vector3 v = Vector3::create(0.4, 0.0, 0.0);
+                Vector3 v = Vector3(0.4, 0.0, 0.0);
                 for (int j = 0; j < BODY_COUNT; j++) {
-                    st->bodies[j].setTranslation(Vector3::create(-3.7 + double(j) * 0.52, 5.4 + double(j % 3) * 0.58, 0.0), true);
+                    st->bodies[j].setTranslation(Vector3(-3.7 + double(j) * 0.52, 5.4 + double(j % 3) * 0.58, 0.0), true);
                     st->bodies[j].setLinvel(v, true);
                 }
                 render(st);

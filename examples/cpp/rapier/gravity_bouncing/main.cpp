@@ -47,7 +47,7 @@ static void draw_dashed(const dom::CanvasRenderingContext2D& ctx, double x1, dou
 
 static void build_scene(const std::shared_ptr<AppState>& st) {
     if (st->world) st->world->free();
-    st->world = World::create(Vector3::create(0.0, st->earth ? -9.81 : -1.62, 0.0));
+    st->world = World(Vector3(0.0, st->earth ? -9.81 : -1.62, 0.0));
 
     RigidBody ground = st->world->createRigidBody(RigidBodyDesc::fixed().setTranslation(0.0, -0.4, 0.0));
     st->world->createCollider(ColliderDesc::cuboid(7.0, 0.4, 2.0), ground);
@@ -175,14 +175,14 @@ static ts::Task run_app() {
         ts::Listener<dom::PointerEvent> cb = [st, i](dom::PointerEvent) {
             if (i == 0) {
                 st->earth = !st->earth;
-                st->world->gravity(Vector3::create(0.0, st->earth ? -9.81 : -1.62, 0.0));
-                Vector3 imp = Vector3::create(0.0, 0.25, 0.0);
+                st->world->gravity(Vector3(0.0, st->earth ? -9.81 : -1.62, 0.0));
+                Vector3 imp = Vector3(0.0, 0.25, 0.0);
                 for (int j = 0; j < 5; j++) st->balls[j].applyImpulse(imp, true);
                 st->grav_btn.textContent(st->earth ? "Gravity: Earth" : "Gravity: Moon");
                 render(st);
             } else if (i == 1) {
                 for (int j = 0; j < 5; j++) {
-                    st->balls[j].applyImpulse(Vector3::create((double(j) - 2.0) * 0.28, 3.4, 0.0), true);
+                    st->balls[j].applyImpulse(Vector3((double(j) - 2.0) * 0.28, 3.4, 0.0), true);
                 }
                 render(st);
             } else if (i == 2) {

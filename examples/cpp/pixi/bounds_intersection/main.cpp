@@ -21,19 +21,19 @@ static ts::Task run_app() {
 
     Container<ts::Value> stage = app.stage();
 
-    Rectangle query = Rectangle::create(190, 105, 260, 170);
+    Rectangle query = Rectangle(190, 105, 260, 170);
     Rectangle padded = query.clone().pad(10, 10);
     Rectangle hull = query.clone();
 
     Rectangle cands[8] = {
-        Rectangle::create(210, 125, 90, 60),
-        Rectangle::create(330, 165, 95, 80),
-        Rectangle::create(110, 80, 130, 85),
-        Rectangle::create(390, 75, 130, 90),
-        Rectangle::create(135, 225, 110, 90),
-        Rectangle::create(40, 40, 100, 110),
-        Rectangle::create(510, 48, 125, 115),
-        Rectangle::create(505, 245, 130, 110),
+        Rectangle(210, 125, 90, 60),
+        Rectangle(330, 165, 95, 80),
+        Rectangle(110, 80, 130, 85),
+        Rectangle(390, 75, 130, 90),
+        Rectangle(135, 225, 110, 90),
+        Rectangle(40, 40, 100, 110),
+        Rectangle(510, 48, 125, 115),
+        Rectangle(505, 245, 130, 110),
     };
 
     int contained = 0;

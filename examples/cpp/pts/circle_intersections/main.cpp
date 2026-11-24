@@ -13,7 +13,7 @@ static Pt mk_pt(double x, double y) {
 }
 
 TS_EXPORT(start) void start() {
-    auto space = CanvasSpace::create("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
+    auto space = CanvasSpace("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
     auto form = space.getForm();
 
     auto player = IPlayer::create();
@@ -26,7 +26,7 @@ TS_EXPORT(start) void start() {
         double ang = time_ms * 0.00035;
         double half_len = min_dim * 0.44;
         double ca = std::cos(ang), sa = std::sin(ang);
-        Group chord = Group::create(
+        Group chord = Group(
             mk_pt(c.x() - ca * half_len, c.y() - sa * half_len),
             mk_pt(c.x() + ca * half_len, c.y() + sa * half_len)
         );
@@ -50,7 +50,7 @@ TS_EXPORT(start) void start() {
                 .circle(circle);
             if (auto foot = Line::perpendicularFromPt(chord, tc, false)) {
                 form.strokeOnly("#b5b5b5", 1.0)
-                    .line(Group::create(tc, *foot));
+                    .line(Group(tc, *foot));
                 form.fillOnly("#555555")
                     .point(*foot, 2.5, "circle");
             }
@@ -58,9 +58,9 @@ TS_EXPORT(start) void start() {
 
         form.strokeOnly("#111111", 2.0).circle(probe);
         form.strokeOnly("#111111", 1.4)
-            .line(Group::create(mk_pt(probe_center.x() - 6.0, probe_center.y()), mk_pt(probe_center.x() + 6.0, probe_center.y())));
+            .line(Group(mk_pt(probe_center.x() - 6.0, probe_center.y()), mk_pt(probe_center.x() + 6.0, probe_center.y())));
         form.strokeOnly("#111111", 1.4)
-            .line(Group::create(mk_pt(probe_center.x(), probe_center.y() - 6.0), mk_pt(probe_center.x(), probe_center.y() + 6.0)));
+            .line(Group(mk_pt(probe_center.x(), probe_center.y() - 6.0), mk_pt(probe_center.x(), probe_center.y() + 6.0)));
 
         for (const auto& circle : targets) {
             Group hits = Circle::intersectCircle2D(probe, circle);

@@ -18,7 +18,7 @@ static const char* SHADES[9] = {
 };
 
 TS_EXPORT(start) void start() {
-    auto space = CanvasSpace::create("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
+    auto space = CanvasSpace("#pt").setup({{.bgcolor = "#ffffff", .resize = true, .retina = true}});
     auto form = space.getForm();
 
     auto player = IPlayer::create();
@@ -44,7 +44,7 @@ TS_EXPORT(start) void start() {
             if (depth == 0) {
                 for (Pt pt : poly) {
                     form.strokeOnly("#d4d4d4", 1.0)
-                        .line(Group::create(centroid, pt));
+                        .line(Group(centroid, pt));
                     form.fillOnly("#111111")
                         .point(pt, 3.5, "circle");
                 }
@@ -53,9 +53,9 @@ TS_EXPORT(start) void start() {
         }
 
         form.strokeOnly("#ffffff", 1.5)
-            .line(Group::create(mk_pt(c.x() - 10.0, c.y()), mk_pt(c.x() + 10.0, c.y())));
+            .line(Group(mk_pt(c.x() - 10.0, c.y()), mk_pt(c.x() + 10.0, c.y())));
         form.strokeOnly("#ffffff", 1.5)
-            .line(Group::create(mk_pt(c.x(), c.y() - 10.0), mk_pt(c.x(), c.y() + 10.0)));
+            .line(Group(mk_pt(c.x(), c.y() - 10.0), mk_pt(c.x(), c.y() + 10.0)));
         form.fill("#ffffff")
             .stroke("#111111", 1.5)
             .point(centroid, 5.0, "circle");

@@ -35,7 +35,7 @@ TS_EXPORT(start) void start() {
     };
     auto ext = marked::MarkedExtension<std::string, std::string>({.renderer = rend, .walkTokens = on_token});
 
-    Mk custom_m = Mk::create(ext);
+    Mk custom_m = Mk(ext);
     std::string def_html = marked::marked(md, marked::marked_options_no_async::create());
     std::string cust_html = std::get<std::string>(custom_m.parse()(md));
 

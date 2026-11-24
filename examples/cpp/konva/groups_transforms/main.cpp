@@ -16,7 +16,7 @@ static Rect make_rect(double x, double y, double w, double h, const char* fill, 
         rc.stroke(stroke);
         rc.strokeWidth(sw);
     }
-    return Rect::create(rc);
+    return Rect(rc);
 }
 
 static Text make_text(double x, double y, const std::string& txt, double size, const char* fill) {

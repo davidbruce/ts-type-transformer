@@ -38,7 +38,7 @@ TS_EXPORT(start) void start() {
     }
 
     RectConfig frame({.x = 20, .y = 20, .width = 640, .height = 360, .stroke = "#b5b5b5", .strokeWidth = 1.5, .dash = ts::Array<double>::of(6.0, 4.0)});
-    bg_layer.add(Rect::create(frame), make_label(32, 32, "Layer 1: Blueprint Grid (z=0)", "#737373"));
+    bg_layer.add(Rect(frame), make_label(32, 32, "Layer 1: Blueprint Grid (z=0)", "#737373"));
 
     // Layer 2: Stacked cards & badge.
     Rect card_a = make_card("card-a", 110, 80, "#efefef");

@@ -161,7 +161,7 @@ TS_EXPORT(start) void start() {
         },
     });
 
-    app->view = EditorView::create(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
+    app->view = EditorView(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
     update_meta(app, app->view.state());
 
     auto toggle_mark = [app](const char* name, const char* label) {

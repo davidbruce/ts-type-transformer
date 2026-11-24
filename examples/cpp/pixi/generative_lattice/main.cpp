@@ -30,7 +30,7 @@ static ts::Task run_app() {
         stroke_g(guides, 1.0, 0xe5e5e5);
     }
 
-    pixi_js::Point unit_x = pixi_js::Point::create(1.0, 0.0);
+    pixi_js::Point unit_x = pixi_js::Point(1.0, 0.0);
     for (int step = 0; step < 12; step++) {
         double theta = double(step) * (2.0 * M_PI / 12.0);
         Matrix spoke = Matrix::create().rotate(theta);
@@ -53,10 +53,10 @@ static ts::Task run_app() {
                 .rotate(theta + double(r_idx) * 0.2)
                 .translate(340.0 + radius * dir.x(), 200.0 + radius * dir.y());
 
-            pixi_js::Point p0 = tile_m.apply(pixi_js::Point::create(cx[0], cy[0]));
+            pixi_js::Point p0 = tile_m.apply(pixi_js::Point(cx[0], cy[0]));
             tiles.moveTo(p0.x(), p0.y());
             for (int k = 1; k < 4; k++) {
-                pixi_js::Point pk = tile_m.apply(pixi_js::Point::create(cx[k], cy[k]));
+                pixi_js::Point pk = tile_m.apply(pixi_js::Point(cx[k], cy[k]));
                 tiles.lineTo(pk.x(), pk.y());
             }
             tiles.closePath().fill(ring_colors[r_idx]);
