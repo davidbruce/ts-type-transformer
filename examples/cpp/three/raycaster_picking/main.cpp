@@ -54,7 +54,7 @@ static void render_scene(const std::shared_ptr<AppState>& st) {
 
 static void cast_at_ndc(const std::shared_ptr<AppState>& st, double nx, double ny) {
     st->raycaster.setFromCamera(Vector2(nx, ny), st->camera);
-    auto hits = st->raycaster.intersectObjects<Object3D<>>(st->meshes, false);
+    auto hits = st->raycaster.intersectObjects(st->meshes, false);
     if (hits.size() > 0) {
         Intersection<Object3D<>> hit = hits[0];
         double hid = hit.object().id();

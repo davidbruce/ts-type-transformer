@@ -132,14 +132,13 @@ TS_EXPORT(start) void start() {
     wire_mesh.position().y(0.015);
 
     int pt_count = (GRID_N / 2) * (GRID_N / 2);
-    using PointsGeo = BufferGeometry<NormalOrGLBufferAttributes, BufferGeometryEventMap>;
-    PointsGeo pts_geo = PointsGeo::create();
+    BufferGeometry pts_geo = BufferGeometry<>::create();
     Float32BufferAttribute pts_attr = Float32BufferAttribute(pt_count * 3, 3.0);
     pts_geo.setAttribute("position", pts_attr);
 
     scene.add(
         AmbientLight(0xffffff, 1.2), key, rim, grid,
-        surface, wire_mesh, three::Points<PointsGeo>(pts_geo, PointsMaterial::create({{.color = 0x111111, .size = 0.14}}))
+        surface, wire_mesh, Points(pts_geo, PointsMaterial::create({{.color = 0x111111, .size = 0.14}}))
     );
 
     auto st = std::make_shared<AppState>(AppState{

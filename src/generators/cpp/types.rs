@@ -629,13 +629,15 @@ fn build_function(
     if has_key {
         type_params.insert(0, TParam { name: "V".into(), default: None, constraint: None });
     }
+    // One no argument deduces is its constraint, or any value: `intersectObjects(objects)`
+    // is of Object3Ds, as TypeScript infers, with no `<Object3D<>>`.
     for (i, p) in type_params.iter_mut().enumerate() {
-        if !(has_key && i == 0)
-            && p.default.is_none()
-            && p.constraint.as_ref().and_then(|c| constraint(&p.name, c, cx)).is_none()
-            && !params_slice.iter().any(|(_, t)| is_deducible(&p.name, t, unions, callbacks))
-        {
-            p.default = Some(Ty::Any);
+        if !(has_key && i == 0) && p.default.is_none() && !params_slice.iter().any(|(_, t)| is_deducible(&p.name, t, unions, callbacks)) {
+            p.default = Some(match &p.constraint {
+                Some(c @ (Ty::Obj(_) | Ty::Generic(..))) if constraint(&p.name, c, cx).is_some() => c.clone(),
+                Some(_) if p.constraint.as_ref().and_then(|c| constraint(&p.name, c, cx)).is_some() => continue,
+                _ => Ty::Any,
+            });
         }
     }
 

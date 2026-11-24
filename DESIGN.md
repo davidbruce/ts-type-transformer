@@ -331,7 +331,9 @@ the time control returns to JavaScript is reported, not lost.
   nearly all of them, most illegal. Overloads,
   `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`, lambdas
   (`release()`, `ts::Scoped`), class templates with defaults and
-  `requires`-clauses, keyed methods over typed keys, `co_await` on promises
+  `requires`-clauses (a default its constraint does not take by name drops
+  the constraint: three's `Points<>`; a method's type parameter no argument
+  deduces is its constraint, `intersectObjects(objects)`), keyed methods over typed keys, `co_await` on promises
   (`ts::Task`), range-for over iterables and over subclasses of Array.
   Constraints are checked of types that are only declared: each type's bases
   are declared beside it (`ts::bases<X>`) and `ts::extends` walks them.

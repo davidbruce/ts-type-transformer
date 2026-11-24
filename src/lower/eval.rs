@@ -637,6 +637,30 @@ pub(super) fn nominal_constraints(front: &mut Front, decls: &mut [Decl], exact: 
             }
             true
         });
+        // A parameter's own default is a use of it: three's `Points<TGeometry
+        // extends BufferGeometry<NormalOrGLBufferAttributes> = BufferGeometry>`
+        // must make `Points<>`.
+        fn defaults(decls: &[Decl], prefix: &str, f: &Facts, broken: &mut HashSet<(String, usize)>) {
+            for d in decls {
+                let (name, ps) = match d {
+                    Decl::Interface(i) => (format!("{prefix}{}", i.name), &i.type_params),
+                    Decl::Alias(a) => (format!("{prefix}{}", a.name), &a.type_params),
+                    Decl::Namespace(ns) => {
+                        defaults(&ns.decls, &format!("{prefix}{}.", ns.name), f, broken);
+                        continue;
+                    }
+                    _ => continue,
+                };
+                for (i, p) in ps.iter().enumerate() {
+                    if let (Some(d), Some(c)) = (&p.default, &p.constraint)
+                        && !satisfies(f, d, c, 0)
+                    {
+                        broken.insert((name.clone(), i));
+                    }
+                }
+            }
+        }
+        defaults(decls, "", &facts, &mut broken);
         if broken.is_empty() {
             break;
         }
