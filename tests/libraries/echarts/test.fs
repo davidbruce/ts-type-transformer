@@ -25,32 +25,26 @@ let option =
     EChartsOption.Create (
         animation = false,
         xAxis =
-            U5.Case1 (
-                EChartsOptionXAxisData.Create (
-                    data = ResizeArray [
-                        AngleAxisComponentOptionCategoryData.String "mon"
-                        AngleAxisComponentOptionCategoryData.String "tue"
-                        AngleAxisComponentOptionCategoryData.String "wed"
-                    ]
-                )
+            EChartsOptionXAxisData.Create (
+                data = ResizeArray [
+                    AngleAxisComponentOptionCategoryData.String "mon"
+                    AngleAxisComponentOptionCategoryData.String "tue"
+                    AngleAxisComponentOptionCategoryData.String "wed"
+                ]
             ),
         yAxis =
-            U5.Case4 (
-                EChartsOptionYAxisScale.Create (
-                    min = AngleAxisComponentOptionCategoryMin.Number 0.0,
-                    max = AngleAxisComponentOptionCategoryMin.Number 40.0
-                )
+            EChartsOptionYAxisScale.Create (
+                min = AngleAxisComponentOptionCategoryMin.Number 0.0,
+                max = AngleAxisComponentOptionCategoryMin.Number 40.0
             ),
         series =
-            U9.Case1 (
-                BarSeriesOption.Create (
-                    name = OptionName.String "sales",
-                    data = ResizeArray [
-                        Some (BarSeriesOptionData.Number 5.0)
-                        Some (BarSeriesOptionData.Number 20.0)
-                        Some (BarSeriesOptionData.Number 36.0)
-                    ]
-                )
+            BarSeriesOption.Create (
+                name = OptionName.String "sales",
+                data = ResizeArray [
+                    Some (BarSeriesOptionData.Number 5.0)
+                    Some (BarSeriesOptionData.Number 20.0)
+                    Some (BarSeriesOptionData.Number 36.0)
+                ]
             ),
         grid =
             EChartsOptionGrid.GridComponentOption (
@@ -95,14 +89,12 @@ check (not (chart.containPixel (gridFinder, ResizeArray [ 5.0; 5.0 ]))) "contain
 let updated =
     EChartsOption.Create (
         series =
-            U9.Case1 (
-                BarSeriesOption.Create (
-                    data = ResizeArray [
-                        Some (BarSeriesOptionData.Number 10.0)
-                        Some (BarSeriesOptionData.Number 10.0)
-                        Some (BarSeriesOptionData.Number 10.0)
-                    ]
-                )
+            BarSeriesOption.Create (
+                data = ResizeArray [
+                    Some (BarSeriesOptionData.Number 10.0)
+                    Some (BarSeriesOptionData.Number 10.0)
+                    Some (BarSeriesOptionData.Number 10.0)
+                ]
             )
     )
 chart.setOption (updated, false)

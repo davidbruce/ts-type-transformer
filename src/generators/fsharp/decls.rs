@@ -358,14 +358,21 @@ impl Gen {
         let mut cases: Vec<(String, String, Option<String>)> = Vec::new();
         let mut seen_names = HashSet::new();
         let mut seen_testers = HashSet::new();
-        let mut seen_tests = HashSet::new();
-        let mut untested = 0;
+        // A test two members share tells neither apart: Fable guesses, as for `U2`.
+        let mut test_count: HashMap<&str, usize> = HashMap::new();
+        for m in &members {
+            if let Some(t) = m.attribute("test") {
+                *test_count.entry(t).or_default() += 1;
+            }
+        }
         for m in &members {
             let payload = self.ty(*m, "");
             let mut case = if m.has_tag_name("object") {
                 tag_case_name(*m).unwrap_or_else(|| {
-                    if !payload.starts_with("{|") && payload != "obj" {
-                        payload.rsplit('.').next().unwrap_or(&payload).split('<').next().unwrap_or(&payload).to_string()
+                    // By its type's own name, without its arguments: `JsRecord`, not `NodeViewConstructor>`.
+                    let own = payload.split('<').next().unwrap_or(&payload).rsplit('.').next().unwrap_or(&payload);
+                    if !payload.starts_with("{|") && payload != "obj" && own.starts_with(|c: char| c.is_alphabetic()) && own.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                        own.to_string()
                     } else {
                         case_name(*m)
                     }
@@ -378,17 +385,12 @@ impl Gen {
             }
             seen_testers.insert(format!("Is{case}"));
             seen_names.insert(case.clone());
-            let test = m.attribute("test").map(str::to_string);
-            // Fable tests these itself; anything else needs a test from the XML.
-            let native = matches!(payload.as_str(), "string" | "float" | "bool");
-            match &test {
-                Some(t) if !seen_tests.insert(t.clone()) => return false,
-                None if !native => untested += 1,
-                _ => {}
-            }
+            let test = m.attribute("test").filter(|t| test_count[t] == 1).map(str::to_string);
             cases.push((case, payload, test));
         }
-        if untested > 1 || cases.iter().any(|c| c.1 == "obj" || c.1 == "unit") {
+        // Named however many members no test tells apart: it is made of any
+        // of them, and its cases match by their tests, else by Fable's guess.
+        if cases.iter().any(|c| c.1 == "obj" || c.1 == "unit") {
             return false;
         }
         // Fable tags a case by its interface's member: each must be declared here and carry a `tag:` test.
@@ -430,7 +432,8 @@ impl Gen {
         if !name.contains('<') {
             let mut seen = HashSet::new();
             for ((case, payload, _), m) in cases.iter().zip(&members) {
-                let seen_as = expand(&self.through_aliases(*m), &self.abbrevs);
+                // An anonymous record is one type whatever its fields' order.
+                let seen_as = record_fields_sorted(&expand(&self.through_aliases(*m), &self.abbrevs));
                 if payload.contains('\'') || matches!(payload.as_str(), "obj" | "unit") || payload == name || !seen.insert(seen_as) {
                     continue;
                 }
@@ -455,4 +458,24 @@ impl Gen {
         }
         self.out += "\n";
     }
+}
+
+// `{| b: B; a: A |}` as `{| a: A; b: B |}`: its fields at the top, sorted.
+fn record_fields_sorted(t: &str) -> String {
+    let Some(inner) = t.strip_prefix("{|").and_then(|r| r.strip_suffix("|}")) else { return t.to_string() };
+    let (mut fields, mut depth, mut start) = (Vec::new(), 0i32, 0);
+    for (i, c) in inner.char_indices() {
+        match c {
+            '<' | '(' | '[' | '{' => depth += 1,
+            '>' | ')' | ']' | '}' => depth -= 1,
+            ';' if depth == 0 => {
+                fields.push(inner[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    fields.push(inner[start..].trim());
+    fields.sort_unstable();
+    format!("{{| {} |}}", fields.join("; "))
 }

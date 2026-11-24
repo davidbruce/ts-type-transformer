@@ -31,8 +31,8 @@ let paris = Leaflet.latLng (48.8566, 2.3522)
 let km = london.distanceTo (LatLngExpression.LatLng paris) / 1000.0
 check (km > 340.0 && km < 345.0) "distanceTo"
 let bounds = Leaflet.latLngBounds (LatLngExpression.LatLng london, LatLngExpression.LatLng london)
-bounds.extend (U5.Case1 paris) |> ignore
-check (bounds.contains (U5.Case1 (Leaflet.latLng (50.0, 1.0)))) "bounds contain"
+bounds.extend paris |> ignore
+check (bounds.contains (Leaflet.latLng (50.0, 1.0))) "bounds contain"
 check (bounds.getNorthEast().lat = 51.505) "getNorthEast"
 check (bounds.getSouthWest().lat = 48.8566) "getSouthWest"
 let pt = Leaflet.point (3.0, 4.0)
@@ -56,8 +56,8 @@ check (not (m.hasLayer pin) && m.hasLayer group) "removeLayer"
 // Fitting the bounds zooms out to show both cities.
 m.fitBounds (LatLngBoundsExpression.LatLngBounds bounds) |> ignore
 check (m.getZoom () < 13.0) "fitBounds zooms out"
-check (m.getBounds().contains (U5.Case1 paris)) "the map shows Paris"
-check (m.getBounds().contains (U5.Case1 london)) "and London"
+check (m.getBounds().contains paris) "the map shows Paris"
+check (m.getBounds().contains london) "and London"
 
 // An event fired on the map reaches the listener, with its position.
 let mutable clicks = 0
@@ -82,11 +82,11 @@ let line =
     Leaflet.polyline<obj, obj> (ResizeArray [ PolylineNewLatlngs.LatLng london; PolylineNewLatlngs.LatLng paris ], style)
 line.addTo (MapOrLayerGroup.Map m) |> ignore
 check (m.hasLayer line) "a polyline on the map"
-check (line.getBounds().contains (U5.Case1 paris)) "polyline bounds contain its points"
+check (line.getBounds().contains paris) "polyline bounds contain its points"
 check (line.options.color = Some "red") "the polyline's options"
 check (line.getLatLngs().Count = 2) "getLatLngs"
 let ring = Leaflet.rectangle<obj> (LatLngBoundsExpression.LatLngBounds bounds)
-check (ring.getBounds().contains (U5.Case1 london)) "a rectangle's bounds"
+check (ring.getBounds().contains london) "a rectangle's bounds"
 
 // Zoom and pan.
 m.setView (london, 10.0) |> ignore

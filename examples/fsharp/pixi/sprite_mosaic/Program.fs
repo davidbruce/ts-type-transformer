@@ -6,8 +6,8 @@ open Dom
 open type Dom.Globals
 open Pixi.Js
 
-let private strokeStyle w (c: int) : StrokeInput =
-    U9.Case9 (!^ (StrokeStyle.Create (width = w, color = float c)))
+let private strokeStyle w (c: int) =
+    StrokeStyle.Create (width = w, color = float c)
 
 let private initOpts () =
     InitOptions.Create(

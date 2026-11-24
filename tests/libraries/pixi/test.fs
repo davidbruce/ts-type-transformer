@@ -71,7 +71,7 @@ check (box.worldTransform <> null) "worldTransform"
 
 // Graphics: a drawn rectangle has bounds.
 let g = Graphics.Create ()
-g.rect(0.0, 0.0, 100.0, 50.0).fill (U9.Case1 "red") |> ignore
+g.rect(0.0, 0.0, 100.0, 50.0).fill "red" |> ignore
 let gb = g.getLocalBounds ()
 check (gb.width = 100.0 && gb.height = 50.0) "Graphics bounds"
 g.position.set (10.0, 10.0) |> ignore
