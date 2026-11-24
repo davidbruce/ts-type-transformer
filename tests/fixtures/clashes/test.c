@@ -7,8 +7,8 @@ TS_IMPORT(check) void check(int ok, int line);
 __attribute__((export_name("run"))) void run(void) {
     // The static and instance members keep distinct C names.
     Gizmo g = Gizmo_new();
-    CHECK(!Gizmo_isTransforming());
-    CHECK(Gizmo_isTransforming_2(g));
+    CHECK(!Gizmo_isTransforming_2());
+    CHECK(Gizmo_isTransforming(g));
     CHECK(Gizmo_fooBar(g) == 1 && Gizmo_foo_bar(g) == 2);
 
     // The method `Shape_area` keeps its name; the function of that name gives way.

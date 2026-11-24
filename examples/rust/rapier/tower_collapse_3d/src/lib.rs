@@ -45,9 +45,9 @@ fn build_world(st: &mut AppState) {
         None, None, None, None, None, None, None, None, None, None, None, None, None,
     );
 
-    let floor_body = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation_2(0.0, -0.3, 0.0));
+    let floor_body = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.3, 0.0));
     world.create_collider(
-        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).set_friction_2(0.75).set_restitution_2(0.1),
+        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).set_friction(0.75).set_restitution(0.1),
         &floor_body,
     );
 
@@ -62,25 +62,25 @@ fn build_world(st: &mut AppState) {
         } else {
             (offset, 0.0, HALF_THIN, HALF_LONG)
         };
-        let rb = world.create_rigid_body(&rp::RigidBodyDesc::dynamic().set_translation_2(x, y, z));
+        let rb = world.create_rigid_body(&rp::RigidBodyDesc::dynamic().set_translation(x, y, z));
         let cd = rp::ColliderDesc::cuboid(hx, HALF_HEIGHT, hz)
-            .set_friction_2(0.65)
-            .set_restitution_2(0.12)
-            .set_density_2(1.0);
+            .set_friction(0.65)
+            .set_restitution(0.12)
+            .set_density(1.0);
         world.create_collider(&cd, &rb);
         st.planks.push(rb);
     }
 
     let striker = world.create_rigid_body(
         &rp::RigidBodyDesc::dynamic()
-            .set_translation_2(-6.2, 1.55, 0.12)
-            .set_linvel_2(13.5, 1.1, -0.25),
+            .set_translation(-6.2, 1.55, 0.12)
+            .set_linvel(13.5, 1.1, -0.25),
     );
     world.create_collider(
         &rp::ColliderDesc::ball(SPHERE_RADIUS)
-            .set_density_2(4.5)
-            .set_restitution_2(0.35)
-            .set_friction_2(0.3),
+            .set_density(4.5)
+            .set_restitution(0.35)
+            .set_friction(0.3),
         &striker,
     );
 

@@ -59,7 +59,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(base_line))
+      |> canvas_form.line(t.PtLikeIterableGroup(base_line))
 
       let pts_list =
         int.range(from: 0, to: count, with: [], run: fn(acc, i) {
@@ -99,7 +99,7 @@ pub fn main() -> Nil {
               None,
               None,
             )
-            |> canvas_form.line_2(t.PtLikeIterableGroup(stem))
+            |> canvas_form.line(t.PtLikeIterableGroup(stem))
             Nil
           }
           False -> Nil
@@ -113,28 +113,28 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(ctrls))
+      |> canvas_form.line(t.PtLikeIterableGroup(ctrls))
       |> canvas_form.stroke_only(
         t.CanvasFormFillCString("#b5b5b5"),
         Some(2.0),
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(bs))
+      |> canvas_form.line(t.PtLikeIterableGroup(bs))
       |> canvas_form.stroke_only(
         t.CanvasFormFillCString("#555555"),
         Some(1.8),
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(card))
+      |> canvas_form.line(t.PtLikeIterableGroup(card))
       |> canvas_form.stroke_only(
         t.CanvasFormFillCString("#111111"),
         Some(2.6),
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(cr))
+      |> canvas_form.line(t.PtLikeIterableGroup(cr))
 
       list.each(pts_list, fn(p) {
         canvas_form.fill(form, t.CanvasFormFillCString("#ffffff"))
@@ -144,7 +144,7 @@ pub fn main() -> Nil {
           None,
           None,
         )
-        |> canvas_form.point_2(t.PtLikePt(p), Some(4.5), Some("circle"))
+        |> canvas_form.point(t.PtLikePt(p), Some(4.5), Some("circle"))
         Nil
       })
     })

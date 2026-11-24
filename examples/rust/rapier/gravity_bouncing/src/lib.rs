@@ -55,20 +55,20 @@ fn build_scene(st: &mut AppState) {
     let gravity = Vector3::new(0.0, gy, 0.0);
     let world = World::new(&gravity, None, None, None, None, None, None, None, None, None, None, None, None, None);
 
-    let ground = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(0.0, -0.4, 0.0));
+    let ground = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, -0.4, 0.0));
     world.create_collider(&ColliderDesc::cuboid(7.0, 0.4, 2.0), &ground);
-    let lw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(-6.8, 3.5, 0.0));
+    let lw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(-6.8, 3.5, 0.0));
     world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &lw);
-    let rw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(6.8, 3.5, 0.0));
+    let rw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(6.8, 3.5, 0.0));
     world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &rw);
 
     st.balls.clear();
     for i in 0..5 {
-        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation_2(X_COORDS[i], 5.6, 0.0));
+        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(X_COORDS[i], 5.6, 0.0));
         let cd = ColliderDesc::ball(0.42)
-            .set_restitution_2(RESTITUTIONS[i])
-            .set_friction_2(0.2)
-            .set_density_2(1.2);
+            .set_restitution(RESTITUTIONS[i])
+            .set_friction(0.2)
+            .set_density(1.2);
         world.create_collider(&cd, &rb);
         st.balls.push(rb);
     }

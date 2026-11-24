@@ -71,9 +71,9 @@ fn buildWorld(app: *App) void {
 
     const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
 
-    const floor_body = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, -0.3, 0.0));
+    const floor_body = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.3, 0.0));
     _ = world.createCollider(
-        rp.ColliderDesc.cuboid(10.0, 0.3, 10.0).setFriction2(0.75).setRestitution2(0.1),
+        rp.ColliderDesc.cuboid(10.0, 0.3, 10.0).setFriction(0.75).setRestitution(0.1),
         floor_body,
     );
 
@@ -87,12 +87,12 @@ fn buildWorld(app: *App) void {
         const hx: f64 = if (layer % 2 == 0) HALF_LONG else HALF_THIN;
         const hz: f64 = if (layer % 2 == 0) HALF_THIN else HALF_LONG;
 
-        const rb = world.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(x, y, z));
+        const rb = world.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(x, y, z));
         _ = world.createCollider(
             rp.ColliderDesc.cuboid(hx, HALF_HEIGHT, hz)
-                .setFriction2(0.65)
-                .setRestitution2(0.12)
-                .setDensity2(1.0),
+                .setFriction(0.65)
+                .setRestitution(0.12)
+                .setDensity(1.0),
             rb,
         );
         app.planks[idx] = rb.retain();
@@ -100,14 +100,14 @@ fn buildWorld(app: *App) void {
 
     const striker = world.createRigidBody(
         rp.RigidBodyDesc.dynamic()
-            .setTranslation2(-6.2, 1.55, 0.12)
-            .setLinvel2(13.5, 1.1, -0.25),
+            .setTranslation(-6.2, 1.55, 0.12)
+            .setLinvel(13.5, 1.1, -0.25),
     );
     _ = world.createCollider(
         rp.ColliderDesc.ball(SPHERE_RADIUS)
-            .setDensity2(4.5)
-            .setRestitution2(0.35)
-            .setFriction2(0.3),
+            .setDensity(4.5)
+            .setRestitution(0.35)
+            .setFriction(0.3),
         striker,
     );
     app.striker = striker.retain();

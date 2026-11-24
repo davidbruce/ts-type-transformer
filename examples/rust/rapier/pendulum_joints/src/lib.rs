@@ -108,7 +108,7 @@ fn build_scene(st: &mut AppState) {
         None, None, None, None, None, None, None, None, None, None, None, None, None,
     );
 
-    let gantry = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(0.0, 6.2, 0.0));
+    let gantry = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, 6.2, 0.0));
     world.create_collider(&ColliderDesc::cuboid(6.0, 0.22, 0.6), &gantry);
     let z_axis = Vector3::new(0.0, 0.0, 1.0);
 
@@ -116,9 +116,9 @@ fn build_scene(st: &mut AppState) {
     let xs = [-2.8, -3.3, -3.8];
     let ys = [5.4, 4.1, 2.8];
     for i in 0..3 {
-        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation_2(xs[i], ys[i], 0.0));
+        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(xs[i], ys[i], 0.0));
         world.create_collider(
-            &ColliderDesc::cuboid(LINK_HX, LINK_HY, 0.2).set_density_2(if i == 2 { 1.6 } else { 1.4 }),
+            &ColliderDesc::cuboid(LINK_HX, LINK_HY, 0.2).set_density(if i == 2 { 1.6 } else { 1.4 }),
             &rb,
         );
         st.chain.push(rb);
@@ -138,10 +138,10 @@ fn build_scene(st: &mut AppState) {
     );
     st.chain[2].apply_impulse(&Vector3::new(-1.4, 0.0, 0.0), true);
 
-    let arm = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation_2(3.1, 5.2, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(0.14, 0.85, 0.2).set_density_2(1.2), &arm);
-    let bob = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation_2(3.8, 3.6, 0.0));
-    world.create_collider(&ColliderDesc::ball(0.42).set_density_2(3.0), &bob);
+    let arm = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(3.1, 5.2, 0.0));
+    world.create_collider(&ColliderDesc::cuboid(0.14, 0.85, 0.2).set_density(1.2), &arm);
+    let bob = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(3.8, 3.6, 0.0));
+    world.create_collider(&ColliderDesc::ball(0.42).set_density(3.0), &bob);
 
     world.create_impulse_joint(
         &JointData::revolute(&Vector3::new(2.3, -0.22, 0.0), &Vector3::new(0.0, 0.88, 0.0), &z_axis),

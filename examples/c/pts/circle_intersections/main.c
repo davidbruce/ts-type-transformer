@@ -34,7 +34,7 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
         mk_pt(cx - ca * half_len, cy - sa * half_len),
         mk_pt(cx + ca * half_len, cy + sa * half_len)
     );
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#999999", 1.2), chord);
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#999999", 1.2), chord);
 
     double px = Pts_Pt_get_x(pointer), py = Pts_Pt_get_y(pointer);
     Pts_Pt probe_center = (px > 1.0 || py > 1.0) ? pointer : c;
@@ -49,25 +49,25 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
         double tr = min_dim * (0.11 + 0.025 * (double)(i % 3));
         targets[i] = Pts_Circle_fromCenter(tc, tr);
 
-        Pts_CanvasForm_circle_2(
+        Pts_CanvasForm_circle(
             Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#f7f7f7"), "#737373", 1.4),
             targets[i]
         );
         Pts_Pt foot = Pts_Line_perpendicularFromPt(chord, tc, false);
         if (foot.h != 0) {
             Pts_Group stem = mk_group2(tc, foot);
-            Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 1.0), stem);
-            Pts_CanvasForm_point_2(Pts_CanvasForm_fillOnly(g_form, "#555555"), foot, 2.5, "circle");
+            Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 1.0), stem);
+            Pts_CanvasForm_point(Pts_CanvasForm_fillOnly(g_form, "#555555"), foot, 2.5, "circle");
         }
     }
 
-    Pts_CanvasForm_circle_2(Pts_CanvasForm_strokeOnly(g_form, "#111111", 2.0), probe);
+    Pts_CanvasForm_circle(Pts_CanvasForm_strokeOnly(g_form, "#111111", 2.0), probe);
     double pcx = Pts_Pt_get_x(probe_center), pcy = Pts_Pt_get_y(probe_center);
-    Pts_CanvasForm_line_2(
+    Pts_CanvasForm_line(
         Pts_CanvasForm_strokeOnly(g_form, "#111111", 1.4),
         mk_group2(mk_pt(pcx - 6.0, pcy), mk_pt(pcx + 6.0, pcy))
     );
-    Pts_CanvasForm_line_2(
+    Pts_CanvasForm_line(
         Pts_CanvasForm_strokeOnly(g_form, "#111111", 1.4),
         mk_group2(mk_pt(pcx, pcy - 6.0), mk_pt(pcx, pcy + 6.0))
     );
@@ -77,11 +77,11 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
         JsArray_Pts_Pt arr = Pts_Group_as_array(hits);
         uint32_t n = JsArray_Pts_Pt_length(arr);
         if (n == 2) {
-            Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#111111", 1.4), hits);
+            Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#111111", 1.4), hits);
         }
         for (uint32_t k = 0; k < n; k++) {
             Pts_Pt h = JsArray_Pts_Pt_get(arr, k);
-            Pts_CanvasForm_point_2(
+            Pts_CanvasForm_point(
                 Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#ffffff"), "#111111", 2.0),
                 h, 5.0, "circle"
             );

@@ -10,8 +10,8 @@ fn expect(ok: bool, src: std.builtin.SourceLocation) void {
 
 export fn run() void {
     const g = b.Gizmo.new();
-    expect(g.isTransforming2(), @src());
-    expect(!b.Gizmo.isTransforming(), @src());
+    expect(g.isTransforming(), @src());
+    expect(!b.Gizmo.isTransforming2(), @src());
     // `fooBar` and `foo_bar` are one `fooBar`.
     expect(g.fooBar() == 1 and g.fooBar2() == 2, @src());
 

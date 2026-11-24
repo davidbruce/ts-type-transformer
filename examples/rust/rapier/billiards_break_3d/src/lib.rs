@@ -38,9 +38,9 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
         None, None, None, None, None, None, None, None, None, None, None, None, None,
     );
 
-    let bed = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation_2(0.0, -0.25, 0.0));
+    let bed = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.25, 0.0));
     world.create_collider(
-        &rp::ColliderDesc::cuboid(4.6, 0.25, 7.6).set_friction_2(0.14).set_restitution_2(0.35),
+        &rp::ColliderDesc::cuboid(4.6, 0.25, 7.6).set_friction(0.14).set_restitution(0.35),
         &bed,
     );
 
@@ -51,9 +51,9 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
         (0.0, 0.45, 7.35, 4.6, 0.45, 0.25),
     ];
     for (rx, ry, rz, hx, hy, hz) in rails {
-        let rb = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation_2(rx, ry, rz));
+        let rb = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(rx, ry, rz));
         world.create_collider(
-            &rp::ColliderDesc::cuboid(hx, hy, hz).set_friction_2(0.12).set_restitution_2(0.88),
+            &rp::ColliderDesc::cuboid(hx, hy, hz).set_friction(0.12).set_restitution(0.88),
             &rb,
         );
     }
@@ -65,15 +65,15 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
             let z = -1.6 - (row as f64) * 0.645;
             let rb = world.create_rigid_body(
                 &rp::RigidBodyDesc::dynamic()
-                    .set_translation_2(x, BALL_RADIUS, z)
-                    .set_linear_damping_2(0.30)
-                    .set_angular_damping_2(0.30),
+                    .set_translation(x, BALL_RADIUS, z)
+                    .set_linear_damping(0.30)
+                    .set_angular_damping(0.30),
             );
             world.create_collider(
                 &rp::ColliderDesc::ball(BALL_RADIUS)
-                    .set_restitution_2(0.92)
-                    .set_friction_2(0.10)
-                    .set_density_2(1.0),
+                    .set_restitution(0.92)
+                    .set_friction(0.10)
+                    .set_density(1.0),
                 &rb,
             );
             st.balls.push(rb);
@@ -81,18 +81,18 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
     }
 
     let mut cue_desc = rp::RigidBodyDesc::dynamic()
-        .set_translation_2(0.04, BALL_RADIUS, 4.4)
-        .set_linear_damping_2(0.22)
-        .set_angular_damping_2(0.22);
+        .set_translation(0.04, BALL_RADIUS, 4.4)
+        .set_linear_damping(0.22)
+        .set_angular_damping(0.22);
     if shoot_cue {
-        cue_desc = cue_desc.set_linvel_2(-0.18, 0.0, -16.0);
+        cue_desc = cue_desc.set_linvel(-0.18, 0.0, -16.0);
     }
     let cue = world.create_rigid_body(&cue_desc);
     world.create_collider(
         &rp::ColliderDesc::ball(BALL_RADIUS)
-            .set_restitution_2(0.94)
-            .set_friction_2(0.10)
-            .set_density_2(1.25),
+            .set_restitution(0.94)
+            .set_friction(0.10)
+            .set_density(1.25),
         &cue,
     );
     st.balls.push(cue);

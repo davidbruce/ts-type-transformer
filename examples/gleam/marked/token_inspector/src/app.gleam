@@ -69,7 +69,7 @@ pub fn main() -> Nil {
     Some(app) -> {
       let sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n"
-      let toks = lexer.lex(sample, None)
+      let toks = lexer.lex_2(sample, None)
       let items = tokens_list.to_list(toks)
 
       let head = document.create_element(doc, tag.div, None)

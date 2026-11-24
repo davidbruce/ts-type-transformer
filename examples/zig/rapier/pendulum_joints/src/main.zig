@@ -101,15 +101,15 @@ fn buildScene(app: *App) void {
     const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
     app.world = w;
 
-    const gantry = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, 6.2, 0.0));
+    const gantry = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, 6.2, 0.0));
     _ = w.createCollider(rp.ColliderDesc.cuboid(6.0, 0.22, 0.6), .{ .parent = gantry });
     const z_axis = rp.Vector3.new(0.0, 0.0, 1.0);
 
     const cx = [3]f64{ -2.8, -3.3, -3.8 };
     const cy = [3]f64{ 5.4, 4.1, 2.8 };
     for (0..3) |i| {
-        app.chain[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(cx[i], cy[i], 0.0)).retain();
-        _ = w.createCollider(rp.ColliderDesc.cuboid(LINK_HX, LINK_HY, 0.2).setDensity2(@as(f64, if (i == 2) 1.6 else 1.4)), .{ .parent = app.chain[i] });
+        app.chain[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(cx[i], cy[i], 0.0)).retain();
+        _ = w.createCollider(rp.ColliderDesc.cuboid(LINK_HX, LINK_HY, 0.2).setDensity(@as(f64, if (i == 2) 1.6 else 1.4)), .{ .parent = app.chain[i] });
     }
 
     _ = w.createImpulseJoint(rp.JointData.revolute(rp.Vector3.new(-2.2, -0.22, 0.0), rp.Vector3.new(0.0, LINK_HY + 0.06, 0.0), z_axis), gantry, app.chain[0], true);
@@ -121,10 +121,10 @@ fn buildScene(app: *App) void {
 
     app.chain[2].applyImpulse(rp.Vector3.new(-1.4, 0.0, 0.0), true);
 
-    app.arm = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(3.1, 5.2, 0.0)).retain();
-    _ = w.createCollider(rp.ColliderDesc.cuboid(0.14, 0.85, 0.2).setDensity2(1.2), .{ .parent = app.arm });
-    app.bob = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(3.8, 3.6, 0.0)).retain();
-    _ = w.createCollider(rp.ColliderDesc.ball(0.42).setDensity2(3.0), .{ .parent = app.bob });
+    app.arm = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(3.1, 5.2, 0.0)).retain();
+    _ = w.createCollider(rp.ColliderDesc.cuboid(0.14, 0.85, 0.2).setDensity(1.2), .{ .parent = app.arm });
+    app.bob = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(3.8, 3.6, 0.0)).retain();
+    _ = w.createCollider(rp.ColliderDesc.ball(0.42).setDensity(3.0), .{ .parent = app.bob });
 
     _ = w.createImpulseJoint(rp.JointData.revolute(rp.Vector3.new(2.3, -0.22, 0.0), rp.Vector3.new(0.0, 0.88, 0.0), z_axis), gantry, app.arm, true);
     _ = w.createImpulseJoint(rp.JointData.revolute(rp.Vector3.new(0.0, -0.88, 0.0), rp.Vector3.new(0.0, 0.72, 0.0), z_axis), app.arm, app.bob, true);

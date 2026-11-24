@@ -57,33 +57,33 @@ fn build_world(st: &mut AppState) {
         None, None, None, None, None, None, None, None, None, None, None, None, None,
     );
 
-    let floor_body = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation_2(0.0, -0.3, 0.0));
+    let floor_body = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.3, 0.0));
     world.create_collider(
-        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).set_friction_2(0.75).set_restitution_2(0.1),
+        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).set_friction(0.75).set_restitution(0.1),
         &floor_body,
     );
 
     let ramp_rot = rp::Quaternion::new(0.0, 0.0, (RAMP_ANGLE * 0.5).sin(), (RAMP_ANGLE * 0.5).cos());
     let ramp_body = world.create_rigid_body(
         &rp::RigidBodyDesc::fixed()
-            .set_translation_2(RAMP_X, RAMP_Y, RAMP_Z)
-            .set_rotation_2(&ramp_rot),
+            .set_translation(RAMP_X, RAMP_Y, RAMP_Z)
+            .set_rotation(&ramp_rot),
     );
     world.create_collider(
-        &rp::ColliderDesc::cuboid(1.75, 0.10, 0.65).set_friction_2(0.15).set_restitution_2(0.2),
+        &rp::ColliderDesc::cuboid(1.75, 0.10, 0.65).set_friction(0.15).set_restitution(0.2),
         &ramp_body,
     );
 
     let marble = world.create_rigid_body(
         &rp::RigidBodyDesc::dynamic()
-            .set_translation_2(-4.75, 2.02, -2.5)
-            .set_linvel_2(3.0, 0.0, 0.0),
+            .set_translation(-4.75, 2.02, -2.5)
+            .set_linvel(3.0, 0.0, 0.0),
     );
     world.create_collider(
         &rp::ColliderDesc::ball(MARBLE_RADIUS)
-            .set_density_2(3.2)
-            .set_restitution_2(0.32)
-            .set_friction_2(0.18),
+            .set_density(3.2)
+            .set_restitution(0.32)
+            .set_friction(0.18),
         &marble,
     );
     st.marble = Some(marble);
@@ -93,13 +93,13 @@ fn build_world(st: &mut AppState) {
         let (x, y, z, yaw) = spiral_pose(i);
         let q = rp::Quaternion::new(0.0, (yaw * 0.5).sin(), 0.0, (yaw * 0.5).cos());
         let rb = world.create_rigid_body(
-            &rp::RigidBodyDesc::dynamic().set_translation_2(x, y, z).set_rotation_2(&q),
+            &rp::RigidBodyDesc::dynamic().set_translation(x, y, z).set_rotation(&q),
         );
         world.create_collider(
             &rp::ColliderDesc::cuboid(DOM_HX, DOM_HY, DOM_HZ)
-                .set_friction_2(0.55)
-                .set_restitution_2(0.18)
-                .set_density_2(1.0),
+                .set_friction(0.55)
+                .set_restitution(0.18)
+                .set_density(1.0),
             &rb,
         );
         st.doms.push(rb);
@@ -115,12 +115,12 @@ fn build_world(st: &mut AppState) {
         let spread = ((j as f64) - 1.0) * 0.52;
         let cx = end_x + fwd_x * 0.72 + perp_x * spread;
         let cz = end_z + fwd_z * 0.72 + perp_z * spread;
-        let rb = world.create_rigid_body(&rp::RigidBodyDesc::dynamic().set_translation_2(cx, 0.42, cz));
+        let rb = world.create_rigid_body(&rp::RigidBodyDesc::dynamic().set_translation(cx, 0.42, cz));
         world.create_collider(
             &rp::ColliderDesc::cylinder(0.42, 0.25)
-                .set_friction_2(0.55)
-                .set_restitution_2(0.25)
-                .set_density_2(1.0),
+                .set_friction(0.55)
+                .set_restitution(0.25)
+                .set_density(1.0),
             &rb,
         );
         st.cyls.push(rb);

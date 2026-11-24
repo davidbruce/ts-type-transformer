@@ -88,7 +88,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.rect_2(t.PtLikeIterableGroup(bbox))
+      |> canvas_form.rect(t.PtLikeIterableGroup(bbox))
       |> canvas_form.fill(t.CanvasFormFillCString("#f7f7f7"))
       |> canvas_form.stroke(
         t.CanvasFormFillCString("#111111"),
@@ -96,7 +96,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.polygon_2(t.PtLikeIterableGroup(hull))
+      |> canvas_form.polygon(t.PtLikeIterableGroup(hull))
 
       list.each(polygon.network(t.PtIterableGroup(hull), Some(0.0)), fn(seg) {
         canvas_form.stroke_only(
@@ -106,7 +106,7 @@ pub fn main() -> Nil {
           None,
           None,
         )
-        |> canvas_form.line_2(t.PtLikeIterableGroup(seg))
+        |> canvas_form.line(t.PtLikeIterableGroup(seg))
         Nil
       })
       case hull_len > 3 {
@@ -124,7 +124,7 @@ pub fn main() -> Nil {
                 None,
                 None,
               )
-              |> canvas_form.line_2(t.PtLikeIterableGroup(seg))
+              |> canvas_form.line(t.PtLikeIterableGroup(seg))
               Nil
             },
           )
@@ -133,7 +133,7 @@ pub fn main() -> Nil {
 
       list.each(cloud_pts, fn(p) {
         canvas_form.fill_only(form, t.CanvasFormFillCString("#737373"))
-        |> canvas_form.point_2(t.PtLikePt(p), Some(3.0), Some("circle"))
+        |> canvas_form.point(t.PtLikePt(p), Some(3.0), Some("circle"))
         Nil
       })
       list.each(hull_pts, fn(h) {
@@ -144,7 +144,7 @@ pub fn main() -> Nil {
           None,
           None,
         )
-        |> canvas_form.point_2(t.PtLikePt(h), Some(5.0), Some("circle"))
+        |> canvas_form.point(t.PtLikePt(h), Some(5.0), Some("circle"))
         Nil
       })
 
@@ -159,8 +159,8 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(h_bar))
-      |> canvas_form.line_2(t.PtLikeIterableGroup(v_bar))
+      |> canvas_form.line(t.PtLikeIterableGroup(h_bar))
+      |> canvas_form.line(t.PtLikeIterableGroup(v_bar))
       |> canvas_form.fill(t.CanvasFormFillCString("#ffffff"))
       |> canvas_form.stroke(
         t.CanvasFormFillCString("#111111"),
@@ -168,7 +168,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.point_2(t.PtLikePt(cent), Some(5.5), Some("circle"))
+      |> canvas_form.point(t.PtLikePt(cent), Some(5.5), Some("circle"))
       Nil
     })
 

@@ -92,26 +92,26 @@ fn build_scene(st: &mut AppState) {
         None, None, None, None, None, None, None, None, None, None, None, None, None,
     );
 
-    let floor = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(0.0, -0.35, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(7.2, 0.35, 2.0).set_friction_2(0.8), &floor);
+    let floor = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, -0.35, 0.0));
+    world.create_collider(&ColliderDesc::cuboid(7.2, 0.35, 2.0).set_friction(0.8), &floor);
 
     st.dominoes.clear();
     for i in 0..DOMINO_COUNT {
         let x = -2.4 + i as f64 * 0.88;
-        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation_2(x, DOM_HY, 0.0));
+        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(x, DOM_HY, 0.0));
         let cd = ColliderDesc::cuboid(DOM_HX, DOM_HY, 0.35)
-            .set_friction_2(0.55)
-            .set_restitution_2(0.15)
-            .set_density_2(1.0);
+            .set_friction(0.55)
+            .set_restitution(0.15)
+            .set_density(1.0);
         world.create_collider(&cd, &rb);
         st.dominoes.push(rb);
     }
 
-    let striker = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation_2(-5.3, 1.05, 0.0));
+    let striker = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(-5.3, 1.05, 0.0));
     let bcd = ColliderDesc::ball(0.40)
-        .set_density_2(2.8)
-        .set_restitution_2(0.45)
-        .set_friction_2(0.25);
+        .set_density(2.8)
+        .set_restitution(0.45)
+        .set_friction(0.25);
     world.create_collider(&bcd, &striker);
     striker.apply_impulse(&Vector3::new(4.8, 0.2, 0.0), true);
 

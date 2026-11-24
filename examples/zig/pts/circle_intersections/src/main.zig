@@ -32,7 +32,7 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
     const ca = @cos(ang);
     const sa = @sin(ang);
     const chord = seg(pt(cx - ca * half_len, cy - sa * half_len), pt(cx + ca * half_len, cy + sa * half_len));
-    _ = state.form.strokeOnly("#999999", .{ .width = 1.2 }).line2(chord);
+    _ = state.form.strokeOnly("#999999", .{ .width = 1.2 }).line(chord);
 
     const px = pointer.getX();
     const py = pointer.getY();
@@ -51,30 +51,30 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
         _ = state.form
             .fill("#f7f7f7")
             .stroke("#737373", .{ .width = 1.4 })
-            .circle2(targets[i]);
+            .circle(targets[i]);
         if (b.Line.perpendicularFromPt(chord, tc, .{ .asProjection = false })) |foot| {
-            _ = state.form.strokeOnly("#b5b5b5", .{ .width = 1.0 }).line2(seg(tc, foot));
-            _ = state.form.fillOnly("#555555").point2(foot, .{ .radius = 2.5, .shape = "circle" });
+            _ = state.form.strokeOnly("#b5b5b5", .{ .width = 1.0 }).line(seg(tc, foot));
+            _ = state.form.fillOnly("#555555").point(foot, .{ .radius = 2.5, .shape = "circle" });
         }
     }
 
-    _ = state.form.strokeOnly("#111111", .{ .width = 2.0 }).circle2(probe);
+    _ = state.form.strokeOnly("#111111", .{ .width = 2.0 }).circle(probe);
     const pcx = probe_center.getX();
     const pcy = probe_center.getY();
-    _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line2(seg(pt(pcx - 6.0, pcy), pt(pcx + 6.0, pcy)));
-    _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line2(seg(pt(pcx, pcy - 6.0), pt(pcx, pcy + 6.0)));
+    _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line(seg(pt(pcx - 6.0, pcy), pt(pcx + 6.0, pcy)));
+    _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line(seg(pt(pcx, pcy - 6.0), pt(pcx, pcy + 6.0)));
 
     for (targets) |target| {
         const hits = b.Circle.intersectCircle2D(probe, target);
         if (hits.getLength() == 2.0) {
-            _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line2(hits);
+            _ = state.form.strokeOnly("#111111", .{ .width = 1.4 }).line(hits);
         }
         var it = hits.iterate();
         while (it.next()) |h| {
             _ = state.form
                 .fill("#ffffff")
                 .stroke("#111111", .{ .width = 2.0 })
-                .point2(h, .{ .radius = 5.0, .shape = "circle" });
+                .point(h, .{ .radius = 5.0, .shape = "circle" });
         }
     }
 }

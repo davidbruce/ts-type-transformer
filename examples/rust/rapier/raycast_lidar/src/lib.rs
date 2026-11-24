@@ -207,12 +207,12 @@ pub extern "C" fn start() {
         let add_box = |cx: f64, cy: f64, theta: f64, hx: f64, hy: f64| {
             let q = Quaternion::new(0.0, 0.0, (theta * 0.5).sin(), (theta * 0.5).cos());
             let rb = world.create_rigid_body(
-                &RigidBodyDesc::fixed().set_translation_2(cx, cy, 0.0).set_rotation_2(&q),
+                &RigidBodyDesc::fixed().set_translation(cx, cy, 0.0).set_rotation(&q),
             );
             world.create_collider(&ColliderDesc::cuboid(hx, hy, 1.0), &rb);
         };
         let add_sphere = |cx: f64, cy: f64, r: f64| {
-            let rb = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(cx, cy, 0.0));
+            let rb = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(cx, cy, 0.0));
             world.create_collider(&ColliderDesc::ball(r), &rb);
         };
 

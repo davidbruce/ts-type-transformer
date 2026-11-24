@@ -116,7 +116,7 @@ pub fn main() {
     + check(marked_class.parse_invoke(parse_inline, "# not a heading", call, runtime.codec_string()) == "# not a heading", "parseInline has no blocks")
 
   // The lexer: tokens, their types and fields.
-  let tokens = lexer.lex("# Head\n\nSome *text*.\n\n- one\n- two\n", None)
+  let tokens = lexer.lex_2("# Head\n\nSome *text*.\n\n- one\n- two\n", None)
   let list_of = tokens_list.to_list(tokens)
   let types = list.map(list_of, token_type)
   let passed =

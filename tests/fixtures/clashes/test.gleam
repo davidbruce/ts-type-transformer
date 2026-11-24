@@ -17,8 +17,8 @@ fn check(ok: Bool, what: String) -> Nil {
 
 pub fn main() {
   let g = gizmo.new()
-  check(!gizmo.is_transforming(), "static")
-  check(gizmo.is_transforming_2(g), "method")
+  check(!gizmo.is_transforming_2(), "static")
+  check(gizmo.is_transforming(g), "method")
   // `fooBar` and `foo_bar` are one `foo_bar`.
   check(gizmo.foo_bar(g) == 1.0 && gizmo.foo_bar_2(g) == 2.0, "foo_bar")
 

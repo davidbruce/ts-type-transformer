@@ -45,12 +45,12 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
         _ = state.form
             .fill(shade)
             .stroke("#111111", .{ .width = sw })
-            .polygon2(poly);
+            .polygon(poly);
         if (depth == 0) {
             var it = poly.iterate();
             while (it.next()) |p| {
-                _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line2(seg(centroid, p));
-                _ = state.form.fillOnly("#111111").point2(p, .{ .radius = 3.5, .shape = "circle" });
+                _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line(seg(centroid, p));
+                _ = state.form.fillOnly("#111111").point(p, .{ .radius = 3.5, .shape = "circle" });
             }
         }
         poly = b.Polygon.midpoints(poly, .{ .closePath = true, .t = t });
@@ -58,15 +58,15 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
 
     const cx = c.getX();
     const cy = c.getY();
-    _ = state.form.strokeOnly("#ffffff", .{ .width = 1.5 }).line2(seg(pt(cx - 10.0, cy), pt(cx + 10.0, cy)));
-    _ = state.form.strokeOnly("#ffffff", .{ .width = 1.5 }).line2(seg(pt(cx, cy - 10.0), pt(cx, cy + 10.0)));
+    _ = state.form.strokeOnly("#ffffff", .{ .width = 1.5 }).line(seg(pt(cx - 10.0, cy), pt(cx + 10.0, cy)));
+    _ = state.form.strokeOnly("#ffffff", .{ .width = 1.5 }).line(seg(pt(cx, cy - 10.0), pt(cx, cy + 10.0)));
     _ = state.form
         .fill("#ffffff")
         .stroke("#111111", .{ .width = 1.5 })
-        .point2(centroid, .{ .radius = 5.0, .shape = "circle" });
+        .point(centroid, .{ .radius = 5.0, .shape = "circle" });
 
     const ring = b.Circle.fromCenter(pointer, 10.0);
-    _ = state.form.strokeOnly("#737373", .{ .width = 1.5 }).circle2(ring);
+    _ = state.form.strokeOnly("#737373", .{ .width = 1.5 }).circle(ring);
 }
 
 export fn start() void {

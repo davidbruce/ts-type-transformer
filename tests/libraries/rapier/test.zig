@@ -60,9 +60,9 @@ fn simulate() void {
     expect(ground.bodyType() == .Fixed, @src());
 
     // A ball: dynamic, dropped from y = 5.
-    const ball_desc = b.RigidBodyDesc.dynamic().setTranslation2(0, 5, 0);
+    const ball_desc = b.RigidBodyDesc.dynamic().setTranslation(0, 5, 0);
     const ball = world.createRigidBody(ball_desc);
-    const ball_collider = world.createCollider(b.ColliderDesc.ball(0.5).setRestitution2(0).setDensity2(2), .{ .parent = ball });
+    const ball_collider = world.createCollider(b.ColliderDesc.ball(0.5).setRestitution(0).setDensity(2), .{ .parent = ball });
     expect(ball.isDynamic() and ball.bodyType() == .Dynamic, @src());
     expect(near(ball.translation(null).getY(), 5, 1e-9), @src());
     expect(near(ball_collider.radius(), 0.5, 1e-9), @src());

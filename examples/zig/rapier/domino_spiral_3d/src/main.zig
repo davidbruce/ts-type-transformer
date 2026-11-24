@@ -90,33 +90,33 @@ fn buildWorld(app: *App) void {
 
     const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
 
-    const floor_body = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, -0.3, 0.0));
+    const floor_body = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.3, 0.0));
     _ = world.createCollider(
-        rp.ColliderDesc.cuboid(10.0, 0.3, 10.0).setFriction2(0.75).setRestitution2(0.1),
+        rp.ColliderDesc.cuboid(10.0, 0.3, 10.0).setFriction(0.75).setRestitution(0.1),
         floor_body,
     );
 
     const ramp_rot = rp.Quaternion.new(0.0, 0.0, @sin(RAMP_ANGLE * 0.5), @cos(RAMP_ANGLE * 0.5));
     const ramp_body = world.createRigidBody(
         rp.RigidBodyDesc.fixed()
-            .setTranslation2(RAMP_X, RAMP_Y, RAMP_Z)
-            .setRotation2(ramp_rot),
+            .setTranslation(RAMP_X, RAMP_Y, RAMP_Z)
+            .setRotation(ramp_rot),
     );
     _ = world.createCollider(
-        rp.ColliderDesc.cuboid(1.75, 0.10, 0.65).setFriction2(0.15).setRestitution2(0.2),
+        rp.ColliderDesc.cuboid(1.75, 0.10, 0.65).setFriction(0.15).setRestitution(0.2),
         ramp_body,
     );
 
     const marble = world.createRigidBody(
         rp.RigidBodyDesc.dynamic()
-            .setTranslation2(-4.75, 2.02, -2.5)
-            .setLinvel2(3.0, 0.0, 0.0),
+            .setTranslation(-4.75, 2.02, -2.5)
+            .setLinvel(3.0, 0.0, 0.0),
     );
     _ = world.createCollider(
         rp.ColliderDesc.ball(MARBLE_RADIUS)
-            .setDensity2(3.2)
-            .setRestitution2(0.32)
-            .setFriction2(0.18),
+            .setDensity(3.2)
+            .setRestitution(0.32)
+            .setFriction(0.18),
         marble,
     );
     app.marble = marble.retain();
@@ -125,13 +125,13 @@ fn buildWorld(app: *App) void {
         const pose = spiralPose(i);
         const q = rp.Quaternion.new(0.0, @sin(pose.yaw * 0.5), 0.0, @cos(pose.yaw * 0.5));
         const rb = world.createRigidBody(
-            rp.RigidBodyDesc.dynamic().setTranslation2(pose.x, pose.y, pose.z).setRotation2(q),
+            rp.RigidBodyDesc.dynamic().setTranslation(pose.x, pose.y, pose.z).setRotation(q),
         );
         _ = world.createCollider(
             rp.ColliderDesc.cuboid(DOM_HX, DOM_HY, DOM_HZ)
-                .setFriction2(0.55)
-                .setRestitution2(0.18)
-                .setDensity2(1.0),
+                .setFriction(0.55)
+                .setRestitution(0.18)
+                .setDensity(1.0),
             rb,
         );
         app.doms[i] = rb.retain();
@@ -146,12 +146,12 @@ fn buildWorld(app: *App) void {
         const spread = (@as(f64, @floatFromInt(j)) - 1.0) * 0.52;
         const cx = end_pose.x + fwd_x * 0.72 + perp_x * spread;
         const cz = end_pose.z + fwd_z * 0.72 + perp_z * spread;
-        const rb = world.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(cx, 0.42, cz));
+        const rb = world.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(cx, 0.42, cz));
         _ = world.createCollider(
             rp.ColliderDesc.cylinder(0.42, 0.25)
-                .setFriction2(0.55)
-                .setRestitution2(0.25)
-                .setDensity2(1.0),
+                .setFriction(0.55)
+                .setRestitution(0.25)
+                .setDensity(1.0),
             rb,
         );
         app.cyls[j] = rb.retain();

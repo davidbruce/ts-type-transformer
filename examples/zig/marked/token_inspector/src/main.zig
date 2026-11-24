@@ -19,7 +19,7 @@ export fn start() void {
     const sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n";
 
-    const tokens = m.Lexer.lex(sample, null);
+    const tokens = m.Lexer.lex2(sample, null);
     const count: usize = @intFromFloat(tokens.getLength());
 
     var bbuf: [32]u8 = undefined;

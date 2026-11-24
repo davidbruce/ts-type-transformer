@@ -149,7 +149,7 @@ pub extern "C" fn start() {
     }
     let tri_count = (GRID_N - 1) * (GRID_N - 1) * 2;
     geo.set_attribute("position".to_string(), BufferAttribute::from(pos_attr.clone()));
-    geo.set_index_2(JsArray::from(idx_vec));
+    geo.set_index(JsArray::from(idx_vec));
 
     let smp = MeshStandardMaterialParameters::default()
         .with_color(0xb5b5b5 as f64)

@@ -95,7 +95,7 @@ pub extern "C" fn run() {
     check!(html_of(inline) == "a <em>b</em> <code>c</code>");
 
     // The lexer: tokens of a document, the type of each, and their children.
-    let list = Lexer::<String, String>::lex::<String, String>("# Head\n\npara with **bold**\n\n- a\n- b\n", None);
+    let list = Lexer::<String, String>::lex_2::<String, String>("# Head\n\npara with **bold**\n\n- a\n- b\n", None);
     let types: Vec<String> = (0..list.length() as usize).map(|i| token_type(&list.at(i as f64).unwrap())).collect();
     check!(types == ["heading", "space", "paragraph", "space", "list"]);
     let Token::Heading(heading) = list.at(0.0).unwrap() else { panic!("expected heading") };
@@ -117,7 +117,7 @@ pub extern "C" fn run() {
     check!(html_of(m.parse().invoke_2("x\ny", None)).contains("x<br>y"));
     check!(m.defaults().breaks() == Some(true));
     check!(!html(marked_with_opt_marked_options("x\ny", None)).contains("<br>"));
-    let toks = m.lexer_2("hi *there*", None);
+    let toks = m.lexer("hi *there*", None);
     check!(toks.length() == 1.0 && matches!(toks.at(0.0), Some(Token::Paragraph(_))));
 
     // A walkTokens extension sees every token, and may change them.

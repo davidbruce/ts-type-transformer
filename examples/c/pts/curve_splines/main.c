@@ -29,7 +29,7 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     double amp = h * 0.24;
 
     Pts_Group base_line = mk_group2(mk_pt(w * 0.06, cy), mk_pt(w * 0.94, cy));
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#e5e5e5", 1.0), base_line);
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#e5e5e5", 1.0), base_line);
 
     JsArray_Pts_Pt arr = JsArray_Pts_Pt_new();
     int count = 11;
@@ -58,17 +58,17 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     for (uint32_t i = 0; i < cr_len; i += 3) {
         Pts_Pt p = JsArray_Pts_Pt_get(cr_arr, i);
         Pts_Group stem = mk_group2(mk_pt(Pts_Pt_get_x(p), cy), p);
-        Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), stem);
+        Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), stem);
     }
 
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), ctrls);
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 2.0), bs);
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#555555", 1.8), card);
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#111111", 2.6), cr);
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), ctrls);
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#b5b5b5", 2.0), bs);
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#555555", 1.8), card);
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#111111", 2.6), cr);
 
     for (uint32_t i = 0; i < (uint32_t)count; i++) {
         Pts_Pt p = JsArray_Pts_Pt_get(arr, i);
-        Pts_CanvasForm_point_2(
+        Pts_CanvasForm_point(
             Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#ffffff"), "#111111", 1.5),
             p, 4.5, "circle"
         );

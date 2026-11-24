@@ -161,7 +161,7 @@ export fn start() void {
     }
     g_app.tri_count = (GRID_N - 1) * (GRID_N - 1) * 2;
     _ = g_app.geo.setAttribute("position", g_app.pos_attr);
-    _ = g_app.geo.setIndex2(indices);
+    _ = g_app.geo.setIndex(indices);
 
     const surf = three.Mesh.new(.{
         .geometry = g_app.geo,

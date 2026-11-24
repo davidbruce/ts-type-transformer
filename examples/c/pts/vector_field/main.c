@@ -35,14 +35,14 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
         double alpha = 0.25 + 0.75 * t;
         snprintf(color, sizeof color, "hsla(0, 0%%, %d%%, %.2f)", light, alpha);
 
-        Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, color, 1.5 + 2.5 * t), seg);
+        Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, color, 1.5 + 2.5 * t), seg);
         Pts_Group dot = Pts_Circle_fromCenter(pt, 1.5 + 4.5 * t * t);
-        Pts_CanvasForm_circle_2(Pts_CanvasForm_fillOnly(g_form, color), dot);
+        Pts_CanvasForm_circle(Pts_CanvasForm_fillOnly(g_form, color), dot);
     }
 
     double ring_radius = 18.0 + 6.0 * sin(time_ms * 0.004);
     Pts_Group ring = Pts_Circle_fromCenter(pointer, ring_radius);
-    Pts_CanvasForm_circle_2(Pts_CanvasForm_strokeOnly(g_form, "#11111199", 2.0), ring);
+    Pts_CanvasForm_circle(Pts_CanvasForm_strokeOnly(g_form, "#11111199", 2.0), ring);
 }
 
 __attribute__((export_name("start"))) void start(void) {

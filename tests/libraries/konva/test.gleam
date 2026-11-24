@@ -61,7 +61,7 @@ pub fn main() {
   let passed =
     check(list.length(stage.get_layers(s)) == 1, "the stage has a layer")
     + check(option.is_some(node.get_stage(l)), "the layer knows its stage")
-    + check(node.get_class_name_2(s) == "Stage" && node.get_class_name_2(l) == "Layer", "class names")
+    + check(node.get_class_name(s) == "Stage" && node.get_class_name(l) == "Layer", "class names")
 
   // A rectangle from a config, with an id and a name.
   let rc = rect_config.create()
@@ -81,15 +81,15 @@ pub fn main() {
     + check(pos.get_x(at) == 20.0 && pos.get_y(at) == 30.0, "position")
     + check(i_rect.get_x(client) == 20.0 && i_rect.get_y(client) == 30.0, "client rect position")
     + check(i_rect.get_width(client) == 100.0 && i_rect.get_height(client) == 50.0, "client rect size")
-    + check(node.get_class_name_2(r) == "Rect", "class name of a rect")
+    + check(node.get_class_name(r) == "Rect", "class name of a rect")
     + check(get_set.invoke(node.get_x(r), runtime.codec_float()) == 20.0, "the x property")
     + check(get_set.invoke(node.get_y(r), runtime.codec_float()) == 30.0, "the y property")
     + check(get_set.invoke(node.get_width(r), runtime.codec_float()) == 100.0, "the width property")
     + check(get_set.invoke(shape.get_fill(r), t.string_or_canvas_gradient_codec()) == t.StringOrCanvasGradientString("red"), "the fill property")
     + check(node.get_parent(r) |> option.is_some, "the rect has a parent")
     + check(option.is_some(node.get_layer(r)), "the rect knows its layer")
-    + check(rect_config.get_fill(node.get_attrs_2(r)) == Some(t.StringOrCanvasGradientString("red")), "fill in the attrs")
-    + check(rect_config.get_id(node.get_attrs_2(r)) == Some("box"), "id in the attrs")
+    + check(rect_config.get_fill(node.get_attrs(r)) == Some(t.StringOrCanvasGradientString("red")), "fill in the attrs")
+    + check(rect_config.get_id(node.get_attrs(r)) == Some("box"), "id in the attrs")
 
   // A circle and a text, and a group holding both.
   let cc = circle_config.create()
@@ -114,8 +114,8 @@ pub fn main() {
   let text_rect = node.get_client_rect(tx, None)
   let passed =
     passed
-    + check(list.length(container.get_children(g, t.group_or_shape_codec())) == 2, "the group has two children")
-    + check(list.length(container.get_children(l, t.group_or_shape_codec())) == 2, "the layer has two children")
+    + check(list.length(container.get_children(g, None, t.group_or_shape_codec())) == 2, "the group has two children")
+    + check(list.length(container.get_children(l, None, t.group_or_shape_codec())) == 2, "the layer has two children")
     + check(pos.get_x(circle_at) == 210.0 && pos.get_y(circle_at) == 110.0, "absolute position adds the group's")
     + check(pos.get_x(node.get_position(c)) == 10.0, "own position does not")
     + check(i_rect.get_width(text_rect) >. 20.0 && i_rect.get_height(text_rect) >. 10.0, "a text has a size")
@@ -191,7 +191,7 @@ pub fn main() {
     + check(option.is_some(hit), "a shape is under the point")
     + check(
       case hit {
-        Some(shape) -> node.get_class_name_2(shape) == "Circle"
+        Some(shape) -> node.get_class_name(shape) == "Circle"
         None -> False
       },
       "and it is the circle",
@@ -213,7 +213,7 @@ pub fn main() {
   let passed =
     passed
     + check(container.find(l, runtime.dynamic("Circle")) == [], "a destroyed circle is gone")
-    + check(list.length(container.get_children(g, t.group_or_shape_codec())) == 1, "the group has one child left")
+    + check(list.length(container.get_children(g, None, t.group_or_shape_codec())) == 1, "the group has one child left")
   let _ = container.destroy_children(l)
   let passed = passed + check(!container.has_children(l), "no children after destroy_children")
   let _ = stage.destroy(s)

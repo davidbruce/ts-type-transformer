@@ -46,13 +46,13 @@ pub extern "C" fn start() {
                 let sw = if depth == 0 { 1.6 } else { 1.0 };
                 form.fill(*shade)
                     .stroke("#111111", sw, None, None)
-                    .polygon_2(&poly);
+                    .polygon(&poly);
                 if depth == 0 {
                     for pt in poly.as_array().iter() {
                         let ray = Group::new([centroid.clone(), pt.clone()]);
-                        form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&ray);
+                        form.stroke_only("#d4d4d4", 1.0, None, None).line(&ray);
                         form.fill_only("#111111")
-                            .point_2(&pt, 3.5, "circle");
+                            .point(&pt, 3.5, "circle");
                     }
                 }
                 poly = Polygon::midpoints(&poly, true, t);
@@ -60,14 +60,14 @@ pub extern "C" fn start() {
 
             let h_bar = Group::new([mk_pt(c.x() - 10.0, c.y()), mk_pt(c.x() + 10.0, c.y())]);
             let v_bar = Group::new([mk_pt(c.x(), c.y() - 10.0), mk_pt(c.x(), c.y() + 10.0)]);
-            form.stroke_only("#ffffff", 1.5, None, None).line_2(&h_bar);
-            form.stroke_only("#ffffff", 1.5, None, None).line_2(&v_bar);
+            form.stroke_only("#ffffff", 1.5, None, None).line(&h_bar);
+            form.stroke_only("#ffffff", 1.5, None, None).line(&v_bar);
             form.fill("#ffffff")
                 .stroke("#111111", 1.5, None, None)
-                .point_2(&centroid, 5.0, "circle");
+                .point(&centroid, 5.0, "circle");
 
             let ring = Circle::from_center(&pointer, 10.0);
-            form.stroke_only("#737373", 1.5, None, None).circle_2(&ring);
+            form.stroke_only("#737373", 1.5, None, None).circle(&ring);
         })
     };
 

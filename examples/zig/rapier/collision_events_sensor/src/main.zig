@@ -86,8 +86,8 @@ fn drawSegs(ctx: dom.CanvasRenderingContext2D, x1: f64, y1: f64, x2: f64, y2: f6
 
 fn addRamp(w: rp.World, cx: f64, cy: f64, hx: f64, hy: f64, theta: f64) void {
     const q = rp.Quaternion.new(0.0, 0.0, @sin(theta * 0.5), @cos(theta * 0.5));
-    const rb = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(cx, cy, 0.0).setRotation2(q));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(hx, hy, 1.0).setFriction2(0.15).setRestitution2(0.35), .{ .parent = rb });
+    const rb = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(cx, cy, 0.0).setRotation(q));
+    _ = w.createCollider(rp.ColliderDesc.cuboid(hx, hy, 1.0).setFriction(0.15).setRestitution(0.35), .{ .parent = rb });
 }
 
 fn onCollision(app: *App, h1: f64, h2: f64, started: bool) void {
@@ -127,16 +127,16 @@ fn buildScene(app: *App) void {
     addRamp(w, -2.1, 4.2, 2.2, 0.18, -0.36);
     addRamp(w, 1.8, 2.6, 2.2, 0.18, 0.36);
 
-    const sbody = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, 1.35, 0.0));
-    const scd = rp.ColliderDesc.cuboid(1.85, 0.30, 1.2).setSensor(true).setActiveEvents2(.COLLISION_EVENTS);
+    const sbody = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, 1.35, 0.0));
+    const scd = rp.ColliderDesc.cuboid(1.85, 0.30, 1.2).setSensor(true).setActiveEvents(.COLLISION_EVENTS);
     app.sensor_handle = w.createCollider(scd, .{ .parent = sbody }).getHandle();
 
     for (0..BODY_COUNT) |i| {
         const x = -3.7 + @as(f64, @floatFromInt(i)) * 0.52;
         const y = 5.4 + @as(f64, @floatFromInt(i % 3)) * 0.58;
-        app.bodies[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(x, y, 0.0)).retain();
+        app.bodies[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(x, y, 0.0)).retain();
         const base_cd = if (IS_BOX[i]) rp.ColliderDesc.cuboid(0.28, 0.28, 0.28) else rp.ColliderDesc.ball(0.32);
-        const cd = base_cd.setRestitution2(0.35).setFriction2(0.25).setActiveEvents2(.COLLISION_EVENTS);
+        const cd = base_cd.setRestitution(0.35).setFriction(0.25).setActiveEvents(.COLLISION_EVENTS);
         _ = w.createCollider(cd, .{ .parent = app.bodies[i] });
     }
 

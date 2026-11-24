@@ -43,15 +43,15 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     for (int depth = 0; depth < 9; depth++) {
         double sw = depth == 0 ? 1.6 : 1.0;
         Pts_CanvasForm f = Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, SHADES[depth]), "#111111", sw);
-        Pts_CanvasForm_polygon_2(f, poly);
+        Pts_CanvasForm_polygon(f, poly);
         if (depth == 0) {
             JsArray_Pts_Pt items = Pts_Group_as_array(poly);
             uint32_t n = JsArray_Pts_Pt_length(items);
             for (uint32_t i = 0; i < n; i++) {
                 Pts_Pt pt = JsArray_Pts_Pt_get(items, i);
                 Pts_Group ray = mk_group2(centroid, pt);
-                Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), ray);
-                Pts_CanvasForm_point_2(Pts_CanvasForm_fillOnly(g_form, "#111111"), pt, 3.5, "circle");
+                Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#d4d4d4", 1.0), ray);
+                Pts_CanvasForm_point(Pts_CanvasForm_fillOnly(g_form, "#111111"), pt, 3.5, "circle");
             }
         }
         poly = Pts_Polygon_midpoints(poly, true, t);
@@ -60,15 +60,15 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     double cx = Pts_Pt_get_x(c), cy = Pts_Pt_get_y(c);
     Pts_Group hbar = mk_group2(mk_pt(cx - 10.0, cy), mk_pt(cx + 10.0, cy));
     Pts_Group vbar = mk_group2(mk_pt(cx, cy - 10.0), mk_pt(cx, cy + 10.0));
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), hbar);
-    Pts_CanvasForm_line_2(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), vbar);
-    Pts_CanvasForm_point_2(
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), hbar);
+    Pts_CanvasForm_line(Pts_CanvasForm_strokeOnly(g_form, "#ffffff", 1.5), vbar);
+    Pts_CanvasForm_point(
         Pts_CanvasForm_stroke(Pts_CanvasForm_fill(g_form, "#ffffff"), "#111111", 1.5),
         centroid, 5.0, "circle"
     );
 
     Pts_Group ring = Pts_Circle_fromCenter(pointer, 10.0);
-    Pts_CanvasForm_circle_2(Pts_CanvasForm_strokeOnly(g_form, "#737373", 1.5), ring);
+    Pts_CanvasForm_circle(Pts_CanvasForm_strokeOnly(g_form, "#737373", 1.5), ring);
 }
 
 __attribute__((export_name("start"))) void start(void) {

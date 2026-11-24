@@ -62,9 +62,9 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
 
     const world = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
 
-    const bed = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, -0.25, 0.0));
+    const bed = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.25, 0.0));
     _ = world.createCollider(
-        rp.ColliderDesc.cuboid(4.6, 0.25, 7.6).setFriction2(0.14).setRestitution2(0.35),
+        rp.ColliderDesc.cuboid(4.6, 0.25, 7.6).setFriction(0.14).setRestitution(0.35),
         bed,
     );
 
@@ -76,9 +76,9 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
         .{ .rx = 0.0, .ry = 0.45, .rz = 7.35, .hx = 4.6, .hy = 0.45, .hz = 0.25 },
     };
     for (rails) |r| {
-        const rb = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(r.rx, r.ry, r.rz));
+        const rb = world.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(r.rx, r.ry, r.rz));
         _ = world.createCollider(
-            rp.ColliderDesc.cuboid(r.hx, r.hy, r.hz).setFriction2(0.12).setRestitution2(0.88),
+            rp.ColliderDesc.cuboid(r.hx, r.hy, r.hz).setFriction(0.12).setRestitution(0.88),
             rb,
         );
     }
@@ -92,15 +92,15 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
             const z = -1.6 - frow * 0.645;
             const rb = world.createRigidBody(
                 rp.RigidBodyDesc.dynamic()
-                    .setTranslation2(x, BALL_RADIUS, z)
-                    .setLinearDamping2(0.30)
-                    .setAngularDamping2(0.30),
+                    .setTranslation(x, BALL_RADIUS, z)
+                    .setLinearDamping(0.30)
+                    .setAngularDamping(0.30),
             );
             _ = world.createCollider(
                 rp.ColliderDesc.ball(BALL_RADIUS)
-                    .setRestitution2(0.92)
-                    .setFriction2(0.10)
-                    .setDensity2(1.0),
+                    .setRestitution(0.92)
+                    .setFriction(0.10)
+                    .setDensity(1.0),
                 rb,
             );
             app.balls[idx] = rb.retain();
@@ -109,18 +109,18 @@ fn buildWorld(app: *App, shoot_cue: bool) void {
     }
 
     var cue_desc = rp.RigidBodyDesc.dynamic()
-        .setTranslation2(0.04, BALL_RADIUS, 4.4)
-        .setLinearDamping2(0.22)
-        .setAngularDamping2(0.22);
+        .setTranslation(0.04, BALL_RADIUS, 4.4)
+        .setLinearDamping(0.22)
+        .setAngularDamping(0.22);
     if (shoot_cue) {
-        cue_desc = cue_desc.setLinvel2(-0.18, 0.0, -16.0);
+        cue_desc = cue_desc.setLinvel(-0.18, 0.0, -16.0);
     }
     const cue = world.createRigidBody(cue_desc);
     _ = world.createCollider(
         rp.ColliderDesc.ball(BALL_RADIUS)
-            .setRestitution2(0.94)
-            .setFriction2(0.10)
-            .setDensity2(1.25),
+            .setRestitution(0.94)
+            .setFriction(0.10)
+            .setDensity(1.25),
         cue,
     );
     app.balls[RACK_COUNT] = cue.retain();

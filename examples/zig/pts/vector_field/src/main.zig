@@ -33,14 +33,14 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
             .{ 65.0 - 57.0 * t, 0.25 + 0.75 * t },
         ) catch continue;
 
-        _ = state.form.strokeOnly(color, .{ .width = 1.5 + 2.5 * t }).line2(seg);
+        _ = state.form.strokeOnly(color, .{ .width = 1.5 + 2.5 * t }).line(seg);
         const dot = b.Circle.fromCenter(pt, 1.5 + 4.5 * t * t);
-        _ = state.form.fillOnly(color).circle2(dot);
+        _ = state.form.fillOnly(color).circle(dot);
     }
 
     const ring_radius = 18.0 + 6.0 * @sin(time_ms * 0.004);
     const ring = b.Circle.fromCenter(pointer, ring_radius);
-    _ = state.form.strokeOnly("#11111199", .{ .width = 2.0 }).circle2(ring);
+    _ = state.form.strokeOnly("#11111199", .{ .width = 2.0 }).circle(ring);
 }
 
 export fn start() void {

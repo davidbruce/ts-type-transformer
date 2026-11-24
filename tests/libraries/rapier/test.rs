@@ -59,9 +59,9 @@ fn physics() {
     // A dynamic ball of radius 0.5, dropped from y = 5, resting on the slab
     // (whose top is at y = 0.5) when its centre is at y = 1.
     let desc = RigidBodyDesc::new_dynamic();
-    desc.set_translation(&Vector3::new(0.0, 5.0, 0.0));
+    desc.set_translation(0.0, 5.0, 0.0);
     let ball = world.create_rigid_body(&desc);
-    let collider = world.create_collider(&ColliderDesc::ball(0.5).set_restitution_2(0.0).set_density_2(1.0), Some(&ball));
+    let collider = world.create_collider(&ColliderDesc::ball(0.5).set_restitution(0.0).set_density(1.0), Some(&ball));
     check!(ball.is_dynamic() && !ball.is_fixed());
     check!(ball.translation(None).y() == 5.0);
     check!(collider.handle() == world.get_collider(collider.handle()).handle());

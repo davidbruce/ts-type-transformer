@@ -75,7 +75,7 @@ pub fn main() -> Nil {
           None,
           None,
         )
-        |> canvas_form.polygon_2(t.PtLikeIterableGroup(poly))
+        |> canvas_form.polygon(t.PtLikeIterableGroup(poly))
 
           case depth == 0 {
             True ->
@@ -88,9 +88,9 @@ pub fn main() -> Nil {
                   None,
                   None,
                 )
-                |> canvas_form.line_2(t.PtLikeIterableGroup(ray))
+                |> canvas_form.line(t.PtLikeIterableGroup(ray))
                 |> canvas_form.fill_only(t.CanvasFormFillCString("#111111"))
-                |> canvas_form.point_2(
+                |> canvas_form.point(
                   t.PtLikePt(p),
                   Some(3.5),
                   Some("circle"),
@@ -114,8 +114,8 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(h_bar))
-      |> canvas_form.line_2(t.PtLikeIterableGroup(v_bar))
+      |> canvas_form.line(t.PtLikeIterableGroup(h_bar))
+      |> canvas_form.line(t.PtLikeIterableGroup(v_bar))
       |> canvas_form.fill(t.CanvasFormFillCString("#ffffff"))
       |> canvas_form.stroke(
         t.CanvasFormFillCString("#111111"),
@@ -123,7 +123,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.point_2(t.PtLikePt(centroid), Some(5.0), Some("circle"))
+      |> canvas_form.point(t.PtLikePt(centroid), Some(5.0), Some("circle"))
 
       let ring = circle.from_center(t.PtLikePt(pointer), 10.0)
       canvas_form.stroke_only(
@@ -133,7 +133,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.circle_2(t.PtLikeIterableGroup(ring))
+      |> canvas_form.circle(t.PtLikeIterableGroup(ring))
       Nil
     })
 

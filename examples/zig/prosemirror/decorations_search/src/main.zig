@@ -151,7 +151,7 @@ fn searchInit(_: state_mod.EditorStateConfig, _: state_mod.EditorState) pm.JsVal
 }
 
 fn searchApply(tr: state_mod.Transaction, prev: pm.JsValue, _: state_mod.EditorState, _: state_mod.EditorState) pm.JsValue {
-    const mv = tr.getMeta2("search");
+    const mv = tr.getMeta("search");
     if (mv.h != 0) return mv;
     return prev.retain();
 }
@@ -210,7 +210,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
 
     const app = ctx.app;
     app.active_btn = ctx.id;
-    const tr = app.view.getState().getTr().setMeta2("search", QUERIES[ctx.id]);
+    const tr = app.view.getState().getTr().setMeta("search", QUERIES[ctx.id]);
     app.view.dispatch(tr);
 }
 

@@ -84,18 +84,18 @@ fn buildScene(app: *App) void {
     const w = rp.World.new(rp.Vector3.new(0.0, -9.81, 0.0), null).retain();
     app.world = w;
 
-    const floor = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, -0.35, 0.0));
-    _ = w.createCollider(rp.ColliderDesc.cuboid(7.2, 0.35, 2.0).setFriction2(0.8), .{ .parent = floor });
+    const floor = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.35, 0.0));
+    _ = w.createCollider(rp.ColliderDesc.cuboid(7.2, 0.35, 2.0).setFriction(0.8), .{ .parent = floor });
 
     for (0..DOMINO_COUNT) |i| {
         const x = -2.4 + @as(f64, @floatFromInt(i)) * 0.88;
-        app.dominoes[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(x, DOM_HY, 0.0)).retain();
-        const cd = rp.ColliderDesc.cuboid(DOM_HX, DOM_HY, 0.35).setFriction2(0.55).setRestitution2(0.15).setDensity2(1.0);
+        app.dominoes[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(x, DOM_HY, 0.0)).retain();
+        const cd = rp.ColliderDesc.cuboid(DOM_HX, DOM_HY, 0.35).setFriction(0.55).setRestitution(0.15).setDensity(1.0);
         _ = w.createCollider(cd, .{ .parent = app.dominoes[i] });
     }
 
-    app.striker = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(-5.3, 1.05, 0.0)).retain();
-    _ = w.createCollider(rp.ColliderDesc.ball(0.40).setDensity2(2.8).setRestitution2(0.45).setFriction2(0.25), .{ .parent = app.striker });
+    app.striker = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(-5.3, 1.05, 0.0)).retain();
+    _ = w.createCollider(rp.ColliderDesc.ball(0.40).setDensity(2.8).setRestitution(0.45).setFriction(0.25), .{ .parent = app.striker });
     app.striker.applyImpulse(rp.Vector3.new(4.8, 0.2, 0.0), true);
 
     app.step_count = 0;

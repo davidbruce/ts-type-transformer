@@ -64,7 +64,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(chord))
+      |> canvas_form.line(t.PtLikeIterableGroup(chord))
 
       let probe_center = case
         pt.get_x(pointer) >. 1.0 || pt.get_y(pointer) >. 1.0
@@ -90,7 +90,7 @@ pub fn main() -> Nil {
             None,
             None,
           )
-          |> canvas_form.circle_2(t.PtLikeIterableGroup(target))
+          |> canvas_form.circle(t.PtLikeIterableGroup(target))
 
           case line.perpendicular_from_pt(
             t.PtIterableGroup(chord),
@@ -106,9 +106,9 @@ pub fn main() -> Nil {
                 None,
                 None,
               )
-              |> canvas_form.line_2(t.PtLikeIterableGroup(stem))
+              |> canvas_form.line(t.PtLikeIterableGroup(stem))
               |> canvas_form.fill_only(t.CanvasFormFillCString("#555555"))
-              |> canvas_form.point_2(
+              |> canvas_form.point(
                 t.PtLikePt(foot),
                 Some(2.5),
                 Some("circle"),
@@ -132,15 +132,15 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.circle_2(t.PtLikeIterableGroup(probe))
+      |> canvas_form.circle(t.PtLikeIterableGroup(probe))
       |> canvas_form.stroke_only(
         t.CanvasFormFillCString("#111111"),
         Some(1.4),
         None,
         None,
       )
-      |> canvas_form.line_2(t.PtLikeIterableGroup(px1))
-      |> canvas_form.line_2(t.PtLikeIterableGroup(py1))
+      |> canvas_form.line(t.PtLikeIterableGroup(px1))
+      |> canvas_form.line(t.PtLikeIterableGroup(py1))
 
       list.each(targets, fn(target) {
         let hits =
@@ -158,7 +158,7 @@ pub fn main() -> Nil {
               None,
               None,
             )
-            |> canvas_form.line_2(t.PtLikeIterableGroup(hits))
+            |> canvas_form.line(t.PtLikeIterableGroup(hits))
             Nil
           }
           False -> Nil
@@ -171,7 +171,7 @@ pub fn main() -> Nil {
             None,
             None,
           )
-          |> canvas_form.point_2(t.PtLikePt(h), Some(5.0), Some("circle"))
+          |> canvas_form.point(t.PtLikePt(h), Some(5.0), Some("circle"))
           Nil
         })
       })

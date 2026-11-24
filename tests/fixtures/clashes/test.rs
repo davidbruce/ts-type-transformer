@@ -15,10 +15,10 @@ macro_rules! check {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
-    // The static property and the method are both `is_transforming`: the method gives way.
+    // The static property and the method are both `is_transforming`: the static gives way.
     let g = Gizmo::new();
-    check!(g.is_transforming_2());
-    check!(!Gizmo::is_transforming());
+    check!(g.is_transforming());
+    check!(!Gizmo::is_transforming_2());
     // `fooBar` and `foo_bar` are one `foo_bar`.
     check!(g.foo_bar() == 1.0 && g.foo_bar_2() == 2.0);
 

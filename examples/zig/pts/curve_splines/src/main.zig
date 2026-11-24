@@ -33,7 +33,7 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
 
     _ = state.form
         .strokeOnly("#e5e5e5", .{ .width = 1.0 })
-        .line2(seg(pt(w * 0.06, cy), pt(w * 0.94, cy)));
+        .line(seg(pt(w * 0.06, cy), pt(w * 0.94, cy)));
 
     const arr = b.JsArrayOf(b.Pt).new();
     for (0..count) |i| {
@@ -60,22 +60,22 @@ fn onAnimate(state: *App, time_ms: f64, _: f64, _: b.Space) void {
     var idx: usize = 0;
     while (it_cr.next()) |p| {
         if (idx % 3 == 0) {
-            _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line2(seg(pt(p.getX(), cy), p));
+            _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line(seg(pt(p.getX(), cy), p));
         }
         idx += 1;
     }
 
-    _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line2(ctrls);
-    _ = state.form.strokeOnly("#b5b5b5", .{ .width = 2.0 }).line2(bs);
-    _ = state.form.strokeOnly("#555555", .{ .width = 1.8 }).line2(card);
-    _ = state.form.strokeOnly("#111111", .{ .width = 2.6 }).line2(cr);
+    _ = state.form.strokeOnly("#d4d4d4", .{ .width = 1.0 }).line(ctrls);
+    _ = state.form.strokeOnly("#b5b5b5", .{ .width = 2.0 }).line(bs);
+    _ = state.form.strokeOnly("#555555", .{ .width = 1.8 }).line(card);
+    _ = state.form.strokeOnly("#111111", .{ .width = 2.6 }).line(cr);
 
     var it_c = ctrls.iterate();
     while (it_c.next()) |p| {
         _ = state.form
             .fill("#ffffff")
             .stroke("#111111", .{ .width = 1.5 })
-            .point2(p, .{ .radius = 4.5, .shape = "circle" });
+            .point(p, .{ .radius = 4.5, .shape = "circle" });
     }
 }
 

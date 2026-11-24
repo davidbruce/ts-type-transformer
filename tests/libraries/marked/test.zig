@@ -64,7 +64,7 @@ export fn run() void {
     expect(has(.{ .h = inl.h }, "<em>world</em>") and !has(.{ .h = inl.h }, "<p>"), @src());
 
     // The lexer: block tokens.
-    const tokens = b.Lexer.lex("# Head\n\npara with `code`\n\n- x\n- y\n", .{});
+    const tokens = b.Lexer.lex2("# Head\n\npara with `code`\n\n- x\n- y\n", .{});
     expect(tokens.getLength() == 5, @src());
 
     // The Token union decodes every token by its `type`.

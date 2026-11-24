@@ -186,7 +186,10 @@ whether types and functions share a namespace, and whether functions
 overload (C++). What the library declares claims names first, a top-level
 declaration before a namespace's (`StreamPipeOptions` before a flattened
 `Stream.PipeOptions`), then functions, then what lowering made up, which
-takes the `_2`.
+takes the `_2`. Within a type its methods come first, then its statics, then
+its properties' accessors: Rapier's `setTranslation(x, y, z)` keeps its name,
+and the setter of `translation` is `setTranslation2`; pts' `form.line(pts)`
+is `line`, and the static `CanvasForm.line(ctx, pts)` `line_2`.
 
 Documentation: the model carries each function's, class's and enum's (and its
 members') `<doc>`, and each generator writes it once, at the definition, in its

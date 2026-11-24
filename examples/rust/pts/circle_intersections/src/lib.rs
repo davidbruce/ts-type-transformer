@@ -32,7 +32,7 @@ pub extern "C" fn start() {
                 mk_pt(c.x() - ca * half_len, c.y() - sa * half_len),
                 mk_pt(c.x() + ca * half_len, c.y() + sa * half_len),
             ]);
-            form.stroke_only("#999999", 1.2, None, None).line_2(&chord);
+            form.stroke_only("#999999", 1.2, None, None).line(&chord);
 
             let probe_center = if pointer.x() > 1.0 || pointer.y() > 1.0 {
                 pointer
@@ -52,17 +52,17 @@ pub extern "C" fn start() {
 
                 form.fill("#f7f7f7")
                     .stroke("#737373", 1.4, None, None)
-                    .circle_2(&circle);
+                    .circle(&circle);
                 if let Some(foot) = Line::perpendicular_from_pt(&chord, &tc, false) {
                     let stem = Group::new([tc, foot.clone()]);
-                    form.stroke_only("#b5b5b5", 1.0, None, None).line_2(&stem);
+                    form.stroke_only("#b5b5b5", 1.0, None, None).line(&stem);
                     form.fill_only("#555555")
-                        .point_2(&foot, 2.5, "circle");
+                        .point(&foot, 2.5, "circle");
                 }
                 targets.push(circle);
             }
 
-            form.stroke_only("#111111", 2.0, None, None).circle_2(&probe);
+            form.stroke_only("#111111", 2.0, None, None).circle(&probe);
             let px1 = Group::new([
                 mk_pt(probe_center.x() - 6.0, probe_center.y()),
                 mk_pt(probe_center.x() + 6.0, probe_center.y()),
@@ -71,19 +71,19 @@ pub extern "C" fn start() {
                 mk_pt(probe_center.x(), probe_center.y() - 6.0),
                 mk_pt(probe_center.x(), probe_center.y() + 6.0),
             ]);
-            form.stroke_only("#111111", 1.4, None, None).line_2(&px1);
-            form.stroke_only("#111111", 1.4, None, None).line_2(&py1);
+            form.stroke_only("#111111", 1.4, None, None).line(&px1);
+            form.stroke_only("#111111", 1.4, None, None).line(&py1);
 
             for circle in &targets {
                 let hits = Circle::intersect_circle2d(&probe, circle);
                 let hit_vec: Vec<Pt> = hits.as_array().iter().collect();
                 if hit_vec.len() == 2 {
-                    form.stroke_only("#111111", 1.4, None, None).line_2(&hits);
+                    form.stroke_only("#111111", 1.4, None, None).line(&hits);
                 }
                 for h in &hit_vec {
                     form.fill("#ffffff")
                         .stroke("#111111", 2.0, None, None)
-                        .point_2(h, 5.0, "circle");
+                        .point(h, 5.0, "circle");
                 }
             }
         })

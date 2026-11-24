@@ -28,7 +28,7 @@ pub extern "C" fn start() {
             let count = 11usize;
 
             let base_line = Group::new([mk_pt(w * 0.06, c.y()), mk_pt(w * 0.94, c.y())]);
-            form.stroke_only("#e5e5e5", 1.0, None, None).line_2(&base_line);
+            form.stroke_only("#e5e5e5", 1.0, None, None).line(&base_line);
 
             let mut pts_vec = Vec::with_capacity(count);
             for i in 0..count {
@@ -54,19 +54,19 @@ pub extern "C" fn start() {
             for (i, p) in cr.as_array().iter().enumerate() {
                 if i % 3 == 0 {
                     let stem = Group::new([mk_pt(p.x(), c.y()), p.clone()]);
-                    form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&stem);
+                    form.stroke_only("#d4d4d4", 1.0, None, None).line(&stem);
                 }
             }
 
-            form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&ctrls);
-            form.stroke_only("#b5b5b5", 2.0, None, None).line_2(&bs);
-            form.stroke_only("#555555", 1.8, None, None).line_2(&card);
-            form.stroke_only("#111111", 2.6, None, None).line_2(&cr);
+            form.stroke_only("#d4d4d4", 1.0, None, None).line(&ctrls);
+            form.stroke_only("#b5b5b5", 2.0, None, None).line(&bs);
+            form.stroke_only("#555555", 1.8, None, None).line(&card);
+            form.stroke_only("#111111", 2.6, None, None).line(&cr);
 
             for p in &pts_vec {
                 form.fill("#ffffff")
                     .stroke("#111111", 1.5, None, None)
-                    .point_2(p, 4.5, "circle");
+                    .point(p, 4.5, "circle");
             }
         })
     };

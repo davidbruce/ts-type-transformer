@@ -11,7 +11,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::model::{Class, Func, Model, TParam, Ty};
+use super::model::{Call, Class, Func, Model, TParam, Ty};
 
 // One scope's identifiers.
 #[derive(Clone, Default)]
@@ -143,7 +143,11 @@ pub fn settle_with(m: &mut Model, naming: &Naming, extra_reserved: &[String]) {
                 let owner = (naming.type_names)(owner, &c.name, Kind::Class, m).into_iter().next().unwrap_or_default();
                 let mut own = Scope::with(reserved());
                 own.take((naming.members)(c, m));
-                for (fi, f) in c.funcs.iter().enumerate() {
+                // The library's methods first: a property's setter does not
+                // take `setTranslation` from the method of that name.
+                let mut order: Vec<(usize, &Func)> = c.funcs.iter().enumerate().collect();
+                order.sort_by_key(|(_, f)| claim_rank(f));
+                for (fi, f) in order {
                     if (naming.func_name)(Some(&owner), &f.name, f).is_none() {
                         continue;
                     }
@@ -440,5 +444,16 @@ mod tests {
         assert!(!has_prefix_word("konva", "Node"));
         assert!(!has_prefix_word("babylon", "Vector3"));
         assert!(!has_prefix_word("pts", "Pt"));
+    }
+}
+
+// Which of a type's members claims a name first: its methods, then its
+// statics, then what else it is called by, then its properties' accessors.
+fn claim_rank(f: &Func) -> u8 {
+    match f.call {
+        Call::Method(_) => 0,
+        Call::Static(_) => 1,
+        Call::Get(_) | Call::GetBound(_) | Call::Set(_) | Call::StaticGet(_) | Call::StaticSet(_) => 3,
+        _ => 2,
     }
 }

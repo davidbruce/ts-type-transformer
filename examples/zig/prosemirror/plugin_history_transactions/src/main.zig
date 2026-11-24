@@ -146,7 +146,7 @@ fn onDispatch(app: *App, tr: state_mod.Transaction) void {
                 idx -= 1;
                 inv.push(steps.get(idx).invert(docs.get(idx)));
             }
-            const hm = tr.getMeta2("history");
+            const hm = tr.getMeta("history");
             if (hm.h == 0) {
                 if (app.undo_len < 64) {
                     app.undo[app.undo_len] = inv.retain();
@@ -203,7 +203,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
                 app.undo_len -= 1;
                 break :blk app.undo[app.undo_len];
             };
-            const tr = st.getTr().setMeta2("history", "undo");
+            const tr = st.getTr().setMeta("history", "undo");
             for (0..batch.len()) |k| _ = tr.step(batch.get(k));
             if (!app.locked) {
                 batch.deinit();
@@ -220,7 +220,7 @@ fn onClick(ctx: *const BtnCtx, _: dom.PointerEvent) void {
                 app.redo_len -= 1;
                 break :blk app.redo[app.redo_len];
             };
-            const tr = st.getTr().setMeta2("history", "redo");
+            const tr = st.getTr().setMeta("history", "redo");
             for (0..batch.len()) |k| _ = tr.step(batch.get(k));
             if (!app.locked) {
                 batch.deinit();

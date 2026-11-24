@@ -229,10 +229,26 @@ impl<'a> Builder<'a> {
             && !named(d, "call").any(|_| true)
             && !self.extended_by_class.contains(path)
             && !elements(d).any(|m| matches!(m.tag_name().name(), "method" | "construct" | "constructor") && !flag(m, "static"));
-        for m in elements(d) {
-            let is_static = m.has_tag_name("constructor") || flag(m, "static");
-            self.member(&mut c, &mut names, m, path_js, is_static, !is_static && is_option_bag);
+        // Its methods take their names first (a static `line` does not leave
+        // the method `line_2`), and stay where they are declared.
+        // What is not a member (its type parameters, its bases) comes first still.
+        let members: Vec<Node<'a, 'a>> = elements(d).collect();
+        let rank = |m: &Node| match m.tag_name().name() {
+            "method" if !flag(*m, "static") => 1,
+            "method" | "property" | "get" | "set" | "constructor" | "construct" | "call" | "index" => 2,
+            _ => 0,
+        };
+        let mut order: Vec<(usize, &Node<'a, 'a>)> = members.iter().enumerate().collect();
+        order.sort_by_key(|(_, m)| rank(m));
+        let mut origin = vec![0; c.funcs.len()];
+        for (i, m) in order {
+            let is_static = m.has_tag_name("constructor") || flag(*m, "static");
+            self.member(&mut c, &mut names, *m, path_js, is_static, !is_static && is_option_bag);
+            origin.resize(c.funcs.len(), i + 1);
         }
+        let mut funcs: Vec<(usize, Func)> = origin.into_iter().zip(std::mem::take(&mut c.funcs)).collect();
+        funcs.sort_by_key(|(i, _)| *i);
+        c.funcs = funcs.into_iter().map(|(_, f)| f).collect();
         c
     }
 

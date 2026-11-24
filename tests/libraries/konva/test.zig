@@ -113,8 +113,8 @@ fn scene() void {
     const inner = kv.Rect.new(inner_config);
     _ = group.add(b.JsArrayOf(b.Group_or_Shape).of(&.{child(inner.asShape())}));
     _ = layer.add(b.JsArrayOf(b.Group_or_Shape).of(&.{.{ .Group = group }}));
-    expect(group.getChildren().len() == 1, @src());
-    expect(layer.getChildren().len() == 4, @src());
+    expect(group.getChildren(null).len() == 1, @src());
+    expect(layer.getChildren(null).len() == 4, @src());
     // The inner rectangle's absolute position adds the group's.
     const inner_node = inner.asShape().asNode();
     expect(inner_node.getX().invoke().toNumber() == 10, @src());
@@ -182,9 +182,9 @@ fn scene() void {
 
     // Removing and destroying.
     _ = circle.asShape().asNode().remove();
-    expect(layer.getChildren().len() == 3, @src());
+    expect(layer.getChildren(null).len() == 3, @src());
     _ = layer.asContainer().destroyChildren();
-    expect(layer.getChildren().len() == 0, @src());
+    expect(layer.getChildren(null).len() == 0, @src());
     _ = stage.destroy();
     expect(stage.getLayers().len() == 0, @src());
 }

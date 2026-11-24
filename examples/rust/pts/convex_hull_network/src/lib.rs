@@ -49,28 +49,28 @@ pub extern "C" fn start() {
             let hull_pts: Vec<Pt> = hull.as_array().iter().collect();
             let hull_len = hull_pts.len();
 
-            form.stroke_only("#b5b5b5", 1.0, None, None).rect_2(&bbox);
+            form.stroke_only("#b5b5b5", 1.0, None, None).rect(&bbox);
             form.fill("#f7f7f7")
                 .stroke("#111111", 2.0, None, None)
-                .polygon_2(&hull);
+                .polygon(&hull);
 
             for seg in Polygon::network(&hull, 0.0).iter() {
-                form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&seg);
+                form.stroke_only("#d4d4d4", 1.0, None, None).line(&seg);
             }
             if hull_len > 3 {
                 for seg in Polygon::network(&hull, (hull_len / 2) as f64).iter() {
-                    form.stroke_only("#d4d4d4", 1.0, None, None).line_2(&seg);
+                    form.stroke_only("#d4d4d4", 1.0, None, None).line(&seg);
                 }
             }
 
             for p in &cloud_vec {
                 form.fill_only("#737373")
-                    .point_2(p, 3.0, "circle");
+                    .point(p, 3.0, "circle");
             }
             for h in &hull_pts {
                 form.fill("#111111")
                     .stroke("#ffffff", 1.5, None, None)
-                    .point_2(h, 5.0, "circle");
+                    .point(h, 5.0, "circle");
             }
 
             let h_bar = Group::new([
@@ -81,11 +81,11 @@ pub extern "C" fn start() {
                 mk_pt(cent.x(), cent.y() - 10.0),
                 mk_pt(cent.x(), cent.y() + 10.0),
             ]);
-            form.stroke_only("#111111", 1.4, None, None).line_2(&h_bar);
-            form.stroke_only("#111111", 1.4, None, None).line_2(&v_bar);
+            form.stroke_only("#111111", 1.4, None, None).line(&h_bar);
+            form.stroke_only("#111111", 1.4, None, None).line(&v_bar);
             form.fill("#ffffff")
                 .stroke("#111111", 1.6, None, None)
-                .point_2(&cent, 5.5, "circle");
+                .point(&cent, 5.5, "circle");
         })
     };
 

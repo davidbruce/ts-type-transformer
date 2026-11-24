@@ -111,11 +111,11 @@ fn build_scene(st: &mut AppState) {
     let add_ramp = |cx: f64, cy: f64, hx: f64, hy: f64, theta: f64| {
         let q = Quaternion::new(0.0, 0.0, (theta * 0.5).sin(), (theta * 0.5).cos());
         let rb = world.create_rigid_body(
-            &RigidBodyDesc::fixed().set_translation_2(cx, cy, 0.0).set_rotation_2(&q),
+            &RigidBodyDesc::fixed().set_translation(cx, cy, 0.0).set_rotation(&q),
         );
         let cd = ColliderDesc::cuboid(hx, hy, 1.0)
-            .set_friction_2(0.15)
-            .set_restitution_2(0.35);
+            .set_friction(0.15)
+            .set_restitution(0.35);
         world.create_collider(&cd, &rb);
     };
 
@@ -125,11 +125,11 @@ fn build_scene(st: &mut AppState) {
     add_ramp(-2.1, 4.2, 2.2, 0.18, -0.36);
     add_ramp(1.8, 2.6, 2.2, 0.18, 0.36);
 
-    let sbody = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation_2(0.0, 1.35, 0.0));
+    let sbody = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, 1.35, 0.0));
     let sc = world.create_collider(
         &ColliderDesc::cuboid(1.85, 0.30, 1.2)
             .set_sensor(true)
-            .set_active_events_2(ActiveEvents::CollisionEvents),
+            .set_active_events(ActiveEvents::CollisionEvents),
         &sbody,
     );
     st.sensor_handle = sc.handle();
@@ -138,16 +138,16 @@ fn build_scene(st: &mut AppState) {
     for (i, &is_box) in IS_BOX.iter().enumerate() {
         let x = -3.7 + i as f64 * 0.52;
         let y = 5.4 + (i % 3) as f64 * 0.58;
-        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation_2(x, y, 0.0));
+        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(x, y, 0.0));
         let cd = if is_box {
             ColliderDesc::cuboid(0.28, 0.28, 0.28)
         } else {
             ColliderDesc::ball(0.32)
         };
         world.create_collider(
-            &cd.set_restitution_2(0.35)
-                .set_friction_2(0.25)
-                .set_active_events_2(ActiveEvents::CollisionEvents),
+            &cd.set_restitution(0.35)
+                .set_friction(0.25)
+                .set_active_events(ActiveEvents::CollisionEvents),
             &rb,
         );
         st.bodies.push(rb);

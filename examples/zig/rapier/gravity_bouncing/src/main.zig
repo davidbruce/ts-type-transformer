@@ -64,16 +64,16 @@ fn buildScene(app: *App) void {
     const w = rp.World.new(rp.Vector3.new(0.0, @as(f64, if (app.earth) -9.81 else -1.62), 0.0), null).retain();
     app.world = w;
 
-    const ground = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(0.0, -0.4, 0.0));
+    const ground = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(0.0, -0.4, 0.0));
     _ = w.createCollider(rp.ColliderDesc.cuboid(7.0, 0.4, 2.0), .{ .parent = ground });
-    const lw = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(-6.8, 3.5, 0.0));
+    const lw = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(-6.8, 3.5, 0.0));
     _ = w.createCollider(rp.ColliderDesc.cuboid(0.25, 4.0, 2.0), .{ .parent = lw });
-    const rw = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(6.8, 3.5, 0.0));
+    const rw = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(6.8, 3.5, 0.0));
     _ = w.createCollider(rp.ColliderDesc.cuboid(0.25, 4.0, 2.0), .{ .parent = rw });
 
     for (0..5) |i| {
-        app.balls[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation2(X_COORDS[i], 5.6, 0.0)).retain();
-        const cd = rp.ColliderDesc.ball(0.42).setRestitution2(RESTITUTIONS[i]).setFriction2(0.2).setDensity2(1.2);
+        app.balls[i] = w.createRigidBody(rp.RigidBodyDesc.dynamic().setTranslation(X_COORDS[i], 5.6, 0.0)).retain();
+        const cd = rp.ColliderDesc.ball(0.42).setRestitution(RESTITUTIONS[i]).setFriction(0.2).setDensity(1.2);
         _ = w.createCollider(cd, .{ .parent = app.balls[i] });
     }
     app.step_count = 0;

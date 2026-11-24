@@ -79,13 +79,13 @@ fn drawCircle(ctx: dom.CanvasRenderingContext2D, wx: f64, wy: f64, r: f64, fill:
 
 fn addBox(w: rp.World, cx: f64, cy: f64, theta: f64, hx: f64, hy: f64) void {
     const q = rp.Quaternion.new(0.0, 0.0, @sin(theta * 0.5), @cos(theta * 0.5));
-    const desc = rp.RigidBodyDesc.fixed().setTranslation2(cx, cy, 0.0).setRotation2(q);
+    const desc = rp.RigidBodyDesc.fixed().setTranslation(cx, cy, 0.0).setRotation(q);
     const rb = w.createRigidBody(desc);
     _ = w.createCollider(rp.ColliderDesc.cuboid(hx, hy, 1.0), .{ .parent = rb });
 }
 
 fn addSphere(w: rp.World, cx: f64, cy: f64, r: f64) void {
-    const rb = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation2(cx, cy, 0.0));
+    const rb = w.createRigidBody(rp.RigidBodyDesc.fixed().setTranslation(cx, cy, 0.0));
     _ = w.createCollider(rp.ColliderDesc.ball(r), .{ .parent = rb });
 }
 

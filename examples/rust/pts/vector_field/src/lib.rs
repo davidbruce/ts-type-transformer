@@ -33,15 +33,15 @@ pub extern "C" fn start() {
                 let color = format!("hsla(0, 0%, {light:.0}%, {alpha:.2})");
 
                 form.stroke_only(&*color, 1.5 + 2.5 * t, None, None)
-                    .line_2(&seg);
+                    .line(&seg);
                 let dot = Circle::from_center(&pt, 1.5 + 4.5 * t * t);
-                form.fill_only(&*color).circle_2(&dot);
+                form.fill_only(&*color).circle(&dot);
             }
 
             let ring_radius = 18.0 + 6.0 * (time * 0.004).sin();
             let ring = Circle::from_center(&pointer, ring_radius);
             form.stroke_only("#11111199", 2.0, None, None)
-                .circle_2(&ring);
+                .circle(&ring);
         })
     };
 

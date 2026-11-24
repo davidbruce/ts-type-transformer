@@ -63,13 +63,13 @@ pub fn main() -> Nil {
           None,
           None,
         )
-        |> canvas_form.line_2(
+        |> canvas_form.line(
           t.PtLikeIterableGroup(line.from_angle(t.PtLikePt(p), angle, len)),
         )
         |> canvas_form.fill_only(
           t.CanvasFormFillCString("hsla(0, 0%, " <> light <> "%, 0.9)"),
         )
-        |> canvas_form.circle_2(
+        |> canvas_form.circle(
           t.PtLikeIterableGroup(circle.from_center(
             t.PtLikePt(p),
             1.5 +. 4.5 *. weight *. weight,
@@ -86,7 +86,7 @@ pub fn main() -> Nil {
         None,
         None,
       )
-      |> canvas_form.circle_2(
+      |> canvas_form.circle(
         t.PtLikeIterableGroup(circle.from_center(
           t.PtLikePt(pointer),
           ring_radius,
