@@ -340,13 +340,15 @@ pub(super) fn head(params: &[TParam], defaults: bool, cx: &Ctx) -> String {
     format!("template <{}>{requires}\n", ps.join(", "))
 }
 
-// A type's constructors: none, or from a handle.
+// A type's constructors: none (`X(nullptr)`), or from a handle.
 // With its assignments: the handle, a virtual base by several paths, is
 // assigned once (an implicit move assignment may move it once per path, the
-// second from what the first emptied).
-pub(super) fn constructors(name: &str) -> String {
+// second from what the first emptied). Where JavaScript makes one of nothing
+// (`new Scene()`), `Scene()` is not a null handle: the default is a base's only.
+pub(super) fn constructors(name: &str, made_of_nothing: bool) -> String {
+    let default = if made_of_nothing { format!("protected:\n    {name}() = default;\npublic:\n") } else { format!("    {name}() = default;\n") };
     format!(
-        "    {name}() = default;\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n\
+        "{default}    {name}(std::nullptr_t) {{}}\n    {name}(ts::handle_t, uint32_t h) : ts::Handle(ts::handle, h) {{}}\n\
          \x20   {name}(const {name}&) = default;\n    {name}({name}&&) = default;\n\
          \x20   {name}& operator=(const {name}& o) {{ ts::Handle::operator=(static_cast<const ts::Handle&>(o)); return *this; }}\n\
          \x20   {name}& operator=({name}&& o) noexcept {{ ts::Handle::operator=(std::move(static_cast<ts::Handle&>(o))); return *this; }}\n"

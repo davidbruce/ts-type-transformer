@@ -323,7 +323,12 @@ the time control returns to JavaScript is reported, not lost.
   bindings' root, so they are compiled with `-I` on it. A value type per JavaScript type, inheriting
   virtually from `ts::Handle`; copies retain, destructors release. `new X(a, b)`
   is `X(a, b)` as well as `X::create(a, b)` (a class template's arguments its
-  defaults: `Mesh(geometry, material)`); `X()` is the null handle. Overloads,
+  defaults: `Mesh(geometry, material)`). `X(nullptr)` is the null handle,
+  and `X()` too, but for a module's class JavaScript makes of nothing
+  (`new Scene()`): that is `Scene::create()`, and `Scene()`, a member left
+  unset or `std::make_shared` of a struct holding one do not compile, where
+  they would be null. lib.dom's globals keep `X()`: it declares `new()` on
+  nearly all of them, most illegal. Overloads,
   `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`, lambdas
   (`release()`, `ts::Scoped`), class templates with defaults and
   `requires`-clauses, keyed methods over typed keys, `co_await` on promises

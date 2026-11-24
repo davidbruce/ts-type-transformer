@@ -64,7 +64,7 @@ static Node make_initial_doc(const Sch& schema) {
 
 struct AppState {
     Sch schema;
-    PluginKey<ts::Value> audit_key;
+    PluginKey<ts::Value> audit_key{nullptr};
     EditorView view;
     dom::Document doc;
     dom::HTMLElement meta;

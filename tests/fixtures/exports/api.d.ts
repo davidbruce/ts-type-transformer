@@ -20,3 +20,8 @@ declare namespace util_d {
     export { util_d_twice as twice, util_d_half as half };
 }
 export { util_d as util };
+// Made of nothing: `new Tally()`.
+export declare class Tally {
+    constructor();
+    count(): number;
+}

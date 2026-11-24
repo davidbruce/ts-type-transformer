@@ -250,7 +250,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                  {name}(F f) : ts::Handle(ts::handle, {cb_raw}(reinterpret_cast<uintptr_t>(&call<F>), ts::closure(std::move(f)))) {{}}\n\
                  {op_decls}\n  \
                  private:\n    template <class F>\n    static {ret} call(void* ctx{raw_args}) {{ {result} }}\n}};\n",
-                constructors(name),
+                constructors(name, false),
             ),
         );
         let mut text = format!(
@@ -610,7 +610,9 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             "{class_doc}{class_head}struct {0} : {1} {{\n{2}{usings}{members}{new_ctor}}};\n",
             c.name,
             bases.join(", "),
-            constructors(&c.name)
+            // lib.dom declares `new()` on nearly every global, most of them
+            // illegal: a module's class (`new Scene()`) is made of nothing.
+            constructors(&c.name, (m.root_import.is_some() || m.packages.contains_key(&c.name)) && c.funcs.iter().any(|f| matches!(f.call, Call::New(_)) && f.params.is_empty()))
         );
         decl += &format!("\n{}", wrap_ns(ns, &decl_body));
         used.remove(&c.name);

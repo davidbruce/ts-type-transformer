@@ -28,4 +28,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // Rollup's namespace, by the name it is exported as: `util.half`.
     CHECK(util::half(4) == 2 && util::get_twice()(4) == 8);
+
+    // `new Tally()` is `Tally::create()`; `Tally()` is no null handle, which is `Tally(nullptr)`.
+    static_assert(!std::is_default_constructible_v<Tally> && std::is_constructible_v<Tally, std::nullptr_t>);
+    CHECK(Tally::create().count() == 0);
 }

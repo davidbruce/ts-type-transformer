@@ -127,7 +127,7 @@ static DecoStats compute_decorations(Node doc, const std::string& raw_query) {
 
 struct AppState {
     Sch schema;
-    PluginKey<ts::Value> search_key;
+    PluginKey<ts::Value> search_key{nullptr};
     EditorView view;
     dom::Document doc;
     dom::HTMLElement meta;
