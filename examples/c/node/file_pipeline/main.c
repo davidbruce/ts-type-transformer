@@ -75,7 +75,7 @@ __attribute__((export_name("start"))) void start(void) {
     for (int i = 0; i < 3; i++) {
         check(JsString_equals(node_path_extname(log_names[i]), ".log"));
         join2(fp, sizeof fp, in_dir, log_names[i]);
-        JsString chunk = node_readFileSync_with_BufferEncoding(fp, Node_BufferEncoding_utf8);
+        JsString chunk = node_readFileSync_with_readFileSync_options(fp, Node_BufferEncoding_utf8);
         node_appendFileSync(combined, chunk, (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     }
     emit_stage(bus, "stage", "bundle");
@@ -84,11 +84,11 @@ __attribute__((export_name("start"))) void start(void) {
     Node_Stats comb_st = node_statSync(combined);
     int comb_size = (int)js_to_number(Node_Stats_get_size(comb_st));
     char comb_buf[128];
-    JsString_copy(node_readFileSync_with_BufferEncoding(combined, Node_BufferEncoding_utf8), comb_buf, sizeof comb_buf);
+    JsString_copy(node_readFileSync_with_readFileSync_options(combined, Node_BufferEncoding_utf8), comb_buf, sizeof comb_buf);
     check(comb_size == 21 && strstr(comb_buf, "200 OK") != 0);
 
     join2(fp, sizeof fp, out_dir, "missing.log");
-    JsString missing = node_readFileSync_with_BufferEncoding(fp, Node_BufferEncoding_utf8);
+    JsString missing = node_readFileSync_with_readFileSync_options(fp, Node_BufferEncoding_utf8);
     check(missing.h == 0 && js_failed());
     char mbuf[256];
     JsString_copy(js_error_message(js_take_error()), mbuf, sizeof mbuf);

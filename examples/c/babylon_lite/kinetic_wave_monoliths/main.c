@@ -142,7 +142,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
             g_col_dist[idx] = sqrt(fx * fx + fz * fz);
             g_col_diag[idx] = fx - fz;
 
-            Babylon_Mesh m = babylon_createBox_with_BoxOptions(g_engine, bopts);
+            Babylon_Mesh m = babylon_createBox(g_engine, bopts);
             g_col_pos[idx] = Babylon_Mesh_get_position(m);
             g_col_scale[idx] = Babylon_Mesh_get_scaling(m);
             js_retain(g_col_pos[idx]);
@@ -181,6 +181,6 @@ __attribute__((export_name("start"))) void start(void) {
     g_canvas = Document_querySelector_canvas(get_document());
     if (g_canvas.h != 0) {
         js_retain(g_canvas);
-        Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
+        Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
     }
 }

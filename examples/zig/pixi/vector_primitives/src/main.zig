@@ -4,7 +4,7 @@ const px = @import("pixi_js");
 var g_app: px.Application = undefined;
 
 fn strokeG(g: px.Graphics, width: f64, color_hex: f64) void {
-    _ = g.stroke(.{px.StrokeStyle.init(.{ .width = width, .color = color_hex })});
+    _ = g.stroke(px.StrokeStyle.init(.{ .width = width, .color = color_hex }));
 }
 
 fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {

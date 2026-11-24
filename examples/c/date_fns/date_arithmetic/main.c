@@ -10,8 +10,8 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 static void add_op_row(Document doc, HTMLElement tbody, const char* op_name, Date res, Date base_d, const char* fmt) {
-    int dd = (int)df_differenceInCalendarDays_with_Date_and_Date(res, base_d);
-    int dh = (int)df_differenceInHours_with_Date_and_Date(res, base_d);
+    int dd = (int)df_differenceInCalendarDays(res, base_d);
+    int dh = (int)df_differenceInHours(res, base_d);
     char dd_buf[24], dh_buf[24];
     snprintf(dd_buf, sizeof dd_buf, dd == 0 ? "0" : "%+d", dd);
     snprintf(dh_buf, sizeof dh_buf, dh == 0 ? "0" : "%+d", dh);
@@ -22,7 +22,7 @@ static void add_op_row(Document doc, HTMLElement tbody, const char* op_name, Dat
     HTMLElement_appendChild(tr, td_op);
 
     HTMLElement td_out = make_el(doc, "td", 0, 0);
-    HTMLElement_set_textContent(td_out, df_formatDate_with_Date(res, fmt));
+    HTMLElement_set_textContent(td_out, df_formatDate(res, fmt));
     HTMLElement_appendChild(tr, td_out);
     HTMLElement_appendChild(tr, make_el(doc, "td", 0, dd_buf));
     HTMLElement_appendChild(tr, make_el(doc, "td", 0, dh_buf));

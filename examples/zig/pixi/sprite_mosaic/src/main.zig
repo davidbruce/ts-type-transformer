@@ -17,7 +17,7 @@ fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {
 
     const frame = px.Graphics.new(null);
     _ = frame.rect(32.0, 20.0, 616.0, 360.0);
-    _ = frame.stroke(.{px.StrokeStyle.init(.{ .width = 1.5, .color = 0xd4d4d4 })});
+    _ = frame.stroke(px.StrokeStyle.init(.{ .width = 1.5, .color = 0xd4d4d4 }));
     _ = stage.addChild(.{frame});
 
     const shades = [_]f64{

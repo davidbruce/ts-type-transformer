@@ -139,7 +139,7 @@ export fn start() void {
     _ = rim.getPosition().set(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 9.0, .divisions = 12.0, .color1 = 0x999999, .color2 = 0xe5e5e5 });
-    grid.getPosition().setY(-1.1);
+    _ = grid.getPosition().setY(-1.1);
 
     g_app.geo = three.BufferGeometry.new().retain();
     g_app.pos_attr = three.Float32BufferAttribute.new(GRID_N * GRID_N * 3, 3.0, null).retain();
@@ -172,7 +172,7 @@ export fn start() void {
         .geometry = g_app.geo,
         .material = three.MeshBasicMaterial.new(.{ .color = 0x262626, .wireframe = true }),
     }).retain();
-    g_app.wire_mesh.getPosition().setY(0.015);
+    _ = g_app.wire_mesh.getPosition().setY(0.015);
 
     const pt_count = (GRID_N / 2) * (GRID_N / 2);
     const pts_geo = three.BufferGeometry.new();

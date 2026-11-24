@@ -106,7 +106,7 @@ export fn start() void {
 
     if (dom.getDocument().getElementById("meta")) |meta_el| {
         meta_el.setTextContent(
-            std.fmt.bufPrint(&meta_buf, "Stage: 680x400 \xC2\xB7 Procedural rosette \xC2\xB7 {d} shapes on layer", .{layer.getChildren().len()}) catch "",
+            std.fmt.bufPrint(&meta_buf, "Stage: 680x400 \xC2\xB7 Procedural rosette \xC2\xB7 {d} shapes on layer", .{layer.getChildren(null).len()}) catch "",
         );
     }
 }

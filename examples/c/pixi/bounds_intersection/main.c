@@ -5,13 +5,11 @@
 static Pixi_Application g_app;
 
 static Pixi_Rectangle mk_rect(double x, double y, double w, double h) {
-    return Pixi_Rectangle_new_with_number_and_number_and_number_and_number(x, y, w, h);
+    return Pixi_Rectangle_new(x, y, w, h);
 }
 
 static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
-    JsArray args = JsArray_new();
-    js_push_val(args, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
-    Pixi_Graphics_stroke(g, args);
+    Pixi_Graphics_stroke(g, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
 }
 
 static void on_init(void* ctx, bool ok, JsValue v) {

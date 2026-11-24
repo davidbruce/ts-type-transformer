@@ -40,11 +40,11 @@ fn updateOrrery(app: *App) void {
     const scope = three.JsScope.open();
     defer scope.deinit();
 
-    app.inner_pivot.getRotation().setY(app.epoch);
-    app.moon_pivot.getRotation().setY(app.epoch * 2.5);
-    app.outer_pivot.getRotation().setY(-app.epoch * 0.55);
-    app.outer_pivot.getRotation().setZ(@as(f64, if (app.tilted) 0.38 else 0.0));
-    app.station_body.getRotation().setY(app.epoch * 1.4);
+    _ = app.inner_pivot.getRotation().setY(app.epoch);
+    _ = app.moon_pivot.getRotation().setY(app.epoch * 2.5);
+    _ = app.outer_pivot.getRotation().setY(-app.epoch * 0.55);
+    _ = app.outer_pivot.getRotation().setZ(@as(f64, if (app.tilted) 0.38 else 0.0));
+    _ = app.station_body.getRotation().setY(app.epoch * 1.4);
 
     app.scene.updateMatrixWorld(true);
     const mpos = app.moon.getWorldPosition(v3(0.0, 0.0, 0.0));
@@ -101,13 +101,13 @@ export fn start() void {
     _ = rim.getPosition().set(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 12.0, .divisions = 12.0, .color1 = 0x999999, .color2 = 0xe5e5e5 });
-    grid.getPosition().setY(-1.5);
+    _ = grid.getPosition().setY(-1.5);
 
     const pedestal = three.Mesh.new(.{
         .geometry = three.CylinderGeometry.new(.{ .radiusTop = 0.55, .radiusBottom = 0.75, .height = 0.35, .radialSegments = 24.0 }),
         .material = stdMat(0x262626, 0.7, 0.05, false),
     });
-    pedestal.getPosition().setY(-1.3);
+    _ = pedestal.getPosition().setY(-1.3);
 
     const core = three.Mesh.new(.{
         .geometry = three.SphereGeometry.new(.{ .radius = 0.65, .widthSegments = 24.0, .heightSegments = 18.0 }),
@@ -119,7 +119,7 @@ export fn start() void {
         .geometry = three.TorusGeometry.new(.{ .radius = 2.1, .tube = 0.025, .radialSegments = 8.0, .tubularSegments = 64.0 }),
         .material = three.MeshBasicMaterial.new(.{ .color = 0x999999 }),
     });
-    inner_track.getRotation().setX(std.math.pi / 2.0);
+    _ = inner_track.getRotation().setX(std.math.pi / 2.0);
 
     const inner_planet = three.Group.new();
     _ = inner_planet.getPosition().set(2.1, 0.0, 0.0);
@@ -143,7 +143,7 @@ export fn start() void {
         .geometry = three.TorusGeometry.new(.{ .radius = 3.8, .tube = 0.025, .radialSegments = 8.0, .tubularSegments = 80.0 }),
         .material = three.MeshBasicMaterial.new(.{ .color = 0xb5b5b5 }),
     });
-    outer_track.getRotation().setX(std.math.pi / 2.0);
+    _ = outer_track.getRotation().setX(std.math.pi / 2.0);
 
     g_app.outer_station = three.Group.new().retain();
     _ = g_app.outer_station.getPosition().set(3.8, 0.0, 0.0);
@@ -156,7 +156,7 @@ export fn start() void {
         .geometry = three.TorusGeometry.new(.{ .radius = 0.68, .tube = 0.06, .radialSegments = 10.0, .tubularSegments = 32.0 }),
         .material = stdMat(0x111111, 0.4, 0.1, false),
     });
-    halo.getRotation().setX(0.8);
+    _ = halo.getRotation().setX(0.8);
     _ = g_app.outer_station.add(.{ g_app.station_body, halo });
     _ = g_app.outer_pivot.add(.{ outer_track, g_app.outer_station });
 

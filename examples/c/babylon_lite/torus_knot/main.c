@@ -123,6 +123,6 @@ __attribute__((export_name("start"))) void start(void) {
     g_canvas = Document_querySelector_canvas(get_document());
     if (g_canvas.h != 0) {
         js_retain(g_canvas);
-        Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
+        Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
     }
 }

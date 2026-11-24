@@ -94,7 +94,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     babylon_addToScene(scene, floor_m);
 
     Babylon_BoxOptions popts = Babylon_BoxOptions_create(.width = 8.4, .height = 0.08, .depth = 8.4);
-    Babylon_Mesh plinth = babylon_createBox_with_BoxOptions(g_engine, popts);
+    Babylon_Mesh plinth = babylon_createBox(g_engine, popts);
     Babylon_ObservableVec3_set(Babylon_Mesh_get_position(plinth), 0.0, 0.04, 0.0);
     Babylon_Mesh_set_material(plinth, mk_pbr(0.17, 0.12, 0.78));
     babylon_addToScene(scene, plinth);
@@ -132,6 +132,6 @@ __attribute__((export_name("start"))) void start(void) {
     g_canvas = Document_querySelector_canvas(get_document());
     if (g_canvas.h != 0) {
         js_retain(g_canvas);
-        Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
+        Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
     }
 }

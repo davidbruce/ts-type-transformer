@@ -269,7 +269,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         double w_box = (layer % 2 == 0) ? (HALF_LONG * 2.0) : (HALF_THIN * 2.0);
         double d_box = (layer % 2 == 0) ? (HALF_THIN * 2.0) : (HALF_LONG * 2.0);
         Babylon_BoxOptions bopts = Babylon_BoxOptions_create(.width = w_box, .height = HALF_HEIGHT * 2.0, .depth = d_box);
-        Babylon_Mesh m = babylon_createBox_with_BoxOptions(g_engine, bopts);
+        Babylon_Mesh m = babylon_createBox(g_engine, bopts);
         Babylon_Mesh_set_material(m, palette[layer % 3]);
         babylon_addToScene(scene, js_value(m));
         g_plank_pos[idx] = Babylon_Mesh_get_position(m);
@@ -327,7 +327,7 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_retain(g_canvas);
-    Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
+    Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
 }
 
 __attribute__((export_name("start"))) void start(void) {

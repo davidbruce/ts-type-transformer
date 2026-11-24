@@ -29,7 +29,7 @@ pub extern "C" fn start() {
             return;
         };
 
-        let engine = match babylonjs_lite::create_engine_with_engine_options(&canvas, None).await {
+        let engine = match babylonjs_lite::create_engine(&canvas, None).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());

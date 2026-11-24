@@ -2,7 +2,7 @@
 
 use dom::{Document, HTMLElement};
 use marked::{
-    BooleanOrRendererOutput, JsArray, Marked, MarkedExtension, MarkedExtensionRenderer,
+    BooleanOrRendererOutput, Marked, MarkedExtension, MarkedExtensionRenderer,
     MarkedExtensionRendererHeading, ParserOutputOrPromise, StringOrPromise, Token,
     MarkedExtensionWalkTokens, tokens,
 };
@@ -62,8 +62,7 @@ pub extern "C" fn start() {
 
     let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
-    let heading = MarkedExtensionRendererHeading::<String, String>::new(|args: JsArray| {
-        let h = args.get(0).unchecked_into::<tokens::Heading>();
+    let heading = MarkedExtensionRendererHeading::<String, String>::new(|h: tokens::Heading| {
         BooleanOrRendererOutput::RendererOutput(format!(
             "<h{0} class=\"wire-h\">\u{00A7} {1}</h{0}>\n",
             h.depth() as u32,

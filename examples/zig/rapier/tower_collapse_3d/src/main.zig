@@ -328,7 +328,7 @@ fn onRapierReady(app: *App, ok: bool, _: rp.JsValue) void {
         return;
     };
     app.canvas = canvas.retain();
-    b.createEngineWithEngineOptions(app.canvas, null).then(onEngine, app);
+    b.createEngine(app.canvas, null).then(onEngine, app);
 }
 
 export fn start() void {

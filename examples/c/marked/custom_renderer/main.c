@@ -23,10 +23,9 @@ static JsValue walk_token_cb(void* ctx, JsValue token) {
     return (JsValue){ 0 };
 }
 
-static JsValue render_heading(void* ctx, JsTuple_Marked_Tokens_Heading args) {
+static JsValue render_heading(void* ctx, Marked_Tokens_Heading h) {
     (void)ctx;
     js_scope();
-    Marked_Tokens_Heading h = JsTuple_Marked_Tokens_Heading_get_0(args);
     uint32_t depth = (uint32_t)Marked_Tokens_Heading_get_depth(h);
     if (depth < 1 || depth > 6) depth = 1;
     char text_buf[128];
@@ -55,7 +54,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     Marked custom_m = Marked_new(JsArray_MarkedExtension_from(&ext, 1));
     JsString def_html = marked(md, (marked_options_no_async){ 0 });
-    JsString custom_html = js_to_string(Marked_parse_invoke(Marked_get_parse(custom_m), md, (Marked_parse_call_options_no_async){ 0 }));
+    JsString custom_html = Marked_parse_invoke(Marked_get_parse(custom_m), md, (marked_options_no_async){ 0 });
 
     char badge_buf[48];
     snprintf(badge_buf, sizeof badge_buf, "%u tokens visited", walked_count);

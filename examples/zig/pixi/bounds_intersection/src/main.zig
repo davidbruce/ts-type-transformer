@@ -9,7 +9,7 @@ fn mkRect(x: f64, y: f64, w: f64, h: f64) px.Rectangle {
 }
 
 fn strokeG(g: px.Graphics, width: f64, color_hex: f64) void {
-    _ = g.stroke(.{px.StrokeStyle.init(.{ .width = width, .color = color_hex })});
+    _ = g.stroke(px.StrokeStyle.init(.{ .width = width, .color = color_hex }));
 }
 
 fn onInit(app: *px.Application, ok: bool, _: px.JsValue) void {

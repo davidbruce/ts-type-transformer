@@ -74,13 +74,13 @@ static Pm_Node t_node(const char* t) {
     return Pm_Schema_text(g_schema, t, (JsArray_Pm_Mark){ 0 });
 }
 static Pm_Node p_node(const char* t) {
-    return Pm_Schema_node_with_string(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
+    return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
 }
 
 static Pm_Node make_initial_doc(void) {
     Pm_Attrs h_attrs = Pm_Attrs_create();
     js_set_num(h_attrs, "level", 2);
-    Pm_Node h = Pm_Schema_node_with_string(
+    Pm_Node h = Pm_Schema_node(
         g_schema, "heading", h_attrs, t_node("Step-Inversion Undo & Transaction Filter")
     );
     Pm_Node blocks[4] = {
@@ -89,7 +89,7 @@ static Pm_Node make_initial_doc(void) {
         p_node("A ProseMirror Plugin inspects transactions in filterTransaction and can enforce a read-only lock."),
         p_node("Click Append Revision or Bold First Line, then step backward with Undo and forward with Redo.")
     };
-    return Pm_Schema_node_with_string_and_Node_array(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 4));
+    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 4));
 }
 
 static JsValue audit_init(void* ctx, Pm_EditorStateConfig cfg, Pm_EditorState inst) {

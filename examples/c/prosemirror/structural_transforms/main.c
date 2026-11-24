@@ -101,19 +101,19 @@ static Pm_Node t_node(const char* t) {
     return Pm_Schema_text(g_schema, t, (JsArray_Pm_Mark){ 0 });
 }
 static Pm_Node p_node(const char* t) {
-    return Pm_Schema_node_with_string(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
+    return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
 }
 static Pm_Node li_node(const char* t) {
-    return Pm_Schema_node_with_string(g_schema, "list_item", (Pm_Attrs){ 0 }, p_node(t));
+    return Pm_Schema_node(g_schema, "list_item", (Pm_Attrs){ 0 }, p_node(t));
 }
 
 static Pm_Node make_initial_doc(void) {
     Pm_Attrs h_attrs = Pm_Attrs_create();
     js_set_num(h_attrs, "level", 2);
-    Pm_Node h = Pm_Schema_node_with_string(g_schema, "heading", h_attrs, t_node("Structural Transform Pipeline"));
+    Pm_Node h = Pm_Schema_node(g_schema, "heading", h_attrs, t_node("Structural Transform Pipeline"));
     Pm_Node p1 = p_node("ProseMirror transforms express structural edits as invertible steps.");
     Pm_Node p2 = p_node("Wrap blocks in quotes, lift nested content, or split paragraphs cleanly.");
-    Pm_Node quote = Pm_Schema_node_with_string(
+    Pm_Node quote = Pm_Schema_node(
         g_schema, "blockquote", (Pm_Attrs){ 0 }, p_node("Blockquote content can be lifted back to top-level document depth.")
     );
     Pm_Node lis[3] = {
@@ -121,10 +121,10 @@ static Pm_Node make_initial_doc(void) {
         li_node("Wrap range with blockquote"),
         li_node("Lift nested block to root")
     };
-    Pm_Node ulist = Pm_Schema_node_with_string_and_Node_array(g_schema, "bullet_list", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(lis, 3));
+    Pm_Node ulist = Pm_Schema_node(g_schema, "bullet_list", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(lis, 3));
 
     Pm_Node blocks[5] = { h, p1, p2, quote, ulist };
-    return Pm_Schema_node_with_string_and_Node_array(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 5));
+    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 5));
 }
 
 static Pm_EditorState make_state(void) {

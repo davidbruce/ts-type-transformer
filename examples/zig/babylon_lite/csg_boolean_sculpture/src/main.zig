@@ -152,5 +152,5 @@ export fn start() void {
     const scope = dom.JsScope.open();
     defer scope.deinit();
     g_app.canvas = (dom.getDocument().querySelector(.canvas) orelse return).retain();
-    b.createEngineWithEngineOptions(g_app.canvas, null).then(onEngine, &g_app);
+    b.createEngine(g_app.canvas, null).then(onEngine, &g_app);
 }

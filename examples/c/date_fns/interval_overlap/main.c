@@ -45,7 +45,7 @@ __attribute__((export_name("start"))) void start(void) {
     for (uint32_t i = 0; i < day_count; i++) {
         Date d = JsArray_Df_DateArg_get(month_days, i).as.Date;
         HTMLElement lbl = make_el(doc, "div", "slot-lbl", 0);
-        HTMLElement_set_textContent(lbl, df_formatDate_with_Date(d, "d"));
+        HTMLElement_set_textContent(lbl, df_formatDate(d, "d"));
         HTMLElement_appendChild(hslots, lbl);
     }
     HTMLElement_appendChild(ghead, hslots);
@@ -66,8 +66,8 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement slots = make_el(doc, "div", "slots", 0);
         for (uint32_t i = 0; i < day_count; i++) {
             Date d = JsArray_Df_DateArg_get(month_days, i).as.Date;
-            bool in_track = df_isWithinInterval_with_Date(d, tracks[t]);
-            bool in_ref = df_isWithinInterval_with_Date(d, sprint_a);
+            bool in_track = df_isWithinInterval(d, tracks[t]);
+            bool in_ref = df_isWithinInterval(d, sprint_a);
             const char* cls = (in_track && !is_ref && in_ref) ? "slot overlap" : (in_track ? "slot active" : "slot");
             HTMLElement_appendChild(slots, make_el(doc, "div", cls, 0));
         }
@@ -103,7 +103,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement tr = make_el(doc, "tr", 0, 0);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, probes[i]));
         HTMLElement td_clamped = make_el(doc, "td", 0, 0);
-        HTMLElement_set_textContent(td_clamped, df_formatDate_with_Date(res.as.Date, "yyyy-MM-dd"));
+        HTMLElement_set_textContent(td_clamped, df_formatDate(res.as.Date, "yyyy-MM-dd"));
         HTMLElement_appendChild(tr, td_clamped);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, rules[i]));
         HTMLElement_appendChild(tbody, tr);

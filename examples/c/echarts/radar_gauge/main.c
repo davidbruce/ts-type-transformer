@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 static Echarts_LineStyleOption line_color(const char* hex) {
-    return Echarts_LineStyleOption_create(.color = js_string(hex));
+    return Echarts_LineStyleOption_create(.color = Echarts_Color_of(hex));
 }
 
 static void push_ind(JsArray_Echarts_RadarIndicatorOption arr, const char* name) {
@@ -23,9 +23,12 @@ __attribute__((export_name("start"))) void start(void) {
     ECharts gauge = echarts_init(Document_getElementById(doc, "chart-gauge"), NULL);
 
     /* ---- Radar ---- */
+    // Its colors alternate: an array, which areaStyle's type does not say.
     JsArray r_sa_cols = JsArray_new();
     js_push_str(r_sa_cols, "#ffffff");
     js_push_str(r_sa_cols, "#f7f7f7");
+    Echarts_AreaStyleOption sa_style = Echarts_AreaStyleOption_create();
+    js_set_val(sa_style, "color", r_sa_cols);
 
     JsArray_Echarts_RadarIndicatorOption inds = JsArray_Echarts_RadarIndicatorOption_new();
     push_ind(inds, "Throughput");
@@ -40,12 +43,12 @@ __attribute__((export_name("start"))) void start(void) {
     JsArray_Echarts_RadarSeriesOption_data r_data = JsArray_Echarts_RadarSeriesOption_data_new();
     JsArray_Echarts_RadarSeriesOption_data_push(r_data, Echarts_RadarSeriesDataItemOption_create(
         .name = Echarts_OptionName_of("WASM Target"), .value = js_value(num_arr(v_wasm, 5)),
-        .lineStyle = Echarts_LineStyleOption_create(.color = js_string("#111111"), .width = 2),
+        .lineStyle = Echarts_LineStyleOption_create(.color = Echarts_Color_of("#111111"), .width = 2),
         .itemStyle = Echarts_ItemStyleOption_create(.color = Echarts_ItemStyleOption_color_of("#111111")),
-        .areaStyle = Echarts_AreaStyleOption_create(.color = js_string("rgba(17,17,17,0.12)"))));
+        .areaStyle = Echarts_AreaStyleOption_create(.color = Echarts_Color_of("rgba(17,17,17,0.12)"))));
     JsArray_Echarts_RadarSeriesOption_data_push(r_data, Echarts_RadarSeriesDataItemOption_create(
         .name = Echarts_OptionName_of("Baseline"), .value = js_value(num_arr(v_base, 5)),
-        .lineStyle = Echarts_LineStyleOption_create(.color = js_string("#737373"), .width = 1.5, .type = Echarts_ZRLineType_of("dashed")),
+        .lineStyle = Echarts_LineStyleOption_create(.color = Echarts_Color_of("#737373"), .width = 1.5, .type = Echarts_ZRLineType_of("dashed")),
         .itemStyle = Echarts_ItemStyleOption_create(.color = Echarts_ItemStyleOption_color_of("#737373"))));
 
     EChartsOption radar_opt = EChartsOption_create(
@@ -57,7 +60,7 @@ __attribute__((export_name("start"))) void start(void) {
             .radius = Echarts_number_or_string_or_number_or_string_array_of("62%"),
             .axisName = Echarts_RadarComponentOption_axisName_create(.color = "#111111"),
             .splitLine = Echarts_SplitLineOption_create(.lineStyle = line_color("#d4d4d4")),
-            .splitArea = Echarts_SplitAreaOption_create(.areaStyle = Echarts_AreaStyleOption_create(.color = js_value(r_sa_cols))),
+            .splitArea = Echarts_SplitAreaOption_create(.areaStyle = sa_style),
             .axisLine = Echarts_AxisLineOption_create(.lineStyle = line_color("#b5b5b5")),
             .indicator = inds)),
         .series = EChartsOption_series_of(Echarts_RadarSeriesOption_create(.data = r_data)));

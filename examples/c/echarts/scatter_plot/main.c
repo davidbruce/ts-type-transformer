@@ -6,7 +6,7 @@
 #define Bound(x) Echarts_AngleAxisComponentOption_category_min_of(x)
 
 static Echarts_LineStyleOption line_color(const char* hex) {
-    return Echarts_LineStyleOption_create(.color = js_string(hex));
+    return Echarts_LineStyleOption_create(.color = Echarts_Color_of(hex));
 }
 
 #define VALUE_AXIS(T) T##_create( \

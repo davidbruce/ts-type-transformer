@@ -24,8 +24,7 @@ fn walkToken(state: *WalkState, tok: m.Token) ?m.void_or_void_or_Promise_array_o
     return null;
 }
 
-fn renderHeading(args: m.JsTuple(&.{m.tokens.Heading})) m.JsValue {
-    const h = args.get(0);
+fn renderHeading(h: m.tokens.Heading) m.JsValue {
     const depth: u32 = @intFromFloat(h.getDepth());
     var out_buf: [256]u8 = undefined;
     const out = std.fmt.bufPrint(
@@ -61,7 +60,7 @@ export fn start() void {
 
     const custom_m = m.Marked.new(.{ext});
     const def_html = m.marked(md, .{});
-    const cust_str = custom_m.getParse().invoke2(md, null).as(m.JsString);
+    const cust_str = custom_m.getParse().invoke(md, .{});
 
     var bbuf: [48]u8 = undefined;
     const badge_txt = std.fmt.bufPrint(&bbuf, "{d} tokens visited", .{walk.count}) catch "visited";

@@ -93,7 +93,7 @@ static Pm_Node t_node(const char* t) {
 static Pm_Node make_initial_doc(void) {
     Pm_Attrs h_attrs = Pm_Attrs_create();
     js_set_num(h_attrs, "level", 2);
-    Pm_Node h = Pm_Schema_node_with_string(g_schema, "heading", h_attrs, t_node("ProseMirror Document Schema"));
+    Pm_Node h = Pm_Schema_node(g_schema, "heading", h_attrs, t_node("ProseMirror Document Schema"));
 
     Pm_Mark m_strong = Pm_Schema_mark(g_schema, "strong", (Pm_Attrs){ 0 });
     Pm_Mark m_em = Pm_Schema_mark(g_schema, "em", (Pm_Attrs){ 0 });
@@ -108,28 +108,28 @@ static Pm_Node make_initial_doc(void) {
         Pm_Schema_text(g_schema, "inline_code", JsArray_Pm_Mark_from(&m_code, 1)),
         t_node(" spans.")
     };
-    Pm_Node p_marks = Pm_Schema_node_with_string_and_Node_array(
+    Pm_Node p_marks = Pm_Schema_node(
         g_schema, "paragraph", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(p1_items, 7)
     );
 
-    Pm_Node q_inner = Pm_Schema_node_with_string(
+    Pm_Node q_inner = Pm_Schema_node(
         g_schema, "paragraph", (Pm_Attrs){ 0 },
         t_node("Every document conforms to a strict schema enforced on every transaction.")
     );
-    Pm_Node quote = Pm_Schema_node_with_string(g_schema, "blockquote", (Pm_Attrs){ 0 }, q_inner);
+    Pm_Node quote = Pm_Schema_node(g_schema, "blockquote", (Pm_Attrs){ 0 }, q_inner);
 
-    Pm_Node code_block = Pm_Schema_node_with_string(
+    Pm_Node code_block = Pm_Schema_node(
         g_schema, "code_block", (Pm_Attrs){ 0 },
         t_node("schema.node(\"paragraph\", null, [schema.text(\"typed\")])")
     );
 
-    Pm_Node outro = Pm_Schema_node_with_string(
+    Pm_Node outro = Pm_Schema_node(
         g_schema, "paragraph", (Pm_Attrs){ 0 },
         t_node("Select any text in this editor and click a toolbar action to toggle marks or switch block types.")
     );
 
     Pm_Node blocks[5] = { h, p_marks, quote, code_block, outro };
-    return Pm_Schema_node_with_string_and_Node_array(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 5));
+    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 5));
 }
 
 static Pm_EditorState make_state(void) {
@@ -167,9 +167,9 @@ static void update_meta(Pm_EditorState st) {
     target_range(st, &f, &t);
     Pm_Node doc = Pm_EditorState_get_doc(st);
     Pm_Schema_marks marks = Pm_Schema_get_marks(g_schema);
-    bool has_b = Pm_Node_rangeHasMark_with_MarkType(doc, f, t, Pm_Schema_marks_get_at(marks, "strong"));
-    bool has_e = Pm_Node_rangeHasMark_with_MarkType(doc, f, t, Pm_Schema_marks_get_at(marks, "em"));
-    bool has_c = Pm_Node_rangeHasMark_with_MarkType(doc, f, t, Pm_Schema_marks_get_at(marks, "code"));
+    bool has_b = Pm_Node_rangeHasMark(doc, f, t, Pm_Schema_marks_get_at(marks, "strong"));
+    bool has_e = Pm_Node_rangeHasMark(doc, f, t, Pm_Schema_marks_get_at(marks, "em"));
+    bool has_c = Pm_Node_rangeHasMark(doc, f, t, Pm_Schema_marks_get_at(marks, "code"));
 
     HTMLElement_set_className(Document_getElementById(g_doc, "btn-0"), has_b ? "active" : "");
     HTMLElement_set_className(Document_getElementById(g_doc, "btn-1"), has_e ? "active" : "");
@@ -209,8 +209,8 @@ static void toggle_mark(const char* name, const char* added_msg, const char* rem
     if (t > f) {
         Pm_MarkType mt = Pm_Schema_marks_get_at(Pm_Schema_get_marks(g_schema), name);
         Pm_Transaction tr = Pm_EditorState_get_tr(st);
-        if (Pm_Node_rangeHasMark_with_MarkType(Pm_EditorState_get_doc(st), f, t, mt)) {
-            Pm_Transaction_removeMark_with_opt_MarkType(tr, f, t, mt);
+        if (Pm_Node_rangeHasMark(Pm_EditorState_get_doc(st), f, t, mt)) {
+            Pm_Transaction_removeMark(tr, f, t, mt);
             g_last_action = removed_msg;
         } else {
             Pm_Mark m = Pm_Schema_mark(g_schema, mt, (Pm_Attrs){ 0 });

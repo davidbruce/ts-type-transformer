@@ -39,7 +39,7 @@ __attribute__((export_name("start"))) void start(void) {
     check(node_existsSync(notes) && Node_Stats_isFile(st1) && s1 == 11);
 
     node_appendFileSync(notes, "gamma\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
-    JsString text = node_readFileSync_with_BufferEncoding(notes, Node_BufferEncoding_utf8);
+    JsString text = node_readFileSync_with_readFileSync_options(notes, Node_BufferEncoding_utf8);
     Node_Stats st2 = node_statSync(notes);
     int s2 = (int)js_to_number(Node_Stats_get_size(st2));
     check(JsString_equals(text, "alpha\nbeta\ngamma\n") && s2 == 17);
@@ -52,7 +52,7 @@ __attribute__((export_name("start"))) void start(void) {
     node_renameSync(backup, archive);
     check(!node_existsSync(backup) && node_existsSync(archive));
 
-    JsString arch_text = node_readFileSync_with_BufferEncoding(archive, Node_BufferEncoding_utf8);
+    JsString arch_text = node_readFileSync_with_readFileSync_options(archive, Node_BufferEncoding_utf8);
     check(JsString_equals(arch_text, text));
 
     node_unlinkSync(archive);

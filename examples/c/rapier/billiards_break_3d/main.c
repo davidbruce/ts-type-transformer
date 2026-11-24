@@ -263,7 +263,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     babylon_addToScene(scene, js_value(dir));
 
     Babylon_BoxOptions topts = Babylon_BoxOptions_create(.width = 9.2, .height = 0.5, .depth = 15.2);
-    Babylon_Mesh table = babylon_createBox_with_BoxOptions(g_engine, topts);
+    Babylon_Mesh table = babylon_createBox(g_engine, topts);
     Babylon_ObservableVec3_set(Babylon_Mesh_get_position(table), 0.0, -0.25, 0.0);
     Babylon_Mesh_set_material(table, mk_pbr(0.08, 0.24, 0.18, 0.05, 0.78));
     babylon_addToScene(scene, js_value(table));
@@ -277,7 +277,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     };
     for (int i = 0; i < 4; i++) {
         Babylon_BoxOptions ropts = Babylon_BoxOptions_create(.width = rail_meshes[i][3], .height = rail_meshes[i][4], .depth = rail_meshes[i][5]);
-        Babylon_Mesh r = babylon_createBox_with_BoxOptions(g_engine, ropts);
+        Babylon_Mesh r = babylon_createBox(g_engine, ropts);
         Babylon_ObservableVec3_set(Babylon_Mesh_get_position(r), rail_meshes[i][0], rail_meshes[i][1], rail_meshes[i][2]);
         Babylon_Mesh_set_material(r, rail_mat);
         babylon_addToScene(scene, js_value(r));
@@ -342,7 +342,7 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_retain(g_canvas);
-    Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
+    Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
 }
 
 __attribute__((export_name("start"))) void start(void) {

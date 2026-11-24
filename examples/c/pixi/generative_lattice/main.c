@@ -6,9 +6,7 @@ static const double TWO_PI = 6.283185307179586;
 static Pixi_Application g_app;
 
 static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
-    JsArray args = JsArray_new();
-    js_push_val(args, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
-    Pixi_Graphics_stroke(g, args);
+    Pixi_Graphics_stroke(g, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
 }
 
 static void add_gfx(Pixi_Container stage, Pixi_Graphics g) {

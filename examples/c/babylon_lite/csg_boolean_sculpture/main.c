@@ -102,7 +102,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_Mesh_set_material(disc, mk_pbr(0.22, 0.25, 0.65));
     babylon_addToScene(scene, disc);
 
-    Babylon_Mesh src_box = babylon_createBox_with_BoxOptions(g_engine, Babylon_BoxOptions_create(.size = 2.1));
+    Babylon_Mesh src_box = babylon_createBox(g_engine, Babylon_BoxOptions_create(.size = 2.1));
 
     Babylon_CylinderOptions copts = Babylon_CylinderOptions_create(.height = 3.0, .diameter = 1.18, .tessellation = 16.0);
     Babylon_Mesh cyl_y = babylon_createCylinder(g_engine, copts);
@@ -130,7 +130,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_BoxOptions cbopts = Babylon_BoxOptions_create(.size = 0.82);
     Babylon_SphereOptions csopts = Babylon_SphereOptions_create(.diameter = 1.02, .segments = 14.0);
     Babylon_CsgSolid core_s = babylon_csgIntersect(
-        babylon_createCsgFromMesh(babylon_createBox_with_BoxOptions(g_engine, cbopts)),
+        babylon_createCsgFromMesh(babylon_createBox(g_engine, cbopts)),
         babylon_createCsgFromMesh(babylon_createSphere(g_engine, csopts)));
     Babylon_Mesh core = babylon_createMeshFromCsg(g_engine, core_s, "core");
     Babylon_ObservableVec3_set(Babylon_Mesh_get_position(core), 0.0, 2.15, 0.0);
@@ -164,6 +164,6 @@ __attribute__((export_name("start"))) void start(void) {
     g_canvas = Document_querySelector_canvas(get_document());
     if (g_canvas.h != 0) {
         js_retain(g_canvas);
-        Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
+        Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
     }
 }

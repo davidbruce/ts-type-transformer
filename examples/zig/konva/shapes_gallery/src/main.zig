@@ -51,7 +51,7 @@ export fn start() void {
 
     if (dom.getDocument().getElementById("meta")) |meta_el| {
         meta_el.setTextContent(
-            std.fmt.bufPrint(&meta_buf, "Stage: 680x400 \xC2\xB7 7 primitive types \xC2\xB7 {d} layer children", .{layer.getChildren().len()}) catch "",
+            std.fmt.bufPrint(&meta_buf, "Stage: 680x400 \xC2\xB7 7 primitive types \xC2\xB7 {d} layer children", .{layer.getChildren(null).len()}) catch "",
         );
     }
 }

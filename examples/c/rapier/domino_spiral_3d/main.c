@@ -308,7 +308,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     babylon_addToScene(scene, js_value(ground));
 
     Babylon_BoxOptions ropts = Babylon_BoxOptions_create(.width = 3.5, .height = 0.2, .depth = 1.3);
-    Babylon_Mesh ramp_mesh = babylon_createBox_with_BoxOptions(g_engine, ropts);
+    Babylon_Mesh ramp_mesh = babylon_createBox(g_engine, ropts);
     Babylon_ObservableVec3_set(Babylon_Mesh_get_position(ramp_mesh), RAMP_X, RAMP_Y, RAMP_Z);
     Babylon_ObservableQuat_set(Babylon_Mesh_get_rotationQuaternion(ramp_mesh), 0.0, 0.0, sin(RAMP_ANGLE * 0.5), cos(RAMP_ANGLE * 0.5));
     Babylon_Mesh_set_material(ramp_mesh, mk_pbr(0.28, 0.30, 0.34, 0.35, 0.48));
@@ -327,7 +327,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_PbrMaterialProps mat_b = mk_pbr(0.45, 0.46, 0.48, 0.25, 0.38);
     Babylon_BoxOptions dopts = Babylon_BoxOptions_create(.width = DOM_HX * 2.0, .height = DOM_HY * 2.0, .depth = DOM_HZ * 2.0);
     for (int i = 0; i < DOM_COUNT; i++) {
-        Babylon_Mesh m = babylon_createBox_with_BoxOptions(g_engine, dopts);
+        Babylon_Mesh m = babylon_createBox(g_engine, dopts);
         Babylon_Mesh_set_material(m, (i % 2 == 0) ? mat_a : mat_b);
         babylon_addToScene(scene, js_value(m));
         g_dom_pos[i] = Babylon_Mesh_get_position(m);
@@ -388,7 +388,7 @@ static void on_rapier_ready(void* ctx, bool ok, JsValue value) {
         return;
     }
     js_retain(g_canvas);
-    Promise_then(babylon_createEngine_with_EngineOptions(g_canvas), on_engine, 0);
+    Promise_then(babylon_createEngine(g_canvas), on_engine, 0);
 }
 
 __attribute__((export_name("start"))) void start(void) {

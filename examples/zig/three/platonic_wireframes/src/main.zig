@@ -45,8 +45,8 @@ fn addSolid(
         }),
     });
     _ = mesh.getPosition().set(x, y, z);
-    mesh.getRotation().setX(0.25);
-    mesh.getRotation().setY(0.45);
+    _ = mesh.getRotation().setX(0.25);
+    _ = mesh.getRotation().setY(0.45);
     _ = app.scene.add(.{mesh});
 
     const segs = three.LineSegments.new(.{
@@ -54,8 +54,8 @@ fn addSolid(
         .material = line_mat,
     });
     _ = segs.getPosition().set(x, y, z);
-    segs.getRotation().setX(0.25);
-    segs.getRotation().setY(0.45);
+    _ = segs.getRotation().setX(0.25);
+    _ = segs.getRotation().setY(0.45);
     _ = app.wire_group.add(.{segs});
 }
 
@@ -119,7 +119,7 @@ export fn start() void {
     _ = rim.getPosition().set(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 12.0, .divisions = 12.0, .color1 = 0x737373, .color2 = 0xd4d4d4 });
-    grid.getPosition().setY(-1.2);
+    _ = grid.getPosition().setY(-1.2);
 
     g_app.wire_group = three.Group.new().retain();
     _ = g_app.scene.add(.{

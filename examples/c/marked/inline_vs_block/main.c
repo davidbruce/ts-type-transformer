@@ -33,7 +33,7 @@ __attribute__((export_name("start"))) void start(void) {
     Marked m = Marked_new();
     Marked_parse parse_fn = Marked_get_parse(m);
     Marked_parse parse_inline_fn = Marked_get_parseInline(m);
-    Marked_parse_call_options_no_async call_opts = { 0 };
+    marked_options_no_async call_opts = { 0 };
 
     const char* snippets[] = {
         "Hello **world** and *italics*",
@@ -48,8 +48,8 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(row, make_el(doc, "pre", "src", snippets[i]));
 
         HTMLElement grid = make_el(doc, "div", "grid", 0);
-        JsString block_html = js_to_string(Marked_parse_invoke(parse_fn, snippets[i], call_opts));
-        JsString inl_html = js_to_string(Marked_parse_invoke(parse_inline_fn, snippets[i], call_opts));
+        JsString block_html = Marked_parse_invoke(parse_fn, snippets[i], call_opts);
+        JsString inl_html = Marked_parse_invoke(parse_inline_fn, snippets[i], call_opts);
 
         HTMLElement_appendChild(grid, make_result_card(doc, "Block (parse)", block_html));
         HTMLElement_appendChild(grid, make_result_card(doc, "Inline (parseInline)", inl_html));

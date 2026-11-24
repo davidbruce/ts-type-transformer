@@ -19,9 +19,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     Pixi_Graphics frame = Pixi_Graphics_new();
     Pixi_Graphics_rect(frame, 32.0, 20.0, 616.0, 360.0);
-    JsArray args = JsArray_new();
-    js_push_val(args, Pixi_StrokeStyle_create(.width = 1.5, .color = Pixi_ColorSource_of(0xd4d4d4)));
-    Pixi_Graphics_stroke(frame, args);
+    Pixi_Graphics_stroke(frame, Pixi_StrokeStyle_create(.width = 1.5, .color = Pixi_ColorSource_of(0xd4d4d4)));
     Pixi_Container_addChild(stage, JsArray_Pixi_Container_from((Pixi_Container[]){ AS_Pixi_Container(frame) }, 1));
 
     static const int shades[8] = {
@@ -32,7 +30,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     for (int row = 0; row < 6; row++) {
         for (int col = 0; col < 10; col++) {
-            Pixi_Sprite s = Pixi_Sprite_new_with_Texture(white);
+            Pixi_Sprite s = Pixi_Sprite_new(white);
             int idx = (row * 3 + col * 5) % 8;
             Pixi_Sprite_set_width(s, 52.0);
             Pixi_Sprite_set_height(s, 48.0);

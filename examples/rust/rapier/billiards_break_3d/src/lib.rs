@@ -213,7 +213,7 @@ pub extern "C" fn start() {
             set_status_error("missing <canvas> element");
             return;
         };
-        let engine = match b::create_engine_with_engine_options(&canvas, None).await {
+        let engine = match b::create_engine(&canvas, None).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());

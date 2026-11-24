@@ -8,8 +8,7 @@ fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: anytype) do
     return el;
 }
 
-fn makeResultCard(doc: dom.Document, title: []const u8, val: m.JsValue) dom.HTMLElement {
-    const html = val.as(m.JsString);
+fn makeResultCard(doc: dom.Document, title: []const u8, html: m.JsString) dom.HTMLElement {
     const card = makeEl(doc, "div", "card", null);
     _ = card.appendChild(makeEl(doc, "div", "label", title));
     const out = makeEl(doc, "div", "md-out", null);
@@ -48,8 +47,8 @@ export fn start() void {
         _ = row.appendChild(makeEl(doc, "pre", "src", s));
 
         const grid = makeEl(doc, "div", "grid", null);
-        _ = grid.appendChild(makeResultCard(doc, "Block (parse)", parse_fn.invoke2(s, null)));
-        _ = grid.appendChild(makeResultCard(doc, "Inline (parseInline)", inline_fn.invoke2(s, null)));
+        _ = grid.appendChild(makeResultCard(doc, "Block (parse)", parse_fn.invoke(s, .{})));
+        _ = grid.appendChild(makeResultCard(doc, "Inline (parseInline)", inline_fn.invoke(s, .{})));
         _ = row.appendChild(grid);
         _ = app.appendChild(row);
     }

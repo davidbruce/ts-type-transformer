@@ -129,7 +129,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     g_geo = Three_BufferGeometry_new();
     js_retain(g_geo);
-    g_pos_attr = Three_Float32BufferAttribute_new_with_number((double)(GRID_N * GRID_N * 3), 3.0);
+    g_pos_attr = Three_Float32BufferAttribute_new((double)(GRID_N * GRID_N * 3), 3.0);
     js_retain(g_pos_attr);
     JsArray_double indices = JsArray_double_new();
     for (int iz = 0; iz < GRID_N - 1; iz++) {
@@ -148,7 +148,7 @@ __attribute__((export_name("start"))) void start(void) {
     }
     g_tri_count = (GRID_N - 1) * (GRID_N - 1) * 2;
     Three_BufferGeometry_setAttribute(g_geo, "position", g_pos_attr);
-    Three_BufferGeometry_setIndex_with_opt_number_array(g_geo, indices);
+    Three_BufferGeometry_setIndex(g_geo, indices);
 
     Three_Mesh surface_mesh = Three_Mesh_new(g_geo, Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
         .color = Three_ColorRepresentation_of(0xb5b5b5), .roughness = 0.72, .metalness = 0.05, .flatShading = true)));
@@ -162,7 +162,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     int pt_count = (GRID_N / 2) * (GRID_N / 2);
     Three_BufferGeometry pts_geo = Three_BufferGeometry_new();
-    g_pts_attr = Three_Float32BufferAttribute_new_with_number((double)(pt_count * 3), 3.0);
+    g_pts_attr = Three_Float32BufferAttribute_new((double)(pt_count * 3), 3.0);
     js_retain(g_pts_attr);
     Three_BufferGeometry_setAttribute(pts_geo, "position", g_pts_attr);
     add_obj(g_scene, Three_Points_new(pts_geo, Three_PointsMaterial_new(Three_PointsMaterialParameters_create(

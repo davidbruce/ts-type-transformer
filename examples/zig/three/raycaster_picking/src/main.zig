@@ -187,7 +187,7 @@ export fn start() void {
     _ = rim.getPosition().set(-7.0, 5.0, -6.0);
 
     const grid = three.GridHelper.new(.{ .size = 9.0, .divisions = 9.0, .color1 = 0x999999, .color2 = 0xd4d4d4 });
-    grid.getPosition().setY(-0.85);
+    _ = grid.getPosition().setY(-0.85);
     _ = g_app.scene.add(.{
         three.AmbientLight.new(.{ .color = 0xffffff, .intensity = 1.2 }),
         key,
@@ -221,8 +221,8 @@ export fn start() void {
         const m = three.Mesh.new(.{ .geometry = geos[i], .material = g_app.mats[i] }).retain();
         m.setName(NAMES[i]);
         _ = m.getPosition().set(@as(f64, @floatFromInt(gx)) * 2.1, 0.0, @as(f64, @floatFromInt(gz)) * 2.1);
-        m.getRotation().setX(0.2);
-        m.getRotation().setY(0.35 * @as(f64, @floatFromInt(i)));
+        _ = m.getRotation().setX(0.2);
+        _ = m.getRotation().setY(0.35 * @as(f64, @floatFromInt(i)));
         _ = g_app.scene.add(.{m});
         g_app.meshes[i] = m;
         g_app.mesh_arr.push(m);

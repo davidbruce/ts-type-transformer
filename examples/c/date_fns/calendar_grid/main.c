@@ -34,10 +34,10 @@ __attribute__((export_name("start"))) void start(void) {
     char b_days[16], b_q[16], b_w[16], b_doy[32];
     snprintf(b_days, sizeof b_days, "%d", (int)df_getDaysInMonth(ref_day));
     snprintf(b_q, sizeof b_q, "Q%d", (int)df_getQuarter(ref_day));
-    snprintf(b_w, sizeof b_w, "W%d", (int)df_getISOWeek_with_Date(ref_day));
+    snprintf(b_w, sizeof b_w, "W%d", (int)df_getISOWeek(ref_day));
     snprintf(b_doy, sizeof b_doy, "%s \xC2\xB7 #%d",
         df_isLeapYear(ref_day) ? "Yes" : "No",
-        (int)df_getDayOfYear_with_Date(ref_day));
+        (int)df_getDayOfYear(ref_day));
 
     HTMLElement metrics = make_el(doc, "div", "metrics", 0);
     add_metric(doc, metrics, "Days in Month", b_days);
@@ -63,20 +63,20 @@ __attribute__((export_name("start"))) void start(void) {
     uint32_t count = JsArray_Df_DateArg_length(days);
     for (uint32_t i = 0; i < count; i++) {
         Date d = JsArray_Df_DateArg_get(days, i).as.Date;
-        bool is_ref = df_isSameDay_with_Date_and_Date(d, ref_day);
+        bool is_ref = df_isSameDay(d, ref_day);
         bool is_wknd = df_isWeekend(d);
         const char* cls = is_ref ? "day-cell today" : (is_wknd ? "day-cell weekend" : "day-cell");
 
         HTMLElement cell = make_el(doc, "div", cls, 0);
         HTMLElement num = make_el(doc, "span", "day-num", 0);
-        HTMLElement_set_textContent(num, df_formatDate_with_Date(d, "d"));
+        HTMLElement_set_textContent(num, df_formatDate(d, "d"));
         HTMLElement_appendChild(cell, num);
 
         if (is_ref) {
             HTMLElement_appendChild(cell, make_el(doc, "span", "sub", "REF"));
         } else {
             HTMLElement sub = make_el(doc, "span", "sub", 0);
-            HTMLElement_set_textContent(sub, df_formatDate_with_Date(d, "EEE"));
+            HTMLElement_set_textContent(sub, df_formatDate(d, "EEE"));
             HTMLElement_appendChild(cell, sub);
         }
         HTMLElement_appendChild(grid, cell);

@@ -161,8 +161,8 @@ export fn start() void {
         .geometry = three.PlaneGeometry.new(.{ .width = 8.6, .height = 8.6 }),
         .material = three.MeshStandardMaterial.new(.{ .color = 0xe5e5e5, .roughness = 0.85 }),
     });
-    plinth.getRotation().setX(-std.math.pi / 2.0);
-    plinth.getPosition().setY(-0.01);
+    _ = plinth.getRotation().setX(-std.math.pi / 2.0);
+    _ = plinth.getPosition().setY(-0.01);
 
     const grid = three.GridHelper.new(.{ .size = 9.0, .divisions = 10.0, .color1 = 0x999999, .color2 = 0xd4d4d4 });
 

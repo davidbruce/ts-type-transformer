@@ -25,7 +25,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
     let ss = StrokeStyle::default()
         .with_width(width)
         .with_color(color_hex as f64);
-    g.stroke(JsArray::from([JsValue::from(ss)]));
+    g.stroke(&JsValue::from(ss));
 }
 
 #[unsafe(no_mangle)]

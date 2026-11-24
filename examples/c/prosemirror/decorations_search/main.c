@@ -92,25 +92,25 @@ static Pm_Node t_node(const char* t) {
     return Pm_Schema_text(g_schema, t, (JsArray_Pm_Mark){ 0 });
 }
 static Pm_Node p_node(const char* t) {
-    return Pm_Schema_node_with_string(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
+    return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
 }
 
 static Pm_Node make_initial_doc(void) {
     Pm_Attrs h_attrs = Pm_Attrs_create();
     js_set_num(h_attrs, "level", 2);
-    Pm_Node h = Pm_Schema_node_with_string(
+    Pm_Node h = Pm_Schema_node(
         g_schema, "heading", h_attrs, t_node("Immutable State & View Decorations")
     );
     Pm_Node p1 = p_node("A ProseMirror schema validates every document tree before state updates commit to the view.");
     Pm_Node p2 = p_node("Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema.");
-    Pm_Node cb = Pm_Schema_node_with_string(
+    Pm_Node cb = Pm_Schema_node(
         g_schema, "code_block", (Pm_Attrs){ 0 },
         t_node("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view")
     );
     Pm_Node p3 = p_node("Inline decorations highlight matching tokens while node decorations outline matching blocks in the view.");
 
     Pm_Node blocks_arr[5] = { h, p1, p2, cb, p3 };
-    return Pm_Schema_node_with_string_and_Node_array(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks_arr, 5));
+    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks_arr, 5));
 }
 
 static Pm_DecorationSet compute_decos(Pm_Node doc, const char* query, int* out_inline, int* out_blocks) {

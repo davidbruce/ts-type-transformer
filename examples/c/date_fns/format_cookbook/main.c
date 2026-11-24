@@ -59,16 +59,16 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(tbl, thead);
 
     HTMLElement tbody = make_el(doc, "tbody", 0, 0);
-    add_fmt_row(doc, tbody, "formatDate(\"yyyy-MM-dd\")", df_formatDate_with_Date(sample, "yyyy-MM-dd"), "ISO date");
-    add_fmt_row(doc, tbody, "formatDate(\"EEEE, do MMMM yyyy\")", df_formatDate_with_Date(sample, "EEEE, do MMMM yyyy"), "Ordinal full date");
-    add_fmt_row(doc, tbody, "formatDate(\"EEE, d MMM yy\")", df_formatDate_with_Date(sample, "EEE, d MMM yy"), "Compact short date");
-    add_fmt_row(doc, tbody, "formatDate(\"HH:mm:ss\")", df_formatDate_with_Date(sample, "HH:mm:ss"), "24-hour clock");
-    add_fmt_row(doc, tbody, "formatDate(\"h:mm a\")", df_formatDate_with_Date(sample, "h:mm a"), "12-hour clock");
-    add_fmt_row(doc, tbody, "formatDate(\"'Q'Q \xC2\xB7 'W'I\")", df_formatDate_with_Date(sample, "'Q'Q \xC2\xB7 'W'I"), "Quarter & ISO week");
-    add_fmt_row(doc, tbody, "formatDate(\"DDD 'of' yyyy\")", df_formatDate_with_Date(sample, "DDD 'of' yyyy"), "Day of year");
-    add_fmt_row(doc, tbody, "lightFormat(\"yyyy/MM/dd HH:mm\")", df_lightFormat_with_Date(sample, "yyyy/MM/dd HH:mm"), "Zero-locale light formatter");
-    add_fmt_row(doc, tbody, "formatISO(sample)", df_formatISO_with_Date(sample), "ISO 8601 timestamp");
-    add_fmt_row(doc, tbody, "parse(\"15/03/2024\", \"dd/MM/yyyy\")", df_formatDate_with_Date(parsed, "yyyy-MM-dd"), "Custom parse roundtrip");
+    add_fmt_row(doc, tbody, "formatDate(\"yyyy-MM-dd\")", df_formatDate(sample, "yyyy-MM-dd"), "ISO date");
+    add_fmt_row(doc, tbody, "formatDate(\"EEEE, do MMMM yyyy\")", df_formatDate(sample, "EEEE, do MMMM yyyy"), "Ordinal full date");
+    add_fmt_row(doc, tbody, "formatDate(\"EEE, d MMM yy\")", df_formatDate(sample, "EEE, d MMM yy"), "Compact short date");
+    add_fmt_row(doc, tbody, "formatDate(\"HH:mm:ss\")", df_formatDate(sample, "HH:mm:ss"), "24-hour clock");
+    add_fmt_row(doc, tbody, "formatDate(\"h:mm a\")", df_formatDate(sample, "h:mm a"), "12-hour clock");
+    add_fmt_row(doc, tbody, "formatDate(\"'Q'Q \xC2\xB7 'W'I\")", df_formatDate(sample, "'Q'Q \xC2\xB7 'W'I"), "Quarter & ISO week");
+    add_fmt_row(doc, tbody, "formatDate(\"DDD 'of' yyyy\")", df_formatDate(sample, "DDD 'of' yyyy"), "Day of year");
+    add_fmt_row(doc, tbody, "lightFormat(\"yyyy/MM/dd HH:mm\")", df_lightFormat(sample, "yyyy/MM/dd HH:mm"), "Zero-locale light formatter");
+    add_fmt_row(doc, tbody, "formatISO(sample)", df_formatISO(sample), "ISO 8601 timestamp");
+    add_fmt_row(doc, tbody, "parse(\"15/03/2024\", \"dd/MM/yyyy\")", df_formatDate(parsed, "yyyy-MM-dd"), "Custom parse roundtrip");
     HTMLElement_appendChild(tbl, tbody);
     HTMLElement_appendChild(fmt_card, tbl);
     HTMLElement_appendChild(app, fmt_card);

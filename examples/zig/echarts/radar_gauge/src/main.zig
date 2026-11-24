@@ -15,6 +15,9 @@ export fn start() void {
     const radar = ec.init(radar_box, null);
     const gauge = ec.init(gauge_box, null);
 
+    // Its colors alternate: an array, which areaStyle's type does not say.
+    const split_area = ec.AreaStyleOption.init(.{});
+    ec.JsValue.of(split_area).set("color", .{ "#ffffff", "#f7f7f7" });
     radar.setOption(ec.EChartsOption.init(.{
         .animation = false,
         .backgroundColor = "#ffffff",
@@ -23,7 +26,7 @@ export fn start() void {
             .radius = "62%",
             .axisName = .{ .color = "#111111" },
             .splitLine = .{ .lineStyle = .{ .color = "#d4d4d4" } },
-            .splitArea = .{ .areaStyle = .{ .color = .{ "#ffffff", "#f7f7f7" } } },
+            .splitArea = .{ .areaStyle = split_area },
             .axisLine = .{ .lineStyle = .{ .color = "#b5b5b5" } },
             .indicator = .{
                 .{ .name = "Throughput", .max = 100 },
