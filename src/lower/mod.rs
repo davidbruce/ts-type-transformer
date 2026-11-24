@@ -146,6 +146,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         // And the overloads evaluating made (`typeof merge`).
         mark_overloads(decls);
     }
+    // `(...args: [style?: StrokeInput])` is `(style?: StrokeInput)`, as
+    // TypeScript has it: pixi's `stroke(...args: Parameters<GraphicsContext['stroke']>)`.
+    generics::each_signature(decls, &mut spread_tuple_rest);
     if o.aliases {
         expand_aliases(front, decls);
     }
@@ -599,4 +602,23 @@ fn drop_redeclared(decls: &mut [Decl]) -> usize {
         }
     }
     dropped
+}
+
+// A rest parameter of a tuple of fixed length: its elements, each a parameter.
+fn spread_tuple_rest(s: &mut Signature) {
+    let Some(last) = s.params.last() else { return };
+    let Type::Tuple(elems) = &last.ty else { return };
+    if !last.rest || elems.iter().any(|e| e.rest) {
+        return;
+    }
+    let (base, elems) = (last.name.clone(), elems.clone());
+    s.params.pop();
+    let mut taken: HashSet<String> = s.params.iter().map(|p| p.name.clone()).collect();
+    for (i, e) in elems.into_iter().enumerate() {
+        let mut name = e.name.unwrap_or_else(|| format!("{base}{i}"));
+        while !taken.insert(name.clone()) {
+            name.push('_');
+        }
+        s.params.push(Param { name, optional: e.optional, rest: false, constant: None, ty: e.ty });
+    }
 }

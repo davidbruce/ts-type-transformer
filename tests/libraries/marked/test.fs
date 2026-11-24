@@ -128,8 +128,7 @@ let seen = ResizeArray<string>()
 let ext = createEmpty<MarkedExtension<string, string>>
 ext.renderer <- Some (
     MarkedExtensionRenderer.Create (
-        heading = RendererSpace.Create (fun args ->
-            let h = unbox<Tokens.Heading> args.[0]
+        heading = (fun (h: Tokens.Heading) ->
             U2.Case2 (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
     )
 )

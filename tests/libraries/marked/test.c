@@ -61,9 +61,7 @@ static bool token_is(JsValue token, const char* type) {
 
 // The renderer for headings: a class by depth, the heading's own text.
 static int headings_rendered;
-static JsValue render_heading(void* ctx, JsTuple_Marked_Tokens_Heading args) {
-    // The rest-args tuple: item 0 is the heading token.
-    Marked_Tokens_Heading h = JsTuple_Marked_Tokens_Heading_get_0(args);
+static JsValue render_heading(void* ctx, Marked_Tokens_Heading h) {
     headings_rendered++;
     char html[128];
     uint32_t depth = (uint32_t)Marked_Tokens_Heading_get_depth(h);

@@ -69,6 +69,10 @@ are errors. Example targets are in `examples/targets/`.
 | `overloads` | `rename` | same-named members | `f`, `f_with_x`, ... with `jsName` | no |
 | `redeclarations` | `drop` | a method a type declares again as its ancestor does, but for `this` | the ancestor's alone | no |
 
+A rest parameter of a tuple of fixed length is its elements, as TypeScript
+has it: pixi's `stroke(...args: Parameters<GraphicsContext['stroke']>)` is
+`stroke(style?)`, and marked's renderer callbacks take their token.
+
 Four passes need the type checker. That is why lowering lives here and not in
 each generator: a generator written in F# or C has no checker.
 

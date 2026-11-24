@@ -130,8 +130,7 @@ export fn run() void {
     expect(has(.{ .h = hr.h }, "<p>replaced</p>"), @src());
 }
 
-fn renderCodespan(_: ?*anyopaque, args: b.JsTuple(&.{b.tokens.Codespan})) b.JsValue {
-    const t = args.get(0);
+fn renderCodespan(_: ?*anyopaque, t: b.tokens.Codespan) b.JsValue {
     var out: [64]u8 = undefined;
     var text: [32]u8 = undefined;
     const body = t.getText().copy(&text);
@@ -139,13 +138,11 @@ fn renderCodespan(_: ?*anyopaque, args: b.JsTuple(&.{b.tokens.Codespan})) b.JsVa
 }
 
 // The hook's arguments arrive as the array: item 0 is the markdown.
-fn preprocess(_: ?*anyopaque, args: b.JsArray) b.string_or_Promise {
-    const md: b.JsString = .{ .h = args.get(0).h };
+fn preprocess(_: ?*anyopaque, md: b.JsString) b.string_or_Promise {
     return .{ .string = b.JsString.from(if (md.eql("original")) "replaced" else "other") };
 }
 
-fn renderHeading(_: ?*anyopaque, args: b.JsTuple(&.{b.tokens.Heading})) b.JsValue {
-    const t = args.get(0);
+fn renderHeading(_: ?*anyopaque, t: b.tokens.Heading) b.JsValue {
     var out: [64]u8 = undefined;
     var title: [32]u8 = undefined;
     const text = std.fmt.bufPrint(&out, "<h{d} class=\"mine\">{s}</h{d}>", .{ @as(u32, @intFromFloat(t.getDepth())), t.getText().copy(&title), @as(u32, @intFromFloat(t.getDepth())) }) catch "";

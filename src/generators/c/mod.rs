@@ -287,7 +287,8 @@ pub fn model_with_refs(xml: &str, refs: &[ProjectRef]) -> Result<Model, Vec<Stri
 }
 
 pub const NAMING: Naming = Naming {
-    reserved: || KEYWORDS.iter().chain(LIBC_NAMES).map(|k| (*k).to_string()).chain(runtime_names()).collect(),
+    // And what ts_types.h declares for promises.
+    reserved: || KEYWORDS.iter().chain(LIBC_NAMES).chain(&["Promise_fn", "Promise_then"]).map(|k| (*k).to_string()).chain(runtime_names()).collect(),
     type_names: |candidate, name, kind, m| {
         let mut ids = vec![candidate.to_string(), format!("AS_{candidate}")];
         match kind {

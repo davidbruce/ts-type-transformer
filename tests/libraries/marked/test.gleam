@@ -155,8 +155,7 @@ pub fn main() {
   let renderer = marked_extension_renderer.create()
   marked_extension_renderer.set_heading(
     renderer,
-    Some(fn(args) {
-      let #(heading) = args
+    Some(fn(heading) {
       let token = runtime.dynamic(heading)
       cell.set(rendered, [#(field_string(token, "text"), field_float(token, "depth")), ..cell.get(rendered)])
       t.BooleanOrRendererOutputRendererOutput("<h" <> int.to_string(float.round(field_float(token, "depth"))) <> " class=\"x\">" <> field_string(token, "text") <> "</h>\n")
@@ -176,9 +175,7 @@ pub fn main() {
   let hooks = marked_extension.hooks_create()
   marked_extension.hooks_set_preprocess(
     hooks,
-    Some(fn(args) {
-      let assert [first] = args
-      let assert Ok(text) = decode.run(first, decode.string)
+    Some(fn(text) {
       t.StringOrPromiseString(string.replace(text, "foo", "bar"))
     }),
   )

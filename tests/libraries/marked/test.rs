@@ -142,8 +142,7 @@ pub extern "C" fn run() {
     // A renderer extension replaces how one token is written.
     let ext = MarkedExtension::<String, String>::create();
     let renderer = MarkedExtensionRenderer::<String, String>::create();
-    let heading = MarkedExtensionRendererHeading::<String, String>::new(|args: JsArray| {
-        let h = tokens::Heading(args.get(0).0.clone());
+    let heading = MarkedExtensionRendererHeading::<String, String>::new(|h: tokens::Heading| {
         BooleanOrRendererOutput::RendererOutput(format!("<h{0} class=\"x\">{1}</h{0}>", h.depth() as u32, h.text()))
     });
     renderer.set_heading(Some(&heading));
