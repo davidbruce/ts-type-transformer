@@ -97,7 +97,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(StatsBase_isDirectory(statSync(P(dir))));
 
     join2(file, dir, "hello.txt");
-    writeFileSync(F(file), js_string("hello, node\n"), (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    writeFileSync(F(file), "hello, node\n", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
     CHECK(existsSync(P(file)));
     CHECK(StatsBase_isFile(statSync(P(file))));
     CHECK(js_to_number(StatsBase_get_size(statSync(P(file)))) == 12);
@@ -122,11 +122,11 @@ __attribute__((export_name("run"))) void run(void) {
     join2(sub, dir, "inner/deeper");
     MakeDirectoryOptions mk = MakeDirectoryOptions_create();
     MakeDirectoryOptions_set_recursive(mk, js_some_bool(true));
-    js_release(mkdirSync_with_opt_number_or_string_or_MakeDirectoryOptions(P(sub), mk));
+    js_release(mkdirSync_with_opt_MakeDirectoryOptions(P(sub), mk));
     CHECK(existsSync(P(sub)));
     char nested[700];
     join2(nested, sub, "n.txt");
-    writeFileSync(F(nested), js_string("nested"), (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    writeFileSync(F(nested), "nested", (WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
 
     // The directory's entries.
     JsArray_JsString names = readdirSync(P(dir), (readdir_options){ 0 });

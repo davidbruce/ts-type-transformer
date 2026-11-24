@@ -174,8 +174,10 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         hoist(decls, o.separator);
     }
     if o.optionals || o.param_unions {
-        each_member_list(decls, &mut |members| expand_members(members, o));
-        expand_functions(decls, o);
+        let mut unions = HashSet::new();
+        overloads::union_aliases(decls, &mut unions);
+        each_member_list(decls, &mut |members| expand_members(members, o, &unions));
+        expand_functions(decls, o, &unions);
     }
     if o.unions {
         walk(decls, &mut |t, _| {

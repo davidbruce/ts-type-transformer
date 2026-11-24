@@ -2,6 +2,9 @@
 
 use std::collections::HashSet;
 
+use tsrs_ast::Symbol;
+use tsrs_core::P;
+
 use crate::ir::*;
 use crate::xml::{member_key, signature_key, type_key};
 
@@ -11,7 +14,7 @@ use super::walk::each_member_list;
 
 // One signature per way of calling: optional parameters and union-typed
 // parameters are spelled out.
-fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
+fn expand_signature(sig: &Signature, o: Options, unions: &HashSet<P<Symbol>>) -> Vec<Signature> {
     let mut out = vec![sig.clone()];
     if o.optionals {
         // Every prefix that ends after the last required parameter is callable.
@@ -41,8 +44,18 @@ fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
                     },
                     _ => continue,
                 };
-                // A union of members with types of their own stays one parameter.
-                if o.untyped_param_unions && !parts.iter().any(|p| matches!(p, Type::Primitive(n) if matches!(n.as_str(), "symbol" | "bigint" | "unknown" | "any" | "object"))) {
+                // A union of members with types of their own stays one parameter:
+                // not one with a member of none, nor two arrays, told apart by
+                // what they hold (`LatLngExpression[] | LatLngExpression[][]`).
+                // nor one with a member that is a union of its own, untested
+                // (`string | NodeJS.ArrayBufferView`).
+                let untyped = parts.iter().any(|p| match p {
+                    Type::Primitive(n) => matches!(n.as_str(), "symbol" | "bigint" | "unknown" | "any" | "object"),
+                    Type::Ref(r) => r.sym.is_some_and(|s| unions.contains(&s)),
+                    _ => false,
+                });
+                let arrays = parts.iter().filter(|p| matches!(p, Type::Array(_) | Type::Tuple(_))).count();
+                if o.untyped_param_unions && !untyped && arrays < 2 {
                     continue;
                 }
                 // Too many combinations: leave the union for a later pass.
@@ -70,13 +83,13 @@ fn expand_signature(sig: &Signature, o: Options) -> Vec<Signature> {
     out
 }
 
-pub(super) fn expand_members(members: &mut Vec<Member>, o: Options) {
+pub(super) fn expand_members(members: &mut Vec<Member>, o: Options, unions: &HashSet<P<Symbol>>) {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for m in members.drain(..) {
         match &m.sig {
             Some(sig) if m.kind != MemberKind::Index => {
-                for s in expand_signature(sig, o) {
+                for s in expand_signature(sig, o, unions) {
                     let mut v = m.clone();
                     v.sig = Some(s);
                     if seen.insert(member_key(&v)) {
@@ -90,20 +103,20 @@ pub(super) fn expand_members(members: &mut Vec<Member>, o: Options) {
     *members = out;
 }
 
-pub(super) fn expand_functions(decls: &mut Vec<Decl>, o: Options) {
+pub(super) fn expand_functions(decls: &mut Vec<Decl>, o: Options, unions: &HashSet<P<Symbol>>) {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for d in decls.drain(..) {
         match d {
             Decl::Function(f) => {
-                for sig in expand_signature(&f.sig, o) {
+                for sig in expand_signature(&f.sig, o, unions) {
                     if seen.insert(format!("{} {}", f.name, signature_key(&sig))) {
                         out.push(Decl::Function(Function { name: f.name.clone(), js_name: f.js_name.clone(), sig, doc: f.doc.clone() }));
                     }
                 }
             }
             Decl::Namespace(mut n) => {
-                expand_functions(&mut n.decls, o);
+                expand_functions(&mut n.decls, o, unions);
                 out.push(Decl::Namespace(n));
             }
             d => out.push(d),
@@ -501,4 +514,19 @@ pub(super) fn rename_functions(decls: &mut [Decl], o: Options, synth_enums: &std
         }
     }
     renamed
+}
+
+// The aliases of unions, by symbol: a member that is one is a union in a union.
+pub(super) fn union_aliases(decls: &[Decl], out: &mut HashSet<P<Symbol>>) {
+    for d in decls {
+        match d {
+            Decl::Alias(a) if matches!(a.ty, Type::Union(_)) => {
+                if let Some(s) = a.sym {
+                    out.insert(s);
+                }
+            }
+            Decl::Namespace(n) => union_aliases(&n.decls, out),
+            _ => {}
+        }
+    }
 }
