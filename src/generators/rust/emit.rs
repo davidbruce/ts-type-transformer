@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::classes::{callback, emit_classes, union_enum};
-use super::types::{function, names_of, ns_module, rust_elem};
+use super::types::{function, names_of, ns_module, rust_elem, Site};
 use super::{camel, camel_variant, rust_function, rust_type, snake, Context, ProjectRef, PRELUDE, RUNTIME_TYPES};
 use super::super::comments::{Style, comment};
 use super::super::model::{Call, Model, NamedUnion, Ty};
@@ -312,7 +312,8 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
             }
             None => (modules.entry(module_file(&f.module)).or_insert_with(|| PRELUDE.to_string()), function_names[&f.name].clone()),
         };
-        for item in function(f, &name, "pub ", &mut imports, None, &cx) {
+        let here: HashSet<String> = function_names.values().cloned().chain(taken_in.values().flatten().cloned()).collect();
+        for item in function(f, &name, "pub ", &mut imports, None, &Site { assoc: false, taken: &here }, &cx) {
             *out += &format!("{item}\n");
         }
     }

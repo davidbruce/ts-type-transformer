@@ -31,14 +31,17 @@ fn paths() {
     // Taking paths apart and putting them together.
     check!(path::join(["/usr", "local", "..", "lib", "x.txt"]) == "/usr/lib/x.txt");
     check!(path::normalize("/a//b/./c/..") == "/a/b");
-    check!(path::basename("/tmp/out/report.txt", None) == "report.txt");
-    check!(path::basename("/tmp/out/report.txt", Some(".txt")) == "report");
+    check!(path::basename("/tmp/out/report.txt") == "report.txt");
+    check!(path::basename_with("/tmp/out/report.txt", Some(".txt")) == "report");
     check!(path::dirname("/tmp/out/report.txt") == "/tmp/out");
     check!(path::extname("report.tar.gz") == ".gz" && path::extname("README") == "");
     check!(path::is_absolute("/tmp") && !path::is_absolute("tmp/x"));
     check!(path::resolve(["/a/b", "../c", "d"]) == "/a/c/d");
     check!(path::relative("/a/b/c", "/a/d") == "../../d");
-    check!(path::matches_glob("/foo/bar.txt", "/foo/*.txt") && !path::matches_glob("/foo/bar.md", "/foo/*.txt"));
+    check!(
+        path::matches_glob("/foo/bar.txt", "/foo/*.txt")
+            && !path::matches_glob("/foo/bar.md", "/foo/*.txt")
+    );
     check!(path::to_namespaced_path("/a/b") == "/a/b");
     check!(path::sep().as_str() == "/" && path::delimiter().as_str() == ":");
     let p = path::parse("/home/user/dir/file.txt");
@@ -62,24 +65,24 @@ fn paths() {
 
 fn files() {
     // A scratch directory, made under target/e2e and removed at the end.
-    let dir = fs::mkdtemp_sync("target/e2e/node-fs-", None);
+    let dir = fs::mkdtemp_sync("target/e2e/node-fs-");
     check!(dir.starts_with("target/e2e/node-fs-"));
     check!(fs::exists_sync(dir.as_str()));
     check!(fs::stat_sync(dir.as_str()).is_directory());
 
     let file = format!("{}/{}", dir.as_str(), "hello.txt");
     check!(!fs::exists_sync(file.as_str()));
-    fs::write_file_sync(file.as_str(), "hello, node\nsecond line\n", None);
+    fs::write_file_sync(file.as_str(), "hello, node\nsecond line\n");
     check!(fs::exists_sync(file.as_str()));
 
     // Read back as bytes (`Buffer<T>` derefs to `Uint8Array<T>`), and as text with an encoding.
-    let bytes = fs::read_file_sync(file.as_str(), None);
+    let bytes = fs::read_file_sync(file.as_str());
     check!(bytes.len() == 24);
     check!(String::from_utf8(bytes.to_vec()).unwrap() == "hello, node\nsecond line\n");
     let text = fs::read_file_sync_with_read_file_sync_options(file.as_str(), BufferEncoding::Utf8);
     check!(text == "hello, node\nsecond line\n");
 
-    fs::append_file_sync(file.as_str(), "third\n", None);
+    fs::append_file_sync(file.as_str(), "third\n");
     let text = fs::read_file_sync_with_read_file_sync_options(file.as_str(), BufferEncoding::Utf8);
     check!(text.lines().count() == 3 && text.ends_with("third\n"));
     let stats = fs::stat_sync(file.as_str());
@@ -90,10 +93,13 @@ fn files() {
     let sub = format!("{}/{}", dir.as_str(), "sub");
     let mk = fs::MakeDirectoryOptions::create();
     mk.set_recursive(Some(true));
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(sub.as_str(), &mk);
-    fs::write_file_sync(format!("{}/{}", sub.as_str(), "b.txt").as_str(), "b", None);
-    fs::copy_file_sync(file.as_str(), format!("{}/{}", dir.as_str(), "copy.txt").as_str(), None);
-    let mut names: Vec<String> = fs::readdir_sync(dir.as_str(), None).iter().collect();
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(sub.as_str(), &mk);
+    fs::write_file_sync(format!("{}/{}", sub.as_str(), "b.txt").as_str(), "b");
+    fs::copy_file_sync(
+        file.as_str(),
+        format!("{}/{}", dir.as_str(), "copy.txt").as_str(),
+    );
+    let mut names: Vec<String> = fs::readdir_sync(dir.as_str()).iter().collect();
     names.sort();
     check!(names == ["copy.txt", "hello.txt", "sub"]);
     check!(fs::stat_sync(sub.as_str()).is_directory());
@@ -106,27 +112,29 @@ fn files() {
     check!(!fs::exists_sync(moved.as_str()));
 
     // A missing file throws; the call returns a zero value and the error is kept.
-    let missing = js::attempt(|| fs::read_file_sync(format!("{}/{}", dir.as_str(), "nope").as_str(), None));
+    let missing =
+        js::attempt(|| fs::read_file_sync(format!("{}/{}", dir.as_str(), "nope").as_str()));
     check!(missing.is_err_and(|e| e.message().contains("ENOENT")));
 
     // Removed with everything in it.
     let rm = fs::RmOptions::create();
     rm.set_recursive(Some(true));
-    fs::rm_sync(dir.as_str(), Some(&rm));
+    fs::rm_sync_with(dir.as_str(), Some(&rm));
     check!(!fs::exists_sync(dir.as_str()));
 }
 
 fn emitter() {
-    let em = EventEmitter::<JsValue>::new(None);
+    let em = EventEmitter::<JsValue>::new();
     let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
     let on_greet = AnyArrayFn::new({
         let log = log.clone();
         move |args: JsArray| {
-            log.borrow_mut().push(format!("greet {} {}", args.get(0).as_string(), args.len()));
+            log.borrow_mut()
+                .push(format!("greet {} {}", args.get(0).as_string(), args.len()));
         }
     });
     em.on("greet", &on_greet);
-    check!(em.listener_count("greet", None) == 1.0);
+    check!(em.listener_count("greet") == 1.0);
     check!(em.emit("greet", [JsValue::from("world")]));
     check!(log.borrow().len() == 1 && log.borrow()[0] == "greet world 1");
 
@@ -137,16 +145,16 @@ fn emitter() {
         move |_: JsArray| c.set(c.get() + 1)
     });
     em.once("ping", &once);
-    check!(em.listener_count("ping", None) == 1.0);
+    check!(em.listener_count("ping") == 1.0);
     check!(em.emit("ping", Vec::<JsValue>::new()));
     check!(!em.emit("ping", Vec::<JsValue>::new()));
     check!(once_count.get() == 1);
-    check!(em.listener_count("ping", None) == 0.0);
+    check!(em.listener_count("ping") == 0.0);
 
     // remove_listener stops a listener; event_names lists what is left.
     check!(em.event_names().len() == 1);
     em.remove_listener("greet", &on_greet);
-    check!(em.listener_count("greet", None) == 0.0);
+    check!(em.listener_count("greet") == 0.0);
     check!(!em.emit("greet", [JsValue::from("again")]));
     check!(log.borrow().len() == 1);
 

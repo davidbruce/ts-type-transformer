@@ -59,7 +59,7 @@ fn draw_box(
         ctx.line_to(xs[i], ys[i]);
     }
     ctx.close_path();
-    ctx.fill(None);
+    ctx.fill();
 
     ctx.set_stroke_style("#111111");
     ctx.set_line_width(1.5);
@@ -78,12 +78,12 @@ fn draw_circle(ctx: &CanvasRenderingContext2D, wx: f64, wy: f64, r: f64, fill_he
     let rpx = r * 46.0;
     ctx.set_fill_style(fill_hex);
     ctx.begin_path();
-    ctx.arc(cx, cy, rpx, 0.0, TAU, None);
-    ctx.fill(None);
+    ctx.arc(cx, cy, rpx, 0.0, TAU);
+    ctx.fill();
     ctx.set_stroke_style("#111111");
     ctx.set_line_width(1.5);
     ctx.begin_path();
-    ctx.arc(cx, cy, rpx, 0.0, TAU, None);
+    ctx.arc(cx, cy, rpx, 0.0, TAU);
     ctx.stroke();
 }
 
@@ -130,7 +130,7 @@ fn render(st: &AppState) {
         let dx = angle.cos();
         let dy = angle.sin();
         let ray = Ray::new(&origin, &Vector3::new(dx, dy, 0.0));
-        if let Some(hit) = st.world.cast_ray_and_get_normal(&ray, MAX_TOI, true, None, None, None, None, None) {
+        if let Some(hit) = st.world.cast_ray_and_get_normal(&ray, MAX_TOI, true) {
             hits += 1;
             let toi = hit.time_of_impact();
             if toi < min_toi {
@@ -157,26 +157,29 @@ fn render(st: &AppState) {
 
             ctx.set_fill_style("#111111");
             ctx.begin_path();
-            ctx.arc(hx, hy, 2.8, 0.0, TAU, None);
-            ctx.fill(None);
+            ctx.arc(hx, hy, 2.8, 0.0, TAU);
+            ctx.fill();
         } else {
             ctx.set_stroke_style("#e5e5e5");
             ctx.set_line_width(0.9);
             ctx.begin_path();
             ctx.move_to(ox, oy);
-            ctx.line_to(to_cx(EMITTER_X + dx * MAX_TOI), to_cy(EMITTER_Y + dy * MAX_TOI));
+            ctx.line_to(
+                to_cx(EMITTER_X + dx * MAX_TOI),
+                to_cy(EMITTER_Y + dy * MAX_TOI),
+            );
             ctx.stroke();
         }
     }
 
     ctx.set_fill_style("#111111");
     ctx.begin_path();
-    ctx.arc(ox, oy, 6.0, 0.0, TAU, None);
-    ctx.fill(None);
+    ctx.arc(ox, oy, 6.0, 0.0, TAU);
+    ctx.fill();
     ctx.set_stroke_style("#ffffff");
     ctx.set_line_width(1.5);
     ctx.begin_path();
-    ctx.arc(ox, oy, 3.0, 0.0, TAU, None);
+    ctx.arc(ox, oy, 3.0, 0.0, TAU);
     ctx.stroke();
 
     let deg = (base_angle * 180.0 / PI).round() as i32;
@@ -198,22 +201,21 @@ pub extern "C" fn start() {
         }
         let doc = dom::document();
         let canvas = HTMLCanvasElement::cast(&doc.get_element_by_id("canvas").unwrap()).unwrap();
-        let ctx = canvas.get_context_2d(None).unwrap();
+        let ctx = canvas.get_context_2d().unwrap();
 
-        let world = World::new(
-            &Vector3::new(0.0, 0.0, 0.0),
-            None, None, None, None, None, None, None, None, None, None, None, None, None,
-        );
+        let world = World::new(&Vector3::new(0.0, 0.0, 0.0));
         let add_box = |cx: f64, cy: f64, theta: f64, hx: f64, hy: f64| {
             let q = Quaternion::new(0.0, 0.0, (theta * 0.5).sin(), (theta * 0.5).cos());
             let rb = world.create_rigid_body(
-                &RigidBodyDesc::fixed().set_translation(cx, cy, 0.0).set_rotation(&q),
+                &RigidBodyDesc::fixed()
+                    .set_translation(cx, cy, 0.0)
+                    .set_rotation(&q),
             );
-            world.create_collider(&ColliderDesc::cuboid(hx, hy, 1.0), &rb);
+            world.create_collider_with(&ColliderDesc::cuboid(hx, hy, 1.0), &rb);
         };
         let add_sphere = |cx: f64, cy: f64, r: f64| {
             let rb = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(cx, cy, 0.0));
-            world.create_collider(&ColliderDesc::ball(r), &rb);
+            world.create_collider_with(&ColliderDesc::ball(r), &rb);
         };
 
         add_box(0.0, -0.35, 0.0, 7.0, 0.35);
@@ -223,7 +225,7 @@ pub extern "C" fn start() {
         add_box(0.4, 4.4, 0.0, 1.9, 0.22);
         add_sphere(-2.5, 3.6, 0.65);
         add_sphere(4.2, 3.2, 0.75);
-        world.step(None, None);
+        world.step();
 
         let st = Rc::new(RefCell::new(AppState {
             ctx,

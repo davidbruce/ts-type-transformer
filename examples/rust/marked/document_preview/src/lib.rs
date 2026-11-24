@@ -30,7 +30,10 @@ pub extern "C" fn start() {
     let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("Marked Document Preview (Rust)")));
+    append(
+        &head,
+        make_el(&doc, "h1", "", Some("Marked Document Preview (Rust)")),
+    );
     append(&head, make_el(&doc, "span", "badge", Some("marked")));
     append(&app, head);
 
@@ -54,13 +57,19 @@ pub extern "C" fn start() {
     let grid = make_el(&doc, "div", "grid", None);
 
     let src_card = make_el(&doc, "div", "card", None);
-    append(&src_card, make_el(&doc, "div", "label", Some("Markdown Source")));
+    append(
+        &src_card,
+        make_el(&doc, "div", "label", Some("Markdown Source")),
+    );
     append(&src_card, make_el(&doc, "pre", "src", Some(markdown_src)));
 
     let out_card = make_el(&doc, "div", "card", None);
-    append(&out_card, make_el(&doc, "div", "label", Some("Rendered HTML")));
+    append(
+        &out_card,
+        make_el(&doc, "div", "label", Some("Rendered HTML")),
+    );
     let md_out = make_el(&doc, "div", "md-out", None);
-    let html = unwrap_html(marked::marked_with_opt_marked_options(markdown_src, None));
+    let html = unwrap_html(marked::marked_with_opt_marked_options(markdown_src));
     md_out.set_inner_html(&html);
     append(&out_card, md_out);
 

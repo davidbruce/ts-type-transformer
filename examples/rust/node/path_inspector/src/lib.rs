@@ -42,8 +42,8 @@ pub extern "C" fn start() {
     c.check(rel == "../../dist/assets");
 
     c.check(path::dirname("/srv/app/archive.tar.gz") == "/srv/app");
-    c.check(path::basename("/srv/app/archive.tar.gz", None) == "archive.tar.gz");
-    c.check(path::basename("/srv/app/archive.tar.gz", ".gz") == "archive.tar");
+    c.check(path::basename("/srv/app/archive.tar.gz") == "archive.tar.gz");
+    c.check(path::basename_with("/srv/app/archive.tar.gz", ".gz") == "archive.tar");
     c.check(path::extname("/srv/app/archive.tar.gz") == ".gz");
     c.check(path::is_absolute("/srv/app") && !path::is_absolute("src/app"));
 
@@ -69,7 +69,9 @@ pub extern "C" fn start() {
     );
 
     println(&format!("join={joined} norm={norm}"));
-    println(&format!("resolve={resolved} relative={rel} format={formatted}"));
+    println(&format!(
+        "resolve={resolved} relative={rel} format={formatted}"
+    ));
     println(&format!(
         "parsed=(root={} dir={} base={} ext={})",
         parsed.root(),

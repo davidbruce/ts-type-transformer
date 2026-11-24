@@ -384,10 +384,14 @@ the time control returns to JavaScript is reported, not lost.
   or of a union nothing types (Pixi's `fill`, of colors another package
   declares), is `impl Into<JsValue>`: `&handle`, `4.0`, `"text"`, and `None`
   where it is optional; a value of a type parameter
-  goes by value. An optional or nullable argument is its value or `None`: a
+  goes by value. A function with trailing optional arguments is two: one
+  without them (`lat_lng(46.2, 6.1)`, `World::new(&gravity)`) that calls the
+  one with them, `_with` (`map_with("map", &opts)`; `_full` where a member is
+  named so). There an optional or nullable argument is its value or `None`: a
   string is `"x"`, `&text` or `None`, an object `&opts`, `Some(&opts)` or
-  `None`, a number or flag `500.0`, `Some(500.0)` or `None`
-  (`lat_lng(46.2, 6.1, None)`, `map("map", &opts)`, `fire("click", &data, None)`).
+  `None`, a number or flag `500.0`, `Some(500.0)` or `None`. There is no
+  shorter form before a rest, or where what it leaves out names the
+  function's type parameter.
   Overloads that differ in a
   key-or-string parameter are one method (`query_selector(HTMLElementTagNameMap::P)`,
   `query_selector("p.intro")`), and where they differ in other parameters too,

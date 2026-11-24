@@ -11,21 +11,21 @@ pub extern "C" fn start() {
         .with_zoom_animation(false)
         .with_fade_animation(false)
         .with_marker_zoom_animation(false);
-    let m = map("map", &m_opts);
+    let m = map_with("map", &m_opts);
 
     let stations = [
-        ("01", "Geneva", lat_lng(46.2044, 6.1432, None)),
-        ("02", "Lausanne", lat_lng(46.5197, 6.6323, None)),
-        ("03", "Bern", lat_lng(46.9480, 7.4474, None)),
-        ("04", "Zurich", lat_lng(47.3769, 8.5417, None)),
-        ("05", "Basel", lat_lng(47.5596, 7.5886, None)),
+        ("01", "Geneva", lat_lng(46.2044, 6.1432)),
+        ("02", "Lausanne", lat_lng(46.5197, 6.6323)),
+        ("03", "Bern", lat_lng(46.9480, 7.4474)),
+        ("04", "Zurich", lat_lng(47.3769, 8.5417)),
+        ("05", "Basel", lat_lng(47.5596, 7.5886)),
     ];
 
     let p_opts = PolylineOptions::default()
         .with_smooth_factor(1.0)
         .with_color("#404040")
         .with_weight(2.5);
-    let corridor = polyline(stations.iter().map(|s| &s.2).collect::<Vec<_>>(), &p_opts);
+    let corridor = polyline_with(stations.iter().map(|s| &s.2).collect::<Vec<_>>(), &p_opts);
     corridor.add_to(&m);
 
     let dot_opts = CircleMarkerOptions::default()
@@ -35,12 +35,12 @@ pub extern "C" fn start() {
         .with_fill_color("#ffffff")
         .with_fill_opacity(1.0);
 
-    let pin_size = point(22.0, 22.0, None);
-    let pin_anchor = point(11.0, 11.0, None);
+    let pin_size = point(22.0, 22.0);
+    let pin_anchor = point(11.0, 11.0);
 
     for (code, name, pt) in &stations {
-        let cm = circle_marker(pt, &dot_opts);
-        cm.bind_tooltip(format!("{code} · {name}"), None);
+        let cm = circle_marker_with(pt, &dot_opts);
+        cm.bind_tooltip(format!("{code} · {name}"));
         cm.add_to(&m);
 
         let d_opts = DivIconOptions::default()
@@ -49,14 +49,14 @@ pub extern "C" fn start() {
             .with_icon_size(pin_size.clone())
             .with_icon_anchor(pin_anchor.clone());
 
-        let mk_opts = MarkerOptions::default().with_icon(div_icon(&d_opts));
-        marker(pt, &mk_opts).add_to(&m);
+        let mk_opts = MarkerOptions::default().with_icon(div_icon_with(&d_opts));
+        marker_with(pt, &mk_opts).add_to(&m);
     }
 
-    m.fit_bounds(&corridor.get_bounds().pad(0.15), None);
+    m.fit_bounds(&corridor.get_bounds().pad(0.15));
 
     let pop_opts = PopupOptions::default().with_max_width(220.0);
-    let note = popup(&stations[2].2, &pop_opts);
+    let note = popup_with(&stations[2].2, &pop_opts);
     note.set_content("03 Bern · 46.95N, 7.45E");
     note.open_on(&m);
 
@@ -86,8 +86,8 @@ pub extern "C" fn start() {
             }
         }
     });
-    m.on_click(&on_click, None);
+    m.on_click(&on_click);
     let data = LeafletMouseEvent::default().with_latlng(&stations[2].2);
-    m.fire("click", &data, None);
-    m.fire("click", &data, None);
+    m.fire_with("click", &data, None);
+    m.fire_with("click", &data, None);
 }

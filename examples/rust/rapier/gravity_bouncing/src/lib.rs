@@ -53,23 +53,27 @@ fn build_scene(st: &mut AppState) {
     }
     let gy = if st.earth { -9.81 } else { -1.62 };
     let gravity = Vector3::new(0.0, gy, 0.0);
-    let world = World::new(&gravity, None, None, None, None, None, None, None, None, None, None, None, None, None);
+    let world = World::new(&gravity);
 
     let ground = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, -0.4, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(7.0, 0.4, 2.0), &ground);
+    world.create_collider_with(&ColliderDesc::cuboid(7.0, 0.4, 2.0), &ground);
     let lw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(-6.8, 3.5, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &lw);
+    world.create_collider_with(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &lw);
     let rw = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(6.8, 3.5, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &rw);
+    world.create_collider_with(&ColliderDesc::cuboid(0.25, 4.0, 2.0), &rw);
 
     st.balls.clear();
     for i in 0..5 {
-        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(X_COORDS[i], 5.6, 0.0));
+        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(
+            X_COORDS[i],
+            5.6,
+            0.0,
+        ));
         let cd = ColliderDesc::ball(0.42)
             .set_restitution(RESTITUTIONS[i])
             .set_friction(0.2)
             .set_density(1.2);
-        world.create_collider(&cd, &rb);
+        world.create_collider_with(&cd, &rb);
         st.balls.push(rb);
     }
 
@@ -80,12 +84,12 @@ fn build_scene(st: &mut AppState) {
 
 fn step_sim(st: &mut AppState) {
     if let Some(ref w) = st.world {
-        w.step(None, None);
+        w.step();
     }
     st.step_count += 1;
     let idx = (st.step_count - 1) % TRAIL_LEN;
     for i in 0..5 {
-        let p = st.balls[i].translation(None);
+        let p = st.balls[i].translation();
         st.trail_x[i][idx] = p.x();
         st.trail_y[i][idx] = p.y();
     }
@@ -149,12 +153,18 @@ fn render(st: &AppState) {
         ctx.set_fill_style("#b5b5b5");
         for k in 0..st.trail_count {
             ctx.begin_path();
-            ctx.arc(to_cx(st.trail_x[i][k]), to_cy(st.trail_y[i][k]), 1.6, 0.0, TAU, None);
-            ctx.fill(None);
+            ctx.arc(
+                to_cx(st.trail_x[i][k]),
+                to_cy(st.trail_y[i][k]),
+                1.6,
+                0.0,
+                TAU,
+            );
+            ctx.fill();
         }
 
-        let p = st.balls[i].translation(None);
-        let v = st.balls[i].linvel(None);
+        let p = st.balls[i].translation();
+        let v = st.balls[i].linvel();
         energy += 0.5 * (v.x() * v.x() + v.y() * v.y());
         if p.y() > max_y {
             max_y = p.y();
@@ -166,28 +176,32 @@ fn render(st: &AppState) {
 
         ctx.set_fill_style(BALL_HEX[i]);
         ctx.begin_path();
-        ctx.arc(cx, cy, rpx, 0.0, TAU, None);
-        ctx.fill(None);
+        ctx.arc(cx, cy, rpx, 0.0, TAU);
+        ctx.fill();
 
         ctx.set_stroke_style("#111111");
         ctx.set_line_width(1.6);
         ctx.begin_path();
-        ctx.arc(cx, cy, rpx, 0.0, TAU, None);
+        ctx.arc(cx, cy, rpx, 0.0, TAU);
         ctx.stroke();
 
         ctx.set_fill_style(if i >= 3 { "#d4d4d4" } else { "#737373" });
         ctx.begin_path();
-        ctx.arc(cx - 5.0, cy - 5.0, 2.8, 0.0, TAU, None);
-        ctx.fill(None);
+        ctx.arc(cx - 5.0, cy - 5.0, 2.8, 0.0, TAU);
+        ctx.fill();
 
         ctx.set_fill_style("#111111");
         let label = format!("e={:.2}", RESTITUTIONS[i]);
-        ctx.fill_text(&label, cx - 22.0, 368.0, None);
+        ctx.fill_text(&label, cx - 22.0, 368.0);
     }
 
     let msg = format!(
         "5 spheres \u{00B7} g={} m/s\u{00B2} \u{00B7} max_y={:.2} m \u{00B7} ke={:.1} \u{00B7} step={} ({})",
-        if st.earth { "Earth (-9.81)" } else { "Moon (-1.62)" },
+        if st.earth {
+            "Earth (-9.81)"
+        } else {
+            "Moon (-1.62)"
+        },
         max_y,
         energy,
         st.step_count,
@@ -204,7 +218,7 @@ pub extern "C" fn start() {
         }
         let doc = dom::document();
         let canvas = HTMLCanvasElement::cast(&doc.get_element_by_id("canvas").unwrap()).unwrap();
-        let ctx = canvas.get_context_2d(None).unwrap();
+        let ctx = canvas.get_context_2d().unwrap();
 
         let st = Rc::new(RefCell::new(AppState {
             ctx,
@@ -230,7 +244,10 @@ pub extern "C" fn start() {
             render(&s);
         }
 
-        for (i, bid) in ["btn-gravity", "btn-kick", "btn-pause", "btn-reset"].iter().enumerate() {
+        for (i, bid) in ["btn-gravity", "btn-kick", "btn-pause", "btn-reset"]
+            .iter()
+            .enumerate()
+        {
             let btn = doc.get_element_by_id(bid).unwrap();
             let st_c = st.clone();
             let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
@@ -262,11 +279,8 @@ pub extern "C" fn start() {
                     }
                     2 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(if s.paused {
-                            "Resume"
-                        } else {
-                            "Pause"
-                        });
+                        s.pause_btn
+                            .set_text_content(if s.paused { "Resume" } else { "Pause" });
                         render(&s);
                     }
                     _ => {

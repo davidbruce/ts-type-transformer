@@ -24,8 +24,14 @@ pub extern "C" fn start() {
     let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("ParseError Inspector (Rust)")));
-    append(&head, make_el(&doc, "span", "badge", Some("throwOnError: false vs true")));
+    append(
+        &head,
+        make_el(&doc, "h1", "", Some("ParseError Inspector (Rust)")),
+    );
+    append(
+        &head,
+        make_el(&doc, "span", "badge", Some("throwOnError: false vs true")),
+    );
     append(&app, head);
 
     let lenient = KatexOptions::default()
@@ -34,26 +40,32 @@ pub extern "C" fn start() {
 
     let strict = KatexOptions::default().with_throw_on_error(true);
 
-    let bad_inputs = [
-        r"\frac{1}{",
-        r"\unknowncmd{x}",
-        r"x^{2 + ",
-        r"\sqrt{a + b",
-    ];
+    let bad_inputs = [r"\frac{1}{", r"\unknowncmd{x}", r"x^{2 + ", r"\sqrt{a + b"];
 
     for tex in bad_inputs {
         let row = make_el(&doc, "div", "row", None);
 
         let left = make_el(&doc, "div", "cell mode-html", None);
-        append(&left, make_el(&doc, "div", "label", Some("throwOnError: false (#555555)")));
+        append(
+            &left,
+            make_el(&doc, "div", "label", Some("throwOnError: false (#555555)")),
+        );
         let l_slot = make_el(&doc, "div", "slot", None);
-        l_slot.set_inner_html(&katex::render_to_string(tex, &lenient));
+        l_slot.set_inner_html(&katex::render_to_string_with(tex, &lenient));
         append(&left, l_slot);
         append(&row, left);
 
         let right = make_el(&doc, "div", "cell", None);
-        append(&right, make_el(&doc, "div", "label", Some("throwOnError: true (caught ParseError)")));
-        let err_msg = match katex::js::attempt(|| katex::render_to_string(tex, &strict)) {
+        append(
+            &right,
+            make_el(
+                &doc,
+                "div",
+                "label",
+                Some("throwOnError: true (caught ParseError)"),
+            ),
+        );
+        let err_msg = match katex::js::attempt(|| katex::render_to_string_with(tex, &strict)) {
             Ok(_) => String::from("(did not throw)"),
             Err(e) => e.message(),
         };

@@ -35,25 +35,63 @@ pub extern "C" fn start() {
     let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("Date-fns Calendar Grid (Rust)")));
+    append(
+        &head,
+        make_el(&doc, "h1", "", Some("Date-fns Calendar Grid (Rust)")),
+    );
     append(&head, make_el(&doc, "span", "badge", Some("March 2024")));
     append(&app, head);
 
     let ref_day: Date = date_fns::parse_iso("2024-03-15", None);
     let month_start: Date = date_fns::start_of_month::<Date, Date>(day(&ref_day), None);
     let month_end: Date = date_fns::end_of_month::<Date, Date>(day(&ref_day), None);
-    let offset = date_fns::get_day(&month_start, None) as usize;
+    let offset = date_fns::get_day(&month_start) as usize;
 
     let metrics = make_el(&doc, "div", "metrics", None);
-    add_metric(&doc, &metrics, "Days in Month", &format!("{}", date_fns::get_days_in_month(&ref_day, None) as i32));
-    add_metric(&doc, &metrics, "Quarter", &format!("Q{}", date_fns::get_quarter(&ref_day, None) as i32));
-    add_metric(&doc, &metrics, "ISO Week", &format!("W{}", date_fns::get_iso_week(&ref_day, None) as i32));
-    let leap_str = if date_fns::is_leap_year(&ref_day, None) { "Yes" } else { "No" };
-    add_metric(&doc, &metrics, "Leap Year / DOY", &format!("{leap_str} \u{00B7} #{}", date_fns::get_day_of_year(&ref_day, None) as i32));
+    add_metric(
+        &doc,
+        &metrics,
+        "Days in Month",
+        &format!("{}", date_fns::get_days_in_month(&ref_day) as i32),
+    );
+    add_metric(
+        &doc,
+        &metrics,
+        "Quarter",
+        &format!("Q{}", date_fns::get_quarter(&ref_day) as i32),
+    );
+    add_metric(
+        &doc,
+        &metrics,
+        "ISO Week",
+        &format!("W{}", date_fns::get_iso_week(&ref_day) as i32),
+    );
+    let leap_str = if date_fns::is_leap_year(&ref_day) {
+        "Yes"
+    } else {
+        "No"
+    };
+    add_metric(
+        &doc,
+        &metrics,
+        "Leap Year / DOY",
+        &format!(
+            "{leap_str} \u{00B7} #{}",
+            date_fns::get_day_of_year(&ref_day) as i32
+        ),
+    );
     append(&app, metrics);
 
     let card = make_el(&doc, "div", "card", None);
-    append(&card, make_el(&doc, "div", "label", Some("March 2024 \u{2014} Reference 2024-03-15")));
+    append(
+        &card,
+        make_el(
+            &doc,
+            "div",
+            "label",
+            Some("March 2024 \u{2014} Reference 2024-03-15"),
+        ),
+    );
 
     let grid = make_el(&doc, "div", "cal-grid", None);
     for dow in ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] {
@@ -66,11 +104,12 @@ pub extern "C" fn start() {
     let span: Interval<DateArg<Date>, DateArg<Date>> = Interval::default()
         .with_start(day(&month_start))
         .with_end(day(&month_end));
-    let days = date_fns::each_day_of_interval::<_, date_fns::EachDayOfIntervalOptions<Date>>(span, None);
+    let days =
+        date_fns::each_day_of_interval::<_, date_fns::EachDayOfIntervalOptions<Date>>(span, None);
     for i in 0..days.len() {
         let item = days.get(i);
-        let is_ref = date_fns::is_same_day(item.clone(), &ref_day, None);
-        let is_wknd = date_fns::is_weekend(item.clone(), None);
+        let is_ref = date_fns::is_same_day(item.clone(), &ref_day);
+        let is_wknd = date_fns::is_weekend(item.clone());
         let cls = if is_ref {
             "day-cell today"
         } else if is_wknd {
@@ -79,12 +118,12 @@ pub extern "C" fn start() {
             "day-cell"
         };
         let cell = make_el(&doc, "div", cls, None);
-        let day_num = date_fns::format_date(item.clone(), "d", None);
+        let day_num = date_fns::format_date(item.clone(), "d");
         append(&cell, make_el(&doc, "span", "day-num", Some(&day_num)));
         let sub = if is_ref {
             "REF".to_string()
         } else {
-            date_fns::format_date(item, "EEE", None)
+            date_fns::format_date(item, "EEE")
         };
         append(&cell, make_el(&doc, "span", "sub", Some(&sub)));
         append(&grid, cell);

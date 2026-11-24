@@ -33,7 +33,7 @@ impl Checks {
 pub extern "C" fn start() {
     let mut c = Checks(0);
 
-    let bus = EventEmitter::<JsValue>::new(None);
+    let bus = EventEmitter::<JsValue>::new();
     let stages = Rc::new(Cell::new(0u32));
     let done_count = Rc::new(Cell::new(0u32));
 
@@ -48,22 +48,22 @@ pub extern "C" fn start() {
     bus.on("stage", &on_stage);
     bus.once("done", &on_done);
 
-    let root = fs::mkdtemp_sync("/tmp/tsrs-node-pipe-", None);
+    let root = fs::mkdtemp_sync("/tmp/tsrs-node-pipe-");
     let in_dir = path::join([root.as_str(), "in"]);
     let out_dir = path::join([root.as_str(), "out"]);
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(&*in_dir, &mk);
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(&*out_dir, &mk);
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(&*in_dir, &mk);
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(&*out_dir, &mk);
 
     // Stage 1: seed
-    fs::write_file_sync(&*path::join([in_dir.as_str(), "a.log"]), "100 OK\n", None);
-    fs::write_file_sync(&*path::join([in_dir.as_str(), "b.log"]), "200 OK\n", None);
-    fs::write_file_sync(&*path::join([in_dir.as_str(), "c.log"]), "300 OK\n", None);
+    fs::write_file_sync(&*path::join([in_dir.as_str(), "a.log"]), "100 OK\n");
+    fs::write_file_sync(&*path::join([in_dir.as_str(), "b.log"]), "200 OK\n");
+    fs::write_file_sync(&*path::join([in_dir.as_str(), "c.log"]), "300 OK\n");
     bus.emit("stage", ["seed"]);
     c.check(stages.get() == 1);
 
     // Stage 2: bundle
-    let mut logs: Vec<String> = fs::readdir_sync(&*in_dir, None).iter().collect();
+    let mut logs: Vec<String> = fs::readdir_sync(&*in_dir).iter().collect();
     logs.sort();
     c.check(logs == ["a.log", "b.log", "c.log"]);
 
@@ -74,16 +74,18 @@ pub extern "C" fn start() {
             &*path::join([in_dir.as_str(), name.as_str()]),
             BufferEncoding::Utf8,
         );
-        fs::append_file_sync(&*combined, &*chunk, None);
+        fs::append_file_sync(&*combined, &*chunk);
     }
     bus.emit("stage", ["bundle"]);
     c.check(stages.get() == 2);
 
     // Stage 3: verify
-    let comb_text = fs::read_file_sync_with_read_file_sync_options(&*combined, BufferEncoding::Utf8);
+    let comb_text =
+        fs::read_file_sync_with_read_file_sync_options(&*combined, BufferEncoding::Utf8);
     c.check(fs::stat_sync(&*combined).size() == 21.0 && comb_text.contains("200 OK"));
 
-    let missing = js::attempt(|| fs::read_file_sync(&*path::join([out_dir.as_str(), "missing.log"]), None));
+    let missing =
+        js::attempt(|| fs::read_file_sync(&*path::join([out_dir.as_str(), "missing.log"])));
     let enoent_caught = missing.is_err_and(|e| e.message().contains("ENOENT"));
     c.check(enoent_caught);
 
@@ -91,11 +93,16 @@ pub extern "C" fn start() {
     bus.emit("done", [comb_text.len() as f64]);
     c.check(stages.get() == 3 && done_count.get() == 1);
 
-    let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
-    fs::rm_sync(&*root, &rm);
+    let rm = fs::RmOptions::default()
+        .with_recursive(true)
+        .with_force(true);
+    fs::rm_sync_with(&*root, &rm);
     c.check(!fs::exists_sync(&*root));
 
-    println(&format!("pipeline_root={root} combined_bytes={}", comb_text.len()));
+    println(&format!(
+        "pipeline_root={root} combined_bytes={}",
+        comb_text.len()
+    ));
     println(&format!(
         "stages={} done={} enoent={}",
         stages.get(),

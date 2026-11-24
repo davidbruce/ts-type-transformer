@@ -33,14 +33,13 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
     if let Some(w) = st.world.take() {
         w.free();
     }
-    let world = rp::World::new(
-        &rp::Vector3::new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
-    );
+    let world = rp::World::new(&rp::Vector3::new(0.0, -9.81, 0.0));
 
     let bed = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.25, 0.0));
-    world.create_collider(
-        &rp::ColliderDesc::cuboid(4.6, 0.25, 7.6).set_friction(0.14).set_restitution(0.35),
+    world.create_collider_with(
+        &rp::ColliderDesc::cuboid(4.6, 0.25, 7.6)
+            .set_friction(0.14)
+            .set_restitution(0.35),
         &bed,
     );
 
@@ -52,8 +51,10 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
     ];
     for (rx, ry, rz, hx, hy, hz) in rails {
         let rb = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(rx, ry, rz));
-        world.create_collider(
-            &rp::ColliderDesc::cuboid(hx, hy, hz).set_friction(0.12).set_restitution(0.88),
+        world.create_collider_with(
+            &rp::ColliderDesc::cuboid(hx, hy, hz)
+                .set_friction(0.12)
+                .set_restitution(0.88),
             &rb,
         );
     }
@@ -69,7 +70,7 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
                     .set_linear_damping(0.30)
                     .set_angular_damping(0.30),
             );
-            world.create_collider(
+            world.create_collider_with(
                 &rp::ColliderDesc::ball(BALL_RADIUS)
                     .set_restitution(0.92)
                     .set_friction(0.10)
@@ -88,7 +89,7 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
         cue_desc = cue_desc.set_linvel(-0.18, 0.0, -16.0);
     }
     let cue = world.create_rigid_body(&cue_desc);
-    world.create_collider(
+    world.create_collider_with(
         &rp::ColliderDesc::ball(BALL_RADIUS)
             .set_restitution(0.94)
             .set_friction(0.10)
@@ -103,8 +104,8 @@ fn build_world(st: &mut AppState, shoot_cue: bool) {
 
 fn sync_meshes(st: &AppState) {
     for (rb, mesh) in st.balls.iter().zip(st.ball_meshes.iter()) {
-        let p = rb.translation(None);
-        let q = rb.rotation(None);
+        let p = rb.translation();
+        let q = rb.rotation();
         mesh.position().set(p.x(), p.y(), p.z());
         mesh.rotation_quaternion().set(q.x(), q.y(), q.z(), q.w());
     }
@@ -114,7 +115,7 @@ fn update_meta(st: &AppState) {
     let mut moving = 0usize;
     let mut ke = 0.0_f64;
     for rb in &st.balls {
-        let v = rb.linvel(None);
+        let v = rb.linvel();
         let s2 = v.x() * v.x() + v.y() * v.y() + v.z() * v.z();
         if s2 > 0.05 {
             moving += 1;
@@ -131,7 +132,7 @@ fn update_meta(st: &AppState) {
 
 fn step_sim(st: &mut AppState) {
     if let Some(ref w) = st.world {
-        w.step(None, None);
+        w.step();
     }
     st.step_count += 1;
     sync_meshes(st);
@@ -161,14 +162,17 @@ pub extern "C" fn start() {
             build_world(&mut s, true);
             for _ in 0..26 {
                 if let Some(ref w) = s.world {
-                    w.step(None, None);
+                    w.step();
                 }
                 s.step_count += 1;
             }
             update_meta(&s);
         }
 
-        for (i, bid) in ["btn-break", "btn-scatter", "btn-pause", "btn-reset"].iter().enumerate() {
+        for (i, bid) in ["btn-break", "btn-scatter", "btn-pause", "btn-reset"]
+            .iter()
+            .enumerate()
+        {
             let btn = doc.get_element_by_id(bid).unwrap();
             let st_c = st.clone();
             let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
@@ -184,17 +188,17 @@ pub extern "C" fn start() {
                     1 => {
                         for (idx, rb) in s.balls.iter().enumerate() {
                             let ang = (idx as f64) * 1.15;
-                            rb.apply_impulse(&rp::Vector3::new(ang.cos() * 1.4, 0.25, ang.sin() * 1.4), true);
+                            rb.apply_impulse(
+                                &rp::Vector3::new(ang.cos() * 1.4, 0.25, ang.sin() * 1.4),
+                                true,
+                            );
                         }
                         update_meta(&s);
                     }
                     2 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(if s.paused {
-                            "Resume"
-                        } else {
-                            "Pause"
-                        });
+                        s.pause_btn
+                            .set_text_content(if s.paused { "Resume" } else { "Pause" });
                         update_meta(&s);
                     }
                     _ => {
@@ -213,7 +217,7 @@ pub extern "C" fn start() {
             set_status_error("missing <canvas> element");
             return;
         };
-        let engine = match b::create_engine(&canvas, None).await {
+        let engine = match b::create_engine(&canvas).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());
@@ -221,20 +225,24 @@ pub extern "C" fn start() {
             }
         };
 
-        let scene = b::create_scene_context(&engine, None);
-        let clear = GPUColorDict::default().with_r(0.05).with_g(0.07).with_b(0.09).with_a(1.0);
+        let scene = b::create_scene_context(&engine);
+        let clear = GPUColorDict::default()
+            .with_r(0.05)
+            .with_g(0.07)
+            .with_b(0.09)
+            .with_a(1.0);
         scene.set_clear_color(&clear);
 
         let camera = b::create_arc_rotate_camera(1.18, 0.92, 13.5, &b::vec3(0.0, 0.3, -0.4));
         b::add_to_scene(&scene, &camera);
-        b::attach_control(&camera, &canvas, &scene, None);
+        b::attach_control_with(&camera, &canvas, &scene, None);
 
-        let hemi = b::create_hemispheric_light(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
+        let hemi = b::create_hemispheric_light_with(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
         hemi.set_diffuse_color([0.85, 0.9, 0.95]);
         hemi.set_ground_color([0.12, 0.14, 0.16]);
         b::add_to_scene(&scene, &hemi);
 
-        let dir = b::create_directional_light([-1.0, -2.0, -1.0], 2.1);
+        let dir = b::create_directional_light_with([-1.0, -2.0, -1.0], 2.1);
         dir.set_diffuse([1.0, 0.97, 0.92]);
         b::add_to_scene(&scene, &dir);
 
@@ -243,12 +251,15 @@ pub extern "C" fn start() {
                 .with_base_color_factor([r, g, bl, 1.0])
                 .with_metallic_factor(m)
                 .with_roughness_factor(ro);
-            b::create_pbr_material(&props)
+            b::create_pbr_material_with(&props)
         };
 
-        let table = b::create_box(
+        let table = b::create_box_with(
             &engine,
-            &b::BoxOptions::default().with_width(9.2).with_height(0.5).with_depth(15.2),
+            &b::BoxOptions::default()
+                .with_width(9.2)
+                .with_height(0.5)
+                .with_depth(15.2),
         );
         table.position().set(0.0, -0.25, 0.0);
         table.set_material(&mk_mat(0.08, 0.24, 0.18, 0.05, 0.78));
@@ -261,9 +272,12 @@ pub extern "C" fn start() {
             (0.0, 0.45, -7.35, 9.2, 0.9, 0.5),
             (0.0, 0.45, 7.35, 9.2, 0.9, 0.5),
         ] {
-            let r = b::create_box(
+            let r = b::create_box_with(
                 &engine,
-                &b::BoxOptions::default().with_width(wr).with_height(hr).with_depth(dr),
+                &b::BoxOptions::default()
+                    .with_width(wr)
+                    .with_height(hr)
+                    .with_depth(dr),
             );
             r.position().set(rx, ry, rz);
             r.set_material(&rail_mat);
@@ -280,10 +294,16 @@ pub extern "C" fn start() {
 
         {
             let mut s = st.borrow_mut();
-            let sopts = b::SphereOptions::default().with_diameter(BALL_RADIUS * 2.0).with_segments(24.0);
+            let sopts = b::SphereOptions::default()
+                .with_diameter(BALL_RADIUS * 2.0)
+                .with_segments(24.0);
             for i in 0..BALL_COUNT {
-                let m = b::create_sphere(&engine, &sopts);
-                m.set_material(if i == RACK_COUNT { &cue_mat } else { &rack_mats[i % 4] });
+                let m = b::create_sphere_with(&engine, &sopts);
+                m.set_material(if i == RACK_COUNT {
+                    &cue_mat
+                } else {
+                    &rack_mats[i % 4]
+                });
                 b::add_to_scene(&scene, &m);
                 s.ball_meshes.push(m);
             }

@@ -19,7 +19,7 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
 }
 
 fn render_with(src: &str, opts: &MarkedOptions<String, String>) -> String {
-    match marked::marked_with_opt_marked_options(src, opts) {
+    match marked::marked_with_opt_marked_options_with(src, opts) {
         StringOrPromise::String(s) => s,
         StringOrPromise::JsPromise(_) => String::new(),
     }
@@ -41,7 +41,10 @@ pub extern "C" fn start() {
     let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("Marked GFM & Line Breaks (Rust)")));
+    append(
+        &head,
+        make_el(&doc, "h1", "", Some("Marked GFM & Line Breaks (Rust)")),
+    );
     append(&head, make_el(&doc, "span", "badge", Some("MarkedOptions")));
     append(&app, head);
 
@@ -50,10 +53,19 @@ pub extern "C" fn start() {
     let gfm_off = MarkedOptions::<String, String>::default().with_gfm(false);
 
     let gfm_sec = make_el(&doc, "div", "section", None);
-    append(&gfm_sec, make_el(&doc, "div", "label", Some("GitHub Flavored Markdown (gfm)")));
+    append(
+        &gfm_sec,
+        make_el(&doc, "div", "label", Some("GitHub Flavored Markdown (gfm)")),
+    );
     let gfm_grid = make_el(&doc, "div", "grid", None);
-    append(&gfm_grid, make_pane(&doc, "gfm: true", &render_with(gfm_src, &gfm_on)));
-    append(&gfm_grid, make_pane(&doc, "gfm: false", &render_with(gfm_src, &gfm_off)));
+    append(
+        &gfm_grid,
+        make_pane(&doc, "gfm: true", &render_with(gfm_src, &gfm_on)),
+    );
+    append(
+        &gfm_grid,
+        make_pane(&doc, "gfm: false", &render_with(gfm_src, &gfm_off)),
+    );
     append(&gfm_sec, gfm_grid);
     append(&app, gfm_sec);
 
@@ -62,10 +74,19 @@ pub extern "C" fn start() {
     let br_on = MarkedOptions::<String, String>::default().with_breaks(true);
 
     let br_sec = make_el(&doc, "div", "section", None);
-    append(&br_sec, make_el(&doc, "div", "label", Some("Soft Line Breaks (breaks)")));
+    append(
+        &br_sec,
+        make_el(&doc, "div", "label", Some("Soft Line Breaks (breaks)")),
+    );
     let br_grid = make_el(&doc, "div", "grid", None);
-    append(&br_grid, make_pane(&doc, "breaks: false", &render_with(breaks_src, &br_off)));
-    append(&br_grid, make_pane(&doc, "breaks: true", &render_with(breaks_src, &br_on)));
+    append(
+        &br_grid,
+        make_pane(&doc, "breaks: false", &render_with(breaks_src, &br_off)),
+    );
+    append(
+        &br_grid,
+        make_pane(&doc, "breaks: true", &render_with(breaks_src, &br_on)),
+    );
     append(&br_sec, br_grid);
     append(&app, br_sec);
 }

@@ -40,9 +40,9 @@ pub extern "C" fn run() {
     check!(s.scale_with_name(2.0, "big").name() == "big");
 
     // An optional parameter is its value or None.
-    s.resize(2.6, None);
+    s.resize(2.6);
     check!(s.size() == 2.6);
-    s.resize(2.6, true);
+    s.resize_with(2.6, true);
     check!(s.size() == 3.0);
 
     // Union parameter: an enum, made from any of its members.
@@ -63,8 +63,8 @@ pub extern "C" fn run() {
     check!(largest(&s, &s) == Some(s.clone()));
 
     // `undefined` rather than `null`.
-    check!(or_unit(None).area() == 1.0);
-    check!(or_unit(Some(&s)) == s);
+    check!(or_unit().area() == 1.0);
+    check!(or_unit_with(Some(&s)) == s);
     check!(find("nothing").is_none());
     check!(find("unit").map(|u| u.area()) == Some(1.0));
 

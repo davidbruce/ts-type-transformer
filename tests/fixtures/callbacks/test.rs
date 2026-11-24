@@ -43,7 +43,10 @@ pub extern "C" fn busy() -> i32 {
 async fn chain() -> Result<f64, JsError> {
     let first = delayed(10.0).await?;
     let second = delayed(first).await?;
-    Ok(second + rejected("stop").await.map_or_else(|e| e.message().len() as f64, |_| 0.0))
+    Ok(second
+        + rejected("stop")
+            .await
+            .map_or_else(|e| e.message().len() as f64, |_| 0.0))
 }
 
 #[unsafe(no_mangle)]
@@ -106,13 +109,15 @@ pub extern "C" fn run() {
         }
     });
     c.subscribe(&on_value);
-    check!(c.increment(None) == 1.0);
+    check!(c.increment() == 1.0);
     check!(last.get() == 1.0);
-    c.increment(4.0);
+    c.increment_with(4.0);
     check!(last.get() == 5.0 && calls.get() == 2);
 
     // A callback that takes an object and returns a value.
-    check!(c.visit(&CounterVisitF::new(|counter: Counter| counter.count() == 5.0)));
+    check!(c.visit(&CounterVisitF::new(
+        |counter: Counter| counter.count() == 5.0
+    )));
 
     // For the length of a call a closure may borrow, and nothing is kept.
     let live = js::live_handles();
@@ -129,7 +134,7 @@ pub extern "C" fn run() {
 
     // The same Listener is the same JavaScript function; release frees the closure.
     c.unsubscribe(&on_value);
-    c.increment(None);
+    c.increment();
     check!(last.get() == 5.0 && calls.get() == 2);
     on_value.release();
 
@@ -141,14 +146,18 @@ pub extern "C" fn run() {
         move |value: f64| prop.set(value)
     })));
     check!(c.onchange().is_some());
-    c.increment(None);
+    c.increment();
     check!(prop.get() == 7.0);
     c.set_onchange(None);
-    c.increment(None);
+    c.increment();
     check!(prop.get() == 7.0);
 
     // Several arguments, a string among them, and a result.
-    check!(c.fold(&CounterFoldF::new(|total: f64, label: String| total * 2.0 + label.len() as f64)) == 8.0 * 2.0 + 5.0);
+    check!(
+        c.fold(&CounterFoldF::new(
+            |total: f64, label: String| total * 2.0 + label.len() as f64
+        )) == 8.0 * 2.0 + 5.0
+    );
 
     // A callback kept and called later.
     let ran = Rc::new(Cell::new(0));

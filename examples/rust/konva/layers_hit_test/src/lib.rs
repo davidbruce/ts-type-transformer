@@ -9,7 +9,7 @@ fn make_line(pts: [f64; 4], col: &str, width: f64) -> GroupOrShape {
         .with_points(JsArray::from(pts))
         .with_stroke(col)
         .with_stroke_width(width);
-    let ln = Line::<LineConfig>::new(Some(lc));
+    let ln = Line::<LineConfig>::new_with(Some(lc));
     Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
 }
 
@@ -24,7 +24,7 @@ fn make_card(id: &str, x: f64, y: f64, fill: &str) -> Rect {
         .with_fill(fill)
         .with_stroke("#111111")
         .with_stroke_width(2.0);
-    Rect::new(&rc)
+    Rect::new_with(&rc)
 }
 
 #[unsafe(no_mangle)]
@@ -35,8 +35,8 @@ pub extern "C" fn start() {
         .with_height(400.0);
     let stage = Stage::new(&sc);
 
-    let bg_layer = Layer::new(None);
-    let fg_layer = Layer::new(None);
+    let bg_layer = Layer::new();
+    let fg_layer = Layer::new();
     stage.add(&bg_layer, JsArray::<JsValue>::new());
     stage.add(&fg_layer, JsArray::<JsValue>::new());
 
@@ -47,7 +47,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    bg_layer.add([Rect::new(&bgr)]);
+    bg_layer.add([Rect::new_with(&bgr)]);
 
     for x in (40..=640).step_by(40) {
         let xf = x as f64;
@@ -74,8 +74,8 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#737373");
     bg_layer.add([
-        GroupOrShape::from(Rect::new(&frame)),
-        GroupOrShape::from(Text::new(&l1)),
+        GroupOrShape::from(Rect::new_with(&frame)),
+        GroupOrShape::from(Text::new_with(&l1)),
     ]);
 
     // Layer 2: Stacked cards & badge.
@@ -89,7 +89,7 @@ pub extern "C" fn start() {
         .with_radius(38.0)
         .with_fill("#111111");
     let gc = GroupConfig::default().with_listening(false);
-    let overlay = Group::new(&gc);
+    let overlay = Group::new_with(&gc);
     let dc = CircleConfig::default()
         .with_x(250.0)
         .with_y(160.0)
@@ -105,17 +105,17 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     overlay.add([
-        GroupOrShape::from(Circle::new(&dc)),
+        GroupOrShape::from(Circle::new_with(&dc)),
         make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5),
         make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5),
-        GroupOrShape::from(Text::new(&l2)),
+        GroupOrShape::from(Text::new_with(&l2)),
     ]);
 
     fg_layer.add([
         GroupOrShape::from(&card_a),
         GroupOrShape::from(&card_b),
         GroupOrShape::from(&card_c),
-        GroupOrShape::from(Circle::new(&bc)),
+        GroupOrShape::from(Circle::new_with(&bc)),
         GroupOrShape::from(&overlay),
     ]);
 
@@ -125,7 +125,11 @@ pub extern "C" fn start() {
     fg_layer.draw();
 
     let clicks = Rc::new(Cell::new(0usize));
-    for (card, card_id) in [(&card_a, "card-a"), (&card_b, "card-b"), (&card_c, "card-c")] {
+    for (card, card_id) in [
+        (&card_a, "card-a"),
+        (&card_b, "card-b"),
+        (&card_c, "card-c"),
+    ] {
         let on_click = KonvaEventListener::<Node<RectConfig>, dom::PointerEvent>::new({
             let stage = stage.clone();
             let fg_layer = fg_layer.clone();
@@ -157,6 +161,6 @@ pub extern "C" fn start() {
         card.on_click(&on_click);
     }
 
-    card_a.fire("click", None, None);
-    card_a.fire("click", None, None);
+    card_a.fire("click");
+    card_a.fire("click");
 }

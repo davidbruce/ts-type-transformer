@@ -38,20 +38,24 @@ fn update_camera(st: &AppState) {
     let r = 8.4;
     st.camera
         .position()
-        .set(r * st.yaw.sin(), 5.1, r * st.yaw.cos());
-    st.camera.look_at(&Vector3::new(0.0, 0.0, 0.0));
-    st.camera.update_matrix_world(true);
-    st.scene.update_matrix_world(true);
+        .set_with(r * st.yaw.sin(), 5.1, r * st.yaw.cos());
+    st.camera.look_at(&Vector3::new_with(0.0, 0.0, 0.0));
+    st.camera.update_matrix_world_with(true);
+    st.scene.update_matrix_world_with(true);
 }
 
 fn render_scene(st: &AppState) {
     for (i, mat) in st.mats.iter().enumerate() {
-        let hex = if i as isize == st.selected { 0x111111 } else { 0xd4d4d4 };
-        mat.color().set_hex(hex as f64, None);
+        let hex = if i as isize == st.selected {
+            0x111111
+        } else {
+            0xd4d4d4
+        };
+        mat.color().set_hex(hex as f64);
     }
     if st.selected >= 0 && (st.selected as usize) < st.meshes.len() {
         st.box3
-            .set_from_object(&st.meshes[st.selected as usize], true);
+            .set_from_object_with(&st.meshes[st.selected as usize], true);
         st.helper.set_visible(true);
     } else {
         st.helper.set_visible(false);
@@ -65,7 +69,7 @@ fn render_scene(st: &AppState) {
 
 fn cast_at_ndc(st: &mut AppState, nx: f64, ny: f64) {
     st.raycaster
-        .set_from_camera(&Vector2::new(nx, ny), &st.camera);
+        .set_from_camera(&Vector2::new_with(nx, ny), &st.camera);
     let hits = st
         .raycaster
         .intersect_objects::<Object3D>(st.mesh_arr.clone(), false, None);
@@ -75,8 +79,8 @@ fn cast_at_ndc(st: &mut AppState, nx: f64, ny: f64) {
         let found = st.meshes.iter().position(|m| m == &hobj);
         if let Some(idx) = found {
             st.selected = idx as isize;
-            st.box3.set_from_object(&st.meshes[idx], true);
-            let sz = st.box3.get_size(&Vector3::new(None, None, None));
+            st.box3.set_from_object_with(&st.meshes[idx], true);
+            let sz = st.box3.get_size(&Vector3::new());
             let pt = hit.point();
             st.hit_info = format!(
                 "{} at d={:.2} ({:.2}, {:.2}, {:.2}) box={:.2}x{:.2}x{:.2}",
@@ -102,7 +106,7 @@ fn cast_at_ndc(st: &mut AppState, nx: f64, ny: f64) {
 
 fn pick_specimen(st: &mut AppState, idx: usize) {
     update_camera(st);
-    let wp = st.meshes[idx].get_world_position(&Vector3::new(None, None, None));
+    let wp = st.meshes[idx].get_world_position(&Vector3::new());
     let proj = wp.project(&st.camera);
     cast_at_ndc(st, proj.x(), proj.y());
 }
@@ -116,45 +120,43 @@ pub extern "C" fn start() {
     let rp = WebGLRendererParameters::default()
         .with_antialias(true)
         .with_preserve_drawing_buffer(true);
-    let renderer = WebGLRenderer::new(&rp);
+    let renderer = WebGLRenderer::new_with(&rp);
     renderer.set_pixel_ratio(1.0);
-    renderer.set_size(width, height, None);
+    renderer.set_size(width, height);
     let canvas: dom::HTMLCanvasElement = renderer.dom_element().into();
     doc.get_element_by_id("stage")
         .expect("missing #stage")
         .append_child(canvas.clone());
 
     let scene = Scene::new();
-    scene.set_background(Color::new(0xf7f7f7 as f64));
-    let camera = PerspectiveCamera::new(42.0, width / height, 0.1, 100.0);
+    scene.set_background(Color::new_with(0xf7f7f7 as f64));
+    let camera = PerspectiveCamera::new_with(42.0, width / height, 0.1, 100.0);
 
-    scene.add([AmbientLight::new(ColorRepresentation::from(0xffffff as f64), 1.2)]);
-    let key = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 2.2);
-    key.position().set(6.0, 10.0, 8.0);
+    scene.add([AmbientLight::new_with(
+        ColorRepresentation::from(0xffffff as f64),
+        1.2,
+    )]);
+    let key = DirectionalLight::new_with(ColorRepresentation::from(0xffffff as f64), 2.2);
+    key.position().set_with(6.0, 10.0, 8.0);
     scene.add([key]);
-    let rim = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 0.9);
-    rim.position().set(-7.0, 5.0, -6.0);
+    let rim = DirectionalLight::new_with(ColorRepresentation::from(0xffffff as f64), 0.9);
+    rim.position().set_with(-7.0, 5.0, -6.0);
     scene.add([rim]);
 
-    let grid = GridHelper::new(
-        9.0,
-        9.0,
-        0x999999 as f64,
-        0xd4d4d4 as f64,
-    );
+    let grid = GridHelper::new_with(9.0, 9.0, 0x999999 as f64, 0xd4d4d4 as f64);
     grid.position().set_y(-0.85);
     scene.add([grid]);
 
     let geos: Vec<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>> = vec![
-        BoxGeometry::new(1.05, 1.05, 1.05, None, None, None).into(),
-        ConeGeometry::new(0.62, 1.25, 20.0, None, None, None, None).into(),
-        CylinderGeometry::new(0.48, 0.48, 1.2, 24.0, None, None, None, None).into(),
-        SphereGeometry::new(0.62, 24.0, 18.0, None, None, None, None).into(),
-        OctahedronGeometry::new(0.68, 0.0).into(),
-        DodecahedronGeometry::new(0.62, 0.0).into(),
-        TorusGeometry::new(0.5, 0.18, 14.0, 36.0, None, None, None).into(),
-        IcosahedronGeometry::new(0.64, 0.0).into(),
-        TetrahedronGeometry::new(0.72, 0.0).into(),
+        BoxGeometry::new_with(1.05, 1.05, 1.05, None, None, None).into(),
+        ConeGeometry::new_with(0.62, 1.25, 20.0, None, None, None, None).into(),
+        CylinderGeometry::new_with(0.48, 0.48, 1.2, 24.0, None, None, None, None).into(),
+        SphereGeometry::new_with(0.62, 24.0, 18.0, None, None, None, None).into(),
+        OctahedronGeometry::new_with(0.68, 0.0).into(),
+        DodecahedronGeometry::new_with(0.62, 0.0).into(),
+        TorusGeometry::new_with(0.5, 0.18, 14.0, 36.0, None, None, None).into(),
+        IcosahedronGeometry::new_with(0.64, 0.0).into(),
+        TetrahedronGeometry::new_with(0.72, 0.0).into(),
     ];
 
     let mut mats = Vec::with_capacity(9);
@@ -167,11 +169,11 @@ pub extern "C" fn start() {
             .with_roughness(0.55)
             .with_metalness(0.1)
             .with_flat_shading(i >= 4);
-        let mat = MeshStandardMaterial::new(&mp);
-        let m = Mesh::<_, MeshStandardMaterial>::new(Some(geo), Some(mat.clone()));
+        let mat = MeshStandardMaterial::new_with(&mp);
+        let m = Mesh::<_, MeshStandardMaterial>::new_with(Some(geo), Some(mat.clone()));
         m.set_name(NAMES[i]);
-        m.position().set(gx * 2.1, 0.0, gz * 2.1);
-        m.rotation().set(0.2, 0.35 * i as f64, 0.0, None);
+        m.position().set_with(gx * 2.1, 0.0, gz * 2.1);
+        m.rotation().set(0.2, 0.35 * i as f64, 0.0);
         let mo: Object3D = m.into();
         scene.add([mo.clone()]);
         mats.push(mat);
@@ -179,11 +181,11 @@ pub extern "C" fn start() {
     }
     let mesh_arr = JsArray::from(meshes.clone());
 
-    let box3 = Box3::new(
-        &Vector3::new(-0.5, -0.5, -0.5),
-        &Vector3::new(0.5, 0.5, 0.5),
+    let box3 = Box3::new_with(
+        &Vector3::new_with(-0.5, -0.5, -0.5),
+        &Vector3::new_with(0.5, 0.5, 0.5),
     );
-    let helper = Box3Helper::new(&box3, 0x111111 as f64);
+    let helper = Box3Helper::new_with(&box3, 0x111111 as f64);
     helper.set_visible(false);
     scene.add([helper.clone()]);
 
@@ -197,7 +199,7 @@ pub extern "C" fn start() {
         mesh_arr,
         box3,
         helper,
-        raycaster: Raycaster::new(None, None, None, None),
+        raycaster: Raycaster::new(),
         meta: doc.get_element_by_id("meta").expect("missing #meta"),
         yaw: 0.45,
         selected: -1,
@@ -215,7 +217,10 @@ pub extern "C" fn start() {
     });
     canvas.add_event_listener(dom::HTMLElementEventMap::CLICK, &on_canvas, None);
 
-    for (i, bid) in ["btn-p0", "btn-p1", "btn-p2", "btn-orbit", "btn-clear"].iter().enumerate() {
+    for (i, bid) in ["btn-p0", "btn-p1", "btn-p2", "btn-orbit", "btn-clear"]
+        .iter()
+        .enumerate()
+    {
         let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {

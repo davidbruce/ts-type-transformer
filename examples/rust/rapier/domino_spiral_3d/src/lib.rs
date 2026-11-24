@@ -52,25 +52,28 @@ fn build_world(st: &mut AppState) {
     if let Some(w) = st.world.take() {
         w.free();
     }
-    let world = rp::World::new(
-        &rp::Vector3::new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
-    );
+    let world = rp::World::new(&rp::Vector3::new(0.0, -9.81, 0.0));
 
-    let floor_body = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.3, 0.0));
-    world.create_collider(
-        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).set_friction(0.75).set_restitution(0.1),
+    let floor_body =
+        world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.3, 0.0));
+    world.create_collider_with(
+        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0)
+            .set_friction(0.75)
+            .set_restitution(0.1),
         &floor_body,
     );
 
-    let ramp_rot = rp::Quaternion::new(0.0, 0.0, (RAMP_ANGLE * 0.5).sin(), (RAMP_ANGLE * 0.5).cos());
+    let ramp_rot =
+        rp::Quaternion::new(0.0, 0.0, (RAMP_ANGLE * 0.5).sin(), (RAMP_ANGLE * 0.5).cos());
     let ramp_body = world.create_rigid_body(
         &rp::RigidBodyDesc::fixed()
             .set_translation(RAMP_X, RAMP_Y, RAMP_Z)
             .set_rotation(&ramp_rot),
     );
-    world.create_collider(
-        &rp::ColliderDesc::cuboid(1.75, 0.10, 0.65).set_friction(0.15).set_restitution(0.2),
+    world.create_collider_with(
+        &rp::ColliderDesc::cuboid(1.75, 0.10, 0.65)
+            .set_friction(0.15)
+            .set_restitution(0.2),
         &ramp_body,
     );
 
@@ -79,7 +82,7 @@ fn build_world(st: &mut AppState) {
             .set_translation(-4.75, 2.02, -2.5)
             .set_linvel(3.0, 0.0, 0.0),
     );
-    world.create_collider(
+    world.create_collider_with(
         &rp::ColliderDesc::ball(MARBLE_RADIUS)
             .set_density(3.2)
             .set_restitution(0.32)
@@ -93,9 +96,11 @@ fn build_world(st: &mut AppState) {
         let (x, y, z, yaw) = spiral_pose(i);
         let q = rp::Quaternion::new(0.0, (yaw * 0.5).sin(), 0.0, (yaw * 0.5).cos());
         let rb = world.create_rigid_body(
-            &rp::RigidBodyDesc::dynamic().set_translation(x, y, z).set_rotation(&q),
+            &rp::RigidBodyDesc::dynamic()
+                .set_translation(x, y, z)
+                .set_rotation(&q),
         );
-        world.create_collider(
+        world.create_collider_with(
             &rp::ColliderDesc::cuboid(DOM_HX, DOM_HY, DOM_HZ)
                 .set_friction(0.55)
                 .set_restitution(0.18)
@@ -115,8 +120,9 @@ fn build_world(st: &mut AppState) {
         let spread = ((j as f64) - 1.0) * 0.52;
         let cx = end_x + fwd_x * 0.72 + perp_x * spread;
         let cz = end_z + fwd_z * 0.72 + perp_z * spread;
-        let rb = world.create_rigid_body(&rp::RigidBodyDesc::dynamic().set_translation(cx, 0.42, cz));
-        world.create_collider(
+        let rb =
+            world.create_rigid_body(&rp::RigidBodyDesc::dynamic().set_translation(cx, 0.42, cz));
+        world.create_collider_with(
             &rp::ColliderDesc::cylinder(0.42, 0.25)
                 .set_friction(0.55)
                 .set_restitution(0.25)
@@ -131,8 +137,8 @@ fn build_world(st: &mut AppState) {
 }
 
 fn sync_pair(rb: &rp::RigidBody, mesh: &b::Mesh) {
-    let p = rb.translation(None);
-    let q = rb.rotation(None);
+    let p = rb.translation();
+    let q = rb.rotation();
     mesh.position().set(p.x(), p.y(), p.z());
     mesh.rotation_quaternion().set(q.x(), q.y(), q.z(), q.w());
 }
@@ -153,19 +159,19 @@ fn update_meta(st: &AppState) {
     let mut fallen = 0usize;
     let mut ke = 0.0_f64;
     if let Some(ref mb) = st.marble {
-        let v = mb.linvel(None);
+        let v = mb.linvel();
         ke += 0.5 * (v.x() * v.x() + v.y() * v.y() + v.z() * v.z());
     }
     for rb in &st.doms {
-        let p = rb.translation(None);
-        let v = rb.linvel(None);
+        let p = rb.translation();
+        let v = rb.linvel();
         if p.y() < 0.48 {
             fallen += 1;
         }
         ke += 0.5 * (v.x() * v.x() + v.y() * v.y() + v.z() * v.z());
     }
     for rb in &st.cyls {
-        let v = rb.linvel(None);
+        let v = rb.linvel();
         ke += 0.5 * (v.x() * v.x() + v.y() * v.y() + v.z() * v.z());
     }
     let state_text = if st.paused { "paused" } else { "running" };
@@ -178,7 +184,7 @@ fn update_meta(st: &AppState) {
 
 fn step_sim(st: &mut AppState) {
     if let Some(ref w) = st.world {
-        w.step(None, None);
+        w.step();
     }
     st.step_count += 1;
     sync_meshes(st);
@@ -212,14 +218,17 @@ pub extern "C" fn start() {
             build_world(&mut s);
             for _ in 0..20 {
                 if let Some(ref w) = s.world {
-                    w.step(None, None);
+                    w.step();
                 }
                 s.step_count += 1;
             }
             update_meta(&s);
         }
 
-        for (i, bid) in ["btn-launch", "btn-nudge", "btn-pause", "btn-reset"].iter().enumerate() {
+        for (i, bid) in ["btn-launch", "btn-nudge", "btn-pause", "btn-reset"]
+            .iter()
+            .enumerate()
+        {
             let btn = doc.get_element_by_id(bid).unwrap();
             let st_c = st.clone();
             let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
@@ -242,11 +251,8 @@ pub extern "C" fn start() {
                     }
                     2 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(if s.paused {
-                            "Resume"
-                        } else {
-                            "Pause"
-                        });
+                        s.pause_btn
+                            .set_text_content(if s.paused { "Resume" } else { "Pause" });
                         update_meta(&s);
                     }
                     _ => {
@@ -265,7 +271,7 @@ pub extern "C" fn start() {
             set_status_error("missing <canvas> element");
             return;
         };
-        let engine = match b::create_engine(&canvas, None).await {
+        let engine = match b::create_engine(&canvas).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());
@@ -273,25 +279,34 @@ pub extern "C" fn start() {
             }
         };
 
-        let scene = b::create_scene_context(&engine, None);
-        let clear = GPUColorDict::default().with_r(0.06).with_g(0.07).with_b(0.09).with_a(1.0);
+        let scene = b::create_scene_context(&engine);
+        let clear = GPUColorDict::default()
+            .with_r(0.06)
+            .with_g(0.07)
+            .with_b(0.09)
+            .with_a(1.0);
         scene.set_clear_color(&clear);
 
         let camera = b::create_arc_rotate_camera(0.65, 1.05, 12.0, &b::vec3(-0.4, 0.8, 0.0));
         b::add_to_scene(&scene, &camera);
-        b::attach_control(&camera, &canvas, &scene, None);
+        b::attach_control_with(&camera, &canvas, &scene, None);
 
-        let hemi = b::create_hemispheric_light(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
+        let hemi = b::create_hemispheric_light_with(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
         hemi.set_diffuse_color([0.85, 0.88, 0.95]);
         hemi.set_ground_color([0.14, 0.14, 0.16]);
         b::add_to_scene(&scene, &hemi);
 
-        let dir = b::create_directional_light([-1.0, -2.0, -1.2], 2.1);
+        let dir = b::create_directional_light_with([-1.0, -2.0, -1.2], 2.1);
         dir.set_diffuse([1.0, 0.97, 0.92]);
         b::add_to_scene(&scene, &dir);
 
-        let ground_mat = b::create_grid_material(None);
-        let ground = b::create_ground(&engine, &b::GroundOptions::default().with_width(20.0).with_height(20.0));
+        let ground_mat = b::create_grid_material();
+        let ground = b::create_ground_with(
+            &engine,
+            &b::GroundOptions::default()
+                .with_width(20.0)
+                .with_height(20.0),
+        );
         ground.set_material(&ground_mat);
         b::add_to_scene(&scene, &ground);
 
@@ -300,25 +315,33 @@ pub extern "C" fn start() {
                 .with_base_color_factor([r, g, bl, 1.0])
                 .with_metallic_factor(m)
                 .with_roughness_factor(ro);
-            b::create_pbr_material(&props)
+            b::create_pbr_material_with(&props)
         };
 
-        let ramp_mesh = b::create_box(
+        let ramp_mesh = b::create_box_with(
             &engine,
-            &b::BoxOptions::default().with_width(3.5).with_height(0.2).with_depth(1.3),
+            &b::BoxOptions::default()
+                .with_width(3.5)
+                .with_height(0.2)
+                .with_depth(1.3),
         );
         ramp_mesh.position().set(RAMP_X, RAMP_Y, RAMP_Z);
-        ramp_mesh
-            .rotation_quaternion()
-            .set(0.0, 0.0, (RAMP_ANGLE * 0.5).sin(), (RAMP_ANGLE * 0.5).cos());
+        ramp_mesh.rotation_quaternion().set(
+            0.0,
+            0.0,
+            (RAMP_ANGLE * 0.5).sin(),
+            (RAMP_ANGLE * 0.5).cos(),
+        );
         ramp_mesh.set_material(&mk_mat(0.28, 0.30, 0.34, 0.35, 0.48));
         b::add_to_scene(&scene, &ramp_mesh);
 
         {
             let mut s = st.borrow_mut();
-            let mb = b::create_sphere(
+            let mb = b::create_sphere_with(
                 &engine,
-                &b::SphereOptions::default().with_diameter(MARBLE_RADIUS * 2.0).with_segments(24.0),
+                &b::SphereOptions::default()
+                    .with_diameter(MARBLE_RADIUS * 2.0)
+                    .with_segments(24.0),
             );
             mb.set_material(&mk_mat(0.95, 0.42, 0.28, 0.55, 0.2));
             b::add_to_scene(&scene, &mb);
@@ -331,7 +354,7 @@ pub extern "C" fn start() {
                 .with_height(DOM_HY * 2.0)
                 .with_depth(DOM_HZ * 2.0);
             for i in 0..DOM_COUNT {
-                let m = b::create_box(&engine, &dom_opts);
+                let m = b::create_box_with(&engine, &dom_opts);
                 m.set_material(if i % 2 == 0 { &mat_a } else { &mat_b });
                 b::add_to_scene(&scene, &m);
                 s.dom_meshes.push(m);
@@ -343,7 +366,7 @@ pub extern "C" fn start() {
                 .with_diameter(0.5)
                 .with_tessellation(24.0);
             for _ in 0..CYL_COUNT {
-                let m = b::create_cylinder(&engine, &cyl_opts);
+                let m = b::create_cylinder_with(&engine, &cyl_opts);
                 m.set_material(&cyl_mat);
                 b::add_to_scene(&scene, &m);
                 s.cyl_meshes.push(m);

@@ -26,7 +26,7 @@ impl Checks {
 }
 
 fn walk_dir(dir: &str, dirs: &mut u32, files: &mut u32, total_bytes: &mut f64) {
-    let mut entries: Vec<String> = fs::readdir_sync(dir, None).iter().collect();
+    let mut entries: Vec<String> = fs::readdir_sync(dir).iter().collect();
     entries.sort();
     for name in entries {
         let full = path::join([dir, &name]);
@@ -45,38 +45,35 @@ fn walk_dir(dir: &str, dirs: &mut u32, files: &mut u32, total_bytes: &mut f64) {
 pub extern "C" fn start() {
     let mut c = Checks(0);
 
-    let root = fs::mkdtemp_sync("/tmp/tsrs-node-tree-", None);
+    let root = fs::mkdtemp_sync("/tmp/tsrs-node-tree-");
     c.check(fs::exists_sync(&*root));
 
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(
         &*path::join([root.as_str(), "src", "core"]),
         &mk,
     );
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(
         &*path::join([root.as_str(), "src", "cli"]),
         &mk,
     );
-    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options(
+    fs::mkdir_sync_with_opt_number_or_string_or_make_directory_options_with(
         &*path::join([root.as_str(), "docs"]),
         &mk,
     );
 
-    fs::write_file_sync(&*path::join([root.as_str(), "README.md"]), "node tree demo", None);
+    fs::write_file_sync(&*path::join([root.as_str(), "README.md"]), "node tree demo");
     fs::write_file_sync(
         &*path::join([root.as_str(), "src", "core", "engine.txt"]),
         "engine core module!\n",
-        None,
     );
     fs::write_file_sync(
         &*path::join([root.as_str(), "src", "cli", "args.txt"]),
         "cli args parser\n",
-        None,
     );
     fs::write_file_sync(
         &*path::join([root.as_str(), "docs", "guide.md"]),
         "monochrome documentation\n",
-        None,
     );
 
     let mut dir_count = 0u32;
@@ -88,8 +85,10 @@ pub extern "C" fn start() {
     c.check(file_count == 4);
     c.check(total_bytes == 75.0);
 
-    let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
-    fs::rm_sync(&*root, &rm);
+    let rm = fs::RmOptions::default()
+        .with_recursive(true)
+        .with_force(true);
+    fs::rm_sync_with(&*root, &rm);
     c.check(!fs::exists_sync(&*root));
     c.check(dir_count + file_count == 8);
     c.check(true);

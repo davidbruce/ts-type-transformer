@@ -4,7 +4,7 @@ use konva::*;
 
 fn add_stage_box(layer: &Layer, x: f64, title: &str, sub: &str, fill: &str, ink: &str) {
     let gc = GroupConfig::default().with_x(x).with_y(95.0);
-    let g = Group::new(&gc);
+    let g = Group::new_with(&gc);
 
     let rc = RectConfig::default()
         .with_width(126.0)
@@ -32,9 +32,9 @@ fn add_stage_box(layer: &Layer, x: f64, title: &str, sub: &str, fill: &str, ink:
         .with_fill(ink);
 
     g.add([
-        GroupOrShape::from(Rect::new(&rc)),
-        GroupOrShape::from(Text::new(&t1)),
-        GroupOrShape::from(Text::new(&t2)),
+        GroupOrShape::from(Rect::new_with(&rc)),
+        GroupOrShape::from(Text::new_with(&t1)),
+        GroupOrShape::from(Text::new_with(&t2)),
     ]);
     layer.add([g]);
 }
@@ -47,7 +47,7 @@ fn add_arrow(layer: &Layer, pts: [f64; 4]) {
         .with_fill("#111111")
         .with_stroke("#111111")
         .with_stroke_width(2.0);
-    layer.add([Arrow::new(&ac)]);
+    layer.add([Arrow::new_with(&ac)]);
 }
 
 #[unsafe(no_mangle)]
@@ -58,7 +58,7 @@ pub extern "C" fn start() {
         .with_height(400.0);
     let stage = Stage::new(&sc);
 
-    let layer = Layer::new(None);
+    let layer = Layer::new();
     stage.add(&layer, JsArray::<JsValue>::new());
 
     let bg = RectConfig::default()
@@ -67,7 +67,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    layer.add([Rect::new(&bg)]);
+    layer.add([Rect::new_with(&bg)]);
 
     add_stage_box(&layer, 28.0, "01 PARSE", ".d.ts AST", "#ffffff", "#111111");
     add_stage_box(&layer, 194.0, "02 LOWER", "Typed IR", "#f7f7f7", "#111111");
@@ -81,12 +81,16 @@ pub extern "C" fn start() {
     add_arrow(&layer, [423.0, 163.0, 423.0, 251.0]);
 
     let fbc = LineConfig::default()
-        .with_points(JsArray::from([589.0, 163.0, 589.0, 212.0, 91.0, 212.0, 91.0, 168.0]))
+        .with_points(JsArray::from([
+            589.0, 163.0, 589.0, 212.0, 91.0, 212.0, 91.0, 168.0,
+        ]))
         .with_stroke("#737373")
         .with_stroke_width(1.5)
         .with_dash([6.0, 4.0]);
-    let fb = Line::<LineConfig>::new(Some(fbc));
-    layer.add([GroupOrShape::from(Shape::<LineConfig>::from(fb).upcast::<ShapeConfig>())]);
+    let fb = Line::<LineConfig>::new_with(Some(fbc));
+    layer.add([GroupOrShape::from(
+        Shape::<LineConfig>::from(fb).upcast::<ShapeConfig>(),
+    )]);
 
     let bar = RectConfig::default()
         .with_x(28.0)
@@ -106,8 +110,8 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     layer.add([
-        GroupOrShape::from(Rect::new(&bar)),
-        GroupOrShape::from(Text::new(&btxt)),
+        GroupOrShape::from(Rect::new_with(&bar)),
+        GroupOrShape::from(Text::new_with(&btxt)),
     ]);
 
     layer.draw();
@@ -116,7 +120,9 @@ pub extern "C" fn start() {
     let arrows = layer.find::<Node<NodeConfig>>("Arrow").len();
     let json_len = layer.to_json().len();
 
-    let msg = format!("Pipeline diagram \u{00B7} {rects} rects \u{00B7} {arrows} arrows \u{00B7} JSON {json_len} bytes");
+    let msg = format!(
+        "Pipeline diagram \u{00B7} {rects} rects \u{00B7} {arrows} arrows \u{00B7} JSON {json_len} bytes"
+    );
     dom::document()
         .get_element_by_id("meta")
         .expect("missing #meta")

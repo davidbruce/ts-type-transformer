@@ -34,7 +34,10 @@ fn build_schema() -> Schema<JsValue, JsValue> {
         .with_content("inline*")
         .with_group("block")
         .with_defining(true)
-        .with_parse_dom(&JsArray::<TagParseRule>::from([tag_rule("h1", 1), tag_rule("h2", 2)]))
+        .with_parse_dom(&JsArray::<TagParseRule>::from([
+            tag_rule("h1", 1),
+            tag_rule("h2", 2),
+        ]))
         .with_to_dom(&NodeToDOMOutputSpecFn::new(|n: Node| {
             let l = n.attrs().at("level").as_f64() as i32;
             hole_spec(if l == 1 { "h1" } else { "h2" })
@@ -51,7 +54,9 @@ fn build_schema() -> Schema<JsValue, JsValue> {
         .with_group("block")
         .with_defining(true)
         .with_parse_dom(&JsArray::<TagParseRule>::from([tag_rule("blockquote", 0)]))
-        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("blockquote")));
+        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| {
+            hole_spec("blockquote")
+        }));
 
     let text = NodeSpec::default().with_group("inline");
 
@@ -65,7 +70,9 @@ fn build_schema() -> Schema<JsValue, JsValue> {
     let make_mark = |tag: &'static str| {
         MarkSpec::default()
             .with_parse_dom(&JsArray::<ParseRule>::from([tag_rule(tag, 0)]))
-            .with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| hole_spec(tag)))
+            .with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(
+                move |_: Mark, _: bool| hole_spec(tag),
+            ))
     };
     let marks = JsValue::object()
         .with("strong", &make_mark("strong"))
@@ -95,13 +102,13 @@ struct AppState {
 fn parse_html(dom_doc: &dom::Document, parser: &DOMParser, html: &str) -> Node {
     let div = dom_doc.create_element("div", None);
     div.set_inner_html(html);
-    parser.parse(&div, None)
+    parser.parse(&div)
 }
 
 fn refresh_output(app: &AppState, doc: &Node) {
     let div = app.doc.create_element("div", None);
     app.serializer
-        .serialize_fragment(&doc.content(), None, div.clone());
+        .serialize_fragment_with(&doc.content(), None, div.clone());
     let html_out = div.inner_html();
 
     let nb = doc.child_count() as usize;
@@ -115,7 +122,11 @@ fn refresh_output(app: &AppState, doc: &Node) {
         } else {
             tname
         };
-        ast.push_str(&format!("  [{i}] {kind} ({} bytes): {}\n", b.node_size() as usize, b.text_content()));
+        ast.push_str(&format!(
+            "  [{i}] {kind} ({} bytes): {}\n",
+            b.node_size() as usize,
+            b.text_content()
+        ));
     }
     let full = format!(
         "SERIALIZED HTML (DOMSerializer):\n{html_out}\n\nDOCUMENT AST & JSON ROUND-TRIP:\n{ast}\nROUND-TRIP STATUS: {}",
@@ -123,7 +134,11 @@ fn refresh_output(app: &AppState, doc: &Node) {
     );
     app.output.set_text_content(&full);
 
-    let msg = format!("{} \u{00B7} blocks={nb} \u{00B7} nodeSize={nsz} \u{00B7} htmlBytes={}", app.status, html_out.len());
+    let msg = format!(
+        "{} \u{00B7} blocks={nb} \u{00B7} nodeSize={nsz} \u{00B7} htmlBytes={}",
+        app.status,
+        html_out.len()
+    );
     app.meta.set_text_content(&msg);
 }
 
@@ -141,7 +156,9 @@ pub extern "C" fn start() {
         serializer,
         view: None,
         doc: dom_doc.clone(),
-        output: dom_doc.get_element_by_id("output").expect("missing #output"),
+        output: dom_doc
+            .get_element_by_id("output")
+            .expect("missing #output"),
         meta: dom_doc.get_element_by_id("meta").expect("missing #meta"),
         status: "Parsed Spec HTML via DOMParser".to_string(),
     }));
@@ -164,7 +181,9 @@ pub extern "C" fn start() {
             }
         }));
 
-    let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
+    let mount = dom_doc
+        .get_element_by_id("editor")
+        .expect("missing #editor");
     let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
     let view = EditorView::new(place, &props);
     {
@@ -173,7 +192,10 @@ pub extern "C" fn start() {
         refresh_output(&st, &view.state().doc());
     }
 
-    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
+    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"]
+        .iter()
+        .enumerate()
+    {
         let btn = dom_doc.get_element_by_id(bid).expect("missing button");
         let app_c = app.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
@@ -189,7 +211,11 @@ pub extern "C" fn start() {
                         "Parsed Changelog HTML via DOMParser"
                     }
                     .to_string();
-                    let next_doc = parse_html(&st.doc, &st.parser, if idx == 0 { SPEC_HTML } else { CHANGELOG_HTML });
+                    let next_doc = parse_html(
+                        &st.doc,
+                        &st.parser,
+                        if idx == 0 { SPEC_HTML } else { CHANGELOG_HTML },
+                    );
                     let cfg = EditorStateConfig::default()
                         .with_schema(&st.schema)
                         .with_doc(&next_doc);
@@ -205,12 +231,14 @@ pub extern "C" fn start() {
                 }
                 3 => {
                     if doc.child_count() >= 2.0 {
-                        let insert_pos = doc.child(0.0).node_size() + doc.child(1.0).node_size() - 1.0;
+                        let insert_pos =
+                            doc.child(0.0).node_size() + doc.child(1.0).node_size() - 1.0;
                         let span = {
                             let mut st = app_c.borrow_mut();
-                            st.status = format!("Inserted code span at pos {}", insert_pos as usize);
-                            let marks = JsArray::<Mark>::from([st.schema.mark("code", None)]);
-                            st.schema.text(" roundtrip()", &marks)
+                            st.status =
+                                format!("Inserted code span at pos {}", insert_pos as usize);
+                            let marks = JsArray::<Mark>::from([st.schema.mark("code")]);
+                            st.schema.text_with(" roundtrip()", &marks)
                         };
                         let tr = es.tr();
                         tr.insert(insert_pos, span);
@@ -221,9 +249,12 @@ pub extern "C" fn start() {
                     let mut st = app_c.borrow_mut();
                     let div = st.doc.create_element("div", None);
                     st.serializer
-                        .serialize_fragment(&doc.content(), None, div.clone());
-                    let reparsed = st.parser.parse(&div, None);
-                    st.status = format!("DOM serializeFragment->parse eq() = {}", doc.js_eq(&reparsed));
+                        .serialize_fragment_with(&doc.content(), None, div.clone());
+                    let reparsed = st.parser.parse(&div);
+                    st.status = format!(
+                        "DOM serializeFragment->parse eq() = {}",
+                        doc.js_eq(&reparsed)
+                    );
                     let cfg = EditorStateConfig::default()
                         .with_schema(&st.schema)
                         .with_doc(&reparsed);

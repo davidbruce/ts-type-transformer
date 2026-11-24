@@ -41,8 +41,14 @@ pub extern "C" fn start() {
     let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("Marked Inline vs Block (Rust)")));
-    append(&head, make_el(&doc, "span", "badge", Some("parse vs parseInline")));
+    append(
+        &head,
+        make_el(&doc, "h1", "", Some("Marked Inline vs Block (Rust)")),
+    );
+    append(
+        &head,
+        make_el(&doc, "span", "badge", Some("parse vs parseInline")),
+    );
     append(&app, head);
 
     let m = Marked::<String, String>::new(Vec::<MarkedExtension<String, String>>::new());
@@ -55,14 +61,20 @@ pub extern "C" fn start() {
 
     for s in snippets {
         let row = make_el(&doc, "div", "row-card", None);
-        append(&row, make_el(&doc, "div", "label", Some("Markdown Snippet")));
+        append(
+            &row,
+            make_el(&doc, "div", "label", Some("Markdown Snippet")),
+        );
         append(&row, make_el(&doc, "pre", "src", Some(s)));
 
         let grid = make_el(&doc, "div", "grid", None);
-        let block_html = html_of(m.parse().invoke_2(s, None));
-        let inl_html = html_of(m.parse_inline().invoke_2(s, None));
+        let block_html = html_of(m.parse().invoke_2(s));
+        let inl_html = html_of(m.parse_inline().invoke_2(s));
         append(&grid, make_result_card(&doc, "Block (parse)", &block_html));
-        append(&grid, make_result_card(&doc, "Inline (parseInline)", &inl_html));
+        append(
+            &grid,
+            make_result_card(&doc, "Inline (parseInline)", &inl_html),
+        );
         append(&row, grid);
         append(&app, row);
     }

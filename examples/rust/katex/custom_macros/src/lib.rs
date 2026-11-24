@@ -25,7 +25,10 @@ pub extern "C" fn start() {
 
     let head = make_el(&doc, "div", "head", None);
     append(&head, make_el(&doc, "h1", "", Some("Custom Macros (Rust)")));
-    append(&head, make_el(&doc, "span", "badge", Some(r"\RR, \NN, \dd, \norm")));
+    append(
+        &head,
+        make_el(&doc, "span", "badge", Some(r"\RR, \NN, \dd, \norm")),
+    );
     append(&app, head);
 
     let macros = KatexOptionsMacros::default();
@@ -39,10 +42,20 @@ pub extern "C" fn start() {
         .with_macros(&macros);
 
     let legend = make_el(&doc, "div", "card", None);
-    append(&legend, make_el(&doc, "div", "label", Some("Defined Macros")));
     append(
         &legend,
-        make_el(&doc, "pre", "tex", Some("\\RR -> \\mathbb{R}\n\\NN -> \\mathbb{N}\n\\dd -> \\mathrm{d}\n\\norm -> \\left\\| #1 \\right\\|")),
+        make_el(&doc, "div", "label", Some("Defined Macros")),
+    );
+    append(
+        &legend,
+        make_el(
+            &doc,
+            "pre",
+            "tex",
+            Some(
+                "\\RR -> \\mathbb{R}\n\\NN -> \\mathbb{N}\n\\dd -> \\mathrm{d}\n\\norm -> \\left\\| #1 \\right\\|",
+            ),
+        ),
     );
     append(&app, legend);
 
@@ -51,7 +64,10 @@ pub extern "C" fn start() {
         ("Euclidean Space", r"v \in \RR^n,\quad k \in \NN"),
         ("Vector Norm", r"\norm{x + y} \le \norm{x} + \norm{y}"),
         ("Differential Form", r"\int_a^b f(x)\,\dd x = F(b) - F(a)"),
-        ("Inner Product Norm", r"\norm{\phi}_2 = \sqrt{\int_{\RR} |\phi(t)|^2\,\dd t}"),
+        (
+            "Inner Product Norm",
+            r"\norm{\phi}_2 = \sqrt{\int_{\RR} |\phi(t)|^2\,\dd t}",
+        ),
     ];
 
     for (name, tex) in exprs {
@@ -59,7 +75,7 @@ pub extern "C" fn start() {
         append(&card, make_el(&doc, "div", "label", Some(name)));
         append(&card, make_el(&doc, "pre", "tex", Some(tex)));
         let slot = make_el(&doc, "div", "slot", None);
-        slot.set_inner_html(&katex::render_to_string(tex, &opts));
+        slot.set_inner_html(&katex::render_to_string_with(tex, &opts));
         append(&card, slot);
         append(&grid, card);
     }

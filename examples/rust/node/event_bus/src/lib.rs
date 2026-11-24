@@ -33,7 +33,7 @@ impl Checks {
 pub extern "C" fn start() {
     let mut c = Checks(0);
 
-    let emitter = EventEmitter::<JsValue>::new(None);
+    let emitter = EventEmitter::<JsValue>::new();
     emitter.set_max_listeners(12.0);
     c.check(emitter.get_max_listeners() == 12.0);
 
@@ -65,12 +65,12 @@ pub extern "C" fn start() {
     emitter.once("metric", &on_once);
     emitter.on("shutdown", &on_shutdown);
 
-    c.check(emitter.listener_count("metric", None) == 2.0);
+    c.check(emitter.listener_count("metric") == 2.0);
     c.check(emitter.event_names().len() == 2);
 
     let emitted1 = emitter.emit("metric", [JsValue::from(101.0), JsValue::from("ok")]);
     c.check(emitted1 && metric_calls.get() == 1 && once_calls.get() == 1);
-    c.check(emitter.listener_count("metric", None) == 1.0);
+    c.check(emitter.listener_count("metric") == 1.0);
 
     let emitted2 = emitter.emit("metric", [JsValue::from(202.0), JsValue::from("ok")]);
     c.check(
@@ -83,13 +83,10 @@ pub extern "C" fn start() {
     c.check(!emitter.emit("idle", JsArray::new()));
 
     emitter.remove_listener("metric", &on_metric);
-    c.check(
-        emitter.listener_count("metric", None) == 0.0
-            && !emitter.emit("metric", [1.0]),
-    );
+    c.check(emitter.listener_count("metric") == 0.0 && !emitter.emit("metric", [1.0]));
     c.check(metric_calls.get() == 2);
 
-    emitter.remove_all_listeners("shutdown");
+    emitter.remove_all_listeners_with("shutdown");
     c.check(emitter.event_names().is_empty() && shutdown_calls.get() == 0);
 
     println(&format!(

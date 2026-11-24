@@ -7,7 +7,7 @@ fn make_line(pts: [f64; 4]) -> GroupOrShape {
         .with_points(JsArray::from(pts))
         .with_stroke("#e5e5e5")
         .with_stroke_width(1.0);
-    let ln = Line::<LineConfig>::new(Some(lc));
+    let ln = Line::<LineConfig>::new_with(Some(lc));
     Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
 }
 
@@ -19,7 +19,7 @@ pub extern "C" fn start() {
         .with_height(400.0);
     let stage = Stage::new(&sc);
 
-    let layer = Layer::new(None);
+    let layer = Layer::new();
     stage.add(&layer, JsArray::<JsValue>::new());
 
     let bg = RectConfig::default()
@@ -28,7 +28,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    layer.add([Rect::new(&bg)]);
+    layer.add([Rect::new_with(&bg)]);
 
     for x in (40..=640).step_by(40) {
         let xf = x as f64;
@@ -41,7 +41,7 @@ pub extern "C" fn start() {
 
     // Group A.
     let gac = GroupConfig::default().with_x(40.0).with_y(55.0);
-    let group_a = Group::new(&gac);
+    let group_a = Group::new_with(&gac);
     let gab = RectConfig::default()
         .with_width(160.0)
         .with_height(120.0)
@@ -61,9 +61,9 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     group_a.add([
-        GroupOrShape::from(Rect::new(&gab)),
-        GroupOrShape::from(Circle::new(&gad)),
-        GroupOrShape::from(Text::new(&gal)),
+        GroupOrShape::from(Rect::new_with(&gab)),
+        GroupOrShape::from(Circle::new_with(&gad)),
+        GroupOrShape::from(Text::new_with(&gal)),
     ]);
     layer.add([group_a]);
 
@@ -72,7 +72,7 @@ pub extern "C" fn start() {
         .with_x(340.0)
         .with_y(75.0)
         .with_rotation(24.0);
-    let group_b = Group::new(&gbc);
+    let group_b = Group::new_with(&gbc);
     let gbo = RectConfig::default()
         .with_width(150.0)
         .with_height(110.0)
@@ -101,10 +101,10 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     group_b.add([
-        GroupOrShape::from(Rect::new(&gbo)),
-        GroupOrShape::from(Rect::new(&gbi)),
-        GroupOrShape::from(Circle::new(&gbd)),
-        GroupOrShape::from(Text::new(&gbl)),
+        GroupOrShape::from(Rect::new_with(&gbo)),
+        GroupOrShape::from(Rect::new_with(&gbi)),
+        GroupOrShape::from(Circle::new_with(&gbd)),
+        GroupOrShape::from(Text::new_with(&gbl)),
     ]);
     layer.add([GroupOrShape::from(&group_b)]);
 
@@ -114,7 +114,7 @@ pub extern "C" fn start() {
         .with_y(55.0)
         .with_scale_x(1.15)
         .with_scale_y(1.15);
-    let group_c = Group::new(&gcc);
+    let group_c = Group::new_with(&gcc);
     let gco = RectConfig::default()
         .with_width(130.0)
         .with_height(110.0)
@@ -133,23 +133,23 @@ pub extern "C" fn start() {
         .with_x(25.0)
         .with_y(25.0)
         .with_rotation(15.0);
-    let inner_group = Group::new(&icc);
+    let inner_group = Group::new_with(&icc);
     let mc = CircleConfig::default()
         .with_x(40.0)
         .with_y(30.0)
         .with_radius(16.0)
         .with_fill("#111111");
-    let marker = Circle::new(&mc);
+    let marker = Circle::new_with(&mc);
     inner_group.add([GroupOrShape::from(&marker)]);
     group_c.add([
-        GroupOrShape::from(Rect::new(&gco)),
-        GroupOrShape::from(Text::new(&gcl)),
+        GroupOrShape::from(Rect::new_with(&gco)),
+        GroupOrShape::from(Text::new_with(&gcl)),
         GroupOrShape::from(inner_group),
     ]);
     layer.add([group_c]);
 
-    let abs = marker.get_absolute_position(None);
-    let bbox = group_b.get_client_rect(None);
+    let abs = marker.get_absolute_position();
+    let bbox = group_b.get_client_rect();
     let ax = abs.x().round() as i32;
     let ay = abs.y().round() as i32;
     let bw = bbox.width().round() as i32;
@@ -172,8 +172,8 @@ pub extern "C" fn start() {
         .with_font_family("monospace")
         .with_fill("#111111");
     layer.add([
-        GroupOrShape::from(Rect::new(&strip)),
-        GroupOrShape::from(Text::new(&sum)),
+        GroupOrShape::from(Rect::new_with(&strip)),
+        GroupOrShape::from(Text::new_with(&sum)),
     ]);
 
     layer.draw();

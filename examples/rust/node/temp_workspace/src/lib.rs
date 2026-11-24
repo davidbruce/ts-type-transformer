@@ -29,22 +29,22 @@ impl Checks {
 pub extern "C" fn start() {
     let mut c = Checks(0);
 
-    let dir = fs::mkdtemp_sync("/tmp/tsrs-node-ws-", None);
+    let dir = fs::mkdtemp_sync("/tmp/tsrs-node-ws-");
     c.check(fs::exists_sync(&*dir) && fs::stat_sync(&*dir).is_directory());
 
     let notes = path::join([dir.as_str(), "notes.txt"]);
-    fs::write_file_sync(&*notes, "alpha\nbeta\n", None);
+    fs::write_file_sync(&*notes, "alpha\nbeta\n");
     let st1 = fs::stat_sync(&*notes);
     c.check(fs::exists_sync(&*notes) && st1.is_file() && st1.size() == 11.0);
 
-    fs::append_file_sync(&*notes, "gamma\n", None);
+    fs::append_file_sync(&*notes, "gamma\n");
     let text = fs::read_file_sync_with_read_file_sync_options(&*notes, BufferEncoding::Utf8);
     let st2 = fs::stat_sync(&*notes);
     c.check(text == "alpha\nbeta\ngamma\n" && st2.size() == 17.0);
 
     let backup = path::join([dir.as_str(), "backup.txt"]);
     let archive = path::join([dir.as_str(), "archive.txt"]);
-    fs::copy_file_sync(&*notes, &*backup, None);
+    fs::copy_file_sync(&*notes, &*backup);
     c.check(fs::exists_sync(&*backup));
 
     fs::rename_sync(&*backup, &*archive);
@@ -56,8 +56,10 @@ pub extern "C" fn start() {
     fs::unlink_sync(&*archive);
     c.check(!fs::exists_sync(&*archive));
 
-    let rm = fs::RmOptions::default().with_recursive(true).with_force(true);
-    fs::rm_sync(&*dir, &rm);
+    let rm = fs::RmOptions::default()
+        .with_recursive(true)
+        .with_force(true);
+    fs::rm_sync_with(&*dir, &rm);
     c.check(!fs::exists_sync(&*dir));
     c.check(true);
 

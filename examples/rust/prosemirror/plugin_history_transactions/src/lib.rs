@@ -43,9 +43,9 @@ fn build_schema() -> Schema<JsValue, JsValue> {
         .with("text", &text);
 
     let make_mark = |tag: &'static str| {
-        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| {
-            hole_spec(tag)
-        }))
+        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(
+            move |_: Mark, _: bool| hole_spec(tag),
+        ))
     };
     let marks = JsValue::object()
         .with("strong", &make_mark("strong"))
@@ -58,14 +58,19 @@ fn build_schema() -> Schema<JsValue, JsValue> {
 }
 
 fn p_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
-    schema.node("paragraph", None, schema.text(t, None), None)
+    schema.node_with("paragraph", None, schema.text(t), None)
 }
 
 fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     let ha = Attrs::default();
     ha.set_at("level", 2.0);
-    let h = schema.node("heading", &ha, schema.text("Step-Inversion Undo & Transaction Filter", None), None);
-    schema.node(
+    let h = schema.node_with(
+        "heading",
+        &ha,
+        schema.text("Step-Inversion Undo & Transaction Filter"),
+        None,
+    );
+    schema.node_with(
         "doc",
         None,
         JsArray::<Node>::from([
@@ -119,7 +124,7 @@ fn update_meta(app: &AppState, st: &EditorState) {
 pub extern "C" fn start() {
     let dom_doc = dom::document();
     let schema = build_schema();
-    let audit_key = PluginKey::<JsValue>::new("audit");
+    let audit_key = PluginKey::<JsValue>::new_with("audit");
 
     let app = Rc::new(RefCell::new(AppState {
         schema: schema.clone(),
@@ -150,7 +155,8 @@ pub extern "C" fn start() {
                 let mut st = app.borrow_mut();
                 if st.locked && tr.doc_changed() {
                     st.blocked += 1;
-                    st.last_action = "Blocked document mutation (filterTransaction=false)".to_string();
+                    st.last_action =
+                        "Blocked document mutation (filterTransaction=false)".to_string();
                     false
                 } else {
                     true
@@ -197,7 +203,9 @@ pub extern "C" fn start() {
             }
         }));
 
-    let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
+    let mount = dom_doc
+        .get_element_by_id("editor")
+        .expect("missing #editor");
     let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
     let view = EditorView::new(place, &props);
     {
@@ -206,7 +214,10 @@ pub extern "C" fn start() {
         update_meta(&st, &view.state());
     }
 
-    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
+    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"]
+        .iter()
+        .enumerate()
+    {
         let btn = dom_doc.get_element_by_id(bid).expect("missing button");
         let app_c = app.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
@@ -233,13 +244,16 @@ pub extern "C" fn start() {
                         let fp = doc.child(0.0).node_size() + 1.0;
                         let tp = fp + doc.child(1.0).content().size();
                         if tp > fp {
-                            let mark = app_c.borrow().schema.mark("strong", None);
+                            let mark = app_c.borrow().schema.mark("strong");
                             let tr = es.tr();
                             tr.add_mark(fp, tp, &mark);
                             {
                                 let mut st = app_c.borrow_mut();
                                 if !st.locked {
-                                    st.last_action = format!("Bolded first paragraph [{}..{}]", fp as usize, tp as usize);
+                                    st.last_action = format!(
+                                        "Bolded first paragraph [{}..{}]",
+                                        fp as usize, tp as usize
+                                    );
                                 }
                             }
                             view.dispatch(&tr);
@@ -297,7 +311,12 @@ pub extern "C" fn start() {
                 _ => {
                     let mut st = app_c.borrow_mut();
                     st.locked = !st.locked;
-                    st.last_action = if st.locked { "Enabled read-only lock" } else { "Disabled read-only lock" }.to_string();
+                    st.last_action = if st.locked {
+                        "Enabled read-only lock"
+                    } else {
+                        "Disabled read-only lock"
+                    }
+                    .to_string();
                     update_meta(&st, &es);
                 }
             }

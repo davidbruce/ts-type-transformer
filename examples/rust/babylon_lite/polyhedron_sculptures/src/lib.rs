@@ -29,7 +29,7 @@ pub extern "C" fn start() {
             return;
         };
 
-        let engine = match babylonjs_lite::create_engine(&canvas, None).await {
+        let engine = match babylonjs_lite::create_engine(&canvas).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());
@@ -37,7 +37,7 @@ pub extern "C" fn start() {
             }
         };
 
-        let scene = babylonjs_lite::create_scene_context(&engine, None);
+        let scene = babylonjs_lite::create_scene_context(&engine);
         let clear = GPUColorDict::default()
             .with_r(0.05)
             .with_g(0.05)
@@ -52,17 +52,15 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 1.6, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        babylonjs_lite::attach_control(&camera, &canvas, &scene, None);
+        babylonjs_lite::attach_control_with(&camera, &canvas, &scene, None);
 
-        let hemi = babylonjs_lite::create_hemispheric_light(
-            &JsTuple3::from([0.0, 1.0, 0.0]),
-            0.42,
-        );
+        let hemi =
+            babylonjs_lite::create_hemispheric_light_with(&JsTuple3::from([0.0, 1.0, 0.0]), 0.42);
         hemi.set_diffuse_color([0.70, 0.70, 0.70]);
         hemi.set_ground_color([0.08, 0.08, 0.08]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
-        let spot = babylonjs_lite::create_spot_light(
+        let spot = babylonjs_lite::create_spot_light_with(
             [0.0, 6.2, 3.0],
             [0.0, -1.0, -0.55],
             core::f64::consts::PI / 3.2,
@@ -73,12 +71,12 @@ pub extern "C" fn start() {
         spot.set_range(22.0);
         babylonjs_lite::add_to_scene(&scene, &spot);
 
-        let fill = babylonjs_lite::create_directional_light([1.2, -1.5, -1.0], 0.65);
+        let fill = babylonjs_lite::create_directional_light_with([1.2, -1.5, -1.0], 0.65);
         fill.set_diffuse([0.80, 0.80, 0.80]);
         babylonjs_lite::add_to_scene(&scene, &fill);
 
         let floor_opts = GroundOptions::default().with_width(18.0).with_height(18.0);
-        let floor = babylonjs_lite::create_ground(&engine, &floor_opts);
+        let floor = babylonjs_lite::create_ground_with(&engine, &floor_opts);
         floor.set_material(&mk_std(0.10, 0.25, 24.0));
         babylonjs_lite::add_to_scene(&scene, &floor);
 
@@ -94,7 +92,7 @@ pub extern "C" fn start() {
             let x = (fi - 2.0) * 2.25;
             let z = -(fi - 2.0).abs() * 0.55;
 
-            let plinth = babylonjs_lite::create_cylinder(&engine, &copts);
+            let plinth = babylonjs_lite::create_cylinder_with(&engine, &copts);
             plinth.position().set(x, 0.55, z);
             plinth.set_material(&plinth_mat);
             babylonjs_lite::add_to_scene(&scene, &plinth);
@@ -104,7 +102,7 @@ pub extern "C" fn start() {
                 .with_type(fi)
                 .with_size(0.62)
                 .with_flat(true);
-            let mesh = babylonjs_lite::create_polyhedron(&engine, &popts);
+            let mesh = babylonjs_lite::create_polyhedron_with(&engine, &popts);
             mesh.position().set(x, 2.05, z);
             mesh.set_material(&mk_std(v, 0.95, 18.0 + fi * 24.0));
             babylonjs_lite::add_to_scene(&scene, &mesh);

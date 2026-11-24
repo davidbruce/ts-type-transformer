@@ -28,37 +28,31 @@ pub extern "C" fn start() {
         .with_zoom_animation(false)
         .with_fade_animation(false)
         .with_marker_zoom_animation(false);
-    let m = map("map", &m_opts);
+    let m = map_with("map", &m_opts);
 
     let mid_pts = JsArray::<PolylineSetLatLngsLatlngs>::from([
-        lat_lng(47.2, 7.6, None),
-        lat_lng(48.0, 8.6, None),
-        lat_lng(47.5, 9.7, None),
-        lat_lng(46.8, 9.5, None),
-        lat_lng(46.6, 8.4, None),
-        lat_lng(46.9, 7.3, None),
+        lat_lng(47.2, 7.6),
+        lat_lng(48.0, 8.6),
+        lat_lng(47.5, 9.7),
+        lat_lng(46.8, 9.5),
+        lat_lng(46.6, 8.4),
+        lat_lng(46.9, 7.3),
     ]);
 
     let core_pts = JsArray::<PolylineSetLatLngsLatlngs>::from([
-        lat_lng(47.35, 8.2, None),
-        lat_lng(47.55, 8.75, None),
-        lat_lng(47.15, 9.0, None),
-        lat_lng(46.95, 8.4, None),
+        lat_lng(47.35, 8.2),
+        lat_lng(47.55, 8.75),
+        lat_lng(47.15, 9.0),
+        lat_lng(46.95, 8.4),
     ]);
 
-    let mid_poly = polygon(
-        mid_pts,
-        &poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55),
-    );
-    let core_poly = polygon(
-        core_pts,
-        &poly_opts("#111111", 2.5, None, "#404040", 0.75),
-    );
+    let mid_poly = polygon_with(mid_pts, &poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55));
+    let core_poly = polygon_with(core_pts, &poly_opts("#111111", 2.5, None, "#404040", 0.75));
 
     let mid_bounds = mid_poly.get_bounds();
     let core_bounds = core_poly.get_bounds();
     let padded = mid_bounds.pad(0.18);
-    let hull_rect = rectangle(
+    let hull_rect = rectangle_with(
         &padded,
         &poly_opts("#737373", 1.5, Some("4 4"), "#efefef", 0.05),
     );
@@ -68,14 +62,14 @@ pub extern "C" fn start() {
     core_poly.add_to(&m);
 
     let probes = [
-        lat_lng(47.25, 8.6, None),
-        lat_lng(47.15, 8.55, None),
-        lat_lng(47.7, 8.6, None),
-        lat_lng(47.0, 9.2, None),
-        lat_lng(46.8, 7.9, None),
-        lat_lng(47.85, 7.5, None),
-        lat_lng(47.9, 9.7, None),
-        lat_lng(46.55, 9.6, None),
+        lat_lng(47.25, 8.6),
+        lat_lng(47.15, 8.55),
+        lat_lng(47.7, 8.6),
+        lat_lng(47.0, 9.2),
+        lat_lng(46.8, 7.9),
+        lat_lng(47.85, 7.5),
+        lat_lng(47.9, 9.7),
+        lat_lng(46.55, 9.6),
     ];
 
     let mut in_core = 0usize;
@@ -99,10 +93,10 @@ pub extern "C" fn start() {
             .with_weight(2.0)
             .with_fill_color(fill_hex)
             .with_fill_opacity(1.0);
-        circle_marker(pt, &cm_opts).add_to(&m);
+        circle_marker_with(pt, &cm_opts).add_to(&m);
     }
 
-    m.fit_bounds(&padded, None);
+    m.fit_bounds(&padded);
 
     if let Some(meta) = dom::document().get_element_by_id("meta") {
         let text = format!(

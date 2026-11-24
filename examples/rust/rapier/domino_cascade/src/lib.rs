@@ -70,7 +70,7 @@ fn draw_rot_box(
         ctx.line_to(xs[i], ys[i]);
     }
     ctx.close_path();
-    ctx.fill(None);
+    ctx.fill();
 
     ctx.set_stroke_style("#111111");
     ctx.set_line_width(1.5);
@@ -87,13 +87,13 @@ fn build_scene(st: &mut AppState) {
     if let Some(w) = st.world.take() {
         w.free();
     }
-    let world = World::new(
-        &Vector3::new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
-    );
+    let world = World::new(&Vector3::new(0.0, -9.81, 0.0));
 
     let floor = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, -0.35, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(7.2, 0.35, 2.0).set_friction(0.8), &floor);
+    world.create_collider_with(
+        &ColliderDesc::cuboid(7.2, 0.35, 2.0).set_friction(0.8),
+        &floor,
+    );
 
     st.dominoes.clear();
     for i in 0..DOMINO_COUNT {
@@ -103,16 +103,17 @@ fn build_scene(st: &mut AppState) {
             .set_friction(0.55)
             .set_restitution(0.15)
             .set_density(1.0);
-        world.create_collider(&cd, &rb);
+        world.create_collider_with(&cd, &rb);
         st.dominoes.push(rb);
     }
 
-    let striker = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(-5.3, 1.05, 0.0));
+    let striker =
+        world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(-5.3, 1.05, 0.0));
     let bcd = ColliderDesc::ball(0.40)
         .set_density(2.8)
         .set_restitution(0.45)
         .set_friction(0.25);
-    world.create_collider(&bcd, &striker);
+    world.create_collider_with(&bcd, &striker);
     striker.apply_impulse(&Vector3::new(4.8, 0.2, 0.0), true);
 
     st.striker = Some(striker);
@@ -123,11 +124,11 @@ fn build_scene(st: &mut AppState) {
 
 fn step_sim(st: &mut AppState) {
     if let Some(ref w) = st.world {
-        w.step(None, None);
+        w.step();
     }
     st.step_count += 1;
     if let Some(ref striker) = st.striker {
-        let sp = striker.translation(None);
+        let sp = striker.translation();
         let idx = (st.step_count - 1) % TRAIL_LEN;
         st.trail_x[idx] = sp.x();
         st.trail_y[idx] = sp.y();
@@ -171,14 +172,14 @@ fn render(st: &AppState) {
     ctx.set_fill_style("#b5b5b5");
     for i in 0..st.trail_count {
         ctx.begin_path();
-        ctx.arc(to_cx(st.trail_x[i]), to_cy(st.trail_y[i]), 2.0, 0.0, TAU, None);
-        ctx.fill(None);
+        ctx.arc(to_cx(st.trail_x[i]), to_cy(st.trail_y[i]), 2.0, 0.0, TAU);
+        ctx.fill();
     }
 
     let mut toppled = 0usize;
     for d in &st.dominoes {
-        let p = d.translation(None);
-        let q = d.rotation(None);
+        let p = d.translation();
+        let q = d.rotation();
         let tilted = q.z().abs() > 0.25;
         if tilted {
             toppled += 1;
@@ -199,29 +200,29 @@ fn render(st: &AppState) {
 
     let mut spx = 0.0;
     if let Some(ref striker) = st.striker {
-        let sp = striker.translation(None);
+        let sp = striker.translation();
         spx = sp.x();
         let scx = to_cx(sp.x());
         let scy = to_cy(sp.y());
         ctx.set_fill_style("#262626");
         ctx.begin_path();
-        ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TAU, None);
-        ctx.fill(None);
+        ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TAU);
+        ctx.fill();
         ctx.set_stroke_style("#111111");
         ctx.set_line_width(1.6);
         ctx.begin_path();
-        ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TAU, None);
+        ctx.arc(scx, scy, 0.40 * 46.0, 0.0, TAU);
         ctx.stroke();
         ctx.set_fill_style("#e5e5e5");
         ctx.begin_path();
-        ctx.arc(scx - 5.0, scy - 5.0, 2.5, 0.0, TAU, None);
-        ctx.fill(None);
+        ctx.arc(scx - 5.0, scy - 5.0, 2.5, 0.0, TAU);
+        ctx.fill();
     }
 
     let cap = format!("Dominoes toppled: {} / 9", toppled);
     ctx.set_fill_style("#555555");
     ctx.set_font("11px ui-monospace, monospace");
-    ctx.fill_text(&cap, 18.0, 24.0, None);
+    ctx.fill_text(&cap, 18.0, 24.0);
 
     let msg = format!(
         "9 cuboids + striker sphere \u{00B7} toppled={}/9 \u{00B7} striker_x={:.2} m \u{00B7} step={} ({})",
@@ -241,7 +242,7 @@ pub extern "C" fn start() {
         }
         let doc = dom::document();
         let canvas = HTMLCanvasElement::cast(&doc.get_element_by_id("canvas").unwrap()).unwrap();
-        let ctx = canvas.get_context_2d(None).unwrap();
+        let ctx = canvas.get_context_2d().unwrap();
 
         let st = Rc::new(RefCell::new(AppState {
             ctx,
@@ -280,11 +281,8 @@ pub extern "C" fn start() {
                     }
                     1 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(if s.paused {
-                            "Resume"
-                        } else {
-                            "Pause"
-                        });
+                        s.pause_btn
+                            .set_text_content(if s.paused { "Resume" } else { "Pause" });
                         render(&s);
                     }
                     _ => {

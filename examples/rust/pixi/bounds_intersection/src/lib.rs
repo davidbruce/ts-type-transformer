@@ -21,7 +21,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
     let ss = StrokeStyle::default()
         .with_width(width)
         .with_color(color_hex as f64);
-    g.stroke(&ss);
+    g.stroke_with(&ss);
 }
 
 #[unsafe(no_mangle)]
@@ -29,7 +29,7 @@ pub extern "C" fn start() {
     js::spawn(async {
         let app = Application::<JsValue>::new();
         let opts = build_opts();
-        if app.init(&opts).await.is_err() {
+        if app.init_with(&opts).await.is_err() {
             return;
         }
 
@@ -40,39 +40,39 @@ pub extern "C" fn start() {
 
         let stage = app.stage();
 
-        let query = Rectangle::new(190.0, 105.0, 260.0, 170.0);
-        let padded = query.js_clone().pad(10.0, 10.0);
+        let query = Rectangle::new_with(190.0, 105.0, 260.0, 170.0);
+        let padded = query.js_clone().pad_with(10.0, 10.0);
         let hull = query.js_clone();
 
         let candidates = [
-            Rectangle::new(210.0, 125.0, 90.0, 60.0),
-            Rectangle::new(330.0, 165.0, 95.0, 80.0),
-            Rectangle::new(110.0, 80.0, 130.0, 85.0),
-            Rectangle::new(390.0, 75.0, 130.0, 90.0),
-            Rectangle::new(135.0, 225.0, 110.0, 90.0),
-            Rectangle::new(40.0, 40.0, 100.0, 110.0),
-            Rectangle::new(510.0, 48.0, 125.0, 115.0),
-            Rectangle::new(505.0, 245.0, 130.0, 110.0),
+            Rectangle::new_with(210.0, 125.0, 90.0, 60.0),
+            Rectangle::new_with(330.0, 165.0, 95.0, 80.0),
+            Rectangle::new_with(110.0, 80.0, 130.0, 85.0),
+            Rectangle::new_with(390.0, 75.0, 130.0, 90.0),
+            Rectangle::new_with(135.0, 225.0, 110.0, 90.0),
+            Rectangle::new_with(40.0, 40.0, 100.0, 110.0),
+            Rectangle::new_with(510.0, 48.0, 125.0, 115.0),
+            Rectangle::new_with(505.0, 245.0, 130.0, 110.0),
         ];
 
         let mut contained = 0usize;
         let mut intersecting = 0usize;
         let mut disjoint = 0usize;
 
-        let g = Graphics::new(JsNone);
+        let g = Graphics::new_with(JsNone);
         for c in &candidates {
             hull.enlarge(c);
             g.rect(c.x(), c.y(), c.width(), c.height());
             if query.contains_rect(c) {
                 contained += 1;
-                g.fill(0x111111 as f64);
-            } else if query.intersects(c, None) {
+                g.fill_with(0x111111 as f64);
+            } else if query.intersects(c) {
                 intersecting += 1;
-                g.fill(0x737373 as f64);
+                g.fill_with(0x737373 as f64);
                 stroke_g(&g, 2.0, 0x111111);
             } else {
                 disjoint += 1;
-                g.fill(0xe5e5e5 as f64);
+                g.fill_with(0xe5e5e5 as f64);
                 stroke_g(&g, 1.0, 0xa3a3a3);
             }
         }

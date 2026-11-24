@@ -95,7 +95,9 @@ fn render(st: &State) {
     let rows = st.table.get_row_model().rows();
     let grp_col = st.grp_col.borrow().clone();
 
-    let mut html = String::from("<table><thead><tr><th>Group / Host</th><th>Region</th><th>Role</th><th class=\"num\">CPU %</th><th class=\"num\">Mem GB</th><th class=\"num\">Nodes</th></tr></thead><tbody>");
+    let mut html = String::from(
+        "<table><thead><tr><th>Group / Host</th><th>Region</th><th>Role</th><th class=\"num\">CPU %</th><th class=\"num\">Mem GB</th><th class=\"num\">Nodes</th></tr></thead><tbody>",
+    );
     let mut group_cnt = 0usize;
     for r in rows.iter() {
         let is_grp = js::unchecked_cast::<RowColumnGrouping>(&r).get_is_grouped();
@@ -119,7 +121,10 @@ fn render(st: &State) {
             esc_html(&reg, &mut html);
             html.push_str("</td><td>");
             esc_html(&role, &mut html);
-            let _ = write!(html, "</td><td class=\"num\">{cpu:.1}</td><td class=\"num\">{mem:.0}</td><td class=\"num\">{nodes:.0}</td></tr>");
+            let _ = write!(
+                html,
+                "</td><td class=\"num\">{cpu:.1}</td><td class=\"num\">{mem:.0}</td><td class=\"num\">{nodes:.0}</td></tr>"
+            );
         } else {
             html.push_str("<tr><td class=\"child-indent\">");
             esc_html(&r.get_value::<JsValue>("host").as_string(), &mut html);
@@ -127,13 +132,19 @@ fn render(st: &State) {
             esc_html(&r.get_value::<JsValue>("region").as_string(), &mut html);
             html.push_str("</td><td>");
             esc_html(&r.get_value::<JsValue>("role").as_string(), &mut html);
-            let _ = write!(html, "</td><td class=\"num\">{cpu:.0}</td><td class=\"num\">{mem:.0}</td><td class=\"num\">{nodes:.0}</td></tr>");
+            let _ = write!(
+                html,
+                "</td><td class=\"num\">{cpu:.0}</td><td class=\"num\">{mem:.0}</td><td class=\"num\">{nodes:.0}</td></tr>"
+            );
         }
     }
     html.push_str("</tbody></table>");
     st.wrap.set_inner_html(&html);
 
-    let msg = format!("Grouped by {grp_col} \u{00B7} {group_cnt} groups \u{00B7} {} visible rows", rows.len());
+    let msg = format!(
+        "Grouped by {grp_col} \u{00B7} {group_cnt} groups \u{00B7} {} visible rows",
+        rows.len()
+    );
     st.meta.set_text_content(&msg);
 }
 
@@ -148,9 +159,18 @@ pub extern "C" fn start() {
         .with("columnGroupingFeature", column_grouping_feature())
         .with("rowAggregationFeature", row_aggregation_feature())
         .with("rowExpandingFeature", row_expanding_feature())
-        .with("coreRowModel", create_core_row_model::<TableFeatures, JsValue>())
-        .with("groupedRowModel", create_grouped_row_model_as::<TableFeatures, JsValue>())
-        .with("expandedRowModel", create_expanded_row_model_as::<TableFeatures, JsValue>())
+        .with(
+            "coreRowModel",
+            create_core_row_model::<TableFeatures, JsValue>(),
+        )
+        .with(
+            "groupedRowModel",
+            create_grouped_row_model_as::<TableFeatures, JsValue>(),
+        )
+        .with(
+            "expandedRowModel",
+            create_expanded_row_model_as::<TableFeatures, JsValue>(),
+        )
         .with("aggregationFns", agg_fns);
 
     let data = JsArray::<JsValue>::from([
@@ -187,7 +207,9 @@ pub extern "C" fn start() {
     let doc = dom::document();
     let st = Rc::new(State {
         table: construct_table(&opts),
-        wrap: doc.get_element_by_id("table-wrap").expect("missing #table-wrap"),
+        wrap: doc
+            .get_element_by_id("table-wrap")
+            .expect("missing #table-wrap"),
         meta: doc.get_element_by_id("meta").expect("missing #meta"),
         grp_col: RefCell::new(String::from("region")),
     });
@@ -199,8 +221,8 @@ pub extern "C" fn start() {
             let grp: TableColumnGrouping<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             let exp: TableRowExpanding<TableFeatures, JsValue> = js::unchecked_cast(&st_c.table);
             match idx {
-                0 => exp.toggle_all_rows_expanded(true),
-                1 => exp.toggle_all_rows_expanded(false),
+                0 => exp.toggle_all_rows_expanded_with(true),
+                1 => exp.toggle_all_rows_expanded_with(false),
                 _ => {
                     let key = if idx == 2 { "region" } else { "role" };
                     *st_c.grp_col.borrow_mut() = String::from(key);

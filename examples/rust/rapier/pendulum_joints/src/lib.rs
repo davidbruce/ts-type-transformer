@@ -72,7 +72,7 @@ fn draw_rot_box(
         ctx.line_to(xs[i], ys[i]);
     }
     ctx.close_path();
-    ctx.fill(None);
+    ctx.fill();
 
     ctx.set_stroke_style("#111111");
     ctx.set_line_width(1.5);
@@ -90,12 +90,12 @@ fn draw_pivot(ctx: &CanvasRenderingContext2D, wx: f64, wy: f64) {
     let cy = to_cy(wy);
     ctx.set_fill_style("#ffffff");
     ctx.begin_path();
-    ctx.arc(cx, cy, 4.0, 0.0, TAU, None);
-    ctx.fill(None);
+    ctx.arc(cx, cy, 4.0, 0.0, TAU);
+    ctx.fill();
     ctx.set_stroke_style("#111111");
     ctx.set_line_width(1.6);
     ctx.begin_path();
-    ctx.arc(cx, cy, 4.0, 0.0, TAU, None);
+    ctx.arc(cx, cy, 4.0, 0.0, TAU);
     ctx.stroke();
 }
 
@@ -103,53 +103,88 @@ fn build_scene(st: &mut AppState) {
     if let Some(w) = st.world.take() {
         w.free();
     }
-    let world = World::new(
-        &Vector3::new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
-    );
+    let world = World::new(&Vector3::new(0.0, -9.81, 0.0));
 
     let gantry = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, 6.2, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(6.0, 0.22, 0.6), &gantry);
+    world.create_collider_with(&ColliderDesc::cuboid(6.0, 0.22, 0.6), &gantry);
     let z_axis = Vector3::new(0.0, 0.0, 1.0);
 
     st.chain.clear();
     let xs = [-2.8, -3.3, -3.8];
     let ys = [5.4, 4.1, 2.8];
     for i in 0..3 {
-        let rb = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(xs[i], ys[i], 0.0));
-        world.create_collider(
-            &ColliderDesc::cuboid(LINK_HX, LINK_HY, 0.2).set_density(if i == 2 { 1.6 } else { 1.4 }),
+        let rb =
+            world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(xs[i], ys[i], 0.0));
+        world.create_collider_with(
+            &ColliderDesc::cuboid(LINK_HX, LINK_HY, 0.2).set_density(if i == 2 {
+                1.6
+            } else {
+                1.4
+            }),
             &rb,
         );
         st.chain.push(rb);
     }
 
     world.create_impulse_joint(
-        &JointData::revolute(&Vector3::new(-2.2, -0.22, 0.0), &Vector3::new(0.0, LINK_HY + 0.06, 0.0), &z_axis),
-        &gantry, &st.chain[0], true,
+        &JointData::revolute(
+            &Vector3::new(-2.2, -0.22, 0.0),
+            &Vector3::new(0.0, LINK_HY + 0.06, 0.0),
+            &z_axis,
+        ),
+        &gantry,
+        &st.chain[0],
+        true,
     );
     world.create_impulse_joint(
-        &JointData::revolute(&Vector3::new(0.0, -LINK_HY - 0.06, 0.0), &Vector3::new(0.0, LINK_HY + 0.06, 0.0), &z_axis),
-        &st.chain[0], &st.chain[1], true,
+        &JointData::revolute(
+            &Vector3::new(0.0, -LINK_HY - 0.06, 0.0),
+            &Vector3::new(0.0, LINK_HY + 0.06, 0.0),
+            &z_axis,
+        ),
+        &st.chain[0],
+        &st.chain[1],
+        true,
     );
     world.create_impulse_joint(
-        &JointData::revolute(&Vector3::new(0.0, -LINK_HY - 0.06, 0.0), &Vector3::new(0.0, LINK_HY + 0.06, 0.0), &z_axis),
-        &st.chain[1], &st.chain[2], true,
+        &JointData::revolute(
+            &Vector3::new(0.0, -LINK_HY - 0.06, 0.0),
+            &Vector3::new(0.0, LINK_HY + 0.06, 0.0),
+            &z_axis,
+        ),
+        &st.chain[1],
+        &st.chain[2],
+        true,
     );
     st.chain[2].apply_impulse(&Vector3::new(-1.4, 0.0, 0.0), true);
 
     let arm = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(3.1, 5.2, 0.0));
-    world.create_collider(&ColliderDesc::cuboid(0.14, 0.85, 0.2).set_density(1.2), &arm);
+    world.create_collider_with(
+        &ColliderDesc::cuboid(0.14, 0.85, 0.2).set_density(1.2),
+        &arm,
+    );
     let bob = world.create_rigid_body(&RigidBodyDesc::dynamic().set_translation(3.8, 3.6, 0.0));
-    world.create_collider(&ColliderDesc::ball(0.42).set_density(3.0), &bob);
+    world.create_collider_with(&ColliderDesc::ball(0.42).set_density(3.0), &bob);
 
     world.create_impulse_joint(
-        &JointData::revolute(&Vector3::new(2.3, -0.22, 0.0), &Vector3::new(0.0, 0.88, 0.0), &z_axis),
-        &gantry, &arm, true,
+        &JointData::revolute(
+            &Vector3::new(2.3, -0.22, 0.0),
+            &Vector3::new(0.0, 0.88, 0.0),
+            &z_axis,
+        ),
+        &gantry,
+        &arm,
+        true,
     );
     world.create_impulse_joint(
-        &JointData::revolute(&Vector3::new(0.0, -0.88, 0.0), &Vector3::new(0.0, 0.72, 0.0), &z_axis),
-        &arm, &bob, true,
+        &JointData::revolute(
+            &Vector3::new(0.0, -0.88, 0.0),
+            &Vector3::new(0.0, 0.72, 0.0),
+            &z_axis,
+        ),
+        &arm,
+        &bob,
+        true,
     );
     bob.apply_impulse(&Vector3::new(1.8, 0.2, 0.0), true);
 
@@ -162,11 +197,11 @@ fn build_scene(st: &mut AppState) {
 
 fn step_sim(st: &mut AppState) {
     if let Some(ref w) = st.world {
-        w.step(None, None);
+        w.step();
     }
     st.step_count += 1;
-    let pa = st.chain[2].translation(None);
-    let pb = st.bob.as_ref().unwrap().translation(None);
+    let pa = st.chain[2].translation();
+    let pb = st.bob.as_ref().unwrap().translation();
     let idx = (st.step_count - 1) % TRAIL_LEN;
     st.ax[idx] = pa.x();
     st.ay[idx] = pa.y();
@@ -204,11 +239,11 @@ fn render(st: &AppState) {
     ctx.set_fill_style("#b5b5b5");
     for i in 0..st.trail_count {
         ctx.begin_path();
-        ctx.arc(to_cx(st.ax[i]), to_cy(st.ay[i]), 1.6, 0.0, TAU, None);
-        ctx.fill(None);
+        ctx.arc(to_cx(st.ax[i]), to_cy(st.ay[i]), 1.6, 0.0, TAU);
+        ctx.fill();
         ctx.begin_path();
-        ctx.arc(to_cx(st.bx[i]), to_cy(st.by[i]), 1.6, 0.0, TAU, None);
-        ctx.fill(None);
+        ctx.arc(to_cx(st.bx[i]), to_cy(st.by[i]), 1.6, 0.0, TAU);
+        ctx.fill();
     }
 
     let mut pin_x = [0.0; 2];
@@ -216,11 +251,19 @@ fn render(st: &AppState) {
     let mut tip_x = 0.0;
     let mut tip_y = 0.0;
     for (i, link) in st.chain.iter().enumerate() {
-        let p = link.translation(None);
-        let q = link.rotation(None);
+        let p = link.translation();
+        let q = link.rotation();
         draw_rot_box(
-            ctx, p.x(), p.y(), q.x(), q.y(), q.z(), q.w(),
-            LINK_HX, LINK_HY, if i == 2 { "#d4d4d4" } else { "#f7f7f7" },
+            ctx,
+            p.x(),
+            p.y(),
+            q.x(),
+            q.y(),
+            q.z(),
+            q.w(),
+            LINK_HX,
+            LINK_HY,
+            if i == 2 { "#d4d4d4" } else { "#f7f7f7" },
         );
         if i < 2 {
             let r01 = 2.0 * (q.x() * q.y() - q.w() * q.z());
@@ -233,21 +276,32 @@ fn render(st: &AppState) {
         }
     }
 
-    let ap = st.arm.as_ref().unwrap().translation(None);
-    let aq = st.arm.as_ref().unwrap().rotation(None);
-    let bp = st.bob.as_ref().unwrap().translation(None);
-    draw_rot_box(ctx, ap.x(), ap.y(), aq.x(), aq.y(), aq.z(), aq.w(), 0.14, 0.85, "#f7f7f7");
+    let ap = st.arm.as_ref().unwrap().translation();
+    let aq = st.arm.as_ref().unwrap().rotation();
+    let bp = st.bob.as_ref().unwrap().translation();
+    draw_rot_box(
+        ctx,
+        ap.x(),
+        ap.y(),
+        aq.x(),
+        aq.y(),
+        aq.z(),
+        aq.w(),
+        0.14,
+        0.85,
+        "#f7f7f7",
+    );
 
     let bcx = to_cx(bp.x());
     let bcy = to_cy(bp.y());
     ctx.set_fill_style("#262626");
     ctx.begin_path();
-    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TAU, None);
-    ctx.fill(None);
+    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TAU);
+    ctx.fill();
     ctx.set_stroke_style("#111111");
     ctx.set_line_width(1.6);
     ctx.begin_path();
-    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TAU, None);
+    ctx.arc(bcx, bcy, 0.42 * 46.0, 0.0, TAU);
     ctx.stroke();
 
     draw_pivot(ctx, -2.2, 5.98);
@@ -260,12 +314,17 @@ fn render(st: &AppState) {
 
     ctx.set_fill_style("#555555");
     ctx.set_font("11px ui-monospace, monospace");
-    ctx.fill_text("3-Link Revolute Chain", to_cx(-3.5), 36.0, None);
-    ctx.fill_text("2-Body Bob Pendulum", to_cx(1.1), 36.0, None);
+    ctx.fill_text("3-Link Revolute Chain", to_cx(-3.5), 36.0);
+    ctx.fill_text("2-Body Bob Pendulum", to_cx(1.1), 36.0);
 
     let msg = format!(
         "5 revolute joints \u{00B7} chain_tip=({:.2}, {:.2}) \u{00B7} bob=({:.2}, {:.2}) \u{00B7} step={} ({})",
-        tip_x, tip_y, bp.x(), bp.y(), st.step_count, if st.paused { "paused" } else { "running" }
+        tip_x,
+        tip_y,
+        bp.x(),
+        bp.y(),
+        st.step_count,
+        if st.paused { "paused" } else { "running" }
     );
     st.meta.set_text_content(&msg);
 }
@@ -278,7 +337,7 @@ pub extern "C" fn start() {
         }
         let doc = dom::document();
         let canvas = HTMLCanvasElement::cast(&doc.get_element_by_id("canvas").unwrap()).unwrap();
-        let ctx = canvas.get_context_2d(None).unwrap();
+        let ctx = canvas.get_context_2d().unwrap();
 
         let st = Rc::new(RefCell::new(AppState {
             ctx,
@@ -321,11 +380,8 @@ pub extern "C" fn start() {
                     }
                     1 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(if s.paused {
-                            "Resume"
-                        } else {
-                            "Pause"
-                        });
+                        s.pause_btn
+                            .set_text_content(if s.paused { "Resume" } else { "Pause" });
                         render(&s);
                     }
                     _ => {

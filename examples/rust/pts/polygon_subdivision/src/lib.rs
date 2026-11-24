@@ -1,15 +1,16 @@
 #![no_main]
 
-use pts::{AnimateCallbackFn, CanvasSpace, CanvasSpaceOptions, Circle, Group, IPlayer, Num, Polygon, Pt};
+use pts::{
+    AnimateCallbackFn, CanvasSpace, CanvasSpaceOptions, Circle, Group, IPlayer, Num, Polygon, Pt,
+};
 
 fn mk_pt(x: f64, y: f64) -> Pt {
-    Pt::make(2.0, None, None).with_x(x).with_y(y)
+    Pt::make(2.0).with_x(x).with_y(y)
 }
 
 const SHADES: [&str; 9] = [
-    "#f7f7f7", "#efefef", "#e5e5e5",
-    "#d4d4d4", "#b5b5b5", "#999999",
-    "#737373", "#404040", "#262626",
+    "#f7f7f7", "#efefef", "#e5e5e5", "#d4d4d4", "#b5b5b5", "#999999", "#737373", "#404040",
+    "#262626",
 ];
 
 #[unsafe(no_mangle)]
@@ -19,7 +20,7 @@ pub extern "C" fn start() {
         .with_resize(true)
         .with_retina(true);
 
-    let space = CanvasSpace::new("#pt", None).setup(&opts);
+    let space = CanvasSpace::new_with("#pt", None).setup(&opts);
     let form = space.get_form();
 
     let anim = {
@@ -39,39 +40,41 @@ pub extern "C" fn start() {
             );
 
             let mut poly =
-                Polygon::from_center(&c, radius, 6.0).rotate2d(time_ms * 0.00035, &c, None);
+                Polygon::from_center(&c, radius, 6.0).rotate2d_with(time_ms * 0.00035, &c, None);
             let centroid = Polygon::centroid(&poly);
 
             for (depth, shade) in SHADES.iter().enumerate() {
                 let sw = if depth == 0 { 1.6 } else { 1.0 };
                 form.fill(*shade)
-                    .stroke("#111111", sw, None, None)
+                    .stroke_with("#111111", sw, None, None)
                     .polygon(&poly);
                 if depth == 0 {
                     for pt in poly.as_array().iter() {
                         let ray = Group::new([centroid.clone(), pt.clone()]);
-                        form.stroke_only("#d4d4d4", 1.0, None, None).line(&ray);
-                        form.fill_only("#111111")
-                            .point(&pt, 3.5, "circle");
+                        form.stroke_only_with("#d4d4d4", 1.0, None, None).line(&ray);
+                        form.fill_only("#111111").point_with(&pt, 3.5, "circle");
                     }
                 }
-                poly = Polygon::midpoints(&poly, true, t);
+                poly = Polygon::midpoints_with(&poly, true, t);
             }
 
             let h_bar = Group::new([mk_pt(c.x() - 10.0, c.y()), mk_pt(c.x() + 10.0, c.y())]);
             let v_bar = Group::new([mk_pt(c.x(), c.y() - 10.0), mk_pt(c.x(), c.y() + 10.0)]);
-            form.stroke_only("#ffffff", 1.5, None, None).line(&h_bar);
-            form.stroke_only("#ffffff", 1.5, None, None).line(&v_bar);
+            form.stroke_only_with("#ffffff", 1.5, None, None)
+                .line(&h_bar);
+            form.stroke_only_with("#ffffff", 1.5, None, None)
+                .line(&v_bar);
             form.fill("#ffffff")
-                .stroke("#111111", 1.5, None, None)
-                .point(&centroid, 5.0, "circle");
+                .stroke_with("#111111", 1.5, None, None)
+                .point_with(&centroid, 5.0, "circle");
 
             let ring = Circle::from_center(&pointer, 10.0);
-            form.stroke_only("#737373", 1.5, None, None).circle(&ring);
+            form.stroke_only_with("#737373", 1.5, None, None)
+                .circle(&ring);
         })
     };
 
     let player = IPlayer::default().with_animate(&anim);
     space.add(&player);
-    space.bind_mouse(None, None).bind_touch(None, None, None).play(None);
+    space.bind_mouse().bind_touch().play();
 }

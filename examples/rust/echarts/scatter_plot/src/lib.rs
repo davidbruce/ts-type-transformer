@@ -7,7 +7,10 @@ fn value_axis() -> JsValue {
         .with("type", "value")
         .with("min", 0.0)
         .with("max", 100.0)
-        .with("splitLine", JsValue::object().with("lineStyle", JsValue::object().with("color", "#e5e5e5")))
+        .with(
+            "splitLine",
+            JsValue::object().with("lineStyle", JsValue::object().with("color", "#e5e5e5")),
+        )
         .with("axisLabel", JsValue::object().with("color", "#555555"))
 }
 
@@ -22,7 +25,7 @@ fn pts(coords: &[(f64, f64)]) -> JsArray<JsValue> {
 pub extern "C" fn start() {
     let doc = dom::document();
     let box_el = doc.get_element_by_id("chart").expect("missing #chart");
-    let chart = echarts::init(&box_el, None, None);
+    let chart = echarts::init_with(&box_el, None, None);
 
     let opt = EChartsCoreOption::default().with_animation(false);
     opt.set_at("backgroundColor", "#ffffff");
@@ -54,8 +57,16 @@ pub extern "C" fn start() {
                 .with(
                     "data",
                     pts(&[
-                        (14.0, 22.0), (21.0, 31.0), (28.0, 27.0), (33.0, 42.0), (40.0, 48.0),
-                        (46.0, 53.0), (54.0, 61.0), (62.0, 59.0), (71.0, 74.0), (82.0, 85.0),
+                        (14.0, 22.0),
+                        (21.0, 31.0),
+                        (28.0, 27.0),
+                        (33.0, 42.0),
+                        (40.0, 48.0),
+                        (46.0, 53.0),
+                        (54.0, 61.0),
+                        (62.0, 59.0),
+                        (71.0, 74.0),
+                        (82.0, 85.0),
                     ]),
                 ),
             JsValue::object()
@@ -73,13 +84,21 @@ pub extern "C" fn start() {
                 .with(
                     "data",
                     pts(&[
-                        (18.0, 64.0), (25.0, 72.0), (31.0, 68.0), (39.0, 79.0), (47.0, 65.0),
-                        (55.0, 81.0), (64.0, 77.0), (72.0, 88.0), (79.0, 82.0), (88.0, 92.0),
+                        (18.0, 64.0),
+                        (25.0, 72.0),
+                        (31.0, 68.0),
+                        (39.0, 79.0),
+                        (47.0, 65.0),
+                        (55.0, 81.0),
+                        (64.0, 77.0),
+                        (72.0, 88.0),
+                        (79.0, 82.0),
+                        (88.0, 92.0),
                     ]),
                 ),
         ])),
     );
-    chart.set_option(opt, None, None);
+    chart.set_option(opt);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
     meta.set_text_content(&format!(

@@ -2402,9 +2402,9 @@ fn rust_arguments_are_values_not_wrappers() {
     assert!(!bad.status.success(), "a number is not a nullable string");
     let shapes = case_in("shapes", "rust", "shapes-rust-arguments");
     rust_bindings(&rustc, &shapes.out, &model(&shapes.xml, "Rust"));
-    let ok = compile(&shapes, "pub fn ok(s: &Shape) { s.resize(1.0, None); s.resize(1.0, true); s.resize(1.0, Some(true)); }");
+    let ok = compile(&shapes, "pub fn ok(s: &Shape) { s.resize(1.0); s.resize_with(1.0, None); s.resize_with(1.0, true); s.resize_with(1.0, Some(true)); }");
     assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
-    let bad = compile(&shapes, "pub fn bad(s: &Shape) { s.resize(1.0, 2.0); }");
+    let bad = compile(&shapes, "pub fn bad(s: &Shape) { s.resize_with(1.0, 2.0); }");
     assert!(!bad.status.success(), "a number is not an optional flag");
     let unions = case_in("unions", "rust", "unions-rust-arguments");
     rust_bindings(&rustc, &unions.out, &model(&unions.xml, "Rust"));
@@ -3240,15 +3240,15 @@ fn intl_locale_formatting() {
                      d_opts.set_year(Some(intl::DateTimeFormatOptionsDay::Numeric));\n\
                      d_opts.set_month(Some(intl::DateTimeFormatOptionsMonth::Short));\n\
                      d_opts.set_day(Some(intl::DateTimeFormatOptionsDay::_2Digit));\n\
-                     let dtf = intl::date_time_format().construct(\"en-US\", Some(&d_opts));\n\
-                     let formatted_date = dtf.format(&Date::from_time(1700000000000.0));\n\
+                     let dtf = intl::date_time_format().construct_with(\"en-US\", Some(&d_opts));\n\
+                     let formatted_date = dtf.format_with(&Date::from_time(1700000000000.0));\n\
                      check!(formatted_date == \"Nov 14, 2023\");\n\
                      let n_opts = intl::NumberFormatOptions::create();\n\
                      n_opts.set_style(Some(intl::NumberFormatOptionsStyle::Currency));\n\
                      n_opts.set_currency(Some(\"USD\"));\n\
-                     let nf = intl::number_format().construct(\"en-US\", Some(&n_opts));\n\
+                     let nf = intl::number_format().construct_with(\"en-US\", Some(&n_opts));\n\
                      check!(nf.format(1234.5) == \"$1,234.50\");\n\
-                     let rtf = intl::RelativeTimeFormatStatics::new(\"en-US\", None);\n\
+                     let rtf = intl::RelativeTimeFormatStatics::new_with(\"en-US\", None);\n\
                      check!(rtf.format(-1.0, intl::RelativeTimeFormatUnit::Day) == \"1 day ago\");\n\
                  }\n\
                  check!(js::live_handles() == 0);\n\
@@ -3338,7 +3338,7 @@ fn webworker_bindings_and_worker() {
                      let mut v = bytes.to_vec();\n\
                      for b in &mut v { *b = b.wrapping_mul(2); }\n\
                      let reply = Uint8Array::<ArrayBufferLike>::from_slice(&v);\n\
-                     post_message(&reply, None);\n\
+                     post_message(&reply);\n\
                  });\n\
                  set_onmessage(Some(&handler));\n\
              }\n",

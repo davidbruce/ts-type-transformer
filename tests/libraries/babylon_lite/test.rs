@@ -33,7 +33,7 @@ pub extern "C" fn run() {
         check!(camera.radius() == 8.5 && near(camera.target().y(), 1.6));
 
         // Lights.
-        let hemi = create_hemispheric_light(Some(&JsTuple3::new(0.0, 1.0, 0.2)), Some(0.75));
+        let hemi = create_hemispheric_light_with(Some(&JsTuple3::new(0.0, 1.0, 0.2)), Some(0.75));
         hemi.set_diffuse_color(&JsTuple3::new(0.75, 0.85, 1.0));
         hemi.set_ground_color(&JsTuple3::new(0.12, 0.14, 0.22));
         let dc = hemi.diffuse_color();
@@ -42,11 +42,11 @@ pub extern "C" fn run() {
         check!(near(dc.get0(), 0.75) && near(dc.get1(), 0.85) && near(dc.get2(), 1.0));
         check!(near(gc.get0(), 0.12));
 
-        let dir = create_directional_light(&JsTuple3::new(-1.0, -2.0, -1.2), Some(2.2));
+        let dir = create_directional_light_with(&JsTuple3::new(-1.0, -2.0, -1.2), Some(2.2));
         dir.set_diffuse(&JsTuple3::new(1.0, 0.96, 0.9));
         check!(near(dir.intensity(), 2.2) && near(dir.diffuse().get1(), 0.96));
 
-        let pt = create_point_light(&JsTuple3::new(2.8, 1.6, 0.0), Some(8.0));
+        let pt = create_point_light_with(&JsTuple3::new(2.8, 1.6, 0.0), Some(8.0));
         pt.set_range(12.0);
         check!(near(pt.intensity(), 8.0) && near(pt.range(), 12.0));
 
@@ -55,24 +55,24 @@ pub extern "C" fn run() {
         props.set_base_color_factor(Some(&JsTuple4::new(0.18, 0.78, 0.95, 1.0)));
         props.set_metallic_factor(Some(0.75));
         props.set_roughness_factor(Some(0.22));
-        let pbr = create_pbr_material(Some(&props));
+        let pbr = create_pbr_material_with(Some(&props));
         check!(pbr.metallic_factor() == Some(0.75) && pbr.roughness_factor() == Some(0.22));
 
-        let grid = create_grid_material(None);
+        let grid = create_grid_material();
         check!(!grid.vertex_source().is_empty() && !grid.fragment_source().is_empty());
 
         // Procedural geometry data.
         let sopts = SphereOptions::create();
         sopts.set_diameter(Some(2.0));
         sopts.set_segments(Some(8.0));
-        let sphere = create_sphere_data(Some(&sopts));
+        let sphere = create_sphere_data_with(Some(&sopts));
         check!(sphere.vertex_count() > 0.0 && sphere.index_count() > 0.0);
         check!(!sphere.positions().to_vec().is_empty() && sphere.indices().byte_len() > 0);
 
         let topts = TorusKnotOptions::create();
         topts.set_radius(Some(1.0));
         topts.set_tube(Some(0.3));
-        let knot = create_torus_knot_data(Some(&topts));
+        let knot = create_torus_knot_data_with(Some(&topts));
         check!(!knot.positions().is_empty() && knot.indices().byte_len() > 0);
 
         // Accessibility tree.
@@ -85,7 +85,10 @@ pub extern "C" fn run() {
         let node = add_accessibility_node(&tree, &nopts);
         check!(tree.roots().len() == 1 && !tree.disposed());
         let got_tag = node.tag().unwrap();
-        check!(got_tag.name().as_deref() == Some("hero") && got_tag.role().as_deref() == Some("button"));
+        check!(
+            got_tag.name().as_deref() == Some("hero")
+                && got_tag.role().as_deref() == Some("button")
+        );
 
         // Quaternion -> Euler tuple conversion.
         let euler = quat_to_euler_xyz_tuple(0.0, 0.0, 0.0, 1.0);

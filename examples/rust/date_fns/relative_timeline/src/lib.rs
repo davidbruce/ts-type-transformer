@@ -24,8 +24,14 @@ pub extern "C" fn start() {
     let app = doc.get_element_by_id("app").expect("missing #app");
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("Date-fns Relative Timeline (Rust)")));
-    append(&head, make_el(&doc, "span", "badge", Some("Anchor 2024-03-15")));
+    append(
+        &head,
+        make_el(&doc, "h1", "", Some("Date-fns Relative Timeline (Rust)")),
+    );
+    append(
+        &head,
+        make_el(&doc, "span", "badge", Some("Anchor 2024-03-15")),
+    );
     append(&app, head);
 
     let anchor: Date = date_fns::parse_iso("2024-03-15", None);
@@ -41,7 +47,15 @@ pub extern "C" fn start() {
     ];
 
     let tl_card = make_el(&doc, "div", "card", None);
-    append(&tl_card, make_el(&doc, "div", "label", Some("Milestones Relative to 2024-03-15")));
+    append(
+        &tl_card,
+        make_el(
+            &doc,
+            "div",
+            "label",
+            Some("Milestones Relative to 2024-03-15"),
+        ),
+    );
     let timeline = make_el(&doc, "div", "timeline", None);
 
     let mut all_dates: Vec<DateArg<Date>> = Vec::new();
@@ -49,19 +63,44 @@ pub extern "C" fn start() {
         let d: Date = date_fns::parse_iso(iso, None);
         all_dates.push(DateArg::DateType(d.clone()));
 
-        let same = date_fns::is_same_day(&d, &anchor, None);
-        let row = make_el(&doc, "div", if same { "milestone anchor" } else { "milestone" }, None);
-        append(&row, make_el(&doc, "span", "muted", Some(&date_fns::format_date(&d, "yyyy-MM-dd (EEE)", None))));
+        let same = date_fns::is_same_day(&d, &anchor);
+        let row = make_el(
+            &doc,
+            "div",
+            if same {
+                "milestone anchor"
+            } else {
+                "milestone"
+            },
+            None,
+        );
+        append(
+            &row,
+            make_el(
+                &doc,
+                "span",
+                "muted",
+                Some(&date_fns::format_date(&d, "yyyy-MM-dd (EEE)")),
+            ),
+        );
         append(&row, make_el(&doc, "span", "title", Some(title)));
         let rel = if same {
             "today (anchor)".to_string()
         } else {
-            date_fns::format_distance(&d, &anchor, &opts)
+            date_fns::format_distance_with(&d, &anchor, &opts)
         };
         append(&row, make_el(&doc, "span", "", Some(&rel)));
-        let strict = date_fns::format_distance_strict(&d, &anchor, None);
+        let strict = date_fns::format_distance_strict(&d, &anchor);
         let cmp = date_fns::compare_asc(&d, &anchor) as i32;
-        append(&row, make_el(&doc, "span", "muted", Some(&format!("{strict} \u{00B7} cmp {cmp}"))));
+        append(
+            &row,
+            make_el(
+                &doc,
+                "span",
+                "muted",
+                Some(&format!("{strict} \u{00B7} cmp {cmp}")),
+            ),
+        );
         let status = if same {
             "ANCHOR"
         } else if date_fns::is_before(&d, &anchor) {
@@ -79,14 +118,47 @@ pub extern "C" fn start() {
 
     let earliest: Date = date_fns::min::<Date, Date>(all_dates.clone(), None);
     let latest: Date = date_fns::max::<Date, Date>(all_dates, None);
-    let total_span = date_fns::difference_in_calendar_days(&latest, &earliest, None) as i32;
+    let total_span = date_fns::difference_in_calendar_days(&latest, &earliest) as i32;
 
     let sum_card = make_el(&doc, "div", "card", None);
-    append(&sum_card, make_el(&doc, "div", "label", Some("Extremes & Total Span")));
+    append(
+        &sum_card,
+        make_el(&doc, "div", "label", Some("Extremes & Total Span")),
+    );
     let summary = make_el(&doc, "div", "summary", None);
-    append(&summary, make_el(&doc, "span", "", Some(&format!("Earliest: {}", date_fns::format_date(&earliest, "yyyy-MM-dd", None)))));
-    append(&summary, make_el(&doc, "span", "", Some(&format!("Latest: {}", date_fns::format_date(&latest, "yyyy-MM-dd", None)))));
-    append(&summary, make_el(&doc, "span", "", Some(&format!("Total Span: {total_span} days"))));
+    append(
+        &summary,
+        make_el(
+            &doc,
+            "span",
+            "",
+            Some(&format!(
+                "Earliest: {}",
+                date_fns::format_date(&earliest, "yyyy-MM-dd")
+            )),
+        ),
+    );
+    append(
+        &summary,
+        make_el(
+            &doc,
+            "span",
+            "",
+            Some(&format!(
+                "Latest: {}",
+                date_fns::format_date(&latest, "yyyy-MM-dd")
+            )),
+        ),
+    );
+    append(
+        &summary,
+        make_el(
+            &doc,
+            "span",
+            "",
+            Some(&format!("Total Span: {total_span} days")),
+        ),
+    );
     append(&sum_card, summary);
     append(&app, sum_card);
 }

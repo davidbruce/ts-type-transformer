@@ -18,7 +18,7 @@ fn mk_pbr(v: f64, metallic: f64, roughness: f64) -> PbrMaterialProps {
         .with_base_color_factor([v, v, v, 1.0])
         .with_metallic_factor(metallic)
         .with_roughness_factor(roughness);
-    babylonjs_lite::create_pbr_material(&props)
+    babylonjs_lite::create_pbr_material_with(&props)
 }
 
 #[unsafe(no_mangle)]
@@ -29,7 +29,7 @@ pub extern "C" fn start() {
             return;
         };
 
-        let engine = match babylonjs_lite::create_engine(&canvas, None).await {
+        let engine = match babylonjs_lite::create_engine(&canvas).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());
@@ -37,7 +37,7 @@ pub extern "C" fn start() {
             }
         };
 
-        let scene = babylonjs_lite::create_scene_context(&engine, None);
+        let scene = babylonjs_lite::create_scene_context(&engine);
         let clear = GPUColorDict::default()
             .with_r(0.06)
             .with_g(0.06)
@@ -52,58 +52,56 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 2.1, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        babylonjs_lite::attach_control(&camera, &canvas, &scene, None);
+        babylonjs_lite::attach_control_with(&camera, &canvas, &scene, None);
 
-        let hemi = babylonjs_lite::create_hemispheric_light(
-            &JsTuple3::from([0.0, 1.0, 0.2]),
-            0.72,
-        );
+        let hemi =
+            babylonjs_lite::create_hemispheric_light_with(&JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
         hemi.set_diffuse_color([0.85, 0.85, 0.85]);
         hemi.set_ground_color([0.14, 0.14, 0.14]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
-        let dir = babylonjs_lite::create_directional_light([-1.2, -2.0, -1.1], 2.1);
+        let dir = babylonjs_lite::create_directional_light_with([-1.2, -2.0, -1.1], 2.1);
         dir.set_diffuse([1.0, 1.0, 1.0]);
         babylonjs_lite::add_to_scene(&scene, &dir);
 
-        let key_light = babylonjs_lite::create_point_light([3.2, 3.6, 2.4], 8.0);
+        let key_light = babylonjs_lite::create_point_light_with([3.2, 3.6, 2.4], 8.0);
         key_light.set_diffuse([0.92, 0.92, 0.92]);
         key_light.set_range(14.0);
         babylonjs_lite::add_to_scene(&scene, &key_light);
 
         let floor_opts = GroundOptions::default().with_width(16.0).with_height(16.0);
-        let floor = babylonjs_lite::create_ground(&engine, &floor_opts);
+        let floor = babylonjs_lite::create_ground_with(&engine, &floor_opts);
         floor.set_material(&mk_pbr(0.09, 0.10, 0.88));
         babylonjs_lite::add_to_scene(&scene, &floor);
 
-        let disc_opts = DiscOptions::default().with_radius(2.6).with_tessellation(48.0);
-        let disc = babylonjs_lite::create_disc(&engine, &disc_opts);
+        let disc_opts = DiscOptions::default()
+            .with_radius(2.6)
+            .with_tessellation(48.0);
+        let disc = babylonjs_lite::create_disc_with(&engine, &disc_opts);
         disc.rotation().set_x(core::f64::consts::FRAC_PI_2);
         disc.position().set(0.0, 0.03, 0.0);
         disc.set_material(&mk_pbr(0.22, 0.25, 0.65));
         babylonjs_lite::add_to_scene(&scene, &disc);
 
         let sbopts = BoxOptions::default().with_size(2.1);
-        let src_box = babylonjs_lite::create_box(&engine, &sbopts);
+        let src_box = babylonjs_lite::create_box_with(&engine, &sbopts);
         let copts = CylinderOptions::default()
             .with_height(3.0)
             .with_diameter(1.18)
             .with_tessellation(16.0);
-        let cyl_y = babylonjs_lite::create_cylinder(&engine, &copts);
-        let cyl_x = babylonjs_lite::create_cylinder(&engine, &copts);
+        let cyl_y = babylonjs_lite::create_cylinder_with(&engine, &copts);
+        let cyl_x = babylonjs_lite::create_cylinder_with(&engine, &copts);
         cyl_x.rotation().set_z(core::f64::consts::FRAC_PI_2);
-        let cyl_z = babylonjs_lite::create_cylinder(&engine, &copts);
+        let cyl_z = babylonjs_lite::create_cylinder_with(&engine, &copts);
         cyl_z.rotation().set_x(core::f64::consts::FRAC_PI_2);
 
         let s1 = babylonjs_lite::csg_subtract(
-            &babylonjs_lite::create_csg_from_mesh(&src_box, None),
-            &babylonjs_lite::create_csg_from_mesh(&cyl_y, None),
+            &babylonjs_lite::create_csg_from_mesh(&src_box),
+            &babylonjs_lite::create_csg_from_mesh(&cyl_y),
         );
-        let s2 =
-            babylonjs_lite::csg_subtract(&s1, &babylonjs_lite::create_csg_from_mesh(&cyl_x, None));
-        let s3 =
-            babylonjs_lite::csg_subtract(&s2, &babylonjs_lite::create_csg_from_mesh(&cyl_z, None));
-        let monolith = babylonjs_lite::create_mesh_from_csg(&engine, &s3, "monolith");
+        let s2 = babylonjs_lite::csg_subtract(&s1, &babylonjs_lite::create_csg_from_mesh(&cyl_x));
+        let s3 = babylonjs_lite::csg_subtract(&s2, &babylonjs_lite::create_csg_from_mesh(&cyl_z));
+        let monolith = babylonjs_lite::create_mesh_from_csg_with(&engine, &s3, "monolith");
         monolith.position().set(0.0, 2.15, 0.0);
 
         let mprops = CreatePbrMaterialProps::default()
@@ -115,18 +113,20 @@ pub extern "C" fn start() {
             .with_intensity(0.90)
             .with_roughness(0.10);
         babylonjs_lite::set_pbr_clear_coat(&mprops, &cc);
-        monolith.set_material(&babylonjs_lite::create_pbr_material(&mprops));
+        monolith.set_material(&babylonjs_lite::create_pbr_material_with(&mprops));
         babylonjs_lite::add_to_scene(&scene, &monolith);
 
         let cbopts = BoxOptions::default().with_size(0.82);
-        let core_box = babylonjs_lite::create_box(&engine, &cbopts);
-        let csopts = SphereOptions::default().with_diameter(1.02).with_segments(14.0);
-        let core_sphere = babylonjs_lite::create_sphere(&engine, &csopts);
+        let core_box = babylonjs_lite::create_box_with(&engine, &cbopts);
+        let csopts = SphereOptions::default()
+            .with_diameter(1.02)
+            .with_segments(14.0);
+        let core_sphere = babylonjs_lite::create_sphere_with(&engine, &csopts);
         let core_solid = babylonjs_lite::csg_intersect(
-            &babylonjs_lite::create_csg_from_mesh(&core_box, None),
-            &babylonjs_lite::create_csg_from_mesh(&core_sphere, None),
+            &babylonjs_lite::create_csg_from_mesh(&core_box),
+            &babylonjs_lite::create_csg_from_mesh(&core_sphere),
         );
-        let core = babylonjs_lite::create_mesh_from_csg(&engine, &core_solid, "core");
+        let core = babylonjs_lite::create_mesh_from_csg_with(&engine, &core_solid, "core");
         core.position().set(0.0, 2.15, 0.0);
         core.set_material(&mk_pbr(0.18, 0.85, 0.16));
         babylonjs_lite::add_to_scene(&scene, &core);
@@ -135,7 +135,7 @@ pub extern "C" fn start() {
             .with_diameter(4.2)
             .with_thickness(0.09)
             .with_tessellation(48.0);
-        let outer_ring = babylonjs_lite::create_torus(&engine, &otopts);
+        let outer_ring = babylonjs_lite::create_torus_with(&engine, &otopts);
         outer_ring.position().set(0.0, 2.15, 0.0);
         outer_ring.set_material(&mk_pbr(0.55, 0.80, 0.25));
         babylonjs_lite::add_to_scene(&scene, &outer_ring);
@@ -144,7 +144,7 @@ pub extern "C" fn start() {
             .with_diameter(3.55)
             .with_thickness(0.07)
             .with_tessellation(48.0);
-        let inner_ring = babylonjs_lite::create_torus(&engine, &itopts);
+        let inner_ring = babylonjs_lite::create_torus_with(&engine, &itopts);
         inner_ring.position().set(0.0, 2.15, 0.0);
         inner_ring.set_material(&mk_pbr(0.88, 0.40, 0.30));
         babylonjs_lite::add_to_scene(&scene, &inner_ring);

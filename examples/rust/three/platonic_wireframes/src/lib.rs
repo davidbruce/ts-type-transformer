@@ -35,24 +35,24 @@ fn add_solid(
         .with_roughness(rough)
         .with_metalness(metal)
         .with_flat_shading(flat);
-    let mat = MeshStandardMaterial::new(&mp);
+    let mat = MeshStandardMaterial::new_with(&mp);
 
     let mesh = Mesh::<
         BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
         MeshStandardMaterial,
-    >::new(Some(geo.clone()), Some(mat));
-    mesh.position().set(x, y, z);
-    mesh.rotation().set(0.25, 0.45, 0.0, None);
+    >::new_with(Some(geo.clone()), Some(mat));
+    mesh.position().set_with(x, y, z);
+    mesh.rotation().set(0.25, 0.45, 0.0);
     scene.add([mesh]);
 
-    let egeo = EdgesGeometry::new(Some(geo), thresh);
+    let egeo = EdgesGeometry::new_with(Some(geo), thresh);
     let segs = LineSegments::<
         EdgesGeometry<BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>>,
         LineBasicMaterial,
         Object3DEventMap,
-    >::new(Some(egeo), Some(line_mat.clone()));
-    segs.position().set(x, y, z);
-    segs.rotation().set(0.25, 0.45, 0.0, None);
+    >::new_with(Some(egeo), Some(line_mat.clone()));
+    segs.position().set_with(x, y, z);
+    segs.rotation().set(0.25, 0.45, 0.0);
     wire_group.add([segs]);
 }
 
@@ -60,8 +60,8 @@ fn update_view(st: &AppState) {
     let r = 8.6;
     st.camera
         .position()
-        .set(r * st.azimuth.sin(), 3.6, r * st.azimuth.cos());
-    st.camera.look_at(&Vector3::new(0.0, 0.0, 0.0));
+        .set_with(r * st.azimuth.sin(), 3.6, r * st.azimuth.cos());
+    st.camera.look_at(&Vector3::new_with(0.0, 0.0, 0.0));
     st.wire_group.set_visible(st.wire_visible);
     st.wire_btn.set_text_content(if st.wire_visible {
         "Wireframes: On"
@@ -88,32 +88,27 @@ pub extern "C" fn start() {
     let rp = WebGLRendererParameters::default()
         .with_antialias(true)
         .with_preserve_drawing_buffer(true);
-    let renderer = WebGLRenderer::new(&rp);
+    let renderer = WebGLRenderer::new_with(&rp);
     renderer.set_pixel_ratio(1.0);
-    renderer.set_size(width, height, None);
+    renderer.set_size(width, height);
     doc.get_element_by_id("stage")
         .expect("missing #stage")
         .append_child(renderer.dom_element());
 
     let scene = Scene::new();
-    scene.set_background(Color::new(0xf7f7f7 as f64));
-    let camera = PerspectiveCamera::new(42.0, width / height, 0.1, 100.0);
+    scene.set_background(Color::new_with(0xf7f7f7 as f64));
+    let camera = PerspectiveCamera::new_with(42.0, width / height, 0.1, 100.0);
 
-    let ambient = AmbientLight::new(ColorRepresentation::from(0xffffff as f64), 1.2);
+    let ambient = AmbientLight::new_with(ColorRepresentation::from(0xffffff as f64), 1.2);
     scene.add([ambient]);
-    let key = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 2.2);
-    key.position().set(6.0, 10.0, 8.0);
+    let key = DirectionalLight::new_with(ColorRepresentation::from(0xffffff as f64), 2.2);
+    key.position().set_with(6.0, 10.0, 8.0);
     scene.add([key]);
-    let rim = DirectionalLight::new(ColorRepresentation::from(0xffffff as f64), 0.9);
-    rim.position().set(-7.0, 5.0, -6.0);
+    let rim = DirectionalLight::new_with(ColorRepresentation::from(0xffffff as f64), 0.9);
+    rim.position().set_with(-7.0, 5.0, -6.0);
     scene.add([rim]);
 
-    let grid = GridHelper::new(
-        12.0,
-        12.0,
-        0x737373 as f64,
-        0xd4d4d4 as f64,
-    );
+    let grid = GridHelper::new_with(12.0, 12.0, 0x737373 as f64, 0xd4d4d4 as f64);
     grid.position().set_y(-1.2);
     scene.add([grid]);
 
@@ -121,12 +116,12 @@ pub extern "C" fn start() {
     scene.add([wire_group.clone()]);
 
     let lmp = LineBasicMaterialParameters::default().with_color(0x111111 as f64);
-    let line_mat = LineBasicMaterial::new(&lmp);
+    let line_mat = LineBasicMaterial::new_with(&lmp);
 
     add_solid(
         &scene,
         &wire_group,
-        BoxGeometry::new(1.45, 1.45, 1.45, None, None, None).into(),
+        BoxGeometry::new_with(1.45, 1.45, 1.45, None, None, None).into(),
         0x262626,
         0.65,
         0.1,
@@ -140,7 +135,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        IcosahedronGeometry::new(0.95, 0.0).into(),
+        IcosahedronGeometry::new_with(0.95, 0.0).into(),
         0xd4d4d4,
         0.55,
         0.08,
@@ -154,7 +149,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        TorusKnotGeometry::new(0.72, 0.24, 96.0, 16.0, None, None).into(),
+        TorusKnotGeometry::new_with(0.72, 0.24, 96.0, 16.0, None, None).into(),
         0x737373,
         0.45,
         0.15,
@@ -168,7 +163,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        OctahedronGeometry::new(0.95, 0.0).into(),
+        OctahedronGeometry::new_with(0.95, 0.0).into(),
         0xefefef,
         0.5,
         0.05,
@@ -182,7 +177,7 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        TorusGeometry::new(0.72, 0.23, 16.0, 48.0, None, None, None).into(),
+        TorusGeometry::new_with(0.72, 0.23, 16.0, 48.0, None, None, None).into(),
         0x404040,
         0.55,
         0.12,
@@ -199,13 +194,18 @@ pub extern "C" fn start() {
         scene,
         camera,
         wire_group,
-        wire_btn: doc.get_element_by_id("btn-wire").expect("missing #btn-wire"),
+        wire_btn: doc
+            .get_element_by_id("btn-wire")
+            .expect("missing #btn-wire"),
         meta: doc.get_element_by_id("meta").expect("missing #meta"),
         wire_visible: true,
         azimuth: 0.35,
     }));
 
-    for (i, bid) in ["btn-wire", "btn-left", "btn-right", "btn-reset"].iter().enumerate() {
+    for (i, bid) in ["btn-wire", "btn-left", "btn-right", "btn-reset"]
+        .iter()
+        .enumerate()
+    {
         let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {

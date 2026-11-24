@@ -20,11 +20,11 @@ macro_rules! check {
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
     // A map in the page's #map, centred on London.
-    let london = lat_lng(51.505, -0.09, None);
-    let m = map(test_page::element("map"), None);
-    m.set_view(&london, Some(13.0), None);
+    let london = lat_lng(51.505, -0.09);
+    let m = map(test_page::element("map"));
+    m.set_view_with(&london, Some(13.0), None);
     check!(m.get_zoom() == 13.0);
-    check!(m.get_center().equals(&london, Some(1e-9)));
+    check!(m.get_center().equals_with(&london, Some(1e-9)));
     check!(m.get_size().x() == 400.0 && m.get_size().y() == 300.0);
 
     // The centre is the middle of the container.
@@ -32,27 +32,27 @@ pub extern "C" fn run() {
     check!(middle.x() == 200.0 && middle.y() == 150.0);
 
     // Geometry: distances in metres, bounds that grow.
-    let paris = lat_lng(48.8566, 2.3522, None);
+    let paris = lat_lng(48.8566, 2.3522);
     let km = london.distance_to(&paris) / 1000.0;
     check!(km > 340.0 && km < 345.0);
     let bounds = lat_lng_bounds(&london, &london);
     bounds.extend(&paris);
-    check!(bounds.contains(&lat_lng(50.0, 1.0, None)));
+    check!(bounds.contains(&lat_lng(50.0, 1.0)));
     check!(bounds.get_north_east().lat() == 51.505);
 
     // Layers: a marker added to the map and found there, then removed.
-    let pin = marker(&paris, None);
+    let pin = marker(&paris);
     pin.add_to(&m);
     check!(m.has_layer(&pin));
-    check!(pin.get_lat_lng().equals(&paris, None));
-    let group = layer_group(None, None);
-    group.add_layer(&circle_with_radius(&london, 500.0, None));
+    check!(pin.get_lat_lng().equals(&paris));
+    let group = layer_group();
+    group.add_layer(&circle_with_radius(&london, 500.0));
     group.add_to(&m);
     m.remove_layer(&pin);
     check!(!m.has_layer(&pin) && m.has_layer(&group));
 
     // Fitting the bounds zooms out to show both cities.
-    m.fit_bounds(&bounds, None);
+    m.fit_bounds(&bounds);
     check!(m.get_zoom() < 13.0);
     check!(m.get_bounds().contains(&paris) && m.get_bounds().contains(&london));
 
@@ -66,33 +66,33 @@ pub extern "C" fn run() {
             }
         }
     });
-    m.on_click(&on_click, None);
+    m.on_click(&on_click);
     let data = LeafletMouseEvent::create();
     data.set_latlng(&london);
     let data = JsValue::from(&data);
-    m.fire("click", Some(&data), None);
-    m.fire("click", Some(&data), None);
+    m.fire_with("click", Some(&data), None);
+    m.fire_with("click", Some(&data), None);
     check!(clicks.get() == 2);
 
     // Zoom set directly and by steps; the view moved by pixels.
-    m.set_view(&london, Some(10.0), None);
-    m.set_zoom(12.0, None);
+    m.set_view_with(&london, Some(10.0), None);
+    m.set_zoom(12.0);
     check!(m.get_zoom() == 12.0);
     // (Zoom and pan animate unless told not to: the value would only change later.)
     let zoom_now = ZoomOptions::create();
     zoom_now.set_animate(Some(false));
     let pan_now = PanOptions::create();
     pan_now.set_animate(Some(false));
-    m.zoom_in(Some(2.0), Some(&zoom_now));
+    m.zoom_in_with(Some(2.0), Some(&zoom_now));
     check!(m.get_zoom() == 14.0);
-    m.zoom_out(None, Some(&zoom_now));
+    m.zoom_out_with(None, Some(&zoom_now));
     check!(m.get_zoom() == 13.0);
-    m.set_view(&london, Some(13.0), None);
-    m.pan_by(&point(100.0, 0.0, None), Some(&pan_now));
+    m.set_view_with(&london, Some(13.0), None);
+    m.pan_by_with(&point(100.0, 0.0), Some(&pan_now));
     check!(m.get_center().lng() > london.lng());
     check!((m.get_center().lat() - london.lat()).abs() < 1e-3);
     // The zoom that shows the bounds of both cities.
-    let z = m.get_bounds_zoom(&bounds, None, None);
+    let z = m.get_bounds_zoom(&bounds);
     check!(z > 3.0 && z < 13.0);
     check!(z == z.floor());
 }

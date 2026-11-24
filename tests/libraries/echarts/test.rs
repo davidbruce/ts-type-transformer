@@ -50,7 +50,7 @@ fn as_array(v: &JsValue) -> JsArray<JsValue> {
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
     // A chart on the page's 400 x 300 element.
-    let chart = init(Some(&test_page::element("chart")), None, None);
+    let chart = init_with(Some(&test_page::element("chart")), None, None);
     check!(!chart.is_disposed());
     check!(chart.get_width() == 400.0 && chart.get_height() == 300.0);
     check!(chart.get_dom() == test_page::element("chart"));
@@ -59,13 +59,20 @@ pub extern "C" fn run() {
     // A bar chart: three categories and their values.
     let option = EChartsOption::create();
     option.set_animation(Some(false));
-    option.set_x_axis(&obj(&[("type", text("category")), ("data", list(vec![text("mon"), text("tue"), text("wed")]))]));
+    option.set_x_axis(&obj(&[
+        ("type", text("category")),
+        ("data", list(vec![text("mon"), text("tue"), text("wed")])),
+    ]));
     option.set_y_axis(&obj(&[("type", text("value"))]));
     let bars = BarSeriesOption::create();
     bars.set_name(OptionName::String("sales".to_string()));
-    bars.set_data(Some(&JsArray::<JsValue>::from(vec![num(5.0), num(20.0), num(36.0)])));
+    bars.set_data(Some(&JsArray::<JsValue>::from(vec![
+        num(5.0),
+        num(20.0),
+        num(36.0),
+    ])));
     option.set_series(&JsValue(bars.0.clone()));
-    chart.set_option(option.clone(), None, None);
+    chart.set_option(option.clone());
 
     // Read back what was set: the series, with its data.
     let read = chart.get_option();
@@ -80,16 +87,25 @@ pub extern "C" fn run() {
 
     // Setting again merges: a fourth value is added to the series.
     let more = EChartsOption::create();
-    more.set_series(&list(vec![obj(&[("data", list(vec![num(5.0), num(20.0), num(36.0), num(7.0)]))])]));
-    chart.set_option(more, None, None);
+    more.set_series(&list(vec![obj(&[(
+        "data",
+        list(vec![num(5.0), num(20.0), num(36.0), num(7.0)]),
+    )])]));
+    chart.set_option(more);
     let merged = as_array(&as_obj(&as_array(&chart.get_option().at("series")).get(0)).at("data"));
     check!(merged.len() == 4);
 
     // Pixels: the categories lie left to right inside the chart.
     let finder = ModelFinderObject::create();
     finder.set_x_axis_index(0.0);
-    let x_mon = chart.convert_to_pixel(ModelFinder::ModelFinderObject(finder.clone()), ScaleDataValue::String("mon".to_string()));
-    let x_wed = chart.convert_to_pixel(ModelFinder::ModelFinderObject(finder.clone()), ScaleDataValue::String("wed".to_string()));
+    let x_mon = chart.convert_to_pixel(
+        ModelFinder::ModelFinderObject(finder.clone()),
+        ScaleDataValue::String("mon".to_string()),
+    );
+    let x_wed = chart.convert_to_pixel(
+        ModelFinder::ModelFinderObject(finder.clone()),
+        ScaleDataValue::String("wed".to_string()),
+    );
     check!(x_mon > 0.0 && x_mon < x_wed && x_wed < 400.0);
     let back = chart.convert_from_pixel(ModelFinder::ModelFinderObject(finder), x_wed);
     check!(back == 2.0);
@@ -110,15 +126,18 @@ pub extern "C" fn run() {
     chart.on("custom".to_string(), &handler, None::<JsValue>);
     chart.trigger("custom".to_string(), vec![num(42.0), num(1.0)]);
     check!(heard.get() == 42.0 && count.get() == 2);
-    chart.off(Some(&text("custom")), None);
+    chart.off_with(Some(&text("custom")), None);
     chart.trigger("custom".to_string(), vec![num(7.0)]);
     check!(heard.get() == 42.0);
 
     // Resized, cleared, then disposed.
-    chart.resize(None);
+    chart.resize();
     check!(chart.get_width() == 400.0);
     chart.clear();
-    check!(chart.get_option().at("series").is_null() || as_array(&chart.get_option().at("series")).is_empty());
+    check!(
+        chart.get_option().at("series").is_null()
+            || as_array(&chart.get_option().at("series")).is_empty()
+    );
     chart.dispose();
     check!(chart.is_disposed());
     check!(get_instance_by_dom(&test_page::element("chart")).is_none());

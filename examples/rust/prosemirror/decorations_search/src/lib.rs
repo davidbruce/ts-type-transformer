@@ -53,9 +53,9 @@ fn build_schema() -> Schema<JsValue, JsValue> {
         .with("text", &text);
 
     let make_mark = |tag: &'static str| {
-        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| {
-            hole_spec(tag)
-        }))
+        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(
+            move |_: Mark, _: bool| hole_spec(tag),
+        ))
     };
     let marks = JsValue::object()
         .with("strong", &make_mark("strong"))
@@ -68,20 +68,25 @@ fn build_schema() -> Schema<JsValue, JsValue> {
 }
 
 fn p_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
-    schema.node("paragraph", None, schema.text(t, None), None)
+    schema.node_with("paragraph", None, schema.text(t), None)
 }
 
 fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     let ha = Attrs::default();
     ha.set_at("level", 2.0);
-    let h = schema.node("heading", &ha, schema.text("Immutable State & View Decorations", None), None);
-    let cb = schema.node(
-        "code_block",
-        None,
-        schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view", None),
+    let h = schema.node_with(
+        "heading",
+        &ha,
+        schema.text("Immutable State & View Decorations"),
         None,
     );
-    schema.node(
+    let cb = schema.node_with(
+        "code_block",
+        None,
+        schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view"),
+        None,
+    );
+    schema.node_with(
         "doc",
         None,
         JsArray::<Node>::from([
@@ -120,7 +125,7 @@ fn compute_decorations(doc: &Node, raw_query: &str) -> (DecorationSet, usize, us
                     let idx = at + rel;
                     let fp = inline_pos + idx as f64;
                     let tp = fp + q.len() as f64;
-                    decos.push(Decoration::inline(fp, tp, &inl_attr, None));
+                    decos.push(Decoration::inline(fp, tp, &inl_attr));
                     inl_hits += 1;
                     matched = true;
                     at = idx + q.len();
@@ -129,7 +134,11 @@ fn compute_decorations(doc: &Node, raw_query: &str) -> (DecorationSet, usize, us
             inline_pos += ch.node_size();
         }
         if matched {
-            decos.push(Decoration::node(block_pos, block_pos + blk.node_size(), &blk_attr, None));
+            decos.push(Decoration::node(
+                block_pos,
+                block_pos + blk.node_size(),
+                &blk_attr,
+            ));
             blk_hits += 1;
         }
         block_pos += blk.node_size();
@@ -152,14 +161,21 @@ fn sync_meta(app: &AppState, st: &EditorState) {
         .filter(|v| !v.is_null())
         .map_or_else(String::new, |v| v.as_string());
     let (dset, inl, blk) = compute_decorations(&st.doc(), &q);
-    let total = dset.find(None, None, None).len();
-    let qdisp = if q.is_empty() { "(none)".to_string() } else { format!("\"{q}\"") };
+    let total = dset.find().len();
+    let qdisp = if q.is_empty() {
+        "(none)".to_string()
+    } else {
+        format!("\"{q}\"")
+    };
     let msg = format!(
         "Query: {} \u{00B7} inline matches={} \u{00B7} highlighted blocks={} \u{00B7} decorations={}",
         qdisp, inl, blk, total
     );
     app.meta.set_text_content(&msg);
-    for (i, id) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
+    for (i, id) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"]
+        .iter()
+        .enumerate()
+    {
         app.doc
             .get_element_by_id(id)
             .expect("missing button")
@@ -171,7 +187,7 @@ fn sync_meta(app: &AppState, st: &EditorState) {
 pub extern "C" fn start() {
     let dom_doc = dom::document();
     let schema = build_schema();
-    let key = PluginKey::<JsValue>::new("search");
+    let key = PluginKey::<JsValue>::new_with("search");
 
     let app = Rc::new(RefCell::new(AppState {
         key: key.clone(),
@@ -188,8 +204,10 @@ pub extern "C" fn start() {
             if mv.is_null() { prev } else { mv }
         }));
 
-    let eprops = EditorProps::<Plugin<JsValue>>::default().with_decorations(
-        &EditorPropsDecorations::<Plugin<JsValue>>::new({
+    let eprops =
+        EditorProps::<Plugin<JsValue>>::default().with_decorations(&EditorPropsDecorations::<
+            Plugin<JsValue>,
+        >::new({
             let key = key.clone();
             move |st: EditorState| {
                 let q = key
@@ -199,8 +217,7 @@ pub extern "C" fn start() {
                 let (dset, _, _) = compute_decorations(&st.doc(), &q);
                 Some(dset.into())
             }
-        }),
-    );
+        }));
 
     let pspec = PluginSpec::<JsValue>::default()
         .with_key(&key)
@@ -226,7 +243,9 @@ pub extern "C" fn start() {
             }
         }));
 
-    let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
+    let mount = dom_doc
+        .get_element_by_id("editor")
+        .expect("missing #editor");
     let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
     let view = EditorView::new(place, &props);
     {

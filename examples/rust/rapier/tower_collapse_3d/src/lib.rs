@@ -40,14 +40,14 @@ fn build_world(st: &mut AppState) {
     if let Some(w) = st.world.take() {
         w.free();
     }
-    let world = rp::World::new(
-        &rp::Vector3::new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
-    );
+    let world = rp::World::new(&rp::Vector3::new(0.0, -9.81, 0.0));
 
-    let floor_body = world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.3, 0.0));
-    world.create_collider(
-        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0).set_friction(0.75).set_restitution(0.1),
+    let floor_body =
+        world.create_rigid_body(&rp::RigidBodyDesc::fixed().set_translation(0.0, -0.3, 0.0));
+    world.create_collider_with(
+        &rp::ColliderDesc::cuboid(10.0, 0.3, 10.0)
+            .set_friction(0.75)
+            .set_restitution(0.1),
         &floor_body,
     );
 
@@ -67,7 +67,7 @@ fn build_world(st: &mut AppState) {
             .set_friction(0.65)
             .set_restitution(0.12)
             .set_density(1.0);
-        world.create_collider(&cd, &rb);
+        world.create_collider_with(&cd, &rb);
         st.planks.push(rb);
     }
 
@@ -76,7 +76,7 @@ fn build_world(st: &mut AppState) {
             .set_translation(-6.2, 1.55, 0.12)
             .set_linvel(13.5, 1.1, -0.25),
     );
-    world.create_collider(
+    world.create_collider_with(
         &rp::ColliderDesc::ball(SPHERE_RADIUS)
             .set_density(4.5)
             .set_restitution(0.35)
@@ -91,14 +91,14 @@ fn build_world(st: &mut AppState) {
 
 fn sync_meshes(st: &AppState) {
     for (rb, mesh) in st.planks.iter().zip(st.plank_meshes.iter()) {
-        let p = rb.translation(None);
-        let q = rb.rotation(None);
+        let p = rb.translation();
+        let q = rb.rotation();
         mesh.position().set(p.x(), p.y(), p.z());
         mesh.rotation_quaternion().set(q.x(), q.y(), q.z(), q.w());
     }
     if let (Some(rb), Some(mesh)) = (&st.striker, &st.striker_mesh) {
-        let p = rb.translation(None);
-        let q = rb.rotation(None);
+        let p = rb.translation();
+        let q = rb.rotation();
         mesh.position().set(p.x(), p.y(), p.z());
         mesh.rotation_quaternion().set(q.x(), q.y(), q.z(), q.w());
     }
@@ -108,15 +108,15 @@ fn update_meta(st: &AppState) {
     let mut max_y = 0.0_f64;
     let mut ke = 0.0_f64;
     for rb in &st.planks {
-        let p = rb.translation(None);
-        let v = rb.linvel(None);
+        let p = rb.translation();
+        let v = rb.linvel();
         if p.y() > max_y {
             max_y = p.y();
         }
         ke += 0.5 * (v.x() * v.x() + v.y() * v.y() + v.z() * v.z());
     }
     if let Some(ref rb) = st.striker {
-        let v = rb.linvel(None);
+        let v = rb.linvel();
         ke += 2.25 * (v.x() * v.x() + v.y() * v.y() + v.z() * v.z());
     }
     let state_text = if st.paused { "paused" } else { "running" };
@@ -129,7 +129,7 @@ fn update_meta(st: &AppState) {
 
 fn step_sim(st: &mut AppState) {
     if let Some(ref w) = st.world {
-        w.step(None, None);
+        w.step();
     }
     st.step_count += 1;
     sync_meshes(st);
@@ -162,7 +162,7 @@ pub extern "C" fn start() {
             build_world(&mut s);
             for _ in 0..18 {
                 if let Some(ref w) = s.world {
-                    w.step(None, None);
+                    w.step();
                 }
                 s.step_count += 1;
             }
@@ -195,11 +195,8 @@ pub extern "C" fn start() {
                     }
                     1 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(if s.paused {
-                            "Resume"
-                        } else {
-                            "Pause"
-                        });
+                        s.pause_btn
+                            .set_text_content(if s.paused { "Resume" } else { "Pause" });
                         update_meta(&s);
                     }
                     _ => {
@@ -208,7 +205,7 @@ pub extern "C" fn start() {
                         build_world(&mut s);
                         for _ in 0..12 {
                             if let Some(ref w) = s.world {
-                                w.step(None, None);
+                                w.step();
                             }
                             s.step_count += 1;
                         }
@@ -224,7 +221,7 @@ pub extern "C" fn start() {
             set_status_error("missing <canvas> element");
             return;
         };
-        let engine = match b::create_engine(&canvas, None).await {
+        let engine = match b::create_engine(&canvas).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());
@@ -232,25 +229,34 @@ pub extern "C" fn start() {
             }
         };
 
-        let scene = b::create_scene_context(&engine, None);
-        let clear = GPUColorDict::default().with_r(0.06).with_g(0.07).with_b(0.09).with_a(1.0);
+        let scene = b::create_scene_context(&engine);
+        let clear = GPUColorDict::default()
+            .with_r(0.06)
+            .with_g(0.07)
+            .with_b(0.09)
+            .with_a(1.0);
         scene.set_clear_color(&clear);
 
         let camera = b::create_arc_rotate_camera(0.85, 1.12, 11.5, &b::vec3(0.0, 1.5, 0.0));
         b::add_to_scene(&scene, &camera);
-        b::attach_control(&camera, &canvas, &scene, None);
+        b::attach_control_with(&camera, &canvas, &scene, None);
 
-        let hemi = b::create_hemispheric_light(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
+        let hemi = b::create_hemispheric_light_with(&b::JsTuple3::from([0.0, 1.0, 0.2]), 0.72);
         hemi.set_diffuse_color([0.85, 0.88, 0.95]);
         hemi.set_ground_color([0.14, 0.14, 0.16]);
         b::add_to_scene(&scene, &hemi);
 
-        let dir = b::create_directional_light([-1.0, -2.0, -1.2], 2.1);
+        let dir = b::create_directional_light_with([-1.0, -2.0, -1.2], 2.1);
         dir.set_diffuse([1.0, 0.97, 0.92]);
         b::add_to_scene(&scene, &dir);
 
-        let ground_mat = b::create_grid_material(None);
-        let ground = b::create_ground(&engine, &b::GroundOptions::default().with_width(20.0).with_height(20.0));
+        let ground_mat = b::create_grid_material();
+        let ground = b::create_ground_with(
+            &engine,
+            &b::GroundOptions::default()
+                .with_width(20.0)
+                .with_height(20.0),
+        );
         ground.set_material(&ground_mat);
         b::add_to_scene(&scene, &ground);
 
@@ -259,7 +265,7 @@ pub extern "C" fn start() {
                 .with_base_color_factor([r, g, bl, 1.0])
                 .with_metallic_factor(m)
                 .with_roughness_factor(ro);
-            b::create_pbr_material(&props)
+            b::create_pbr_material_with(&props)
         };
         let palette = [
             mk_mat(0.86, 0.86, 0.86, 0.15, 0.45),
@@ -276,7 +282,7 @@ pub extern "C" fn start() {
                 } else {
                     (HALF_THIN * 2.0, HALF_LONG * 2.0)
                 };
-                let m = b::create_box(
+                let m = b::create_box_with(
                     &engine,
                     &b::BoxOptions::default()
                         .with_width(w_box)
@@ -288,9 +294,11 @@ pub extern "C" fn start() {
                 s.plank_meshes.push(m);
             }
 
-            let sm = b::create_sphere(
+            let sm = b::create_sphere_with(
                 &engine,
-                &b::SphereOptions::default().with_diameter(SPHERE_RADIUS * 2.0).with_segments(24.0),
+                &b::SphereOptions::default()
+                    .with_diameter(SPHERE_RADIUS * 2.0)
+                    .with_segments(24.0),
             );
             sm.set_material(&mk_mat(0.95, 0.42, 0.28, 0.55, 0.22));
             b::add_to_scene(&scene, &sm);

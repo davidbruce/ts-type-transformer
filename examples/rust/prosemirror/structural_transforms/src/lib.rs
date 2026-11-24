@@ -54,16 +54,22 @@ fn build_schema() -> Schema<JsValue, JsValue> {
         .with("doc", &doc)
         .with("heading", &heading)
         .with("paragraph", &tag_node("inline*", Some("block"), "p", false))
-        .with("blockquote", &tag_node("block+", Some("block"), "blockquote", true))
-        .with("bullet_list", &tag_node("list_item+", Some("block"), "ul", false))
+        .with(
+            "blockquote",
+            &tag_node("block+", Some("block"), "blockquote", true),
+        )
+        .with(
+            "bullet_list",
+            &tag_node("list_item+", Some("block"), "ul", false),
+        )
         .with("list_item", &tag_node("paragraph block*", None, "li", true))
         .with("horizontal_rule", &hr)
         .with("text", &text);
 
     let make_mark = |tag: &'static str| {
-        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(move |_: Mark, _: bool| {
-            hole_spec(tag)
-        }))
+        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(
+            move |_: Mark, _: bool| hole_spec(tag),
+        ))
     };
     let marks = JsValue::object()
         .with("strong", &make_mark("strong"))
@@ -76,18 +82,31 @@ fn build_schema() -> Schema<JsValue, JsValue> {
 }
 
 fn p_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
-    schema.node("paragraph", None, schema.text(t, None), None)
+    schema.node_with("paragraph", None, schema.text(t), None)
 }
 fn li_node(schema: &Schema<JsValue, JsValue>, t: &str) -> Node {
-    schema.node("list_item", None, p_node(schema, t), None)
+    schema.node_with("list_item", None, p_node(schema, t), None)
 }
 
 fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
     let ha = Attrs::default();
     ha.set_at("level", 2.0);
-    let h = schema.node("heading", &ha, schema.text("Structural Transform Pipeline", None), None);
-    let quote = schema.node("blockquote", None, p_node(schema, "Blockquote content can be lifted back to top-level document depth."), None);
-    let ulist = schema.node(
+    let h = schema.node_with(
+        "heading",
+        &ha,
+        schema.text("Structural Transform Pipeline"),
+        None,
+    );
+    let quote = schema.node_with(
+        "blockquote",
+        None,
+        p_node(
+            schema,
+            "Blockquote content can be lifted back to top-level document depth.",
+        ),
+        None,
+    );
+    let ulist = schema.node_with(
         "bullet_list",
         None,
         JsArray::<Node>::from([
@@ -97,13 +116,19 @@ fn make_initial_doc(schema: &Schema<JsValue, JsValue>) -> Node {
         ]),
         None,
     );
-    schema.node(
+    schema.node_with(
         "doc",
         None,
         JsArray::<Node>::from([
             h,
-            p_node(schema, "ProseMirror transforms express structural edits as invertible steps."),
-            p_node(schema, "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly."),
+            p_node(
+                schema,
+                "ProseMirror transforms express structural edits as invertible steps.",
+            ),
+            p_node(
+                schema,
+                "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly.",
+            ),
             quote,
             ulist,
         ]),
@@ -175,7 +200,9 @@ pub extern "C" fn start() {
             }
         }));
 
-    let mount = dom_doc.get_element_by_id("editor").expect("missing #editor");
+    let mount = dom_doc
+        .get_element_by_id("editor")
+        .expect("missing #editor");
     let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
     let view = EditorView::new(place, &props);
     {
@@ -184,7 +211,10 @@ pub extern "C" fn start() {
         update_meta(&st, &view.state().doc());
     }
 
-    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
+    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"]
+        .iter()
+        .enumerate()
+    {
         let btn = dom_doc.get_element_by_id(bid).expect("missing button");
         let app_c = app.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
@@ -194,7 +224,11 @@ pub extern "C" fn start() {
             match idx {
                 0 => {
                     let sel_from = es.selection().from();
-                    let mut split_pos = if can_split(&doc, sel_from, None, None) { Some(sel_from) } else { None };
+                    let mut split_pos = if can_split(&doc, sel_from) {
+                        Some(sel_from)
+                    } else {
+                        None
+                    };
                     if split_pos.is_none() {
                         let mut pos = 0.0;
                         for k in 0..(doc.child_count() as usize) {
@@ -203,7 +237,7 @@ pub extern "C" fn start() {
                                 let len = ch.content().size() as usize;
                                 if len >= 8 {
                                     let mid = pos + 1.0 + (len / 2) as f64;
-                                    if can_split(&doc, mid, None, None) {
+                                    if can_split(&doc, mid) {
                                         split_pos = Some(mid);
                                     }
                                 }
@@ -213,8 +247,9 @@ pub extern "C" fn start() {
                     }
                     if let Some(sp) = split_pos {
                         let tr = es.tr();
-                        tr.split(sp, None, None);
-                        app_c.borrow_mut().last_op = format!("Split paragraph at pos {}", sp as usize);
+                        tr.split(sp);
+                        app_c.borrow_mut().last_op =
+                            format!("Split paragraph at pos {}", sp as usize);
                         view.dispatch(&tr);
                     } else {
                         let mut st = app_c.borrow_mut();
@@ -223,12 +258,22 @@ pub extern "C" fn start() {
                     }
                 }
                 1 => {
-                    let qtype = app_c.borrow().schema.nodes().at("blockquote").expect("missing blockquote");
+                    let qtype = app_c
+                        .borrow()
+                        .schema
+                        .nodes()
+                        .at("blockquote")
+                        .expect("missing blockquote");
                     let sel = es.selection();
                     let mut found: Option<NodeRange> = None;
-                    if sel.dollar_from().depth() == 1.0 && sel.dollar_from().parent().type_().name() == "paragraph" {
-                        if let Some(r) = sel.dollar_from().block_range(Some(&sel.dollar_to()), None) {
-                            if find_wrapping(&r, &qtype, None, None).is_some() {
+                    if sel.dollar_from().depth() == 1.0
+                        && sel.dollar_from().parent().type_().name() == "paragraph"
+                    {
+                        if let Some(r) = sel
+                            .dollar_from()
+                            .block_range_with(Some(&sel.dollar_to()), None)
+                        {
+                            if find_wrapping(&r, &qtype).is_some() {
                                 found = Some(r);
                             }
                         }
@@ -239,8 +284,8 @@ pub extern "C" fn start() {
                             let ch = doc.child(k as f64);
                             if found.is_none() && ch.type_().name() == "paragraph" {
                                 let rp = doc.resolve(pos + 1.0);
-                                if let Some(r) = rp.block_range(Some(&rp), None) {
-                                    if find_wrapping(&r, &qtype, None, None).is_some() {
+                                if let Some(r) = rp.block_range_with(Some(&rp), None) {
+                                    if find_wrapping(&r, &qtype).is_some() {
                                         found = Some(r);
                                     }
                                 }
@@ -249,10 +294,14 @@ pub extern "C" fn start() {
                         }
                     }
                     if let Some(r) = found {
-                        if let Some(wrapped) = find_wrapping(&r, &qtype, None, None) {
+                        if let Some(wrapped) = find_wrapping(&r, &qtype) {
                             let tr = es.tr();
                             tr.wrap(&r, wrapped);
-                            app_c.borrow_mut().last_op = format!("Wrapped block [{}..{}] in blockquote", r.start() as usize, r.end() as usize);
+                            app_c.borrow_mut().last_op = format!(
+                                "Wrapped block [{}..{}] in blockquote",
+                                r.start() as usize,
+                                r.end() as usize
+                            );
                             view.dispatch(&tr);
                             return;
                         }
@@ -267,11 +316,14 @@ pub extern "C" fn start() {
                         let ch = doc.child(k as f64);
                         if ch.type_().name() == "blockquote" && ch.child_count() > 0.0 {
                             let rp = doc.resolve(pos + 2.0);
-                            if let Some(r) = rp.block_range(Some(&rp), None) {
+                            if let Some(r) = rp.block_range_with(Some(&rp), None) {
                                 if let Some(target) = lift_target(&r) {
                                     let tr = es.tr();
                                     tr.lift(&r, target);
-                                    app_c.borrow_mut().last_op = format!("Lifted blockquote child to depth {}", target as usize);
+                                    app_c.borrow_mut().last_op = format!(
+                                        "Lifted blockquote child to depth {}",
+                                        target as usize
+                                    );
                                     view.dispatch(&tr);
                                     return;
                                 }
@@ -287,9 +339,22 @@ pub extern "C" fn start() {
                     let (hr, note) = {
                         let mut st = app_c.borrow_mut();
                         st.note_counter += 1;
-                        let msg = format!("Appended structural section #{} at doc offset {}.", st.note_counter, doc.content().size() as usize);
-                        st.last_op = format!("Inserted horizontal_rule + note #{}", st.note_counter);
-                        (st.schema.node("horizontal_rule", None, JsArray::<Node>::new(), None), p_node(&st.schema, &msg))
+                        let msg = format!(
+                            "Appended structural section #{} at doc offset {}.",
+                            st.note_counter,
+                            doc.content().size() as usize
+                        );
+                        st.last_op =
+                            format!("Inserted horizontal_rule + note #{}", st.note_counter);
+                        (
+                            st.schema.node_with(
+                                "horizontal_rule",
+                                None,
+                                JsArray::<Node>::new(),
+                                None,
+                            ),
+                            p_node(&st.schema, &msg),
+                        )
                     };
                     let tr = es.tr();
                     tr.insert(doc.content().size(), JsArray::<Node>::from([hr, note]));

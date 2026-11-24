@@ -179,11 +179,65 @@ pub(super) fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>) -> HashMap<Str
 // handle of the object it is called on, for members. A type parameter that
 // has a default and cannot be inferred from the arguments is two functions:
 // `name`, with the default, and `name_as::<T>`.
-pub(super) fn function(f: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>, cx: &Context) -> Vec<String> {
-    function_raw(f, f, name, vis, imports, this, cx)
+// Where a function is written: in an impl (`Self::new_with(..)`) or not, and
+// the names beside it, which a form with its optional arguments keeps clear of.
+pub(super) struct Site<'a> {
+    pub assoc: bool,
+    pub taken: &'a HashSet<String>,
 }
 
-pub(super) fn function_raw(f: &Func, orig: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>, cx: &Context) -> Vec<String> {
+pub(super) fn function(f: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>, site: &Site, cx: &Context) -> Vec<String> {
+    function_raw(f, f, name, vis, imports, this, site, cx)
+}
+
+// How many trailing optional arguments a form leaves out: `World::new(&g)` is
+// `World::new_with(&g, None, ..)`. None before a rest, or where one names the
+// function's type parameter, which a `None` could not fix.
+pub(super) fn left_out(f: &Func) -> usize {
+    // A setter's value is what it sets: `set_x()` would set `undefined`.
+    if f.rest || matches!(f.call, Call::Set(_) | Call::IndexSet) {
+        return 0;
+    }
+    let k = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count();
+    let dropped = &f.params[f.params.len() - k..];
+    if dropped.iter().any(|(_, t)| f.type_params.iter().any(|p| mentions(t, &p.name))) { 0 } else { k }
+}
+
+// Its form with every argument, by `_with`, else `_full`: ProseMirror's `can_replace_with` is a method.
+fn full_name(name: &str, site: &Site) -> Option<String> {
+    [format!("{name}_with"), format!("{name}_full")].into_iter().find(|n| !site.taken.contains(n) && !site.taken.contains(&format!("{n}_as")))
+}
+
+// The form without its trailing optional arguments: it calls the one with them.
+#[allow(clippy::too_many_arguments)]
+fn short_form(f: &Func, orig: &Func, k: usize, name: &str, full: &str, vis: &str, this: Option<&str>, site: &Site, cx: &Context) -> String {
+    let keep = f.params.len() - k;
+    let short = Func { params: f.params[..keep].to_vec(), ..f.clone() };
+    let short_orig = Func { params: orig.params[..keep].to_vec(), ..orig.clone() };
+    let p = parts_with_raw(&short, Some(&short_orig), &mut BTreeMap::new(), this, cx);
+    let generics = if p.generics.is_empty() { String::new() } else { format!("<{}>", p.generics.join(", ")) };
+    let ret = if f.ret == Ty::Void { String::new() } else { format!(" -> {}", p.ret) };
+    let args: Vec<String> = short.params.iter().map(|(n, _)| ident(&snake(n))).chain(std::iter::repeat_n("None".to_string(), k)).collect();
+    // Its type arguments stated: one that only has a default is not inferred.
+    let turbofish = if p.generics.is_empty() { String::new() } else { format!("::<{}>", p.generics.iter().map(|g| g.split(':').next().unwrap_or(g).trim()).collect::<Vec<_>>().join(", ")) };
+    let callee = if this.is_some() { format!("self.{full}{turbofish}") } else if site.assoc { format!("Self::{full}{turbofish}") } else { format!("{full}{turbofish}") };
+    format!("{}{vis}fn {name}{generics}({}){ret} {{ {callee}({}) }}", doc_of(f), p.params.join(", "), args.join(", "))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn function_raw(f: &Func, orig: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>, site: &Site, cx: &Context) -> Vec<String> {
+    let k = left_out(f);
+    let Some(full) = (k > 0 && orig.params.len() == f.params.len()).then(|| full_name(name, site)).flatten() else {
+        return forms(f, orig, name, vis, imports, this, cx);
+    };
+    let mut out = forms(&Func { doc: None, ..f.clone() }, orig, &full, vis, imports, this, cx);
+    let (sf, so) = if hidden(f).is_empty() { (f.clone(), orig.clone()) } else { (defaulted(f), defaulted(orig)) };
+    out.push(short_form(&sf, &so, k, name, &full, vis, this, site, cx));
+    out
+}
+
+// Its form by `name`, and by `name_as` where a type argument is stated.
+fn forms(f: &Func, orig: &Func, name: &str, vis: &str, imports: &mut BTreeMap<String, String>, this: Option<&str>, cx: &Context) -> Vec<String> {
     if hidden(f).is_empty() {
         return vec![one_function_raw(f, Some(orig), name, vis, imports, this, cx)];
     }

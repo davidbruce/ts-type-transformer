@@ -8,7 +8,7 @@ fn make_line(pts: [f64; 4], color: &str, width: f64) -> GroupOrShape {
         .with_points(JsArray::from(pts))
         .with_stroke(color)
         .with_stroke_width(width);
-    let ln = Line::<LineConfig>::new(Some(lc));
+    let ln = Line::<LineConfig>::new_with(Some(lc));
     Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
 }
 
@@ -23,7 +23,7 @@ pub extern "C" fn start() {
         .with_height(400.0);
     let stage = Stage::new(&sc);
 
-    let layer = Layer::new(None);
+    let layer = Layer::new();
     stage.add(&layer, JsArray::<JsValue>::new());
 
     let bg = RectConfig::default()
@@ -32,7 +32,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    layer.add([Rect::new(&bg)]);
+    layer.add([Rect::new_with(&bg)]);
 
     for (r, col, fill, sw) in [
         (160.0, "#d4d4d4", None, 1.0),
@@ -49,13 +49,18 @@ pub extern "C" fn start() {
         if let Some(f) = fill {
             cc = cc.with_fill(f);
         }
-        layer.add([Circle::new(&cc)]);
+        layer.add([Circle::new_with(&cc)]);
     }
 
     for i in 0..12 {
         let a = (i as f64) * PI / 6.0;
         layer.add([make_line(
-            [cx + 36.0 * a.cos(), cy + 36.0 * a.sin(), cx + 160.0 * a.cos(), cy + 160.0 * a.sin()],
+            [
+                cx + 36.0 * a.cos(),
+                cy + 36.0 * a.sin(),
+                cx + 160.0 * a.cos(),
+                cy + 160.0 * a.sin(),
+            ],
             "#d4d4d4",
             1.0,
         )]);
@@ -65,7 +70,12 @@ pub extern "C" fn start() {
         let a = (i as f64) * PI / 12.0;
         let r0 = if i % 2 == 0 { 148.0 } else { 154.0 };
         layer.add([make_line(
-            [cx + r0 * a.cos(), cy + r0 * a.sin(), cx + 166.0 * a.cos(), cy + 166.0 * a.sin()],
+            [
+                cx + r0 * a.cos(),
+                cy + r0 * a.sin(),
+                cx + 166.0 * a.cos(),
+                cy + 166.0 * a.sin(),
+            ],
             "#111111",
             if i % 2 == 0 { 2.0 } else { 1.0 },
         )]);
@@ -83,7 +93,7 @@ pub extern "C" fn start() {
             .with_fill(if i % 2 == 0 { "#111111" } else { "#efefef" })
             .with_stroke("#111111")
             .with_stroke_width(1.5);
-        layer.add([Rect::new(&pc)]);
+        layer.add([Rect::new_with(&pc)]);
     }
 
     for i in 0..12 {
@@ -95,7 +105,7 @@ pub extern "C" fn start() {
             .with_fill(if i % 2 == 0 { "#111111" } else { "#ffffff" })
             .with_stroke("#111111")
             .with_stroke_width(1.5);
-        layer.add([Circle::new(&oc)]);
+        layer.add([Circle::new_with(&oc)]);
     }
 
     let cp = RegularPolygonConfig::default()
@@ -110,8 +120,8 @@ pub extern "C" fn start() {
         .with_radius(9.0)
         .with_fill("#ffffff");
     layer.add([
-        GroupOrShape::from(RegularPolygon::new(&cp)),
-        GroupOrShape::from(Circle::new(&cd)),
+        GroupOrShape::from(RegularPolygon::new_with(&cp)),
+        GroupOrShape::from(Circle::new_with(&cd)),
     ]);
 
     for (x, y, label) in [
@@ -127,13 +137,14 @@ pub extern "C" fn start() {
             .with_font_size(11.0)
             .with_font_family("monospace")
             .with_fill("#555555");
-        layer.add([Text::new(&tc)]);
+        layer.add([Text::new_with(&tc)]);
     }
 
     layer.draw();
 
-    let count = layer.get_children(None).len();
-    let msg = format!("Stage: 680x400 \u{00B7} Procedural rosette \u{00B7} {count} shapes on layer");
+    let count = layer.get_children().len();
+    let msg =
+        format!("Stage: 680x400 \u{00B7} Procedural rosette \u{00B7} {count} shapes on layer");
     dom::document()
         .get_element_by_id("meta")
         .expect("missing #meta")

@@ -10,7 +10,7 @@ fn add_caption(layer: &Layer, x: f64, y: f64, label: &str) {
         .with_font_size(11.0)
         .with_font_family("monospace")
         .with_fill("#555555");
-    layer.add([Text::new(&tc)]);
+    layer.add([Text::new_with(&tc)]);
 }
 
 #[unsafe(no_mangle)]
@@ -21,7 +21,7 @@ pub extern "C" fn start() {
         .with_height(400.0);
     let stage = Stage::new(&sc);
 
-    let layer = Layer::new(None);
+    let layer = Layer::new();
     stage.add(&layer, JsArray::<JsValue>::new());
 
     let bg = RectConfig::default()
@@ -30,7 +30,7 @@ pub extern "C" fn start() {
         .with_width(680.0)
         .with_height(400.0)
         .with_fill("#ffffff");
-    layer.add([Rect::new(&bg)]);
+    layer.add([Rect::new_with(&bg)]);
 
     // Row 1: Rounded filled Rect, dashed Rect, Circle, Hexagon.
     let r1 = RectConfig::default()
@@ -40,7 +40,7 @@ pub extern "C" fn start() {
         .with_height(76.0)
         .with_corner_radius(8.0)
         .with_fill("#111111");
-    layer.add([Rect::new(&r1)]);
+    layer.add([Rect::new_with(&r1)]);
     add_caption(&layer, 40.0, 142.0, "Rect (filled)");
 
     let r2 = RectConfig::default()
@@ -52,7 +52,7 @@ pub extern "C" fn start() {
         .with_stroke("#111111")
         .with_stroke_width(2.0)
         .with_dash([6.0, 4.0]);
-    layer.add([Rect::new(&r2)]);
+    layer.add([Rect::new_with(&r2)]);
     add_caption(&layer, 195.0, 142.0, "Rect (dashed)");
 
     let cc = CircleConfig::default()
@@ -62,7 +62,7 @@ pub extern "C" fn start() {
         .with_fill("#404040")
         .with_stroke("#111111")
         .with_stroke_width(2.0);
-    layer.add([Circle::new(&cc)]);
+    layer.add([Circle::new_with(&cc)]);
     add_caption(&layer, 395.0, 142.0, "Circle");
 
     let pc = RegularPolygonConfig::default()
@@ -73,7 +73,7 @@ pub extern "C" fn start() {
         .with_fill("#efefef")
         .with_stroke("#111111")
         .with_stroke_width(2.0);
-    layer.add([RegularPolygon::new(&pc)]);
+    layer.add([RegularPolygon::new_with(&pc)]);
     add_caption(&layer, 548.0, 142.0, "Hexagon");
 
     // Row 2: Star, Ring, Wedge, Framed Text.
@@ -86,7 +86,7 @@ pub extern "C" fn start() {
         .with_fill("#737373")
         .with_stroke("#111111")
         .with_stroke_width(2.0);
-    layer.add([Star::new(&st)]);
+    layer.add([Star::new_with(&st)]);
     add_caption(&layer, 62.0, 325.0, "Star (5pt)");
 
     let rc = RingConfig::default()
@@ -97,7 +97,7 @@ pub extern "C" fn start() {
         .with_fill("#d4d4d4")
         .with_stroke("#111111")
         .with_stroke_width(2.0);
-    layer.add([Ring::new(&rc)]);
+    layer.add([Ring::new_with(&rc)]);
     add_caption(&layer, 236.0, 325.0, "Ring");
 
     let wc = WedgeConfig::default()
@@ -109,7 +109,7 @@ pub extern "C" fn start() {
         .with_fill("#111111")
         .with_stroke("#555555")
         .with_stroke_width(1.0);
-    layer.add([Wedge::new(&wc)]);
+    layer.add([Wedge::new_with(&wc)]);
     add_caption(&layer, 382.0, 325.0, "Wedge 270\u{00B0}");
 
     let tf = RectConfig::default()
@@ -120,7 +120,7 @@ pub extern "C" fn start() {
         .with_fill("#f7f7f7")
         .with_stroke("#111111")
         .with_stroke_width(1.5);
-    layer.add([Rect::new(&tf)]);
+    layer.add([Rect::new_with(&tf)]);
 
     let tc = TextConfig::default()
         .with_x(514.0)
@@ -129,12 +129,12 @@ pub extern "C" fn start() {
         .with_font_size(13.0)
         .with_font_family("monospace")
         .with_fill("#111111");
-    layer.add([Text::new(&tc)]);
+    layer.add([Text::new_with(&tc)]);
     add_caption(&layer, 558.0, 325.0, "Text");
 
     layer.draw();
 
-    let count = layer.get_children(None).len();
+    let count = layer.get_children().len();
     let msg = format!("Stage: 680x400 \u{00B7} 7 primitive types \u{00B7} {count} layer children");
     dom::document()
         .get_element_by_id("meta")

@@ -69,7 +69,7 @@ fn draw_rot_box(
         ctx.line_to(xs[i], ys[i]);
     }
     ctx.close_path();
-    ctx.fill(None);
+    ctx.fill();
 
     ctx.set_stroke_style("#111111");
     ctx.set_line_width(1.5);
@@ -102,21 +102,20 @@ fn build_scene(st: &mut AppState) {
     if let Some(w) = st.world.take() {
         w.free();
     }
-    let world = World::new(
-        &Vector3::new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
-    );
-    let queue = EventQueue::new(true, None);
+    let world = World::new(&Vector3::new(0.0, -9.81, 0.0));
+    let queue = EventQueue::new(true);
 
     let add_ramp = |cx: f64, cy: f64, hx: f64, hy: f64, theta: f64| {
         let q = Quaternion::new(0.0, 0.0, (theta * 0.5).sin(), (theta * 0.5).cos());
         let rb = world.create_rigid_body(
-            &RigidBodyDesc::fixed().set_translation(cx, cy, 0.0).set_rotation(&q),
+            &RigidBodyDesc::fixed()
+                .set_translation(cx, cy, 0.0)
+                .set_rotation(&q),
         );
         let cd = ColliderDesc::cuboid(hx, hy, 1.0)
             .set_friction(0.15)
             .set_restitution(0.35);
-        world.create_collider(&cd, &rb);
+        world.create_collider_with(&cd, &rb);
     };
 
     add_ramp(0.0, -0.35, 6.8, 0.35, 0.0);
@@ -126,7 +125,7 @@ fn build_scene(st: &mut AppState) {
     add_ramp(1.8, 2.6, 2.2, 0.18, 0.36);
 
     let sbody = world.create_rigid_body(&RigidBodyDesc::fixed().set_translation(0.0, 1.35, 0.0));
-    let sc = world.create_collider(
+    let sc = world.create_collider_with(
         &ColliderDesc::cuboid(1.85, 0.30, 1.2)
             .set_sensor(true)
             .set_active_events(ActiveEvents::CollisionEvents),
@@ -144,7 +143,7 @@ fn build_scene(st: &mut AppState) {
         } else {
             ColliderDesc::ball(0.32)
         };
-        world.create_collider(
+        world.create_collider_with(
             &cd.set_restitution(0.35)
                 .set_friction(0.25)
                 .set_active_events(ActiveEvents::CollisionEvents),
@@ -167,7 +166,7 @@ fn step_sim(st: &mut AppState) {
     let mut active = st.active_in_sensor;
     let mut contacts = st.solid_contacts;
     if let (Some(w), Some(q)) = (st.world.as_ref(), st.queue.as_ref()) {
-        w.step(q, None);
+        w.step_with(q, None);
         EventQueueDrainCollisionEventsF::scoped(
             |h1: f64, h2: f64, started: bool| {
                 if h1 == sh || h2 == sh {
@@ -234,30 +233,63 @@ fn render(st: &AppState) {
     let gcap = format!("SENSOR GATE ({} inside)", st.active_in_sensor);
     ctx.set_fill_style("#555555");
     ctx.set_font("11px ui-monospace, monospace");
-    ctx.fill_text(&gcap, sx + 8.0, sy + 17.0, None);
+    ctx.fill_text(&gcap, sx + 8.0, sy + 17.0);
 
     draw_rot_box(ctx, 0.0, -0.35, 0.0, 0.0, 0.0, 1.0, 6.8, 0.35, "#f7f7f7");
     draw_rot_box(ctx, -5.4, 2.8, 0.0, 0.0, 0.0, 1.0, 0.25, 3.2, "#efefef");
     draw_rot_box(ctx, 5.4, 2.8, 0.0, 0.0, 0.0, 1.0, 0.25, 3.2, "#efefef");
-    draw_rot_box(ctx, -2.1, 4.2, 0.0, 0.0, (-0.18_f64).sin(), (-0.18_f64).cos(), 2.2, 0.18, "#e5e5e5");
-    draw_rot_box(ctx, 1.8, 2.6, 0.0, 0.0, (0.18_f64).sin(), (0.18_f64).cos(), 2.2, 0.18, "#e5e5e5");
+    draw_rot_box(
+        ctx,
+        -2.1,
+        4.2,
+        0.0,
+        0.0,
+        (-0.18_f64).sin(),
+        (-0.18_f64).cos(),
+        2.2,
+        0.18,
+        "#e5e5e5",
+    );
+    draw_rot_box(
+        ctx,
+        1.8,
+        2.6,
+        0.0,
+        0.0,
+        (0.18_f64).sin(),
+        (0.18_f64).cos(),
+        2.2,
+        0.18,
+        "#e5e5e5",
+    );
 
     for (i, b) in st.bodies.iter().enumerate() {
-        let p = b.translation(None);
-        let q = b.rotation(None);
+        let p = b.translation();
+        let q = b.rotation();
         if IS_BOX[i] {
-            draw_rot_box(ctx, p.x(), p.y(), q.x(), q.y(), q.z(), q.w(), 0.28, 0.28, "#d4d4d4");
+            draw_rot_box(
+                ctx,
+                p.x(),
+                p.y(),
+                q.x(),
+                q.y(),
+                q.z(),
+                q.w(),
+                0.28,
+                0.28,
+                "#d4d4d4",
+            );
         } else {
             let cx = to_cx(p.x());
             let cy = to_cy(p.y());
             ctx.set_fill_style("#262626");
             ctx.begin_path();
-            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TAU, None);
-            ctx.fill(None);
+            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TAU);
+            ctx.fill();
             ctx.set_stroke_style("#111111");
             ctx.set_line_width(1.5);
             ctx.begin_path();
-            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TAU, None);
+            ctx.arc(cx, cy, 0.32 * 46.0, 0.0, TAU);
             ctx.stroke();
         }
     }
@@ -281,7 +313,7 @@ pub extern "C" fn start() {
         }
         let doc = dom::document();
         let canvas = HTMLCanvasElement::cast(&doc.get_element_by_id("canvas").unwrap()).unwrap();
-        let ctx = canvas.get_context_2d(None).unwrap();
+        let ctx = canvas.get_context_2d().unwrap();
 
         let st = Rc::new(RefCell::new(AppState {
             ctx,
@@ -325,11 +357,8 @@ pub extern "C" fn start() {
                     }
                     1 => {
                         s.paused = !s.paused;
-                        s.pause_btn.set_text_content(if s.paused {
-                            "Resume"
-                        } else {
-                            "Pause"
-                        });
+                        s.pause_btn
+                            .set_text_content(if s.paused { "Resume" } else { "Pause" });
                         render(&s);
                     }
                     _ => {

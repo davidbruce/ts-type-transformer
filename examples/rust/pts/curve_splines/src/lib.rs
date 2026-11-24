@@ -3,7 +3,7 @@
 use pts::{AnimateCallbackFn, CanvasSpace, CanvasSpaceOptions, Curve, Group, IPlayer, Pt};
 
 fn mk_pt(x: f64, y: f64) -> Pt {
-    Pt::make(2.0, None, None).with_x(x).with_y(y)
+    Pt::make(2.0).with_x(x).with_y(y)
 }
 
 #[unsafe(no_mangle)]
@@ -13,7 +13,7 @@ pub extern "C" fn start() {
         .with_resize(true)
         .with_retina(true);
 
-    let space = CanvasSpace::new("#pt", None).setup(&opts);
+    let space = CanvasSpace::new_with("#pt", None).setup(&opts);
     let form = space.get_form();
 
     let anim = {
@@ -28,7 +28,8 @@ pub extern "C" fn start() {
             let count = 11usize;
 
             let base_line = Group::new([mk_pt(w * 0.06, c.y()), mk_pt(w * 0.94, c.y())]);
-            form.stroke_only("#e5e5e5", 1.0, None, None).line(&base_line);
+            form.stroke_only_with("#e5e5e5", 1.0, None, None)
+                .line(&base_line);
 
             let mut pts_vec = Vec::with_capacity(count);
             for i in 0..count {
@@ -47,31 +48,34 @@ pub extern "C" fn start() {
             }
 
             let ctrls = Group::new(pts_vec.clone());
-            let bs = Curve::bspline(&ctrls, 12.0, None);
-            let card = Curve::cardinal(&ctrls, 12.0, 0.35);
-            let cr = Curve::catmull_rom(&ctrls, 12.0);
+            let bs = Curve::bspline_with(&ctrls, 12.0, None);
+            let card = Curve::cardinal_with(&ctrls, 12.0, 0.35);
+            let cr = Curve::catmull_rom_with(&ctrls, 12.0);
 
             for (i, p) in cr.as_array().iter().enumerate() {
                 if i % 3 == 0 {
                     let stem = Group::new([mk_pt(p.x(), c.y()), p.clone()]);
-                    form.stroke_only("#d4d4d4", 1.0, None, None).line(&stem);
+                    form.stroke_only_with("#d4d4d4", 1.0, None, None)
+                        .line(&stem);
                 }
             }
 
-            form.stroke_only("#d4d4d4", 1.0, None, None).line(&ctrls);
-            form.stroke_only("#b5b5b5", 2.0, None, None).line(&bs);
-            form.stroke_only("#555555", 1.8, None, None).line(&card);
-            form.stroke_only("#111111", 2.6, None, None).line(&cr);
+            form.stroke_only_with("#d4d4d4", 1.0, None, None)
+                .line(&ctrls);
+            form.stroke_only_with("#b5b5b5", 2.0, None, None).line(&bs);
+            form.stroke_only_with("#555555", 1.8, None, None)
+                .line(&card);
+            form.stroke_only_with("#111111", 2.6, None, None).line(&cr);
 
             for p in &pts_vec {
                 form.fill("#ffffff")
-                    .stroke("#111111", 1.5, None, None)
-                    .point(p, 4.5, "circle");
+                    .stroke_with("#111111", 1.5, None, None)
+                    .point_with(p, 4.5, "circle");
             }
         })
     };
 
     let player = IPlayer::default().with_animate(&anim);
     space.add(&player);
-    space.bind_mouse(None, None).bind_touch(None, None, None).play(None);
+    space.bind_mouse().bind_touch().play();
 }

@@ -13,7 +13,6 @@ macro_rules! check {
     };
 }
 
-
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
     // A Pt is an array of coordinates, with names for the first four.
@@ -28,17 +27,22 @@ pub extern "C" fn run() {
     let moved = p.add_new([1.0, 1.0]);
     check!(moved != p && moved.x() == 4.0 && p.x() == 3.0);
     check!(p.add([1.0, 1.0]) == p && p.x() == 4.0);
-    check!(p.equals(&moved, None));
-    check!(p.js_clone().equals(&p, Some(0.001)) && p.js_clone() != p);
+    check!(p.equals(&moved));
+    check!(p.js_clone().equals_with(&p, Some(0.001)) && p.js_clone() != p);
 
     // Statics.
     check!(Num::lerp(0.0, 10.0, 0.5) == 5.0);
     check!(Num::clamp(12.0, 0.0, 10.0) == 10.0);
     check!(Geom::to_degree(core::f64::consts::PI) == 180.0);
-    check!(Pt::make(3.0, Some(2.0), None).to_string() == "Pt(2, 2, 2)");
+    check!(Pt::make_with(3.0, Some(2.0), None).to_string() == "Pt(2, 2, 2)");
 
     // A Group is an array of Pt.
-    let square = Group::new([Pt::new([0.0, 0.0]), Pt::new([4.0, 0.0]), Pt::new([4.0, 4.0]), Pt::new([0.0, 4.0])]);
+    let square = Group::new([
+        Pt::new([0.0, 0.0]),
+        Pt::new([4.0, 0.0]),
+        Pt::new([4.0, 4.0]),
+        Pt::new([0.0, 4.0]),
+    ]);
     check!(square.as_array().len() == 4 && square.as_array().get(2).y() == 4.0);
     check!(square.p1().x() == 0.0);
     check!(square.centroid().to_string() == "Pt(2, 2)");

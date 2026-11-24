@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::emit::module_file;
-use super::types::{
+use super::types::{Site, 
     args_of, avoid_outer_type_params, bound, defaulted, families, function, function_raw, generics,
-    handle_decl, hidden, indented, is_subtype, lower_callback, names_of, one_function, one_function_raw,
+    handle_decl, hidden, indented, is_subtype, lower_callback, names_of, one_function,
     param, raise, raw, raw_ret, ty, upcast_in, Family, VALUE,
 };
 use super::{camel, ident, snake, Context, PRELUDE, RUNTIME_TYPES, TAKEN};
@@ -226,8 +226,9 @@ pub(super) fn emit_classes(
         }
         // The trait of its own members (including fluent `with_<prop>` builders).
         let mut trait_body = String::new();
+        let own_names: HashSet<String> = own.values().cloned().collect();
         for f in c.funcs.iter().filter(|f| Class::has_self(f) && family_of(c, f).is_none()) {
-            for item in function(&with_self_args(f, c), &own[&f.name], "", imports, Some(this), cx) {
+            for item in function(&with_self_args(f, c), &own[&f.name], "", imports, Some(this), &Site { assoc: false, taken: &own_names }, cx) {
                 trait_body += &indented(&item);
             }
         }
@@ -272,7 +273,7 @@ pub(super) fn emit_classes(
                 inherent_taken.insert(format!("{fname}_as"));
             }
             inherent_taken.insert(fname.clone());
-            for item in function(&f_self, fname, "pub ", imports, None, cx) {
+            for item in function(&f_self, fname, "pub ", imports, None, &Site { assoc: true, taken: &own_names }, cx) {
                 inherent += &indented(&item);
             }
         }
@@ -353,6 +354,8 @@ pub(super) fn emit_classes(
         } else {
             Ty::Generic(c.name.clone(), c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect())
         };
+        // Every name the inherent block may have: a `_with` form keeps clear of them (ProseMirror's `replace_with`).
+        let holder_names: HashSet<String> = holders.keys().cloned().collect();
         for (method, hs) in &holders {
             if inherent_taken.contains(method) {
                 continue;
@@ -399,13 +402,17 @@ pub(super) fn emit_classes(
                 let as_name = format!("{method}_as");
                 if !hidden(&f).is_empty() && !inherent_taken.contains(&as_name) && !holders.contains_key(&as_name) {
                     inherent_taken.insert(as_name);
-                    for item in function_raw(&f, &orig, method, "pub ", imports, Some(this), cx) {
+                    let here: HashSet<String> = own_names.iter().chain(&inherent_taken).chain(&holder_names).cloned().collect();
+                    for item in function_raw(&f, &orig, method, "pub ", imports, Some(this), &Site { assoc: false, taken: &here }, cx) {
                         inherent += &indented(&item);
                     }
                 } else {
                     let f_def = if hidden(&f).is_empty() { f } else { defaulted(&f) };
                     let o_def = if hidden(&orig).is_empty() { orig } else { defaulted(&orig) };
-                    inherent += &indented(&one_function_raw(&f_def, Some(&o_def), method, "pub ", imports, Some(this), cx));
+                    let here: HashSet<String> = own_names.iter().chain(&inherent_taken).chain(&holder_names).cloned().collect();
+                    for item in function_raw(&f_def, &o_def, method, "pub ", imports, Some(this), &Site { assoc: false, taken: &here }, cx) {
+                        inherent += &indented(&item);
+                    }
                 }
             }
         }

@@ -122,7 +122,10 @@ pub extern "C" fn run() {
 
     // A union as a type argument is the union.
     let some = ids();
-    check!(matches!(some.get(0), Id::Number(n) if n == 1.0) && matches!(some.get(1), Id::String(s) if s == "two"));
+    check!(
+        matches!(some.get(0), Id::Number(n) if n == 1.0)
+            && matches!(some.get(1), Id::String(s) if s == "two")
+    );
     check!(matches!(boxed_id().value(), Id::String(s) if s == "three"));
 
     // A constraint, and a constrained interface.

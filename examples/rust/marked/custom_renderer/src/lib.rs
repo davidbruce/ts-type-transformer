@@ -3,8 +3,8 @@
 use dom::{Document, HTMLElement};
 use marked::{
     BooleanOrRendererOutput, Marked, MarkedExtension, MarkedExtensionRenderer,
-    MarkedExtensionRendererHeading, ParserOutputOrPromise, StringOrPromise, Token,
-    MarkedExtensionWalkTokens, tokens,
+    MarkedExtensionRendererHeading, MarkedExtensionWalkTokens, ParserOutputOrPromise,
+    StringOrPromise, Token, tokens,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -57,8 +57,7 @@ pub extern "C" fn start() {
     let doc = dom::document();
     let app = doc.get_element_by_id("app").expect("missing #app");
 
-    let md =
-        "# Wireframe Spec\n\n## Custom Pipeline\n\nParagraph with *italic* and **bold** and `code`.\n";
+    let md = "# Wireframe Spec\n\n## Custom Pipeline\n\nParagraph with *italic* and **bold** and `code`.\n";
 
     let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
@@ -83,11 +82,11 @@ pub extern "C" fn start() {
         .with_walk_tokens(&walk);
 
     let custom_m = Marked::<String, String>::new(vec![ext]);
-    let def_html = match marked::marked_with_opt_marked_options(md, None) {
+    let def_html = match marked::marked_with_opt_marked_options(md) {
         StringOrPromise::String(s) => s,
         StringOrPromise::JsPromise(_) => String::new(),
     };
-    let cust_html = match custom_m.parse().invoke_2(md, None) {
+    let cust_html = match custom_m.parse().invoke_2(md) {
         ParserOutputOrPromise::ParserOutput(s) => s,
         ParserOutputOrPromise::JsPromise(_) => String::new(),
     };
@@ -95,7 +94,15 @@ pub extern "C" fn start() {
     let visited = seen.borrow();
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("Marked Custom Renderer & Walker (Rust)")));
+    append(
+        &head,
+        make_el(
+            &doc,
+            "h1",
+            "",
+            Some("Marked Custom Renderer & Walker (Rust)"),
+        ),
+    );
     let badge_txt = format!("{} tokens visited", visited.len());
     append(&head, make_el(&doc, "span", "badge", Some(&badge_txt)));
     append(&app, head);
@@ -103,13 +110,19 @@ pub extern "C" fn start() {
     let grid = make_el(&doc, "div", "grid", None);
 
     let def_card = make_el(&doc, "div", "card", None);
-    append(&def_card, make_el(&doc, "div", "label", Some("Default Renderer")));
+    append(
+        &def_card,
+        make_el(&doc, "div", "label", Some("Default Renderer")),
+    );
     let def_out = make_el(&doc, "div", "md-out", None);
     def_out.set_inner_html(&def_html);
     append(&def_card, def_out);
 
     let cust_card = make_el(&doc, "div", "card", None);
-    append(&cust_card, make_el(&doc, "div", "label", Some("Custom Heading Renderer")));
+    append(
+        &cust_card,
+        make_el(&doc, "div", "label", Some("Custom Heading Renderer")),
+    );
     let cust_out = make_el(&doc, "div", "md-out", None);
     cust_out.set_inner_html(&cust_html);
     append(&cust_card, cust_out);
@@ -119,7 +132,10 @@ pub extern "C" fn start() {
     append(&app, grid);
 
     let walk_card = make_el(&doc, "div", "card", None);
-    append(&walk_card, make_el(&doc, "div", "label", Some("Visited Tokens (walkTokens)")));
+    append(
+        &walk_card,
+        make_el(&doc, "div", "label", Some("Visited Tokens (walkTokens)")),
+    );
     let strip = make_el(&doc, "div", "tok-strip", None);
     for kind in visited.iter() {
         append(&strip, make_el(&doc, "span", "tok-pill", Some(kind)));

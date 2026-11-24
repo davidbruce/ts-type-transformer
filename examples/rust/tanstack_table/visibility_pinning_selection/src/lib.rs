@@ -116,7 +116,11 @@ fn render(st: &State) {
                 .at("header")
                 .expect("missing column header")
                 .as_string();
-            html.push_str(if cid == "cpu" { "<th class=\"num\">" } else { "<th>" });
+            html.push_str(if cid == "cpu" {
+                "<th class=\"num\">"
+            } else {
+                "<th>"
+            });
             esc_html(&hdr, &mut html);
             if *pinned {
                 html.push_str("<span class=\"pin-tag\">PIN</span>");
@@ -130,10 +134,18 @@ fn render(st: &State) {
     let rows = st.table.get_row_model().rows();
     for r in rows.iter() {
         let is_sel = js::unchecked_cast::<RowRowSelection>(&r).get_is_selected();
-        html.push_str(if is_sel { "<tr class=\"selected-row\"><td>&#9632;</td>" } else { "<tr><td>&#9633;</td>" });
+        html.push_str(if is_sel {
+            "<tr class=\"selected-row\"><td>&#9632;</td>"
+        } else {
+            "<tr><td>&#9633;</td>"
+        });
         for cid in &col_ids {
             if cid == "cpu" {
-                let _ = write!(html, "<td class=\"num\">{:.0}%</td>", r.get_value::<JsValue>("cpu").as_f64());
+                let _ = write!(
+                    html,
+                    "<td class=\"num\">{:.0}%</td>",
+                    r.get_value::<JsValue>("cpu").as_f64()
+                );
             } else {
                 html.push_str("<td>");
                 esc_html(&r.get_value::<JsValue>(cid).as_string(), &mut html);
@@ -162,16 +174,68 @@ pub extern "C" fn start() {
         .with("columnVisibilityFeature", column_visibility_feature())
         .with("columnPinningFeature", column_pinning_feature())
         .with("rowSelectionFeature", row_selection_feature())
-        .with("coreRowModel", create_core_row_model::<TableFeatures, JsValue>());
+        .with(
+            "coreRowModel",
+            create_core_row_model::<TableFeatures, JsValue>(),
+        );
 
     let data = JsArray::<JsValue>::from([
-        task_row("T-101", "ingest-wal-sync", "a.meyer", "eu-ch-1", 42.0, "running"),
-        task_row("T-102", "index-compact", "b.rossi", "eu-ch-2", 68.0, "running"),
-        task_row("T-103", "snapshot-verify", "c.keller", "eu-de-1", 15.0, "queued"),
-        task_row("T-104", "ledger-reconcile", "d.weber", "eu-de-2", 79.0, "running"),
-        task_row("T-105", "cert-rotation", "e.morel", "eu-fr-1", 24.0, "ready"),
-        task_row("T-106", "shard-rebalance", "f.novak", "eu-fr-2", 55.0, "running"),
-        task_row("T-107", "backup-archive", "g.steiner", "eu-ch-1", 31.0, "ready"),
+        task_row(
+            "T-101",
+            "ingest-wal-sync",
+            "a.meyer",
+            "eu-ch-1",
+            42.0,
+            "running",
+        ),
+        task_row(
+            "T-102",
+            "index-compact",
+            "b.rossi",
+            "eu-ch-2",
+            68.0,
+            "running",
+        ),
+        task_row(
+            "T-103",
+            "snapshot-verify",
+            "c.keller",
+            "eu-de-1",
+            15.0,
+            "queued",
+        ),
+        task_row(
+            "T-104",
+            "ledger-reconcile",
+            "d.weber",
+            "eu-de-2",
+            79.0,
+            "running",
+        ),
+        task_row(
+            "T-105",
+            "cert-rotation",
+            "e.morel",
+            "eu-fr-1",
+            24.0,
+            "ready",
+        ),
+        task_row(
+            "T-106",
+            "shard-rebalance",
+            "f.novak",
+            "eu-fr-2",
+            55.0,
+            "running",
+        ),
+        task_row(
+            "T-107",
+            "backup-archive",
+            "g.steiner",
+            "eu-ch-1",
+            31.0,
+            "ready",
+        ),
     ]);
     let cols = JsArray::<JsValue>::from([
         col_def("id", "Task ID"),
@@ -206,13 +270,18 @@ pub extern "C" fn start() {
     let doc = dom::document();
     let st = Rc::new(State {
         table: construct_table(&opts),
-        wrap: doc.get_element_by_id("table-wrap").expect("missing #table-wrap"),
+        wrap: doc
+            .get_element_by_id("table-wrap")
+            .expect("missing #table-wrap"),
         meta: doc.get_element_by_id("meta").expect("missing #meta"),
         zone_vis: Cell::new(false),
         owner_vis: Cell::new(true),
     });
 
-    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"].iter().enumerate() {
+    for (idx, bid) in ["btn-0", "btn-1", "btn-2", "btn-3", "btn-4"]
+        .iter()
+        .enumerate()
+    {
         let btn = doc.get_element_by_id(bid).expect("missing button");
         let st_c = st.clone();
         let cb = dom::JsListener::new(move |_: dom::PointerEvent| {
@@ -227,8 +296,8 @@ pub extern "C" fn start() {
                     st_c.owner_vis.set(!st_c.owner_vis.get());
                     apply_vis(&st_c);
                 }
-                2 => sel.toggle_all_rows_selected(true, None),
-                3 => sel.toggle_all_rows_selected(false, None),
+                2 => sel.toggle_all_rows_selected_with(true, None),
+                3 => sel.toggle_all_rows_selected_with(false, None),
                 _ => {
                     st_c.zone_vis.set(false);
                     st_c.owner_vis.set(true);

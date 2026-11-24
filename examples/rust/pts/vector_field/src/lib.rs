@@ -9,14 +9,14 @@ pub extern "C" fn start() {
         .with_resize(true)
         .with_retina(true);
 
-    let space = CanvasSpace::new("#pt", None).setup(&opts);
+    let space = CanvasSpace::new_with("#pt", None).setup(&opts);
     let form = space.get_form();
 
     let anim = {
         let space = space.clone();
         AnimateCallbackFn::new(move |time, _, _| {
             let pointer = space.pointer();
-            let grid = Create::grid_pts(&space.inner_bound(), 18.0, 11.0, None);
+            let grid = Create::grid_pts(&space.inner_bound(), 18.0, 11.0);
             let size = space.size();
             let max_dist = f64::max(1.0, f64::max(size.x(), size.y()) * 0.55);
 
@@ -24,7 +24,7 @@ pub extern "C" fn start() {
                 let delta = pt.subtract_new([&pointer]);
                 let dist = delta.magnitude();
                 let t = 1.0 - Num::clamp(dist / max_dist, 0.0, 1.0);
-                let angle = delta.angle(None) + (time * 0.0015 + dist * 0.01).sin() * 0.35;
+                let angle = delta.angle() + (time * 0.0015 + dist * 0.01).sin() * 0.35;
                 let len = 8.0 + 34.0 * t;
                 let seg = Line::from_angle(&pt, angle, len);
 
@@ -32,7 +32,7 @@ pub extern "C" fn start() {
                 let alpha = 0.25 + 0.75 * t;
                 let color = format!("hsla(0, 0%, {light:.0}%, {alpha:.2})");
 
-                form.stroke_only(&*color, 1.5 + 2.5 * t, None, None)
+                form.stroke_only_with(&*color, 1.5 + 2.5 * t, None, None)
                     .line(&seg);
                 let dot = Circle::from_center(&pt, 1.5 + 4.5 * t * t);
                 form.fill_only(&*color).circle(&dot);
@@ -40,12 +40,12 @@ pub extern "C" fn start() {
 
             let ring_radius = 18.0 + 6.0 * (time * 0.004).sin();
             let ring = Circle::from_center(&pointer, ring_radius);
-            form.stroke_only("#11111199", 2.0, None, None)
+            form.stroke_only_with("#11111199", 2.0, None, None)
                 .circle(&ring);
         })
     };
 
     let player = IPlayer::default().with_animate(&anim);
     space.add(&player);
-    space.bind_mouse(None, None).bind_touch(None, None, None).play(None);
+    space.bind_mouse().bind_touch().play();
 }

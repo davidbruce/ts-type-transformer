@@ -6,11 +6,15 @@ use echarts::*;
 pub extern "C" fn start() {
     let doc = dom::document();
     let box_el = doc.get_element_by_id("chart").expect("missing #chart");
-    let chart = init(&box_el, None, None);
+    let chart = init_with(&box_el, None, None);
 
     let title = TitleComponentOption::default()
         .with_text("Monthly Output")
-        .with_text_style(&TitleTextStyleOption::default().with_color("#111111").with_font_size(13.0));
+        .with_text_style(
+            &TitleTextStyleOption::default()
+                .with_color("#111111")
+                .with_font_size(13.0),
+        );
     title.set_left(16.0);
     title.set_top(12.0);
 
@@ -22,13 +26,17 @@ pub extern "C" fn start() {
 
     let x_axis = XAXisComponentOptionXAxis::default()
         .with_data(["Jan", "Feb", "Mar", "Apr", "May", "Jun"])
-        .with_axis_line(&AxisLineOption::default().with_line_style(&LineStyleOption::<JsValue>::default().with_color(JsValue::from("#111111"))))
+        .with_axis_line(&AxisLineOption::default().with_line_style(
+            &LineStyleOption::<JsValue>::default().with_color(JsValue::from("#111111")),
+        ))
         .with_axis_label(&AxisLabelOption::default().with_color("#555555"));
 
     let y_axis = YAXisComponentOptionYAxisValue::default()
         .with_min(0.0)
         .with_max(100.0)
-        .with_split_line(&SplitLineOption::default().with_line_style(&LineStyleOption::<JsValue>::default().with_color(JsValue::from("#e5e5e5"))))
+        .with_split_line(&SplitLineOption::default().with_line_style(
+            &LineStyleOption::<JsValue>::default().with_color(JsValue::from("#e5e5e5")),
+        ))
         .with_axis_label(&AxisLabelOption::default().with_color("#555555"));
 
     let bars = BarSeriesOption::default()
@@ -44,7 +52,7 @@ pub extern "C" fn start() {
     opt.set_x_axis(&x_axis);
     opt.set_y_axis(&y_axis);
     opt.set_series(&bars);
-    chart.set_option(opt, None, None);
+    chart.set_option(opt);
 
     let meta = doc.get_element_by_id("meta").expect("missing #meta");
     meta.set_text_content(&format!(

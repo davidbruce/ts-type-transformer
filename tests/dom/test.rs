@@ -67,7 +67,9 @@ pub extern "C" fn run() {
     check!(el.query_selector_all("p, span").length() == 1.0);
 
     // A typed key selects the event type: the listener of "click" takes a PointerEvent.
-    let button: HTMLElement = doc.create_element(HTMLElementTagNameMap::BUTTON, None).into();
+    let button: HTMLElement = doc
+        .create_element(HTMLElementTagNameMap::BUTTON, None)
+        .into();
     button.set_text_content("press");
     el.append_child(button.clone());
     let clicks = Rc::new(Cell::new(0));
@@ -102,12 +104,12 @@ pub extern "C" fn run() {
     // One method: a typed key and its listener, or a string and any listener.
     // An optional union argument is any member, or None.
     el.add_event_listener("ping", on_ping, &once);
-    el.dispatch_event(&Event::new("ping", None));
-    el.dispatch_event(&Event::new("ping", None));
+    el.dispatch_event(&Event::new("ping"));
+    el.dispatch_event(&Event::new("ping"));
     check!(pings.get() == 1);
 
     // Style, layout and the window.
-    el.style().set_property("color", "red", None);
+    el.style().set_property("color", "red");
     check!(el.style().color() == "red");
     check!(el.get_bounding_client_rect().width() > 0.0);
     check!(el.children().length() == 2.0);
@@ -119,14 +121,21 @@ pub extern "C" fn run() {
     doc.set_title("driven by rust");
 
     // An invalid selector throws inside attempt: caught as a JsError without leaking to the error slot.
-    check!(js::attempt(|| el.query_selector("<bad")).is_err_and(|e| e.message().contains("not a valid selector")));
+    check!(
+        js::attempt(|| el.query_selector("<bad"))
+            .is_err_and(|e| e.message().contains("not a valid selector"))
+    );
     check!(js::take_error().is_none());
 
     // A real request: a promise of a Response, then of its text, each awaited.
     js::spawn(async {
-        let Ok(response) = fetch("./verify.mjs", None).await else { return };
+        let Ok(response) = fetch("./verify.mjs").await else {
+            return;
+        };
         let text = response.text().await;
-        FETCHED.with(|f| f.set(response.status() == 200.0 && text.is_ok_and(|t| t.contains("verify"))));
+        FETCHED.with(|f| {
+            f.set(response.status() == 200.0 && text.is_ok_and(|t| t.contains("verify")))
+        });
     });
 
     // Handles are counted: what goes out of scope is freed.

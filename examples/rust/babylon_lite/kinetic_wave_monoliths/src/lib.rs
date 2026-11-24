@@ -18,7 +18,7 @@ fn mk_pbr(v: f64, metallic: f64, roughness: f64) -> PbrMaterialProps {
         .with_base_color_factor([v, v, v, 1.0])
         .with_metallic_factor(metallic)
         .with_roughness_factor(roughness);
-    babylonjs_lite::create_pbr_material(&props)
+    babylonjs_lite::create_pbr_material_with(&props)
 }
 
 #[unsafe(no_mangle)]
@@ -29,7 +29,7 @@ pub extern "C" fn start() {
             return;
         };
 
-        let engine = match babylonjs_lite::create_engine(&canvas, None).await {
+        let engine = match babylonjs_lite::create_engine(&canvas).await {
             Ok(e) => e,
             Err(e) => {
                 set_status_error(&e.message());
@@ -37,7 +37,7 @@ pub extern "C" fn start() {
             }
         };
 
-        let scene = babylonjs_lite::create_scene_context(&engine, None);
+        let scene = babylonjs_lite::create_scene_context(&engine);
         let clear = GPUColorDict::default()
             .with_r(0.05)
             .with_g(0.05)
@@ -52,37 +52,30 @@ pub extern "C" fn start() {
             &babylonjs_lite::vec3(0.0, 1.4, 0.0),
         );
         babylonjs_lite::add_to_scene(&scene, &camera);
-        babylonjs_lite::attach_control(&camera, &canvas, &scene, None);
+        babylonjs_lite::attach_control_with(&camera, &canvas, &scene, None);
 
-        let hemi = babylonjs_lite::create_hemispheric_light(
-            &JsTuple3::from([0.0, 1.0, 0.15]),
-            0.55,
-        );
+        let hemi =
+            babylonjs_lite::create_hemispheric_light_with(&JsTuple3::from([0.0, 1.0, 0.15]), 0.55);
         hemi.set_diffuse_color([0.76, 0.76, 0.76]);
         hemi.set_ground_color([0.10, 0.10, 0.10]);
         babylonjs_lite::add_to_scene(&scene, &hemi);
 
-        let dir =
-            babylonjs_lite::create_directional_light([-1.0, -2.2, -0.8], 1.35);
+        let dir = babylonjs_lite::create_directional_light_with([-1.0, -2.2, -0.8], 1.35);
         dir.set_diffuse([0.90, 0.90, 0.90]);
         babylonjs_lite::add_to_scene(&scene, &dir);
 
-        let light1 =
-            babylonjs_lite::create_point_light([5.2, 4.2, 0.0], 10.0);
+        let light1 = babylonjs_lite::create_point_light_with([5.2, 4.2, 0.0], 10.0);
         light1.set_diffuse([1.0, 1.0, 1.0]);
         light1.set_range(16.0);
         babylonjs_lite::add_to_scene(&scene, &light1);
 
-        let light2 =
-            babylonjs_lite::create_point_light([-5.2, 3.4, 0.0], 7.5);
+        let light2 = babylonjs_lite::create_point_light_with([-5.2, 3.4, 0.0], 7.5);
         light2.set_diffuse([0.78, 0.78, 0.78]);
         light2.set_range(16.0);
         babylonjs_lite::add_to_scene(&scene, &light2);
 
-        let floor_opts = GroundOptions::default()
-            .with_width(18.0)
-            .with_height(18.0);
-        let floor = babylonjs_lite::create_ground(&engine, &floor_opts);
+        let floor_opts = GroundOptions::default().with_width(18.0).with_height(18.0);
+        let floor = babylonjs_lite::create_ground_with(&engine, &floor_opts);
         floor.set_material(&mk_pbr(0.09, 0.10, 0.88));
         babylonjs_lite::add_to_scene(&scene, &floor);
 
@@ -106,7 +99,7 @@ pub extern "C" fn start() {
                 let fz = (row as f64) - 2.5;
                 let x = fx * 1.15;
                 let z = fz * 1.15;
-                let m = babylonjs_lite::create_box(&engine, &bopts);
+                let m = babylonjs_lite::create_box_with(&engine, &bopts);
                 m.position().set(x, 0.5, z);
                 m.set_material(&col_mats[(row + col) % 4]);
                 babylonjs_lite::add_to_scene(&scene, &m);
@@ -131,7 +124,7 @@ pub extern "C" fn start() {
             .with_roughness(0.08);
         babylonjs_lite::set_pbr_clear_coat(&cap_props, &cc);
         babylonjs_lite::set_pbr_emissive(&cap_props, [0.16, 0.16, 0.16]);
-        let cap_mat = babylonjs_lite::create_pbr_material(&cap_props);
+        let cap_mat = babylonjs_lite::create_pbr_material_with(&cap_props);
 
         let copts = CapsuleOptions::default()
             .with_height(1.15)
@@ -139,7 +132,7 @@ pub extern "C" fn start() {
             .with_tessellation(20.0);
         let mut capsules = Vec::with_capacity(4);
         for _ in 0..4 {
-            let cap = babylonjs_lite::create_capsule(&engine, &copts);
+            let cap = babylonjs_lite::create_capsule_with(&engine, &copts);
             cap.set_material(&cap_mat);
             babylonjs_lite::add_to_scene(&scene, &cap);
             capsules.push((cap.position(), cap.rotation()));
@@ -169,8 +162,16 @@ pub extern "C" fn start() {
                 rot.set_z((elapsed + fk).sin() * 0.35);
                 rot.set_y(-theta);
             }
-            l1_pos.set((elapsed * 0.65).cos() * 5.2, 4.2, (elapsed * 0.65).sin() * 5.2);
-            l2_pos.set((-elapsed * 0.52).cos() * 5.2, 3.4, (-elapsed * 0.52).sin() * 5.2);
+            l1_pos.set(
+                (elapsed * 0.65).cos() * 5.2,
+                4.2,
+                (elapsed * 0.65).sin() * 5.2,
+            );
+            l2_pos.set(
+                (-elapsed * 0.52).cos() * 5.2,
+                3.4,
+                (-elapsed * 0.52).sin() * 5.2,
+            );
         });
         babylonjs_lite::on_before_render(&scene, &render_cb);
 

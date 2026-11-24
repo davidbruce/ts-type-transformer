@@ -33,9 +33,19 @@ fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsHandle {
     let o = MakeObjectMapResult::<JsValue>::create();
     o.set_at("get", get);
     if let Some(mut set) = set {
-        o.set_at("set", JsValue(AnyFunction::new(move |args: JsValue| set(as_array(&args).get(0))).0.clone()));
+        o.set_at(
+            "set",
+            JsValue(
+                AnyFunction::new(move |args: JsValue| set(as_array(&args).get(0)))
+                    .0
+                    .clone(),
+            ),
+        );
     }
-    o.set_at("subscribe", JsValue(AnyFunction::new(|_: JsValue| {}).0.clone()));
+    o.set_at(
+        "subscribe",
+        JsValue(AnyFunction::new(|_: JsValue| {}).0.clone()),
+    );
     o.0.clone()
 }
 
@@ -53,8 +63,11 @@ pub extern "C" fn run() {
     // The state a table starts from, per feature.
     let sorting = JsValue(row_sorting_feature().0.clone());
     let visibility = JsValue(column_visibility_feature().0.clone());
-    let features: TableFeatures = table_features(JsValue::from(&object(&[("rowSortingFeature", &sorting), ("columnVisibilityFeature", &visibility)])));
-    check!(features.0 .0 != 0);
+    let features: TableFeatures = table_features(JsValue::from(&object(&[
+        ("rowSortingFeature", &sorting),
+        ("columnVisibilityFeature", &visibility),
+    ])));
+    check!(features.0.0 != 0);
 
     // functionalUpdate: a value, or a function of the previous value.
     let five: JsValue = functional_update(Updater::T(JsValue::from(5.0)), JsValue::from(1.0));
@@ -63,9 +76,9 @@ pub extern "C" fn run() {
     check!(functional_update(Updater::UpdaterFn2(bump), JsValue::from(41.0)).as_f64() == 42.0);
 
     // Names of table functions, split into parent and key.
-    let info = get_function_name_info("column_toggleSorting", None);
+    let info = get_function_name_info("column_toggleSorting");
     check!(info.fn_key() == "toggleSorting" && info.fn_name() == "column.toggleSorting");
-    check!(get_function_name_info("table_setPageIndex", None).fn_name() == "table.setPageIndex");
+    check!(get_function_name_info("table_setPageIndex").fn_name() == "table.setPageIndex");
 
     // Comparing state slices, and own properties.
     let a = object(&[("x", &JsValue::from(1.0))]);
@@ -77,12 +90,12 @@ pub extern "C" fn run() {
     check!(is_function(JsValue(AnyFunction::new(|_: JsValue| {}).0.clone())) && !is_function(1.0));
 
     // The row sort and filter functions are values; their names are known.
-    check!(sort_fn_basic().0 .0 != 0 && sort_fn_text().0 .0 != 0);
-    check!(filter_fn_includes_string().0 .0 != 0);
-    check!(aggregation_fn_sum().0 .0 != 0);
+    check!(sort_fn_basic().0.0 != 0 && sort_fn_text().0.0 != 0);
+    check!(filter_fn_includes_string().0.0 != 0);
+    check!(aggregation_fn_sum().0.0 != 0);
     check!(core_features().core_reactivity_feature().is_none());
-    check!(stock_features().row_sorting_feature().0 .0 != 0);
-    check!(re_split_alpha_numeric().0 .0 != 0);
+    check!(stock_features().row_sorting_feature().0.0 != 0);
+    check!(re_split_alpha_numeric().0.0 != 0);
 
     // A table, built by `constructTable` with the reactivity written here.
     // FINDING 9: `TableOptionsCore` has no setters (its properties are
@@ -94,17 +107,27 @@ pub extern "C" fn run() {
         let value = Rc::new(RefCell::new(initial));
         let (read, write) = (value.clone(), value);
         let get = ColumnColumnFilteringGetFilterValue::new(move || read.borrow().clone());
-        Atom(atom(JsValue(get.0.clone()), Some(Box::new(move |v| {
-            // `set` takes a value, or a function of the previous one.
-            let prev = write.borrow().clone();
-            *write.borrow_mut() = functional_update(Updater::T(v), prev);
-        }))), PhantomData)
+        Atom(
+            atom(
+                JsValue(get.0.clone()),
+                Some(Box::new(move |v| {
+                    // `set` takes a value, or a function of the previous one.
+                    let prev = write.borrow().clone();
+                    *write.borrow_mut() = functional_update(Updater::T(v), prev);
+                })),
+            ),
+            PhantomData,
+        )
     });
     bindings.set_create_writable_atom(&writable);
     // `compute` is made the atom's `get` itself.
-    let readonly = TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| ReadonlyAtom(atom(JsValue(compute.0.clone()), None), PhantomData));
+    let readonly =
+        TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| {
+            ReadonlyAtom(atom(JsValue(compute.0.clone()), None), PhantomData)
+        });
     bindings.set_create_readonly_atom(&readonly);
-    let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
+    let untrack =
+        TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
     bindings.set_untrack(&untrack);
     let run_it = FnFn::new(move |f: VoidFn| {
         call_void_fn(&f);
@@ -117,32 +140,74 @@ pub extern "C" fn run() {
 
     // The data, the columns (plain definitions: `columnHelper.accessor` is a
     // function-valued property and cannot be called), and the options.
-    let person = |name: &str, age: f64| JsValue::from(&object(&[("name", &JsValue::from(name)), ("age", &JsValue::from(age))]));
-    let data = JsArray::<JsValue>::from(vec![person("bo", 30.0), person("al", 20.0), person("cy", 25.0)]);
-    let column = |key: &str, header: &str| JsValue::from(&object(&[("accessorKey", &JsValue::from(key)), ("header", &JsValue::from(header))]));
+    let person = |name: &str, age: f64| {
+        JsValue::from(&object(&[
+            ("name", &JsValue::from(name)),
+            ("age", &JsValue::from(age)),
+        ]))
+    };
+    let data = JsArray::<JsValue>::from(vec![
+        person("bo", 30.0),
+        person("al", 20.0),
+        person("cy", 25.0),
+    ]);
+    let column = |key: &str, header: &str| {
+        JsValue::from(&object(&[
+            ("accessorKey", &JsValue::from(key)),
+            ("header", &JsValue::from(header)),
+        ]))
+    };
     let columns = JsArray::<JsValue>::from(vec![column("name", "Name"), column("age", "Age")]);
-    let sorted_model = JsValue(create_sorted_row_model::<TableFeatures, JsValue>().0.clone());
+    let sorted_model = JsValue(
+        create_sorted_row_model::<TableFeatures, JsValue>()
+            .0
+            .clone(),
+    );
     let reactivity = JsValue(bindings.0.clone());
     let sorting = JsValue(row_sorting_feature().0.clone());
-    let feature_map = object(&[("coreReactivityFeature", &reactivity), ("rowSortingFeature", &sorting), ("sortedRowModel", &sorted_model)]);
-    let options = object(&[("features", &JsValue::from(&feature_map)), ("data", &JsValue(data.0.clone())), ("columns", &JsValue(columns.0.clone()))]);
-    let table = construct_table(&TableOptionsCore::<TableFeatures, JsValue>(options.0.clone(), PhantomData));
-    check!(table.0 .0 != 0);
+    let feature_map = object(&[
+        ("coreReactivityFeature", &reactivity),
+        ("rowSortingFeature", &sorting),
+        ("sortedRowModel", &sorted_model),
+    ]);
+    let options = object(&[
+        ("features", &JsValue::from(&feature_map)),
+        ("data", &JsValue(data.0.clone())),
+        ("columns", &JsValue(columns.0.clone())),
+    ]);
+    let table = construct_table(&TableOptionsCore::<TableFeatures, JsValue>(
+        options.0.clone(),
+        PhantomData,
+    ));
+    check!(table.0.0 != 0);
     let state = table.initial_state();
     let state_h = match &state {
         TableState::TableStateObject(s) => s.0.clone(),
         TableState::TableStateCellSelection2(s) => s.0.clone(),
     };
     check!(state_h.0 != 0);
-    check!(as_array(&MakeObjectMapResult::<JsValue>(state_h, PhantomData).at("sorting").unwrap()).len() == 0);
-    check!(table.options().0 .0 != 0);
+    check!(
+        as_array(
+            &MakeObjectMapResult::<JsValue>(state_h, PhantomData)
+                .at("sorting")
+                .unwrap()
+        )
+        .len()
+            == 0
+    );
+    check!(table.options().0.0 != 0);
 
     // The row model, got by calling the function-valued property: three rows
     // in the data's order.
     let model = table.get_core_row_model();
     let rows = model.rows();
     check!(rows.len() == 3);
-    let name_of = |r: &RowCore<TableFeatures, JsValue>| MakeObjectMapResult::<JsValue>(r.original().0.clone(), PhantomData).at("name").unwrap().as_string();
+    let name_of = |r: &RowCore<TableFeatures, JsValue>| {
+        MakeObjectMapResult::<JsValue>(r.original().0.clone(), PhantomData)
+            .at("name")
+            .unwrap()
+            .as_string()
+    };
     let names: Vec<String> = rows.iter().map(|r| name_of(&r)).collect();
     check!(names == ["bo", "al", "cy"]);
     check!(rows.get(1).id() == "1" && rows.get(1).index() == 1.0 && rows.get(1).depth() == 0.0);
