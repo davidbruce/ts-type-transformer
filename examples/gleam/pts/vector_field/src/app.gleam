@@ -95,7 +95,7 @@ pub fn main() -> Nil {
       Nil
     })
 
-  canvas_space.add(cs, r.dynamic(player))
+  canvas_space.add(cs, t.i_player_or_animate_callback_fn_i_player(player))
   canvas_space.bind_mouse(cs, Some(True), None)
   canvas_space.bind_touch(cs, Some(True), None, None)
   canvas_space.play(cs, None)

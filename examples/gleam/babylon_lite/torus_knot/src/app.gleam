@@ -69,22 +69,22 @@ pub fn main() -> Nil {
           8.5,
           b.vec3(0.0, 1.6, 0.0),
         )
-      b.add_to_scene(scene, br.dynamic(camera))
+      b.add_to_scene(scene, bt.scene_entity_camera(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.75))
       hemispheric_light.set_diffuse_color(hemi, #(0.75, 0.85, 1.0))
       hemispheric_light.set_ground_color(hemi, #(0.12, 0.14, 0.22))
-      b.add_to_scene(scene, br.dynamic(hemi))
+      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
       let dir = b.create_directional_light(#(-1.0, -2.0, -1.2), Some(2.2))
       directional_light.set_diffuse(dir, #(1.0, 0.96, 0.9))
-      b.add_to_scene(scene, br.dynamic(dir))
+      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
       let orb_light = b.create_point_light(#(2.8, 1.6, 0.0), Some(8.0))
       point_light.set_diffuse(orb_light, #(1.0, 0.45, 0.35))
       point_light.set_range(orb_light, 12.0)
-      b.add_to_scene(scene, br.dynamic(orb_light))
+      b.add_to_scene(scene, bt.scene_entity_light_base(orb_light))
 
       let knot_props =
         create_pbr_material_props.create()
@@ -107,7 +107,7 @@ pub fn main() -> Nil {
       let knot = b.create_torus_knot(engine, Some(knot_opts))
       observable_vec3.set(scene_node.get_position(knot), 0.0, 2.0, 0.0)
       mesh.set_material(knot, knot_mat)
-      b.add_to_scene(scene, br.dynamic(knot))
+      b.add_to_scene(scene, bt.scene_entity_mesh(knot))
 
       let orb_props =
         create_pbr_material_props.create()
@@ -127,7 +127,7 @@ pub fn main() -> Nil {
         |> sphere_options.with_segments(32.0)
       let orb = b.create_sphere(engine, Some(orb_opts))
       mesh.set_material(orb, orb_mat)
-      b.add_to_scene(scene, br.dynamic(orb))
+      b.add_to_scene(scene, bt.scene_entity_mesh(orb))
 
       let ground_mat = b.create_grid_material(None)
       let ground_opts =
@@ -136,7 +136,7 @@ pub fn main() -> Nil {
         |> ground_options.with_height(16.0)
       let ground = b.create_ground(engine, Some(ground_opts))
       mesh.set_material(ground, ground_mat)
-      b.add_to_scene(scene, br.dynamic(ground))
+      b.add_to_scene(scene, bt.scene_entity_mesh(ground))
 
       let knot_rot = scene_node.get_rotation(knot)
       let orb_pos = scene_node.get_position(orb)

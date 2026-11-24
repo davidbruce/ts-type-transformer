@@ -81,13 +81,13 @@ pub fn main() -> Nil {
           11.5,
           b.vec3(0.0, 1.6, 0.0),
         )
-      b.add_to_scene(scene, br.dynamic(camera))
+      b.add_to_scene(scene, bt.scene_entity_camera(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.0)), Some(0.42))
       hemispheric_light.set_diffuse_color(hemi, #(0.7, 0.7, 0.7))
       hemispheric_light.set_ground_color(hemi, #(0.08, 0.08, 0.08))
-      b.add_to_scene(scene, br.dynamic(hemi))
+      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
       let spot =
         b.create_spot_light(
@@ -99,11 +99,11 @@ pub fn main() -> Nil {
         )
       spot_light.set_diffuse(spot, #(1.0, 1.0, 1.0))
       spot_light.set_range(spot, 22.0)
-      b.add_to_scene(scene, br.dynamic(spot))
+      b.add_to_scene(scene, bt.scene_entity_light_base(spot))
 
       let fill = b.create_directional_light(#(1.2, -1.5, -1.0), Some(0.65))
       directional_light.set_diffuse(fill, #(0.8, 0.8, 0.8))
-      b.add_to_scene(scene, br.dynamic(fill))
+      b.add_to_scene(scene, bt.scene_entity_light_base(fill))
 
       let floor_opts =
         ground_options.create()
@@ -111,7 +111,7 @@ pub fn main() -> Nil {
         |> ground_options.with_height(18.0)
       let floor = b.create_ground(engine, Some(floor_opts))
       mesh.set_material(floor, mk_std(0.1, 0.25, 24.0))
-      b.add_to_scene(scene, br.dynamic(floor))
+      b.add_to_scene(scene, bt.scene_entity_mesh(floor))
 
       let plinth_mat = mk_std(0.18, 0.3, 32.0)
 
@@ -129,7 +129,7 @@ pub fn main() -> Nil {
           let plinth = b.create_cylinder(engine, Some(copts))
           observable_vec3.set(scene_node.get_position(plinth), x, 0.55, z)
           mesh.set_material(plinth, plinth_mat)
-          b.add_to_scene(scene, br.dynamic(plinth))
+          b.add_to_scene(scene, bt.scene_entity_mesh(plinth))
 
           let v = 0.9 -. fi *. 0.13
           let popts =
@@ -141,7 +141,7 @@ pub fn main() -> Nil {
           let pos = scene_node.get_position(poly)
           observable_vec3.set(pos, x, 2.05, z)
           mesh.set_material(poly, mk_std(v, 0.95, 18.0 +. fi *. 24.0))
-          b.add_to_scene(scene, br.dynamic(poly))
+          b.add_to_scene(scene, bt.scene_entity_mesh(poly))
           #(fi, pos, scene_node.get_rotation(poly), x, z)
         })
 

@@ -87,27 +87,27 @@ pub fn main() -> Nil {
           12.8,
           b.vec3(0.0, 1.4, 0.0),
         )
-      b.add_to_scene(scene, br.dynamic(camera))
+      b.add_to_scene(scene, bt.scene_entity_camera(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.15)), Some(0.55))
       hemispheric_light.set_diffuse_color(hemi, #(0.76, 0.76, 0.76))
       hemispheric_light.set_ground_color(hemi, #(0.1, 0.1, 0.1))
-      b.add_to_scene(scene, br.dynamic(hemi))
+      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
       let dir = b.create_directional_light(#(-1.0, -2.2, -0.8), Some(1.35))
       directional_light.set_diffuse(dir, #(0.9, 0.9, 0.9))
-      b.add_to_scene(scene, br.dynamic(dir))
+      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
       let light1 = b.create_point_light(#(5.2, 4.2, 0.0), Some(10.0))
       point_light.set_diffuse(light1, #(1.0, 1.0, 1.0))
       point_light.set_range(light1, 16.0)
-      b.add_to_scene(scene, br.dynamic(light1))
+      b.add_to_scene(scene, bt.scene_entity_light_base(light1))
 
       let light2 = b.create_point_light(#(-5.2, 3.4, 0.0), Some(7.5))
       point_light.set_diffuse(light2, #(0.78, 0.78, 0.78))
       point_light.set_range(light2, 16.0)
-      b.add_to_scene(scene, br.dynamic(light2))
+      b.add_to_scene(scene, bt.scene_entity_light_base(light2))
 
       let floor_opts =
         ground_options.create()
@@ -115,7 +115,7 @@ pub fn main() -> Nil {
         |> ground_options.with_height(18.0)
       let floor = b.create_ground(engine, Some(floor_opts))
       mesh.set_material(floor, mk_pbr(0.09, 0.1, 0.88))
-      b.add_to_scene(scene, br.dynamic(floor))
+      b.add_to_scene(scene, bt.scene_entity_mesh(floor))
 
       let m0 = mk_pbr(0.22, 0.35, 0.36)
       let m1 = mk_pbr(0.44, 0.35, 0.36)
@@ -146,7 +146,7 @@ pub fn main() -> Nil {
               _ -> m3
             }
             mesh.set_material(m, mat)
-            b.add_to_scene(scene, br.dynamic(m))
+            b.add_to_scene(scene, bt.scene_entity_mesh(m))
             #(
               pos,
               scene_node.get_scaling(m),
@@ -186,7 +186,7 @@ pub fn main() -> Nil {
         list.map([0, 1, 2, 3], fn(k) {
           let cap = b.create_capsule(engine, Some(copts))
           mesh.set_material(cap, cap_mat)
-          b.add_to_scene(scene, br.dynamic(cap))
+          b.add_to_scene(scene, bt.scene_entity_mesh(cap))
           #(
             int.to_float(k),
             scene_node.get_position(cap),

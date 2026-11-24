@@ -419,17 +419,17 @@ pub fn main() -> Nil {
 
       let camera =
         b.create_arc_rotate_camera(0.65, 1.05, 12.0, b.vec3(-0.4, 0.8, 0.0))
-      b.add_to_scene(scene, br.dynamic(camera))
+      b.add_to_scene(scene, bt.scene_entity_camera(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.88, 0.95))
       hemispheric_light.set_ground_color(hemi, #(0.14, 0.14, 0.16))
-      b.add_to_scene(scene, br.dynamic(hemi))
+      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
       let dir = b.create_directional_light(#(-1.0, -2.0, -1.2), Some(2.1))
       directional_light.set_diffuse(dir, #(1.0, 0.97, 0.92))
-      b.add_to_scene(scene, br.dynamic(dir))
+      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
       let ground_opts =
         ground_options.create()
@@ -437,7 +437,7 @@ pub fn main() -> Nil {
         |> ground_options.with_height(20.0)
       let ground = b.create_ground(engine, Some(ground_opts))
       mesh.set_material(ground, b.create_grid_material(None))
-      b.add_to_scene(scene, br.dynamic(ground))
+      b.add_to_scene(scene, bt.scene_entity_mesh(ground))
 
       let ramp_opts =
         box_options.create()
@@ -460,7 +460,7 @@ pub fn main() -> Nil {
         cos(ramp_angle *. 0.5),
       )
       mesh.set_material(ramp_mesh, mk_pbr(0.28, 0.3, 0.34, 0.35, 0.48))
-      b.add_to_scene(scene, br.dynamic(ramp_mesh))
+      b.add_to_scene(scene, bt.scene_entity_mesh(ramp_mesh))
 
       let sopts =
         sphere_options.create()
@@ -468,7 +468,7 @@ pub fn main() -> Nil {
         |> sphere_options.with_segments(24.0)
       let mb = b.create_sphere(engine, Some(sopts))
       mesh.set_material(mb, mk_pbr(0.95, 0.42, 0.28, 0.55, 0.2))
-      b.add_to_scene(scene, br.dynamic(mb))
+      b.add_to_scene(scene, bt.scene_entity_mesh(mb))
       rp_rt.ref_set(
         marble_handle_ref,
         Some(#(
@@ -495,7 +495,7 @@ pub fn main() -> Nil {
             True -> mat_a
             False -> mat_b
           })
-          b.add_to_scene(scene, br.dynamic(m))
+          b.add_to_scene(scene, bt.scene_entity_mesh(m))
           [
             #(scene_node.get_position(m), scene_node.get_rotation_quaternion(m)),
             ..acc
@@ -514,7 +514,7 @@ pub fn main() -> Nil {
         int.range(from: 0, to: cyl_count, with: [], run: fn(acc, _) {
           let m = b.create_cylinder(engine, Some(cyl_opts))
           mesh.set_material(m, cyl_mat)
-          b.add_to_scene(scene, br.dynamic(m))
+          b.add_to_scene(scene, bt.scene_entity_mesh(m))
           [
             #(scene_node.get_position(m), scene_node.get_rotation_quaternion(m)),
             ..acc

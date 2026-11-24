@@ -83,22 +83,22 @@ pub fn main() -> Nil {
           8.8,
           b.vec3(0.0, 2.1, 0.0),
         )
-      b.add_to_scene(scene, br.dynamic(camera))
+      b.add_to_scene(scene, bt.scene_entity_camera(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.85, 0.85))
       hemispheric_light.set_ground_color(hemi, #(0.14, 0.14, 0.14))
-      b.add_to_scene(scene, br.dynamic(hemi))
+      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
       let dir = b.create_directional_light(#(-1.2, -2.0, -1.1), Some(2.1))
       directional_light.set_diffuse(dir, #(1.0, 1.0, 1.0))
-      b.add_to_scene(scene, br.dynamic(dir))
+      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
       let key_light = b.create_point_light(#(3.2, 3.6, 2.4), Some(8.0))
       point_light.set_diffuse(key_light, #(0.92, 0.92, 0.92))
       point_light.set_range(key_light, 14.0)
-      b.add_to_scene(scene, br.dynamic(key_light))
+      b.add_to_scene(scene, bt.scene_entity_light_base(key_light))
 
       let floor_opts =
         ground_options.create()
@@ -106,7 +106,7 @@ pub fn main() -> Nil {
         |> ground_options.with_height(16.0)
       let floor = b.create_ground(engine, Some(floor_opts))
       mesh.set_material(floor, mk_pbr(0.09, 0.1, 0.88))
-      b.add_to_scene(scene, br.dynamic(floor))
+      b.add_to_scene(scene, bt.scene_entity_mesh(floor))
 
       let dopts =
         disc_options.create()
@@ -116,7 +116,7 @@ pub fn main() -> Nil {
       euler_proxy.set_x(scene_node.get_rotation(disc), 1.5707963267948966)
       observable_vec3.set(scene_node.get_position(disc), 0.0, 0.03, 0.0)
       mesh.set_material(disc, mk_pbr(0.22, 0.25, 0.65))
-      b.add_to_scene(scene, br.dynamic(disc))
+      b.add_to_scene(scene, bt.scene_entity_mesh(disc))
 
       let sbopts =
         box_options.create()
@@ -161,7 +161,7 @@ pub fn main() -> Nil {
         |> clear_coat_props.with_roughness(0.1)
       b.set_pbr_clear_coat(mprops, cc)
       mesh.set_material(monolith, b.create_pbr_material(Some(mprops)))
-      b.add_to_scene(scene, br.dynamic(monolith))
+      b.add_to_scene(scene, bt.scene_entity_mesh(monolith))
 
       let cbopts =
         box_options.create()
@@ -181,7 +181,7 @@ pub fn main() -> Nil {
       let core = b.create_mesh_from_csg(engine, core_solid, Some("core"))
       observable_vec3.set(scene_node.get_position(core), 0.0, 2.15, 0.0)
       mesh.set_material(core, mk_pbr(0.18, 0.85, 0.16))
-      b.add_to_scene(scene, br.dynamic(core))
+      b.add_to_scene(scene, bt.scene_entity_mesh(core))
 
       let otopts =
         torus_options.create()
@@ -191,7 +191,7 @@ pub fn main() -> Nil {
       let outer_ring = b.create_torus(engine, Some(otopts))
       observable_vec3.set(scene_node.get_position(outer_ring), 0.0, 2.15, 0.0)
       mesh.set_material(outer_ring, mk_pbr(0.55, 0.8, 0.25))
-      b.add_to_scene(scene, br.dynamic(outer_ring))
+      b.add_to_scene(scene, bt.scene_entity_mesh(outer_ring))
 
       let itopts =
         torus_options.create()
@@ -201,7 +201,7 @@ pub fn main() -> Nil {
       let inner_ring = b.create_torus(engine, Some(itopts))
       observable_vec3.set(scene_node.get_position(inner_ring), 0.0, 2.15, 0.0)
       mesh.set_material(inner_ring, mk_pbr(0.88, 0.4, 0.3))
-      b.add_to_scene(scene, br.dynamic(inner_ring))
+      b.add_to_scene(scene, bt.scene_entity_mesh(inner_ring))
 
       let mono_rot = scene_node.get_rotation(monolith)
       let core_rot = scene_node.get_rotation(core)

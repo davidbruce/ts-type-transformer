@@ -241,8 +241,7 @@ impl<'m> Gen<'m> {
                     while JS_RESERVED.contains(&val_param.as_str()) || val_param == "self" {
                         val_param.push('_');
                     }
-                    let val_ty_str = self.ty(&val_ty);
-                    let val_js = self.from_gleam(&val_ty, &val_param);
+                    let (val_ty_str, val_js) = self.going_in(|| (self.ty(&val_ty), self.from_gleam(&val_ty, &val_param)));
                     *self.open.borrow_mut() = None;
                     let mut params = vec![format!("self: {self_ty}"), format!("{val_param}: {val_ty_str}")];
                     let mut js_params = vec!["self".to_string(), val_param.clone()];
@@ -297,9 +296,10 @@ impl<'m> Gen<'m> {
                         while JS_RESERVED.contains(&pid.as_str()) || !taken.insert(pid.clone()) {
                             pid.push('_');
                         }
-                        params.push(format!("{pid}: {}", self.ty(t)));
+                        let (ty, js) = self.going_in(|| (self.ty(t), self.from_gleam(t, &pid)));
+                        params.push(format!("{pid}: {ty}"));
                         js_params.push(pid.clone());
-                        arg_js.push(self.from_gleam(t, &pid));
+                        arg_js.push(js);
                     }
                     *self.open.borrow_mut() = None;
                     for p in self.crossing_params(&wf, Some((&c.name, &c.type_params))) {

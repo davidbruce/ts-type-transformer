@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use roxmltree::Document;
@@ -90,6 +90,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         parents: m.classes.iter().filter_map(|c| parent(&m, c).map(|p| (c.name.clone(), p))).collect(),
         class_bound: HashMap::new(),
         open: RefCell::new(None),
+        going_in: Cell::new(false),
         bound: RefCell::default(),
         fixed_params: RefCell::default(),
         bound_lists: RefCell::default(),
@@ -141,9 +142,9 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         name_type(o, &mut g);
     }
     g.types.insert("PromiseLike".into(), "Promise".into());
-    // A variant by its own name where that is free, else its type's and its own.
+    // A variant by its type's name and its own.
     let mut variant_names: Vec<(String, usize, String)> = Vec::new();
-    for u in m.unions.iter().filter(|u| u.decodable()) {
+    for u in m.unions.iter().filter(|u| u.decodable() || u.typable()) {
         for (i, p) in u.parts.iter().enumerate() {
             let own = match p {
                 Ty::Num => "Number".to_string(),
@@ -394,7 +395,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
             g.to_gleam(&c.ret, &format!("f({})", into_js.join(", "))),
         );
     }
-    for u in m.unions.iter().filter(|u| u.decodable()) {
+    for u in m.unions.iter().filter(|u| u.decodable() || u.typable()) {
         g.union(u);
     }
     // Each type's codec, beside it. A handle crosses as it is; an enum, a

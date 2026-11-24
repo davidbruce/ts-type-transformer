@@ -10,7 +10,6 @@ import pts/i_player
 import pts/num
 import pts/polygon
 import pts/pt
-import pts/runtime as r
 import pts/types as t
 
 @external(javascript, "./app_ffi.mjs", "sin")
@@ -137,7 +136,7 @@ pub fn main() -> Nil {
       Nil
     })
 
-  canvas_space.add(cs, r.dynamic(player))
+  canvas_space.add(cs, t.i_player_or_animate_callback_fn_i_player(player))
   canvas_space.bind_mouse(cs, Some(True), None)
   canvas_space.bind_touch(cs, Some(True), None, None)
   canvas_space.play(cs, None)

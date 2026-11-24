@@ -375,7 +375,7 @@ pub fn main() {
         let ha =
           attrs.create()
           |> attrs.with_at("level", dynamic.int(2))
-        transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), ht, Some(pm_rt.dynamic(ha)))
+        transform.set_block_type(tr, selection.get_from(sel), Some(selection.get_to(sel)), ht, Some(t.attrs_or_transform_set_block_type_attrs_attrs(ha)))
         pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }
     }

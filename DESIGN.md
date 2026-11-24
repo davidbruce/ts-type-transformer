@@ -424,7 +424,10 @@ the time control returns to JavaScript is reported, not lost.
   types only. A name JavaScript reserves is `new_` in the FFI. Each has an FFI module that calls the API and
   converts what Gleam holds otherwise:
   an `Option(a)` for a nullable value or optional argument, a `List(a)` for an
-  array, custom types for unions and string enums, a Gleam function for a
+  array, custom types for unions and string enums (a union no test tells
+  apart is one where a value goes in, a parameter or a setter's, and
+  `Dynamic` where one comes out; a variant holding a class is made of any
+  subtype, `scene_entity_camera(cam)`), a Gleam function for a
   callback (the same JavaScript function each time), `Promise(a)` to
   `promise_then`, `attempt` for an exception. Generics are Gleam's, without
   constraints. Gleam's values of a type parameter are not JavaScript's when

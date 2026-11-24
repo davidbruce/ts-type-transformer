@@ -1,8 +1,8 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::bounds::generic_args;
-use super::{codec_var, lower, relative, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
+use super::{codec_var, lower, relative, snake, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
 use super::super::comments::{Style, comment};
 use super::super::js::{call_expr, js_test, trim_trailing_undef};
 use super::super::model::{mentions, subst, Class, Func, Model, NamedUnion, TParam, Ty};
@@ -41,6 +41,9 @@ pub(super) struct Gen<'m> {
     // `Element(Nil)`, that type and no more (what comes back, what a callback
     // is given, what a list or variant holds).
     pub open: RefCell<Option<usize>>,
+    // Where a value goes into JavaScript (a parameter, a setter's value): a
+    // union no test tells apart is its own type there, `Dynamic` elsewhere.
+    pub going_in: Cell<bool>,
     // A function's own or class-bound type parameters bound to a class (`T extends Node`):
     // that class, open in the parameter's variable.
     pub bound: RefCell<HashMap<String, (String, Vec<Ty>)>>,
@@ -177,9 +180,23 @@ impl<'m> Gen<'m> {
     // `f`, with class types closed.
     pub(super) fn closed<T>(&self, f: impl FnOnce() -> T) -> T {
         let was = self.open.replace(None);
+        let in_was = self.going_in.replace(false);
         let out = f();
         *self.open.borrow_mut() = was;
+        self.going_in.set(in_was);
         out
+    }
+
+    // `f`, for a value going into JavaScript.
+    pub(super) fn going_in<T>(&self, f: impl FnOnce() -> T) -> T {
+        let was = self.going_in.replace(true);
+        let out = f();
+        self.going_in.set(was);
+        out
+    }
+
+    fn made_in(&self, n: &str) -> bool {
+        self.going_in.get() && self.m.unions.iter().any(|u| u.name == n && !u.decodable() && u.typable())
     }
 
     // A class's type with its arguments (using parameter defaults, or `Dynamic`
@@ -300,7 +317,7 @@ impl<'m> Gen<'m> {
                 self.note("Option");
                 format!("Option({})", self.ty(inner))
             }
-            Ty::NamedUnion(n) if self.decodable(n) => self.bare(n),
+            Ty::NamedUnion(n) if self.decodable(n) || self.made_in(n) => self.bare(n),
             Ty::NamedUnion(_) => dynamic(),
             Ty::Param(n) => {
                 if let Some((class, args)) = self.bound.borrow().get(n).cloned() {
@@ -427,7 +444,7 @@ impl<'m> Gen<'m> {
             Ty::ArrayOf(e) => format!("{x}.toArray().map((v) => {})", self.from_gleam(e, "v")),
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.from_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
             Ty::Enum(n) | Ty::NumEnum(n) => format!("$T.{}_from({x})", self.tname(n)),
-            Ty::NamedUnion(n) if self.decodable(n) => format!("$T.{}_from({x})", self.tname(n)),
+            Ty::NamedUnion(n) if self.decodable(n) || self.made_in(n) => format!("$T.{}_from({x})", self.tname(n)),
             Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("$T.{}_from({x}{})", self.tname(n), self.codec_args(n, args)),
             Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("$T.{}_from({x}{})", self.tname(n), self.codec_args(n, generic_args(t))),
             Ty::Generic(n, args) if (n == "Promise" || n == "PromiseLike") && args.len() == 1 => {
@@ -550,10 +567,9 @@ impl<'m> Gen<'m> {
                 id.push('_');
             }
             let last_rest = f.rest && i == f.params.len() - 1;
-            let param_ty = self.ty(t);
+            let (param_ty, value) = self.going_in(|| (self.ty(t), self.from_gleam(t, &id)));
             params.push(format!("{id}: {param_ty}"));
             js_params.push(id.clone());
-            let value = self.from_gleam(t, &id);
             args.push(if last_rest { format!("...({value} ?? [])") } else { value });
             may_undef.push(!last_rest && matches!(t, Ty::Nullable(_, true)));
         }
@@ -588,10 +604,30 @@ impl<'m> Gen<'m> {
     // A union as a custom type, and its conversions: told apart by its tests.
     pub(super) fn union(&mut self, u: &NamedUnion) {
         let name = self.tname(&u.name);
+        // Made of a member where it goes in, never read back: no decoder.
+        let decodes = u.decodable();
         let params = Self::type_params(&u.type_params);
         let variants: Vec<String> = (0..u.parts.len()).map(|i| self.variants[&(u.name.clone(), i)].clone()).collect();
-        let cases: Vec<String> = u.parts.iter().zip(&variants).map(|(p, v)| format!("  {v}({})", self.ty(p))).collect();
+        let cases: Vec<String> = u.parts.iter().zip(&variants).map(|(p, v)| format!("  {v}({})", if decodes { self.ty(p) } else { self.going_in(|| self.ty(p)) })).collect();
         self.out += &format!("pub type {name}{params} {{\n{}\n}}\n\n", cases.join("\n"));
+        // A variant holding a class, made of any subtype: `scene_entity_camera(cam)`,
+        // not `SceneEntityCamera(camera.upcast(cam))`.
+        if u.type_params.is_empty() {
+            for (p, v) in u.parts.iter().zip(&variants) {
+                let payload = |g: &Self| if decodes { g.ty(p) } else { g.going_in(|| g.ty(p)) };
+                let closed = payload(self);
+                *self.open.borrow_mut() = Some(0);
+                let open = payload(self);
+                *self.open.borrow_mut() = None;
+                let id = snake(v);
+                if open == closed || id.ends_with("_codec") {
+                    continue;
+                }
+                let id = self.fresh_value(&id);
+                self.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(x: {open}) -> {name}\n\n", self.own_ffi());
+                self.ffi += &format!("export function {id}(x) {{\n  return new B.{v}(x);\n}}\n");
+            }
+        }
         // A library's name for it, where that is free.
         if u.type_params.is_empty() {
             let mut seen = HashSet::new();
@@ -611,7 +647,11 @@ impl<'m> Gen<'m> {
             }
         }
         to += &fallback.unwrap_or_else(|| format!("  throw new TypeError(\"not a {name}: \" + v);\n"));
-        let from: String = u.parts.iter().zip(&variants).map(|(p, v)| format!("  if (u instanceof B.{v}) return {};\n", self.from_gleam(p, "u[0]"))).collect();
+        let from: String = u.parts.iter().zip(&variants).map(|(p, v)| format!("  if (u instanceof B.{v}) return {};\n", if decodes { self.from_gleam(p, "u[0]") } else { self.going_in(|| self.from_gleam(p, "u[0]")) })).collect();
+        if !decodes {
+            self.ffi += &format!("export function {name}_from(u) {{\n{from}}}\n");
+            return;
+        }
         let codecs: String = self.union_codecs[&u.name].iter().map(|&i| format!(", {}", codec_var(&u.type_params[i].name))).collect();
         self.ffi += &format!("export function {name}_to(v{codecs}) {{\n{to}}}\nexport function {name}_from(u{codecs}) {{\n{from}}}\n");
     }

@@ -356,17 +356,17 @@ pub fn main() -> Nil {
 
       let camera =
         b.create_arc_rotate_camera(0.85, 1.12, 11.5, b.vec3(0.0, 1.5, 0.0))
-      b.add_to_scene(scene, br.dynamic(camera))
+      b.add_to_scene(scene, bt.scene_entity_camera(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
       let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.72))
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.88, 0.95))
       hemispheric_light.set_ground_color(hemi, #(0.14, 0.14, 0.16))
-      b.add_to_scene(scene, br.dynamic(hemi))
+      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
 
       let dir = b.create_directional_light(#(-1.0, -2.0, -1.2), Some(2.1))
       directional_light.set_diffuse(dir, #(1.0, 0.97, 0.92))
-      b.add_to_scene(scene, br.dynamic(dir))
+      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
 
       let ground_opts =
         ground_options.create()
@@ -374,7 +374,7 @@ pub fn main() -> Nil {
         |> ground_options.with_height(20.0)
       let ground = b.create_ground(engine, Some(ground_opts))
       mesh.set_material(ground, b.create_grid_material(None))
-      b.add_to_scene(scene, br.dynamic(ground))
+      b.add_to_scene(scene, bt.scene_entity_mesh(ground))
 
       let mat0 = mk_pbr(0.86, 0.86, 0.86, 0.15, 0.45)
       let mat1 = mk_pbr(0.58, 0.58, 0.6, 0.25, 0.38)
@@ -400,7 +400,7 @@ pub fn main() -> Nil {
             _ -> mat2
           }
           mesh.set_material(m, mat)
-          b.add_to_scene(scene, br.dynamic(m))
+          b.add_to_scene(scene, bt.scene_entity_mesh(m))
           [
             #(scene_node.get_position(m), scene_node.get_rotation_quaternion(m)),
             ..acc
@@ -415,7 +415,7 @@ pub fn main() -> Nil {
         |> sphere_options.with_segments(24.0)
       let sm = b.create_sphere(engine, Some(sopts))
       mesh.set_material(sm, mk_pbr(0.95, 0.42, 0.28, 0.55, 0.22))
-      b.add_to_scene(scene, br.dynamic(sm))
+      b.add_to_scene(scene, bt.scene_entity_mesh(sm))
       rp_rt.ref_set(
         striker_handle_ref,
         Some(#(
