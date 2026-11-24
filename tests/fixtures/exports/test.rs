@@ -32,4 +32,11 @@ pub extern "C" fn run() {
     // A union told apart by the classes as exported.
     check!(matches!(pick(0.0), FigureOrBadge::Figure(f) if f.size() == 2.0));
     check!(matches!(pick(1.0), FigureOrBadge::Badge(_)));
+
+    // A tuple is told apart as an array, not by `toString`, which every object has.
+    check!(matches!(locate(0.0), PairOrPoint::Array(_)));
+    check!(matches!(locate(1.0), PairOrPoint::Point(_)));
+
+    // Rollup's namespace, by the name it is exported as: `util.half`.
+    check!(util::half(4.0) == 2.0 && util::twice().call(4.0) == 8.0);
 }

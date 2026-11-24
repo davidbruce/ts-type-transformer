@@ -109,6 +109,14 @@ const KEYWORDS: &[&str] = &[
     "h",
 ];
 
+// The C library's functions a WASI program has at global scope.
+pub(super) const LIBC_GLOBALS: &[&str] = &[
+    "abort", "abs", "acos", "asin", "atan", "atan2", "atexit", "bsearch", "calloc", "ceil", "clock", "cos", "ctime", "difftime", "div", "exit",
+    "exp", "fabs", "floor", "fmod", "free", "getenv", "gmtime", "labs", "localtime", "log", "malloc", "memcpy", "memset", "mktime", "perror",
+    "pow", "printf", "puts", "qsort", "raise", "rand", "realloc", "remove", "rename", "round", "signal", "sin", "sprintf", "sqrt", "srand",
+    "strftime", "strlen", "system", "tan", "time", "tolower", "toupper", "trunc",
+];
+
 pub(super) fn ident(name: &str) -> String {
     let s = super::model::ident(name);
     if KEYWORDS.contains(&s.as_str()) { format!("{s}_") } else { s }

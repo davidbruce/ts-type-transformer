@@ -86,7 +86,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     // A namespace's types, also by their own names in it.
     let (namespaces, in_structs) = namespace_aliases(m, &ns_prefix, &cx);
     // A namespace's functions where it is a class's: its statics, by their own names.
-    let containers = namespace_containers(m);
+    let containers = namespace_containers(m, ns_prefix.is_empty());
     let levels = level_names(m);
     let mut class_statics: HashMap<String, Vec<Func>> = HashMap::new();
     let mut class_statics_of: HashSet<String> = HashSet::new();

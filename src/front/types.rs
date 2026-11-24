@@ -468,6 +468,11 @@ impl<'c> Front<'c> {
                 let s = self.c.get_merged_symbol_exported(r.sym?);
                 match r.kind {
                     "enum" => None,
+                    // An alias of an array or a tuple (leaflet's `LatLngTuple`) is an array.
+                    "typeAlias" => {
+                        let t = self.c.get_declared_type_of_symbol_exported(s);
+                        (self.c.is_array_type_exported(t) || tsrs_checker::is_tuple_type_exported(t)).then_some(Test::Array)
+                    }
                     // An interface that is only a call signature is a function.
                     "interface" if {
                         let t = self.c.get_declared_type_of_symbol_exported(s);

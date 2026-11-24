@@ -77,7 +77,36 @@ pub(super) fn shift(args: &str) -> String {
 
 // The identifiers in F# source.
 pub(super) fn words(src: &str) -> HashSet<&str> {
-    src.split(|c: char| !(c.is_alphanumeric() || c == '_')).filter(|w| !w.is_empty()).collect()
+    // Not in a string or a comment: an `Emit`'s `"time"` names no type.
+    let b = src.as_bytes();
+    let mut out = HashSet::new();
+    let (mut i, mut start) = (0, None);
+    while i < b.len() {
+        let c = b[i];
+        if c.is_ascii_alphanumeric() || c == b'_' || c >= 0x80 {
+            start.get_or_insert(i);
+            i += 1;
+            continue;
+        }
+        if let Some(s) = start.take() {
+            out.insert(&src[s..i]);
+        }
+        if c == b'"' {
+            i += 1;
+            while i < b.len() && b[i] != b'"' {
+                i += if b[i] == b'\\' { 2 } else { 1 };
+            }
+        } else if c == b'/' && b.get(i + 1) == Some(&b'/') {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+        }
+        i += 1;
+    }
+    if let Some(s) = start {
+        out.insert(&src[s..]);
+    }
+    out
 }
 
 // A JavaScript built-in as Fable has it: `JS.Date`; an Error is an F#

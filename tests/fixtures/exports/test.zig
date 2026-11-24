@@ -34,4 +34,11 @@ export fn run() void {
         else => expect(false, @src()),
     }
     expect(b.pick(1) == .Badge, @src());
+
+    // A tuple is told apart as an array, not by `toString`, which every object has.
+    expect(b.locate(0) == .array, @src());
+    expect(b.locate(1) == .Point, @src());
+
+    // Rollup's namespace, by the name it is exported as: `util.half`.
+    expect(b.util.half(4) == 2 and b.util.getTwice().call(4) == 8, @src());
 }

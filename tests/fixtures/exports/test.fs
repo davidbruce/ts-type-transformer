@@ -32,4 +32,14 @@ let kind (v: FigureOrBadge) =
 check (kind (pick 0.0) = "figure 2") "instanceof the imported Figure"
 check (kind (pick 1.0) = "badge b") "instanceof the imported Badge"
 
+// A tuple is told apart as an array, not by `toString`, which every object has.
+let shape (v: PairOrPoint) =
+    match v with
+    | PairOrPoint.Pair _ -> "pair"
+    | PairOrPoint.Point _ -> "point"
+check (shape (locate 0.0) = "pair" && shape (locate 1.0) = "point") "a tuple is an array"
+
+// Rollup's namespace, by the name it is exported as: `util.half`.
+check (util.half 4.0 = 2.0 && util.twice 4.0 = 8.0) "a namespace's re-exports"
+
 printfn "%d checks passed" passed

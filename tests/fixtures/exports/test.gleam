@@ -5,6 +5,7 @@ import gleam/io
 import bindings/badge
 import bindings/figure
 import bindings/point
+import bindings/namespaces/util
 
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -32,6 +33,13 @@ pub fn main() {
   let assert t.FigureOrBadgeFigure(fig) = b.pick(0.0)
   check(figure.get_size(fig) == 2.0, "instanceof Figure")
   let assert t.FigureOrBadgeBadge(_) = b.pick(1.0)
+
+  // A tuple is told apart as an array, not by `toString`, which every object has.
+  let assert t.PairOrPointArray(_) = b.locate(0.0)
+  let assert t.PairOrPointPoint(_) = b.locate(1.0)
+
+  // Rollup's namespace, by the name it is exported as: `util.half`.
+  check(util.half(4.0) == 2.0 && util.get_twice()(4.0) == 8.0, "a namespace's re-exports")
 
   io.println("checks passed")
 }

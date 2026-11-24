@@ -284,8 +284,15 @@ impl<'c> Front<'c> {
                     _ => {}
                 }
             // A namespace is reached by what contains it: `path.posix` is `path` by
-            // another name, not a rename of it.
-            } else if exported != name && !matches!(d, Decl::Namespace(_)) {
+            // another name, not a rename of it; one only exported by another
+            // name (rollup's `color_d`, exported as `color`) is known by it.
+            } else if let Decl::Namespace(n) = d {
+                if exported != name && !declared.contains(&exported) {
+                    n.name = exported.clone();
+                    declared.insert(exported.clone());
+                    renames.push((name, exported));
+                }
+            } else if exported != name {
                 if !declared.contains(&exported) {
                     renames.push((name, exported));
                 } else if !plain.contains(&exported) && !by_name.contains_key(&exported) && !renames.iter().any(|(_, n)| *n == name || *n == exported) {
@@ -522,6 +529,33 @@ impl<'c> Front<'c> {
         }
     }
 
+    // A variable or function `export { local as exported }` brings into a
+    // namespace, by its exported name: false when it is not one, is out
+    // already, or is exported by its own module too (node's `finished`, also
+    // `finished.__promisify__`), where it stays.
+    fn emit_as(&mut self, alias: P<Symbol>, out: &mut Vec<Decl>) -> bool {
+        let target = self.resolve_alias(alias);
+        let value = SymbolFlags::Variable | SymbolFlags::Function;
+        if !target.flags().intersects(value) || target.flags().intersects(!value & SymbolFlags::Value) || self.c.get_parent_of_symbol_exported(target).is_some() {
+            return false;
+        }
+        let before = out.len();
+        // The value only: `graphic_d_Arc` is a type too, which stays where it is.
+        for d in target.declarations().to_vec() {
+            if matches!(d.kind(), Kind::VariableDeclaration | Kind::FunctionDeclaration) && ts_ast::get_source_file_of_node(d).is_some_and(|f| self.is_package_file(&f)) {
+                self.emit_decl_node(d, out);
+            }
+        }
+        for d in &mut out[before..] {
+            match d {
+                Decl::Var(v) => (v.name, v.js_name) = (alias.name().to_string(), None),
+                Decl::Function(f) => (f.name, f.js_name) = (alias.name().to_string(), None),
+                _ => {}
+            }
+        }
+        out.len() > before
+    }
+
     fn emit_symbol(&mut self, sym: P<Symbol>, out: &mut Vec<Decl>) {
         let decls: Vec<P<Node>> = sym.declarations().to_vec();
         for d in decls {
@@ -655,10 +689,16 @@ impl<'c> Front<'c> {
                         }
                     }
                     Some(clause) if clause.kind() == Kind::NamedExports => {
+                        // A namespace's (`namespace color_d { export { color_d_parse as parse } }`):
+                        // a value is reached through it, by the name it exports.
+                        let in_namespace = ed.module_specifier().is_none()
+                            && s.parent().is_some_and(|b| b.kind() == Kind::ModuleBlock && b.parent().and_then(|m| m.name()).is_some_and(|n| n.kind() != Kind::StringLiteral));
                         for &spec in clause.as_named_exports().elements().nodes() {
-                            if let Some(sym) = self.c.get_symbol_of_declaration_exported(spec) {
-                                self.enqueue_symbol(sym);
+                            let Some(sym) = self.c.get_symbol_of_declaration_exported(spec) else { continue };
+                            if in_namespace && self.emit_as(sym, out) {
+                                continue;
                             }
+                            self.enqueue_symbol(sym);
                         }
                     }
                     Some(clause) if clause.kind() == Kind::NamespaceExport => {

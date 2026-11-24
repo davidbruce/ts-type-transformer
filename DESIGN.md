@@ -465,11 +465,15 @@ Every union member says how to recognise it at runtime, whatever the config:
 </union>
 ```
 
-`instanceof` is given for classes with a global constructor, `has:` for the
-first required property no other member has, `tag:` when one required
-property has a distinct literal value in every member. F# turns these into
-`[<Erase>]` unions with `CaseTest`s or `[<TypeScriptTaggedUnion>]`; the wasm
-glue into a tag function, so Zig can `switch` on a union a call returns.
+`instanceof` is given for classes with a global constructor, `array` for
+arrays and tuples (an alias of one too), `has:` for the first required
+property no other member has, never one every object has (`toString`), `tag:`
+when one required property has a distinct literal value in every member. F#
+turns these into `[<Erase>]` unions with `CaseTest`s or
+`[<TypeScriptTaggedUnion>]`, named however many members no test tells apart:
+any member converts to it, and a case without a test of its own matches by
+Fable's guess. The wasm glue makes a tag function, so Zig can `switch` on a
+union a call returns.
 A library's alias of a named union (`type Wrapped = Content`) is declared as
 the target's own alias (`typedef`, `using`, `pub const`, `pub type`, an F#
 abbreviation).
@@ -528,6 +532,11 @@ Names too long are cut in the middle; a number is the last resort.
 Bundled declarations take their exported names: rollup's
 `BarSeriesOption$1`, exported as `BarSeriesOption`, swaps names with the
 local interface; an unused `$N` is pruned, a used one drops `$N` if free.
+Its namespace of locals (`namespace color_d { export { color_d_parse as
+parse } }`, exported as `color`) is `color`, with `parse` in it, reached as
+`echarts.color.parse`: what a module exports itself stays its own (node's
+`finished`, also `finished.__promisify__`). At global scope, C++ keeps such a
+namespace clear of the C library (`time_ns`).
 F# delegates are named by their place (`MkdirCallback`), then their types.
 
 ## Provenance
@@ -651,9 +660,9 @@ and `wrong.cpp` (which must not compile), `fsharp_checks_constraints` and
 - 8 DOM unions have members no runtime test can tell apart (two array types,
   `ArrayBufferLike | ArrayBufferView`): bound as untyped values, in C and
   Rust typed where a value goes in. A union with an `any` member is `any`.
-- F# on Pts erases 7 unions whose members no test tells apart (`U3<...>`,
-  matched by nothing). Namespaced
-  classes of a module library are still tested through `globalThis`.
+- F# matches a union's cases no test tells apart (Pts' 7, Pixi's fills) by
+  Fable's guess. Namespaced classes of a module library are still tested
+  through `globalThis`.
 - F# has no `SharedArrayBuffer` or `BigUint64Array` of Fable's: they are
   opaque. A built-in as a base type stays opaque too (`Pt` extends an opaque
   `Float32Array`): an F# interface cannot inherit Fable's.

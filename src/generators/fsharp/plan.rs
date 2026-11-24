@@ -409,6 +409,11 @@ pub(super) fn declared_files(root: Node, plan: &[Vec<String>], units: &HashMap<S
         if d.has_tag_name("var") || d.has_tag_name("function") {
             continue;
         }
+        // A namespace of values only (ECharts' `color`) is no type's: by its
+        // name, a property `color` would place what has it after it.
+        if d.has_tag_name("namespace") && !d.descendants().any(|t| ["interface", "class", "typeAlias", "enum"].iter().any(|k| t.has_tag_name(*k))) {
+            continue;
+        }
         if let Some(&f) = units.get(n).and_then(|u| file.get(u.as_str())) {
             out.insert(n.to_string(), f);
             out.insert(format!("{n}Static"), f);

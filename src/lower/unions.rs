@@ -350,10 +350,13 @@ fn discriminant_tests(shapes: &[Option<PropShapes>]) -> Option<(String, Vec<Opti
 }
 
 // A required property of member `i` that no other member has.
+// Every object has these (`"toString" in v` always holds): they tell nothing apart.
+const OBJECT_PROTOTYPE: [&str; 7] = ["constructor", "hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toLocaleString", "toString", "valueOf"];
+
 pub(super) fn unique_property(shapes: &[Option<PropShapes>], i: usize) -> Option<String> {
     let own = shapes[i].as_ref()?;
     own.iter()
-        .filter(|f| !f.1)
+        .filter(|f| !f.1 && !OBJECT_PROTOTYPE.contains(&f.0.as_str()))
         .find(|f| shapes.iter().enumerate().all(|(j, s)| j == i || s.as_ref().is_none_or(|s| !s.iter().any(|g| g.0 == f.0))))
         .map(|f| f.0.clone())
 }

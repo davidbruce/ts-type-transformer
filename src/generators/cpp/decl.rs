@@ -505,7 +505,7 @@ pub(super) fn namespace_aliases(m: &Model, ns_prefix: &str, cx: &Ctx) -> (String
     let mut in_structs: HashMap<String, String> = HashMap::new();
     let _ = taken;
     let tops: BTreeSet<&String> = entries.iter().map(|(p, _, _)| &p[0]).collect();
-    let containers = namespace_containers(m);
+    let containers = namespace_containers(m, ns_prefix.is_empty());
     for top in tops {
         match &containers[top] {
             Container::Class(c) => {
@@ -549,7 +549,9 @@ pub(super) enum Container {
     Namespace(String),
 }
 
-pub(super) fn namespace_containers(m: &Model) -> HashMap<String, Container> {
+// At global scope (no package namespace), a namespace keeps clear of the C
+// library's functions there: ECharts' `time` is `time_ns` beside `::time`.
+pub(super) fn namespace_containers(m: &Model, global: bool) -> HashMap<String, Container> {
     // Each top-level namespace's own names, directly in it.
     let mut own: BTreeMap<String, HashSet<String>> = BTreeMap::new();
     for path in m.namespaced.values() {
@@ -567,6 +569,9 @@ pub(super) fn namespace_containers(m: &Model) -> HashMap<String, Container> {
     let mut taken: HashSet<String> = m.classes.iter().map(|c| c.name.clone()).chain(m.callbacks.iter().map(|c| c.name.clone())).chain(m.unions.iter().map(|u| u.name.clone())).collect();
     taken.extend(m.enums.iter().map(|e| e.0.clone()).chain(m.num_enums.iter().map(|e| e.0.clone())).chain(m.opaque.iter().cloned()));
     taken.extend(m.funcs.iter().filter(|f| !m.func_namespaces.contains_key(&f.import)).map(|f| cpp_name(f, "create")).chain(m.maps.iter().map(|k| format!("{}Keys", k.name))).chain(["ts".to_string()]));
+    if global {
+        taken.extend(super::LIBC_GLOBALS.iter().map(|n| n.to_string()));
+    }
     let mut out = HashMap::new();
     for (top, names) in own {
         let class = m.classes.iter().find(|c| c.name == top && !m.namespaced.contains_key(&c.name));

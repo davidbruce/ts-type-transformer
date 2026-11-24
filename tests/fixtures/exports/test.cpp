@@ -21,4 +21,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // A union told apart by the classes as exported.
     CHECK(std::holds_alternative<Figure>(pick(0)) && std::get<Figure>(pick(0)).size() == 2);
     CHECK(std::holds_alternative<Badge>(pick(1)));
+
+    // A tuple is told apart as an array, not by `toString`, which every object has.
+    CHECK((std::holds_alternative<ts::Tuple<double, double>>(locate(0))));
+    CHECK(std::holds_alternative<Point>(locate(1)));
+
+    // Rollup's namespace, by the name it is exported as: `util.half`.
+    CHECK(util::half(4) == 2 && util::get_twice()(4) == 8);
 }

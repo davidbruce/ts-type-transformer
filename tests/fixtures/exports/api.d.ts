@@ -10,3 +10,13 @@ export declare const LIMIT: number;
 export declare let counter: number;
 export declare function bump(): number;
 export declare function pick(i: number): Shape | Badge;
+// A tuple is an array: `"toString" in v` would hold for any object.
+export type Pair = [number, number];
+export declare function locate(i: number): Pair | Point;
+// Rollup's namespace of locals, exported by another name: `util.twice`.
+declare const util_d_twice: (n: number) => number;
+declare function util_d_half(n: number): number;
+declare namespace util_d {
+    export { util_d_twice as twice, util_d_half as half };
+}
+export { util_d as util };
