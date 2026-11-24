@@ -15,6 +15,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(s.kind() == Shape_kind::square);
     CHECK(Shape::create(Shape_kind::circle, 1).kind() == Shape_kind::circle);
 
+    // `new Shape(..)` is also `Shape(..)`; a copy is the same object, not a new one.
+    Shape t(Shape_kind::square, 2);
+    Shape same = t;
+    CHECK(t.area() == 4 && same == t);
+
     // Properties: a getter and a setter of the same name.
     s.size(4);
     CHECK(s.size() == 4);

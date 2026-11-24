@@ -318,10 +318,12 @@ the time control returns to JavaScript is reported, not lost.
   `JsValue`. Handles are released one by one or by scope
   (`js_scope_open()`/`js_scope_close()`), or by `js_scope();`, which
   closes where its block is left, on any path.
-  The DOM: 10 MB.
+  The DOM: 21 MB of headers.
 - C++ (C++20, WASI SDK): headers include each other by their path from the
   bindings' root, so they are compiled with `-I` on it. A value type per JavaScript type, inheriting
-  virtually from `ts::Handle`; copies retain, destructors release. Overloads,
+  virtually from `ts::Handle`; copies retain, destructors release. `new X(a, b)`
+  is `X(a, b)` as well as `X::create(a, b)` (a class template's arguments its
+  defaults: `Mesh(geometry, material)`); `X()` is the null handle. Overloads,
   `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`, lambdas
   (`release()`, `ts::Scoped`), class templates with defaults and
   `requires`-clauses, keyed methods over typed keys, `co_await` on promises
@@ -343,7 +345,7 @@ the time control returns to JavaScript is reported, not lost.
   typed where a value goes in, in an array too (`ts::Array<Loose>`), and
   what comes back is a `ts::Value`; a `ts::Array<>` takes any array. A
   variable initialized from a template's value needs no argument list
-  (`Polyline line = leaflet::polyline(..)`). 7 MB.
+  (`Polyline line = leaflet::polyline(..)`). The DOM: 6 MB of headers and 5 MB of `.cpp`.
 - Zig: a file per module and a root `bindings.zig`; Zig reads only what is
   used. `?T`, tagged unions, `JsArrayOf(T)`, `JsTuple(&.{...})`; callbacks
   are comptime functions with Zig types, behind a C-convention trampoline;
@@ -359,7 +361,7 @@ the time control returns to JavaScript is reported, not lost.
   Zig's, camelCase: `getTextContent()`, `setTextContent(..)`,
   `addEventListenerWithString`. Inheritance is flattened, and an
   inherited member is written once: the furthest ancestor that declares it
-  writes it in `X.Methods(Self)`, and each subtype's member is an alias. 12 MB.
+  writes it in `X.Methods(Self)`, and each subtype's member is an alias of it, named once per type (`M_Element.x`). The DOM: 13 MB.
 - Rust (wasm32-unknown-unknown): a crate (`Cargo.toml`, `src/`), compiled
   once: a DOM program then builds in under a second. Every crate shares the
   runtime's, `ts_runtime`, written beside it: one `JsValue` for the DOM and a
@@ -387,7 +389,7 @@ the time control returns to JavaScript is reported, not lost.
   nullable union argument is any member, the union or `None`. A defaulted type argument is stated with
   `query_selector_as::<T>`. `T extends Node` is `T: Is<Node>`. Callbacks are
   closures, kept (`new`, `release`, or freed once JavaScript collects the
-  function) or for the length of a call and free to borrow (`scoped`); promises are awaited under `js::spawn`. 6.6 MB.
+  function) or for the length of a call and free to borrow (`scoped`); promises are awaited under `js::spawn`. The DOM: 12 MB.
 - Gleam (JavaScript target): no wasm and no glue, as F#; from the shared
   model, as the wasm targets, since Gleam has no methods, subtypes, overloads
   or optional arguments. Subtypes are phantom types along each class's chain

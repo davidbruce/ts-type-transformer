@@ -595,8 +595,19 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             }
         }
         let class_doc = c.doc.as_deref().map(|d| comment(d, "///", "", Style::C)).unwrap_or_default();
+        // `new X(a, b)` is `X(a, b)`, as `X::create(a, b)`: a class template's
+        // arguments are its defaults (`Mesh(geometry, material)`).
+        let new_ctor = if c.funcs.iter().any(|f| matches!(f.call, Call::New(_)) && !f.params.is_empty()) {
+            format!(
+                "    template <class... A_> requires (sizeof...(A_) > 0 && !ts::is_self_arg<{0}, A_...> && requires (A_&&... a_) {{ {0}::{ctor}(std::forward<A_>(a_)...); }})\n    \
+                 explicit {0}(A_&&... a_) : {0}({0}::{ctor}(std::forward<A_>(a_)...)) {{}}\n",
+                c.name
+            )
+        } else {
+            String::new()
+        };
         let decl_body = format!(
-            "{class_doc}{class_head}struct {0} : {1} {{\n{2}{usings}{members}}};\n",
+            "{class_doc}{class_head}struct {0} : {1} {{\n{2}{usings}{members}{new_ctor}}};\n",
             c.name,
             bases.join(", "),
             constructors(&c.name)

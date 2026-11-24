@@ -109,6 +109,11 @@ inline uint32_t live_handles() { return ts_raw_js_live(); }
 template <class T>
 inline constexpr bool is_handle = std::is_base_of_v<Handle, std::decay_t<T>>;
 
+// Whether the arguments are one object of `X`, or of a type made from it:
+// that is a copy or an upcast of the handle, never a new JavaScript object.
+template <class X, class... A>
+inline constexpr bool is_self_arg = sizeof...(A) == 1 && (std::is_base_of_v<X, std::remove_cvref_t<A>> && ...);
+
 // T, as a type that depends on D: checked only once D is known.
 template <class D, class T>
 struct dep_ {
