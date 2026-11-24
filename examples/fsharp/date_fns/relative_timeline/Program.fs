@@ -1,4 +1,4 @@
-module Program
+module Demos.DateFns.RelativeTimeline
 
 open Fable.Core
 open Fable.Core.JsInterop

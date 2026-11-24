@@ -1,4 +1,4 @@
-module Program
+module Demos.BabylonLite.PbrMaterialMatrix
 
 open System
 open Fable.Core

@@ -1,4 +1,4 @@
-module Program
+module Demos.Node.EventBus
 
 open Node
 

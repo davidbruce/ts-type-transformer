@@ -1,4 +1,4 @@
-module Program
+module Demos.Konva.RadialRosette
 
 open System
 open Fable.Core.JsInterop

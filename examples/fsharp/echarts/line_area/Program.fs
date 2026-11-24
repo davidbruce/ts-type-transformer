@@ -1,4 +1,4 @@
-module Program
+module Demos.Echarts.LineArea
 
 open Dom
 open type Dom.Globals

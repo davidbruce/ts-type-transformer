@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.BilliardsBreak3d
 
 open System
 open Fable.Core

@@ -1,4 +1,4 @@
-module Program
+module Demos.BabylonLite.PolyhedronSculptures
 
 open System
 open Fable.Core

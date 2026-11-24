@@ -52,7 +52,7 @@ export const TARGETS = [
     shortLabel: 'F#',
     artifactRel: 'js/Program.mjs',
     usesGlue: false,
-    defaultJobs: 1,
+    defaultJobs: DEFAULT_PARALLEL_JOBS,
   },
 ];
 
@@ -335,6 +335,7 @@ export const VITE_WATCH_IGNORED = [
   '**/bin/**',
   '**/obj/**',
   '**/js/**',
+  '**/_all/**',
   '**/build/**',
   '**/zig-out/**',
   '**/.zig-cache/**',
@@ -702,14 +703,16 @@ export async function runTargetBuild({
     }
   }
 
+  // `beforeDemos` returns true when it built every demo itself.
+  let builtAll = false;
   if (toBuild.length > 0 && beforeDemos) {
     const buildPkgs = [...new Set(toBuild.flatMap(t => getExamplePackages(t.ex)))];
     const buildDom = buildPkgs.some(p => packages[p]?.needsDom);
-    await beforeDemos({ toBuild, buildPkgs, buildDom, packages, bindingsDir, jobs, force });
+    builtAll = (await beforeDemos({ toBuild, buildPkgs, buildDom, packages, bindingsDir, jobs, force })) === true;
   }
 
   const buffered = jobs > 1;
-  await runPool(toBuild, jobs, async ({ ex, demoDir, outPath, spec, specs }) => {
+  await runPool(builtAll ? [] : toBuild, jobs, async ({ ex, demoDir, outPath, spec, specs }) => {
     console.log(`Building ${targetId} ${ex.id}...`);
     await buildDemo({ ex, demoDir, outPath, spec, specs, bindingsDir, jobs, buffered });
     if (targetSpec.usesGlue) {

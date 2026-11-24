@@ -1,4 +1,4 @@
-module Program
+module Demos.Marked.CustomRenderer
 
 open Fable.Core.JsInterop
 open Dom

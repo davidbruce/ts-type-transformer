@@ -1,4 +1,4 @@
-module Program
+module Demos.Prosemirror.PluginHistoryTransactions
 
 open System.Collections.Generic
 open Fable.Core.JsInterop

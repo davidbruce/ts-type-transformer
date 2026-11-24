@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.TowerCollapse3d
 
 open System
 open Fable.Core

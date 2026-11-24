@@ -1,4 +1,4 @@
-module Program
+module Demos.TanstackTable.PaginationLedger
 
 open Fable.Core
 open Fable.Core.JsInterop

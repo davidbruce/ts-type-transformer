@@ -1,4 +1,4 @@
-module Program
+module Demos.Prosemirror.StructuralTransforms
 
 open Fable.Core.JsInterop
 open Dom

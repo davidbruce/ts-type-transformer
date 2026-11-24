@@ -1,4 +1,4 @@
-module Program
+module Demos.Pts.VectorField
 
 open System
 open Pts

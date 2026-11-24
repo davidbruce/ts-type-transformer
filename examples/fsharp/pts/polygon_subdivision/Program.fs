@@ -1,4 +1,4 @@
-module Program
+module Demos.Pts.PolygonSubdivision
 
 open System
 open Pts

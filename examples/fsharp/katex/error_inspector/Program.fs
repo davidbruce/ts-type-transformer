@@ -1,4 +1,4 @@
-module Program
+module Demos.Katex.ErrorInspector
 
 open Dom
 open type Dom.Globals

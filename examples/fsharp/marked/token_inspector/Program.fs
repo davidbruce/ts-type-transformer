@@ -1,4 +1,4 @@
-module Program
+module Demos.Marked.TokenInspector
 
 open Dom
 open type Dom.Globals

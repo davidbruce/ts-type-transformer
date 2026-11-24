@@ -1,4 +1,4 @@
-module Program
+module Demos.Konva.ShapesGallery
 
 open Fable.Core.JsInterop
 open Dom

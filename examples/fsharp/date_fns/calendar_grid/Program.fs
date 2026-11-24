@@ -1,4 +1,4 @@
-module Program
+module Demos.DateFns.CalendarGrid
 
 open Fable.Core
 open Fable.Core.JsInterop

@@ -1,4 +1,4 @@
-module Program
+module Demos.Konva.GroupsTransforms
 
 open Fable.Core.JsInterop
 open Dom

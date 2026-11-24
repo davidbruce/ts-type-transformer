@@ -1,4 +1,4 @@
-module Program
+module Demos.Pts.ConvexHullNetwork
 
 open System
 open Pts

@@ -1,4 +1,4 @@
-module Program
+module Demos.Pixi.SceneHierarchy
 
 open System
 open Fable.Core

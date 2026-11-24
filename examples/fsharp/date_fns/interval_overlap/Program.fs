@@ -1,4 +1,4 @@
-module Program
+module Demos.DateFns.IntervalOverlap
 
 open Fable.Core
 open Fable.Core.JsInterop

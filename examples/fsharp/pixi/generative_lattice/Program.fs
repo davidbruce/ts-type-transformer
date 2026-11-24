@@ -1,4 +1,4 @@
-module Program
+module Demos.Pixi.GenerativeLattice
 
 open System
 open Fable.Core

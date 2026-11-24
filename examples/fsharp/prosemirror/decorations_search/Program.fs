@@ -1,4 +1,4 @@
-module Program
+module Demos.Prosemirror.DecorationsSearch
 
 open System
 open Fable.Core.JsInterop

@@ -1,4 +1,4 @@
-module Program
+module Demos.Marked.InlineVsBlock
 
 open Dom
 open type Dom.Globals

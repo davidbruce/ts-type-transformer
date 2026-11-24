@@ -1,4 +1,4 @@
-module Program
+module Demos.Prosemirror.RichSchemaMarks
 
 open Fable.Core.JsInterop
 open Dom

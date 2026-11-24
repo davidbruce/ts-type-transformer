@@ -1,4 +1,4 @@
-module Program
+module Demos.Pixi.SpriteMosaic
 
 open Fable.Core
 open Fable.Core.JsInterop

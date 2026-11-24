@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.DominoCascade
 
 open System
 open Fable.Core

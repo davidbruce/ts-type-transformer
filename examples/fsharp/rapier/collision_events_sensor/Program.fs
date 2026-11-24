@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.CollisionEventsSensor
 
 open System
 open Fable.Core

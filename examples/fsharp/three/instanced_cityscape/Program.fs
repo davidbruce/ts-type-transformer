@@ -1,4 +1,4 @@
-module Program
+module Demos.Three.InstancedCityscape
 
 open System
 open Fable.Core

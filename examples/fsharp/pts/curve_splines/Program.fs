@@ -1,4 +1,4 @@
-module Program
+module Demos.Pts.CurveSplines
 
 open System
 open Pts

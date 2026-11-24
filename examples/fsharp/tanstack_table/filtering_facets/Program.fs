@@ -1,4 +1,4 @@
-module Program
+module Demos.TanstackTable.FilteringFacets
 
 open Fable.Core
 open Fable.Core.JsInterop

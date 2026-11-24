@@ -1,4 +1,4 @@
-module Program
+module Demos.Katex.InlineVsDisplay
 
 open Dom
 open type Dom.Globals

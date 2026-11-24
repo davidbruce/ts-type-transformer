@@ -1,4 +1,4 @@
-module Program
+module Demos.Echarts.BarChart
 
 open Dom
 open type Dom.Globals

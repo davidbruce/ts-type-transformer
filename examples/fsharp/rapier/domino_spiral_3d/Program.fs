@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.DominoSpiral3d
 
 open System
 open Fable.Core

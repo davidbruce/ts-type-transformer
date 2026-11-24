@@ -1,4 +1,4 @@
-module Program
+module Demos.Leaflet.VectorRoute
 
 open Fable.Core
 open Fable.Core.JsInterop

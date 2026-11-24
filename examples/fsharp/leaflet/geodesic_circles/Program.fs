@@ -1,4 +1,4 @@
-module Program
+module Demos.Leaflet.GeodesicCircles
 
 open Fable.Core.JsInterop
 open Dom

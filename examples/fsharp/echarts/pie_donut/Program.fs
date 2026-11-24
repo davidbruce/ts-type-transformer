@@ -1,4 +1,4 @@
-module Program
+module Demos.Echarts.PieDonut
 
 open Dom
 open type Dom.Globals

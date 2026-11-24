@@ -1,4 +1,4 @@
-module Program
+module Demos.Prosemirror.DomJsonRoundtrip
 
 open Fable.Core.JsInterop
 open Dom

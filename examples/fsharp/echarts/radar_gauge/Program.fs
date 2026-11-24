@@ -1,4 +1,4 @@
-module Program
+module Demos.Echarts.RadarGauge
 
 open Dom
 open type Dom.Globals

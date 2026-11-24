@@ -1,4 +1,4 @@
-module Program
+module Demos.BabylonLite.KineticWaveMonoliths
 
 open System
 open Fable.Core

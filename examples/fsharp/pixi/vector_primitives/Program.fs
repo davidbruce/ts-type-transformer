@@ -1,4 +1,4 @@
-module Program
+module Demos.Pixi.VectorPrimitives
 
 open Fable.Core
 open Fable.Core.JsInterop

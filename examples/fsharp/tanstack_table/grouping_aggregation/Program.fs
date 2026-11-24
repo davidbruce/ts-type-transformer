@@ -1,4 +1,4 @@
-module Program
+module Demos.TanstackTable.GroupingAggregation
 
 open Fable.Core
 open Fable.Core.JsInterop

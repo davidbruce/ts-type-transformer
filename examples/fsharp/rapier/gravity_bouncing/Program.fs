@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.GravityBouncing
 
 open System
 open Fable.Core

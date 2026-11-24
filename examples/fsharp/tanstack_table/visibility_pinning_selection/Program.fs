@@ -1,4 +1,4 @@
-module Program
+module Demos.TanstackTable.VisibilityPinningSelection
 
 open Fable.Core
 open Fable.Core.JsInterop

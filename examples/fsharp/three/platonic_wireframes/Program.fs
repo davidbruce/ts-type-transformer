@@ -1,4 +1,4 @@
-module Program
+module Demos.Three.PlatonicWireframes
 
 open System
 open Fable.Core

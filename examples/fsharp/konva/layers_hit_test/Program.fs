@@ -1,4 +1,4 @@
-module Program
+module Demos.Konva.LayersHitTest
 
 open Fable.Core.JsInterop
 open Dom

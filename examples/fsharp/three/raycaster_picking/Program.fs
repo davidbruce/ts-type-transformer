@@ -1,4 +1,4 @@
-module Program
+module Demos.Three.RaycasterPicking
 
 open System
 open Fable.Core

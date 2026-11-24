@@ -1,4 +1,4 @@
-module Program
+module Demos.Node.FilePipeline
 
 open Node
 

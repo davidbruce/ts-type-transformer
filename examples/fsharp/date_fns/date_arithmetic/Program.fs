@@ -1,4 +1,4 @@
-module Program
+module Demos.DateFns.DateArithmetic
 
 open Fable.Core
 open Fable.Core.JsInterop

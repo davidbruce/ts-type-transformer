@@ -1,4 +1,4 @@
-module Program
+module Demos.BabylonLite.TorusKnot
 
 open System
 open Fable.Core

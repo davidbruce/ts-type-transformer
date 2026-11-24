@@ -1,4 +1,4 @@
-module Program
+module Demos.Katex.CustomMacros
 
 open Fable.Core.JsInterop
 open Dom

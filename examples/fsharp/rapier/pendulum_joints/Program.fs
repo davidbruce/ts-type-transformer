@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.PendulumJoints
 
 open System
 open Fable.Core

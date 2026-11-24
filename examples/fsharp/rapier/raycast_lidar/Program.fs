@@ -1,4 +1,4 @@
-module Program
+module Demos.Rapier.RaycastLidar
 
 open System
 open Fable.Core

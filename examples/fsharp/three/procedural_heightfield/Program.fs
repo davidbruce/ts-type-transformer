@@ -1,4 +1,4 @@
-module Program
+module Demos.Three.ProceduralHeightfield
 
 open System
 open Fable.Core

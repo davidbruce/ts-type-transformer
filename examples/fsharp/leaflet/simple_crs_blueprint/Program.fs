@@ -1,4 +1,4 @@
-module Program
+module Demos.Leaflet.SimpleCrsBlueprint
 
 open Fable.Core.JsInterop
 open Dom

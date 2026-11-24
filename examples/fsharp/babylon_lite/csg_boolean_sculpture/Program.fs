@@ -1,4 +1,4 @@
-module Program
+module Demos.BabylonLite.CsgBooleanSculpture
 
 open System
 open Fable.Core

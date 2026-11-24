@@ -1,4 +1,4 @@
-module Program
+module Demos.Konva.WireframeDiagram
 
 open Fable.Core.JsInterop
 open Dom

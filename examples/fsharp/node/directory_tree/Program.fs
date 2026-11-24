@@ -1,4 +1,4 @@
-module Program
+module Demos.Node.DirectoryTree
 
 open Node
 

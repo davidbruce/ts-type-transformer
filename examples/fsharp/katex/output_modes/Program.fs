@@ -1,4 +1,4 @@
-module Program
+module Demos.Katex.OutputModes
 
 open Fable.Core.JsInterop
 open Dom
