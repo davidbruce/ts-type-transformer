@@ -10,17 +10,17 @@ import babylonjs_lite/hemispheric_light
 import babylonjs_lite/mesh
 import babylonjs_lite/observable_vec3
 import babylonjs_lite/point_light
+import babylonjs_lite/runtime as br
 import babylonjs_lite/scene_context
 import babylonjs_lite/scene_node
-import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node
 import dom/areas/core/performance
+import dom/areas/html/html_element_tag_name_map as tag
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
-import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
@@ -36,7 +36,10 @@ fn cos(x: Float) -> Float
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
     Some(el) ->
-      node.set_text_content(el, Some("WebGPU / Babylon Lite error: " <> message))
+      node.set_text_content(
+        el,
+        Some("WebGPU / Babylon Lite error: " <> message),
+      )
     None -> Nil
   }
 }
@@ -60,12 +63,11 @@ pub fn main() -> Nil {
   case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
-      let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }
+      let on_err = fn(err) {
+        set_status_error(status, br.js_error_message(err))
+      }
       use engine <- br.promise_try(
-        b.create_engine_with_engine_options(
-          bt.RenderCanvasHTMLCanvasElement(canvas),
-          None,
-        ),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
         on_err,
       )
 
@@ -88,17 +90,13 @@ pub fn main() -> Nil {
       b.add_to_scene(scene, br.dynamic(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
-      let hemi =
-        b.create_hemispheric_light(
-          Some(#(0.0, 1.0, 0.15)),
-          Some(0.55),
-        )
+      let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.15)), Some(0.55))
       hemispheric_light.set_diffuse_color(hemi, #(0.76, 0.76, 0.76))
-      hemispheric_light.set_ground_color(hemi, #(0.10, 0.10, 0.10))
+      hemispheric_light.set_ground_color(hemi, #(0.1, 0.1, 0.1))
       b.add_to_scene(scene, br.dynamic(hemi))
 
       let dir = b.create_directional_light(#(-1.0, -2.2, -0.8), Some(1.35))
-      directional_light.set_diffuse(dir, #(0.90, 0.90, 0.90))
+      directional_light.set_diffuse(dir, #(0.9, 0.9, 0.9))
       b.add_to_scene(scene, br.dynamic(dir))
 
       let light1 = b.create_point_light(#(5.2, 4.2, 0.0), Some(10.0))
@@ -116,7 +114,7 @@ pub fn main() -> Nil {
         |> ground_options.with_width(18.0)
         |> ground_options.with_height(18.0)
       let floor = b.create_ground(engine, Some(floor_opts))
-      mesh.set_material(floor, mk_pbr(0.09, 0.10, 0.88))
+      mesh.set_material(floor, mk_pbr(0.09, 0.1, 0.88))
       b.add_to_scene(scene, br.dynamic(floor))
 
       let m0 = mk_pbr(0.22, 0.35, 0.36)
@@ -138,10 +136,7 @@ pub fn main() -> Nil {
             let x = fx *. 1.15
             let z = fz *. 1.15
             let m =
-              b.create_box(
-                engine,
-                Some(bt.NumberOrBoxOptionsBoxOptions(bopts)),
-              )
+              b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(bopts)))
             let pos = scene_node.get_position(m)
             observable_vec3.set(pos, x, 0.5, z)
             let mat = case { row + col } % 4 {
@@ -165,8 +160,13 @@ pub fn main() -> Nil {
 
       let cap_props =
         create_pbr_material_props.create()
-        |> create_pbr_material_props.with_base_color_factor(#(0.92, 0.92, 0.92, 1.0))
-        |> create_pbr_material_props.with_metallic_factor(0.50)
+        |> create_pbr_material_props.with_base_color_factor(#(
+          0.92,
+          0.92,
+          0.92,
+          1.0,
+        ))
+        |> create_pbr_material_props.with_metallic_factor(0.5)
         |> create_pbr_material_props.with_roughness_factor(0.15)
       let cc =
         clear_coat_props.create()
@@ -207,10 +207,9 @@ pub fn main() -> Nil {
             let h =
               0.55
               +. 1.15
-              *. {
-                0.5 +. 0.5 *. sin(elapsed *. 2.2 -. dist *. 1.15)
-              }
-              +. 0.30 *. cos(elapsed *. 1.3 +. diag *. 0.7)
+              *. { 0.5 +. 0.5 *. sin(elapsed *. 2.2 -. dist *. 1.15) }
+              +. 0.3
+              *. cos(elapsed *. 1.3 +. diag *. 0.7)
             observable_vec3.set(scale, 1.0, h, 1.0)
             observable_vec3.set(pos, x, h *. 0.5, z)
           })

@@ -16,13 +16,20 @@ import pixi_js/types as t
 
 const two_pi = 6.283185307179586
 
-fn stroke_g(g: t.Graphics(Nil), width: Float, color_hex: Int) -> t.Graphics(Nil) {
-  graphics.stroke(g, [
-    runtime.js_object([
-      #("width", runtime.dynamic(width)),
-      #("color", runtime.dynamic(int.to_float(color_hex))),
-    ]),
-  ])
+fn stroke_g(
+  g: t.Graphics(Nil),
+  width: Float,
+  color_hex: Int,
+) -> t.Graphics(Nil) {
+  graphics.stroke(
+    g,
+    Some(
+      runtime.js_object([
+        #("width", runtime.dynamic(width)),
+        #("color", runtime.dynamic(int.to_float(color_hex))),
+      ]),
+    ),
+  )
 }
 
 fn ring_spec(r_idx: Int) -> #(Float, Int) {
@@ -73,7 +80,8 @@ pub fn main() {
   let unit_x = point.new(Some(1.0), Some(0.0))
   int.range(from: 0, to: 12, with: Nil, run: fn(_, step) {
     let theta = int.to_float(step) *. { two_pi /. 12.0 }
-    let spoke = matrix.rotate(matrix.new(None, None, None, None, None, None), theta)
+    let spoke =
+      matrix.rotate(matrix.new(None, None, None, None, None, None), theta)
     let dir = matrix.apply(spoke, unit_x, None)
     graphics.move_to(guides, 340.0, 200.0)
     |> graphics.line_to(
@@ -93,7 +101,8 @@ pub fn main() {
     int.range(from: 0, to: 12, with: Nil, run: fn(_, step) {
       let theta =
         int.to_float(step) *. { two_pi /. 12.0 } +. int.to_float(r_idx) *. 0.13
-      let dir_m = matrix.rotate(matrix.new(None, None, None, None, None, None), theta)
+      let dir_m =
+        matrix.rotate(matrix.new(None, None, None, None, None, None), theta)
       let dir = matrix.apply(dir_m, unit_x, None)
 
       let tile_m =

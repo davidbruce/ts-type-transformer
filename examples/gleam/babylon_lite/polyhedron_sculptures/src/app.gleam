@@ -7,19 +7,19 @@ import babylonjs_lite/hemispheric_light
 import babylonjs_lite/mesh
 import babylonjs_lite/observable_vec3
 import babylonjs_lite/polyhedron_options
+import babylonjs_lite/runtime as br
 import babylonjs_lite/scene_context
 import babylonjs_lite/scene_node
 import babylonjs_lite/spot_light
 import babylonjs_lite/standard_material_props
-import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node
 import dom/areas/core/performance
+import dom/areas/html/html_element_tag_name_map as tag
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
-import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
@@ -31,7 +31,10 @@ fn sin(x: Float) -> Float
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
     Some(el) ->
-      node.set_text_content(el, Some("WebGPU / Babylon Lite error: " <> message))
+      node.set_text_content(
+        el,
+        Some("WebGPU / Babylon Lite error: " <> message),
+      )
     None -> Nil
   }
 }
@@ -54,12 +57,11 @@ pub fn main() -> Nil {
   case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
-      let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }
+      let on_err = fn(err) {
+        set_status_error(status, br.js_error_message(err))
+      }
       use engine <- br.promise_try(
-        b.create_engine_with_engine_options(
-          bt.RenderCanvasHTMLCanvasElement(canvas),
-          None,
-        ),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
         on_err,
       )
 
@@ -82,12 +84,8 @@ pub fn main() -> Nil {
       b.add_to_scene(scene, br.dynamic(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
-      let hemi =
-        b.create_hemispheric_light(
-          Some(#(0.0, 1.0, 0.0)),
-          Some(0.42),
-        )
-      hemispheric_light.set_diffuse_color(hemi, #(0.70, 0.70, 0.70))
+      let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.0)), Some(0.42))
+      hemispheric_light.set_diffuse_color(hemi, #(0.7, 0.7, 0.7))
       hemispheric_light.set_ground_color(hemi, #(0.08, 0.08, 0.08))
       b.add_to_scene(scene, br.dynamic(hemi))
 
@@ -104,7 +102,7 @@ pub fn main() -> Nil {
       b.add_to_scene(scene, br.dynamic(spot))
 
       let fill = b.create_directional_light(#(1.2, -1.5, -1.0), Some(0.65))
-      directional_light.set_diffuse(fill, #(0.80, 0.80, 0.80))
+      directional_light.set_diffuse(fill, #(0.8, 0.8, 0.8))
       b.add_to_scene(scene, br.dynamic(fill))
 
       let floor_opts =
@@ -112,10 +110,10 @@ pub fn main() -> Nil {
         |> ground_options.with_width(18.0)
         |> ground_options.with_height(18.0)
       let floor = b.create_ground(engine, Some(floor_opts))
-      mesh.set_material(floor, mk_std(0.10, 0.25, 24.0))
+      mesh.set_material(floor, mk_std(0.1, 0.25, 24.0))
       b.add_to_scene(scene, br.dynamic(floor))
 
-      let plinth_mat = mk_std(0.18, 0.30, 32.0)
+      let plinth_mat = mk_std(0.18, 0.3, 32.0)
 
       let poly_states =
         list.map([0, 1, 2, 3, 4], fn(i) {
@@ -133,7 +131,7 @@ pub fn main() -> Nil {
           mesh.set_material(plinth, plinth_mat)
           b.add_to_scene(scene, br.dynamic(plinth))
 
-          let v = 0.90 -. fi *. 0.13
+          let v = 0.9 -. fi *. 0.13
           let popts =
             polyhedron_options.create()
             |> polyhedron_options.with_type(fi)

@@ -7,29 +7,29 @@ import babylonjs_lite/hemispheric_light
 import babylonjs_lite/mesh
 import babylonjs_lite/observable_quat
 import babylonjs_lite/observable_vec3
+import babylonjs_lite/runtime as br
 import babylonjs_lite/scene_context
 import babylonjs_lite/scene_node
 import babylonjs_lite/sphere_options
-import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
 import dimforge_rapier3d_compat as rapier
 import dimforge_rapier3d_compat/collider_desc
 import dimforge_rapier3d_compat/rigid_body
 import dimforge_rapier3d_compat/rigid_body_desc
 import dimforge_rapier3d_compat/rotation
+import dimforge_rapier3d_compat/runtime as rp_rt
+import dimforge_rapier3d_compat/types as rt
 import dimforge_rapier3d_compat/vector
 import dimforge_rapier3d_compat/vector3
 import dimforge_rapier3d_compat/world
-import dimforge_rapier3d_compat/runtime as rp_rt
-import dimforge_rapier3d_compat/types as rt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
+import dom/areas/html/html_element_tag_name_map as tag
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
-import dom/areas/html/html_element_tag_name_map as tag
 import gleam/float
 import gleam/int
 import gleam/list
@@ -56,7 +56,10 @@ const sphere_radius = 0.65
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
     Some(el) ->
-      dom_node.set_text_content(el, Some("WebGPU / Babylon Lite error: " <> message))
+      dom_node.set_text_content(
+        el,
+        Some("WebGPU / Babylon Lite error: " <> message),
+      )
     None -> Nil
   }
 }
@@ -88,10 +91,12 @@ pub fn main() -> Nil {
   let world_ref: rp_rt.Ref(Option(rt.World(Nil))) = rp_rt.ref_new(None)
   let planks_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
   let striker_ref: rp_rt.Ref(Option(rt.RigidBody(Nil))) = rp_rt.ref_new(None)
-  let plank_handles_ref: rp_rt.Ref(List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)))) =
-    rp_rt.ref_new([])
-  let striker_handle_ref: rp_rt.Ref(Option(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)))) =
-    rp_rt.ref_new(None)
+  let plank_handles_ref: rp_rt.Ref(
+    List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+  ) = rp_rt.ref_new([])
+  let striker_handle_ref: rp_rt.Ref(
+    Option(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+  ) = rp_rt.ref_new(None)
   let paused_ref = rp_rt.ref_new(False)
   let step_ref = rp_rt.ref_new(0)
   let shot_ref = rp_rt.ref_new(0)
@@ -104,20 +109,32 @@ pub fn main() -> Nil {
     let w =
       world.new(
         vector3.new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
       )
 
     let floor_body =
       world.create_rigid_body(
         w,
         rigid_body_desc.fixed()
-        |> rigid_body_desc.set_translation(0.0, -0.3, 0.0),
+          |> rigid_body_desc.set_translation(0.0, -0.3, 0.0),
       )
     world.create_collider(
       w,
       collider_desc.cuboid(10.0, 0.3, 10.0)
-      |> collider_desc.set_friction(0.75)
-      |> collider_desc.set_restitution(0.1),
+        |> collider_desc.set_friction(0.75)
+        |> collider_desc.set_restitution(0.1),
       Some(floor_body),
     )
 
@@ -135,7 +152,7 @@ pub fn main() -> Nil {
           world.create_rigid_body(
             w,
             rigid_body_desc.dynamic()
-            |> rigid_body_desc.set_translation(x, y, z),
+              |> rigid_body_desc.set_translation(x, y, z),
           )
         let cd =
           collider_desc.cuboid(hx, half_height, hz)
@@ -151,15 +168,15 @@ pub fn main() -> Nil {
       world.create_rigid_body(
         w,
         rigid_body_desc.dynamic()
-        |> rigid_body_desc.set_translation(-6.2, 1.55, 0.12)
-        |> rigid_body_desc.set_linvel(13.5, 1.1, -0.25),
+          |> rigid_body_desc.set_translation(-6.2, 1.55, 0.12)
+          |> rigid_body_desc.set_linvel(13.5, 1.1, -0.25),
       )
     world.create_collider(
       w,
       collider_desc.ball(sphere_radius)
-      |> collider_desc.set_density(4.5)
-      |> collider_desc.set_restitution(0.35)
-      |> collider_desc.set_friction(0.3),
+        |> collider_desc.set_density(4.5)
+        |> collider_desc.set_restitution(0.35)
+        |> collider_desc.set_friction(0.3),
       Some(striker),
     )
 
@@ -320,12 +337,11 @@ pub fn main() -> Nil {
   case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
-      let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }
+      let on_err = fn(err) {
+        set_status_error(status, br.js_error_message(err))
+      }
       use engine <- br.promise_try(
-        b.create_engine_with_engine_options(
-          bt.RenderCanvasHTMLCanvasElement(canvas),
-          None,
-        ),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
         on_err,
       )
 
@@ -338,7 +354,8 @@ pub fn main() -> Nil {
         |> gpu_color_dict.with_a(1.0)
       scene_context.set_clear_color(scene, clear)
 
-      let camera = b.create_arc_rotate_camera(0.85, 1.12, 11.5, b.vec3(0.0, 1.5, 0.0))
+      let camera =
+        b.create_arc_rotate_camera(0.85, 1.12, 11.5, b.vec3(0.0, 1.5, 0.0))
       b.add_to_scene(scene, br.dynamic(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
@@ -360,8 +377,8 @@ pub fn main() -> Nil {
       b.add_to_scene(scene, br.dynamic(ground))
 
       let mat0 = mk_pbr(0.86, 0.86, 0.86, 0.15, 0.45)
-      let mat1 = mk_pbr(0.58, 0.58, 0.60, 0.25, 0.38)
-      let mat2 = mk_pbr(0.30, 0.31, 0.33, 0.35, 0.35)
+      let mat1 = mk_pbr(0.58, 0.58, 0.6, 0.25, 0.38)
+      let mat2 = mk_pbr(0.3, 0.31, 0.33, 0.35, 0.35)
 
       let plank_handles =
         int.range(from: 0, to: plank_count, with: [], run: fn(acc, idx) {
@@ -375,7 +392,8 @@ pub fn main() -> Nil {
             |> box_options.with_width(w_box)
             |> box_options.with_height(half_height *. 2.0)
             |> box_options.with_depth(d_box)
-          let m = b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(bopts)))
+          let m =
+            b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(bopts)))
           let mat = case layer % 3 {
             0 -> mat0
             1 -> mat1
@@ -400,7 +418,10 @@ pub fn main() -> Nil {
       b.add_to_scene(scene, br.dynamic(sm))
       rp_rt.ref_set(
         striker_handle_ref,
-        Some(#(scene_node.get_position(sm), scene_node.get_rotation_quaternion(sm))),
+        Some(#(
+          scene_node.get_position(sm),
+          scene_node.get_rotation_quaternion(sm),
+        )),
       )
 
       sync_meshes()

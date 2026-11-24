@@ -6,29 +6,29 @@ import babylonjs_lite/hemispheric_light
 import babylonjs_lite/mesh
 import babylonjs_lite/observable_quat
 import babylonjs_lite/observable_vec3
+import babylonjs_lite/runtime as br
 import babylonjs_lite/scene_context
 import babylonjs_lite/scene_node
 import babylonjs_lite/sphere_options
-import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
 import dimforge_rapier3d_compat as rapier
 import dimforge_rapier3d_compat/collider_desc
 import dimforge_rapier3d_compat/rigid_body
 import dimforge_rapier3d_compat/rigid_body_desc
 import dimforge_rapier3d_compat/rotation
+import dimforge_rapier3d_compat/runtime as rp_rt
+import dimforge_rapier3d_compat/types as rt
 import dimforge_rapier3d_compat/vector
 import dimforge_rapier3d_compat/vector3
 import dimforge_rapier3d_compat/world
-import dimforge_rapier3d_compat/runtime as rp_rt
-import dimforge_rapier3d_compat/types as rt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
+import dom/areas/html/html_element_tag_name_map as tag
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
-import dom/areas/html/html_element_tag_name_map as tag
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -48,7 +48,10 @@ const ball_radius = 0.36
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
     Some(el) ->
-      dom_node.set_text_content(el, Some("WebGPU / Babylon Lite error: " <> message))
+      dom_node.set_text_content(
+        el,
+        Some("WebGPU / Babylon Lite error: " <> message),
+      )
     None -> Nil
   }
 }
@@ -79,8 +82,9 @@ pub fn main() -> Nil {
 
   let world_ref: rp_rt.Ref(Option(rt.World(Nil))) = rp_rt.ref_new(None)
   let balls_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
-  let handles_ref: rp_rt.Ref(List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)))) =
-    rp_rt.ref_new([])
+  let handles_ref: rp_rt.Ref(
+    List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+  ) = rp_rt.ref_new([])
   let paused_ref = rp_rt.ref_new(False)
   let step_ref = rp_rt.ref_new(0)
 
@@ -92,20 +96,32 @@ pub fn main() -> Nil {
     let w =
       world.new(
         vector3.new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
       )
 
     let bed =
       world.create_rigid_body(
         w,
         rigid_body_desc.fixed()
-        |> rigid_body_desc.set_translation(0.0, -0.25, 0.0),
+          |> rigid_body_desc.set_translation(0.0, -0.25, 0.0),
       )
     world.create_collider(
       w,
       collider_desc.cuboid(4.6, 0.25, 7.6)
-      |> collider_desc.set_friction(0.14)
-      |> collider_desc.set_restitution(0.35),
+        |> collider_desc.set_friction(0.14)
+        |> collider_desc.set_restitution(0.35),
       Some(bed),
     )
 
@@ -121,13 +137,13 @@ pub fn main() -> Nil {
         world.create_rigid_body(
           w,
           rigid_body_desc.fixed()
-          |> rigid_body_desc.set_translation(rx, ry, rz),
+            |> rigid_body_desc.set_translation(rx, ry, rz),
         )
       world.create_collider(
         w,
         collider_desc.cuboid(hx, hy, hz)
-        |> collider_desc.set_friction(0.12)
-        |> collider_desc.set_restitution(0.88),
+          |> collider_desc.set_friction(0.12)
+          |> collider_desc.set_restitution(0.88),
         Some(rb),
       )
       Nil
@@ -142,16 +158,16 @@ pub fn main() -> Nil {
             world.create_rigid_body(
               w,
               rigid_body_desc.dynamic()
-              |> rigid_body_desc.set_translation(x, ball_radius, z)
-              |> rigid_body_desc.set_linear_damping(0.30)
-              |> rigid_body_desc.set_angular_damping(0.30),
+                |> rigid_body_desc.set_translation(x, ball_radius, z)
+                |> rigid_body_desc.set_linear_damping(0.3)
+                |> rigid_body_desc.set_angular_damping(0.3),
             )
           world.create_collider(
             w,
             collider_desc.ball(ball_radius)
-            |> collider_desc.set_restitution(0.92)
-            |> collider_desc.set_friction(0.10)
-            |> collider_desc.set_density(1.0),
+              |> collider_desc.set_restitution(0.92)
+              |> collider_desc.set_friction(0.1)
+              |> collider_desc.set_density(1.0),
             Some(rb),
           )
           [rb, ..inner_acc]
@@ -172,9 +188,9 @@ pub fn main() -> Nil {
     world.create_collider(
       w,
       collider_desc.ball(ball_radius)
-      |> collider_desc.set_restitution(0.94)
-      |> collider_desc.set_friction(0.10)
-      |> collider_desc.set_density(1.25),
+        |> collider_desc.set_restitution(0.94)
+        |> collider_desc.set_friction(0.1)
+        |> collider_desc.set_density(1.25),
       Some(cue),
     )
 
@@ -190,7 +206,12 @@ pub fn main() -> Nil {
         let #(rb, #(pos, rot)) = item
         let p = rigid_body.translation(rb, None)
         let q = rigid_body.rotation(rb, None)
-        observable_vec3.set(pos, vector.get_x(p), vector.get_y(p), vector.get_z(p))
+        observable_vec3.set(
+          pos,
+          vector.get_x(p),
+          vector.get_y(p),
+          vector.get_z(p),
+        )
         observable_quat.set(
           rot,
           rotation.get_x(q),
@@ -274,7 +295,11 @@ pub fn main() -> Nil {
   wire_click("btn-scatter", fn() {
     list.index_fold(rp_rt.ref_get(balls_ref), Nil, fn(_, rb, idx) {
       let ang = int.to_float(idx) *. 1.15
-      rigid_body.apply_impulse(rb, vector3.new(cos(ang) *. 1.4, 0.25, sin(ang) *. 1.4), True)
+      rigid_body.apply_impulse(
+        rb,
+        vector3.new(cos(ang) *. 1.4, 0.25, sin(ang) *. 1.4),
+        True,
+      )
     })
     update_meta()
   })
@@ -302,12 +327,11 @@ pub fn main() -> Nil {
   case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
-      let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }
+      let on_err = fn(err) {
+        set_status_error(status, br.js_error_message(err))
+      }
       use engine <- br.promise_try(
-        b.create_engine_with_engine_options(
-          bt.RenderCanvasHTMLCanvasElement(canvas),
-          None,
-        ),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
         on_err,
       )
 
@@ -320,7 +344,8 @@ pub fn main() -> Nil {
         |> gpu_color_dict.with_a(1.0)
       scene_context.set_clear_color(scene, clear)
 
-      let camera = b.create_arc_rotate_camera(1.18, 0.92, 13.5, b.vec3(0.0, 0.3, -0.4))
+      let camera =
+        b.create_arc_rotate_camera(1.18, 0.92, 13.5, b.vec3(0.0, 0.3, -0.4))
       b.add_to_scene(scene, br.dynamic(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
@@ -338,12 +363,13 @@ pub fn main() -> Nil {
         |> box_options.with_width(9.2)
         |> box_options.with_height(0.5)
         |> box_options.with_depth(15.2)
-      let table = b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(table_opts)))
+      let table =
+        b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(table_opts)))
       observable_vec3.set(scene_node.get_position(table), 0.0, -0.25, 0.0)
       mesh.set_material(table, mk_pbr(0.08, 0.24, 0.18, 0.05, 0.78))
       b.add_to_scene(scene, br.dynamic(table))
 
-      let rail_mat = mk_pbr(0.18, 0.18, 0.20, 0.35, 0.42)
+      let rail_mat = mk_pbr(0.18, 0.18, 0.2, 0.35, 0.42)
       let rail_meshes = [
         #(-4.35, 0.45, 0.0, 0.5, 0.9, 15.2),
         #(4.35, 0.45, 0.0, 0.5, 0.9, 15.2),
@@ -357,7 +383,8 @@ pub fn main() -> Nil {
           |> box_options.with_width(wr)
           |> box_options.with_height(hr)
           |> box_options.with_depth(dr)
-        let r = b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(ropts)))
+        let r =
+          b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(ropts)))
         observable_vec3.set(scene_node.get_position(r), rx, ry, rz)
         mesh.set_material(r, rail_mat)
         b.add_to_scene(scene, br.dynamic(r))
@@ -367,7 +394,7 @@ pub fn main() -> Nil {
       let m0 = mk_pbr(0.85, 0.24, 0.22, 0.2, 0.22)
       let m1 = mk_pbr(0.22, 0.48, 0.85, 0.2, 0.22)
       let m2 = mk_pbr(0.92, 0.68, 0.18, 0.2, 0.22)
-      let m3 = mk_pbr(0.20, 0.20, 0.22, 0.25, 0.2)
+      let m3 = mk_pbr(0.2, 0.2, 0.22, 0.25, 0.2)
 
       let sopts =
         sphere_options.create()

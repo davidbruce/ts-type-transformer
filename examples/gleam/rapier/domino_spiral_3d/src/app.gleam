@@ -8,10 +8,10 @@ import babylonjs_lite/hemispheric_light
 import babylonjs_lite/mesh
 import babylonjs_lite/observable_quat
 import babylonjs_lite/observable_vec3
+import babylonjs_lite/runtime as br
 import babylonjs_lite/scene_context
 import babylonjs_lite/scene_node
 import babylonjs_lite/sphere_options
-import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
 import dimforge_rapier3d_compat as rapier
 import dimforge_rapier3d_compat/collider_desc
@@ -19,19 +19,19 @@ import dimforge_rapier3d_compat/quaternion
 import dimforge_rapier3d_compat/rigid_body
 import dimforge_rapier3d_compat/rigid_body_desc
 import dimforge_rapier3d_compat/rotation
+import dimforge_rapier3d_compat/runtime as rp_rt
+import dimforge_rapier3d_compat/types as rt
 import dimforge_rapier3d_compat/vector
 import dimforge_rapier3d_compat/vector3
 import dimforge_rapier3d_compat/world
-import dimforge_rapier3d_compat/runtime as rp_rt
-import dimforge_rapier3d_compat/types as rt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node as dom_node
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
+import dom/areas/html/html_element_tag_name_map as tag
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
-import dom/areas/html/html_element_tag_name_map as tag
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -74,7 +74,10 @@ fn spiral_pose(i: Int) -> #(Float, Float, Float, Float) {
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
     Some(el) ->
-      dom_node.set_text_content(el, Some("WebGPU / Babylon Lite error: " <> message))
+      dom_node.set_text_content(
+        el,
+        Some("WebGPU / Babylon Lite error: " <> message),
+      )
     None -> Nil
   }
 }
@@ -115,12 +118,15 @@ pub fn main() -> Nil {
   let marble_ref: rp_rt.Ref(Option(rt.RigidBody(Nil))) = rp_rt.ref_new(None)
   let doms_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
   let cyls_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
-  let marble_handle_ref: rp_rt.Ref(Option(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)))) =
-    rp_rt.ref_new(None)
-  let dom_handles_ref: rp_rt.Ref(List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)))) =
-    rp_rt.ref_new([])
-  let cyl_handles_ref: rp_rt.Ref(List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)))) =
-    rp_rt.ref_new([])
+  let marble_handle_ref: rp_rt.Ref(
+    Option(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+  ) = rp_rt.ref_new(None)
+  let dom_handles_ref: rp_rt.Ref(
+    List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+  ) = rp_rt.ref_new([])
+  let cyl_handles_ref: rp_rt.Ref(
+    List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+  ) = rp_rt.ref_new([])
   let paused_ref = rp_rt.ref_new(False)
   let step_ref = rp_rt.ref_new(0)
 
@@ -132,20 +138,32 @@ pub fn main() -> Nil {
     let w =
       world.new(
         vector3.new(0.0, -9.81, 0.0),
-        None, None, None, None, None, None, None, None, None, None, None, None, None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
       )
 
     let floor_body =
       world.create_rigid_body(
         w,
         rigid_body_desc.fixed()
-        |> rigid_body_desc.set_translation(0.0, -0.3, 0.0),
+          |> rigid_body_desc.set_translation(0.0, -0.3, 0.0),
       )
     world.create_collider(
       w,
       collider_desc.cuboid(10.0, 0.3, 10.0)
-      |> collider_desc.set_friction(0.75)
-      |> collider_desc.set_restitution(0.1),
+        |> collider_desc.set_friction(0.75)
+        |> collider_desc.set_restitution(0.1),
       Some(floor_body),
     )
 
@@ -155,14 +173,14 @@ pub fn main() -> Nil {
       world.create_rigid_body(
         w,
         rigid_body_desc.fixed()
-        |> rigid_body_desc.set_translation(ramp_x, ramp_y, ramp_z)
-        |> rigid_body_desc.set_rotation(ramp_rot),
+          |> rigid_body_desc.set_translation(ramp_x, ramp_y, ramp_z)
+          |> rigid_body_desc.set_rotation(ramp_rot),
       )
     world.create_collider(
       w,
-      collider_desc.cuboid(1.75, 0.10, 0.65)
-      |> collider_desc.set_friction(0.15)
-      |> collider_desc.set_restitution(0.2),
+      collider_desc.cuboid(1.75, 0.1, 0.65)
+        |> collider_desc.set_friction(0.15)
+        |> collider_desc.set_restitution(0.2),
       Some(ramp_body),
     )
 
@@ -170,15 +188,15 @@ pub fn main() -> Nil {
       world.create_rigid_body(
         w,
         rigid_body_desc.dynamic()
-        |> rigid_body_desc.set_translation(-4.75, 2.02, -2.5)
-        |> rigid_body_desc.set_linvel(3.0, 0.0, 0.0),
+          |> rigid_body_desc.set_translation(-4.75, 2.02, -2.5)
+          |> rigid_body_desc.set_linvel(3.0, 0.0, 0.0),
       )
     world.create_collider(
       w,
       collider_desc.ball(marble_radius)
-      |> collider_desc.set_density(3.2)
-      |> collider_desc.set_restitution(0.32)
-      |> collider_desc.set_friction(0.18),
+        |> collider_desc.set_density(3.2)
+        |> collider_desc.set_restitution(0.32)
+        |> collider_desc.set_friction(0.18),
       Some(marble),
     )
 
@@ -190,15 +208,15 @@ pub fn main() -> Nil {
           world.create_rigid_body(
             w,
             rigid_body_desc.dynamic()
-            |> rigid_body_desc.set_translation(x, y, z)
-            |> rigid_body_desc.set_rotation(q),
+              |> rigid_body_desc.set_translation(x, y, z)
+              |> rigid_body_desc.set_rotation(q),
           )
         world.create_collider(
           w,
           collider_desc.cuboid(dom_hx, dom_hy, dom_hz)
-          |> collider_desc.set_friction(0.55)
-          |> collider_desc.set_restitution(0.18)
-          |> collider_desc.set_density(1.0),
+            |> collider_desc.set_friction(0.55)
+            |> collider_desc.set_restitution(0.18)
+            |> collider_desc.set_density(1.0),
           Some(rb),
         )
         [rb, ..acc]
@@ -219,14 +237,14 @@ pub fn main() -> Nil {
           world.create_rigid_body(
             w,
             rigid_body_desc.dynamic()
-            |> rigid_body_desc.set_translation(cx, 0.42, cz),
+              |> rigid_body_desc.set_translation(cx, 0.42, cz),
           )
         world.create_collider(
           w,
           collider_desc.cylinder(0.42, 0.25)
-          |> collider_desc.set_friction(0.55)
-          |> collider_desc.set_restitution(0.25)
-          |> collider_desc.set_density(1.0),
+            |> collider_desc.set_friction(0.55)
+            |> collider_desc.set_restitution(0.25)
+            |> collider_desc.set_density(1.0),
           Some(rb),
         )
         [rb, ..acc]
@@ -352,7 +370,8 @@ pub fn main() -> Nil {
 
   wire_click("btn-nudge", fn() {
     case rp_rt.ref_get(doms_ref) {
-      [first, ..] -> rigid_body.apply_impulse(first, vector3.new(1.6, 0.0, 0.0), True)
+      [first, ..] ->
+        rigid_body.apply_impulse(first, vector3.new(1.6, 0.0, 0.0), True)
       [] -> Nil
     }
     update_meta()
@@ -381,12 +400,11 @@ pub fn main() -> Nil {
   case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
-      let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }
+      let on_err = fn(err) {
+        set_status_error(status, br.js_error_message(err))
+      }
       use engine <- br.promise_try(
-        b.create_engine_with_engine_options(
-          bt.RenderCanvasHTMLCanvasElement(canvas),
-          None,
-        ),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
         on_err,
       )
 
@@ -399,7 +417,8 @@ pub fn main() -> Nil {
         |> gpu_color_dict.with_a(1.0)
       scene_context.set_clear_color(scene, clear)
 
-      let camera = b.create_arc_rotate_camera(0.65, 1.05, 12.0, b.vec3(-0.4, 0.8, 0.0))
+      let camera =
+        b.create_arc_rotate_camera(0.65, 1.05, 12.0, b.vec3(-0.4, 0.8, 0.0))
       b.add_to_scene(scene, br.dynamic(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
@@ -427,7 +446,12 @@ pub fn main() -> Nil {
         |> box_options.with_depth(1.3)
       let ramp_mesh =
         b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(ramp_opts)))
-      observable_vec3.set(scene_node.get_position(ramp_mesh), ramp_x, ramp_y, ramp_z)
+      observable_vec3.set(
+        scene_node.get_position(ramp_mesh),
+        ramp_x,
+        ramp_y,
+        ramp_z,
+      )
       observable_quat.set(
         scene_node.get_rotation_quaternion(ramp_mesh),
         0.0,
@@ -435,7 +459,7 @@ pub fn main() -> Nil {
         sin(ramp_angle *. 0.5),
         cos(ramp_angle *. 0.5),
       )
-      mesh.set_material(ramp_mesh, mk_pbr(0.28, 0.30, 0.34, 0.35, 0.48))
+      mesh.set_material(ramp_mesh, mk_pbr(0.28, 0.3, 0.34, 0.35, 0.48))
       b.add_to_scene(scene, br.dynamic(ramp_mesh))
 
       let sopts =
@@ -447,7 +471,10 @@ pub fn main() -> Nil {
       b.add_to_scene(scene, br.dynamic(mb))
       rp_rt.ref_set(
         marble_handle_ref,
-        Some(#(scene_node.get_position(mb), scene_node.get_rotation_quaternion(mb))),
+        Some(#(
+          scene_node.get_position(mb),
+          scene_node.get_rotation_quaternion(mb),
+        )),
       )
 
       let mat_a = mk_pbr(0.88, 0.88, 0.88, 0.15, 0.4)
@@ -459,14 +486,15 @@ pub fn main() -> Nil {
         |> box_options.with_depth(dom_hz *. 2.0)
       let dom_handles =
         int.range(from: 0, to: dom_count, with: [], run: fn(acc, i) {
-          let m = b.create_box(engine, Some(bt.NumberOrBoxOptionsBoxOptions(dom_opts)))
-          mesh.set_material(
-            m,
-            case i % 2 == 0 {
-              True -> mat_a
-              False -> mat_b
-            },
-          )
+          let m =
+            b.create_box(
+              engine,
+              Some(bt.NumberOrBoxOptionsBoxOptions(dom_opts)),
+            )
+          mesh.set_material(m, case i % 2 == 0 {
+            True -> mat_a
+            False -> mat_b
+          })
           b.add_to_scene(scene, br.dynamic(m))
           [
             #(scene_node.get_position(m), scene_node.get_rotation_quaternion(m)),

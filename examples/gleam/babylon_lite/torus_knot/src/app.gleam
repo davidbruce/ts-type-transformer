@@ -7,19 +7,19 @@ import babylonjs_lite/hemispheric_light
 import babylonjs_lite/mesh
 import babylonjs_lite/observable_vec3
 import babylonjs_lite/point_light
+import babylonjs_lite/runtime as br
 import babylonjs_lite/scene_context
 import babylonjs_lite/scene_node
 import babylonjs_lite/sphere_options
 import babylonjs_lite/torus_knot_options
-import babylonjs_lite/runtime as br
 import babylonjs_lite/types as bt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node
 import dom/areas/core/performance
+import dom/areas/html/html_element_tag_name_map as tag
 import dom/areas/webgpu/gpu_color_dict
 import dom/types.{type HTMLElement}
-import dom/areas/html/html_element_tag_name_map as tag
 import gleam/option.{type Option, None, Some}
 
 @external(javascript, "./app_ffi.mjs", "sin")
@@ -31,7 +31,10 @@ fn cos(x: Float) -> Float
 fn set_status_error(status: Option(HTMLElement(Nil)), message: String) -> Nil {
   case status {
     Some(el) ->
-      node.set_text_content(el, Some("WebGPU / Babylon Lite error: " <> message))
+      node.set_text_content(
+        el,
+        Some("WebGPU / Babylon Lite error: " <> message),
+      )
     None -> Nil
   }
 }
@@ -42,12 +45,11 @@ pub fn main() -> Nil {
   case document.query_selector(doc, tag.canvas) {
     None -> set_status_error(status, "missing <canvas> element")
     Some(canvas) -> {
-      let on_err = fn(err) { set_status_error(status, br.js_error_message(err)) }
+      let on_err = fn(err) {
+        set_status_error(status, br.js_error_message(err))
+      }
       use engine <- br.promise_try(
-        b.create_engine_with_engine_options(
-          bt.RenderCanvasHTMLCanvasElement(canvas),
-          None,
-        ),
+        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas), None),
         on_err,
       )
 
@@ -70,11 +72,7 @@ pub fn main() -> Nil {
       b.add_to_scene(scene, br.dynamic(camera))
       b.attach_control(camera, canvas, Some(scene), None)
 
-      let hemi =
-        b.create_hemispheric_light(
-          Some(#(0.0, 1.0, 0.2)),
-          Some(0.75),
-        )
+      let hemi = b.create_hemispheric_light(Some(#(0.0, 1.0, 0.2)), Some(0.75))
       hemispheric_light.set_diffuse_color(hemi, #(0.75, 0.85, 1.0))
       hemispheric_light.set_ground_color(hemi, #(0.12, 0.14, 0.22))
       b.add_to_scene(scene, br.dynamic(hemi))
@@ -90,7 +88,12 @@ pub fn main() -> Nil {
 
       let knot_props =
         create_pbr_material_props.create()
-        |> create_pbr_material_props.with_base_color_factor(#(0.18, 0.78, 0.95, 1.0))
+        |> create_pbr_material_props.with_base_color_factor(#(
+          0.18,
+          0.78,
+          0.95,
+          1.0,
+        ))
         |> create_pbr_material_props.with_metallic_factor(0.75)
         |> create_pbr_material_props.with_roughness_factor(0.22)
       let knot_mat = b.create_pbr_material(Some(knot_props))
@@ -108,7 +111,12 @@ pub fn main() -> Nil {
 
       let orb_props =
         create_pbr_material_props.create()
-        |> create_pbr_material_props.with_base_color_factor(#(1.0, 0.42, 0.32, 1.0))
+        |> create_pbr_material_props.with_base_color_factor(#(
+          1.0,
+          0.42,
+          0.32,
+          1.0,
+        ))
         |> create_pbr_material_props.with_metallic_factor(0.2)
         |> create_pbr_material_props.with_roughness_factor(0.35)
       let orb_mat = b.create_pbr_material(Some(orb_props))

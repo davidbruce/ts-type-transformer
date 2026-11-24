@@ -13,13 +13,20 @@ import pixi_js/types as t
 
 const two_pi_3 = 2.0943951023931953
 
-fn stroke_g(g: t.Graphics(Nil), width: Float, color_hex: Int) -> t.Graphics(Nil) {
-  graphics.stroke(g, [
-    runtime.js_object([
-      #("width", runtime.dynamic(width)),
-      #("color", runtime.dynamic(int.to_float(color_hex))),
-    ]),
-  ])
+fn stroke_g(
+  g: t.Graphics(Nil),
+  width: Float,
+  color_hex: Int,
+) -> t.Graphics(Nil) {
+  graphics.stroke(
+    g,
+    Some(
+      runtime.js_object([
+        #("width", runtime.dynamic(width)),
+        #("color", runtime.dynamic(int.to_float(color_hex))),
+      ]),
+    ),
+  )
 }
 
 pub fn main() {

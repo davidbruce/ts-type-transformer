@@ -8,9 +8,9 @@ import pixi_js/application_init_options
 import pixi_js/container
 import pixi_js/graphics
 import pixi_js/observable_point
+import pixi_js/runtime
 import pixi_js/sprite
 import pixi_js/texture
-import pixi_js/runtime
 import pixi_js/types as t
 
 fn shade_at(idx: Int) -> Int {
@@ -58,12 +58,14 @@ pub fn main() {
   let frame =
     graphics.new(None)
     |> graphics.rect(32.0, 20.0, 616.0, 360.0)
-    |> graphics.stroke([
-      runtime.js_object([
-        #("width", runtime.dynamic(1.5)),
-        #("color", runtime.dynamic(int.to_float(0xd4d4d4))),
-      ]),
-    ])
+    |> graphics.stroke(
+      Some(
+        runtime.js_object([
+          #("width", runtime.dynamic(1.5)),
+          #("color", runtime.dynamic(int.to_float(0xd4d4d4))),
+        ]),
+      ),
+    )
   container.add_child(stage, [frame])
 
   let white = texture.get_white()
@@ -80,7 +82,10 @@ pub fn main() {
       |> observable_point.set(Some(0.5), Some(0.5))
       container.set_x(s, 70.0 +. c_f *. 60.0)
       container.set_y(s, 56.0 +. r_f *. 56.0)
-      container.set_rotation(s, { c_f -. 4.5 } *. 0.04 +. { r_f -. 2.5 } *. 0.03)
+      container.set_rotation(
+        s,
+        { c_f -. 4.5 } *. 0.04 +. { r_f -. 2.5 } *. 0.03,
+      )
       container.set_alpha(s, 0.65 +. 0.35 *. alpha_mod /. 2.0)
       container.set_tint(s, runtime.dynamic(int.to_float(shade_at(idx))))
       container.add_child(stage, [s])
@@ -94,7 +99,9 @@ pub fn main() {
     Some(meta) ->
       dom_node.set_text_content(
         meta,
-        Some("60 Texture.WHITE sprites · 10x6 mosaic · 8 monochrome tints · 680x400 WebGL"),
+        Some(
+          "60 Texture.WHITE sprites · 10x6 mosaic · 8 monochrome tints · 680x400 WebGL",
+        ),
       )
     None -> Nil
   }

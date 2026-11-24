@@ -18,13 +18,20 @@ fn mk_rect(x: Float, y: Float, w: Float, h: Float) -> t.Rectangle(Nil) {
   rectangle.new(n(x), n(y), n(w), n(h))
 }
 
-fn stroke_g(g: t.Graphics(Nil), width: Float, color_hex: Int) -> t.Graphics(Nil) {
-  graphics.stroke(g, [
-    runtime.js_object([
-      #("width", runtime.dynamic(width)),
-      #("color", runtime.dynamic(int.to_float(color_hex))),
-    ]),
-  ])
+fn stroke_g(
+  g: t.Graphics(Nil),
+  width: Float,
+  color_hex: Int,
+) -> t.Graphics(Nil) {
+  graphics.stroke(
+    g,
+    Some(
+      runtime.js_object([
+        #("width", runtime.dynamic(width)),
+        #("color", runtime.dynamic(int.to_float(color_hex))),
+      ]),
+    ),
+  )
 }
 
 pub fn main() {

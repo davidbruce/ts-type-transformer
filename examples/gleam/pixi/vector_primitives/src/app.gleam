@@ -10,13 +10,20 @@ import pixi_js/graphics
 import pixi_js/runtime
 import pixi_js/types as t
 
-fn stroke_g(g: t.Graphics(Nil), width: Float, color_hex: Int) -> t.Graphics(Nil) {
-  graphics.stroke(g, [
-    runtime.js_object([
-      #("width", runtime.dynamic(width)),
-      #("color", runtime.dynamic(int.to_float(color_hex))),
-    ]),
-  ])
+fn stroke_g(
+  g: t.Graphics(Nil),
+  width: Float,
+  color_hex: Int,
+) -> t.Graphics(Nil) {
+  graphics.stroke(
+    g,
+    Some(
+      runtime.js_object([
+        #("width", runtime.dynamic(width)),
+        #("color", runtime.dynamic(int.to_float(color_hex))),
+      ]),
+    ),
+  )
 }
 
 pub fn main() {

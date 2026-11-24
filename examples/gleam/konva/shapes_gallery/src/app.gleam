@@ -21,9 +21,9 @@ import konva/star
 import konva/star_config
 import konva/text
 import konva/text_config
+import konva/types as t
 import konva/wedge
 import konva/wedge_config
-import konva/types as t
 
 fn add_caption(l: t.Layer(Nil), x: Float, y: Float, label: String) -> Nil {
   let tc =
@@ -93,8 +93,12 @@ pub fn main() -> Nil {
     |> regular_polygon_config.with_y(93.0)
     |> regular_polygon_config.with_sides(6.0)
     |> regular_polygon_config.with_radius(42.0)
-    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString("#efefef"))
-    |> regular_polygon_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString(
+      "#efefef",
+    ))
+    |> regular_polygon_config.with_stroke(t.StringOrCanvasGradientString(
+      "#111111",
+    ))
     |> regular_polygon_config.with_stroke_width(2.0)
 
   // Row 2: Star, Ring, Wedge, Framed Text.
@@ -173,14 +177,16 @@ pub fn main() -> Nil {
 
   node.draw(l)
 
-  let count = int.to_string(list.length(layer.get_children(l)))
+  let count = int.to_string(list.length(layer.get_children(l, None)))
   let doc = core.get_document()
   case document.get_element_by_id(doc, "meta") {
     None -> Nil
     Some(el) ->
       dom_node.set_text_content(
         el,
-        Some("Stage: 680x400 · 7 primitive types · " <> count <> " layer children"),
+        Some(
+          "Stage: 680x400 · 7 primitive types · " <> count <> " layer children",
+        ),
       )
   }
 }

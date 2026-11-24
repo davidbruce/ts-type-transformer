@@ -8,7 +8,7 @@ import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
-import marked as marked
+import marked
 import marked/marked as marked_class
 import marked/marked_extension
 import marked/marked_extension_renderer
@@ -69,8 +69,7 @@ pub fn main() -> Nil {
       let renderer =
         marked_extension_renderer.create()
         |> marked_extension_renderer.with_heading(
-          fn(args) {
-            let #(heading) = args
+          fn(heading) {
             let tok = mr.dynamic(heading)
             let d = int.to_string(float.round(field_float(tok, "depth")))
             mt.BooleanOrRendererOutputRendererOutput(

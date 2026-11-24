@@ -197,7 +197,9 @@ pub fn main() -> Nil {
     |> regular_polygon_config.with_y(cy)
     |> regular_polygon_config.with_sides(8.0)
     |> regular_polygon_config.with_radius(26.0)
-    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString(
+      "#111111",
+    ))
 
   let cd =
     circle_config.create()
@@ -241,14 +243,18 @@ pub fn main() -> Nil {
 
   node.draw(l)
 
-  let count = int.to_string(list.length(layer.get_children(l)))
+  let count = int.to_string(list.length(layer.get_children(l, None)))
   let doc = core.get_document()
   case document.get_element_by_id(doc, "meta") {
     None -> Nil
     Some(el) ->
       dom_node.set_text_content(
         el,
-        Some("Stage: 680x400 · Procedural rosette · " <> count <> " shapes on layer"),
+        Some(
+          "Stage: 680x400 · Procedural rosette · "
+          <> count
+          <> " shapes on layer",
+        ),
       )
   }
 }
