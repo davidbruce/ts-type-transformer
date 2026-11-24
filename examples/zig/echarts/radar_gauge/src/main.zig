@@ -12,8 +12,8 @@ export fn start() void {
     const radar_box = doc.getElementById("chart-radar") orelse return;
     const gauge_box = doc.getElementById("chart-gauge") orelse return;
 
-    const radar = ec.init(radar_box, null);
-    const gauge = ec.init(gauge_box, null);
+    const radar = ec.init(.{ .dom = radar_box });
+    const gauge = ec.init(.{ .dom = gauge_box });
 
     // Its colors alternate: an array, which areaStyle's type does not say.
     const split_area = ec.AreaStyleOption.init(.{});

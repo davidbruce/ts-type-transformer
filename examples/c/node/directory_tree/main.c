@@ -31,7 +31,7 @@ static void join2(char* out, uint32_t cap, const char* a, const char* b) {
 
 static void walk(const char* dir) {
     js_scope();
-    JsArray_JsString names = node_readdirSync(dir, (Node_readdir_options){ 0 });
+    JsArray_JsString names = node_readdirSync(dir);
     uint32_t len = JsArray_JsString_length(names);
     for (uint32_t i = 0; i < len; i++) {
         char nbuf[128], full[512];
@@ -51,7 +51,7 @@ static void walk(const char* dir) {
 __attribute__((export_name("start"))) void start(void) {
     js_scope();
     char root[256], src_dir[320], core_dir[360], cli_dir[360], docs_dir[320], file_path[400];
-    JsString_copy(node_mkdtempSync("/tmp/tsrs-node-tree-", (Node_ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), root, sizeof root);
+    JsString_copy(node_mkdtempSync("/tmp/tsrs-node-tree-"), root, sizeof root);
     check(node_existsSync(root));
 
     Node_MakeDirectoryOptions mk = Node_MakeDirectoryOptions_create(.recursive = true);
@@ -64,13 +64,13 @@ __attribute__((export_name("start"))) void start(void) {
     node_mkdirSync_with_opt_MakeDirectoryOptions(docs_dir, mk);
 
     join2(file_path, sizeof file_path, root, "README.md");
-    node_writeFileSync(file_path, "node tree demo", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(file_path, "node tree demo");
     join2(file_path, sizeof file_path, core_dir, "engine.txt");
-    node_writeFileSync(file_path, "engine core module!\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(file_path, "engine core module!\n");
     join2(file_path, sizeof file_path, cli_dir, "args.txt");
-    node_writeFileSync(file_path, "cli args parser\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(file_path, "cli args parser\n");
     join2(file_path, sizeof file_path, docs_dir, "guide.md");
-    node_writeFileSync(file_path, "monochrome documentation\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(file_path, "monochrome documentation\n");
 
     walk(root);
 

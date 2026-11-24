@@ -71,7 +71,7 @@ static Pm_Schema make_schema(void) {
 }
 
 static Pm_Node t_node(const char* t) {
-    return Pm_Schema_text(g_schema, t, (JsArray_Pm_Mark){ 0 });
+    return Pm_Schema_text(g_schema, t);
 }
 static Pm_Node p_node(const char* t) {
     return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
@@ -178,7 +178,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             double to_p = from_p + Pm_Fragment_get_size(Pm_Node_get_content(Pm_Node_child(doc, 1)));
             if (to_p > from_p) {
                 Pm_Transaction tr = Pm_EditorState_get_tr(st);
-                Pm_Transaction_addMark(tr, from_p, to_p, Pm_Schema_mark(g_schema, "strong", (Pm_Attrs){ 0 }));
+                Pm_Transaction_addMark(tr, from_p, to_p, Pm_Schema_mark(g_schema, "strong"));
                 if (!g_locked) g_last_action = "Bolded first body paragraph";
                 Pm_EditorView_dispatch(g_view, tr);
             }

@@ -28,17 +28,17 @@ static void join2(char* out, uint32_t cap, const char* a, const char* b) {
 __attribute__((export_name("start"))) void start(void) {
     js_scope();
     char dir[256], notes[320], backup[320], archive[320];
-    JsString_copy(node_mkdtempSync("/tmp/tsrs-node-ws-", (Node_ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), dir, sizeof dir);
+    JsString_copy(node_mkdtempSync("/tmp/tsrs-node-ws-"), dir, sizeof dir);
     Node_Stats dir_st = node_statSync(dir);
     check(node_existsSync(dir) && Node_Stats_isDirectory(dir_st));
 
     join2(notes, sizeof notes, dir, "notes.txt");
-    node_writeFileSync(notes, "alpha\nbeta\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(notes, "alpha\nbeta\n");
     Node_Stats st1 = node_statSync(notes);
     int s1 = (int)js_to_number(Node_Stats_get_size(st1));
     check(node_existsSync(notes) && Node_Stats_isFile(st1) && s1 == 11);
 
-    node_appendFileSync(notes, "gamma\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_appendFileSync(notes, "gamma\n");
     JsString text = node_readFileSync_with_readFileSync_options(notes, Node_BufferEncoding_utf8);
     Node_Stats st2 = node_statSync(notes);
     int s2 = (int)js_to_number(Node_Stats_get_size(st2));
@@ -46,7 +46,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     join2(backup, sizeof backup, dir, "backup.txt");
     join2(archive, sizeof archive, dir, "archive.txt");
-    node_copyFileSync(notes, backup, js_none_double());
+    node_copyFileSync(notes, backup);
     check(node_existsSync(backup));
 
     node_renameSync(backup, archive);

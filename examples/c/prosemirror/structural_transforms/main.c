@@ -98,7 +98,7 @@ static Pm_Schema make_schema(void) {
 }
 
 static Pm_Node t_node(const char* t) {
-    return Pm_Schema_text(g_schema, t, (JsArray_Pm_Mark){ 0 });
+    return Pm_Schema_text(g_schema, t);
 }
 static Pm_Node p_node(const char* t) {
     return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
@@ -202,7 +202,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         Pm_NodeRange range = { 0 };
         if (Pm_ResolvedPos_get_depth(sf) == 1.0 && JsString_equals(Pm_NodeType_get_name(Pm_Node_get_type(Pm_ResolvedPos_get_parent(sf))), "paragraph")) {
             Pm_NodeRange r = Pm_ResolvedPos_blockRange(sf, stp);
-            if (r.h != 0 && pm_findWrapping(r, quote_type, (Pm_Attrs){ 0 }).h != 0) range = r;
+            if (r.h != 0 && pm_findWrapping(r, quote_type).h != 0) range = r;
         }
         if (range.h == 0) {
             double pos = 0.0;
@@ -212,14 +212,14 @@ static void on_click(void* ctx, PointerEvent ev) {
                 if (range.h == 0 && JsString_equals(Pm_NodeType_get_name(Pm_Node_get_type(ch)), "paragraph")) {
                     Pm_ResolvedPos rp = Pm_Node_resolve(doc, pos + 1.0);
                     Pm_NodeRange r = Pm_ResolvedPos_blockRange(rp);
-                    if (r.h != 0 && pm_findWrapping(r, quote_type, (Pm_Attrs){ 0 }).h != 0) range = r;
+                    if (r.h != 0 && pm_findWrapping(r, quote_type).h != 0) range = r;
                 }
                 pos += Pm_Node_get_nodeSize(ch);
             }
         }
         bool wrapped = false;
         if (range.h != 0) {
-            JsArray_Pm_canSplit_typesAfter wrappers = pm_findWrapping(range, quote_type, (Pm_Attrs){ 0 });
+            JsArray_Pm_canSplit_typesAfter wrappers = pm_findWrapping(range, quote_type);
             if (wrappers.h != 0) {
                 Pm_Transaction tr = Pm_EditorState_get_tr(st);
                 Pm_Transaction_wrap(tr, range, wrappers);
@@ -260,7 +260,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         }
     } else if (idx == 3) {
         g_note_counter++;
-        Pm_Node hr = Pm_Schema_node(g_schema, "horizontal_rule", (Pm_Attrs){ 0 });
+        Pm_Node hr = Pm_Schema_node(g_schema, "horizontal_rule");
         char nbuf[96];
         double doc_end = Pm_Fragment_get_size(Pm_Node_get_content(doc));
         snprintf(nbuf, sizeof nbuf, "Appended structural section #%d at doc offset %d.", g_note_counter, (int)doc_end);

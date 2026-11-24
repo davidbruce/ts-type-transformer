@@ -89,7 +89,7 @@ static Pm_Schema make_schema(void) {
 }
 
 static Pm_Node t_node(const char* t) {
-    return Pm_Schema_text(g_schema, t, (JsArray_Pm_Mark){ 0 });
+    return Pm_Schema_text(g_schema, t);
 }
 static Pm_Node p_node(const char* t) {
     return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));

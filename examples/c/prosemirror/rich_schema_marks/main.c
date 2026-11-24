@@ -87,7 +87,7 @@ static Pm_Schema make_schema(void) {
 }
 
 static Pm_Node t_node(const char* t) {
-    return Pm_Schema_text(g_schema, t, (JsArray_Pm_Mark){ 0 });
+    return Pm_Schema_text(g_schema, t);
 }
 
 static Pm_Node make_initial_doc(void) {
@@ -95,9 +95,9 @@ static Pm_Node make_initial_doc(void) {
     js_set_num(h_attrs, "level", 2);
     Pm_Node h = Pm_Schema_node(g_schema, "heading", h_attrs, t_node("ProseMirror Document Schema"));
 
-    Pm_Mark m_strong = Pm_Schema_mark(g_schema, "strong", (Pm_Attrs){ 0 });
-    Pm_Mark m_em = Pm_Schema_mark(g_schema, "em", (Pm_Attrs){ 0 });
-    Pm_Mark m_code = Pm_Schema_mark(g_schema, "code", (Pm_Attrs){ 0 });
+    Pm_Mark m_strong = Pm_Schema_mark(g_schema, "strong");
+    Pm_Mark m_em = Pm_Schema_mark(g_schema, "em");
+    Pm_Mark m_code = Pm_Schema_mark(g_schema, "code");
 
     Pm_Node p1_items[7] = {
         t_node("Inline marks compose cleanly: "),
@@ -213,7 +213,7 @@ static void toggle_mark(const char* name, const char* added_msg, const char* rem
             Pm_Transaction_removeMark(tr, f, t, mt);
             g_last_action = removed_msg;
         } else {
-            Pm_Mark m = Pm_Schema_mark(g_schema, mt, (Pm_Attrs){ 0 });
+            Pm_Mark m = Pm_Schema_mark(g_schema, mt);
             Pm_Transaction_addMark(tr, f, t, m);
             g_last_action = added_msg;
         }
@@ -236,7 +236,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         Pm_Transaction tr = Pm_EditorState_get_tr(st);
         Pm_Schema_nodes nodes = Pm_Schema_get_nodes(g_schema);
         if (JsString_equals(pname, "heading")) {
-            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), Pm_Schema_nodes_get_at(nodes, "paragraph"), (Pm_Attrs){ 0 });
+            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), Pm_Schema_nodes_get_at(nodes, "paragraph"));
             g_last_action = "Converted heading -> paragraph";
         } else {
             Pm_Attrs ha = Pm_Attrs_create();

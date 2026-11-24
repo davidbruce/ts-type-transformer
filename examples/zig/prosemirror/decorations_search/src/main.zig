@@ -72,17 +72,17 @@ const BtnCtx = struct { app: *App, id: usize };
 var g_app: App = .{};
 
 fn pNode(schema: model.Schema, t: []const u8) model.Node {
-    return schema.node("paragraph", null, .{ .content = schema.text(t, null) });
+    return schema.node("paragraph", .{ .content = schema.text(t, null) });
 }
 
 fn makeInitialDoc(schema: model.Schema) model.Node {
-    const h = schema.node("heading", .{ .level = 2 }, .{
+    const h = schema.node("heading", .{ .attrs = .{ .level = 2 },
         .content = schema.text("Immutable State & View Decorations", null),
     });
-    const cb = schema.node("code_block", null, .{
+    const cb = schema.node("code_block", .{
         .content = schema.text("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view", null),
     });
-    return schema.node("doc", null, .{
+    return schema.node("doc", .{
         .content = &.{
             h,
             pNode(schema, "A ProseMirror schema validates every document tree before state updates commit to the view."),

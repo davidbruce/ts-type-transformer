@@ -51,7 +51,7 @@ __attribute__((export_name("start"))) void start(void) {
     NodeJS_EventEmitter_once(bus, "done", Node_any_array_fn_from(on_done, 0));
 
     char root[256], in_dir[320], out_dir[320], fp[384], combined[384];
-    JsString_copy(node_mkdtempSync("/tmp/tsrs-node-pipe-", (Node_ObjectEncodingOptions_or_BufferEncoding){ .tag = -1 }), root, sizeof root);
+    JsString_copy(node_mkdtempSync("/tmp/tsrs-node-pipe-"), root, sizeof root);
 
     join2(in_dir, sizeof in_dir, root, "in");
     join2(out_dir, sizeof out_dir, root, "out");
@@ -60,23 +60,23 @@ __attribute__((export_name("start"))) void start(void) {
     node_mkdirSync_with_opt_MakeDirectoryOptions(out_dir, mk);
 
     join2(fp, sizeof fp, in_dir, "a.log");
-    node_writeFileSync(fp, "100 OK\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(fp, "100 OK\n");
     join2(fp, sizeof fp, in_dir, "b.log");
-    node_writeFileSync(fp, "200 OK\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(fp, "200 OK\n");
     join2(fp, sizeof fp, in_dir, "c.log");
-    node_writeFileSync(fp, "300 OK\n", (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+    node_writeFileSync(fp, "300 OK\n");
     emit_stage(bus, "stage", "seed");
     check(g_stages == 1);
 
     const char* log_names[3] = { "a.log", "b.log", "c.log" };
-    check(JsArray_JsString_length(node_readdirSync(in_dir, (Node_readdir_options){ 0 })) == 3);
+    check(JsArray_JsString_length(node_readdirSync(in_dir)) == 3);
 
     join2(combined, sizeof combined, out_dir, "combined.log");
     for (int i = 0; i < 3; i++) {
         check(JsString_equals(node_path_extname(log_names[i]), ".log"));
         join2(fp, sizeof fp, in_dir, log_names[i]);
         JsString chunk = node_readFileSync_with_readFileSync_options(fp, Node_BufferEncoding_utf8);
-        node_appendFileSync(combined, chunk, (Node_WriteFileOptions_object_or_BufferEncoding){ .tag = -1 });
+        node_appendFileSync(combined, chunk);
     }
     emit_stage(bus, "stage", "bundle");
     check(g_stages == 2);

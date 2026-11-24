@@ -75,14 +75,14 @@ fn clearRedo(app: *App) void {
 }
 
 fn pNode(schema: model.Schema, t: []const u8) model.Node {
-    return schema.node("paragraph", null, .{ .content = schema.text(t, null) });
+    return schema.node("paragraph", .{ .content = schema.text(t, null) });
 }
 
 fn makeInitialDoc(schema: model.Schema) model.Node {
-    const h = schema.node("heading", .{ .level = 2 }, .{
+    const h = schema.node("heading", .{ .attrs = .{ .level = 2 },
         .content = schema.text("Step-Inversion Undo & Transaction Filter", null),
     });
-    return schema.node("doc", null, .{
+    return schema.node("doc", .{
         .content = &.{
             h,
             pNode(schema, "Every document change produces atomic Transform steps that can be inverted against prior snapshots."),

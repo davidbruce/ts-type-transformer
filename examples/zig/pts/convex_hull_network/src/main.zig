@@ -92,7 +92,7 @@ export fn start() void {
     const scope = b.JsScope.open();
     defer scope.deinit();
 
-    app.space = b.CanvasSpace.new("#pt", null).setup(.{
+    app.space = b.CanvasSpace.new(.{ .elem = "#pt" }).setup(.{
         .bgcolor = "#ffffff",
         .resize = true,
         .retina = true,

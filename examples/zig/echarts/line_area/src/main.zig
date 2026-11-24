@@ -10,7 +10,7 @@ export fn start() void {
 
     const doc = dom.getDocument();
     const box = doc.getElementById("chart") orelse return;
-    const chart = ec.init(box, null);
+    const chart = ec.init(.{ .dom = box });
 
     const opt = ec.EChartsOption.init(.{
         .animation = false,

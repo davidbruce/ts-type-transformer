@@ -74,11 +74,11 @@ fn makeSchema() pm.Schema {
 
 fn paragraphOf(schema: pm.Schema, text: []const u8) pm.Node {
     const inner = schema.text(text, null);
-    return schema.node(.{ .string = b.JsString.from("paragraph") }, null, .{ .content = .{ .Node = inner } });
+    return schema.node(.{ .string = b.JsString.from("paragraph") }, .{ .content = .{ .Node = inner } });
 }
 
 fn docOf(schema: pm.Schema, paragraphs: []const pm.Node) pm.Node {
-    return schema.node(.{ .string = b.JsString.from("doc") }, null, .{ .content = .{ .array = b.JsArrayOf(pm.Node).of(paragraphs) } });
+    return schema.node(.{ .string = b.JsString.from("doc") }, .{ .content = .{ .array = b.JsArrayOf(pm.Node).of(paragraphs) } });
 }
 
 // A plugin's state: how many transactions changed the document.
@@ -114,7 +114,7 @@ export fn run() void {
     expect(doc.getTextContent().eql("Helloworld"), @src());
     expect(doc.getNodeSize() == 2 + 7 + 7, @src());
     expect(doc.getContent().getSize() == 14, @src());
-    expect(doc.textBetween(0, doc.getContent().getSize(), "|", null).eql("Hello|world"), @src());
+    expect(doc.textBetween(0, doc.getContent().getSize(), .{ .blockSeparator = "|" }).eql("Hello|world"), @src());
     expect(doc.child(1).getIsTextblock() and doc.getIsBlock() and !doc.getIsText(), @src());
     expect(doc.nodeAt(1).?.getIsText() and doc.nodeAt(1).?.getText().?.eql("Hello"), @src());
     expect(doc.eq(docOf(schema, &.{ paragraphOf(schema, "Hello"), paragraphOf(schema, "world") })), @src());
@@ -138,7 +138,7 @@ export fn run() void {
     expect(pm.Node.fromJSON(schema, doc.toJSON()).eq(doc), @src());
 
     // A document that breaks the schema is refused when checked: a doc cannot hold text directly.
-    const bad = schema.node(.{ .string = b.JsString.from("doc") }, null, .{ .content = .{ .Node = hello } });
+    const bad = schema.node(.{ .string = b.JsString.from("doc") }, .{ .content = .{ .Node = hello } });
     expect(b.jsTakeError() != null, @src());
     expect(bad.h == 0, @src());
 

@@ -27,7 +27,7 @@ fn onPing(ctx: ?*anyopaque, args: b.JsArray) ?bool {
 // type) is at the top of bindings, so this program mixes `ec.` and `b.`.
 export fn run() void {
     // A chart on the page's #chart, 400 by 300.
-    const chart = ec.init(b.test_page.element("chart"), .{});
+    const chart = ec.init(.{ .dom = b.test_page.element("chart") });
     const c = chart.asEChartsType();
     expect(c.getWidth() == 400 and c.getHeight() == 300, @src());
     expect(!c.isDisposed(), @src());

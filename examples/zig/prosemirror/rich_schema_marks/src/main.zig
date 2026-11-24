@@ -75,13 +75,13 @@ const BtnCtx = struct { app: *App, id: usize };
 var g_app: App = .{};
 
 fn makeInitialDoc(schema: model.Schema) model.Node {
-    const h = schema.node("heading", .{ .level = 2 }, .{ .content = schema.text("ProseMirror Document Schema", null) });
+    const h = schema.node("heading", .{ .attrs = .{ .level = 2 }, .content = schema.text("ProseMirror Document Schema", null) });
 
     const m_strong = schema.mark("strong", null);
     const m_em = schema.mark("em", null);
     const m_code = schema.mark("code", null);
 
-    const p1 = schema.node("paragraph", null, .{
+    const p1 = schema.node("paragraph", .{
         .content = &.{
             schema.text("Inline marks compose cleanly: ", null),
             schema.text("bold", &.{m_strong}),
@@ -93,18 +93,18 @@ fn makeInitialDoc(schema: model.Schema) model.Node {
         },
     });
 
-    const q_inner = schema.node("paragraph", null, .{
+    const q_inner = schema.node("paragraph", .{
         .content = schema.text("Every document conforms to a strict schema enforced on every transaction.", null),
     });
-    const quote = schema.node("blockquote", null, .{ .content = q_inner });
-    const cb = schema.node("code_block", null, .{
+    const quote = schema.node("blockquote", .{ .content = q_inner });
+    const cb = schema.node("code_block", .{
         .content = schema.text("schema.node(\"paragraph\", null, [schema.text(\"typed\")])", null),
     });
-    const outro = schema.node("paragraph", null, .{
+    const outro = schema.node("paragraph", .{
         .content = schema.text("Select any text in this editor and click a toolbar action to toggle marks or switch block types.", null),
     });
 
-    return schema.node("doc", null, .{ .content = &.{ h, p1, quote, cb, outro } });
+    return schema.node("doc", .{ .content = &.{ h, p1, quote, cb, outro } });
 }
 
 fn makeState(schema: model.Schema) state_mod.EditorState {

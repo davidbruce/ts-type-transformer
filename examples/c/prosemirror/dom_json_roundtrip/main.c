@@ -205,7 +205,7 @@ static void on_click(void* ctx, PointerEvent ev) {
     } else if (idx == 3) {
         if (Pm_Node_get_childCount(doc) >= 2.0) {
             double insert_pos = Pm_Node_get_nodeSize(Pm_Node_child(doc, 0)) + Pm_Node_get_nodeSize(Pm_Node_child(doc, 1)) - 1.0;
-            Pm_Mark code_mark = Pm_Schema_mark(g_schema, "code", (Pm_Attrs){ 0 });
+            Pm_Mark code_mark = Pm_Schema_mark(g_schema, "code");
             Pm_Node span = Pm_Schema_text(g_schema, " roundtrip()", JsArray_Pm_Mark_from(&code_mark, 1));
             Pm_Transaction tr = Pm_EditorState_get_tr(st);
             Pm_Transaction_insert(tr, insert_pos, span);

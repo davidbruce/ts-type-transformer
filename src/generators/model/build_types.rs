@@ -960,7 +960,8 @@ fn absent(t: Ty, undefined: bool) -> Ty {
     match t {
         Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
         Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) | Ty::Listener(_) => Ty::Nullable(Box::new(t), undefined),
-        Ty::Nullable(..) => t,
+        // `x?: T | null`: omitted too, as `x?: T` is.
+        Ty::Nullable(inner, u) => Ty::Nullable(inner, u || undefined),
         Ty::Void => Ty::Void,
         _ => Ty::Any,
     }

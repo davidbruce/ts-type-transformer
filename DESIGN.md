@@ -291,7 +291,7 @@ the time control returns to JavaScript is reported, not lost.
   (`ParentNode_querySelector_div`), only where it takes it directly
   (`Document_querySelector_canvas`). A function's name is also a macro, so trailing optional
   arguments may be left out (`Event_new("ping")`; all of them, `orUnit()`,
-  in C23) and the first of a family of overloads picks one by its
+  in C23), `x?: T | null` as `x?: T` (`node_writeFileSync(path, text)`), and the first of a family of overloads picks one by its
   argument's type (`Shape_label(s, "a")`, `Shape_label(s, 7)`). Each shorter
   call is one line that makes the next longer one, and is written once
   where several overloads share it. Optional values are `JsOptionalDouble`,

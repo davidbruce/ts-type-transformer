@@ -20,7 +20,7 @@ export fn start() void {
 
     const doc = dom.getDocument();
     const box = doc.getElementById("chart") orelse return;
-    const chart = ec.init(box, null);
+    const chart = ec.init(.{ .dom = box });
 
     const ca_pts = &[_][2]f64{ .{ 14, 22 }, .{ 21, 31 }, .{ 28, 27 }, .{ 33, 42 }, .{ 40, 48 }, .{ 46, 53 }, .{ 54, 61 }, .{ 62, 59 }, .{ 71, 74 }, .{ 82, 85 } };
     const cb_pts = &[_][2]f64{ .{ 18, 64 }, .{ 25, 72 }, .{ 31, 68 }, .{ 39, 79 }, .{ 47, 65 }, .{ 55, 81 }, .{ 64, 77 }, .{ 72, 88 }, .{ 79, 82 }, .{ 88, 92 } };

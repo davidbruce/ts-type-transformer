@@ -50,7 +50,7 @@ fn addSolid(
     _ = app.scene.add(.{mesh});
 
     const segs = three.LineSegments.new(.{
-        .geometry = three.EdgesGeometry.new(geo, .{ .thresholdAngle = thresh }),
+        .geometry = three.EdgesGeometry.new(.{ .geometry = geo, .thresholdAngle = thresh }),
         .material = line_mat,
     });
     _ = segs.getPosition().set(x, y, z);
