@@ -180,10 +180,26 @@ impl Gen {
                 for p in named(d, "typeParameter") {
                     self.cur_constrained.remove(&format!("'{}", attr(p, "name")));
                 }
+                // A type parameter no required argument names, whose default is
+                // one that does (date-fns' `ResultDate = DateType`), is that one:
+                // the result follows the argument, with no annotation.
+                let required: HashSet<&str> = named(d, "parameter")
+                    .filter(|p| !flag(*p, "optional"))
+                    .flat_map(|p| p.descendants().filter(|r| r.has_tag_name("ref") && attr(*r, "kind") == "typeParameter").map(|r| attr(r, "name")))
+                    .collect();
+                let follows: HashMap<String, String> = named(d, "typeParameter")
+                    .filter_map(|p| {
+                        let def = named(p, "default").next().map(only_child).filter(|d| d.has_tag_name("ref") && d.attribute("kind") == Some("typeParameter"))?;
+                        let to = def.attribute("name")?;
+                        (!required.contains(attr(p, "name")) && required.contains(to)).then(|| (attr(p, "name").to_string(), format!("'{to}")))
+                    })
+                    .collect();
+                self.skip_tparams = follows.keys().cloned().collect();
                 let (tps, fn_constrained) = self.constrained_type_params_with_names(d);
+                self.skip_tparams.clear();
                 self.cur_constrained.extend(fn_constrained);
-                let params = self.params(d, "");
-                let ret = self.returns(d, "");
+                let params: Vec<FsParam> = self.params(d, "").iter().map(|p| p.subst(&follows)).collect();
+                let ret = subst_params(&self.returns(d, ""), &follows);
                 let (fname, args) = match self.fixed(d, 0) {
                     // Escaped where it is written, by `at`.
                     Some((suffix, args)) => (ident(&format!("{raw}_{suffix}")), args),

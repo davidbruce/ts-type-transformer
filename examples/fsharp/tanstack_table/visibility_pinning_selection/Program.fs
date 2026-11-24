@@ -127,7 +127,7 @@ let main () =
         let cv: obj = state?columnVisibility
         let curZone = isColVisible cv "zone"
         let curOwner = isColVisible cv "owner"
-        vis.setColumnVisibility (!^ (JsRecord.Create [ "zone", not curZone; "owner", curOwner ]))
+        vis.setColumnVisibility (JsRecord.Create [ "zone", not curZone; "owner", curOwner ])
         render ()
     )
     wireBtn "btn-1" (fun () ->
@@ -135,7 +135,7 @@ let main () =
         let cv: obj = state?columnVisibility
         let curZone = isColVisible cv "zone"
         let curOwner = isColVisible cv "owner"
-        vis.setColumnVisibility (!^ (JsRecord.Create [ "owner", not curOwner; "zone", curZone ]))
+        vis.setColumnVisibility (JsRecord.Create [ "owner", not curOwner; "zone", curZone ])
         render ()
     )
     wireBtn "btn-2" (fun () ->
@@ -147,9 +147,9 @@ let main () =
         render ()
     )
     wireBtn "btn-4" (fun () ->
-        vis.setColumnVisibility (!^ (JsRecord.Create [ "zone", false; "owner", true ]))
+        vis.setColumnVisibility (JsRecord.Create [ "zone", false; "owner", true ])
         pin.setColumnPinning (ColumnPinningState.Create(ResizeArray [ "id" ], ResizeArray [ "status" ]))
-        sel.setRowSelection (!^ (JsRecord.Create [ "0", true; "2", true; "4", true ]))
+        sel.setRowSelection (JsRecord.Create [ "0", true; "2", true; "4", true ])
         render ()
     )
     render ()

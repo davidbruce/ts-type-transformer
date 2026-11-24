@@ -55,7 +55,8 @@ impl Gen {
         let mut params = Vec::new();
         let mut constraints = Vec::new();
         let mut constrained_names = Vec::new();
-        for p in named(n, "typeParameter") {
+        let skip = self.skip_tparams.clone();
+        for p in named(n, "typeParameter").filter(|p| !skip.contains(attr(*p, "name"))) {
             let name = format!("'{}", attr(p, "name"));
             let mut is_constrained = false;
             let c = elements(p).find(|c| c.has_tag_name("constraint")).map(only_child);
@@ -221,14 +222,24 @@ impl Gen {
             if t.has_tag_name("nullable") && attr(t, "absent") == "null" {
                 t = only_child(t);
             }
+            // An alias's parameters are the reference's arguments: date-fns'
+            // `DateArg<'DateType>` is a `'DateType`, a `float` or a `string`.
+            let mut alias_args: HashMap<String, String> = HashMap::new();
             let union_node = if t.has_tag_name("union") {
                 Some(t)
-            } else if t.has_tag_name("ref") && attr(t, "kind") == "typeAlias" && elements(t).next().is_none() {
-                t.attribute("to")
-                    .and_then(|to| find_decl(root, to))
-                    .filter(|d| d.has_tag_name("typeAlias") && named(*d, "typeParameter").next().is_none())
-                    .map(only_child_type)
-                    .filter(|b| b.has_tag_name("union"))
+            } else if t.has_tag_name("ref") && attr(t, "kind") == "typeAlias" {
+                let decl = t.attribute("to").and_then(|to| find_decl(root, to)).filter(|d| d.has_tag_name("typeAlias"));
+                let tps: Vec<Node> = decl.map(|d| named(d, "typeParameter").collect()).unwrap_or_default();
+                let args: Vec<Node> = elements(t).collect();
+                if tps.len() == args.len() {
+                    for (tp, a) in tps.iter().zip(&args) {
+                        let rendered = self.ty(*a, owner);
+                        alias_args.insert(attr(*tp, "name").to_string(), rendered);
+                    }
+                    decl.map(only_child_type).filter(|b| b.has_tag_name("union"))
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -249,7 +260,7 @@ impl Gen {
             let mut arms = Vec::new();
             let mut seen = HashSet::new();
             for m in members {
-                let arm_ty = self.ty(m, owner);
+                let arm_ty = subst_params(&self.ty(m, owner), &alias_args);
                 // Do not expand `obj`, `unit`, or nested erased `U2<..>`..`U9<..>` arms.
                 let is_erased_u = arm_ty.starts_with('U')
                     && arm_ty.as_bytes().get(1).is_some_and(u8::is_ascii_digit)

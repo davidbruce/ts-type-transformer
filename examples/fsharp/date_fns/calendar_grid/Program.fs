@@ -24,8 +24,8 @@ let private app = (document.getElementById "app").Value
 app.appendChild (wrap "div" "head" [ el "h1" "" "Date-fns Calendar Grid (F#)"; el "span" "badge" "March 2024" ]) |> ignore
 
 let refDay: JS.Date = parseISO "2024-03-15"
-let monthStart: JS.Date = startOfMonth !^refDay
-let monthEnd: JS.Date = endOfMonth !^refDay
+let monthStart: JS.Date = startOfMonth refDay
+let monthEnd: JS.Date = endOfMonth refDay
 let offset = int (getDay monthStart)
 
 let metric (lbl: string) (value: string) =

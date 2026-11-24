@@ -24,7 +24,7 @@ let private app = (document.getElementById "app").Value
 app.appendChild (wrap "div" "head" [ el "h1" "" "Date-fns Format & Parse Cookbook (F#)"; el "span" "badge" "2024-03-15T14:30:45" ]) |> ignore
 
 let sample: JS.Date = parseISO "2024-03-15T14:30:45"
-let parsed: JS.Date = parse ("15/03/2024", "dd/MM/yyyy", !^sample)
+let parsed: JS.Date = parse ("15/03/2024", "dd/MM/yyyy", sample)
 
 let rows =
     [ "formatDate(\"yyyy-MM-dd\")", formatDate (sample, "yyyy-MM-dd"), "ISO date"

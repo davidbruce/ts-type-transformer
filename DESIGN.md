@@ -460,7 +460,12 @@ the time control returns to JavaScript is reported, not lost.
   constraints of methods, functions and interfaces are F# constraints, kept
   through keyed values (`getElementsByTagName<'K when 'K :> Element>`). An
   index signature is `JsRecord<string, T>`; `f(a, b?, ...rest)` is two
-  overloads. A library that is a module is imported (`[<Import("Pt",
+  overloads. A union argument is an overload of each member too, a generic
+  alias's with its arguments put in (date-fns' `DateArg<'D>`:
+  `addDays (date, 3.0)`, no `!^`), and a function's type parameter no
+  required argument names, defaulted to one that does, is that one
+  (`ResultDate = DateType`): the result follows the argument. date-fns'
+  bindings grow a fifth. A library that is a module is imported (`[<Import("Pt",
   "pts")>]`): values, functions and classes, and a union case of a class is
   tested by `instanceof` on the import. The built-ins Fable has are its
   types (`JS.Uint8Array`, `JS.DataView`, `JS.Date`); an `Error` is an `exn`,

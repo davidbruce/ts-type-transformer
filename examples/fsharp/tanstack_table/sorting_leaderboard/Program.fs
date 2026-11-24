@@ -116,19 +116,19 @@ let private render (label: string) =
 
 let main () =
     wireBtn "btn-0" (fun () ->
-        tableSort.setSorting (!^ (ResizeArray [ ColumnSort.Create(false, "region"); ColumnSort.Create(false, "latency") ]))
+        tableSort.setSorting (ResizeArray [ ColumnSort.Create(false, "region"); ColumnSort.Create(false, "latency") ])
         render "Sort: region asc, latency asc"
     )
     wireBtn "btn-1" (fun () ->
-        tableSort.setSorting (!^ (ResizeArray [ ColumnSort.Create(false, "latency") ]))
+        tableSort.setSorting (ResizeArray [ ColumnSort.Create(false, "latency") ])
         render "Sort: latency asc"
     )
     wireBtn "btn-2" (fun () ->
-        tableSort.setSorting (!^ (ResizeArray [ ColumnSort.Create(true, "throughput") ]))
+        tableSort.setSorting (ResizeArray [ ColumnSort.Create(true, "throughput") ])
         render "Sort: throughput desc"
     )
     wireBtn "btn-3" (fun () ->
-        tableSort.setSorting (!^ (ResizeArray [ ColumnSort.Create(false, "host") ]))
+        tableSort.setSorting (ResizeArray [ ColumnSort.Create(false, "host") ])
         render "Sort: host asc"
     )
     wireBtn "btn-4" (fun () ->

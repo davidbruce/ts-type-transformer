@@ -104,14 +104,14 @@ let main () =
     wireBtn "btn-0" (fun () ->
         let pg = readPagination ()
         if pg.pageIndex > 0.0 then
-            pag.setPageIndex (!^ (pg.pageIndex - 1.0))
+            pag.setPageIndex (pg.pageIndex - 1.0)
         render ()
     )
     wireBtn "btn-1" (fun () ->
         let pg = readPagination ()
         let maxIdx = pag.getPageCount () - 1.0
         if pg.pageIndex < maxIdx then
-            pag.setPageIndex (!^ (pg.pageIndex + 1.0))
+            pag.setPageIndex (pg.pageIndex + 1.0)
         render ()
     )
     wireBtn "btn-2" (fun () ->

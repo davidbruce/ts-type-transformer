@@ -113,7 +113,7 @@ let private render (label: string) =
 let main () =
     wireBtn "btn-0" (fun () ->
         globFilt.setGlobalFilter (box "")
-        colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("tier", box "core"); ColumnFilter.Create("requests", box 400.0) ]))
+        colFilt.setColumnFilters (ResizeArray [ ColumnFilter.Create("tier", box "core"); ColumnFilter.Create("requests", box 400.0) ])
         render "Filter: tier = core & requests >= 400"
     )
     wireBtn "btn-1" (fun () ->
@@ -123,7 +123,7 @@ let main () =
     )
     wireBtn "btn-2" (fun () ->
         globFilt.setGlobalFilter (box "")
-        colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("tier", box "edge") ]))
+        colFilt.setColumnFilters (ResizeArray [ ColumnFilter.Create("tier", box "edge") ])
         render "Filter: tier = edge"
     )
     wireBtn "btn-3" (fun () ->
@@ -133,7 +133,7 @@ let main () =
     )
     wireBtn "btn-4" (fun () ->
         globFilt.setGlobalFilter (box "")
-        colFilt.setColumnFilters (!^ (ResizeArray [ ColumnFilter.Create("errors", box 5.0) ]))
+        colFilt.setColumnFilters (ResizeArray [ ColumnFilter.Create("errors", box 5.0) ])
         render "Filter: errors >= 5"
     )
     render "Filter: tier = core & requests >= 400"

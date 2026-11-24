@@ -188,6 +188,8 @@ pub(super) struct Gen {
     record_counter: usize,
     probing: bool,
     cur_constrained: HashSet<String>,
+    // Type parameters a function writes as others (`ResultDate` as `DateType`).
+    skip_tparams: HashSet<String>,
     pending_delegates: String,
     global_delegates: String,
     in_globals: bool,
@@ -367,6 +369,7 @@ pub fn module_with_refs(xml: &str, namespace: &str, refs: &[ProjectRef]) -> Resu
         record_counter: 0,
         probing: false,
         cur_constrained: HashSet::new(),
+        skip_tparams: HashSet::new(),
         pending_delegates: String::new(),
         global_delegates: String::new(),
         in_globals: false,

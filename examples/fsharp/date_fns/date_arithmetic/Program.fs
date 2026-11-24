@@ -31,15 +31,15 @@ let jan31: JS.Date = parseISO "2024-01-31"
 let dur = Duration.Create (months = 1.0, days = 2.0)
 
 let ops: (string * JS.Date * string) list =
-    [ "addDays(base, 3)", addDays (!^baseDate, 3.0), "yyyy-MM-dd"
-      "subDays(base, 15)", subDays (!^baseDate, 15.0), "yyyy-MM-dd"
-      "addWeeks(base, 2)", addWeeks (!^baseDate, 2.0), "yyyy-MM-dd"
-      "addMonths(jan31, 1)", addMonths (!^jan31, 1.0), "yyyy-MM-dd"
-      "subMonths(base, 3)", subMonths (!^baseDate, 3.0), "yyyy-MM-dd"
-      "addYears(base, 1)", addYears (!^baseDate, 1.0), "yyyy-MM-dd"
-      "startOfWeek(base)", startOfWeek !^baseDate, "yyyy-MM-dd"
-      "endOfMonth(base)", endOfMonth !^baseDate, "yyyy-MM-dd HH:mm:ss"
-      "add(base, { months: 1, days: 2 })", add (!^baseDate, dur), "yyyy-MM-dd"
+    [ "addDays(base, 3)", addDays (baseDate, 3.0), "yyyy-MM-dd"
+      "subDays(base, 15)", subDays (baseDate, 15.0), "yyyy-MM-dd"
+      "addWeeks(base, 2)", addWeeks (baseDate, 2.0), "yyyy-MM-dd"
+      "addMonths(jan31, 1)", addMonths (jan31, 1.0), "yyyy-MM-dd"
+      "subMonths(base, 3)", subMonths (baseDate, 3.0), "yyyy-MM-dd"
+      "addYears(base, 1)", addYears (baseDate, 1.0), "yyyy-MM-dd"
+      "startOfWeek(base)", startOfWeek baseDate, "yyyy-MM-dd"
+      "endOfMonth(base)", endOfMonth baseDate, "yyyy-MM-dd HH:mm:ss"
+      "add(base, { months: 1, days: 2 })", add (baseDate, dur), "yyyy-MM-dd"
       "base (immutable check)", baseDate, "yyyy-MM-dd" ]
 
 let bodyRows =

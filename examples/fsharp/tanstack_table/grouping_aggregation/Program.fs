@@ -127,13 +127,13 @@ let main () =
         render ()
     )
     wireBtn "btn-2" (fun () ->
-        grp.setGrouping (!^ (ResizeArray [ "region" ]))
+        grp.setGrouping (ResizeArray [ "region" ])
         let expandAll : ExpandedState = !^true
         exp.setExpanded expandAll
         render ()
     )
     wireBtn "btn-3" (fun () ->
-        grp.setGrouping (!^ (ResizeArray [ "role" ]))
+        grp.setGrouping (ResizeArray [ "role" ])
         let expandAll : ExpandedState = !^true
         exp.setExpanded expandAll
         render ()
