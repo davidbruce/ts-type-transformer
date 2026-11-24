@@ -9,7 +9,7 @@ fn make_line(pts: [f64; 4], col: &str, width: f64) -> GroupOrShape {
         .with_points(JsArray::from(pts))
         .with_stroke(col)
         .with_stroke_width(width);
-    let ln = Line::<LineConfig>::new_with(Some(lc));
+    let ln = Line::new_with(Some(lc));
     Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
 }
 
@@ -130,7 +130,7 @@ pub extern "C" fn start() {
         (&card_b, "card-b"),
         (&card_c, "card-c"),
     ] {
-        let on_click = KonvaEventListener::<Node<RectConfig>, dom::PointerEvent>::new({
+        let on_click = KonvaEventListener::new({
             let stage = stage.clone();
             let fg_layer = fg_layer.clone();
             let overlay = overlay.clone();

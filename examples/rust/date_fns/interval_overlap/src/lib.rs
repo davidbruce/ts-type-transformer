@@ -19,8 +19,8 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
 }
 
 fn make_span(s_iso: &str, e_iso: &str) -> Interval<DateArg<Date>, DateArg<Date>> {
-    let s: Date = date_fns::parse_iso(s_iso, None);
-    let e: Date = date_fns::parse_iso(e_iso, None);
+    let s: Date = date_fns::parse_iso(s_iso);
+    let e: Date = date_fns::parse_iso(e_iso);
     Interval::default()
         .with_start(DateArg::DateType(s))
         .with_end(DateArg::DateType(e))
@@ -48,9 +48,7 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let win_span = make_span("2024-03-01", "2024-03-31");
-    let month_days = date_fns::each_day_of_interval::<_, date_fns::EachDayOfIntervalOptions<Date>>(
-        win_span, None,
-    );
+    let month_days = date_fns::each_day_of_interval(win_span);
 
     let sprint_a = make_span("2024-03-08", "2024-03-18");
     let tracks = [
@@ -158,12 +156,8 @@ pub extern "C" fn start() {
         ("2024-03-14", "Inside interval"),
         ("2024-03-28", "Clamped to end"),
     ] {
-        let probe: Date = date_fns::parse_iso(iso, None);
-        let clamped = date_fns::clamp::<
-            DateArg<Date>,
-            Interval<DateArg<Date>, DateArg<Date>>,
-            date_fns::ClampOptions<Date>,
-        >(DateArg::DateType(probe), sprint_a.clone(), None);
+        let probe: Date = date_fns::parse_iso(iso);
+        let clamped = date_fns::clamp(DateArg::DateType(probe), sprint_a.clone());
         let out_txt = date_fns::format_date(clamped, "yyyy-MM-dd");
         let tr = make_el(&doc, "tr", "", None);
         append(&tr, make_el(&doc, "td", "", Some(iso)));

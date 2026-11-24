@@ -7,7 +7,7 @@ fn make_line(pts: [f64; 4]) -> GroupOrShape {
         .with_points(JsArray::from(pts))
         .with_stroke("#e5e5e5")
         .with_stroke_width(1.0);
-    let ln = Line::<LineConfig>::new_with(Some(lc));
+    let ln = Line::new_with(Some(lc));
     Shape::<LineConfig>::from(ln).upcast::<ShapeConfig>().into()
 }
 

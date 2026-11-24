@@ -2,8 +2,8 @@
 
 use pixi_js::*;
 
-fn init_app() -> Application<JsValue> {
-    Application::<JsValue>::new()
+fn init_app() -> Application {
+    Application::new()
 }
 
 fn build_opts() -> ApplicationInitOptions {

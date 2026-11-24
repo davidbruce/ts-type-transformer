@@ -39,12 +39,11 @@ pub extern "C" fn start() {
     );
     append(&app, head);
 
-    let sample: Date = date_fns::parse_iso("2024-03-15T14:30:45", None);
-    let parsed: Date = date_fns::parse::<Date, Date>(
+    let sample: Date = date_fns::parse_iso("2024-03-15T14:30:45");
+    let parsed: Date = date_fns::parse(
         "15/03/2024",
         "dd/MM/yyyy",
         DateArg::DateType(sample.clone()),
-        None,
     );
 
     let fmt_card = make_el(&doc, "div", "card", None);
@@ -149,8 +148,8 @@ pub extern "C" fn start() {
     append(&vhead, vhrow);
     append(&vtbl, vhead);
 
-    let good_iso: Date = date_fns::parse_iso("2024-03-15", None);
-    let bad_iso: Date = date_fns::parse_iso("not-a-date", None);
+    let good_iso: Date = date_fns::parse_iso("2024-03-15");
+    let bad_iso: Date = date_fns::parse_iso("not-a-date");
     let ok_good = date_fns::is_valid(&good_iso) && date_fns::is_match("2024-03-15", "yyyy-MM-dd");
     let ok_bad = date_fns::is_valid(&bad_iso) && date_fns::is_match("not-a-date", "yyyy-MM-dd");
     let ok_2024 = date_fns::is_exists(2024.0, 1.0, 29.0);

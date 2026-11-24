@@ -398,7 +398,12 @@ the time control returns to JavaScript is reported, not lost.
   the key fixes their types (`add_event_listener(HTMLElementEventMap::CLICK,
   &listener, None)`, `add_event_listener("ping", on_ping, &options)`). A
   nullable union argument is any member, the union or `None`. A defaulted type argument is stated with
-  `query_selector_as::<T>`. `T extends Node` is `T: Is<Node>`. Callbacks are
+  `query_selector_as::<T>`; a constructor of a generic class takes the
+  class's parameters it does not name at their defaults, as `HashMap::new`
+  (`Mesh::new_with(&geometry, &material)`, `Application::new()`), and a
+  shorter form those its arguments left out alone named (date-fns'
+  `add_days(date, 3.0)`, of `ResultDate = DateType`). An option bag's
+  `create()` and `default()` stay generic: where it goes says what it is. `T extends Node` is `T: Is<Node>`. Callbacks are
   closures, kept (`new`, `release`, or freed once JavaScript collects the
   function) or for the length of a call and free to borrow (`scoped`); promises are awaited under `js::spawn`. The DOM: 12 MB.
 - Gleam (JavaScript target): no wasm and no glue, as F#; from the shared

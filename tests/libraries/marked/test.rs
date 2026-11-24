@@ -98,10 +98,7 @@ pub extern "C" fn run() {
     check!(html_of(inline) == "a <em>b</em> <code>c</code>");
 
     // The lexer: tokens of a document, the type of each, and their children.
-    let list = Lexer::<String, String>::lex_2::<String, String>(
-        "# Head\n\npara with **bold**\n\n- a\n- b\n",
-        None,
-    );
+    let list = Lexer::<String, String>::lex_2("# Head\n\npara with **bold**\n\n- a\n- b\n");
     let types: Vec<String> = (0..list.length() as usize)
         .map(|i| token_type(&list.at(i as f64).unwrap()))
         .collect();

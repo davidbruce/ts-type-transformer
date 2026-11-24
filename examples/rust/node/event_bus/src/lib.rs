@@ -33,7 +33,7 @@ impl Checks {
 pub extern "C" fn start() {
     let mut c = Checks(0);
 
-    let emitter = EventEmitter::<JsValue>::new();
+    let emitter = EventEmitter::new();
     emitter.set_max_listeners(12.0);
     c.check(emitter.get_max_listeners() == 12.0);
 

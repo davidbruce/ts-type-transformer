@@ -61,7 +61,7 @@ pub extern "C" fn start() {
 
     let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
-    let heading = MarkedExtensionRendererHeading::<String, String>::new(|h: tokens::Heading| {
+    let heading = MarkedExtensionRendererHeading::new(|h: tokens::Heading| {
         BooleanOrRendererOutput::RendererOutput(format!(
             "<h{0} class=\"wire-h\">\u{00A7} {1}</h{0}>\n",
             h.depth() as u32,
@@ -81,7 +81,7 @@ pub extern "C" fn start() {
         .with_renderer(&renderer)
         .with_walk_tokens(&walk);
 
-    let custom_m = Marked::<String, String>::new(vec![ext]);
+    let custom_m = Marked::new(vec![ext]);
     let def_html = match marked::marked_with_opt_marked_options(md) {
         StringOrPromise::String(s) => s,
         StringOrPromise::JsPromise(_) => String::new(),

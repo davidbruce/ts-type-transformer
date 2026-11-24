@@ -53,22 +53,31 @@ pub extern "C" fn start() {
 
     let sample =
         "# Heading\n\nParagraph with **bold** and `code`.\n\n- alpha\n- beta\n\n> quote\n\n---\n";
-    let list = Lexer::<String, String>::lex_2::<String, String>(sample, None);
+    let list = Lexer::<String, String>::lex_2(sample);
     let count = list.length() as usize;
 
     let head = make_el(&doc, "div", "head", None);
-    append(&head, make_el(&doc, "h1", "", Some("Marked Token Inspector (Rust)")));
+    append(
+        &head,
+        make_el(&doc, "h1", "", Some("Marked Token Inspector (Rust)")),
+    );
     let badge_text = format!("{count} tokens");
     append(&head, make_el(&doc, "span", "badge", Some(&badge_text)));
     append(&app, head);
 
     let src_card = make_el(&doc, "div", "card", None);
-    append(&src_card, make_el(&doc, "div", "label", Some("Markdown Input")));
+    append(
+        &src_card,
+        make_el(&doc, "div", "label", Some("Markdown Input")),
+    );
     append(&src_card, make_el(&doc, "pre", "src", Some(sample)));
     append(&app, src_card);
 
     let tbl_card = make_el(&doc, "div", "card", None);
-    append(&tbl_card, make_el(&doc, "div", "label", Some("Lexer Token Stream")));
+    append(
+        &tbl_card,
+        make_el(&doc, "div", "label", Some("Lexer Token Stream")),
+    );
 
     let table = make_el(&doc, "table", "tok-table", None);
     let thead = make_el(&doc, "thead", "", None);

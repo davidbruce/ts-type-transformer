@@ -42,9 +42,9 @@ pub extern "C" fn start() {
     append(&head, make_el(&doc, "span", "badge", Some("March 2024")));
     append(&app, head);
 
-    let ref_day: Date = date_fns::parse_iso("2024-03-15", None);
-    let month_start: Date = date_fns::start_of_month::<Date, Date>(day(&ref_day), None);
-    let month_end: Date = date_fns::end_of_month::<Date, Date>(day(&ref_day), None);
+    let ref_day: Date = date_fns::parse_iso("2024-03-15");
+    let month_start: Date = date_fns::start_of_month(day(&ref_day));
+    let month_end: Date = date_fns::end_of_month(day(&ref_day));
     let offset = date_fns::get_day(&month_start) as usize;
 
     let metrics = make_el(&doc, "div", "metrics", None);
@@ -104,8 +104,7 @@ pub extern "C" fn start() {
     let span: Interval<DateArg<Date>, DateArg<Date>> = Interval::default()
         .with_start(day(&month_start))
         .with_end(day(&month_end));
-    let days =
-        date_fns::each_day_of_interval::<_, date_fns::EachDayOfIntervalOptions<Date>>(span, None);
+    let days = date_fns::each_day_of_interval(span);
     for i in 0..days.len() {
         let item = days.get(i);
         let is_ref = date_fns::is_same_day(item.clone(), &ref_day);

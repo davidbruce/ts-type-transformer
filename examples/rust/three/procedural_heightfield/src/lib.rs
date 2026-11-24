@@ -133,7 +133,7 @@ pub extern "C" fn start() {
     grid.position().set_y(-1.1);
     scene.add([grid]);
 
-    let geo = BufferGeometry::<NormalBufferAttributes, BufferGeometryEventMap>::new();
+    let geo = BufferGeometry::new();
     let pos_attr = Float32BufferAttribute::new((GRID_N * GRID_N * 3) as f64, 3.0);
 
     let mut idx_vec = Vec::with_capacity((GRID_N - 1) * (GRID_N - 1) * 6);
@@ -158,7 +158,7 @@ pub extern "C" fn start() {
         .with_roughness(0.72)
         .with_metalness(0.05)
         .with_flat_shading(true);
-    let surf = Mesh::<_, MeshStandardMaterial>::new_with(
+    let surf = Mesh::new_with(
         Some(geo.clone()),
         Some(MeshStandardMaterial::new_with(&smp)),
     );
@@ -167,15 +167,12 @@ pub extern "C" fn start() {
     let wmp = MeshBasicMaterialParameters::default()
         .with_color(0x262626 as f64)
         .with_wireframe(true);
-    let wire_mesh = Mesh::<_, MeshBasicMaterial>::new_with(
-        Some(geo.clone()),
-        Some(MeshBasicMaterial::new_with(&wmp)),
-    );
+    let wire_mesh = Mesh::new_with(Some(geo.clone()), Some(MeshBasicMaterial::new_with(&wmp)));
     wire_mesh.position().set_y(0.015);
     scene.add([wire_mesh.clone()]);
 
     let pt_count = (GRID_N / 2) * (GRID_N / 2);
-    let pts_geo = BufferGeometry::<NormalBufferAttributes, BufferGeometryEventMap>::new();
+    let pts_geo = BufferGeometry::new();
     let pts_attr = Float32BufferAttribute::new((pt_count * 3) as f64, 3.0);
     pts_geo.set_attribute(
         "position".to_string(),
@@ -184,11 +181,7 @@ pub extern "C" fn start() {
     let pmp = PointsMaterialParameters::default()
         .with_color(0x111111 as f64)
         .with_size(0.14);
-    let pts = Points::<
-        BufferGeometry<NormalBufferAttributes, BufferGeometryEventMap>,
-        PointsMaterial,
-        Object3DEventMap,
-    >::new_with(Some(pts_geo), Some(PointsMaterial::new_with(&pmp)));
+    let pts = Points::new_with(Some(pts_geo), Some(PointsMaterial::new_with(&pmp)));
     scene.add([pts]);
 
     let st = Rc::new(RefCell::new(AppState {

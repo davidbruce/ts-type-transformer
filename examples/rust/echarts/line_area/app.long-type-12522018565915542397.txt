@@ -1,0 +1,1 @@
+echarts::ItemStyleOption: AsRef<echarts::ItemStyleOption<echarts::DefaultLabelFormatterCallbackParams>>

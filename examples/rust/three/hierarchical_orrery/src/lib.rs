@@ -101,7 +101,7 @@ pub extern "C" fn start() {
     grid.position().set_y(-1.5);
     scene.add([grid]);
 
-    let pedestal = Mesh::<CylinderGeometry, MeshStandardMaterial>::new_with(
+    let pedestal = Mesh::new_with(
         Some(CylinderGeometry::new_with(
             0.55, 0.75, 0.35, 24.0, None, None, None, None,
         )),
@@ -110,7 +110,7 @@ pub extern "C" fn start() {
     pedestal.position().set_y(-1.3);
     scene.add([pedestal]);
 
-    let core = Mesh::<SphereGeometry, MeshStandardMaterial>::new_with(
+    let core = Mesh::new_with(
         Some(SphereGeometry::new_with(
             0.65, 24.0, 18.0, None, None, None, None,
         )),
@@ -122,7 +122,7 @@ pub extern "C" fn start() {
     scene.add([inner_pivot.clone()]);
 
     let tp1 = MeshBasicMaterialParameters::default().with_color(0x999999 as f64);
-    let inner_track = Mesh::<TorusGeometry, MeshBasicMaterial>::new_with(
+    let inner_track = Mesh::new_with(
         Some(TorusGeometry::new_with(
             2.1, 0.025, 8.0, 64.0, None, None, None,
         )),
@@ -135,7 +135,7 @@ pub extern "C" fn start() {
     inner_planet.position().set_with(2.1, 0.0, 0.0);
     inner_pivot.add([inner_planet.clone()]);
 
-    let planet = Mesh::<SphereGeometry, MeshStandardMaterial>::new_with(
+    let planet = Mesh::new_with(
         Some(SphereGeometry::new_with(
             0.36, 20.0, 16.0, None, None, None, None,
         )),
@@ -145,7 +145,7 @@ pub extern "C" fn start() {
 
     let moon_pivot = Group::new();
     inner_planet.add([moon_pivot.clone()]);
-    let moon = Mesh::<OctahedronGeometry, MeshStandardMaterial>::new_with(
+    let moon = Mesh::new_with(
         Some(OctahedronGeometry::new_with(0.18, 0.0)),
         Some(std_mat(0xd4d4d4, 0.4, 0.1, true)),
     );
@@ -156,7 +156,7 @@ pub extern "C" fn start() {
     scene.add([outer_pivot.clone()]);
 
     let tp2 = MeshBasicMaterialParameters::default().with_color(0xb5b5b5 as f64);
-    let outer_track = Mesh::<TorusGeometry, MeshBasicMaterial>::new_with(
+    let outer_track = Mesh::new_with(
         Some(TorusGeometry::new_with(
             3.8, 0.025, 8.0, 80.0, None, None, None,
         )),
@@ -169,13 +169,13 @@ pub extern "C" fn start() {
     outer_station.position().set_with(3.8, 0.0, 0.0);
     outer_pivot.add([outer_station.clone()]);
 
-    let station_body = Mesh::<IcosahedronGeometry, MeshStandardMaterial>::new_with(
+    let station_body = Mesh::new_with(
         Some(IcosahedronGeometry::new_with(0.42, 0.0)),
         Some(std_mat(0x404040, 0.5, 0.1, true)),
     );
     outer_station.add([station_body.clone()]);
 
-    let halo = Mesh::<TorusGeometry, MeshStandardMaterial>::new_with(
+    let halo = Mesh::new_with(
         Some(TorusGeometry::new_with(
             0.68, 0.06, 10.0, 32.0, None, None, None,
         )),

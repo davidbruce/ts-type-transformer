@@ -51,7 +51,7 @@ pub extern "C" fn start() {
     );
     append(&app, head);
 
-    let m = Marked::<String, String>::new(Vec::<MarkedExtension<String, String>>::new());
+    let m = Marked::new(Vec::<MarkedExtension<String, String>>::new());
     let snippets = [
         "Hello **world** and *italics*",
         "# Heading stays literal inline",

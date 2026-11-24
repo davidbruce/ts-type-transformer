@@ -187,7 +187,7 @@ fn sync_meta(app: &AppState, st: &EditorState) {
 pub extern "C" fn start() {
     let dom_doc = dom::document();
     let schema = build_schema();
-    let key = PluginKey::<JsValue>::new_with("search");
+    let key = PluginKey::new_with("search");
 
     let app = Rc::new(RefCell::new(AppState {
         key: key.clone(),
@@ -205,9 +205,7 @@ pub extern "C" fn start() {
         }));
 
     let eprops =
-        EditorProps::<Plugin<JsValue>>::default().with_decorations(&EditorPropsDecorations::<
-            Plugin<JsValue>,
-        >::new({
+        EditorProps::<Plugin<JsValue>>::default().with_decorations(&EditorPropsDecorations::new({
             let key = key.clone();
             move |st: EditorState| {
                 let q = key

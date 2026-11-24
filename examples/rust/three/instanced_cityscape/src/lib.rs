@@ -148,7 +148,7 @@ pub extern "C" fn start() {
     let pmp = MeshStandardMaterialParameters::default()
         .with_color(0xe5e5e5 as f64)
         .with_roughness(0.85);
-    let plinth = Mesh::<PlaneGeometry, MeshStandardMaterial>::new_with(
+    let plinth = Mesh::new_with(
         Some(PlaneGeometry::new_with(8.6, 8.6, None, None)),
         Some(MeshStandardMaterial::new_with(&pmp)),
     );
@@ -165,11 +165,7 @@ pub extern "C" fn start() {
         .with_roughness(0.65)
         .with_metalness(0.08);
     let tmat = MeshStandardMaterial::new_with(&tmp);
-    let inst = InstancedMesh::<BoxGeometry, MeshStandardMaterial, Object3DEventMap>::new(
-        Some(tgeo),
-        Some(tmat),
-        100.0,
-    );
+    let inst = InstancedMesh::new(Some(tgeo), Some(tmat), 100.0);
     scene.add([inst.clone()]);
 
     let st = Rc::new(RefCell::new(AppState {

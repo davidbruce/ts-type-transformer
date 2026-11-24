@@ -53,7 +53,7 @@ pub extern "C" fn run() {
 
 // An Application on the page's canvas: renders if the browser has WebGL.
 async fn application() {
-    let app = Application::<JsValue>::new();
+    let app = Application::new();
     let options = ApplicationInitOptions::create();
     // FINDING 14: `canvas: ICanvas` is a structural interface that an
     // HTMLCanvasElement satisfies; no conversion is bound, so the handle is viewed as one.
@@ -181,9 +181,9 @@ fn scene() {
     check!(near(local.width(), 40.0));
 
     // A point in the graphics' space and in the world's.
-    let at: Point = g.to_global(&Point::new_with(Some(1.0), Some(1.0)), None, None);
+    let at: Point = g.to_global(&Point::new_with(Some(1.0), Some(1.0)));
     check!(near(at.x(), 122.0) && near(at.y(), 92.0));
-    let back: Point = g.to_local(&Point::new_with(Some(122.0), Some(92.0)), None, None, None);
+    let back: Point = g.to_local(&Point::new_with(Some(122.0), Some(92.0)));
     check!(near(back.x(), 1.0) && near(back.y(), 1.0));
 
     // Rotation, alpha and visibility.

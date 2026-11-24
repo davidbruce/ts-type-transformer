@@ -170,7 +170,7 @@ pub extern "C" fn start() {
             .with_metalness(0.1)
             .with_flat_shading(i >= 4);
         let mat = MeshStandardMaterial::new_with(&mp);
-        let m = Mesh::<_, MeshStandardMaterial>::new_with(Some(geo), Some(mat.clone()));
+        let m = Mesh::new_with(Some(geo), Some(mat.clone()));
         m.set_name(NAMES[i]);
         m.position().set_with(gx * 2.1, 0.0, gz * 2.1);
         m.rotation().set(0.2, 0.35 * i as f64, 0.0);

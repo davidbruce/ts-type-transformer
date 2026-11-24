@@ -87,7 +87,7 @@ pub extern "C" fn start() {
         .with_stroke("#737373")
         .with_stroke_width(1.5)
         .with_dash([6.0, 4.0]);
-    let fb = Line::<LineConfig>::new_with(Some(fbc));
+    let fb = Line::new_with(Some(fbc));
     layer.add([GroupOrShape::from(
         Shape::<LineConfig>::from(fb).upcast::<ShapeConfig>(),
     )]);

@@ -27,7 +27,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     js::spawn(async {
-        let app = Application::<JsValue>::new();
+        let app = Application::new();
         let opts = build_opts();
         if app.init_with(&opts).await.is_err() {
             return;
@@ -54,7 +54,7 @@ pub extern "C" fn start() {
             let theta = step as f64 * (2.0 * std::f64::consts::PI / 12.0);
             let spoke = Matrix::new();
             spoke.rotate(theta);
-            let dir: Point = spoke.apply(&unit_x, None);
+            let dir: Point = spoke.apply(&unit_x);
             guides
                 .move_to(340.0, 200.0)
                 .line_to(340.0 + dir.x() * 182.0, 200.0 + dir.y() * 182.0);
@@ -71,17 +71,17 @@ pub extern "C" fn start() {
                 let theta = step as f64 * (2.0 * std::f64::consts::PI / 12.0) + r_idx as f64 * 0.13;
                 let dir_m = Matrix::new();
                 dir_m.rotate(theta);
-                let dir: Point = dir_m.apply(&unit_x, None);
+                let dir: Point = dir_m.apply(&unit_x);
 
                 let tile_m = Matrix::new();
                 tile_m
                     .rotate(theta + r_idx as f64 * 0.2)
                     .translate(340.0 + radius * dir.x(), 200.0 + radius * dir.y());
 
-                let p0: Point = tile_m.apply(&Point::new_with(corners[0].0, corners[0].1), None);
+                let p0: Point = tile_m.apply(&Point::new_with(corners[0].0, corners[0].1));
                 tiles.move_to(p0.x(), p0.y());
                 for &(cx, cy) in &corners[1..] {
-                    let pk: Point = tile_m.apply(&Point::new_with(cx, cy), None);
+                    let pk: Point = tile_m.apply(&Point::new_with(cx, cy));
                     tiles.line_to(pk.x(), pk.y());
                 }
                 tiles.close_path().fill_with(ring_colors[r_idx] as f64);

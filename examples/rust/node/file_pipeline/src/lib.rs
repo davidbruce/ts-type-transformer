@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use node::events::EventEmitter;
-use node::{AnyArrayFn, BufferEncoding, JsArray, JsValue, fs, js, path};
+use node::{AnyArrayFn, BufferEncoding, JsArray, fs, js, path};
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -33,7 +33,7 @@ impl Checks {
 pub extern "C" fn start() {
     let mut c = Checks(0);
 
-    let bus = EventEmitter::<JsValue>::new();
+    let bus = EventEmitter::new();
     let stages = Rc::new(Cell::new(0u32));
     let done_count = Rc::new(Cell::new(0u32));
 

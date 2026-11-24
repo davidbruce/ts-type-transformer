@@ -34,7 +34,7 @@ pub extern "C" fn start() {
     );
     append(&app, head);
 
-    let anchor: Date = date_fns::parse_iso("2024-03-15", None);
+    let anchor: Date = date_fns::parse_iso("2024-03-15");
     let opts = FormatDistanceOptions::default().with_add_suffix(true);
 
     let raw = [
@@ -60,7 +60,7 @@ pub extern "C" fn start() {
 
     let mut all_dates: Vec<DateArg<Date>> = Vec::new();
     for (iso, title) in raw {
-        let d: Date = date_fns::parse_iso(iso, None);
+        let d: Date = date_fns::parse_iso(iso);
         all_dates.push(DateArg::DateType(d.clone()));
 
         let same = date_fns::is_same_day(&d, &anchor);
@@ -116,8 +116,8 @@ pub extern "C" fn start() {
     append(&tl_card, timeline);
     append(&app, tl_card);
 
-    let earliest: Date = date_fns::min::<Date, Date>(all_dates.clone(), None);
-    let latest: Date = date_fns::max::<Date, Date>(all_dates, None);
+    let earliest: Date = date_fns::min(all_dates.clone());
+    let latest: Date = date_fns::max(all_dates);
     let total_span = date_fns::difference_in_calendar_days(&latest, &earliest) as i32;
 
     let sum_card = make_el(&doc, "div", "card", None);

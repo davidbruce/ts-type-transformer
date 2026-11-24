@@ -199,8 +199,10 @@ pub(super) fn left_out(f: &Func) -> usize {
         return 0;
     }
     let k = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count();
-    let dropped = &f.params[f.params.len() - k..];
-    if dropped.iter().any(|(_, t)| f.type_params.iter().any(|p| mentions(t, &p.name))) { 0 } else { k }
+    let (kept, dropped) = f.params.split_at(f.params.len() - k);
+    // One it alone names is its default there (date-fns' `ResultDate = DateType`), else unknown.
+    let unknown = |p: &TParam| p.default.is_none() && !kept.iter().any(|(_, t)| mentions(t, &p.name));
+    if dropped.iter().any(|(_, t)| f.type_params.iter().any(|p| unknown(p) && mentions(t, &p.name))) { 0 } else { k }
 }
 
 // Its form with every argument, by `_with`, else `_full`: ProseMirror's `can_replace_with` is a method.
@@ -214,12 +216,24 @@ fn short_form(f: &Func, orig: &Func, k: usize, name: &str, full: &str, vis: &str
     let keep = f.params.len() - k;
     let short = Func { params: f.params[..keep].to_vec(), ..f.clone() };
     let short_orig = Func { params: orig.params[..keep].to_vec(), ..orig.clone() };
+    // A type parameter only what it leaves out named is its default.
+    let gone = hidden(&short);
+    let (short, short_orig) = if gone.is_empty() { (short, short_orig) } else { (defaulted(&short), defaulted(&short_orig)) };
     let p = parts_with_raw(&short, Some(&short_orig), &mut BTreeMap::new(), this, cx);
+    let full_generics = parts_with_raw(f, Some(orig), &mut BTreeMap::new(), this, cx).generics;
     let generics = if p.generics.is_empty() { String::new() } else { format!("<{}>", p.generics.join(", ")) };
     let ret = if f.ret == Ty::Void { String::new() } else { format!(" -> {}", p.ret) };
     let args: Vec<String> = short.params.iter().map(|(n, _)| ident(&snake(n))).chain(std::iter::repeat_n("None".to_string(), k)).collect();
     // Its type arguments stated: one that only has a default is not inferred.
-    let turbofish = if p.generics.is_empty() { String::new() } else { format!("::<{}>", p.generics.iter().map(|g| g.split(':').next().unwrap_or(g).trim()).collect::<Vec<_>>().join(", ")) };
+    let default_of = |n: &str| {
+        let mut t = Ty::Param(n.to_string());
+        for _ in 0..=gone.len() {
+            t = subst(&t, &gone, &[]);
+        }
+        ty(&t, cx)
+    };
+    let names: Vec<String> = full_generics.iter().map(|g| g.split(':').next().unwrap_or(g).trim().to_string()).collect();
+    let turbofish = if names.is_empty() { String::new() } else { format!("::<{}>", names.iter().map(|n| if gone.iter().any(|g| g.name == *n) { default_of(n) } else { n.clone() }).collect::<Vec<_>>().join(", ")) };
     let callee = if this.is_some() { format!("self.{full}{turbofish}") } else if site.assoc { format!("Self::{full}{turbofish}") } else { format!("{full}{turbofish}") };
     format!("{}{vis}fn {name}{generics}({}){ret} {{ {callee}({}) }}", doc_of(f), p.params.join(", "), args.join(", "))
 }
@@ -517,10 +531,14 @@ pub(super) fn defaulted(f: &Func) -> Func {
     let hidden = hidden(f);
     // A default may name another that is hidden: `R = D` beside `D = Date`.
     let mut out = f.clone();
-    for _ in 0..=hidden.len() {
-        out = map_types(&out, &|t| subst(t, &hidden, &[]));
-    }
+    let fill = |t: &Ty| (0..=hidden.len()).fold(t.clone(), |t, _| subst(&t, &hidden, &[]));
+    out = map_types(&out, &fill);
     out.type_params.retain(|p| !hidden.iter().any(|h| h.name == p.name));
+    // And in those left: `ResultDate = DateType` where `DateType` is `Date`.
+    for p in &mut out.type_params {
+        p.default = p.default.as_ref().map(&fill);
+        p.constraint = p.constraint.as_ref().map(&fill);
+    }
     out
 }
 

@@ -124,7 +124,7 @@ fn update_meta(app: &AppState, st: &EditorState) {
 pub extern "C" fn start() {
     let dom_doc = dom::document();
     let schema = build_schema();
-    let audit_key = PluginKey::<JsValue>::new_with("audit");
+    let audit_key = PluginKey::new_with("audit");
 
     let app = Rc::new(RefCell::new(AppState {
         schema: schema.clone(),

@@ -27,7 +27,7 @@ fn stroke_g(g: &Graphics, width: f64, color_hex: u32) {
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     js::spawn(async {
-        let app = Application::<JsValue>::new();
+        let app = Application::new();
         let opts = build_opts();
         if app.init_with(&opts).await.is_err() {
             return;

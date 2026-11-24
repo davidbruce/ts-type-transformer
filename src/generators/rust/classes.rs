@@ -7,7 +7,7 @@ use super::types::{Site,
     param, raise, raw, raw_ret, ty, upcast_in, Family, VALUE,
 };
 use super::{camel, ident, snake, Context, PRELUDE, RUNTIME_TYPES, TAKEN};
-use super::super::model::{base_args, map_types, subst, with_self_args, Call, Class, Func, Model, NamedUnion, TParam, Ty};
+use super::super::model::{base_args, map_types, mentions, subst, with_self_args, Call, Class, Func, Model, NamedUnion, TParam, Ty};
 
 fn valid_with_param(t: &Ty) -> bool {
     match t {
@@ -266,6 +266,11 @@ pub(super) fn emit_classes(
         // Statics, constants, a map's keys, non-primary/colliding/own inherent methods, and conversions.
         let mut inherent = String::new();
         let mut inherent_taken: HashSet<String> = HashSet::new();
+        // A constructor of a generic class is in an impl where the class's
+        // parameters it does not take are their defaults, as `HashMap::new`:
+        // `Mesh::new_with(&geometry, &material)`, no `Mesh::<G, M>`. An option
+        // bag's `create()` stays generic: where it goes says what it is.
+        let mut defaulted_impls: BTreeMap<(String, String), String> = BTreeMap::new();
         for f in c.funcs.iter().filter(|f| !Class::has_self(f)) {
             let fname = &own[&f.name];
             let f_self = with_self_args(f, c);
@@ -273,9 +278,14 @@ pub(super) fn emit_classes(
                 inherent_taken.insert(format!("{fname}_as"));
             }
             inherent_taken.insert(fname.clone());
-            for item in function(&f_self, fname, "pub ", imports, None, &Site { assoc: true, taken: &own_names }, cx) {
-                inherent += &indented(&item);
+            let (spec_bounds, spec_me, f_spec) = if matches!(f.call, Call::New(_)) { defaulted_impl(c, &name, &f_self, cx) } else { (bounds.clone(), me.clone(), f_self.clone()) };
+            let body = if spec_me == me { &mut inherent } else { defaulted_impls.entry((spec_bounds, spec_me)).or_default() };
+            for item in function(&f_spec, fname, "pub ", imports, None, &Site { assoc: true, taken: &own_names }, cx) {
+                *body += &indented(&item);
             }
+        }
+        for ((spec_bounds, spec_me), body) in &defaulted_impls {
+            *out += &format!("impl{spec_bounds} {spec_me} {{\n{body}}}\n");
         }
         for (constant, value) in &c.consts {
             let t = if value.starts_with('"') { "&'static str" } else if value == "true" || value == "false" { "bool" } else { "f64" };
@@ -703,4 +713,26 @@ pub(super) fn callback(name: &str, type_params: &[TParam], params: &[(String, Ty
         trampoline("unsafe { &*(ctx as *const core::cell::RefCell<F>) }.borrow_mut()", ""),
         turbofish.join(", ")
     )
+}
+
+// The impl a static goes in: the class's parameters it does not take, which
+// have defaults, are those (`impl<G, M> Mesh<G, M, Object3DEventMap>`); its
+// bounds, its type, and the static with them put in.
+fn defaulted_impl(c: &Class, name: &str, f: &Func, cx: &Context) -> (String, String, Func) {
+    let mut args: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
+    let taken = |p: &TParam| f.params.iter().any(|(_, t)| mentions(t, &p.name)) || f.type_params.iter().any(|q| q.constraint.as_ref().is_some_and(|k| mentions(k, &p.name)));
+    let mut fixed = vec![false; args.len()];
+    for (i, p) in c.type_params.iter().enumerate() {
+        if let Some(d) = p.default.as_ref().filter(|_| !taken(p)) {
+            args[i] = subst(d, &c.type_params, &args);
+            fixed[i] = true;
+        }
+    }
+    // A default naming a parameter still open keeps it generic: nothing to fix.
+    if !fixed.iter().any(|&x| x) || args.iter().zip(&fixed).any(|(a, &x)| x && c.type_params.iter().zip(&fixed).any(|(p, &y)| !y && mentions(a, &p.name))) {
+        return (generics(&c.type_params, cx), format!("{name}{}", args_of(&c.type_params)), f.clone());
+    }
+    let open: Vec<TParam> = c.type_params.iter().zip(&fixed).filter(|(_, x)| !**x).map(|(p, _)| p.clone()).collect();
+    let me = format!("{name}<{}>", args.iter().map(|a| ty(a, cx)).collect::<Vec<_>>().join(", "));
+    (generics(&open, cx), me, map_types(f, &|t| subst(t, &c.type_params, &args)))
 }
