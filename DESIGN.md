@@ -282,7 +282,10 @@ the time control returns to JavaScript is reported, not lost.
 - C (C11): `ts_types.h` with every handle, enum, union and callback; one
   header per declaration in `areas/<module>/` or `namespaces/<module>/`.
   Inheritance is kept: `_Generic` upcasts (`AS_Element(x)`) let any subtype
-  be passed. A function's name is also a macro, so trailing optional
+  be passed, and a type names its ancestors' functions too
+  (`HTMLElement_appendChild`), but a family of more than 150, one per literal
+  (`ParentNode_querySelector_div`), only where it takes it directly
+  (`Document_querySelector_canvas`). A function's name is also a macro, so trailing optional
   arguments may be left out (`Event_new("ping")`; all of them, `orUnit()`,
   in C23) and the first of a family of overloads picks one by its
   argument's type (`Shape_label(s, "a")`, `Shape_label(s, 7)`). Each shorter

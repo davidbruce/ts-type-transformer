@@ -15,6 +15,10 @@ use super::{
 // declaration in a directory per module, `<module>/<Name>.h`, with the module's
 // functions in `<module>/functions.h`; an umbrella `<module>.h` per module, and
 // `bindings.h` for everything.
+
+// The most functions of one literal family a subclass repeats.
+const MAX_INHERITED_FAMILY: usize = 150;
+
 pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec<(String, String)>, Vec<String>> {
     let problems = check(m);
     if !problems.is_empty() {
@@ -478,7 +482,21 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         for a in &ancestors {
             let Some(a_class) = class_by_name.get(a.as_str()) else { continue };
             methods |= a_class.funcs.iter().any(|f| matches!(f.call, Call::Method(_)));
+            // A family of one function per literal too big to repeat in every
+            // subclass (the DOM's 229 `querySelector_<tag>`) is named only by
+            // a type that takes it directly: `Document_querySelector_canvas`,
+            // and `ParentNode_querySelector_div(frameset)` for the rest.
+            let mut families: HashMap<&str, usize> = HashMap::new();
+            for f in &a_class.funcs {
+                if let Some((import, _)) = &f.shared {
+                    *families.entry(import.as_str()).or_default() += 1;
+                }
+            }
+            let direct = c.ancestors.contains(a);
             for af in a_class.funcs.iter().filter(|af| Class::has_self(af)) {
+                if !direct && af.shared.as_ref().is_some_and(|(import, _)| families[import.as_str()] > MAX_INHERITED_FAMILY) {
+                    continue;
+                }
                 if !own_methods.insert(af.name.as_str()) {
                     continue;
                 }
