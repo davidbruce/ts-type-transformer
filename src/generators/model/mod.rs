@@ -239,8 +239,10 @@ impl NamedUnion {
     // CanvasGradient`); a record beside other objects (prosemirror's `{
     // [name]: NodeSpec } | OrderedMap<NodeSpec>`); none where every member is
     // an object (ECharts' series); else the first as declared (`number |
-    // string`, `Date | number | string`).
-    pub fn primary(&self, record: impl Fn(&str) -> bool) -> Option<usize> {
+    // string`, `Date | number | string`). An inline union's order is the
+    // checker's, `string` before `number` always: there a number comes first
+    // (ECharts' `fontSize`, as its `left` through `PositionSizeOption`).
+    pub fn primary(&self, record: impl Fn(&str) -> bool, inline: bool) -> Option<usize> {
         let object = |t: &Ty| !matches!(t, Ty::Num | Ty::Bool | Ty::Str | Ty::Enum(_) | Ty::NumEnum(_) | Ty::Any | Ty::Void);
         if let Some(i) = self.parts.iter().position(|p| self.parts.iter().any(|q| matches!(q, Ty::ArrayOf(e) if **e == *p))) {
             return Some(i);
@@ -259,6 +261,12 @@ impl NamedUnion {
         if self.parts.iter().all(object) {
             return None;
         }
+        if inline
+            && self.parts.first() == Some(&Ty::Str)
+            && let Some(i) = self.parts.iter().position(|p| matches!(p, Ty::Num | Ty::NumEnum(_)))
+        {
+            return Some(i);
+        }
         (!self.parts.is_empty()).then_some(0)
     }
 
@@ -267,6 +275,143 @@ impl NamedUnion {
     pub fn typable(&self) -> bool {
         self.type_params.is_empty() && self.parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)))
     }
+}
+
+impl Model {
+    pub fn is_callback(&self, name: &str) -> bool {
+        self.callbacks.iter().any(|c| c.name == name)
+    }
+
+    // An object of string keys: `{ [name: string]: NodeSpec }`.
+    pub fn is_record(&self, class: &str) -> bool {
+        self.classes.iter().find(|c| c.name == class).is_some_and(|c| c.funcs.iter().any(|f| f.call == Call::IndexSet))
+    }
+
+    // The `type` an option object's `create` fixes: `{"type": "category", ..}`.
+    pub fn fixed_type(&self, class: &str) -> Option<String> {
+        let c = self.classes.iter().find(|c| c.name == class)?;
+        c.funcs.iter().find_map(|f| match &f.call {
+            Call::Create(lit) => {
+                let at = lit.find("\"type\": \"")? + "\"type\": \"".len();
+                Some(lit[at..].split('"').next()?.to_string())
+            }
+            _ => None,
+        })
+    }
+
+    // An array element of the union's own members: ECharts' `SeriesOption` in
+    // `BarSeriesOption | LineSeriesOption | .. | SeriesOption[]`.
+    pub fn of_members(&self, e: &Ty, u: &NamedUnion) -> bool {
+        match e {
+            Ty::NamedUnion(n) => self.unions.iter().find(|v| v.name == *n).is_some_and(|v| v.parts.iter().all(|p| u.parts.contains(p))),
+            t => u.parts.iter().filter(|p| *p == t).count() == 1,
+        }
+    }
+
+    // The member a union's plain name takes (see `NamedUnion::primary`; where
+    // every member is an object, the one named by just what they all share:
+    // Leaflet's `Icon` beside `DivIcon`), and each member's part of a name for it.
+    pub fn member_names(&self, u: &NamedUnion, type_name: &dyn Fn(&str) -> String) -> (Option<usize>, Vec<String>) {
+        let primary = u.primary(|n| self.is_record(n), self.synthetic.contains(&u.name));
+        let (names, base) = self.member_suffixes(u, primary, type_name);
+        match (primary, base) {
+            (None, Some(b)) => (Some(b), self.member_suffixes(u, Some(b), type_name).0),
+            _ => (primary, names),
+        }
+    }
+
+    // Each member's part of a name for it (Gleam's `with_left_string`, C's
+    // `.left_string`): `string`, `number`, `list` (of `T | T[]`), `fn`; an
+    // option object by the `type` its `create` fixes (ECharts' axes:
+    // `category`, `value`); one lowering made up by the last of its name
+    // (`EditorView_new_place_object`); else its type's name, as `type_name`
+    // has it, without the words every such member has (`BarSeriesOption |
+    // LineSeriesOption`: `bar`, `line`). And the one member those words
+    // alone name, if any.
+    fn member_suffixes(&self, u: &NamedUnion, primary: Option<usize>, type_name: &dyn Fn(&str) -> String) -> (Vec<String>, Option<usize>) {
+        let snake = super::case::snake_case_alnum;
+        let typed: Vec<Option<String>> = u
+            .parts
+            .iter()
+            .map(|p| match p {
+                Ty::Obj(n) if self.is_callback(n) => None,
+                Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) | Ty::NamedUnion(n) => Some(type_name(n)),
+                _ => None,
+            })
+            .collect();
+        let fixed: Vec<Option<String>> = u.parts.iter().map(|p| if let Ty::Obj(n) = p { self.fixed_type(n) } else { None }).collect();
+        let objects = typed.iter().filter(|t| t.is_some()).count();
+        let mut values: Vec<&String> = fixed.iter().flatten().collect();
+        values.sort();
+        values.dedup();
+        let by_type = objects > 1 && fixed.iter().zip(&typed).all(|(f, t)| t.is_none() || f.is_some()) && values.len() == objects;
+        let words: Vec<Vec<String>> = typed.iter().flatten().map(|n| camel_words(n)).collect();
+        let (mut head, mut tail) = (0, 0);
+        if words.len() > 1 {
+            let shortest = words.iter().map(Vec::len).min().unwrap_or(0);
+            while head < shortest && words.iter().all(|w| w[head] == words[0][head]) {
+                head += 1;
+            }
+            while tail < shortest - head && words.iter().all(|w| w[w.len() - 1 - tail] == words[0][words[0].len() - 1 - tail]) {
+                tail += 1;
+            }
+        }
+        let bare: Vec<usize> = if words.len() > 1 && !by_type {
+            typed.iter().enumerate().filter(|(_, n)| n.as_ref().is_some_and(|n| camel_words(n).len() == head + tail)).map(|(i, _)| i).collect()
+        } else {
+            Vec::new()
+        };
+        let base = if let [b] = bare.as_slice() { Some(*b) } else { None };
+        let names = u.parts
+            .iter()
+            .zip(&typed)
+            .enumerate()
+            .map(|(m, (p, name))| match p {
+                Ty::Str => "string".into(),
+                Ty::Num | Ty::NumEnum(_) => "number".into(),
+                Ty::Bool => "boolean".into(),
+                Ty::ArrayOf(e) if primary.is_some_and(|q| **e == u.parts[q]) || self.of_members(e, u) => "list".into(),
+                Ty::Obj(n) if self.is_callback(n) => "fn".into(),
+                // Untyped, the only array beside objects: `T | T[]` of a union `T`, flattened.
+                Ty::Array if primary.is_none() && u.parts.iter().filter(|q| matches!(q, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() == 1 => "list".into(),
+                Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
+                _ if by_type => snake(&fixed[m].clone().unwrap_or_default().replace(['-', ' ', '.'], "_")),
+                Ty::Obj(n) | Ty::NamedUnion(n) if self.synthetic.contains(n) && n.contains('_') => snake(n.rsplit('_').next().unwrap_or(n)),
+                _ => match name {
+                    Some(n) => {
+                        let w = camel_words(n);
+                        let kept = &w[head.min(w.len())..w.len().saturating_sub(tail).max(head.min(w.len()))];
+                        snake(&if kept.is_empty() { n.clone() } else { kept.concat() })
+                    }
+                    None => format!("case{m}"),
+                },
+            })
+            .collect();
+        (names, base)
+    }
+}
+
+// `XAXisComponentOption` as `X`, `AXis`, `Component`, `Option`: a word starts
+// at a capital after a lowercase letter or a digit, or after an underscore
+// (C's `Echarts_BarSeriesOption`).
+pub fn camel_words(n: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut prev_lower = false;
+    let mut fresh = true;
+    for c in n.chars() {
+        if c == '_' {
+            fresh = true;
+            prev_lower = false;
+            continue;
+        }
+        if fresh || (c.is_ascii_uppercase() && prev_lower) {
+            out.push(String::new());
+            fresh = false;
+        }
+        out.last_mut().unwrap().push(c);
+        prev_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+    }
+    out
 }
 
 // A map whose keys select types: `HTMLElementEventMap`.

@@ -58,7 +58,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement_appendChild(grid, make_el(doc, "div", "day-cell empty", 0));
     }
 
-    Df_Interval span = Df_Interval_create(.start = Df_DateArg_of(month_start), .end = Df_DateArg_of(month_end));
+    Df_Interval span = Df_Interval_create(.start = month_start, .end = month_end);
     JsArray_Df_DateArg days = df_eachDayOfInterval(span);
     uint32_t count = JsArray_Df_DateArg_length(days);
     for (uint32_t i = 0; i < count; i++) {

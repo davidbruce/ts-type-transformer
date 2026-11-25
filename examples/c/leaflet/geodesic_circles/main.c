@@ -37,7 +37,7 @@ __attribute__((export_name("start"))) void start(void) {
         total_dist_km += Leaflet_LatLng_distanceTo(zurich, pt) / 1000.0;
 
         Leaflet_Circle_addTo(leaflet_circle_with_radius(pt, 18000.0, Leaflet_CircleMarkerOptions_create(
-            .color = "#555555", .weight = 1.2, .dashArray = Leaflet_string_or_number_array_of("3 3"),
+            .color = "#555555", .weight = 1.2, .dashArray = "3 3",
             .fillColor = "#737373", .fillOpacity = 0.18)), m);
 
         Leaflet_CircleMarker_addTo(leaflet_circleMarker(pt, Leaflet_CircleMarkerOptions_create(

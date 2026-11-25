@@ -612,7 +612,8 @@ impl<'m> Gen<'m> {
         if unions.is_empty() {
             return Vec::new();
         }
-        let primary: Vec<Option<usize>> = unions.iter().map(|(_, u, _)| u.primary(|n| self.is_record(n))).collect();
+        let named: Vec<(Option<usize>, Vec<String>)> = unions.iter().map(|(_, u, _)| self.m.member_names(u, &|n| self.tname(n))).collect();
+        let primary: Vec<Option<usize>> = named.iter().map(|(p, _)| *p).collect();
         let member = |place: &Place, t: &Ty| match place {
             Place::Tail(absent) => Ty::Nullable(Box::new(t.clone()), *absent),
             _ => t.clone(),
@@ -644,7 +645,7 @@ impl<'m> Gen<'m> {
                 continue;
             }
             let Some(others) = at_primary(Some(k)) else { continue };
-            let names = self.member_suffixes(u, primary[k]);
+            let names = &named[k].1;
             let with_only = matches!(place, Place::Tail(_));
             let mut add = |suffix: String, full: Option<String>, t: Option<Ty>, forms: &mut Vec<Form>| {
                 // Taken by another parameter's member: by its whole name (node's `BufferEncoding` beside `Buffer`).
@@ -679,63 +680,6 @@ impl<'m> Gen<'m> {
             forms.push(Form { suffix: Some("of".to_string()), args: Vec::new(), with_only });
         }
         forms
-    }
-
-    // Each member's part of a form's name: `string`, `number`, `list` (of
-    // `T | T[]`), `fn`, else its type's, without the words every such member
-    // has (ECharts' `BarSeriesOption | LineSeriesOption` are `bar`, `line`).
-    fn member_suffixes(&self, u: &NamedUnion, primary: Option<usize>) -> Vec<String> {
-        let typed: Vec<Option<String>> = u
-            .parts
-            .iter()
-            .map(|p| match p {
-                Ty::Obj(n) if self.is_callback(n) => None,
-                Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) | Ty::NamedUnion(n) => Some(self.tname(n)),
-                _ => None,
-            })
-            .collect();
-        // Option objects whose `type` each fixes apart (ECharts' axes: `category`, `value`).
-        let fixed: Vec<Option<String>> = u.parts.iter().map(|p| if let Ty::Obj(n) = p { self.fixed_type(n) } else { None }).collect();
-        let objects = typed.iter().filter(|t| t.is_some()).count();
-        let mut values: Vec<&String> = fixed.iter().flatten().collect();
-        values.sort();
-        values.dedup();
-        let by_type = objects > 1 && fixed.iter().zip(&typed).all(|(f, t)| t.is_none() || f.is_some()) && values.len() == objects;
-        let words: Vec<Vec<String>> = typed.iter().flatten().map(|n| camel_words(n)).collect();
-        let (mut head, mut tail) = (0, 0);
-        if words.len() > 1 {
-            let shortest = words.iter().map(Vec::len).min().unwrap_or(0);
-            while head < shortest && words.iter().all(|w| w[head] == words[0][head]) {
-                head += 1;
-            }
-            while tail < shortest - head && words.iter().all(|w| w[w.len() - 1 - tail] == words[0][words[0].len() - 1 - tail]) {
-                tail += 1;
-            }
-        }
-        u.parts
-            .iter()
-            .zip(&typed)
-            .enumerate()
-            .map(|(m, (p, name))| match p {
-                Ty::Str => "string".into(),
-                Ty::Num | Ty::NumEnum(_) => "number".into(),
-                Ty::Bool => "boolean".into(),
-                Ty::ArrayOf(e) if primary.is_some_and(|q| **e == u.parts[q]) || self.of_members(e, u) => "list".into(),
-                Ty::Obj(n) if self.is_callback(n) => "fn".into(),
-                Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
-                _ if by_type => snake(&lower(&fixed[m].clone().unwrap_or_default().replace(['-', ' ', '.'], "_"))),
-                // Made up by lowering, named for where it is: the last of that (`EditorView_new_place_object`).
-                Ty::Obj(n) | Ty::NamedUnion(n) if self.m.synthetic.contains(n) && n.contains('_') => snake(n.rsplit('_').next().unwrap_or(n)),
-                _ => match name {
-                    Some(n) => {
-                        let w = camel_words(n);
-                        let kept = &w[head.min(w.len())..w.len().saturating_sub(tail).max(head.min(w.len()))];
-                        snake(&if kept.is_empty() { n.clone() } else { kept.concat() })
-                    }
-                    None => format!("case{m}"),
-                },
-            })
-            .collect()
     }
 
     // One external function, `name`, and its JavaScript; returns its JS export
@@ -878,48 +822,6 @@ impl<'m> Gen<'m> {
         let codecs: String = self.union_codecs[&u.name].iter().map(|&i| format!(", {}", codec_var(&u.type_params[i].name))).collect();
         self.ffi += &format!("export function {name}_to(v{codecs}) {{\n{to}}}\nexport function {name}_from(u{codecs}) {{\n{from}}}\n");
     }
-}
-
-impl Gen<'_> {
-    // An object of string keys: `{ [name: string]: NodeSpec }`.
-    fn is_record(&self, class: &str) -> bool {
-        self.m.classes.iter().find(|c| c.name == class).is_some_and(|c| c.funcs.iter().any(|f| f.call == Call::IndexSet))
-    }
-
-    // An array element of the union's own members: ECharts' `SeriesOption` in
-    // `BarSeriesOption | LineSeriesOption | .. | SeriesOption[]`.
-    fn of_members(&self, e: &Ty, u: &NamedUnion) -> bool {
-        match e {
-            Ty::NamedUnion(n) => self.m.unions.iter().find(|v| v.name == *n).is_some_and(|v| v.parts.iter().all(|p| u.parts.contains(p))),
-            t => u.parts.iter().filter(|p| *p == t).count() == 1,
-        }
-    }
-
-    // The `type` an option object's `create` fixes: `{"type": "category", ..}`.
-    fn fixed_type(&self, class: &str) -> Option<String> {
-        let c = self.m.classes.iter().find(|c| c.name == class)?;
-        c.funcs.iter().find_map(|f| match &f.call {
-            Call::Create(lit) => {
-                let at = lit.find("\"type\": \"")? + "\"type\": \"".len();
-                Some(lit[at..].split('"').next()?.to_string())
-            }
-            _ => None,
-        })
-    }
-}
-
-// `XAXisComponentOption` as `X`, `AXis`, `Component`, `Option`: a word starts at a capital after a lowercase letter or a digit.
-fn camel_words(n: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut prev_lower = false;
-    for c in n.chars() {
-        if (c.is_ascii_uppercase() && prev_lower) || out.is_empty() {
-            out.push(String::new());
-        }
-        out.last_mut().unwrap().push(c);
-        prev_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
-    }
-    out
 }
 
 // A form of a function for one union member: by parameter, the member type

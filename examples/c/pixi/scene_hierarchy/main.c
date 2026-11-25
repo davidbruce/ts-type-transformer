@@ -7,7 +7,7 @@ static const double TWO_PI_3 = 2.0943951023931953;
 static Pixi_Application g_app;
 
 static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
-    Pixi_Graphics_stroke(g, Pixi_StrokeStyle_create(.width = width, .color = Pixi_ColorSource_of(color_hex)));
+    Pixi_Graphics_stroke(g, Pixi_StrokeStyle_create(.width = width, .color = color_hex));
 }
 
 static void add_child_c(Pixi_Container parent, Pixi_Container child) {
@@ -104,8 +104,8 @@ __attribute__((export_name("start"))) void start(void) {
     g_app = Pixi_Application_new();
     js_retain(g_app);
     Pixi_Application_init_options opts = Pixi_Application_init_options_create(
-        .width = 680.0, .height = 400.0, .backgroundColor = Pixi_ColorSource_of(0xffffff),
-        .preference = Pixi_string_or_RendererPreference_array_of("webgl"),
+        .width = 680.0, .height = 400.0, .backgroundColor = 0xffffff,
+        .preference = "webgl",
         .preserveDrawingBuffer = true, .antialias = true, .autoStart = false);
     Promise_then(Pixi_Application_init(g_app, opts), on_init, 0);
 }

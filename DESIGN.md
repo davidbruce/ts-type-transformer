@@ -330,7 +330,12 @@ the time control returns to JavaScript is reported, not lost.
   NaN for a number, NULL, a null handle, `tag == -1`; the macro lists those
   first and silences the compiler's warning of the designators that override
   them. `X_create()` and `(X_create)()` are the empty object, made by the
-  function. A bag nests: `.icon = Icon_or_DivIcon_of(divIcon(DivIconOptions_create(.className = "pin")))`.
+  function. A union's property is a field for each member, the primary one
+  by its name (as Gleam's: `.left = 16`, `.fill = "#111"`), the others with
+  the member's (`.left_string = "10%"`, `.fill_canvas_gradient`,
+  `.title_list`, `.xAxis_category`, `.series_bar`): no tagged union to make,
+  and no `{ .number = 0 }` a `{ .boolean = false }` would equal once C11
+  zeroes the rest. A bag nests: `.icon_div = divIcon(DivIconOptions_create(.className = "pin"))`; of objects only, the one named by what they all share is plain (`.icon` beside `.icon_div`).
   A property of a type with no C value is a `JsValue` field, a property
   set in more than one way is left out, and a property named as a C keyword
   is a field with an underscore (`.inline_`). A long list of properties none
@@ -435,9 +440,12 @@ the time control returns to JavaScript is reported, not lost.
   export: `create_element(doc, tag)` without them, `create_element_with(doc,
   tag, Some(options))` with them (`_full` where a member is named `_with`).
   A union going in is one function per member. The plain name takes its
-  primary member: of `T | T[]` the one, a string beside objects, none where
-  every member is an object, else the first as declared (`with_left(16.0)`,
-  `add_days(date, 3.0)`, `schema.node("heading")`). Each other member is
+  primary member: of `T | T[]` the one, a string beside objects, a record
+  beside other objects, of objects only the one named by what they all share
+  (Leaflet's `LatLng`) or none, else the first as declared; an inline union's
+  number before its string, the checker having put string first
+  (`with_left(16.0)`, `with_font_size(13.0)`, `add_days(date, 3.0)`,
+  `schema.node("heading")`). Each other member is
   `name_<member>`: `with_left_string("10%")`, `with_title_list([..])`,
   `with_color_fn(f)`; an option object by the `type` its `create` fixes
   (`with_x_axis_category`), else by its name less what the members share

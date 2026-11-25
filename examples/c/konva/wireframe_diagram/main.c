@@ -7,21 +7,21 @@ static void add_stage_box(JsArray_Konva_Node list, double x, const char* title, 
     JsArray_Konva_Node ch = JsArray_Konva_Node_new();
 
     Konva_RectConfig rc = Konva_RectConfig_create(
-        .width = 126, .height = 68, .cornerRadius = Konva_number_or_number_array_of(3),
-        .fill = Konva_string_or_CanvasGradient_of(fill), .stroke = Konva_string_or_CanvasGradient_of("#111111"),
+        .width = 126, .height = 68, .cornerRadius = 3,
+        .fill = fill, .stroke = "#111111",
         .strokeWidth = 2
     );
     JsArray_Konva_Node_push(ch, AS_Konva_Node(Konva_Rect_new(rc)));
 
     Konva_TextConfig t1 = Konva_TextConfig_create(
         .x = 12, .y = 16, .text = title, .fontSize = 12, .fontStyle = "bold", .fontFamily = "monospace",
-        .fill = Konva_string_or_CanvasGradient_of(ink)
+        .fill = ink
     );
     JsArray_Konva_Node_push(ch, AS_Konva_Node(Konva_Text_new(t1)));
 
     Konva_TextConfig t2 = Konva_TextConfig_create(
         .x = 12, .y = 38, .text = sub, .fontSize = 11, .fontFamily = "monospace",
-        .fill = Konva_string_or_CanvasGradient_of(ink)
+        .fill = ink
     );
     JsArray_Konva_Node_push(ch, AS_Konva_Node(Konva_Text_new(t2)));
 
@@ -31,9 +31,9 @@ static void add_stage_box(JsArray_Konva_Node list, double x, const char* title, 
 
 static void add_arrow(JsArray_Konva_Node list, double x1, double y1, double x2, double y2) {
     Konva_ArrowConfig ac = Konva_ArrowConfig_create(
-        .points = Konva_LinePoints_of(JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4)), .pointerLength = 8,
-        .pointerWidth = 8, .fill = Konva_string_or_CanvasGradient_of("#111111"),
-        .stroke = Konva_string_or_CanvasGradient_of("#111111"), .strokeWidth = 2
+        .points_array = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4), .pointerLength = 8,
+        .pointerWidth = 8, .fill = "#111111",
+        .stroke = "#111111", .strokeWidth = 2
     );
     JsArray_Konva_Node_push(list, AS_Konva_Node(Konva_Arrow_new(ac)));
 }
@@ -42,7 +42,7 @@ __attribute__((export_name("start"))) void start(void) {
     js_scope();
 
     Konva_StageConfig sc = Konva_StageConfig_create(
-        .container = Konva_HTMLDivElement_or_string_of("stage"), .width = 680, .height = 400
+        .container = "stage", .width = 680, .height = 400
     );
     Konva_Stage stage = Konva_Stage_new(sc);
 
@@ -51,7 +51,7 @@ __attribute__((export_name("start"))) void start(void) {
     JsArray_Konva_Node items = JsArray_Konva_Node_new();
 
     Konva_RectConfig bg = Konva_RectConfig_create(
-        .x = 0, .y = 0, .width = 680, .height = 400, .fill = Konva_string_or_CanvasGradient_of("#ffffff")
+        .x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff"
     );
     JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Rect_new(bg)));
 
@@ -67,22 +67,22 @@ __attribute__((export_name("start"))) void start(void) {
     add_arrow(items, 423, 163, 423, 251);
 
     Konva_LineConfig fbc = Konva_LineConfig_create(
-        .points = Konva_LinePoints_of(JsArray_double_from((double[]){ 589, 163, 589, 212, 91, 212, 91, 168 }, 8)),
-        .stroke = Konva_string_or_CanvasGradient_of("#737373"), .strokeWidth = 1.5,
+        .points_array = JsArray_double_from((double[]){ 589, 163, 589, 212, 91, 212, 91, 168 }, 8),
+        .stroke = "#737373", .strokeWidth = 1.5,
         .dash = JsArray_double_from((double[]){ 6.0, 4.0 }, 2)
     );
     JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Line_new(fbc)));
 
     Konva_RectConfig bar = Konva_RectConfig_create(
-        .x = 28, .y = 255, .width = 624, .height = 58, .cornerRadius = Konva_number_or_number_array_of(3),
-        .fill = Konva_string_or_CanvasGradient_of("#f7f7f7"), .stroke = Konva_string_or_CanvasGradient_of("#111111"),
+        .x = 28, .y = 255, .width = 624, .height = 58, .cornerRadius = 3,
+        .fill = "#f7f7f7", .stroke = "#111111",
         .strokeWidth = 1.5
     );
     JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Rect_new(bar)));
 
     Konva_TextConfig btxt = Konva_TextConfig_create(
         .x = 180, .y = 278, .text = "Shared DOM & Package Handle Runtime", .fontSize = 12, .fontFamily = "monospace",
-        .fill = Konva_string_or_CanvasGradient_of("#111111")
+        .fill = "#111111"
     );
     JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Text_new(btxt)));
 

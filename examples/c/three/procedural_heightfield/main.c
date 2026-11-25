@@ -151,11 +151,11 @@ __attribute__((export_name("start"))) void start(void) {
     Three_BufferGeometry_setIndex(g_geo, indices);
 
     Three_Mesh surface_mesh = Three_Mesh_new(g_geo, Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0xb5b5b5), .roughness = 0.72, .metalness = 0.05, .flatShading = true)));
+        .color_number = 0xb5b5b5, .roughness = 0.72, .metalness = 0.05, .flatShading = true)));
     add_obj(g_scene, surface_mesh);
 
     g_wire_mesh = Three_Mesh_new(g_geo, Three_MeshBasicMaterial_new(Three_MeshBasicMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0x262626), .wireframe = true)));
+        .color_number = 0x262626, .wireframe = true)));
     js_retain(g_wire_mesh);
     Three_Vector3_set_y(Three_Mesh_get_position(g_wire_mesh), 0.015);
     add_obj(g_scene, g_wire_mesh);
@@ -166,7 +166,7 @@ __attribute__((export_name("start"))) void start(void) {
     js_retain(g_pts_attr);
     Three_BufferGeometry_setAttribute(pts_geo, "position", g_pts_attr);
     add_obj(g_scene, Three_Points_new(pts_geo, Three_PointsMaterial_new(Three_PointsMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0x111111), .size = 0.14))));
+        .color_number = 0x111111, .size = 0.14))));
 
     g_wire_btn = Document_getElementById(doc, "btn-wire");
     js_retain(g_wire_btn);

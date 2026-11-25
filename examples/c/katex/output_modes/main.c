@@ -55,7 +55,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     KatexOptions o_fl = KatexOptions_create(
         .displayMode = true, .fleqn = true, .maxSize = 2.0,
-        .strict = Katex_boolean_or_string_or_StrictFunction_of(false)
+        .strict = false
     );
     add_card(doc, grid, "fleqn + maxSize(2) + strict(false)", "", "\\text{café} + \\rule{10em}{0.4em} + é", o_fl);
 

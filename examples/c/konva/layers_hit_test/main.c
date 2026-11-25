@@ -37,8 +37,8 @@ static void on_card_click(void* ctx, KonvaEventObject e) {
 
 static Konva_Line make_line(double x1, double y1, double x2, double y2, const char* color, double width) {
     Konva_LineConfig lc = Konva_LineConfig_create(
-        .points = Konva_LinePoints_of(JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4)),
-        .stroke = Konva_string_or_CanvasGradient_of(color), .strokeWidth = width
+        .points_array = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4),
+        .stroke = color, .strokeWidth = width
     );
     return Konva_Line_new(lc);
 }
@@ -46,7 +46,7 @@ static Konva_Line make_line(double x1, double y1, double x2, double y2, const ch
 static Konva_Rect make_card(const char* id, double x, double y, const char* fill) {
     Konva_RectConfig rc = Konva_RectConfig_create(
         .id = id, .name = "card", .x = x, .y = y, .width = 200, .height = 130,
-        .fill = Konva_string_or_CanvasGradient_of(fill), .stroke = Konva_string_or_CanvasGradient_of("#111111"),
+        .fill = fill, .stroke = "#111111",
         .strokeWidth = 2
     );
     return Konva_Rect_new(rc);
@@ -56,7 +56,7 @@ __attribute__((export_name("start"))) void start(void) {
     js_scope();
 
     Konva_StageConfig sc = Konva_StageConfig_create(
-        .container = Konva_HTMLDivElement_or_string_of("stage"), .width = 680, .height = 400
+        .container = "stage", .width = 680, .height = 400
     );
     Konva_Stage stage = Konva_Stage_new(sc);
 
@@ -68,7 +68,7 @@ __attribute__((export_name("start"))) void start(void) {
     // Layer 1: Blueprint Grid.
     JsArray_Konva_Node bg_items = JsArray_Konva_Node_new();
     Konva_RectConfig bgr = Konva_RectConfig_create(
-        .x = 0, .y = 0, .width = 680, .height = 400, .fill = Konva_string_or_CanvasGradient_of("#ffffff")
+        .x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff"
     );
     JsArray_Konva_Node_push(bg_items, AS_Konva_Node(Konva_Rect_new(bgr)));
 
@@ -80,14 +80,14 @@ __attribute__((export_name("start"))) void start(void) {
     }
 
     Konva_RectConfig frame = Konva_RectConfig_create(
-        .x = 20, .y = 20, .width = 640, .height = 360, .stroke = Konva_string_or_CanvasGradient_of("#b5b5b5"),
+        .x = 20, .y = 20, .width = 640, .height = 360, .stroke = "#b5b5b5",
         .strokeWidth = 1.5, .dash = JsArray_double_from((double[]){ 6.0, 4.0 }, 2)
     );
     JsArray_Konva_Node_push(bg_items, AS_Konva_Node(Konva_Rect_new(frame)));
 
     Konva_TextConfig l1 = Konva_TextConfig_create(
         .x = 32, .y = 32, .text = "Layer 1: Blueprint Grid (z=0)", .fontSize = 12, .fontFamily = "monospace",
-        .fill = Konva_string_or_CanvasGradient_of("#737373")
+        .fill = "#737373"
     );
     JsArray_Konva_Node_push(bg_items, AS_Konva_Node(Konva_Text_new(l1)));
     Konva_Layer_add(bg_layer, bg_items);
@@ -97,7 +97,7 @@ __attribute__((export_name("start"))) void start(void) {
     Konva_Rect card_b = make_card("card-b", 210, 125, "#404040");
     Konva_Rect card_c = make_card("card-c", 310, 170, "#ffffff");
     Konva_CircleConfig bc = Konva_CircleConfig_create(
-        .id = "badge", .x = 555, .y = 135, .radius = 38, .fill = Konva_string_or_CanvasGradient_of("#111111")
+        .id = "badge", .x = 555, .y = 135, .radius = 38, .fill = "#111111"
     );
     Konva_Circle badge = Konva_Circle_new(bc);
 
@@ -105,8 +105,8 @@ __attribute__((export_name("start"))) void start(void) {
     Konva_Group overlay = Konva_Group_new(Konva_GroupConfig_create(.listening = false));
     JsArray_Konva_Node overlay_items = JsArray_Konva_Node_new();
     Konva_CircleConfig dc = Konva_CircleConfig_create(
-        .x = 250, .y = 160, .radius = 7, .fill = Konva_string_or_CanvasGradient_of("#ffffff"),
-        .stroke = Konva_string_or_CanvasGradient_of("#111111"), .strokeWidth = 2
+        .x = 250, .y = 160, .radius = 7, .fill = "#ffffff",
+        .stroke = "#111111", .strokeWidth = 2
     );
     JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(Konva_Circle_new(dc)));
     JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(make_line(238, 160, 262, 160, "#111111", 1.5)));
@@ -114,7 +114,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     Konva_TextConfig l2 = Konva_TextConfig_create(
         .x = 32, .y = 354, .text = "Layer 2: Elevated Stack (z=1) \xC2\xB7 Probe (250,160)", .fontSize = 12,
-        .fontFamily = "monospace", .fill = Konva_string_or_CanvasGradient_of("#111111")
+        .fontFamily = "monospace", .fill = "#111111"
     );
     JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(Konva_Text_new(l2)));
     Konva_Group_add(overlay, overlay_items);

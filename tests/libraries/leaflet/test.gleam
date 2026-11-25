@@ -45,15 +45,16 @@ fn near(a: Float, b: Float, within: Float) -> Bool {
 }
 
 pub fn main() {
-  // A map in the page's #map, centred on London. A union of objects goes in
-  // by its member's name: `set_view_lat_lng`.
+  // A map in the page's #map, centred on London. Of a union of objects, the
+  // member named by what they all share goes in by the plain name
+  // (`LatLng` of `LatLngExpression`: `set_view`), the others by theirs.
   let london = leaflet.lat_lng(51.505, -0.09)
   let m = leaflet.map_html_element(test_page.element("map"))
-  let _ = map.set_view_lat_lng_with(m, london, Some(13.0), None)
+  let _ = map.set_view_with(m, london, Some(13.0), None)
   let passed =
     check(map.get_zoom(m) == 13.0, "zoom")
     + check(
-      lat_lng.equals_lat_lng_with(map.get_center(m), london, Some(0.000000001)),
+      lat_lng.equals_with(map.get_center(m), london, Some(0.000000001)),
       "centre",
     )
     + check(
@@ -64,7 +65,7 @@ pub fn main() {
     + check(string.starts_with(leaflet.get_version(), "1."), "version")
 
   // The centre is the middle of the container, and the projections agree.
-  let middle = map.lat_lng_to_container_point_lat_lng(m, london)
+  let middle = map.lat_lng_to_container_point(m, london)
   let back =
     map.container_point_to_lat_lng_point(m, leaflet.point(200.0, 150.0))
   let passed =
@@ -78,7 +79,7 @@ pub fn main() {
       "container point to latlng",
     )
     + check(
-      point.get_x(map.project_lat_lng_with(m, london, Some(0.0))) >. 0.0,
+      point.get_x(map.project_with(m, london, Some(0.0))) >. 0.0,
       "project",
     )
     + check(
@@ -89,18 +90,18 @@ pub fn main() {
   // Geometry: distances in metres, bounds that grow. Two corners are two
   // unions: they go in as union values, by `_of`.
   let paris = leaflet.lat_lng(48.8566, 2.3522)
-  let km = lat_lng.distance_to_lat_lng(london, paris) /. 1000.0
+  let km = lat_lng.distance_to(london, paris) /. 1000.0
   let box =
     leaflet.lat_lng_bounds_of(
       t.LatLngExpressionLatLng(london),
       t.LatLngExpressionLatLng(london),
     )
-  let _ = lat_lng_bounds.extend_lat_lng(box, paris)
+  let _ = lat_lng_bounds.extend(box, paris)
   let passed =
     passed
     + check(km >. 340.0 && km <. 345.0, "distance London to Paris")
     + check(
-      lat_lng_bounds.contains_lat_lng(box, leaflet.lat_lng(50.0, 1.0)),
+      lat_lng_bounds.contains(box, leaflet.lat_lng(50.0, 1.0)),
       "bounds contain a point between",
     )
     + check(
@@ -142,17 +143,17 @@ pub fn main() {
     )
 
   // Layers: a marker added to the map and found there, then removed.
-  let pin = leaflet.marker_lat_lng(paris)
+  let pin = leaflet.marker(paris)
   let _ = layer.add_to_map(pin, m)
   let passed =
     passed
     + check(map.has_layer(m, pin), "marker is on the map")
     + check(
-      lat_lng.equals_lat_lng(marker.get_lat_lng(pin), paris),
+      lat_lng.equals(marker.get_lat_lng(pin), paris),
       "marker position",
     )
   let group = leaflet.layer_group()
-  let ring = leaflet.circle_with_radius_lat_lng(london, 500.0)
+  let ring = leaflet.circle_with_radius(london, 500.0)
   let _ = layer_group.add_layer(group, ring)
   let _ = layer.add_to_map(group, m)
   let _ = map.remove_layer(m, pin)
@@ -173,7 +174,7 @@ pub fn main() {
     passed
     + check(circle.get_radius(ring) == 750.0, "set_radius")
     + check(
-      lat_lng_bounds.contains_lat_lng(circle.get_bounds(ring), london),
+      lat_lng_bounds.contains(circle.get_bounds(ring), london),
       "circle bounds contain its centre",
     )
 
@@ -183,7 +184,7 @@ pub fn main() {
   marker_options.set_draggable(marker_opts, Some(True))
   marker_options.set_opacity(marker_opts, Some(0.5))
   let ben =
-    leaflet.marker_lat_lng_with(
+    leaflet.marker_with(
       leaflet.lat_lng(51.5007, -0.1246),
       Some(marker_opts),
     )
@@ -200,7 +201,7 @@ pub fn main() {
   let style = path_options.create()
   path_options.set_color(style, Some("#ff0000"))
   path_options.set_weight(style, Some(5.0))
-  let styled = leaflet.circle_marker_lat_lng(london)
+  let styled = leaflet.circle_marker(london)
   let _ = circle.set_style(circle.upcast(ring), style)
   let passed =
     passed
@@ -225,7 +226,7 @@ pub fn main() {
     passed
     + check(!polyline.is_empty(line), "polyline is not empty")
     + check(
-      lat_lng_bounds.contains_lat_lng(
+      lat_lng_bounds.contains(
         polyline.get_bounds(line),
         leaflet.lat_lng(50.0, 1.0),
       ),
@@ -240,8 +241,8 @@ pub fn main() {
     passed
     + check(map.get_zoom(m) <. 13.0, "fit_bounds zooms out")
     + check(
-      lat_lng_bounds.contains_lat_lng(map.get_bounds(m), paris)
-        && lat_lng_bounds.contains_lat_lng(map.get_bounds(m), london),
+      lat_lng_bounds.contains(map.get_bounds(m), paris)
+        && lat_lng_bounds.contains(map.get_bounds(m), london),
       "both cities are in view",
     )
   let still = zoom_pan_options.create()
@@ -250,7 +251,7 @@ pub fn main() {
   let passed = passed + check(map.get_zoom(m) == 10.0, "set_zoom")
   let no_pan = pan_options.create()
   pan_options.set_animate(no_pan, Some(False))
-  let _ = map.pan_to_lat_lng_with(m, paris, Some(no_pan))
+  let _ = map.pan_to_with(m, paris, Some(no_pan))
   let passed =
     passed
     + check(near(lat_lng.get_lat(map.get_center(m)), 48.8566, 0.01), "pan_to")
@@ -282,7 +283,7 @@ pub fn main() {
     evented.on(m, "popupopen", fn(_) { cell.set(opened, cell.get(opened) + 1) })
   let popup_opts = popup_options.create()
   popup_options.set_max_width(popup_opts, Some(200.0))
-  let note = leaflet.popup_lat_lng_with(london, Some(popup_opts))
+  let note = leaflet.popup_with(london, Some(popup_opts))
   let _ = popup.open_on(note, m)
   let passed =
     passed
@@ -297,7 +298,7 @@ pub fn main() {
   let opts = map_options.create()
   map_options.set_zoom_control(opts, Some(False))
   map_options.set_zoom(opts, Some(4.0))
-  map_options.set_center_lat_lng(opts, paris)
+  map_options.set_center(opts, paris)
   let second =
     leaflet.map_html_element_with(test_page.element("stage"), Some(opts))
   let passed =

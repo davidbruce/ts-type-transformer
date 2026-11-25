@@ -19,7 +19,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
 
     Pixi_Graphics frame = Pixi_Graphics_new();
     Pixi_Graphics_rect(frame, 32.0, 20.0, 616.0, 360.0);
-    Pixi_Graphics_stroke(frame, Pixi_StrokeStyle_create(.width = 1.5, .color = Pixi_ColorSource_of(0xd4d4d4)));
+    Pixi_Graphics_stroke(frame, Pixi_StrokeStyle_create(.width = 1.5, .color = 0xd4d4d4));
     Pixi_Container_addChild(stage, JsArray_Pixi_Container_from((Pixi_Container[]){ AS_Pixi_Container(frame) }, 1));
 
     static const int shades[8] = {
@@ -57,8 +57,8 @@ __attribute__((export_name("start"))) void start(void) {
     g_app = Pixi_Application_new();
     js_retain(g_app);
     Pixi_Application_init_options opts = Pixi_Application_init_options_create(
-        .width = 680.0, .height = 400.0, .backgroundColor = Pixi_ColorSource_of(0xffffff),
-        .preference = Pixi_string_or_RendererPreference_array_of("webgl"),
+        .width = 680.0, .height = 400.0, .backgroundColor = 0xffffff,
+        .preference = "webgl",
         .preserveDrawingBuffer = true, .antialias = true, .autoStart = false);
     Promise_then(Pixi_Application_init(g_app, opts), on_init, 0);
 }

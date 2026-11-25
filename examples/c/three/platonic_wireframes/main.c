@@ -20,7 +20,7 @@ static double g_azimuth = 0.35;
 static void add_solid(Three_BufferGeometry geo, uint32_t hex, double rough, double metal, bool flat,
                       double x, double y, double z, double thresh, Three_LineBasicMaterial line_mat) {
     Three_MeshStandardMaterial mat = Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(hex), .roughness = rough, .metalness = metal, .flatShading = flat));
+        .color_number = hex, .roughness = rough, .metalness = metal, .flatShading = flat));
 
     Three_Mesh mesh = Three_Mesh_new(geo, mat);
     Three_Vector3_set(Three_Mesh_get_position(mesh), x, y, z);
@@ -103,7 +103,7 @@ __attribute__((export_name("start"))) void start(void) {
     add_obj(g_scene, g_wire_group);
 
     Three_LineBasicMaterial line_mat = Three_LineBasicMaterial_new(Three_LineBasicMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0x111111)));
+        .color_number = 0x111111));
 
     add_solid(AS_Three_BufferGeometry(Three_BoxGeometry_new(1.45, 1.45, 1.45)),
               0x262626, 0.65, 0.1, false, -3.2, 0.0, -0.6, 1.0, line_mat);

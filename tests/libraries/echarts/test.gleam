@@ -178,8 +178,8 @@ pub fn main() {
 
   // Resizing.
   let size = resize_opts.create()
-  resize_opts.set_width_number(size, 200.0)
-  resize_opts.set_height_number(size, 150.0)
+  resize_opts.set_width(size, 200.0)
+  resize_opts.set_height(size, 150.0)
   e_charts_type.resize_with(chart, Some(size))
   let passed =
     passed

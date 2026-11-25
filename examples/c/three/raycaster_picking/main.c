@@ -168,7 +168,7 @@ __attribute__((export_name("start"))) void start(void) {
         int gx = (i % 3) - 1;
         int gz = (i / 3) - 1;
         g_mats[i] = Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
-            .color = Three_ColorRepresentation_of(0xd4d4d4), .roughness = 0.55, .metalness = 0.1, .flatShading = i >= 4));
+            .color_number = 0xd4d4d4, .roughness = 0.55, .metalness = 0.1, .flatShading = i >= 4));
         js_retain(g_mats[i]);
 
         Three_Mesh m = Three_Mesh_new(geos[i], g_mats[i]);

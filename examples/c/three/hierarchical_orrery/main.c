@@ -10,7 +10,7 @@ static const double PI = 3.14159265358979323846;
 
 static Three_MeshStandardMaterial std_mat(uint32_t hex, double rough, double metal, bool flat) {
     return Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(hex), .roughness = rough, .metalness = metal, .flatShading = flat));
+        .color_number = hex, .roughness = rough, .metalness = metal, .flatShading = flat));
 }
 
 static Three_WebGLRenderer g_renderer;
@@ -107,7 +107,7 @@ __attribute__((export_name("start"))) void start(void) {
     add_obj(g_scene, g_inner_pivot);
 
     Three_Mesh inner_track = Three_Mesh_new(Three_TorusGeometry_new(2.1, 0.025, 8.0, 64.0), Three_MeshBasicMaterial_new(Three_MeshBasicMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0x999999))));
+        .color_number = 0x999999)));
     Three_Euler_set_x(Three_Mesh_get_rotation(inner_track), PI / 2.0);
     add_obj(g_inner_pivot, inner_track);
 
@@ -132,7 +132,7 @@ __attribute__((export_name("start"))) void start(void) {
     add_obj(g_scene, g_outer_pivot);
 
     Three_Mesh outer_track = Three_Mesh_new(Three_TorusGeometry_new(3.8, 0.025, 8.0, 80.0), Three_MeshBasicMaterial_new(Three_MeshBasicMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0xb5b5b5))));
+        .color_number = 0xb5b5b5)));
     Three_Euler_set_x(Three_Mesh_get_rotation(outer_track), PI / 2.0);
     add_obj(g_outer_pivot, outer_track);
 

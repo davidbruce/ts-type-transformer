@@ -112,7 +112,7 @@ static Pm_Schema make_schema(void) {
     Pm_SchemaSpec_marks_set_at(marks, "em", em);
     Pm_SchemaSpec_marks_set_at(marks, "code", code);
 
-    return Pm_Schema_new(Pm_SchemaSpec_create(.nodes = Pm_SchemaSpec_nodes_or_OrderedMap_of(nodes), .marks = Pm_SchemaSpec_marks_or_OrderedMap_of(marks)));
+    return Pm_Schema_new(Pm_SchemaSpec_create(.nodes = nodes, .marks = marks));
 }
 
 static const char* SPEC_HTML =

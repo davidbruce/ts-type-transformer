@@ -2,15 +2,13 @@
 #include "echarts/echarts.h"
 #include <stdio.h>
 
-#define Position(x) Echarts_PositionSizeOption_of(x)
-#define Bound(x) Echarts_AngleAxisComponentOption_category_min_of(x)
 
 static Echarts_LineStyleOption line_color(const char* hex) {
-    return Echarts_LineStyleOption_create(.color = Echarts_LineStyle_or_string_or_Color_array_of(hex));
+    return Echarts_LineStyleOption_create(.color = hex);
 }
 
 #define VALUE_AXIS(T) T##_create( \
-    .min = Bound(0), .max = Bound(100), \
+    .min = 0, .max = 100, \
     .splitLine = Echarts_SplitLineOption_create(.lineStyle = line_color("#e5e5e5")), \
     .axisLabel = Echarts_AxisLabelOption_create(.color = js_string("#555555")))
 
@@ -35,14 +33,14 @@ __attribute__((export_name("start"))) void start(void) {
     const double cb_pts[10][2] = { {18,64},{25,72},{31,68},{39,79},{47,65},{55,81},{64,77},{72,88},{79,82},{88,92} };
 
     Echarts_ScatterSeriesOption s0 = Echarts_ScatterSeriesOption_create(
-        .name = Echarts_OptionName_of("Cluster A"), .symbol = Echarts_string_or_SymbolCallback_of("circle"), .symbolSize = Echarts_number_or_number_array_or_SymbolSizeCallback_of(10),
-        .itemStyle = Echarts_ItemStyleOption_create(.color = Echarts_ItemStyle_or_SVGPatternObject_of("#111111")),
-        .data = Echarts_ScatterSeriesOption_data_of(make_pts(ca_pts, 10)));
+        .name = "Cluster A", .symbol = "circle", .symbolSize = 10,
+        .itemStyle = Echarts_ItemStyleOption_create(.color = "#111111"),
+        .data_list = make_pts(ca_pts, 10));
     Echarts_ScatterSeriesOption s1 = Echarts_ScatterSeriesOption_create(
-        .name = Echarts_OptionName_of("Cluster B"), .symbol = Echarts_string_or_SymbolCallback_of("rect"), .symbolSize = Echarts_number_or_number_array_or_SymbolSizeCallback_of(10),
+        .name = "Cluster B", .symbol = "rect", .symbolSize = 10,
         .itemStyle = Echarts_ItemStyleOption_create(
-            .color = Echarts_ItemStyle_or_SVGPatternObject_of("#ffffff"), .borderColor = Echarts_Color_of("#111111"), .borderWidth = 2),
-        .data = Echarts_ScatterSeriesOption_data_of(make_pts(cb_pts, 10)));
+            .color = "#ffffff", .borderColor = "#111111", .borderWidth = 2),
+        .data_list = make_pts(cb_pts, 10));
 
     JsArray series = JsArray_new();
     js_push_val(series, s0);
@@ -50,14 +48,14 @@ __attribute__((export_name("start"))) void start(void) {
 
     EChartsOption opt = EChartsOption_create(
         .animation = false,
-        .backgroundColor = Echarts_Color_of("#ffffff"),
-        .legend = EChartsOption_legend_of(Echarts_PlainLegendComponentOption_create(
-            .top = Position(8), .textStyle = Echarts_LabelOption_create(.color = js_string("#111111")))),
-        .grid = EChartsOption_grid_of(Echarts_GridComponentOption_create(
-            .left = Position(48), .right = Position(24), .top = Position(48), .bottom = Position(36))),
-        .xAxis = EChartsOption_xAxis_of(VALUE_AXIS(Echarts_XAXisComponentOption_xAxis_value)),
-        .yAxis = EChartsOption_yAxis_of(VALUE_AXIS(Echarts_YAXisComponentOption_yAxis_value)),
-        .series = EChartsOption_series_of(series));
+        .backgroundColor = "#ffffff",
+        .legend_plain = Echarts_PlainLegendComponentOption_create(
+            .top = 8, .textStyle = Echarts_LabelOption_create(.color = js_string("#111111"))),
+        .grid = Echarts_GridComponentOption_create(
+            .left = 48, .right = 24, .top = 48, .bottom = 36),
+        .xAxis_value = VALUE_AXIS(Echarts_XAXisComponentOption_xAxis_value),
+        .yAxis_value = VALUE_AXIS(Echarts_YAXisComponentOption_yAxis_value),
+        .series_list = series);
     ECharts_setOption(chart, opt);
 
     char meta[96];

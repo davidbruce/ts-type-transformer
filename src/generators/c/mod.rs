@@ -167,7 +167,7 @@ fn default_c_prefix(import: &str) -> Option<String> {
     (!chosen.is_empty()).then_some(chosen)
 }
 
-fn effective_prefix(m: &Model) -> Option<String> {
+pub(super) fn effective_prefix(m: &Model) -> Option<String> {
     match m.prefix.as_deref() {
         Some("") => None,
         Some(p) => Some(p.to_string()),

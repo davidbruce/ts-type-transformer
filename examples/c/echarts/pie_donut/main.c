@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 static void push_slice(JsArray_Echarts_PieSeriesOption_data data, const char* name, double value) {
-    JsArray_Echarts_PieSeriesOption_data_push(data, Echarts_PieDataItemOption_create(.name = Echarts_OptionName_of(name), .value = js_number(value)));
+    JsArray_Echarts_PieSeriesOption_data_push(data, Echarts_PieDataItemOption_create(.name = name, .value = js_number(value)));
 }
 
 __attribute__((export_name("start"))) void start(void) {
@@ -33,18 +33,18 @@ __attribute__((export_name("start"))) void start(void) {
 
     EChartsOption opt = EChartsOption_create(
         .animation = false,
-        .backgroundColor = Echarts_Color_of("#ffffff"),
-        .color = Echarts_BarSeriesOption_color_of(palette),
-        .legend = EChartsOption_legend_of(Echarts_PlainLegendComponentOption_create(
-            .bottom = Echarts_PositionSizeOption_of(8), .textStyle = Echarts_LabelOption_create(.color = js_string("#111111")))),
-        .tooltip = EChartsOption_tooltip_of(Echarts_TooltipComponentOption_create(.trigger = Echarts_TooltipComponentOption_trigger_item)),
-        .series = EChartsOption_series_of(Echarts_PieSeriesOption_create(
-            .name = Echarts_OptionName_of("Subsystems"),
-            .radius = Echarts_string_or_number_or_string_or_number_array_of(radius),
-            .center = Echarts_string_or_number_or_string_or_number_array_of(center),
-            .itemStyle = Echarts_PieItemStyleOption_create(.borderColor = Echarts_Color_of("#ffffff"), .borderWidth = 2),
+        .backgroundColor = "#ffffff",
+        .color_array = palette,
+        .legend_plain = Echarts_PlainLegendComponentOption_create(
+            .bottom = 8, .textStyle = Echarts_LabelOption_create(.color = js_string("#111111"))),
+        .tooltip = Echarts_TooltipComponentOption_create(.trigger = Echarts_TooltipComponentOption_trigger_item),
+        .series_pie = Echarts_PieSeriesOption_create(
+            .name = "Subsystems",
+            .radius_list = radius,
+            .center_list = center,
+            .itemStyle = Echarts_PieItemStyleOption_create(.borderColor = "#ffffff", .borderWidth = 2),
             .label = Echarts_PieLabelOption_create(.color = "#111111"),
-            .data = data)));
+            .data = data));
     ECharts_setOption(chart, opt);
 
     char meta[96];

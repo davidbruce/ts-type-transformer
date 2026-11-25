@@ -62,7 +62,10 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(str_eq(peek(slot), "widget w"));
     Slot_set_value(slot, o);
     CHECK(str_eq(peek(slot), "options verbose=true"));
-    CHECK(str_eq(peek(Slot_create(.value = Value_of(7))), "number 7"));
+    // In a bag, a field for each member: `.value` the string, `.value_number`, `.value_widget`.
+    CHECK(str_eq(peek(Slot_create(.value_number = 7)), "number 7"));
+    CHECK(str_eq(peek(Slot_create(.value = "text")), "string text"));
+    CHECK(str_eq(peek(Slot_create(.value_widget = widget)), "widget w"));
 
     // Members no test tells apart: typed going in, a value coming back. A value goes in as it is.
     LooseA loose_a = LooseA_create(.a = 1);

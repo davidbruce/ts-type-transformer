@@ -554,30 +554,69 @@ fn field(t: &Ty, cx: &Ctx) -> Option<(char, String)> {
 
 // `X_create(.a = 1, .b = "x")`: a struct of the settable properties, and the object made from what is named.
 // Each field is by the type that declares its setter. A property set in more than one way is left out.
-pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx) -> String {
+// A union's is a field for each member: its primary member's by the property's
+// name (`.left = 16`), each other's with the member's (`.left_string = "10%"`,
+// `.series_bar`, `.title_list`), set through the union.
+pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) -> String {
     let js = |f: &Func| match &f.call {
         Call::Set(js) => js.clone(),
         _ => unreachable!(),
     };
-    let entries: Vec<String> = setters
-        .iter()
-        .filter(|(f, _)| f.params.len() == 1 && setters.iter().filter(|(g, _)| js(g) == js(f)).count() == 1)
-        .filter_map(|(f, owner)| {
-            let (kind, ty) = field(&f.params[0].1, cx)?;
-            let prop = js(f);
-            if !prop.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || !prop.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-                return None;
+    let mut helpers = String::new();
+    let mut entries: Vec<String> = Vec::new();
+    for (f, owner) in setters.iter().filter(|(f, _)| f.params.len() == 1 && setters.iter().filter(|(g, _)| js(g) == js(f)).count() == 1) {
+        let prop = js(f);
+        if !prop.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || !prop.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            continue;
+        }
+        let field_name = ident(&prop);
+        let setter_owner = *owner;
+        let owner = if *owner == name { "C_" } else { owner };
+        let value = match &f.params[0].1 {
+            Ty::Nullable(inner, _) => &**inner,
+            t => t,
+        };
+        if let Ty::NamedUnion(n) = value
+            && cx.takes(n)
+            && let Some(u) = m.unions.iter().find(|u| u.name == *n)
+        {
+            // Without the package's prefix: `CanvasGradient`, not `Konva_CanvasGradient`.
+            let prefix = super::effective_prefix(m).map(|p| format!("{p}_")).unwrap_or_default();
+            let (primary, suffixes) = m.member_names(u, &|t| {
+                let t = m.original_type_names.get(t).map_or(t, String::as_str);
+                match t.get(..prefix.len()) {
+                    Some(head) if !prefix.is_empty() && t.len() > prefix.len() && head.eq_ignore_ascii_case(&prefix) => t[prefix.len()..].to_string(),
+                    _ => t.to_string(),
+                }
+            });
+            let members = union_fields(u);
+            let mut seen = std::collections::HashSet::new();
+            for (i, part) in u.parts.iter().enumerate() {
+                let Some((kind, ty)) = field(part, cx) else { continue };
+                let member_field = if Some(i) == primary { field_name.clone() } else { format!("{field_name}_{}", suffixes[i]) };
+                if !seen.insert(member_field.clone()) {
+                    continue;
+                }
+                let (param, arg, of) = match (kind, part) {
+                    ('s', _) => ("TsStr".to_string(), "v.ptr", "cstr".to_string()),
+                    (_, _) => (ty.clone(), "v", members[i].clone()),
+                };
+                helpers += &format!(
+                    "static inline void {name}__{member_field}({name} o, {param} v) {{ ({setter_owner}_{})(({setter_owner}){{ o.h }}, {n}_of_{of}({arg})); }}\n",
+                    f.name
+                );
+                entries.push(format!("F_##_N(C_, {kind}, {ty}, {member_field}, _{member_field})"));
             }
-            let field = ident(&prop);
-            let owner = if *owner == name { "C_" } else { owner };
-            // Where the setter is not `set_` and the property (a keyword, a function assigned), it is named.
-            Some(if f.name == format!("set_{field}") { format!("F_({owner}, {kind}, {ty}, {field})") } else { format!("F_##_N({owner}, {kind}, {ty}, {field}, {})", f.name) })
-        })
-        .collect();
+            continue;
+        }
+        let Some((kind, ty)) = field(&f.params[0].1, cx) else { continue };
+        // Where the setter is not `set_` and the property (a keyword, a function assigned), it is named.
+        entries.push(if f.name == format!("set_{field_name}") { format!("F_({owner}, {kind}, {ty}, {field_name})") } else { format!("F_##_N({owner}, {kind}, {ty}, {field_name}, {})", f.name) });
+    }
     if entries.is_empty() {
         return String::new();
     }
-    format!("#define {name}_FIELDS(F_, C_) {}\nTS_BAG_DEF({name})\n#define {name}_create(...) TS_BAG({name}, __VA_ARGS__)\n", entries.join(" "))
+    format!("{helpers}#define {name}_FIELDS(F_, C_) {}\nTS_BAG_DEF({name})\n#define {name}_create(...) TS_BAG({name}, __VA_ARGS__)\n", entries.join(" "))
 }
 
 // What an argument left out is: `undefined`, as each type says it.

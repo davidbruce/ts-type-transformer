@@ -56,8 +56,8 @@ __attribute__((export_name("start"))) void start(void) {
     Leaflet_CircleMarkerOptions dot_opts = Leaflet_CircleMarkerOptions_create(
         .radius = 6.0, .color = "#111111", .weight = 2.0, .fillColor = "#ffffff", .fillOpacity = 1.0);
 
-    Leaflet_PointExpression pin_size = Leaflet_PointExpression_of(Leaflet_Point_new(22.0, 22.0));
-    Leaflet_PointExpression pin_anchor = Leaflet_PointExpression_of(Leaflet_Point_new(11.0, 11.0));
+    Leaflet_Point pin_size = Leaflet_Point_new(22.0, 22.0);
+    Leaflet_Point pin_anchor = Leaflet_Point_new(11.0, 11.0);
 
     for (int i = 0; i < 5; i++) {
         Leaflet_CircleMarker cm = leaflet_circleMarker(pts[i], dot_opts);
@@ -65,9 +65,9 @@ __attribute__((export_name("start"))) void start(void) {
         Leaflet_CircleMarker_addTo(cm, m);
 
         Leaflet_DivIcon pin = leaflet_divIcon(Leaflet_DivIconOptions_create(
-            .className = "mono-pin", .html = Leaflet_string_or_Element_or_boolean_of(htmls[i]),
-            .iconSize = pin_size, .iconAnchor = pin_anchor));
-        Leaflet_Marker_addTo(leaflet_marker(pts[i], Leaflet_MarkerOptions_create(.icon = Leaflet_Icon_or_DivIcon_of(pin))), m);
+            .className = "mono-pin", .html = htmls[i],
+            .iconSize_point = pin_size, .iconAnchor_point = pin_anchor));
+        Leaflet_Marker_addTo(leaflet_marker(pts[i], Leaflet_MarkerOptions_create(.icon_div = pin)), m);
     }
 
     Leaflet_Map_fitBounds(m, Leaflet_LatLngBounds_pad(Leaflet_Polyline_getBounds(corridor), 0.15));

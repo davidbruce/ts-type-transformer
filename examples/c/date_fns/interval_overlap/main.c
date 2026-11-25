@@ -9,7 +9,7 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
 }
 
 static Df_Interval make_span(const char* s_iso, const char* e_iso) {
-    return Df_Interval_create(.start = Df_DateArg_of(df_parseISO(s_iso)), .end = Df_DateArg_of(df_parseISO(e_iso)));
+    return Df_Interval_create(.start = df_parseISO(s_iso), .end = df_parseISO(e_iso));
 }
 
 __attribute__((export_name("start"))) void start(void) {

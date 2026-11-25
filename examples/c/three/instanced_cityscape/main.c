@@ -144,7 +144,7 @@ __attribute__((export_name("start"))) void start(void) {
     add_obj(g_scene, rim);
 
     Three_Mesh plinth = Three_Mesh_new(Three_PlaneGeometry_new(8.6, 8.6), Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0xe5e5e5), .roughness = 0.85)));
+        .color_number = 0xe5e5e5, .roughness = 0.85)));
     Three_Euler_set_x(Three_Mesh_get_rotation(plinth), -PI / 2.0);
     Three_Vector3_set_y(Three_Mesh_get_position(plinth), -0.01);
     add_obj(g_scene, plinth);
@@ -153,7 +153,7 @@ __attribute__((export_name("start"))) void start(void) {
 
     Three_BoxGeometry tgeo = Three_BoxGeometry_new(0.54, 1.0, 0.54);
     Three_MeshStandardMaterial tmat = Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
-        .color = Three_ColorRepresentation_of(0xffffff), .roughness = 0.65, .metalness = 0.08));
+        .color_number = 0xffffff, .roughness = 0.65, .metalness = 0.08));
     g_inst = Three_InstancedMesh_new(tgeo, tmat, 100.0);
     js_retain(g_inst);
     add_obj(g_scene, g_inst);

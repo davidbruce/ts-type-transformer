@@ -518,7 +518,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         // properties none optional is a map of keys to types (`ElementTagNameMap`), not made by hand.
         let optional = setters.iter().any(|(f, _)| matches!(f.params.first(), Some((_, Ty::Nullable(_, true)))));
         if !methods && (optional || setters.len() <= 32) && c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) {
-            body += &bag(&c.name, &setters, &cx);
+            body += &bag(&c.name, &setters, &cx, m);
         }
         modules.entry(c.module.clone()).or_default().push(path.clone());
         out.push((path.clone(), header(&c.module, &ancestor_includes, body)));
