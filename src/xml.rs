@@ -472,6 +472,7 @@ impl Xml {
                     Absent::Null => "null",
                     Absent::Undefined => "undefined",
                     Absent::Either => "either",
+                    Absent::False => "false",
                 };
                 self.open("nullable", &vec![("absent", absent)]);
                 self.ty(inner);

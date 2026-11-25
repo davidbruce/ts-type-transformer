@@ -5,7 +5,6 @@ import dom/areas/core/node
 import dom/areas/html/html_element_tag_name_map as tag
 import gleam/option.{None, Some}
 import marked
-import marked/marked_options_no_async
 
 pub fn main() -> Nil {
   let doc = core.get_document()
@@ -60,7 +59,7 @@ pub fn main() -> Nil {
       node.set_text_content(out_lbl, Some("Rendered HTML"))
       let md_out = document.create_element(doc, tag.div)
       element.set_class_name(md_out, "md-out")
-      let html = marked.marked(markdown_src, marked_options_no_async.create())
+      let html = marked.marked(markdown_src)
       element.set_inner_html(md_out, html)
       node.append_child(out_card, out_lbl)
       node.append_child(out_card, md_out)

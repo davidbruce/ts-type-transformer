@@ -16,13 +16,6 @@ macro_rules! check {
     };
 }
 
-fn html(r: StringOrPromise) -> String {
-    match r {
-        StringOrPromise::String(s) => s,
-        StringOrPromise::JsPromise(_) => String::from("<promise>"),
-    }
-}
-
 fn token_type(t: &Token) -> String {
     match t {
         Token::Blockquote(_) => tokens::Blockquote::TYPE.into(),
@@ -54,9 +47,7 @@ fn token_type(t: &Token) -> String {
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
     // Markdown to HTML.
-    let out = html(marked_with_opt_marked_options(
-        "# Title\n\nSome *emphasis* and **strong** text.",
-    ));
+    let out = marked("# Title\n\nSome *emphasis* and **strong** text.");
     check!(out.contains("<h1>Title</h1>"));
     check!(out.contains("<em>emphasis</em>"));
     check!(out.contains("<strong>strong</strong>"));
@@ -64,7 +55,7 @@ pub extern "C" fn run() {
 
     // Lists, code, links, quotes.
     let doc = "- one\n- two\n\n1. first\n2. second\n\n```js\nlet x = 1;\n```\n\n> quoted\n\n[link](https://example.com \"t\")";
-    let out = html(marked_with_opt_marked_options(doc));
+    let out = marked(doc);
     check!(out.contains("<ul>\n<li>one</li>\n<li>two</li>\n</ul>"));
     check!(out.contains("<ol>"));
     check!(out.contains("<pre><code class=\"language-js\">let x = 1;\n</code></pre>"));
@@ -73,17 +64,21 @@ pub extern "C" fn run() {
 
     // GFM tables and task lists; and gfm switched off.
     let table = "| a | b |\n|---|:-:|\n| 1 | 2 |";
-    check!(html(marked_with_opt_marked_options(table)).contains("<table>"));
-    let plain = MarkedOptions::create();
+    check!(marked(table).contains("<table>"));
+    let plain = MarkedExtension::create();
     plain.set_gfm(Some(false));
     check!(plain.gfm() == Some(false));
-    check!(!html(marked_with_opt_marked_options_with(table, Some(&plain))).contains("<table>"));
+    let flat = Marked::new(Vec::<MarkedExtension>::new());
+    flat.use_(vec![plain]);
+    check!(!flat.parse(table).contains("<table>"));
 
     // Options: breaks turns a newline into <br>.
-    let breaks = MarkedOptions::create();
+    let breaks = MarkedExtension::create();
     breaks.set_breaks(Some(true));
-    check!(html(marked_with_opt_marked_options_with("a\nb", Some(&breaks))).contains("a<br>b"));
-    check!(!html(marked_with_opt_marked_options("a\nb")).contains("<br>"));
+    let soft = Marked::new(Vec::<MarkedExtension>::new());
+    soft.use_(vec![breaks]);
+    check!(soft.parse("a\nb").contains("a<br>b"));
+    check!(!marked("a\nb").contains("<br>"));
 
     // The library's defaults.
     let defaults = get_defaults();
@@ -93,8 +88,8 @@ pub extern "C" fn run() {
     // An inline parse has no paragraph.
     // marked's `markedInstance` is not exported, so an instance is made here.
     let plain_instance = Marked::new(Vec::<MarkedExtension>::new());
-    let inline = plain_instance.parse_inline().invoke_2("a *b* `c`");
-    check!(html(inline) == "a <em>b</em> <code>c</code>");
+    let inline = plain_instance.parse_inline("a *b* `c`");
+    check!(inline == "a <em>b</em> <code>c</code>");
 
     // The lexer: tokens of a document, the type of each, and their children.
     let list = Lexer::lex_2("# Head\n\npara with **bold**\n\n- a\n- b\n");
@@ -124,9 +119,9 @@ pub extern "C" fn run() {
     let ext = MarkedExtension::create();
     ext.set_breaks(Some(true));
     let m = Marked::new(vec![ext]);
-    check!(html(m.parse().invoke_2("x\ny")).contains("x<br>y"));
+    check!(m.parse("x\ny").contains("x<br>y"));
     check!(m.defaults().breaks() == Some(true));
-    check!(!html(marked_with_opt_marked_options("x\ny")).contains("<br>"));
+    check!(!marked("x\ny").contains("<br>"));
     let toks = m.lexer("hi *there*");
     check!(toks.length() == 1.0 && matches!(toks.at(0.0), Some(Token::Paragraph(_))));
 
@@ -145,7 +140,7 @@ pub extern "C" fn run() {
     });
     ext.set_walk_tokens(Some(&walk));
     let m2 = Marked::new(vec![ext]);
-    let out = html(m2.parse().invoke_2("# Top\n\ntext"));
+    let out = m2.parse("# Top\n\ntext");
     check!(out.contains("<h2>Top</h2>"));
     check!(seen.get() >= 4);
 
@@ -153,7 +148,7 @@ pub extern "C" fn run() {
     let ext = MarkedExtension::create();
     let renderer = MarkedExtensionRenderer::create();
     let heading = MarkedExtensionRendererHeading::new(|h: tokens::Heading| {
-        StringOrBoolean::String(format!(
+        Some(format!(
             "<h{0} class=\"x\">{1}</h{0}>",
             h.depth() as u32,
             h.text()
@@ -162,5 +157,5 @@ pub extern "C" fn run() {
     renderer.set_heading(Some(&heading));
     ext.set_renderer(Some(&renderer));
     let m3 = Marked::new(vec![ext]);
-    check!(html(m3.parse().invoke_2("## Sub")) == "<h2 class=\"x\">Sub</h2>");
+    check!(m3.parse("## Sub") == "<h2 class=\"x\">Sub</h2>");
 }

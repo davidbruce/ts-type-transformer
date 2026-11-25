@@ -4,8 +4,8 @@ import dom/areas/core/element
 import dom/areas/core/node
 import dom/areas/html/html_element_tag_name_map as tag
 import gleam/option.{None, Some}
-import marked
-import marked/marked_options_no_async
+import marked/marked as marked_class
+import marked/marked_extension
 
 fn make_pane(doc, title: String, html: String) {
   let card = document.create_element(doc, tag.div)
@@ -44,11 +44,15 @@ pub fn main() -> Nil {
       let gfm_src =
         "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n"
       let gfm_on =
-        marked_options_no_async.create()
-        |> marked_options_no_async.with_gfm(True)
+        marked_class.new([])
+        |> marked_class.use_([
+          marked_extension.create() |> marked_extension.with_gfm(True),
+        ])
       let gfm_off =
-        marked_options_no_async.create()
-        |> marked_options_no_async.with_gfm(False)
+        marked_class.new([])
+        |> marked_class.use_([
+          marked_extension.create() |> marked_extension.with_gfm(False),
+        ])
 
       let gfm_sec = document.create_element(doc, tag.div)
       element.set_class_name(gfm_sec, "section")
@@ -59,11 +63,11 @@ pub fn main() -> Nil {
       element.set_class_name(gfm_grid, "grid")
       node.append_child(
         gfm_grid,
-        make_pane(doc, "gfm: true", marked.marked(gfm_src, gfm_on)),
+        make_pane(doc, "gfm: true", marked_class.parse(gfm_on, gfm_src)),
       )
       node.append_child(
         gfm_grid,
-        make_pane(doc, "gfm: false", marked.marked(gfm_src, gfm_off)),
+        make_pane(doc, "gfm: false", marked_class.parse(gfm_off, gfm_src)),
       )
       node.append_child(gfm_sec, gfm_lbl)
       node.append_child(gfm_sec, gfm_grid)
@@ -71,11 +75,15 @@ pub fn main() -> Nil {
 
       let breaks_src = "Line one\nLine two\nLine three"
       let br_off =
-        marked_options_no_async.create()
-        |> marked_options_no_async.with_breaks(False)
+        marked_class.new([])
+        |> marked_class.use_([
+          marked_extension.create() |> marked_extension.with_breaks(False),
+        ])
       let br_on =
-        marked_options_no_async.create()
-        |> marked_options_no_async.with_breaks(True)
+        marked_class.new([])
+        |> marked_class.use_([
+          marked_extension.create() |> marked_extension.with_breaks(True),
+        ])
 
       let br_sec = document.create_element(doc, tag.div)
       element.set_class_name(br_sec, "section")
@@ -86,11 +94,11 @@ pub fn main() -> Nil {
       element.set_class_name(br_grid, "grid")
       node.append_child(
         br_grid,
-        make_pane(doc, "breaks: false", marked.marked(breaks_src, br_off)),
+        make_pane(doc, "breaks: false", marked_class.parse(br_off, breaks_src)),
       )
       node.append_child(
         br_grid,
-        make_pane(doc, "breaks: true", marked.marked(breaks_src, br_on)),
+        make_pane(doc, "breaks: true", marked_class.parse(br_on, breaks_src)),
       )
       node.append_child(br_sec, br_lbl)
       node.append_child(br_sec, br_grid)

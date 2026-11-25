@@ -4,7 +4,7 @@ use roxmltree::Node;
 
 use super::build::{external, Builder};
 use super::ops::{listener_result, mentions};
-use super::{ident, Call, Class, Func, KeyMap, NamedUnion, TParam, Ty};
+use super::{ident, Absence, Call, Class, Func, KeyMap, NamedUnion, TParam, Ty};
 use super::super::{attr, elements, flag, named, only_child};
 
 pub(super) type Sig = (Vec<(String, Ty)>, bool, Vec<(usize, String)>, Ty);
@@ -328,7 +328,7 @@ impl<'a> Builder<'a> {
             if names.insert("get_at".into()) {
                 // A missing key reads as `undefined`.
                 let import = self.import(format!("{owner}_get_at"));
-                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), true), returns_this: false, doc: None });
+                c.funcs.push(Func { type_params: vec![], module: String::new(), import, name: "get_at".into(), call: Call::IndexGet, params: vec![("key".into(), key.clone())], rest: false, fixed: vec![], shared: None, ret: absent(value.clone(), Absence::Undefined), returns_this: false, doc: None });
                 // A value of none (`[key: number]: never`) is never set.
                 if value != Ty::Void {
                     let import = self.import(format!("{owner}_set_at"));
@@ -525,7 +525,7 @@ impl<'a> Builder<'a> {
                 if !bound_fn_prop {
                     let mut t = value(self.ty(only_child(m), &owner));
                     if flag(m, "optional") {
-                        t = absent(t, true);
+                        t = absent(t, Absence::Undefined);
                     }
                     let is_fn_prop = self.function_value(only_child(m));
                     let (get, set) = if is_static {
@@ -610,7 +610,7 @@ impl<'a> Builder<'a> {
                     let t = value(self.ty(only_child(p), owner));
                     // One of any type: `undefined` when absent (leaflet's `on(type, fn,
                     // context?)`), where a null handle would be `null`.
-                    let optional = if t == Ty::Any { Ty::Nullable(Box::new(Ty::Any), true) } else { absent(t.clone(), true) };
+                    let optional = if t == Ty::Any { Ty::Nullable(Box::new(Ty::Any), Absence::Undefined) } else { absent(t.clone(), Absence::Undefined) };
                     if optional == Ty::Any && t != Ty::Any {
                         self.skip("optional parameter of a type that cannot be absent, bound as an untyped value");
                     }
@@ -741,7 +741,11 @@ impl<'a> Builder<'a> {
             }
             "nullable" => {
                 let inner = self.ty(only_child(n), owner);
-                absent(inner, attr(n, "absent") == "undefined")
+                absent(inner, match attr(n, "absent") {
+                    "undefined" => Absence::Undefined,
+                    "false" => Absence::False,
+                    _ => Absence::Null,
+                })
             }
             // Elements that cross as a number, a flag, a string, a handle or a
             // union that can be told apart.
@@ -847,7 +851,7 @@ impl<'a> Builder<'a> {
                         let args: Vec<Ty> = args.iter().enumerate().filter(|(i, _)| kept.is_none_or(|k| k.contains(i))).map(|(_, a)| a.clone()).collect();
                         // One left with no type parameters is no generic union.
                         let t = if generic_union && !args.is_empty() { Ty::Generic(name, args) } else { Ty::NamedUnion(name) };
-                        if has_void { absent(t, true) } else { t }
+                        if has_void { absent(t, Absence::Undefined) } else { t }
                     };
                     if self.model.unions.iter().any(|u| u.name == name) {
                         return named_type(name.clone(), self.union_kept.get(&name));
@@ -895,7 +899,7 @@ impl<'a> Builder<'a> {
                         return Ty::Any;
                     }
                     if let [only] = parts.as_slice() {
-                        return if has_void { absent(only.clone(), true) } else { only.clone() };
+                        return if has_void { absent(only.clone(), Absence::Undefined) } else { only.clone() };
                     }
                     let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
                     if !parts.iter().all(simple) || !distinct(&parts) {
@@ -978,12 +982,12 @@ fn rename_param(t: &mut Ty, from: &str, to: &str) {
 // What may be absent. A handle can be null; a string is a null pointer going
 // in and a null handle coming back; a number is a flag and the number going
 // in, and a handle coming back; a flag or an enum is -1 when absent.
-fn absent(t: Ty, undefined: bool) -> Ty {
+fn absent(t: Ty, a: Absence) -> Ty {
     match t {
-        Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), undefined),
-        Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) | Ty::Listener(_) => Ty::Nullable(Box::new(t), undefined),
+        Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), a),
+        Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) | Ty::Listener(_) => Ty::Nullable(Box::new(t), a),
         // `x?: T | null`: omitted too, as `x?: T` is.
-        Ty::Nullable(inner, u) => Ty::Nullable(inner, u || undefined),
+        Ty::Nullable(inner, u) => Ty::Nullable(inner, if a == Absence::Undefined { a } else { u }),
         Ty::Void => Ty::Void,
         _ => Ty::Any,
     }
@@ -1044,7 +1048,7 @@ impl Builder<'_> {
         self.model.args_bags.insert(f.import.clone(), f.params[start..].iter().map(|(p, _)| p.clone()).collect());
         self.model.synthetic.insert(name.clone());
         f.params.truncate(start);
-        f.params.push(("args".into(), Ty::Nullable(Box::new(Ty::Obj(name.clone())), true)));
+        f.params.push(("args".into(), Ty::Nullable(Box::new(Ty::Obj(name.clone())), Absence::Undefined)));
         Some(Class { type_params: vec![], bases: vec![], module: module.to_string(), name, ancestors: Vec::new(), funcs, consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: None, doc: None })
     }
 }

@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use super::js::{call_expr, global, js_test, trim_trailing_undef};
-use super::model::{Call, Class, Func, Model, Shared, Ty, ident};
+use super::model::{Absence, Call, Class, Func, Model, Shared, Ty, ident};
 pub use super::model::manifest;
 
 /// Primitive storage class on the raw wasm import/export ABI.
@@ -133,12 +133,12 @@ fn from_wasm(p: &str, t: &Ty) -> String {
         Ty::Bool => format!("!!{p}"),
         Ty::Enum(e) => format!("enums.{e}[{p}]"),
         // A flag or an enum that may be absent is -1 when it is.
-        Ty::Nullable(inner, u) if matches!(**inner, Ty::Bool) => format!("({p} < 0 ? {} : !!{p})", if *u { "undefined" } else { "null" }),
+        Ty::Nullable(inner, u) if matches!(**inner, Ty::Bool) => format!("({p} < 0 ? {} : !!{p})", u.js()),
         Ty::Nullable(inner, u) if matches!(**inner, Ty::Enum(_)) => {
             let Ty::Enum(e) = &**inner else { unreachable!() };
-            format!("({p} < 0 ? {} : enums.{e}[{p}])", if *u { "undefined" } else { "null" })
+            format!("({p} < 0 ? {} : enums.{e}[{p}])", u.js())
         }
-        Ty::Nullable(_, true) => format!("({p} === 0 ? undefined : get({p}))"),
+        Ty::Nullable(_, a @ (Absence::Undefined | Absence::False)) => format!("({p} === 0 ? {} : get({p}))", a.js()),
         Ty::Key(m) => format!("keys.{m}[{p}]"),
         _ => format!("get({p})"),
     }
@@ -156,6 +156,8 @@ fn to_wasm(x: &str, t: &Ty) -> String {
             let Ty::Enum(e) = &**inner else { unreachable!() };
             format!("(places.{e}.get({x}) ?? -1)")
         }
+        // `T | false`: false is absent, a null handle.
+        Ty::Nullable(_, Absence::False) => format!("(v => put(v === false ? null : v))({x})"),
         _ => format!("put({x})"),
     }
 }
@@ -184,8 +186,8 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
         {
             wasm_params.push(format!("{p}_ptr"));
             wasm_params.push(format!("{p}_len"));
-            args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", if *undefined { "undefined" } else { "null" }));
-            may_undef.push(*undefined);
+            args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", undefined.js()));
+            may_undef.push(*undefined == Absence::Undefined);
             continue;
         }
         if let Ty::Nullable(inner, undefined) = t
@@ -193,8 +195,8 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
         {
             wasm_params.push(format!("{p}_has"));
             wasm_params.push(format!("{p}_value"));
-            args.push(format!("({p}_has ? {p}_value : {})", if *undefined { "undefined" } else { "null" }));
-            may_undef.push(*undefined);
+            args.push(format!("({p}_has ? {p}_value : {})", undefined.js()));
+            may_undef.push(*undefined == Absence::Undefined);
             continue;
         }
         // A rest parameter's array is spread; a null one is empty.
@@ -203,7 +205,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             may_undef.push(false);
         } else {
             args.push(from_wasm(&p, t));
-            may_undef.push(matches!(t, Ty::Nullable(_, true)));
+            may_undef.push(matches!(t, Ty::Nullable(_, Absence::Undefined)));
         }
         wasm_params.push(p);
     }

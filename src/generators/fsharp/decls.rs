@@ -202,7 +202,8 @@ impl Gen {
                 let ret = subst_params(&self.returns(d, ""), &follows);
                 let (fname, args) = match self.fixed(d, 0) {
                     // Escaped where it is written, by `at`.
-                    Some((suffix, args)) => (ident(&format!("{raw}_{suffix}")), args),
+                    // Only an options object the glue passes: named as lowering named it (`marked`, `marked_async`).
+                    Some((suffix, args)) => (ident(&if suffix.is_empty() && args.contains('{') { raw.to_string() } else { format!("{raw}_{suffix}") }), args),
                     None => (name, "$0...".to_string()),
                 };
                 let at_attr = self.at(&path, Some(&args));

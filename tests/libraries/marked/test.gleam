@@ -5,7 +5,6 @@ import bindings/lexer
 import bindings/marked as marked_class
 import bindings/marked_extension
 import bindings/marked_extension_renderer
-import bindings/marked_options_no_async
 import bindings/namespaces/tokens/generic as token_generic
 import bindings/namespaces/tokens/heading as token_heading
 import bindings/namespaces/tokens/paragraph as token_paragraph
@@ -69,91 +68,84 @@ fn token_type(tok: t.Token) -> String {
 
 pub fn main() {
   let has = string.contains
-  let plain = marked_options_no_async.create()
 
   // Block Markdown to HTML, through the module's function.
-  let html = marked.marked("# Title\n\nHello **world** and *you*.", plain)
+  let html = marked.marked("# Title\n\nHello **world** and *you*.")
   let passed =
     check(
       html
         == "<h1>Title</h1>\n<p>Hello <strong>world</strong> and <em>you</em>.</p>\n",
       "marked",
     )
-    + check(
-      has(marked.marked("- a\n- b\n- c", plain), "<ul>\n<li>a</li>"),
-      "a list",
-    )
+    + check(has(marked.marked("- a\n- b\n- c"), "<ul>\n<li>a</li>"), "a list")
     + check(
       has(
-        marked.marked("```js\nlet x = 1;\n```", plain),
+        marked.marked("```js\nlet x = 1;\n```"),
         "<pre><code class=\"language-js\">let x = 1;\n</code></pre>",
       ),
       "a code block",
     )
     + check(
       has(
-        marked.marked("[a link](http://example.com \"t\")", plain),
+        marked.marked("[a link](http://example.com \"t\")"),
         "<a href=\"http://example.com\" title=\"t\">a link</a>",
       ),
       "a link",
     )
-    + check(has(marked.marked("> quoted", plain), "<blockquote>"), "a quote")
+    + check(has(marked.marked("> quoted"), "<blockquote>"), "a quote")
     + check(
-      has(marked.marked("| a | b |\n|---|---|\n| 1 | 2 |", plain), "<th>a</th>"),
+      has(marked.marked("| a | b |\n|---|---|\n| 1 | 2 |"), "<th>a</th>"),
       "a table (gfm)",
     )
-    + check(has(marked.marked("a <b> & c", plain), "&amp;"), "escapes")
+    + check(has(marked.marked("a <b> & c"), "&amp;"), "escapes")
 
-  // Options: made here, as a record of optional fields.
-  let breaks = marked_options_no_async.create()
-  marked_options_no_async.set_breaks(breaks, Some(True))
+  // Options: made here, as a record of optional fields, and given an
+  // instance with `use`.
+  let breaks = marked_extension.create()
+  marked_extension.set_breaks(breaks, Some(True))
+  let with_breaks = marked_class.new([]) |> marked_class.use_([breaks])
   let passed =
     passed
-    + check(has(marked.marked("a\nb", breaks), "a<br>b"), "breaks: true")
-    + check(!has(marked.marked("a\nb", plain), "<br>"), "no breaks by default")
     + check(
-      marked_options_no_async.get_breaks(breaks) == Some(True),
+      has(marked_class.parse(with_breaks, "a\nb"), "a<br>b"),
+      "breaks: true",
+    )
+    + check(!has(marked.marked("a\nb"), "<br>"), "no breaks by default")
+    + check(
+      marked_extension.get_breaks(breaks) == Some(True),
       "option read back",
     )
-  let no_gfm = marked_options_no_async.create()
-  marked_options_no_async.set_gfm(no_gfm, Some(False))
+  let no_gfm = marked_extension.create()
+  marked_extension.set_gfm(no_gfm, Some(False))
+  let without_gfm = marked_class.new([]) |> marked_class.use_([no_gfm])
   let passed =
     passed
     + check(
-      has(marked.marked("~~gone~~", plain), "<del>gone</del>"),
+      has(marked.marked("~~gone~~"), "<del>gone</del>"),
       "gfm strikethrough",
     )
-    + check(!has(marked.marked("~~gone~~", no_gfm), "<del>"), "gfm: false")
-
-  // The optional-options form gives a string or a promise.
-  let passed =
-    passed
     + check(
-      marked.marked_with_opt_marked_options("*x*")
-        == t.StringOrPromiseString("<p><em>x</em></p>\n"),
-      "marked with no options",
+      !has(marked_class.parse(without_gfm, "~~gone~~"), "<del>"),
+      "gfm: false",
     )
+
+  let passed =
+    passed + check(marked.marked("*x*") == "<p><em>x</em></p>\n", "marked")
 
   // An instance: parse and parseInline.
   // The module's parse is a Dynamic and its parseInline is not bound at all
   // (FINDING 2): an instance's parse and parseInline are used instead.
   let instance = marked_class.new([])
-  let parse = marked_class.get_parse(instance)
-  let parse_inline = marked_class.get_parse_inline(instance)
-  let call = marked_options_no_async.create()
   let passed =
     passed
+    + check(marked_class.parse(instance, "## Two") == "<h2>Two</h2>\n", "parse")
     + check(
-      marked_class.parse_invoke(parse, "## Two", call) == "<h2>Two</h2>\n",
-      "parse",
-    )
-    + check(
-      marked_class.parse_invoke(parse_inline, "**bold** `code`", call)
+      marked_class.parse_inline(instance, "**bold** `code`")
         == "<strong>bold</strong> <code>code</code>",
       "parseInline",
     )
     + check(
-      marked_class.parse_invoke(parse_inline, "# not a heading", call)
+      marked_class.parse_inline(instance, "# not a heading")
         == "# not a heading",
       "parseInline has no blocks",
     )
@@ -201,14 +193,11 @@ pub fn main() {
   let passed =
     passed
     + check(
-      has(
-        marked_class.parse_invoke(marked_class.get_parse(inst), "a\nb", call),
-        "a<br>b",
-      ),
+      has(marked_class.parse(inst, "a\nb"), "a<br>b"),
       "an instance with breaks",
     )
     + check(
-      !has(marked_class.parse_invoke(parse, "a\nb", call), "<br>"),
+      !has(marked_class.parse(instance, "a\nb"), "<br>"),
       "a plain instance is unchanged",
     )
 
@@ -223,7 +212,7 @@ pub fn main() {
         #(field_string(token, "text"), field_float(token, "depth")),
         ..cell.get(rendered)
       ])
-      t.StringOrBooleanString(
+      Some(
         "<h"
         <> int.to_string(float.round(field_float(token, "depth")))
         <> " class=\"x\">"
@@ -235,12 +224,7 @@ pub fn main() {
   let ext = marked_extension.create()
   marked_extension.set_renderer(ext, Some(renderer))
   let with_renderer = marked_class.new([ext])
-  let heading_html =
-    marked_class.parse_invoke(
-      marked_class.get_parse(with_renderer),
-      "# Hi\n\n## There",
-      call,
-    )
+  let heading_html = marked_class.parse(with_renderer, "# Hi\n\n## There")
   let passed =
     passed
     + check(
@@ -266,11 +250,7 @@ pub fn main() {
   let passed =
     passed
     + check(
-      marked_class.parse_invoke(
-        marked_class.get_parse(preprocessed),
-        "foo *foo*",
-        call,
-      )
+      marked_class.parse(preprocessed, "foo *foo*")
         == "<p>bar <em>bar</em></p>\n",
       "a preprocess hook",
     )
@@ -286,12 +266,7 @@ pub fn main() {
     }),
   )
   let walked = marked_class.new([walker])
-  let _ =
-    marked_class.parse_invoke(
-      marked_class.get_parse(walked),
-      "# A\n\n*b*",
-      call,
-    )
+  let _ = marked_class.parse(walked, "# A\n\n*b*")
   let kinds = list.reverse(cell.get(seen))
   let passed =
     passed

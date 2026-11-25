@@ -24,7 +24,7 @@ fn walkToken(state: *WalkState, tok: m.Token) ?m.void_or_void_or_Promise_array_o
     return null;
 }
 
-fn renderHeading(h: m.tokens.Heading) m.JsValue {
+fn renderHeading(h: m.tokens.Heading) ?m.JsString {
     const depth: u32 = @intFromFloat(h.getDepth());
     var out_buf: [256]u8 = undefined;
     const out = std.fmt.bufPrint(
@@ -32,7 +32,7 @@ fn renderHeading(h: m.tokens.Heading) m.JsValue {
         "<h{d} class=\"wire-h\">\xC2\xA7 {f}</h{d}>\n",
         .{ depth, h.getText(), depth },
     ) catch "";
-    return m.JsValue.string(out);
+    return m.JsString.from(out);
 }
 
 fn makeEl(doc: dom.Document, tag: []const u8, cls: []const u8, text: ?[]const u8) dom.HTMLElement {
@@ -59,8 +59,8 @@ export fn start() void {
     });
 
     const custom_m = m.Marked.new(.{ext});
-    const def_html = m.marked(md, .{});
-    const cust_str = custom_m.getParse().invoke(md, .{});
+    const def_html = m.marked(md);
+    const cust_str = custom_m.parse(md);
 
     var bbuf: [48]u8 = undefined;
     const badge_txt = std.fmt.bufPrint(&bbuf, "{d} tokens visited", .{walk.count}) catch "visited";

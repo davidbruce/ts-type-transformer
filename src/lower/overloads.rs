@@ -137,7 +137,8 @@ fn overload_names(
     synth_enums: &std::collections::HashMap<String, String>,
 ) -> Vec<String> {
     let sep = o.separator;
-    let constants = |s: &Signature| -> Vec<String> { s.params.iter().filter_map(|p| p.constant.as_deref()).map(name_part).collect() };
+    // Not an options object the glue passes (`{"async": true}`): its overloads are named by their marks.
+    let constants = |s: &Signature| -> Vec<String> { s.params.iter().filter_map(|p| p.constant.as_deref()).filter(|c| !c.starts_with('{')).map(name_part).collect() };
     // Overloads with the same fixed values are named as a family of their own,
     // after the values: `addEventListener_click`, `addEventListener_click_with_options`.
     let mut out = vec![String::new(); sigs.len()];

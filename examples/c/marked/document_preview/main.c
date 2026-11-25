@@ -43,7 +43,7 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement out_card = make_el(doc, "div", "card", 0);
     HTMLElement_appendChild(out_card, make_el(doc, "div", "label", "Rendered HTML"));
     HTMLElement md_out = make_el(doc, "div", "md-out", 0);
-    HTMLElement_set_innerHTML(md_out, marked(markdown_src, (marked_options_no_async){ 0 }));
+    HTMLElement_set_innerHTML(md_out, marked(markdown_src));
 
     HTMLElement_appendChild(out_card, md_out);
     HTMLElement_appendChild(grid, src_card);

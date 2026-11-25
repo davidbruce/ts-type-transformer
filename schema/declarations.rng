@@ -597,8 +597,8 @@
   <!-- nullable=wrap: `T | null | undefined` without the absent members. -->
   <define name="nullable.body">
     <attribute name="absent">
-      <a:documentation>Which value stands for "no value": null, undefined, or either.</a:documentation>
-      <choice><value>null</value><value>undefined</value><value>either</value></choice>
+      <a:documentation>Which value stands for "no value": null, undefined, either, or false (`T | false`).</a:documentation>
+      <choice><value>null</value><value>undefined</value><value>either</value><value>false</value></choice>
     </attribute>
     <ref name="type"/>
   </define>

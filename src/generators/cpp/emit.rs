@@ -11,7 +11,7 @@ use super::types::{
     ty_in, ty_out, ty_param, Place,
 };
 use super::{ident, import_attr, is_builtin_cpp_type, raw_fn, wrap_ns, Ctx, ProjectRef, RUNTIME};
-use super::super::model::{base_args, map_types, subst, with_self_args, Call, Class, Func, Model, Ty};
+use super::super::model::{Absence, base_args, map_types, subst, with_self_args, Call, Class, Func, Model, Ty};
 
 pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Result<Vec<(String, String)>, Vec<String>> {
     let wasm_module = if pkg_name == "bindings" { "env" } else { pkg_name };
@@ -485,7 +485,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         // A long list of properties none optional is a map of keys to types (`ElementTagNameMap`), not made by hand.
         let mut fields_def = String::new();
         if let Some(setters) = bag_setters(m, c).filter(|s| c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) && !own.contains("Fields") && !holders.contains_key("Fields")
-            && (s.len() <= 32 || s.iter().any(|f| matches!(f.params.first(), Some((_, Ty::Nullable(_, true))))))) {
+            && (s.len() <= 32 || s.iter().any(|f| matches!(f.params.first(), Some((_, Ty::Nullable(_, Absence::Undefined))))))) {
             let js = |f: &Func| match &f.call {
                 Call::Set(js) => js.clone(),
                 _ => unreachable!(),

@@ -12,7 +12,6 @@ import marked
 import marked/marked as marked_class
 import marked/marked_extension
 import marked/marked_extension_renderer
-import marked/marked_options_no_async
 import marked/namespaces/tokens/generic as token_generic
 import marked/runtime as mr
 import marked/types as mt
@@ -71,7 +70,7 @@ pub fn main() -> Nil {
         |> marked_extension_renderer.with_heading(fn(heading) {
           let tok = mr.dynamic(heading)
           let d = int.to_string(float.round(field_float(tok, "depth")))
-          mt.StringOrBooleanString(
+          Some(
             "<h"
             <> d
             <> " class=\"wire-h\">§ "
@@ -94,10 +93,8 @@ pub fn main() -> Nil {
         })
 
       let custom_m = marked_class.new([ext])
-      let call = marked_options_no_async.create()
-      let def_html = marked.marked(md, marked_options_no_async.create())
-      let cust_html =
-        marked_class.parse_invoke(marked_class.get_parse(custom_m), md, call)
+      let def_html = marked.marked(md)
+      let cust_html = marked_class.parse(custom_m, md)
 
       let visited = float.round(element.get_child_element_count(strip))
 

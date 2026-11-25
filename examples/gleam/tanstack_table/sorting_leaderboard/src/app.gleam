@@ -111,9 +111,9 @@ fn render(table: t.TableCore(Dynamic, Nil), doc, label: String) {
       }
       let csort: t.ColumnRowSorting(Dynamic, Nil) = coerce(col)
       let mark = case column_row_sorting.get_is_sorted(csort) {
-        t.BooleanOrSortDirectionSortDirection(t.SortDirectionAsc) -> " &#9650;"
-        t.BooleanOrSortDirectionSortDirection(t.SortDirectionDesc) -> " &#9660;"
-        _ -> ""
+        Some(t.SortDirectionAsc) -> " &#9650;"
+        Some(t.SortDirectionDesc) -> " &#9660;"
+        None -> ""
       }
       let cls = case
         cid == "latency" || cid == "throughput" || cid == "uptime"

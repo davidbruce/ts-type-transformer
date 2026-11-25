@@ -167,15 +167,13 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // Sorting: an ascending sort on age puts Al (25), Cy (30), Bo (41) in order.
     auto sorted = as<ColSort>(*table.getColumn("age"));
     auto isSorted = [&](const ColSort& c) { return c.getIsSorted(); };
-    auto notSorted = [&](const ColSort& c) {
-        auto r = isSorted(c);
-        return std::holds_alternative<bool>(r) && !std::get<bool>(r);
-    };
+    // `false | SortDirection`: none when not sorted.
+    auto notSorted = [&](const ColSort& c) { return !isSorted(c).has_value(); };
     CHECK(notSorted(sorted));
     sorted.toggleSorting(false, std::nullopt);
     model = table.getRowModel();
     CHECK(ids(model.rows()) == "Al#1,Cy#0,Bo#2");
-    CHECK(std::get<SortDirection>(isSorted(sorted)) == SortDirection::asc);
+    CHECK(isSorted(sorted) == SortDirection::asc);
 
     // setSorting with a new state: by name, descending: Cy, Bo, Al.
     ColumnSort by_name = ColumnSort::create();
@@ -187,7 +185,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(ids(model.rows()) == "Cy#0,Bo#2,Al#1");
     CHECK(notSorted(sorted));
     auto byName = as<ColSort>(*table.getColumn("name"));
-    CHECK(std::get<SortDirection>(isSorted(byName)) == SortDirection::desc);
+    CHECK(isSorted(byName) == SortDirection::desc);
     // The unsorted model is still the data's order.
     CHECK(ids(table.getCoreRowModel().rows()) == "Cy#0,Al#1,Bo#2");
 

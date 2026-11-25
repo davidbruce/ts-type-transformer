@@ -148,14 +148,10 @@ fn render(app: *App, label: []const u8) void {
         w.writeAll(if (is_num) "<th class=\"num\">" else "<th>") catch return;
         const hdr = getProp(cp.getColumnDef().as(tt.JsValue), "header").toString().copy(&tmp_buf);
         appendEsc(&w, hdr) catch return;
-        const sd = col.as(tt.Column_RowSorting).getIsSorted();
-        if (sd == .string) {
-            if (sd.string.eql("asc")) {
-                w.writeAll(" &#9650;") catch return;
-            } else if (sd.string.eql("desc")) {
-                w.writeAll(" &#9660;") catch return;
-            }
-        }
+        if (col.as(tt.Column_RowSorting).getIsSorted()) |sd| switch (sd) {
+            .asc => w.writeAll(" &#9650;") catch return,
+            .desc => w.writeAll(" &#9660;") catch return,
+        };
         w.writeAll("</th>") catch return;
     }
     w.writeAll("</tr></thead><tbody>") catch return;

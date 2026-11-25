@@ -45,7 +45,7 @@ export fn start() void {
     const out_card = makeEl(doc, "div", "card", null);
     _ = out_card.appendChild(makeEl(doc, "div", "label", "Rendered HTML"));
     const md_out = makeEl(doc, "div", "md-out", null);
-    md_out.setInnerHTML(m.marked(markdown_src, .{}));
+    md_out.setInnerHTML(m.marked(markdown_src));
 
     _ = out_card.appendChild(md_out);
     _ = grid.appendChild(src_card);

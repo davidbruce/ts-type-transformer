@@ -352,7 +352,10 @@ impl Gen {
         let mut next = first;
         for p in named(n, "parameter") {
             if let Some(value) = p.attribute("const") {
-                suffix.push(value_name(value));
+                // Not an options object the glue passes (`{"async": false}`): lowering named those.
+                if !value.starts_with('{') {
+                    suffix.push(value_name(value));
+                }
                 args.push(if only_child(p).attribute("name") == Some("string") { format!("{value:?}") } else { value.to_string() });
             } else if flag(p, "optional") || flag(p, "rest") {
                 // Whatever is left is passed through as given.
@@ -667,7 +670,7 @@ impl Gen {
                 vec![match self.fixed(fn_node, 1) {
                     Some((suffix, args)) => {
                         let emit = format!("$0{js}({args})");
-                        let fixed_name = ident(&format!("{raw}_{suffix}"));
+                        let fixed_name = ident(&if suffix.is_empty() && args.contains('{') { raw.to_string() } else { format!("{raw}_{suffix}") });
                         let attr = format!("[<Emit(\"{}\")>]", emit.replace('"', "\\\""));
                         method_from(self, fn_node, &fn_tps, &fixed_name, emit, Some(attr))
                     }
@@ -711,7 +714,7 @@ impl Gen {
             "method" => vec![match self.fixed(m, 1) {
                 Some((suffix, args)) => {
                     let emit = format!("$0{js}({args})");
-                    let fixed_name = ident(&format!("{raw}_{suffix}"));
+                    let fixed_name = ident(&if suffix.is_empty() && args.contains('{') { raw.to_string() } else { format!("{raw}_{suffix}") });
                     let attr = format!("[<Emit(\"{}\")>]", emit.replace('"', "\\\""));
                     method_from(self, m, &tps, &fixed_name, emit, Some(attr))
                 }

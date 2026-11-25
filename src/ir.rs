@@ -54,6 +54,8 @@ pub enum Absent {
     Null,
     Undefined,
     Either,
+    // `T | false`: a renderer's "use the default", an octree's "no hit".
+    False,
 }
 
 #[derive(Clone)]

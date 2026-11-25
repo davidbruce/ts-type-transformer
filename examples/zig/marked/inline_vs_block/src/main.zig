@@ -31,8 +31,6 @@ export fn start() void {
     _ = app.appendChild(head);
 
     const inst = m.Marked.new(.{});
-    const parse_fn = inst.getParse();
-    const inline_fn = inst.getParseInline();
 
     const snippets = [_][]const u8{
         "Hello **world** and *italics*",
@@ -47,8 +45,8 @@ export fn start() void {
         _ = row.appendChild(makeEl(doc, "pre", "src", s));
 
         const grid = makeEl(doc, "div", "grid", null);
-        _ = grid.appendChild(makeResultCard(doc, "Block (parse)", parse_fn.invoke(s, .{})));
-        _ = grid.appendChild(makeResultCard(doc, "Inline (parseInline)", inline_fn.invoke(s, .{})));
+        _ = grid.appendChild(makeResultCard(doc, "Block (parse)", inst.parse(s)));
+        _ = grid.appendChild(makeResultCard(doc, "Inline (parseInline)", inst.parseInline(s)));
         _ = row.appendChild(grid);
         _ = app.appendChild(row);
     }

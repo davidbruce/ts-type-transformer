@@ -159,11 +159,9 @@ static void render(const char* label) {
         bool is_num = JsString_equals(cid, "latency") || JsString_equals(cid, "throughput") || JsString_equals(cid, "uptime");
         html_fmt(&out, "%s", is_num ? "<th class=\"num\">" : "<th>");
         html_js_esc(&out, hdr);
-        Table_boolean_or_SortDirection sd = Table_Column_RowSorting_getIsSorted((Table_Column_RowSorting){ col.h });
-        if (sd.tag == Table_boolean_or_SortDirection_Table_SortDirection) {
-            if (sd.as.Table_SortDirection == Table_SortDirection_asc) html_fmt(&out, " &#9650;");
-            else if (sd.as.Table_SortDirection == Table_SortDirection_desc) html_fmt(&out, " &#9660;");
-        }
+        Table_SortDirection sd = Table_Column_RowSorting_getIsSorted((Table_Column_RowSorting){ col.h });
+        if (sd == Table_SortDirection_asc) html_fmt(&out, " &#9650;");
+        else if (sd == Table_SortDirection_desc) html_fmt(&out, " &#9660;");
         html_fmt(&out, "</th>");
     }
     html_fmt(&out, "</tr></thead><tbody>");

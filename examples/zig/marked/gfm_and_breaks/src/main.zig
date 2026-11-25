@@ -18,6 +18,13 @@ fn makePane(doc: dom.Document, title: []const u8, html: m.JsString) dom.HTMLElem
     return card;
 }
 
+// An instance with these options, set with use.
+fn withOptions(opts: m.MarkedExtension) m.Marked {
+    const inst = m.Marked.new(.{});
+    _ = inst.use(.{opts});
+    return inst;
+}
+
 export fn start() void {
     const scope = dom.JsScope.open();
     defer scope.deinit();
@@ -34,8 +41,8 @@ export fn start() void {
     const gfm_sec = makeEl(doc, "div", "section", null);
     _ = gfm_sec.appendChild(makeEl(doc, "div", "label", "GitHub Flavored Markdown (gfm)"));
     const gfm_grid = makeEl(doc, "div", "grid", null);
-    _ = gfm_grid.appendChild(makePane(doc, "gfm: true", m.marked(gfm_src, .{ .gfm = true })));
-    _ = gfm_grid.appendChild(makePane(doc, "gfm: false", m.marked(gfm_src, .{ .gfm = false })));
+    _ = gfm_grid.appendChild(makePane(doc, "gfm: true", withOptions(m.MarkedExtension.init(.{ .gfm = true })).parse(gfm_src)));
+    _ = gfm_grid.appendChild(makePane(doc, "gfm: false", withOptions(m.MarkedExtension.init(.{ .gfm = false })).parse(gfm_src)));
     _ = gfm_sec.appendChild(gfm_grid);
     _ = app.appendChild(gfm_sec);
 
@@ -43,8 +50,8 @@ export fn start() void {
     const br_sec = makeEl(doc, "div", "section", null);
     _ = br_sec.appendChild(makeEl(doc, "div", "label", "Soft Line Breaks (breaks)"));
     const br_grid = makeEl(doc, "div", "grid", null);
-    _ = br_grid.appendChild(makePane(doc, "breaks: false", m.marked(breaks_src, .{ .breaks = false })));
-    _ = br_grid.appendChild(makePane(doc, "breaks: true", m.marked(breaks_src, .{ .breaks = true })));
+    _ = br_grid.appendChild(makePane(doc, "breaks: false", withOptions(m.MarkedExtension.init(.{ .breaks = false })).parse(breaks_src)));
+    _ = br_grid.appendChild(makePane(doc, "breaks: true", withOptions(m.MarkedExtension.init(.{ .breaks = true })).parse(breaks_src)));
     _ = br_sec.appendChild(br_grid);
     _ = app.appendChild(br_sec);
 }

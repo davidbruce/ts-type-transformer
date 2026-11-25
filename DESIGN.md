@@ -57,7 +57,7 @@ are errors. Example targets are in `examples/targets/`.
 | `generics` | `checking` | the same, but those the user fills | as `erase`; `Array<T>`, `map<U>(f): U[]` stay | no |
 | `constraints` | `nominal` | a declaration's type parameter constraints, which TypeScript checks by shape | kept only where every use in the output names a type declared to extend it, or a type parameter so constrained, as C++'s `ts::extends` checks | no |
 | `constraints` | `exact` | the same | as `nominal`, but a type parameter meets only the constraint it has: Rust's `T: Is<Readable>` is not `Is<Stream>` | no |
-| `nullable` | `wrap` | `T \| null \| undefined` | `<nullable absent="null\|undefined\|either">` | no |
+| `nullable` | `wrap` | `T \| null \| undefined`, and `T \| false` | `<nullable absent="null\|undefined\|either\|false">` | no |
 | `literals` | `enum` | literal types | string unions -> `<enum>`, constants -> `const=`, others widened | no |
 | `anonymous` | `hoist` | inline object and function types | named synthetic declarations | no |
 | `optional_params` | `overloads` | optional parameters | one overload per arity | no |
@@ -89,6 +89,15 @@ used with `ZRColor | ZRColor[]` too, so split lines take an array of
 colours), else to its default. `erase` erases every one so; one the user
 fills, to its constraint or default. A merged declaration's parameter has
 the default any of its declarations gives.
+
+`T | false`, of an object or a string with nothing else of `true`,
+`boolean`, `null` or `undefined` beside it, is a nullable `T` whose absent
+value is `false` (marked's renderer, three's octree `Intersection | false`):
+an option in each target but F#, which keeps `T | bool`. A property whose
+type is only call signatures is a method of each (`Marked#parse`). Overloads
+an options object's boolean literal tells apart pass it themselves, the one
+that leaves it open gone: `marked(src)` is a string, `marked_async(src)` a
+promise, whatever the library is set to.
 
 A rest parameter of a tuple of fixed length is its elements, as TypeScript
 has it: pixi's `stroke(...args: Parameters<GraphicsContext['stroke']>)` is

@@ -6,9 +6,6 @@
 TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
-// marked(src) has no default for its options: none given.
-#define NO_OPTIONS ((marked_options_no_async){ 0 })
-
 static bool contains(JsString s, const char* needle) {
     static char buf[1 << 16];
     uint32_t n = JsString_len(s), m = ts_strlen(needle);
@@ -61,7 +58,7 @@ static bool token_is(JsValue token, const char* type) {
 
 // The renderer for headings: a class by depth, the heading's own text.
 static int headings_rendered;
-static JsValue render_heading(void* ctx, Marked_Tokens_Heading h) {
+static JsString render_heading(void* ctx, Marked_Tokens_Heading h) {
     headings_rendered++;
     char html[128];
     uint32_t depth = (uint32_t)Marked_Tokens_Heading_get_depth(h);
@@ -77,7 +74,7 @@ static JsValue render_heading(void* ctx, Marked_Tokens_Heading h) {
     for (uint32_t i = 0; close[i]; i++) html[k + n + i] = close[i];
     html[k + n + 3] = '0' + depth;
     html[k + n + 5] = 0;
-    return js_string(html);
+    return JsString_from(html);
 }
 
 // walkTokens: every heading goes one level down.
@@ -104,7 +101,7 @@ __attribute__((export_name("finish"))) void finish(void) { CHECK(async_ok); }
 
 __attribute__((export_name("run"))) void run(void) {
     // Block Markdown to HTML.
-    JsString html = marked("# Title\n\nHello *world* and **bold**.\n\n- one\n- two\n", NO_OPTIONS);
+    JsString html = marked("# Title\n\nHello *world* and **bold**.\n\n- one\n- two\n");
     CHECK(contains(html, "<h1>Title</h1>"));
     CHECK(contains(html, "<em>world</em>"));
     CHECK(contains(html, "<strong>bold</strong>"));
@@ -112,7 +109,7 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(html);
 
     // Code, links, images, quotes.
-    JsString rich = marked("`x`\n\n```js\nlet a = 1;\n```\n\n[site](https://example.com \"T\") ![alt](a.png)\n\n> quoted\n", NO_OPTIONS);
+    JsString rich = marked("`x`\n\n```js\nlet a = 1;\n```\n\n[site](https://example.com \"T\") ![alt](a.png)\n\n> quoted\n");
     CHECK(contains(rich, "<code>x</code>"));
     CHECK(contains(rich, "<pre><code class=\"language-js\">let a = 1;"));
     CHECK(contains(rich, "<a href=\"https://example.com\" title=\"T\">site</a>"));
@@ -122,32 +119,40 @@ __attribute__((export_name("run"))) void run(void) {
 
     // GitHub tables, on by default; off with gfm false.
     const char* table = "| a | b |\n|---|---|\n| 1 | 2 |\n";
-    JsString t = marked(table, NO_OPTIONS);
+    JsString t = marked(table);
     CHECK(contains(t, "<table>") && contains(t, "<th>a</th>") && contains(t, "<td>2</td>"));
     js_release(t);
-    marked_options_no_async plain = marked_options_no_async_create();
-    marked_options_no_async_set_gfm(plain, js_some_bool(false));
-    JsString flat = marked(table, plain);
+    MarkedExtension plain = MarkedExtension_create();
+    MarkedExtension_set_gfm(plain, js_some_bool(false));
+    JsArray_MarkedExtension plain_exts = JsArray_MarkedExtension_new();
+    JsArray_MarkedExtension_push(plain_exts, plain);
+    Marked flat_m = Marked_new(JsArray_MarkedExtension_new());
+    Marked_use(flat_m, plain_exts);
+    JsString flat = Marked_parse(flat_m, table);
     CHECK(!contains(flat, "<table>"));
     js_release(flat);
 
     // breaks: a newline is a <br>.
-    marked_options_no_async soft = marked_options_no_async_create();
-    marked_options_no_async_set_breaks(soft, js_some_bool(true));
-    JsString br = marked("one\ntwo", soft);
+    MarkedExtension soft = MarkedExtension_create();
+    MarkedExtension_set_breaks(soft, js_some_bool(true));
+    JsArray_MarkedExtension soft_exts = JsArray_MarkedExtension_new();
+    JsArray_MarkedExtension_push(soft_exts, soft);
+    Marked soft_m = Marked_new(JsArray_MarkedExtension_new());
+    Marked_use(soft_m, soft_exts);
+    JsString br = Marked_parse(soft_m, "one\ntwo");
     CHECK(contains(br, "one<br>two"));
     js_release(br);
-    JsString nobr = marked("one\ntwo", NO_OPTIONS);
+    JsString nobr = marked("one\ntwo");
     CHECK(!contains(nobr, "<br>"));
     js_release(nobr);
 
     // An instance, with its own parse and parseInline.
     JsArray_MarkedExtension none = JsArray_MarkedExtension_new();
     Marked m = Marked_new(none);
-    JsString inline_html = Marked_parse_invoke(Marked_get_parseInline(m), "a *b* `c`", (marked_options_no_async){ 0 });
+    JsString inline_html = Marked_parseInline(m, "a *b* `c`");
     CHECK(JsString_equals(inline_html, "a <em>b</em> <code>c</code>"));
     js_release(inline_html);
-    JsString block = Marked_parse_invoke(Marked_get_parse(m), "para *x*", (marked_options_no_async){ 0 });
+    JsString block = Marked_parse(m, "para *x*");
     CHECK(JsString_equals(block, "<p>para <em>x</em></p>\n"));
     js_release(block);
 
@@ -209,13 +214,13 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_MarkedExtension exts = JsArray_MarkedExtension_new();
     JsArray_MarkedExtension_push(exts, ext);
     Marked styled = Marked_new(exts);
-    JsString custom = Marked_parse_invoke(Marked_get_parse(styled), "## Sub\n\nbody", (marked_options_no_async){ 0 });
+    JsString custom = Marked_parse(styled, "## Sub\n\nbody");
     CHECK(contains(custom, "<h2 class=\"title\">Sub</h2>"));
     CHECK(contains(custom, "<p>body</p>"));
     CHECK(headings_rendered == 1);
     js_release(custom);
     // The default instance is untouched.
-    JsString default_h = Marked_parse_invoke(Marked_get_parse(m), "## Sub", (marked_options_no_async){ 0 });
+    JsString default_h = Marked_parse(m, "## Sub");
     CHECK(JsString_equals(default_h, "<h2>Sub</h2>\n"));
     js_release(default_h);
 
@@ -225,7 +230,7 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_MarkedExtension wexts = JsArray_MarkedExtension_new();
     JsArray_MarkedExtension_push(wexts, walker);
     Marked walking = Marked_new(wexts);
-    JsString demoted = Marked_parse_invoke(Marked_get_parse(walking), "# Big\n\ntext", (marked_options_no_async){ 0 });
+    JsString demoted = Marked_parse(walking, "# Big\n\ntext");
     CHECK(contains(demoted, "<h2>Big</h2>"));
     CHECK(walked_headings == 1 && walked >= 4);
     js_release(demoted);
@@ -237,13 +242,12 @@ __attribute__((export_name("run"))) void run(void) {
     MarkedExtension_set_breaks(gfm_off, js_some_bool(true));
     JsArray_MarkedExtension_push(more, gfm_off);
     Marked_use(grown, more);
-    JsString broken = Marked_parse_invoke(Marked_get_parse(grown), "x\ny", (marked_options_no_async){ 0 });
+    JsString broken = Marked_parse(grown, "x\ny");
     CHECK(contains(broken, "x<br>y"));
     js_release(broken);
 
     // The async option gives a promise.
-    // marked_options is `MarkedOptions & { async: true }`: _create sets async.
-    pending = marked_async("**async**", marked_options_create());
+    pending = marked_async("**async**");
     Promise_then(pending, on_async, 0);
 
     // The defaults are an options object.
@@ -267,7 +271,7 @@ __attribute__((export_name("run"))) void run(void) {
     MarkedExtension_set_breaks(global_breaks, js_some_bool(true));
     JsArray_MarkedExtension_push(global, global_breaks);
     js_release(marked_use(global));
-    JsString global_br = marked("p\nq", NO_OPTIONS);
+    JsString global_br = marked("p\nq");
     CHECK(contains(global_br, "p<br>q"));
     js_release(global_br);
 }

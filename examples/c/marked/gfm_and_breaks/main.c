@@ -20,6 +20,13 @@ static HTMLElement make_pane(Document doc, const char* title, JsString html) {
     return card;
 }
 
+// An instance with these options, set with use.
+static Marked with_options(MarkedExtension opts) {
+    Marked m = Marked_new(JsArray_MarkedExtension_new());
+    Marked_use(m, JsArray_MarkedExtension_from(&opts, 1));
+    return m;
+}
+
 __attribute__((export_name("start"))) void start(void) {
     js_scope();
     Document doc = get_document();
@@ -31,26 +38,26 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(app, head);
 
     const char* gfm_src = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n";
-    marked_options_no_async gfm_on = marked_options_no_async_create(.gfm = true);
-    marked_options_no_async gfm_off = marked_options_no_async_create(.gfm = false);
+    Marked gfm_on = with_options(MarkedExtension_create(.gfm = true));
+    Marked gfm_off = with_options(MarkedExtension_create(.gfm = false));
 
     HTMLElement gfm_sec = make_el(doc, "div", "section", 0);
     HTMLElement_appendChild(gfm_sec, make_el(doc, "div", "label", "GitHub Flavored Markdown (gfm)"));
     HTMLElement gfm_grid = make_el(doc, "div", "grid", 0);
-    HTMLElement_appendChild(gfm_grid, make_pane(doc, "gfm: true", marked(gfm_src, gfm_on)));
-    HTMLElement_appendChild(gfm_grid, make_pane(doc, "gfm: false", marked(gfm_src, gfm_off)));
+    HTMLElement_appendChild(gfm_grid, make_pane(doc, "gfm: true", Marked_parse(gfm_on, gfm_src)));
+    HTMLElement_appendChild(gfm_grid, make_pane(doc, "gfm: false", Marked_parse(gfm_off, gfm_src)));
     HTMLElement_appendChild(gfm_sec, gfm_grid);
     HTMLElement_appendChild(app, gfm_sec);
 
     const char* breaks_src = "Line one\nLine two\nLine three";
-    marked_options_no_async br_off = marked_options_no_async_create(.breaks = false);
-    marked_options_no_async br_on = marked_options_no_async_create(.breaks = true);
+    Marked br_off = with_options(MarkedExtension_create(.breaks = false));
+    Marked br_on = with_options(MarkedExtension_create(.breaks = true));
 
     HTMLElement br_sec = make_el(doc, "div", "section", 0);
     HTMLElement_appendChild(br_sec, make_el(doc, "div", "label", "Soft Line Breaks (breaks)"));
     HTMLElement br_grid = make_el(doc, "div", "grid", 0);
-    HTMLElement_appendChild(br_grid, make_pane(doc, "breaks: false", marked(breaks_src, br_off)));
-    HTMLElement_appendChild(br_grid, make_pane(doc, "breaks: true", marked(breaks_src, br_on)));
+    HTMLElement_appendChild(br_grid, make_pane(doc, "breaks: false", Marked_parse(br_off, breaks_src)));
+    HTMLElement_appendChild(br_grid, make_pane(doc, "breaks: true", Marked_parse(br_on, breaks_src)));
     HTMLElement_appendChild(br_sec, br_grid);
     HTMLElement_appendChild(app, br_sec);
 }

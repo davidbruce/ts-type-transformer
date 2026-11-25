@@ -23,7 +23,7 @@ static JsValue walk_token_cb(void* ctx, JsValue token) {
     return (JsValue){ 0 };
 }
 
-static JsValue render_heading(void* ctx, Marked_Tokens_Heading h) {
+static JsString render_heading(void* ctx, Marked_Tokens_Heading h) {
     (void)ctx;
     js_scope();
     uint32_t depth = (uint32_t)Marked_Tokens_Heading_get_depth(h);
@@ -32,7 +32,7 @@ static JsValue render_heading(void* ctx, Marked_Tokens_Heading h) {
     JsString_copy(Marked_Tokens_Heading_get_text(h), text_buf, sizeof text_buf);
     char out[256];
     snprintf(out, sizeof out, "<h%u class=\"wire-h\">\xC2\xA7 %s</h%u>\n", depth, text_buf, depth);
-    JsValue res = js_string(out);
+    JsString res = JsString_from(out);
     js_retain(res);
     return res;
 }
@@ -53,8 +53,8 @@ __attribute__((export_name("start"))) void start(void) {
     );
 
     Marked custom_m = Marked_new(JsArray_MarkedExtension_from(&ext, 1));
-    JsString def_html = marked(md, (marked_options_no_async){ 0 });
-    JsString custom_html = Marked_parse_invoke(Marked_get_parse(custom_m), md, (marked_options_no_async){ 0 });
+    JsString def_html = marked(md);
+    JsString custom_html = Marked_parse(custom_m, md);
 
     char badge_buf[48];
     snprintf(badge_buf, sizeof badge_buf, "%u tokens visited", walked_count);

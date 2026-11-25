@@ -14,20 +14,17 @@ fn has(s: b.JsString, needle: []const u8) bool {
     return std.mem.indexOf(u8, s.copy(&buf), needle) != null;
 }
 
-// FINDING 5: the package's own parse() and parseInline() functions cannot be called. `parseInline` is
-// bound as a struct with invoke methods but nothing returns one (no getter), and parse is getParse() ->
-// JsValue. A Marked instance's getParse()/getParseInline() are used instead.
+// FINDING 5: the package's own parse() cannot be called: it is getParse() -> JsValue. A Marked
+// instance's parse()/parseInline() are used instead.
 export fn run() void {
-    // marked(src, options): the options object is required by the bindings.
-    const none = b.marked_options_no_async.create();
-    const html = b.marked("# Title\n\nSome *emphasis* and **strong** text.\n", none);
+    const html = b.marked("# Title\n\nSome *emphasis* and **strong** text.\n");
     expect(has(html, "<h1>Title</h1>"), @src());
     expect(has(html, "<em>emphasis</em>"), @src());
     expect(has(html, "<strong>strong</strong>"), @src());
     expect(has(html, "<p>Some "), @src());
 
     // Lists, code, links.
-    const rich = b.marked("- one\n- two\n\n1. a\n2. b\n\n`code` and [link](http://x.test \"T\")\n\n```js\nlet x = 1;\n```\n", none);
+    const rich = b.marked("- one\n- two\n\n1. a\n2. b\n\n`code` and [link](http://x.test \"T\")\n\n```js\nlet x = 1;\n```\n");
     expect(has(rich, "<ul>\n<li>one</li>\n<li>two</li>\n</ul>"), @src());
     expect(has(rich, "<ol>"), @src());
     expect(has(rich, "<code>code</code>"), @src());
@@ -35,20 +32,24 @@ export fn run() void {
     expect(has(rich, "<pre><code class=\"language-js\">let x = 1;"), @src());
 
     // GFM tables and strikethrough; gfm off turns them into text.
-    const gfm = b.marked("|a|b|\n|-|-|\n|1|2|\n\n~~gone~~\n", none);
+    const gfm = b.marked("|a|b|\n|-|-|\n|1|2|\n\n~~gone~~\n");
     expect(has(gfm, "<table>") and has(gfm, "<th>a</th>") and has(gfm, "<td>2</td>"), @src());
     expect(has(gfm, "<del>gone</del>"), @src());
-    const plain = b.marked_options_no_async.create();
+    const plain = b.MarkedExtension.create();
     plain.setGfm(false);
     expect(plain.getGfm().? == false, @src());
-    const nogfm = b.marked("~~gone~~", plain);
+    const flat = b.Marked.new(b.JsArrayOf(b.MarkedExtension).new());
+    _ = flat.use(b.JsArrayOf(b.MarkedExtension).of(&.{plain}));
+    const nogfm = flat.parse("~~gone~~");
     expect(!has(nogfm, "<del>"), @src());
 
     // breaks: a newline inside a paragraph becomes <br>.
-    const br = b.marked_options_no_async.create();
+    const br = b.MarkedExtension.create();
     br.setBreaks(true);
-    expect(has(b.marked("a\nb", br), "a<br>b"), @src());
-    expect(!has(b.marked("a\nb", none), "<br>"), @src());
+    const soft = b.Marked.new(b.JsArrayOf(b.MarkedExtension).new());
+    _ = soft.use(b.JsArrayOf(b.MarkedExtension).of(&.{br}));
+    expect(has(soft.parse("a\nb"), "a<br>b"), @src());
+    expect(!has(b.marked("a\nb"), "<br>"), @src());
 
     // The defaults are an options object.
     const defaults = b.getDefaults();
@@ -58,9 +59,9 @@ export fn run() void {
 
     // A Marked instance: the same, and its own options.
     const m = b.Marked.new(b.JsArrayOf(b.MarkedExtension).new());
-    const out = m.getParse().invoke("hello *world*", .{});
+    const out = m.parse("hello *world*");
     expect(has(.{ .h = out.h }, "<p>hello <em>world</em></p>"), @src());
-    const inl = m.getParseInline().invoke("hello *world*", .{});
+    const inl = m.parseInline("hello *world*");
     expect(has(.{ .h = inl.h }, "<em>world</em>") and !has(.{ .h = inl.h }, "<p>"), @src());
 
     // The lexer: block tokens.
@@ -107,7 +108,7 @@ export fn run() void {
     renderer.setHeading(b.MarkedExtension_renderer_heading.from(renderHeading, null));
     ext.setRenderer(renderer);
     const custom = b.Marked.new(b.JsArrayOf(b.MarkedExtension).of(&.{ext}));
-    const styled = custom.getParse().invoke("# Hi\n\ntext", .{});
+    const styled = custom.parse("# Hi\n\ntext");
     expect(has(.{ .h = styled.h }, "<h1 class=\"mine\">Hi</h1>") and has(.{ .h = styled.h }, "<p>text</p>"), @src());
 
     // A codespan renderer on an existing instance, via use(); the instance is returned for chaining.
@@ -117,7 +118,7 @@ export fn run() void {
     ext2.setRenderer(r2);
     const chained = custom.use(b.JsArrayOf(b.MarkedExtension).of(&.{ext2}));
     expect(chained.h == custom.h or b.jsSame(chained, custom), @src());
-    const both = custom.getParse().invoke("# Hi\n\nuse `x` here", .{});
+    const both = custom.parse("# Hi\n\nuse `x` here");
     expect(has(.{ .h = both.h }, "<h1 class=\"mine\">") and has(.{ .h = both.h }, "<tt>x</tt>"), @src());
 
     // A preprocess hook sees the markdown first.
@@ -126,15 +127,15 @@ export fn run() void {
     hooks.setPreprocess(b.MarkedExtension_hooks_preprocess.from(preprocess, null));
     ext3.setHooks(hooks);
     const hooked = b.Marked.new(b.JsArrayOf(b.MarkedExtension).of(&.{ext3}));
-    const hr = hooked.getParse().invoke("original", .{});
+    const hr = hooked.parse("original");
     expect(has(.{ .h = hr.h }, "<p>replaced</p>"), @src());
 }
 
-fn renderCodespan(_: ?*anyopaque, t: b.tokens.Codespan) b.JsValue {
+fn renderCodespan(_: ?*anyopaque, t: b.tokens.Codespan) ?b.JsString {
     var out: [64]u8 = undefined;
     var text: [32]u8 = undefined;
     const body = t.getText().copy(&text);
-    return b.JsValue.string(std.fmt.bufPrint(&out, "<tt>{s}</tt>", .{body}) catch "");
+    return b.JsString.from(std.fmt.bufPrint(&out, "<tt>{s}</tt>", .{body}) catch "");
 }
 
 // The hook's arguments arrive as the array: item 0 is the markdown.
@@ -142,9 +143,9 @@ fn preprocess(_: ?*anyopaque, md: b.JsString) b.string_or_Promise {
     return .{ .string = b.JsString.from(if (md.eql("original")) "replaced" else "other") };
 }
 
-fn renderHeading(_: ?*anyopaque, t: b.tokens.Heading) b.JsValue {
+fn renderHeading(_: ?*anyopaque, t: b.tokens.Heading) ?b.JsString {
     var out: [64]u8 = undefined;
     var title: [32]u8 = undefined;
     const text = std.fmt.bufPrint(&out, "<h{d} class=\"mine\">{s}</h{d}>", .{ @as(u32, @intFromFloat(t.getDepth())), t.getText().copy(&title), @as(u32, @intFromFloat(t.getDepth())) }) catch "";
-    return b.JsValue.string(text);
+    return b.JsString.from(text);
 }

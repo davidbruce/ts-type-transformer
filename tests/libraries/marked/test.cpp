@@ -8,12 +8,6 @@ extern "C" TS_IMPORT(check) void check(int ok, int line);
 
 static bool has(const std::string& s, std::string_view part) { return s.find(part) != std::string::npos; }
 
-// A string out of `string | Promise<string>`: marked is synchronous unless asked.
-static std::string text_of(const string_or_Promise& r) {
-    const std::string* s = std::get_if<std::string>(&r);
-    return s ? *s : std::string("<promise>");
-}
-
 static std::string token_type(const Token& tok) {
     return std::visit([](const auto& x) -> std::string {
         using X = std::decay_t<decltype(x)>;
@@ -24,25 +18,29 @@ static std::string token_type(const Token& tok) {
 
 extern "C" __attribute__((export_name("run"))) void run() {
     // The whole document to HTML.
-    std::string html = text_of(marked("# Hello *world*\n\nSome `code` and [link](http://x.com \"t\")\n\n- a\n- b\n"));
+    std::string html = marked("# Hello *world*\n\nSome `code` and [link](http://x.com \"t\")\n\n- a\n- b\n");
     CHECK(has(html, "<h1>Hello <em>world</em></h1>"));
     CHECK(has(html, "<code>code</code>"));
     CHECK(has(html, "<a href=\"http://x.com\" title=\"t\">link</a>"));
     CHECK(has(html, "<ul>\n<li>a</li>\n<li>b</li>\n</ul>"));
 
-    // An options object made here: breaks turns a newline into <br>.
-    MarkedOptions breaks = MarkedOptions::create();
+    // Options made here, given an instance with use: breaks turns a newline into <br>.
+    MarkedExtension breaks = MarkedExtension::create();
     breaks.breaks(true);
     CHECK(breaks.breaks() == true);
     CHECK(!breaks.gfm());
-    CHECK(text_of(marked("a\nb", breaks)) == "<p>a<br>b</p>\n");
-    CHECK(text_of(marked("a\nb")) == "<p>a\nb</p>\n");
+    Marked soft = Marked::create();
+    soft.use(breaks);
+    CHECK(soft.parse("a\nb") == "<p>a<br>b</p>\n");
+    CHECK(marked("a\nb") == "<p>a\nb</p>\n");
 
-    // With async: false the result is a string, with no union to look into.
-    marked_options_no_async plain = marked_options_no_async::create();
+    // gfm off: no strikethrough.
+    MarkedExtension plain = MarkedExtension::create();
     plain.gfm(false);
-    CHECK(marked("~~x~~", plain) == "<p>~~x~~</p>\n");
-    CHECK(marked("~~x~~", marked_options_no_async::create()) == "<p><del>x</del></p>\n");
+    Marked flat = Marked::create();
+    flat.use(plain);
+    CHECK(flat.parse("~~x~~") == "<p>~~x~~</p>\n");
+    CHECK(marked("~~x~~") == "<p><del>x</del></p>\n");
 
     // The function-typed consts are called via operator().
     TokensList viaConst = marked_ns::get_lexer()("# T\n\npara", std::nullopt);
@@ -98,10 +96,10 @@ extern "C" __attribute__((export_name("run"))) void run() {
     MarkedExtension opts = MarkedExtension::create();
     opts.breaks(true);
     Marked instance = Marked::create({opts});
-    CHECK(std::get<std::string>(instance.parse().invoke("a\nb")) == "<p>a<br>b</p>\n");
-    CHECK(std::get<std::string>(instance.parseInline().invoke("**bold** and _it_")) == "<strong>bold</strong> and <em>it</em>");
+    CHECK(instance.parse("a\nb") == "<p>a<br>b</p>\n");
+    CHECK(instance.parseInline("**bold** and _it_") == "<strong>bold</strong> and <em>it</em>");
     // The shared instance is untouched.
-    CHECK(std::get<std::string>(md.parse().invoke("a\nb")) == "<p>a\nb</p>\n");
+    CHECK(md.parse("a\nb") == "<p>a\nb</p>\n");
 
     // use with a renderer: heading is given its token.
     MarkedExtension ext = MarkedExtension::create();
@@ -112,7 +110,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     }));
     ext.renderer(rend);
     Marked custom = Marked::create({ext});
-    CHECK(std::get<std::string>(custom.parse().invoke("## x")) == "H2:x|");
+    CHECK(custom.parse("## x") == "H2:x|");
 
     // walkTokens visits every token, nested ones too.
     int visited = 0;
@@ -122,6 +120,6 @@ extern "C" __attribute__((export_name("run"))) void run() {
         (void)token;
     }));
     Marked walked = Marked::create({walker});
-    CHECK(std::get<std::string>(walked.parse().invoke("# a *b*")) == "<h1>a <em>b</em></h1>\n");
+    CHECK(walked.parse("# a *b*") == "<h1>a <em>b</em></h1>\n");
     CHECK(visited >= 4);
 }

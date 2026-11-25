@@ -181,12 +181,13 @@ TypeScript object literal, because a Zig literal takes its type from where it go
 
 11. **Smaller.**
     - `T | false`, with literal `false` and no null member, is an option
-      (`Option<String>`, `Option(String)`, `string option`, C++
-      `std::optional<std::string>`, C a null `const char*`).
+      (`Option<String>`, `Option(String)`, C++ `std::optional<std::string>`, C a
+      null handle; F# keeps `U2<T, bool>`, Fable's option being `undefined`).
     - A callable property is a method (`Marked#parse`).
     - Overloads chosen by a literal: the plain name is the synchronous one and
-      passes `{ async: false }` itself; `_async` passes `{ async: true }` (likewise
-      Node's `{ bigint: true }`).
+      passes `{ async: false }` itself; `_async` passes `{ async: true }`; the
+      catch-all goes. Not Node's `{ bigint: true }`, whose options carry more
+      than the literal (`throwIfNoEntry`): those overloads stay as they are.
     - Flag enums combine with `|`, in Gleam with a list. Nothing in a `.d.ts` marks
       them (a power-of-two test also catches plain `0, 1, 2` enums), so they are
       listed per library, like the borrowing callbacks.

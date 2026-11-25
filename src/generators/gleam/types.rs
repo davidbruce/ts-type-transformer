@@ -5,7 +5,7 @@ use super::bounds::generic_args;
 use super::{codec_var, lower, relative, snake, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
 use super::super::comments::{Style, comment};
 use super::super::js::{call_expr, js_test, trim_trailing_undef};
-use super::super::model::{mentions, subst, Call, Class, Func, Model, NamedUnion, TParam, Ty};
+use super::super::model::{mentions, subst, Absence, Call, Class, Func, Model, NamedUnion, TParam, Ty};
 
 pub(super) struct Gen<'m> {
     pub m: &'m Model,
@@ -371,6 +371,7 @@ impl<'m> Gen<'m> {
                     format!("(typeof {x} === \"function\" ? (a0) => {x}({conv}) : {x})")
                 }
             }
+            Ty::Nullable(inner, Absence::False) => format!("((v) => v == null || v === false ? new None() : new Some({}))({x})", self.to_gleam(inner, "v")),
             Ty::Nullable(inner, _) => format!("((v) => v == null ? new None() : new Some({}))({x})", self.to_gleam(inner, "v")),
             Ty::Array => format!("toList(Array.from({x} ?? []))"),
             Ty::ArrayOf(e) => format!("toList(Array.from({x} ?? [], (v) => {}))", self.to_gleam(e, "v")),
@@ -445,7 +446,7 @@ impl<'m> Gen<'m> {
                     format!("$wrap({x}, (f) => (e) => f({conv}))")
                 }
             }
-            Ty::Nullable(inner, undefined) => format!("((v) => v instanceof Some ? {} : {})({x})", self.from_gleam(inner, "v[0]"), if *undefined { "undefined" } else { "null" }),
+            Ty::Nullable(inner, absent) => format!("((v) => v instanceof Some ? {} : {})({x})", self.from_gleam(inner, "v[0]"), absent.js()),
             Ty::Array => format!("{x}.toArray()"),
             Ty::ArrayOf(e) => format!("{x}.toArray().map((v) => {})", self.from_gleam(e, "v")),
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.from_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
@@ -602,7 +603,7 @@ impl<'m> Gen<'m> {
         enum Place {
             Required,
             // In the optional tail: its members are optional too.
-            Tail(bool),
+            Tail(Absence),
             // May be null: `name_null`.
             Nullable,
         }
@@ -726,7 +727,7 @@ impl<'m> Gen<'m> {
         };
         for (i, (p, t)) in f.params.iter().enumerate() {
             if nulls.contains(&i) {
-                args.push(if matches!(t, Ty::Nullable(_, true)) { "undefined" } else { "null" }.to_string());
+                args.push(if let Ty::Nullable(_, a) = t { a.js() } else { "null" }.to_string());
                 may_undef.push(false);
                 continue;
             }
@@ -737,7 +738,7 @@ impl<'m> Gen<'m> {
             }
             let last_rest = f.rest && i == f.params.len() - 1;
             let (param_ty, value) = match t {
-                Ty::Nullable(inner, true) if i >= tail && !kept_open(i, t) => {
+                Ty::Nullable(inner, Absence::Undefined) if i >= tail && !kept_open(i, t) => {
                     let (ty, v) = self.going_in(|| (self.ty(inner), self.from_gleam(inner, &id)));
                     (ty, if v == id { v } else { format!("({id} === undefined ? undefined : {v})") })
                 }
@@ -754,7 +755,7 @@ impl<'m> Gen<'m> {
                 continue;
             }
             args.push(if last_rest { format!("...({value} ?? [])") } else { value });
-            may_undef.push(!last_rest && matches!(t, Ty::Nullable(_, true)));
+            may_undef.push(!last_rest && matches!(t, Ty::Nullable(_, Absence::Undefined)));
         }
         // A codec for each type parameter whose values cross: the class's, then the function's own.
         *self.open.borrow_mut() = None;
@@ -779,7 +780,7 @@ impl<'m> Gen<'m> {
         // A name JavaScript reserves (`new`, `delete`) is `new_` there.
         let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
         // Not a setter's value, a rest, or what codecs follow: JavaScript takes those by position.
-        let optional = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count();
+        let optional = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, Absence::Undefined))).count();
         let shortened = optional > 0 && !f.rest && params.len() + nulls.len() == first + f.params.len() && !matches!(f.call, Call::Set(_) | Call::IndexSet);
         let doc = f.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
         // `_with`, else `_full` where a member has that name (ProseMirror's `can_replace_with`).
@@ -890,5 +891,5 @@ fn optional_tail(f: &Func) -> usize {
     if f.rest || matches!(f.call, Call::Set(_) | Call::IndexSet) {
         return f.params.len();
     }
-    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count()
+    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, Absence::Undefined))).count()
 }

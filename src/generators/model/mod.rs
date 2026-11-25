@@ -82,6 +82,24 @@ pub fn buffer_spec(name: &str) -> Option<&'static BufferSpec> {
     BUFFER_SPECS.iter().find(|s| s.name == name)
 }
 
+// What a nullable value is in JavaScript when absent.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Absence {
+    Undefined,
+    Null,
+    False,
+}
+
+impl Absence {
+    pub fn js(self) -> &'static str {
+        match self {
+            Absence::Undefined => "undefined",
+            Absence::Null => "null",
+            Absence::False => "false",
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Ty {
     Void,
@@ -97,8 +115,8 @@ pub enum Ty {
     // A numeric enum crosses as its number.
     NumEnum(String),
     Array,
-    // The flag says the absent value is `undefined`, not `null`.
-    Nullable(Box<Ty>, bool),
+    // What the absent value is: `undefined`, `null`, or `false` (`T | false`).
+    Nullable(Box<Ty>, Absence),
     // Zig only: a parameter that takes one of several simple types.
     Union(Vec<Ty>),
     // A union declared by name, in `Model::unions`.
@@ -292,7 +310,7 @@ pub enum TailRole {
 
 // Where a function's optional tail starts: its trailing optional parameters.
 pub fn tail_start(f: &Func) -> usize {
-    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count()
+    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, Absence::Undefined))).count()
 }
 
 impl Model {

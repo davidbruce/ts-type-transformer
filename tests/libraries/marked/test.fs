@@ -12,48 +12,47 @@ let mutable passed = 0
 let check (ok: bool) (what: string) =
     if ok then passed <- passed + 1 else failwithf "check failed: %s" what
 
-let html (r: StringOrPromise) =
-    match r with
-    | StringOrPromise.String s -> s
-    | StringOrPromise.Promise _ -> failwith "a promise where a string was expected"
-
 // Block level: headings, emphasis, code, lists.
-let doc = html (marked "# Title\n\nSome *emphasis* and **strong** and `code`.\n")
+let doc = marked "# Title\n\nSome *emphasis* and **strong** and `code`.\n"
 check (doc.Contains "<h1>Title</h1>") "a heading"
 check (doc.Contains "<em>emphasis</em>") "emphasis"
 check (doc.Contains "<strong>strong</strong>") "strong"
 check (doc.Contains "<code>code</code>") "code span"
 check (doc.Contains "<p>Some") "a paragraph"
 
-let list = html (marked "- one\n- two\n- three\n")
+let list = marked "- one\n- two\n- three\n"
 check (list.Contains "<ul>" && list.Contains "<li>two</li>") "a list"
-let numbered = html (marked "1. a\n2. b\n")
+let numbered = marked "1. a\n2. b\n"
 check (numbered.Contains "<ol>") "an ordered list"
 
-let link = html (marked "[site](https://example.com \"T\")")
+let link = marked "[site](https://example.com \"T\")"
 check (link.Contains "<a href=\"https://example.com\" title=\"T\">site</a>") "a link"
-let fenced = html (marked "```js\nlet x = 1 < 2;\n```\n")
+let fenced = marked "```js\nlet x = 1 < 2;\n```\n"
 check (fenced.Contains "language-js" && fenced.Contains "&lt;") "a fenced block, escaped"
-let table = html (marked "| a | b |\n|---|:-:|\n| 1 | 2 |\n")
+let table = marked "| a | b |\n|---|:-:|\n| 1 | 2 |\n"
 check (table.Contains "<table>" && table.Contains "<th align=\"center\">b</th>") "a GFM table"
-check ((html (marked "~~gone~~")).Contains "<del>gone</del>") "strikethrough"
-check ((html (marked "> quoted")).Contains "<blockquote>") "a blockquote"
-check ((html (marked "---")).Contains "<hr>") "a rule"
+check ((marked "~~gone~~").Contains "<del>gone</del>") "strikethrough"
+check ((marked "> quoted").Contains "<blockquote>") "a blockquote"
+check ((marked "---").Contains "<hr>") "a rule"
 
 // Inline only: no paragraph around it.
-let inl = html (parseInline.Invoke "just *inline*")
+let inl = parseInline "just *inline*"
 check (inl = "just <em>inline</em>") "parseInline"
 
-// Options: breaks turns a newline into <br>; gfm off drops the table.
-let breaks = getDefaults<string, string> ()
-check (breaks.breaks = Some false || breaks.breaks = None) "the default is no breaks"
-check (not ((html (marked "a\nb")).Contains "<br>")) "newline without breaks"
-// FINDING 3: MarkedOptions has no Create; one is made from getDefaults and mutated
+// Options, given an instance with use: breaks turns a newline into <br>; gfm off drops strikethrough.
+let defaults = getDefaults<string, string> ()
+check (defaults.breaks = Some false || defaults.breaks = None) "the default is no breaks"
+check (not ((marked "a\nb").Contains "<br>")) "newline without breaks"
+let breaks = createEmpty<MarkedExtension>
 breaks.breaks <- Some true
-check ((html (marked ("a\nb", breaks))).Contains "<br>") "breaks"
-let nogfm = getDefaults<string, string> ()
+let soft = Marked.Create ()
+soft.``use`` breaks |> ignore
+check ((soft.parse "a\nb").Contains "<br>") "breaks"
+let nogfm = createEmpty<MarkedExtension>
 nogfm.gfm <- Some false
-check (not ((html (marked ("~~gone~~", nogfm))).Contains "<del>")) "gfm false"
+let flat = Marked.Create ()
+flat.``use`` nogfm |> ignore
+check (not ((flat.parse "~~gone~~").Contains "<del>")) "gfm false"
 
 // The lexer: tokens with their types and raw text.
 let tokenKind = function
@@ -122,14 +121,14 @@ check (m.lexer("# T").length = 1.0) "instance lexer"
 let tl = m.lexer "x *y*"
 check (m.parser (ResizeArray [ tl.[0.0] ]) = "<p>x <em>y</em></p>\n") "instance parser"
 
-// FINDING 5: `marked.parse`, `Marked#parse` and `Marked#parseInline` are typed `obj`: not callable.
+// FINDING 5: `marked.parse` is typed `obj`: not callable.
 // Custom renderer and walkTokens extension.
 let seen = ResizeArray<string>()
 let ext = createEmpty<MarkedExtension>
 ext.renderer <- Some (
     MarkedExtensionRenderer.Create (
         heading = (fun (h: Tokens.Heading) ->
-            StringOrBoolean.String (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
+            !^ (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
     )
 )
 ext.walkTokens <- Some (fun (t: Token) ->

@@ -117,6 +117,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         split_literal_overloads(decls, o.keyed_limit);
     }
     let mut written = if o.name_unions { written_unions(decls) } else { HashSet::new() };
+    callable_properties(decls);
     // Before widening and erasing lose what marks them.
     mark_overloads(decls);
     // An inherited member serves every subtype, where a target has subtypes.
@@ -134,6 +135,8 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     }
     if o.inheritance {
         flatten(front, decls);
+        // Members are the checker's again.
+        callable_properties(decls);
     }
     if o.classes {
         structural_extends(decls, o.inheritance);
@@ -148,6 +151,9 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
         // And the overloads evaluating made (`typeof merge`).
         mark_overloads(decls);
     }
+    // And those `typeof` made (marked's `let parseInline: typeof markedInstance.parseInline`).
+    callable_properties(decls);
+    literal_option_overloads(decls, o.separator);
     // `(...args: [style?: StrokeInput])` is `(style?: StrokeInput)`, as
     // TypeScript has it: pixi's `stroke(...args: Parameters<GraphicsContext['stroke']>)`.
     generics::each_signature(decls, &mut spread_tuple_rest);
@@ -625,4 +631,139 @@ fn spread_tuple_rest(s: &mut Signature) {
         }
         s.params.push(Param { name, optional: e.optional, rest: false, constant: None, ty: e.ty });
     }
+}
+
+// A property whose type is only call signatures is a method of each
+// (marked's `Marked#parse: { (src, options & { async: true }): Promise<string>; .. }`),
+// as a caller sees it: `marked.parse(src)`; a constant so is a function of
+// each (marked's `parseInline`).
+fn callable_properties(decls: &mut Vec<Decl>) {
+    fn constants(decls: &mut Vec<Decl>) {
+        let mut out = Vec::with_capacity(decls.len());
+        for d in decls.drain(..) {
+            match d {
+                Decl::Var(v) if matches!(&v.ty, Type::Object(ms) if !ms.is_empty() && ms.iter().all(|c| c.kind == MemberKind::Call)) => {
+                    let Type::Object(ms) = v.ty else { unreachable!() };
+                    out.extend(ms.into_iter().filter_map(|c| c.sig).map(|sig| Decl::Function(Function { name: v.name.clone(), js_name: v.js_name.clone(), sig, doc: v.doc.clone() })));
+                }
+                Decl::Namespace(mut n) => {
+                    constants(&mut n.decls);
+                    out.push(Decl::Namespace(n));
+                }
+                d => out.push(d),
+            }
+        }
+        *decls = out;
+    }
+    constants(decls);
+    each_member_list(decls, &mut |members| {
+        let mut out = Vec::with_capacity(members.len());
+        for m in members.drain(..) {
+            let calls: Option<Vec<Signature>> = match (&m.kind, &m.ty) {
+                (MemberKind::Property, Some(Type::Object(ms))) if !ms.is_empty() && ms.iter().all(|c| c.kind == MemberKind::Call) => ms.iter().map(|c| c.sig.clone()).collect(),
+                _ => None,
+            };
+            match calls {
+                Some(sigs) => out.extend(sigs.into_iter().map(|sig| Member { kind: MemberKind::Method, sig: Some(sig), ty: None, readonly: false, ..m.clone() })),
+                None => out.push(m),
+            }
+        }
+        *members = out;
+    });
+}
+
+// Overloads an options object's boolean literal tells apart (marked's
+// `{ async: false }` gives a string, `{ async: true }` a promise, and leaving
+// it out either): each passes its literal itself, the one of `true` named
+// for its property (`marked(src)`, `marked_async(src)`) in every target, so
+// what it gives is sound whatever the library is set to; the one that
+// leaves it open goes.
+fn literal_option_overloads(decls: &mut Vec<Decl>, sep: &str) {
+    // The parameter and property a literal of this signature fixes, and its value.
+    fn fixed(s: &Signature) -> Option<(usize, String, String)> {
+        s.params.iter().enumerate().find_map(|(i, p)| match &p.ty {
+            Type::Object(ms) => ms.iter().find_map(|m| match &m.ty {
+                Some(Type::Literal { kind: "boolean", value }) if m.kind == MemberKind::Property && !m.optional => Some((i, m.name.clone(), value.clone())),
+                _ => None,
+            }),
+            _ => None,
+        })
+    }
+    fn group(sigs: Vec<&mut Signature>, renamed: &mut Vec<(usize, String)>) -> Vec<usize> {
+        let found: Vec<Option<(usize, String, String)>> = sigs.iter().map(|s| fixed(s)).collect();
+        let values: HashSet<&str> = found.iter().flatten().map(|(_, _, v)| v.as_str()).collect();
+        let Some((at, prop, _)) = found.iter().flatten().next().cloned() else { return Vec::new() };
+        if !(values.contains("true") && values.contains("false")) || found.iter().flatten().any(|(i, p, _)| *i != at || *p != prop) {
+            return Vec::new();
+        }
+        let mut dropped = Vec::new();
+        for (k, (s, f)) in sigs.into_iter().zip(&found).enumerate() {
+            match f {
+                Some((_, _, v)) => {
+                    if v == "true" {
+                        renamed.push((k, prop.clone()));
+                    }
+                    let p = &mut s.params[at];
+                    p.constant = Some(format!("{{{prop:?}: {v}}}"));
+                    p.ty = Type::prim("object");
+                    p.optional = false;
+                }
+                // The one that leaves it open, with the same parameters before it.
+                None if s.params.len() > at => dropped.push(k),
+                None => {}
+            }
+        }
+        dropped
+    }
+    each_member_list(decls, &mut |members| {
+        let names: Vec<String> = members.iter().filter(|m| m.kind == MemberKind::Method).map(|m| m.js_name.clone().unwrap_or_else(|| m.name.clone())).collect();
+        for name in names.into_iter().collect::<HashSet<_>>() {
+            let idx: Vec<usize> = members.iter().enumerate().filter(|(_, m)| m.kind == MemberKind::Method && m.js_name.as_ref().unwrap_or(&m.name) == &name).map(|(i, _)| i).collect();
+            if idx.len() < 3 {
+                continue;
+            }
+            let sigs: Vec<&mut Signature> = members.iter_mut().enumerate().filter(|(i, _)| idx.contains(i)).filter_map(|(_, m)| m.sig.as_mut()).collect();
+            let mut renamed = Vec::new();
+            let dropped: HashSet<usize> = group(sigs, &mut renamed).into_iter().map(|k| idx[k]).collect();
+            for (k, prop) in renamed {
+                let m = &mut members[idx[k]];
+                m.js_name.get_or_insert_with(|| m.name.clone());
+                m.name = format!("{}{sep}{prop}", m.name);
+            }
+            let mut i = 0;
+            members.retain(|_| {
+                i += 1;
+                !dropped.contains(&(i - 1))
+            });
+        }
+    });
+    fn functions(decls: &mut Vec<Decl>, sep: &str) {
+        let names: HashSet<String> = decls.iter().filter_map(|d| if let Decl::Function(f) = d { Some(f.js_name.clone().unwrap_or_else(|| f.name.clone())) } else { None }).collect();
+        for name in names {
+            let idx: Vec<usize> = decls.iter().enumerate().filter(|(_, d)| matches!(d, Decl::Function(f) if f.js_name.as_ref().unwrap_or(&f.name) == &name)).map(|(i, _)| i).collect();
+            if idx.len() < 3 {
+                continue;
+            }
+            let sigs: Vec<&mut Signature> = decls.iter_mut().enumerate().filter(|(i, _)| idx.contains(i)).filter_map(|(_, d)| if let Decl::Function(f) = d { Some(&mut f.sig) } else { None }).collect();
+            let mut renamed = Vec::new();
+            let dropped: HashSet<usize> = group(sigs, &mut renamed).into_iter().map(|k| idx[k]).collect();
+            for (k, prop) in renamed {
+                if let Decl::Function(f) = &mut decls[idx[k]] {
+                    f.js_name.get_or_insert_with(|| f.name.clone());
+                    f.name = format!("{}{sep}{prop}", f.name);
+                }
+            }
+            let mut i = 0;
+            decls.retain(|_| {
+                i += 1;
+                !dropped.contains(&(i - 1))
+            });
+        }
+        for d in decls.iter_mut() {
+            if let Decl::Namespace(n) = d {
+                functions(&mut n.decls, sep);
+            }
+        }
+    }
+    functions(decls, sep);
 }

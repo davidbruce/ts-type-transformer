@@ -372,6 +372,17 @@ pub(super) fn each_signature(decls: &mut [Decl], f: &mut dyn FnMut(&mut Signatur
 pub(super) fn nullable(t: &mut Type) {
     let Type::Union(parts) = t else { return };
     let is_null = |p: &Type| p.is_prim("null") || p.is_prim("undefined");
+    // `T | false`, of an object or a string (marked's renderer, three's octree
+    // `Intersection | false`): T, false when absent. Not beside `true`, a
+    // boolean, null or undefined, which say something else.
+    let literal = |p: &Type, v: &str| matches!(p, Type::Literal { kind: "boolean", value } if value == v);
+    let other = |p: &Type| !literal(p, "false") && !literal(p, "true") && !is_null(p) && !p.is_prim("boolean") && !matches!(p, Type::Primitive(n) if matches!(n.as_str(), "number" | "bigint" | "any" | "unknown"));
+    if parts.iter().any(|p| literal(p, "false")) && parts.iter().all(|p| literal(p, "false") || other(p)) && parts.iter().any(other) {
+        let mut rest: Vec<Type> = parts.drain(..).filter(|p| !literal(p, "false")).collect();
+        let inner = if rest.len() == 1 { rest.pop().unwrap() } else { Type::Union(rest) };
+        *t = Type::Nullable(Box::new(inner), Absent::False);
+        return;
+    }
     let absent = match (parts.iter().any(|p| p.is_prim("null")), parts.iter().any(|p| p.is_prim("undefined"))) {
         (true, true) => Absent::Either,
         (true, false) => Absent::Null,

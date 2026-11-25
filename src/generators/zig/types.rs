@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use super::{ident, zig_func_name};
 use super::super::comments::{Style, comment};
-use super::super::model::{Call, Callback, Class, Func, NamedUnion, Ty};
+use super::super::model::{Absence, Call, Callback, Class, Func, NamedUnion, Ty};
 
 // Each function's Zig name, by the model's: `names::settle` made them apart.
 pub(super) fn names_of<'a>(funcs: impl Iterator<Item = &'a Func>) -> HashMap<String, String> {
@@ -328,7 +328,7 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         0
     } else {
         let before_rest = if rest_opt { f.params.len() - 1 } else { f.params.len() };
-        let opt_before = f.params[..before_rest].iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, true))).count();
+        let opt_before = f.params[..before_rest].iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, Absence::Undefined))).count();
         opt_before + usize::from(rest_opt)
     };
     // A lone parameter stays one: `orUnit(s)`, `orUnit(null)`.
@@ -342,7 +342,7 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         let id = param(name);
         let is_rest_param = rest_opt && i == f.params.len() - 1;
         let effective_t = if is_rest_param && !matches!(t, Ty::Nullable(..)) {
-            Ty::Nullable(Box::new(t.clone()), true)
+            Ty::Nullable(Box::new(t.clone()), Absence::Undefined)
         } else {
             t.clone()
         };

@@ -461,13 +461,10 @@ pub(super) fn cpp_name_as(f: &Func, name: &str, ctor: &str) -> String {
         Call::New(_) | Call::Create(_) => ctor.into(),
         _ => ident(name),
     };
-    // Overloads that differ only in a fixed argument are named after it.
-    if f.fixed.is_empty() {
-        base
-    } else {
-        let values: Vec<String> = f.fixed.iter().map(|(_, v)| super::super::value_name(v)).collect();
-        format!("{base}_{}", values.join("_"))
-    }
+    // Overloads that differ only in a fixed argument are named after it; not
+    // after an options object the glue passes (`{"async": false}`), which lowering named.
+    let values: Vec<String> = f.fixed.iter().filter(|(_, v)| !v.starts_with('{')).map(|(_, v)| super::super::value_name(v)).collect();
+    if values.is_empty() { base } else { format!("{base}_{}", values.join("_")) }
 }
 
 // One function, in its parts.

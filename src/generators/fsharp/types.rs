@@ -97,6 +97,10 @@ impl Gen {
             "nullable" => {
                 let inner = only_child(n);
                 let t = self.ty(inner, owner);
+                // `T | false`: as written, an erased union (`!^false`).
+                if attr(n, "absent") == "false" {
+                    return erased_union(vec![t, "bool".into()]);
+                }
                 // Fable sends `None` as `undefined`. Where only `null` is accepted, use
                 // a type that has a null of its own, if there is one.
                 if attr(n, "absent") != "null" || inner.has_tag_name("functionType") || t.starts_with('\'') || t == "unit" {
