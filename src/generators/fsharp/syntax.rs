@@ -270,11 +270,16 @@ pub(super) fn only_child_type<'a>(d: Node<'a, 'a>) -> Node<'a, 'a> {
 
 // The properties of a map, its own and those of the maps it extends.
 pub(super) fn map_properties<'a>(root: Node<'a, 'a>, decl: Node<'a, 'a>) -> Vec<(String, Node<'a, 'a>)> {
-    let mut out: Vec<(String, Node)> = named(decl, "property").map(|p| (attr(p, "name").to_string(), only_child(p))).collect();
+    all_properties(root, decl).into_iter().map(|p| (attr(p, "name").to_string(), only_child(p))).collect()
+}
+
+// A declaration's properties, its own first, then its bases'.
+pub(super) fn all_properties<'a>(root: Node<'a, 'a>, decl: Node<'a, 'a>) -> Vec<Node<'a, 'a>> {
+    let mut out: Vec<Node> = named(decl, "property").collect();
     for e in named(decl, "extends") {
         let base = only_child(e);
         if let Some(b) = base.attribute("to").and_then(|t| find_decl(root, t)) {
-            out.extend(map_properties(root, b));
+            out.extend(all_properties(root, b));
         }
     }
     out

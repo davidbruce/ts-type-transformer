@@ -574,6 +574,20 @@ of `T` (ECharts' `BarSeriesOption | .. | SeriesOption[]`). A `symbol` is a
 handle of its own, `JsSymbol` in every target, not `any`: `string | symbol`
 stays a union (node's event names), told by `typeof`.
 
+A field every member of a union of objects has is read without a match:
+Rust `token.type_()`, C `Marked_Token_get_type(t)`, F# ``token.``type`` ``.
+C++ waits for unions to be classes (`token.type()`): a free function named
+for the field would meet the library's own (`min`, `name`, DOM's `onsubmit`
+type); Gleam for its union modules; Zig has none. A member's field is its own or a base's,
+a getter or a constant (marked's `type` is a constant on 22 tokens and a
+property on `Generic`), of one type in each or of one primitive under its
+constants and enums (`string`), nullable where any member's is. Fields whose
+types disagree have none, nor a constant every member shares (`Node`'s
+`ELEMENT_NODE`), nor a member's type parameter (`T`), nor, in F#, a type a
+later file declares. In lib.dom.d.ts, Rust has 962 getters, most on four unions of
+siblings (`HTMLAnchorElement | HTMLAreaElement`): +0.7% of the bindings,
+C +0.6%, F# +1.5%.
+
 ## Overload names
 
 Overloads with fixed values (from `keyed_params` or literal parameters) are a

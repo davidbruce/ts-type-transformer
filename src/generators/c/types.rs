@@ -242,6 +242,27 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
         }
         functions += &format!("#define {n}_of(x) _Generic((x), {n}: {n}_of_self, {}, default: ts_no_member)(x)\n", choices.join(", "));
     }
+    // A field every member has, read without a switch (marked's `Marked_Token_get_type(t)`).
+    for (p, t) in m.shared_fields(u) {
+        // A handle's type is none at a null handle.
+        let handle = |t: &Ty| matches!(t, Ty::Str | Ty::Any | Ty::Array | Ty::ArrayOf(_) | Ty::Obj(_));
+        let ret = typed(&t, false, cx);
+        let tail = match &t {
+            Ty::Num => "double v = ts_raw_js_to_number(r); ts_raw_js_release(r); return v;".to_string(),
+            Ty::Bool => "bool v = ts_raw_js_to_bool(r) != 0; ts_raw_js_release(r); return v;".into(),
+            Ty::Nullable(i, _) if **i == Ty::Num => "JsOptionalDouble v = { r != 0, r ? ts_raw_js_to_number(r) : 0 }; ts_raw_js_release(r); return v;".into(),
+            Ty::Nullable(i, _) if **i == Ty::Bool => "JsOptionalBool v = { r != 0, r && ts_raw_js_to_bool(r) != 0 }; ts_raw_js_release(r); return v;".into(),
+            Ty::Nullable(i, _) if handle(i) => format!("return ({ret}){{ r }};"),
+            t if handle(t) => format!("return ({ret}){{ r }};"),
+            Ty::NamedUnion(n) if cx.decodable(n) => format!("{n} v = {n}_from_handle(r); ts_raw_js_release(r); return v;"),
+            _ => continue,
+        };
+        functions += &format!(
+            "static inline {ret} {n}_get_{}({n} u) {{ uint32_t h = {n}_to_handle(u); uint32_t r = ts_raw_js_object_get(h, {p:?}, {}); ts_raw_js_release(h); {tail} }}\n",
+            ident(&p),
+            p.len()
+        );
+    }
     (decl, functions)
 }
 

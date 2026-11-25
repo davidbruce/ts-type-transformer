@@ -781,6 +781,12 @@ pub mod js {
 
     pub const NONE: JsNone = JsNone;
 
+    // A property of a value, as its type is: a union's field every member has (`token.type_()`).
+    pub fn field<T: FromJs>(v: &impl ToJs, key: &str) -> T {
+        let l = v.lend();
+        T::from_handle(unsafe { rt::js_object_get(l.h, key.as_ptr(), key.len()) })
+    }
+
     pub fn unchecked_cast<T: FromJs>(v: &impl AsRef<JsHandle>) -> T {
         let h = v.as_ref().clone();
         let id = h.0;

@@ -346,6 +346,90 @@ impl Model {
         out
     }
 
+    // The fields every member of a union of objects has, each read by a
+    // getter of the union's own (marked's `Token`: `type` on all 23, a
+    // constant on 22, `"heading"`, a property on `Generic`): a member's own
+    // or its ancestors', getters and constants. Of one type, or of one
+    // primitive under constants and enums of it, nullable where any member's
+    // is; not where the members' disagree, nor a constant all members share
+    // (`Node.ELEMENT_NODE`), nor one of a member's type parameters (`T`), nor
+    // a name no target writes as is (`$action`).
+    pub fn shared_fields(&self, u: &NamedUnion) -> Vec<(String, Ty)> {
+        let classes: Option<Vec<&Class>> = u.parts.iter().map(|p| if let Ty::Obj(n) = p { self.classes.iter().find(|c| c.name == *n) } else { None }).collect();
+        let Some(classes) = classes.filter(|c| c.len() > 1) else { return Vec::new() };
+        let plain = |n: &str| n.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        let fields = |c: &Class| -> Vec<(String, Ty, Option<String>)> {
+            let mut out: Vec<(String, Ty, Option<String>)> = Vec::new();
+            // Its bases' bases too, where inheritance is kept.
+            let mut chain = vec![c];
+            let mut i = 0;
+            while i < chain.len() {
+                for a in &chain[i].ancestors {
+                    if let Some(x) = self.classes.iter().find(|x| x.name == *a)
+                        && !chain.iter().any(|y| y.name == x.name)
+                    {
+                        chain.push(x);
+                    }
+                }
+                i += 1;
+            }
+            for k in chain {
+                for f in &k.funcs {
+                    if let Call::Get(p) = &f.call
+                        && !out.iter().any(|(n, ..)| n == p)
+                        && !k.type_params.iter().any(|t| mentions(&f.ret, &t.name))
+                        && plain(p)
+                    {
+                        out.push((p.clone(), f.ret.clone(), None));
+                    }
+                }
+                for (n, v) in &k.consts {
+                    let t = if v.starts_with('"') { Ty::Str } else if v == "true" || v == "false" { Ty::Bool } else { Ty::Num };
+                    if !out.iter().any(|(m, ..)| m == n) && plain(n) {
+                        out.push((n.clone(), t, Some(v.clone())));
+                    }
+                }
+            }
+            out
+        };
+        let per: Vec<Vec<(String, Ty, Option<String>)>> = classes.iter().map(|c| fields(c)).collect();
+        let primitive = |t: &Ty| match t {
+            Ty::Enum(_) => Ty::Str,
+            Ty::NumEnum(_) => Ty::Num,
+            t => t.clone(),
+        };
+        let mut out = Vec::new();
+        for (name, ..) in &per[0] {
+            let Some(found) = per.iter().map(|fs| fs.iter().find(|(n, ..)| n == name)).collect::<Option<Vec<_>>>() else { continue };
+            if found[0].2.is_some() && found.iter().all(|f| f.2 == found[0].2) {
+                continue;
+            }
+            let tys: Vec<&Ty> = found.iter().map(|f| &f.1).collect();
+            let absent: Vec<Absence> = tys.iter().filter_map(|t| if let Ty::Nullable(_, a) = t { Some(*a) } else { None }).collect();
+            let inner: Vec<&Ty> = tys.iter().map(|t| if let Ty::Nullable(i, _) = t { &**i } else { *t }).collect();
+            let one = if inner.iter().all(|t| *t == inner[0]) {
+                inner[0].clone()
+            } else if inner.iter().all(|t| primitive(t) == primitive(inner[0])) {
+                primitive(inner[0])
+            } else {
+                continue;
+            };
+            if matches!(one, Ty::Void | Ty::Any | Ty::Param(_) | Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_)) || absent.contains(&Absence::False) {
+                continue;
+            }
+            // Read, null and undefined are both none.
+            let a = if absent.is_empty() {
+                None
+            } else if absent.iter().all(|a| *a == absent[0]) {
+                Some(absent[0])
+            } else {
+                Some(Absence::Either)
+            };
+            out.push((name.clone(), match a { Some(a) => Ty::Nullable(Box::new(one), a), None => one }));
+        }
+        out
+    }
+
     pub fn is_callback(&self, name: &str) -> bool {
         self.callbacks.iter().any(|c| c.name == name)
     }

@@ -597,6 +597,12 @@ pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<Strin
          impl{bounds} core::fmt::Debug for {n}{args}{debug_where} {{ fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {{ match self {{ {debug_arms}}} }} }}\n",
         variants.join(", ")
     );
+    // A field every member has, read without a match (marked's `token.type_()`).
+    let fields = if u.type_params.is_empty() { m.shared_fields(u) } else { Vec::new() };
+    if !fields.is_empty() {
+        let getters: String = fields.iter().map(|(p, t)| format!("    pub fn {}(&self) -> {} {{ js::field(self, {p:?}) }}\n", super::ident(&super::super::case::snake_case(p)), ty(t, cx))).collect();
+        out += &format!("impl {n} {{\n{getters}}}\n");
+    }
     if decodable {
         // A bare type parameter is told apart by what its argument is.
         let kind = u.parts.iter().find_map(|p| if let Ty::Param(t) = p { Some(format!("{t}::KIND")) } else { None }).unwrap_or("0".into());

@@ -161,6 +161,9 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Marked_TokensList_get_length(tokens) >= 4);
     Marked_Token first = Marked_TokensList_get_at(tokens, 0);
     CHECK(first.tag == Marked_Token_Marked_Tokens_Heading);
+    JsString first_type = Marked_Token_get_type(first);
+    CHECK(JsString_equals(first_type, "heading"));
+    js_release(first_type);
     Marked_Tokens_Heading heading = first.as.Marked_Tokens_Heading;
     CHECK(Marked_Tokens_Heading_get_depth(heading) == 1);
     JsString heading_text = Marked_Tokens_Heading_get_text(heading);

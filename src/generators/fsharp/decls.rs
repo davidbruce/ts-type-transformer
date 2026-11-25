@@ -7,7 +7,7 @@ use super::{doc_lines, member_doc_lines, Gen, T};
 use super::member_ir::{FsMember, FsMemberKind, FsParam, has_member_conflict, push_member, render_members};
 use super::plan::AliasForm;
 use super::syntax::{
-    case_name, case_test, expand, fable_builtin, ident, is_function_interface, js_path, only_child_type, subst_params, tag_case_name, type_ident,
+    all_properties, case_name, case_test, expand, fable_builtin, find_decl, ident, is_function_interface, js_path, only_child_type, subst_params, tag_case_name, type_ident,
     type_path, words,
 };
 
@@ -442,6 +442,7 @@ impl Gen {
                 self.out += &format!("{indent}    | {attr}{case} of {payload}\n");
             }
         }
+        self.shared_fields(&members, indent);
         // A value of a case's type converts to the union: implicitly where an
         // argument is one, with `!^` elsewhere and from subtypes. Once per
         // type F# sees (`DOMHighResTimeStamp` is a float); never from a type
@@ -465,6 +466,41 @@ impl Gen {
         }
         self.out += "\n";
         true
+    }
+
+    // A property every member has, read without a match (marked's
+    // `token.``type```): its own or a base's, of one type in each, optional
+    // where any member's is.
+    fn shared_fields(&mut self, members: &[Node], indent: &str) {
+        let Some(root) = members.first().map(|m| m.document().root_element()) else { return };
+        let props: Option<Vec<Vec<Node>>> = members.iter().map(|m| m.attribute("to").filter(|_| m.has_tag_name("ref")).and_then(|t| find_decl(root, t)).map(|d| all_properties(root, d))).collect();
+        let Some(props) = props.filter(|p| p.len() > 1) else { return };
+        let mut seen = HashSet::new();
+        for key in props[0].iter().map(|p| attr(*p, "name")) {
+            if !seen.insert(key) {
+                continue;
+            }
+            let Some(found) = props.iter().map(|ps| ps.iter().find(|q| attr(**q, "name") == key).copied()).collect::<Option<Vec<Node>>>() else { continue };
+            // Of a type that needs its owner (`this`, an inline object, a function), none.
+            let owned = |q: &Node| q.descendants().any(|d| matches!(d.tag_name().name(), "this" | "object" | "functionType" | "call"));
+            if found.iter().any(owned) || !key.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || !key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                continue;
+            }
+            // A constant all share is the base's (`Node.ELEMENT_NODE`).
+            if found[0].has_attribute("const") && found.iter().all(|q| q.attribute("const") == found[0].attribute("const")) {
+                continue;
+            }
+            let tys: Vec<String> = found.iter().map(|q| self.ty(only_child(*q), "")).collect();
+            let bare: Vec<&str> = tys.iter().map(|t| t.strip_suffix(" option").unwrap_or(t)).collect();
+            // Nor of a type a later file declares (`HTMLSlotElement`, after `core`).
+            let later = words(bare[0]).iter().filter_map(|w| self.file_of.get(*w)).any(|f| *f > self.current_file);
+            if later || bare.iter().any(|t| *t != bare[0]) || bare[0].contains('\'') || matches!(bare[0], "obj" | "unit") {
+                continue;
+            }
+            let optional = found.iter().any(|q| q.attribute("optional") == Some("true")) || tys.iter().any(|t| t.ends_with(" option"));
+            let t = if optional { format!("{} option", bare[0]) } else { bare[0].to_string() };
+            self.out += &format!("{indent}    [<Emit(\"$0.{key}\")>] member _.{}: {t} = jsNative\n", ident(key));
+        }
     }
 
     fn numeric_enum(&mut self, d: Node, name: &str, indent: &str) {

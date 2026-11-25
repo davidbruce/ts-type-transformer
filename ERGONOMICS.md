@@ -102,7 +102,8 @@ TypeScript object literal, because a Zig literal takes its type from where it go
    `token.Heading(h)`, F# `Token.Heading h`. A field every member has is read
    without a match, as any getter is: Rust `t.type_()`, C++ `t.type()`, Gleam
    `token.get_type(t)`, C `Marked_Token_get_type(t)`, F# ``t.``type`` ``. A field of string literals widens to
-   `string`. Getters only.
+   `string`. Getters only. Done but for C++ (with unions as classes, step 4)
+   and Gleam (with 9b's union modules).
 
 5. **Optional arguments.**
    - C leaves out trailing ones; C++ overloads; F# optional arguments.

@@ -16,34 +16,6 @@ macro_rules! check {
     };
 }
 
-fn token_type(t: &Token) -> String {
-    match t {
-        Token::Blockquote(_) => tokens::Blockquote::TYPE.into(),
-        Token::Br(_) => tokens::Br::TYPE.into(),
-        Token::Checkbox(_) => tokens::Checkbox::TYPE.into(),
-        Token::Code(_) => tokens::Code::TYPE.into(),
-        Token::Codespan(_) => tokens::Codespan::TYPE.into(),
-        Token::Def(_) => tokens::Def::TYPE.into(),
-        Token::Del(_) => tokens::Del::TYPE.into(),
-        Token::Em(_) => tokens::Em::TYPE.into(),
-        Token::Escape(_) => tokens::Escape::TYPE.into(),
-        Token::Heading(_) => tokens::Heading::TYPE.into(),
-        Token::Hr(_) => tokens::Hr::TYPE.into(),
-        Token::HTML(_) => tokens::HTML::TYPE.into(),
-        Token::Image(_) => tokens::Image::TYPE.into(),
-        Token::Link(_) => tokens::Link::TYPE.into(),
-        Token::List(_) => tokens::List::TYPE.into(),
-        Token::ListItem(_) => tokens::ListItem::TYPE.into(),
-        Token::Paragraph(_) => tokens::Paragraph::TYPE.into(),
-        Token::Space(_) => tokens::Space::TYPE.into(),
-        Token::Strong(_) => tokens::Strong::TYPE.into(),
-        Token::Table(_) => tokens::Table::TYPE.into(),
-        Token::Tag(_) => tokens::Tag::TYPE.into(),
-        Token::Text(_) => tokens::Text::TYPE.into(),
-        Token::Generic(g) => g.type_(),
-    }
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn run() {
     // Markdown to HTML.
@@ -94,7 +66,7 @@ pub extern "C" fn run() {
     // The lexer: tokens of a document, the type of each, and their children.
     let list = Lexer::lex_2("# Head\n\npara with **bold**\n\n- a\n- b\n");
     let types: Vec<String> = (0..list.length() as usize)
-        .map(|i| token_type(&list.at(i as f64).unwrap()))
+        .map(|i| list.at(i as f64).unwrap().type_())
         .collect();
     check!(types == ["heading", "space", "paragraph", "space", "list"]);
     let Token::Heading(heading) = list.at(0.0).unwrap() else {
@@ -106,7 +78,7 @@ pub extern "C" fn run() {
     };
     let children = para.tokens();
     check!(children.len() == 2);
-    let child_types: Vec<String> = children.iter().map(|c| token_type(&c)).collect();
+    let child_types: Vec<String> = children.iter().map(|c| c.type_()).collect();
     check!(child_types == ["text", "strong"]);
     check!(para.raw().starts_with("para with"));
     let Token::List(list_token) = list.at(4.0).unwrap() else {
