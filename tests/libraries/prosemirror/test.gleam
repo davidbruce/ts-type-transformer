@@ -97,11 +97,8 @@ pub fn main() {
   schema_spec.marks_set_at(marks, "link", link_spec)
 
   let spec = schema_spec.create()
-  schema_spec.set_nodes(spec, t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(nodes))
-  schema_spec.set_marks(
-    spec,
-    Some(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(marks)),
-  )
+  schema_spec.set_nodes(spec, nodes)
+  schema_spec.set_marks(spec, marks)
   let sch = schema.new(spec)
   let assert Some(paragraph_type) =
     schema.nodes_get_at(schema.get_nodes(sch), "paragraph")
@@ -241,20 +238,9 @@ pub fn main() {
 
   // Nodes made from the schema.
   let abc = schema.text(sch, "abc")
-  let made =
-    schema.node_with(
-      sch,
-      t.StringOrNodeTypeString("paragraph"),
-      None,
-      Some(t.FragmentOrNodeOrNodeArrayNode(abc)),
-      None,
-    )
+  let made = schema.node_with(sch, "paragraph", None, Some(abc), None)
   let linked =
-    schema.mark_with(
-      sch,
-      t.StringOrMarkTypeString("link"),
-      Some(href_attrs("https://example.com")),
-    )
+    schema.mark_with(sch, "link", Some(href_attrs("https://example.com")))
   let linked_text = schema.text_with(sch, "site", Some([linked]))
   let passed =
     passed
@@ -331,21 +317,11 @@ pub fn main() {
   let passed =
     passed
     + check(
-      node.range_has_mark(
-        editor_state.get_doc(st4),
-        1.0,
-        3.0,
-        t.MarkOrMarkTypeMarkType(strong),
-      ),
+      node.range_has_mark_type(editor_state.get_doc(st4), 1.0, 3.0, strong),
       "addMark",
     )
     + check(
-      !node.range_has_mark(
-        editor_state.get_doc(st3),
-        1.0,
-        3.0,
-        t.MarkOrMarkTypeMarkType(strong),
-      ),
+      !node.range_has_mark_type(editor_state.get_doc(st3), 1.0, 3.0, strong),
       "the earlier doc has no mark",
     )
     + check(transform.get_doc_changed(tr3), "the transform changed the doc")
@@ -391,12 +367,7 @@ pub fn main() {
     Some(fn(tr, _) {
       cell.set(seen, cell.get(seen) + 1)
       // transactions marked "block" are refused
-      case
-        decode.run(
-          transaction.get_meta(tr, t.StringOrPluginOrPluginKeyString("block")),
-          decode.bool,
-        )
-      {
+      case decode.run(transaction.get_meta(tr, "block"), decode.bool) {
         Ok(True) -> False
         _ -> True
       }
@@ -444,12 +415,7 @@ pub fn main() {
   // filterTransaction: applyTransaction refuses a blocked transaction.
   let blocked = editor_state.get_tr(p3)
   let _ = transaction.insert_text_with(blocked, "#", Some(1.0), Some(1.0))
-  let _ =
-    transaction.set_meta(
-      blocked,
-      t.StringOrPluginOrPluginKeyString("block"),
-      runtime.dynamic(True),
-    )
+  let _ = transaction.set_meta(blocked, "block", runtime.dynamic(True))
   let refused = editor_state.apply_transaction(p3, blocked)
   let allowed = editor_state.get_tr(p3)
   let _ = transaction.insert_text_with(allowed, "#", Some(1.0), Some(1.0))
@@ -505,11 +471,7 @@ pub fn main() {
   let place =
     editor_view.new_place_object_create()
     |> editor_view.new_place_object_with_mount(test_page.element("stage"))
-  let view =
-    editor_view.new(
-      Some(t.EditorViewNewPlaceOrDistDOMNodeEditorViewNewPlaceObject(place)),
-      props,
-    )
+  let view = editor_view.new_object(place, props)
   cell.set(view_cell, Some(view))
   let at_one = editor_view.coords_at_pos(view, 1.0)
   let passed =

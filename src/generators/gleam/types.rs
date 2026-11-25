@@ -9,6 +9,9 @@ use super::super::model::{mentions, subst, Call, Class, Func, Model, NamedUnion,
 
 pub(super) struct Gen<'m> {
     pub m: &'m Model,
+    // Unions whose values the user is given (a result, a callback's argument):
+    // they go back in too, through `name_of`.
+    pub given_back: HashSet<String>,
     pub pkg: String,
     // Gleam's name of each type the model names, and of each union's or enum's variants.
     pub types: HashMap<String, String>,
@@ -542,11 +545,204 @@ impl<'m> Gen<'m> {
         out
     }
 
+    // `name` and its forms for union arguments (see `member_forms`): returns
+    // the JS export of the first, and every name given out.
+    pub(super) fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) -> (String, Vec<String>) {
+        let forms = self.member_forms(&f.params, f.rest, optional_tail(f));
+        if forms.is_empty() {
+            let (js, with) = self.function_form(name, f, owner, false, &[]);
+            return (js, std::iter::once(name.to_string()).chain(with).collect());
+        }
+        let mut first = None;
+        let mut names = Vec::new();
+        for form in forms {
+            let mut g = f.clone();
+            let mut nulls = Vec::new();
+            for (i, t) in form.args {
+                match t {
+                    Some(t) => g.params[i].1 = t,
+                    None => nulls.push(i),
+                }
+            }
+            let n = match &form.suffix {
+                None => name.to_string(),
+                Some(s) => self.fresh_value(&format!("{name}_{s}")),
+            };
+            let (js, with) = self.function_form(&n, &g, owner, form.with_only, &nulls);
+            first.get_or_insert(js);
+            if !(form.with_only && with.is_some()) {
+                names.push(n);
+            }
+            names.extend(with);
+        }
+        (first.unwrap(), names)
+    }
+
+    // A union going in is a value of one of its members, as Gleam writes it:
+    // the plain form takes each union's primary member (`with_left(16.0)`),
+    // `name_<member>` another of one union no other parameter has
+    // (`with_left_string("10%")`), `name_null` a nullable one's null, and
+    // `name_of` the unions themselves where there are several (date-fns'
+    // `difference_in_days(later, earlier)`), or a union of objects comes back.
+    // A union in the optional tail (from `tail`) is in `name_<member>_with`
+    // alone. None: no forms.
+    pub(super) fn member_forms(&self, params: &[(String, Ty)], rest: bool, tail: usize) -> Vec<Form> {
+        #[derive(PartialEq)]
+        enum Place {
+            Required,
+            // In the optional tail: its members are optional too.
+            Tail(bool),
+            // May be null: `name_null`.
+            Nullable,
+        }
+        let find = |n: &str| self.m.unions.iter().find(|u| u.name == n && u.type_params.is_empty());
+        let unions: Vec<(usize, &NamedUnion, Place)> = params
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !(rest && *i == params.len() - 1))
+            .filter_map(|(i, (_, t))| match t {
+                Ty::NamedUnion(n) => find(n).map(|u| (i, u, Place::Required)),
+                Ty::Nullable(inner, absent) => match &**inner {
+                    Ty::NamedUnion(n) => find(n).map(|u| (i, u, if i >= tail { Place::Tail(*absent) } else { Place::Nullable })),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        if unions.is_empty() {
+            return Vec::new();
+        }
+        let primary: Vec<Option<usize>> = unions.iter().map(|(_, u, _)| u.primary(|n| self.is_record(n))).collect();
+        let member = |place: &Place, t: &Ty| match place {
+            Place::Tail(absent) => Ty::Nullable(Box::new(t.clone()), *absent),
+            _ => t.clone(),
+        };
+        // Every union but `skip` at its primary member; one in the tail without one stays the union.
+        let at_primary = |skip: Option<usize>| -> Option<Vec<(usize, Option<Ty>)>> {
+            let mut out = Vec::new();
+            for (k, ((i, u, place), p)) in unions.iter().zip(&primary).enumerate() {
+                if Some(k) == skip {
+                    continue;
+                }
+                match (p, place) {
+                    (Some(p), _) => out.push((*i, Some(member(place, &u.parts[*p])))),
+                    (None, Place::Tail(_)) => {}
+                    (None, _) => return None,
+                }
+            }
+            Some(out)
+        };
+        let mut forms = Vec::new();
+        if let Some(args) = at_primary(None) {
+            forms.push(Form { suffix: None, args, with_only: false });
+        }
+        let mut suffixes: Vec<String> = Vec::new();
+        let mut of = unions.len() > 1;
+        for (k, (i, u, place)) in unions.iter().enumerate() {
+            if unions.iter().filter(|(_, v, _)| v.name == u.name).count() > 1 {
+                of = true;
+                continue;
+            }
+            let Some(others) = at_primary(Some(k)) else { continue };
+            let names = self.member_suffixes(u, primary[k]);
+            let with_only = matches!(place, Place::Tail(_));
+            let mut add = |suffix: String, full: Option<String>, t: Option<Ty>, forms: &mut Vec<Form>| {
+                // Taken by another parameter's member: by its whole name (node's `BufferEncoding` beside `Buffer`).
+                let suffix = match full {
+                    Some(full) if suffixes.contains(&suffix) && !suffixes.contains(&full) => full,
+                    _ => suffix,
+                };
+                if suffixes.contains(&suffix) {
+                    of = true;
+                    return;
+                }
+                suffixes.push(suffix.clone());
+                let mut args = others.clone();
+                args.push((*i, t));
+                forms.push(Form { suffix: Some(suffix), args, with_only });
+            };
+            for (m, part) in u.parts.iter().enumerate().filter(|(m, _)| Some(*m) != primary[k]) {
+                let full = match part {
+                    Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) | Ty::NamedUnion(n) => Some(snake(&self.tname(n))),
+                    _ => None,
+                };
+                add(names[m].clone(), full, Some(member(place, part)), &mut forms);
+            }
+            if *place == Place::Nullable {
+                add("null".into(), None, None, &mut forms);
+            }
+        }
+        // A union of objects that comes back goes back in as it is (the fixture's `area(shape)`).
+        let returned = unions.iter().zip(&primary).any(|((_, u, _), p)| p.is_none() && self.given_back.contains(&u.name));
+        if of || returned {
+            let with_only = unions.iter().all(|(_, _, place)| matches!(place, Place::Tail(_)));
+            forms.push(Form { suffix: Some("of".to_string()), args: Vec::new(), with_only });
+        }
+        forms
+    }
+
+    // Each member's part of a form's name: `string`, `number`, `list` (of
+    // `T | T[]`), `fn`, else its type's, without the words every such member
+    // has (ECharts' `BarSeriesOption | LineSeriesOption` are `bar`, `line`).
+    fn member_suffixes(&self, u: &NamedUnion, primary: Option<usize>) -> Vec<String> {
+        let typed: Vec<Option<String>> = u
+            .parts
+            .iter()
+            .map(|p| match p {
+                Ty::Obj(n) if self.is_callback(n) => None,
+                Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) | Ty::NamedUnion(n) => Some(self.tname(n)),
+                _ => None,
+            })
+            .collect();
+        // Option objects whose `type` each fixes apart (ECharts' axes: `category`, `value`).
+        let fixed: Vec<Option<String>> = u.parts.iter().map(|p| if let Ty::Obj(n) = p { self.fixed_type(n) } else { None }).collect();
+        let objects = typed.iter().filter(|t| t.is_some()).count();
+        let mut values: Vec<&String> = fixed.iter().flatten().collect();
+        values.sort();
+        values.dedup();
+        let by_type = objects > 1 && fixed.iter().zip(&typed).all(|(f, t)| t.is_none() || f.is_some()) && values.len() == objects;
+        let words: Vec<Vec<String>> = typed.iter().flatten().map(|n| camel_words(n)).collect();
+        let (mut head, mut tail) = (0, 0);
+        if words.len() > 1 {
+            let shortest = words.iter().map(Vec::len).min().unwrap_or(0);
+            while head < shortest && words.iter().all(|w| w[head] == words[0][head]) {
+                head += 1;
+            }
+            while tail < shortest - head && words.iter().all(|w| w[w.len() - 1 - tail] == words[0][words[0].len() - 1 - tail]) {
+                tail += 1;
+            }
+        }
+        u.parts
+            .iter()
+            .zip(&typed)
+            .enumerate()
+            .map(|(m, (p, name))| match p {
+                Ty::Str => "string".into(),
+                Ty::Num | Ty::NumEnum(_) => "number".into(),
+                Ty::Bool => "boolean".into(),
+                Ty::ArrayOf(e) if primary.is_some_and(|q| **e == u.parts[q]) || self.of_members(e, u) => "list".into(),
+                Ty::Obj(n) if self.is_callback(n) => "fn".into(),
+                Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
+                _ if by_type => snake(&lower(&fixed[m].clone().unwrap_or_default().replace(['-', ' ', '.'], "_"))),
+                // Made up by lowering, named for where it is: the last of that (`EditorView_new_place_object`).
+                Ty::Obj(n) | Ty::NamedUnion(n) if self.m.synthetic.contains(n) && n.contains('_') => snake(n.rsplit('_').next().unwrap_or(n)),
+                _ => match name {
+                    Some(n) => {
+                        let w = camel_words(n);
+                        let kept = &w[head.min(w.len())..w.len().saturating_sub(tail).max(head.min(w.len()))];
+                        snake(&if kept.is_empty() { n.clone() } else { kept.concat() })
+                    }
+                    None => format!("case{m}"),
+                },
+            })
+            .collect()
+    }
+
     // One external function, `name`, and its JavaScript; returns its JS export
     // name, and the name of its form with its trailing optional arguments
     // where `name` leaves them out (`create_element(doc, tag)`,
     // `create_element_with(doc, tag, Some(options))`): one export for both.
-    pub(super) fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) -> (String, Option<String>) {
+    fn function_form(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>, with_only: bool, nulls: &[usize]) -> (String, Option<String>) {
         self.setup_fn_bounds(f, owner);
         let mut params = Vec::new();
         let mut js_params = Vec::new();
@@ -564,6 +760,11 @@ impl<'m> Gen<'m> {
         let mut args = Vec::new();
         let mut may_undef = Vec::new();
         for (i, (p, t)) in f.params.iter().enumerate() {
+            if nulls.contains(&i) {
+                args.push(if matches!(t, Ty::Nullable(_, true)) { "undefined" } else { "null" }.to_string());
+                may_undef.push(false);
+                continue;
+            }
             // A parameter of the FFI's JavaScript too: `default_` there.
             let mut id = lower(p);
             while JS_RESERVED.contains(&id.as_str()) || !taken.insert(id.clone()) {
@@ -600,7 +801,7 @@ impl<'m> Gen<'m> {
         let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
         // Not a setter's value, a rest, or what codecs follow: JavaScript takes those by position.
         let optional = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count();
-        let shortened = optional > 0 && !f.rest && params.len() == first + f.params.len() && !matches!(f.call, Call::Set(_) | Call::IndexSet);
+        let shortened = optional > 0 && !f.rest && params.len() + nulls.len() == first + f.params.len() && !matches!(f.call, Call::Set(_) | Call::IndexSet);
         let doc = f.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
         // `_with`, else `_full` where a member has that name (ProseMirror's `can_replace_with`).
         let free = |g: &Self, n: &str| !g.reserved_values.contains(n) && !g.values.contains(&(g.unit.clone(), n.to_string()));
@@ -610,7 +811,9 @@ impl<'m> Gen<'m> {
         });
         if let Some(with) = &with {
             self.out += &doc;
-            self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params[..params.len() - optional].join(", "));
+            if !with_only {
+                self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {name}({}) -> {ret}\n\n", self.own_ffi(), params[..params.len() - optional].join(", "));
+            }
             self.out += &format!("@external(javascript, \"{}\", \"{js}\")\npub fn {with}({}) -> {ret}\n\n", self.own_ffi(), params.join(", "));
         } else {
             self.out += &doc;
@@ -675,4 +878,63 @@ impl<'m> Gen<'m> {
         let codecs: String = self.union_codecs[&u.name].iter().map(|&i| format!(", {}", codec_var(&u.type_params[i].name))).collect();
         self.ffi += &format!("export function {name}_to(v{codecs}) {{\n{to}}}\nexport function {name}_from(u{codecs}) {{\n{from}}}\n");
     }
+}
+
+impl Gen<'_> {
+    // An object of string keys: `{ [name: string]: NodeSpec }`.
+    fn is_record(&self, class: &str) -> bool {
+        self.m.classes.iter().find(|c| c.name == class).is_some_and(|c| c.funcs.iter().any(|f| f.call == Call::IndexSet))
+    }
+
+    // An array element of the union's own members: ECharts' `SeriesOption` in
+    // `BarSeriesOption | LineSeriesOption | .. | SeriesOption[]`.
+    fn of_members(&self, e: &Ty, u: &NamedUnion) -> bool {
+        match e {
+            Ty::NamedUnion(n) => self.m.unions.iter().find(|v| v.name == *n).is_some_and(|v| v.parts.iter().all(|p| u.parts.contains(p))),
+            t => u.parts.iter().filter(|p| *p == t).count() == 1,
+        }
+    }
+
+    // The `type` an option object's `create` fixes: `{"type": "category", ..}`.
+    fn fixed_type(&self, class: &str) -> Option<String> {
+        let c = self.m.classes.iter().find(|c| c.name == class)?;
+        c.funcs.iter().find_map(|f| match &f.call {
+            Call::Create(lit) => {
+                let at = lit.find("\"type\": \"")? + "\"type\": \"".len();
+                Some(lit[at..].split('"').next()?.to_string())
+            }
+            _ => None,
+        })
+    }
+}
+
+// `XAXisComponentOption` as `X`, `AXis`, `Component`, `Option`: a word starts at a capital after a lowercase letter or a digit.
+fn camel_words(n: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut prev_lower = false;
+    for c in n.chars() {
+        if (c.is_ascii_uppercase() && prev_lower) || out.is_empty() {
+            out.push(String::new());
+        }
+        out.last_mut().unwrap().push(c);
+        prev_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
+    }
+    out
+}
+
+// A form of a function for one union member: by parameter, the member type
+// it takes, or none for its absent value (`name_null`).
+pub(super) struct Form {
+    pub suffix: Option<String>,
+    pub args: Vec<(usize, Option<Ty>)>,
+    // Of a union in the optional tail: only `name_<member>_with` takes it.
+    pub with_only: bool,
+}
+
+// Where a function's optional tail starts, as `function_form` leaves it out.
+fn optional_tail(f: &Func) -> usize {
+    if f.rest || matches!(f.call, Call::Set(_) | Call::IndexSet) {
+        return f.params.len();
+    }
+    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count()
 }

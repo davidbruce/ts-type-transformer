@@ -208,8 +208,8 @@ pub fn main() {
     )
 
   // ---- Color ----
-  let red = color.new_with(Some(t.ColorRepresentationString("red")))
-  let from_hex = color.new_with(Some(t.ColorRepresentationNumber(16_711_680.0)))
+  let red = color.new_string_with(Some("red"))
+  let from_hex = color.new_number_with(Some(16_711_680.0))
   let passed =
     passed
     + check(color.get_hex(red) == 16_711_680.0, "named colour's hex")
@@ -332,10 +332,7 @@ pub fn main() {
   let material = mesh_basic_material.new()
   mesh_basic_material.set_color(material, red)
   let cube =
-    mesh.new_with(
-      Some(geometry),
-      Some(t.material_or_material_array_material(material)),
-    )
+    mesh.new_with(Some(geometry), Some(material))
   object3d.set_name(cube, "cube")
   let _ = object3d.add(parent, [cube])
   object3d.update_matrix_world_with(parent, Some(True))

@@ -81,6 +81,7 @@ pub fn main() {
   check(cell.get(clicks) == 2, "listener removed")
 
   // An options bag, { once: true }, and events made and dispatched here.
+  // Two unions, the listener's and the options', go in by `_of`.
   let pings = cell.new(0)
   let on_ping = fn(_) {
     cell.set(pings, cell.get(pings) + 1)
@@ -88,7 +89,7 @@ pub fn main() {
   }
   let once = add_event_listener_options.create()
   add_event_listener_options.set_once(once, Some(True))
-  html_element.add_event_listener_with_string_with(
+  html_element.add_event_listener_with_string_of_with(
     box,
     "ping",
     t.EventListenerOrEventListenerObjectEventListener(on_ping),

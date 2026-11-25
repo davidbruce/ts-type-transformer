@@ -34,11 +34,8 @@ pub fn main() {
   check(pt.get_x(moved) == 4.0 && pt.get_x(p) == 3.0, "$add returns another")
   let _ = pt.add(p, [r.dynamic(1.0), r.dynamic(1.0)])
   check(pt.get_x(p) == 4.0, "add changes it")
-  check(pt.equals(p, t.PtLikePt(moved)), "union argument")
-  check(
-    pt.equals_with(pt.clone(p), t.PtLikePt(p), Some(0.001)),
-    "optional argument",
-  )
+  check(pt.equals_pt(p, moved), "union argument")
+  check(pt.equals_pt_with(pt.clone(p), p, Some(0.001)), "optional argument")
 
   // Statics.
   check(
@@ -64,17 +61,13 @@ pub fn main() {
     "bounding box",
   )
 
-  // A union parameter takes any of its members: a Group where points are wanted.
+  // A union of objects: each member by name, a Group where points are wanted.
+  check(pt.get_x(geom.centroid_group(square)) == 2.0, "a Group as points")
   check(
-    pt.get_x(geom.centroid(t.PtLikeIterableGroup(square))) == 2.0,
-    "a Group as points",
-  )
-  check(
-    line.magnitude(t.PtIterableGroup(group.new([pt(0.0, 0.0), pt(3.0, 4.0)])))
-      == 5.0,
+    line.magnitude_group(group.new([pt(0.0, 0.0), pt(3.0, 4.0)])) == 5.0,
     "line",
   )
-  let ray = line.from_angle(t.PtLikePt(pt(1.0, 1.0)), 0.0, 5.0)
+  let ray = line.from_angle_pt(pt(1.0, 1.0), 0.0, 5.0)
   check(
     pt.get_x(group.get_p2(ray)) == 6.0 && pt.get_y(group.get_p2(ray)) == 1.0,
     "from angle",

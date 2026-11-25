@@ -97,6 +97,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         key_vars: RefCell::default(),
         expanding_defaults: RefCell::default(),
         skipped: m.skipped.clone(),
+        given_back: given_back(&m),
     };
 
     // Names: every type (`names::settle` made them apart), then every
@@ -618,4 +619,26 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         ..Default::default()
     };
     Ok(Output { name: pkg.to_string(), files, project_refs, skipped: g.skipped, manifest: super::super::model::manifest(&m), meta_toml: meta.to_toml() })
+}
+
+// The unions a result or a callback's argument holds.
+fn given_back(m: &Model) -> HashSet<String> {
+    fn add(t: &Ty, out: &mut HashSet<String>) {
+        match t {
+            Ty::NamedUnion(n) => {
+                out.insert(n.clone());
+            }
+            Ty::Nullable(t, _) | Ty::ArrayOf(t) | Ty::Listener(t) => add(t, out),
+            Ty::Tuple(ts) | Ty::Union(ts) | Ty::Generic(_, ts) => ts.iter().for_each(|t| add(t, out)),
+            _ => {}
+        }
+    }
+    let mut out = HashSet::new();
+    for f in m.funcs.iter().chain(m.classes.iter().flat_map(|c| &c.funcs)) {
+        add(&f.ret, &mut out);
+    }
+    for c in &m.callbacks {
+        c.params.iter().for_each(|(_, t)| add(t, &mut out));
+    }
+    out
 }

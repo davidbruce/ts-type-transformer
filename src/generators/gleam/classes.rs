@@ -212,54 +212,69 @@ impl<'m> Gen<'m> {
                         Some(p) => lower(&format!("{p}_with_{rest}")),
                         None => lower(&format!("with_{rest}")),
                     };
-                    let with_id = match prefix {
-                        Some(_) => {
-                            if self.reserved_values.contains(&with_base) {
-                                continue;
-                            }
-                            self.fresh_value(&with_base)
-                        }
-                        None => {
-                            if self.reserved_values.contains(&with_base) || self.values.contains(&(self.unit.clone(), with_base.clone())) {
-                                continue;
-                            }
-                            self.value_name(&with_base)
-                        }
-                    };
                     let val_ty = match &f.params[0].1 {
                         Ty::Nullable(inner, _) => (**inner).clone(),
                         t => t.clone(),
                     };
-                    let mut wf = f.clone();
-                    wf.params = vec![(f.params[0].0.clone(), val_ty.clone())];
-                    wf.ret = Ty::Void;
-                    self.setup_fn_bounds(&wf, Some((&c.name, &c.type_params)));
-                    *self.open.borrow_mut() = Some(0);
-                    let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
-                    let self_ty = self.class_type(&c.name, &own);
-                    let mut val_param = lower(&wf.params[0].0);
-                    while JS_RESERVED.contains(&val_param.as_str()) || val_param == "self" {
-                        val_param.push('_');
+                    // A union's value: each member its own setter (`with_left(16.0)`, `with_left_string("10%")`).
+                    let mut forms: Vec<(Option<String>, Ty)> = self
+                        .member_forms(&[(f.params[0].0.clone(), val_ty.clone())], false, 1)
+                        .into_iter()
+                        .filter_map(|form| Some((form.suffix, form.args.into_iter().next().map_or(Some(val_ty.clone()), |m| m.1)?)))
+                        .collect();
+                    if forms.is_empty() {
+                        forms.push((None, val_ty.clone()));
                     }
-                    let (val_ty_str, val_js) = self.going_in(|| (self.ty(&val_ty), self.from_gleam(&val_ty, &val_param)));
-                    *self.open.borrow_mut() = None;
-                    let mut params = vec![format!("self: {self_ty}"), format!("{val_param}: {val_ty_str}")];
-                    let mut js_params = vec!["self".to_string(), val_param.clone()];
-                    for p in self.crossing_params(&wf, Some((&c.name, &c.type_params))) {
-                        self.note("Codec");
-                        params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
-                        js_params.push(codec_var(&p.name));
-                    }
-                    let js_fn = if JS_RESERVED.contains(&with_id.as_str()) { format!("{with_id}_") } else { with_id.clone() };
-                    self.out += &format!("@external(javascript, \"{}\", \"{js_fn}\")\npub fn {with_id}({}) -> {self_ty}\n\n", self.own_ffi(), params.join(", "));
-                    self.ffi += &format!("export function {js_fn}({}) {{\n  self{} = {val_js};\n  return self;\n}}\n", js_params.join(", "), access(js));
-                    self.clear_fn_bounds();
-                    if prefix.is_none() {
-                        emitted.push(EmittedWith {
-                            gleam_name: with_id,
-                            ffi_path: format!("{}_ffi.mjs", self.unit),
-                            func: wf,
-                        });
+                    for (suffix, val_ty) in forms {
+                        let base = match &suffix {
+                            Some(s) => format!("{with_base}_{s}"),
+                            None => with_base.clone(),
+                        };
+                        let with_id = match (prefix, &suffix) {
+                            (Some(_), _) | (None, Some(_)) => {
+                                if self.reserved_values.contains(&base) {
+                                    continue;
+                                }
+                                self.fresh_value(&base)
+                            }
+                            (None, None) => {
+                                if self.reserved_values.contains(&base) || self.values.contains(&(self.unit.clone(), base.clone())) {
+                                    continue;
+                                }
+                                self.value_name(&base)
+                            }
+                        };
+                        let mut wf = f.clone();
+                        wf.params = vec![(f.params[0].0.clone(), val_ty.clone())];
+                        wf.ret = Ty::Void;
+                        self.setup_fn_bounds(&wf, Some((&c.name, &c.type_params)));
+                        *self.open.borrow_mut() = Some(0);
+                        let own: Vec<Ty> = c.type_params.iter().map(|p| Ty::Param(p.name.clone())).collect();
+                        let self_ty = self.class_type(&c.name, &own);
+                        let mut val_param = lower(&wf.params[0].0);
+                        while JS_RESERVED.contains(&val_param.as_str()) || val_param == "self" {
+                            val_param.push('_');
+                        }
+                        let (val_ty_str, val_js) = self.going_in(|| (self.ty(&val_ty), self.from_gleam(&val_ty, &val_param)));
+                        *self.open.borrow_mut() = None;
+                        let mut params = vec![format!("self: {self_ty}"), format!("{val_param}: {val_ty_str}")];
+                        let mut js_params = vec!["self".to_string(), val_param.clone()];
+                        for p in self.crossing_params(&wf, Some((&c.name, &c.type_params))) {
+                            self.note("Codec");
+                            params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
+                            js_params.push(codec_var(&p.name));
+                        }
+                        let js_fn = if JS_RESERVED.contains(&with_id.as_str()) { format!("{with_id}_") } else { with_id.clone() };
+                        self.out += &format!("@external(javascript, \"{}\", \"{js_fn}\")\npub fn {with_id}({}) -> {self_ty}\n\n", self.own_ffi(), params.join(", "));
+                        self.ffi += &format!("export function {js_fn}({}) {{\n  self{} = {val_js};\n  return self;\n}}\n", js_params.join(", "), access(js));
+                        self.clear_fn_bounds();
+                        if prefix.is_none() {
+                            emitted.push(EmittedWith {
+                                gleam_name: with_id,
+                                ffi_path: format!("{}_ffi.mjs", self.unit),
+                                func: wf,
+                            });
+                        }
                     }
                 }
                 Call::IndexSet if f.params.len() == 2 => {
@@ -363,9 +378,9 @@ pub(super) fn emit_class_and_func_modules<'m>(
         let ids: Vec<String> = c.funcs.iter().map(|f| g.value_name(&function_name(&with_self_args(f, c), &f.name))).collect();
         for (f, id) in c.funcs.iter().zip(ids) {
             let f = with_self_args(f, c);
-            let (_, with) = g.function(&id, &f, Some((&c.name, &c.type_params)));
+            let (_, names) = g.function(&id, &f, Some((&c.name, &c.type_params)));
             if Class::has_self(&f) {
-                for gleam_name in [Some(id), with].into_iter().flatten() {
+                for gleam_name in names {
                     cls_methods.push(EmittedMethod { gleam_name, ffi_path: format!("{}_ffi.mjs", class_paths[&c.name]), func: f.clone() });
                 }
             }

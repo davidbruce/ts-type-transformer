@@ -19,12 +19,12 @@ pub fn main() {
   let options = options.create()
   options.set_verbose(options, True)
 
-  // A union is a custom type: any member goes in.
-  check(b.describe(t.ValueString("text")) == "string text", "string case")
-  check(b.describe(t.ValueNumber(42.0)) == "number 42", "number case")
-  check(b.describe(t.ValueWidget(widget)) == "widget w", "class case")
+  // A union going in: its first member plain, each other one by name.
+  check(b.describe("text") == "string text", "string case")
+  check(b.describe_number(42.0) == "number 42", "number case")
+  check(b.describe_widget(widget) == "widget w", "class case")
   check(
-    b.describe(t.ValueOptions(options)) == "options verbose=true",
+    b.describe_options(options) == "options verbose=true",
     "option bag case",
   )
 
@@ -34,26 +34,28 @@ pub fn main() {
   let assert t.ValueWidget(w) = b.pick(2.0)
   check(widget.get_name(w) == "w", "instanceof out")
 
-  // A tagged union, told apart by its `kind`.
+  // A tagged union, told apart by its `kind`; one given back goes in by `_of`.
   let square = b.make_shape("square", 3.0)
   let assert t.ShapeSquare(sq) = square
-  check(square.get_side(sq) == 3.0 && b.area(square) == 9.0, "tagged union")
+  check(square.get_side(sq) == 3.0 && b.area_of(square) == 9.0, "tagged union")
 
   // An inline union.
-  check(b.setup(t.BooleanOrOptionsBoolean(True)) == "bool true", "inline union")
+  check(b.setup(True) == "bool true", "inline union")
   check(
-    b.setup(t.BooleanOrOptionsOptions(options)) == "options verbose=true",
+    b.setup_options(options) == "options verbose=true",
     "inline union object",
   )
   check(b.lookup("abc") == t.NumberOrWidgetNumber(3.0), "inline union out")
 
-  // Members no test tells apart: typed going in, made of any subtype by a function.
+  // Members no test tells apart: each goes in by name; the union, made of
+  // any subtype by a function, by `_of`.
   let a = loose_a.create() |> loose_a.with_a(1.0)
+  check(b.loose_a(a) == "loose {\"a\":1}", "a loose union's member")
   check(
-    b.loose(t.loose_loose_a(a)) == "loose {\"a\":1}",
+    b.loose_of(t.loose_loose_a(a)) == "loose {\"a\":1}",
     "a loose union made of a member",
   )
-  check(b.loose(t.LooseLooseA(a)) == "loose {\"a\":1}", "and by its variant")
+  check(b.loose_of(t.LooseLooseA(a)) == "loose {\"a\":1}", "and by its variant")
 
   io.println("checks passed")
 }

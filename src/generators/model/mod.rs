@@ -233,6 +233,35 @@ impl NamedUnion {
         self.parts.iter().filter(|p| matches!(p, Ty::Param(_))).count()
     }
 
+    // The member a value going in is by default, where a language names the
+    // others (Gleam's `with_left(16.0)` beside `with_left_string("10%")`):
+    // of `T | T[]` the one; a string beside objects (Konva's `string |
+    // CanvasGradient`); a record beside other objects (prosemirror's `{
+    // [name]: NodeSpec } | OrderedMap<NodeSpec>`); none where every member is
+    // an object (ECharts' series); else the first as declared (`number |
+    // string`, `Date | number | string`).
+    pub fn primary(&self, record: impl Fn(&str) -> bool) -> Option<usize> {
+        let object = |t: &Ty| !matches!(t, Ty::Num | Ty::Bool | Ty::Str | Ty::Enum(_) | Ty::NumEnum(_) | Ty::Any | Ty::Void);
+        if let Some(i) = self.parts.iter().position(|p| self.parts.iter().any(|q| matches!(q, Ty::ArrayOf(e) if **e == *p))) {
+            return Some(i);
+        }
+        let records: Vec<usize> = self.parts.iter().enumerate().filter(|(_, p)| matches!(p, Ty::Obj(n) if record(n))).map(|(i, _)| i).collect();
+        if let [i] = records.as_slice()
+            && self.parts.iter().all(object)
+        {
+            return Some(*i);
+        }
+        if let Some(i) = self.parts.iter().position(|p| *p == Ty::Str)
+            && self.parts.iter().enumerate().all(|(j, q)| j == i || object(q))
+        {
+            return Some(i);
+        }
+        if self.parts.iter().all(object) {
+            return None;
+        }
+        (!self.parts.is_empty()).then_some(0)
+    }
+
     // A value can be made of a member without telling members apart: each is a
     // number, a flag, a string, a handle, an array or a tuple.
     pub fn typable(&self) -> bool {
@@ -375,6 +404,8 @@ pub struct ModelOptions<'a> {
     pub generics: bool,
     pub overloading: bool,
     pub retain_opaque_constraints: bool,
+    // `T | T[]` of a union `T` keeps its array's element (a Gleam list of `T` going in).
+    pub typed_union_arrays: bool,
 }
 
 impl<'a> ModelOptions<'a> {
@@ -386,6 +417,7 @@ impl<'a> ModelOptions<'a> {
             generics: matches!(target, "C++" | "Rust" | "Gleam"),
             overloading: target == "C++",
             retain_opaque_constraints: target == "Gleam",
+            typed_union_arrays: target == "Gleam",
         }
     }
 }

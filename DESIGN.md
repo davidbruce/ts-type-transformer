@@ -433,7 +433,20 @@ the time control returns to JavaScript is reported, not lost.
   model, as the wasm targets, since Gleam has no methods, subtypes, overloads
   or optional arguments. A function with trailing optional arguments is two, one
   export: `create_element(doc, tag)` without them, `create_element_with(doc,
-  tag, Some(options))` with them (`_full` where a member is named `_with`). Subtypes are phantom types along each class's chain
+  tag, Some(options))` with them (`_full` where a member is named `_with`).
+  A union going in is one function per member. The plain name takes its
+  primary member: of `T | T[]` the one, a string beside objects, none where
+  every member is an object, else the first as declared (`with_left(16.0)`,
+  `add_days(date, 3.0)`, `schema.node("heading")`). Each other member is
+  `name_<member>`: `with_left_string("10%")`, `with_title_list([..])`,
+  `with_color_fn(f)`; an option object by the `type` its `create` fixes
+  (`with_x_axis_category`), else by its name less what the members share
+  (`with_series_bar`); a nullable one's null `name_null`. One in the optional
+  tail is in `name_<member>_with` alone. `name_of` takes the unions as they
+  are where a function has several, two of one, or a union of objects comes
+  back (`difference_in_days(later, earlier)` takes Dates,
+  `difference_in_days_of` `DateArg`s). Bindings grow 1-20%, pts' 43%: its
+  point union is in nearly every function, often twice. Subtypes are phantom types along each class's chain
   of first bases: `Node(a)` is opaque, `Element(a) = Node(ElementTag(a))`,
   so an `Element(Nil)` is a `Node` to any function that takes a `Node(a)`,
   and only an Element. A function's parameters are open (`Node(a)`, any
@@ -526,7 +539,8 @@ Fable's guess. The wasm glue makes a tag function, so Zig can `switch` on a
 union a call returns.
 A library's alias of a named union (`type Wrapped = Content`) is declared as
 the target's own alias (`typedef`, `using`, `pub const`, `pub type`, an F#
-abbreviation).
+abbreviation). `T | T[]` of a union `T` is flat in the model, its array still
+of `T` (ECharts' `BarSeriesOption | .. | SeriesOption[]`).
 
 ## Overload names
 

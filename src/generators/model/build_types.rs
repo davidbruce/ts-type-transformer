@@ -863,6 +863,22 @@ impl<'a> Builder<'a> {
                             t => t,
                         })
                         .collect();
+                    // `T | T[]` of a union `T`, flattened (ECharts' `SeriesOption |
+                    // SeriesOption[]`): the array is of `T`, whose members are all here.
+                    let flat = parts.clone();
+                    let parts: Vec<Ty> = members
+                        .iter()
+                        .zip(parts)
+                        .map(|(m, p)| {
+                            if self.opts.typed_union_arrays && p == Ty::Array && m.has_tag_name("array")
+                                && let Ty::NamedUnion(n) = self.ty(only_child(*m), "")
+                                && self.model.unions.iter().find(|u| u.name == n).is_some_and(|u| u.typable() && u.parts.iter().all(|q| flat.contains(q)))
+                            {
+                                return Ty::ArrayOf(Box::new(Ty::NamedUnion(n)));
+                            }
+                            p
+                        })
+                        .collect();
                     (self.erased, self.keyed, self.key_strings) = saved;
                     self.resolving.pop();
                     // Members that are one type here, as two generic types are once erased, are one member.

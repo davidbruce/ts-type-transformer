@@ -52,7 +52,7 @@ fn attr_string(d, name: String) -> String {
 pub fn main() {
   // A stage on the page's #stage, 400 by 300, with a layer.
   let cfg = stage_config.create()
-  stage_config.set_container(cfg, Some(t.HTMLDivElementOrStringString("stage")))
+  stage_config.set_container(cfg, "stage")
   node_config.set_width(cfg, Some(400.0))
   node_config.set_height(cfg, Some(300.0))
   let s = stage.new(cfg)
@@ -72,7 +72,7 @@ pub fn main() {
   rect_config.set_y(rc, Some(30.0))
   rect_config.set_width(rc, Some(100.0))
   rect_config.set_height(rc, Some(50.0))
-  rect_config.set_fill(rc, Some(t.StringOrCanvasGradientString("red")))
+  rect_config.set_fill(rc, "red")
   rect_config.set_id(rc, Some("box"))
   rect_config.set_name(rc, Some("shape"))
   let r = rect.new_with(Some(rc))
@@ -168,7 +168,7 @@ pub fn main() {
     )
 
   // Finding by selector: id, name, type.
-  let by_id = container.find_one(l, t.StringOrFunctionString("#box"))
+  let by_id = container.find_one(l, "#box")
   let by_name = container.find(l, runtime.dynamic(".shape"))
   let rects = container.find(l, runtime.dynamic("Rect"))
   let passed =
@@ -181,7 +181,7 @@ pub fn main() {
       "nothing found",
     )
     + check(
-      option.is_some(container.find_one(l, t.StringOrFunctionString(".cluster"))),
+      option.is_some(container.find_one(l, ".cluster")),
       "find a group by name",
     )
 

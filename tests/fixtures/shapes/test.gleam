@@ -54,15 +54,9 @@ pub fn main() {
   shape.resize_with(s, 2.6, Some(True))
   check(shape.get_size(s) == 3.0, "given argument")
 
-  // A union is a custom type.
-  check(
-    shape.label(s, t.StringOrNumberString("a")) == "string:a",
-    "union string",
-  )
-  check(
-    shape.label(s, t.StringOrNumberNumber(7.0)) == "number:7",
-    "union number",
-  )
+  // A union: its first member plain, the other by name.
+  check(shape.label(s, "a") == "string:a", "union string")
+  check(shape.label_number(s, 7.0) == "number:7", "union number")
 
   // A nullable value is an Option.
   check(shape.get_parent(s) == None, "null")

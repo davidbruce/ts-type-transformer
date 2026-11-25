@@ -27,10 +27,6 @@ fn check(ok: Bool, what: String) -> Int {
   }
 }
 
-fn str(s: String) {
-  t.PathLikeString(s)
-}
-
 pub fn main() {
   // ---- path ----
   let parsed = path.parse("/home/user/dir/file.txt")
@@ -72,35 +68,25 @@ pub fn main() {
   let dir = fs.mkdtemp_sync("target/e2e/gleam-node-")
   let file = path.join([dir, "hello.txt"])
   let read = fn(p) {
-    fs.read_file_sync_with_read_file_sync_options(
-      t.PathOrFileDescriptorString(p),
-      t.ReadFileSyncOptions2BufferEncoding(t.BufferEncodingUtf8),
+    fs.read_file_sync_with_read_file_sync_options_buffer_encoding(
+      p,
+      t.BufferEncodingUtf8,
     )
   }
-  let read_buf = fn(p) {
-    buffer.to_string(fs.read_file_sync(t.PathOrFileDescriptorString(p)))
-  }
-  let write = fn(p, text) {
-    fs.write_file_sync(
-      t.PathOrFileDescriptorString(p),
-      t.WriteFileDataString(text),
-    )
-  }
+  let read_buf = fn(p) { buffer.to_string(fs.read_file_sync(p)) }
+  let write = fn(p, text) { fs.write_file_sync(p, text) }
   let passed =
     passed
     + check(string.starts_with(dir, "target/e2e/gleam-node-"), "mkdtemp")
-    + check(fs.exists_sync(str(dir)), "the directory exists")
-    + check(!fs.exists_sync(str(file)), "no file yet")
+    + check(fs.exists_sync(dir), "the directory exists")
+    + check(!fs.exists_sync(file), "no file yet")
   write(file, "hello, node")
   let passed =
     passed
-    + check(fs.exists_sync(str(file)), "writeFileSync")
+    + check(fs.exists_sync(file), "writeFileSync")
     + check(read(file) == "hello, node", "readFileSync")
     + check(read_buf(file) == "hello, node", "readFileSync as Buffer")
-  fs.append_file_sync(
-    t.PathOrFileDescriptorString(file),
-    t.StringOrUint8ArrayString("!\nsecond line"),
-  )
+  fs.append_file_sync(file, "!\nsecond line")
   let passed =
     passed
     + check(read(file) == "hello, node!\nsecond line", "appendFileSync")
@@ -108,21 +94,18 @@ pub fn main() {
 
   // More files, a subdirectory, a listing.
   let sub = path.join([dir, "sub"])
-  fs.mkdir_sync(str(sub))
+  fs.mkdir_sync(sub)
   write(path.join([sub, "b.txt"]), "bbb")
   write(path.join([dir, "a.json"]), "{\"n\": 1}")
-  let names = list.sort(fs.readdir_sync(str(dir)), string.compare)
+  let names = list.sort(fs.readdir_sync(dir), string.compare)
   let passed =
     passed
     + check(names == ["a.json", "hello.txt", "sub"], "readdirSync")
-    + check(
-      fs.readdir_sync(str(sub)) == ["b.txt"],
-      "readdirSync of a subdirectory",
-    )
+    + check(fs.readdir_sync(sub) == ["b.txt"], "readdirSync of a subdirectory")
 
   // Stats: kind and size.
-  let st = fs.stat_sync(str(file))
-  let sd = fs.stat_sync(str(sub))
+  let st = fs.stat_sync(file)
+  let sd = fs.stat_sync(sub)
   let passed =
     passed
     + check(
@@ -136,25 +119,21 @@ pub fn main() {
     + check(stats_base.get_size(st, runtime.codec_float()) == 24.0, "stat size")
 
   // Renamed and copied.
-  fs.rename_sync(
-    str(path.join([dir, "a.json"])),
-    str(path.join([dir, "b.json"])),
-  )
-  fs.copy_file_sync(str(file), str(path.join([dir, "copy.txt"])))
+  fs.rename_sync(path.join([dir, "a.json"]), path.join([dir, "b.json"]))
+  fs.copy_file_sync(file, path.join([dir, "copy.txt"]))
   let passed =
     passed
-    + check(!fs.exists_sync(str(path.join([dir, "a.json"]))), "renamed away")
+    + check(!fs.exists_sync(path.join([dir, "a.json"])), "renamed away")
     + check(read(path.join([dir, "b.json"])) == "{\"n\": 1}", "renamed to")
     + check(read(path.join([dir, "copy.txt"])) == read(file), "copy_file_sync")
-  fs.unlink_sync(str(path.join([dir, "copy.txt"])))
+  fs.unlink_sync(path.join([dir, "copy.txt"]))
   let passed =
-    passed
-    + check(!fs.exists_sync(str(path.join([dir, "copy.txt"]))), "unlinkSync")
+    passed + check(!fs.exists_sync(path.join([dir, "copy.txt"])), "unlinkSync")
 
   // A nested directory, made recursively; mkdir options say so.
   let deep = path.join([dir, "x", "y", "z"])
   let opts = mkdir_options.create()
-  let first = fs.mkdir_sync_recursive(str(deep), opts)
+  let first = fs.mkdir_sync_recursive(deep, opts)
   let passed =
     passed
     + check(
@@ -162,7 +141,7 @@ pub fn main() {
         == Ok(True),
       "mkdir options are recursive",
     )
-    + check(fs.exists_sync(str(deep)), "a nested directory")
+    + check(fs.exists_sync(deep), "a nested directory")
     + check(
       first == Some(path.join([dir, "x"])),
       "mkdir reports the first directory made",
@@ -188,8 +167,8 @@ pub fn main() {
   // Cleaned up, recursively.
   let recursive = rm_options.create()
   rm_options.set_recursive(recursive, Some(True))
-  fs.rm_sync_with(str(dir), Some(recursive))
-  let passed = passed + check(!fs.exists_sync(str(dir)), "rmSync recursive")
+  fs.rm_sync_with(dir, Some(recursive))
+  let passed = passed + check(!fs.exists_sync(dir), "rmSync recursive")
 
   // ---- events ----
   let bus = events.new()

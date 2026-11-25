@@ -18,7 +18,6 @@ import bindings/areas/pixi_js/rectangle
 import bindings/areas/pixi_js/sprite
 import bindings/areas/pixi_js/texture
 import bindings/runtime
-import bindings/types as t
 import gleam/float
 import gleam/int
 import gleam/io
@@ -37,8 +36,7 @@ fn near(a: Float, b: Float) -> Bool {
 }
 
 fn rect(x: Float, y: Float, w: Float, h: Float) {
-  let n = fn(v) { Some(t.NumberOrStringNumber(v)) }
-  rectangle.new_with(n(x), n(y), n(w), n(h))
+  rectangle.new_with(Some(x), Some(y), Some(w), Some(h))
 }
 
 pub fn main() {
@@ -147,7 +145,7 @@ pub fn main() {
   let root = container.new()
   let box = graphics.new()
   let _ = graphics.rect(box, 0.0, 0.0, 100.0, 50.0)
-  let _ = graphics.fill_with(box, Some(runtime.dynamic(16_711_680.0)))
+  let _ = graphics.fill_with(box, Some(16_711_680.0))
   let bb = graphics.get_bounds(box)
   let passed =
     passed
@@ -228,7 +226,7 @@ pub fn main() {
   // Circles and polygons.
   let dot = graphics.new()
   let _ = graphics.circle(dot, 50.0, 50.0, 25.0)
-  let _ = graphics.fill_with(dot, Some(runtime.dynamic(255.0)))
+  let _ = graphics.fill_with(dot, Some(255.0))
   let db = graphics.get_bounds(dot)
   let passed =
     passed
@@ -247,7 +245,7 @@ pub fn main() {
 
   // Sprites: Texture.WHITE is one pixel.
   let white = texture.get_white()
-  let s = sprite.from(runtime.dynamic(white))
+  let s = sprite.from_texture(white)
   let passed =
     passed
     + check(
@@ -270,17 +268,14 @@ pub fn main() {
   let opts = application_init_options.create()
   application_init_options.set_width(opts, Some(200.0))
   application_init_options.set_height(opts, Some(100.0))
-  application_init_options.set_background_color(
-    opts,
-    Some(runtime.dynamic(255.0)),
-  )
+  application_init_options.set_background_color(opts, 255.0)
   runtime.promise_then(application.init_with(app, Some(opts)), fn(ready) {
     let assert Ok(_) = ready
     let screen = application.get_screen(app)
     let stage = application.get_stage(app)
     let dot = graphics.new()
     let _ = graphics.circle(dot, 100.0, 50.0, 20.0)
-    let _ = graphics.fill_with(dot, Some(runtime.dynamic(16_777_215.0)))
+    let _ = graphics.fill_with(dot, Some(16_777_215.0))
     let _ = container.add_child(stage, [dot])
     application.render(app)
     let passed =

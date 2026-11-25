@@ -61,7 +61,7 @@ pub fn main() {
 
   // A bar series with a category axis and a value axis.
   let series = bar_series_option.create()
-  bar_series_option.set_name(series, Some(t.OptionNameString("sales")))
+  bar_series_option.set_name(series, "sales")
   bar_series_option.set_data(
     series,
     Some(list.map([5.0, 20.0, 36.0, 10.0], dynamic.float)),
@@ -121,10 +121,11 @@ pub fn main() {
     + check(unit.get_animation(read) == Some(False), "animation is off")
 
   // Pixel conversions: along the x axis in order, and the taller bar higher up.
+  // A finder object with a category, neither its union's first member: `_of`.
   let on_x = model_finder_object.create()
   model_finder_object.set_x_axis_index(on_x, runtime.dynamic(0.0))
   let x_of = fn(c) {
-    e_charts_type.convert_to_pixel(
+    e_charts_type.convert_to_pixel_of(
       chart,
       t.ModelFinderModelFinderObject(on_x),
       t.ScaleDataValueString(c),
@@ -133,11 +134,7 @@ pub fn main() {
   let on_y = model_finder_object.create()
   model_finder_object.set_y_axis_index(on_y, runtime.dynamic(0.0))
   let y_of = fn(v) {
-    e_charts_type.convert_to_pixel(
-      chart,
-      t.ModelFinderModelFinderObject(on_y),
-      t.ScaleDataValueNumber(v),
-    )
+    e_charts_type.convert_to_pixel_model_finder_object(chart, on_y, v)
   }
   let passed =
     passed
@@ -181,8 +178,8 @@ pub fn main() {
 
   // Resizing.
   let size = resize_opts.create()
-  resize_opts.set_width(size, Some(t.StringOrNumberNumber(200.0)))
-  resize_opts.set_height(size, Some(t.StringOrNumberNumber(150.0)))
+  resize_opts.set_width_number(size, 200.0)
+  resize_opts.set_height_number(size, 150.0)
   e_charts_type.resize_with(chart, Some(size))
   let passed =
     passed
