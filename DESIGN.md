@@ -548,7 +548,9 @@ union a call returns.
 A library's alias of a named union (`type Wrapped = Content`) is declared as
 the target's own alias (`typedef`, `using`, `pub const`, `pub type`, an F#
 abbreviation). `T | T[]` of a union `T` is flat in the model, its array still
-of `T` (ECharts' `BarSeriesOption | .. | SeriesOption[]`).
+of `T` (ECharts' `BarSeriesOption | .. | SeriesOption[]`). A `symbol` is a
+handle of its own, `JsSymbol` in every target, not `any`: `string | symbol`
+stays a union (node's event names), told by `typeof`.
 
 ## Overload names
 

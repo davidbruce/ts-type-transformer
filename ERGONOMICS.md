@@ -45,17 +45,34 @@ TypeScript object literal, because a Zig literal takes its type from where it go
      comes before `_with` (`add_days_string_with`); a callback member's suffix is
      `_fn` in every language (`.color_fn`, `with_color_fn`).
    - The primary member is given by the first rule that applies:
-     1. `T | T[]`: `T`; the array is `name_list` (`.title_list`, `with_series_list`).
+     1. `T | T[]`: `T`; the array is `name_list` (`.title_list`, `with_series_list`),
+        also where `T` is itself a union of objects, flattened (ECharts'
+        `SeriesOption | SeriesOption[]`).
      2. `string`, when every other member is an object (`string | CanvasGradient`,
-        `HTMLDivElement | string`, `string | NodeType`, `string | symbol`).
-     3. A record beside `OrderedMap`: the record, as a pair list (convention 10).
-     4. When every member is an object (ECharts series and axes, three's
-        `Color | Texture`), none: each is named (`.series_bar`, `.xAxis_category`,
-        `with_background_texture`).
-     5. Otherwise the first member as declared; the lowering keeps declared order
-        (`PositionSizeOption = number | string` gives `number`, `OptionName =
-        string | number` gives `string`, date-fns' `DateType | number | string`
-        gives `Date`).
+        `HTMLDivElement | string`, `string | NodeType`, `string | symbol`; `symbol`
+        is an opaque `JsSymbol`, not `any`).
+     3. A record beside other objects (`{ [name]: NodeSpec } | OrderedMap`): the
+        record, as a pair list (convention 10).
+     4. When every member is an object: the one named by just the words they all
+        share (Leaflet's `Icon` beside `DivIcon`, `.icon` / `.icon_div`; `LatLng` in
+        `LatLngExpression`, `map.set_view(m, london)`), else none, each named
+        (`.series_bar`, `.xAxis_category`, `with_background_texture`).
+     5. Otherwise the first member as declared: a library's alias keeps its
+        written order (`PositionSizeOption = number | string` gives `number`,
+        `OptionName = string | number` gives `string`, date-fns' `DateType | number
+        | string` gives `Date`). An inline union's order is the checker's, which
+        always puts `string` before `number`, so there the number comes first
+        (ECharts' `fontSize`, `min`, `max`), but for a key's `string | number |
+        symbol`.
+
+     A member is named by: `string`, `number`, `boolean`, `list`, `fn`, `symbol`;
+     an option object by the `type` its `create` fixes (`category`, `value`); a
+     type lowering made up by the last part of its name
+     (`EditorView_new_place_object`: `object`); else its type's name, less the
+     words every such member shares and the package prefix (`BarSeriesOption`:
+     `bar`; `CanvasGradient`: `canvas_gradient`). A name another parameter's member
+     already took is the member's whole name (node's `BufferEncoding` beside a
+     path's `Buffer`).
 
      `null` and `undefined` are never the primary member. A nullable value takes
      null itself: C `NULL`, C++ `nullptr` (a constructor from `nullptr_t`, since

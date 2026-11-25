@@ -59,7 +59,7 @@ __attribute__((export_name("start"))) void start(void) {
     NodeJS_EventEmitter_on(emitter, "shutdown", shutdown_cb);
 
     check(NodeJS_EventEmitter_listenerCount(emitter, "metric") == 2.0);
-    check(JsArray_length(Node_EventEmitter_eventNames(emitter)) == 2);
+    check(JsArray_Node_string_or_symbol_length(Node_EventEmitter_eventNames(emitter)) == 2);
 
     JsArray args1 = JsArray_new();
     js_push_num(args1, 101.0);
@@ -80,7 +80,7 @@ __attribute__((export_name("start"))) void start(void) {
     check(g_metric_calls == 2);
 
     Node_EventEmitter_removeAllListeners(emitter, "shutdown");
-    check(JsArray_length(Node_EventEmitter_eventNames(emitter)) == 0 && g_shutdown_calls == 0);
+    check(JsArray_Node_string_or_symbol_length(Node_EventEmitter_eventNames(emitter)) == 0 && g_shutdown_calls == 0);
 
     emitf("maxListeners=%d metricCalls=%d metricSum=%d\nonceCalls=%d shutdownCalls=%d\nPASS: event_bus (%d checks)\n",
         (int)NodeJS_EventEmitter_getMaxListeners(emitter),

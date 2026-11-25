@@ -205,8 +205,8 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(!NodeJS_EventEmitter_emit(em, "nobody", JsArray_new()));
 
     // The event names, and a removed listener.
-    JsArray names_of = NodeJS_EventEmitter_eventNames(em);
-    CHECK(JsArray_length(names_of) == 2);
+    JsArray_string_or_symbol names_of = NodeJS_EventEmitter_eventNames(em);
+    CHECK(JsArray_string_or_symbol_length(names_of) == 2);
     NodeJS_EventEmitter_removeListener(em, "data", on_cb);
     CHECK(NodeJS_EventEmitter_listenerCount(em, "data") == 0);
     CHECK(!NodeJS_EventEmitter_emit(em, "data", args));

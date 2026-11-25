@@ -673,6 +673,12 @@ impl<'a> Builder<'a> {
                 "boolean" => Ty::Bool,
                 "string" => Ty::Str,
                 "void" | "undefined" | "never" => Ty::Void,
+                // A handle, as F#'s `JsSymbol`: `string | symbol` stays a union (node's event names).
+                "symbol" => {
+                    self.model.opaque_names.insert("JsSymbol".into(), "JsSymbol".into());
+                    self.opaque.insert("JsSymbol".into());
+                    Ty::Obj("JsSymbol".into())
+                }
                 _ => Ty::Any,
             },
             "this" => Ty::Obj(owner.to_string()),

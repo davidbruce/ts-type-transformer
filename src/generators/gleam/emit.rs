@@ -520,7 +520,9 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         let unit = std::iter::once(base).chain(path[(*depth).min(path.len() - 1)..path.len() - 1].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
         aliases.entry(unit).or_default().push((upper(path.last().unwrap()), gleam, params.clone()));
     }
-    for (unit, list) in aliases {
+    for (unit, mut list) in aliases {
+        // In one order whatever `namespaced`'s: which of two same-named leaves is kept, too.
+        list.sort();
         let u = g.units.entry(unit).or_default();
         let mut seen = HashSet::new();
         // What the module imports, these aliases' types included.

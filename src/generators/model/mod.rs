@@ -240,8 +240,9 @@ impl NamedUnion {
     // [name]: NodeSpec } | OrderedMap<NodeSpec>`); none where every member is
     // an object (ECharts' series); else the first as declared (`number |
     // string`, `Date | number | string`). An inline union's order is the
-    // checker's, `string` before `number` always: there a number comes first
-    // (ECharts' `fontSize`, as its `left` through `PositionSizeOption`).
+    // checker's, `string` before `number` always: there the number comes first
+    // (ECharts' `fontSize`, `min`, as its `left` through `PositionSizeOption`),
+    // but for a key's (`string | number | symbol`).
     pub fn primary(&self, record: impl Fn(&str) -> bool, inline: bool) -> Option<usize> {
         let object = |t: &Ty| !matches!(t, Ty::Num | Ty::Bool | Ty::Str | Ty::Enum(_) | Ty::NumEnum(_) | Ty::Any | Ty::Void);
         if let Some(i) = self.parts.iter().position(|p| self.parts.iter().any(|q| matches!(q, Ty::ArrayOf(e) if **e == *p))) {
@@ -263,6 +264,7 @@ impl NamedUnion {
         }
         if inline
             && self.parts.first() == Some(&Ty::Str)
+            && !self.parts.iter().any(|p| matches!(p, Ty::Obj(n) if n == "JsSymbol"))
             && let Some(i) = self.parts.iter().position(|p| matches!(p, Ty::Num | Ty::NumEnum(_)))
         {
             return Some(i);
@@ -372,6 +374,7 @@ impl Model {
                 Ty::Bool => "boolean".into(),
                 Ty::ArrayOf(e) if primary.is_some_and(|q| **e == u.parts[q]) || self.of_members(e, u) => "list".into(),
                 Ty::Obj(n) if self.is_callback(n) => "fn".into(),
+                Ty::Obj(n) if n == "JsSymbol" => "symbol".into(),
                 // Untyped, the only array beside objects: `T | T[]` of a union `T`, flattened.
                 Ty::Array if primary.is_none() && u.parts.iter().filter(|q| matches!(q, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() == 1 => "list".into(),
                 Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),

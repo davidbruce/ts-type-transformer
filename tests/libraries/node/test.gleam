@@ -172,7 +172,7 @@ pub fn main() {
 
   // ---- events ----
   let bus = events.new()
-  let name = runtime.dynamic("greet")
+  let name = "greet"
   let log = cell.new([])
   let on_greet = fn(args) {
     let words =
@@ -205,7 +205,7 @@ pub fn main() {
     + check(cell.get(log) == ["again", "hi+there"], "emit again")
     + check(cell.get(count) == 1, "once ran only once")
     + check(
-      !emitter.emit(bus, runtime.dynamic("nobody"), []),
+      !emitter.emit(bus, "nobody", []),
       "emit with no listener",
     )
     + check(list.length(emitter.event_names(bus)) == 1, "event_names")
@@ -223,9 +223,9 @@ pub fn main() {
     passed + check(emitter.get_max_listeners(bus) == 3.0, "max listeners")
 
   // events.once: a promise of the arguments of the next emit.
-  let promise = events.once(bus, runtime.dynamic("ready"))
+  let promise = events.once(bus, "ready")
   let _ =
-    emitter.emit(bus, runtime.dynamic("ready"), [
+    emitter.emit(bus, "ready", [
       runtime.dynamic("go"),
       runtime.dynamic("now"),
     ])

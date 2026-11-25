@@ -158,7 +158,7 @@ pub fn main() {
   let _ =
     eventful.on(
       e_charts_type.upcast(chart) |> chart_as_eventful,
-      runtime.dynamic("highlight"),
+      "highlight",
       fn(_) {
         cell.set(seen, cell.get(seen) + 1)
         None

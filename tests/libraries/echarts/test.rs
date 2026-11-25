@@ -125,7 +125,7 @@ pub extern "C" fn run() {
     chart.on("custom", &handler);
     chart.trigger("custom", vec![num(42.0), num(1.0)]);
     check!(heard.get() == 42.0 && count.get() == 2);
-    chart.off_with(Some(&text("custom")), None);
+    chart.off_with("custom", None);
     chart.trigger("custom", vec![num(7.0)]);
     check!(heard.get() == 42.0);
 

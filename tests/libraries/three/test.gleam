@@ -16,7 +16,6 @@ import bindings/normal_buffer_attributes
 import bindings/object3d
 import bindings/quaternion
 import bindings/raycaster
-import bindings/runtime
 import bindings/sphere
 import bindings/types as t
 import bindings/vector3
@@ -417,11 +416,11 @@ pub fn main() {
       "a corner of the box",
     )
     + check(
-      buffer_geometry.has_attribute(geometry, runtime.dynamic("normal")),
+      buffer_geometry.has_attribute(geometry, "normal"),
       "has normals",
     )
     + check(
-      !buffer_geometry.has_attribute(geometry, runtime.dynamic("color")),
+      !buffer_geometry.has_attribute(geometry, "color"),
       "no colours",
     )
   buffer_geometry.compute_bounding_box(geometry)

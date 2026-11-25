@@ -121,7 +121,7 @@ export fn run() void {
     const def = helper.accessor(.{ .string = b.JsString.from("age") }, .{ .ColumnHelper_accessor_column_header_string = column });
     expect(def.h != 0, @src());
     const keyed: b.ColumnHelper_accessor_result_accessorKey = .{ .h = def.h };
-    expect(keyed.getAccessorKey().toString().eql("age"), @src());
+    expect(keyed.getAccessorKey().string.eql("age"), @src());
 
     // FINDING 13: a table cannot be built. constructTable needs options.features with a coreReactivityFeature
     // whose createWritableAtom returns an Atom, but Atom is an opaque handle (from @tanstack/store, not bound),
