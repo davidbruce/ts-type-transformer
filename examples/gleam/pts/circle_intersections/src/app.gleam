@@ -33,7 +33,7 @@ pub fn main() -> Nil {
     |> canvas_space_options.with_retina(True)
 
   let cs =
-    canvas_space.new_with(Some(t.StringOrElementString("#pt")), None)
+    canvas_space.new_with("#pt", None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 
@@ -56,14 +56,8 @@ pub fn main() -> Nil {
           mk_pt(cx -. ca *. half_len, cy -. sa *. half_len),
           mk_pt(cx +. ca *. half_len, cy +. sa *. half_len),
         ])
-      canvas_form.stroke_only_with(
-        form,
-        t.CanvasFormFillCString("#999999"),
-        Some(1.2),
-        None,
-        None,
-      )
-      |> canvas_form.line(t.PtLikeIterableGroup(chord))
+      canvas_form.stroke_only_with(form, "#999999", 1.2, None, None)
+      |> canvas_form.line_group(chord)
 
       let probe_center = case
         pt.get_x(pointer) >. 1.0 || pt.get_y(pointer) >. 1.0
@@ -71,7 +65,7 @@ pub fn main() -> Nil {
         True -> pointer
         False -> c
       }
-      let probe = circle.from_center(t.PtLikePt(probe_center), min_dim *. 0.2)
+      let probe = circle.from_center_pt(probe_center, min_dim *. 0.2)
 
       let targets =
         list.map([0, 1, 2, 3, 4], fn(i) {
@@ -81,40 +75,25 @@ pub fn main() -> Nil {
           let tc =
             mk_pt(cx +. cos(theta) *. orbit_r, cy +. sin(theta) *. orbit_r)
           let tr = min_dim *. { 0.11 +. 0.025 *. int.to_float(i % 3) }
-          let target = circle.from_center(t.PtLikePt(tc), tr)
+          let target = circle.from_center_pt(tc, tr)
 
-          canvas_form.fill(form, t.CanvasFormFillCString("#f7f7f7"))
-          |> canvas_form.stroke_with(
-            t.CanvasFormFillCString("#737373"),
-            Some(1.4),
-            None,
-            None,
-          )
-          |> canvas_form.circle(t.PtLikeIterableGroup(target))
+          canvas_form.fill(form, "#f7f7f7")
+          |> canvas_form.stroke_with("#737373", 1.4, None, None)
+          |> canvas_form.circle_group(target)
 
           case
-            line.perpendicular_from_pt_with(
+            line.perpendicular_from_pt_of_with(
               t.PtIterableGroup(chord),
               t.PtLikePt(tc),
-              Some(False),
+              False,
             )
           {
             Some(foot) -> {
               let stem = group.new([tc, foot])
-              canvas_form.stroke_only_with(
-                form,
-                t.CanvasFormFillCString("#b5b5b5"),
-                Some(1.0),
-                None,
-                None,
-              )
-              |> canvas_form.line(t.PtLikeIterableGroup(stem))
-              |> canvas_form.fill_only(t.CanvasFormFillCString("#555555"))
-              |> canvas_form.point_with(
-                t.PtLikePt(foot),
-                Some(2.5),
-                Some("circle"),
-              )
+              canvas_form.stroke_only_with(form, "#b5b5b5", 1.0, None, None)
+              |> canvas_form.line_group(stem)
+              |> canvas_form.fill_only("#555555")
+              |> canvas_form.point_pt_with(foot, 2.5, "circle")
               Nil
             }
             None -> Nil
@@ -127,61 +106,39 @@ pub fn main() -> Nil {
       let pcy = pt.get_y(probe_center)
       let px1 = group.new([mk_pt(pcx -. 6.0, pcy), mk_pt(pcx +. 6.0, pcy)])
       let py1 = group.new([mk_pt(pcx, pcy -. 6.0), mk_pt(pcx, pcy +. 6.0)])
-      canvas_form.stroke_only_with(
-        form,
-        t.CanvasFormFillCString("#111111"),
-        Some(2.0),
-        None,
-        None,
-      )
-      |> canvas_form.circle(t.PtLikeIterableGroup(probe))
-      |> canvas_form.stroke_only_with(
-        t.CanvasFormFillCString("#111111"),
-        Some(1.4),
-        None,
-        None,
-      )
-      |> canvas_form.line(t.PtLikeIterableGroup(px1))
-      |> canvas_form.line(t.PtLikeIterableGroup(py1))
+      canvas_form.stroke_only_with(form, "#111111", 2.0, None, None)
+      |> canvas_form.circle_group(probe)
+      |> canvas_form.stroke_only_with("#111111", 1.4, None, None)
+      |> canvas_form.line_group(px1)
+      |> canvas_form.line_group(py1)
 
       list.each(targets, fn(target) {
         let hits =
-          circle.intersect_circle2d(
+          circle.intersect_circle2d_of(
             t.PtIterableGroup(probe),
             t.PtIterableGroup(target),
           )
         let hit_list = group.to_list(hits)
         case list.length(hit_list) == 2 {
           True -> {
-            canvas_form.stroke_only_with(
-              form,
-              t.CanvasFormFillCString("#111111"),
-              Some(1.4),
-              None,
-              None,
-            )
-            |> canvas_form.line(t.PtLikeIterableGroup(hits))
+            canvas_form.stroke_only_with(form, "#111111", 1.4, None, None)
+            |> canvas_form.line_group(hits)
             Nil
           }
           False -> Nil
         }
         list.each(hit_list, fn(h) {
-          canvas_form.fill(form, t.CanvasFormFillCString("#ffffff"))
-          |> canvas_form.stroke_with(
-            t.CanvasFormFillCString("#111111"),
-            Some(2.0),
-            None,
-            None,
-          )
-          |> canvas_form.point_with(t.PtLikePt(h), Some(5.0), Some("circle"))
+          canvas_form.fill(form, "#ffffff")
+          |> canvas_form.stroke_with("#111111", 2.0, None, None)
+          |> canvas_form.point_pt_with(h, 5.0, "circle")
           Nil
         })
       })
     })
 
-  canvas_space.add(cs, t.i_player_or_animate_callback_fn_i_player(player))
-  canvas_space.bind_mouse_with(cs, Some(True), None)
-  canvas_space.bind_touch_with(cs, Some(True), None, None)
+  canvas_space.add_i_player(cs, player)
+  canvas_space.bind_mouse(cs)
+  canvas_space.bind_touch(cs)
   canvas_space.play(cs)
   Nil
 }

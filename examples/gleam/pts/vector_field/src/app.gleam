@@ -1,7 +1,7 @@
 import gleam/float
 import gleam/int
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{None}
 import pts/canvas_form
 import pts/canvas_space
 import pts/canvas_space_options
@@ -13,7 +13,6 @@ import pts/line
 import pts/num
 import pts/pt
 import pts/runtime as r
-import pts/types as t
 
 @external(javascript, "./app_ffi.mjs", "sin")
 fn sin(x: Float) -> Float
@@ -26,7 +25,7 @@ pub fn main() -> Nil {
     |> canvas_space_options.with_retina(True)
 
   let cs =
-    canvas_space.new_with(Some(t.StringOrElementString("#pt")), None)
+    canvas_space.new_with("#pt", None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 
@@ -52,48 +51,29 @@ pub fn main() -> Nil {
 
         canvas_form.stroke_only_with(
           form,
-          t.CanvasFormFillCString(
-            "hsla(0, 0%, " <> light <> "%, " <> float.to_string(alpha) <> ")",
-          ),
-          Some(1.5 +. 2.5 *. weight),
+          "hsla(0, 0%, " <> light <> "%, " <> float.to_string(alpha) <> ")",
+          1.5 +. 2.5 *. weight,
           None,
           None,
         )
-        |> canvas_form.line(
-          t.PtLikeIterableGroup(line.from_angle(t.PtLikePt(p), angle, len)),
-        )
-        |> canvas_form.fill_only(t.CanvasFormFillCString(
-          "hsla(0, 0%, " <> light <> "%, 0.9)",
+        |> canvas_form.line_group(line.from_angle_pt(p, angle, len))
+        |> canvas_form.fill_only("hsla(0, 0%, " <> light <> "%, 0.9)")
+        |> canvas_form.circle_group(circle.from_center_pt(
+          p,
+          1.5 +. 4.5 *. weight *. weight,
         ))
-        |> canvas_form.circle(
-          t.PtLikeIterableGroup(circle.from_center(
-            t.PtLikePt(p),
-            1.5 +. 4.5 *. weight *. weight,
-          )),
-        )
         Nil
       })
 
       let ring_radius = 18.0 +. 6.0 *. sin(time *. 0.004)
-      canvas_form.stroke_only_with(
-        form,
-        t.CanvasFormFillCString("#11111199"),
-        Some(2.0),
-        None,
-        None,
-      )
-      |> canvas_form.circle(
-        t.PtLikeIterableGroup(circle.from_center(
-          t.PtLikePt(pointer),
-          ring_radius,
-        )),
-      )
+      canvas_form.stroke_only_with(form, "#11111199", 2.0, None, None)
+      |> canvas_form.circle_group(circle.from_center_pt(pointer, ring_radius))
       Nil
     })
 
-  canvas_space.add(cs, t.i_player_or_animate_callback_fn_i_player(player))
-  canvas_space.bind_mouse_with(cs, Some(True), None)
-  canvas_space.bind_touch_with(cs, Some(True), None, None)
+  canvas_space.add_i_player(cs, player)
+  canvas_space.bind_mouse(cs)
+  canvas_space.bind_touch(cs)
   canvas_space.play(cs)
   Nil
 }

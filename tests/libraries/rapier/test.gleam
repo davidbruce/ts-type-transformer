@@ -73,11 +73,7 @@ fn run() -> Int {
       rigid_body_desc.set_translation(rigid_body_desc.fixed(), 0.0, 0.0, 0.0),
     )
   let ground_collider =
-    world.create_collider_with(
-      w,
-      collider_desc.cuboid(10.0, 0.5, 10.0),
-      Some(ground),
-    )
+    world.create_collider_with(w, collider_desc.cuboid(10.0, 0.5, 10.0), ground)
   let passed =
     passed
     + check(rigid_body.is_fixed(ground), "the ground is fixed")
@@ -99,7 +95,7 @@ fn run() -> Int {
   let box_shape =
     collider_desc.cuboid(0.5, 0.5, 0.5)
     |> collider_desc.set_active_events(t.ActiveEventsCollisionEvents)
-  let box_collider = world.create_collider_with(w, box_shape, Some(box_body))
+  let box_collider = world.create_collider_with(w, box_shape, box_body)
   let passed =
     passed
     + check(rigid_body.is_dynamic(box_body), "the box is dynamic")
@@ -131,7 +127,7 @@ fn run() -> Int {
   let queue = event_queue.new(True)
   let started = cell.new([])
   let step_with_events = fn() {
-    world.step_with(w, Some(queue), None)
+    world.step_with(w, queue, None)
     event_queue.drain_collision_events(queue, fn(a, b, began) {
       cell.set(started, [#(a, b, began), ..cell.get(started)])
     })

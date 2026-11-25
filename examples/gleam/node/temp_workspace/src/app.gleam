@@ -1,14 +1,12 @@
 import gleam/float
 import gleam/int
 import gleam/io
-import gleam/option.{Some}
 import node/areas/fs
 import node/areas/fs/rm_options
 import node/areas/fs/stats
 import node/areas/fs/stats_base
 import node/areas/path
 import node/buffer
-import node/types as t
 
 fn check(ok: Bool, what: String) -> Int {
   case ok {
@@ -17,43 +15,33 @@ fn check(ok: Bool, what: String) -> Int {
   }
 }
 
-fn str(s: String) {
-  t.PathLikeString(s)
-}
-
 fn read_text(p: String) -> String {
-  buffer.to_string(fs.read_file_sync(t.PathOrFileDescriptorString(p)))
+  buffer.to_string(fs.read_file_sync(p))
 }
 
 pub fn main() -> Nil {
   let dir = fs.mkdtemp_sync("/tmp/tsrs-node-ws-")
-  let st_dir = fs.stat_sync(str(dir))
+  let st_dir = fs.stat_sync(dir)
   let passed =
     check(
-      fs.exists_sync(str(dir)) && stats_base.is_directory(st_dir),
+      fs.exists_sync(dir) && stats_base.is_directory(st_dir),
       "workspace created",
     )
 
   let notes = path.join([dir, "notes.txt"])
-  fs.write_file_sync(
-    t.PathOrFileDescriptorString(notes),
-    t.WriteFileDataString("alpha\nbeta\n"),
-  )
-  let st1 = fs.stat_sync(str(notes))
+  fs.write_file_sync(notes, "alpha\nbeta\n")
+  let st1 = fs.stat_sync(notes)
   let s1 = stats.get_size(st1)
   let passed =
     passed
     + check(
-      fs.exists_sync(str(notes)) && stats_base.is_file(st1) && s1 == 11.0,
+      fs.exists_sync(notes) && stats_base.is_file(st1) && s1 == 11.0,
       "initial write and size",
     )
 
-  fs.append_file_sync(
-    t.PathOrFileDescriptorString(notes),
-    t.StringOrUint8ArrayString("gamma\n"),
-  )
+  fs.append_file_sync(notes, "gamma\n")
   let text = read_text(notes)
-  let st2 = fs.stat_sync(str(notes))
+  let st2 = fs.stat_sync(notes)
   let s2 = stats.get_size(st2)
   let passed =
     passed
@@ -61,29 +49,26 @@ pub fn main() -> Nil {
 
   let backup = path.join([dir, "backup.txt"])
   let archive = path.join([dir, "archive.txt"])
-  fs.copy_file_sync(str(notes), str(backup))
-  let passed = passed + check(fs.exists_sync(str(backup)), "copyFileSync")
+  fs.copy_file_sync(notes, backup)
+  let passed = passed + check(fs.exists_sync(backup), "copyFileSync")
 
-  fs.rename_sync(str(backup), str(archive))
+  fs.rename_sync(backup, archive)
   let passed =
     passed
-    + check(
-      !fs.exists_sync(str(backup)) && fs.exists_sync(str(archive)),
-      "renameSync",
-    )
+    + check(!fs.exists_sync(backup) && fs.exists_sync(archive), "renameSync")
     + check(read_text(archive) == text, "archive matches notes")
 
-  fs.unlink_sync(str(archive))
-  let passed = passed + check(!fs.exists_sync(str(archive)), "unlinkSync")
+  fs.unlink_sync(archive)
+  let passed = passed + check(!fs.exists_sync(archive), "unlinkSync")
 
   let rm =
     rm_options.create()
     |> rm_options.with_recursive(True)
     |> rm_options.with_force(True)
-  fs.rm_sync_with(str(dir), Some(rm))
+  fs.rm_sync_with(dir, rm)
   let passed =
     passed
-    + check(!fs.exists_sync(str(dir)), "rmSync recursive")
+    + check(!fs.exists_sync(dir), "rmSync recursive")
     + check(True, "workspace cleanup verified")
 
   io.println("workspace=" <> dir)

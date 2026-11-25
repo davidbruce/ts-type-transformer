@@ -16,8 +16,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let day = dt.DateArgDate
-
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
       let h1 = document.create_element(doc, tag.h1)
@@ -55,7 +53,7 @@ pub fn main() -> Nil {
       element.set_class_name(timeline, "timeline")
       list.each(milestones, fn(item) {
         let #(d, title) = item
-        let same = df.is_same_day(day(d), day(anchor))
+        let same = df.is_same_day(d, anchor)
         let row = document.create_element(doc, tag.div)
         element.set_class_name(row, case same {
           True -> "milestone anchor"
@@ -66,7 +64,7 @@ pub fn main() -> Nil {
         element.set_class_name(s_date, "muted")
         node.set_text_content(
           s_date,
-          Some(df.format_date(day(d), "yyyy-MM-dd (EEE)")),
+          Some(df.format_date(d, "yyyy-MM-dd (EEE)")),
         )
 
         let s_title = document.create_element(doc, tag.span)
@@ -78,13 +76,12 @@ pub fn main() -> Nil {
           s_rel,
           Some(case same {
             True -> "today (anchor)"
-            False -> df.format_distance_with(day(d), day(anchor), Some(opts))
+            False -> df.format_distance_with(d, anchor, opts)
           }),
         )
 
-        let strict = df.format_distance_strict(day(d), day(anchor))
-        let cmp =
-          int.to_string(float.round(df.compare_asc(day(d), day(anchor))))
+        let strict = df.format_distance_strict(d, anchor)
+        let cmp = int.to_string(float.round(df.compare_asc(d, anchor)))
         let s_strict = document.create_element(doc, tag.span)
         element.set_class_name(s_strict, "muted")
         node.set_text_content(s_strict, Some(strict <> " · cmp " <> cmp))
@@ -92,10 +89,10 @@ pub fn main() -> Nil {
         let status = case same {
           True -> "ANCHOR"
           False ->
-            case df.is_before(day(d), day(anchor)) {
+            case df.is_before(d, anchor) {
               True -> "PAST"
               False ->
-                case df.is_after(day(d), day(anchor)) {
+                case df.is_after(d, anchor) {
                   True -> "FUTURE"
                   False -> "OTHER"
                 }
@@ -116,12 +113,12 @@ pub fn main() -> Nil {
       node.append_child(tl_card, timeline)
       node.append_child(app, tl_card)
 
-      let date_args = list.map(milestones, fn(item) { day(item.0) })
+      let date_args = list.map(milestones, fn(item) { dt.DateArgDate(item.0) })
       let earliest = df.min(date_args)
       let latest = df.max(date_args)
       let span_days =
         int.to_string(
-          float.round(df.difference_in_calendar_days(day(latest), day(earliest))),
+          float.round(df.difference_in_calendar_days(latest, earliest)),
         )
 
       let sum_card = document.create_element(doc, tag.div)
@@ -135,8 +132,8 @@ pub fn main() -> Nil {
       element.set_class_name(summary, "summary")
       list.each(
         [
-          "Earliest: " <> df.format_date(day(earliest), "yyyy-MM-dd"),
-          "Latest: " <> df.format_date(day(latest), "yyyy-MM-dd"),
+          "Earliest: " <> df.format_date(earliest, "yyyy-MM-dd"),
+          "Latest: " <> df.format_date(latest, "yyyy-MM-dd"),
           "Total Span: " <> span_days <> " days",
         ],
         fn(txt) {

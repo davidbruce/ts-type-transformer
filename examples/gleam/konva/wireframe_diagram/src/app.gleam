@@ -34,15 +34,15 @@ fn stage_box(
     group_config.create()
     |> group_config.with_x(x)
     |> group_config.with_y(95.0)
-  let g = group.new_with(Some(gc))
+  let g = group.new_with(gc)
 
   let rc =
     rect_config.create()
     |> rect_config.with_width(126.0)
     |> rect_config.with_height(68.0)
-    |> rect_config.with_corner_radius(t.NumberOrNumberArrayNumber(3.0))
-    |> rect_config.with_fill(t.StringOrCanvasGradientString(fill_hex))
-    |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> rect_config.with_corner_radius(3.0)
+    |> rect_config.with_fill(fill_hex)
+    |> rect_config.with_stroke("#111111")
     |> rect_config.with_stroke_width(2.0)
 
   let t1 =
@@ -53,7 +53,7 @@ fn stage_box(
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_style("bold")
     |> text_config.with_font_family("monospace")
-    |> text_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
+    |> text_config.with_fill(ink_hex)
 
   let t2 =
     text_config.create()
@@ -62,12 +62,12 @@ fn stage_box(
     |> text_config.with_text(sub)
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
-    |> text_config.with_fill(t.StringOrCanvasGradientString(ink_hex))
+    |> text_config.with_fill(ink_hex)
 
   container.add(g, [
-    node.upcast(rect.new_with(Some(rc))),
-    node.upcast(text.new_with(Some(t1))),
-    node.upcast(text.new_with(Some(t2))),
+    node.upcast(rect.new_with(rc)),
+    node.upcast(text.new_with(t1)),
+    node.upcast(text.new_with(t2)),
   ])
   node.upcast(g)
 }
@@ -75,19 +75,19 @@ fn stage_box(
 fn make_arrow(pts: List(Float)) -> t.Node(Nil) {
   let ac =
     arrow_config.create()
-    |> line_config.with_points(t.LinePointsArray(pts))
+    |> line_config.with_points(pts)
     |> arrow_config.with_pointer_length(8.0)
     |> arrow_config.with_pointer_width(8.0)
-    |> arrow_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-    |> arrow_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> arrow_config.with_fill("#111111")
+    |> arrow_config.with_stroke("#111111")
     |> arrow_config.with_stroke_width(2.0)
-  node.upcast(arrow.new_with(Some(ac)))
+  node.upcast(arrow.new_with(ac))
 }
 
 pub fn main() -> Nil {
   let sc =
     stage_config.create()
-    |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
+    |> stage_config.with_container("stage")
     |> stage_config.with_width(680.0)
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
@@ -101,14 +101,21 @@ pub fn main() -> Nil {
     |> rect_config.with_y(0.0)
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
+    |> rect_config.with_fill("#ffffff")
 
   let fbc =
     line_config.create()
-    |> line_config.with_points(
-      t.LinePointsArray([589.0, 163.0, 589.0, 212.0, 91.0, 212.0, 91.0, 168.0]),
-    )
-    |> line_config.with_stroke(t.StringOrCanvasGradientString("#737373"))
+    |> line_config.with_points([
+      589.0,
+      163.0,
+      589.0,
+      212.0,
+      91.0,
+      212.0,
+      91.0,
+      168.0,
+    ])
+    |> line_config.with_stroke("#737373")
     |> line_config.with_stroke_width(1.5)
     |> line_config.with_dash([6.0, 4.0])
 
@@ -118,9 +125,9 @@ pub fn main() -> Nil {
     |> rect_config.with_y(255.0)
     |> rect_config.with_width(624.0)
     |> rect_config.with_height(58.0)
-    |> rect_config.with_corner_radius(t.NumberOrNumberArrayNumber(3.0))
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#f7f7f7"))
-    |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> rect_config.with_corner_radius(3.0)
+    |> rect_config.with_fill("#f7f7f7")
+    |> rect_config.with_stroke("#111111")
     |> rect_config.with_stroke_width(1.5)
 
   let btxt =
@@ -130,10 +137,10 @@ pub fn main() -> Nil {
     |> text_config.with_text("Shared DOM & Package Handle Runtime")
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
-    |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> text_config.with_fill("#111111")
 
   container.add(l, [
-    node.upcast(rect.new_with(Some(bg))),
+    node.upcast(rect.new_with(bg)),
     stage_box(28.0, "01 PARSE", ".d.ts AST", "#ffffff", "#111111"),
     stage_box(194.0, "02 LOWER", "Typed IR", "#f7f7f7", "#111111"),
     stage_box(360.0, "03 EMIT", "6 Targets", "#efefef", "#111111"),
@@ -143,9 +150,9 @@ pub fn main() -> Nil {
     make_arrow([486.0, 129.0, 522.0, 129.0]),
     make_arrow([257.0, 163.0, 257.0, 251.0]),
     make_arrow([423.0, 163.0, 423.0, 251.0]),
-    node.upcast(line.new_with(Some(fbc))),
-    node.upcast(rect.new_with(Some(bar))),
-    node.upcast(text.new_with(Some(btxt))),
+    node.upcast(line.new_with(fbc)),
+    node.upcast(rect.new_with(bar)),
+    node.upcast(text.new_with(btxt)),
   ])
 
   node.draw(l)

@@ -1,6 +1,5 @@
 import gleam/int
 import gleam/io
-import gleam/option.{Some}
 import node/areas/path
 import node/areas/path/format_input_path_object as path_format
 import node/areas/path/parsed_path
@@ -47,8 +46,7 @@ pub fn main() -> Nil {
       "path.basename",
     )
     + check(
-      path.basename_with("/srv/app/archive.tar.gz", Some(".gz"))
-        == "archive.tar",
+      path.basename_with("/srv/app/archive.tar.gz", ".gz") == "archive.tar",
       "path.basename suffix",
     )
     + check(path.extname("/srv/app/archive.tar.gz") == ".gz", "path.extname")

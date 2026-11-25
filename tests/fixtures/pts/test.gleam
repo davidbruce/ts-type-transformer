@@ -7,7 +7,7 @@ import bindings/pt
 import bindings/runtime as r
 import bindings/types as t
 import gleam/io
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 
 fn check(ok: Bool, what: String) -> Nil {
   case ok {
@@ -35,7 +35,7 @@ pub fn main() {
   let _ = pt.add(p, [r.dynamic(1.0), r.dynamic(1.0)])
   check(pt.get_x(p) == 4.0, "add changes it")
   check(pt.equals_pt(p, moved), "union argument")
-  check(pt.equals_pt_with(pt.clone(p), p, Some(0.001)), "optional argument")
+  check(pt.equals_pt_with(pt.clone(p), p, 0.001), "optional argument")
 
   // Statics.
   check(
@@ -44,7 +44,7 @@ pub fn main() {
   )
   check(geom.to_degree(3.141592653589793) == 180.0, "static")
   check(
-    pt.to_string(pt.make_with(3.0, Some(2.0), None)) == "Pt(2, 2, 2)",
+    pt.to_string(pt.make_with(3.0, 2.0, False)) == "Pt(2, 2, 2)",
     "optional arguments",
   )
 

@@ -6,7 +6,6 @@ import gleam/list
 import gleam/option.{None, Some}
 import konva/circle
 import konva/circle_config
-import konva/container
 import konva/layer
 import konva/node
 import konva/rect
@@ -33,18 +32,19 @@ fn add_caption(l: t.Layer(Nil), x: Float, y: Float, label: String) -> Nil {
     |> text_config.with_text(label)
     |> text_config.with_font_size(11.0)
     |> text_config.with_font_family("monospace")
-    |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
-  container.add(l, [text.new_with(Some(tc))])
+    |> text_config.with_fill("#555555")
+  layer.add(l, [text.new_with(tc)])
   Nil
 }
 
 pub fn main() -> Nil {
-  let sc =
-    stage_config.create()
-    |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
-    |> stage_config.with_width(680.0)
-    |> stage_config.with_height(400.0)
-  let stg = stage.new(sc)
+  let stg =
+    stage.new(
+      stage_config.create()
+      |> stage_config.with_container("stage")
+      |> stage_config.with_width(680.0)
+      |> stage_config.with_height(400.0),
+    )
 
   let l = layer.new()
   stage.add(stg, l, [])
@@ -55,7 +55,7 @@ pub fn main() -> Nil {
     |> rect_config.with_y(0.0)
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
+    |> rect_config.with_fill("#ffffff")
 
   // Row 1: Rounded filled Rect, dashed Rect, Circle, Hexagon.
   let r1 =
@@ -64,8 +64,8 @@ pub fn main() -> Nil {
     |> rect_config.with_y(55.0)
     |> rect_config.with_width(110.0)
     |> rect_config.with_height(76.0)
-    |> rect_config.with_corner_radius(t.NumberOrNumberArrayNumber(8.0))
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> rect_config.with_corner_radius(8.0)
+    |> rect_config.with_fill("#111111")
 
   let r2 =
     rect_config.create()
@@ -73,8 +73,8 @@ pub fn main() -> Nil {
     |> rect_config.with_y(55.0)
     |> rect_config.with_width(110.0)
     |> rect_config.with_height(76.0)
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-    |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> rect_config.with_fill("#ffffff")
+    |> rect_config.with_stroke("#111111")
     |> rect_config.with_stroke_width(2.0)
     |> rect_config.with_dash([6.0, 4.0])
 
@@ -83,8 +83,8 @@ pub fn main() -> Nil {
     |> circle_config.with_x(415.0)
     |> circle_config.with_y(93.0)
     |> circle_config.with_radius(40.0)
-    |> circle_config.with_fill(t.StringOrCanvasGradientString("#404040"))
-    |> circle_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> circle_config.with_fill("#404040")
+    |> circle_config.with_stroke("#111111")
     |> circle_config.with_stroke_width(2.0)
 
   let pc =
@@ -93,12 +93,8 @@ pub fn main() -> Nil {
     |> regular_polygon_config.with_y(93.0)
     |> regular_polygon_config.with_sides(6.0)
     |> regular_polygon_config.with_radius(42.0)
-    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString(
-      "#efefef",
-    ))
-    |> regular_polygon_config.with_stroke(t.StringOrCanvasGradientString(
-      "#111111",
-    ))
+    |> regular_polygon_config.with_fill("#efefef")
+    |> regular_polygon_config.with_stroke("#111111")
     |> regular_polygon_config.with_stroke_width(2.0)
 
   // Row 2: Star, Ring, Wedge, Framed Text.
@@ -109,8 +105,8 @@ pub fn main() -> Nil {
     |> star_config.with_num_points(5.0)
     |> star_config.with_inner_radius(19.0)
     |> star_config.with_outer_radius(44.0)
-    |> star_config.with_fill(t.StringOrCanvasGradientString("#737373"))
-    |> star_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> star_config.with_fill("#737373")
+    |> star_config.with_stroke("#111111")
     |> star_config.with_stroke_width(2.0)
 
   let rc =
@@ -119,8 +115,8 @@ pub fn main() -> Nil {
     |> ring_config.with_y(268.0)
     |> ring_config.with_inner_radius(22.0)
     |> ring_config.with_outer_radius(42.0)
-    |> ring_config.with_fill(t.StringOrCanvasGradientString("#d4d4d4"))
-    |> ring_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> ring_config.with_fill("#d4d4d4")
+    |> ring_config.with_stroke("#111111")
     |> ring_config.with_stroke_width(2.0)
 
   let wc =
@@ -130,8 +126,8 @@ pub fn main() -> Nil {
     |> wedge_config.with_radius(44.0)
     |> wedge_config.with_angle(270.0)
     |> wedge_config.with_rotation(-90.0)
-    |> wedge_config.with_fill(t.StringOrCanvasGradientString("#111111"))
-    |> wedge_config.with_stroke(t.StringOrCanvasGradientString("#555555"))
+    |> wedge_config.with_fill("#111111")
+    |> wedge_config.with_stroke("#555555")
     |> wedge_config.with_stroke_width(1.0)
 
   let tf =
@@ -140,8 +136,8 @@ pub fn main() -> Nil {
     |> rect_config.with_y(224.0)
     |> rect_config.with_width(150.0)
     |> rect_config.with_height(88.0)
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#f7f7f7"))
-    |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> rect_config.with_fill("#f7f7f7")
+    |> rect_config.with_stroke("#111111")
     |> rect_config.with_stroke_width(1.5)
 
   let txt =
@@ -151,19 +147,19 @@ pub fn main() -> Nil {
     |> text_config.with_text("KONVA 2D\nMonochrome\nScene Graph")
     |> text_config.with_font_size(13.0)
     |> text_config.with_font_family("monospace")
-    |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> text_config.with_fill("#111111")
 
-  container.add(l, [
-    node.upcast(rect.new_with(Some(bg))),
-    node.upcast(rect.new_with(Some(r1))),
-    node.upcast(rect.new_with(Some(r2))),
-    node.upcast(circle.new_with(Some(cc))),
-    node.upcast(regular_polygon.new_with(Some(pc))),
-    node.upcast(star.new_with(Some(st))),
-    node.upcast(ring.new_with(Some(rc))),
-    node.upcast(wedge.new_with(Some(wc))),
-    node.upcast(rect.new_with(Some(tf))),
-    node.upcast(text.new_with(Some(txt))),
+  layer.add(l, [
+    node.upcast(rect.new_with(bg)),
+    node.upcast(rect.new_with(r1)),
+    node.upcast(rect.new_with(r2)),
+    node.upcast(circle.new_with(cc)),
+    node.upcast(regular_polygon.new_with(pc)),
+    node.upcast(star.new_with(st)),
+    node.upcast(ring.new_with(rc)),
+    node.upcast(wedge.new_with(wc)),
+    node.upcast(rect.new_with(tf)),
+    node.upcast(text.new_with(txt)),
   ])
 
   add_caption(l, 40.0, 142.0, "Rect (filled)")

@@ -64,8 +64,7 @@ pub fn main() {
     )
 
   // Lights.
-  let hemi =
-    main.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.2)), Some(0.75))
+  let hemi = main.create_hemispheric_light_with(#(0.0, 1.0, 0.2), 0.75)
   hemispheric_light.set_diffuse_color(hemi, #(0.75, 0.85, 1.0))
   hemispheric_light.set_ground_color(hemi, #(0.12, 0.14, 0.22))
   let #(dr, dg, db) = hemispheric_light.get_diffuse_color(hemi)
@@ -80,7 +79,7 @@ pub fn main() {
       "hemispheric light",
     )
 
-  let dir = main.create_directional_light_with(#(-1.0, -2.0, -1.2), Some(2.2))
+  let dir = main.create_directional_light_with(#(-1.0, -2.0, -1.2), 2.2)
   directional_light.set_diffuse(dir, #(1.0, 0.96, 0.9))
   let #(_, d1, _) = directional_light.get_diffuse(dir)
   let c6 =
@@ -89,7 +88,7 @@ pub fn main() {
       "directional light",
     )
 
-  let pt = main.create_point_light_with(#(2.8, 1.6, 0.0), Some(8.0))
+  let pt = main.create_point_light_with(#(2.8, 1.6, 0.0), 8.0)
   point_light.set_range(pt, 12.0)
   let c7 =
     check(
@@ -106,7 +105,7 @@ pub fn main() {
   )
   create_pbr_material_props.set_metallic_factor(props, Some(0.75))
   create_pbr_material_props.set_roughness_factor(props, Some(0.22))
-  let pbr = main.create_pbr_material_with(Some(props))
+  let pbr = main.create_pbr_material_with(props)
   let c8 =
     check(
       pbr_material_props.get_metallic_factor(pbr) == Some(0.75)
@@ -126,7 +125,7 @@ pub fn main() {
   let sopts = sphere_options.create()
   sphere_options.set_diameter(sopts, Some(2.0))
   sphere_options.set_segments(sopts, Some(8.0))
-  let sphere = main.create_sphere_data_with(Some(sopts))
+  let sphere = main.create_sphere_data_with(sopts)
   let c10 =
     check(
       sphere_mesh_data.get_vertex_count(sphere) >. 0.0
@@ -137,7 +136,7 @@ pub fn main() {
   let topts = torus_knot_options.create()
   torus_knot_options.set_radius(topts, Some(1.0))
   torus_knot_options.set_tube(topts, Some(0.3))
-  let knot = main.create_torus_knot_data_with(Some(topts))
+  let knot = main.create_torus_knot_data_with(topts)
   let _ = torus_knot_data.get_positions(knot)
   let _ = torus_knot_data.get_indices(knot)
 

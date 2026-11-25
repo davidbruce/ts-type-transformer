@@ -1,6 +1,6 @@
 import date_fns as df
 import date_fns/interval
-import date_fns/types as dt
+import date_fns/types as t
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
@@ -31,8 +31,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let day = dt.DateArgDate
-
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
       let h1 = document.create_element(doc, tag.h1)
@@ -45,9 +43,9 @@ pub fn main() -> Nil {
       node.append_child(app, head)
 
       let ref_day = df.parse_iso("2024-03-15")
-      let month_start = df.start_of_month(day(ref_day))
-      let month_end = df.end_of_month(day(ref_day))
-      let offset = float.round(df.get_day(day(month_start)))
+      let month_start = df.start_of_month(ref_day)
+      let month_end = df.end_of_month(ref_day)
+      let offset = float.round(df.get_day(month_start))
 
       let metrics = document.create_element(doc, tag.div)
       element.set_class_name(metrics, "metrics")
@@ -55,21 +53,21 @@ pub fn main() -> Nil {
         doc,
         metrics,
         "Days in Month",
-        int.to_string(float.round(df.get_days_in_month(day(ref_day)))),
+        int.to_string(float.round(df.get_days_in_month(ref_day))),
       )
       add_metric(
         doc,
         metrics,
         "Quarter",
-        "Q" <> int.to_string(float.round(df.get_quarter(day(ref_day)))),
+        "Q" <> int.to_string(float.round(df.get_quarter(ref_day))),
       )
       add_metric(
         doc,
         metrics,
         "ISO Week",
-        "W" <> int.to_string(float.round(df.get_iso_week(day(ref_day)))),
+        "W" <> int.to_string(float.round(df.get_iso_week(ref_day))),
       )
-      let leap = case df.is_leap_year(day(ref_day)) {
+      let leap = case df.is_leap_year(ref_day) {
         True -> "Yes · #"
         False -> "No · #"
       }
@@ -77,7 +75,7 @@ pub fn main() -> Nil {
         doc,
         metrics,
         "Leap Year / DOY",
-        leap <> int.to_string(float.round(df.get_day_of_year(day(ref_day)))),
+        leap <> int.to_string(float.round(df.get_day_of_year(ref_day))),
       )
       node.append_child(app, metrics)
 
@@ -107,12 +105,12 @@ pub fn main() -> Nil {
 
       let span =
         interval.create()
-        |> interval.with_start(day(month_start))
-        |> interval.with_end(day(month_end))
-      let days = df.each_day_of_interval(span)
+        |> interval.with_start(month_start)
+        |> interval.with_end(month_end)
+      let days = df.each_day_of_interval(span) |> list.map(as_date)
 
       list.each(days, fn(d) {
-        let is_ref = df.is_same_day(d, day(ref_day))
+        let is_ref = df.is_same_day(d, ref_day)
         let is_wknd = df.is_weekend(d)
         let cls = case is_ref, is_wknd {
           True, _ -> "day-cell today"
@@ -142,4 +140,10 @@ pub fn main() -> Nil {
       Nil
     }
   }
+}
+
+// `each_day_of_interval` and `clamp` give back a `DateArg`; JavaScript gives a Date.
+fn as_date(x: t.DateArg) -> t.Date {
+  let assert t.DateArgDate(d) = x
+  d
 }

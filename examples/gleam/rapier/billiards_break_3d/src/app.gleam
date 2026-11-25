@@ -1,4 +1,5 @@
 import babylonjs_lite as b
+import babylonjs_lite/attach_control_options
 import babylonjs_lite/box_options
 import babylonjs_lite/create_pbr_material_props
 import babylonjs_lite/directional_light
@@ -68,7 +69,7 @@ fn mk_pbr(
     |> create_pbr_material_props.with_base_color_factor(#(r, g, bl, 1.0))
     |> create_pbr_material_props.with_metallic_factor(metallic)
     |> create_pbr_material_props.with_roughness_factor(roughness)
-  b.create_pbr_material_with(Some(props))
+  b.create_pbr_material_with(props)
 }
 
 pub fn main() -> Nil {
@@ -106,7 +107,7 @@ pub fn main() -> Nil {
       collider_desc.cuboid(4.6, 0.25, 7.6)
         |> collider_desc.set_friction(0.14)
         |> collider_desc.set_restitution(0.35),
-      Some(bed),
+      bed,
     )
 
     let rails = [
@@ -128,7 +129,7 @@ pub fn main() -> Nil {
         collider_desc.cuboid(hx, hy, hz)
           |> collider_desc.set_friction(0.12)
           |> collider_desc.set_restitution(0.88),
-        Some(rb),
+        rb,
       )
       Nil
     })
@@ -152,7 +153,7 @@ pub fn main() -> Nil {
               |> collider_desc.set_restitution(0.92)
               |> collider_desc.set_friction(0.1)
               |> collider_desc.set_density(1.0),
-            Some(rb),
+            rb,
           )
           [rb, ..inner_acc]
         })
@@ -175,7 +176,7 @@ pub fn main() -> Nil {
         |> collider_desc.set_restitution(0.94)
         |> collider_desc.set_friction(0.1)
         |> collider_desc.set_density(1.25),
-      Some(cue),
+      cue,
     )
 
     rp_rt.ref_set(balls_ref, list.append(rack, [cue]))
@@ -315,7 +316,7 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
+        b.create_engine_html_canvas_element(canvas),
         on_err,
       )
 
@@ -330,32 +331,32 @@ pub fn main() -> Nil {
 
       let camera =
         b.create_arc_rotate_camera(1.18, 0.92, 13.5, b.vec3(0.0, 0.3, -0.4))
-      b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control_with(camera, canvas, Some(scene), None)
+      b.add_to_scene_camera(scene, camera)
+      b.attach_control_with(
+        camera,
+        canvas,
+        scene,
+        attach_control_options.create(),
+      )
 
-      let hemi =
-        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.2)), Some(0.72))
+      let hemi = b.create_hemispheric_light_with(#(0.0, 1.0, 0.2), 0.72)
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.9, 0.95))
       hemispheric_light.set_ground_color(hemi, #(0.12, 0.14, 0.16))
-      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
+      b.add_to_scene_light_base(scene, hemi)
 
-      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.0), Some(2.1))
+      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.0), 2.1)
       directional_light.set_diffuse(dir, #(1.0, 0.97, 0.92))
-      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
+      b.add_to_scene_light_base(scene, dir)
 
       let table_opts =
         box_options.create()
         |> box_options.with_width(9.2)
         |> box_options.with_height(0.5)
         |> box_options.with_depth(15.2)
-      let table =
-        b.create_box_with(
-          engine,
-          Some(bt.NumberOrBoxOptionsBoxOptions(table_opts)),
-        )
+      let table = b.create_box_box_options_with(engine, table_opts)
       observable_vec3.set(scene_node.get_position(table), 0.0, -0.25, 0.0)
       mesh.set_material(table, mk_pbr(0.08, 0.24, 0.18, 0.05, 0.78))
-      b.add_to_scene(scene, bt.scene_entity_mesh(table))
+      b.add_to_scene_mesh(scene, table)
 
       let rail_mat = mk_pbr(0.18, 0.18, 0.2, 0.35, 0.42)
       let rail_meshes = [
@@ -371,14 +372,10 @@ pub fn main() -> Nil {
           |> box_options.with_width(wr)
           |> box_options.with_height(hr)
           |> box_options.with_depth(dr)
-        let r =
-          b.create_box_with(
-            engine,
-            Some(bt.NumberOrBoxOptionsBoxOptions(ropts)),
-          )
+        let r = b.create_box_box_options_with(engine, ropts)
         observable_vec3.set(scene_node.get_position(r), rx, ry, rz)
         mesh.set_material(r, rail_mat)
-        b.add_to_scene(scene, bt.scene_entity_mesh(r))
+        b.add_to_scene_mesh(scene, r)
       })
 
       let cue_mat = mk_pbr(0.96, 0.96, 0.95, 0.15, 0.18)
@@ -393,7 +390,7 @@ pub fn main() -> Nil {
         |> sphere_options.with_segments(24.0)
       let handles =
         int.range(from: 0, to: ball_count, with: [], run: fn(acc, i) {
-          let m = b.create_sphere_with(engine, Some(sopts))
+          let m = b.create_sphere_with(engine, sopts)
           let mat = case i == rack_count {
             True -> cue_mat
             False ->
@@ -405,7 +402,7 @@ pub fn main() -> Nil {
               }
           }
           mesh.set_material(m, mat)
-          b.add_to_scene(scene, bt.scene_entity_mesh(m))
+          b.add_to_scene_mesh(scene, m)
           [
             #(scene_node.get_position(m), scene_node.get_rotation_quaternion(m)),
             ..acc

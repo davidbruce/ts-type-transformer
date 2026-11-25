@@ -1,6 +1,6 @@
 import date_fns as df
 import date_fns/interval
-import date_fns/types as dt
+import date_fns/types as t
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
@@ -13,8 +13,8 @@ fn make_span(s_iso: String, e_iso: String) {
   let s = df.parse_iso(s_iso)
   let e = df.parse_iso(e_iso)
   interval.create()
-  |> interval.with_start(dt.DateArgDate(s))
-  |> interval.with_end(dt.DateArgDate(e))
+  |> interval.with_start(s)
+  |> interval.with_end(e)
 }
 
 pub fn main() -> Nil {
@@ -22,8 +22,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let arg = dt.DateArgDate
-
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
       let h1 = document.create_element(doc, tag.h1)
@@ -39,7 +37,7 @@ pub fn main() -> Nil {
       node.append_child(app, head)
 
       let win_span = make_span("2024-03-01", "2024-03-31")
-      let month_days = df.each_day_of_interval(win_span)
+      let month_days = df.each_day_of_interval(win_span) |> list.map(as_date)
 
       let sprint_a = make_span("2024-03-08", "2024-03-18")
       let tracks = [
@@ -172,7 +170,7 @@ pub fn main() -> Nil {
         fn(p) {
           let #(iso, rule) = p
           let probe = df.parse_iso(iso)
-          let clamped = df.clamp(arg(probe), sprint_a)
+          let clamped = as_date(df.clamp(probe, sprint_a))
           let out_txt = df.format_date(clamped, "yyyy-MM-dd")
           let tr = document.create_element(doc, tag.tr)
           list.each([iso, out_txt, rule], fn(txt) {
@@ -191,4 +189,10 @@ pub fn main() -> Nil {
       Nil
     }
   }
+}
+
+// `each_day_of_interval` and `clamp` give back a `DateArg`; JavaScript gives a Date.
+fn as_date(x: t.DateArg) -> t.Date {
+  let assert t.DateArgDate(d) = x
+  d
 }

@@ -228,20 +228,17 @@ pub fn main() {
       "the paragraph's start and end",
     )
     + check(
-      node.text_between_with(doc, 1.0, 13.0, Some(" "), None) == "Hello World",
+      node.text_between_with(doc, 1.0, 13.0, " ", "") == "Hello World",
       "textBetween with a separator",
     )
-    + check(
-      node.get_text_content(node.cut_with(doc, 2.0, Some(5.0))) == "ell",
-      "cut",
-    )
+    + check(node.get_text_content(node.cut_with(doc, 2.0, 5.0)) == "ell", "cut")
 
   // Nodes made from the schema.
   let abc = schema.text(sch, "abc")
-  let made = schema.node_with(sch, "paragraph", None, Some(abc), None)
-  let linked =
-    schema.mark_with(sch, "link", Some(href_attrs("https://example.com")))
-  let linked_text = schema.text_with(sch, "site", Some([linked]))
+  // No attrs and no marks: empty, as null and undefined are.
+  let made = schema.node_with(sch, "paragraph", attrs.create(), abc, [])
+  let linked = schema.mark_with(sch, "link", href_attrs("https://example.com"))
+  let linked_text = schema.text_with(sch, "site", [linked])
   let passed =
     passed
     + check(
@@ -275,10 +272,7 @@ pub fn main() {
   // A transaction: select, type, mark.
   let tr = editor_state.get_tr(st)
   let _ =
-    transaction.set_selection(
-      tr,
-      text_selection.create_with(doc, 1.0, Some(6.0)),
-    )
+    transaction.set_selection(tr, text_selection.create_with(doc, 1.0, 6.0))
   let st2 = editor_state.apply(st, tr)
   let sel = editor_state.get_selection(st2)
   let passed =
@@ -337,7 +331,7 @@ pub fn main() {
     )
 
   // ---- A plugin with state: counts the transactions that changed the doc ----
-  let key = plugin_key.new_with(Some("counter"))
+  let key = plugin_key.new_with("counter")
   let field = state_field.create()
   // FINDING 19 (awkward): set_key takes a PluginKey(Dynamic, _) and set_plugins a
   // List(Plugin(Dynamic, _)), with no way to widen a Plugin(Float, _): a plugin's
@@ -388,7 +382,7 @@ pub fn main() {
     }
   }
   let typed = editor_state.get_tr(p0)
-  let _ = transaction.insert_text_with(typed, "!", Some(1.0), Some(1.0))
+  let _ = transaction.insert_text_with(typed, "!", 1.0, 1.0)
   let p1 = editor_state.apply(p0, typed)
   let selected = editor_state.get_tr(p1)
   let _ =
@@ -398,7 +392,7 @@ pub fn main() {
     )
   let p2 = editor_state.apply(p1, selected)
   let typed_again = editor_state.get_tr(p2)
-  let _ = transaction.insert_text_with(typed_again, "?", Some(1.0), Some(1.0))
+  let _ = transaction.insert_text_with(typed_again, "?", 1.0, 1.0)
   let p3 = editor_state.apply(p2, typed_again)
   let passed =
     passed
@@ -414,11 +408,11 @@ pub fn main() {
 
   // filterTransaction: applyTransaction refuses a blocked transaction.
   let blocked = editor_state.get_tr(p3)
-  let _ = transaction.insert_text_with(blocked, "#", Some(1.0), Some(1.0))
+  let _ = transaction.insert_text_with(blocked, "#", 1.0, 1.0)
   let _ = transaction.set_meta(blocked, "block", runtime.dynamic(True))
   let refused = editor_state.apply_transaction(p3, blocked)
   let allowed = editor_state.get_tr(p3)
-  let _ = transaction.insert_text_with(allowed, "#", Some(1.0), Some(1.0))
+  let _ = transaction.insert_text_with(allowed, "#", 1.0, 1.0)
   let accepted = editor_state.apply_transaction(p3, allowed)
   let passed =
     passed
@@ -492,7 +486,7 @@ pub fn main() {
       "and a place",
     )
   let typing = editor_state.get_tr(editor_view.get_state(view))
-  let _ = transaction.insert_text_with(typing, "Oh ", Some(1.0), Some(1.0))
+  let _ = transaction.insert_text_with(typing, "Oh ", 1.0, 1.0)
   editor_view.update_state(
     view,
     editor_state.apply(editor_view.get_state(view), typing),
@@ -506,7 +500,7 @@ pub fn main() {
     )
   // The view's dispatch goes to the props' dispatchTransaction.
   let sent = editor_state.get_tr(editor_view.get_state(view))
-  let _ = transaction.insert_text_with(sent, "A ", Some(1.0), Some(1.0))
+  let _ = transaction.insert_text_with(sent, "A ", 1.0, 1.0)
   editor_view.dispatch(view, sent)
   let passed =
     passed
@@ -516,12 +510,12 @@ pub fn main() {
         == "A Oh HelloWorld",
       "and the handler updated the view",
     )
-  // A command, called with the state and the view's dispatch.
+  // A command, called with the state, the view's dispatch and the view (unused).
   let command = fn(state, dispatch, _) {
     case dispatch {
       Some(send) -> {
         let tr = editor_state.get_tr(state)
-        let _ = transaction.insert_text_with(tr, "C ", Some(1.0), Some(1.0))
+        let _ = transaction.insert_text_with(tr, "C ", 1.0, 1.0)
         send(tr)
         True
       }
@@ -532,8 +526,8 @@ pub fn main() {
     pstate.call_command_with(
       command,
       editor_view.get_state(view),
-      Some(fn(tr) { editor_view.dispatch(view, tr) }),
-      None,
+      fn(tr) { editor_view.dispatch(view, tr) },
+      view,
     )
   let dry = pstate.call_command(command, editor_view.get_state(view))
   let passed =

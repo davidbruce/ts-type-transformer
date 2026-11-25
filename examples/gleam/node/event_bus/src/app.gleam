@@ -1,9 +1,9 @@
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{Some}
 import node/areas/events/event_emitter as events
 import node/namespaces/node_js/event_emitter as emitter
 import node/runtime
@@ -26,10 +26,7 @@ pub fn main() -> Nil {
   let once_calls = runtime.ref_new(0)
   let shutdown_calls = runtime.ref_new(0)
 
-  let ev_metric = runtime.dynamic("metric")
-  let ev_shutdown = runtime.dynamic("shutdown")
-  let ev_idle = runtime.dynamic("idle")
-
+  // kept in a variable: remove_listener needs the same function
   let on_metric = fn(args) {
     runtime.ref_update(metric_calls, fn(n) { n + 1 })
     case args {
@@ -44,31 +41,29 @@ pub fn main() -> Nil {
       [] -> Nil
     }
   }
-  let on_once = fn(_) {
+
+  emitter.on(bus, "metric", on_metric)
+  emitter.once(bus, "metric", fn(_) {
     runtime.ref_update(once_calls, fn(n) { n + 1 })
     Nil
-  }
-  let on_shutdown = fn(_) {
+  })
+  emitter.on(bus, "shutdown", fn(_) {
     runtime.ref_update(shutdown_calls, fn(n) { n + 1 })
     Nil
-  }
-
-  emitter.on(bus, ev_metric, on_metric)
-  emitter.once(bus, ev_metric, on_once)
-  emitter.on(bus, ev_shutdown, on_shutdown)
+  })
 
   let passed =
     passed
     + check(
-      emitter.listener_count(bus, ev_metric) == 2.0,
+      emitter.listener_count(bus, "metric") == 2.0,
       "initial listenerCount",
     )
     + check(list.length(emitter.event_names(bus)) == 2, "eventNames")
 
   let emitted1 =
-    emitter.emit(bus, ev_metric, [
-      runtime.dynamic(101.0),
-      runtime.dynamic("ok"),
+    emitter.emit(bus, "metric", [
+      dynamic.float(101.0),
+      dynamic.string("ok"),
     ])
   let passed =
     passed
@@ -78,15 +73,12 @@ pub fn main() -> Nil {
         && runtime.ref_get(once_calls) == 1,
       "first metric emit",
     )
-    + check(
-      emitter.listener_count(bus, ev_metric) == 1.0,
-      "once removes itself",
-    )
+    + check(emitter.listener_count(bus, "metric") == 1.0, "once removes itself")
 
   let emitted2 =
-    emitter.emit(bus, ev_metric, [
-      runtime.dynamic(202.0),
-      runtime.dynamic("ok"),
+    emitter.emit(bus, "metric", [
+      dynamic.float(202.0),
+      dynamic.string("ok"),
     ])
   let passed =
     passed
@@ -97,19 +89,19 @@ pub fn main() -> Nil {
         && runtime.ref_get(once_calls) == 1,
       "second metric emit",
     )
-    + check(!emitter.emit(bus, ev_idle, []), "idle emit false")
+    + check(!emitter.emit(bus, "idle", []), "idle emit false")
 
-  emitter.remove_listener(bus, ev_metric, on_metric)
+  emitter.remove_listener(bus, "metric", on_metric)
   let passed =
     passed
     + check(
-      emitter.listener_count(bus, ev_metric) == 0.0
-        && !emitter.emit(bus, ev_metric, [runtime.dynamic(1.0)]),
+      emitter.listener_count(bus, "metric") == 0.0
+        && !emitter.emit(bus, "metric", [dynamic.float(1.0)]),
       "removeListener",
     )
     + check(runtime.ref_get(metric_calls) == 2, "metric count unchanged")
 
-  emitter.remove_all_listeners_with(bus, Some(ev_shutdown))
+  emitter.remove_all_listeners_with(bus, "shutdown")
   let passed =
     passed
     + check(

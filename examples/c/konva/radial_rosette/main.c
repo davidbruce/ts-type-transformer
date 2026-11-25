@@ -41,7 +41,7 @@ __attribute__((export_name("start"))) void start(void) {
         double a = (double)i * PI / 6.0;
         double pts[] = { cx + 36.0 * cos(a), cy + 36.0 * sin(a), cx + 160.0 * cos(a), cy + 160.0 * sin(a) };
         Konva_LineConfig lc = Konva_LineConfig_create(
-            .points_array = JsArray_double_from(pts, 4),
+            .points = JsArray_double_from(pts, 4),
             .stroke = "#d4d4d4", .strokeWidth = 1
         );
         JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Line_new(lc)));
@@ -52,7 +52,7 @@ __attribute__((export_name("start"))) void start(void) {
         double r0 = (i % 2 == 0) ? 148.0 : 154.0;
         double pts[] = { cx + r0 * cos(a), cy + r0 * sin(a), cx + 166.0 * cos(a), cy + 166.0 * sin(a) };
         Konva_LineConfig lc = Konva_LineConfig_create(
-            .points_array = JsArray_double_from(pts, 4),
+            .points = JsArray_double_from(pts, 4),
             .stroke = "#111111", .strokeWidth = i % 2 == 0 ? 2.0 : 1.0
         );
         JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Line_new(lc)));

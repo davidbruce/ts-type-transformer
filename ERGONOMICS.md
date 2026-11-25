@@ -55,7 +55,9 @@ TypeScript object literal, because a Zig literal takes its type from where it go
         record, as a pair list (convention 10).
      4. When every member is an object: the one named by just the words they all
         share (Leaflet's `Icon` beside `DivIcon`, `.icon` / `.icon_div`; `LatLng` in
-        `LatLngExpression`, `map.set_view(m, london)`), else none, each named
+        `LatLngExpression`, `map.set_view(m, london)`), else a lone array of
+        other things (Konva's `points`, `number[]` beside typed arrays; Leaflet's
+        `PointExpression` tuple beside `Point`), else none, each named
         (`.series_bar`, `.xAxis_category`, `with_background_texture`).
      5. Otherwise the first member as declared: a library's alias keeps its
         written order (`PositionSizeOption = number | string` gives `number`,
@@ -70,7 +72,8 @@ TypeScript object literal, because a Zig literal takes its type from where it go
      type lowering made up by the last part of its name
      (`EditorView_new_place_object`: `object`); else its type's name, less the
      words every such member shares and the package prefix (`BarSeriesOption`:
-     `bar`; `CanvasGradient`: `canvas_gradient`). A name another parameter's member
+     `bar`; `CanvasGradient`: `canvas_gradient`), an acronym a word of its own
+     (`GLBufferAttribute`: `gl`). A name another parameter's member
      already took is the member's whole name (node's `BufferEncoding` beside a
      path's `Buffer`).
 
@@ -113,10 +116,14 @@ TypeScript object literal, because a Zig literal takes its type from where it go
      all optional also implements `Default`.
    - Gleam: the plain name without the optional tail; `name_with` takes the whole
      tail, bare, except that a callback or an interface of methods ending a tail of
-     two or more is `Option` (`world.step_with(w, q, None)`).
+     two or more is `Option` (`world.step_with(w, q, None)`), as is a type nothing
+     in the bindings makes or a call gives back (pts' `CanvasLineJoin` without the
+     DOM's bindings). More than four optionals are an option bag folded into the
+     class's module: `sphere_geometry.new_with(sphere_geometry.args_create() |>
+     sphere_geometry.args_with_radius(0.36))`.
    - More than four optionals (three's geometries): the plain name has none and
      `name_with` takes an arguments builder (`CylinderGeometryArgs::default()
-     .with_radius_top(0.55)`, `cylinder_geometry_args.new() |> ..`).
+     .with_radius_top(0.55)`; Gleam's, as above, `cylinder_geometry.args_create() |> ..`).
    - Overloads differing only in their optional tail (`setOption(opt, notMerge?,
      lazyUpdate?)`, `setOption(opt, opts?)`) merge: the shared part is the plain
      name, the one ending in an options object gives `name_with`, and each other one

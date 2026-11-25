@@ -12,6 +12,9 @@ pub(super) struct Gen<'m> {
     // Unions whose values the user is given (a result, a callback's argument):
     // they go back in too, through `name_of`.
     pub given_back: HashSet<String>,
+    // Opaque types no referenced bindings declare: nothing here makes one
+    // (pts' `CanvasLineJoin`, without the DOM's bindings).
+    pub unmakeable: HashSet<String>,
     pub pkg: String,
     // Gleam's name of each type the model names, and of each union's or enum's variants.
     pub types: HashMap<String, String>,
@@ -547,11 +550,14 @@ impl<'m> Gen<'m> {
 
     // `name` and its forms for union arguments (see `member_forms`): returns
     // the JS export of the first, and every name given out.
-    pub(super) fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>) -> (String, Vec<String>) {
+    // With `with_as`, only the form with its optional tail, by that name: an
+    // overload another leads (see `Model::tail_overloads`).
+    pub(super) fn function(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>, with_as: Option<&str>) -> (String, Vec<String>) {
         let forms = self.member_forms(&f.params, f.rest, optional_tail(f));
         if forms.is_empty() {
-            let (js, with) = self.function_form(name, f, owner, false, &[]);
-            return (js, std::iter::once(name.to_string()).chain(with).collect());
+            let (js, with) = self.function_form(name, f, owner, with_as.is_some(), &[], with_as);
+            let plain = (with_as.is_none() || with.is_none()).then(|| name.to_string());
+            return (js, plain.into_iter().chain(with).collect());
         }
         let mut first = None;
         let mut names = Vec::new();
@@ -568,9 +574,14 @@ impl<'m> Gen<'m> {
                 None => name.to_string(),
                 Some(s) => self.fresh_value(&format!("{name}_{s}")),
             };
-            let (js, with) = self.function_form(&n, &g, owner, form.with_only, &nulls);
+            let with_name = with_as.map(|w| match &form.suffix {
+                None => w.to_string(),
+                Some(s) => format!("{w}_{s}"),
+            });
+            let with_only = form.with_only || with_as.is_some();
+            let (js, with) = self.function_form(&n, &g, owner, with_only, &nulls, with_name.as_deref());
             first.get_or_insert(js);
-            if !(form.with_only && with.is_some()) {
+            if !(with_only && with.is_some()) {
                 names.push(n);
             }
             names.extend(with);
@@ -686,7 +697,7 @@ impl<'m> Gen<'m> {
     // name, and the name of its form with its trailing optional arguments
     // where `name` leaves them out (`create_element(doc, tag)`,
     // `create_element_with(doc, tag, Some(options))`): one export for both.
-    fn function_form(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>, with_only: bool, nulls: &[usize]) -> (String, Option<String>) {
+    fn function_form(&mut self, name: &str, f: &Func, owner: Option<(&str, &[TParam])>, with_only: bool, nulls: &[usize], with_as: Option<&str>) -> (String, Option<String>) {
         self.setup_fn_bounds(f, owner);
         let mut params = Vec::new();
         let mut js_params = Vec::new();
@@ -703,6 +714,16 @@ impl<'m> Gen<'m> {
         let mut taken: HashSet<String> = HashSet::from(["self".to_string()]);
         let mut args = Vec::new();
         let mut may_undef = Vec::new();
+        // The optional tail, where `name` leaves it out: `name_with` takes it bare
+        // (`vector3.set_with(v, 6.0, 10.0, 8.0)`), but a callback or an interface
+        // of methods that ends a tail of two (`world.step_with(w, q, None)`).
+        let codecs = self.crossing_params(f, owner);
+        let tail = if codecs.is_empty() && nulls.is_empty() { optional_tail(f) } else { f.params.len() };
+        // So does one of a type nothing here makes (pts' `CanvasLineJoin`, without the DOM's bindings).
+        let kept_open = |i: usize, t: &Ty| {
+            matches!(t, Ty::Nullable(inner, _) if matches!(&**inner, Ty::Obj(n) | Ty::Generic(n, _) if self.unmakeable.contains(n)))
+                || f.params.len() - tail >= 2 && i == f.params.len() - 1 && matches!(t, Ty::Nullable(inner, _) if self.behaviour(inner))
+        };
         for (i, (p, t)) in f.params.iter().enumerate() {
             if nulls.contains(&i) {
                 args.push(if matches!(t, Ty::Nullable(_, true)) { "undefined" } else { "null" }.to_string());
@@ -715,15 +736,29 @@ impl<'m> Gen<'m> {
                 id.push('_');
             }
             let last_rest = f.rest && i == f.params.len() - 1;
-            let (param_ty, value) = self.going_in(|| (self.ty(t), self.from_gleam(t, &id)));
+            let (param_ty, value) = match t {
+                Ty::Nullable(inner, true) if i >= tail && !kept_open(i, t) => {
+                    let (ty, v) = self.going_in(|| (self.ty(inner), self.from_gleam(inner, &id)));
+                    (ty, if v == id { v } else { format!("({id} === undefined ? undefined : {v})") })
+                }
+                _ => self.going_in(|| (self.ty(t), self.from_gleam(t, &id))),
+            };
             params.push(format!("{id}: {param_ty}"));
             js_params.push(id.clone());
+            // An option bag of the optional arguments: each its own, in order.
+            if let Some(props) = self.m.args_bags.get(&f.import).filter(|_| i == f.params.len() - 1) {
+                for prop in props {
+                    args.push(format!("({id} === undefined ? undefined : {id}[{prop:?}])"));
+                    may_undef.push(true);
+                }
+                continue;
+            }
             args.push(if last_rest { format!("...({value} ?? [])") } else { value });
             may_undef.push(!last_rest && matches!(t, Ty::Nullable(_, true)));
         }
         // A codec for each type parameter whose values cross: the class's, then the function's own.
         *self.open.borrow_mut() = None;
-        for p in self.crossing_params(f, owner) {
+        for p in codecs {
             self.note("Codec");
             params.push(format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name)));
             js_params.push(codec_var(&p.name));
@@ -750,7 +785,10 @@ impl<'m> Gen<'m> {
         // `_with`, else `_full` where a member has that name (ProseMirror's `can_replace_with`).
         let free = |g: &Self, n: &str| !g.reserved_values.contains(n) && !g.values.contains(&(g.unit.clone(), n.to_string()));
         let with = shortened.then(|| {
-            let with = [format!("{name}_with"), format!("{name}_full")].into_iter().find(|n| free(self, n)).unwrap_or_else(|| format!("{name}_with"));
+            let with = match with_as {
+                Some(w) => w.to_string(),
+                None => [format!("{name}_with"), format!("{name}_full")].into_iter().find(|n| free(self, n)).unwrap_or_else(|| format!("{name}_with")),
+            };
             self.fresh_value(&with)
         });
         if let Some(with) = &with {
@@ -821,6 +859,20 @@ impl<'m> Gen<'m> {
         }
         let codecs: String = self.union_codecs[&u.name].iter().map(|&i| format!(", {}", codec_var(&u.type_params[i].name))).collect();
         self.ffi += &format!("export function {name}_to(v{codecs}) {{\n{to}}}\nexport function {name}_from(u{codecs}) {{\n{from}}}\n");
+    }
+}
+
+impl Gen<'_> {
+    // A callback, or an object of methods none would make empty (Rapier's
+    // `PhysicsHooks`): what a tail may well leave out after another.
+    fn behaviour(&self, t: &Ty) -> bool {
+        match t {
+            Ty::Obj(n) if self.is_callback(n) => true,
+            Ty::Obj(n) => self.m.classes.iter().find(|c| c.name == *n).is_some_and(|c| {
+                c.funcs.iter().any(|f| matches!(f.call, Call::Method(_))) && !c.funcs.iter().any(|f| matches!(f.call, Call::Set(_) | Call::New(_)))
+            }),
+            _ => false,
+        }
     }
 }
 

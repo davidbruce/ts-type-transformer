@@ -438,11 +438,22 @@ the time control returns to JavaScript is reported, not lost.
   model, as the wasm targets, since Gleam has no methods, subtypes, overloads
   or optional arguments. A function with trailing optional arguments is two, one
   export: `create_element(doc, tag)` without them, `create_element_with(doc,
-  tag, Some(options))` with them (`_full` where a member is named `_with`).
+  tag, options)` with them, bare (`_full` where a member is named `_with`); a
+  callback or an object of methods that ends a tail of two stays an `Option`
+  (`world.step_with(w, q, None)`), and so does a type nothing in the bindings
+  makes or a call gives back (pts' `CanvasLineJoin` without the DOM's bindings).
+  More than four are an option bag of them,
+  folded into the class's module: `sphere_geometry.new_with(
+  sphere_geometry.args_create() |> sphere_geometry.args_with_radius(0.36))`.
+  Overloads that differ only in their optional tail are one plain function,
+  `name_with` the one ending in an options object, and `name_with_<first>` each
+  other (`set_option(chart, opt)`, `set_option_with(chart, opt, opts)`,
+  `set_option_with_not_merge(chart, opt, False, False)`).
   A union going in is one function per member. The plain name takes its
   primary member: of `T | T[]` the one, a string beside objects, a record
   beside other objects, of objects only the one named by what they all share
-  (Leaflet's `LatLng`) or none, else the first as declared; an inline union's
+  (Leaflet's `LatLng`), else a lone array of other things (Konva's `points`), or
+  none, else the first as declared; an inline union's
   number before its string, the checker having put string first
   (`with_left(16.0)`, `with_font_size(13.0)`, `add_days(date, 3.0)`,
   `schema.node("heading")`). Each other member is

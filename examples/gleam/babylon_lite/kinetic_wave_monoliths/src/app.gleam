@@ -1,4 +1,5 @@
 import babylonjs_lite as b
+import babylonjs_lite/attach_control_options
 import babylonjs_lite/box_options
 import babylonjs_lite/capsule_options
 import babylonjs_lite/clear_coat_props
@@ -54,7 +55,7 @@ fn mk_pbr(
     |> create_pbr_material_props.with_base_color_factor(#(v, v, v, 1.0))
     |> create_pbr_material_props.with_metallic_factor(metallic)
     |> create_pbr_material_props.with_roughness_factor(roughness)
-  b.create_pbr_material_with(Some(props))
+  b.create_pbr_material_with(props)
 }
 
 pub fn main() -> Nil {
@@ -67,7 +68,7 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
+        b.create_engine_html_canvas_element(canvas),
         on_err,
       )
 
@@ -87,36 +88,40 @@ pub fn main() -> Nil {
           12.8,
           b.vec3(0.0, 1.4, 0.0),
         )
-      b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control_with(camera, canvas, Some(scene), None)
+      b.add_to_scene_camera(scene, camera)
+      b.attach_control_with(
+        camera,
+        canvas,
+        scene,
+        attach_control_options.create(),
+      )
 
-      let hemi =
-        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.15)), Some(0.55))
+      let hemi = b.create_hemispheric_light_with(#(0.0, 1.0, 0.15), 0.55)
       hemispheric_light.set_diffuse_color(hemi, #(0.76, 0.76, 0.76))
       hemispheric_light.set_ground_color(hemi, #(0.1, 0.1, 0.1))
-      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
+      b.add_to_scene_light_base(scene, hemi)
 
-      let dir = b.create_directional_light_with(#(-1.0, -2.2, -0.8), Some(1.35))
+      let dir = b.create_directional_light_with(#(-1.0, -2.2, -0.8), 1.35)
       directional_light.set_diffuse(dir, #(0.9, 0.9, 0.9))
-      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
+      b.add_to_scene_light_base(scene, dir)
 
-      let light1 = b.create_point_light_with(#(5.2, 4.2, 0.0), Some(10.0))
+      let light1 = b.create_point_light_with(#(5.2, 4.2, 0.0), 10.0)
       point_light.set_diffuse(light1, #(1.0, 1.0, 1.0))
       point_light.set_range(light1, 16.0)
-      b.add_to_scene(scene, bt.scene_entity_light_base(light1))
+      b.add_to_scene_light_base(scene, light1)
 
-      let light2 = b.create_point_light_with(#(-5.2, 3.4, 0.0), Some(7.5))
+      let light2 = b.create_point_light_with(#(-5.2, 3.4, 0.0), 7.5)
       point_light.set_diffuse(light2, #(0.78, 0.78, 0.78))
       point_light.set_range(light2, 16.0)
-      b.add_to_scene(scene, bt.scene_entity_light_base(light2))
+      b.add_to_scene_light_base(scene, light2)
 
       let floor_opts =
         ground_options.create()
         |> ground_options.with_width(18.0)
         |> ground_options.with_height(18.0)
-      let floor = b.create_ground_with(engine, Some(floor_opts))
+      let floor = b.create_ground_with(engine, floor_opts)
       mesh.set_material(floor, mk_pbr(0.09, 0.1, 0.88))
-      b.add_to_scene(scene, bt.scene_entity_mesh(floor))
+      b.add_to_scene_mesh(scene, floor)
 
       let m0 = mk_pbr(0.22, 0.35, 0.36)
       let m1 = mk_pbr(0.44, 0.35, 0.36)
@@ -136,11 +141,7 @@ pub fn main() -> Nil {
             let fz = int.to_float(row) -. 2.5
             let x = fx *. 1.15
             let z = fz *. 1.15
-            let m =
-              b.create_box_with(
-                engine,
-                Some(bt.NumberOrBoxOptionsBoxOptions(bopts)),
-              )
+            let m = b.create_box_box_options_with(engine, bopts)
             let pos = scene_node.get_position(m)
             observable_vec3.set(pos, x, 0.5, z)
             let mat = case { row + col } % 4 {
@@ -150,7 +151,7 @@ pub fn main() -> Nil {
               _ -> m3
             }
             mesh.set_material(m, mat)
-            b.add_to_scene(scene, bt.scene_entity_mesh(m))
+            b.add_to_scene_mesh(scene, m)
             #(
               pos,
               scene_node.get_scaling(m),
@@ -179,7 +180,7 @@ pub fn main() -> Nil {
         |> clear_coat_props.with_roughness(0.08)
       b.set_pbr_clear_coat(cap_props, cc)
       b.set_pbr_emissive(cap_props, #(0.16, 0.16, 0.16))
-      let cap_mat = b.create_pbr_material_with(Some(cap_props))
+      let cap_mat = b.create_pbr_material_with(cap_props)
 
       let copts =
         capsule_options.create()
@@ -188,9 +189,9 @@ pub fn main() -> Nil {
         |> capsule_options.with_tessellation(20.0)
       let capsules =
         list.map([0, 1, 2, 3], fn(k) {
-          let cap = b.create_capsule_with(engine, Some(copts))
+          let cap = b.create_capsule_with(engine, copts)
           mesh.set_material(cap, cap_mat)
-          b.add_to_scene(scene, bt.scene_entity_mesh(cap))
+          b.add_to_scene_mesh(scene, cap)
           #(
             int.to_float(k),
             scene_node.get_position(cap),

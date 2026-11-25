@@ -48,10 +48,10 @@ pub fn main() {
     "renamed overload",
   )
 
-  // An optional argument is an Option.
+  // An optional argument: the plain name without it, `_with` with it.
   shape.resize(s, 2.6)
   check(shape.get_size(s) == 2.6, "absent argument")
-  shape.resize_with(s, 2.6, Some(True))
+  shape.resize_with(s, 2.6, True)
   check(shape.get_size(s) == 3.0, "given argument")
 
   // A union: an inline `string | number`'s number plain, the other by name.
@@ -69,7 +69,7 @@ pub fn main() {
   check(b.largest(s, None) == Some(s), "null argument")
   check(b.largest(shape.unit(), Some(s)) == Some(s), "nullable result")
   check(shape.area(b.or_unit()) == 1.0, "undefined argument")
-  check(b.or_unit_with(Some(s)) == s, "defined argument")
+  check(b.or_unit_with(s) == s, "defined argument")
   check(b.find("nothing") == None, "undefined result")
   check(option.map(b.find("unit"), shape.area) == Some(1.0), "defined result")
 

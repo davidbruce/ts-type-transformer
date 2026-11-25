@@ -122,12 +122,8 @@ fn build_schema() -> t.Schema(Nil) {
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(
-      nodes,
-    ))
-    |> schema_spec.with_marks(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(
-      marks,
-    ))
+    |> schema_spec.with_nodes(nodes)
+    |> schema_spec.with_marks(marks)
   schema.new(spec)
 }
 
@@ -186,11 +182,11 @@ fn refresh_output(
   status_ref: pm_rt.Ref(String),
 ) {
   let div = document.create_element(doc, tag.div)
-  dom_serializer.serialize_fragment_with(
+  dom_serializer.serialize_fragment_html_element_with(
     serializer,
     node.get_content(d),
-    None,
-    Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))),
+    dom_serializer.serialize_fragment_options_create(),
+    div,
   )
   let html_out = element.get_inner_html(div)
   let status = pm_rt.ref_get(status_ref)
@@ -260,11 +256,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view =
-    editor_view.new(
-      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
-      props,
-    )
+  let view = editor_view.new_node2(mount, props)
   pm_rt.ref_set(view_ref, Some(view))
   refresh_output(
     doc,
@@ -315,11 +307,11 @@ pub fn main() {
           node.get_node_size(node.child(d, 0.0))
           +. node.get_node_size(node.child(d, 1.0))
           -. 1.0
-        let mc = schema.mark(sch, t.StringOrMarkTypeString("code"))
-        let span = schema.text_with(sch, " roundtrip()", Some([mc]))
+        let mc = schema.mark(sch, "code")
+        let span = schema.text_with(sch, " roundtrip()", [mc])
         let tr =
           editor_state.get_tr(st)
-          |> transform.insert(insert_pos, t.FragmentOrNodeOrNodeArrayNode(span))
+          |> transform.insert(insert_pos, span)
         pm_rt.ref_set(
           status_ref,
           "Inserted code span at pos " <> int.to_string(float.round(insert_pos)),
@@ -333,11 +325,11 @@ pub fn main() {
   wire_btn(doc, "btn-4", fn() {
     let d = editor_state.get_doc(editor_view.get_state(view))
     let div = document.create_element(doc, tag.div)
-    dom_serializer.serialize_fragment_with(
+    dom_serializer.serialize_fragment_html_element_with(
       serializer,
       node.get_content(d),
-      None,
-      Some(t.HTMLElementOrDocumentFragmentHTMLElement(html_element.upcast(div))),
+      dom_serializer.serialize_fragment_options_create(),
+      div,
     )
     let reparsed = dom_parser.parse(parser, div)
     pm_rt.ref_set(

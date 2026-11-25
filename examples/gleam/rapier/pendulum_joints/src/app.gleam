@@ -16,9 +16,7 @@ import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import dom/areas/html/html_element_tag_name_map as tag
-import dom/types.{
-  type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString,
-}
+import dom/types.{type CanvasRenderingContext2D}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -74,10 +72,7 @@ fn draw_rot_box(
   let px3 = to_cx(cx +. r00 *. { 0.0 -. hx } +. r01 *. hy)
   let py3 = to_cy(cy +. r10 *. { 0.0 -. hx } +. r11 *. hy)
 
-  ctx2d.set_fill_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString(fill_hex),
-  )
+  ctx2d.set_fill_style(ctx, fill_hex)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
   ctx2d.line_to(ctx, px1, py1)
@@ -86,10 +81,7 @@ fn draw_rot_box(
   ctx2d.close_path(ctx)
   ctx2d.fill(ctx)
 
-  ctx2d.set_stroke_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString("#111111"),
-  )
+  ctx2d.set_stroke_style(ctx, "#111111")
   ctx2d.set_line_width(ctx, 1.5)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
@@ -103,17 +95,11 @@ fn draw_rot_box(
 fn draw_pivot(ctx: CanvasRenderingContext2D(Nil), wx: Float, wy: Float) -> Nil {
   let cx = to_cx(wx)
   let cy = to_cy(wy)
-  ctx2d.set_fill_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
-  )
+  ctx2d.set_fill_style(ctx, "#ffffff")
   ctx2d.begin_path(ctx)
   ctx2d.arc(ctx, cx, cy, 4.0, 0.0, two_pi)
   ctx2d.fill(ctx)
-  ctx2d.set_stroke_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString("#111111"),
-  )
+  ctx2d.set_stroke_style(ctx, "#111111")
   ctx2d.set_line_width(ctx, 1.6)
   ctx2d.begin_path(ctx)
   ctx2d.arc(ctx, cx, cy, 4.0, 0.0, two_pi)
@@ -154,11 +140,7 @@ pub fn main() {
         rigid_body_desc.fixed()
           |> rigid_body_desc.set_translation(0.0, 6.2, 0.0),
       )
-    world.create_collider_with(
-      w,
-      collider_desc.cuboid(6.0, 0.22, 0.6),
-      Some(gantry),
-    )
+    world.create_collider_with(w, collider_desc.cuboid(6.0, 0.22, 0.6), gantry)
     let z_axis = vec(0.0, 0.0, 1.0)
 
     let add_link = fn(x: Float, y: Float, density: Float) {
@@ -172,7 +154,7 @@ pub fn main() {
         w,
         collider_desc.cuboid(link_hx, link_hy, 0.2)
           |> collider_desc.set_density(density),
-        Some(rb),
+        rb,
       )
       rb
     }
@@ -225,7 +207,7 @@ pub fn main() {
     world.create_collider_with(
       w,
       collider_desc.cuboid(0.14, 0.85, 0.2) |> collider_desc.set_density(1.2),
-      Some(arm),
+      arm,
     )
     let bob =
       world.create_rigid_body(
@@ -236,7 +218,7 @@ pub fn main() {
     world.create_collider_with(
       w,
       collider_desc.ball(0.42) |> collider_desc.set_density(3.0),
-      Some(bob),
+      bob,
     )
 
     world.create_impulse_joint(
@@ -287,16 +269,10 @@ pub fn main() {
   }
 
   let render = fn() {
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
-    )
+    ctx2d.set_fill_style(ctx, "#ffffff")
     ctx2d.fill_rect(ctx, 0.0, 0.0, 680.0, 400.0)
 
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#efefef"),
-    )
+    ctx2d.set_stroke_style(ctx, "#efefef")
     ctx2d.set_line_width(ctx, 1.0)
     int.range(from: -6, to: 7, with: Nil, run: fn(_, gx) {
       let x = to_cx(int.to_float(gx))
@@ -315,10 +291,7 @@ pub fn main() {
 
     draw_rot_box(ctx, 0.0, 6.2, 0.0, 0.0, 0.0, 1.0, 6.0, 0.22, "#efefef")
 
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#b5b5b5"),
-    )
+    ctx2d.set_fill_style(ctx, "#b5b5b5")
     list.each(rp_rt.ref_get(trail_a_ref), fn(pt) {
       let #(tx, ty) = pt
       ctx2d.begin_path(ctx)
@@ -395,17 +368,11 @@ pub fn main() {
         let bpy = vector.get_y(bp)
         let bcx = to_cx(bpx)
         let bcy = to_cy(bpy)
-        ctx2d.set_fill_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString("#262626"),
-        )
+        ctx2d.set_fill_style(ctx, "#262626")
         ctx2d.begin_path(ctx)
         ctx2d.arc(ctx, bcx, bcy, 0.42 *. 46.0, 0.0, two_pi)
         ctx2d.fill(ctx)
-        ctx2d.set_stroke_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString("#111111"),
-        )
+        ctx2d.set_stroke_style(ctx, "#111111")
         ctx2d.set_line_width(ctx, 1.6)
         ctx2d.begin_path(ctx)
         ctx2d.arc(ctx, bcx, bcy, 0.42 *. 46.0, 0.0, two_pi)
@@ -426,10 +393,7 @@ pub fn main() {
     })
     draw_pivot(ctx, 2.3, 5.98)
 
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#555555"),
-    )
+    ctx2d.set_fill_style(ctx, "#555555")
     ctx2d.set_font(ctx, "11px ui-monospace, monospace")
     ctx2d.fill_text(ctx, "3-Link Revolute Chain", to_cx(-3.5), 36.0)
     ctx2d.fill_text(ctx, "2-Body Bob Pendulum", to_cx(1.1), 36.0)

@@ -9,6 +9,7 @@ import pixi_js/application_init_options
 import pixi_js/container
 import pixi_js/graphics
 import pixi_js/runtime
+import pixi_js/stroke_style
 import pixi_js/types as t
 
 const two_pi_3 = 2.0943951023931953
@@ -18,14 +19,11 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke_with(
+  graphics.stroke_stroke_style_with(
     g,
-    Some(
-      runtime.js_object([
-        #("width", runtime.dynamic(width)),
-        #("color", runtime.dynamic(int.to_float(color_hex))),
-      ]),
-    ),
+    stroke_style.create()
+      |> stroke_style.with_width(width)
+      |> stroke_style.with_color(int.to_float(color_hex)),
   )
 }
 
@@ -35,17 +33,13 @@ pub fn main() {
     application_init_options.create()
     |> application_init_options.with_width(680.0)
     |> application_init_options.with_height(400.0)
-    |> application_init_options.with_background_color(
-      runtime.dynamic(int.to_float(0xffffff)),
-    )
-    |> application_init_options.with_preference(
-      t.StringOrRendererPreferenceArrayString("webgl"),
-    )
+    |> application_init_options.with_background_color(int.to_float(0xffffff))
+    |> application_init_options.with_preference("webgl")
     |> application_init_options.with_preserve_drawing_buffer(True)
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, opts))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -80,9 +74,9 @@ pub fn main() {
     let arm_bar =
       graphics.new()
       |> graphics.rect(0.0, -4.0, 110.0, 8.0)
-      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x737373))))
+      |> graphics.fill_with(int.to_float(0x737373))
       |> graphics.circle(110.0, 0.0, 10.0)
-      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
+      |> graphics.fill_with(int.to_float(0x111111))
     container.add_child(arm, [arm_bar])
 
     let sub = container.new()
@@ -98,13 +92,13 @@ pub fn main() {
     let sat_box =
       graphics.new()
       |> graphics.rect(-12.0, -12.0, 24.0, 24.0)
-      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x262626))))
+      |> graphics.fill_with(int.to_float(0x262626))
     container.set_x(sat_box, 48.0)
 
     let sat_orb =
       graphics.new()
       |> graphics.circle(0.0, 0.0, 14.0)
-      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xd4d4d4))))
+      |> graphics.fill_with(int.to_float(0xd4d4d4))
       |> stroke_g(2.0, 0x111111)
     container.set_x(sat_orb, -32.0)
 
@@ -117,9 +111,9 @@ pub fn main() {
   let hub =
     graphics.new()
     |> graphics.circle(0.0, 0.0, 18.0)
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
+    |> graphics.fill_with(int.to_float(0x111111))
     |> graphics.circle(0.0, 0.0, 7.0)
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xffffff))))
+    |> graphics.fill_with(int.to_float(0xffffff))
   container.add_child(root, [hub])
 
   container.add_child(stage, [root])

@@ -988,3 +988,63 @@ fn absent(t: Ty, undefined: bool) -> Ty {
         _ => Ty::Any,
     }
 }
+
+impl Builder<'_> {
+    // More than four optional arguments are an option bag of them, made as
+    // any is (three's `CylinderGeometry(radiusTop?, .., thetaLength?)`):
+    // `cylinder_geometry.new_with(cylinder_geometry_args.create() |> ..)`.
+    // The function takes the bag, optional, for them; `Model::args_bags` says
+    // how it spreads.
+    pub(super) fn args_bags(&mut self) {
+        let mut taken: HashSet<String> = self.model.classes.iter().map(|c| c.name.clone()).chain(self.model.callbacks.iter().map(|c| c.name.clone())).collect();
+        let mut bags = Vec::new();
+        for ci in 0..self.model.classes.len() {
+            let (owner, module) = (self.model.classes[ci].name.clone(), self.model.classes[ci].module.clone());
+            for fi in 0..self.model.classes[ci].funcs.len() {
+                let mut f = self.model.classes[ci].funcs[fi].clone();
+                if let Some(bag) = self.args_bag(&owner, &module, &mut f, &mut taken) {
+                    self.model.classes[ci].funcs[fi] = f;
+                    bags.push(bag);
+                }
+            }
+        }
+        for fi in 0..self.model.funcs.len() {
+            let mut f = self.model.funcs[fi].clone();
+            let module = f.module.clone();
+            if let Some(bag) = self.args_bag("", &module, &mut f, &mut taken) {
+                self.model.funcs[fi] = f;
+                bags.push(bag);
+            }
+        }
+        self.model.classes.extend(bags);
+    }
+
+    fn args_bag(&mut self, owner: &str, module: &str, f: &mut Func, taken: &mut HashSet<String>) -> Option<Class> {
+        let start = super::tail_start(f);
+        if f.rest || f.params.len() - start <= 4 || !matches!(f.call, Call::Method(_) | Call::Static(_) | Call::New(_)) {
+            return None;
+        }
+        let pascal = |s: &str| s.chars().take(1).flat_map(char::to_uppercase).chain(s.chars().skip(1)).collect::<String>();
+        let base = match &f.call {
+            Call::New(_) => format!("{owner}Args"),
+            _ => format!("{owner}{}Args", pascal(&f.name)),
+        };
+        let mut name = base.clone();
+        let mut n = 2;
+        while !taken.insert(name.clone()) {
+            name = format!("{base}{n}");
+            n += 1;
+        }
+        let func = |name: String, import: String, call: Call, params: Vec<(String, Ty)>, ret: Ty| Func { type_params: vec![], module: String::new(), import, name, call, params, rest: false, fixed: vec![], shared: None, ret, returns_this: false, doc: None };
+        let mut funcs = vec![func("create".into(), self.import(format!("{name}_create")), Call::Create("{}".into()), vec![], Ty::Obj(name.clone()))];
+        for (p, t) in &f.params[start..] {
+            let setter = format!("set_{}", ident(p));
+            funcs.push(func(setter.clone(), self.import(format!("{name}_{setter}")), Call::Set(p.clone()), vec![("value".into(), t.clone())], Ty::Void));
+        }
+        self.model.args_bags.insert(f.import.clone(), f.params[start..].iter().map(|(p, _)| p.clone()).collect());
+        self.model.synthetic.insert(name.clone());
+        f.params.truncate(start);
+        f.params.push(("args".into(), Ty::Nullable(Box::new(Ty::Obj(name.clone())), true)));
+        Some(Class { type_params: vec![], bases: vec![], module: module.to_string(), name, ancestors: Vec::new(), funcs, consts: Vec::new(), iterates: None, iterates_async: None, elements: None, js: None, doc: None })
+    }
+}

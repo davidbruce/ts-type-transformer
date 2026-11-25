@@ -11,26 +11,19 @@ import pixi_js/container
 import pixi_js/graphics
 import pixi_js/rectangle
 import pixi_js/runtime
+import pixi_js/stroke_style
 import pixi_js/types as t
-
-fn mk_rect(x: Float, y: Float, w: Float, h: Float) -> t.Rectangle(Nil) {
-  let n = fn(v) { Some(t.NumberOrStringNumber(v)) }
-  rectangle.new_with(n(x), n(y), n(w), n(h))
-}
 
 fn stroke_g(
   g: t.Graphics(Nil),
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke_with(
+  graphics.stroke_stroke_style_with(
     g,
-    Some(
-      runtime.js_object([
-        #("width", runtime.dynamic(width)),
-        #("color", runtime.dynamic(int.to_float(color_hex))),
-      ]),
-    ),
+    stroke_style.create()
+      |> stroke_style.with_width(width)
+      |> stroke_style.with_color(int.to_float(color_hex)),
   )
 }
 
@@ -40,17 +33,13 @@ pub fn main() {
     application_init_options.create()
     |> application_init_options.with_width(680.0)
     |> application_init_options.with_height(400.0)
-    |> application_init_options.with_background_color(
-      runtime.dynamic(int.to_float(0xffffff)),
-    )
-    |> application_init_options.with_preference(
-      t.StringOrRendererPreferenceArrayString("webgl"),
-    )
+    |> application_init_options.with_background_color(int.to_float(0xffffff))
+    |> application_init_options.with_preference("webgl")
     |> application_init_options.with_preserve_drawing_buffer(True)
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, opts))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -63,20 +52,19 @@ pub fn main() {
 
   let stage = application.get_stage(app)
 
-  let query = mk_rect(190.0, 105.0, 260.0, 170.0)
-  let padded =
-    rectangle.pad_with(rectangle.clone(query), Some(10.0), Some(10.0))
+  let query = rectangle.new_with(190.0, 105.0, 260.0, 170.0)
+  let padded = rectangle.pad_with(rectangle.clone(query), 10.0, 10.0)
   let hull = rectangle.clone(query)
 
   let candidates = [
-    mk_rect(210.0, 125.0, 90.0, 60.0),
-    mk_rect(330.0, 165.0, 95.0, 80.0),
-    mk_rect(110.0, 80.0, 130.0, 85.0),
-    mk_rect(390.0, 75.0, 130.0, 90.0),
-    mk_rect(135.0, 225.0, 110.0, 90.0),
-    mk_rect(40.0, 40.0, 100.0, 110.0),
-    mk_rect(510.0, 48.0, 125.0, 115.0),
-    mk_rect(505.0, 245.0, 130.0, 110.0),
+    rectangle.new_with(210.0, 125.0, 90.0, 60.0),
+    rectangle.new_with(330.0, 165.0, 95.0, 80.0),
+    rectangle.new_with(110.0, 80.0, 130.0, 85.0),
+    rectangle.new_with(390.0, 75.0, 130.0, 90.0),
+    rectangle.new_with(135.0, 225.0, 110.0, 90.0),
+    rectangle.new_with(40.0, 40.0, 100.0, 110.0),
+    rectangle.new_with(510.0, 48.0, 125.0, 115.0),
+    rectangle.new_with(505.0, 245.0, 130.0, 110.0),
   ]
 
   let g = graphics.new()
@@ -94,24 +82,20 @@ pub fn main() {
         )
       case rectangle.contains_rect(query, c) {
         True -> {
-          graphics.fill_with(g, Some(runtime.dynamic(int.to_float(0x111111))))
+          graphics.fill_with(g, int.to_float(0x111111))
           #(cnt_c + 1, cnt_i, cnt_d)
         }
         False ->
           case rectangle.intersects(query, c) {
             True -> {
               g
-              |> graphics.fill_with(
-                Some(runtime.dynamic(int.to_float(0x737373))),
-              )
+              |> graphics.fill_with(int.to_float(0x737373))
               |> stroke_g(2.0, 0x111111)
               #(cnt_c, cnt_i + 1, cnt_d)
             }
             False -> {
               g
-              |> graphics.fill_with(
-                Some(runtime.dynamic(int.to_float(0xe5e5e5))),
-              )
+              |> graphics.fill_with(int.to_float(0xe5e5e5))
               |> stroke_g(1.0, 0xa3a3a3)
               #(cnt_c, cnt_i, cnt_d + 1)
             }

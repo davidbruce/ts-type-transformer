@@ -95,13 +95,13 @@ fn update_towers(
     let x = { int.to_float(gx) -. 4.5 } *. 0.78
     let z = { int.to_float(gz) -. 4.5 } *. 0.78
     let h = tower_height(mode, gx, gz)
-    vector3.set_with(pos, x, h *. 0.5, Some(z))
+    vector3.set_with(pos, x, h *. 0.5, z)
     quaternion.set_from_axis_angle(
       rot_q,
       axis_y,
       0.08 *. int.to_float({ gx + gz } % 4),
     )
-    vector3.set_with(scale, 1.0, h, Some(1.0))
+    vector3.set_with(scale, 1.0, h, 1.0)
     matrix4.compose(mtx, pos, rot_q, scale)
     instanced_mesh.set_matrix_at(inst, int.to_float(idx), mtx)
 
@@ -123,7 +123,7 @@ pub fn main() {
     web_gl_renderer_parameters.create()
     |> web_gl_renderer_parameters.with_antialias(True)
     |> web_gl_renderer_parameters.with_preserve_drawing_buffer(True)
-  let renderer = web_gl_renderer.new_with(Some(rp))
+  let renderer = web_gl_renderer.new_with(rp)
   web_gl_renderer.set_pixel_ratio(renderer, 1.0)
   web_gl_renderer.set_size(renderer, width, height)
 
@@ -131,98 +131,65 @@ pub fn main() {
   dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
 
   let sc = scene.new()
-  scene.set_background(
-    sc,
-    Some(
-      t.ColorOrTextureColor(
-        color.new_with(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))),
-      ),
-    ),
-  )
+  scene.set_background_color(sc, color.new_number_with(hex(0xf7f7f7)))
   let ortho_cam =
-    orthographic_camera.new_with(
-      Some(-5.4 *. aspect),
-      Some(5.4 *. aspect),
-      Some(5.4),
-      Some(-5.4),
-      Some(0.1),
-      Some(100.0),
-    )
-  let persp_cam =
-    perspective_camera.new_with(
-      Some(40.0),
-      Some(aspect),
-      Some(0.1),
-      Some(100.0),
-    )
+    orthographic_camera.args_create()
+    |> orthographic_camera.args_with_left(-5.4 *. aspect)
+    |> orthographic_camera.args_with_right(5.4 *. aspect)
+    |> orthographic_camera.args_with_top(5.4)
+    |> orthographic_camera.args_with_bottom(-5.4)
+    |> orthographic_camera.args_with_near(0.1)
+    |> orthographic_camera.args_with_far(100.0)
+    |> orthographic_camera.new_with
+  let persp_cam = perspective_camera.new_with(40.0, aspect, 0.1, 100.0)
 
   object3d.add(sc, [
-    ambient_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(1.25),
-    ),
+    ambient_light.new_number_with(hex(0xffffff), 1.25),
   ])
-  let key =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(2.1),
-    )
+  let key = directional_light.new_number_with(hex(0xffffff), 2.1)
   object3d.get_position(key)
-  |> vector3.set_with(8.0, 12.0, Some(6.0))
+  |> vector3.set_with(8.0, 12.0, 6.0)
   object3d.add(sc, [key])
-  let rim =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(0.9),
-    )
+  let rim = directional_light.new_number_with(hex(0xffffff), 0.9)
   object3d.get_position(rim)
-  |> vector3.set_with(-7.0, 6.0, Some(-8.0))
+  |> vector3.set_with(-7.0, 6.0, -8.0)
   object3d.add(sc, [rim])
 
   let pmp =
     mesh_standard_material_parameters.create()
-    |> mesh_standard_material_parameters.with_color(
-      t.ColorRepresentationNumber(hex(0xe5e5e5)),
-    )
+    |> mesh_standard_material_parameters.with_color_number(hex(0xe5e5e5))
     |> mesh_standard_material_parameters.with_roughness(0.85)
   let plinth =
     mesh.new_with(
-      Some(plane_geometry.new_with(Some(8.6), Some(8.6), None, None)),
-      Some(
-        t.material_or_material_array_material(
-          mesh_standard_material.new_with(Some(pmp)),
-        ),
-      ),
+      plane_geometry.new_with(8.6, 8.6, 1.0, 1.0),
+      mesh_standard_material.new_with(pmp),
     )
   euler.set_x(object3d.get_rotation(plinth), 0.0 -. pi /. 2.0)
   vector3.set_y(object3d.get_position(plinth), -0.01)
   object3d.add(sc, [plinth])
 
   let grid =
-    grid_helper.new_with(
-      Some(9.0),
-      Some(10.0),
-      Some(t.ColorRepresentationNumber(hex(0x999999))),
-      Some(t.ColorRepresentationNumber(hex(0xd4d4d4))),
+    grid_helper.new_of_with(
+      9.0,
+      10.0,
+      t.ColorRepresentationNumber(hex(0x999999)),
+      t.ColorRepresentationNumber(hex(0xd4d4d4)),
     )
   object3d.add(sc, [grid])
 
   let tgeo =
-    box_geometry.new_with(Some(0.54), Some(1.0), Some(0.54), None, None, None)
+    box_geometry.args_create()
+    |> box_geometry.args_with_width(0.54)
+    |> box_geometry.args_with_height(1.0)
+    |> box_geometry.args_with_depth(0.54)
+    |> box_geometry.new_with
   let tmp =
     mesh_standard_material_parameters.create()
-    |> mesh_standard_material_parameters.with_color(
-      t.ColorRepresentationNumber(hex(0xffffff)),
-    )
+    |> mesh_standard_material_parameters.with_color_number(hex(0xffffff))
     |> mesh_standard_material_parameters.with_roughness(0.65)
     |> mesh_standard_material_parameters.with_metalness(0.08)
-  let tmat = mesh_standard_material.new_with(Some(tmp))
-  let inst =
-    instanced_mesh.new(
-      Some(tgeo),
-      Some(t.material_or_material_array_material(tmat)),
-      100.0,
-    )
+  let tmat = mesh_standard_material.new_with(tmp)
+  let inst = instanced_mesh.new(Some(tgeo), tmat, 100.0)
   object3d.add(sc, [inst])
 
   let assert Some(cam_btn) = document.get_element_by_id(doc, "btn-cam")
@@ -235,7 +202,7 @@ pub fn main() {
   let rot_q = quaternion.new()
   let scale = vector3.new()
   let mtx = matrix4.new()
-  let axis_y = vector3.new_with(Some(0.0), Some(1.0), Some(0.0))
+  let axis_y = vector3.new_with(0.0, 1.0, 0.0)
   let col = color.new()
 
   let render_city = fn() {
@@ -255,12 +222,12 @@ pub fn main() {
     let radius = 11.5
     let cx = radius *. cos(yaw)
     let cz = radius *. sin(yaw)
-    let target = vector3.new_with(Some(0.0), Some(0.9), Some(0.0))
+    let target = vector3.new_with(0.0, 0.9, 0.0)
     object3d.get_position(ortho_cam)
-    |> vector3.set_with(cx, 8.2, Some(cz))
+    |> vector3.set_with(cx, 8.2, cz)
     object3d.look_at(ortho_cam, target)
     object3d.get_position(persp_cam)
-    |> vector3.set_with(cx, 7.6, Some(cz))
+    |> vector3.set_with(cx, 7.6, cz)
     object3d.look_at(persp_cam, target)
 
     case use_ortho {

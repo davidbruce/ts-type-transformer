@@ -253,11 +253,11 @@ pub fn main() {
   let exp: t.TableRowExpanding(Dynamic, Nil) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
-    table_row_expanding.toggle_all_rows_expanded_with(exp, Some(True))
+    table_row_expanding.toggle_all_rows_expanded_with(exp, True)
     render(table, doc)
   })
   wire_btn(doc, "btn-1", fn() {
-    table_row_expanding.toggle_all_rows_expanded_with(exp, Some(False))
+    table_row_expanding.toggle_all_rows_expanded_with(exp, False)
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {

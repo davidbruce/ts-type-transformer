@@ -28,10 +28,10 @@ import konva/vector2d
 fn make_line(pts: List(Float), col: String, sw: Float) -> t.Node(Nil) {
   let lc =
     line_config.create()
-    |> line_config.with_points(t.LinePointsArray(pts))
-    |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
+    |> line_config.with_points(pts)
+    |> line_config.with_stroke(col)
     |> line_config.with_stroke_width(sw)
-  node.upcast(line.new_with(Some(lc)))
+  node.upcast(line.new_with(lc))
 }
 
 fn make_card(id: String, x: Float, y: Float, fill_hex: String) -> t.Rect(Nil) {
@@ -43,16 +43,16 @@ fn make_card(id: String, x: Float, y: Float, fill_hex: String) -> t.Rect(Nil) {
     |> rect_config.with_y(y)
     |> rect_config.with_width(200.0)
     |> rect_config.with_height(130.0)
-    |> rect_config.with_fill(t.StringOrCanvasGradientString(fill_hex))
-    |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> rect_config.with_fill(fill_hex)
+    |> rect_config.with_stroke("#111111")
     |> rect_config.with_stroke_width(2.0)
-  rect.new_with(Some(rc))
+  rect.new_with(rc)
 }
 
 pub fn main() -> Nil {
   let sc =
     stage_config.create()
-    |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
+    |> stage_config.with_container("stage")
     |> stage_config.with_width(680.0)
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
@@ -69,9 +69,9 @@ pub fn main() -> Nil {
     |> rect_config.with_y(0.0)
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
+    |> rect_config.with_fill("#ffffff")
   container.add(bg_layer, [
-    node.upcast(rect.new_with(Some(bgr))),
+    node.upcast(rect.new_with(bgr)),
   ])
 
   let vlines =
@@ -92,7 +92,7 @@ pub fn main() -> Nil {
     |> rect_config.with_y(20.0)
     |> rect_config.with_width(640.0)
     |> rect_config.with_height(360.0)
-    |> rect_config.with_stroke(t.StringOrCanvasGradientString("#b5b5b5"))
+    |> rect_config.with_stroke("#b5b5b5")
     |> rect_config.with_stroke_width(1.5)
     |> rect_config.with_dash([6.0, 4.0])
 
@@ -103,13 +103,13 @@ pub fn main() -> Nil {
     |> text_config.with_text("Layer 1: Blueprint Grid (z=0)")
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
-    |> text_config.with_fill(t.StringOrCanvasGradientString("#737373"))
+    |> text_config.with_fill("#737373")
 
   container.add(bg_layer, vlines)
   container.add(bg_layer, hlines)
   container.add(bg_layer, [
-    node.upcast(rect.new_with(Some(frame))),
-    node.upcast(text.new_with(Some(l1))),
+    node.upcast(rect.new_with(frame)),
+    node.upcast(text.new_with(l1)),
   ])
 
   // Layer 2: Stacked cards & badge.
@@ -122,14 +122,14 @@ pub fn main() -> Nil {
     |> circle_config.with_x(555.0)
     |> circle_config.with_y(135.0)
     |> circle_config.with_radius(38.0)
-    |> circle_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> circle_config.with_fill("#111111")
   let dc =
     circle_config.create()
     |> circle_config.with_x(250.0)
     |> circle_config.with_y(160.0)
     |> circle_config.with_radius(7.0)
-    |> circle_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-    |> circle_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+    |> circle_config.with_fill("#ffffff")
+    |> circle_config.with_stroke("#111111")
     |> circle_config.with_stroke_width(2.0)
 
   let l2 =
@@ -139,23 +139,23 @@ pub fn main() -> Nil {
     |> text_config.with_text("Layer 2: Elevated Stack (z=1) · Probe (250,160)")
     |> text_config.with_font_size(12.0)
     |> text_config.with_font_family("monospace")
-    |> text_config.with_fill(t.StringOrCanvasGradientString("#111111"))
+    |> text_config.with_fill("#111111")
 
   let gc = group_config.create() |> group_config.with_listening(False)
   let overlay =
-    group.new_with(Some(gc))
+    group.new_with(gc)
     |> container.add([
-      node.upcast(circle.new_with(Some(dc))),
+      node.upcast(circle.new_with(dc)),
       make_line([238.0, 160.0, 262.0, 160.0], "#111111", 1.5),
       make_line([250.0, 148.0, 250.0, 172.0], "#111111", 1.5),
-      node.upcast(text.new_with(Some(l2))),
+      node.upcast(text.new_with(l2)),
     ])
 
   container.add(fg_layer, [
     node.upcast(card_a),
     node.upcast(card_b),
     node.upcast(card_c),
-    node.upcast(circle.new_with(Some(bc))),
+    node.upcast(circle.new_with(bc)),
     node.upcast(overlay),
   ])
 

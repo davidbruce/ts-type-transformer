@@ -3,6 +3,7 @@ import dom/areas/core/document
 import dom/areas/core/node
 import echarts as ec
 import echarts/e_charts_core_option as raw
+import echarts/e_charts_init_opts
 import echarts/e_charts_type
 import echarts/ec_unit_option as unit
 import echarts/runtime
@@ -27,13 +28,15 @@ pub fn main() -> Nil {
     document.get_element_by_id(doc, "chart-gauge")
   {
     Some(r_box), Some(g_box) -> {
-      let radar = ec.init_with(Some(r_box), None, None)
-      let gauge = ec.init_with(Some(g_box), None, None)
+      let radar =
+        ec.init_with(r_box, dynamic.nil(), e_charts_init_opts.create())
+      let gauge =
+        ec.init_with(g_box, dynamic.nil(), e_charts_init_opts.create())
 
       let r_opt =
         raw.create()
         |> unit.with_animation(False)
-        |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
+        |> unit.with_background_color("#ffffff")
         |> unit.with_at(
           "legend",
           obj([
@@ -142,7 +145,7 @@ pub fn main() -> Nil {
       let g_opt =
         raw.create()
         |> unit.with_animation(False)
-        |> unit.with_at("backgroundColor", dynamic.string("#ffffff"))
+        |> unit.with_background_color("#ffffff")
         |> unit.with_at(
           "series",
           dynamic.array([

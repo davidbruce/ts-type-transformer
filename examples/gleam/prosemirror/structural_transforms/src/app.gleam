@@ -130,33 +130,17 @@ fn build_schema() -> t.Schema(Nil) {
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(
-      nodes,
-    ))
-    |> schema_spec.with_marks(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(
-      marks,
-    ))
+    |> schema_spec.with_nodes(nodes)
+    |> schema_spec.with_marks(marks)
   schema.new(spec)
 }
 
 fn p_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node_with(
-    sch,
-    t.StringOrNodeTypeString("paragraph"),
-    None,
-    Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, txt))),
-    None,
-  )
+  schema.node_with(sch, "paragraph", attrs.create(), schema.text(sch, txt), [])
 }
 
 fn li_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node_with(
-    sch,
-    t.StringOrNodeTypeString("list_item"),
-    None,
-    Some(t.FragmentOrNodeOrNodeArrayNode(p_node(sch, txt))),
-    None,
-  )
+  schema.node_with(sch, "list_item", attrs.create(), p_node(sch, txt), [])
 }
 
 fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
@@ -166,63 +150,52 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   let h =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("heading"),
-      Some(ha),
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "Structural Transform Pipeline",
-        )),
-      ),
-      None,
+      "heading",
+      ha,
+      schema.text(sch, "Structural Transform Pipeline"),
+      [],
     )
   let quote =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("blockquote"),
-      None,
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(p_node(
-          sch,
-          "Blockquote content can be lifted back to top-level document depth.",
-        )),
+      "blockquote",
+      attrs.create(),
+      p_node(
+        sch,
+        "Blockquote content can be lifted back to top-level document depth.",
       ),
-      None,
+      [],
     )
   let ulist =
-    schema.node_with(
+    schema.node_list_with(
       sch,
-      t.StringOrNodeTypeString("bullet_list"),
-      None,
-      Some(
-        t.FragmentOrNodeOrNodeArrayArray([
-          li_node(sch, "Split at cursor position"),
-          li_node(sch, "Wrap range with blockquote"),
-          li_node(sch, "Lift nested block to root"),
-        ]),
-      ),
-      None,
+      "bullet_list",
+      attrs.create(),
+      [
+        li_node(sch, "Split at cursor position"),
+        li_node(sch, "Wrap range with blockquote"),
+        li_node(sch, "Lift nested block to root"),
+      ],
+      [],
     )
-  schema.node_with(
+  schema.node_list_with(
     sch,
-    t.StringOrNodeTypeString("doc"),
-    None,
-    Some(
-      t.FragmentOrNodeOrNodeArrayArray([
-        h,
-        p_node(
-          sch,
-          "ProseMirror transforms express structural edits as invertible steps.",
-        ),
-        p_node(
-          sch,
-          "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly.",
-        ),
-        quote,
-        ulist,
-      ]),
-    ),
-    None,
+    "doc",
+    attrs.create(),
+    [
+      h,
+      p_node(
+        sch,
+        "ProseMirror transforms express structural edits as invertible steps.",
+      ),
+      p_node(
+        sch,
+        "Wrap blocks in quotes, lift nested content, or split paragraphs cleanly.",
+      ),
+      quote,
+      ulist,
+    ],
+    [],
   )
 }
 
@@ -378,11 +351,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view =
-    editor_view.new(
-      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
-      props,
-    )
+  let view = editor_view.new_node2(mount, props)
   pm_rt.ref_set(view_ref, Some(view))
   update_meta(
     doc,
@@ -431,11 +400,7 @@ pub fn main() {
     {
       True ->
         case
-          resolved_pos.block_range_with(
-            sf,
-            Some(selection.get_dollar_to(sel)),
-            None,
-          )
+          resolved_pos.block_range_with(sf, selection.get_dollar_to(sel), None)
         {
           Some(r) ->
             case prosemirror_transform.find_wrapping(r, qtype) {
@@ -503,7 +468,7 @@ pub fn main() {
     let d = editor_state.get_doc(st)
     let n = pm_rt.ref_update(notes_ref, fn(cur) { cur + 1 })
     let sz = fragment.get_size(node.get_content(d))
-    let hr = schema.node(sch, t.StringOrNodeTypeString("horizontal_rule"))
+    let hr = schema.node(sch, "horizontal_rule")
     let note =
       p_node(
         sch,
@@ -515,7 +480,7 @@ pub fn main() {
       )
     let tr =
       editor_state.get_tr(st)
-      |> transform.insert(sz, t.FragmentOrNodeOrNodeArrayArray([hr, note]))
+      |> transform.insert_list(sz, [hr, note])
     pm_rt.ref_set(
       op_ref,
       "Inserted horizontal_rule + note #" <> int.to_string(n),

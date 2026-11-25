@@ -5,7 +5,7 @@ import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import gleam/float
 import gleam/int
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import three/ambient_light
 import three/color
 import three/cylinder_geometry
@@ -42,17 +42,13 @@ fn std_mat(
   rough: Float,
   metal: Float,
   flat: Bool,
-) -> t.MaterialOrMaterialArray {
+) -> t.MeshStandardMaterial(Nil) {
   mesh_standard_material_parameters.create()
-  |> mesh_standard_material_parameters.with_color(
-    t.ColorRepresentationNumber(hex(color_hex)),
-  )
+  |> mesh_standard_material_parameters.with_color_number(hex(color_hex))
   |> mesh_standard_material_parameters.with_roughness(rough)
   |> mesh_standard_material_parameters.with_metalness(metal)
   |> mesh_standard_material_parameters.with_flat_shading(flat)
-  |> Some
   |> mesh_standard_material.new_with
-  |> t.material_or_material_array_material
 }
 
 fn fmt_v3(v: t.Vector3(Nil)) -> String {
@@ -74,7 +70,7 @@ pub fn main() {
     web_gl_renderer_parameters.create()
     |> web_gl_renderer_parameters.with_antialias(True)
     |> web_gl_renderer_parameters.with_preserve_drawing_buffer(True)
-  let renderer = web_gl_renderer.new_with(Some(rp))
+  let renderer = web_gl_renderer.new_with(rp)
   web_gl_renderer.set_pixel_ratio(renderer, 1.0)
   web_gl_renderer.set_size(renderer, width, height)
 
@@ -82,87 +78,55 @@ pub fn main() {
   dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
 
   let sc = scene.new()
-  scene.set_background(
-    sc,
-    Some(
-      t.ColorOrTextureColor(
-        color.new_with(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))),
-      ),
-    ),
-  )
-  let cam =
-    perspective_camera.new_with(
-      Some(42.0),
-      Some(width /. height),
-      Some(0.1),
-      Some(100.0),
-    )
+  scene.set_background_color(sc, color.new_number_with(hex(0xf7f7f7)))
+  let cam = perspective_camera.new_with(42.0, width /. height, 0.1, 100.0)
   object3d.get_position(cam)
-  |> vector3.set_with(5.6, 5.2, Some(7.6))
-  object3d.look_at(cam, vector3.new_with(Some(0.0), Some(-0.1), Some(0.0)))
+  |> vector3.set_with(5.6, 5.2, 7.6)
+  object3d.look_at(cam, vector3.new_with(0.0, -0.1, 0.0))
 
   object3d.add(sc, [
-    ambient_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(1.2),
-    ),
+    ambient_light.new_number_with(hex(0xffffff), 1.2),
   ])
-  let key =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(2.2),
-    )
+  let key = directional_light.new_number_with(hex(0xffffff), 2.2)
   object3d.get_position(key)
-  |> vector3.set_with(6.0, 10.0, Some(8.0))
+  |> vector3.set_with(6.0, 10.0, 8.0)
   object3d.add(sc, [key])
-  let rim =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(0.9),
-    )
+  let rim = directional_light.new_number_with(hex(0xffffff), 0.9)
   object3d.get_position(rim)
-  |> vector3.set_with(-7.0, 5.0, Some(-6.0))
+  |> vector3.set_with(-7.0, 5.0, -6.0)
   object3d.add(sc, [rim])
 
   let grid =
-    grid_helper.new_with(
-      Some(12.0),
-      Some(12.0),
-      Some(t.ColorRepresentationNumber(hex(0x999999))),
-      Some(t.ColorRepresentationNumber(hex(0xe5e5e5))),
+    grid_helper.new_of_with(
+      12.0,
+      12.0,
+      t.ColorRepresentationNumber(hex(0x999999)),
+      t.ColorRepresentationNumber(hex(0xe5e5e5)),
     )
   vector3.set_y(object3d.get_position(grid), -1.5)
   object3d.add(sc, [grid])
 
   let pedestal =
     mesh.new_with(
-      Some(cylinder_geometry.new_with(
-        Some(0.55),
-        Some(0.75),
-        Some(0.35),
-        Some(24.0),
-        None,
-        None,
-        None,
-        None,
-      )),
-      Some(std_mat(0x262626, 0.7, 0.05, False)),
+      cylinder_geometry.args_create()
+        |> cylinder_geometry.args_with_radius_top(0.55)
+        |> cylinder_geometry.args_with_radius_bottom(0.75)
+        |> cylinder_geometry.args_with_height(0.35)
+        |> cylinder_geometry.args_with_radial_segments(24.0)
+        |> cylinder_geometry.new_with,
+      std_mat(0x262626, 0.7, 0.05, False),
     )
   vector3.set_y(object3d.get_position(pedestal), -1.3)
   object3d.add(sc, [pedestal])
 
   let core_sphere =
     mesh.new_with(
-      Some(sphere_geometry.new_with(
-        Some(0.65),
-        Some(24.0),
-        Some(18.0),
-        None,
-        None,
-        None,
-        None,
-      )),
-      Some(std_mat(0x111111, 0.45, 0.2, False)),
+      sphere_geometry.args_create()
+        |> sphere_geometry.args_with_radius(0.65)
+        |> sphere_geometry.args_with_width_segments(24.0)
+        |> sphere_geometry.args_with_height_segments(18.0)
+        |> sphere_geometry.new_with,
+      std_mat(0x111111, 0.45, 0.2, False),
     )
   object3d.add(sc, [core_sphere])
 
@@ -170,45 +134,32 @@ pub fn main() {
   object3d.add(sc, [inner_pivot])
   let tp1 =
     mesh_basic_material_parameters.create()
-    |> mesh_basic_material_parameters.with_color(
-      t.ColorRepresentationNumber(hex(0x999999)),
-    )
+    |> mesh_basic_material_parameters.with_color_number(hex(0x999999))
   let inner_track =
     mesh.new_with(
-      Some(torus_geometry.new_with(
-        Some(2.1),
-        Some(0.025),
-        Some(8.0),
-        Some(64.0),
-        None,
-        None,
-        None,
-      )),
-      Some(
-        t.material_or_material_array_material(
-          mesh_basic_material.new_with(Some(tp1)),
-        ),
-      ),
+      torus_geometry.args_create()
+        |> torus_geometry.args_with_radius(2.1)
+        |> torus_geometry.args_with_tube(0.025)
+        |> torus_geometry.args_with_radial_segments(8.0)
+        |> torus_geometry.args_with_tubular_segments(64.0)
+        |> torus_geometry.new_with,
+      mesh_basic_material.new_with(tp1),
     )
   euler.set_x(object3d.get_rotation(inner_track), pi /. 2.0)
   object3d.add(inner_pivot, [inner_track])
 
   let inner_planet = group.new()
   object3d.get_position(inner_planet)
-  |> vector3.set_with(2.1, 0.0, Some(0.0))
+  |> vector3.set_with(2.1, 0.0, 0.0)
   object3d.add(inner_pivot, [inner_planet])
   let planet =
     mesh.new_with(
-      Some(sphere_geometry.new_with(
-        Some(0.36),
-        Some(20.0),
-        Some(16.0),
-        None,
-        None,
-        None,
-        None,
-      )),
-      Some(std_mat(0x555555, 0.55, 0.1, False)),
+      sphere_geometry.args_create()
+        |> sphere_geometry.args_with_radius(0.36)
+        |> sphere_geometry.args_with_width_segments(20.0)
+        |> sphere_geometry.args_with_height_segments(16.0)
+        |> sphere_geometry.new_with,
+      std_mat(0x555555, 0.55, 0.1, False),
     )
   object3d.add(inner_planet, [planet])
 
@@ -216,63 +167,51 @@ pub fn main() {
   object3d.add(inner_planet, [moon_pivot])
   let moon =
     mesh.new_with(
-      Some(octahedron_geometry.new_with(Some(0.18), Some(0.0))),
-      Some(std_mat(0xd4d4d4, 0.4, 0.1, True)),
+      octahedron_geometry.new_with(0.18, 0.0),
+      std_mat(0xd4d4d4, 0.4, 0.1, True),
     )
   object3d.get_position(moon)
-  |> vector3.set_with(0.75, 0.0, Some(0.0))
+  |> vector3.set_with(0.75, 0.0, 0.0)
   object3d.add(moon_pivot, [moon])
 
   let outer_pivot = group.new()
   object3d.add(sc, [outer_pivot])
   let tp2 =
     mesh_basic_material_parameters.create()
-    |> mesh_basic_material_parameters.with_color(
-      t.ColorRepresentationNumber(hex(0xb5b5b5)),
-    )
+    |> mesh_basic_material_parameters.with_color_number(hex(0xb5b5b5))
   let outer_track =
     mesh.new_with(
-      Some(torus_geometry.new_with(
-        Some(3.8),
-        Some(0.025),
-        Some(8.0),
-        Some(80.0),
-        None,
-        None,
-        None,
-      )),
-      Some(
-        t.material_or_material_array_material(
-          mesh_basic_material.new_with(Some(tp2)),
-        ),
-      ),
+      torus_geometry.args_create()
+        |> torus_geometry.args_with_radius(3.8)
+        |> torus_geometry.args_with_tube(0.025)
+        |> torus_geometry.args_with_radial_segments(8.0)
+        |> torus_geometry.args_with_tubular_segments(80.0)
+        |> torus_geometry.new_with,
+      mesh_basic_material.new_with(tp2),
     )
   euler.set_x(object3d.get_rotation(outer_track), pi /. 2.0)
   object3d.add(outer_pivot, [outer_track])
 
   let outer_station = group.new()
   object3d.get_position(outer_station)
-  |> vector3.set_with(3.8, 0.0, Some(0.0))
+  |> vector3.set_with(3.8, 0.0, 0.0)
   object3d.add(outer_pivot, [outer_station])
   let station_body =
     mesh.new_with(
-      Some(icosahedron_geometry.new_with(Some(0.42), Some(0.0))),
-      Some(std_mat(0x404040, 0.5, 0.1, True)),
+      icosahedron_geometry.new_with(0.42, 0.0),
+      std_mat(0x404040, 0.5, 0.1, True),
     )
   object3d.add(outer_station, [station_body])
 
   let halo =
     mesh.new_with(
-      Some(torus_geometry.new_with(
-        Some(0.68),
-        Some(0.06),
-        Some(10.0),
-        Some(32.0),
-        None,
-        None,
-        None,
-      )),
-      Some(std_mat(0x111111, 0.4, 0.1, False)),
+      torus_geometry.args_create()
+        |> torus_geometry.args_with_radius(0.68)
+        |> torus_geometry.args_with_tube(0.06)
+        |> torus_geometry.args_with_radial_segments(10.0)
+        |> torus_geometry.args_with_tubular_segments(32.0)
+        |> torus_geometry.new_with,
+      std_mat(0x111111, 0.4, 0.1, False),
     )
   euler.set_x(object3d.get_rotation(halo), 0.8)
   object3d.add(outer_station, [halo])
@@ -294,16 +233,13 @@ pub fn main() {
     })
     euler.set_y(object3d.get_rotation(station_body), epoch *. 1.4)
 
-    object3d.update_matrix_world_with(sc, Some(True))
+    object3d.update_matrix_world_with(sc, True)
     let mpos =
-      object3d.get_world_position(
-        moon,
-        vector3.new_with(Some(0.0), Some(0.0), Some(0.0)),
-      )
+      object3d.get_world_position(moon, vector3.new_with(0.0, 0.0, 0.0))
     let spos =
       object3d.get_world_position(
         outer_station,
-        vector3.new_with(Some(0.0), Some(0.0), Some(0.0)),
+        vector3.new_with(0.0, 0.0, 0.0),
       )
 
     dom_node.set_text_content(

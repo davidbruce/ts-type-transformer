@@ -98,6 +98,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         expanding_defaults: RefCell::default(),
         skipped: m.skipped.clone(),
         given_back: given_back(&m),
+        unmakeable: HashSet::new(),
     };
 
     // Names: every type (`names::settle` made them apart), then every
@@ -223,6 +224,9 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
             }
         }
     }
+    // Nor does anything here give one back (echarts' `getDom()` gives an `HTMLElement`).
+    let returned = returned_types(&m);
+    g.unmakeable = m.opaque.iter().filter(|o| !resolved_opaque.contains_key(*o) && !OPAQUE_BUILTINS.contains(&o.as_str()) && !returned.contains(*o)).cloned().collect();
     g.class_bound = compute_class_bound(&m, &g.classes, &g.parents);
     // Compute exact crossing codec indices for callbacks and decodable unions.
     for c in &m.callbacks {
@@ -637,6 +641,33 @@ fn given_back(m: &Model) -> HashSet<String> {
     }
     let mut out = HashSet::new();
     for f in m.funcs.iter().chain(m.classes.iter().flat_map(|c| &c.funcs)) {
+        add(&f.ret, &mut out);
+    }
+    for c in &m.callbacks {
+        c.params.iter().for_each(|(_, t)| add(t, &mut out));
+    }
+    out
+}
+
+// The named types a call's result or a callback's argument holds: not a
+// property's, which gives back what was set (pts' `DefaultFormStyle.lineJoin`).
+fn returned_types(m: &Model) -> HashSet<String> {
+    fn add(t: &Ty, out: &mut HashSet<String>) {
+        match t {
+            Ty::Obj(n) => {
+                out.insert(n.clone());
+            }
+            Ty::Generic(n, ts) => {
+                out.insert(n.clone());
+                ts.iter().for_each(|t| add(t, out));
+            }
+            Ty::Nullable(t, _) | Ty::ArrayOf(t) | Ty::Listener(t) => add(t, out),
+            Ty::Tuple(ts) | Ty::Union(ts) => ts.iter().for_each(|t| add(t, out)),
+            _ => {}
+        }
+    }
+    let mut out = HashSet::new();
+    for f in m.funcs.iter().chain(m.classes.iter().flat_map(|c| &c.funcs)).filter(|f| !matches!(f.call, Call::Get(_) | Call::GetBound(_) | Call::StaticGet(_) | Call::IndexGet)) {
         add(&f.ret, &mut out);
     }
     for c in &m.callbacks {

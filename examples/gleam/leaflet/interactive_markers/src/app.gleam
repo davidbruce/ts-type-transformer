@@ -22,7 +22,6 @@ import leaflet/polyline_options
 import leaflet/popup
 import leaflet/popup_options
 import leaflet/runtime
-import leaflet/types as t
 
 pub fn main() {
   let m_opts =
@@ -31,7 +30,7 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map_with(t.StringOrHTMLElementString("map"), Some(m_opts))
+  let m = leaflet.map_with("map", m_opts)
 
   let bern = leaflet.lat_lng(46.948, 7.4474)
   let stations = [
@@ -49,8 +48,8 @@ pub fn main() {
     |> path_options.with_color("#404040")
     |> path_options.with_weight(2.5)
   let corridor =
-    leaflet.polyline_with(line_pts, Some(p_opts))
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+    leaflet.polyline_with(line_pts, p_opts)
+    |> layer.add_to_map(m)
 
   let dot_opts =
     circle_marker_options.create()
@@ -60,53 +59,40 @@ pub fn main() {
     |> path_options.with_fill_color("#ffffff")
     |> path_options.with_fill_opacity(1.0)
 
-  let pin_size = t.PointExpressionPoint(leaflet.point(22.0, 22.0))
-  let pin_anchor = t.PointExpressionPoint(leaflet.point(11.0, 11.0))
+  let pin_size = leaflet.point(22.0, 22.0)
+  let pin_anchor = leaflet.point(11.0, 11.0)
 
   list.each(stations, fn(s) {
     let #(code, name, pt) = s
-    leaflet.circle_marker_with(t.LatLngExpressionLatLng(pt), Some(dot_opts))
-    |> layer.bind_tooltip_with(
-      t.LayerBindTooltipContentString(code <> " · " <> name),
-      None,
-    )
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+    leaflet.circle_marker_with(pt, dot_opts)
+    |> layer.bind_tooltip(code <> " · " <> name)
+    |> layer.add_to_map(m)
 
     let d_opts =
       div_icon_options.create()
       |> div_icon_options.with_class_name("mono-pin")
-      |> div_icon_options.with_html(t.StringOrElementOrBooleanString(
-        "<span>" <> code <> "</span>",
-      ))
-      |> div_icon_options.with_icon_size(pin_size)
-      |> div_icon_options.with_icon_anchor(pin_anchor)
+      |> div_icon_options.with_html("<span>" <> code <> "</span>")
+      |> div_icon_options.with_icon_size_point(pin_size)
+      |> div_icon_options.with_icon_anchor_point(pin_anchor)
 
     let mk_opts =
       marker_options.create()
-      |> marker_options.with_icon(
-        t.IconOrDivIconDivIcon(leaflet.div_icon_with(Some(d_opts))),
-      )
-    leaflet.marker_with(t.LatLngExpressionLatLng(pt), Some(mk_opts))
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+      |> marker_options.with_icon_div(leaflet.div_icon_with(d_opts))
+    leaflet.marker_with(pt, mk_opts)
+    |> layer.add_to_map(m)
     Nil
   })
 
-  map.fit_bounds(
+  map.fit_bounds_lat_lng_bounds(
     m,
-    t.LatLngBoundsExpressionLatLngBounds(lat_lng_bounds.pad(
-      polyline.get_bounds(corridor),
-      0.15,
-    )),
+    lat_lng_bounds.pad(polyline.get_bounds(corridor), 0.15),
   )
 
   let pop_opts =
     popup_options.create()
     |> popup_options.with_max_width(220.0)
-  let note = leaflet.popup_with(t.LatLngExpressionLatLng(bern), Some(pop_opts))
-  div_overlay.set_content(
-    note,
-    t.DivOverlayResultOrStringOrHTMLElementString("03 Bern · 46.95N, 7.45E"),
-  )
+  let note = leaflet.popup_with(bern, pop_opts)
+  div_overlay.set_content(note, "03 Bern · 46.95N, 7.45E")
   popup.open_on(note, m)
 
   let clicks = runtime.ref_new(0)
@@ -121,12 +107,10 @@ pub fn main() {
           runtime.to_fixed(lat, 2) <> "N, " <> runtime.to_fixed(lng, 2) <> "E"
         case n > 2 {
           True -> {
-            div_overlay.set_lat_lng(note, t.LatLngExpressionLatLng(ll))
+            div_overlay.set_lat_lng(note, ll)
             div_overlay.set_content(
               note,
-              t.DivOverlayResultOrStringOrHTMLElementString(
-                "Click #" <> int.to_string(n) <> " · " <> coords,
-              ),
+              "Click #" <> int.to_string(n) <> " · " <> coords,
             )
             popup.open_on(note, m)
             Nil
@@ -154,7 +138,7 @@ pub fn main() {
 
   let payload = leaflet_mouse_event.create()
   leaflet_mouse_event.set_latlng(payload, bern)
-  evented.fire_with(m, "click", Some(runtime.dynamic(payload)), None)
-  evented.fire_with(m, "click", Some(runtime.dynamic(payload)), None)
+  evented.fire_with(m, "click", runtime.dynamic(payload), False)
+  evented.fire_with(m, "click", runtime.dynamic(payload), False)
   Nil
 }

@@ -30,8 +30,7 @@ fn poly_opts(
     |> path_options.with_fill_color(fill_color)
     |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) ->
-      path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    Some(d) -> path_options.with_dash_array(opts, d)
     None -> opts
   }
 }
@@ -43,7 +42,7 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map_with(t.StringOrHTMLElementString("map"), Some(m_opts))
+  let m = leaflet.map_with("map", m_opts)
 
   let mid_pts = [
     t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.2, 7.6)),
@@ -63,26 +62,26 @@ pub fn main() {
   let mid_poly =
     leaflet.polygon_with(
       mid_pts,
-      Some(poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55)),
+      poly_opts("#404040", 2.0, None, "#d4d4d4", 0.55),
     )
   let core_poly =
     leaflet.polygon_with(
       core_pts,
-      Some(poly_opts("#111111", 2.5, None, "#404040", 0.75)),
+      poly_opts("#111111", 2.5, None, "#404040", 0.75),
     )
 
   let mid_bounds = polyline.get_bounds(mid_poly)
   let core_bounds = polyline.get_bounds(core_poly)
   let padded = lat_lng_bounds.pad(mid_bounds, 0.18)
   let hull_rect =
-    leaflet.rectangle_with(
-      t.LatLngBoundsExpressionLatLngBounds(padded),
-      Some(poly_opts("#737373", 1.5, Some("4 4"), "#efefef", 0.05)),
+    leaflet.rectangle_lat_lng_bounds_with(
+      padded,
+      poly_opts("#737373", 1.5, Some("4 4"), "#efefef", 0.05),
     )
 
-  layer.add_to(hull_rect, t.MapOrLayerGroupMap(m))
-  layer.add_to(mid_poly, t.MapOrLayerGroupMap(m))
-  layer.add_to(core_poly, t.MapOrLayerGroupMap(m))
+  layer.add_to_map(hull_rect, m)
+  layer.add_to_map(mid_poly, m)
+  layer.add_to_map(core_poly, m)
 
   let probes = [
     leaflet.lat_lng(47.25, 8.6),
@@ -99,19 +98,11 @@ pub fn main() {
     list.fold(probes, #(0, 0, 0), fn(acc, pt) {
       let #(c_cnt, m_cnt, e_cnt) = acc
       let #(fill_hex, next_acc) = case
-        lat_lng_bounds.contains(
-          core_bounds,
-          t.LatLngBoundsExtendLatlngOrBoundsLatLng(pt),
-        )
+        lat_lng_bounds.contains(core_bounds, pt)
       {
         True -> #("#111111", #(c_cnt + 1, m_cnt, e_cnt))
         False ->
-          case
-            lat_lng_bounds.contains(
-              mid_bounds,
-              t.LatLngBoundsExtendLatlngOrBoundsLatLng(pt),
-            )
-          {
+          case lat_lng_bounds.contains(mid_bounds, pt) {
             True -> #("#737373", #(c_cnt, m_cnt + 1, e_cnt))
             False -> #("#ffffff", #(c_cnt, m_cnt, e_cnt + 1))
           }
@@ -123,12 +114,12 @@ pub fn main() {
         |> path_options.with_weight(2.0)
         |> path_options.with_fill_color(fill_hex)
         |> path_options.with_fill_opacity(1.0)
-      leaflet.circle_marker_with(t.LatLngExpressionLatLng(pt), Some(cm_opts))
-      |> layer.add_to(t.MapOrLayerGroupMap(m))
+      leaflet.circle_marker_with(pt, cm_opts)
+      |> layer.add_to_map(m)
       next_acc
     })
 
-  map.fit_bounds(m, t.LatLngBoundsExpressionLatLngBounds(padded))
+  map.fit_bounds_lat_lng_bounds(m, padded)
 
   case document.get_element_by_id(core.get_document(), "meta") {
     Some(meta) ->

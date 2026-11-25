@@ -1,6 +1,5 @@
 import date_fns as df
 import date_fns/duration
-import date_fns/types as dt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
@@ -39,8 +38,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let day = dt.DateArgDate
-
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
       let h1 = document.create_element(doc, tag.h1)
@@ -60,21 +57,17 @@ pub fn main() -> Nil {
         |> duration.with_days(2.0)
 
       let ops = [
-        #("addDays(base, 3)", df.add_days(day(base_d), 3.0), "yyyy-MM-dd"),
-        #("subDays(base, 15)", df.sub_days(day(base_d), 15.0), "yyyy-MM-dd"),
-        #("addWeeks(base, 2)", df.add_weeks(day(base_d), 2.0), "yyyy-MM-dd"),
-        #("addMonths(jan31, 1)", df.add_months(day(jan31), 1.0), "yyyy-MM-dd"),
-        #("subMonths(base, 3)", df.sub_months(day(base_d), 3.0), "yyyy-MM-dd"),
-        #("addYears(base, 1)", df.add_years(day(base_d), 1.0), "yyyy-MM-dd"),
-        #("startOfWeek(base)", df.start_of_week(day(base_d)), "yyyy-MM-dd"),
-        #(
-          "endOfMonth(base)",
-          df.end_of_month(day(base_d)),
-          "yyyy-MM-dd HH:mm:ss",
-        ),
+        #("addDays(base, 3)", df.add_days(base_d, 3.0), "yyyy-MM-dd"),
+        #("subDays(base, 15)", df.sub_days(base_d, 15.0), "yyyy-MM-dd"),
+        #("addWeeks(base, 2)", df.add_weeks(base_d, 2.0), "yyyy-MM-dd"),
+        #("addMonths(jan31, 1)", df.add_months(jan31, 1.0), "yyyy-MM-dd"),
+        #("subMonths(base, 3)", df.sub_months(base_d, 3.0), "yyyy-MM-dd"),
+        #("addYears(base, 1)", df.add_years(base_d, 1.0), "yyyy-MM-dd"),
+        #("startOfWeek(base)", df.start_of_week(base_d), "yyyy-MM-dd"),
+        #("endOfMonth(base)", df.end_of_month(base_d), "yyyy-MM-dd HH:mm:ss"),
         #(
           "add(base, { months: 1, days: 2 })",
-          df.add(day(base_d), dur),
+          df.add(base_d, dur),
           "yyyy-MM-dd",
         ),
         #("base (immutable check)", base_d, "yyyy-MM-dd"),
@@ -108,18 +101,16 @@ pub fn main() -> Nil {
         node.set_text_content(code, Some(name))
         node.append_child(td_op, code)
         let td_res = document.create_element(doc, tag.td)
-        node.set_text_content(td_res, Some(df.format_date(day(res), fmt)))
+        node.set_text_content(td_res, Some(df.format_date(res, fmt)))
         let td_dd = document.create_element(doc, tag.td)
         node.set_text_content(
           td_dd,
-          Some(
-            fmt_signed(df.difference_in_calendar_days(day(res), day(base_d))),
-          ),
+          Some(fmt_signed(df.difference_in_calendar_days(res, base_d))),
         )
         let td_dh = document.create_element(doc, tag.td)
         node.set_text_content(
           td_dh,
-          Some(fmt_signed(df.difference_in_hours(day(res), day(base_d)))),
+          Some(fmt_signed(df.difference_in_hours(res, base_d))),
         )
         node.append_child(tr, td_op)
         node.append_child(tr, td_res)

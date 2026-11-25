@@ -39,8 +39,7 @@ fn poly_opts(
     |> path_options.with_weight(weight)
     |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) ->
-      path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    Some(d) -> path_options.with_dash_array(opts, d)
     None -> opts
   }
 }
@@ -48,16 +47,13 @@ fn poly_opts(
 fn pair_distances_km(pts: List(t.LatLng(Nil))) -> Float {
   case pts {
     [a, b, ..rest] ->
-      lat_lng.distance_to(a, t.LatLngExpressionLatLng(b))
-      /. 1000.0
-      +. pair_distances_km([b, ..rest])
+      lat_lng.distance_to(a, b) /. 1000.0 +. pair_distances_km([b, ..rest])
     _ -> 0.0
   }
 }
 
 pub fn main() {
-  let m =
-    leaflet.map_with(t.StringOrHTMLElementString("map"), Some(make_map_opts()))
+  let m = leaflet.map_with("map", make_map_opts())
   let london = leaflet.lat_lng(51.505, -0.09)
   let paris = leaflet.lat_lng(48.8566, 2.3522)
   let zurich = leaflet.lat_lng(47.3769, 8.5417)
@@ -81,9 +77,9 @@ pub fn main() {
         runtime.dynamic(leaflet.lat_lng(lat, -2.0)),
         runtime.dynamic(leaflet.lat_lng(lat, 17.0)),
       ],
-      Some(grat_opts),
+      grat_opts,
     )
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+    |> layer.add_to_map(m)
     Nil
   })
   list.each([0.0, 4.0, 8.0, 12.0, 16.0], fn(lng) {
@@ -92,19 +88,16 @@ pub fn main() {
         runtime.dynamic(leaflet.lat_lng(45.0, lng)),
         runtime.dynamic(leaflet.lat_lng(55.0, lng)),
       ],
-      Some(grat_opts),
+      grat_opts,
     )
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+    |> layer.add_to_map(m)
     Nil
   })
 
   let primary_pts = list.map(hubs, fn(h) { runtime.dynamic(h.1) })
   let primary_line =
-    leaflet.polyline_with(
-      primary_pts,
-      Some(poly_opts("#111111", 3.0, None, 0.0)),
-    )
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+    leaflet.polyline_with(primary_pts, poly_opts("#111111", 3.0, None, 0.0))
+    |> layer.add_to_map(m)
 
   leaflet.polyline_with(
     [
@@ -113,9 +106,9 @@ pub fn main() {
       runtime.dynamic(leaflet.lat_lng(52.3676, 4.9041)),
       runtime.dynamic(berlin),
     ],
-    Some(poly_opts("#737373", 1.5, Some("5 5"), 0.0)),
+    poly_opts("#737373", 1.5, Some("5 5"), 0.0),
   )
-  |> layer.add_to(t.MapOrLayerGroupMap(m))
+  |> layer.add_to_map(m)
 
   let nodes = leaflet.layer_group()
   let node_opts =
@@ -128,17 +121,14 @@ pub fn main() {
 
   list.each(hubs, fn(h) {
     let cm =
-      leaflet.circle_marker_with(t.LatLngExpressionLatLng(h.1), Some(node_opts))
-      |> layer.bind_tooltip_with(t.LayerBindTooltipContentString(h.0), None)
+      leaflet.circle_marker_with(h.1, node_opts)
+      |> layer.bind_tooltip(h.0)
     layer_group.add_layer(nodes, cm)
     Nil
   })
-  layer.add_to(nodes, t.MapOrLayerGroupMap(m))
+  layer.add_to_map(nodes, m)
 
-  map.fit_bounds(
-    m,
-    t.LatLngBoundsExpressionLatLngBounds(polyline.get_bounds(primary_line)),
-  )
+  map.fit_bounds_lat_lng_bounds(m, polyline.get_bounds(primary_line))
 
   let total_km = pair_distances_km(list.map(hubs, fn(h) { h.1 }))
   let km_str = int.to_string(float.round(total_km))

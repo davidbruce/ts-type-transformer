@@ -4,7 +4,7 @@
 
 static Konva_Line make_grid_line(double x1, double y1, double x2, double y2) {
     Konva_LineConfig lc = Konva_LineConfig_create(
-        .points_array = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4),
+        .points = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4),
         .stroke = "#e5e5e5", .strokeWidth = 1
     );
     return Konva_Line_new(lc);

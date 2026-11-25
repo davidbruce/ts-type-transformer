@@ -37,7 +37,7 @@ static void on_card_click(void* ctx, KonvaEventObject e) {
 
 static Konva_Line make_line(double x1, double y1, double x2, double y2, const char* color, double width) {
     Konva_LineConfig lc = Konva_LineConfig_create(
-        .points_array = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4),
+        .points = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4),
         .stroke = color, .strokeWidth = width
     );
     return Konva_Line_new(lc);

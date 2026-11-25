@@ -26,6 +26,7 @@ import tanstack_table_core/table_columns
 import tanstack_table_core/table_core_properties
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/table_row_selection
+import tanstack_table_core/table_toggle_all_page_rows_selected_opts
 import tanstack_table_core/types as t
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
@@ -326,11 +327,19 @@ pub fn main() {
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
-    table_row_selection.toggle_all_rows_selected_with(sel, Some(True), None)
+    table_row_selection.toggle_all_rows_selected_with(
+      sel,
+      True,
+      table_toggle_all_page_rows_selected_opts.create(),
+    )
     render(table, doc)
   })
   wire_btn(doc, "btn-3", fn() {
-    table_row_selection.toggle_all_rows_selected_with(sel, Some(False), None)
+    table_row_selection.toggle_all_rows_selected_with(
+      sel,
+      False,
+      table_toggle_all_page_rows_selected_opts.create(),
+    )
     render(table, doc)
   })
   wire_btn(doc, "btn-4", fn() {

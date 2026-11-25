@@ -16,9 +16,7 @@ import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import dom/areas/html/html_element_tag_name_map as tag
-import dom/types.{
-  type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString,
-}
+import dom/types.{type CanvasRenderingContext2D}
 import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
@@ -84,10 +82,7 @@ fn draw_box(
   let px3 = to_cx(cx +. c *. { 0.0 -. hx } -. s *. hy)
   let py3 = to_cy(cy +. s *. { 0.0 -. hx } +. c *. hy)
 
-  ctx2d.set_fill_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString(fill_hex),
-  )
+  ctx2d.set_fill_style(ctx, fill_hex)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
   ctx2d.line_to(ctx, px1, py1)
@@ -96,10 +91,7 @@ fn draw_box(
   ctx2d.close_path(ctx)
   ctx2d.fill(ctx)
 
-  ctx2d.set_stroke_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString("#111111"),
-  )
+  ctx2d.set_stroke_style(ctx, "#111111")
   ctx2d.set_line_width(ctx, 1.5)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
@@ -120,17 +112,11 @@ fn draw_circle(
   let cx = to_cx(wx)
   let cy = to_cy(wy)
   let rpx = r *. 46.0
-  ctx2d.set_fill_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString(fill_hex),
-  )
+  ctx2d.set_fill_style(ctx, fill_hex)
   ctx2d.begin_path(ctx)
   ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
   ctx2d.fill(ctx)
-  ctx2d.set_stroke_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString("#111111"),
-  )
+  ctx2d.set_stroke_style(ctx, "#111111")
   ctx2d.set_line_width(ctx, 1.5)
   ctx2d.begin_path(ctx)
   ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
@@ -159,7 +145,7 @@ pub fn main() {
       |> rigid_body_desc.set_translation(cx, cy, 0.0)
       |> rigid_body_desc.set_rotation(rot_z(theta))
     let rb = world.create_rigid_body(w, desc)
-    world.create_collider_with(w, collider_desc.cuboid(hx, hy, 1.0), Some(rb))
+    world.create_collider_with(w, collider_desc.cuboid(hx, hy, 1.0), rb)
     Nil
   }
   let add_sphere = fn(cx: Float, cy: Float, r: Float) {
@@ -168,7 +154,7 @@ pub fn main() {
         w,
         rigid_body_desc.fixed() |> rigid_body_desc.set_translation(cx, cy, 0.0),
       )
-    world.create_collider_with(w, collider_desc.ball(r), Some(rb))
+    world.create_collider_with(w, collider_desc.ball(r), rb)
     Nil
   }
 
@@ -186,16 +172,10 @@ pub fn main() {
   let offset_ref = rp_rt.ref_new(0.0)
 
   let render = fn() {
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
-    )
+    ctx2d.set_fill_style(ctx, "#ffffff")
     ctx2d.fill_rect(ctx, 0.0, 0.0, 680.0, 400.0)
 
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#efefef"),
-    )
+    ctx2d.set_stroke_style(ctx, "#efefef")
     ctx2d.set_line_width(ctx, 1.0)
     int.range(from: -6, to: 7, with: Nil, run: fn(_, gx) {
       let x = to_cx(int.to_float(gx))
@@ -246,10 +226,7 @@ pub fn main() {
             let hx = to_cx(ptx)
             let hy = to_cy(pty)
 
-            ctx2d.set_stroke_style(
-              ctx,
-              StringOrCanvasGradientOrCanvasPatternString("#737373"),
-            )
+            ctx2d.set_stroke_style(ctx, "#737373")
             ctx2d.set_line_width(ctx, 1.0)
             ctx2d.begin_path(ctx)
             ctx2d.move_to(ctx, ox, oy)
@@ -257,10 +234,7 @@ pub fn main() {
             ctx2d.stroke(ctx)
 
             let n = ray_collider_intersection.get_normal(hit)
-            ctx2d.set_stroke_style(
-              ctx,
-              StringOrCanvasGradientOrCanvasPatternString("#111111"),
-            )
+            ctx2d.set_stroke_style(ctx, "#111111")
             ctx2d.set_line_width(ctx, 1.4)
             ctx2d.begin_path(ctx)
             ctx2d.move_to(ctx, hx, hy)
@@ -271,10 +245,7 @@ pub fn main() {
             )
             ctx2d.stroke(ctx)
 
-            ctx2d.set_fill_style(
-              ctx,
-              StringOrCanvasGradientOrCanvasPatternString("#111111"),
-            )
+            ctx2d.set_fill_style(ctx, "#111111")
             ctx2d.begin_path(ctx)
             ctx2d.arc(ctx, hx, hy, 2.8, 0.0, two_pi)
             ctx2d.fill(ctx)
@@ -282,10 +253,7 @@ pub fn main() {
             #(hit_count + 1, float.min(cur_min, toi))
           }
           None -> {
-            ctx2d.set_stroke_style(
-              ctx,
-              StringOrCanvasGradientOrCanvasPatternString("#e5e5e5"),
-            )
+            ctx2d.set_stroke_style(ctx, "#e5e5e5")
             ctx2d.set_line_width(ctx, 0.9)
             ctx2d.begin_path(ctx)
             ctx2d.move_to(ctx, ox, oy)
@@ -300,17 +268,11 @@ pub fn main() {
         }
       })
 
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#111111"),
-    )
+    ctx2d.set_fill_style(ctx, "#111111")
     ctx2d.begin_path(ctx)
     ctx2d.arc(ctx, ox, oy, 6.0, 0.0, two_pi)
     ctx2d.fill(ctx)
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
-    )
+    ctx2d.set_stroke_style(ctx, "#ffffff")
     ctx2d.set_line_width(ctx, 1.5)
     ctx2d.begin_path(ctx)
     ctx2d.arc(ctx, ox, oy, 3.0, 0.0, two_pi)

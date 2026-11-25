@@ -68,7 +68,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     let mut b = Builder {
         opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], enum_docs: vec![], num_enum_docs: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], enum_docs: vec![], num_enum_docs: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new(), args_bags: HashMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -142,6 +142,9 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     b.model.requested_packages = doc.root_element().attribute("packages").map(|p| p.split(' ').map(str::to_string).collect()).unwrap_or_default();
     b.decls_of(doc.root_element(), "");
     b.nest_generated(doc.root_element());
+    if opts.args_bags {
+        b.args_bags();
+    }
     // JavaScript's built-in `Function` (used by `TimerHandler`, Konva, etc.)
     // is a callable variadic callback rather than an unconstructible opaque handle.
     if b.opaque.remove("Function") && !b.model.callbacks.iter().any(|c| c.name == "Function") && !b.model.classes.iter().any(|c| c.name == "Function") {

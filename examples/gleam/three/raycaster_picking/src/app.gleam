@@ -96,7 +96,7 @@ pub fn main() {
     web_gl_renderer_parameters.create()
     |> web_gl_renderer_parameters.with_antialias(True)
     |> web_gl_renderer_parameters.with_preserve_drawing_buffer(True)
-  let renderer = web_gl_renderer.new_with(Some(rp))
+  let renderer = web_gl_renderer.new_with(rp)
   web_gl_renderer.set_pixel_ratio(renderer, 1.0)
   web_gl_renderer.set_size(renderer, width, height)
   let canvas = web_gl_renderer.get_dom_element(renderer)
@@ -105,51 +105,27 @@ pub fn main() {
   dom_node.append_child(stage, canvas)
 
   let sc = scene.new()
-  scene.set_background(
-    sc,
-    Some(
-      t.ColorOrTextureColor(
-        color.new_with(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))),
-      ),
-    ),
-  )
-  let cam =
-    perspective_camera.new_with(
-      Some(42.0),
-      Some(width /. height),
-      Some(0.1),
-      Some(100.0),
-    )
+  scene.set_background_color(sc, color.new_number_with(hex(0xf7f7f7)))
+  let cam = perspective_camera.new_with(42.0, width /. height, 0.1, 100.0)
 
   object3d.add(sc, [
-    ambient_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(1.2),
-    ),
+    ambient_light.new_number_with(hex(0xffffff), 1.2),
   ])
-  let key =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(2.2),
-    )
+  let key = directional_light.new_number_with(hex(0xffffff), 2.2)
   object3d.get_position(key)
-  |> vector3.set_with(6.0, 10.0, Some(8.0))
+  |> vector3.set_with(6.0, 10.0, 8.0)
   object3d.add(sc, [key])
-  let rim =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(0.9),
-    )
+  let rim = directional_light.new_number_with(hex(0xffffff), 0.9)
   object3d.get_position(rim)
-  |> vector3.set_with(-7.0, 5.0, Some(-6.0))
+  |> vector3.set_with(-7.0, 5.0, -6.0)
   object3d.add(sc, [rim])
 
   let grid =
-    grid_helper.new_with(
-      Some(9.0),
-      Some(9.0),
-      Some(t.ColorRepresentationNumber(hex(0x999999))),
-      Some(t.ColorRepresentationNumber(hex(0xd4d4d4))),
+    grid_helper.new_of_with(
+      9.0,
+      9.0,
+      t.ColorRepresentationNumber(hex(0x999999)),
+      t.ColorRepresentationNumber(hex(0xd4d4d4)),
     )
   vector3.set_y(object3d.get_position(grid), -0.85)
   object3d.add(sc, [grid])
@@ -157,88 +133,71 @@ pub fn main() {
   let defs: List(#(String, t.BufferGeometry(Nil))) = [
     #(
       "Box",
-      buffer_geometry.upcast(box_geometry.new_with(
-        Some(1.05),
-        Some(1.05),
-        Some(1.05),
-        None,
-        None,
-        None,
-      )),
+      buffer_geometry.upcast(
+        box_geometry.args_create()
+        |> box_geometry.args_with_width(1.05)
+        |> box_geometry.args_with_height(1.05)
+        |> box_geometry.args_with_depth(1.05)
+        |> box_geometry.new_with,
+      ),
     ),
     #(
       "Cone",
-      buffer_geometry.upcast(cone_geometry.new_with(
-        Some(0.62),
-        Some(1.25),
-        Some(20.0),
-        None,
-        None,
-        None,
-        None,
-      )),
+      buffer_geometry.upcast(
+        cone_geometry.args_create()
+        |> cone_geometry.args_with_radius(0.62)
+        |> cone_geometry.args_with_height(1.25)
+        |> cone_geometry.args_with_radial_segments(20.0)
+        |> cone_geometry.new_with,
+      ),
     ),
     #(
       "Cylinder",
-      buffer_geometry.upcast(cylinder_geometry.new_with(
-        Some(0.48),
-        Some(0.48),
-        Some(1.2),
-        Some(24.0),
-        None,
-        None,
-        None,
-        None,
-      )),
+      buffer_geometry.upcast(
+        cylinder_geometry.args_create()
+        |> cylinder_geometry.args_with_radius_top(0.48)
+        |> cylinder_geometry.args_with_radius_bottom(0.48)
+        |> cylinder_geometry.args_with_height(1.2)
+        |> cylinder_geometry.args_with_radial_segments(24.0)
+        |> cylinder_geometry.new_with,
+      ),
     ),
     #(
       "Sphere",
-      buffer_geometry.upcast(sphere_geometry.new_with(
-        Some(0.62),
-        Some(24.0),
-        Some(18.0),
-        None,
-        None,
-        None,
-        None,
-      )),
+      buffer_geometry.upcast(
+        sphere_geometry.args_create()
+        |> sphere_geometry.args_with_radius(0.62)
+        |> sphere_geometry.args_with_width_segments(24.0)
+        |> sphere_geometry.args_with_height_segments(18.0)
+        |> sphere_geometry.new_with,
+      ),
     ),
     #(
       "Octahedron",
-      buffer_geometry.upcast(octahedron_geometry.new_with(Some(0.68), Some(0.0))),
+      buffer_geometry.upcast(octahedron_geometry.new_with(0.68, 0.0)),
     ),
     #(
       "Dodecahedron",
-      buffer_geometry.upcast(dodecahedron_geometry.new_with(
-        Some(0.62),
-        Some(0.0),
-      )),
+      buffer_geometry.upcast(dodecahedron_geometry.new_with(0.62, 0.0)),
     ),
     #(
       "Torus",
-      buffer_geometry.upcast(torus_geometry.new_with(
-        Some(0.5),
-        Some(0.18),
-        Some(14.0),
-        Some(36.0),
-        None,
-        None,
-        None,
-      )),
+      buffer_geometry.upcast(
+        torus_geometry.args_create()
+        |> torus_geometry.args_with_radius(0.5)
+        |> torus_geometry.args_with_tube(0.18)
+        |> torus_geometry.args_with_radial_segments(14.0)
+        |> torus_geometry.args_with_tubular_segments(36.0)
+        |> torus_geometry.new_with,
+      ),
     ),
     #(
       "Icosahedron",
-      buffer_geometry.upcast(icosahedron_geometry.new_with(
-        Some(0.64),
-        Some(0.0),
-      )),
+      buffer_geometry.upcast(icosahedron_geometry.new_with(0.64, 0.0)),
     ),
     #(
       "Tetrahedron",
-      buffer_geometry.upcast(tetrahedron_geometry.new_with(
-        Some(0.72),
-        Some(0.0),
-      )),
+      buffer_geometry.upcast(tetrahedron_geometry.new_with(0.72, 0.0)),
     ),
   ]
 
@@ -249,22 +208,15 @@ pub fn main() {
       let gz = int.to_float(i / 3 - 1)
       let mat =
         mesh_standard_material_parameters.create()
-        |> mesh_standard_material_parameters.with_color(
-          t.ColorRepresentationNumber(hex(0xd4d4d4)),
-        )
+        |> mesh_standard_material_parameters.with_color_number(hex(0xd4d4d4))
         |> mesh_standard_material_parameters.with_roughness(0.55)
         |> mesh_standard_material_parameters.with_metalness(0.1)
         |> mesh_standard_material_parameters.with_flat_shading(i >= 4)
-        |> Some
         |> mesh_standard_material.new_with
-      let m =
-        mesh.new_with(
-          Some(geo),
-          Some(t.material_or_material_array_material(mat)),
-        )
+      let m = mesh.new_with(geo, mat)
       object3d.set_name(m, name)
       object3d.get_position(m)
-      |> vector3.set_with(gx *. 2.1, 0.0, Some(gz *. 2.1))
+      |> vector3.set_with(gx *. 2.1, 0.0, gz *. 2.1)
       euler.set_x(object3d.get_rotation(m), 0.2)
       euler.set_y(object3d.get_rotation(m), 0.35 *. int.to_float(i))
       object3d.add(sc, [m])
@@ -274,11 +226,10 @@ pub fn main() {
   let mesh_objs = list.map(specs, fn(s) { s.obj })
   let bx =
     box3.new_with(
-      Some(vector3.new_with(Some(-0.5), Some(-0.5), Some(-0.5))),
-      Some(vector3.new_with(Some(0.5), Some(0.5), Some(0.5))),
+      vector3.new_with(-0.5, -0.5, -0.5),
+      vector3.new_with(0.5, 0.5, 0.5),
     )
-  let helper =
-    box3_helper.new_with(bx, Some(t.ColorRepresentationNumber(hex(0x111111))))
+  let helper = box3_helper.new_number_with(bx, hex(0x111111))
   object3d.set_visible(helper, False)
   object3d.add(sc, [helper])
 
@@ -292,10 +243,10 @@ pub fn main() {
     let yaw = rt.ref_get(yaw_ref)
     let r = 8.4
     object3d.get_position(cam)
-    |> vector3.set_with(r *. sin(yaw), 5.1, Some(r *. cos(yaw)))
-    object3d.look_at(cam, vector3.new_with(Some(0.0), Some(0.0), Some(0.0)))
-    object3d.update_matrix_world_with(cam, Some(True))
-    object3d.update_matrix_world_with(sc, Some(True))
+    |> vector3.set_with(r *. sin(yaw), 5.1, r *. cos(yaw))
+    object3d.look_at(cam, vector3.new_with(0.0, 0.0, 0.0))
+    object3d.update_matrix_world_with(cam, True)
+    object3d.update_matrix_world_with(sc, True)
   }
 
   let render_scene = fn() {
@@ -306,13 +257,13 @@ pub fn main() {
         False -> hex(0xd4d4d4)
       }
       mesh_standard_material.get_color(s.mat)
-      |> color.set_hex_with(col_hex, None)
+      |> color.set_hex(col_hex)
       Nil
     })
     case sel >= 0 && sel < 9 {
       True -> {
         let target_sp = nth_specimen(specs, sel)
-        box3.set_from_object_with(bx, target_sp.obj, Some(True))
+        box3.set_from_object_with(bx, target_sp.obj, True)
         object3d.set_visible(helper, True)
       }
       False -> object3d.set_visible(helper, False)
@@ -329,16 +280,14 @@ pub fn main() {
   }
 
   let cast_at_ndc = fn(nx: Float, ny: Float) {
-    raycaster.set_from_camera(caster, vector2.new_with(Some(nx), Some(ny)), cam)
-    case
-      raycaster.intersect_objects_with(caster, mesh_objs, Some(False), None)
-    {
+    raycaster.set_from_camera(caster, vector2.new_with(nx, ny), cam)
+    case raycaster.intersect_objects_with(caster, mesh_objs, False, []) {
       [first, ..] -> {
         let hit_obj = intersection.get_object(first)
         case find_by_id(specs, object3d.get_id(hit_obj), 0) {
           Some(#(idx, sp)) -> {
             rt.ref_set(sel_ref, idx)
-            box3.set_from_object_with(bx, sp.obj, Some(True))
+            box3.set_from_object_with(bx, sp.obj, True)
             let sz = box3.get_size(bx, vector3.new())
             let pt = intersection.get_point(first)
             rt.ref_set(

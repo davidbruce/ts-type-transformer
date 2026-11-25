@@ -14,9 +14,7 @@ import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import dom/areas/html/html_element_tag_name_map as tag
-import dom/types.{
-  type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString,
-}
+import dom/types.{type CanvasRenderingContext2D}
 import gleam/float
 import gleam/int
 import gleam/list
@@ -112,11 +110,7 @@ pub fn main() {
           w,
           rigid_body_desc.fixed() |> rigid_body_desc.set_translation(x, y, 0.0),
         )
-      world.create_collider_with(
-        w,
-        collider_desc.cuboid(hx, hy, 2.0),
-        Some(body),
-      )
+      world.create_collider_with(w, collider_desc.cuboid(hx, hy, 2.0), body)
       Nil
     }
     add_wall(0.0, -0.4, 7.0, 0.4)
@@ -137,7 +131,7 @@ pub fn main() {
           |> collider_desc.set_restitution(rest)
           |> collider_desc.set_friction(0.2)
           |> collider_desc.set_density(1.2)
-        world.create_collider_with(w, cd, Some(rb))
+        world.create_collider_with(w, cd, rb)
         rb
       })
     rp_rt.ref_set(world_ref, Some(w))
@@ -164,16 +158,10 @@ pub fn main() {
   }
 
   let render = fn() {
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
-    )
+    ctx2d.set_fill_style(ctx, "#ffffff")
     ctx2d.fill_rect(ctx, 0.0, 0.0, 680.0, 400.0)
 
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#efefef"),
-    )
+    ctx2d.set_stroke_style(ctx, "#efefef")
     ctx2d.set_line_width(ctx, 1.0)
     int.range(from: -6, to: 7, with: Nil, run: fn(_, gx) {
       let x = to_cx(int.to_float(gx))
@@ -190,15 +178,9 @@ pub fn main() {
       ctx2d.stroke(ctx)
     })
 
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#f7f7f7"),
-    )
+    ctx2d.set_fill_style(ctx, "#f7f7f7")
     ctx2d.fill_rect(ctx, 0.0, 350.0, 680.0, 50.0)
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#d4d4d4"),
-    )
+    ctx2d.set_stroke_style(ctx, "#d4d4d4")
     int.range(from: 0, to: 40, with: Nil, run: fn(_, i) {
       let hx = -20.0 +. int.to_float(i) *. 18.0
       ctx2d.begin_path(ctx)
@@ -206,20 +188,14 @@ pub fn main() {
       ctx2d.line_to(ctx, hx -. 24.0, 400.0)
       ctx2d.stroke(ctx)
     })
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#111111"),
-    )
+    ctx2d.set_stroke_style(ctx, "#111111")
     ctx2d.set_line_width(ctx, 1.5)
     ctx2d.begin_path(ctx)
     ctx2d.move_to(ctx, 0.0, 350.0)
     ctx2d.line_to(ctx, 680.0, 350.0)
     ctx2d.stroke(ctx)
 
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#d4d4d4"),
-    )
+    ctx2d.set_stroke_style(ctx, "#d4d4d4")
     ctx2d.set_line_width(ctx, 1.0)
     draw_dashed(ctx, to_cx(-5.0), to_cy(5.6), to_cx(5.0), to_cy(5.6), 40)
     list.each(x_coords, fn(wx) {
@@ -227,10 +203,7 @@ pub fn main() {
       draw_dashed(ctx, cx, to_cy(5.6), cx, 350.0, 20)
     })
 
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#b5b5b5"),
-    )
+    ctx2d.set_fill_style(ctx, "#b5b5b5")
     list.each(rp_rt.ref_get(trails_ref), fn(pt) {
       let #(_, tx, ty) = pt
       ctx2d.begin_path(ctx)
@@ -255,18 +228,12 @@ pub fn main() {
         let cy = to_cy(py)
         let rpx = 0.42 *. 46.0
 
-        ctx2d.set_fill_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString(hex),
-        )
+        ctx2d.set_fill_style(ctx, hex)
         ctx2d.begin_path(ctx)
         ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
         ctx2d.fill(ctx)
 
-        ctx2d.set_stroke_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString("#111111"),
-        )
+        ctx2d.set_stroke_style(ctx, "#111111")
         ctx2d.set_line_width(ctx, 1.6)
         ctx2d.begin_path(ctx)
         ctx2d.arc(ctx, cx, cy, rpx, 0.0, two_pi)
@@ -276,18 +243,12 @@ pub fn main() {
           True -> "#d4d4d4"
           False -> "#737373"
         }
-        ctx2d.set_fill_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString(hl),
-        )
+        ctx2d.set_fill_style(ctx, hl)
         ctx2d.begin_path(ctx)
         ctx2d.arc(ctx, cx -. 5.0, cy -. 5.0, 2.8, 0.0, two_pi)
         ctx2d.fill(ctx)
 
-        ctx2d.set_fill_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString("#111111"),
-        )
+        ctx2d.set_fill_style(ctx, "#111111")
         ctx2d.fill_text(ctx, lbl, cx -. 22.0, 368.0)
 
         #(e_sum +. 0.5 *. { vx *. vx +. vy *. vy }, float.max(cur_max_y, py))

@@ -1,4 +1,5 @@
 import babylonjs_lite as b
+import babylonjs_lite/attach_control_options
 import babylonjs_lite/box_options
 import babylonjs_lite/create_pbr_material_props
 import babylonjs_lite/cylinder_options
@@ -94,7 +95,7 @@ fn mk_pbr(
     |> create_pbr_material_props.with_base_color_factor(#(r, g, bl, 1.0))
     |> create_pbr_material_props.with_metallic_factor(metallic)
     |> create_pbr_material_props.with_roughness_factor(roughness)
-  b.create_pbr_material_with(Some(props))
+  b.create_pbr_material_with(props)
 }
 
 fn body_ke(rb: rt.RigidBody(Nil)) -> Float {
@@ -148,7 +149,7 @@ pub fn main() -> Nil {
       collider_desc.cuboid(10.0, 0.3, 10.0)
         |> collider_desc.set_friction(0.75)
         |> collider_desc.set_restitution(0.1),
-      Some(floor_body),
+      floor_body,
     )
 
     let ramp_rot =
@@ -165,7 +166,7 @@ pub fn main() -> Nil {
       collider_desc.cuboid(1.75, 0.1, 0.65)
         |> collider_desc.set_friction(0.15)
         |> collider_desc.set_restitution(0.2),
-      Some(ramp_body),
+      ramp_body,
     )
 
     let marble =
@@ -181,7 +182,7 @@ pub fn main() -> Nil {
         |> collider_desc.set_density(3.2)
         |> collider_desc.set_restitution(0.32)
         |> collider_desc.set_friction(0.18),
-      Some(marble),
+      marble,
     )
 
     let doms =
@@ -201,7 +202,7 @@ pub fn main() -> Nil {
             |> collider_desc.set_friction(0.55)
             |> collider_desc.set_restitution(0.18)
             |> collider_desc.set_density(1.0),
-          Some(rb),
+          rb,
         )
         [rb, ..acc]
       })
@@ -229,7 +230,7 @@ pub fn main() -> Nil {
             |> collider_desc.set_friction(0.55)
             |> collider_desc.set_restitution(0.25)
             |> collider_desc.set_density(1.0),
-          Some(rb),
+          rb,
         )
         [rb, ..acc]
       })
@@ -388,7 +389,7 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
+        b.create_engine_html_canvas_element(canvas),
         on_err,
       )
 
@@ -403,37 +404,37 @@ pub fn main() -> Nil {
 
       let camera =
         b.create_arc_rotate_camera(0.65, 1.05, 12.0, b.vec3(-0.4, 0.8, 0.0))
-      b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control_with(camera, canvas, Some(scene), None)
+      b.add_to_scene_camera(scene, camera)
+      b.attach_control_with(
+        camera,
+        canvas,
+        scene,
+        attach_control_options.create(),
+      )
 
-      let hemi =
-        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.2)), Some(0.72))
+      let hemi = b.create_hemispheric_light_with(#(0.0, 1.0, 0.2), 0.72)
       hemispheric_light.set_diffuse_color(hemi, #(0.85, 0.88, 0.95))
       hemispheric_light.set_ground_color(hemi, #(0.14, 0.14, 0.16))
-      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
+      b.add_to_scene_light_base(scene, hemi)
 
-      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.2), Some(2.1))
+      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.2), 2.1)
       directional_light.set_diffuse(dir, #(1.0, 0.97, 0.92))
-      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
+      b.add_to_scene_light_base(scene, dir)
 
       let ground_opts =
         ground_options.create()
         |> ground_options.with_width(20.0)
         |> ground_options.with_height(20.0)
-      let ground = b.create_ground_with(engine, Some(ground_opts))
+      let ground = b.create_ground_with(engine, ground_opts)
       mesh.set_material(ground, b.create_grid_material())
-      b.add_to_scene(scene, bt.scene_entity_mesh(ground))
+      b.add_to_scene_mesh(scene, ground)
 
       let ramp_opts =
         box_options.create()
         |> box_options.with_width(3.5)
         |> box_options.with_height(0.2)
         |> box_options.with_depth(1.3)
-      let ramp_mesh =
-        b.create_box_with(
-          engine,
-          Some(bt.NumberOrBoxOptionsBoxOptions(ramp_opts)),
-        )
+      let ramp_mesh = b.create_box_box_options_with(engine, ramp_opts)
       observable_vec3.set(
         scene_node.get_position(ramp_mesh),
         ramp_x,
@@ -448,15 +449,15 @@ pub fn main() -> Nil {
         cos(ramp_angle *. 0.5),
       )
       mesh.set_material(ramp_mesh, mk_pbr(0.28, 0.3, 0.34, 0.35, 0.48))
-      b.add_to_scene(scene, bt.scene_entity_mesh(ramp_mesh))
+      b.add_to_scene_mesh(scene, ramp_mesh)
 
       let sopts =
         sphere_options.create()
         |> sphere_options.with_diameter(marble_radius *. 2.0)
         |> sphere_options.with_segments(24.0)
-      let mb = b.create_sphere_with(engine, Some(sopts))
+      let mb = b.create_sphere_with(engine, sopts)
       mesh.set_material(mb, mk_pbr(0.95, 0.42, 0.28, 0.55, 0.2))
-      b.add_to_scene(scene, bt.scene_entity_mesh(mb))
+      b.add_to_scene_mesh(scene, mb)
       rp_rt.ref_set(
         marble_handle_ref,
         Some(#(
@@ -474,16 +475,12 @@ pub fn main() -> Nil {
         |> box_options.with_depth(dom_hz *. 2.0)
       let dom_handles =
         int.range(from: 0, to: dom_count, with: [], run: fn(acc, i) {
-          let m =
-            b.create_box_with(
-              engine,
-              Some(bt.NumberOrBoxOptionsBoxOptions(dom_opts)),
-            )
+          let m = b.create_box_box_options_with(engine, dom_opts)
           mesh.set_material(m, case i % 2 == 0 {
             True -> mat_a
             False -> mat_b
           })
-          b.add_to_scene(scene, bt.scene_entity_mesh(m))
+          b.add_to_scene_mesh(scene, m)
           [
             #(scene_node.get_position(m), scene_node.get_rotation_quaternion(m)),
             ..acc
@@ -500,9 +497,9 @@ pub fn main() -> Nil {
         |> cylinder_options.with_tessellation(24.0)
       let cyl_handles =
         int.range(from: 0, to: cyl_count, with: [], run: fn(acc, _) {
-          let m = b.create_cylinder_with(engine, Some(cyl_opts))
+          let m = b.create_cylinder_with(engine, cyl_opts)
           mesh.set_material(m, cyl_mat)
-          b.add_to_scene(scene, bt.scene_entity_mesh(m))
+          b.add_to_scene_mesh(scene, m)
           [
             #(scene_node.get_position(m), scene_node.get_rotation_quaternion(m)),
             ..acc

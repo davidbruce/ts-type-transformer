@@ -31,7 +31,7 @@ static void add_stage_box(JsArray_Konva_Node list, double x, const char* title, 
 
 static void add_arrow(JsArray_Konva_Node list, double x1, double y1, double x2, double y2) {
     Konva_ArrowConfig ac = Konva_ArrowConfig_create(
-        .points_array = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4), .pointerLength = 8,
+        .points = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4), .pointerLength = 8,
         .pointerWidth = 8, .fill = "#111111",
         .stroke = "#111111", .strokeWidth = 2
     );
@@ -67,7 +67,7 @@ __attribute__((export_name("start"))) void start(void) {
     add_arrow(items, 423, 163, 423, 251);
 
     Konva_LineConfig fbc = Konva_LineConfig_create(
-        .points_array = JsArray_double_from((double[]){ 589, 163, 589, 212, 91, 212, 91, 168 }, 8),
+        .points = JsArray_double_from((double[]){ 589, 163, 589, 212, 91, 212, 91, 168 }, 8),
         .stroke = "#737373", .strokeWidth = 1.5,
         .dash = JsArray_double_from((double[]){ 6.0, 4.0 }, 2)
     );

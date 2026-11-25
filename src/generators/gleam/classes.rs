@@ -7,7 +7,7 @@ use super::{
     JS_RESERVED, MAX_INHERITED_ALIASES,
 };
 use super::super::js::{access, global};
-use super::super::model::{base_args, map_types, subst, with_self_args, Call, Class, Func, Model, TParam, Ty};
+use super::super::model::{base_args, map_types, subst, with_self_args, Call, Class, Func, Model, TParam, TailRole, Ty};
 
 // In a module's noted names: a module it imports whole (an ancestor's, for its aliases).
 pub(super) const MODULE_MARK: &str = "module:";
@@ -71,7 +71,7 @@ impl<'m> Gen<'m> {
         }
         for (id, spec_f) in specs {
             let id = self.value_name(&id);
-            self.function(&id, &Func { doc: None, ..spec_f }, Some((&c.name, &c.type_params)));
+            self.function(&id, &Func { doc: None, ..spec_f }, Some((&c.name, &c.type_params)), None);
         }
     }
 
@@ -376,9 +376,15 @@ pub(super) fn emit_class_and_func_modules<'m>(
         let mut cls_methods = Vec::new();
         // Every member's own name first: a `_with` form takes one none has (`can_replace_with` is ProseMirror's).
         let ids: Vec<String> = c.funcs.iter().map(|f| g.value_name(&function_name(&with_self_args(f, c), &f.name))).collect();
-        for (f, id) in c.funcs.iter().zip(ids) {
+        let tails = m.tail_overloads(&c.funcs);
+        for (i, (f, id)) in c.funcs.iter().zip(&ids).enumerate() {
             let f = with_self_args(f, c);
-            let (_, names) = g.function(&id, &f, Some((&c.name, &c.type_params)));
+            let (id, with_as) = match tails.get(&i) {
+                Some(TailRole::Leader { name }) => (&ids[*name], None),
+                Some(TailRole::Follower { name, first }) => (id, Some(format!("{}_with_{}", ids[*name], lower(first)))),
+                None => (id, None),
+            };
+            let (_, names) = g.function(id, &f, Some((&c.name, &c.type_params)), with_as.as_deref());
             if Class::has_self(&f) {
                 for gleam_name in names {
                     cls_methods.push(EmittedMethod { gleam_name, ffi_path: format!("{}_ffi.mjs", class_paths[&c.name]), func: f.clone() });
@@ -559,9 +565,15 @@ pub(super) fn emit_class_and_func_modules<'m>(
             (unit, id)
         })
         .collect();
-    for (f, (unit, id)) in m.funcs.iter().zip(ids) {
-        g.switch(&unit);
-        g.function(&id, f, None);
+    let tails = m.tail_overloads(&m.funcs);
+    for (i, (f, (unit, id))) in m.funcs.iter().zip(&ids).enumerate() {
+        g.switch(unit);
+        let (id, with_as) = match tails.get(&i) {
+            Some(TailRole::Leader { name }) => (&ids[*name].1, None),
+            Some(TailRole::Follower { name, first }) => (id, Some(format!("{}_with_{}", ids[*name].1, lower(first)))),
+            None => (id, None),
+        };
+        g.function(id, f, None, with_as.as_deref());
     }
     // Pass 3: folded single-owner synthetic option bags / result structs.
     for c in &m.classes {
@@ -582,10 +594,16 @@ pub(super) fn emit_class_and_func_modules<'m>(
             let id = g.fresh_value(&format!("{prefix}_{}", lower(constant)));
             g.out += &format!("pub const {id} = {gleam}\n\n");
         }
-        for f in &c.funcs {
+        let ids: Vec<String> = c.funcs.iter().map(|f| g.fresh_value(&format!("{prefix}_{}", lower(&function_name(&with_self_args(f, c), &f.name))))).collect();
+        let tails = m.tail_overloads(&c.funcs);
+        for (i, (f, id)) in c.funcs.iter().zip(&ids).enumerate() {
             let f = with_self_args(f, c);
-            let id = g.fresh_value(&format!("{prefix}_{}", lower(&function_name(&f, &f.name))));
-            g.function(&id, &f, Some((&c.name, &c.type_params)));
+            let (id, with_as) = match tails.get(&i) {
+                Some(TailRole::Leader { name }) => (&ids[*name], None),
+                Some(TailRole::Follower { name, first }) => (id, Some(format!("{}_with_{}", ids[*name], lower(first)))),
+                None => (id, None),
+            };
+            g.function(id, &f, Some((&c.name, &c.type_params)), with_as.as_deref());
         }
         let id = g.fresh_value(&format!("{prefix}_upcast"));
         let (this, closed) = (open(g), g.class_type(&c.name, &own));

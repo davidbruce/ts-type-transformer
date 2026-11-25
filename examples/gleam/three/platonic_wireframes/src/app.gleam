@@ -5,7 +5,7 @@ import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import gleam/float
 import gleam/int
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import three/ambient_light
 import three/box_geometry
 import three/buffer_geometry
@@ -62,31 +62,23 @@ fn add_solid(
 ) -> Nil {
   let mat =
     mesh_standard_material_parameters.create()
-    |> mesh_standard_material_parameters.with_color(
-      t.ColorRepresentationNumber(hex(color_hex)),
-    )
+    |> mesh_standard_material_parameters.with_color_number(hex(color_hex))
     |> mesh_standard_material_parameters.with_roughness(rough)
     |> mesh_standard_material_parameters.with_metalness(metal)
     |> mesh_standard_material_parameters.with_flat_shading(flat)
-    |> Some
     |> mesh_standard_material.new_with
 
-  let m =
-    mesh.new_with(Some(geo), Some(t.material_or_material_array_material(mat)))
+  let m = mesh.new_with(geo, mat)
   object3d.get_position(m)
-  |> vector3.set_with(x, y, Some(z))
+  |> vector3.set_with(x, y, z)
   euler.set_x(object3d.get_rotation(m), 0.25)
   euler.set_y(object3d.get_rotation(m), 0.45)
   object3d.add(sc, [m])
 
-  let egeo = edges_geometry.new_with(Some(geo), Some(thresh))
-  let segs =
-    line_segments.new_with(
-      Some(egeo),
-      Some(t.material_or_material_array_material(line_mat)),
-    )
+  let egeo = edges_geometry.new_with(geo, thresh)
+  let segs = line_segments.new_with(egeo, line_mat)
   object3d.get_position(segs)
-  |> vector3.set_with(x, y, Some(z))
+  |> vector3.set_with(x, y, z)
   euler.set_x(object3d.get_rotation(segs), 0.25)
   euler.set_y(object3d.get_rotation(segs), 0.45)
   object3d.add(wire_grp, [segs])
@@ -102,7 +94,7 @@ pub fn main() {
     web_gl_renderer_parameters.create()
     |> web_gl_renderer_parameters.with_antialias(True)
     |> web_gl_renderer_parameters.with_preserve_drawing_buffer(True)
-  let renderer = web_gl_renderer.new_with(Some(rp))
+  let renderer = web_gl_renderer.new_with(rp)
   web_gl_renderer.set_pixel_ratio(renderer, 1.0)
   web_gl_renderer.set_size(renderer, width, height)
 
@@ -110,51 +102,27 @@ pub fn main() {
   dom_node.append_child(stage, web_gl_renderer.get_dom_element(renderer))
 
   let sc = scene.new()
-  scene.set_background(
-    sc,
-    Some(
-      t.ColorOrTextureColor(
-        color.new_with(Some(t.ColorRepresentationNumber(hex(0xf7f7f7)))),
-      ),
-    ),
-  )
-  let cam =
-    perspective_camera.new_with(
-      Some(42.0),
-      Some(width /. height),
-      Some(0.1),
-      Some(100.0),
-    )
+  scene.set_background_color(sc, color.new_number_with(hex(0xf7f7f7)))
+  let cam = perspective_camera.new_with(42.0, width /. height, 0.1, 100.0)
 
   object3d.add(sc, [
-    ambient_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(1.2),
-    ),
+    ambient_light.new_number_with(hex(0xffffff), 1.2),
   ])
-  let key =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(2.2),
-    )
+  let key = directional_light.new_number_with(hex(0xffffff), 2.2)
   object3d.get_position(key)
-  |> vector3.set_with(6.0, 10.0, Some(8.0))
+  |> vector3.set_with(6.0, 10.0, 8.0)
   object3d.add(sc, [key])
-  let rim =
-    directional_light.new_with(
-      Some(t.ColorRepresentationNumber(hex(0xffffff))),
-      Some(0.9),
-    )
+  let rim = directional_light.new_number_with(hex(0xffffff), 0.9)
   object3d.get_position(rim)
-  |> vector3.set_with(-7.0, 5.0, Some(-6.0))
+  |> vector3.set_with(-7.0, 5.0, -6.0)
   object3d.add(sc, [rim])
 
   let grid =
-    grid_helper.new_with(
-      Some(12.0),
-      Some(12.0),
-      Some(t.ColorRepresentationNumber(hex(0x737373))),
-      Some(t.ColorRepresentationNumber(hex(0xd4d4d4))),
+    grid_helper.new_of_with(
+      12.0,
+      12.0,
+      t.ColorRepresentationNumber(hex(0x737373)),
+      t.ColorRepresentationNumber(hex(0xd4d4d4)),
     )
   vector3.set_y(object3d.get_position(grid), -1.2)
   object3d.add(sc, [grid])
@@ -164,22 +132,19 @@ pub fn main() {
 
   let lmp =
     line_basic_material_parameters.create()
-    |> line_basic_material_parameters.with_color(
-      t.ColorRepresentationNumber(hex(0x111111)),
-    )
-  let line_mat = line_basic_material.new_with(Some(lmp))
+    |> line_basic_material_parameters.with_color_number(hex(0x111111))
+  let line_mat = line_basic_material.new_with(lmp)
 
   add_solid(
     sc,
     wire_grp,
-    buffer_geometry.upcast(box_geometry.new_with(
-      Some(1.45),
-      Some(1.45),
-      Some(1.45),
-      None,
-      None,
-      None,
-    )),
+    buffer_geometry.upcast(
+      box_geometry.args_create()
+      |> box_geometry.args_with_width(1.45)
+      |> box_geometry.args_with_height(1.45)
+      |> box_geometry.args_with_depth(1.45)
+      |> box_geometry.new_with,
+    ),
     0x262626,
     0.65,
     0.1,
@@ -193,7 +158,7 @@ pub fn main() {
   add_solid(
     sc,
     wire_grp,
-    buffer_geometry.upcast(icosahedron_geometry.new_with(Some(0.95), Some(0.0))),
+    buffer_geometry.upcast(icosahedron_geometry.new_with(0.95, 0.0)),
     0xd4d4d4,
     0.55,
     0.08,
@@ -207,14 +172,14 @@ pub fn main() {
   add_solid(
     sc,
     wire_grp,
-    buffer_geometry.upcast(torus_knot_geometry.new_with(
-      Some(0.72),
-      Some(0.24),
-      Some(96.0),
-      Some(16.0),
-      None,
-      None,
-    )),
+    buffer_geometry.upcast(
+      torus_knot_geometry.args_create()
+      |> torus_knot_geometry.args_with_radius(0.72)
+      |> torus_knot_geometry.args_with_tube(0.24)
+      |> torus_knot_geometry.args_with_tubular_segments(96.0)
+      |> torus_knot_geometry.args_with_radial_segments(16.0)
+      |> torus_knot_geometry.new_with,
+    ),
     0x737373,
     0.45,
     0.15,
@@ -228,7 +193,7 @@ pub fn main() {
   add_solid(
     sc,
     wire_grp,
-    buffer_geometry.upcast(octahedron_geometry.new_with(Some(0.95), Some(0.0))),
+    buffer_geometry.upcast(octahedron_geometry.new_with(0.95, 0.0)),
     0xefefef,
     0.5,
     0.05,
@@ -242,15 +207,14 @@ pub fn main() {
   add_solid(
     sc,
     wire_grp,
-    buffer_geometry.upcast(torus_geometry.new_with(
-      Some(0.72),
-      Some(0.23),
-      Some(16.0),
-      Some(48.0),
-      None,
-      None,
-      None,
-    )),
+    buffer_geometry.upcast(
+      torus_geometry.args_create()
+      |> torus_geometry.args_with_radius(0.72)
+      |> torus_geometry.args_with_tube(0.23)
+      |> torus_geometry.args_with_radial_segments(16.0)
+      |> torus_geometry.args_with_tubular_segments(48.0)
+      |> torus_geometry.new_with,
+    ),
     0x404040,
     0.55,
     0.12,
@@ -272,8 +236,8 @@ pub fn main() {
     let wv = rt.ref_get(wire_ref)
     let r = 8.6
     object3d.get_position(cam)
-    |> vector3.set_with(r *. sin(az), 3.6, Some(r *. cos(az)))
-    object3d.look_at(cam, vector3.new_with(Some(0.0), Some(0.0), Some(0.0)))
+    |> vector3.set_with(r *. sin(az), 3.6, r *. cos(az))
+    object3d.look_at(cam, vector3.new_with(0.0, 0.0, 0.0))
     object3d.set_visible(wire_grp, wv)
     dom_node.set_text_content(
       wire_btn,

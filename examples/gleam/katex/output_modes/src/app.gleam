@@ -66,7 +66,7 @@ pub fn main() -> Nil {
         grid,
         "output: html",
         "card mode-html",
-        katex.render_to_string_with("a^2 + b^2 = c^2", Some(o_html)),
+        katex.render_to_string_with("a^2 + b^2 = c^2", o_html),
       )
 
       let o_math =
@@ -77,7 +77,7 @@ pub fn main() -> Nil {
         grid,
         "output: mathml",
         "card",
-        katex.render_to_string_with("\\frac{1}{1 + x^2}", Some(o_math)),
+        katex.render_to_string_with("\\frac{1}{1 + x^2}", o_math),
       )
 
       let o_both =
@@ -88,7 +88,7 @@ pub fn main() -> Nil {
         grid,
         "output: htmlAndMathml",
         "card",
-        katex.render_to_string_with("\\sqrt{\\alpha + \\beta}", Some(o_both)),
+        katex.render_to_string_with("\\sqrt{\\alpha + \\beta}", o_both),
       )
 
       let o_leq =
@@ -102,7 +102,7 @@ pub fn main() -> Nil {
         "card",
         katex.render_to_string_with(
           "\\int_0^1 x^2\\,dx = \\frac{1}{3} \\tag{1}",
-          Some(o_leq),
+          o_leq,
         ),
       )
 
@@ -111,9 +111,7 @@ pub fn main() -> Nil {
         |> katex_options.with_display_mode(True)
         |> katex_options.with_fleqn(True)
         |> katex_options.with_max_size(2.0)
-        |> katex_options.with_strict(kt.BooleanOrStringOrStrictFunctionBoolean(
-          False,
-        ))
+        |> katex_options.with_strict(False)
       add_card(
         doc,
         grid,
@@ -121,7 +119,7 @@ pub fn main() -> Nil {
         "card",
         katex.render_to_string_with(
           "\\text{café} + \\rule{10em}{0.4em} + é",
-          Some(o_fl),
+          o_fl,
         ),
       )
     }

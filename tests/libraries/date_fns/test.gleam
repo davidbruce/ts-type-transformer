@@ -134,7 +134,7 @@ pub fn main() {
       "from_unix_time",
     )
     + check(
-      date_fns.format_iso_with(friday, Some(date_only)) == "2024-03-15",
+      date_fns.format_iso_with(friday, date_only) == "2024-03-15",
       "format_iso date only",
     )
 

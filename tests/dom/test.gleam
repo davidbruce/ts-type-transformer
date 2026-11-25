@@ -93,7 +93,7 @@ pub fn main() {
     box,
     "ping",
     t.EventListenerOrEventListenerObjectEventListener(on_ping),
-    Some(t.BooleanOrAddEventListenerOptionsAddEventListenerOptions(once)),
+    t.BooleanOrAddEventListenerOptionsAddEventListenerOptions(once),
   )
   event_target.dispatch_event(box, event.new("ping"))
   event_target.dispatch_event(box, event.new("ping"))

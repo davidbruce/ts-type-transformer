@@ -7,7 +7,9 @@ import pixi_js/application
 import pixi_js/application_init_options
 import pixi_js/container
 import pixi_js/graphics
+import pixi_js/matrix
 import pixi_js/runtime
+import pixi_js/stroke_style
 import pixi_js/types as t
 
 fn stroke_g(
@@ -15,14 +17,11 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke_with(
+  graphics.stroke_stroke_style_with(
     g,
-    Some(
-      runtime.js_object([
-        #("width", runtime.dynamic(width)),
-        #("color", runtime.dynamic(int.to_float(color_hex))),
-      ]),
-    ),
+    stroke_style.create()
+      |> stroke_style.with_width(width)
+      |> stroke_style.with_color(int.to_float(color_hex)),
   )
 }
 
@@ -32,17 +31,13 @@ pub fn main() {
     application_init_options.create()
     |> application_init_options.with_width(680.0)
     |> application_init_options.with_height(400.0)
-    |> application_init_options.with_background_color(
-      runtime.dynamic(int.to_float(0xffffff)),
-    )
-    |> application_init_options.with_preference(
-      t.StringOrRendererPreferenceArrayString("webgl"),
-    )
+    |> application_init_options.with_background_color(int.to_float(0xffffff))
+    |> application_init_options.with_preference("webgl")
     |> application_init_options.with_preserve_drawing_buffer(True)
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, opts))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -72,20 +67,20 @@ pub fn main() {
   let rect_g =
     graphics.new()
     |> graphics.rect(40.0, 46.0, 140.0, 88.0)
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
+    |> graphics.fill_with(int.to_float(0x111111))
   container.add_child(stage, [rect_g])
 
   let round_g =
     graphics.new()
-    |> graphics.round_rect_with(216.0, 46.0, 156.0, 88.0, Some(16.0))
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xf7f7f7))))
+    |> graphics.round_rect_with(216.0, 46.0, 156.0, 88.0, 16.0)
+    |> graphics.fill_with(int.to_float(0xf7f7f7))
     |> stroke_g(2.0, 0x111111)
   container.add_child(stage, [round_g])
 
   let circle_g =
     graphics.new()
     |> graphics.circle(458.0, 90.0, 44.0)
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x404040))))
+    |> graphics.fill_with(int.to_float(0x404040))
     |> graphics.circle(458.0, 90.0, 22.0)
     |> stroke_g(2.0, 0xffffff)
     |> graphics.circle(458.0, 90.0, 52.0)
@@ -95,21 +90,22 @@ pub fn main() {
   let ellipse_g =
     graphics.new()
     |> graphics.ellipse(588.0, 90.0, 56.0, 36.0)
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xd4d4d4))))
+    |> graphics.fill_with(int.to_float(0xd4d4d4))
     |> stroke_g(1.5, 0x111111)
   container.add_child(stage, [ellipse_g])
 
   let poly_g =
     graphics.new()
-    |> graphics.regular_poly_with(130.0, 274.0, 58.0, 6.0, Some(0.25), None)
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x737373))))
+    // The tail is bare: the identity matrix draws as no transform does.
+    |> graphics.regular_poly_with(130.0, 274.0, 58.0, 6.0, 0.25, matrix.new())
+    |> graphics.fill_with(int.to_float(0x737373))
     |> stroke_g(2.0, 0x111111)
   container.add_child(stage, [poly_g])
 
   let star_g =
     graphics.new()
-    |> graphics.star_with(340.0, 274.0, 5.0, 62.0, Some(26.0), Some(-0.314))
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
+    |> graphics.star_with(340.0, 274.0, 5.0, 62.0, 26.0, -0.314)
+    |> graphics.fill_with(int.to_float(0x111111))
   container.add_child(stage, [star_g])
 
   let diamond_g =
@@ -119,7 +115,7 @@ pub fn main() {
     |> graphics.line_to(548.0, 336.0)
     |> graphics.line_to(478.0, 274.0)
     |> graphics.close_path()
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0xb5b5b5))))
+    |> graphics.fill_with(int.to_float(0xb5b5b5))
     |> stroke_g(1.5, 0x111111)
   container.add_child(stage, [diamond_g])
 

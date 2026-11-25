@@ -17,9 +17,7 @@ import dom/areas/html/html_canvas_element
 import dom/areas/html/html_element
 import dom/areas/html/html_element_event_map as ev
 import dom/areas/html/html_element_tag_name_map as tag
-import dom/types.{
-  type CanvasRenderingContext2D, StringOrCanvasGradientOrCanvasPatternString,
-}
+import dom/types.{type CanvasRenderingContext2D}
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
@@ -89,10 +87,7 @@ fn draw_rot_box(
   let px3 = to_cx(cx +. r00 *. { 0.0 -. hx } +. r01 *. hy)
   let py3 = to_cy(cy +. r10 *. { 0.0 -. hx } +. r11 *. hy)
 
-  ctx2d.set_fill_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString(fill_hex),
-  )
+  ctx2d.set_fill_style(ctx, fill_hex)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
   ctx2d.line_to(ctx, px1, py1)
@@ -101,10 +96,7 @@ fn draw_rot_box(
   ctx2d.close_path(ctx)
   ctx2d.fill(ctx)
 
-  ctx2d.set_stroke_style(
-    ctx,
-    StringOrCanvasGradientOrCanvasPatternString("#111111"),
-  )
+  ctx2d.set_stroke_style(ctx, "#111111")
   ctx2d.set_line_width(ctx, 1.5)
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, px0, py0)
@@ -185,7 +177,7 @@ pub fn main() {
         collider_desc.cuboid(hx, hy, 1.0)
         |> collider_desc.set_friction(0.15)
         |> collider_desc.set_restitution(0.35)
-      world.create_collider_with(w, cd, Some(rb))
+      world.create_collider_with(w, cd, rb)
       Nil
     }
 
@@ -205,7 +197,7 @@ pub fn main() {
       collider_desc.cuboid(1.85, 0.3, 1.2)
       |> collider_desc.set_sensor(True)
       |> collider_desc.set_active_events(rt.ActiveEventsCollisionEvents)
-    let sc = world.create_collider_with(w, scd, Some(sbody))
+    let sc = world.create_collider_with(w, scd, sbody)
     rp_rt.ref_set(sensor_handle_ref, collider.get_handle(sc))
 
     let b_list =
@@ -227,7 +219,7 @@ pub fn main() {
           |> collider_desc.set_restitution(0.35)
           |> collider_desc.set_friction(0.25)
           |> collider_desc.set_active_events(rt.ActiveEventsCollisionEvents)
-        world.create_collider_with(w, cd, Some(rb))
+        world.create_collider_with(w, cd, rb)
         #(box_flag, rb)
       })
 
@@ -243,31 +235,25 @@ pub fn main() {
   let step_sim = fn() {
     case rp_rt.ref_get(world_ref), rp_rt.ref_get(queue_ref) {
       Some(w), Some(q) -> {
-        world.step_with(w, Some(q), None)
+        world.step_with(w, q, None)
         rp_rt.ref_update(step_ref, fn(s) { s + 1 })
         let sh = rp_rt.ref_get(sensor_handle_ref)
         event_queue.drain_collision_events(q, fn(h1, h2, started) {
-          case h1 == sh || h2 == sh {
-            True ->
-              case started {
-                True -> {
-                  rp_rt.ref_update(crossings_ref, fn(c) { c + 1 })
-                  rp_rt.ref_update(active_ref, fn(a) { a + 1 })
-                  Nil
-                }
-                False -> {
-                  rp_rt.ref_update(active_ref, fn(a) { int.max(0, a - 1) })
-                  Nil
-                }
-              }
-            False ->
-              case started {
-                True -> {
-                  rp_rt.ref_update(contacts_ref, fn(c) { c + 1 })
-                  Nil
-                }
-                False -> Nil
-              }
+          case h1 == sh || h2 == sh, started {
+            True, True -> {
+              rp_rt.ref_update(crossings_ref, fn(c) { c + 1 })
+              rp_rt.ref_update(active_ref, fn(a) { a + 1 })
+              Nil
+            }
+            True, False -> {
+              rp_rt.ref_update(active_ref, fn(a) { int.max(0, a - 1) })
+              Nil
+            }
+            False, True -> {
+              rp_rt.ref_update(contacts_ref, fn(c) { c + 1 })
+              Nil
+            }
+            False, False -> Nil
           }
         })
       }
@@ -276,16 +262,10 @@ pub fn main() {
   }
 
   let render = fn() {
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#ffffff"),
-    )
+    ctx2d.set_fill_style(ctx, "#ffffff")
     ctx2d.fill_rect(ctx, 0.0, 0.0, 680.0, 400.0)
 
-    ctx2d.set_stroke_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#efefef"),
-    )
+    ctx2d.set_stroke_style(ctx, "#efefef")
     ctx2d.set_line_width(ctx, 1.0)
     int.range(from: -6, to: 7, with: Nil, run: fn(_, gx) {
       let x = to_cx(int.to_float(gx))
@@ -309,23 +289,14 @@ pub fn main() {
     let sh = 0.6 *. 46.0
     case active > 0 {
       True -> {
-        ctx2d.set_fill_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString("#efefef"),
-        )
+        ctx2d.set_fill_style(ctx, "#efefef")
         ctx2d.fill_rect(ctx, sx, sy, sw, sh)
-        ctx2d.set_stroke_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString("#111111"),
-        )
+        ctx2d.set_stroke_style(ctx, "#111111")
         ctx2d.set_line_width(ctx, 2.0)
         ctx2d.stroke_rect(ctx, sx, sy, sw, sh)
       }
       False -> {
-        ctx2d.set_stroke_style(
-          ctx,
-          StringOrCanvasGradientOrCanvasPatternString("#737373"),
-        )
+        ctx2d.set_stroke_style(ctx, "#737373")
         ctx2d.set_line_width(ctx, 1.4)
         draw_segs(ctx, sx, sy, sx +. sw, sy, 14)
         draw_segs(ctx, sx +. sw, sy, sx +. sw, sy +. sh, 4)
@@ -334,10 +305,7 @@ pub fn main() {
       }
     }
 
-    ctx2d.set_fill_style(
-      ctx,
-      StringOrCanvasGradientOrCanvasPatternString("#555555"),
-    )
+    ctx2d.set_fill_style(ctx, "#555555")
     ctx2d.set_font(ctx, "11px ui-monospace, monospace")
     ctx2d.fill_text(
       ctx,
@@ -397,17 +365,11 @@ pub fn main() {
         False -> {
           let cx = to_cx(px)
           let cy = to_cy(py)
-          ctx2d.set_fill_style(
-            ctx,
-            StringOrCanvasGradientOrCanvasPatternString("#262626"),
-          )
+          ctx2d.set_fill_style(ctx, "#262626")
           ctx2d.begin_path(ctx)
           ctx2d.arc(ctx, cx, cy, 0.32 *. 46.0, 0.0, two_pi)
           ctx2d.fill(ctx)
-          ctx2d.set_stroke_style(
-            ctx,
-            StringOrCanvasGradientOrCanvasPatternString("#111111"),
-          )
+          ctx2d.set_stroke_style(ctx, "#111111")
           ctx2d.set_line_width(ctx, 1.5)
           ctx2d.begin_path(ctx)
           ctx2d.arc(ctx, cx, cy, 0.32 *. 46.0, 0.0, two_pi)
@@ -480,12 +442,12 @@ pub fn main() {
   })
 
   start_loop(fn() {
-    case !rp_rt.ref_get(paused_ref) {
-      True -> {
+    case rp_rt.ref_get(paused_ref) {
+      False -> {
         step_sim()
         render()
       }
-      False -> Nil
+      True -> Nil
     }
   })
 }

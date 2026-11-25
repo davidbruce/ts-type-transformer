@@ -12,6 +12,7 @@ import pixi_js/matrix
 import pixi_js/point
 import pixi_js/point_data
 import pixi_js/runtime
+import pixi_js/stroke_style
 import pixi_js/types as t
 
 const two_pi = 6.283185307179586
@@ -21,14 +22,11 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke_with(
+  graphics.stroke_stroke_style_with(
     g,
-    Some(
-      runtime.js_object([
-        #("width", runtime.dynamic(width)),
-        #("color", runtime.dynamic(int.to_float(color_hex))),
-      ]),
-    ),
+    stroke_style.create()
+      |> stroke_style.with_width(width)
+      |> stroke_style.with_color(int.to_float(color_hex)),
   )
 }
 
@@ -47,17 +45,13 @@ pub fn main() {
     application_init_options.create()
     |> application_init_options.with_width(680.0)
     |> application_init_options.with_height(400.0)
-    |> application_init_options.with_background_color(
-      runtime.dynamic(int.to_float(0xffffff)),
-    )
-    |> application_init_options.with_preference(
-      t.StringOrRendererPreferenceArrayString("webgl"),
-    )
+    |> application_init_options.with_background_color(int.to_float(0xffffff))
+    |> application_init_options.with_preference("webgl")
     |> application_init_options.with_preserve_drawing_buffer(True)
     |> application_init_options.with_antialias(True)
     |> application_init_options.with_auto_start(False)
 
-  use ready <- runtime.promise_then(application.init_with(app, Some(opts)))
+  use ready <- runtime.promise_then(application.init_with(app, opts))
   let assert Ok(_) = ready
   let doc = core.get_document()
   case document.get_element_by_id(doc, "stage") {
@@ -77,7 +71,7 @@ pub fn main() {
     Nil
   })
 
-  let unit_x = point.new_with(Some(1.0), Some(0.0))
+  let unit_x = point.new_with(1.0, 0.0)
   int.range(from: 0, to: 12, with: Nil, run: fn(_, step) {
     let theta = int.to_float(step) *. { two_pi /. 12.0 }
     let spoke = matrix.rotate(matrix.new(), theta)
@@ -111,17 +105,17 @@ pub fn main() {
           200.0 +. radius *. point_data.get_y(dir),
         )
 
-      let p0 = matrix.apply(tile_m, point.new_with(Some(0.0), Some(0.0 -. s)))
-      let p1 = matrix.apply(tile_m, point.new_with(Some(hw), Some(0.0)))
-      let p2 = matrix.apply(tile_m, point.new_with(Some(0.0), Some(s)))
-      let p3 = matrix.apply(tile_m, point.new_with(Some(0.0 -. hw), Some(0.0)))
+      let p0 = matrix.apply(tile_m, point.new_with(0.0, 0.0 -. s))
+      let p1 = matrix.apply(tile_m, point.new_with(hw, 0.0))
+      let p2 = matrix.apply(tile_m, point.new_with(0.0, s))
+      let p3 = matrix.apply(tile_m, point.new_with(0.0 -. hw, 0.0))
 
       graphics.move_to(tiles, point_data.get_x(p0), point_data.get_y(p0))
       |> graphics.line_to(point_data.get_x(p1), point_data.get_y(p1))
       |> graphics.line_to(point_data.get_x(p2), point_data.get_y(p2))
       |> graphics.line_to(point_data.get_x(p3), point_data.get_y(p3))
       |> graphics.close_path()
-      |> graphics.fill_with(Some(runtime.dynamic(int.to_float(fill_hex))))
+      |> graphics.fill_with(int.to_float(fill_hex))
       |> stroke_g(1.2, 0x111111)
       Nil
     })
@@ -131,7 +125,7 @@ pub fn main() {
   let center_dot =
     graphics.new()
     |> graphics.circle(340.0, 200.0, 8.0)
-    |> graphics.fill_with(Some(runtime.dynamic(int.to_float(0x111111))))
+    |> graphics.fill_with(int.to_float(0x111111))
   container.add_child(stage, [center_dot])
 
   application.render(app)

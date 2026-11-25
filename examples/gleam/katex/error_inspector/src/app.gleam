@@ -54,7 +54,7 @@ pub fn main() -> Nil {
         element.set_class_name(l_slot, "slot")
         element.set_inner_html(
           l_slot,
-          katex.render_to_string_with(tex, Some(lenient)),
+          katex.render_to_string_with(tex, lenient),
         )
         node.append_child(left, l_lbl)
         node.append_child(left, l_slot)
@@ -70,7 +70,7 @@ pub fn main() -> Nil {
         let r_err = document.create_element(doc, tag.div)
         element.set_class_name(r_err, "err")
         let msg = case
-          kr.attempt(fn() { katex.render_to_string_with(tex, Some(strict)) })
+          kr.attempt(fn() { katex.render_to_string_with(tex, strict) })
         {
           Ok(_) -> "(did not throw)"
           Error(e) -> kr.js_error_message(e)

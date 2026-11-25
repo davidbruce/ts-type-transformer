@@ -24,7 +24,7 @@ import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 
 fn check(ok: Bool, what: String) -> Int {
   case ok {
@@ -38,7 +38,7 @@ fn near(a: Float, b: Float) -> Bool {
 }
 
 fn v3(x: Float, y: Float, z: Float) {
-  vector3.new_with(Some(x), Some(y), Some(z))
+  vector3.new_with(x, y, z)
 }
 
 pub fn main() {
@@ -144,7 +144,7 @@ pub fn main() {
   let _ =
     quaternion.set_from_euler(
       q,
-      euler.new_with(Some(0.0), Some(0.0), Some(half_pi), None),
+      euler.new_with(0.0, 0.0, half_pi, t.EulerOrderXYZ),
     )
   let composed = matrix4.new()
   let _ = matrix4.compose(composed, position, q, v3(2.0, 2.0, 2.0))
@@ -207,8 +207,8 @@ pub fn main() {
     )
 
   // ---- Color ----
-  let red = color.new_string_with(Some("red"))
-  let from_hex = color.new_number_with(Some(16_711_680.0))
+  let red = color.new_string_with("red")
+  let from_hex = color.new_number_with(16_711_680.0)
   let passed =
     passed
     + check(color.get_hex(red) == 16_711_680.0, "named colour's hex")
@@ -233,10 +233,10 @@ pub fn main() {
   let passed = passed + check(color.get_hex(styled) == 255.0, "set_style")
 
   // ---- Box3 and Sphere ----
-  let box = box3.new_with(Some(v3(-1.0, -1.0, -1.0)), Some(v3(1.0, 1.0, 1.0)))
+  let box = box3.new_with(v3(-1.0, -1.0, -1.0), v3(1.0, 1.0, 1.0))
   let size = box3.get_size(box, v3(0.0, 0.0, 0.0))
-  let other = box3.new_with(Some(v3(0.5, 0.5, 0.5)), Some(v3(3.0, 3.0, 3.0)))
-  let far = box3.new_with(Some(v3(5.0, 5.0, 5.0)), Some(v3(6.0, 6.0, 6.0)))
+  let other = box3.new_with(v3(0.5, 0.5, 0.5), v3(3.0, 3.0, 3.0))
+  let far = box3.new_with(v3(5.0, 5.0, 5.0), v3(6.0, 6.0, 6.0))
   let passed =
     passed
     + check(vector3.to_list(size) == [2.0, 2.0, 2.0], "box size")
@@ -262,7 +262,7 @@ pub fn main() {
       "expand_by_scalar",
     )
     + check(!box3.is_empty(box), "not empty")
-  let ball0 = sphere.new_with(Some(v3(0.0, 0.0, 0.0)), Some(2.0))
+  let ball0 = sphere.new_with(v3(0.0, 0.0, 0.0), 2.0)
   let passed =
     passed
     + check(sphere.contains_point(ball0, v3(1.0, 1.0, 0.0)), "sphere contains")
@@ -271,10 +271,7 @@ pub fn main() {
       "distance to a point",
     )
     + check(
-      sphere.intersects_sphere(
-        ball0,
-        sphere.new_with(Some(v3(3.0, 0.0, 0.0)), Some(1.5)),
-      ),
+      sphere.intersects_sphere(ball0, sphere.new_with(v3(3.0, 0.0, 0.0), 1.5)),
       "spheres meet",
     )
     + check(
@@ -284,12 +281,12 @@ pub fn main() {
 
   // ---- Scene graph ----
   let parent = group.new()
-  vector3.set_with(object3d.get_position(parent), 1.0, 2.0, Some(3.0))
+  vector3.set_with(object3d.get_position(parent), 1.0, 2.0, 3.0)
   object3d.set_name(parent, "parent")
   let child = group.new()
-  vector3.set_with(object3d.get_position(child), 0.0, 0.0, Some(5.0))
+  vector3.set_with(object3d.get_position(child), 0.0, 0.0, 5.0)
   let _ = object3d.add(parent, [child])
-  object3d.update_matrix_world_with(parent, Some(True))
+  object3d.update_matrix_world_with(parent, True)
   let world = object3d.get_world_position(child, v3(0.0, 0.0, 0.0))
   let passed =
     passed
@@ -307,10 +304,10 @@ pub fn main() {
   // rotate the parent a quarter turn about z: a child at (2, 0, 0) is at (0, 2, 0) from it
   let spinner = group.new()
   let arm = group.new()
-  vector3.set_with(object3d.get_position(arm), 2.0, 0.0, Some(0.0))
+  vector3.set_with(object3d.get_position(arm), 2.0, 0.0, 0.0)
   let _ = object3d.add(spinner, [arm])
   let _ = object3d.rotate_z(spinner, half_pi)
-  object3d.update_matrix_world_with(spinner, Some(True))
+  object3d.update_matrix_world_with(spinner, True)
   let tip = object3d.get_world_position(arm, v3(0.0, 0.0, 0.0))
   let passed =
     passed
@@ -327,14 +324,18 @@ pub fn main() {
 
   // ---- Mesh, geometry and a ray ----
   let geometry =
-    box_geometry.new_with(Some(2.0), Some(2.0), Some(2.0), None, None, None)
+    box_geometry.new_with(
+      box_geometry.args_create()
+      |> box_geometry.args_with_width(2.0)
+      |> box_geometry.args_with_height(2.0)
+      |> box_geometry.args_with_depth(2.0),
+    )
   let material = mesh_basic_material.new()
   mesh_basic_material.set_color(material, red)
-  let cube =
-    mesh.new_with(Some(geometry), Some(material))
+  let cube = mesh.new_with(geometry, material)
   object3d.set_name(cube, "cube")
   let _ = object3d.add(parent, [cube])
-  object3d.update_matrix_world_with(parent, Some(True))
+  object3d.update_matrix_world_with(parent, True)
   let params = box_geometry.get_parameters(geometry)
   // A mesh's material is a Material or a list of them: this one is a MeshBasicMaterial.
   let assert t.MaterialOrMaterialArrayMaterial(cube_material) =
@@ -360,14 +361,11 @@ pub fn main() {
     + check(mesh.get_count(cube) == 1.0, "mesh count")
 
   // A ray from above the cube (the parent is at 1, 2, 3, so the near face is at z = 4).
-  let caster =
-    raycaster.new_with(
-      Some(v3(1.3, 2.2, 13.0)),
-      Some(v3(0.0, 0.0, -1.0)),
-      None,
-      None,
-    )
-  let hits = raycaster.intersect_object_with(caster, cube, Some(False), None)
+  // Set, not made with it: `new_with` takes near and far too, and far's default,
+  // Infinity, has no Gleam literal.
+  let caster = raycaster.new()
+  raycaster.set(caster, v3(1.3, 2.2, 13.0), v3(0.0, 0.0, -1.0))
+  let hits = raycaster.intersect_object_with(caster, cube, False, [])
   let passed = passed + check(list.length(hits) == 1, "the ray hits the cube")
   let assert [first, ..] = hits
   let passed =
@@ -381,17 +379,12 @@ pub fn main() {
       object3d.get_name(intersection.get_object(first)) == "cube",
       "the hit object",
     )
-  let miss =
-    raycaster.new_with(
-      Some(v3(20.0, 20.0, 13.0)),
-      Some(v3(0.0, 0.0, -1.0)),
-      None,
-      None,
-    )
+  let miss = raycaster.new()
+  raycaster.set(miss, v3(20.0, 20.0, 13.0), v3(0.0, 0.0, -1.0))
   let passed =
     passed
     + check(
-      raycaster.intersect_object_with(miss, cube, Some(False), None) == [],
+      raycaster.intersect_object_with(miss, cube, False, []) == [],
       "a ray that misses",
     )
 

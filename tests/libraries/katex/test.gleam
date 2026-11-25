@@ -40,7 +40,7 @@ pub fn main() {
   // Options: display mode, output kind.
   let opts = katex_options.create()
   katex_options.set_display_mode(opts, Some(True))
-  let display = katex.render_to_string_with("\\frac{a}{b}", Some(opts))
+  let display = katex.render_to_string_with("\\frac{a}{b}", opts)
   let passed =
     passed
     + check(has(display, "katex-display"), "display mode")
@@ -51,14 +51,14 @@ pub fn main() {
     )
   let ml = katex_options.create()
   katex_options.set_output(ml, Some(t.KatexOptionsOutputMathml))
-  let mathml = katex.render_to_string_with("a+b", Some(ml))
+  let mathml = katex.render_to_string_with("a+b", ml)
   let passed =
     passed
     + check(has(mathml, "<math"), "mathml output")
     + check(!has(mathml, "katex-html"), "no html in mathml output")
   let only_html = katex_options.create()
   katex_options.set_output(only_html, Some(t.KatexOptionsOutputHtml))
-  let h = katex.render_to_string_with("a+b", Some(only_html))
+  let h = katex.render_to_string_with("a+b", only_html)
   let passed =
     passed + check(has(h, "katex-html") && !has(h, "<math"), "html output")
 
@@ -68,7 +68,7 @@ pub fn main() {
   katex_options.set_leqno(leq, Some(True))
   let passed =
     passed
-    + check(has(katex.render_to_string_with("x", Some(leq)), "leqno"), "leqno")
+    + check(has(katex.render_to_string_with("x", leq), "leqno"), "leqno")
     + check(has(katex.render_to_string("\\color{red} x"), "red"), "color")
     + check(has(katex.render_to_string("\\sqrt{2}"), "sqrt"), "sqrt")
 
@@ -80,7 +80,7 @@ pub fn main() {
     passed
     + check(
       has(
-        katex.render_to_string_with("\\RR", Some(with_macro)),
+        katex.render_to_string_with("\\RR", with_macro),
         "double-struck",
       ),
       "macro expands",
@@ -118,7 +118,7 @@ pub fn main() {
   // throwOnError false: the source is shown as an error, in red.
   let soft = katex_options.create()
   katex_options.set_throw_on_error(soft, Some(False))
-  let shown = katex.render_to_string_with("\\badmacro", Some(soft))
+  let shown = katex.render_to_string_with("\\badmacro", soft)
   let passed =
     passed
     + check(has(shown, "#cc0000"), "error output")
@@ -129,7 +129,7 @@ pub fn main() {
   let passed =
     passed
     + check(
-      has(katex.render_to_string_with("\\badmacro", Some(colour)), "#00ff00"),
+      has(katex.render_to_string_with("\\badmacro", colour), "#00ff00"),
       "error colour",
     )
 

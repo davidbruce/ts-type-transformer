@@ -4,6 +4,7 @@
 import bindings/areas/echarts
 import bindings/areas/echarts/bar_series_option
 import bindings/areas/echarts/e_charts_core_option as raw
+import bindings/areas/echarts/e_charts_init_opts
 import bindings/areas/echarts/e_charts_type
 import bindings/areas/echarts/ec_unit_option as unit
 import bindings/areas/echarts/eventful
@@ -40,8 +41,13 @@ fn array(items: List(dynamic.Dynamic)) -> dynamic.Dynamic {
 }
 
 pub fn main() {
-  // A chart on the page's #chart.
-  let chart = echarts.init_with(Some(test_page.element("chart")), None, None)
+  // A chart on the page's #chart, of no theme (undefined) and no options.
+  let chart =
+    echarts.init_with(
+      test_page.element("chart"),
+      dynamic.nil(),
+      e_charts_init_opts.create(),
+    )
   let passed =
     check(!e_charts_type.is_disposed(chart), "not disposed")
     + check(
@@ -180,7 +186,7 @@ pub fn main() {
   let size = resize_opts.create()
   resize_opts.set_width(size, 200.0)
   resize_opts.set_height(size, 150.0)
-  e_charts_type.resize_with(chart, Some(size))
+  e_charts_type.resize_with(chart, size)
   let passed =
     passed
     + check(

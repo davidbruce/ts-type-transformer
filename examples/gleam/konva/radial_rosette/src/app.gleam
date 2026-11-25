@@ -58,22 +58,22 @@ fn make_circle(
     |> circle_config.with_x(x)
     |> circle_config.with_y(y)
     |> circle_config.with_radius(r)
-    |> circle_config.with_stroke(t.StringOrCanvasGradientString(stroke_col))
+    |> circle_config.with_stroke(stroke_col)
     |> circle_config.with_stroke_width(sw)
   let cc = case fill_opt {
-    Some(f) -> circle_config.with_fill(cc, t.StringOrCanvasGradientString(f))
+    Some(f) -> circle_config.with_fill(cc, f)
     None -> cc
   }
-  node.upcast(circle.new_with(Some(cc)))
+  node.upcast(circle.new_with(cc))
 }
 
 fn make_line(pts: List(Float), col: String, sw: Float) -> t.Node(Nil) {
   let lc =
     line_config.create()
-    |> line_config.with_points(t.LinePointsArray(pts))
-    |> line_config.with_stroke(t.StringOrCanvasGradientString(col))
+    |> line_config.with_points(pts)
+    |> line_config.with_stroke(col)
     |> line_config.with_stroke_width(sw)
-  node.upcast(line.new_with(Some(lc)))
+  node.upcast(line.new_with(lc))
 }
 
 pub fn main() -> Nil {
@@ -82,7 +82,7 @@ pub fn main() -> Nil {
 
   let sc =
     stage_config.create()
-    |> stage_config.with_container(t.HTMLDivElementOrStringString("stage"))
+    |> stage_config.with_container("stage")
     |> stage_config.with_width(680.0)
     |> stage_config.with_height(400.0)
   let stg = stage.new(sc)
@@ -96,8 +96,8 @@ pub fn main() -> Nil {
     |> rect_config.with_y(0.0)
     |> rect_config.with_width(680.0)
     |> rect_config.with_height(400.0)
-    |> rect_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
-  container.add(l, [rect.new_with(Some(bg))])
+    |> rect_config.with_fill("#ffffff")
+  container.add(l, [rect.new_with(bg)])
 
   let rings = [
     make_circle(cx, cy, 160.0, "#d4d4d4", 1.0, None),
@@ -164,10 +164,10 @@ pub fn main() -> Nil {
         |> rect_config.with_offset_x(9.0)
         |> rect_config.with_offset_y(108.0)
         |> rect_config.with_rotation(int.to_float(i) *. 45.0)
-        |> rect_config.with_fill(t.StringOrCanvasGradientString(fill_col))
-        |> rect_config.with_stroke(t.StringOrCanvasGradientString("#111111"))
+        |> rect_config.with_fill(fill_col)
+        |> rect_config.with_stroke("#111111")
         |> rect_config.with_stroke_width(1.5)
-      [node.upcast(rect.new_with(Some(pc))), ..acc]
+      [node.upcast(rect.new_with(pc)), ..acc]
     })
     |> list.reverse
   let nodes =
@@ -197,16 +197,14 @@ pub fn main() -> Nil {
     |> regular_polygon_config.with_y(cy)
     |> regular_polygon_config.with_sides(8.0)
     |> regular_polygon_config.with_radius(26.0)
-    |> regular_polygon_config.with_fill(t.StringOrCanvasGradientString(
-      "#111111",
-    ))
+    |> regular_polygon_config.with_fill("#111111")
 
   let cd =
     circle_config.create()
     |> circle_config.with_x(cx)
     |> circle_config.with_y(cy)
     |> circle_config.with_radius(9.0)
-    |> circle_config.with_fill(t.StringOrCanvasGradientString("#ffffff"))
+    |> circle_config.with_fill("#ffffff")
 
   let compass =
     list.map(
@@ -225,8 +223,8 @@ pub fn main() -> Nil {
           |> text_config.with_text(label)
           |> text_config.with_font_size(11.0)
           |> text_config.with_font_family("monospace")
-          |> text_config.with_fill(t.StringOrCanvasGradientString("#555555"))
-        node.upcast(text.new_with(Some(tc)))
+          |> text_config.with_fill("#555555")
+        node.upcast(text.new_with(tc))
       },
     )
 
@@ -236,8 +234,8 @@ pub fn main() -> Nil {
   container.add(l, petals)
   container.add(l, nodes)
   container.add(l, [
-    node.upcast(regular_polygon.new_with(Some(cp))),
-    node.upcast(circle.new_with(Some(cd))),
+    node.upcast(regular_polygon.new_with(cp)),
+    node.upcast(circle.new_with(cd)),
   ])
   container.add(l, compass)
 

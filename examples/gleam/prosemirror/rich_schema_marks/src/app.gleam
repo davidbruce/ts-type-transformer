@@ -124,12 +124,8 @@ fn build_schema() -> t.Schema(Nil) {
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(
-      nodes,
-    ))
-    |> schema_spec.with_marks(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(
-      marks,
-    ))
+    |> schema_spec.with_nodes(nodes)
+    |> schema_spec.with_marks(marks)
   schema.new(spec)
 }
 
@@ -140,90 +136,70 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   let h =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("heading"),
-      Some(ha),
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "ProseMirror Document Schema",
-        )),
-      ),
-      None,
+      "heading",
+      ha,
+      schema.text(sch, "ProseMirror Document Schema"),
+      [],
     )
-  let ms = schema.mark(sch, t.StringOrMarkTypeString("strong"))
-  let me = schema.mark(sch, t.StringOrMarkTypeString("em"))
-  let mc = schema.mark(sch, t.StringOrMarkTypeString("code"))
+  let ms = schema.mark(sch, "strong")
+  let me = schema.mark(sch, "em")
+  let mc = schema.mark(sch, "code")
   let p1 =
-    schema.node_with(
+    schema.node_list_with(
       sch,
-      t.StringOrNodeTypeString("paragraph"),
-      None,
-      Some(
-        t.FragmentOrNodeOrNodeArrayArray([
-          schema.text(sch, "Inline marks compose cleanly: "),
-          schema.text_with(sch, "bold", Some([ms])),
-          schema.text(sch, ", "),
-          schema.text_with(sch, "italic", Some([me])),
-          schema.text(sch, ", and "),
-          schema.text_with(sch, "inline_code", Some([mc])),
-          schema.text(sch, " spans."),
-        ]),
-      ),
-      None,
+      "paragraph",
+      attrs.create(),
+      [
+        schema.text(sch, "Inline marks compose cleanly: "),
+        schema.text_with(sch, "bold", [ms]),
+        schema.text(sch, ", "),
+        schema.text_with(sch, "italic", [me]),
+        schema.text(sch, ", and "),
+        schema.text_with(sch, "inline_code", [mc]),
+        schema.text(sch, " spans."),
+      ],
+      [],
     )
   let q_inner =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("paragraph"),
-      None,
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "Every document conforms to a strict schema enforced on every transaction.",
-        )),
+      "paragraph",
+      attrs.create(),
+      schema.text(
+        sch,
+        "Every document conforms to a strict schema enforced on every transaction.",
       ),
-      None,
+      [],
     )
-  let quote =
-    schema.node_with(
-      sch,
-      t.StringOrNodeTypeString("blockquote"),
-      None,
-      Some(t.FragmentOrNodeOrNodeArrayNode(q_inner)),
-      None,
-    )
+  let quote = schema.node_with(sch, "blockquote", attrs.create(), q_inner, [])
   let cb =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("code_block"),
-      None,
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "schema.node(\"paragraph\", null, [schema.text(\"typed\")])",
-        )),
+      "code_block",
+      attrs.create(),
+      schema.text(
+        sch,
+        "schema.node(\"paragraph\", null, [schema.text(\"typed\")])",
       ),
-      None,
+      [],
     )
   let outro =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("paragraph"),
-      None,
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "Select any text in this editor and click a toolbar action to toggle marks or switch block types.",
-        )),
+      "paragraph",
+      attrs.create(),
+      schema.text(
+        sch,
+        "Select any text in this editor and click a toolbar action to toggle marks or switch block types.",
       ),
-      None,
+      [],
     )
-  schema.node_with(
+  schema.node_list_with(
     sch,
-    t.StringOrNodeTypeString("doc"),
-    None,
-    Some(t.FragmentOrNodeOrNodeArrayArray([h, p1, quote, cb, outro])),
-    None,
+    "doc",
+    attrs.create(),
+    [h, p1, quote, cb, outro],
+    [],
   )
 }
 
@@ -284,9 +260,9 @@ fn update_meta(
   let assert Some(ms) = schema.marks_get_at(marks, "strong")
   let assert Some(me) = schema.marks_get_at(marks, "em")
   let assert Some(mc) = schema.marks_get_at(marks, "code")
-  let hb = node.range_has_mark(d, f, t, t.MarkOrMarkTypeMarkType(ms))
-  let he = node.range_has_mark(d, f, t, t.MarkOrMarkTypeMarkType(me))
-  let hc = node.range_has_mark(d, f, t, t.MarkOrMarkTypeMarkType(mc))
+  let hb = node.range_has_mark_type(d, f, t, ms)
+  let he = node.range_has_mark_type(d, f, t, me)
+  let hc = node.range_has_mark_type(d, f, t, mc)
 
   set_btn_active(doc, "btn-0", hb)
   set_btn_active(doc, "btn-1", he)
@@ -376,11 +352,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view =
-    editor_view.new(
-      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
-      props,
-    )
+  let view = editor_view.new_node2(mount, props)
   pm_rt.ref_set(view_ref, Some(view))
   update_meta(sch, doc, editor_view.get_state(view), dispatches_ref, action_ref)
 
@@ -391,25 +363,13 @@ pub fn main() {
       True -> {
         let assert Some(mt) = schema.marks_get_at(schema.get_marks(sch), mkey)
         let tr = editor_state.get_tr(st)
-        case
-          node.range_has_mark(
-            editor_state.get_doc(st),
-            f,
-            t,
-            t.MarkOrMarkTypeMarkType(mt),
-          )
-        {
+        case node.range_has_mark_type(editor_state.get_doc(st), f, t, mt) {
           True -> {
-            transform.remove_mark_with(
-              tr,
-              f,
-              t,
-              Some(t.MarkOrMarkTypeMarkType(mt)),
-            )
+            transform.remove_mark_type_with(tr, f, t, mt)
             pm_rt.ref_set(action_ref, "Removed " <> label)
           }
           False -> {
-            let m = schema.mark(sch, t.StringOrMarkTypeMarkType(mt))
+            let m = schema.mark_mark_type(sch, mt)
             transform.add_mark(tr, f, t, m)
             pm_rt.ref_set(action_ref, "Added " <> label)
           }
@@ -453,7 +413,7 @@ pub fn main() {
           selection.get_from(sel),
           Some(selection.get_to(sel)),
           ht,
-          Some(t.attrs_or_transform_set_block_type_attrs_attrs(ha)),
+          ha,
         )
         pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }

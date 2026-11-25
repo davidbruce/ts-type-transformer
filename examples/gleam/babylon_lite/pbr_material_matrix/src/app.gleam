@@ -1,4 +1,5 @@
 import babylonjs_lite as b
+import babylonjs_lite/attach_control_options
 import babylonjs_lite/box_options
 import babylonjs_lite/create_pbr_material_props
 import babylonjs_lite/directional_light
@@ -50,7 +51,7 @@ fn mk_pbr(
     |> create_pbr_material_props.with_base_color_factor(#(v, v, v, 1.0))
     |> create_pbr_material_props.with_metallic_factor(metallic)
     |> create_pbr_material_props.with_roughness_factor(roughness)
-  b.create_pbr_material_with(Some(props))
+  b.create_pbr_material_with(props)
 }
 
 pub fn main() -> Nil {
@@ -63,7 +64,7 @@ pub fn main() -> Nil {
         set_status_error(status, br.js_error_message(err))
       }
       use engine <- br.promise_try(
-        b.create_engine(bt.RenderCanvasHTMLCanvasElement(canvas)),
+        b.create_engine_html_canvas_element(canvas),
         on_err,
       )
 
@@ -83,45 +84,45 @@ pub fn main() -> Nil {
           12.0,
           b.vec3(0.0, 1.1, 0.0),
         )
-      b.add_to_scene(scene, bt.scene_entity_camera(camera))
-      b.attach_control_with(camera, canvas, Some(scene), None)
+      b.add_to_scene_camera(scene, camera)
+      b.attach_control_with(
+        camera,
+        canvas,
+        scene,
+        attach_control_options.create(),
+      )
 
-      let hemi =
-        b.create_hemispheric_light_with(Some(#(0.0, 1.0, 0.2)), Some(0.65))
+      let hemi = b.create_hemispheric_light_with(#(0.0, 1.0, 0.2), 0.65)
       hemispheric_light.set_diffuse_color(hemi, #(0.82, 0.82, 0.82))
       hemispheric_light.set_ground_color(hemi, #(0.12, 0.12, 0.12))
-      b.add_to_scene(scene, bt.scene_entity_light_base(hemi))
+      b.add_to_scene_light_base(scene, hemi)
 
-      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.0), Some(1.8))
+      let dir = b.create_directional_light_with(#(-1.0, -2.0, -1.0), 1.8)
       directional_light.set_diffuse(dir, #(0.95, 0.95, 0.95))
-      b.add_to_scene(scene, bt.scene_entity_light_base(dir))
+      b.add_to_scene_light_base(scene, dir)
 
-      let orb_light = b.create_point_light_with(#(4.5, 3.0, 0.0), Some(12.0))
+      let orb_light = b.create_point_light_with(#(4.5, 3.0, 0.0), 12.0)
       point_light.set_diffuse(orb_light, #(1.0, 1.0, 1.0))
       point_light.set_range(orb_light, 18.0)
-      b.add_to_scene(scene, bt.scene_entity_light_base(orb_light))
+      b.add_to_scene_light_base(scene, orb_light)
 
       let floor_opts =
         ground_options.create()
         |> ground_options.with_width(14.0)
         |> ground_options.with_height(14.0)
-      let floor = b.create_ground_with(engine, Some(floor_opts))
+      let floor = b.create_ground_with(engine, floor_opts)
       mesh.set_material(floor, mk_pbr(0.11, 0.08, 0.88))
-      b.add_to_scene(scene, bt.scene_entity_mesh(floor))
+      b.add_to_scene_mesh(scene, floor)
 
       let plinth_opts =
         box_options.create()
         |> box_options.with_width(8.4)
         |> box_options.with_height(0.08)
         |> box_options.with_depth(8.4)
-      let plinth =
-        b.create_box_with(
-          engine,
-          Some(bt.NumberOrBoxOptionsBoxOptions(plinth_opts)),
-        )
+      let plinth = b.create_box_box_options_with(engine, plinth_opts)
       observable_vec3.set(scene_node.get_position(plinth), 0.0, 0.04, 0.0)
       mesh.set_material(plinth, mk_pbr(0.17, 0.12, 0.78))
-      b.add_to_scene(scene, bt.scene_entity_mesh(plinth))
+      b.add_to_scene_mesh(scene, plinth)
 
       list.each([0, 1, 2, 3, 4], fn(row) {
         list.each([0, 1, 2, 3, 4], fn(col) {
@@ -131,7 +132,7 @@ pub fn main() -> Nil {
             sphere_options.create()
             |> sphere_options.with_diameter(1.05)
             |> sphere_options.with_segments(24.0)
-          let sphere = b.create_sphere_with(engine, Some(sopts))
+          let sphere = b.create_sphere_with(engine, sopts)
           observable_vec3.set(
             scene_node.get_position(sphere),
             int.to_float(col - 2) *. 1.55,
@@ -139,7 +140,7 @@ pub fn main() -> Nil {
             int.to_float(row - 2) *. 1.55,
           )
           mesh.set_material(sphere, mk_pbr(0.85, metallic, roughness))
-          b.add_to_scene(scene, bt.scene_entity_mesh(sphere))
+          b.add_to_scene_mesh(scene, sphere)
         })
       })
 
@@ -154,17 +155,17 @@ pub fn main() -> Nil {
         |> create_pbr_material_props.with_metallic_factor(0.0)
         |> create_pbr_material_props.with_roughness_factor(0.2)
       b.set_pbr_emissive(orb_props, #(0.95, 0.95, 0.95))
-      let orb_mat = b.create_pbr_material_with(Some(orb_props))
+      let orb_mat = b.create_pbr_material_with(orb_props)
 
       let orb_opts =
         sphere_options.create()
         |> sphere_options.with_diameter(0.36)
         |> sphere_options.with_segments(16.0)
-      let orb = b.create_sphere_with(engine, Some(orb_opts))
+      let orb = b.create_sphere_with(engine, orb_opts)
       let orb_pos = scene_node.get_position(orb)
       observable_vec3.set(orb_pos, 4.5, 3.0, 0.0)
       mesh.set_material(orb, orb_mat)
-      b.add_to_scene(scene, bt.scene_entity_mesh(orb))
+      b.add_to_scene_mesh(scene, orb)
 
       let orb_light_pos = point_light.get_position(orb_light)
       let perf = core.get_performance()

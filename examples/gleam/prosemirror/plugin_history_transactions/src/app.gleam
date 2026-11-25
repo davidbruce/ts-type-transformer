@@ -92,23 +92,13 @@ fn build_schema() -> t.Schema(Nil) {
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(
-      nodes,
-    ))
-    |> schema_spec.with_marks(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(
-      marks,
-    ))
+    |> schema_spec.with_nodes(nodes)
+    |> schema_spec.with_marks(marks)
   schema.new(spec)
 }
 
 fn p_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node_with(
-    sch,
-    t.StringOrNodeTypeString("paragraph"),
-    None,
-    Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, txt))),
-    None,
-  )
+  schema.node_with(sch, "paragraph", attrs.create(), schema.text(sch, txt), [])
 }
 
 fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
@@ -118,38 +108,31 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   let h =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("heading"),
-      Some(ha),
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "Step-Inversion Undo & Transaction Filter",
-        )),
-      ),
-      None,
+      "heading",
+      ha,
+      schema.text(sch, "Step-Inversion Undo & Transaction Filter"),
+      [],
     )
-  schema.node_with(
+  schema.node_list_with(
     sch,
-    t.StringOrNodeTypeString("doc"),
-    None,
-    Some(
-      t.FragmentOrNodeOrNodeArrayArray([
-        h,
-        p_node(
-          sch,
-          "Every document change produces atomic Transform steps that can be inverted against prior snapshots.",
-        ),
-        p_node(
-          sch,
-          "A ProseMirror Plugin inspects transactions in filterTransaction and can enforce a read-only lock.",
-        ),
-        p_node(
-          sch,
-          "Click Append Revision or Bold First Line, then step backward with Undo and forward with Redo.",
-        ),
-      ]),
-    ),
-    None,
+    "doc",
+    attrs.create(),
+    [
+      h,
+      p_node(
+        sch,
+        "Every document change produces atomic Transform steps that can be inverted against prior snapshots.",
+      ),
+      p_node(
+        sch,
+        "A ProseMirror Plugin inspects transactions in filterTransaction and can enforce a read-only lock.",
+      ),
+      p_node(
+        sch,
+        "Click Append Revision or Bold First Line, then step backward with Undo and forward with Redo.",
+      ),
+    ],
+    [],
   )
 }
 
@@ -220,7 +203,7 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 pub fn main() {
   let doc = core.get_document()
   let sch = build_schema()
-  let audit_key = plugin_key.new_with(Some("audit"))
+  let audit_key = plugin_key.new_with("audit")
 
   let view_ref = pm_rt.ref_new(None)
   let locked_ref = pm_rt.ref_new(False)
@@ -290,10 +273,7 @@ pub fn main() {
                     |> list.reverse
                   case
                     decode.run(
-                      transaction.get_meta(
-                        tr,
-                        t.StringOrPluginOrPluginKeyString("history"),
-                      ),
+                      transaction.get_meta(tr, "history"),
                       decode.string,
                     )
                   {
@@ -335,11 +315,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view =
-    editor_view.new(
-      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
-      props,
-    )
+  let view = editor_view.new_node2(mount, props)
   pm_rt.ref_set(view_ref, Some(view))
   update_meta(
     doc,
@@ -361,7 +337,7 @@ pub fn main() {
       editor_state.get_tr(st)
       |> transform.insert(
         fragment.get_size(node.get_content(editor_state.get_doc(st))),
-        t.FragmentOrNodeOrNodeArrayNode(p_node(sch, msg)),
+        p_node(sch, msg),
       )
     case pm_rt.ref_get(locked_ref) {
       False ->
@@ -382,11 +358,7 @@ pub fn main() {
           True -> {
             let tr =
               editor_state.get_tr(st)
-              |> transform.add_mark(
-                fp,
-                tp,
-                schema.mark(sch, t.StringOrMarkTypeString("strong")),
-              )
+              |> transform.add_mark(fp, tp, schema.mark(sch, "strong"))
             case pm_rt.ref_get(locked_ref) {
               False -> pm_rt.ref_set(action_ref, "Bolded first body paragraph")
               True -> Nil
@@ -431,10 +403,7 @@ pub fn main() {
         }
         let tr =
           editor_state.get_tr(st)
-          |> transaction.set_meta(
-            t.StringOrPluginOrPluginKeyString("history"),
-            dynamic.string("undo"),
-          )
+          |> transaction.set_meta("history", dynamic.string("undo"))
         list.each(batch, fn(s) {
           transform.step(tr, s)
           Nil
@@ -475,10 +444,7 @@ pub fn main() {
         }
         let tr =
           editor_state.get_tr(st)
-          |> transaction.set_meta(
-            t.StringOrPluginOrPluginKeyString("history"),
-            dynamic.string("redo"),
-          )
+          |> transaction.set_meta("history", dynamic.string("redo"))
         list.each(batch, fn(s) {
           transform.step(tr, s)
           Nil

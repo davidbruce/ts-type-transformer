@@ -108,23 +108,13 @@ fn build_schema() -> t.Schema(Nil) {
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(t.SchemaSpecNodesOrOrderedMapSchemaSpecNodes(
-      nodes,
-    ))
-    |> schema_spec.with_marks(t.SchemaSpecMarksOrOrderedMapSchemaSpecMarks(
-      marks,
-    ))
+    |> schema_spec.with_nodes(nodes)
+    |> schema_spec.with_marks(marks)
   schema.new(spec)
 }
 
 fn p_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node_with(
-    sch,
-    t.StringOrNodeTypeString("paragraph"),
-    None,
-    Some(t.FragmentOrNodeOrNodeArrayNode(schema.text(sch, txt))),
-    None,
-  )
+  schema.node_with(sch, "paragraph", attrs.create(), schema.text(sch, txt), [])
 }
 
 fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
@@ -134,52 +124,43 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   let h =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("heading"),
-      Some(ha),
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "Immutable State & View Decorations",
-        )),
-      ),
-      None,
+      "heading",
+      ha,
+      schema.text(sch, "Immutable State & View Decorations"),
+      [],
     )
   let cb =
     schema.node_with(
       sch,
-      t.StringOrNodeTypeString("code_block"),
-      None,
-      Some(
-        t.FragmentOrNodeOrNodeArrayNode(schema.text(
-          sch,
-          "const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view",
-        )),
+      "code_block",
+      attrs.create(),
+      schema.text(
+        sch,
+        "const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view",
       ),
-      None,
+      [],
     )
-  schema.node_with(
+  schema.node_list_with(
     sch,
-    t.StringOrNodeTypeString("doc"),
-    None,
-    Some(
-      t.FragmentOrNodeOrNodeArrayArray([
-        h,
-        p_node(
-          sch,
-          "A ProseMirror schema validates every document tree before state updates commit to the view.",
-        ),
-        p_node(
-          sch,
-          "Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema.",
-        ),
-        cb,
-        p_node(
-          sch,
-          "Inline decorations highlight matching tokens while node decorations outline matching blocks in the view.",
-        ),
-      ]),
-    ),
-    None,
+    "doc",
+    attrs.create(),
+    [
+      h,
+      p_node(
+        sch,
+        "A ProseMirror schema validates every document tree before state updates commit to the view.",
+      ),
+      p_node(
+        sch,
+        "Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema.",
+      ),
+      cb,
+      p_node(
+        sch,
+        "Inline decorations highlight matching tokens while node decorations outline matching blocks in the view.",
+      ),
+    ],
+    [],
   )
 }
 
@@ -365,7 +346,7 @@ fn sync_meta(doc, search_key, st: t.EditorState(Nil), active_id: String) {
 pub fn main() {
   let doc = core.get_document()
   let sch = build_schema()
-  let search_key = plugin_key.new_with(Some("search"))
+  let search_key = plugin_key.new_with("search")
 
   let field =
     state_field.create()
@@ -375,8 +356,7 @@ pub fn main() {
     )
     |> state_field.with_apply(
       fn(tr, prev, _, _) {
-        let mv =
-          transaction.get_meta(tr, t.StringOrPluginOrPluginKeyString("search"))
+        let mv = transaction.get_meta(tr, "search")
         case decode.run(mv, decode.string) {
           Ok(s) -> dynamic.string(s)
           Error(_) -> prev
@@ -423,11 +403,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view =
-    editor_view.new(
-      Some(t.EditorViewNewPlaceOrDistDOMNodeNode2(dom_node.upcast(mount))),
-      props,
-    )
+  let view = editor_view.new_node2(mount, props)
   pm_rt.ref_set(view_ref, Some(view))
   sync_meta(
     doc,
@@ -452,10 +428,7 @@ pub fn main() {
             pm_rt.ref_set(active_ref, btn_id)
             let tr =
               editor_state.get_tr(editor_view.get_state(view))
-              |> transaction.set_meta(
-                t.StringOrPluginOrPluginKeyString("search"),
-                dynamic.string(query),
-              )
+              |> transaction.set_meta("search", dynamic.string(query))
             editor_view.dispatch(view, tr)
           })
         None -> Nil

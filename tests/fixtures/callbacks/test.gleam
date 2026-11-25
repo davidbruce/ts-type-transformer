@@ -43,7 +43,7 @@ pub fn main() {
   counter.subscribe(c, on_value)
   check(counter.increment(c) == 1.0, "increment")
   check(cell.get(last) == 1.0, "listener called")
-  let _ = counter.increment_with(c, Some(4.0))
+  let _ = counter.increment_with(c, 4.0)
   check(cell.get(last) == 5.0 && cell.get(calls) == 2, "listener called again")
 
   // A callback that takes an object and returns a value.

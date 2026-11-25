@@ -1,6 +1,5 @@
 import date_fns as df
 import date_fns/runtime
-import date_fns/types as dt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
@@ -14,8 +13,6 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "app") {
     None -> Nil
     Some(app) -> {
-      let day = dt.DateArgDate
-
       let head = document.create_element(doc, tag.div)
       element.set_class_name(head, "head")
       let h1 = document.create_element(doc, tag.h1)
@@ -31,7 +28,7 @@ pub fn main() -> Nil {
       node.append_child(app, head)
 
       let sample = df.parse_iso("2024-03-15T14:30:45")
-      let parsed = df.parse("15/03/2024", "dd/MM/yyyy", day(sample))
+      let parsed = df.parse("15/03/2024", "dd/MM/yyyy", sample)
 
       let fmt_card = document.create_element(doc, tag.div)
       element.set_class_name(fmt_card, "card")
@@ -55,48 +52,48 @@ pub fn main() -> Nil {
       let rows = [
         #(
           "formatDate(\"yyyy-MM-dd\")",
-          df.format_date(day(sample), "yyyy-MM-dd"),
+          df.format_date(sample, "yyyy-MM-dd"),
           "ISO date",
         ),
         #(
           "formatDate(\"EEEE, do MMMM yyyy\")",
-          df.format_date(day(sample), "EEEE, do MMMM yyyy"),
+          df.format_date(sample, "EEEE, do MMMM yyyy"),
           "Ordinal full date",
         ),
         #(
           "formatDate(\"EEE, d MMM yy\")",
-          df.format_date(day(sample), "EEE, d MMM yy"),
+          df.format_date(sample, "EEE, d MMM yy"),
           "Compact short date",
         ),
         #(
           "formatDate(\"HH:mm:ss\")",
-          df.format_date(day(sample), "HH:mm:ss"),
+          df.format_date(sample, "HH:mm:ss"),
           "24-hour clock",
         ),
         #(
           "formatDate(\"h:mm a\")",
-          df.format_date(day(sample), "h:mm a"),
+          df.format_date(sample, "h:mm a"),
           "12-hour clock",
         ),
         #(
           "formatDate(\"'Q'Q · 'W'I\")",
-          df.format_date(day(sample), "'Q'Q · 'W'I"),
+          df.format_date(sample, "'Q'Q · 'W'I"),
           "Quarter & ISO week",
         ),
         #(
           "formatDate(\"DDD 'of' yyyy\")",
-          df.format_date(day(sample), "DDD 'of' yyyy"),
+          df.format_date(sample, "DDD 'of' yyyy"),
           "Day of year",
         ),
         #(
           "lightFormat(\"yyyy/MM/dd HH:mm\")",
-          df.light_format(day(sample), "yyyy/MM/dd HH:mm"),
+          df.light_format(sample, "yyyy/MM/dd HH:mm"),
           "Zero-locale light formatter",
         ),
-        #("formatISO(sample)", df.format_iso(day(sample)), "ISO 8601 timestamp"),
+        #("formatISO(sample)", df.format_iso(sample), "ISO 8601 timestamp"),
         #(
           "parse(\"15/03/2024\", \"dd/MM/yyyy\")",
-          df.format_date(day(parsed), "yyyy-MM-dd"),
+          df.format_date(parsed, "yyyy-MM-dd"),
           "Custom parse roundtrip",
         ),
       ]

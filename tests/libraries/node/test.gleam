@@ -46,7 +46,7 @@ pub fn main() {
     + check(path.dirname("/a/b/c.txt") == "/a/b", "path.dirname")
     + check(path.basename("/a/b/c.txt") == "c.txt", "path.basename")
     + check(
-      path.basename_with("/a/b/c.txt", Some(".txt")) == "c",
+      path.basename_with("/a/b/c.txt", ".txt") == "c",
       "path.basename with a suffix",
     )
     + check(path.extname("archive.tar.gz") == ".gz", "path.extname")
@@ -167,7 +167,7 @@ pub fn main() {
   // Cleaned up, recursively.
   let recursive = rm_options.create()
   rm_options.set_recursive(recursive, Some(True))
-  fs.rm_sync_with(dir, Some(recursive))
+  fs.rm_sync_with(dir, recursive)
   let passed = passed + check(!fs.exists_sync(dir), "rmSync recursive")
 
   // ---- events ----

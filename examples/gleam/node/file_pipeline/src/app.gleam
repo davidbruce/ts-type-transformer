@@ -1,8 +1,8 @@
 import gleam/bool
+import gleam/dynamic
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{Some}
 import gleam/string
 import node/areas/events/event_emitter as events
 import node/areas/fs
@@ -13,7 +13,6 @@ import node/buffer
 import node/mkdir_options
 import node/namespaces/node_js/event_emitter as emitter
 import node/runtime
-import node/types as t
 
 fn check(ok: Bool, what: String) -> Int {
   case ok {
@@ -22,19 +21,8 @@ fn check(ok: Bool, what: String) -> Int {
   }
 }
 
-fn str(s: String) {
-  t.PathLikeString(s)
-}
-
 fn read_text(p: String) -> String {
-  buffer.to_string(fs.read_file_sync(t.PathOrFileDescriptorString(p)))
-}
-
-fn write_text(p: String, body: String) -> Nil {
-  fs.write_file_sync(
-    t.PathOrFileDescriptorString(p),
-    t.WriteFileDataString(body),
-  )
+  buffer.to_string(fs.read_file_sync(p))
 }
 
 pub fn main() -> Nil {
@@ -42,13 +30,11 @@ pub fn main() -> Nil {
   let stages = runtime.ref_new(0)
   let done_count = runtime.ref_new(0)
 
-  let ev_stage = runtime.dynamic("stage")
-  let ev_done = runtime.dynamic("done")
-  emitter.on(bus, ev_stage, fn(_) {
+  emitter.on(bus, "stage", fn(_) {
     runtime.ref_update(stages, fn(n) { n + 1 })
     Nil
   })
-  emitter.once(bus, ev_done, fn(_) {
+  emitter.once(bus, "done", fn(_) {
     runtime.ref_update(done_count, fn(n) { n + 1 })
     Nil
   })
@@ -57,18 +43,18 @@ pub fn main() -> Nil {
   let in_dir = path.join([root, "in"])
   let out_dir = path.join([root, "out"])
   let mk = mkdir_options.create()
-  fs.mkdir_sync_recursive(str(in_dir), mk)
-  fs.mkdir_sync_recursive(str(out_dir), mk)
+  fs.mkdir_sync_recursive(in_dir, mk)
+  fs.mkdir_sync_recursive(out_dir, mk)
 
   // Stage 1: seed
-  write_text(path.join([in_dir, "a.log"]), "100 OK\n")
-  write_text(path.join([in_dir, "b.log"]), "200 OK\n")
-  write_text(path.join([in_dir, "c.log"]), "300 OK\n")
-  emitter.emit(bus, ev_stage, [runtime.dynamic("seed")])
+  fs.write_file_sync(path.join([in_dir, "a.log"]), "100 OK\n")
+  fs.write_file_sync(path.join([in_dir, "b.log"]), "200 OK\n")
+  fs.write_file_sync(path.join([in_dir, "c.log"]), "300 OK\n")
+  emitter.emit(bus, "stage", [dynamic.string("seed")])
   let passed = check(runtime.ref_get(stages) == 1, "seed stage")
 
   // Stage 2: bundle
-  let logs = list.sort(fs.readdir_sync(str(in_dir)), string.compare)
+  let logs = list.sort(fs.readdir_sync(in_dir), string.compare)
   let passed =
     passed + check(logs == ["a.log", "b.log", "c.log"], "input logs listed")
   let combined = path.join([out_dir, "combined.log"])
@@ -76,18 +62,15 @@ pub fn main() -> Nil {
     list.fold(logs, passed, fn(acc, name) {
       let c = check(path.extname(name) == ".log", "extname is .log")
       let chunk = read_text(path.join([in_dir, name]))
-      fs.append_file_sync(
-        t.PathOrFileDescriptorString(combined),
-        t.StringOrUint8ArrayString(chunk),
-      )
+      fs.append_file_sync(combined, chunk)
       acc + c
     })
-  emitter.emit(bus, ev_stage, [runtime.dynamic("bundle")])
+  emitter.emit(bus, "stage", [dynamic.string("bundle")])
   let passed = passed + check(runtime.ref_get(stages) == 2, "bundle stage")
 
   // Stage 3: verify
   let comb_text = read_text(combined)
-  let st_comb = fs.stat_sync(str(combined))
+  let st_comb = fs.stat_sync(combined)
   let passed =
     passed
     + check(
@@ -103,9 +86,9 @@ pub fn main() -> Nil {
   }
   let passed = passed + check(enoent_caught, "missing file raised ENOENT")
 
-  emitter.emit(bus, ev_stage, [runtime.dynamic("verify")])
-  emitter.emit(bus, ev_done, [
-    runtime.dynamic(int.to_float(string.length(comb_text))),
+  emitter.emit(bus, "stage", [dynamic.string("verify")])
+  emitter.emit(bus, "done", [
+    dynamic.float(int.to_float(string.length(comb_text))),
   ])
   let passed =
     passed
@@ -118,9 +101,9 @@ pub fn main() -> Nil {
     rm_options.create()
     |> rm_options.with_recursive(True)
     |> rm_options.with_force(True)
-  fs.rm_sync_with(str(root), Some(rm))
+  fs.rm_sync_with(root, rm)
   let passed =
-    passed + check(!fs.exists_sync(str(root)), "pipeline workspace removed")
+    passed + check(!fs.exists_sync(root), "pipeline workspace removed")
 
   io.println(
     "pipeline_root="

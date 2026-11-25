@@ -1,6 +1,6 @@
 import gleam/float
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{None}
 import pts/canvas_form
 import pts/canvas_space
 import pts/canvas_space_options
@@ -30,7 +30,7 @@ pub fn main() -> Nil {
     |> canvas_space_options.with_retina(True)
 
   let cs =
-    canvas_space.new_with(Some(t.StringOrElementString("#pt")), None)
+    canvas_space.new_with("#pt", None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 
@@ -57,87 +57,55 @@ pub fn main() -> Nil {
         )
 
       let poly0 =
-        polygon.from_center(t.PtLikePt(c), radius, 6.0)
-        |> group.rotate2d_with(time_ms *. 0.00035, Some(t.PtLikePt(c)), None)
-      let centroid = polygon.centroid(t.PtLikeIterableGroup(poly0))
+        polygon.from_center_pt(c, radius, 6.0)
+        |> group.rotate2d_pt_with(time_ms *. 0.00035, c, "")
+      let centroid = polygon.centroid_group(poly0)
 
       list.index_fold(shades, poly0, fn(poly, shade, depth) {
         let sw = case depth == 0 {
           True -> 1.6
           False -> 1.0
         }
-        canvas_form.fill(form, t.CanvasFormFillCString(shade))
-        |> canvas_form.stroke_with(
-          t.CanvasFormFillCString("#111111"),
-          Some(sw),
-          None,
-          None,
-        )
-        |> canvas_form.polygon(t.PtLikeIterableGroup(poly))
+        canvas_form.fill(form, shade)
+        |> canvas_form.stroke_with("#111111", sw, None, None)
+        |> canvas_form.polygon_group(poly)
 
         case depth == 0 {
           True ->
             list.each(group.to_list(poly), fn(p) {
               let ray = group.new([centroid, p])
-              canvas_form.stroke_only_with(
-                form,
-                t.CanvasFormFillCString("#d4d4d4"),
-                Some(1.0),
-                None,
-                None,
-              )
-              |> canvas_form.line(t.PtLikeIterableGroup(ray))
-              |> canvas_form.fill_only(t.CanvasFormFillCString("#111111"))
-              |> canvas_form.point_with(
-                t.PtLikePt(p),
-                Some(3.5),
-                Some("circle"),
-              )
+              canvas_form.stroke_only_with(form, "#d4d4d4", 1.0, None, None)
+              |> canvas_form.line_group(ray)
+              |> canvas_form.fill_only("#111111")
+              |> canvas_form.point_pt_with(p, 3.5, "circle")
               Nil
             })
           False -> Nil
         }
 
-        polygon.midpoints_with(t.PtIterableGroup(poly), Some(True), Some(t_val))
+        polygon.midpoints_group_with(poly, True, t_val)
       })
 
       let cx = pt.get_x(c)
       let cy = pt.get_y(c)
       let h_bar = group.new([mk_pt(cx -. 10.0, cy), mk_pt(cx +. 10.0, cy)])
       let v_bar = group.new([mk_pt(cx, cy -. 10.0), mk_pt(cx, cy +. 10.0)])
-      canvas_form.stroke_only_with(
-        form,
-        t.CanvasFormFillCString("#ffffff"),
-        Some(1.5),
-        None,
-        None,
-      )
-      |> canvas_form.line(t.PtLikeIterableGroup(h_bar))
-      |> canvas_form.line(t.PtLikeIterableGroup(v_bar))
-      |> canvas_form.fill(t.CanvasFormFillCString("#ffffff"))
-      |> canvas_form.stroke_with(
-        t.CanvasFormFillCString("#111111"),
-        Some(1.5),
-        None,
-        None,
-      )
-      |> canvas_form.point_with(t.PtLikePt(centroid), Some(5.0), Some("circle"))
+      canvas_form.stroke_only_with(form, "#ffffff", 1.5, None, None)
+      |> canvas_form.line_group(h_bar)
+      |> canvas_form.line_group(v_bar)
+      |> canvas_form.fill("#ffffff")
+      |> canvas_form.stroke_with("#111111", 1.5, None, None)
+      |> canvas_form.point_pt_with(centroid, 5.0, "circle")
 
-      let ring = circle.from_center(t.PtLikePt(pointer), 10.0)
-      canvas_form.stroke_only_with(
-        form,
-        t.CanvasFormFillCString("#737373"),
-        Some(1.5),
-        None,
-        None,
-      )
-      |> canvas_form.circle(t.PtLikeIterableGroup(ring))
+      let ring = circle.from_center_pt(pointer, 10.0)
+      canvas_form.stroke_only_with(form, "#737373", 1.5, None, None)
+      |> canvas_form.circle_group(ring)
       Nil
     })
 
-  canvas_space.add(cs, t.i_player_or_animate_callback_fn_i_player(player))
-  canvas_space.bind_mouse_with(cs, Some(True), None)
-  canvas_space.bind_touch_with(cs, Some(True), None, None)
+  canvas_space.add_i_player(cs, player)
+  canvas_space.bind_mouse(cs)
+  canvas_space.bind_touch(cs)
   canvas_space.play(cs)
   Nil
 }

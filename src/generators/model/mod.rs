@@ -279,7 +279,48 @@ impl NamedUnion {
     }
 }
 
+// How an overload that differs from others only in its optional tail is
+// named (ECharts' `setOption(opt, notMerge?, lazyUpdate?)` beside
+// `setOption(opt, opts?)`): the one whose tail ends in an options object
+// leads, the plain name and `name_with`; each other is `name_with_<its
+// first optional>` alone. `name` is the overload whose name they take: the
+// first, as lowering named it (`setOption`'s `set_option`).
+pub enum TailRole {
+    Leader { name: usize },
+    Follower { name: usize, first: String },
+}
+
+// Where a function's optional tail starts: its trailing optional parameters.
+pub fn tail_start(f: &Func) -> usize {
+    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, true))).count()
+}
+
 impl Model {
+    pub fn tail_overloads(&self, funcs: &[Func]) -> HashMap<usize, TailRole> {
+        let mut groups: Vec<Vec<usize>> = Vec::new();
+        let key = |f: &Func| (format!("{:?}", f.call), f.fixed.clone(), f.params[..tail_start(f)].iter().map(|(_, t)| t.clone()).collect::<Vec<Ty>>());
+        for (i, f) in funcs.iter().enumerate() {
+            if f.rest || tail_start(f) == f.params.len() || !matches!(f.call, Call::Method(_) | Call::Static(_) | Call::New(_) | Call::Invoke | Call::Construct) {
+                continue;
+            }
+            match groups.iter_mut().find(|g| key(&funcs[g[0]]) == key(f)) {
+                Some(g) => g.push(i),
+                None => groups.push(vec![i]),
+            }
+        }
+        let options = |f: &Func| matches!(f.params.last(), Some((_, Ty::Nullable(inner, _))) if matches!(&**inner, Ty::Obj(n) if self.classes.iter().any(|c| c.name == *n && c.funcs.iter().any(|g| matches!(g.call, Call::Create(_))))));
+        let mut out = HashMap::new();
+        for g in groups.into_iter().filter(|g| g.len() > 1) {
+            let leader = g.iter().copied().find(|&i| options(&funcs[i])).unwrap_or(g[0]);
+            out.insert(leader, TailRole::Leader { name: g[0] });
+            for &i in g.iter().filter(|&&i| i != leader) {
+                let first = funcs[i].params[tail_start(&funcs[i])].0.clone();
+                out.insert(i, TailRole::Follower { name: g[0], first });
+            }
+        }
+        out
+    }
+
     pub fn is_callback(&self, name: &str) -> bool {
         self.callbacks.iter().any(|c| c.name == name)
     }
@@ -316,7 +357,14 @@ impl Model {
     pub fn member_names(&self, u: &NamedUnion, type_name: &dyn Fn(&str) -> String) -> (Option<usize>, Vec<String>) {
         let primary = u.primary(|n| self.is_record(n), self.synthetic.contains(&u.name));
         let (names, base) = self.member_suffixes(u, primary, type_name);
-        match (primary, base) {
+        // Of objects only, a lone array of something else is what a user most
+        // readily makes (Konva's `points`, `number[]` beside typed arrays).
+        let arrays: Vec<usize> = u.parts.iter().enumerate().filter(|(_, p)| matches!(p, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).map(|(i, _)| i).collect();
+        let lone_array = match arrays.as_slice() {
+            [a] if names[*a] != "list" => Some(*a),
+            _ => None,
+        };
+        match (primary, base.or(lone_array)) {
             (None, Some(b)) => (Some(b), self.member_suffixes(u, Some(b), type_name).0),
             _ => (primary, names),
         }
@@ -394,25 +442,28 @@ impl Model {
     }
 }
 
-// `XAXisComponentOption` as `X`, `AXis`, `Component`, `Option`: a word starts
-// at a capital after a lowercase letter or a digit, or after an underscore
-// (C's `Echarts_BarSeriesOption`).
+// `XAXisComponentOption` as `XA`, `Xis`, `Component`, `Option`: a word starts
+// at a capital after a lowercase letter or a digit, at an acronym's last
+// capital before a lowercase letter (`GLBuffer`: `GL`, `Buffer`), or after an
+// underscore (C's `Echarts_BarSeriesOption`).
 pub fn camel_words(n: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    let mut prev_lower = false;
+    let chars: Vec<char> = n.chars().collect();
     let mut fresh = true;
-    for c in n.chars() {
+    for (i, &c) in chars.iter().enumerate() {
         if c == '_' {
             fresh = true;
-            prev_lower = false;
             continue;
         }
-        if fresh || (c.is_ascii_uppercase() && prev_lower) {
+        let prev = (i > 0).then(|| chars[i - 1]).filter(|p| *p != '_');
+        let next_lower = chars.get(i + 1).is_some_and(|n| n.is_ascii_lowercase());
+        // A capital after a lowercase letter or a digit, or the last of an acronym before a word (`GLBuffer`).
+        let starts = c.is_ascii_uppercase() && prev.is_some_and(|p| p.is_ascii_lowercase() || p.is_ascii_digit() || (p.is_ascii_uppercase() && next_lower));
+        if fresh || starts {
             out.push(String::new());
             fresh = false;
         }
         out.last_mut().unwrap().push(c);
-        prev_lower = c.is_ascii_lowercase() || c.is_ascii_digit();
     }
     out
 }
@@ -455,6 +506,9 @@ pub struct Shared {
 }
 
 pub struct Model {
+    // Functions whose optional arguments are an option bag, by import: the
+    // bag's properties, in the order the function takes them.
+    pub args_bags: HashMap<String, Vec<String>>,
     pub enums: Vec<(String, Vec<String>)>,
     // Name, then member names and values.
     pub num_enums: Vec<(String, Vec<(String, String)>)>,
@@ -554,6 +608,8 @@ pub struct ModelOptions<'a> {
     pub retain_opaque_constraints: bool,
     // `T | T[]` of a union `T` keeps its array's element (a Gleam list of `T` going in).
     pub typed_union_arrays: bool,
+    // More than four optional arguments are an option bag of them (see `Builder::args_bags`).
+    pub args_bags: bool,
 }
 
 impl<'a> ModelOptions<'a> {
@@ -566,6 +622,7 @@ impl<'a> ModelOptions<'a> {
             overloading: target == "C++",
             retain_opaque_constraints: target == "Gleam",
             typed_union_arrays: target == "Gleam",
+            args_bags: target == "Gleam",
         }
     }
 }

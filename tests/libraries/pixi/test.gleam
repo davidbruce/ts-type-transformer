@@ -36,7 +36,7 @@ fn near(a: Float, b: Float) -> Bool {
 }
 
 fn rect(x: Float, y: Float, w: Float, h: Float) {
-  rectangle.new_with(Some(x), Some(y), Some(w), Some(h))
+  rectangle.new_with(x, y, w, h)
 }
 
 pub fn main() {
@@ -44,9 +44,9 @@ pub fn main() {
 
   // ---- Point ----
   // (add, dot, magnitude, rotate... are pixi.js/math-extras, not loaded: not tested.)
-  let p = point.new_with(Some(3.0), Some(4.0))
-  let q = point.new_with(Some(1.0), Some(2.0))
-  let _ = point.set_with(q, Some(7.0), Some(8.0))
+  let p = point.new_with(3.0, 4.0)
+  let q = point.new_with(1.0, 2.0)
+  let _ = point.set_with(q, 7.0, 8.0)
   let c = point.new()
   let _ = point.copy_from(c, p)
   let passed =
@@ -93,7 +93,7 @@ pub fn main() {
       "is_empty",
     )
   let padded = rectangle.clone(r)
-  let _ = rectangle.pad_with(padded, Some(5.0), Some(5.0))
+  let _ = rectangle.pad_with(padded, 5.0, 5.0)
   let _ = rectangle.set_width(r, 200.0)
   let passed =
     passed
@@ -107,10 +107,10 @@ pub fn main() {
   let m = matrix.new()
   let _ = matrix.translate(m, 10.0, 20.0)
   let _ = matrix.scale(m, 2.0, 3.0)
-  let moved = matrix.apply(m, point.new_with(Some(1.0), Some(1.0)))
+  let moved = matrix.apply(m, point.new_with(1.0, 1.0))
   let back = matrix.apply_inverse(m, moved)
   let spin = matrix.rotate(matrix.new(), half_pi)
-  let spun = matrix.apply(spin, point.new_with(Some(1.0), Some(0.0)))
+  let spun = matrix.apply(spin, point.new_with(1.0, 0.0))
   let passed =
     passed
     + check(matrix.is_identity(matrix.new()), "a new matrix is the identity")
@@ -145,7 +145,7 @@ pub fn main() {
   let root = container.new()
   let box = graphics.new()
   let _ = graphics.rect(box, 0.0, 0.0, 100.0, 50.0)
-  let _ = graphics.fill_with(box, Some(16_711_680.0))
+  let _ = graphics.fill_with(box, 16_711_680.0)
   let bb = graphics.get_bounds(box)
   let passed =
     passed
@@ -162,11 +162,11 @@ pub fn main() {
       "graphics width and height",
     )
     + check(
-      graphics.contains_point(box, point.new_with(Some(50.0), Some(25.0))),
+      graphics.contains_point(box, point.new_with(50.0, 25.0)),
       "graphics contains a point",
     )
     + check(
-      !graphics.contains_point(box, point.new_with(Some(150.0), Some(25.0))),
+      !graphics.contains_point(box, point.new_with(150.0, 25.0)),
       "and not a point outside",
     )
   // FINDING 10 (awkward): `addChild<U extends ContainerChild[]>(...children: U): U[0]` is
@@ -194,7 +194,7 @@ pub fn main() {
     + check(option.is_none(container.get_parent(root)), "the root has none")
 
   // Scale of the parent.
-  observable_point.set_with(container.get_scale(root), Some(2.0), Some(2.0))
+  observable_point.set_with(container.get_scale(root), 2.0, 2.0)
   |> fn(_) { Nil }
   let passed =
     passed
@@ -226,7 +226,7 @@ pub fn main() {
   // Circles and polygons.
   let dot = graphics.new()
   let _ = graphics.circle(dot, 50.0, 50.0, 25.0)
-  let _ = graphics.fill_with(dot, Some(255.0))
+  let _ = graphics.fill_with(dot, 255.0)
   let db = graphics.get_bounds(dot)
   let passed =
     passed
@@ -235,11 +235,11 @@ pub fn main() {
       "circle bounds",
     )
     + check(
-      graphics.contains_point(dot, point.new_with(Some(50.0), Some(50.0))),
+      graphics.contains_point(dot, point.new_with(50.0, 50.0)),
       "circle contains its centre",
     )
     + check(
-      !graphics.contains_point(dot, point.new_with(Some(26.0), Some(26.0))),
+      !graphics.contains_point(dot, point.new_with(26.0, 26.0)),
       "circle does not contain its corner",
     )
 
@@ -254,7 +254,7 @@ pub fn main() {
     )
     + check(container.get_width(s) == 1.0, "a sprite is its texture's size")
   container.set_width(s, 20.0)
-  let _ = observable_point.set_with(sprite.get_anchor(s), Some(0.5), Some(0.5))
+  let _ = observable_point.set_with(sprite.get_anchor(s), 0.5, 0.5)
   let passed =
     passed
     + check(container.get_width(s) == 20.0, "sprite width set")
@@ -269,13 +269,13 @@ pub fn main() {
   application_init_options.set_width(opts, Some(200.0))
   application_init_options.set_height(opts, Some(100.0))
   application_init_options.set_background_color(opts, 255.0)
-  runtime.promise_then(application.init_with(app, Some(opts)), fn(ready) {
+  runtime.promise_then(application.init_with(app, opts), fn(ready) {
     let assert Ok(_) = ready
     let screen = application.get_screen(app)
     let stage = application.get_stage(app)
     let dot = graphics.new()
     let _ = graphics.circle(dot, 100.0, 50.0, 20.0)
-    let _ = graphics.fill_with(dot, Some(16_777_215.0))
+    let _ = graphics.fill_with(dot, 16_777_215.0)
     let _ = container.add_child(stage, [dot])
     application.render(app)
     let passed =

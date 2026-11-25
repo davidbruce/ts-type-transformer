@@ -26,11 +26,12 @@ import bindings/areas/test_page
 import bindings/runtime
 import bindings/types as t
 import cell
+import gleam/dynamic
 import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/string
 
 fn check(ok: Bool, what: String) -> Int {
@@ -50,11 +51,11 @@ pub fn main() {
   // (`LatLng` of `LatLngExpression`: `set_view`), the others by theirs.
   let london = leaflet.lat_lng(51.505, -0.09)
   let m = leaflet.map_html_element(test_page.element("map"))
-  let _ = map.set_view_with(m, london, Some(13.0), None)
+  let _ = map.set_view_with(m, london, 13.0, zoom_pan_options.create())
   let passed =
     check(map.get_zoom(m) == 13.0, "zoom")
     + check(
-      lat_lng.equals_with(map.get_center(m), london, Some(0.000000001)),
+      lat_lng.equals_with(map.get_center(m), london, 0.000000001),
       "centre",
     )
     + check(
@@ -78,10 +79,7 @@ pub fn main() {
       near(lat_lng.get_lat(back), 51.505, 0.00001),
       "container point to latlng",
     )
-    + check(
-      point.get_x(map.project_with(m, london, Some(0.0))) >. 0.0,
-      "project",
-    )
+    + check(point.get_x(map.project_with(m, london, 0.0)) >. 0.0, "project")
     + check(
       map.get_min_zoom(m) == 0.0 && map.get_max_zoom(m) >. 0.0,
       "zoom limits",
@@ -128,7 +126,7 @@ pub fn main() {
       "point distance",
     )
     + check(point.get_x(point.multiply_by(p, 2.0)) == 6.0, "multiply_by")
-    + check(point.equals_array(p, #(3.0, 4.0)), "a point equals a tuple")
+    + check(point.equals(p, #(3.0, 4.0)), "a point equals a tuple")
     + check(point.to_string(p) == "Point(3, 4)", "point to_string")
   let b =
     leaflet.bounds_of(
@@ -183,11 +181,7 @@ pub fn main() {
   marker_options.set_title(marker_opts, Some("Big Ben"))
   marker_options.set_draggable(marker_opts, Some(True))
   marker_options.set_opacity(marker_opts, Some(0.5))
-  let ben =
-    leaflet.marker_with(
-      leaflet.lat_lng(51.5007, -0.1246),
-      Some(marker_opts),
-    )
+  let ben = leaflet.marker_with(leaflet.lat_lng(51.5007, -0.1246), marker_opts)
   let passed =
     passed
     + check(
@@ -236,7 +230,7 @@ pub fn main() {
   // Fitting the bounds zooms out to show both cities.
   let fit = fit_bounds_options.create()
   fit_bounds_options.set_animate(fit, Some(False))
-  let _ = map.fit_bounds_lat_lng_bounds_with(m, box, Some(fit))
+  let _ = map.fit_bounds_lat_lng_bounds_with(m, box, fit)
   let passed =
     passed
     + check(map.get_zoom(m) <. 13.0, "fit_bounds zooms out")
@@ -247,11 +241,11 @@ pub fn main() {
     )
   let still = zoom_pan_options.create()
   zoom_pan_options.set_animate(still, Some(False))
-  let _ = map.set_zoom_with(m, 10.0, Some(still))
+  let _ = map.set_zoom_with(m, 10.0, still)
   let passed = passed + check(map.get_zoom(m) == 10.0, "set_zoom")
   let no_pan = pan_options.create()
   pan_options.set_animate(no_pan, Some(False))
-  let _ = map.pan_to_with(m, paris, Some(no_pan))
+  let _ = map.pan_to_with(m, paris, no_pan)
   let passed =
     passed
     + check(near(lat_lng.get_lat(map.get_center(m)), 48.8566, 0.01), "pan_to")
@@ -267,14 +261,15 @@ pub fn main() {
   let _ = evented.on_click(m, on_click)
   let data = leaflet_mouse_event.create()
   leaflet_mouse_event.set_latlng(data, london)
-  let _ = evented.fire_with(m, "click", Some(runtime.dynamic(data)), None)
-  let _ = evented.fire_with(m, "click", Some(runtime.dynamic(data)), None)
+  let _ = evented.fire_with(m, "click", runtime.dynamic(data), False)
+  let _ = evented.fire_with(m, "click", runtime.dynamic(data), False)
   let passed =
     passed
     + check(cell.get(clicks) == 2, "the click listener ran twice")
     + check(evented.listens_click(m), "listens")
-  let _ = evented.off_click_with(m, Some(on_click), None)
-  let _ = evented.fire_with(m, "click", Some(runtime.dynamic(data)), None)
+  // No context: undefined.
+  let _ = evented.off_click_with(m, on_click, dynamic.nil())
+  let _ = evented.fire_with(m, "click", runtime.dynamic(data), False)
   let passed = passed + check(cell.get(clicks) == 2, "the listener was removed")
 
   // A popup opened on the map, and a map event by name.
@@ -283,7 +278,7 @@ pub fn main() {
     evented.on(m, "popupopen", fn(_) { cell.set(opened, cell.get(opened) + 1) })
   let popup_opts = popup_options.create()
   popup_options.set_max_width(popup_opts, Some(200.0))
-  let note = leaflet.popup_with(london, Some(popup_opts))
+  let note = leaflet.popup_with(london, popup_opts)
   let _ = popup.open_on(note, m)
   let passed =
     passed
@@ -292,15 +287,14 @@ pub fn main() {
       popup_options.get_max_width(popup.get_options(note)) == Some(200.0),
       "popup option",
     )
-  let _ = map.close_popup_with(m, Some(note))
+  let _ = map.close_popup_with(m, note)
 
   // Map options made here, with a zoom level and no zoom control.
   let opts = map_options.create()
   map_options.set_zoom_control(opts, Some(False))
   map_options.set_zoom(opts, Some(4.0))
   map_options.set_center(opts, paris)
-  let second =
-    leaflet.map_html_element_with(test_page.element("stage"), Some(opts))
+  let second = leaflet.map_html_element_with(test_page.element("stage"), opts)
   let passed =
     passed
     + check(map.get_zoom(second) == 4.0, "a second map from options")

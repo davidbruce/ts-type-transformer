@@ -186,6 +186,7 @@ pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::Mod
     overloading: false,
     retain_opaque_constraints: false,
     typed_union_arrays: false,
+    args_bags: false,
 };
 
 pub const NAMING: Naming = Naming {

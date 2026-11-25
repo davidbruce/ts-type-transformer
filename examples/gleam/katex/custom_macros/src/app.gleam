@@ -84,10 +84,7 @@ pub fn main() -> Nil {
         node.set_text_content(src, Some(tex))
         let slot = document.create_element(doc, tag.div)
         element.set_class_name(slot, "slot")
-        element.set_inner_html(
-          slot,
-          katex.render_to_string_with(tex, Some(opts)),
-        )
+        element.set_inner_html(slot, katex.render_to_string_with(tex, opts))
         node.append_child(card, lbl)
         node.append_child(card, src)
         node.append_child(card, slot)

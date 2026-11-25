@@ -32,8 +32,7 @@ fn box_opts(
     |> path_options.with_fill_color(fill_color)
     |> path_options.with_fill_opacity(fill_opacity)
   case dash {
-    Some(d) ->
-      path_options.with_dash_array(opts, t.StringOrNumberArrayString(d))
+    Some(d) -> path_options.with_dash_array(opts, d)
     None -> opts
   }
 }
@@ -48,7 +47,7 @@ pub fn main() {
     |> map_options.with_zoom_animation(False)
     |> map_options.with_fade_animation(False)
     |> map_options.with_marker_zoom_animation(False)
-  let m = leaflet.map_with(t.StringOrHTMLElementString("map"), Some(m_opts))
+  let m = leaflet.map_with("map", m_opts)
 
   let grid_opts = box_opts("#e5e5e5", 1.0, None, "#ffffff", 0.0)
   list.each([0.0, 20.0, 40.0, 60.0, 80.0, 100.0], fn(r) {
@@ -57,9 +56,9 @@ pub fn main() {
         runtime.dynamic(leaflet.lat_lng(r, 0.0)),
         runtime.dynamic(leaflet.lat_lng(r, 160.0)),
       ],
-      Some(grid_opts),
+      grid_opts,
     )
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+    |> layer.add_to_map(m)
     Nil
   })
   list.each([0.0, 20.0, 40.0, 60.0, 80.0, 100.0, 120.0, 140.0, 160.0], fn(c) {
@@ -68,22 +67,22 @@ pub fn main() {
         runtime.dynamic(leaflet.lat_lng(0.0, c)),
         runtime.dynamic(leaflet.lat_lng(100.0, c)),
       ],
-      Some(grid_opts),
+      grid_opts,
     )
-    |> layer.add_to(t.MapOrLayerGroupMap(m))
+    |> layer.add_to_map(m)
     Nil
   })
 
   let env =
     leaflet.lat_lng_bounds(
-      t.LatLngExpressionLatLng(leaflet.lat_lng(8.0, 12.0)),
-      t.LatLngExpressionLatLng(leaflet.lat_lng(92.0, 148.0)),
+      leaflet.lat_lng(8.0, 12.0),
+      leaflet.lat_lng(92.0, 148.0),
     )
-  leaflet.rectangle_with(
-    t.LatLngBoundsExpressionLatLngBounds(env),
-    Some(box_opts("#111111", 2.5, None, "#ffffff", 0.9)),
+  leaflet.rectangle_lat_lng_bounds_with(
+    env,
+    box_opts("#111111", 2.5, None, "#ffffff", 0.9),
   )
-  |> layer.add_to(t.MapOrLayerGroupMap(m))
+  |> layer.add_to_map(m)
 
   list.each(
     [
@@ -95,15 +94,12 @@ pub fn main() {
     fn(room) {
       let #(r0, c0, r1, c1, fill) = room
       let b =
-        leaflet.lat_lng_bounds(
-          t.LatLngExpressionLatLng(leaflet.lat_lng(r0, c0)),
-          t.LatLngExpressionLatLng(leaflet.lat_lng(r1, c1)),
-        )
-      leaflet.rectangle_with(
-        t.LatLngBoundsExpressionLatLngBounds(b),
-        Some(box_opts("#404040", 1.5, None, fill, 0.85)),
+        leaflet.lat_lng_bounds(leaflet.lat_lng(r0, c0), leaflet.lat_lng(r1, c1))
+      leaflet.rectangle_lat_lng_bounds_with(
+        b,
+        box_opts("#404040", 1.5, None, fill, 0.85),
       )
-      |> layer.add_to(t.MapOrLayerGroupMap(m))
+      |> layer.add_to_map(m)
       Nil
     },
   )
@@ -114,20 +110,17 @@ pub fn main() {
     t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(50.0, 96.0)),
     t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(26.0, 80.0)),
   ]
-  leaflet.polygon_with(
-    atrium,
-    Some(box_opts("#111111", 2.0, None, "#555555", 0.35)),
-  )
-  |> layer.add_to(t.MapOrLayerGroupMap(m))
+  leaflet.polygon_with(atrium, box_opts("#111111", 2.0, None, "#555555", 0.35))
+  |> layer.add_to_map(m)
 
   leaflet.polyline_with(
     [
       runtime.dynamic(leaflet.lat_lng(50.0, 12.0)),
       runtime.dynamic(leaflet.lat_lng(50.0, 148.0)),
     ],
-    Some(box_opts("#737373", 1.5, Some("4 4"), "#ffffff", 0.0)),
+    box_opts("#737373", 1.5, Some("4 4"), "#ffffff", 0.0),
   )
-  |> layer.add_to(t.MapOrLayerGroupMap(m))
+  |> layer.add_to_map(m)
 
   let col_opts =
     circle_marker_options.create()
@@ -148,27 +141,20 @@ pub fn main() {
     ],
     fn(col) {
       let #(r, c) = col
-      leaflet.circle_marker_with(
-        t.LatLngExpressionLatLng(leaflet.lat_lng(r, c)),
-        Some(col_opts),
-      )
-      |> layer.add_to(t.MapOrLayerGroupMap(m))
+      leaflet.circle_marker_with(leaflet.lat_lng(r, c), col_opts)
+      |> layer.add_to_map(m)
       Nil
     },
   )
 
   let plan_bounds =
     leaflet.lat_lng_bounds(
-      t.LatLngExpressionLatLng(leaflet.lat_lng(0.0, 0.0)),
-      t.LatLngExpressionLatLng(leaflet.lat_lng(100.0, 160.0)),
+      leaflet.lat_lng(0.0, 0.0),
+      leaflet.lat_lng(100.0, 160.0),
     )
-  map.fit_bounds(m, t.LatLngBoundsExpressionLatLngBounds(plan_bounds))
+  map.fit_bounds_lat_lng_bounds(m, plan_bounds)
 
-  let px =
-    map.lat_lng_to_container_point(
-      m,
-      t.LatLngExpressionLatLng(leaflet.lat_lng(50.0, 80.0)),
-    )
+  let px = map.lat_lng_to_container_point(m, leaflet.lat_lng(50.0, 80.0))
   let px_x = int.to_string(float.round(point.get_x(px)))
   let px_y = int.to_string(float.round(point.get_y(px)))
 
