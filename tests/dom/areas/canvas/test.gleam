@@ -18,9 +18,10 @@ import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/string
 
+// A fill or stroke style as it reads back.
 fn style(s: String) {
   t.StringOrCanvasGradientOrCanvasPatternString(s)
 }
@@ -36,7 +37,6 @@ fn pixel(ctx, x: Int, y: Int) -> List(Int) {
         int.to_float(y),
         1.0,
         1.0,
-        None,
       )),
     )
   list.map([0, 1, 2, 3], fn(i) {
@@ -56,26 +56,26 @@ pub fn main() {
   let doc = dom.get_document()
   let body = document.get_body(doc)
 
-  let canvas = document.create_element(doc, tag.canvas, None)
+  let canvas = document.create_element(doc, tag.canvas)
   canvas_el.set_width(canvas, 100.0)
   canvas_el.set_height(canvas, 60.0)
   node.append_child(body, canvas)
   check(canvas_el.get_width(canvas) == 100.0 && canvas_el.get_height(canvas) == 60.0, "canvas size")
-  let assert Some(ctx) = canvas_el.get_context_2d(canvas, None)
+  let assert Some(ctx) = canvas_el.get_context_2d(canvas)
   check(canvas_el.get_width(ctx2d.get_canvas(ctx)) == 100.0, "context knows its canvas")
   check(pixel(ctx, 5, 5) == [0, 0, 0, 0], "a new canvas is transparent")
 
   // Filled and stroked rectangles.
-  ctx2d.set_fill_style(ctx, style("#ff0000"))
+  ctx2d.set_fill_style(ctx, "#ff0000")
   ctx2d.fill_rect(ctx, 0.0, 0.0, 10.0, 10.0)
   check(pixel(ctx, 5, 5) == [255, 0, 0, 255], "fillRect red")
   check(pixel(ctx, 15, 5) == [0, 0, 0, 0], "outside the rectangle")
   check(ctx2d.get_fill_style(ctx) == style("#ff0000"), "fillStyle reads back")
-  ctx2d.set_fill_style(ctx, style("rgb(0, 128, 255)"))
+  ctx2d.set_fill_style(ctx, "rgb(0, 128, 255)")
   check(ctx2d.get_fill_style(ctx) == style("#0080ff"), "fillStyle is normalised")
   ctx2d.fill_rect(ctx, 20.0, 0.0, 10.0, 10.0)
   check(pixel(ctx, 25, 5) == [0, 128, 255, 255], "fillRect blue")
-  ctx2d.set_stroke_style(ctx, style("#00ff00"))
+  ctx2d.set_stroke_style(ctx, "#00ff00")
   ctx2d.set_line_width(ctx, 2.0)
   ctx2d.stroke_rect(ctx, 41.0, 11.0, 18.0, 18.0)
   check(pixel(ctx, 41, 20) == [0, 255, 0, 255], "strokeRect edge")
@@ -85,18 +85,18 @@ pub fn main() {
   check(pixel(ctx, 5, 5) == [0, 0, 0, 0], "clearRect")
 
   // Paths.
-  ctx2d.set_fill_style(ctx, style("#ffff00"))
+  ctx2d.set_fill_style(ctx, "#ffff00")
   ctx2d.begin_path(ctx)
-  ctx2d.arc(ctx, 80.0, 30.0, 10.0, 0.0, 6.283185307179586, None)
-  ctx2d.fill(ctx, None)
+  ctx2d.arc(ctx, 80.0, 30.0, 10.0, 0.0, 6.283185307179586)
+  ctx2d.fill(ctx)
   check(pixel(ctx, 80, 30) == [255, 255, 0, 255], "arc filled")
   check(pixel(ctx, 80, 45) == [0, 0, 0, 0], "outside the arc")
-  check(ctx2d.is_point_in_path(ctx, 80.0, 30.0, None), "point in path")
-  check(!ctx2d.is_point_in_path(ctx, 0.0, 0.0, None), "point not in path")
+  check(ctx2d.is_point_in_path(ctx, 80.0, 30.0), "point in path")
+  check(!ctx2d.is_point_in_path(ctx, 0.0, 0.0), "point not in path")
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, 0.0, 50.0)
   ctx2d.line_to(ctx, 40.0, 50.0)
-  ctx2d.set_stroke_style(ctx, style("#ff00ff"))
+  ctx2d.set_stroke_style(ctx, "#ff00ff")
   ctx2d.set_line_width(ctx, 4.0)
   ctx2d.stroke(ctx)
   check(pixel(ctx, 20, 50) == [255, 0, 255, 255], "lineTo stroked")
@@ -104,20 +104,20 @@ pub fn main() {
   check(!ctx2d.is_point_in_stroke(ctx, 20.0, 40.0), "point not in stroke")
   ctx2d.begin_path(ctx)
   ctx2d.rect(ctx, 0.0, 12.0, 8.0, 8.0)
-  ctx2d.set_fill_style(ctx, style("#ffffff"))
-  ctx2d.fill(ctx, None)
+  ctx2d.set_fill_style(ctx, "#ffffff")
+  ctx2d.fill(ctx)
   check(pixel(ctx, 4, 16) == [255, 255, 255, 255], "rect path filled")
   ctx2d.begin_path(ctx)
   ctx2d.move_to(ctx, 60.0, 40.0)
   ctx2d.line_to(ctx, 70.0, 40.0)
   ctx2d.line_to(ctx, 70.0, 55.0)
   ctx2d.close_path(ctx)
-  check(ctx2d.is_point_in_path(ctx, 68.0, 45.0, None), "closed triangle contains a point")
+  check(ctx2d.is_point_in_path(ctx, 68.0, 45.0), "closed triangle contains a point")
 
   // State: save and restore.
-  ctx2d.set_fill_style(ctx, style("#112233"))
+  ctx2d.set_fill_style(ctx, "#112233")
   ctx2d.save(ctx)
-  ctx2d.set_fill_style(ctx, style("#445566"))
+  ctx2d.set_fill_style(ctx, "#445566")
   ctx2d.set_line_width(ctx, 9.0)
   check(ctx2d.get_fill_style(ctx) == style("#445566"), "changed inside save")
   ctx2d.restore(ctx)
@@ -126,7 +126,7 @@ pub fn main() {
 
   // Transforms.
   ctx2d.clear_rect(ctx, 0.0, 0.0, 100.0, 60.0)
-  ctx2d.set_fill_style(ctx, style("#ff0000"))
+  ctx2d.set_fill_style(ctx, "#ff0000")
   ctx2d.save(ctx)
   ctx2d.translate(ctx, 30.0, 20.0)
   ctx2d.fill_rect(ctx, 0.0, 0.0, 6.0, 6.0)
@@ -149,7 +149,7 @@ pub fn main() {
   ctx2d.clear_rect(ctx, 0.0, 0.0, 100.0, 60.0)
   canvas_compositing.set_global_alpha(ctx, 0.5)
   check(canvas_compositing.get_global_alpha(ctx) == 0.5, "globalAlpha")
-  ctx2d.set_fill_style(ctx, style("#ffffff"))
+  ctx2d.set_fill_style(ctx, "#ffffff")
   ctx2d.fill_rect(ctx, 0.0, 0.0, 4.0, 4.0)
   let assert [255, 255, 255, a] = pixel(ctx, 1, 1)
   check(a >= 127 && a <= 129, "half alpha: " <> int.to_string(a))
@@ -159,7 +159,7 @@ pub fn main() {
   let gradient = ctx2d.create_linear_gradient(ctx, 0.0, 0.0, 100.0, 0.0)
   canvas_gradient.add_color_stop(gradient, 0.0, "#ff0000")
   canvas_gradient.add_color_stop(gradient, 1.0, "#0000ff")
-  ctx2d.set_fill_style(ctx, t.StringOrCanvasGradientOrCanvasPatternCanvasGradient(gradient))
+  ctx2d.set_fill_style_gradient(ctx, gradient)
   ctx2d.fill_rect(ctx, 0.0, 30.0, 100.0, 10.0)
   let assert [r0, _, b0, 255] = pixel(ctx, 0, 35)
   let assert [r1, _, b1, 255] = pixel(ctx, 99, 35)
@@ -167,18 +167,18 @@ pub fn main() {
 
   // Pixels moved with getImageData and putImageData.
   ctx2d.clear_rect(ctx, 0.0, 0.0, 100.0, 60.0)
-  ctx2d.set_fill_style(ctx, style("#0000ff"))
+  ctx2d.set_fill_style(ctx, "#0000ff")
   ctx2d.fill_rect(ctx, 0.0, 0.0, 8.0, 8.0)
-  let copy = ctx2d.get_image_data(ctx, 0.0, 0.0, 8.0, 8.0, None)
+  let copy = ctx2d.get_image_data(ctx, 0.0, 0.0, 8.0, 8.0)
   check(image_data.get_width(copy) == 8.0 && image_data.get_height(copy) == 8.0, "imageData size")
   ctx2d.put_image_data(ctx, copy, 50.0, 40.0)
   check(pixel(ctx, 53, 43) == [0, 0, 255, 255], "putImageData copies pixels")
   check(pixel(ctx, 49, 43) == [0, 0, 0, 0], "putImageData is placed")
-  let blank = ctx2d.create_image_data(ctx, 3.0, 2.0, None)
+  let blank = ctx2d.create_image_data(ctx, 3.0, 2.0)
   check(image_data.get_width(blank) == 3.0 && image_data.get_height(blank) == 2.0, "createImageData size")
   ctx2d.put_image_data(ctx, blank, 50.0, 40.0)
   check(pixel(ctx, 51, 41) == [0, 0, 0, 0], "a blank ImageData erases")
-  check(image_data.new(4.0, 5.0, None) |> image_data.get_height == 5.0, "new ImageData")
+  check(image_data.new(4.0, 5.0) |> image_data.get_height == 5.0, "new ImageData")
 
   // FINDING 3 (can't express): ImageData::new_with_data needs a Uint8ClampedArray,
   // which has no constructor or setters, so pixels can only be copied, not made.
@@ -191,8 +191,8 @@ pub fn main() {
   check(text_metrics.get_width(short) >. 0.0, "text has width")
   check(float.absolute_value(text_metrics.get_width(long) -. 4.0 *. text_metrics.get_width(short)) <. 0.01, "monospace widths scale")
   ctx2d.clear_rect(ctx, 0.0, 0.0, 100.0, 60.0)
-  ctx2d.set_fill_style(ctx, style("#000000"))
-  ctx2d.fill_text(ctx, "MMMM", 2.0, 30.0, None)
+  ctx2d.set_fill_style(ctx, "#000000")
+  ctx2d.fill_text(ctx, "MMMM", 2.0, 30.0)
   let inked =
     list.index_map(list.repeat(0, 41), fn(_, i) { i })
     |> list.filter(fn(x) {
@@ -209,11 +209,11 @@ pub fn main() {
   check(pixel(ctx, 5, 22) == [0, 0, 0, 0], "reset clears")
 
   // The data URL.
-  check(string.starts_with(canvas_el.to_data_url(canvas, None, None), "data:image/png;base64,"), "png data url")
-  check(string.starts_with(canvas_el.to_data_url(canvas, Some("image/jpeg"), Some(0.8)), "data:image/jpeg;base64,"), "jpeg data url")
+  check(string.starts_with(canvas_el.to_data_url(canvas), "data:image/png;base64,"), "png data url")
+  check(string.starts_with(canvas_el.to_data_url_with(canvas, "image/jpeg", 0.8), "data:image/jpeg;base64,"), "jpeg data url")
 
   // Resizing clears the canvas and its state.
-  ctx2d.set_fill_style(ctx, style("#ff0000"))
+  ctx2d.set_fill_style(ctx, "#ff0000")
   ctx2d.fill_rect(ctx, 0.0, 0.0, 100.0, 60.0)
   canvas_el.set_width(canvas, 50.0)
   check(canvas_el.get_width(canvas) == 50.0, "resized")

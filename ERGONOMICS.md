@@ -118,7 +118,8 @@ TypeScript object literal, because a Zig literal takes its type from where it go
      tail, bare, except that a callback or an interface of methods ending a tail of
      two or more is `Option` (`world.step_with(w, q, None)`), as is a type nothing
      in the bindings makes or a call gives back (pts' `CanvasLineJoin` without the
-     DOM's bindings). More than four optionals are an option bag folded into the
+     DOM's bindings), or one written `x?: T | null`, whose null is a value
+     (`form_data.new_with(form, None)`). More than four optionals are an option bag folded into the
      class's module: `sphere_geometry.new_with(sphere_geometry.args_create() |>
      sphere_geometry.args_with_radius(0.36))`.
    - More than four optionals (three's geometries): the plain name has none and

@@ -755,7 +755,7 @@ impl<'m> Gen<'m> {
                 continue;
             }
             args.push(if last_rest { format!("...({value} ?? [])") } else { value });
-            may_undef.push(!last_rest && matches!(t, Ty::Nullable(_, Absence::Undefined)));
+            may_undef.push(!last_rest && matches!(t, Ty::Nullable(_, a) if a.optional()));
         }
         // A codec for each type parameter whose values cross: the class's, then the function's own.
         *self.open.borrow_mut() = None;
@@ -780,7 +780,7 @@ impl<'m> Gen<'m> {
         // A name JavaScript reserves (`new`, `delete`) is `new_` there.
         let js = if JS_RESERVED.contains(&name) { format!("{name}_") } else { name.to_string() };
         // Not a setter's value, a rest, or what codecs follow: JavaScript takes those by position.
-        let optional = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, Absence::Undefined))).count();
+        let optional = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, a) if a.optional())).count();
         let shortened = optional > 0 && !f.rest && params.len() + nulls.len() == first + f.params.len() && !matches!(f.call, Call::Set(_) | Call::IndexSet);
         let doc = f.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
         // `_with`, else `_full` where a member has that name (ProseMirror's `can_replace_with`).
@@ -891,5 +891,5 @@ fn optional_tail(f: &Func) -> usize {
     if f.rest || matches!(f.call, Call::Set(_) | Call::IndexSet) {
         return f.params.len();
     }
-    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, Absence::Undefined))).count()
+    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, a) if a.optional())).count()
 }

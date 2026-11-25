@@ -115,10 +115,10 @@ pub extern "C" fn run() {
     init.set_old_value(Some("1"));
     init.set_new_value(Some("2"));
     init.set_storage_area(Some(&local));
-    let event = StorageEvent::new("storage", Some(&init));
+    let event = StorageEvent::new_with("storage", &init);
     check!(event.key().as_deref() == Some("k") && event.old_value().as_deref() == Some("1") && event.new_value().as_deref() == Some("2"));
     check!(event.storage_area() == Some(local.clone()));
-    check!(event.type_() == "storage" && StorageEvent::new("storage", None).key().is_none());
+    check!(event.type_() == "storage" && StorageEvent::new("storage").key().is_none());
 
     // JSON: a document made as JSON text, stored, read back and parsed.
     PENDING.with(|p| p.set(p.get() + 1));
@@ -126,19 +126,19 @@ pub extern "C" fn run() {
         let doc = ResponseInit::create();
         doc.set_status(Some(201.0));
         doc.set_status_text(Some("stored \"quoted\" text"));
-        let text = Response::json(&doc, None).text().await.unwrap();
+        let text = Response::json(&doc).text().await.unwrap();
         check!(text == "{\"status\":201,\"statusText\":\"stored \\\"quoted\\\" text\"}");
         let local = local_storage();
         local.set_item("config", &text);
         check!(local.get_item("config").as_deref() == Some(text.as_str()));
         // Read back, then parsed.
         let stored = local.get_item("config").unwrap();
-        let parsed = ResponseInit(Response::new(stored.as_str(), None).json().await.unwrap().0);
+        let parsed = ResponseInit(Response::new_with(stored.as_str(), None).json().await.unwrap().0);
         check!(parsed.status() == Some(201.0));
         check!(parsed.status_text().as_deref() == Some("stored \"quoted\" text"));
         // Text that is not JSON does not parse.
         local.set_item("broken", "{not json");
-        check!(Response::new(local.get_item("broken").unwrap().as_str(), None).json().await.is_err());
+        check!(Response::new_with(local.get_item("broken").unwrap().as_str(), None).json().await.is_err());
         local.remove_item("broken");
         ROUND_TRIPPED.with(|r| r.set(true));
         PENDING.with(|p| p.set(p.get() - 1));

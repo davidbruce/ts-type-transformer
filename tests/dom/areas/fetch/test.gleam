@@ -48,7 +48,7 @@ pub fn main() {
   }
 
   // Headers: names are case-insensitive, values join.
-  let h = headers.new(None)
+  let h = headers.new()
   headers.append(h, "X-Tag", "a")
   headers.append(h, "x-tag", "b")
   headers.set(h, "Content-Type", "text/plain")
@@ -60,36 +60,36 @@ pub fn main() {
   check(!headers.has(h, "X-Tag"), "deleted")
   let map = headers_init_map.create()
   headers_init_map.set_at(map, "Accept", "application/json")
-  let from_map = headers.new(Some(t.HeadersInitHeadersInitMap(map)))
+  let from_map = headers.new_with(map)
   check(headers.get(from_map, "accept") == Some("application/json"), "headers from a record")
-  let copy = headers.new(Some(t.HeadersInitHeaders(from_map)))
+  let copy = headers.new_headers_with(from_map)
   check(headers.get(copy, "accept") == Some("application/json"), "headers from headers")
 
   // A Request built directly.
   let init = request_init.create()
   request_init.set_method(init, Some("POST"))
-  request_init.set_headers(init, Some(t.HeadersInitHeadersInitMap(map)))
-  request_init.set_body(init, Some(t.BodyInitString("payload")))
-  let req = request.new(t.RequestOrStringOrURLString("./submit"), Some(init))
+  request_init.set_headers(init, map)
+  request_init.set_body(init, "payload")
+  let req = request.new_with("./submit", init)
   check(request.get_method(req) == "POST", "request method")
   check(string.ends_with(request.get_url(req), "/submit"), "request url is absolute")
   check(string.starts_with(request.get_url(req), "http"), "request url scheme")
   check(headers.get(request.get_headers(req), "accept") == Some("application/json"), "request header")
   check(request.get_mode(req) == t.RequestModeCors, "request mode")
-  let get_req = request.new(t.RequestOrStringOrURLString("./x"), None)
+  let get_req = request.new("./x")
   check(request.get_method(get_req) == "GET", "default method")
   check(request.get_method(request.clone(req)) == "POST", "request clone")
   let aborter = abort_controller.new()
   let signalled = request_init.create()
   request_init.set_signal(signalled, Some(abort_controller.get_signal(aborter)))
-  check(!{ request.new(t.RequestOrStringOrURLString("./x"), Some(signalled)) |> request.get_signal |> aborted }, "request signal")
+  check(!{ request.new_with("./x", signalled) |> request.get_signal |> aborted }, "request signal")
 
   // A Response built directly.
   let rinit = response_init.create()
   response_init.set_status(rinit, Some(201.0))
   response_init.set_status_text(rinit, Some("Created"))
-  response_init.set_headers(rinit, Some(t.HeadersInitHeadersInitMap(map)))
-  let made = response.new(Some(t.BodyInitString("hello")), Some(rinit))
+  response_init.set_headers(rinit, map)
+  let made = response.new_with(Some("hello"), rinit)
   check(response.get_status(made) == 201.0, "response status")
   check(response.get_status_text(made) == "Created", "status text")
   check(response.get_ok(made), "201 is ok")
@@ -98,21 +98,21 @@ pub fn main() {
   let failure = response.error()
   check(failure |> response.get_type == t.ResponseTypeError, "error response type")
   check(response.get_status(failure) == 0.0 && !response.get_ok(failure), "error response status")
-  let moved = response.redirect(t.StringOrURLString("https://example.com/x"), Some(301.0))
+  let moved = response.redirect_with("https://example.com/x", 301.0)
   check(response.get_status(moved) == 301.0, "redirect status")
   check(headers.get(response.get_headers(moved), "location") == Some("https://example.com/x"), "redirect location")
-  let not_ok = response.new(None, Some(status_init(404.0)))
+  let not_ok = response.new_with(None, status_init(404.0))
   check(!response.get_ok(not_ok) && response.get_status(not_ok) == 404.0, "404 is not ok")
 
   // A Blob and a File.
   let plain = blob_property_bag.create()
   blob_property_bag.set_type(plain, Some("text/plain"))
-  let the_blob = blob.new(Some([t.BlobPartString("hello "), t.BlobPartString("blob")]), Some(plain))
+  let the_blob = blob.new_with([t.BlobPartString("hello "), t.BlobPartString("blob")], plain)
   check(blob.get_size(the_blob) == 10.0, "blob size")
   check(blob.get_type(the_blob) == "text/plain", "blob type")
-  let tail = blob.slice(the_blob, Some(6.0), None, None)
+  let tail = blob.slice_with(the_blob, 6.0, blob.get_size(the_blob), "")
   check(blob.get_size(tail) == 4.0, "blob slice size")
-  let the_file = file.new([t.BlobPartString("abc")], "a.txt", None)
+  let the_file = file.new([t.BlobPartString("abc")], "a.txt")
   check(file.get_name(the_file) == "a.txt", "file name")
   check(blob.get_size(the_file) == 3.0, "a file is a blob")
 
@@ -127,7 +127,7 @@ pub fn main() {
         #("label", runtime.dynamic("seven")),
         #("items", runtime.js_array([runtime.dynamic(1.0), runtime.dynamic(2.0)])),
       ])
-    let json = response.json(data, None)
+    let json = response.json(data)
     check(headers.get(response.get_headers(json), "content-type") == Some("application/json"), "json content type")
     await(body.json(json), fn(parsed) {
       check(runtime.js_has(parsed, "status") && !runtime.js_has(parsed, "missing"), "js_has on parsed object")
@@ -142,10 +142,10 @@ pub fn main() {
         check(text == "hello blob", "blob text")
         await(blob.text(tail), fn(text) {
           check(text == "blob", "blob slice text")
-          let params = url_search_params.new(None)
+          let params = url_search_params.new()
           url_search_params.append(params, "a", "1")
           url_search_params.append(params, "b", "x y")
-          let form = response.new(Some(t.BodyInitURLSearchParams(params)), None)
+          let form = response.new_url_search_params_with(Some(params), response_init.create())
           check(
             option.map(headers.get(response.get_headers(form), "content-type"), string.starts_with(_, "application/x-www-form-urlencoded"))
               == Some(True),
@@ -173,7 +173,7 @@ fn status_init(status: Float) {
 
 // fetch of files the page serves.
 fn fetch_page(check, count) -> Nil {
-  await(dom.fetch(t.RequestOrStringOrURLString("./index.html"), None), fn(res) {
+  await(dom.fetch("./index.html"), fn(res) {
     check(response.get_status(res) == 200.0 && response.get_ok(res), "fetch status")
     check(string.ends_with(response.get_url(res), "/index.html"), "fetch url")
     check(
@@ -195,10 +195,10 @@ fn fetch_page(check, count) -> Nil {
 }
 
 fn by_request(check, count) -> Nil {
-  let get = request.new(t.RequestOrStringOrURLString("./index.html"), None)
-  await(dom.fetch(t.RequestOrStringOrURLString(request.get_url(get)), None), fn(res2) {
+  let get = request.new("./index.html")
+  await(dom.fetch(request.get_url(get)), fn(res2) {
     check(response.get_status(res2) == 200.0, "fetch by absolute url")
-    await(dom.fetch(t.RequestOrStringOrURLString("/status/404"), None), fn(missing) {
+    await(dom.fetch("/status/404"), fn(missing) {
       check(!response.get_ok(missing) && response.get_status(missing) == 404.0, "fetch 404 resolves not ok")
       await(body.text(missing), fn(text) {
         check(text == "status 404", "fetch 404 body")
@@ -212,16 +212,16 @@ fn aborting(check, count) -> Nil {
   let controller = abort_controller.new()
   let init = request_init.create()
   request_init.set_signal(init, Some(abort_controller.get_signal(controller)))
-  let pending = dom.fetch(t.RequestOrStringOrURLString("./index.html"), Some(init))
-  abort_controller.abort(controller, None)
+  let pending = dom.fetch_with("./index.html", init)
+  abort_controller.abort(controller)
   settle(pending, fn(result) {
     case result {
       Ok(_) -> panic as "an aborted fetch resolved"
       Error(e) -> {
         check(string.contains(string.lowercase(runtime.js_error_message(e)), "abort"), "aborted fetch rejects: " <> runtime.js_error_message(e))
         // A fetch of a Request object.
-        let req = request.new(t.RequestOrStringOrURLString("./index.html"), None)
-        await(dom.fetch(t.RequestOrStringOrURLString(request.get_url(req)), None), fn(res) {
+        let req = request.new("./index.html")
+        await(dom.fetch(request.get_url(req)), fn(res) {
           check(response.get_ok(res), "fetch after abort still works")
           io.println(int.to_string(cell.get(count)) <> " checks passed")
         })

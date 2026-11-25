@@ -25,8 +25,8 @@ pub extern "C" fn run() {
     body.append_child(el.clone());
     let style = el.style();
     check!(style.length() == 0.0 && style.css_text().is_empty());
-    style.set_property("color", Some("red"), None);
-    style.set_property("margin-left", Some("4px"), None);
+    style.set_property("color", "red");
+    style.set_property("margin-left", "4px");
     check!(style.get_property_value("color") == "red");
     check!(style.color() == "red");
     check!(style.margin_left() == "4px" && style.get_property_value("margin-left") == "4px");
@@ -35,7 +35,7 @@ pub extern "C" fn run() {
     // A typed property setter, and an important priority.
     style.set_width("120px");
     check!(style.width() == "120px");
-    style.set_property("height", Some("50px"), Some("important"));
+    style.set_property_with("height", "50px", "important");
     check!(style.get_property_priority("height") == "important");
     check!(style.get_property_priority("width").is_empty());
     check!(style.css_text().contains("height: 50px !important"));
@@ -47,18 +47,18 @@ pub extern "C" fn run() {
     check!(style.color().is_empty() && style.length() == 3.0);
     check!(style.remove_property("color").is_empty());
     // A value the engine rejects leaves the property as it was.
-    style.set_property("width", Some("not a width"), None);
+    style.set_property("width", "not a width");
     check!(style.width() == "120px");
     style.set_css_text("padding: 2px; display: block");
     check!(style.padding() == "2px" && style.display() == "block" && style.width().is_empty());
     style.set_css_text("");
 
     // Computed style: resolved values, not the written ones.
-    style.set_property("width", Some("10em"), None);
-    style.set_property("font-size", Some("10px"), None);
-    style.set_property("color", Some("rgb(1, 2, 3)"), None);
-    style.set_property("background-color", Some("#00ff00"), None);
-    let computed = get_computed_style(&el, None);
+    style.set_property("width", "10em");
+    style.set_property("font-size", "10px");
+    style.set_property("color", "rgb(1, 2, 3)");
+    style.set_property("background-color", "#00ff00");
+    let computed = get_computed_style(&el);
     check!(computed.width() == "100px");
     check!(computed.get_property_value("font-size") == "10px");
     check!(computed.color() == "rgb(1, 2, 3)");
@@ -66,9 +66,9 @@ pub extern "C" fn run() {
     check!(computed.display() == "block");
     check!(style.background_color() == "rgb(0, 255, 0)");
     // Computed style is live and read-only.
-    style.set_property("display", Some("none"), None);
+    style.set_property("display", "none");
     check!(computed.display() == "none");
-    check!(js::attempt(|| computed.set_property("color", Some("red"), None)).is_err());
+    check!(js::attempt(|| computed.set_property("color", "red")).is_err());
     style.remove_property("display");
     check!(computed.display() == "block");
 
@@ -111,7 +111,7 @@ pub extern "C" fn run() {
     check!(computed.color() == "rgb(0, 0, 255)");
     el.class_list().replace("box", "wide");
     check!(computed.width() == "200px" && computed.height() != "20px");
-    el.class_list().toggle("boxed", None);
+    el.class_list().toggle("boxed");
     // Inline style outranks the sheet.
     check!(computed.background_color() == "rgb(0, 255, 0)");
     style.remove_property("background-color");
@@ -120,7 +120,7 @@ pub extern "C" fn run() {
     check!(computed.background_color() == "rgba(0, 0, 0, 0)");
 
     // insertRule and deleteRule.
-    let at = sheet.insert_rule(".extra { width: 7px }", Some(1.0));
+    let at = sheet.insert_rule_with(".extra { width: 7px }", 1.0);
     check!(at == 1.0 && rules.length() == 5.0);
     check!(CSSStyleRule(rules.item(1.0).unwrap().0.clone()).selector_text() == ".extra");
     el.class_list().add(["extra"]);
@@ -134,7 +134,7 @@ pub extern "C" fn run() {
     check!(rules.length() == 4.0);
     check!(CSSStyleRule(rules.item(1.0).unwrap().0.clone()).selector_text() == ".wide");
     // A bad rule throws; the sheet is unchanged.
-    check!(js::attempt(|| sheet.insert_rule("{ nonsense", None)).is_err());
+    check!(js::attempt(|| sheet.insert_rule("{ nonsense")).is_err());
     check!(rules.length() == 4.0);
     check!(js::attempt(|| sheet.delete_rule(99.0)).is_err());
     // Disabling the sheet's element turns it off.

@@ -87,16 +87,23 @@ pub fn buffer_spec(name: &str) -> Option<&'static BufferSpec> {
 pub enum Absence {
     Undefined,
     Null,
+    // `x?: T | null`: left out, or null as a value of its own.
+    Either,
     False,
 }
 
 impl Absence {
     pub fn js(self) -> &'static str {
         match self {
-            Absence::Undefined => "undefined",
+            Absence::Undefined | Absence::Either => "undefined",
             Absence::Null => "null",
             Absence::False => "false",
         }
+    }
+
+    // May be left out of a call.
+    pub fn optional(self) -> bool {
+        matches!(self, Absence::Undefined | Absence::Either)
     }
 }
 
@@ -310,7 +317,7 @@ pub enum TailRole {
 
 // Where a function's optional tail starts: its trailing optional parameters.
 pub fn tail_start(f: &Func) -> usize {
-    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, Absence::Undefined))).count()
+    f.params.len() - f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, a) if a.optional())).count()
 }
 
 impl Model {

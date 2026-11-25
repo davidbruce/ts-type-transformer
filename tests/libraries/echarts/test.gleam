@@ -44,7 +44,7 @@ pub fn main() {
   // A chart on the page's #chart, of no theme (undefined) and no options.
   let chart =
     echarts.init_with(
-      test_page.element("chart"),
+      Some(test_page.element("chart")),
       dynamic.nil(),
       e_charts_init_opts.create(),
     )

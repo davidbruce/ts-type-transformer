@@ -16,7 +16,7 @@ macro_rules! check {
 
 // The RGBA of the pixel at (x, y), read back.
 fn pixel(ctx: &CanvasRenderingContext2D, x: f64, y: f64) -> [u8; 4] {
-    let data = ctx.get_image_data(x, y, 1.0, 1.0, None).data();
+    let data = ctx.get_image_data(x, y, 1.0, 1.0).data();
     let mut rgba = [0u8; 4];
     data.read_bytes(0, &mut rgba);
     rgba
@@ -42,7 +42,7 @@ pub extern "C" fn run() {
     canvas.set_height(80.0);
     check!(canvas.width() == 100.0 && canvas.height() == 80.0);
     doc.body().append_child(canvas.clone());
-    let ctx = canvas.get_context_2d(None).unwrap();
+    let ctx = canvas.get_context_2d().unwrap();
     check!(ctx.canvas() == canvas);
     check!(!ctx.is_context_lost());
 
@@ -90,14 +90,14 @@ pub extern "C" fn run() {
 
     // putImageData: pixels written are the pixels read.
     let data = Uint8ClampedArray::<ArrayBuffer>::from_slice(&[1, 2, 3, 255, 10, 20, 30, 255]);
-    let image = ImageData::new_with_data(&data, 2.0, Some(1.0), None);
+    let image = ImageData::new_with_data_with(&data, 2.0, 1.0, None);
     check!(image.width() == 2.0 && image.height() == 1.0 && image.data().len() == 8);
     ctx.put_image_data(&image, 80.0, 60.0);
     check!(pixel(&ctx, 80.0, 60.0) == [1, 2, 3, 255]);
     check!(pixel(&ctx, 81.0, 60.0) == [10, 20, 30, 255]);
-    let region = ctx.get_image_data(10.0, 10.0, 20.0, 20.0, None);
+    let region = ctx.get_image_data(10.0, 10.0, 20.0, 20.0);
     check!(region.width() == 20.0 && region.data().len() == 20 * 20 * 4);
-    let blank = ctx.create_image_data(3.0, 2.0, None);
+    let blank = ctx.create_image_data(3.0, 2.0);
     check!(blank.data().len() == 24);
     let mut bytes = [1u8; 24];
     blank.data().read_bytes(0, &mut bytes);
@@ -109,11 +109,11 @@ pub extern "C" fn run() {
     // Paths: a filled circle, and a line.
     ctx.set_fill_style("#ff0000");
     ctx.begin_path();
-    ctx.arc(60.0, 60.0, 10.0, 0.0, std::f64::consts::PI * 2.0, None);
-    ctx.fill(None);
+    ctx.arc(60.0, 60.0, 10.0, 0.0, std::f64::consts::PI * 2.0);
+    ctx.fill();
     check!(pixel(&ctx, 60.0, 60.0) == RED && pixel(&ctx, 66.0, 60.0) == RED);
     check!(pixel(&ctx, 60.0, 73.0) == CLEAR && pixel(&ctx, 71.0, 60.0) == CLEAR);
-    check!(ctx.is_point_in_path(60.0, 60.0, None) && !ctx.is_point_in_path(60.0, 75.0, None));
+    check!(ctx.is_point_in_path(60.0, 60.0) && !ctx.is_point_in_path(60.0, 75.0));
     ctx.clear_rect(0.0, 0.0, 100.0, 80.0);
     ctx.begin_path();
     ctx.move_to(10.0, 40.5);
@@ -132,18 +132,18 @@ pub extern "C" fn run() {
     ctx.line_to(10.0, 60.0);
     ctx.close_path();
     ctx.set_fill_style("red");
-    ctx.fill(Some(CanvasFillRule::Evenodd));
+    ctx.fill_with(CanvasFillRule::Evenodd);
     check!(pixel(&ctx, 20.0, 20.0) == RED && pixel(&ctx, 55.0, 55.0) == CLEAR);
-    let shape = Path2D::new(None::<Path2DOrString>);
+    let shape = Path2D::new();
     shape.rect(70.0, 10.0, 10.0, 10.0);
-    ctx.fill_with_path(&shape, None);
+    ctx.fill_with_path(&shape);
     check!(pixel(&ctx, 75.0, 15.0) == RED);
-    check!(ctx.is_point_in_path_with_path(&shape, 75.0, 15.0, None));
+    check!(ctx.is_point_in_path_with_path(&shape, 75.0, 15.0));
     // An SVG path string.
-    let from_text = Path2D::new("M 0 0 h 5 v 5 h -5 z");
+    let from_text = Path2D::new_with("M 0 0 h 5 v 5 h -5 z");
     ctx.save();
     ctx.translate(70.0, 40.0);
-    ctx.fill_with_path(&from_text, None);
+    ctx.fill_with_path(&from_text);
     ctx.restore();
     check!(pixel(&ctx, 72.0, 42.0) == RED && pixel(&ctx, 2.0, 2.0) == CLEAR);
 
@@ -210,9 +210,9 @@ pub extern "C" fn run() {
     ctx.set_text_align(AlignSetting::Center);
     check!(ctx.text_align() == AlignSetting::Center);
     ctx.set_fill_style("#000000");
-    ctx.fill_text("I", 50.0, 70.0, None);
+    ctx.fill_text("I", 50.0, 70.0);
     let mut any = false;
-    let strip = ctx.get_image_data(30.0, 40.0, 40.0, 32.0, None).data();
+    let strip = ctx.get_image_data(30.0, 40.0, 40.0, 32.0).data();
     let mut buf = vec![0u8; strip.len()];
     strip.read_bytes(0, &mut buf);
     for px in buf.chunks(4) {
@@ -229,9 +229,9 @@ pub extern "C" fn run() {
     check!(ctx.global_composite_operation() == GlobalCompositeOperation::Copy);
 
     // The canvas as an image.
-    let url = canvas.to_data_url(None, None);
+    let url = canvas.to_data_url();
     check!(url.starts_with("data:image/png;base64,") && url.len() > 100);
-    check!(canvas.to_data_url(Some("image/jpeg"), Some(0.5)).starts_with("data:image/jpeg;base64,"));
+    check!(canvas.to_data_url_with("image/jpeg", 0.5).starts_with("data:image/jpeg;base64,"));
     // Resizing a canvas clears it.
     ctx.reset_transform();
     ctx.set_global_composite_operation(GlobalCompositeOperation::SourceOver);

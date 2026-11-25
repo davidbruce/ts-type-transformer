@@ -450,7 +450,9 @@ the time control returns to JavaScript is reported, not lost.
   tag, options)` with them, bare (`_full` where a member is named `_with`); a
   callback or an object of methods that ends a tail of two stays an `Option`
   (`world.step_with(w, q, None)`), and so does a type nothing in the bindings
-  makes or a call gives back (pts' `CanvasLineJoin` without the DOM's bindings).
+  makes or a call gives back (pts' `CanvasLineJoin` without the DOM's bindings),
+  and one written `x?: T | null`, whose null is a value (`form_data.new_with(form,
+  None)`, `response.new_with(None, init)`).
   More than four are an option bag of them,
   folded into the class's module: `sphere_geometry.new_with(
   sphere_geometry.args_create() |> sphere_geometry.args_with_radius(0.36))`.

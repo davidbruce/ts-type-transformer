@@ -28,7 +28,7 @@ pub extern "C" fn run() {
     let body = doc.body();
 
     // An <svg> made with a namespace: an SVGSVGElement only when the namespace is SVG's.
-    let wrong: Element = doc.create_element_ns(Some("http://www.w3.org/1999/xhtml"), "svg", None);
+    let wrong: Element = doc.create_element_ns("http://www.w3.org/1999/xhtml", "svg");
     check!(wrong.namespace_uri().as_deref() == Some("http://www.w3.org/1999/xhtml"));
     let svg: SVGSVGElement = doc.create_element_ns_svg(SVGElementTagNameMap::SVG);
     check!(svg.namespace_uri().as_deref() == Some(SVG_NS) && svg.local_name() == "svg" && svg.tag_name() == "svg");
@@ -47,7 +47,7 @@ pub extern "C" fn run() {
     circle.set_attribute("cx", "100");
     circle.set_attribute("cy", "60");
     circle.set_attribute("r", "15");
-    let generic = doc.create_element_ns(Some(SVG_NS), "ellipse", None);
+    let generic = doc.create_element_ns(SVG_NS, "ellipse");
     generic.set_attribute("rx", "8");
     generic.set_attribute("ry", "4");
     check!(generic.namespace_uri().as_deref() == Some(SVG_NS) && generic.tag_name() == "ellipse");
@@ -59,15 +59,15 @@ pub extern "C" fn run() {
     svg.append_child(group.clone());
     check!(svg.child_element_count() == 1.0 && group.child_element_count() == 3.0);
     check!(rect.get_attribute("fill").as_deref() == Some("red") && rect.get_attribute("FILL").is_none());
-    check!(svg.query_selector_as::<SVGRectElement>("#shapes > rect") == Some(rect.clone()));
+    check!(svg.query_selector("#shapes > rect").map(|e| js::unchecked_cast::<SVGRectElement>(&e)) == Some(rect.clone()));
     check!(svg.query_selector_all("circle, ellipse").length() == 2.0);
     check!(svg.get_element_by_id("shapes").is_some());
     // Classes and style work on SVG elements as on HTML ones.
     rect.class_list().add(["bar", "wide"]);
     check!(rect.get_attribute("class").as_deref() == Some("bar wide"));
-    rect.style().set_property("stroke", Some("blue"), None);
-    check!(get_computed_style(&rect, None).get_property_value("stroke") == "rgb(0, 0, 255)");
-    check!(get_computed_style(&rect, None).get_property_value("fill") == "rgb(255, 0, 0)");
+    rect.style().set_property("stroke", "blue");
+    check!(get_computed_style(&rect).get_property_value("stroke") == "rgb(0, 0, 255)");
+    check!(get_computed_style(&rect).get_property_value("fill") == "rgb(255, 0, 0)");
 
     // Lengths: an animated length's base value, in user units.
     check!(svg.width().base_val().value() == 200.0 && svg.height().base_val().value() == 100.0);
@@ -112,20 +112,20 @@ pub extern "C" fn run() {
     check!(svg.view_box().anim_val().width() == 400.0);
 
     // getBBox: the box of the drawn shape, in its own units.
-    let bbox = rect.get_b_box(None);
+    let bbox = rect.get_b_box();
     check!(bbox.x() == 10.0 && bbox.y() == 20.0 && bbox.width() == 30.0 && bbox.height() == 40.0);
-    let cbox = circle.get_b_box(None);
+    let cbox = circle.get_b_box();
     check!(cbox.x() == 85.0 && cbox.y() == 45.0 && cbox.width() == 30.0 && cbox.height() == 30.0);
     // A group's box holds all of its children (the ellipse is at the origin: 0..8 by 0..4, centered).
-    let all = group.get_b_box(None);
+    let all = group.get_b_box();
     check!(all.x() == -8.0 && all.y() == -4.0 && all.width() == 123.0 && all.height() == 79.0);
     // Moving a shape moves its box.
     rect.set_attribute("x", "15");
-    check!(rect.get_b_box(None).x() == 15.0);
+    check!(rect.get_b_box().x() == 15.0);
     rect.set_attribute("x", "10");
     // A transform moves where it is drawn, not what getBBox says.
     group.set_attribute("transform", "translate(10 20)");
-    check!(group.get_b_box(None).x() == -8.0);
+    check!(group.get_b_box().x() == -8.0);
     let ctm = rect.get_ctm().unwrap();
     // The matrix to the viewport includes the viewBox scale (400 units in 200px) and the translate.
     check!(near(ctm.a(), 0.5) && near(ctm.d(), 0.5) && near(ctm.e(), 5.0) && near(ctm.f(), 10.0));
@@ -162,12 +162,12 @@ pub extern "C" fn run() {
     let inside = DOMPointInit::create();
     inside.set_x(Some(15.0));
     inside.set_y(Some(30.0));
-    check!(rect.is_point_in_fill(Some(&inside)) && !rect.is_point_in_stroke(Some(&inside)));
+    check!(rect.is_point_in_fill_with(&inside) && !rect.is_point_in_stroke_with(&inside));
     let outside = DOMPointInit::create();
     outside.set_x(Some(500.0));
     outside.set_y(Some(500.0));
-    check!(!rect.is_point_in_fill(Some(&outside)));
-    check!(circle.is_point_in_fill(Some(&{ let p = DOMPointInit::create(); p.set_x(Some(100.0)); p.set_y(Some(60.0)); p })));
+    check!(!rect.is_point_in_fill_with(&outside));
+    check!(circle.is_point_in_fill_with(&{ let p = DOMPointInit::create(); p.set_x(Some(100.0)); p.set_y(Some(60.0)); p }));
     svg.remove_child(path.clone());
 
     // Text has measurable extent.
@@ -179,14 +179,14 @@ pub extern "C" fn run() {
     svg.append_child(label.clone());
     check!(label.get_number_of_chars() == 5.0 && label.text_content() == "Hello");
     check!(label.get_computed_text_length() > 20.0);
-    let box_ = label.get_b_box(None);
+    let box_ = label.get_b_box();
     check!(box_.x() == 10.0 && box_.width() > 20.0 && box_.height() > 10.0 && box_.y() < 90.0);
     check!(label.get_start_position_of_char(0.0).x() == 10.0);
     check!(label.get_start_position_of_char(1.0).x() > 10.0);
 
     // Removed elements are gone from the drawing; the group's box shrinks.
     group.remove_child(circle.clone());
-    check!(group.get_b_box(None).width() < 123.0);
+    check!(group.get_b_box().width() < 123.0);
     check!(svg.query_selector_all("circle").length() == 0.0);
     // The root's own geometry in the page.
     let page = svg.get_bounding_client_rect();

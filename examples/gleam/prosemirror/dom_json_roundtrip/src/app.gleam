@@ -308,7 +308,7 @@ pub fn main() {
           +. node.get_node_size(node.child(d, 1.0))
           -. 1.0
         let mc = schema.mark(sch, "code")
-        let span = schema.text_with(sch, " roundtrip()", [mc])
+        let span = schema.text_with(sch, " roundtrip()", Some([mc]))
         let tr =
           editor_state.get_tr(st)
           |> transform.insert(insert_pos, span)

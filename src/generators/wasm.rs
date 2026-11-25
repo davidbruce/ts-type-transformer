@@ -138,7 +138,7 @@ fn from_wasm(p: &str, t: &Ty) -> String {
             let Ty::Enum(e) = &**inner else { unreachable!() };
             format!("({p} < 0 ? {} : enums.{e}[{p}])", u.js())
         }
-        Ty::Nullable(_, a @ (Absence::Undefined | Absence::False)) => format!("({p} === 0 ? {} : get({p}))", a.js()),
+        Ty::Nullable(_, a @ (Absence::Undefined | Absence::Either | Absence::False)) => format!("({p} === 0 ? {} : get({p}))", a.js()),
         Ty::Key(m) => format!("keys.{m}[{p}]"),
         _ => format!("get({p})"),
     }
@@ -187,7 +187,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             wasm_params.push(format!("{p}_ptr"));
             wasm_params.push(format!("{p}_len"));
             args.push(format!("({p}_ptr === 0 ? {} : str({p}_ptr, {p}_len))", undefined.js()));
-            may_undef.push(*undefined == Absence::Undefined);
+            may_undef.push(undefined.optional());
             continue;
         }
         if let Ty::Nullable(inner, undefined) = t
@@ -196,7 +196,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             wasm_params.push(format!("{p}_has"));
             wasm_params.push(format!("{p}_value"));
             args.push(format!("({p}_has ? {p}_value : {})", undefined.js()));
-            may_undef.push(*undefined == Absence::Undefined);
+            may_undef.push(undefined.optional());
             continue;
         }
         // A rest parameter's array is spread; a null one is empty.
@@ -205,7 +205,7 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
             may_undef.push(false);
         } else {
             args.push(from_wasm(&p, t));
-            may_undef.push(matches!(t, Ty::Nullable(_, Absence::Undefined)));
+            may_undef.push(matches!(t, Ty::Nullable(_, a) if a.optional()));
         }
         wasm_params.push(p);
     }

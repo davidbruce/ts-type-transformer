@@ -117,7 +117,7 @@ pub extern "C" fn run() {
     set_timeout(function(|| PENDING.with(|p| p.set(p.get() - 1))), Some(45.0), JsArray::new());
     // A microtask queued inside a timer runs right after it, before the next timer. The plain
     // timer made at 20ms is canceled; this one takes its place.
-    clear_timeout(Some(id20));
+    clear_timeout_with(id20);
     PENDING.with(|p| p.set(p.get() + 2));
     set_timeout(
         function(|| {
@@ -134,11 +134,11 @@ pub extern "C" fn run() {
     );
     // clearTimeout stops one from running.
     let doomed = set_timeout(function(|| log("cleared")), Some(10.0), JsArray::new());
-    clear_timeout(Some(doomed));
+    clear_timeout_with(doomed);
     // Clearing an id that is gone, or none at all, does nothing.
-    clear_timeout(Some(doomed));
-    clear_timeout(None);
-    clear_timeout(Some(987654.0));
+    clear_timeout_with(doomed);
+    clear_timeout();
+    clear_timeout_with(987654.0);
 
     // An interval: three ticks, then it stops itself.
     let interval_id = Rc::new(Cell::new(0.0));
@@ -153,7 +153,7 @@ pub extern "C" fn run() {
                 });
                 log(&format!("tick-{n}"));
                 if n == 3 {
-                    clear_interval(Some(interval_id.get()));
+                    clear_interval_with(interval_id.get());
                     PENDING.with(|p| p.set(p.get() - 1));
                 }
             }
@@ -165,7 +165,7 @@ pub extern "C" fn run() {
     check!(id > 0.0);
     // An interval cleared before it ticks never does.
     let never = set_interval(function(|| log("tick-never")), Some(5.0), JsArray::new());
-    clear_interval(Some(never));
+    clear_interval_with(never);
 
     // Microtasks run after this code, in order, ahead of every timer; a nested one ahead of timers too.
     let first_micro = VoidFunction::new(|| {

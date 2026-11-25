@@ -30,12 +30,12 @@ pub fn main() {
   let doc = dom.get_document()
   let body = document.get_body(doc)
 
-  let the_form = document.create_element(doc, tag.form, None)
+  let the_form = document.create_element(doc, tag.form)
   form.set_name(the_form, "signup")
   node.append_child(body, the_form)
 
   // A text input: value, default value, attributes.
-  let user = document.create_element(doc, tag.input, None)
+  let user = document.create_element(doc, tag.input)
   input.set_type(user, "text")
   input.set_name(user, "user")
   input.set_default_value(user, "anon")
@@ -54,7 +54,7 @@ pub fn main() {
   )
 
   // A number input.
-  let age = document.create_element(doc, tag.input, None)
+  let age = document.create_element(doc, tag.input)
   input.set_type(age, "number")
   input.set_name(age, "age")
   input.set_min(age, "0")
@@ -65,9 +65,9 @@ pub fn main() {
   check(input.get_value_as_number(age) == 42.0, "valueAsNumber")
   input.set_value_as_number(age, 50.0)
   check(input.get_value(age) == "50", "set valueAsNumber")
-  input.step_up(age, Some(5.0))
+  input.step_up_with(age, 5.0)
   check(input.get_value(age) == "55", "stepUp")
-  input.step_down(age, None)
+  input.step_down(age)
   check(input.get_value(age) == "54", "stepDown")
   input.set_value(age, "150")
   check(validity_state.get_range_overflow(input.get_validity(age)), "range overflow")
@@ -78,7 +78,7 @@ pub fn main() {
   check(input.check_validity(age), "in range is valid")
 
   // A checkbox.
-  let agree = document.create_element(doc, tag.input, None)
+  let agree = document.create_element(doc, tag.input)
   input.set_type(agree, "checkbox")
   input.set_name(agree, "agree")
   node.append_child(the_form, agree)
@@ -89,10 +89,10 @@ pub fn main() {
   check(!input.get_default_checked(agree), "default unchecked")
 
   // A select with options.
-  let color = document.create_element(doc, tag.select, None)
+  let color = document.create_element(doc, tag.select)
   select.set_name(color, "color")
   list.each([#("red", "Red"), #("green", "Green"), #("blue", "Blue")], fn(c) {
-    let o = document.create_element(doc, tag.option, None)
+    let o = document.create_element(doc, tag.option)
     option_el.set_value(o, c.0)
     option_el.set_text(o, c.1)
     node.append_child(color, o)
@@ -120,13 +120,13 @@ pub fn main() {
   select.set_selected_index(color, 0.0)
 
   // A textarea.
-  let notes = document.create_element(doc, tag.textarea, None)
+  let notes = document.create_element(doc, tag.textarea)
   textarea.set_name(notes, "notes")
   textarea.set_value(notes, "hello world")
   node.append_child(the_form, notes)
   check(textarea.get_value(notes) == "hello world", "textarea value")
   check(textarea.get_text_length(notes) == 11.0, "text length")
-  textarea.set_selection_range(notes, Some(0.0), Some(5.0), None)
+  textarea.set_selection_range(notes, Some(0.0), Some(5.0))
   check(textarea.get_selection_start(notes) == 0.0 && textarea.get_selection_end(notes) == 5.0, "selection range")
   textarea.set_range_text(notes, "HOWDY")
   check(textarea.get_value(notes) == "HOWDY world", "setRangeText")
@@ -137,7 +137,7 @@ pub fn main() {
   check(collection.get_length(form.get_elements(the_form)) == 5.0, "form elements")
 
   // FormData from the form: text, number, a checked box, the select and text.
-  let data = form_data.new(Some(the_form), None)
+  let data = form_data.new_with(the_form, None)
   check(form_data.get(data, "user") == Some(t.FormDataEntryValueString("alice")), "FormData user")
   check(form_data.get(data, "age") == Some(t.FormDataEntryValueString("30")), "FormData age")
   check(form_data.get(data, "agree") == Some(t.FormDataEntryValueString("on")), "FormData checked box")
@@ -145,7 +145,7 @@ pub fn main() {
   check(form_data.get(data, "notes") == Some(t.FormDataEntryValueString("HOWDY world")), "FormData textarea")
   check(form_data.get(data, "missing") == None, "FormData missing")
   input.set_checked(agree, False)
-  check(!form_data.has(form_data.new(Some(the_form), None), "agree"), "unchecked box is left out")
+  check(!form_data.has(form_data.new_with(the_form, None), "agree"), "unchecked box is left out")
   form_data.append_with_string(data, "extra", "1")
   form_data.append_with_string(data, "extra", "2")
   check(form_data.get_all(data, "extra") == [t.FormDataEntryValueString("1"), t.FormDataEntryValueString("2")], "FormData getAll")
@@ -156,7 +156,7 @@ pub fn main() {
   check(list.length(form_data.to_list(data)) == 5, "FormData entries")
 
   // Required and pattern validation.
-  let code = document.create_element(doc, tag.input, None)
+  let code = document.create_element(doc, tag.input)
   input.set_type(code, "text")
   input.set_name(code, "code")
   input.set_required(code, True)
@@ -183,7 +183,7 @@ pub fn main() {
   check(input.check_validity(code), "cleared custom error")
 
   // An email input flags a type mismatch.
-  let mail = document.create_element(doc, tag.input, None)
+  let mail = document.create_element(doc, tag.input)
   input.set_type(mail, "email")
   input.set_value(mail, "not an email")
   check(validity_state.get_type_mismatch(input.get_validity(mail)), "email type mismatch")

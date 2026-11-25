@@ -34,16 +34,16 @@ pub extern "C" fn run() {
     let hits = Rc::new(Cell::new(0));
     let on_a = counter(&hits);
     inner.add_event_listener("a", on_a.clone(), None);
-    check!(inner.dispatch_event(&Event::new("a", None)));
+    check!(inner.dispatch_event(&Event::new("a")));
     check!(hits.get() == 1);
-    inner.dispatch_event(&Event::new("a", None));
+    inner.dispatch_event(&Event::new("a"));
     check!(hits.get() == 2);
     inner.remove_event_listener("a", on_a.clone(), None);
-    inner.dispatch_event(&Event::new("a", None));
+    inner.dispatch_event(&Event::new("a"));
     check!(hits.get() == 2);
     // Another type does not reach it.
     inner.add_event_listener("a", on_a.clone(), None);
-    inner.dispatch_event(&Event::new("b", None));
+    inner.dispatch_event(&Event::new("b"));
     check!(hits.get() == 2);
     inner.remove_event_listener("a", on_a.clone(), None);
 
@@ -52,7 +52,7 @@ pub extern "C" fn run() {
     let l = counter(&twice);
     inner.add_event_listener("t", l.clone(), None);
     inner.add_event_listener("t", l.clone(), None);
-    inner.dispatch_event(&Event::new("t", None));
+    inner.dispatch_event(&Event::new("t"));
     check!(twice.get() == 1);
     inner.remove_event_listener("t", l.clone(), None);
 
@@ -64,7 +64,7 @@ pub extern "C" fn run() {
     check!(once_opts.passive().is_none());
     inner.add_event_listener("o", counter(&onces), &once_opts);
     for _ in 0..3 {
-        inner.dispatch_event(&Event::new("o", None));
+        inner.dispatch_event(&Event::new("o"));
     }
     check!(onces.get() == 1);
 
@@ -78,13 +78,13 @@ pub extern "C" fn run() {
     let on_inner = log("inner");
     outer.add_event_listener("x", on_outer.clone(), None);
     inner.add_event_listener("x", on_inner.clone(), None);
-    inner.dispatch_event(&Event::new("x", None));
+    inner.dispatch_event(&Event::new("x"));
     check!(order.borrow().is_empty() == false && *order.borrow() == ["inner:2"]);
     order.borrow_mut().clear();
     let bubbling = EventInit::create();
     bubbling.set_bubbles(Some(true));
     check!(bubbling.bubbles() == Some(true));
-    let ev = Event::new("x", Some(&bubbling));
+    let ev = Event::new_with("x", &bubbling);
     check!(ev.bubbles() && !ev.cancelable() && ev.type_() == "x");
     check!(ev.target().is_none() && !ev.is_trusted());
     inner.dispatch_event(&ev);
@@ -99,11 +99,11 @@ pub extern "C" fn run() {
     capture.set_capture(Some(true));
     let on_cap = log("capture");
     outer.add_event_listener("x", on_cap.clone(), &capture);
-    inner.dispatch_event(&Event::new("x", Some(&bubbling)));
+    inner.dispatch_event(&Event::new_with("x", &bubbling));
     check!(*order.borrow() == ["capture:1", "inner:2", "outer:3"]);
     outer.remove_event_listener("x", on_cap.clone(), true);
     order.borrow_mut().clear();
-    inner.dispatch_event(&Event::new("x", Some(&bubbling)));
+    inner.dispatch_event(&Event::new_with("x", &bubbling));
     check!(*order.borrow() == ["inner:2", "outer:3"]);
 
     // stopPropagation keeps the event from the parent; stopImmediatePropagation from its siblings.
@@ -115,13 +115,13 @@ pub extern "C" fn run() {
     let stopper = EventListener::new(|e: Event| e.stop_propagation());
     inner.add_event_listener("s", stopper.clone(), None);
     inner.add_event_listener("s", counter(&second), None);
-    inner.dispatch_event(&Event::new("s", Some(&bubbling)));
+    inner.dispatch_event(&Event::new_with("s", &bubbling));
     check!(reached_outer.get() == 0 && second.get() == 1);
     inner.remove_event_listener("s", stopper.clone(), None);
     let immediate = EventListener::new(|e: Event| e.stop_immediate_propagation());
     inner.add_event_listener("i", immediate, None);
     inner.add_event_listener("i", counter(&second), None);
-    inner.dispatch_event(&Event::new("i", None));
+    inner.dispatch_event(&Event::new("i"));
     check!(second.get() == 1);
 
     // preventDefault only counts on a cancelable event; dispatchEvent returns false when canceled.
@@ -129,9 +129,9 @@ pub extern "C" fn run() {
     cancelable.set_cancelable(Some(true));
     let preventer = EventListener::new(|e: Event| e.prevent_default());
     inner.add_event_listener("p", preventer.clone(), None);
-    let plain = Event::new("p", None);
+    let plain = Event::new("p");
     check!(inner.dispatch_event(&plain) && !plain.default_prevented());
-    let cancel = Event::new("p", Some(&cancelable));
+    let cancel = Event::new_with("p", &cancelable);
     check!(cancel.cancelable() && !cancel.default_prevented());
     check!(!inner.dispatch_event(&cancel));
     check!(cancel.default_prevented());
@@ -150,11 +150,11 @@ pub extern "C" fn run() {
     let init = CustomEventInit::<String>::create();
     init.set_detail(Some("payload".to_string()));
     check!(init.detail().as_deref() == Some("payload"));
-    inner.dispatch_event(&CustomEvent::<String>::new("custom", Some(&init)));
+    inner.dispatch_event(&CustomEvent::<String>::new_with("custom", &init));
     check!(*seen.borrow() == "payload");
     let numeric = CustomEventInit::<f64>::create();
     numeric.set_detail(Some(41.5));
-    check!(CustomEvent::<f64>::new("n", Some(&numeric)).detail() == 41.5);
+    check!(CustomEvent::<f64>::new_with("n", &numeric).detail() == 41.5);
 
     // A MouseEvent made with an init dict, seen by a typed listener.
     let clicks: Rc<RefCell<Vec<(f64, f64, f64, bool, bool)>>> = Rc::new(RefCell::new(Vec::new()));
@@ -178,7 +178,7 @@ pub extern "C" fn run() {
         }
     });
     outer.add_event_listener("click", on_click_any.clone(), None);
-    inner.dispatch_event(&MouseEvent::new("click", Some(&mouse)));
+    inner.dispatch_event(&MouseEvent::new_with("click", &mouse));
     check!(*clicks.borrow() == [(12.0, 34.0, 1.0, true, false)]);
     // A real click() produces a PointerEvent for the typed listener.
     clicks.borrow_mut().clear();
@@ -204,13 +204,13 @@ pub extern "C" fn run() {
     key.set_location(Some(KeyboardEvent::DOM_KEY_LOCATION_LEFT));
     key.set_bubbles(Some(true));
     check!(key.key().as_deref() == Some("A"));
-    let down = KeyboardEvent::new("keydown", Some(&key));
+    let down = KeyboardEvent::new_with("keydown", &key);
     check!(down.key() == "A" && down.code() == "KeyA" && down.shift_key() && down.repeat());
     check!(down.get_modifier_state("Shift") && !down.get_modifier_state("Control"));
     inner.dispatch_event(&down);
     check!(*keys.borrow() == ["A/KeyA/true/true/1"]);
     outer.remove_event_listener(HTMLElementEventMap::KEYDOWN, &on_key, None);
-    inner.dispatch_event(&KeyboardEvent::new("keydown", Some(&key)));
+    inner.dispatch_event(&KeyboardEvent::new_with("keydown", &key));
     check!(keys.borrow().len() == 1);
 
     // An AbortSignal removes its listener when it aborts.
@@ -222,20 +222,20 @@ pub extern "C" fn run() {
     with_signal.set_signal(Some(&signal));
     check!(with_signal.signal() == Some(signal.clone()));
     inner.add_event_listener("sig", counter(&aborts), &with_signal);
-    inner.dispatch_event(&Event::new("sig", None));
+    inner.dispatch_event(&Event::new("sig"));
     check!(aborts.get() == 1);
     let on_abort_seen = Rc::new(Cell::new(0));
     signal.add_event_listener("abort", counter(&on_abort_seen), None);
-    controller.abort(None);
+    controller.abort();
     check!(signal.aborted() && on_abort_seen.get() == 1);
-    inner.dispatch_event(&Event::new("sig", None));
+    inner.dispatch_event(&Event::new("sig"));
     check!(aborts.get() == 1);
     check!(js::attempt(|| signal.throw_if_aborted()).is_err());
 
     // A window-level event and a listener on document.
     let docs = Rc::new(Cell::new(0));
     doc.add_event_listener("ping", counter(&docs), None);
-    doc.dispatch_event(&Event::new("ping", None));
+    doc.dispatch_event(&Event::new("ping"));
     check!(docs.get() == 1);
 
     // A passive listener may not prevent default: the request is ignored.
@@ -243,7 +243,7 @@ pub extern "C" fn run() {
     passive.set_passive(Some(true));
     check!(passive.passive() == Some(true));
     inner.add_event_listener("pp", preventer.clone(), &passive);
-    let pe = Event::new("pp", Some(&cancelable));
+    let pe = Event::new_with("pp", &cancelable);
     check!(inner.dispatch_event(&pe) && !pe.default_prevented());
     on_click.release();
     on_key.release();

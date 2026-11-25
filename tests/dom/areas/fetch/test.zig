@@ -195,7 +195,7 @@ export fn run() void {
     response_init.setStatus(201);
     response_init.setStatusText("Made");
     response_init.setHeaders(.{ .HeadersInit_map = map });
-    const made = b.Response.new(bodyOf("created"), .{ .init = response_init });
+    const made = b.Response.new(.{ .body = bodyOf("created"), .init = response_init });
     expect(made.getStatus() == 201 and made.getOk(), @src());
     expect(made.getStatusText().eql("Made"), @src());
     expect(made.getHeaders().get("x-one").?.eql("1"), @src());
@@ -203,26 +203,26 @@ export fn run() void {
     expect(!made.getBodyUsed(), @src());
     const failed = b.ResponseInit.create();
     failed.setStatus(500);
-    expect(!b.Response.new(null, .{ .init = failed }).getOk(), @src());
+    expect(!b.Response.new(.{ .body = null, .init = failed }).getOk(), @src());
     expect(b.Response.@"error"().getType() == .@"error", @src());
     expect(b.Response.redirect(.{ .string = b.JsString.from("https://example.com/next") }, .{ .status = 302 }).getStatus() == 302, @src());
 
-    // FINDING 4 (partly fixed): Body's instance `json()` is generated as `json2` (areas/network.zig:518)
-    // because the static Response.json took the name. Plain JS objects and arrays can now be built and read.
+    // FINDING 4 (partly fixed): the static Response.json is generated as `json2`
+    // because Body's instance `json()` took the name. Plain JS objects and arrays can now be built and read.
     // Response.json writes the body as JSON and says so.
-    const json = b.Response.json(b.JsValue.number(7), .{});
+    const json = b.Response.json2(b.JsValue.number(7), .{});
     expect(json.getHeaders().get("content-type").?.eql("application/json"), @src());
-    launch(json.json2(), onJsonNumber);
-    launch(b.Response.json(b.JsValue.string("quoted \"text\""), .{}).json2(), onJsonText);
+    launch(json.json(), onJsonNumber);
+    launch(b.Response.json2(b.JsValue.string("quoted \"text\""), .{}).json(), onJsonText);
     const obj = b.JsValue.object();
     obj.set("n", 7);
     obj.set("label", "seven");
     obj.set("items", b.JsArrayOf(f64).of(&.{ 10, 20 }));
-    launch(b.Response.json(obj, .{}).json2(), onJsonObject);
+    launch(b.Response.json2(obj, .{}).json(), onJsonObject);
 
     // Bodies read as text.
-    launch(b.Response.new(bodyOf("hello"), .{}).text(), onHello);
-    const twice = b.Response.new(bodyOf("twice"), .{});
+    launch(b.Response.new(.{ .body = bodyOf("hello") }).text(), onHello);
+    const twice = b.Response.new(.{ .body = bodyOf("twice") });
     const copy = twice.clone();
     launch(twice.text(), onCloneFirst);
     launch(copy.text(), onCloneSecond);
@@ -240,9 +240,9 @@ export fn run() void {
     expect(b.Blob.new(.{}).getSize() == 0, @src());
     launch(blob.text(), onBlobText);
     // A FormData as a body is multipart, and a Response reads it back as text.
-    const form = b.FormData.new(null, null);
+    const form = b.FormData.new(.{});
     form.appendWithString("k", "v");
-    launch(b.Response.new(.{ .FormData = form }, .{}).text(), onFormText);
+    launch(b.Response.new(.{ .body = .{ .FormData = form } }).text(), onFormText);
 
     // The page's own file, over the network, and a 404 response.
     launch(b.fetch(.{ .string = b.JsString.from("./index.html") }, .{}), onPage);

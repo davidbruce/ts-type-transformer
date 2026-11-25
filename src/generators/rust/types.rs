@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::{camel, ident, rust_function, snake, Context, KEYWORDS};
 use super::super::comments::{Style, comment, text_lines};
-use super::super::model::{Absence, base_args, map_types, mentions, subst, with_self_args, Call, Class, Func, Model, TParam, Ty};
+use super::super::model::{base_args, map_types, mentions, subst, with_self_args, Call, Class, Func, Model, TParam, Ty};
 
 pub(super) const VALUE: &str = "JsValue";
 
@@ -198,7 +198,7 @@ pub(super) fn left_out(f: &Func) -> usize {
     if f.rest || matches!(f.call, Call::Set(_) | Call::IndexSet) {
         return 0;
     }
-    let k = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, Absence::Undefined))).count();
+    let k = f.params.iter().rev().take_while(|(_, t)| matches!(t, Ty::Nullable(_, a) if a.optional())).count();
     let (kept, dropped) = f.params.split_at(f.params.len() - k);
     // One it alone names is its default there (date-fns' `ResultDate = DateType`), else unknown.
     let unknown = |p: &TParam| p.default.is_none() && !kept.iter().any(|(_, t)| mentions(t, &p.name));

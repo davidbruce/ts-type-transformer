@@ -59,15 +59,15 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(STR(URL_get_href(URL_new("http://abs.example/x", base)), "http://abs.example/x"));
     CHECK(STR(URL_get_pathname(URL_new("../../../../up", base)), "/up"));
     URL base_url = URL_new(base);
-    CHECK(STR(URL_get_href(URL_new_with_string("sub/x.js", base_url)), "https://example.com/a/b/sub/x.js"));
-    CHECK(STR(URL_get_href(URL_new_with_URL_and_URL(URL_new("../z", "http://q.example/m/n"), base_url)), "http://q.example/z"));
+    CHECK(STR(URL_get_href(URL_new("sub/x.js", base_url)), "https://example.com/a/b/sub/x.js"));
+    CHECK(STR(URL_get_href(URL_new(URL_new("../z", "http://q.example/m/n"), base_url)), "http://q.example/z"));
 
     // canParse and parse say yes or no; the constructor throws.
     CHECK(URL_canParse("https://example.com/x"));
     CHECK(!URL_canParse("not a url"));
     CHECK(!URL_canParse("/relative"));
     CHECK(URL_canParse("/relative", "https://example.com"));
-    CHECK(URL_canParse_with_string("/relative", base_url));
+    CHECK(URL_canParse("/relative", base_url));
     CHECK(URL_parse("not a url").h == 0 && !js_failed());
     CHECK(STR(URL_get_pathname(URL_parse("/p/q", "https://example.com")), "/p/q"));
     CHECK(URL_new("not a url").h == 0 && js_failed());
@@ -87,7 +87,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(URLSearchParams_get_size(live) == 1);
 
     // URLSearchParams on its own: get, getAll, has, set, append, delete.
-    URLSearchParams params = URLSearchParams_new_with_string("?a=1&b=2&a=3&c=");
+    URLSearchParams params = URLSearchParams_new("?a=1&b=2&a=3&c=");
     CHECK(URLSearchParams_get_size(params) == 4);
     CHECK(STR(URLSearchParams_get(params, "a"), "1"));
     CHECK(URLSearchParams_get(params, "missing").h == 0);
@@ -107,7 +107,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(!URLSearchParams_has(params, "b") && URLSearchParams_get_size(params) == 2);
 
     // Sorting is stable by name; iteration yields [name, value] pairs in order.
-    URLSearchParams unsorted = URLSearchParams_new_with_string("z=1&b=2&a=3&b=1");
+    URLSearchParams unsorted = URLSearchParams_new("z=1&b=2&a=3&b=1");
     URLSearchParams_sort(unsorted);
     CHECK(STR(URLSearchParams_toString(unsorted), "a=3&b=2&b=1&z=1"));
     JsIterator it = URLSearchParams_iterate(unsorted);
@@ -123,13 +123,13 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(seen == 4 && in_order);
 
     // Encoding: what encodeURIComponent would escape, with spaces as plus.
-    URLSearchParams encoded = URLSearchParams_new_with_string("");
+    URLSearchParams encoded = URLSearchParams_new("");
     URLSearchParams_set(encoded, "k", "a/b c+d&e=f#g");
     CHECK(STR(URLSearchParams_toString(encoded), "k=a%2Fb+c%2Bd%26e%3Df%23g"));
     CHECK(STR(URLSearchParams_get(encoded, "k"), "a/b c+d&e=f#g"));
     URLSearchParams_set(encoded, "name", "caf\xc3\xa9 \xe2\x82\xac");
     CHECK(STR(URLSearchParams_toString(encoded), "k=a%2Fb+c%2Bd%26e%3Df%23g&name=caf%C3%A9+%E2%82%AC"));
-    URLSearchParams decoded = URLSearchParams_new_with_string("x=%E2%82%AC+1%2B1&%C3%A9=ok");
+    URLSearchParams decoded = URLSearchParams_new("x=%E2%82%AC+1%2B1&%C3%A9=ok");
     CHECK(STR(URLSearchParams_get(decoded, "x"), "\xe2\x82\xac 1+1") && STR(URLSearchParams_get(decoded, "\xc3\xa9"), "ok"));
 
     // From pairs, and a copy from another set that stays independent.
@@ -140,7 +140,7 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_JsArray_JsString_push(list, p1);
     URLSearchParams from_pairs = URLSearchParams_new(list);
     CHECK(STR(URLSearchParams_toString(from_pairs), "one=1"));
-    URLSearchParams copy = URLSearchParams_new_with_URLSearchParams(from_pairs);
+    URLSearchParams copy = URLSearchParams_new(from_pairs);
     URLSearchParams_append(copy, "two", "2");
     CHECK(URLSearchParams_get_size(from_pairs) == 1 && URLSearchParams_get_size(copy) == 2);
 

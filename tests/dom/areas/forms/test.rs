@@ -49,12 +49,14 @@ pub extern "C" fn run() {
     check!(form.get_attribute("name").as_deref() == Some("signupForm"));
     check!(doc.get_element_by_id("signup") == Some(form.clone().into()));
 
-    let user = form.query_selector_as::<HTMLInputElement>("[name=user]").unwrap();
-    let age = form.query_selector_as::<HTMLInputElement>("[name=age]").unwrap();
-    let news = form.query_selector_as::<HTMLInputElement>("[name=news]").unwrap();
-    let terms = form.query_selector_as::<HTMLInputElement>("[name=terms]").unwrap();
-    let color = form.query_selector_as::<HTMLSelectElement>("select").unwrap();
-    let bio = form.query_selector_as::<HTMLTextAreaElement>("textarea").unwrap();
+    // A selector finds an Element; the control it is said to be is a cast.
+    let field = |selector: &str| form.query_selector(selector).unwrap();
+    let user: HTMLInputElement = js::unchecked_cast(&field("[name=user]"));
+    let age: HTMLInputElement = js::unchecked_cast(&field("[name=age]"));
+    let news: HTMLInputElement = js::unchecked_cast(&field("[name=news]"));
+    let terms: HTMLInputElement = js::unchecked_cast(&field("[name=terms]"));
+    let color: HTMLSelectElement = js::unchecked_cast(&field("select"));
+    let bio: HTMLTextAreaElement = js::unchecked_cast(&field("textarea"));
 
     // Text input: value, attributes, properties.
     check!(user.value() == "ada" && user.type_() == "text" && user.name() == "user");
@@ -67,7 +69,7 @@ pub extern "C" fn run() {
     user.set_placeholder("your name");
     check!(user.get_attribute("placeholder").as_deref() == Some("your name"));
     user.set_value("hello world");
-    user.set_selection_range(Some(0.0), Some(5.0), None);
+    user.set_selection_range(0.0, 5.0);
     check!(user.selection_start() == Some(0.0) && user.selection_end() == Some(5.0));
     check!(user.max_length() == -1.0);
     user.set_max_length(8.0);
@@ -77,9 +79,9 @@ pub extern "C" fn run() {
     check!(age.type_() == "number" && age.value() == "36" && age.value_as_number() == 36.0);
     age.set_value_as_number(41.0);
     check!(age.value() == "41");
-    age.step_up(Some(2.0));
+    age.step_up_with(2.0);
     check!(age.value() == "43");
-    age.step_down(None);
+    age.step_down();
     check!(age.value() == "42");
     age.set_value("500");
     check!(!age.validity().valid() && age.validity().range_overflow());
@@ -116,7 +118,7 @@ pub extern "C" fn run() {
     let extra: HTMLOptionElement = doc.create_element(HTMLElementTagNameMap::OPTION, None);
     extra.set_value("k");
     extra.set_text("Black");
-    color.add(extra.clone(), None::<HTMLElementOrNumber>);
+    color.add(extra.clone());
     check!(color.length() == 4.0 && extra.index() == 3.0);
     color.set_value("k");
     check!(color.selected_index() == 3.0);
@@ -138,14 +140,14 @@ pub extern "C" fn run() {
     bio.set_cols(30.0);
     check!(bio.rows() == 4.0 && bio.cols() == 30.0 && bio.type_() == "textarea");
     bio.set_value("hello");
-    bio.set_selection_range(Some(0.0), Some(1.0), None);
+    bio.set_selection_range(0.0, 1.0);
     bio.set_range_text("J");
     check!(bio.value() == "Jello");
 
     // FormData from the form: names, values, only checked boxes, repeated names.
     bio.set_value("hello");
     user.set_value("grace");
-    let data = FormData::new(Some(&form), None);
+    let data = FormData::new_with(&form, None);
     check!(text(data.get("user")).as_deref() == Some("grace"));
     check!(text(data.get("age")).as_deref() == Some("36"));
     check!(text(data.get("news")).as_deref() == Some("yes"));
@@ -189,7 +191,7 @@ pub extern "C" fn run() {
     // Disabled controls are left out of the data and of validation.
     user.set_disabled(true);
     check!(!user.will_validate() && form.check_validity());
-    check!(!FormData::new(Some(&form), None).has("user"));
+    check!(!FormData::new_with(&form, None).has("user"));
     user.set_disabled(false);
 
     // reset restores each control's default.

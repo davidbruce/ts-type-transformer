@@ -33,7 +33,7 @@ pub fn main() -> Nil {
     |> canvas_space_options.with_retina(True)
 
   let cs =
-    canvas_space.new_with("#pt", None)
+    canvas_space.new_with(Some("#pt"), None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 

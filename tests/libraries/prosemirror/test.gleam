@@ -228,17 +228,17 @@ pub fn main() {
       "the paragraph's start and end",
     )
     + check(
-      node.text_between_with(doc, 1.0, 13.0, " ", "") == "Hello World",
+      node.text_between_with(doc, 1.0, 13.0, Some(" "), None) == "Hello World",
       "textBetween with a separator",
     )
     + check(node.get_text_content(node.cut_with(doc, 2.0, 5.0)) == "ell", "cut")
 
   // Nodes made from the schema.
   let abc = schema.text(sch, "abc")
-  // No attrs and no marks: empty, as null and undefined are.
-  let made = schema.node_with(sch, "paragraph", attrs.create(), abc, [])
-  let linked = schema.mark_with(sch, "link", href_attrs("https://example.com"))
-  let linked_text = schema.text_with(sch, "site", [linked])
+  // No attrs and no marks.
+  let made = schema.node_with(sch, "paragraph", None, abc, [])
+  let linked = schema.mark_with(sch, "link", Some(href_attrs("https://example.com")))
+  let linked_text = schema.text_with(sch, "site", Some([linked]))
   let passed =
     passed
     + check(

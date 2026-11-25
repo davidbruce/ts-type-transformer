@@ -70,7 +70,7 @@ pub extern "C" fn run() {
     let quiet = MutationObserver::new(&MutationCallback::new(|_, _| see("never-called".to_string())));
     let child_list = MutationObserverInit::create();
     child_list.set_child_list(Some(true));
-    quiet.observe(&host, Some(&child_list));
+    quiet.observe_with(&host, &child_list);
     check!(quiet.take_records().len() == 0);
     let a: HTMLSpanElement = doc.create_element(HTMLElementTagNameMap::SPAN, None);
     let b: HTMLSpanElement = doc.create_element(HTMLElementTagNameMap::SPAN, None);
@@ -99,7 +99,7 @@ pub extern "C" fn run() {
     let deep = MutationObserverInit::create();
     deep.set_child_list(Some(true));
     deep.set_subtree(Some(true));
-    quiet.observe(&host, Some(&deep));
+    quiet.observe_with(&host, &deep);
     b.append_child(doc.create_text_node("t"));
     let nested = quiet.take_records();
     check!(nested.len() == 1 && nested.get(0).target() == b.clone().into());
@@ -109,7 +109,7 @@ pub extern "C" fn run() {
     attrs.set_attribute_old_value(Some(true));
     attrs.set_attribute_filter(Some(&JsArray::<String>::from(["title", "lang"])));
     check!(attrs.attributes() == Some(true) && attrs.attribute_filter().unwrap().len() == 2);
-    quiet.observe(&host, Some(&attrs));
+    quiet.observe_with(&host, &attrs);
     host.set_attribute("title", "one");
     host.set_attribute("title", "two");
     host.set_attribute("data-ignored", "x");
@@ -126,14 +126,14 @@ pub extern "C" fn run() {
     chars.set_character_data(Some(true));
     chars.set_character_data_old_value(Some(true));
     let char_observer = MutationObserver::new(&MutationCallback::new(|_, _| ()));
-    char_observer.observe(&text, Some(&chars));
+    char_observer.observe_with(&text, &chars);
     text.set_data("after");
     let edits = char_observer.take_records();
     check!(edits.len() == 1 && edits.get(0).type_() == MutationRecordType::CharacterData);
     check!(edits.get(0).old_value().as_deref() == Some("before") && edits.get(0).target() == text.clone().into());
     check!(text.data() == "after");
     // An observer with no kind of change to watch throws.
-    check!(js::attempt(|| quiet.observe(&host, Some(&MutationObserverInit::create()))).is_err());
+    check!(js::attempt(|| quiet.observe_with(&host, &MutationObserverInit::create())).is_err());
     check!(js::take_error().is_none());
     // disconnect: nothing more is recorded, and what was pending is dropped.
     host.append_child(doc.create_element(HTMLElementTagNameMap::P, None));
@@ -163,7 +163,7 @@ pub extern "C" fn run() {
     everything.set_child_list(Some(true));
     everything.set_attributes(Some(true));
     everything.set_attribute_old_value(Some(true));
-    observer.observe(&watched, Some(&everything));
+    observer.observe_with(&watched, &everything);
     // A fragment adds both at once: one record.
     let fragment = doc.create_document_fragment();
     fragment.append_child(doc.create_element(HTMLElementTagNameMap::B, None));
@@ -178,7 +178,7 @@ pub extern "C" fn run() {
 
     // ---- A disconnected observer's callback never runs.
     let dropped = MutationObserver::new(&MutationCallback::new(|_, _| see("after-disconnect".to_string())));
-    dropped.observe(&watched, Some(&everything));
+    dropped.observe_with(&watched, &everything);
     watched.set_attribute("data-other", "1");
     dropped.disconnect();
     KEEP.with(|k| k.borrow_mut().push(dropped.0.clone()));
@@ -218,7 +218,7 @@ pub extern "C" fn run() {
         }
     }));
     KEEP.with(|k| k.borrow_mut().push(resize.0.clone()));
-    resize.observe(&sized, None);
+    resize.observe(&sized);
 
     // ---- IntersectionObserver: one element on screen, one far below it.
     let near: HTMLDivElement = doc.create_element(HTMLElementTagNameMap::DIV, None);
@@ -230,17 +230,14 @@ pub extern "C" fn run() {
     body.append_child(near.clone());
     body.append_child(far.clone());
     PENDING.with(|p| p.set(p.get() + 2));
-    let intersect = IntersectionObserver::new(
-        &IntersectionObserverCallback::new(|entries, _| {
-            for entry in entries.iter() {
-                see(format!("intersect:{}:{}:ratio={}", entry.target().id(), entry.is_intersecting(), entry.intersection_ratio()));
-                check!(entry.bounding_client_rect().width() == 20.0);
-                check!(entry.root_bounds().is_some() && entry.time() > 0.0);
-                arrived();
-            }
-        }),
-        None,
-    );
+    let intersect = IntersectionObserver::new(&IntersectionObserverCallback::new(|entries, _| {
+        for entry in entries.iter() {
+            see(format!("intersect:{}:{}:ratio={}", entry.target().id(), entry.is_intersecting(), entry.intersection_ratio()));
+            check!(entry.bounding_client_rect().width() == 20.0);
+            check!(entry.root_bounds().is_some() && entry.time() > 0.0);
+            arrived();
+        }
+    }));
     check!(intersect.root().is_none() && intersect.root_margin() == "0px 0px 0px 0px");
     check!(intersect.thresholds().len() == 1 && intersect.thresholds().get(0) == 0.0);
     KEEP.with(|k| k.borrow_mut().push(intersect.0.clone()));
@@ -250,7 +247,7 @@ pub extern "C" fn run() {
     let options = IntersectionObserverInit::create();
     options.set_threshold(JsArray::<f64>::from([0.0, 0.5, 1.0]));
     options.set_root_margin(Some("10px"));
-    let with_options = IntersectionObserver::new(&IntersectionObserverCallback::new(|_, _| ()), Some(&options));
+    let with_options = IntersectionObserver::new_with(&IntersectionObserverCallback::new(|_, _| ()), &options);
     check!(with_options.thresholds().len() == 3 && with_options.root_margin() == "10px 10px 10px 10px");
     with_options.observe(&near);
     check!(with_options.take_records().len() == 0);
@@ -277,7 +274,7 @@ pub extern "C" fn run() {
     let controller = AbortController::new();
     let combined = AbortSignal::any([controller.signal(), AbortSignal::timeout(100000.0)]);
     check!(!combined.aborted());
-    controller.abort(None);
+    controller.abort();
     check!(combined.aborted());
     check!(DOMException(combined.reason().0).name() == "AbortError");
 }

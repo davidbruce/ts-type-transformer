@@ -20,7 +20,7 @@ import gleam/float
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/string
 
 pub fn main() {
@@ -36,11 +36,11 @@ pub fn main() {
   let head = document.get_head(doc)
 
   // Inline style: set, get, remove.
-  let box = document.create_element(doc, tag.div, None)
+  let box = document.create_element(doc, tag.div)
   element.set_id(box, "box")
   node.append_child(body, box)
   let style = html_element.get_style(box)
-  decl.set_property(style, "color", Some("red"), None)
+  decl.set_property(style, "color", Some("red"))
   check(decl.get_property_value(style, "color") == "red", "setProperty / getPropertyValue")
   check(props.get_color(style) == "red", "color property")
   props.set_width(style, "120px")
@@ -53,7 +53,7 @@ pub fn main() {
   check(decl.remove_property(style, "width") == "120px", "removeProperty returns the old value")
   check(props.get_width(style) == "", "removed property is empty")
   check(decl.get_length(style) == 2.0, "two declarations left")
-  decl.set_property(style, "margin-top", Some("4px"), Some("important"))
+  decl.set_property_with(style, "margin-top", Some("4px"), "important")
   check(decl.get_property_priority(style, "margin-top") == "important", "priority")
   decl.set_css_text(style, "color: blue; padding: 2px")
   check(props.get_color(style) == "blue", "cssText replaced")
@@ -65,19 +65,19 @@ pub fn main() {
   props.set_color(style, "red")
   props.set_font_size(style, "20px")
   props.set_width(style, "50%")
-  let computed = dom.get_computed_style(box, None)
+  let computed = dom.get_computed_style(box)
   check(props.get_color(computed) == "rgb(255, 0, 0)", "computed color")
   check(props.get_font_size(computed) == "20px", "computed font size")
   check(decl.get_property_value(computed, "display") == "block", "computed display of a div")
   props.set_display(style, "none")
-  check(decl.get_property_value(dom.get_computed_style(box, None), "display") == "none", "computed display none")
+  check(decl.get_property_value(dom.get_computed_style(box), "display") == "none", "computed display none")
   html_element.set_style(box, "width: 80px; height: 30px; padding: 5px")
-  check(decl.get_property_value(dom.get_computed_style(box, None), "width") == "80px", "computed width")
+  check(decl.get_property_value(dom.get_computed_style(box), "width") == "80px", "computed width")
   check(element.get_client_width(box) == 90.0, "clientWidth includes padding")
   check(html_element.get_offset_height(box) == 40.0, "offsetHeight")
 
   // A style element and its sheet.
-  let sheet_el = document.create_element(doc, tag.style, None)
+  let sheet_el = document.create_element(doc, tag.style)
   element.set_text_content(
     sheet_el,
     Some(".big { font-size: 30px; } .big.bold { font-weight: 700; } p { margin: 0; }"),
@@ -100,37 +100,37 @@ pub fn main() {
   check(list.length(texts) == 3, "rules as a list")
 
   // Class-driven computed style.
-  let target = document.create_element(doc, tag.div, None)
+  let target = document.create_element(doc, tag.div)
   node.append_child(body, target)
-  check(props.get_font_size(dom.get_computed_style(target, None)) == "16px", "default font size")
+  check(props.get_font_size(dom.get_computed_style(target)) == "16px", "default font size")
   dom_token_list.add(element.get_class_list(target), ["big"])
-  check(props.get_font_size(dom.get_computed_style(target, None)) == "30px", "class sets font size")
-  check(decl.get_property_value(dom.get_computed_style(target, None), "font-weight") == "400", "not bold yet")
+  check(props.get_font_size(dom.get_computed_style(target)) == "30px", "class sets font size")
+  check(decl.get_property_value(dom.get_computed_style(target), "font-weight") == "400", "not bold yet")
   dom_token_list.add(element.get_class_list(target), ["bold"])
-  check(decl.get_property_value(dom.get_computed_style(target, None), "font-weight") == "700", "compound selector")
+  check(decl.get_property_value(dom.get_computed_style(target), "font-weight") == "700", "compound selector")
   dom_token_list.remove(element.get_class_list(target), ["big", "bold"])
-  check(props.get_font_size(dom.get_computed_style(target, None)) == "16px", "class removed")
+  check(props.get_font_size(dom.get_computed_style(target)) == "16px", "class removed")
 
   // insertRule / deleteRule change the page.
-  let at = css_style_sheet.insert_rule(sheet, ".tinted { color: rgb(0, 0, 255); }", Some(0.0))
+  let at = css_style_sheet.insert_rule_with(sheet, ".tinted { color: rgb(0, 0, 255); }", 0.0)
   check(at == 0.0, "insertRule returns the index")
   check(css_rule_list.get_length(css_style_sheet.get_css_rules(sheet)) == 4.0, "four rules")
   dom_token_list.add(element.get_class_list(target), ["tinted"])
-  check(props.get_color(dom.get_computed_style(target, None)) == "rgb(0, 0, 255)", "inserted rule applies")
+  check(props.get_color(dom.get_computed_style(target)) == "rgb(0, 0, 255)", "inserted rule applies")
   let assert Some(inserted) = css_rule_list.item(css_style_sheet.get_css_rules(sheet), 0.0)
   let assert Ok(inserted_style) = css_style_rule.from(inserted)
   check(css_style_rule.get_selector_text(inserted_style) == ".tinted", "inserted selector")
   css_style_rule.set_selector_text(inserted_style, ".tinted2")
-  check(props.get_color(dom.get_computed_style(target, None)) != "rgb(0, 0, 255)", "selector change unapplies it")
-  decl.set_property(css_style_rule.get_style(inserted_style), "color", Some("rgb(0, 128, 0)"), None)
+  check(props.get_color(dom.get_computed_style(target)) != "rgb(0, 0, 255)", "selector change unapplies it")
+  decl.set_property(css_style_rule.get_style(inserted_style), "color", Some("rgb(0, 128, 0)"))
   dom_token_list.add(element.get_class_list(target), ["tinted2"])
-  check(props.get_color(dom.get_computed_style(target, None)) == "rgb(0, 128, 0)", "rule's style edited")
+  check(props.get_color(dom.get_computed_style(target)) == "rgb(0, 128, 0)", "rule's style edited")
   css_style_sheet.delete_rule(sheet, 0.0)
   check(css_rule_list.get_length(css_style_sheet.get_css_rules(sheet)) == 3.0, "deleteRule")
-  check(props.get_color(dom.get_computed_style(target, None)) != "rgb(0, 128, 0)", "deleted rule no longer applies")
+  check(props.get_color(dom.get_computed_style(target)) != "rgb(0, 128, 0)", "deleted rule no longer applies")
 
   // A constructed sheet, replaced synchronously.
-  let built = css_style_sheet.new(None)
+  let built = css_style_sheet.new()
   css_style_sheet.replace_sync(built, "a { color: red } b { color: blue }")
   check(css_rule_list.get_length(css_style_sheet.get_css_rules(built)) == 2.0, "constructed sheet rules")
 

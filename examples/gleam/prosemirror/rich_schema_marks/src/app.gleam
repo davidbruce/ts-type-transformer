@@ -137,7 +137,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_with(
       sch,
       "heading",
-      ha,
+      Some(ha),
       schema.text(sch, "ProseMirror Document Schema"),
       [],
     )
@@ -148,14 +148,14 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_list_with(
       sch,
       "paragraph",
-      attrs.create(),
+      None,
       [
         schema.text(sch, "Inline marks compose cleanly: "),
-        schema.text_with(sch, "bold", [ms]),
+        schema.text_with(sch, "bold", Some([ms])),
         schema.text(sch, ", "),
-        schema.text_with(sch, "italic", [me]),
+        schema.text_with(sch, "italic", Some([me])),
         schema.text(sch, ", and "),
-        schema.text_with(sch, "inline_code", [mc]),
+        schema.text_with(sch, "inline_code", Some([mc])),
         schema.text(sch, " spans."),
       ],
       [],
@@ -164,19 +164,19 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_with(
       sch,
       "paragraph",
-      attrs.create(),
+      None,
       schema.text(
         sch,
         "Every document conforms to a strict schema enforced on every transaction.",
       ),
       [],
     )
-  let quote = schema.node_with(sch, "blockquote", attrs.create(), q_inner, [])
+  let quote = schema.node_with(sch, "blockquote", None, q_inner, [])
   let cb =
     schema.node_with(
       sch,
       "code_block",
-      attrs.create(),
+      None,
       schema.text(
         sch,
         "schema.node(\"paragraph\", null, [schema.text(\"typed\")])",
@@ -187,7 +187,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_with(
       sch,
       "paragraph",
-      attrs.create(),
+      None,
       schema.text(
         sch,
         "Select any text in this editor and click a toolbar action to toggle marks or switch block types.",
@@ -197,7 +197,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   schema.node_list_with(
     sch,
     "doc",
-    attrs.create(),
+    None,
     [h, p1, quote, cb, outro],
     [],
   )
@@ -365,7 +365,7 @@ pub fn main() {
         let tr = editor_state.get_tr(st)
         case node.range_has_mark_type(editor_state.get_doc(st), f, t, mt) {
           True -> {
-            transform.remove_mark_type_with(tr, f, t, mt)
+            transform.remove_mark_type_with(tr, f, t, Some(mt))
             pm_rt.ref_set(action_ref, "Removed " <> label)
           }
           False -> {
@@ -413,7 +413,7 @@ pub fn main() {
           selection.get_from(sel),
           Some(selection.get_to(sel)),
           ht,
-          ha,
+          Some(ha),
         )
         pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }

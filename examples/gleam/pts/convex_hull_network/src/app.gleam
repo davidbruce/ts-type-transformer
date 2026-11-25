@@ -1,7 +1,7 @@
 import gleam/float
 import gleam/int
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import pts/canvas_form
 import pts/canvas_space
 import pts/canvas_space_options
@@ -34,7 +34,7 @@ pub fn main() -> Nil {
     |> canvas_space_options.with_retina(True)
 
   let cs =
-    canvas_space.new_with("#pt", None)
+    canvas_space.new_with(Some("#pt"), None)
     |> canvas_space.setup(opts)
   let form = canvas_space.get_form(cs)
 

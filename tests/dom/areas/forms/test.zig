@@ -113,18 +113,18 @@ export fn run() void {
     expect(note.getValue().eql("hello\nworld"), @src());
 
     // FormData collects the named controls that count: an unchecked box does not.
-    const data = b.FormData.new(form, null);
+    const data = b.FormData.new(.{ .form = form });
     expect(isEntry(data, "user", "grace"), @src());
     expect(isEntry(data, "age", "42"), @src());
     expect(isEntry(data, "color", "r"), @src());
     expect(isEntry(data, "note", "hello\nworld"), @src());
     expect(!data.has("agree"), @src());
     agree.setChecked(true);
-    const again = b.FormData.new(form, null);
+    const again = b.FormData.new(.{ .form = form });
     expect(isEntry(again, "agree", "yes"), @src());
 
     // FormData built by hand.
-    const made = b.FormData.new(null, null);
+    const made = b.FormData.new(.{});
     made.appendWithString("tag", "x");
     made.appendWithString("tag", "y");
     made.setWithString("one", "1");

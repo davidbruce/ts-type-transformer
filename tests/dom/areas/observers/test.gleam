@@ -71,7 +71,7 @@ pub fn main() {
   let body = document.get_body(doc)
 
   // ---- take_records: what happened, with no callback ----
-  let target = document.create_element(doc, tag.div, None)
+  let target = document.create_element(doc, tag.div)
   node.append_child(body, target)
   let text = document.create_text_node(doc, "abc")
   node.append_child(target, text)
@@ -84,10 +84,10 @@ pub fn main() {
   flag(all, mutation_observer_init.set_subtree)
   flag(all, mutation_observer_init.set_attribute_old_value)
   flag(all, mutation_observer_init.set_character_data_old_value)
-  mutation_observer.observe(watcher, target, Some(all))
+  mutation_observer.observe_with(watcher, target, all)
   check(mutation_observer.take_records(watcher) == [], "nothing happened yet")
 
-  let child = document.create_element(doc, tag.span, None)
+  let child = document.create_element(doc, tag.span)
   node.append_child(target, child)
   element.set_attribute(target, "data-a", "1")
   element.set_attribute(target, "data-a", "2")
@@ -116,10 +116,10 @@ pub fn main() {
   })
   let scope = mutation_observer_init.create()
   flag(scope, mutation_observer_init.set_child_list)
-  mutation_observer.observe(observer, target, Some(scope))
-  let grandchild_host = document.create_element(doc, tag.div, None)
+  mutation_observer.observe_with(observer, target, scope)
+  let grandchild_host = document.create_element(doc, tag.div)
   node.append_child(target, grandchild_host)
-  node.append_child(grandchild_host, document.create_element(doc, tag.i, None))
+  node.append_child(grandchild_host, document.create_element(doc, tag.i))
   element.set_attribute(target, "data-a", "3")
   mutation_observer.disconnect(watcher)
 
@@ -130,7 +130,7 @@ pub fn main() {
   })
   let only_a = mutation_observer_init.create()
   mutation_observer_init.set_attribute_filter(only_a, Some(["a"]))
-  mutation_observer.observe(filter, target, Some(only_a))
+  mutation_observer.observe_with(filter, target, only_a)
   element.set_attribute(target, "b", "ignored")
   element.set_attribute(target, "a", "seen")
 
@@ -142,7 +142,7 @@ pub fn main() {
     // ---- disconnect drops what is queued ----
     let late = cell.new(0)
     let dropped = mutation_observer.new(fn(_, _) { cell.set(late, 1) })
-    mutation_observer.observe(dropped, target, Some(all))
+    mutation_observer.observe_with(dropped, target, all)
     element.set_attribute(target, "data-z", "1")
     mutation_observer.disconnect(dropped)
     check(mutation_observer.take_records(dropped) == [], "disconnect drops the queue")
@@ -154,7 +154,7 @@ pub fn main() {
 fn resize(check, count, body, late) -> Nil {
   let doc = dom.get_document()
   check(cell.get(late) == 0, "a disconnected observer never delivers")
-  let box = document.create_element(doc, tag.div, None)
+  let box = document.create_element(doc, tag.div)
   element.set_attribute(box, "style", "width: 50px; height: 30px; background: #ccc")
   node.append_child(body, box)
   let sizes = cell.new([])
@@ -174,15 +174,15 @@ fn resize(check, count, body, late) -> Nil {
       ])
     })
   })
-  resize_observer.observe(resizer, box, None)
+  resize_observer.observe(resizer, box)
   when(fn() { cell.get(sizes) != [] }, "the first resize report", fn() {
     check(cell.get(sizes) == [#(50.0, 30.0, 50.0, 30.0, True)], "first report: size and target")
-    html_element.get_style(box) |> decl.set_property("width", Some("80px"), None)
+    html_element.get_style(box) |> decl.set_property("width", Some("80px"))
     when(fn() { list.length(cell.get(sizes)) == 2 }, "the second resize report", fn() {
       let assert [latest, ..] = cell.get(sizes)
       check(latest == #(80.0, 30.0, 80.0, 30.0, True), "second report after a change")
       resize_observer.unobserve(resizer, box)
-      html_element.get_style(box) |> decl.set_property("width", Some("90px"), None)
+      html_element.get_style(box) |> decl.set_property("width", Some("90px"))
       // A frame or two for a report that must not come.
       when(fn() { True }, "a frame", fn() {
         when(fn() { True }, "another frame", fn() {
@@ -199,9 +199,9 @@ fn resize(check, count, body, late) -> Nil {
 fn intersect(check, count, body) -> Nil {
   let doc = dom.get_document()
   let seen = cell.new([])
-  let in_view = document.create_element(doc, tag.div, None)
+  let in_view = document.create_element(doc, tag.div)
   element.set_attribute(in_view, "style", "width: 40px; height: 40px")
-  let far = document.create_element(doc, tag.div, None)
+  let far = document.create_element(doc, tag.div)
   element.set_attribute(far, "style", "position: absolute; top: 20000px; left: 0; width: 40px; height: 40px")
   node.append_child(body, in_view)
   node.append_child(body, far)
@@ -213,7 +213,7 @@ fn intersect(check, count, body) -> Nil {
       }
       cell.set(seen, [#(which, io_entry.get_is_intersecting(entry), io_entry.get_intersection_ratio(entry), dom_rect_read_only.get_width(io_entry.get_bounding_client_rect(entry))), ..cell.get(seen)])
     })
-  }, None)
+  })
   check(intersection_observer.get_thresholds(observer) == [0.0], "default threshold")
   check(intersection_observer.get_root(observer) == None, "default root")
   intersection_observer.observe(observer, in_view)
@@ -236,12 +236,9 @@ fn timeout(check, count) -> Nil {
   let signal = abort_signal.timeout(40.0)
   check(!abort_signal.get_aborted(signal), "not aborted at once")
   let heard = cell.new(0)
-  abort_signal.add_event_listener_with_string(
-    signal,
-    "abort",
-    t.EventListenerOrEventListenerObjectEventListener(fn(_) { cell.set(heard, cell.get(heard) + 1) }),
-    None,
-  )
+  abort_signal.add_event_listener_with_string_fn(signal, "abort", fn(_) {
+    cell.set(heard, cell.get(heard) + 1)
+  })
   let other = abort_signal.timeout(100000.0)
   when(fn() { cell.get(heard) == 1 }, "the timeout signal", fn() {
     check(abort_signal.get_aborted(signal), "aborted after the delay")

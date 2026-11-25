@@ -3,9 +3,9 @@
 import bindings/areas/core as dom
 import bindings/areas/network/body
 import bindings/areas/network/response
+import bindings/areas/network/response_init
 import bindings/areas/storage/storage
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic
 import gleam/dynamic/decode
@@ -99,7 +99,7 @@ pub fn main() {
   storage.set_item(local, "doc", json)
   let assert Some(stored) = storage.get_item(local, "doc")
   check(stored == json, "JSON text is kept exactly")
-  let parsed = response.new(Some(t.BodyInitString(stored)), None)
+  let parsed = response.new_with(Some(stored), response_init.create())
   runtime.promise_then(body.json(parsed), fn(result) {
     let assert Ok(value) = result
     check(decode.run(value, decode.at(["name"], decode.string)) == Ok("ada"), "parsed name")

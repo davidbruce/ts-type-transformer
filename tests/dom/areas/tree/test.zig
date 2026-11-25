@@ -121,7 +121,7 @@ export fn run() void {
     expect(@as(u32, @intFromFloat(body.compareDocumentPosition(a.asNode()))) & b.Node.DOCUMENT_POSITION_CONTAINED_BY != 0, @src());
 
     // A walk over the list's elements.
-    const walker = doc.createTreeWalker(list.asNode(), 1, null);
+    const walker = doc.createTreeWalker(list.asNode(), .{ .whatToShow = 1 });
     var seen: [8][8]u8 = undefined;
     var lens: [8]usize = undefined;
     var n: usize = 0;

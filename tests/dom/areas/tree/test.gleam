@@ -33,10 +33,10 @@ pub fn main() {
   let body = document.get_body(doc)
 
   // A list built from elements and text.
-  let list_el = document.create_element(doc, tag.ul, None)
+  let list_el = document.create_element(doc, tag.ul)
   element.set_id(list_el, "list")
   list.each(["one", "two", "three"], fn(word) {
-    let item = document.create_element(doc, tag.li, None)
+    let item = document.create_element(doc, tag.li)
     node.append_child(item, document.create_text_node(doc, word))
     element.set_attribute(item, "data-word", word)
     node.append_child(list_el, item)
@@ -80,7 +80,7 @@ pub fn main() {
   check(element.get_text_content(list_el) == "onethreetwo", "order after move")
 
   // insertBefore puts a node ahead of another.
-  let zero0 = document.create_element(doc, tag.li, None)
+  let zero0 = document.create_element(doc, tag.li)
   element.set_text_content(zero0, Some("start"))
   node.insert_before(list_el, zero0, Some(first_el))
   let assert Some(head) = element.get_first_element_child(list_el)
@@ -89,7 +89,7 @@ pub fn main() {
   check(element.get_child_element_count(list_el) == 3.0, "removeChild")
 
   // Removed and replaced.
-  let zero = document.create_element(doc, tag.li, None)
+  let zero = document.create_element(doc, tag.li)
   element.set_text_content(zero, Some("zero"))
   node.replace_child(list_el, zero, first_el)
   check(option.is_none(node.get_parent_node(first_el)), "replaced node has no parent")
@@ -101,7 +101,7 @@ pub fn main() {
   // A fragment's children move in at once; it is left empty.
   let fragment = document.create_document_fragment(doc)
   list.each(["a", "b"], fn(word) {
-    let item = document.create_element(doc, tag.li, None)
+    let item = document.create_element(doc, tag.li)
     element.set_text_content(item, Some(word))
     node.append_child(fragment, item)
   })
@@ -111,8 +111,8 @@ pub fn main() {
   check(node_list.get_length(node.get_child_nodes(fragment)) == 0.0, "fragment emptied")
 
   // A deep clone copies the subtree; a shallow one does not.
-  let deep = node.clone_node(list_el, Some(True))
-  let shallow = node.clone_node(list_el, None)
+  let deep = node.clone_node_with(list_el, True)
+  let shallow = node.clone_node(list_el)
   check(node.get_text_content(deep) == Some(element.get_text_content(list_el)), "deep clone text")
   check(node_list.get_length(node.get_child_nodes(shallow)) == 0.0, "shallow clone")
   check(
@@ -122,7 +122,7 @@ pub fn main() {
   )
 
   // Markup parsed and written.
-  let host = document.create_element(doc, tag.div, None)
+  let host = document.create_element(doc, tag.div)
   element.set_inner_html(host, "<p class=\"x\">hi <b>there</b></p>")
   let assert Some(b) = element.query_selector_element(host, "b")
   check(element.get_text_content(b) == "there", "querySelector")
@@ -133,7 +133,7 @@ pub fn main() {
   let assert Some(p) = element.get_first_element_child(host)
   check(string.starts_with(element.get_outer_html(p), "<p class=\"x\">"), "outerHTML")
   check(dom_token_list.contains(element.get_class_list(p), "x"), "classList contains")
-  dom_token_list.toggle(element.get_class_list(p), "y", None)
+  dom_token_list.toggle(element.get_class_list(p), "y")
   check(element.get_attribute(p, "class") == Some("x y"), "classList toggle")
   dom_token_list.remove(element.get_class_list(p), ["x"])
   check(element.get_class_name(p) == "y", "classList remove")
@@ -159,7 +159,7 @@ pub fn main() {
   check(child_node.upcast(zero_text) |> node.get_text_content == Some("zero"), "text node content")
 
   // A walk over the list's elements.
-  let walker = document.create_tree_walker(doc, list_el, Some(1.0), None)
+  let walker = document.create_tree_walker_fn_with(doc, list_el, 1.0, None)
   let seen = walk(walker, [])
   check(seen == ["zero", "three", "a", "b"], "walker visits elements in order")
   check(node.is_same_node(tree_walker.get_root(walker), Some(list_el)), "walker root")

@@ -40,8 +40,8 @@ check (two.nextElementSibling.Value.textContent = "three") "nextElementSibling"
 check (body.contains two) "body contains"
 check (two.matches "li[data-word=two]") "matches"
 // FINDING 1: the value `Option` (the HTML <option> constructor) hides F#'s Option module.
-check ((two.closest<Element> "ul").Value.id = "list") "closest"
-check ((two.closest<Element> "table").IsNone) "closest finds nothing"
+check ((two.closest "ul").Value.id = "list") "closest"
+check ((two.closest "table").IsNone) "closest finds nothing"
 let fc = two.firstChild.Value
 check (fc.nodeType = two.TEXT_NODE) "first child is text"
 check fc.nextSibling.IsNone "text has no next sibling"
@@ -96,7 +96,7 @@ check (deep.isEqualNode list && not (deep.isSameNode list)) "clone is equal, not
 // Markup parsed and written.
 let host: HTMLDivElement = document.createElement HTMLElementTagNameMapKeys.div
 host.innerHTML <- "<p class=\"x\">hi <b>there</b></p>"
-check ((host.querySelector<Element> "b").Value.textContent = "there") "querySelector"
+check ((host.querySelector "b").Value.textContent = "there") "querySelector"
 check (host.innerHTML = "<p class=\"x\">hi <b>there</b></p>") "innerHTML"
 let p = host.firstElementChild.Value
 check (p.outerHTML.StartsWith "<p class=\"x\">") "outerHTML"
@@ -107,7 +107,7 @@ p.classList.add ("z", "w")
 check (p.classList.length = 4.0) "classList.add many"
 p.classList.remove "w"
 check (p.className = "x y z") "className"
-check ((host.querySelectorAll<Element> "p, b").length = 2.0) "querySelectorAll"
+check ((host.querySelectorAll "p, b").length = 2.0) "querySelectorAll"
 
 // Positions compared: `zero` precedes `a`.
 let a = (list.children.item 3.0).Value

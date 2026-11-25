@@ -743,6 +743,7 @@ impl<'a> Builder<'a> {
                 let inner = self.ty(only_child(n), owner);
                 absent(inner, match attr(n, "absent") {
                     "undefined" => Absence::Undefined,
+                    "either" => Absence::Either,
                     "false" => Absence::False,
                     _ => Absence::Null,
                 })
@@ -987,7 +988,11 @@ fn absent(t: Ty, a: Absence) -> Ty {
         Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), a),
         Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) | Ty::Listener(_) => Ty::Nullable(Box::new(t), a),
         // `x?: T | null`: omitted too, as `x?: T` is.
-        Ty::Nullable(inner, u) => Ty::Nullable(inner, if a == Absence::Undefined { a } else { u }),
+        Ty::Nullable(inner, u) => Ty::Nullable(inner, match (a, u) {
+            (Absence::Undefined, Absence::Null | Absence::Either) => Absence::Either,
+            (Absence::Undefined, _) => Absence::Undefined,
+            (_, u) => u,
+        }),
         Ty::Void => Ty::Void,
         _ => Ty::Any,
     }

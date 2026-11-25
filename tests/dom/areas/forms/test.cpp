@@ -27,11 +27,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(form.length() == 5);
     CHECK(form.elements().length() == 5);
 
-    HTMLInputElement user = *form.querySelector<HTMLInputElement>("input[name=user]");
-    HTMLInputElement age = *form.querySelector<HTMLInputElement>("input[name=age]");
-    HTMLInputElement news = *form.querySelector<HTMLInputElement>("input[name=news]");
-    HTMLSelectElement color = *form.querySelector<HTMLSelectElement>("select");
-    HTMLTextAreaElement bio = *form.querySelector<HTMLTextAreaElement>("textarea");
+    HTMLInputElement user = *HTMLInputElement::cast(*form.querySelector("input[name=user]"));
+    HTMLInputElement age = *HTMLInputElement::cast(*form.querySelector("input[name=age]"));
+    HTMLInputElement news = *HTMLInputElement::cast(*form.querySelector("input[name=news]"));
+    HTMLSelectElement color = *HTMLSelectElement::cast(*form.querySelector("select"));
+    HTMLTextAreaElement bio = *HTMLTextAreaElement::cast(*form.querySelector("textarea"));
 
     // Text input: value, type, form, defaultValue.
     CHECK(user.value() == "ada" && user.type() == "text");

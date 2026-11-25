@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use super::super::model::{Absence, Call, Class, Func, Model, Ty};
+use super::super::model::{Call, Class, Func, Model, Ty};
 use super::super::names::Kind;
 use super::super::comments::{Style, comment};
 use super::types::{
@@ -516,7 +516,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         }
         // An object a caller fills in, not one with methods: made in one expression. A long list of
         // properties none optional is a map of keys to types (`ElementTagNameMap`), not made by hand.
-        let optional = setters.iter().any(|(f, _)| matches!(f.params.first(), Some((_, Ty::Nullable(_, Absence::Undefined)))));
+        let optional = setters.iter().any(|(f, _)| matches!(f.params.first(), Some((_, Ty::Nullable(_, a))) if a.optional()));
         if !methods && (optional || setters.len() <= 32) && c.funcs.iter().any(|f| matches!(f.call, Call::Create(_))) {
             body += &bag(&c.name, &setters, &cx, m);
         }

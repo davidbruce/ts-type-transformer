@@ -25,7 +25,7 @@ import cell
 import gleam/float
 import gleam/int
 import gleam/io
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/string
 
 const svg_ns = "http://www.w3.org/2000/svg"
@@ -96,7 +96,7 @@ pub fn main() {
   element.set_attribute(rect, "height", "50")
 
   // getBBox of a shape, and of a group.
-  let box = svg_graphics_element.get_b_box(rect, None)
+  let box = svg_graphics_element.get_b_box(rect)
   check(
     dom_rect_read_only.get_x(box) == 10.0 && dom_rect_read_only.get_y(box) == 20.0
       && dom_rect_read_only.get_width(box) == 100.0 && dom_rect_read_only.get_height(box) == 50.0,
@@ -111,10 +111,10 @@ pub fn main() {
   element.set_attribute(circle, "r", "30")
   node.append_child(group, circle)
   check(svg_length.get_value(animated.get_base_val(svg_circle_element.get_r(circle))) == 30.0, "circle radius")
-  let circle_box = svg_graphics_element.get_b_box(circle, None)
+  let circle_box = svg_graphics_element.get_b_box(circle)
   check(dom_rect_read_only.get_x(circle_box) == 120.0 && dom_rect_read_only.get_width(circle_box) == 60.0, "circle bbox")
-  node.append_child(group, node.clone_node(rect, Some(True)))
-  let group_box = svg_graphics_element.get_b_box(group, None)
+  node.append_child(group, node.clone_node_with(rect, True))
+  let group_box = svg_graphics_element.get_b_box(group)
   check(
     dom_rect_read_only.get_x(group_box) == 10.0 && dom_rect_read_only.get_y(group_box) == 20.0
       && dom_rect_read_only.get_width(group_box) == 170.0 && dom_rect_read_only.get_height(group_box) == 70.0,
@@ -148,26 +148,26 @@ pub fn main() {
   let inside = dom_point_init.create()
   dom_point_init.set_x(inside, Some(90.0))
   dom_point_init.set_y(inside, Some(10.0))
-  check(svg_geometry_element.is_point_in_fill(path, Some(inside)), "a point inside the triangle")
+  check(svg_geometry_element.is_point_in_fill_with(path, inside), "a point inside the triangle")
   let outside = dom_point_init.create()
   dom_point_init.set_x(outside, Some(10.0))
   dom_point_init.set_y(outside, Some(90.0))
-  check(!svg_geometry_element.is_point_in_fill(path, Some(outside)), "a point outside the triangle")
+  check(!svg_geometry_element.is_point_in_fill_with(path, outside), "a point outside the triangle")
   let on_edge = dom_point_init.create()
   dom_point_init.set_x(on_edge, Some(50.0))
   dom_point_init.set_y(on_edge, Some(0.0))
-  check(svg_geometry_element.is_point_in_stroke(path, Some(on_edge)), "a point on the stroke")
-  check(!svg_geometry_element.is_point_in_stroke(path, Some(inside)), "a point off the stroke")
+  check(svg_geometry_element.is_point_in_stroke_with(path, on_edge), "a point on the stroke")
+  check(!svg_geometry_element.is_point_in_stroke_with(path, inside), "a point off the stroke")
   element.set_attribute(path, "d", "M0 0 H50")
   check(near(svg_geometry_element.get_total_length(path), 50.0), "a new d changes the length")
 
   // The generic constructor, and downcasts from Element.
-  let made = document.create_element_ns(doc, Some(svg_ns), "circle", None)
+  let made = document.create_element_ns(doc, Some(svg_ns), "circle")
   check(element.get_namespace_uri(made) == Some(svg_ns), "createElementNS namespace")
   check(svg_circle_element.from(made) |> is_ok, "an Element made as a circle is an SVGCircleElement")
   check(svg_rect_element.from(made) |> is_error, "but not an SVGRectElement")
-  check(svg_rect_element.from(document.create_element(doc, tag.div, None)) |> is_error, "an HTML div is no SVGRectElement")
-  let html_circle = document.create_element_ns(doc, Some("http://www.w3.org/1999/xhtml"), "circle", None)
+  check(svg_rect_element.from(document.create_element(doc, tag.div)) |> is_error, "an HTML div is no SVGRectElement")
+  let html_circle = document.create_element_ns(doc, Some("http://www.w3.org/1999/xhtml"), "circle")
   check(svg_circle_element.from(html_circle) |> is_error, "the same name in the HTML namespace is not SVG")
   check(svgsvg_element.from(svg) |> is_ok, "the root downcasts")
 
@@ -179,9 +179,9 @@ pub fn main() {
   dom_token_list.add(element.get_class_list(rect), ["hot", "big"])
   check(element.get_attribute(rect, "class") == Some("hot big"), "classList on SVG")
   check(string.contains(element.get_outer_html(rect), "<rect "), "outerHTML")
-  check(props.get_fill(dom.get_computed_style(rect, None)) == "rgb(255, 0, 0)", "computed fill")
+  check(props.get_fill(dom.get_computed_style(rect)) == "rgb(255, 0, 0)", "computed fill")
   element.set_attribute(rect, "style", "fill: green")
-  check(props.get_fill(dom.get_computed_style(rect, None)) == "rgb(0, 128, 0)", "style beats the attribute")
+  check(props.get_fill(dom.get_computed_style(rect)) == "rgb(0, 128, 0)", "style beats the attribute")
 
   // Plain SVG factory results.
   let length = svgsvg_element.create_svg_length(svg)

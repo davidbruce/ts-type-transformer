@@ -114,7 +114,7 @@ fn build_schema() -> t.Schema(Nil) {
 }
 
 fn p_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node_with(sch, "paragraph", attrs.create(), schema.text(sch, txt), [])
+  schema.node_with(sch, "paragraph", None, schema.text(sch, txt), [])
 }
 
 fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
@@ -125,7 +125,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_with(
       sch,
       "heading",
-      ha,
+      Some(ha),
       schema.text(sch, "Immutable State & View Decorations"),
       [],
     )
@@ -133,7 +133,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_with(
       sch,
       "code_block",
-      attrs.create(),
+      None,
       schema.text(
         sch,
         "const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view",
@@ -143,7 +143,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   schema.node_list_with(
     sch,
     "doc",
-    attrs.create(),
+    None,
     [
       h,
       p_node(

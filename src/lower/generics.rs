@@ -40,8 +40,11 @@ pub(super) fn erase_generics(decls: &mut [Decl], keep_keyed: bool, checking: boo
         }
         Some(erased_to(p, used.get(&s), &aliases))
     };
-    erase_type_params(decls, true, &value, &keep);
-    // `LineStyleOption<ZRColor[]>` is `LineStyleOption`.
+    // Under `checking`, one not known here stays: a constructor's own `<T>`, the class's once paired (`new CustomEvent<T>(..)`).
+    erase_type_params(decls, true, !checking, &value, &keep);
+    // `LineStyleOption<ZRColor[]>` is `LineStyleOption`; but where a parameter
+    // the user fills is erased (`erase`), its arguments stay, as they say what
+    // iterating gives (`HeadersIterator<[string, string]>`).
     walk(decls, &mut |t, _| {
         if let Type::Ref(r) = t
             && r.kind != "typeParameter"
@@ -50,7 +53,7 @@ pub(super) fn erase_generics(decls: &mut [Decl], keep_keyed: bool, checking: boo
             let mut i = 0;
             r.args.retain(|_| {
                 i += 1;
-                params.get(i - 1).is_none_or(|p| p.sym.is_some_and(|s| keep.contains(&s)))
+                params.get(i - 1).is_none_or(|p| p.sym.is_some_and(|s| keep.contains(&s) || filled.contains(&s)))
             });
         }
         true
@@ -263,7 +266,7 @@ pub(super) fn mentions(t: &Type, syms: &HashSet<P<Symbol>>) -> bool {
 // Removes the type parameters `value` gives a value, replacing each use by it
 // (`None`: `any`). `declarations` includes those of interfaces and aliases,
 // not only those of signatures.
-fn erase_type_params(decls: &mut [Decl], declarations: bool, value: &dyn Fn(&TypeParam) -> Option<Option<Type>>, keep: &HashSet<P<Symbol>>) {
+fn erase_type_params(decls: &mut [Decl], declarations: bool, unknown: bool, value: &dyn Fn(&TypeParam) -> Option<Option<Type>>, keep: &HashSet<P<Symbol>>) {
     // Type parameters have unique identities, so no scoping is needed.
     let mut constraints: Constraints = HashMap::new();
     let mut collect = |params: &mut Vec<TypeParam>| {
@@ -278,7 +281,7 @@ fn erase_type_params(decls: &mut [Decl], declarations: bool, value: &dyn Fn(&Typ
     for_each_type_params(decls, declarations, &mut collect);
     walk(decls, &mut |t, _| {
         if matches!(t, Type::Ref(r) if r.kind == "typeParameter") {
-            return !substitute_constraint(t, &constraints, declarations, keep, 0);
+            return !substitute_constraint(t, &constraints, unknown, keep, 0);
         }
         true
     });
@@ -421,7 +424,7 @@ pub(super) fn literals(decls: &mut Vec<Decl>, sep: &str) -> usize {
         Type::Union(parts) => parts.iter().all(|p| matches!(p, Type::Literal { .. })),
         _ => false,
     };
-    erase_type_params(decls, false, &|p| p.constraint.as_ref().is_some_and(only_literals).then(|| p.constraint.clone().or_else(|| p.default.clone())), &HashSet::new());
+    erase_type_params(decls, false, false, &|p| p.constraint.as_ref().is_some_and(only_literals).then(|| p.constraint.clone().or_else(|| p.default.clone())), &HashSet::new());
     // `createEvent(type: "MouseEvent")`: the parameter has one value. Keep it.
     each_signature(decls, &mut |s| {
         for p in s.params.iter_mut().filter(|p| !p.rest) {

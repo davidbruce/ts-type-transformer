@@ -1,5 +1,5 @@
 use super::super::comments::{Style, comment};
-use super::super::model::{Absence, Call, Class, Func, Model, NamedUnion, Ty};
+use super::super::model::{Call, Class, Func, Model, NamedUnion, Ty};
 use super::{Ctx, T, ident, import_attr, raw_fn};
 
 pub(super) fn raw(t: &Ty) -> &'static str {
@@ -621,7 +621,10 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
 
 // What an argument left out is: `undefined`, as each type says it.
 fn absent(t: &Ty, cx: &Ctx) -> Option<String> {
-    let Ty::Nullable(inner, Absence::Undefined) = t else { return None };
+    let Ty::Nullable(inner, a) = t else { return None };
+    if !a.optional() {
+        return None;
+    }
     Some(match &**inner {
         Ty::Num | Ty::NumEnum(_) => "js_none_double()".into(),
         Ty::Bool => "js_none_bool()".into(),

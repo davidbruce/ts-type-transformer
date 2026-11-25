@@ -11,14 +11,14 @@ import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/io
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/string
 
-fn callback(f: fn() -> Nil) -> t.TimerHandler {
-  t.TimerHandlerFunction(fn(_) {
+fn callback(f: fn() -> Nil) -> t.Function {
+  fn(_) {
     f()
     runtime.dynamic(Nil)
-  })
+  }
 }
 
 // Runs `then` on the first animation frame after `ready()` holds.
@@ -52,14 +52,14 @@ pub fn main() {
   let t2 = performance.now(perf)
   check(t0 >=. 0.0 && t1 >=. t0 && t2 >=. t1, "performance.now is monotonic")
   check(performance.get_time_origin(perf) >. 1.0e12, "timeOrigin is an epoch time")
-  let mark = performance.mark(perf, "m1", None)
+  let mark = performance.mark(perf, "m1")
   check(float.absolute_value(performance.now(perf) -. t0) <. 5000.0, "the clock is in milliseconds")
   let _ = mark
 
   // Order: synchronous code, then microtasks, then a zero-delay timer.
   let order = cell.new("")
   let add = fn(letter) { cell.set(order, cell.get(order) <> letter) }
-  let timer_a = dom.set_timeout(callback(fn() { add("T") }), Some(0.0), [])
+  let timer_a = dom.set_timeout_fn(callback(fn() { add("T") }), Some(0.0), [])
   dom.queue_microtask(fn() { add("1") })
   dom.queue_microtask(fn() {
     add("2")
@@ -77,8 +77,8 @@ pub fn main() {
   let ticks = cell.new(0)
   let cancelled_frame = cell.new(False)
   let fired =
-    dom.set_timeout(
-      t.TimerHandlerFunction(fn(args) {
+    dom.set_timeout_fn(
+      fn(args) {
         cell.set(fired_count, cell.get(fired_count) + 1)
         let decoded = case args {
           [a, b] -> {
@@ -90,18 +90,18 @@ pub fn main() {
         }
         cell.set(got_args, decoded)
         runtime.dynamic(Nil)
-      }),
+      },
       Some(10.0),
       [dynamic.string("x"), dynamic.string("y")],
     )
-  let cleared = dom.set_timeout(callback(fn() { cell.set(cleared_count, cell.get(cleared_count) + 1) }), Some(10.0), [])
+  let cleared = dom.set_timeout_fn(callback(fn() { cell.set(cleared_count, cell.get(cleared_count) + 1) }), Some(10.0), [])
   check(fired != cleared, "timer ids differ")
-  dom.clear_timeout(Some(cleared))
-  dom.clear_timeout(None)
-  let late = dom.set_timeout(callback(fn() { cell.set(late_count, cell.get(late_count) + 1) }), Some(250.0), [])
+  dom.clear_timeout_with(cleared)
+  dom.clear_timeout()
+  let late = dom.set_timeout_fn(callback(fn() { cell.set(late_count, cell.get(late_count) + 1) }), Some(250.0), [])
 
   // An interval that is cleared once it has ticked three times.
-  let interval = dom.set_interval(callback(fn() { cell.set(ticks, cell.get(ticks) + 1) }), Some(15.0), [])
+  let interval = dom.set_interval_fn(callback(fn() { cell.set(ticks, cell.get(ticks) + 1) }), Some(15.0), [])
   check(interval != fired, "interval id differs")
 
   // A frame request that is cancelled, and one that runs.
@@ -120,7 +120,7 @@ pub fn main() {
     check(!cell.get(cancelled_frame), "a cancelled frame never runs")
     check(string.starts_with(cell.get(order), "S123"), "microtasks 1 2 3, nested one last: " <> cell.get(order))
     when(fn() { cell.get(ticks) >= 3 }, "three ticks", started, fn() {
-      dom.clear_interval(Some(interval))
+      dom.clear_interval_with(interval)
       let at_clear = cell.get(ticks)
       check(at_clear >= 3, "the interval ticked at least three times")
       check(cell.get(order) == "S123T", "the zero timer ran after the microtasks")
@@ -133,7 +133,7 @@ pub fn main() {
         check(cell.get(late_count) == 1, "the late timeout fired once")
         check(performance.now(perf) -. started >=. 100.0, "the late timeout waited")
         check(cell.get(ticks) == at_clear, "the cleared interval stopped")
-        dom.clear_timeout(Some(late))
+        dom.clear_timeout_with(late)
         idle(check, count, perf)
       })
     })
@@ -143,8 +143,7 @@ pub fn main() {
 // An idle callback runs with a deadline, then the program reports.
 fn idle(check, count, perf) -> Nil {
   let remaining = cell.new(-1.0)
-  let options = None
-  dom.request_idle_callback(fn(deadline) { cell.set(remaining, idle_deadline.time_remaining(deadline)) }, options)
+  dom.request_idle_callback(fn(deadline) { cell.set(remaining, idle_deadline.time_remaining(deadline)) })
   let started = performance.now(perf)
   when(fn() { cell.get(remaining) >=. 0.0 }, "the idle callback", started, fn() {
     check(cell.get(remaining) <=. 50.0, "idle time remaining is at most 50 ms")

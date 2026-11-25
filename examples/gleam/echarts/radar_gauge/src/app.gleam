@@ -29,9 +29,9 @@ pub fn main() -> Nil {
   {
     Some(r_box), Some(g_box) -> {
       let radar =
-        ec.init_with(r_box, dynamic.nil(), e_charts_init_opts.create())
+        ec.init_with(Some(r_box), dynamic.nil(), e_charts_init_opts.create())
       let gauge =
-        ec.init_with(g_box, dynamic.nil(), e_charts_init_opts.create())
+        ec.init_with(Some(g_box), dynamic.nil(), e_charts_init_opts.create())
 
       let r_opt =
         raw.create()

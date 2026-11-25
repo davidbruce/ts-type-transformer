@@ -64,7 +64,7 @@ let bbox = rect.getBBox ()
 check (bbox.x = 20.0 && bbox.y = 30.0 && bbox.width = 100.0 && bbox.height = 50.0) "rect getBBox"
 check (same (document.getElementById "r").Value rect) "found by id from the document"
 check (same rect.parentNode.Value svg) "parent is the svg"
-check (same (svg.querySelector<Element> "rect").Value rect) "querySelector in the svg"
+check (same (svg.querySelector "rect").Value rect) "querySelector in the svg"
 
 // A length set through the bindings changes the attribute and the box.
 rect.width.baseVal.value <- 150.0

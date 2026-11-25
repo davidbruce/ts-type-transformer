@@ -30,7 +30,7 @@ host.innerHTML <-
 </form>"""
 document.body.appendChild host |> ignore
 
-let find<'T when 'T :> Element> (selector: string) : 'T = (host.querySelector<'T> selector).Value
+let find<'T when 'T :> Element> (selector: string) : 'T = (host.querySelector selector).Value :?> 'T
 
 let form = find<HTMLFormElement> "form"
 let name = find<HTMLInputElement> "#name"

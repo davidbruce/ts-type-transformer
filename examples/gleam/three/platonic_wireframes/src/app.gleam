@@ -75,7 +75,7 @@ fn add_solid(
   euler.set_y(object3d.get_rotation(m), 0.45)
   object3d.add(sc, [m])
 
-  let egeo = edges_geometry.new_with(geo, thresh)
+  let egeo = edges_geometry.new_with(Some(geo), thresh)
   let segs = line_segments.new_with(egeo, line_mat)
   object3d.get_position(segs)
   |> vector3.set_with(x, y, z)

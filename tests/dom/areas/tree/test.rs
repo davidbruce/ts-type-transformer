@@ -70,8 +70,8 @@ pub extern "C" fn run() {
     check!(fragment.child_nodes().length() == 0.0);
 
     // A deep clone copies the subtree; a shallow one does not.
-    let deep = list.clone_node(Some(true));
-    let shallow = list.clone_node(None);
+    let deep = list.clone_node_with(true);
+    let shallow = list.clone_node();
     // A Node's text may be null; an element's is a string.
     check!(deep.text_content() == Some(list.text_content()));
     check!(shallow.child_nodes().length() == 0.0);
@@ -85,7 +85,7 @@ pub extern "C" fn run() {
     let p = host.first_element_child().unwrap();
     check!(p.outer_html().starts_with("<p class=\"x\">"));
     check!(p.class_list().contains("x"));
-    p.class_list().toggle("y", None);
+    p.class_list().toggle("y");
     check!(p.get_attribute("class").as_deref() == Some("x y"));
 
     // Positions compared: `two` is gone; `zero` precedes `a`.
@@ -94,7 +94,7 @@ pub extern "C" fn run() {
     check!(position as u32 & 4 != 0);
 
     // A walk over the list's elements.
-    let walker = doc.create_tree_walker(&list, Some(1.0), None);
+    let walker = doc.create_tree_walker_with(&list, 1.0, None);
     let mut seen = Vec::new();
     while let Some(n) = walker.next_node() {
         seen.push(n.text_content().unwrap_or_default());

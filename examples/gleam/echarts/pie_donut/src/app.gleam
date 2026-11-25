@@ -26,7 +26,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "chart") {
     None -> Nil
     Some(box) -> {
-      let chart = ec.init_with(box, dynamic.nil(), e_charts_init_opts.create())
+      let chart = ec.init_with(Some(box), dynamic.nil(), e_charts_init_opts.create())
       let opt =
         raw.create()
         |> unit.with_animation(False)

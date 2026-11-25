@@ -328,7 +328,7 @@ pub(super) fn func(out: &mut String, externs: &mut String, owner: Option<&str>, 
         0
     } else {
         let before_rest = if rest_opt { f.params.len() - 1 } else { f.params.len() };
-        let opt_before = f.params[..before_rest].iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, Absence::Undefined))).count();
+        let opt_before = f.params[..before_rest].iter().rev().take_while(|p| matches!(p.1, Ty::Nullable(_, a) if a.optional())).count();
         opt_before + usize::from(rest_opt)
     };
     // A lone parameter stays one: `orUnit(s)`, `orUnit(null)`.

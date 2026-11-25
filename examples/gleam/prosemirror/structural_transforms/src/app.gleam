@@ -136,11 +136,11 @@ fn build_schema() -> t.Schema(Nil) {
 }
 
 fn p_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node_with(sch, "paragraph", attrs.create(), schema.text(sch, txt), [])
+  schema.node_with(sch, "paragraph", None, schema.text(sch, txt), [])
 }
 
 fn li_node(sch, txt: String) -> t.Node(Nil) {
-  schema.node_with(sch, "list_item", attrs.create(), p_node(sch, txt), [])
+  schema.node_with(sch, "list_item", None, p_node(sch, txt), [])
 }
 
 fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
@@ -151,7 +151,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_with(
       sch,
       "heading",
-      ha,
+      Some(ha),
       schema.text(sch, "Structural Transform Pipeline"),
       [],
     )
@@ -159,7 +159,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_with(
       sch,
       "blockquote",
-      attrs.create(),
+      None,
       p_node(
         sch,
         "Blockquote content can be lifted back to top-level document depth.",
@@ -170,7 +170,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
     schema.node_list_with(
       sch,
       "bullet_list",
-      attrs.create(),
+      None,
       [
         li_node(sch, "Split at cursor position"),
         li_node(sch, "Wrap range with blockquote"),
@@ -181,7 +181,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   schema.node_list_with(
     sch,
     "doc",
-    attrs.create(),
+    None,
     [
       h,
       p_node(
