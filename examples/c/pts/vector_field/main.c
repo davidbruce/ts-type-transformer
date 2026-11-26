@@ -21,9 +21,7 @@ static void on_animate(void* ctx, double time_ms, double ftime_ms, Pts_Space cur
     uint32_t count = JsArray_Pts_Pt_length(items);
     for (uint32_t i = 0; i < count; i++) {
         Pts_Pt pt = JsArray_Pts_Pt_get(items, i);
-        JsArray args = JsArray_new();
-        js_push_val(args, pointer);
-        Pts_Pt delta = Pts_Pt__subtract(pt, args);
+        Pts_Pt delta = Pts_Pt__subtract(pt, js_value(pointer));
         double dist = Pts_Pt_magnitude(delta);
         double t = 1.0 - Pts_Num_clamp(dist / max_dist, 0.0, 1.0);
         double angle = Pts_Pt_angle(delta) + sin(time_ms * 0.0015 + dist * 0.01) * 0.35;
@@ -53,7 +51,7 @@ __attribute__((export_name("start"))) void start(void) {
     g_form = Pts_CanvasSpace_getForm(g_space);
 
     Pts_IPlayer player = Pts_IPlayer_create();
-    Pts_IPlayer_set_animate(player, Pts_AnimateCallbackFn_from(on_animate, 0));
+    Pts_IPlayer_set_animate(player, on_animate);
     Pts_CanvasSpace_add(g_space, player);
     Pts_CanvasSpace_bindMouse(g_space);
     Pts_CanvasSpace_bindTouch(g_space);

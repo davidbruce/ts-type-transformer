@@ -79,13 +79,13 @@ static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, Table_AddSubscriptionFn_from(add_sub, NULL));
-    TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
-    TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_untrack(r, Table_UntrackFn_from(untrack_cb, NULL));
-    TableReactivityBindings_set_createWritableAtom(r, Table_CreateWritableAtomFn_from(create_writable, NULL));
-    TableReactivityBindings_set_createReadonlyAtom(r, Table_CreateReadonlyAtomFn_from(create_readonly, NULL));
+    TableReactivityBindings_set_addSubscription(r, add_sub);
+    TableReactivityBindings_set_unmount(r, unmount_cb);
+    TableReactivityBindings_set_batch(r, batch_cb);
+    TableReactivityBindings_set_schedule(r, batch_cb);
+    TableReactivityBindings_set_untrack(r, untrack_cb);
+    TableReactivityBindings_set_createWritableAtom(r, create_writable);
+    TableReactivityBindings_set_createReadonlyAtom(r, create_readonly);
     return r;
 }
 

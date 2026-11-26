@@ -2,40 +2,36 @@
 #include "konva/konva.h"
 #include <stdio.h>
 
-static void add_stage_box(JsArray_Konva_Node list, double x, const char* title, const char* sub, const char* fill, const char* ink) {
+static Konva_Group make_stage_box(double x, const char* title, const char* sub, const char* fill, const char* ink) {
     Konva_Group g = Konva_Group_new(Konva_GroupConfig_create(.x = x, .y = 95));
-    JsArray_Konva_Node ch = JsArray_Konva_Node_new();
 
     Konva_RectConfig rc = Konva_RectConfig_create(
         .width = 126, .height = 68, .cornerRadius = 3,
         .fill = fill, .stroke = "#111111",
         .strokeWidth = 2
     );
-    JsArray_Konva_Node_push(ch, AS_Konva_Node(Konva_Rect_new(rc)));
 
     Konva_TextConfig t1 = Konva_TextConfig_create(
         .x = 12, .y = 16, .text = title, .fontSize = 12, .fontStyle = "bold", .fontFamily = "monospace",
         .fill = ink
     );
-    JsArray_Konva_Node_push(ch, AS_Konva_Node(Konva_Text_new(t1)));
 
     Konva_TextConfig t2 = Konva_TextConfig_create(
         .x = 12, .y = 38, .text = sub, .fontSize = 11, .fontFamily = "monospace",
         .fill = ink
     );
-    JsArray_Konva_Node_push(ch, AS_Konva_Node(Konva_Text_new(t2)));
 
-    Konva_Group_add(g, ch);
-    JsArray_Konva_Node_push(list, AS_Konva_Node(g));
+    Konva_Group_add(g, Konva_Rect_new(rc), Konva_Text_new(t1), Konva_Text_new(t2));
+    return g;
 }
 
-static void add_arrow(JsArray_Konva_Node list, double x1, double y1, double x2, double y2) {
+static Konva_Arrow make_arrow(double x1, double y1, double x2, double y2) {
     Konva_ArrowConfig ac = Konva_ArrowConfig_create(
-        .points = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4), .pointerLength = 8,
+        .points = js_numbers(x1, y1, x2, y2), .pointerLength = 8,
         .pointerWidth = 8, .fill = "#111111",
         .stroke = "#111111", .strokeWidth = 2
     );
-    JsArray_Konva_Node_push(list, AS_Konva_Node(Konva_Arrow_new(ac)));
+    return Konva_Arrow_new(ac);
 }
 
 __attribute__((export_name("start"))) void start(void) {
@@ -48,45 +44,40 @@ __attribute__((export_name("start"))) void start(void) {
 
     Konva_Layer layer = Konva_Layer_new();
     Konva_Stage_add(stage, layer);
-    JsArray_Konva_Node items = JsArray_Konva_Node_new();
 
     Konva_RectConfig bg = Konva_RectConfig_create(
         .x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff"
     );
-    JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Rect_new(bg)));
-
-    add_stage_box(items, 28, "01 PARSE", ".d.ts AST", "#ffffff", "#111111");
-    add_stage_box(items, 194, "02 LOWER", "Typed IR", "#f7f7f7", "#111111");
-    add_stage_box(items, 360, "03 EMIT", "6 Targets", "#efefef", "#111111");
-    add_stage_box(items, 526, "04 RUN", "WASM / JS", "#111111", "#ffffff");
-
-    add_arrow(items, 154, 129, 190, 129);
-    add_arrow(items, 320, 129, 356, 129);
-    add_arrow(items, 486, 129, 522, 129);
-    add_arrow(items, 257, 163, 257, 251);
-    add_arrow(items, 423, 163, 423, 251);
 
     Konva_LineConfig fbc = Konva_LineConfig_create(
-        .points = JsArray_double_from((double[]){ 589, 163, 589, 212, 91, 212, 91, 168 }, 8),
+        .points = js_numbers(589, 163, 589, 212, 91, 212, 91, 168),
         .stroke = "#737373", .strokeWidth = 1.5,
-        .dash = JsArray_double_from((double[]){ 6.0, 4.0 }, 2)
+        .dash = js_numbers(6.0, 4.0)
     );
-    JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Line_new(fbc)));
 
     Konva_RectConfig bar = Konva_RectConfig_create(
         .x = 28, .y = 255, .width = 624, .height = 58, .cornerRadius = 3,
         .fill = "#f7f7f7", .stroke = "#111111",
         .strokeWidth = 1.5
     );
-    JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Rect_new(bar)));
 
     Konva_TextConfig btxt = Konva_TextConfig_create(
         .x = 180, .y = 278, .text = "Shared DOM & Package Handle Runtime", .fontSize = 12, .fontFamily = "monospace",
         .fill = "#111111"
     );
-    JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Text_new(btxt)));
 
-    Konva_Layer_add(layer, items);
+    Konva_Layer_add(layer,
+        Konva_Rect_new(bg),
+        make_stage_box(28, "01 PARSE", ".d.ts AST", "#ffffff", "#111111"),
+        make_stage_box(194, "02 LOWER", "Typed IR", "#f7f7f7", "#111111"),
+        make_stage_box(360, "03 EMIT", "6 Targets", "#efefef", "#111111"),
+        make_stage_box(526, "04 RUN", "WASM / JS", "#111111", "#ffffff"),
+        make_arrow(154, 129, 190, 129),
+        make_arrow(320, 129, 356, 129),
+        make_arrow(486, 129, 522, 129),
+        make_arrow(257, 163, 257, 251),
+        make_arrow(423, 163, 423, 251),
+        Konva_Line_new(fbc), Konva_Rect_new(bar), Konva_Text_new(btxt));
     Konva_Layer_draw(layer);
 
     int rects = (int)JsArray_Konva_Node_length(Konva_Layer_find(layer, js_string("Rect")));

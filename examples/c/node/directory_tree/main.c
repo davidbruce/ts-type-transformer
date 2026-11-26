@@ -25,8 +25,7 @@ static void emitf(const char* fmt, ...) {
 }
 
 static void join2(char* out, uint32_t cap, const char* a, const char* b) {
-    JsString j = node_path_join(JsArray_JsString_from((const char* const[]){ a, b }, 2));
-    JsString_copy(j, out, cap);
+    JsString_copy(node_path_join(a, b), out, cap);
 }
 
 static void walk(const char* dir) {

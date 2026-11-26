@@ -10,11 +10,41 @@
 
 // `ts_arity_<name>_<N>`, by the number of arguments: how trailing optional arguments are left out.
 // An empty call counts as none: `orUnit()` (C23, or C11 without -pedantic).
-#define TS_COUNT(...) TS_COUNT_(0 __VA_OPT__(,) __VA_ARGS__, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
-#define TS_COUNT_(z, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, n, ...) n
+#define TS_COUNT(...) TS_COUNT_(0 __VA_OPT__(,) __VA_ARGS__, \
+    32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, \
+    16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0)
+#define TS_COUNT_(z, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, n, ...) n
 #define TS_PASTE(name, n) TS_PASTE_(name, n)
 #define TS_PASTE_(name, n) ts_arity_##name##_##n
 #define TS_CALL(name, ...) TS_PASTE(name, TS_COUNT(__VA_ARGS__))(__VA_ARGS__)
+#define TS_PASTE3(a, b, c) TS_PASTE3_(a, b, c)
+#define TS_PASTE3_(a, b, c) a##b##c
+
+// `TS_GT_<K>(...)` is 1 iff there are more than K arguments (for up to 32 arguments).
+#define TS_GT_32_(z, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, \
+    a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32, n, ...) n
+#define TS_GT_0(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0)
+#define TS_GT_1(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0)
+#define TS_GT_2(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0)
+#define TS_GT_3(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0)
+#define TS_GT_4(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0)
+#define TS_GT_5(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0)
+#define TS_GT_6(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0)
+#define TS_GT_7(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0)
+#define TS_GT_8(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0)
+#define TS_GT_9(...)  TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0)
+#define TS_GT_10(...) TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0)
+#define TS_GT_11(...) TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0)
+#define TS_GT_12(...) TS_GT_32_(0 __VA_OPT__(,) __VA_ARGS__, 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+
+// Null-pointer `_Generic` arms (supports `NULL`, `(void*)0`, and C23 `nullptr`).
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#define TS_NULL_ARMS(v) void*: (v), const void*: (v), typeof(nullptr): (v)
+#else
+#define TS_NULL_ARMS(v) void*: (v), const void*: (v)
+#endif
+#define TS_NULL_H(T, x) _Generic((x), T: (x), TS_NULL_ARMS(((T){ 0 })))
 
 // What `U_of(x)` calls where `x` is not a member of the union `U`.
 #if __STDC_VERSION__ >= 202311L
@@ -178,10 +208,89 @@ static inline void ts_push_val(uint32_t a, uint32_t v) { ts_raw_js_array_push(a,
 #define js_push_bool(a, v) ts_push_bool((a).h, (v))
 #define js_push_val(a, v) ts_push_val((a).h, (v).h)
 
+// Callback argument wrapper: accepts a callback handle, bare function pointer (ctx = NULL), or NULL.
+typedef struct { uint32_t h; bool ts_own; } TsCb;
+
+// Inline list construction helpers (`TS_LIST` maps each item via `M`, `TS_LIST_RAW` leaves items as-is).
+#define TS_MAP_1(F, a1) F(a1)
+#define TS_MAP_2(F, a1, a2) F(a1), F(a2)
+#define TS_MAP_3(F, a1, a2, a3) F(a1), F(a2), F(a3)
+#define TS_MAP_4(F, a1, a2, a3, a4) F(a1), F(a2), F(a3), F(a4)
+#define TS_MAP_5(F, a1, a2, a3, a4, a5) F(a1), F(a2), F(a3), F(a4), F(a5)
+#define TS_MAP_6(F, a1, a2, a3, a4, a5, a6) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6)
+#define TS_MAP_7(F, a1, a2, a3, a4, a5, a6, a7) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7)
+#define TS_MAP_8(F, a1, a2, a3, a4, a5, a6, a7, a8) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8)
+#define TS_MAP_9(F, a1, a2, a3, a4, a5, a6, a7, a8, a9) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9)
+#define TS_MAP_10(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10)
+#define TS_MAP_11(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11)
+#define TS_MAP_12(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12)
+#define TS_MAP_13(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13)
+#define TS_MAP_14(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14)
+#define TS_MAP_15(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15)
+#define TS_MAP_16(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16)
+#define TS_MAP_17(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17)
+#define TS_MAP_18(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18)
+#define TS_MAP_19(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19)
+#define TS_MAP_20(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20)
+#define TS_MAP_21(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21)
+#define TS_MAP_22(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22)
+#define TS_MAP_23(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23)
+#define TS_MAP_24(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24)
+#define TS_MAP_25(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25)
+#define TS_MAP_26(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25), F(a26)
+#define TS_MAP_27(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25), F(a26), F(a27)
+#define TS_MAP_28(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25), F(a26), F(a27), F(a28)
+#define TS_MAP_29(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25), F(a26), F(a27), F(a28), F(a29)
+#define TS_MAP_30(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25), F(a26), F(a27), F(a28), F(a29), F(a30)
+#define TS_MAP_31(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25), F(a26), F(a27), F(a28), F(a29), F(a30), F(a31)
+#define TS_MAP_32(F, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16, a17, a18, a19, a20, a21, a22, a23, a24, a25, a26, a27, a28, a29, a30, a31, a32) F(a1), F(a2), F(a3), F(a4), F(a5), F(a6), F(a7), F(a8), F(a9), F(a10), F(a11), F(a12), F(a13), F(a14), F(a15), F(a16), F(a17), F(a18), F(a19), F(a20), F(a21), F(a22), F(a23), F(a24), F(a25), F(a26), F(a27), F(a28), F(a29), F(a30), F(a31), F(a32)
+#define TS_MAP(F, ...) TS_PASTE2(TS_MAP_, TS_COUNT(__VA_ARGS__))(F, __VA_ARGS__)
+#define TS_LIST_0(A, E, M, ...) A##_new()
+#define TS_LIST_1(A, E, M, ...) A##_from((const E[]){ TS_MAP(M, __VA_ARGS__) }, TS_COUNT(__VA_ARGS__))
+#define TS_LIST(A, E, M, ...) TS_PASTE2(TS_LIST_, TS_FILLED(__VA_ARGS__))(A, E, M, __VA_ARGS__)
+#define TS_LIST_RAW_0(A, E, ...) A##_new()
+#define TS_LIST_RAW_1(A, E, ...) A##_from((const E[]){ __VA_ARGS__ }, TS_COUNT(__VA_ARGS__))
+#define TS_LIST_RAW(A, E, ...) TS_PASTE2(TS_LIST_RAW_, TS_FILLED(__VA_ARGS__))(A, E, __VA_ARGS__)
+
+// Untyped JavaScript array literal: `js_values("tag", 42, some_val, NULL)`.
+// Primitive handles created here are released immediately after pushing.
+typedef struct { uint32_t h; bool ts_own; } TsArgVal;
+static inline TsArgVal ts_val_num(double x) { return (TsArgVal){ ts_raw_js_from_number(x), true }; }
+static inline TsArgVal ts_val_bool(bool x) { return (TsArgVal){ ts_raw_js_from_bool(x), true }; }
+static inline TsArgVal ts_val_cstr(const char* s) { return s ? (TsArgVal){ ts_raw_js_from_string(s, ts_strlen(s)), true } : (TsArgVal){ 0, false }; }
+static inline TsArgVal ts_val_tsstr(TsStr s) { return s.ptr ? (TsArgVal){ ts_raw_js_from_string(s.ptr, s.len), true } : (TsArgVal){ 0, false }; }
+static inline TsArgVal ts_val_js(JsValue v) { return (TsArgVal){ v.h, false }; }
+static inline TsArgVal ts_val_str(JsString v) { return (TsArgVal){ v.h, false }; }
+static inline TsArgVal ts_val_arr(JsArray v) { return (TsArgVal){ v.h, false }; }
+static inline TsArgVal ts_val_iter(JsIterator v) { return (TsArgVal){ v.h, false }; }
+static inline TsArgVal ts_val_null(const void* p) { (void)p; return (TsArgVal){ 0, false }; }
+#define TS_VAL(x) _Generic((x), \
+    double: ts_val_num, float: ts_val_num, \
+    signed char: ts_val_num, unsigned char: ts_val_num, \
+    short: ts_val_num, unsigned short: ts_val_num, \
+    int: ts_val_num, unsigned int: ts_val_num, \
+    long: ts_val_num, unsigned long: ts_val_num, \
+    long long: ts_val_num, unsigned long long: ts_val_num, \
+    _Bool: ts_val_bool, \
+    const char*: ts_val_cstr, char*: ts_val_cstr, \
+    TsStr: ts_val_tsstr, \
+    JsValue: ts_val_js, JsString: ts_val_str, JsArray: ts_val_arr, JsIterator: ts_val_iter, \
+    TS_NULL_ARMS(ts_val_null))(x)
+static inline JsArray ts_js_values_new(void) { return JsArray_new(); }
+static inline JsArray ts_js_values_from(const TsArgVal* v, uint32_t n) {
+    JsArray a = JsArray_new();
+    for (uint32_t i = 0; i < n; i++) {
+        ts_raw_js_array_push(a.h, v[i].h);
+        if (v[i].ts_own) ts_raw_js_release(v[i].h);
+    }
+    return a;
+}
+#define js_values(...) TS_LIST(ts_js_values, TsArgVal, TS_VAL, __VA_ARGS__)
+
 // An option bag: `X_create(.a = 1, .b = "x")` sets the properties it names and no others. `X_FIELDS` lists the
 // fields, each by its owner (the type that declares the setter) and kind: `i` a flag or an enum (-1 is absent),
-// `d` a number (one NaN is absent), `s` a string (NULL), `h` a handle (0), `u` a union (tag -1), and `B`, `D`
-// for an optional flag or number. A designator after the absent values overrides one.
+// `d` a number (one NaN is absent), `s` a string (NULL), `h` a handle (0), `p` a callback function pointer (0),
+// `u` a union (tag -1), and `B`, `D` for an optional flag or number. A designator after the absent values overrides one.
 static inline bool ts_absent_num(double x) { union { double d; uint64_t u; } a = { x }, b = { __builtin_nan("0x7515") }; return a.u == b.u; }
 #define TS_NO_i (-1)
 #define TS_NO_B (-1)
@@ -189,6 +298,7 @@ static inline bool ts_absent_num(double x) { union { double d; uint64_t u; } a =
 #define TS_NO_D __builtin_nan("0x7515")
 #define TS_NO_s 0
 #define TS_NO_h { 0 }
+#define TS_NO_p 0
 #define TS_NO_u { .tag = -1 }
 #define TS_HAS_i(x) ((x) >= 0)
 #define TS_HAS_B(x) ((x) >= 0)
@@ -196,6 +306,7 @@ static inline bool ts_absent_num(double x) { union { double d; uint64_t u; } a =
 #define TS_HAS_D(x) (!ts_absent_num(x))
 #define TS_HAS_s(x) ((x) != 0)
 #define TS_HAS_h(x) ((x).h != 0)
+#define TS_HAS_p(x) ((x) != 0)
 #define TS_HAS_u(x) ((x).tag != -1)
 #define TS_GET_i(x) (x)
 #define TS_GET_B(x) js_some_bool(x)
@@ -203,6 +314,7 @@ static inline bool ts_absent_num(double x) { union { double d; uint64_t u; } a =
 #define TS_GET_D(x) js_some_double(x)
 #define TS_GET_s(x) ts_str_c(x)
 #define TS_GET_h(x) (x)
+#define TS_GET_p(x) (x)
 #define TS_GET_u(x) (x)
 #define TS_FIELD(c, k, t, n) t n;
 #define TS_FIELD_NO(c, k, t, n) .n = TS_NO_##k,

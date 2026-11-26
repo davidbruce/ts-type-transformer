@@ -232,6 +232,7 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     }
     if let Some(choices) = of_choices(u, cx) {
         functions += &format!("static inline {n} {n}_of_self({n} u) {{ return u; }}\n");
+        functions += &format!("static inline {n} {n}_of_null(const void* p) {{ (void)p; return ({n}){{ .tag = -1 }}; }}\n");
         for (sub, base, f) in subtype_arms(u, cx) {
             let name = format!("{n}_of_{f}_from_{sub}");
             if choices.iter().any(|(_, c)| *c == name) {
@@ -242,7 +243,7 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
         if !cx.decodable(n) {
             choices.push(format!("JsValue: {n}_of_ts_value"));
         }
-        functions += &format!("#define {n}_of(x) _Generic((x), {n}: {n}_of_self, {}, default: ts_no_member)(x)\n", choices.join(", "));
+        functions += &format!("#define {n}_of(x) _Generic((x), {n}: {n}_of_self, TS_NULL_ARMS({n}_of_null), {}, default: ts_no_member)(x)\n", choices.join(", "));
     }
     // A field every member has, read without a switch (marked's `Marked_Token_get_type(t)`).
     for (p, t) in m.shared_fields(u) {
@@ -304,17 +305,23 @@ pub(super) fn of_choices(u: &NamedUnion, cx: &Ctx) -> Option<Vec<(String, String
 }
 
 // A union's members that are classes with subclasses here, but not too many:
-// (subclass, member, the member's field).
+// (subclass, member, the member's field). Narrower bases come first so a
+// subtype picks its nearest ancestor when a union names both.
 pub(super) fn subtype_arms(u: &NamedUnion, cx: &Ctx) -> Vec<(String, String, String)> {
-    const MAX_SUBTYPES: usize = 40;
-    u.parts
+    const MAX_SUBTYPES: usize = 200;
+    let mut by_base: Vec<(String, String, &Vec<String>)> = u
+        .parts
         .iter()
         .zip(union_fields(u))
         .filter_map(|(p, f)| match p {
-            Ty::Obj(base) => cx.subtypes.get(base).filter(|subs| subs.len() <= MAX_SUBTYPES).map(|subs| subs.iter().map(|s| (s.clone(), base.clone(), f.clone())).collect::<Vec<_>>()),
+            Ty::Obj(base) => cx.subtypes.get(base).filter(|subs| subs.len() <= MAX_SUBTYPES).map(|subs| (base.clone(), f, subs)),
             _ => None,
         })
-        .flatten()
+        .collect();
+    by_base.sort_by_key(|(_, _, subs)| subs.len());
+    by_base
+        .into_iter()
+        .flat_map(|(base, f, subs)| subs.iter().map(move |s| (s.clone(), base.clone(), f.clone())))
         .filter(|(s, ..)| !u.parts.contains(&Ty::Obj(s.clone())))
         .collect()
 }
@@ -364,9 +371,9 @@ pub(super) fn tuple_type(es: &[Ty], cx: &Ctx) -> String {
     out + &format!("static inline JsArray {name}_any({name} a) {{ return (JsArray){{ a.h }}; }}\n")
 }
 
-// A typed array: `JsArray_double`, with `_new`, `_length`, `_get`, `_push` and `_from`.
+// A typed array: `JsArray_double`, with `_new`, `_length`, `_get`, `_push`, `_from` and `_of`.
 // What `_get` returns is the caller's to release; a number or flag is read and released.
-pub(super) fn array_type(e: &Ty, cx: &Ctx) -> String {
+pub(super) fn array_type(e: &Ty, cx: &Ctx, upcast_macro: Option<&str>, short_list_macro_ok: bool) -> String {
     let (name, elem) = (format!("JsArray_{}", element(e, cx)), typed(e, false, cx));
     if *e == Ty::Str {
         return [
@@ -376,7 +383,11 @@ pub(super) fn array_type(e: &Ty, cx: &Ctx) -> String {
             format!("static inline {elem} {name}_get({name} a, uint32_t i) {{ uint32_t h = ts_raw_js_array_get(a.h, i); return (JsString){{ h }}; }}"),
             format!("static inline void {name}_push({name} a, TsStr v) {{ uint32_t h = ts_raw_js_from_string(v.ptr, v.len); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }}"),
             format!("static inline {name} {name}_from(const char* const* items, uint32_t len) {{ {name} a = {name}_new(); for (uint32_t i = 0; i < len; i++) {{ uint32_t h = ts_raw_js_from_string(items[i], items[i] ? ts_strlen(items[i]) : 0); ts_raw_js_array_push(a.h, h); ts_raw_js_release(h); }} return a; }}"),
-            format!("#define {name}_push(a, v) {name}_push((a), TS_STR(v))"),
+            format!("static inline {name} ts_{name}_new(void) {{ return {name}_new(); }}"),
+            format!("static inline {name} ts_{name}_from(const TsStr* items, uint32_t len) {{ {name} a = {name}_new(); for (uint32_t i = 0; i < len; i++) {{ uint32_t h = items[i].ptr ? ts_raw_js_from_string(items[i].ptr, items[i].len) : 0; ts_raw_js_array_push(a.h, h); if (h) ts_raw_js_release(h); }} return a; }}"),
+            format!("#define {name}_push(a, v) ({name}_push)((a), TS_STR(v))"),
+            format!("#define {name}_of(...) TS_LIST(ts_{name}, TsStr, TS_STR, __VA_ARGS__)"),
+            format!("#ifndef js_strings\n#define js_strings(...) {name}_of(__VA_ARGS__)\n#endif"),
             format!("static inline JsArray {name}_any({name} a) {{ return (JsArray){{ a.h }}; }}"),
         ]
         .map(|l| l + "\n")
@@ -394,13 +405,29 @@ pub(super) fn array_type(e: &Ty, cx: &Ctx) -> String {
         format!("static inline uint32_t {name}_length({name} a) {{ return ts_raw_js_array_length(a.h); }}"),
         format!("static inline {elem} {name}_get({name} a, uint32_t i) {{ uint32_t h = ts_raw_js_array_get(a.h, i); {get} }}"),
         format!("static inline void {name}_push({name} a, {push_param}) {{ {push} }}"),
-        format!("static inline {name} {name}_from(const {elem}* items, uint32_t len) {{ {name} a = {name}_new(); for (uint32_t i = 0; i < len; i++) {name}_push(a, items[i]); return a; }}"),
+        format!("static inline {name} {name}_from(const {elem}* items, uint32_t len) {{ {name} a = {name}_new(); for (uint32_t i = 0; i < len; i++) ({name}_push)(a, items[i]); return a; }}"),
         // The same array, untyped.
         format!("static inline JsArray {name}_any({name} a) {{ return (JsArray){{ a.h }}; }}"),
     ];
-    // A union element is pushed as any member: `push(a, widget)`.
-    if let Ty::NamedUnion(n) = e && cx.decodable(n) && cx.of.contains_key(n) {
-        lines.push(format!("#define {name}_push(a, v) {name}_push((a), {n}_of(v))"));
+    if let Some(as_m) = upcast_macro {
+        lines.push(format!("#define {name}_push(a, v) ({name}_push)((a), {as_m}(v))"));
+        lines.push(format!("#define {name}_of(...) TS_LIST({name}, {elem}, {as_m}, __VA_ARGS__)"));
+    } else if let Ty::NamedUnion(n) = e && cx.decodable(n) && cx.of.contains_key(n) {
+        // A union element is pushed as any member: `push(a, widget)`.
+        lines.push(format!("#define {name}_push(a, v) ({name}_push)((a), {n}_of(v))"));
+        lines.push(format!("#define {name}_of(...) TS_LIST({name}, {n}, {n}_of, __VA_ARGS__)"));
+    } else {
+        lines.push(format!("#define {name}_of(...) TS_LIST_RAW({name}, {elem}, __VA_ARGS__)"));
+    }
+    match e {
+        Ty::Num => lines.push(format!("#ifndef js_numbers\n#define js_numbers(...) {name}_of(__VA_ARGS__)\n#endif")),
+        Ty::Bool => lines.push(format!("#ifndef js_bools\n#define js_bools(...) {name}_of(__VA_ARGS__)\n#endif")),
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n)
+            if short_list_macro_ok && !super::is_builtin_c_type(n) =>
+        {
+            lines.push(format!("#ifndef {n}_list\n#define {n}_list(...) {name}_of(__VA_ARGS__)\n#endif"));
+        }
+        _ => {}
     }
     lines.into_iter().map(|l| l + "\n").collect()
 }
@@ -686,16 +713,26 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
         Call::Set(js) => js.clone(),
         _ => unreachable!(),
     };
+    let eligible: Vec<(&Func, &str)> = setters
+        .iter()
+        .copied()
+        .filter(|(f, _)| {
+            let prop = js(f);
+            f.params.len() == 1
+                && setters.iter().filter(|(g, _)| js(g) == prop).count() == 1
+                && prop.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                && prop.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+        .collect();
+    let reserved_fields: std::collections::HashSet<String> = eligible.iter().map(|(f, _)| ident(&js(f))).collect();
+    let mut used_fields = reserved_fields.clone();
     let mut helpers = String::new();
     let mut entries: Vec<String> = Vec::new();
-    for (f, owner) in setters.iter().filter(|(f, _)| f.params.len() == 1 && setters.iter().filter(|(g, _)| js(g) == js(f)).count() == 1) {
+    for (f, owner) in eligible {
         let prop = js(f);
-        if !prop.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') || !prop.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-            continue;
-        }
         let field_name = ident(&prop);
-        let setter_owner = *owner;
-        let owner = if *owner == name { "C_" } else { owner };
+        let setter_owner = owner;
+        let owner = if owner == name { "C_" } else { owner };
         let value = match &f.params[0].1 {
             Ty::Nullable(inner, _) => &**inner,
             t => t,
@@ -721,6 +758,28 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
                 if !seen.insert(member_field.clone()) {
                     continue;
                 }
+                used_fields.insert(member_field.clone());
+                if let Ty::Obj(cb) = part && cx.callbacks.contains(cb) {
+                    let of = &members[i];
+                    helpers += &format!(
+                        "static inline void {name}__{member_field}({name} o, {cb}_fn fn) {{ {cb} cb = {cb}_from(fn, (void*)0); ({setter_owner}_{})(({setter_owner}){{ o.h }}, {n}_of_{of}(cb)); ts_raw_js_release(cb.h); }}\n",
+                        f.name
+                    );
+                    entries.push(format!("F_##_N(C_, p, {cb}_fn, {member_field}, _{member_field})"));
+                    let base = member_field.strip_suffix("_fn").unwrap_or(&member_field);
+                    let mut cb_field = format!("{base}_cb");
+                    if reserved_fields.contains(&cb_field) || !used_fields.insert(cb_field.clone()) {
+                        cb_field = format!("{member_field}_cb");
+                    }
+                    if !reserved_fields.contains(&cb_field) && used_fields.insert(cb_field.clone()) {
+                        helpers += &format!(
+                            "static inline void {name}__{cb_field}({name} o, {cb} v) {{ ({setter_owner}_{})(({setter_owner}){{ o.h }}, {n}_of_{of}(v)); }}\n",
+                            f.name
+                        );
+                        entries.push(format!("F_##_N(C_, h, {cb}, {cb_field}, _{cb_field})"));
+                    }
+                    continue;
+                }
                 let (param, arg, of) = match (kind, part) {
                     ('s', _) => ("TsStr".to_string(), "v.ptr", "cstr".to_string()),
                     (_, _) => (ty.clone(), "v", members[i].clone()),
@@ -736,6 +795,16 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
         let Some((kind, ty)) = field(&f.params[0].1, cx) else { continue };
         // Where the setter is not `set_` and the property (a keyword, a function assigned), it is named.
         entries.push(if f.name == format!("set_{field_name}") { format!("F_({owner}, {kind}, {ty}, {field_name})") } else { format!("F_##_N({owner}, {kind}, {ty}, {field_name}, {})", f.name) });
+        if let Ty::Obj(cb) = value && cx.callbacks.contains(cb) {
+            let fn_field = format!("{field_name}_fn");
+            if !reserved_fields.contains(&fn_field) && used_fields.insert(fn_field.clone()) {
+                helpers += &format!(
+                    "static inline void {name}__{fn_field}({name} o, {cb}_fn fn) {{ {cb} cb = {cb}_from(fn, (void*)0); ({setter_owner}_{})(({setter_owner}){{ o.h }}, cb); ts_raw_js_release(cb.h); }}\n",
+                    f.name
+                );
+                entries.push(format!("F_##_N(C_, p, {cb}_fn, {fn_field}, _{fn_field})"));
+            }
+        }
     }
     if entries.is_empty() {
         return String::new();
@@ -800,10 +869,10 @@ pub(super) fn family<'a>(f: &'a Func, all: &'a [Func], cx: &Ctx) -> Option<(usiz
 }
 
 // A function's name as a macro, so a call may: pass any subtype
-// (`AS_Element(x)` is applied), leave out trailing optional arguments, and
-// for the first of a family of overloads, have `_Generic` choose among them.
-// `earlier` are the functions declared before f beside it: where one of them,
-// called with the same leading arguments, leaves out the same ones, f does not.
+// (`AS_Element(x)` is applied), pass `NULL` for nullable handles, pass bare
+// function pointers for callbacks, leave out trailing optional arguments, pass
+// variadic rest arguments, and for the first of a family of overloads, have
+// `_Generic` choose among them. Returns `(macro_code, emitted_list_variant)`.
 pub(super) fn call_macros(
     name: &str,
     owner: Option<&str>,
@@ -811,16 +880,31 @@ pub(super) fn call_macros(
     earlier: &[&Func],
     family: Option<(usize, Vec<String>, Vec<&Func>)>,
     descendants: &std::collections::BTreeMap<String, Vec<String>>,
+    remote_as: &std::collections::HashMap<String, String>,
     as_macro: &dyn Fn(&str) -> String,
+    allow_list: bool,
     cx: &Ctx,
-) -> String {
-    let upcast = |t: &Ty| match t {
-        Ty::Obj(n) if descendants.contains_key(n) => Some(n.clone()),
-        Ty::Nullable(inner, _) => match &**inner {
-            Ty::Obj(n) if descendants.contains_key(n) => Some(n.clone()),
+) -> (String, bool) {
+    let cb_name = |t: &Ty| -> Option<String> {
+        let inner = match t {
+            Ty::Nullable(inner, _) => &**inner,
+            t => t,
+        };
+        match inner {
+            Ty::Obj(n) if cx.callbacks.contains(n) => Some(n.clone()),
             _ => None,
-        },
-        _ => None,
+        }
+    };
+    let upcast = |t: &Ty| -> Option<String> {
+        let inner = match t {
+            Ty::Nullable(inner, _) => &**inner,
+            t => t,
+        };
+        match inner {
+            Ty::Obj(n) if descendants.contains_key(n) => Some(as_macro(n)),
+            Ty::Obj(n) => remote_as.get(n).cloned(),
+            _ => None,
+        }
     };
     // A union argument is the union or any member `U_of` tells by its type.
     let made = |t: &Ty| match t {
@@ -830,6 +914,13 @@ pub(super) fn call_macros(
             _ => None,
         },
         _ => None,
+    };
+    let nullable_handle_ty = |t: &Ty| -> Option<String> {
+        let Ty::Nullable(inner, _) = t else { return None };
+        match &**inner {
+            Ty::Obj(_) | Ty::Record(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Any | Ty::NamedUnion(_) => Some(typed(t, true, cx)),
+            _ => None,
+        }
     };
     let chosen = family.as_ref().map(|f| f.0);
     // Where an overload takes a union, the members the others do not take choose it too, and are made into it.
@@ -853,8 +944,10 @@ pub(super) fn call_macros(
             format!("_Generic(({expr}), {arms}default: ({expr}))")
         } else if chosen == Some(p_idx) {
             format!("({expr})")
-        } else if let Some(n) = upcast(t) {
-            format!("{}({expr})", as_macro(&n))
+        } else if let Some(cb) = cb_name(t) {
+            format!("{cb}_arg({expr})")
+        } else if let Some(m) = upcast(t) {
+            format!("{m}({expr})")
         } else if let Some(n) = made(t) {
             format!("{n}_of({expr})")
         } else if *t == Ty::Str || matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
@@ -863,6 +956,8 @@ pub(super) fn call_macros(
             format!("TS_OPT_DOUBLE({expr})")
         } else if matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Bool) {
             format!("TS_OPT_BOOL({expr})")
+        } else if let Some(hty) = nullable_handle_ty(t) {
+            format!("TS_NULL_H({hty}, {expr})")
         } else {
             format!("({expr})")
         }
@@ -876,72 +971,133 @@ pub(super) fn call_macros(
         any |= upcast_self;
         args.push(if upcast_self { format!("{}(self)", as_macro(o)) } else { "(self)".into() });
     }
+    let mut has_cb = false;
     for (i, (_, t)) in f.params.iter().enumerate() {
         let a = format!("a{}", i + 1);
         params.push(a.clone());
+        let is_cb = chosen != Some(i) && cb_name(t).is_some();
+        has_cb |= is_cb;
         any |= chosen != Some(i)
-            && (upcast(t).is_some()
+            && (is_cb
+                || upcast(t).is_some()
                 || made(t).is_some()
                 || *t == Ty::Str
-                || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Str | Ty::Num | Ty::NumEnum(_) | Ty::Bool)));
+                || matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Str | Ty::Num | Ty::NumEnum(_) | Ty::Bool))
+                || nullable_handle_ty(t).is_some());
         args.push(wrap_expr(i, t, a));
     }
-    let mut prefix = String::new();
-    let callee = match &family {
-        Some((at, names, members)) => {
-            let has_num = members.iter().any(|o| o.params[*at].1 == Ty::Num);
-            let mut choices = Vec::new();
-            for (o_name, o) in names.iter().zip(members) {
-                if o.params[*at].1 == Ty::Str {
-                    let mut c_params = Vec::new();
-                    let mut c_args = Vec::new();
-                    let mut js_params = Vec::new();
-                    let mut js_args = Vec::new();
-                    if Class::has_self(o) {
-                        let own_ty = owner.unwrap();
-                        c_params.push(format!("{own_ty} self"));
-                        js_params.push(format!("{own_ty} self"));
-                        c_args.push("self".to_string());
-                        js_args.push("self".to_string());
-                    }
-                    for (j, (_, pt)) in o.params.iter().enumerate() {
-                        if j == *at {
-                            c_params.push(format!("const char* p{j}"));
-                            js_params.push(format!("JsString p{j}"));
-                            c_args.push(format!("ts_str_c(p{j})"));
-                            js_args.push(format!("ts_str_js(p{j})"));
+    let own = usize::from(owner.is_some());
+    let rest_idx = f.params.len().saturating_sub(1);
+    let fixed_n = own + rest_idx;
+    let rest_ok = f.rest
+        && !f.params.is_empty()
+        && chosen != Some(rest_idx)
+        && fixed_n <= 12
+        && family.as_ref().is_none_or(|(_, _, members)| {
+            members.iter().all(|o| o.rest && o.params.len() == f.params.len() && o.params[rest_idx].1 == f.params[rest_idx].1)
+        });
+    let rest_ctor = if rest_ok {
+        match &f.params[rest_idx].1 {
+            Ty::Array => Some("js_values".to_string()),
+            Ty::ArrayOf(e) => Some(format!("JsArray_{}_of", element(e, cx))),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    let emit_wrap = |prefix: &mut String, fn_name: &str, o: &Func, o_name: &str, str_arm: Option<(usize, bool)>, release_rest: bool| {
+        let mut w_params = Vec::new();
+        let mut w_args = Vec::new();
+        let mut w_release = Vec::new();
+        if Class::has_self(o) {
+            let own_ty = owner.unwrap();
+            w_params.push(format!("{own_ty} self"));
+            w_args.push("self".to_string());
+        }
+        for (j, (_, pt)) in o.params.iter().enumerate() {
+            if let Some((at, is_js_str)) = str_arm && j == at {
+                if is_js_str {
+                    w_params.push(format!("JsString p{j}"));
+                    w_args.push(format!("ts_str_js(p{j})"));
+                } else {
+                    w_params.push(format!("const char* p{j}"));
+                    w_args.push(format!("ts_str_c(p{j})"));
+                }
+            } else if let Some(cb) = cb_name(pt).filter(|_| chosen != Some(j)) {
+                w_params.push(format!("TsCb p{j}"));
+                w_args.push(format!("({cb}){{ p{j}.h }}"));
+                w_release.push(format!("if (p{j}.ts_own) ts_raw_js_release(p{j}.h);"));
+            } else {
+                w_params.push(format!("{} p{j}", func_param_ty(pt, cx)));
+                w_args.push(format!("p{j}"));
+            }
+            if release_rest && j + 1 == o.params.len() {
+                w_release.push(format!("ts_raw_js_release(p{j}.h);"));
+            }
+        }
+        let ret_ty = typed(&o.ret, false, cx);
+        let call_expr = format!("({o_name})({})", w_args.join(", "));
+        let body = if w_release.is_empty() {
+            if o.ret == Ty::Void { format!("{call_expr};") } else { format!("return {call_expr};") }
+        } else if o.ret == Ty::Void {
+            format!("{call_expr}; {}", w_release.join(" "))
+        } else {
+            format!("{ret_ty} raw_r = {call_expr}; {} return raw_r;", w_release.join(" "))
+        };
+        *prefix += &format!(
+            "static inline {ret_ty} {fn_name}({}) {{ {body} }}\n",
+            if w_params.is_empty() { "void".into() } else { w_params.join(", ") }
+        );
+    };
+
+    let build_callee = |prefix: &mut String, release_rest: bool| -> String {
+        match &family {
+            Some((at, names, members)) => {
+                let has_num = members.iter().any(|o| o.params[*at].1 == Ty::Num);
+                let mut choices = Vec::new();
+                let fam_prefix = if release_rest { "ts_rest_fam" } else { "ts_fam" };
+                for (o_name, o) in names.iter().zip(members) {
+                    if o.params[*at].1 == Ty::Str {
+                        let c_fn = format!("{fam_prefix}_cstr_{o_name}");
+                        let js_fn = format!("{fam_prefix}_jsstr_{o_name}");
+                        emit_wrap(prefix, &c_fn, o, o_name, Some((*at, false)), release_rest);
+                        emit_wrap(prefix, &js_fn, o, o_name, Some((*at, true)), release_rest);
+                        choices.extend([format!("const char*: {c_fn}"), format!("char*: {c_fn}"), format!("JsString: {js_fn}")]);
+                    } else {
+                        let target_fn = if release_rest || o.params.iter().enumerate().any(|(j, (_, pt))| j != *at && cb_name(pt).is_some()) {
+                            let w_fn = format!("{fam_prefix}_{o_name}");
+                            emit_wrap(prefix, &w_fn, o, o_name, None, release_rest);
+                            w_fn
                         } else {
-                            let pty = func_param_ty(pt, cx);
-                            c_params.push(format!("{pty} p{j}"));
-                            js_params.push(format!("{pty} p{j}"));
-                            c_args.push(format!("p{j}"));
-                            js_args.push(format!("p{j}"));
+                            o_name.clone()
+                        };
+                        choices.extend(generic_types(&o.params[*at].1, has_num, cx).unwrap_or_default().into_iter().map(|t| format!("{t}: {target_fn}")));
+                        if let Ty::NamedUnion(n) = &o.params[*at].1 {
+                            choices.extend(conv.iter().filter(|(_, u)| u == n).map(|(t, _)| format!("{t}: {target_fn}")));
                         }
                     }
-                    let ret_ty = typed(&o.ret, false, cx);
-                    let ret_kw = if o.ret == Ty::Void { "" } else { "return " };
-                    let c_fn = format!("ts_fam_cstr_{o_name}");
-                    let js_fn = format!("ts_fam_jsstr_{o_name}");
-                    prefix += &format!(
-                        "static inline {ret_ty} {c_fn}({}) {{ {ret_kw}({o_name})({}); }}\n\
-                         static inline {ret_ty} {js_fn}({}) {{ {ret_kw}({o_name})({}); }}\n",
-                        c_params.join(", "),
-                        c_args.join(", "),
-                        js_params.join(", "),
-                        js_args.join(", "),
-                    );
-                    choices.extend([format!("const char*: {c_fn}"), format!("char*: {c_fn}"), format!("JsString: {js_fn}")]);
+                }
+                format!("_Generic((a{}), {})", at + 1, choices.join(", "))
+            }
+            None => {
+                if release_rest {
+                    let r_fn = format!("ts_rest_{name}");
+                    emit_wrap(prefix, &r_fn, f, name, None, true);
+                    r_fn
+                } else if has_cb {
+                    let w_fn = format!("ts_wrap_{name}");
+                    emit_wrap(prefix, &w_fn, f, name, None, false);
+                    w_fn
                 } else {
-                    choices.extend(generic_types(&o.params[*at].1, has_num, cx).unwrap_or_default().into_iter().map(|t| format!("{t}: {o_name}")));
-                    if let Ty::NamedUnion(n) = &o.params[*at].1 {
-                        choices.extend(conv.iter().filter(|(_, u)| u == n).map(|(t, _)| format!("{t}: {o_name}")));
-                    }
+                    format!("({name})")
                 }
             }
-            format!("_Generic((a{}), {})", at + 1, choices.join(", "))
         }
-        None => format!("({name})"),
     };
+
+    let mut prefix = String::new();
+    let callee = build_callee(&mut prefix, false);
     let param_absent = |g: &Func, idx: usize| -> Option<String> {
         if g.rest && idx + 1 == g.params.len() {
             Some(format!("({}){{ 0 }}", func_param_ty(&g.params[idx].1, cx)))
@@ -952,7 +1108,6 @@ pub(super) fn call_macros(
     // A setter's value is never left out: that is not setting it.
     let setter = matches!(f.call, Call::Set(_) | Call::StaticSet(_) | Call::IndexSet);
     let n = params.len();
-    let own = usize::from(owner.is_some());
     let optional = if setter || n > 15 { 0 } else { (0..f.params.len()).rev().take_while(|&idx| param_absent(f, idx).is_some()).count() };
     let shadowed = |given: usize| {
         let k = given - own;
@@ -960,9 +1115,57 @@ pub(super) fn call_macros(
     };
     // The shorter calls this function answers: down to where an earlier one does.
     let shorter: Vec<usize> = (n - optional..n).rev().take_while(|g| !shadowed(*g)).collect();
+
+    if let Some(ctor) = rest_ctor.filter(|_| shorter.contains(&fixed_n)) {
+        let rest_callee = build_callee(&mut prefix, true);
+        let forward_r0 = any || family.is_some();
+        let mut out = prefix;
+        if shorter.len() == 1 {
+            let mut r0_args = if forward_r0 { args[..fixed_n].to_vec() } else { params[..fixed_n].to_vec() };
+            r0_args.push(param_absent(f, rest_idx).unwrap());
+            out += &format!("#define ts_r0_{name}({}) {callee}({})\n", params[..fixed_n].join(", "), r0_args.join(", "));
+        } else {
+            out += &format!("#define ts_r0_{name}(...) TS_CALL({name}, __VA_ARGS__)\n");
+            for given in shorter {
+                let mut call_args: Vec<String> = (0..given)
+                    .map(|j| if forward_r0 { args[j].clone() } else { params[j].clone() })
+                    .collect();
+                for j in given..n {
+                    let p_idx = j - own;
+                    let abs = param_absent(f, p_idx).unwrap();
+                    call_args.push(if forward_r0 && j + 1 < n {
+                        wrap_expr(p_idx, &f.params[p_idx].1, abs)
+                    } else {
+                        abs
+                    });
+                }
+                out += &format!("#define ts_arity_{name}_{given}({}) {callee}({})\n", params[..given].join(", "), call_args.join(", "));
+            }
+        }
+        let mut r1_args = args[..fixed_n].to_vec();
+        r1_args.push(format!("{ctor}(__VA_ARGS__)"));
+        let r1_params = if fixed_n == 0 {
+            "...".to_string()
+        } else {
+            format!("{}, ...", params[..fixed_n].join(", "))
+        };
+        out += &format!("#define ts_r1_{name}({r1_params}) {rest_callee}({})\n", r1_args.join(", "));
+        out += &format!("#define {name}(...) TS_PASTE3(ts_r, TS_GT_{fixed_n}(__VA_ARGS__), _{name})(__VA_ARGS__)\n");
+        let emitted_list = if allow_list {
+            out += &format!("#define {name}_list({}) {callee}({})\n", params.join(", "), args.join(", "));
+            true
+        } else {
+            false
+        };
+        return (out, emitted_list);
+    }
+
     let forward = (any || family.is_some()).then(|| format!("{callee}({})", args.join(", ")));
     if shorter.is_empty() {
-        return forward.map(|call| format!("{prefix}#define {name}({}) {call}\n", params.join(", "))).unwrap_or_default();
+        return (
+            forward.map(|call| format!("{prefix}#define {name}({}) {call}\n", params.join(", "))).unwrap_or_default(),
+            false,
+        );
     }
     // By the number of arguments: each shorter call supplies every omitted
     // trailing parameter directly in a single hop.
@@ -971,7 +1174,6 @@ pub(super) fn call_macros(
         Some(call) => format!("#define ts_arity_{name}_{n}({}) {call}\n", params.join(", ")),
         None => format!("#define ts_arity_{name}_{n} ({name})\n"),
     };
-    let head = if forward.is_some() { callee.as_str() } else { "" };
     for given in shorter {
         let mut call_args: Vec<String> = (0..given)
             .map(|j| if forward.is_some() { args[j].clone() } else { params[j].clone() })
@@ -985,10 +1187,9 @@ pub(super) fn call_macros(
                 abs
             });
         }
-        let target = if forward.is_some() { head.to_string() } else { format!("({name})") };
-        out += &format!("#define ts_arity_{name}_{given}({}) {target}({})\n", params[..given].join(", "), call_args.join(", "));
+        out += &format!("#define ts_arity_{name}_{given}({}) {callee}({})\n", params[..given].join(", "), call_args.join(", "));
     }
-    out
+    (out, false)
 }
 
 // Direct and indirect bases, nearest first.

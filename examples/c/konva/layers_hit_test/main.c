@@ -37,7 +37,7 @@ static void on_card_click(void* ctx, KonvaEventObject e) {
 
 static Konva_Line make_line(double x1, double y1, double x2, double y2, const char* color, double width) {
     Konva_LineConfig lc = Konva_LineConfig_create(
-        .points = JsArray_double_from((double[]){ x1, y1, x2, y2 }, 4),
+        .points = js_numbers(x1, y1, x2, y2),
         .stroke = color, .strokeWidth = width
     );
     return Konva_Line_new(lc);
@@ -70,27 +70,27 @@ __attribute__((export_name("start"))) void start(void) {
     Konva_RectConfig bgr = Konva_RectConfig_create(
         .x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff"
     );
-    JsArray_Konva_Node_push(bg_items, AS_Konva_Node(Konva_Rect_new(bgr)));
+    JsArray_Konva_Node_push(bg_items, Konva_Rect_new(bgr));
 
     for (int x = 40; x <= 640; x += 40) {
-        JsArray_Konva_Node_push(bg_items, AS_Konva_Node(make_line((double)x, 20, (double)x, 380, "#e5e5e5", 1)));
+        JsArray_Konva_Node_push(bg_items, make_line((double)x, 20, (double)x, 380, "#e5e5e5", 1));
     }
     for (int y = 40; y <= 360; y += 40) {
-        JsArray_Konva_Node_push(bg_items, AS_Konva_Node(make_line(20, (double)y, 660, (double)y, "#e5e5e5", 1)));
+        JsArray_Konva_Node_push(bg_items, make_line(20, (double)y, 660, (double)y, "#e5e5e5", 1));
     }
 
     Konva_RectConfig frame = Konva_RectConfig_create(
         .x = 20, .y = 20, .width = 640, .height = 360, .stroke = "#b5b5b5",
-        .strokeWidth = 1.5, .dash = JsArray_double_from((double[]){ 6.0, 4.0 }, 2)
+        .strokeWidth = 1.5, .dash = js_numbers(6.0, 4.0)
     );
-    JsArray_Konva_Node_push(bg_items, AS_Konva_Node(Konva_Rect_new(frame)));
+    JsArray_Konva_Node_push(bg_items, Konva_Rect_new(frame));
 
     Konva_TextConfig l1 = Konva_TextConfig_create(
         .x = 32, .y = 32, .text = "Layer 1: Blueprint Grid (z=0)", .fontSize = 12, .fontFamily = "monospace",
         .fill = "#737373"
     );
-    JsArray_Konva_Node_push(bg_items, AS_Konva_Node(Konva_Text_new(l1)));
-    Konva_Layer_add(bg_layer, bg_items);
+    JsArray_Konva_Node_push(bg_items, Konva_Text_new(l1));
+    Konva_Layer_add_list(bg_layer, bg_items);
 
     // Layer 2: Stacked cards & badge.
     Konva_Rect card_a = make_card("card-a", 110, 80, "#efefef");
@@ -103,24 +103,20 @@ __attribute__((export_name("start"))) void start(void) {
 
     // Crosshair & foreground label (non-listening overlay group kept above raised cards).
     Konva_Group overlay = Konva_Group_new(Konva_GroupConfig_create(.listening = false));
-    JsArray_Konva_Node overlay_items = JsArray_Konva_Node_new();
     Konva_CircleConfig dc = Konva_CircleConfig_create(
         .x = 250, .y = 160, .radius = 7, .fill = "#ffffff",
         .stroke = "#111111", .strokeWidth = 2
     );
-    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(Konva_Circle_new(dc)));
-    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(make_line(238, 160, 262, 160, "#111111", 1.5)));
-    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(make_line(250, 148, 250, 172, "#111111", 1.5)));
 
     Konva_TextConfig l2 = Konva_TextConfig_create(
         .x = 32, .y = 354, .text = "Layer 2: Elevated Stack (z=1) \xC2\xB7 Probe (250,160)", .fontSize = 12,
         .fontFamily = "monospace", .fill = "#111111"
     );
-    JsArray_Konva_Node_push(overlay_items, AS_Konva_Node(Konva_Text_new(l2)));
-    Konva_Group_add(overlay, overlay_items);
+    Konva_Group_add(overlay,
+        Konva_Circle_new(dc), make_line(238, 160, 262, 160, "#111111", 1.5),
+        make_line(250, 148, 250, 172, "#111111", 1.5), Konva_Text_new(l2));
 
-    Konva_Node fg_arr[5] = { AS_Konva_Node(card_a), AS_Konva_Node(card_b), AS_Konva_Node(card_c), AS_Konva_Node(badge), AS_Konva_Node(overlay) };
-    Konva_Layer_add(fg_layer, JsArray_Konva_Node_from(fg_arr, 5));
+    Konva_Layer_add(fg_layer, card_a, card_b, card_c, badge, overlay);
 
     Konva_Rect_moveToTop(card_a);
     Konva_Group_moveToTop(overlay);

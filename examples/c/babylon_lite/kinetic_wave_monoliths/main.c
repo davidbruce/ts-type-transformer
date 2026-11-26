@@ -94,29 +94,29 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_SceneContext_set_clearColor(scene, GPUColorDict_create(.r = 0.05, .g = 0.05, .b = 0.05, .a = 1.0));
 
     Babylon_ArcRotateCamera camera = babylon_createArcRotateCamera(PI / 4.0, PI / 3.1, 12.8, babylon_vec3(0.0, 1.4, 0.0));
-    babylon_addToScene(scene, AS_Babylon_Camera(camera));
+    babylon_addToScene(scene, camera);
     babylon_attachControl(camera, g_canvas, scene);
 
     Babylon_HemisphericLight hemi = babylon_createHemisphericLight(JsTuple_double_double_double_new(0.0, 1.0, 0.15), 0.55);
     Babylon_HemisphericLight_set_diffuseColor(hemi, JsTuple_double_double_double_new(0.76, 0.76, 0.76));
     Babylon_HemisphericLight_set_groundColor(hemi, JsTuple_double_double_double_new(0.10, 0.10, 0.10));
-    babylon_addToScene(scene, AS_Babylon_LightBase(hemi));
+    babylon_addToScene(scene, hemi);
 
     Babylon_DirectionalLight dir = babylon_createDirectionalLight(JsTuple_double_double_double_new(-1.0, -2.2, -0.8), 1.35);
     Babylon_DirectionalLight_set_diffuse(dir, JsTuple_double_double_double_new(0.90, 0.90, 0.90));
-    babylon_addToScene(scene, AS_Babylon_LightBase(dir));
+    babylon_addToScene(scene, dir);
 
     Babylon_PointLight light1 = babylon_createPointLight(JsTuple_double_double_double_new(5.2, 4.2, 0.0), 10.0);
     Babylon_PointLight_set_diffuse(light1, JsTuple_double_double_double_new(1.0, 1.0, 1.0));
     Babylon_PointLight_set_range(light1, 16.0);
-    babylon_addToScene(scene, AS_Babylon_LightBase(light1));
+    babylon_addToScene(scene, light1);
     g_light1_pos = Babylon_PointLight_get_position(light1);
     js_retain(g_light1_pos);
 
     Babylon_PointLight light2 = babylon_createPointLight(JsTuple_double_double_double_new(-5.2, 3.4, 0.0), 7.5);
     Babylon_PointLight_set_diffuse(light2, JsTuple_double_double_double_new(0.78, 0.78, 0.78));
     Babylon_PointLight_set_range(light2, 16.0);
-    babylon_addToScene(scene, AS_Babylon_LightBase(light2));
+    babylon_addToScene(scene, light2);
     g_light2_pos = Babylon_PointLight_get_position(light2);
     js_retain(g_light2_pos);
 
@@ -172,7 +172,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         babylon_addToScene(scene, cap);
     }
 
-    babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
+    babylon_onBeforeRender(scene, on_before_render);
     Promise_then(babylon_registerScene(scene), on_registered, 0);
 }
 

@@ -12,17 +12,7 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement box = Document_getElementById(doc, "chart");
     ECharts chart = echarts_init(box, NULL);
 
-    JsArray palette = JsArray_new();
-    const char* cols[] = { "#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4" };
-    for (int i = 0; i < 5; i++) js_push_str(palette, cols[i]);
-
-    JsArray_Echarts_PositionSizeOption radius = JsArray_Echarts_PositionSizeOption_new();
-    JsArray_Echarts_PositionSizeOption_push(radius, "44%");
-    JsArray_Echarts_PositionSizeOption_push(radius, "72%");
-
-    JsArray_Echarts_PositionSizeOption center = JsArray_Echarts_PositionSizeOption_new();
-    JsArray_Echarts_PositionSizeOption_push(center, "50%");
-    JsArray_Echarts_PositionSizeOption_push(center, "46%");
+    JsArray palette = js_values("#111111", "#404040", "#737373", "#a3a3a3", "#d4d4d4");
 
     JsArray_Echarts_PieSeriesOption_data data = JsArray_Echarts_PieSeriesOption_data_new();
     push_slice(data, "Runtime", 34);
@@ -40,8 +30,8 @@ __attribute__((export_name("start"))) void start(void) {
         .tooltip = Echarts_TooltipComponentOption_create(.trigger = Echarts_TooltipComponentOption_trigger_item),
         .series_pie = Echarts_PieSeriesOption_create(
             .name = "Subsystems",
-            .radius_list = radius,
-            .center_list = center,
+            .radius_list = Echarts_PositionSizeOption_list("44%", "72%"),
+            .center_list = Echarts_PositionSizeOption_list("50%", "46%"),
             .itemStyle = Echarts_PieItemStyleOption_create(.borderColor = "#ffffff", .borderWidth = 2),
             .label = Echarts_PieLabelOption_create(.color = "#111111"),
             .data = data));

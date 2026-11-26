@@ -9,10 +9,6 @@ static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
     Pixi_Graphics_stroke(g, Pixi_StrokeStyle_create(.width = width, .color = color_hex));
 }
 
-static void add_gfx(Pixi_Container stage, Pixi_Graphics g) {
-    Pixi_Container_addChild(stage, JsArray_Pixi_Container_from((Pixi_Container[]){ AS_Pixi_Container(g) }, 1));
-}
-
 static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx;
     (void)v;
@@ -45,7 +41,6 @@ static void on_init(void* ctx, bool ok, JsValue v) {
         Pixi_Graphics_lineTo(guides, 340.0 + Pixi_PointData_get_x(dir) * 182.0, 200.0 + Pixi_PointData_get_y(dir) * 182.0);
     }
     stroke_g(guides, 1.0, (double)0xd4d4d4);
-    add_gfx(stage, guides);
 
     Pixi_Graphics tiles = Pixi_Graphics_new();
     for (int r_idx = 0; r_idx < 4; r_idx++) {
@@ -76,12 +71,11 @@ static void on_init(void* ctx, bool ok, JsValue v) {
             stroke_g(tiles, 1.2, (double)0x111111);
         }
     }
-    add_gfx(stage, tiles);
 
     Pixi_Graphics center_dot = Pixi_Graphics_new();
     Pixi_Graphics_circle(center_dot, 340.0, 200.0, 8.0);
     Pixi_Graphics_fill(center_dot, 0x111111);
-    add_gfx(stage, center_dot);
+    Pixi_Container_addChild(stage, guides, tiles, center_dot);
 
     Pixi_Application_render(g_app);
 

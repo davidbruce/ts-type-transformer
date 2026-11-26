@@ -105,7 +105,7 @@ __attribute__((export_name("run"))) void run(void) {
     JsString raw = Katex_ParseError_get_rawMessage(parse_error);
     CHECK(JsString_equals(raw, "Undefined control sequence: \\badcommand"));
     js_release(raw);
-    Error as_error = Katex_ParseError_as_Error(parse_error);
+    Error as_error = AS_Error(parse_error);
     JsString text = Error_message(as_error);
     CHECK(contains(text, "KaTeX parse error"));
     js_release(text);

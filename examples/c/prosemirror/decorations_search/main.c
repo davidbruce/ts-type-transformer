@@ -20,10 +20,7 @@ static int find_ci(const char* hay, int hlen, const char* needle, int nlen, int 
 }
 
 static JsValue dom_hole(const char* tag) {
-    JsArray a = JsArray_new();
-    js_push_str(a, tag);
-    js_push_num(a, 0);
-    return js_value(a);
+    return js_value(js_values(tag, 0));
 }
 static JsValue heading_dom(void* ctx, Pm_Node n) {
     (void)ctx;
@@ -36,15 +33,7 @@ static JsValue heading_dom(void* ctx, Pm_Node n) {
 static JsValue para_dom(void* ctx, Pm_Node n) { (void)ctx; (void)n; return dom_hole("p"); }
 static JsValue code_block_dom(void* ctx, Pm_Node n) {
     (void)ctx; (void)n;
-    js_scope();
-    JsArray inner = JsArray_new();
-    js_push_str(inner, "code");
-    js_push_num(inner, 0);
-    JsArray outer = JsArray_new();
-    js_push_str(outer, "pre");
-    js_push_val(outer, inner);
-    js_retain(outer);
-    return js_value(outer);
+    return js_value(js_values("pre", js_values("code", 0)));
 }
 static JsValue mark_dom(void* ctx, Pm_Mark m, bool inl) {
     (void)m; (void)inl;
@@ -61,11 +50,11 @@ static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
     Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .toDOM_fn = heading_dom);
 
-    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(para_dom, NULL));
+    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM_fn = para_dom);
 
-    Pm_NodeSpec cblock = Pm_NodeSpec_create(.content = "text*", .marks = "", .group = "block", .code = true, .toDOM = Pm_NodeSpecToDOMFn_from(code_block_dom, NULL));
+    Pm_NodeSpec cblock = Pm_NodeSpec_create(.content = "text*", .marks = "", .group = "block", .code = true, .toDOM_fn = code_block_dom);
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
@@ -82,25 +71,22 @@ static Pm_Node t_node(const char* t) {
     return Pm_Schema_text(g_schema, t);
 }
 static Pm_Node p_node(const char* t) {
-    return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
+    return Pm_Schema_node(g_schema, "paragraph", NULL, t_node(t));
 }
 
 static Pm_Node make_initial_doc(void) {
-    Pm_Attrs h_attrs = Pm_Attrs_create();
-    js_set_num(h_attrs, "level", 2);
     Pm_Node h = Pm_Schema_node(
-        g_schema, "heading", h_attrs, t_node("Immutable State & View Decorations")
+        g_schema, "heading", Pm_Attrs_record({ "level", js_number(2) }), t_node("Immutable State & View Decorations")
     );
     Pm_Node p1 = p_node("A ProseMirror schema validates every document tree before state updates commit to the view.");
     Pm_Node p2 = p_node("Each transaction maps positions forward so state plugins can recompute decorations without mutating the schema.");
     Pm_Node cb = Pm_Schema_node(
-        g_schema, "code_block", (Pm_Attrs){ 0 },
+        g_schema, "code_block", NULL,
         t_node("const nextState = state.apply(transaction);\nview.updateState(nextState); // sync view")
     );
     Pm_Node p3 = p_node("Inline decorations highlight matching tokens while node decorations outline matching blocks in the view.");
 
-    Pm_Node blocks_arr[5] = { h, p1, p2, cb, p3 };
-    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks_arr, 5));
+    return Pm_Schema_node(g_schema, "doc", NULL, Pm_Node_list(h, p1, p2, cb, p3));
 }
 
 static Pm_DecorationSet compute_decos(Pm_Node doc, const char* query, int* out_inline, int* out_blocks) {
@@ -174,7 +160,7 @@ static Pm_DecorationSource search_decos(void* ctx, Pm_EditorState st) {
         uint32_t len = JsString_copy((JsString){ qv.h }, qbuf, sizeof qbuf - 1);
         qbuf[len < sizeof qbuf ? len : sizeof qbuf - 1] = 0;
     }
-    Pm_DecorationSource res = Pm_DecorationSet_as_Pm_DecorationSource(compute_decos(Pm_EditorState_get_doc(st), qbuf, NULL, NULL));
+    Pm_DecorationSource res = AS_Pm_DecorationSource(compute_decos(Pm_EditorState_get_doc(st), qbuf, NULL, NULL));
     js_retain(res);
     return res;
 }
@@ -237,21 +223,21 @@ __attribute__((export_name("start"))) void start(void) {
     g_search_key = Pm_PluginKey_new("search");
     js_retain(g_search_key);
     Pm_StateField field = Pm_StateField_create();
-    Pm_StateField_set_init(field, Pm_StateFieldInitFn_from(search_init, NULL));
-    Pm_StateField_set_apply(field, Pm_StateFieldApplyFn_from(search_apply, NULL));
+    Pm_StateField_set_init(field, search_init);
+    Pm_StateField_set_apply(field, search_apply);
 
-    Pm_EditorProps eprops = Pm_EditorProps_create(.decorations = Pm_any_EditorState_to_opt_DecorationSource_fn_from(search_decos, NULL));
+    Pm_EditorProps eprops = Pm_EditorProps_create(.decorations_fn = search_decos);
 
     Pm_PluginSpec pspec = Pm_PluginSpec_create(.key = g_search_key, .state = field, .props = eprops);
     Pm_Plugin plugin = Pm_Plugin_new(pspec);
 
-    Pm_EditorStateConfig scfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = make_initial_doc(), .plugins = JsArray_Pm_Plugin_from(&plugin, 1));
+    Pm_EditorStateConfig scfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = make_initial_doc(), .plugins = Pm_Plugin_list(plugin));
     Pm_EditorState st = Pm_EditorState_create(scfg);
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = st, .dispatchTransaction = Pm_DispatchTransactionFn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = st, .dispatchTransaction_fn = on_dispatch);
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = Pm_EditorView_new(AS_Node(mount), props);
+    g_view = Pm_EditorView_new(mount, props);
     js_retain(g_view);
     sync_meta(Pm_EditorView_get_state(g_view));
 

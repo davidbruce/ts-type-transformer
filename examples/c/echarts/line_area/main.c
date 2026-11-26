@@ -17,30 +17,20 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement box = Document_getElementById(doc, "chart");
     ECharts chart = echarts_init(box, NULL);
 
-    JsArray_Echarts_CategoryAxisBase_data_or_string_or_number weeks = JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_new();
-    const char* wk[] = { "W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8" };
-    for (int i = 0; i < 8; i++) JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_push(weeks, wk[i]);
+    JsArray_Echarts_CategoryAxisBase_data_or_string_or_number weeks = JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_of("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8");
 
-    JsArray vals0 = JsArray_new();
-    double d0[] = { 28, 44, 39, 62, 58, 76, 81, 89 };
-    for (int i = 0; i < 8; i++) js_push_num(vals0, d0[i]);
     Echarts_LineSeriesOption s0 = Echarts_LineSeriesOption_create(
-        .name = "Throughput", .smooth_boolean = true, .data = vals0,
+        .name = "Throughput", .smooth_boolean = true, .data = js_values(28, 44, 39, 62, 58, 76, 81, 89),
         .lineStyle = Echarts_LineStyleOption_create(.color = "#111111", .width = 2),
         .itemStyle = Echarts_ItemStyleOption_create(.color = "#111111"),
         .areaStyle = Echarts_LineSeriesOption_areaStyle_create(.color = "rgba(17,17,17,0.12)"));
 
-    JsArray vals1 = JsArray_new();
-    double d1[] = { 35, 38, 42, 46, 50, 54, 58, 62 };
-    for (int i = 0; i < 8; i++) js_push_num(vals1, d1[i]);
     Echarts_LineSeriesOption s1 = Echarts_LineSeriesOption_create(
-        .name = "Baseline", .smooth_boolean = false, .data = vals1,
+        .name = "Baseline", .smooth_boolean = false, .data = js_values(35, 38, 42, 46, 50, 54, 58, 62),
         .lineStyle = Echarts_LineStyleOption_create(.color = "#737373", .width = 1.5, .type_string = "dashed"),
         .itemStyle = Echarts_ItemStyleOption_create(.color = "#737373"));
 
-    JsArray series = JsArray_new();
-    js_push_val(series, s0);
-    js_push_val(series, s1);
+    JsArray series = js_values(js_value(s0), js_value(s1));
 
     EChartsOption opt = EChartsOption_create(
         .animation = false,

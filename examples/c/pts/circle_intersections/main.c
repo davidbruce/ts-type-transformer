@@ -9,7 +9,7 @@ static Pts_Pt mk_pt(double x, double y) {
 }
 
 static Pts_Group mk_group2(Pts_Pt a, Pts_Pt b) {
-    return Pts_Group_new(JsArray_Pts_Pt_from((Pts_Pt[]){ a, b }, 2));
+    return Pts_Group_new(a, b);
 }
 
 static Pts_CanvasSpace g_space;
@@ -97,7 +97,7 @@ __attribute__((export_name("start"))) void start(void) {
     g_form = Pts_CanvasSpace_getForm(g_space);
 
     Pts_IPlayer player = Pts_IPlayer_create();
-    Pts_IPlayer_set_animate(player, Pts_AnimateCallbackFn_from(on_animate, 0));
+    Pts_IPlayer_set_animate(player, on_animate);
     Pts_CanvasSpace_add(g_space, player);
     Pts_CanvasSpace_bindMouse(g_space);
     Pts_CanvasSpace_bindTouch(g_space);

@@ -317,14 +317,21 @@ the time control returns to JavaScript is reported, not lost.
 
 - C (C11): `ts_types.h` with every handle, enum, union and callback; one
   header per declaration in `areas/<module>/` or `namespaces/<module>/`.
-  Inheritance is kept: `_Generic` upcasts (`AS_Element(x)`) let any subtype
-  be passed, and a type names its ancestors' functions too
-  (`HTMLElement_appendChild`), but a family of more than 150, one per literal
-  (`ParentNode_querySelector_div`), only where it takes it directly
-  (`Document_querySelector_canvas`). A function's name is also a macro, so trailing optional
-  arguments may be left out (`Event_new("ping")`; all of them, `orUnit()`,
-  in C23), `x?: T | null` as `x?: T` (`node_writeFileSync(path, text)`), and the first of a family of overloads picks one by its
-  argument's type (`Shape_label(s, "a")`, `Shape_label(s, 7)`). Each shorter
+  Inheritance is kept: `_Generic` upcasts (`AS_Element(x)`) accept any subtype
+  or `NULL` (including cross-package subtypes recorded in referenced packages'
+  `tsrs-meta.toml` `c_subtypes`, replacing per-pair `{Sub}_as_{Anc}` helpers),
+  and a type names its ancestors' functions too (`HTMLElement_appendChild`),
+  except that a family of more than 150, one per literal
+  (`ParentNode_querySelector_div`), is emitted only where it takes it directly
+  (`Document_querySelector_canvas`). A function's name is also a macro, so
+  trailing optional arguments may be left out (`Event_new("ping")`; all of them,
+  `orUnit()`, in C23), `x?: T | null` as `x?: T` (`node_writeFileSync(path, text)`),
+  nullable handle and union parameters accept `NULL` directly (via `TS_NULL_H`
+  and `U_of`), variadic rest parameters take up to 32 arguments directly and
+  release the temporary array (`<fn>_list(..., arr)` keeps an explicit `JsArray`
+  for loops, including across inherited methods and overload families), and the
+  first of a family of overloads picks one by its argument's type
+  (`Shape_label(s, "a")`, `Shape_label(s, 7)`). Each shorter
   call is one line that makes the next longer one, and is written once
   where several overloads share it. Optional values are `JsOptionalDouble`,
   `JsOptionalBool`, null handles and `E_absent`; unions tagged structs made
@@ -332,11 +339,17 @@ the time control returns to JavaScript is reported, not lost.
   tuples and string-keyed records typed (`JsArray_double`,
   `JsTuple_double_JsString`, `JsRecord_<E>` with `<T>_record({ "k", v }, ..)`,
   `js_record`, `js_string_record`, `js_number_record`, `js_bool_record`, plus
-  typedef/macro aliases such as `Pm_Attrs_record`). A union
+  typedef/macro aliases such as `Pm_Attrs_record`), with inline list
+  constructors `<T>_list(...)`, `JsArray_<E>_of(...)`, `js_numbers(...)`,
+  `js_strings(...)`, `js_bools(...)`, and `js_values(...)` (up to 32 elements)
+  and auto-upcasting in `JsArray_<Base>_push`. A union
   parameter, a setter, an array's `push` and a family's overload take the
-  union or any member whose C type tells it apart (`leaflet_marker(ll, opts)`,
+  union, `NULL` where nullable, or any member whose C type tells it apart (`leaflet_marker(ll, opts)`,
   `Popup_setContent(note, "text")`): the macro applies `U_of`, and a value
-  that is no member is `ts_no_member`. A subtype of a member is upcast first (where the member has at most 40).
+  that is no member is `ts_no_member`. A subtype of a member is upcast first,
+  ordered narrower-base-first up to 200 subtypes. Bare function-pointer
+  callbacks (`ctx == NULL`) pass directly to functions and setters (via `Cb_arg`),
+  while stateful or retained callbacks use `Cb_from(fn, ctx)`.
   An object an interface only holds properties of is made in one expression,
   `X_create(.a = 1, .name = "x")`: a struct of the settable properties, own
   and inherited, and an object with those named set, and no others; `false`,
@@ -349,7 +362,9 @@ the time control returns to JavaScript is reported, not lost.
   the member's (`.left_string = "10%"`, `.fill_canvas_gradient`,
   `.title_list`, `.xAxis_category`, `.series_bar`): no tagged union to make,
   and no `{ .number = 0 }` a `{ .boolean = false }` would equal once C11
-  zeroes the rest. A bag nests: `.icon_div = divIcon(DivIconOptions_create(.className = "pin"))`; of objects only, the one named by what they all share is plain (`.icon` beside `.icon_div`).
+  zeroes the rest. Callback properties in option bags also expose `.prop_fn`
+  for bare function pointers alongside `.prop` / `.prop_cb` for `Cb_from(fn, ctx)`
+  (and `.color_fn` for callback union members). A bag nests: `.icon_div = divIcon(DivIconOptions_create(.className = "pin"))`; of objects only, the one named by what they all share is plain (`.icon` beside `.icon_div`).
   A property of a type with no C value is a `JsValue` field, a property
   set in more than one way is left out, and a property named as a C keyword
   is a field with an underscore (`.inline_`). A long list of properties none

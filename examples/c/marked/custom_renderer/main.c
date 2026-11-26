@@ -48,11 +48,11 @@ __attribute__((export_name("start"))) void start(void) {
         "Paragraph with *italic* and **bold** and `code`.\n";
 
     MarkedExtension ext = MarkedExtension_create(
-        .renderer = Marked_RendererObject_create(.heading = Marked_RendererObjectHeadingFn_from(render_heading, 0)),
-        .walkTokens = MarkedExtensionWalkTokensFn_from(walk_token_cb, 0)
+        .renderer = Marked_RendererObject_create(.heading_fn = render_heading),
+        .walkTokens_fn = walk_token_cb
     );
 
-    Marked custom_m = Marked_new(JsArray_MarkedExtension_from(&ext, 1));
+    Marked custom_m = Marked_new(ext);
     JsString def_html = marked(md);
     JsString custom_html = Marked_parse(custom_m, md);
 

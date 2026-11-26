@@ -65,22 +65,22 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_SceneContext_set_clearColor(scene, GPUColorDict_create(.r = 0.05, .g = 0.07, .b = 0.11, .a = 1.0));
 
     Babylon_ArcRotateCamera camera = babylon_createArcRotateCamera(PI / 4.0, PI / 3.0, 8.5, babylon_vec3(0.0, 1.6, 0.0));
-    babylon_addToScene(scene, AS_Babylon_Camera(camera));
+    babylon_addToScene(scene, camera);
     babylon_attachControl(camera, g_canvas, scene);
 
     Babylon_HemisphericLight hemi = babylon_createHemisphericLight(JsTuple_double_double_double_new(0.0, 1.0, 0.2), 0.75);
     Babylon_HemisphericLight_set_diffuseColor(hemi, JsTuple_double_double_double_new(0.75, 0.85, 1.0));
     Babylon_HemisphericLight_set_groundColor(hemi, JsTuple_double_double_double_new(0.12, 0.14, 0.22));
-    babylon_addToScene(scene, AS_Babylon_LightBase(hemi));
+    babylon_addToScene(scene, hemi);
 
     Babylon_DirectionalLight dir = babylon_createDirectionalLight(JsTuple_double_double_double_new(-1.0, -2.0, -1.2), 2.2);
     Babylon_DirectionalLight_set_diffuse(dir, JsTuple_double_double_double_new(1.0, 0.96, 0.9));
-    babylon_addToScene(scene, AS_Babylon_LightBase(dir));
+    babylon_addToScene(scene, dir);
 
     Babylon_PointLight orb_light = babylon_createPointLight(JsTuple_double_double_double_new(2.8, 1.6, 0.0), 8.0);
     Babylon_PointLight_set_diffuse(orb_light, JsTuple_double_double_double_new(1.0, 0.45, 0.35));
     Babylon_PointLight_set_range(orb_light, 12.0);
-    babylon_addToScene(scene, AS_Babylon_LightBase(orb_light));
+    babylon_addToScene(scene, orb_light);
     g_orb_light_pos = Babylon_PointLight_get_position(orb_light);
     js_retain(g_orb_light_pos);
 
@@ -114,7 +114,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_Mesh_set_material(ground, babylon_createGridMaterial());
     babylon_addToScene(scene, ground);
 
-    babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
+    babylon_onBeforeRender(scene, on_before_render);
     Promise_then(babylon_registerScene(scene), on_registered, 0);
 }
 

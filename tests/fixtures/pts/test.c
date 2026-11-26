@@ -41,12 +41,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(JsString_equals(Pts_Pt_toString(Pts_Pt_make(3, js_some_double(2))), "Pt(2, 2, 2)"));
 
     // A Group is an array of Pt.
-    JsArray_Pts_Pt corners = JsArray_Pts_Pt_new();
-    JsArray_Pts_Pt_push(corners, pt(0, 0));
-    JsArray_Pts_Pt_push(corners, pt(4, 0));
-    JsArray_Pts_Pt_push(corners, pt(4, 4));
-    JsArray_Pts_Pt_push(corners, pt(0, 4));
-    Pts_Group square = Pts_Group_new(corners);
+    Pts_Group square = Pts_Group_new(pt(0, 0), pt(4, 0), pt(4, 4), pt(0, 4));
     CHECK(JsArray_Pts_Pt_length(Pts_Group_as_array(square)) == 4 && Pts_Pt_get_y(JsArray_Pts_Pt_get(Pts_Group_as_array(square), 2)) == 4);
     CHECK(Pts_Pt_get_x(Pts_Group_get_p1(square)) == 0);
     CHECK(JsString_equals(Pts_Pt_toString(Pts_Group_centroid(square)), "Pt(2, 2)"));
@@ -54,10 +49,8 @@ __attribute__((export_name("run"))) void run(void) {
 
     // A union parameter takes any of its members: a Group where points are wanted.
     CHECK(Pts_Pt_get_x(Pts_Geom_centroid(Pts_PtLikeIterable_of(square))) == 2);
-    JsArray_Pts_Pt ends = JsArray_Pts_Pt_new();
-    JsArray_Pts_Pt_push(ends, pt(0, 0));
-    JsArray_Pts_Pt_push(ends, pt(3, 4));
-    CHECK(Pts_Line_magnitude(Pts_PtIterable_of(Pts_Group_new(ends))) == 5);
+    JsArray_Pts_Pt ends = Pts_Pt_list(pt(0, 0), pt(3, 4));
+    CHECK(Pts_Line_magnitude(Pts_PtIterable_of(Pts_Group_new_list(ends))) == 5);
     Pts_Group ray = Pts_Line_fromAngle(Pts_PtLike_of(pt(1, 1)), 0, 5);
     CHECK(Pts_Pt_get_x(Pts_Group_get_p2(ray)) == 6 && Pts_Pt_get_y(Pts_Group_get_p2(ray)) == 1);
 

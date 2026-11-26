@@ -24,6 +24,8 @@ pub(super) struct Ctx {
     pub of: HashMap<String, Vec<String>>,
     // Each class's subclasses here, for a union to take one as the member it is.
     pub subtypes: HashMap<String, Vec<String>>,
+    // Callback handle types declared in this module.
+    pub callbacks: HashSet<String>,
 }
 
 impl Ctx {
@@ -45,6 +47,7 @@ pub struct ProjectRef {
     pub structs: HashSet<String>,
     pub external_structs: HashSet<String>,
     pub struct_aliases: HashMap<String, String>,
+    pub subtypes: HashMap<String, Vec<String>>,
     pub all_names: Vec<String>,
 }
 
@@ -76,8 +79,9 @@ pub fn load_project_ref(dir_or_header: &Path, from_dir: &Path) -> Result<Project
     let structs = loaded.meta.structs.into_iter().collect();
     let external_structs = loaded.meta.external_structs.into_iter().collect();
     let struct_aliases = loaded.meta.c_structs.into_iter().collect();
+    let subtypes = loaded.meta.c_subtypes.into_iter().collect();
     let all_names = loaded.meta.types;
-    Ok(ProjectRef { pkg_name, ts_types_include, umbrella_include, structs, external_structs, struct_aliases, all_names })
+    Ok(ProjectRef { pkg_name, ts_types_include, umbrella_include, structs, external_structs, struct_aliases, subtypes, all_names })
 }
 
 pub(super) fn import_attr(wasm_module: &str, name: &str) -> String {
@@ -300,15 +304,14 @@ pub const NAMING: Naming = Naming {
             Kind::Class => {
                 if let Some(c) = m.classes.iter().find(|c| c.name == name) {
                     ids.extend(["fields", "FIELDS", "from_fields"].map(|s| format!("{candidate}_{s}")));
-                    ids.extend(c.ancestors.iter().map(|a| format!("{candidate}_as_{a}")));
                     if c.iterates.is_some() || c.iterates_async.is_some() {
                         ids.extend(["iterate", "iterate_async", "iterate_next"].map(|s| format!("{candidate}_{s}")));
                     }
                 }
             }
-            Kind::Callback => ids.extend(["fn", "from"].map(|s| format!("{candidate}_{s}"))),
+            Kind::Callback => ids.extend(["fn", "from", "arg", "arg_self", "arg_fn", "arg_null"].map(|s| format!("{candidate}_{s}"))),
             Kind::Union => {
-                ids.extend(["from_handle", "to_handle", "of", "of_self", "of_ts_value", "release"].map(|s| format!("{candidate}_{s}")));
+                ids.extend(["from_handle", "to_handle", "of", "of_self", "of_null", "of_ts_value", "release"].map(|s| format!("{candidate}_{s}")));
                 if let Some(u) = m.unions.iter().find(|u| u.name == name) {
                     if u.parts.contains(&Ty::Str) {
                         ids.push(format!("{candidate}_of_cstr"));

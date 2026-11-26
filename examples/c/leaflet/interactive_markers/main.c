@@ -81,8 +81,7 @@ __attribute__((export_name("start"))) void start(void) {
     g_note = note;
     js_retain(g_note);
 
-    LeafletMouseEventHandlerFn handler = LeafletMouseEventHandlerFn_from(on_click, 0);
-    Leaflet_Map_on_click(m, handler);
+    Leaflet_Map_on_click(m, on_click);
     LeafletMouseEvent data = LeafletMouseEvent_create(.latlng = pts[2]);
     Leaflet_Map_fire(m, "click", js_value(data));
     Leaflet_Map_fire(m, "click", js_value(data));

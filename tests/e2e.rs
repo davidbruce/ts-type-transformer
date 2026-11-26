@@ -934,6 +934,143 @@ fn c_union_release_and_unmatched_tag() {
     print!("{report}");
 }
 
+#[test]
+fn c_stage4_ergonomics() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+    let dir = root().join("target/e2e/c-stage4-ergonomics");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("api.d.ts"),
+        "declare class BaseNode { tag: string; }\n\
+         declare class LeafNode extends BaseNode { value: number; constructor(value: number); }\n\
+         interface OptBag { label?: string; count?: number; }\n\
+         type NodeOrText = BaseNode | string;\n\
+         type OnDone = (x: number) => number;\n\
+         type ColorFn = () => string;\n\
+         type Color = string | ColorFn;\n\
+         interface Cfg { color?: Color; onDone?: OnDone; }\n\
+         declare class Emitter {\n\
+             constructor();\n\
+             emit(ev: string, ...args: any[]): number;\n\
+             emit(ev: symbol, ...args: any[]): number;\n\
+         }\n\
+         declare function makeBase(tag: string): BaseNode;\n\
+         declare function readTag(n: BaseNode | null): string;\n\
+         declare function sumNums(xs: number[]): number;\n\
+         declare function joinStrs(xs: string[]): string;\n\
+         declare function countTrues(xs: boolean[]): number;\n\
+         declare function sumNodeTags(xs: BaseNode[]): string;\n\
+         declare function describeMixed(xs: any[]): string;\n\
+         declare function takeUnion(u: NodeOrText | null): string;\n\
+         declare function readOpt(o: OptBag | null): string;\n\
+         declare function joinRest(sep: string, ...parts: string[]): string;\n\
+         declare function runDone(cb: OnDone | null, x: number): number;\n\
+         declare function runCfg(c: Cfg): string;\n",
+    )
+    .unwrap();
+    let xml = lower(&dir.join("api.d.ts"), Some("c"), &[]);
+    let m = model(&xml, "C");
+    write_files(&dir.join("bindings"), generators::c::files(&m).unwrap());
+    fs::write(
+        dir.join("test.c"),
+        "#include \"bindings.h\"\n\
+         TS_IMPORT(check) void check(int ok, int line);\n\
+         #define CHECK(c) check((c), __LINE__)\n\
+         static double double_cb(void* ctx, double x) { (void)ctx; return x * 2.0; }\n\
+         static JsString color_cb(void* ctx) { (void)ctx; return JsString_from(\"#0af\"); }\n\
+         __attribute__((export_name(\"run\"))) void run(void) {\n\
+             uint32_t base = js_live_handles();\n\
+             LeafNode leaf = LeafNode_new(7);\n\
+             BaseNode b = makeBase(\"root\");\n\
+             BaseNode up = AS_BaseNode(leaf);\n\
+             BaseNode null_up = AS_BaseNode(NULL);\n\
+             CHECK(up.h != 0 && null_up.h == 0);\n\
+             JsString t_leaf = readTag(leaf);\n\
+             JsString t_null = readTag(NULL);\n\
+             CHECK(JsString_equals(t_leaf, \"leaf:7\") && JsString_equals(t_null, \"null\"));\n\
+             js_release(t_leaf); js_release(t_null);\n\
+             JsString u_null = takeUnion(NULL);\n\
+             CHECK(JsString_equals(u_null, \"null\"));\n\
+             js_release(u_null);\n\
+             JsString u_leaf = takeUnion(leaf);\n\
+             CHECK(JsString_equals(u_leaf, \"leaf:7\"));\n\
+             js_release(u_leaf);\n\
+             JsString opt_null = readOpt(NULL);\n\
+             CHECK(JsString_equals(opt_null, \"null\"));\n\
+             js_release(opt_null);\n\
+             JsArray_double nums = js_numbers(1.5, 2.5, 6.0);\n\
+             CHECK(sumNums(nums) == 10.0);\n\
+             js_release(nums);\n\
+             JsString s_in = JsString_from(\"world\");\n\
+             JsArray_JsString strs = js_strings(\"hello\", s_in);\n\
+             JsString joined = joinStrs(strs);\n\
+             CHECK(JsString_equals(joined, \"hello+world\"));\n\
+             js_release(joined); js_release(strs); js_release(s_in);\n\
+             JsArray_bool flags = js_bools(true, false, true);\n\
+             CHECK(countTrues(flags) == 2);\n\
+             js_release(flags);\n\
+             JsArray_BaseNode nodes = BaseNode_list(b, leaf);\n\
+             JsArray_BaseNode_push(nodes, leaf);\n\
+             JsString tags = sumNodeTags(nodes);\n\
+             CHECK(JsString_equals(tags, \"root,leaf:7,leaf:7\"));\n\
+             js_release(tags); js_release(nodes);\n\
+             bool flag = true;\n\
+             JsString mv = JsString_from(\"z\");\n\
+             JsArray mixed = js_values(42, \"ab\", flag, mv, NULL);\n\
+             JsString dm = describeMixed(mixed);\n\
+             CHECK(JsString_equals(dm, \"42|ab|true|z|null\"));\n\
+             js_release(dm); js_release(mixed); js_release(mv);\n\
+             JsString r0 = joinRest(\"-\");\n\
+             JsString r2 = joinRest(\"-\", \"x\", \"y\");\n\
+             JsArray_JsString rarr = js_strings(\"p\", \"q\");\n\
+             JsString rl = joinRest_list(\"-\", rarr);\n\
+             CHECK(JsString_equals(r0, \"\") && JsString_equals(r2, \"x-y\") && JsString_equals(rl, \"p-q\"));\n\
+             js_release(r0); js_release(r2); js_release(rl); js_release(rarr);\n\
+             Emitter em = Emitter_new();\n\
+             CHECK(Emitter_emit(em, \"go\") == 0);\n\
+             CHECK(Emitter_emit(em, \"go\", 10, \"hi\", true) == 3);\n\
+             js_release(em);\n\
+             CHECK(runDone(double_cb, 21) == 42);\n\
+             CHECK(runDone(NULL, 21) == -1);\n\
+             Cfg cfg = Cfg_create(.color_fn = color_cb, .onDone_fn = double_cb);\n\
+             JsString rc = runCfg(cfg);\n\
+             CHECK(JsString_equals(rc, \"#0af:10\"));\n\
+             js_release(rc); js_release(cfg);\n\
+             js_release(b); js_release(leaf);\n\
+             CHECK(js_live_handles() == base);\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(dir.join("bindings")).arg("-o").arg(dir.join("test.wasm")).arg(dir.join("test.c")));
+    let c = Case { fixture: dir.clone(), out: dir.clone(), xml };
+    write_glue(&c, &m);
+    fs::write(
+        dir.join("impl.mjs"),
+        "export class BaseNode { constructor(tag) { this.tag = tag; } }\n\
+         export class LeafNode extends BaseNode { constructor(value) { super('leaf:' + value); this.value = value; } }\n\
+         export class Emitter { emit(_ev, ...args) { return args.length; } }\n\
+         export const root = {\n\
+             BaseNode, LeafNode, Emitter,\n\
+             makeBase: tag => new BaseNode(tag),\n\
+             readTag: n => n ? n.tag : 'null',\n\
+             sumNums: xs => xs.reduce((a, b) => a + b, 0),\n\
+             joinStrs: xs => xs.join('+'),\n\
+             countTrues: xs => xs.filter(Boolean).length,\n\
+             sumNodeTags: xs => xs.map(n => n.tag).join(','),\n\
+             describeMixed: xs => xs.map(v => v === null ? 'null' : String(v)).join('|'),\n\
+             takeUnion: u => u === null ? 'null' : typeof u === 'string' ? u : u.tag,\n\
+             readOpt: o => o ? 'some' : 'null',\n\
+             joinRest: (sep, ...parts) => parts.join(sep),\n\
+             runDone: (cb, x) => cb ? cb(x) : -1,\n\
+             runCfg: c => (c.color ? c.color() : 'none') + ':' + (c.onDone ? c.onDone(5) : 0),\n\
+         };\n",
+    )
+    .unwrap();
+    let report = run(Command::new(node).arg("--expose-gc").arg(root().join("tests/run_wasm.mjs")).arg(dir.join("impl.mjs")).arg(dir.join("glue.mjs")).arg(dir.join("test.wasm")));
+    print!("{report}");
+}
+
 // Independently generated ES-module C packages defining colliding names (`Node`, `min`)
 // compose cleanly in one translation unit alongside unprefixed DOM without `--ref` between them.
 #[test]
@@ -2195,6 +2332,116 @@ fn c_cross_project_refs() {
     .unwrap();
     run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.c")));
     write_composable_runner(&out);
+    let report = run(Command::new(node).current_dir(&out).arg("run.mjs"));
+    assert!(report.contains("6 checks passed"), "{report}");
+}
+
+#[test]
+fn c_cross_project_subtypes() {
+    let Some([clang, node]) = tools(["clang", "node"]) else { return };
+    let out = root().join("target/e2e/c-ref-subtypes");
+    let _ = fs::remove_dir_all(&out);
+    let bindings = out.join("bindings");
+    let pkg_dir = out.join("node_modules/base-lib");
+    fs::create_dir_all(&bindings).unwrap();
+    fs::create_dir_all(&pkg_dir).unwrap();
+    let base_dts = pkg_dir.join("index.d.ts");
+    fs::write(pkg_dir.join("package.json"), "{ \"name\": \"base-lib\", \"types\": \"./index.d.ts\" }\n").unwrap();
+    fs::write(
+        &base_dts,
+        "export declare class NodeBase { tag: string; constructor(tag: string); }\n\
+         export declare class ChildNode extends NodeBase { n: number; constructor(n: number); }\n\
+         export declare function makeChild(n: number): ChildNode;\n",
+    )
+    .unwrap();
+    let app_dts = out.join("app.d.ts");
+    fs::write(
+        &app_dts,
+        "import type { NodeBase } from 'base-lib';\n\
+         export type NodeOrNum = NodeBase | number;\n\
+         export declare function readTag(n: NodeBase | null): string;\n\
+         export declare function describeNodeOrNum(v: NodeOrNum | null): string;\n",
+    )
+    .unwrap();
+    let base_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg(&base_dts)
+        .arg("--config")
+        .arg(config("c"))
+        .args(["--emit", "c", "--name", "base-lib", "--out"])
+        .arg(&bindings)
+        .output()
+        .unwrap();
+    assert!(base_ok.status.success(), "c base: {}", String::from_utf8_lossy(&base_ok.stderr));
+    let app_ok = Command::new(env!("CARGO_BIN_EXE_tsrs_proto"))
+        .arg(&app_dts)
+        .arg("--config")
+        .arg(config("c"))
+        .args(["--emit", "c", "--name", "app-lib", "--ref"])
+        .arg(bindings.join("base_lib"))
+        .arg("--out")
+        .arg(&bindings)
+        .output()
+        .unwrap();
+    assert!(app_ok.status.success(), "c app: {}", String::from_utf8_lossy(&app_ok.stderr));
+
+    fs::write(
+        out.join("test.c"),
+        "#include \"base_lib/base_lib.h\"\n\
+         #include \"app_lib/app_lib.h\"\n\
+         TS_IMPORT(check) void check(int32_t ok, uint32_t line);\n\
+         #define CHECK(ok) check((ok) ? 1 : 0, __LINE__)\n\
+         __attribute__((export_name(\"run\"))) void run(void) {\n\
+             Base_ChildNode child = base_makeChild(9);\n\
+             JsString t = readTag(child);\n\
+             JsString n = readTag(NULL);\n\
+             JsString u_child = describeNodeOrNum(child);\n\
+             JsString u_num = describeNodeOrNum(5);\n\
+             JsString u_null = describeNodeOrNum(NULL);\n\
+             CHECK(JsString_equals(t, \"child:9\"));\n\
+             CHECK(JsString_equals(n, \"null\"));\n\
+             CHECK(JsString_equals(u_child, \"child:9\"));\n\
+             CHECK(JsString_equals(u_num, \"num:5\"));\n\
+             CHECK(JsString_equals(u_null, \"null\"));\n\
+             js_release(t); js_release(n); js_release(u_child); js_release(u_num); js_release(u_null); js_release(child);\n\
+             CHECK(js_live_handles() == 0);\n\
+         }\n",
+    )
+    .unwrap();
+    run(Command::new(clang).args(CLANG_WASM).arg("-I").arg(&bindings).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.c")));
+    fs::write(
+        out.join("run.mjs"),
+        "import fs from 'node:fs';\n\
+         import { createRuntime, makeEnv as baseEnv } from './bindings/base_lib/glue.mjs';\n\
+         import { makeEnv as appEnv } from './bindings/app_lib/glue.mjs';\n\
+         let instance;\n\
+         let passed = 0;\n\
+         const failed = [];\n\
+         const wasi = new Proxy({}, { get: () => () => 0 });\n\
+         const rt = createRuntime(() => instance, { check: true, unchecked: e => failed.push(e) });\n\
+         class NodeBase { constructor(tag) { this.tag = tag; } }\n\
+         class ChildNode extends NodeBase { constructor(n) { super('child:' + n); this.n = n; } }\n\
+         const baseImpl = { NodeBase, ChildNode, makeChild: n => new ChildNode(n) };\n\
+         const appImpl = {\n\
+             readTag: n => n ? n.tag : 'null',\n\
+             describeNodeOrNum: v => v === null ? 'null' : typeof v === 'number' ? 'num:' + v : v.tag,\n\
+         };\n\
+         const b = baseEnv(() => instance, { runtime: rt, root: baseImpl });\n\
+         const a = appEnv(() => instance, { runtime: rt, root: appImpl });\n\
+         ({ instance } = await WebAssembly.instantiate(fs.readFileSync('./test.wasm'), {\n\
+             env: { ...rt.env, check: (ok, line) => (ok ? passed++ : failed.push(line)) },\n\
+             base_lib: b.$pkg,\n\
+             app_lib: a.$pkg,\n\
+             wasi_snapshot_preview1: wasi,\n\
+         }));\n\
+         instance.exports._initialize?.();\n\
+         instance.exports.run();\n\
+         if (failed.length || passed === 0) {\n\
+             console.error(`${failed.length} failed; ${passed} passed; lines=${failed.join(',')}`);\n\
+             process.exit(1);\n\
+         }\n\
+         console.log(`${passed} checks passed`);\n",
+    )
+    .unwrap();
     let report = run(Command::new(node).current_dir(&out).arg("run.mjs"));
     assert!(report.contains("6 checks passed"), "{report}");
 }

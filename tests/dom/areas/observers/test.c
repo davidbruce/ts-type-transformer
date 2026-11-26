@@ -111,7 +111,7 @@ __attribute__((export_name("run"))) void run(void) {
     // childList: appended and removed children are recorded, in order.
     MutationObserver kids = MutationObserver_new(MutationCallback_from(never, 0));
     MutationObserver_observe(kids, box, init(true, false, false, false));
-    HTMLElement a = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc));
+    HTMLElement a = AS_HTMLElement(Document_createElement_p(doc));
     Node_appendChild(box, a);
     Node_removeChild(box, a);
     JsArray_MutationRecord taken = MutationObserver_takeRecords(kids);
@@ -126,7 +126,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(JsArray_MutationRecord_length(MutationObserver_takeRecords(kids)) == 0);
     // Attribute changes are not childList records; grandchildren need subtree.
     Element_setAttribute(box, "data-x", "1");
-    HTMLElement inner = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc));
+    HTMLElement inner = AS_HTMLElement(Document_createElement_p(doc));
     Node_appendChild(box, inner);
     Node_appendChild(inner, Document_createElement_span(doc));
     CHECK(JsArray_MutationRecord_length(MutationObserver_takeRecords(kids)) == 1);
@@ -137,7 +137,7 @@ __attribute__((export_name("run"))) void run(void) {
     // subtree: changes anywhere below are seen.
     MutationObserver deep = MutationObserver_new(MutationCallback_from(never, 0));
     MutationObserver_observe(deep, box, init(true, false, false, true));
-    HTMLElement branch = HTMLDivElement_as_HTMLElement(Document_createElement_div(doc));
+    HTMLElement branch = AS_HTMLElement(Document_createElement_div(doc));
     Node_appendChild(box, branch);
     Node_appendChild(branch, Document_createElement_span(doc));
     JsArray_MutationRecord deep_records = MutationObserver_takeRecords(deep);
@@ -193,7 +193,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // ResizeObserver: reports the size on observing, and again when it changes.
     HTMLDivElement sized = Document_createElement_div(doc);
-    resize_target = HTMLDivElement_as_HTMLElement(sized);
+    resize_target = AS_HTMLElement(sized);
     CSSStyleDeclaration style = ElementCSSInlineStyle_get_style(sized);
     CSSStyleProperties_set_width(style, "100px");
     CSSStyleProperties_set_height(style, "50px");
@@ -204,12 +204,12 @@ __attribute__((export_name("run"))) void run(void) {
 
     // IntersectionObserver: one target in view, one far below; scrolling to it reports it too.
     HTMLDivElement visible = Document_createElement_div(doc);
-    in_view = HTMLDivElement_as_HTMLElement(visible);
+    in_view = AS_HTMLElement(visible);
     Node_set_textContent(visible, "in view");
     CSSStyleProperties_set_height(ElementCSSInlineStyle_get_style(visible), "40px");
     Node_appendChild(body, visible);
     HTMLDivElement far = Document_createElement_div(doc);
-    below = HTMLDivElement_as_HTMLElement(far);
+    below = AS_HTMLElement(far);
     Node_set_textContent(far, "far below");
     CSSStyleDeclaration far_style = ElementCSSInlineStyle_get_style(far);
     CSSStyleProperties_set_marginTop(far_style, "4000px");

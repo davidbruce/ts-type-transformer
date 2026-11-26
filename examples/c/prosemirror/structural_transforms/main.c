@@ -25,10 +25,7 @@ static void out_js(OutBuf* o, JsString js) {
 }
 
 static JsValue dom_hole(const char* tag) {
-    JsArray a = JsArray_new();
-    js_push_str(a, tag);
-    js_push_num(a, 0);
-    return js_value(a);
+    return js_value(js_values(tag, 0));
 }
 static JsValue heading_dom(void* ctx, Pm_Node n) {
     (void)ctx;
@@ -41,9 +38,7 @@ static JsValue heading_dom(void* ctx, Pm_Node n) {
 static JsValue tag_dom(void* ctx, Pm_Node n) { (void)n; return dom_hole((const char*)ctx); }
 static JsValue hr_dom(void* ctx, Pm_Node n) {
     (void)ctx; (void)n;
-    JsArray a = JsArray_new();
-    js_push_str(a, "hr");
-    return js_value(a);
+    return js_value(js_values("hr"));
 }
 static JsValue mark_dom(void* ctx, Pm_Mark m, bool inl) {
     (void)m; (void)inl;
@@ -61,7 +56,7 @@ static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
     Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .defining = true, .toDOM_fn = heading_dom);
 
     Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"p"));
 
@@ -71,7 +66,7 @@ static Pm_Schema make_schema(void) {
 
     Pm_NodeSpec li = Pm_NodeSpec_create(.content = "paragraph block*", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"li"));
 
-    Pm_NodeSpec hr = Pm_NodeSpec_create(.group = "block", .atom = true, .toDOM = Pm_NodeSpecToDOMFn_from(hr_dom, NULL));
+    Pm_NodeSpec hr = Pm_NodeSpec_create(.group = "block", .atom = true, .toDOM_fn = hr_dom);
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
@@ -88,30 +83,26 @@ static Pm_Node t_node(const char* t) {
     return Pm_Schema_text(g_schema, t);
 }
 static Pm_Node p_node(const char* t) {
-    return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
+    return Pm_Schema_node(g_schema, "paragraph", NULL, t_node(t));
 }
 static Pm_Node li_node(const char* t) {
-    return Pm_Schema_node(g_schema, "list_item", (Pm_Attrs){ 0 }, p_node(t));
+    return Pm_Schema_node(g_schema, "list_item", NULL, p_node(t));
 }
 
 static Pm_Node make_initial_doc(void) {
-    Pm_Attrs h_attrs = Pm_Attrs_create();
-    js_set_num(h_attrs, "level", 2);
-    Pm_Node h = Pm_Schema_node(g_schema, "heading", h_attrs, t_node("Structural Transform Pipeline"));
+    Pm_Node h = Pm_Schema_node(g_schema, "heading", Pm_Attrs_record({ "level", js_number(2) }), t_node("Structural Transform Pipeline"));
     Pm_Node p1 = p_node("ProseMirror transforms express structural edits as invertible steps.");
     Pm_Node p2 = p_node("Wrap blocks in quotes, lift nested content, or split paragraphs cleanly.");
     Pm_Node quote = Pm_Schema_node(
-        g_schema, "blockquote", (Pm_Attrs){ 0 }, p_node("Blockquote content can be lifted back to top-level document depth.")
+        g_schema, "blockquote", NULL, p_node("Blockquote content can be lifted back to top-level document depth.")
     );
-    Pm_Node lis[3] = {
+    Pm_Node ulist = Pm_Schema_node(g_schema, "bullet_list", NULL, Pm_Node_list(
         li_node("Split at cursor position"),
         li_node("Wrap range with blockquote"),
         li_node("Lift nested block to root")
-    };
-    Pm_Node ulist = Pm_Schema_node(g_schema, "bullet_list", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(lis, 3));
+    ));
 
-    Pm_Node blocks[5] = { h, p1, p2, quote, ulist };
-    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 5));
+    return Pm_Schema_node(g_schema, "doc", NULL, Pm_Node_list(h, p1, p2, quote, ulist));
 }
 
 static Pm_EditorState make_state(void) {
@@ -251,9 +242,8 @@ static void on_click(void* ctx, PointerEvent ev) {
         char nbuf[96];
         double doc_end = Pm_Fragment_get_size(Pm_Node_get_content(doc));
         snprintf(nbuf, sizeof nbuf, "Appended structural section #%d at doc offset %d.", g_note_counter, (int)doc_end);
-        Pm_Node items[2] = { hr, p_node(nbuf) };
         Pm_Transaction tr = Pm_EditorState_get_tr(st);
-        Pm_Transaction_insert(tr, doc_end, JsArray_Pm_Node_from(items, 2));
+        Pm_Transaction_insert(tr, doc_end, Pm_Node_list(hr, p_node(nbuf)));
         g_last_op = "Inserted horizontal_rule + note";
         Pm_EditorView_dispatch(g_view, tr);
     } else if (idx == 4) {
@@ -273,10 +263,10 @@ __attribute__((export_name("start"))) void start(void) {
     g_schema = make_schema();
     js_retain(g_schema);
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = make_state(), .dispatchTransaction = Pm_DispatchTransactionFn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = make_state(), .dispatchTransaction_fn = on_dispatch);
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = Pm_EditorView_new(AS_Node(mount), props);
+    g_view = Pm_EditorView_new(mount, props);
     js_retain(g_view);
     update_meta(Pm_EditorState_get_doc(Pm_EditorView_get_state(g_view)));
 

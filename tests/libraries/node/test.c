@@ -57,11 +57,7 @@ static void on_event(void* ctx, JsArray args) {
 
 __attribute__((export_name("run"))) void run(void) {
     // ---- path ----
-    JsArray_JsString parts = JsArray_JsString_new();
-    JsArray_JsString_push(parts, "a");
-    JsArray_JsString_push(parts, "b/../c");
-    JsArray_JsString_push(parts, "d.txt");
-    CHECK(same(take(path_join(parts)), "a/c/d.txt"));
+    CHECK(same(take(path_join("a", "b/../c", "d.txt")), "a/c/d.txt"));
     CHECK(same(take(path_basename("/x/y/file.tar.gz")), "file.tar.gz"));
     CHECK(same(take(path_basename("/x/y/file.tar.gz", ".gz")), "file.tar"));
     CHECK(same(take(path_extname("/x/y/file.tar.gz")), ".gz"));
@@ -69,12 +65,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(same(take(path_normalize("/a//b/./c/..")), "/a/b"));
     CHECK(path_isAbsolute("/a") && !path_isAbsolute("a/b"));
     CHECK(same(take(path_relative("/data/orandea/test/aaa", "/data/orandea/impl/bbb")), "../../impl/bbb"));
-    JsArray_JsString abs = JsArray_JsString_new();
-    JsArray_JsString_push(abs, "/foo");
-    JsArray_JsString_push(abs, "bar");
-    JsArray_JsString_push(abs, "baz/asdf");
-    JsArray_JsString_push(abs, "..");
-    CHECK(same(take(path_resolve(abs)), "/foo/bar/baz"));
+    CHECK(same(take(path_resolve("/foo", "bar", "baz/asdf", "..")), "/foo/bar/baz"));
     path_ParsedPath parsed = path_parse("/home/user/dir/file.txt");
     CHECK(same(take(path_ParsedPath_get_root(parsed)), "/"));
     CHECK(same(take(path_ParsedPath_get_dir(parsed)), "/home/user/dir"));
@@ -113,9 +104,9 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(both);
 
     // Without an encoding, the bytes are a Buffer.
-    Buffer bytes = readFileSync(F(file), (ReadFileSyncOptionsWithBufferEncoding){ 0 });
+    Buffer bytes = readFileSync(F(file), NULL);
     CHECK(bytes.h != 0);
-    CHECK(Uint8Array_length(Buffer_as_Uint8Array(bytes)) == 17);
+    CHECK(Uint8Array_length(AS_Uint8Array(bytes)) == 17);
     js_release(bytes);
 
     // A subdirectory, made with options, and a second file in it.
@@ -187,28 +178,24 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(EventEmitter_listenerCount(emitter, "other") == 1);
 
     // Emit with arguments: the listeners get them.
-    JsArray args = JsArray_new();
-    JsValue n42 = js_number(42), word = js_string("payload");
-    JsArray_push(args, n42);
-    JsArray_push(args, word);
-    CHECK(EventEmitter_emit(emitter, "data", args));
+    CHECK(EventEmitter_emit(emitter, "data", 42, "payload"));
     CHECK(on_count == 1 && once_count == 1 && other_count == 0);
     // Both listeners got both arguments.
     CHECK(well_formed == 2 && last_number == 42);
     // The once listener is gone after the first emit.
     CHECK(EventEmitter_listenerCount(emitter, "data") == 1);
-    EventEmitter_emit(emitter, "data", args);
+    EventEmitter_emit(emitter, "data", 42, "payload");
     CHECK(on_count == 2 && once_count == 1 && hits == 3);
 
     // No listener: emit says so.
-    CHECK(!EventEmitter_emit(emitter, "nobody", JsArray_new()));
+    CHECK(!EventEmitter_emit(emitter, "nobody"));
 
     // The event names, and a removed listener.
     JsArray_string_or_symbol names_of = EventEmitter_eventNames(emitter);
     CHECK(JsArray_string_or_symbol_length(names_of) == 2);
     EventEmitter_removeListener(emitter, "data", on_cb);
     CHECK(EventEmitter_listenerCount(emitter, "data") == 0);
-    CHECK(!EventEmitter_emit(emitter, "data", args));
+    CHECK(!EventEmitter_emit(emitter, "data", 42, "payload"));
     CHECK(on_count == 2);
     EventEmitter_removeAllListeners(emitter, "other");
     CHECK(EventEmitter_listenerCount(emitter, "other") == 0);

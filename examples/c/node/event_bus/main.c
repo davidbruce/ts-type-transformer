@@ -51,32 +51,23 @@ __attribute__((export_name("start"))) void start(void) {
     check(Node_EventEmitter_getMaxListeners(emitter) == 12.0);
 
     Node_Listener metric_cb = Node_Listener_from(on_metric, 0);
-    Node_Listener once_cb = Node_Listener_from(on_once, 0);
-    Node_Listener shutdown_cb = Node_Listener_from(on_shutdown, 0);
 
     Node_EventEmitter_on(emitter, "metric", metric_cb);
-    Node_EventEmitter_once(emitter, "metric", once_cb);
-    Node_EventEmitter_on(emitter, "shutdown", shutdown_cb);
+    Node_EventEmitter_once(emitter, "metric", on_once);
+    Node_EventEmitter_on(emitter, "shutdown", on_shutdown);
 
     check(Node_EventEmitter_listenerCount(emitter, "metric") == 2.0);
     check(JsArray_Node_string_or_symbol_length(Node_EventEmitter_eventNames(emitter)) == 2);
 
-    JsArray args1 = JsArray_new();
-    js_push_num(args1, 101.0);
-    js_push_str(args1, "ok");
-    check(Node_EventEmitter_emit(emitter, "metric", args1) && g_metric_calls == 1 && g_once_calls == 1);
+    check(Node_EventEmitter_emit(emitter, "metric", 101.0, "ok") && g_metric_calls == 1 && g_once_calls == 1);
     check(Node_EventEmitter_listenerCount(emitter, "metric") == 1.0);
 
-    JsArray args2 = JsArray_new();
-    js_push_num(args2, 202.0);
-    js_push_str(args2, "ok");
-    check(Node_EventEmitter_emit(emitter, "metric", args2) && g_metric_calls == 2 && g_metric_sum == 303.0 && g_once_calls == 1);
+    check(Node_EventEmitter_emit(emitter, "metric", 202.0, "ok") && g_metric_calls == 2 && g_metric_sum == 303.0 && g_once_calls == 1);
 
-    JsArray empty_args = JsArray_new();
-    check(!Node_EventEmitter_emit(emitter, "idle", empty_args));
+    check(!Node_EventEmitter_emit(emitter, "idle"));
 
     Node_EventEmitter_removeListener(emitter, "metric", metric_cb);
-    check(Node_EventEmitter_listenerCount(emitter, "metric") == 0.0 && !Node_EventEmitter_emit(emitter, "metric", empty_args));
+    check(Node_EventEmitter_listenerCount(emitter, "metric") == 0.0 && !Node_EventEmitter_emit(emitter, "metric"));
     check(g_metric_calls == 2);
 
     Node_EventEmitter_removeAllListeners(emitter, "shutdown");

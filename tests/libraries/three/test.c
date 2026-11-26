@@ -147,9 +147,7 @@ __attribute__((export_name("run"))) void run(void) {
     Three_Mesh mesh = Three_Mesh_new(geometry, material);
     Three_Object3D_set_name(mesh, "box");
     Three_Vector3_set(Three_Object3D_get_position(mesh), 1, 2, js_some_double(3));
-    JsArray_Three_Object3D kids = JsArray_Three_Object3D_new();
-    JsArray_Three_Object3D_push(kids, Three_Mesh_as_Three_Object3D(mesh));
-    Three_Object3D_add(group, kids);
+    Three_Object3D_add(group, mesh);
     CHECK(JsArray_Three_Object3D_length(Three_Object3D_get_children(group)) == 1);
     CHECK(js_same(Three_Object3D_get_parent(mesh), group));
     CHECK(js_same(Three_Object3D_getObjectByName(group, "box"), mesh));

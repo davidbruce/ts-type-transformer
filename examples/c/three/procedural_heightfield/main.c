@@ -5,9 +5,6 @@
 
 static const double PI = 3.14159265358979323846;
 
-#define add_obj(parent, child) \
-    Three_Object3D_add(AS_Three_Object3D(parent), JsArray_Three_Object3D_from((Three_Object3D[]){ AS_Three_Object3D(child) }, 1))
-
 static double wave_height(int mode, double x, double z) {
     if (mode == 1) {
         double r = sqrt(x * x + z * z);
@@ -115,17 +112,14 @@ __attribute__((export_name("start"))) void start(void) {
     g_camera = Three_PerspectiveCamera_new(42.0, width / height, 0.1, 100.0);
     js_retain(g_camera);
 
-    add_obj(g_scene, Three_AmbientLight_new(0xffffff, 1.2));
     Three_DirectionalLight key = Three_DirectionalLight_new(0xffffff, 2.2);
     Three_Vector3_set(Three_DirectionalLight_get_position(key), 6.0, 10.0, 8.0);
-    add_obj(g_scene, key);
     Three_DirectionalLight rim = Three_DirectionalLight_new(0xffffff, 0.9);
     Three_Vector3_set(Three_DirectionalLight_get_position(rim), -7.0, 5.0, -6.0);
-    add_obj(g_scene, rim);
 
     Three_GridHelper grid = Three_GridHelper_new(9.0, 12.0, 0x999999, 0xe5e5e5);
     Three_Vector3_set_y(Three_GridHelper_get_position(grid), -1.1);
-    add_obj(g_scene, grid);
+    Three_Scene_add(g_scene, Three_AmbientLight_new(0xffffff, 1.2), key, rim, grid);
 
     g_geo = Three_BufferGeometry_new();
     js_retain(g_geo);
@@ -152,21 +146,20 @@ __attribute__((export_name("start"))) void start(void) {
 
     Three_Mesh surface_mesh = Three_Mesh_new(g_geo, Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
         .color_number = 0xb5b5b5, .roughness = 0.72, .metalness = 0.05, .flatShading = true)));
-    add_obj(g_scene, surface_mesh);
 
     g_wire_mesh = Three_Mesh_new(g_geo, Three_MeshBasicMaterial_new(Three_MeshBasicMaterialParameters_create(
         .color_number = 0x262626, .wireframe = true)));
     js_retain(g_wire_mesh);
     Three_Vector3_set_y(Three_Mesh_get_position(g_wire_mesh), 0.015);
-    add_obj(g_scene, g_wire_mesh);
 
     int pt_count = (GRID_N / 2) * (GRID_N / 2);
     Three_BufferGeometry pts_geo = Three_BufferGeometry_new();
     g_pts_attr = Three_Float32BufferAttribute_new((double)(pt_count * 3), 3.0);
     js_retain(g_pts_attr);
     Three_BufferGeometry_setAttribute(pts_geo, "position", g_pts_attr);
-    add_obj(g_scene, Three_Points_new(pts_geo, Three_PointsMaterial_new(Three_PointsMaterialParameters_create(
-        .color_number = 0x111111, .size = 0.14))));
+    Three_Points pts_obj = Three_Points_new(pts_geo, Three_PointsMaterial_new(Three_PointsMaterialParameters_create(
+        .color_number = 0x111111, .size = 0.14)));
+    Three_Scene_add(g_scene, surface_mesh, g_wire_mesh, pts_obj);
 
     g_wire_btn = Document_getElementById(doc, "btn-wire");
     js_retain(g_wire_btn);

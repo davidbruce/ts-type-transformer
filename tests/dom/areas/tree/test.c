@@ -84,12 +84,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(!Node_hasChildNodes(fragment));
 
     // append and prepend take nodes or strings.
-    // FINDING 1: Node_or_string_of(x) is _Generic on the exact type, so an HTMLLIElement is not accepted
-    // where Node_or_string is wanted (every other Node parameter takes a subtype); cast to Node by hand.
-    JsArray_Node_or_string extras = JsArray_Node_or_string_new();
-    JsArray_Node_or_string_push(extras, Node_or_string_of(JsString_from("tail")));
-    JsArray_Node_or_string_push(extras, Node_or_string_of_Node((Node){ item(doc, "z").h }));
-    ParentNode_append(list, extras);
+    ParentNode_append(list, "tail", item(doc, "z"));
     CHECK(ParentNode_get_childElementCount(list) == 5);
     CHECK(STR(Node_get_textContent(list), "zerothreeabtailz"));
     CHECK(Node_get_nodeType(Node_get_childNodes(list).h ? NodeListOf_item(Node_get_childNodes(list), 4) : (Node){0}) == Node_TEXT_NODE);
@@ -123,9 +118,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(DOMTokenList_get_length(classes) == 2);
     CHECK(DOMTokenList_replace(classes, "x", "w"));
     CHECK(STR(Element_get_className(p), "w y"));
-    JsArray_JsString drop = JsArray_JsString_new();
-    JsArray_JsString_push(drop, "w");
-    DOMTokenList_remove(classes, drop);
+    DOMTokenList_remove(classes, "w");
     CHECK(STR(DOMTokenList_toString(classes), "y"));
     NodeListOf bs = ParentNode_querySelectorAll(host, "p, b");
     int found = 0;

@@ -3,10 +3,7 @@
 #include "prosemirror/prosemirror.h"
 
 static JsValue dom_hole(const char* tag) {
-    JsArray a = JsArray_new();
-    js_push_str(a, tag);
-    js_push_num(a, 0);
-    return js_value(a);
+    return js_value(js_values(tag, 0));
 }
 static JsValue heading_dom(void* ctx, Pm_Node n) {
     (void)ctx;
@@ -19,21 +16,11 @@ static JsValue heading_dom(void* ctx, Pm_Node n) {
 static JsValue tag_dom(void* ctx, Pm_Node n) { (void)n; return dom_hole((const char*)ctx); }
 static JsValue code_block_dom(void* ctx, Pm_Node n) {
     (void)ctx; (void)n;
-    js_scope();
-    JsArray inner = JsArray_new();
-    js_push_str(inner, "code");
-    js_push_num(inner, 0);
-    JsArray outer = JsArray_new();
-    js_push_str(outer, "pre");
-    js_push_val(outer, inner);
-    js_retain(outer);
-    return js_value(outer);
+    return js_value(js_values("pre", js_values("code", 0)));
 }
 static JsValue hr_dom(void* ctx, Pm_Node n) {
     (void)ctx; (void)n;
-    JsArray a = JsArray_new();
-    js_push_str(a, "hr");
-    return js_value(a);
+    return js_value(js_values("hr"));
 }
 static JsValue mark_dom(void* ctx, Pm_Mark m, bool inl) {
     (void)m; (void)inl;
@@ -50,15 +37,15 @@ static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
     Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .defining = true, .toDOM_fn = heading_dom);
 
     Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"p"));
 
     Pm_NodeSpec quote = Pm_NodeSpec_create(.content = "block+", .group = "block", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"blockquote"));
 
-    Pm_NodeSpec cblock = Pm_NodeSpec_create(.content = "text*", .marks = "", .group = "block", .code = true, .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(code_block_dom, NULL));
+    Pm_NodeSpec cblock = Pm_NodeSpec_create(.content = "text*", .marks = "", .group = "block", .code = true, .defining = true, .toDOM_fn = code_block_dom);
 
-    Pm_NodeSpec hr = Pm_NodeSpec_create(.group = "block", .atom = true, .toDOM = Pm_NodeSpecToDOMFn_from(hr_dom, NULL));
+    Pm_NodeSpec hr = Pm_NodeSpec_create(.group = "block", .atom = true, .toDOM_fn = hr_dom);
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
@@ -77,45 +64,42 @@ static Pm_Node t_node(const char* t) {
 }
 
 static Pm_Node make_initial_doc(void) {
-    Pm_Attrs h_attrs = Pm_Attrs_create();
-    js_set_num(h_attrs, "level", 2);
-    Pm_Node h = Pm_Schema_node(g_schema, "heading", h_attrs, t_node("ProseMirror Document Schema"));
+    Pm_Node h = Pm_Schema_node(g_schema, "heading", Pm_Attrs_record({ "level", js_number(2) }), t_node("ProseMirror Document Schema"));
 
     Pm_Mark m_strong = Pm_Schema_mark(g_schema, "strong");
     Pm_Mark m_em = Pm_Schema_mark(g_schema, "em");
     Pm_Mark m_code = Pm_Schema_mark(g_schema, "code");
 
-    Pm_Node p1_items[7] = {
-        t_node("Inline marks compose cleanly: "),
-        Pm_Schema_text(g_schema, "bold", JsArray_Pm_Mark_from(&m_strong, 1)),
-        t_node(", "),
-        Pm_Schema_text(g_schema, "italic", JsArray_Pm_Mark_from(&m_em, 1)),
-        t_node(", and "),
-        Pm_Schema_text(g_schema, "inline_code", JsArray_Pm_Mark_from(&m_code, 1)),
-        t_node(" spans.")
-    };
     Pm_Node p_marks = Pm_Schema_node(
-        g_schema, "paragraph", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(p1_items, 7)
+        g_schema, "paragraph", NULL,
+        Pm_Node_list(
+            t_node("Inline marks compose cleanly: "),
+            Pm_Schema_text(g_schema, "bold", Pm_Mark_list(m_strong)),
+            t_node(", "),
+            Pm_Schema_text(g_schema, "italic", Pm_Mark_list(m_em)),
+            t_node(", and "),
+            Pm_Schema_text(g_schema, "inline_code", Pm_Mark_list(m_code)),
+            t_node(" spans.")
+        )
     );
 
     Pm_Node q_inner = Pm_Schema_node(
-        g_schema, "paragraph", (Pm_Attrs){ 0 },
+        g_schema, "paragraph", NULL,
         t_node("Every document conforms to a strict schema enforced on every transaction.")
     );
-    Pm_Node quote = Pm_Schema_node(g_schema, "blockquote", (Pm_Attrs){ 0 }, q_inner);
+    Pm_Node quote = Pm_Schema_node(g_schema, "blockquote", NULL, q_inner);
 
     Pm_Node code_block = Pm_Schema_node(
-        g_schema, "code_block", (Pm_Attrs){ 0 },
+        g_schema, "code_block", NULL,
         t_node("schema.node(\"paragraph\", null, [schema.text(\"typed\")])")
     );
 
     Pm_Node outro = Pm_Schema_node(
-        g_schema, "paragraph", (Pm_Attrs){ 0 },
+        g_schema, "paragraph", NULL,
         t_node("Select any text in this editor and click a toolbar action to toggle marks or switch block types.")
     );
 
-    Pm_Node blocks[5] = { h, p_marks, quote, code_block, outro };
-    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 5));
+    return Pm_Schema_node(g_schema, "doc", NULL, Pm_Node_list(h, p_marks, quote, code_block, outro));
 }
 
 static Pm_EditorState make_state(void) {
@@ -225,9 +209,7 @@ static void on_click(void* ctx, PointerEvent ev) {
             Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), JsRecord_Pm_NodeType_get(nodes, "paragraph"));
             g_last_action = "Converted heading -> paragraph";
         } else {
-            Pm_Attrs ha = Pm_Attrs_create();
-            js_set_num(ha, "level", 2);
-            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), JsRecord_Pm_NodeType_get(nodes, "heading"), ha);
+            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), JsRecord_Pm_NodeType_get(nodes, "heading"), Pm_Attrs_record({ "level", js_number(2) }));
             g_last_action = "Converted block -> heading[level=2]";
         }
         Pm_EditorView_dispatch(g_view, tr);
@@ -247,10 +229,10 @@ __attribute__((export_name("start"))) void start(void) {
     g_schema = make_schema();
     js_retain(g_schema);
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = make_state(), .dispatchTransaction = Pm_DispatchTransactionFn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = make_state(), .dispatchTransaction_fn = on_dispatch);
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = Pm_EditorView_new(AS_Node(mount), props);
+    g_view = Pm_EditorView_new(mount, props);
     js_retain(g_view);
     update_meta(Pm_EditorView_get_state(g_view));
 

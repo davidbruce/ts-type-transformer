@@ -7,10 +7,6 @@ static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
     Pixi_Graphics_stroke(g, Pixi_StrokeStyle_create(.width = width, .color = color_hex));
 }
 
-static void add_gfx(Pixi_Container stage, Pixi_Graphics g) {
-    Pixi_Container_addChild(stage, JsArray_Pixi_Container_from((Pixi_Container[]){ AS_Pixi_Container(g) }, 1));
-}
-
 static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx;
     (void)v;
@@ -35,18 +31,15 @@ static void on_init(void* ctx, bool ok, JsValue v) {
         Pixi_Graphics_lineTo(grid, 680.0, (double)y);
     }
     stroke_g(grid, 1.0, (double)0xe5e5e5);
-    add_gfx(stage, grid);
 
     Pixi_Graphics rect_g = Pixi_Graphics_new();
     Pixi_Graphics_rect(rect_g, 40.0, 46.0, 140.0, 88.0);
     Pixi_Graphics_fill(rect_g, 0x111111);
-    add_gfx(stage, rect_g);
 
     Pixi_Graphics round_g = Pixi_Graphics_new();
     Pixi_Graphics_roundRect(round_g, 216.0, 46.0, 156.0, 88.0, 16.0);
     Pixi_Graphics_fill(round_g, 0xf7f7f7);
     stroke_g(round_g, 2.0, (double)0x111111);
-    add_gfx(stage, round_g);
 
     Pixi_Graphics circle_g = Pixi_Graphics_new();
     Pixi_Graphics_circle(circle_g, 458.0, 90.0, 44.0);
@@ -55,24 +48,20 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     stroke_g(circle_g, 2.0, (double)0xffffff);
     Pixi_Graphics_circle(circle_g, 458.0, 90.0, 52.0);
     stroke_g(circle_g, 1.5, (double)0x111111);
-    add_gfx(stage, circle_g);
 
     Pixi_Graphics ellipse_g = Pixi_Graphics_new();
     Pixi_Graphics_ellipse(ellipse_g, 588.0, 90.0, 56.0, 36.0);
     Pixi_Graphics_fill(ellipse_g, 0xd4d4d4);
     stroke_g(ellipse_g, 1.5, (double)0x111111);
-    add_gfx(stage, ellipse_g);
 
     Pixi_Graphics poly_g = Pixi_Graphics_new();
     Pixi_Graphics_regularPoly(poly_g, 130.0, 274.0, 58.0, 6.0, 0.25);
     Pixi_Graphics_fill(poly_g, 0x737373);
     stroke_g(poly_g, 2.0, (double)0x111111);
-    add_gfx(stage, poly_g);
 
     Pixi_Graphics star_g = Pixi_Graphics_new();
     Pixi_Graphics_star(star_g, 340.0, 274.0, 5.0, 62.0, 26.0, -0.314);
     Pixi_Graphics_fill(star_g, 0x111111);
-    add_gfx(stage, star_g);
 
     Pixi_Graphics diamond_g = Pixi_Graphics_new();
     Pixi_Graphics_moveTo(diamond_g, 548.0, 212.0);
@@ -82,7 +71,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     Pixi_Graphics_closePath(diamond_g);
     Pixi_Graphics_fill(diamond_g, 0xb5b5b5);
     stroke_g(diamond_g, 1.5, (double)0x111111);
-    add_gfx(stage, diamond_g);
+    Pixi_Container_addChild(stage, grid, rect_g, round_g, circle_g, ellipse_g, poly_g, star_g, diamond_g);
 
     Pixi_Application_render(g_app);
 

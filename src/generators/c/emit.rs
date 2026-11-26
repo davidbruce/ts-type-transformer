@@ -51,10 +51,39 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         }
     };
 
-    let mut subtypes: HashMap<String, Vec<String>> = HashMap::new();
+    let mut descendants: BTreeMap<String, Vec<String>> = Default::default();
     for c in &m.classes {
         for a in all_ancestors(m, &c.name) {
-            subtypes.entry(a).or_default().push(c.name.clone());
+            descendants.entry(a).or_default().push(c.name.clone());
+        }
+    }
+    let local_type_names: HashSet<&str> = m
+        .classes
+        .iter()
+        .map(|c| c.name.as_str())
+        .chain(m.callbacks.iter().map(|c| c.name.as_str()))
+        .chain(m.unions.iter().map(|u| u.name.as_str()))
+        .chain(m.type_aliases.iter().map(|a| a.0.as_str()))
+        .chain(m.record_aliases.iter().map(|a| a.0.as_str()))
+        .chain(m.enums.iter().map(|e| e.0.as_str()))
+        .chain(m.num_enums.iter().map(|e| e.0.as_str()))
+        .collect();
+    let mut subtypes: HashMap<String, Vec<String>> = descendants.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut opaque_keys: Vec<&String> = resolved_opaque.keys().collect();
+    opaque_keys.sort();
+    let mut remote_as: HashMap<String, String> = HashMap::new();
+    for name in opaque_keys {
+        let (idx, orig_c_name) = &resolved_opaque[name];
+        if let Some(remote_subs) = refs[*idx].subtypes.get(orig_c_name) {
+            let entry = subtypes.entry(name.clone()).or_default();
+            for s in remote_subs {
+                if refs[*idx].structs.contains(s) && !local_type_names.contains(s.as_str()) && !entry.contains(s) {
+                    entry.push(s.clone());
+                }
+            }
+            if !descendants.contains_key(name) {
+                remote_as.insert(name.clone(), format!("AS_{orig_c_name}"));
+            }
         }
     }
     let mut cx = Ctx {
@@ -62,6 +91,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         typed: HashSet::new(),
         of: HashMap::new(),
         subtypes,
+        callbacks: m.callbacks.iter().map(|c| c.name.clone()).collect(),
     };
     // A union only a value goes into is typed where a member can be told by its C type: else a value stays one.
     cx.of = m.unions.iter().filter(|u| cx.decodable(&u.name) || typable(u)).filter_map(|u| Some((u.name.clone(), of_choices(u, &cx)?.into_iter().map(|c| c.0).chain((!cx.decodable(&u.name)).then(|| "JsValue".to_string())).collect()))).collect();
@@ -220,18 +250,29 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             types += "#endif\n";
         }
     }
-    // A callback is made from a function and a context pointer passed back to it.
     // C11: one upcast per type with descendants. `AS_Element(div)` is `div` as
-    // an Element, and a compile error for anything that is not one.
-    let mut descendants: BTreeMap<String, Vec<String>> = Default::default();
-    for c in &m.classes {
-        for a in all_ancestors(m, &c.name) {
-            descendants.entry(a).or_default().push(c.name.clone());
+    // an Element (or NULL), and a compile error for anything that is not one.
+    for (base, local_subs) in &descendants {
+        let mut all_subs = local_subs.clone();
+        if let Some((idx, orig)) = resolved_opaque.get(base)
+            && let Some(rsubs) = refs[*idx].subtypes.get(orig)
+        {
+            for s in rsubs {
+                if refs[*idx].structs.contains(s) && !local_type_names.contains(s.as_str()) && !all_subs.contains(s) {
+                    all_subs.push(s.clone());
+                }
+            }
         }
-    }
-    for (base, subs) in &descendants {
-        let arms: Vec<String> = subs.iter().map(|s| format!("    {s}: ({base}){{ (x).h }}")).collect();
-        types += &format!("#define {}(x) _Generic((x), \\\n    {base}: (x), \\\n{})\n", as_macro(base), arms.join(", \\\n"));
+        let mname = as_macro(base);
+        types += &format!("#ifndef TS_DEFINED_{mname}\n#define TS_DEFINED_{mname}\n");
+        types += &format!("static inline {base} ts_up_{mname}_self({base} x) {{ return x; }}\n");
+        types += &format!("static inline {base} ts_up_{mname}_null(const void* p) {{ (void)p; return ({base}){{ 0 }}; }}\n");
+        let mut arms = vec![format!("    {base}: ts_up_{mname}_self"), format!("    TS_NULL_ARMS(ts_up_{mname}_null)")];
+        for (i, s) in all_subs.iter().enumerate() {
+            types += &format!("static inline {base} ts_up_{mname}_{i}({s} x) {{ return ({base}){{ x.h }}; }}\n");
+            arms.push(format!("    {s}: ts_up_{mname}_{i}"));
+        }
+        types += &format!("#define {mname}(x) _Generic((x), \\\n{})((x))\n#endif\n", arms.join(", \\\n"));
     }
     // A promise: `Promise_then(p, fn, ctx)` calls fn(ctx, ok, value) once it
     // settles, ok with its value or not with its reason; the value is lent.
@@ -270,19 +311,29 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     }
     // The structs first, then unions, which may hold arrays or records, then the
     // functions, which may read unions out of arrays or records.
-    let short_macro_ok = |t: &Ty| match t {
+    let short_macro_ok = |t: &Ty, suffix: &str| match t {
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) => {
-            !m.classes.iter().any(|c| c.name == *n && c.funcs.iter().any(|f| f.name == "record"))
-                && !m.funcs.iter().any(|f| f.name == format!("{n}_record"))
+            !m.classes.iter().any(|c| c.name == *n && c.funcs.iter().any(|f| f.name == suffix))
+                && !m.funcs.iter().any(|f| f.name == format!("{n}_{suffix}"))
+                && !m.enums.iter().any(|(en, vs)| en == n && vs.iter().any(|v| super::super::model::ident(v) == suffix))
+                && !m.num_enums.iter().any(|(en, ms)| en == n && ms.iter().any(|(k, _)| k == suffix))
         }
         _ => false,
+    };
+    let elem_upcast_macro = |e: &Ty| -> Option<String> {
+        let Ty::Obj(n) = e else { return None };
+        if descendants.contains_key(n) {
+            Some(as_macro(n))
+        } else {
+            remote_as.get(n).cloned()
+        }
     };
     let containers: Vec<String> = elements
         .iter()
         .map(|t| match t {
-            Ty::ArrayOf(e) => array_type(e, &cx),
+            Ty::ArrayOf(e) => array_type(e, &cx, elem_upcast_macro(e).as_deref(), short_macro_ok(e, "list")),
             Ty::Tuple(es) => tuple_type(es, &cx),
-            Ty::Record(v) => record_type(v, m, &raw_prefix, &cx, short_macro_ok(v)),
+            Ty::Record(v) => record_type(v, m, &raw_prefix, &cx, short_macro_ok(v, "record")),
             _ => unreachable!(),
         })
         .collect();
@@ -364,6 +415,13 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         types += &format!("\ntypedef {} (*{}_fn)({});\n", plain(&c.ret), c.name, params.join(", "));
         types += &format!("{} uint32_t {cb_raw}({}_fn, void*);\n", import_attr(wasm_module, &cb_from), c.name);
         types += &format!("static inline {0} {0}_from({0}_fn fn, void* ctx) {{ return ({0}){{ {cb_raw}(fn, ctx) }}; }}\n", c.name);
+        types += &format!(
+            "static inline TsCb {0}_arg_self({0} x) {{ return (TsCb){{ x.h, false }}; }}\n\
+             static inline TsCb {0}_arg_fn({0}_fn fn) {{ return (TsCb){{ fn ? {cb_raw}(fn, (void*)0) : 0, fn != ({0}_fn)0 }}; }}\n\
+             static inline TsCb {0}_arg_null(const void* p) {{ (void)p; return (TsCb){{ 0, false }}; }}\n\
+             #define {0}_arg(x) _Generic((x), {0}: {0}_arg_self, {0}_fn: {0}_arg_fn, TS_NULL_ARMS({0}_arg_null))(x)\n",
+            c.name
+        );
     }
 
     let mut out = vec![("ts_runtime.h".to_string(), RUNTIME.to_string()), ("ts_types.h".to_string(), types)];
@@ -408,9 +466,6 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     for c in &m.classes {
         global_taken.insert(c.name.clone());
         global_taken.insert(as_macro(&c.name));
-        for a in all_ancestors(m, &c.name) {
-            global_taken.insert(format!("{}_as_{a}", c.name));
-        }
         if c.js.is_some() {
             global_taken.insert(format!("{}_cast", c.name));
             global_taken.insert(format!("{}_try_cast", c.name));
@@ -432,8 +487,9 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     }
     for c in &m.callbacks {
         global_taken.insert(c.name.clone());
-        global_taken.insert(format!("{}_fn", c.name));
-        global_taken.insert(format!("{}_from", c.name));
+        for s in ["fn", "from", "arg", "arg_self", "arg_fn", "arg_null"] {
+            global_taken.insert(format!("{}_{s}", c.name));
+        }
     }
     for u in &m.unions {
         for id in (NAMING.type_names)(&u.name, &u.name, Kind::Union, m) {
@@ -443,6 +499,8 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     for f in &m.funcs {
         global_taken.insert(f.name.clone());
     }
+    let mut rest_list_methods: HashSet<(String, String)> = HashSet::new();
+    let mut class_bodies = Vec::with_capacity(m.classes.len());
     for (c, path) in m.classes.iter().zip(&class_paths) {
         let mut body = String::new();
         for (name, value) in &c.consts {
@@ -474,10 +532,6 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 body += &format!("#define {n}_iterate(self) {n}_iterate({}(self))\n", as_macro(n));
             }
         }
-        // A cast to every ancestor: an inherited member is called on the type that declares it.
-        for a in all_ancestors(m, &c.name) {
-            body += &format!("static inline {a} {}_as_{a}({} self) {{ return ({a}){{ self.h }}; }}\n", c.name, c.name);
-        }
         // Checked downcast: only a class has a constructor to test against.
         if c.js.is_some() {
             let cast_name = if c.funcs.iter().any(|f| f.name == "cast") { "try_cast" } else { "cast" };
@@ -491,23 +545,34 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 c.name
             );
         }
-        let macros: Vec<String> = c
+        let macros: Vec<(String, bool)> = c
             .funcs
             .iter()
             .enumerate()
             .map(|(i, f)| {
                 let overloads = family(f, &c.funcs, &cx).map(|(at, members)| (at, members.iter().map(|o| format!("{}_{}", c.name, o.name)).collect(), members));
                 let earlier: Vec<&Func> = c.funcs[..i].iter().collect();
-                call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants, &as_macro, &cx)
+                let list_name = format!("{}_{}_list", c.name, f.name);
+                let allow_list = f.rest && !global_taken.contains(&list_name);
+                let (m_out, emitted_list) = call_macros(&format!("{}_{}", c.name, f.name), Class::has_self(f).then_some(c.name.as_str()), f, &earlier, overloads, &descendants, &remote_as, &as_macro, allow_list, &cx);
+                if emitted_list {
+                    global_taken.insert(list_name);
+                    rest_list_methods.insert((c.name.clone(), f.name.clone()));
+                }
+                (m_out, emitted_list)
             })
             .collect();
-        for (f, macros) in c.funcs.iter().zip(&macros) {
-            func(&mut body, Some(&c.name), f, wasm_module, &raw_prefix, &cx, !macros.is_empty());
+        for (f, (ms, _)) in c.funcs.iter().zip(&macros) {
+            func(&mut body, Some(&c.name), f, wasm_module, &raw_prefix, &cx, !ms.is_empty());
         }
         // After every function: a macro may choose a later one.
-        for (f, macros) in c.funcs.iter().zip(macros) {
-            body += &with_doc(macros, &format!("{}_{}", c.name, f.name), f);
+        for (f, (ms, _)) in c.funcs.iter().zip(macros) {
+            body += &with_doc(ms, &format!("{}_{}", c.name, f.name), f);
         }
+        class_bodies.push((c, path, body));
+    }
+    // Emit inherited aliases in a second pass so `_list` macros exist regardless of class order.
+    for (c, path, mut body) in class_bodies {
         let mut own_methods: HashSet<&str> = c.funcs.iter().map(|f| f.name.as_str()).chain(c.consts.iter().map(|(k, _)| k.as_str())).collect();
         own_methods.extend(["cast", "try_cast", "as_array", "iterate", "iterate_async", "iterate_next"]);
         let mut ancestor_includes = Vec::new();
@@ -544,6 +609,13 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                     ancestor_includes.push(a_path);
                 }
                 body += &format!("#define {alias} {a}_{}\n", af.name);
+                if rest_list_methods.contains(&(a.clone(), af.name.clone())) {
+                    let list_alias = format!("{alias}_list");
+                    if global_taken.insert(list_alias.clone()) {
+                        body += &format!("#define {list_alias} {a}_{}_list\n", af.name);
+                        rest_list_methods.insert((c.name.clone(), af.name.clone()));
+                    }
+                }
                 if matches!(af.call, Call::Set(_)) {
                     setters.push((af, a));
                 }
@@ -559,7 +631,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         out.push((path.clone(), header(&c.module, &ancestor_includes, body)));
     }
     let mut functions: BTreeMap<String, String> = Default::default();
-    let macros: Vec<String> = m
+    let macros: Vec<(String, bool)> = m
         .funcs
         .iter()
         .enumerate()
@@ -567,28 +639,38 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
             // Overloads in one module: in one header.
             let overloads = family(f, &m.funcs, &cx).filter(|(_, members)| members.iter().all(|o| o.module == f.module)).map(|(at, members)| (at, members.iter().map(|o| o.name.clone()).collect(), members));
             let earlier: Vec<&Func> = m.funcs[..i].iter().filter(|g| g.module == f.module).collect();
-            call_macros(&f.name, None, f, &earlier, overloads, &descendants, &as_macro, &cx)
+            let list_name = format!("{}_list", f.name);
+            let allow_list = f.rest && !global_taken.contains(&list_name);
+            let (ms, emitted_list) = call_macros(&f.name, None, f, &earlier, overloads, &descendants, &remote_as, &as_macro, allow_list, &cx);
+            if emitted_list {
+                global_taken.insert(list_name);
+            }
+            (ms, emitted_list)
         })
         .collect();
-    for (f, macros) in m.funcs.iter().zip(&macros) {
-        func(functions.entry(f.module.clone()).or_default(), None, f, wasm_module, &raw_prefix, &cx, !macros.is_empty());
+    for (f, (ms, _)) in m.funcs.iter().zip(&macros) {
+        func(functions.entry(f.module.clone()).or_default(), None, f, wasm_module, &raw_prefix, &cx, !ms.is_empty());
     }
-    for (f, macros) in m.funcs.iter().zip(macros) {
-        *functions.entry(f.module.clone()).or_default() += &with_doc(macros, &f.name, f);
+    for (f, (ms, _)) in m.funcs.iter().zip(macros) {
+        *functions.entry(f.module.clone()).or_default() += &with_doc(ms, &f.name, f);
     }
+    let is_internal_helper = |name: &str| {
+        ["ts_arity_", "ts_fam_", "ts_wrap_", "ts_rest_", "ts_r0_", "ts_r1_"].iter().any(|p| name.starts_with(p))
+    };
     for (module, body) in functions {
         for line in body.lines().map(str::trim) {
             if let Some(rest) = line.strip_prefix("static inline ")
                 && let Some((head, _)) = rest.split_once('(')
                 && let Some(name) = head.split_whitespace().last()
                 && !name.is_empty()
+                && !is_internal_helper(name)
             {
                 all_names.push(name.to_string());
             } else if let Some(rest) = line.strip_prefix("#define ")
                 && let Some((name, _)) = rest.split_once('(')
             {
                 let name = name.trim();
-                if !name.is_empty() && !name.starts_with("ts_arity_") {
+                if !name.is_empty() && !is_internal_helper(name) {
                     all_names.push(name.to_string());
                 }
             }
@@ -610,6 +692,12 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         out.push((format!("{pkg_name}.h"), all));
     }
     let entry = if pkg_name != "bindings" { format!("{pkg_name}.h") } else { "bindings.h".into() };
+    let meta_structs_set: HashSet<&str> = meta_structs.iter().map(String::as_str).collect();
+    let c_subtypes: BTreeMap<String, Vec<String>> = descendants
+        .iter()
+        .filter(|(base, _)| meta_structs_set.contains(base.as_str()))
+        .map(|(base, subs)| (base.clone(), subs.clone()))
+        .collect();
     let c_structs: BTreeMap<String, String> = meta_structs
         .iter()
         .filter_map(|s| m.original_type_names.get(s).map(|orig| (orig.clone(), s.clone())))
@@ -622,6 +710,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         structs: meta_structs,
         external_structs: meta_external_structs,
         c_structs,
+        c_subtypes,
         ..Default::default()
     };
     out.push((super::super::pkg_meta::META_FILE.into(), meta.to_toml()));

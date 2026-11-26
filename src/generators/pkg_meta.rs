@@ -23,6 +23,8 @@ pub struct PkgMeta {
     pub external_structs: Vec<String>,
     /// Original unprefixed TS type name -> emitted C struct name (when renamed/prefixed).
     pub c_structs: BTreeMap<String, String>,
+    /// C base struct -> subtype struct names defined in this package.
+    pub c_subtypes: BTreeMap<String, Vec<String>>,
     /// Rust exported top-level types: `name -> (arity, is_handle)`.
     pub rust_types: BTreeMap<String, (usize, bool)>,
     /// F# exported top-level types: `name -> (arity, is_interface, abbrev_target)`.
@@ -111,6 +113,12 @@ impl PkgMeta {
                 out += &format!("{} = {}\n", toml_str(orig), toml_str(emitted));
             }
         }
+        if !self.c_subtypes.is_empty() {
+            out += "\n[c_subtypes]\n";
+            for (base, subs) in &self.c_subtypes {
+                write_str_list(&mut out, &toml_str(base), subs);
+            }
+        }
         if !self.rust_types.is_empty() {
             out += "\n[rust_types]\n";
             for (name, &(arity, handle)) in &self.rust_types {
@@ -180,6 +188,16 @@ impl PkgMeta {
             }
         }
 
+        let mut c_subtypes = BTreeMap::new();
+        if let Some(val) = root.get("c_subtypes") {
+            let tbl = val
+                .as_table()
+                .ok_or_else(|| format!("{}: `c_subtypes` must be a table", path.display()))?;
+            for (base, _) in tbl {
+                c_subtypes.insert(base.clone(), get_opt_str_list(tbl, base, path)?);
+            }
+        }
+
         let mut rust_types = BTreeMap::new();
         if let Some(val) = root.get("rust_types") {
             let tbl = val
@@ -226,6 +244,7 @@ impl PkgMeta {
             structs,
             external_structs,
             c_structs,
+            c_subtypes,
             rust_types,
             fsharp_types,
         })

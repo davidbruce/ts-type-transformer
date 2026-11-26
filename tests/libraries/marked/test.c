@@ -122,23 +122,15 @@ __attribute__((export_name("run"))) void run(void) {
     JsString t = marked(table);
     CHECK(contains(t, "<table>") && contains(t, "<th>a</th>") && contains(t, "<td>2</td>"));
     js_release(t);
-    MarkedExtension plain = MarkedExtension_create();
-    MarkedExtension_set_gfm(plain, js_some_bool(false));
-    JsArray_MarkedExtension plain_exts = JsArray_MarkedExtension_new();
-    JsArray_MarkedExtension_push(plain_exts, plain);
-    Marked flat_m = Marked_new(JsArray_MarkedExtension_new());
-    Marked_use(flat_m, plain_exts);
+    MarkedExtension plain = MarkedExtension_create(.gfm = false);
+    Marked flat_m = Marked_new(plain);
     JsString flat = Marked_parse(flat_m, table);
     CHECK(!contains(flat, "<table>"));
     js_release(flat);
 
     // breaks: a newline is a <br>.
-    MarkedExtension soft = MarkedExtension_create();
-    MarkedExtension_set_breaks(soft, js_some_bool(true));
-    JsArray_MarkedExtension soft_exts = JsArray_MarkedExtension_new();
-    JsArray_MarkedExtension_push(soft_exts, soft);
-    Marked soft_m = Marked_new(JsArray_MarkedExtension_new());
-    Marked_use(soft_m, soft_exts);
+    MarkedExtension soft = MarkedExtension_create(.breaks = true);
+    Marked soft_m = Marked_new(soft);
     JsString br = Marked_parse(soft_m, "one\ntwo");
     CHECK(contains(br, "one<br>two"));
     js_release(br);
@@ -147,8 +139,7 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(nobr);
 
     // An instance, with its own parse and parseInline.
-    JsArray_MarkedExtension none = JsArray_MarkedExtension_new();
-    Marked m = Marked_new(none);
+    Marked m = Marked_new_list(JsArray_MarkedExtension_new());
     JsString inline_html = Marked_parseInline(m, "a *b* `c`");
     CHECK(JsString_equals(inline_html, "a <em>b</em> <code>c</code>"));
     js_release(inline_html);
@@ -210,13 +201,10 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(raw_table);
 
     // `use` with a renderer: headings made by a function here.
-    MarkedExtension ext = MarkedExtension_create();
-    Marked_RendererObject rend = Marked_RendererObject_create();
-    Marked_RendererObject_set_heading(rend, Marked_RendererObjectHeadingFn_from(render_heading, 0));
-    MarkedExtension_set_renderer(ext, rend);
-    JsArray_MarkedExtension exts = JsArray_MarkedExtension_new();
-    JsArray_MarkedExtension_push(exts, ext);
-    Marked styled = Marked_new(exts);
+    MarkedExtension ext = MarkedExtension_create(
+        .renderer = Marked_RendererObject_create(.heading_fn = render_heading)
+    );
+    Marked styled = Marked_new(ext);
     JsString custom = Marked_parse(styled, "## Sub\n\nbody");
     CHECK(contains(custom, "<h2 class=\"title\">Sub</h2>"));
     CHECK(contains(custom, "<p>body</p>"));
@@ -228,23 +216,17 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(default_h);
 
     // `use` with walkTokens: every token is visited, headings change.
-    MarkedExtension walker = MarkedExtension_create();
-    MarkedExtension_set_walkTokens(walker, MarkedExtensionWalkTokensFn_from(demote, 0));
-    JsArray_MarkedExtension wexts = JsArray_MarkedExtension_new();
-    JsArray_MarkedExtension_push(wexts, walker);
-    Marked walking = Marked_new(wexts);
+    MarkedExtension walker = MarkedExtension_create(.walkTokens_fn = demote);
+    Marked walking = Marked_new(walker);
     JsString demoted = Marked_parse(walking, "# Big\n\ntext");
     CHECK(contains(demoted, "<h2>Big</h2>"));
     CHECK(walked_headings == 1 && walked >= 4);
     js_release(demoted);
 
     // Marked_use adds an extension to an existing instance.
-    Marked grown = Marked_new(JsArray_MarkedExtension_new());
-    JsArray_MarkedExtension more = JsArray_MarkedExtension_new();
-    MarkedExtension gfm_off = MarkedExtension_create();
-    MarkedExtension_set_breaks(gfm_off, js_some_bool(true));
-    JsArray_MarkedExtension_push(more, gfm_off);
-    Marked_use(grown, more);
+    Marked grown = Marked_new_list(JsArray_MarkedExtension_new());
+    MarkedExtension gfm_off = MarkedExtension_create(.breaks = true);
+    Marked_use(grown, gfm_off);
     JsString broken = Marked_parse(grown, "x\ny");
     CHECK(contains(broken, "x<br>y"));
     js_release(broken);
@@ -269,11 +251,8 @@ __attribute__((export_name("run"))) void run(void) {
     js_release(parsed);
 
     // marked's own `use` changes the defaults for marked(): last, so nothing above sees it.
-    JsArray_MarkedExtension global = JsArray_MarkedExtension_new();
-    MarkedExtension global_breaks = MarkedExtension_create();
-    MarkedExtension_set_breaks(global_breaks, js_some_bool(true));
-    JsArray_MarkedExtension_push(global, global_breaks);
-    js_release(marked_use(global));
+    MarkedExtension global_breaks = MarkedExtension_create(.breaks = true);
+    js_release(marked_use(global_breaks));
     JsString global_br = marked("p\nq");
     CHECK(contains(global_br, "p<br>q"));
     js_release(global_br);

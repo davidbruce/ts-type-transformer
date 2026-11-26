@@ -5,9 +5,6 @@
 
 static const double PI = 3.14159265358979323846;
 
-#define add_obj(parent, child) \
-    Three_Object3D_add(AS_Three_Object3D(parent), JsArray_Three_Object3D_from((Three_Object3D[]){ AS_Three_Object3D(child) }, 1))
-
 static double tower_height(int mode, int gx, int gz) {
     double fx = (double)gx - 4.5;
     double fz = (double)gz - 4.5;
@@ -135,28 +132,22 @@ __attribute__((export_name("start"))) void start(void) {
     g_persp = Three_PerspectiveCamera_new(40.0, aspect, 0.1, 100.0);
     js_retain(g_persp);
 
-    add_obj(g_scene, Three_AmbientLight_new(0xffffff, 1.25));
     Three_DirectionalLight key = Three_DirectionalLight_new(0xffffff, 2.1);
     Three_Vector3_set(Three_DirectionalLight_get_position(key), 8.0, 12.0, 6.0);
-    add_obj(g_scene, key);
     Three_DirectionalLight rim = Three_DirectionalLight_new(0xffffff, 0.9);
     Three_Vector3_set(Three_DirectionalLight_get_position(rim), -7.0, 6.0, -8.0);
-    add_obj(g_scene, rim);
 
     Three_Mesh plinth = Three_Mesh_new(Three_PlaneGeometry_new(8.6, 8.6), Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
         .color_number = 0xe5e5e5, .roughness = 0.85)));
     Three_Euler_set_x(Three_Mesh_get_rotation(plinth), -PI / 2.0);
     Three_Vector3_set_y(Three_Mesh_get_position(plinth), -0.01);
-    add_obj(g_scene, plinth);
-
-    add_obj(g_scene, Three_GridHelper_new(9.0, 10.0, 0x999999, 0xd4d4d4));
 
     Three_BoxGeometry tgeo = Three_BoxGeometry_new(0.54, 1.0, 0.54);
     Three_MeshStandardMaterial tmat = Three_MeshStandardMaterial_new(Three_MeshStandardMaterialParameters_create(
         .color_number = 0xffffff, .roughness = 0.65, .metalness = 0.08));
     g_inst = Three_InstancedMesh_new(tgeo, tmat, 100.0);
     js_retain(g_inst);
-    add_obj(g_scene, g_inst);
+    Three_Scene_add(g_scene, Three_AmbientLight_new(0xffffff, 1.25), key, rim, plinth, Three_GridHelper_new(9.0, 10.0, 0x999999, 0xd4d4d4), g_inst);
 
     g_cam_btn = Document_getElementById(doc, "btn-cam");
     js_retain(g_cam_btn);

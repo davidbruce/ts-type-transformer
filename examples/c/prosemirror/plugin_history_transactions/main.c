@@ -3,10 +3,7 @@
 #include "prosemirror/prosemirror.h"
 
 static JsValue dom_hole(const char* tag) {
-    JsArray a = JsArray_new();
-    js_push_str(a, tag);
-    js_push_num(a, 0);
-    return js_value(a);
+    return js_value(js_values(tag, 0));
 }
 static JsValue heading_dom(void* ctx, Pm_Node n) {
     (void)ctx;
@@ -46,9 +43,9 @@ static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
     Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .toDOM_fn = heading_dom);
 
-    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(para_dom, NULL));
+    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM_fn = para_dom);
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
@@ -65,22 +62,19 @@ static Pm_Node t_node(const char* t) {
     return Pm_Schema_text(g_schema, t);
 }
 static Pm_Node p_node(const char* t) {
-    return Pm_Schema_node(g_schema, "paragraph", (Pm_Attrs){ 0 }, t_node(t));
+    return Pm_Schema_node(g_schema, "paragraph", NULL, t_node(t));
 }
 
 static Pm_Node make_initial_doc(void) {
-    Pm_Attrs h_attrs = Pm_Attrs_create();
-    js_set_num(h_attrs, "level", 2);
     Pm_Node h = Pm_Schema_node(
-        g_schema, "heading", h_attrs, t_node("Step-Inversion Undo & Transaction Filter")
+        g_schema, "heading", Pm_Attrs_record({ "level", js_number(2) }), t_node("Step-Inversion Undo & Transaction Filter")
     );
-    Pm_Node blocks[4] = {
+    return Pm_Schema_node(g_schema, "doc", NULL, Pm_Node_list(
         h,
         p_node("Every document change produces atomic Transform steps that can be inverted against prior snapshots."),
         p_node("A ProseMirror Plugin inspects transactions in filterTransaction and can enforce a read-only lock."),
         p_node("Click Append Revision or Bold First Line, then step backward with Undo and forward with Redo.")
-    };
-    return Pm_Schema_node(g_schema, "doc", (Pm_Attrs){ 0 }, JsArray_Pm_Node_from(blocks, 4));
+    ));
 }
 
 static JsValue audit_init(void* ctx, Pm_EditorStateConfig cfg, Pm_EditorState inst) {
@@ -218,18 +212,18 @@ __attribute__((export_name("start"))) void start(void) {
     js_retain(g_audit_key);
 
     Pm_StateField field = Pm_StateField_create();
-    Pm_StateField_set_init(field, Pm_StateFieldInitFn_from(audit_init, NULL));
-    Pm_StateField_set_apply(field, Pm_StateFieldApplyFn_from(audit_apply, NULL));
+    Pm_StateField_set_init(field, audit_init);
+    Pm_StateField_set_apply(field, audit_apply);
 
-    Pm_PluginSpec pspec = Pm_PluginSpec_create(.key = g_audit_key, .state = field, .filterTransaction = Pm_FilterTransactionFn_from(filter_tr, NULL));
+    Pm_PluginSpec pspec = Pm_PluginSpec_create(.key = g_audit_key, .state = field, .filterTransaction_fn = filter_tr);
     Pm_Plugin plugin = Pm_Plugin_new(pspec);
 
-    Pm_EditorStateConfig scfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = make_initial_doc(), .plugins = JsArray_Pm_Plugin_from(&plugin, 1));
+    Pm_EditorStateConfig scfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = make_initial_doc(), .plugins = Pm_Plugin_list(plugin));
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = Pm_EditorState_create(scfg), .dispatchTransaction = Pm_DispatchTransactionFn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = Pm_EditorState_create(scfg), .dispatchTransaction_fn = on_dispatch);
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = Pm_EditorView_new(AS_Node(mount), props);
+    g_view = Pm_EditorView_new(mount, props);
     js_retain(g_view);
     update_meta(Pm_EditorView_get_state(g_view));
 

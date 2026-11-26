@@ -25,15 +25,13 @@ __attribute__((export_name("start"))) void start(void) {
     js_scope();
     char jbuf[128], nbuf[128], rbuf[128], lbuf[128], fbuf[128], tmp[128];
 
-    const char* join_items[] = { "/workspace", "packages", "core", "..", "cli", "index.ts" };
-    JsString_copy(node_path_join(JsArray_JsString_from(join_items, 6)), jbuf, sizeof jbuf);
+    JsString_copy(node_path_join("/workspace", "packages", "core", "..", "cli", "index.ts"), jbuf, sizeof jbuf);
     check(strcmp(jbuf, "/workspace/packages/cli/index.ts") == 0);
 
     JsString_copy(node_path_normalize("/var//log/./app/../http/access.log"), nbuf, sizeof nbuf);
     check(strcmp(nbuf, "/var/log/http/access.log") == 0);
 
-    const char* resolve_items[] = { "/srv/app", "../shared", "config/prod.json" };
-    JsString_copy(node_path_resolve(JsArray_JsString_from(resolve_items, 3)), rbuf, sizeof rbuf);
+    JsString_copy(node_path_resolve("/srv/app", "../shared", "config/prod.json"), rbuf, sizeof rbuf);
     check(strcmp(rbuf, "/srv/shared/config/prod.json") == 0);
 
     JsString_copy(node_path_relative("/srv/app/src/ui", "/srv/app/dist/assets"), lbuf, sizeof lbuf);

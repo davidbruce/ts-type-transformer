@@ -75,22 +75,22 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_SceneContext_set_clearColor(scene, GPUColorDict_create(.r = 0.06, .g = 0.06, .b = 0.06, .a = 1.0));
 
     Babylon_ArcRotateCamera camera = babylon_createArcRotateCamera(PI / 4.2, PI / 2.9, 8.8, babylon_vec3(0.0, 2.1, 0.0));
-    babylon_addToScene(scene, AS_Babylon_Camera(camera));
+    babylon_addToScene(scene, camera);
     babylon_attachControl(camera, g_canvas, scene);
 
     Babylon_HemisphericLight hemi = babylon_createHemisphericLight(JsTuple_double_double_double_new(0.0, 1.0, 0.2), 0.72);
     Babylon_HemisphericLight_set_diffuseColor(hemi, JsTuple_double_double_double_new(0.85, 0.85, 0.85));
     Babylon_HemisphericLight_set_groundColor(hemi, JsTuple_double_double_double_new(0.14, 0.14, 0.14));
-    babylon_addToScene(scene, AS_Babylon_LightBase(hemi));
+    babylon_addToScene(scene, hemi);
 
     Babylon_DirectionalLight dir = babylon_createDirectionalLight(JsTuple_double_double_double_new(-1.2, -2.0, -1.1), 2.1);
     Babylon_DirectionalLight_set_diffuse(dir, JsTuple_double_double_double_new(1.0, 1.0, 1.0));
-    babylon_addToScene(scene, AS_Babylon_LightBase(dir));
+    babylon_addToScene(scene, dir);
 
     Babylon_PointLight key_light = babylon_createPointLight(JsTuple_double_double_double_new(3.2, 3.6, 2.4), 8.0);
     Babylon_PointLight_set_diffuse(key_light, JsTuple_double_double_double_new(0.92, 0.92, 0.92));
     Babylon_PointLight_set_range(key_light, 14.0);
-    babylon_addToScene(scene, AS_Babylon_LightBase(key_light));
+    babylon_addToScene(scene, key_light);
 
     Babylon_Mesh floor_m = babylon_createGround(g_engine, Babylon_GroundOptions_create(.width = 16.0, .height = 16.0));
     Babylon_Mesh_set_material(floor_m, mk_pbr(0.09, 0.10, 0.88));
@@ -155,7 +155,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_Mesh_set_material(inner_ring, mk_pbr(0.88, 0.40, 0.30));
     babylon_addToScene(scene, inner_ring);
 
-    babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
+    babylon_onBeforeRender(scene, on_before_render);
     Promise_then(babylon_registerScene(scene), on_registered, 0);
 }
 

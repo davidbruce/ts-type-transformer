@@ -20,7 +20,7 @@ __attribute__((export_name("start"))) void start(void) {
     Konva_RectConfig bg = Konva_RectConfig_create(
         .x = 0, .y = 0, .width = 680, .height = 400, .fill = "#ffffff"
     );
-    JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Rect_new(bg)));
+    JsArray_Konva_Node_push(items, Konva_Rect_new(bg));
 
     const double cx = 340.0;
     const double cy = 200.0;
@@ -34,28 +34,26 @@ __attribute__((export_name("start"))) void start(void) {
             .strokeWidth = ring_sw[i]
         );
         if (i == 3) Konva_CircleConfig_set_fill(cc, Konva_string_or_CanvasGradient_of("#f7f7f7"));
-        JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Circle_new(cc)));
+        JsArray_Konva_Node_push(items, Konva_Circle_new(cc));
     }
 
     for (int i = 0; i < 12; i++) {
         double a = (double)i * PI / 6.0;
-        double pts[] = { cx + 36.0 * cos(a), cy + 36.0 * sin(a), cx + 160.0 * cos(a), cy + 160.0 * sin(a) };
         Konva_LineConfig lc = Konva_LineConfig_create(
-            .points = JsArray_double_from(pts, 4),
+            .points = js_numbers(cx + 36.0 * cos(a), cy + 36.0 * sin(a), cx + 160.0 * cos(a), cy + 160.0 * sin(a)),
             .stroke = "#d4d4d4", .strokeWidth = 1
         );
-        JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Line_new(lc)));
+        JsArray_Konva_Node_push(items, Konva_Line_new(lc));
     }
 
     for (int i = 0; i < 24; i++) {
         double a = (double)i * PI / 12.0;
         double r0 = (i % 2 == 0) ? 148.0 : 154.0;
-        double pts[] = { cx + r0 * cos(a), cy + r0 * sin(a), cx + 166.0 * cos(a), cy + 166.0 * sin(a) };
         Konva_LineConfig lc = Konva_LineConfig_create(
-            .points = JsArray_double_from(pts, 4),
+            .points = js_numbers(cx + r0 * cos(a), cy + r0 * sin(a), cx + 166.0 * cos(a), cy + 166.0 * sin(a)),
             .stroke = "#111111", .strokeWidth = i % 2 == 0 ? 2.0 : 1.0
         );
-        JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Line_new(lc)));
+        JsArray_Konva_Node_push(items, Konva_Line_new(lc));
     }
 
     for (int i = 0; i < 8; i++) {
@@ -64,7 +62,7 @@ __attribute__((export_name("start"))) void start(void) {
             .fill = i % 2 == 0 ? "#111111" : "#efefef",
             .stroke = "#111111", .strokeWidth = 1.5
         );
-        JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Rect_new(pc)));
+        JsArray_Konva_Node_push(items, Konva_Rect_new(pc));
     }
 
     for (int i = 0; i < 12; i++) {
@@ -74,18 +72,18 @@ __attribute__((export_name("start"))) void start(void) {
             .fill = i % 2 == 0 ? "#111111" : "#ffffff",
             .stroke = "#111111", .strokeWidth = 1.5
         );
-        JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Circle_new(oc)));
+        JsArray_Konva_Node_push(items, Konva_Circle_new(oc));
     }
 
     Konva_RegularPolygonConfig cp = Konva_RegularPolygonConfig_create(
         .x = cx, .y = cy, .sides = 8, .radius = 26, .fill = "#111111"
     );
-    JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_RegularPolygon_new(cp)));
+    JsArray_Konva_Node_push(items, Konva_RegularPolygon_new(cp));
 
     Konva_CircleConfig cd = Konva_CircleConfig_create(
         .x = cx, .y = cy, .radius = 9, .fill = "#ffffff"
     );
-    JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Circle_new(cd)));
+    JsArray_Konva_Node_push(items, Konva_Circle_new(cd));
 
     const double lx[] = { 516, 332, 140, 328 };
     const double ly[] = { 194, 376, 194, 14 };
@@ -95,10 +93,10 @@ __attribute__((export_name("start"))) void start(void) {
             .x = lx[i], .y = ly[i], .text = labels[i], .fontSize = 11, .fontFamily = "monospace",
             .fill = "#555555"
         );
-        JsArray_Konva_Node_push(items, AS_Konva_Node(Konva_Text_new(tc)));
+        JsArray_Konva_Node_push(items, Konva_Text_new(tc));
     }
 
-    Konva_Layer_add(layer, items);
+    Konva_Layer_add_list(layer, items);
     Konva_Layer_draw(layer);
 
     char meta[128];

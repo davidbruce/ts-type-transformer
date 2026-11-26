@@ -15,10 +15,7 @@ static Echarts_LineStyleOption line_color(const char* hex) {
 static JsArray make_pts(const double pts[][2], int count) {
     JsArray arr = JsArray_new();
     for (int i = 0; i < count; i++) {
-        JsArray pair = JsArray_new();
-        js_push_num(pair, pts[i][0]);
-        js_push_num(pair, pts[i][1]);
-        js_push_val(arr, pair);
+        js_push_val(arr, js_numbers(pts[i][0], pts[i][1]));
     }
     return arr;
 }
@@ -42,9 +39,7 @@ __attribute__((export_name("start"))) void start(void) {
             .color = "#ffffff", .borderColor = "#111111", .borderWidth = 2),
         .data_list = make_pts(cb_pts, 10));
 
-    JsArray series = JsArray_new();
-    js_push_val(series, s0);
-    js_push_val(series, s1);
+    JsArray series = js_values(js_value(s0), js_value(s1));
 
     EChartsOption opt = EChartsOption_create(
         .animation = false,

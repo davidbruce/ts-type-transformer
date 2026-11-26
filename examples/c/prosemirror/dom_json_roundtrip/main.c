@@ -25,10 +25,7 @@ static void out_js(OutBuf* o, JsString js) {
 }
 
 static JsValue dom_hole(const char* tag) {
-    JsArray a = JsArray_new();
-    js_push_str(a, tag);
-    js_push_num(a, 0);
-    return js_value(a);
+    return js_value(js_values(tag, 0));
 }
 static JsValue heading_dom(void* ctx, Pm_Node n) {
     (void)ctx;
@@ -47,9 +44,7 @@ static JsValue mark_dom(void* ctx, Pm_Mark m, bool inl) {
 static Pm_TagParseRule make_tag_rule(const char* tag, int level) {
     Pm_TagParseRule r = Pm_TagParseRule_create(.tag = tag);
     if (level > 0) {
-        Pm_Attrs a = Pm_Attrs_create();
-        js_set_num(a, "level", (double)level);
-        Pm_TagParseRule_set_attrs(r, a);
+        Pm_TagParseRule_set_attrs(r, Pm_Attrs_record({ "level", js_number((double)level) }));
     }
     return r;
 }
@@ -65,37 +60,40 @@ static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
     Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .defining = true);
-    Pm_TagParseRule hrules[2] = { make_tag_rule("h1", 1), make_tag_rule("h2", 2) };
-    Pm_NodeSpec_set_parseDOM(heading, JsArray_Pm_TagParseRule_from(hrules, 2));
-    Pm_NodeSpec_set_toDOM(heading, Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(
+        .attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .defining = true,
+        .parseDOM = Pm_TagParseRule_list(make_tag_rule("h1", 1), make_tag_rule("h2", 2)),
+        .toDOM_fn = heading_dom
+    );
 
-    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block");
-    Pm_TagParseRule p_rule = make_tag_rule("p", 0);
-    Pm_NodeSpec_set_parseDOM(para, JsArray_Pm_TagParseRule_from(&p_rule, 1));
-    Pm_NodeSpec_set_toDOM(para, Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"p"));
+    Pm_NodeSpec para = Pm_NodeSpec_create(
+        .content = "inline*", .group = "block",
+        .parseDOM = Pm_TagParseRule_list(make_tag_rule("p", 0)),
+        .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"p")
+    );
 
-    Pm_NodeSpec quote = Pm_NodeSpec_create(.content = "block+", .group = "block", .defining = true);
-    Pm_TagParseRule q_rule = make_tag_rule("blockquote", 0);
-    Pm_NodeSpec_set_parseDOM(quote, JsArray_Pm_TagParseRule_from(&q_rule, 1));
-    Pm_NodeSpec_set_toDOM(quote, Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"blockquote"));
+    Pm_NodeSpec quote = Pm_NodeSpec_create(
+        .content = "block+", .group = "block", .defining = true,
+        .parseDOM = Pm_TagParseRule_list(make_tag_rule("blockquote", 0)),
+        .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"blockquote")
+    );
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
-    Pm_MarkSpec strong = Pm_MarkSpec_create();
-    Pm_ParseRule srule = Pm_ParseRule_of(make_tag_rule("strong", 0));
-    Pm_MarkSpec_set_parseDOM(strong, JsArray_Pm_ParseRule_from(&srule, 1));
-    Pm_MarkSpec_set_toDOM(strong, Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"strong"));
+    Pm_MarkSpec strong = Pm_MarkSpec_create(
+        .parseDOM = Pm_ParseRule_list(make_tag_rule("strong", 0)),
+        .toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"strong")
+    );
 
-    Pm_MarkSpec em = Pm_MarkSpec_create();
-    Pm_ParseRule erule = Pm_ParseRule_of(make_tag_rule("em", 0));
-    Pm_MarkSpec_set_parseDOM(em, JsArray_Pm_ParseRule_from(&erule, 1));
-    Pm_MarkSpec_set_toDOM(em, Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"em"));
+    Pm_MarkSpec em = Pm_MarkSpec_create(
+        .parseDOM = Pm_ParseRule_list(make_tag_rule("em", 0)),
+        .toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"em")
+    );
 
-    Pm_MarkSpec code = Pm_MarkSpec_create();
-    Pm_ParseRule crule = Pm_ParseRule_of(make_tag_rule("code", 0));
-    Pm_MarkSpec_set_parseDOM(code, JsArray_Pm_ParseRule_from(&crule, 1));
-    Pm_MarkSpec_set_toDOM(code, Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"code"));
+    Pm_MarkSpec code = Pm_MarkSpec_create(
+        .parseDOM = Pm_ParseRule_list(make_tag_rule("code", 0)),
+        .toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"code")
+    );
 
     return Pm_Schema_new(Pm_SchemaSpec_create(
         .nodes = Pm_NodeSpec_record({ "doc", doc }, { "heading", heading }, { "paragraph", para }, { "blockquote", quote }, { "text", text }),
@@ -118,13 +116,13 @@ static const char* CHANGELOG_HTML =
 static Pm_Node parse_html(const char* html) {
     HTMLElement div = Document_createElement(g_doc, "div");
     HTMLElement_set_innerHTML(div, html);
-    return Pm_DOMParser_parse(g_parser, AS_Node(div));
+    return Pm_DOMParser_parse(g_parser, div);
 }
 
 static void refresh_output(Pm_Node doc) {
     js_scope();
     HTMLElement div = Document_createElement(g_doc, "div");
-    Pm_DOMSerializer_serializeFragment(g_serializer, Pm_Node_get_content(doc), (Pm_DOMSerializer_serializeFragment_options){ 0 }, div);
+    Pm_DOMSerializer_serializeFragment(g_serializer, Pm_Node_get_content(doc), NULL, div);
     JsString html_js = HTMLElement_get_innerHTML(div);
     int html_len = (int)JsString_len(html_js);
 
@@ -194,7 +192,7 @@ static void on_click(void* ctx, PointerEvent ev) {
         if (Pm_Node_get_childCount(doc) >= 2.0) {
             double insert_pos = Pm_Node_get_nodeSize(Pm_Node_child(doc, 0)) + Pm_Node_get_nodeSize(Pm_Node_child(doc, 1)) - 1.0;
             Pm_Mark code_mark = Pm_Schema_mark(g_schema, "code");
-            Pm_Node span = Pm_Schema_text(g_schema, " roundtrip()", JsArray_Pm_Mark_from(&code_mark, 1));
+            Pm_Node span = Pm_Schema_text(g_schema, " roundtrip()", Pm_Mark_list(code_mark));
             Pm_Transaction tr = Pm_EditorState_get_tr(st);
             Pm_Transaction_insert(tr, insert_pos, span);
             g_status = "Inserted code span into paragraph";
@@ -202,8 +200,8 @@ static void on_click(void* ctx, PointerEvent ev) {
         }
     } else if (idx == 4) {
         HTMLElement div = Document_createElement(g_doc, "div");
-        Pm_DOMSerializer_serializeFragment(g_serializer, Pm_Node_get_content(doc), (Pm_DOMSerializer_serializeFragment_options){ 0 }, div);
-        Pm_Node reparsed = Pm_DOMParser_parse(g_parser, AS_Node(div));
+        Pm_DOMSerializer_serializeFragment(g_serializer, Pm_Node_get_content(doc), NULL, div);
+        Pm_Node reparsed = Pm_DOMParser_parse(g_parser, div);
         bool ok = Pm_Node_eq(doc, reparsed);
         g_status = ok ? "DOM serializeFragment->parse eq() = true" : "DOM serializeFragment->parse eq() = false";
         Pm_EditorStateConfig cfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = reparsed);
@@ -226,10 +224,10 @@ __attribute__((export_name("start"))) void start(void) {
 
     Pm_EditorStateConfig scfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = parse_html(SPEC_HTML));
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = Pm_EditorState_create(scfg), .dispatchTransaction = Pm_DispatchTransactionFn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = Pm_EditorState_create(scfg), .dispatchTransaction_fn = on_dispatch);
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
-    g_view = Pm_EditorView_new(AS_Node(mount), props);
+    g_view = Pm_EditorView_new(mount, props);
     js_retain(g_view);
     g_status = "Parsed Spec HTML via DOMParser";
     refresh_output(Pm_EditorState_get_doc(Pm_EditorView_get_state(g_view)));

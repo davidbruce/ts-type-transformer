@@ -22,8 +22,8 @@ static HTMLElement make_pane(Document doc, const char* title, JsString html) {
 
 // An instance with these options, set with use.
 static Marked with_options(MarkedExtension opts) {
-    Marked m = Marked_new(JsArray_MarkedExtension_new());
-    Marked_use(m, JsArray_MarkedExtension_from(&opts, 1));
+    Marked m = Marked_new();
+    Marked_use(m, opts);
     return m;
 }
 

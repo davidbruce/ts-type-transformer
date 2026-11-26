@@ -10,12 +10,6 @@ static void push_ind(JsArray_Echarts_RadarIndicatorOption arr, const char* name)
     JsArray_Echarts_RadarIndicatorOption_push(arr, Echarts_RadarIndicatorOption_create(.name = name, .max = 100));
 }
 
-static JsArray num_arr(const double* vals, int n) {
-    JsArray a = JsArray_new();
-    for (int i = 0; i < n; i++) js_push_num(a, vals[i]);
-    return a;
-}
-
 __attribute__((export_name("start"))) void start(void) {
     js_scope();
     Document doc = get_document();
@@ -24,10 +18,8 @@ __attribute__((export_name("start"))) void start(void) {
 
     /* ---- Radar ---- */
     // Its colors alternate.
-    JsArray r_sa_cols = JsArray_new();
-    js_push_str(r_sa_cols, "#ffffff");
-    js_push_str(r_sa_cols, "#f7f7f7");
-    Echarts_AreaStyleOption sa_style = Echarts_AreaStyleOption_create(.color_array = r_sa_cols);
+    Echarts_AreaStyleOption sa_style = Echarts_AreaStyleOption_create(
+        .color_array = js_values("#ffffff", "#f7f7f7"));
 
     JsArray_Echarts_RadarIndicatorOption inds = JsArray_Echarts_RadarIndicatorOption_new();
     push_ind(inds, "Throughput");
@@ -36,17 +28,14 @@ __attribute__((export_name("start"))) void start(void) {
     push_ind(inds, "Type Safety");
     push_ind(inds, "Bundle");
 
-    const double v_wasm[5] = { 92, 86, 88, 96, 84 };
-    const double v_base[5] = { 70, 68, 74, 72, 66 };
-
     JsArray_Echarts_RadarSeriesOption_data r_data = JsArray_Echarts_RadarSeriesOption_data_new();
     JsArray_Echarts_RadarSeriesOption_data_push(r_data, Echarts_RadarSeriesDataItemOption_create(
-        .name = "WASM Target", .value = js_value(num_arr(v_wasm, 5)),
+        .name = "WASM Target", .value = js_value(js_numbers(92, 86, 88, 96, 84)),
         .lineStyle = Echarts_LineStyleOption_create(.color = "#111111", .width = 2),
         .itemStyle = Echarts_ItemStyleOption_create(.color = "#111111"),
         .areaStyle = Echarts_AreaStyleOption_create(.color = "rgba(17,17,17,0.12)")));
     JsArray_Echarts_RadarSeriesOption_data_push(r_data, Echarts_RadarSeriesDataItemOption_create(
-        .name = "Baseline", .value = js_value(num_arr(v_base, 5)),
+        .name = "Baseline", .value = js_value(js_numbers(70, 68, 74, 72, 66)),
         .lineStyle = Echarts_LineStyleOption_create(.color = "#737373", .width = 1.5, .type_string = "dashed"),
         .itemStyle = Echarts_ItemStyleOption_create(.color = "#737373")));
 
@@ -66,11 +55,7 @@ __attribute__((export_name("start"))) void start(void) {
     ECharts_setOption(radar, radar_opt);
 
     /* ---- Gauge ---- */
-    JsArray stop = JsArray_new();
-    js_push_num(stop, 1);
-    js_push_str(stop, "#e5e5e5");
-    JsArray al_stops = JsArray_new();
-    js_push_val(al_stops, stop);
+    JsArray al_stops = js_values(js_values(1, "#e5e5e5"));
 
     JsArray_Echarts_number_or_string_or_GaugeDataItemOption g_data = JsArray_Echarts_number_or_string_or_GaugeDataItemOption_new();
     JsArray_Echarts_number_or_string_or_GaugeDataItemOption_push(g_data, Echarts_GaugeDataItemOption_create(

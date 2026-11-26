@@ -72,7 +72,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     Pixi_Graphics_rect(g, Pixi_Rectangle_get_x(query), Pixi_Rectangle_get_y(query), Pixi_Rectangle_get_width(query), Pixi_Rectangle_get_height(query));
     stroke_g(g, 2.5, (double)0x111111);
 
-    Pixi_Container_addChild(stage, JsArray_Pixi_Container_from((Pixi_Container[]){ AS_Pixi_Container(g) }, 1));
+    Pixi_Container_addChild(stage, g);
     Pixi_Application_render(g_app);
 
     char buf[160];

@@ -5,9 +5,6 @@
 
 static const double PI = 3.14159265358979323846;
 
-#define add_obj(parent, child) \
-    Three_Object3D_add(AS_Three_Object3D(parent), JsArray_Three_Object3D_from((Three_Object3D[]){ AS_Three_Object3D(child) }, 1))
-
 static Three_WebGLRenderer g_renderer;
 static Three_Scene g_scene;
 static Three_PerspectiveCamera g_camera;
@@ -26,14 +23,14 @@ static void add_solid(Three_BufferGeometry geo, uint32_t hex, double rough, doub
     Three_Vector3_set(Three_Mesh_get_position(mesh), x, y, z);
     Three_Euler_set_x(Three_Mesh_get_rotation(mesh), 0.25);
     Three_Euler_set_y(Three_Mesh_get_rotation(mesh), 0.45);
-    add_obj(g_scene, mesh);
+    Three_Scene_add(g_scene, mesh);
 
     Three_EdgesGeometry egeo = Three_EdgesGeometry_new(geo, thresh);
     Three_LineSegments segs = Three_LineSegments_new(egeo, line_mat);
     Three_Vector3_set(Three_LineSegments_get_position(segs), x, y, z);
     Three_Euler_set_x(Three_LineSegments_get_rotation(segs), 0.25);
     Three_Euler_set_y(Three_LineSegments_get_rotation(segs), 0.45);
-    add_obj(g_wire_group, segs);
+    Three_Group_add(g_wire_group, segs);
 }
 
 static void update_view(void) {
@@ -86,21 +83,17 @@ __attribute__((export_name("start"))) void start(void) {
     g_camera = Three_PerspectiveCamera_new(42.0, width / height, 0.1, 100.0);
     js_retain(g_camera);
 
-    add_obj(g_scene, Three_AmbientLight_new(0xffffff, 1.2));
     Three_DirectionalLight key = Three_DirectionalLight_new(0xffffff, 2.2);
     Three_Vector3_set(Three_DirectionalLight_get_position(key), 6.0, 10.0, 8.0);
-    add_obj(g_scene, key);
     Three_DirectionalLight rim = Three_DirectionalLight_new(0xffffff, 0.9);
     Three_Vector3_set(Three_DirectionalLight_get_position(rim), -7.0, 5.0, -6.0);
-    add_obj(g_scene, rim);
 
     Three_GridHelper grid = Three_GridHelper_new(12.0, 12.0, 0x737373, 0xd4d4d4);
     Three_Vector3_set_y(Three_GridHelper_get_position(grid), -1.2);
-    add_obj(g_scene, grid);
 
     g_wire_group = Three_Group_new();
     js_retain(g_wire_group);
-    add_obj(g_scene, g_wire_group);
+    Three_Scene_add(g_scene, Three_AmbientLight_new(0xffffff, 1.2), key, rim, grid, g_wire_group);
 
     Three_LineBasicMaterial line_mat = Three_LineBasicMaterial_new(Three_LineBasicMaterialParameters_create(
         .color_number = 0x111111));

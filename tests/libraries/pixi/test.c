@@ -35,9 +35,7 @@ static void on_app(void* ctx, bool ok, JsValue v) {
         Graphics dot = Graphics_new((GraphicsOptions){ 0 });
         Graphics_circle(dot, 50, 50, 20);
         Graphics_fill(dot, js_number(0x00ff00));
-        JsArray_Container kids = JsArray_Container_new();
-        JsArray_Container_push(kids, Graphics_as_Container(dot));
-        Container_addChild(stage, kids);
+        Container_addChild(stage, dot);
         Application_render(app);
         CHECK(JsArray_Container_length(Container_get_children(stage)) == 1);
         Bounds b = MeasureMixin_getBounds(stage, js_none_bool(), (Bounds){ 0 });
@@ -127,9 +125,7 @@ __attribute__((export_name("run"))) void run(void) {
     Container_set_y(box, 5);
 
     // A Graphics is a Container: it goes where a container is wanted.
-    JsArray_Container kids = JsArray_Container_new();
-    JsArray_Container_push(kids, Graphics_as_Container(box));
-    Container_addChild(root, kids);
+    Container_addChild(root, box);
     JsArray_Container children = Container_get_children(root);
     CHECK(JsArray_Container_length(children) == 1);
     CHECK(js_same(Container_get_parent(box), root));
@@ -165,9 +161,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Container_get_width(sprite) == 30 && Container_get_height(sprite) == 20);
     CHECK(js_same((JsValue){ Sprite_get_texture(sprite).h }, (JsValue){ white.h }));
     Container_set_x(sprite, 200);
-    JsArray_Container more = JsArray_Container_new();
-    JsArray_Container_push(more, Sprite_as_Container(sprite));
-    Container_addChild(root, more);
+    Container_addChild(root, sprite);
     CHECK(JsArray_Container_length(Container_get_children(root)) == 2);
     Bounds all = MeasureMixin_getBounds(root, js_none_bool(), (Bounds){ 0 });
     CHECK(Bounds_get_minX(all) == 15 && Bounds_get_maxX(all) == 240);
@@ -178,9 +172,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(FindMixin_getChildByLabel(root, "nothing", js_none_bool()).h == 0);
 
     // Removing a child.
-    JsArray_Container gone = JsArray_Container_new();
-    JsArray_Container_push(gone, Sprite_as_Container(sprite));
-    Container_removeChild(root, gone);
+    Container_removeChild(root, sprite);
     CHECK(JsArray_Container_length(Container_get_children(root)) == 1);
     CHECK(Container_get_parent(sprite).h == 0);
     Container_destroy(root, (JsValue){ 0 });

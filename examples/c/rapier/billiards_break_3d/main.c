@@ -305,7 +305,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
 
     sync_meshes();
 
-    babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
+    babylon_onBeforeRender(scene, on_before_render);
     Promise_then(babylon_registerScene(scene), on_registered, 0);
 }
 

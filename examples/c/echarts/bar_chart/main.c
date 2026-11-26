@@ -12,13 +12,7 @@ __attribute__((export_name("start"))) void start(void) {
     Document doc = get_document();
     ECharts chart = echarts_init(Document_getElementById(doc, "chart"), NULL);
 
-    JsArray_Echarts_CategoryAxisBase_data_or_string_or_number cats = JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_new();
-    const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun" };
-    for (int i = 0; i < 6; i++) JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_push(cats, months[i]);
-
-    JsArray vals = JsArray_new();
-    double nums[] = { 42, 68, 55, 84, 71, 93 };
-    for (int i = 0; i < 6; i++) js_push_num(vals, nums[i]);
+    JsArray_Echarts_CategoryAxisBase_data_or_string_or_number cats = JsArray_Echarts_CategoryAxisBase_data_or_string_or_number_of("Jan", "Feb", "Mar", "Apr", "May", "Jun");
 
     EChartsOption opt = EChartsOption_create(
         .animation = false,
@@ -37,7 +31,7 @@ __attribute__((export_name("start"))) void start(void) {
             .splitLine = Echarts_SplitLineOption_create(.lineStyle = line_color("#e5e5e5")),
             .axisLabel = Echarts_AxisLabelOption_create(.color = js_string("#555555"))),
         .series_bar = Echarts_BarSeriesOption_create(
-            .name = "Units", .barWidth_string = "46%", .data = vals,
+            .name = "Units", .barWidth_string = "46%", .data = js_values(42, 68, 55, 84, 71, 93),
             .itemStyle = Echarts_BarItemStyleOption_create(.color = "#111111")));
     ECharts_setOption(chart, opt);
 

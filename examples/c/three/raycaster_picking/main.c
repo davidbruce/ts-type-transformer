@@ -5,9 +5,6 @@
 
 static const double PI = 3.14159265358979323846;
 
-#define add_obj(parent, child) \
-    Three_Object3D_add(AS_Three_Object3D(parent), JsArray_Three_Object3D_from((Three_Object3D[]){ AS_Three_Object3D(child) }, 1))
-
 static const char* NAMES[9] = {
     "Box", "Cone", "Cylinder", "Sphere", "Octahedron",
     "Dodecahedron", "Torus", "Icosahedron", "Tetrahedron"
@@ -140,17 +137,14 @@ __attribute__((export_name("start"))) void start(void) {
     g_camera = Three_PerspectiveCamera_new(42.0, width / height, 0.1, 100.0);
     js_retain(g_camera);
 
-    add_obj(g_scene, Three_AmbientLight_new(0xffffff, 1.2));
     Three_DirectionalLight key = Three_DirectionalLight_new(0xffffff, 2.2);
     Three_Vector3_set(Three_DirectionalLight_get_position(key), 6.0, 10.0, 8.0);
-    add_obj(g_scene, key);
     Three_DirectionalLight rim = Three_DirectionalLight_new(0xffffff, 0.9);
     Three_Vector3_set(Three_DirectionalLight_get_position(rim), -7.0, 5.0, -6.0);
-    add_obj(g_scene, rim);
 
     Three_GridHelper grid = Three_GridHelper_new(9.0, 9.0, 0x999999, 0xd4d4d4);
     Three_Vector3_set_y(Three_GridHelper_get_position(grid), -0.85);
-    add_obj(g_scene, grid);
+    Three_Scene_add(g_scene, Three_AmbientLight_new(0xffffff, 1.2), key, rim, grid);
 
     Three_BufferGeometry geos[9] = {
         AS_Three_BufferGeometry(Three_BoxGeometry_new(1.05, 1.05, 1.05)),
@@ -177,7 +171,7 @@ __attribute__((export_name("start"))) void start(void) {
         Three_Vector3_set(Three_Object3D_get_position(mo), (double)gx * 2.1, 0.0, (double)gz * 2.1);
         Three_Euler_set_x(Three_Object3D_get_rotation(mo), 0.2);
         Three_Euler_set_y(Three_Object3D_get_rotation(mo), 0.35 * (double)i);
-        add_obj(g_scene, mo);
+        Three_Scene_add(g_scene, mo);
         g_meshes[i] = mo;
         js_retain(g_meshes[i]);
     }
@@ -189,14 +183,14 @@ __attribute__((export_name("start"))) void start(void) {
     g_helper = Three_Box3Helper_new(g_box, 0x111111);
     js_retain(g_helper);
     Three_Box3Helper_set_visible(g_helper, false);
-    add_obj(g_scene, g_helper);
+    Three_Scene_add(g_scene, g_helper);
 
     g_raycaster = Three_Raycaster_new(Three_Vector3_new(0.0, 0.0, 0.0), Three_Vector3_new(0.0, 0.0, -1.0));
     js_retain(g_raycaster);
     g_meta = Document_getElementById(doc, "meta");
     js_retain(g_meta);
 
-    HTMLCanvasElement_addEventListener_click(g_canvas, HTMLElement_PointerEvent_fn_from(on_canvas_click, NULL));
+    HTMLCanvasElement_addEventListener_click(g_canvas, on_canvas_click);
 
     static const char* ids[5] = { "btn-p0", "btn-p1", "btn-p2", "btn-orbit", "btn-clear" };
     for (int i = 0; i < 5; i++) {

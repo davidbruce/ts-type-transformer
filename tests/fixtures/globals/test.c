@@ -35,13 +35,12 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(get_Geometry_UNIT() == 1);
     CHECK(Geometry_Deep_twice(4) == 8);
 
-    // Rest parameters take an array.
-    JsArray_JsString parts = JsArray_JsString_new();
-    JsArray_JsString_push(parts, "a");
-    JsArray_JsString_push(parts, "b");
-    JsArray_JsString_push(parts, "c");
-    CHECK(str_eq(join("-", parts), "a-b-c"));
-    CHECK(str_eq(join("-", JsArray_JsString_new()), ""));
+    // Rest parameters accept inline arguments or an array via `_list`.
+    CHECK(str_eq(join("-", "a", "b", "c"), "a-b-c"));
+    CHECK(str_eq(join("-"), ""));
+    JsArray_JsString parts = JsArray_JsString_of("a", "b", "c");
+    CHECK(str_eq(join_list("-", parts), "a-b-c"));
+    CHECK(str_eq(join_list("-", JsArray_JsString_new()), ""));
 
     // Numeric enums.
     CHECK(bump(Level_Low) == Level_High);

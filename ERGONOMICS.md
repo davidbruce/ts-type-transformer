@@ -91,9 +91,10 @@ TypeScript object literal, because a Zig literal takes its type from where it go
    - Gleam union modules (`series_option.bar(..)`) remain for lists, `_of` and
      values coming back.
 
-3. **Lists mixing kinds** keep their element type: C `X_list({ .number = 42 }, ..)`
-   and `js_numbers(..)`, a list of one class `X_list(a, b)` and of `any`
-   `js_values(..)`; C++ `{42, 68}`; Rust `[12.0.into(), item.into()]`; Gleam
+3. **Lists mixing kinds** keep their element type: C `<T>_list(...)` (or `X_list({ .number = 42 }, ..)`),
+   `JsArray_<E>_of(...)`, `js_numbers(..)`, `js_strings(..)`, `js_bools(..)`, a list of
+   one class `X_list(a, b)` and of `any` `js_values(..)` (all inline C list macros accept
+   up to 32 items); C++ `{42, 68}`; Rust `[12.0.into(), item.into()]`; Gleam
    `[data.number(42.0), data.item(i)]`; F# `ResizeArray [ !^42.; !^item ]` (F#
    applies `op_Implicit` to arguments, not list elements).
 
@@ -130,10 +131,12 @@ TypeScript object literal, because a Zig literal takes its type from where it go
      name, the one ending in an options object gives `name_with`, and each other one
      is `name_with_<its first optional>` (`set_option_with_not_merge`).
 
-6. **Rest parameters.** C++ and F# variadic. C one argument per value through
-   `_Generic`, plus `name_list` taking a `JsArray` for loops (the 40-subtype
-   `_Generic` limit must hold for three's `Object3D`, Konva's `Shape` and the DOM's
-   `Node`). Rust and Gleam a list (in Gleam, of one class; mixed classes take
+6. **Rest parameters.** C++ and F# variadic. C takes up to 32 arguments directly
+   through `_Generic` (releasing the temporary array automatically) and supports
+   `name_list` taking a `JsArray` for loops and existing arrays, including across
+   inherited methods and overload families (its union `_Generic` arms cover up to
+   200 subtypes, ordered narrower-base-first, and cross-package subtypes via `tsrs-meta.toml`
+   `c_subtypes`). Rust and Gleam a list (in Gleam, of one class; mixed classes take
    separate calls): after required arguments the plain name leaves the rest out and
    `name_with` takes the list (`emit("idle")`, `emit_with("metric", [..])`); a rest
    parameter alone is the plain name's list (`layer.add([&r, &c])`, borrowed in Rust).
@@ -156,6 +159,10 @@ TypeScript object literal, because a Zig literal takes its type from where it go
    `unbox`.
 
 8. **Callbacks** are closures passed directly.
+   - C passes bare function pointers (`ctx == NULL`) directly to functions and setters
+     (via `Cb_arg`), and to option bags via `.prop_fn` (or `.color_fn` for callback
+     union members), while stateful or retained callbacks use `Cb_from(fn, ctx)`
+     (`.prop` / `.prop_cb`).
    - Rust takes `impl FnMut(..) + 'static`, so closure argument types are inferred.
      When a removal method takes the same callback, `name_listener(&Listener)` takes
      a kept handle (`on` / `on_listener`).

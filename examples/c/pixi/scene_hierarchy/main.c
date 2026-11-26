@@ -10,10 +10,6 @@ static void stroke_g(Pixi_Graphics g, double width, double color_hex) {
     Pixi_Graphics_stroke(g, Pixi_StrokeStyle_create(.width = width, .color = color_hex));
 }
 
-static void add_child_c(Pixi_Container parent, Pixi_Container child) {
-    Pixi_Container_addChild(parent, JsArray_Pixi_Container_from(&child, 1));
-}
-
 static void on_init(void* ctx, bool ok, JsValue v) {
     (void)ctx;
     (void)v;
@@ -36,7 +32,6 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     stroke_g(guide, 1.0, (double)0xe5e5e5);
     Pixi_Graphics_circle(guide, 340.0, 200.0, 110.0);
     stroke_g(guide, 1.0, (double)0xd4d4d4);
-    add_child_c(stage, AS_Pixi_Container(guide));
 
     Pixi_Container root = Pixi_Container_new();
     Pixi_Container_set_x(root, 340.0);
@@ -51,7 +46,6 @@ static void on_init(void* ctx, bool ok, JsValue v) {
         Pixi_Graphics_fill(arm_bar, 0x737373);
         Pixi_Graphics_circle(arm_bar, 110.0, 0.0, 10.0);
         Pixi_Graphics_fill(arm_bar, 0x111111);
-        add_child_c(arm, AS_Pixi_Container(arm_bar));
 
         Pixi_Container sub = Pixi_Container_new();
         Pixi_Container_set_x(sub, 110.0);
@@ -61,23 +55,21 @@ static void on_init(void* ctx, bool ok, JsValue v) {
         Pixi_Graphics_moveTo(sub_bar, -32.0, 0.0);
         Pixi_Graphics_lineTo(sub_bar, 48.0, 0.0);
         stroke_g(sub_bar, 2.0, (double)0x404040);
-        add_child_c(sub, AS_Pixi_Container(sub_bar));
 
         Pixi_Graphics sat_box = Pixi_Graphics_new();
         Pixi_Graphics_rect(sat_box, -12.0, -12.0, 24.0, 24.0);
         Pixi_Graphics_fill(sat_box, 0x262626);
         Pixi_Graphics_set_x(sat_box, 48.0);
-        add_child_c(sub, AS_Pixi_Container(sat_box));
 
         Pixi_Graphics sat_orb = Pixi_Graphics_new();
         Pixi_Graphics_circle(sat_orb, 0.0, 0.0, 14.0);
         Pixi_Graphics_fill(sat_orb, 0xd4d4d4);
         stroke_g(sat_orb, 2.0, (double)0x111111);
         Pixi_Graphics_set_x(sat_orb, -32.0);
-        add_child_c(sub, AS_Pixi_Container(sat_orb));
+        Pixi_Container_addChild(sub, sub_bar, sat_box, sat_orb);
 
-        add_child_c(arm, sub);
-        add_child_c(root, arm);
+        Pixi_Container_addChild(arm, arm_bar, sub);
+        Pixi_Container_addChild(root, arm);
     }
 
     Pixi_Graphics hub = Pixi_Graphics_new();
@@ -85,9 +77,9 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     Pixi_Graphics_fill(hub, 0x111111);
     Pixi_Graphics_circle(hub, 0.0, 0.0, 7.0);
     Pixi_Graphics_fill(hub, 0xffffff);
-    add_child_c(root, AS_Pixi_Container(hub));
+    Pixi_Container_addChild(root, hub);
 
-    add_child_c(stage, root);
+    Pixi_Container_addChild(stage, guide, root);
     Pixi_Application_render(g_app);
 
     Pixi_Bounds rb = Pixi_Container_getBounds(root);

@@ -76,13 +76,13 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
     Babylon_SceneContext_set_clearColor(scene, GPUColorDict_create(.r = 0.05, .g = 0.05, .b = 0.05, .a = 1.0));
 
     Babylon_ArcRotateCamera camera = babylon_createArcRotateCamera(PI / 2.0, PI / 2.8, 11.5, babylon_vec3(0.0, 1.6, 0.0));
-    babylon_addToScene(scene, AS_Babylon_Camera(camera));
+    babylon_addToScene(scene, camera);
     babylon_attachControl(camera, g_canvas, scene);
 
     Babylon_HemisphericLight hemi = babylon_createHemisphericLight(JsTuple_double_double_double_new(0.0, 1.0, 0.0), 0.42);
     Babylon_HemisphericLight_set_diffuseColor(hemi, JsTuple_double_double_double_new(0.70, 0.70, 0.70));
     Babylon_HemisphericLight_set_groundColor(hemi, JsTuple_double_double_double_new(0.08, 0.08, 0.08));
-    babylon_addToScene(scene, AS_Babylon_LightBase(hemi));
+    babylon_addToScene(scene, hemi);
 
     Babylon_SpotLight spot = babylon_createSpotLight(
         JsTuple_double_double_double_new(0.0, 6.2, 3.0),
@@ -90,7 +90,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         PI / 3.2, 3.0, 26.0);
     Babylon_SpotLight_set_diffuse(spot, JsTuple_double_double_double_new(1.0, 1.0, 1.0));
     Babylon_SpotLight_set_range(spot, 22.0);
-    babylon_addToScene(scene, AS_Babylon_LightBase(spot));
+    babylon_addToScene(scene, spot);
     g_spot_pos = Babylon_SpotLight_get_position(spot);
     g_spot_dir = Babylon_SpotLight_get_direction(spot);
     js_retain(g_spot_pos);
@@ -98,7 +98,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
 
     Babylon_DirectionalLight fill = babylon_createDirectionalLight(JsTuple_double_double_double_new(1.2, -1.5, -1.0), 0.65);
     Babylon_DirectionalLight_set_diffuse(fill, JsTuple_double_double_double_new(0.80, 0.80, 0.80));
-    babylon_addToScene(scene, AS_Babylon_LightBase(fill));
+    babylon_addToScene(scene, fill);
 
     Babylon_Mesh floor_m = babylon_createGround(g_engine, Babylon_GroundOptions_create(.width = 18.0, .height = 18.0));
     Babylon_Mesh_set_material(floor_m, mk_std(0.10, 0.25, 24.0));
@@ -128,7 +128,7 @@ static void on_engine(void* ctx, bool ok, JsValue value) {
         babylon_addToScene(scene, mesh);
     }
 
-    babylon_onBeforeRender(scene, Babylon_number_fn_from(on_before_render, 0));
+    babylon_onBeforeRender(scene, on_before_render);
     Promise_then(babylon_registerScene(scene), on_registered, 0);
 }
 

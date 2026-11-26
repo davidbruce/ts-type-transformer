@@ -23,11 +23,6 @@ static double ease(JsValue v) { return js_to_number(v); }
 static JsOptionalDouble D(double v) { return js_some_double(v); }
 static double num(GetSet f) { return js_to_number(GetSet_invoke(f)); }
 static bool text_is(JsValue v, const char* s) { return JsString_equals(js_to_string(v), s); }
-static JsArray_Node nodes1(Node a) {
-    JsArray_Node list = JsArray_Node_new();
-    JsArray_Node_push(list, a);
-    return list;
-}
 
 static int clicks;
 static void on_click(void* ctx, KonvaEventObject e) { clicks++; }
@@ -44,7 +39,7 @@ static void shapes(void) {
     CHECK(JsArray_Stage_length(Konva_get_stages()) == 1);
 
     Layer layer = Layer_new(LayerConfig_create());
-    Stage_add(stage, layer, JsArray_new());
+    Stage_add(stage, layer);
     CHECK(JsArray_Node_length(Container_getChildren(stage, (FilterFuncFn){ 0 })) == 1);
     CHECK(js_same((JsValue){ Node_getStage(layer).h }, (JsValue){ stage.h }));
     CHECK(JsString_equals(Node_getType(layer), "Layer"));
@@ -69,7 +64,7 @@ static void shapes(void) {
     CHECK(text_is(GetSet_invoke(Shape_get_fill(rect)), "red"));
     CHECK(num(Shape_get_strokeWidth(rect)) == 4);
     CHECK(JsString_equals(Node_getClassName(rect), "Rect"));
-    Container_add(layer, nodes1(AS_Node(rect)));
+    Container_add(layer, rect);
     CHECK(JsArray_Node_length(Container_getChildren(layer, (FilterFuncFn){ 0 })) == 1);
     CHECK(js_same((JsValue){ Node_getLayer(rect).h }, (JsValue){ layer.h }) && js_same((JsValue){ Node_getStage(rect).h }, (JsValue){ stage.h }));
 
@@ -103,11 +98,8 @@ static void shapes(void) {
     NodeConfig_set_y(gc, D(100));
     NodeConfig_set_name(gc, "cluster");
     Group group = Group_new(gc);
-    JsArray_Node inside = JsArray_Node_new();
-    JsArray_Node_push(inside, AS_Node(circle));
-    JsArray_Node_push(inside, AS_Node(label));
-    Container_add(group, inside);
-    Container_add(layer, nodes1(AS_Node(group)));
+    Container_add(group, circle, label);
+    Container_add(layer, group);
     CHECK(JsArray_Node_length(Container_getChildren(group, (FilterFuncFn){ 0 })) == 2);
     CHECK(JsArray_Node_length(Container_getChildren(layer, (FilterFuncFn){ 0 })) == 2);
     CHECK(js_same((JsValue){ Node_getParent(circle).h }, (JsValue){ group.h }));

@@ -53,13 +53,10 @@ __attribute__((export_name("run"))) void run(void) {
     // Create an element and put it in the page.
     // One method per tag, returning the tag's own element type.
     HTMLDivElement div = Document_createElement_div(doc);
-    HTMLElement box = HTMLDivElement_as_HTMLElement(div);
+    HTMLElement box = AS_HTMLElement(div);
     Element_set_id(box, "made-by-c");
     Node_set_textContent(box, "hello from c");
-    JsArray_JsString classes = JsArray_JsString_new();
-    JsArray_JsString_push(classes, "box");
-    DOMTokenList_add(Element_get_classList(box), classes);
-    js_release(classes);
+    DOMTokenList_add(Element_get_classList(box), "box");
     Node_appendChild(body, box);
     CHECK(js_same(Document_getElementById(doc, "made-by-c"), box));
     CHECK(DOMTokenList_contains(Element_get_classList(box), "box"));
@@ -75,12 +72,12 @@ __attribute__((export_name("run"))) void run(void) {
     // What does not fit is cut, and the copy still ends in NUL.
     char short_text[5];
     CHECK(JsString_copy(seed_text, short_text, sizeof short_text) == 9 && short_text[3] == 'd' && short_text[4] == 0);
-    HTMLElement copy = HTMLParagraphElement_as_HTMLElement(Document_createElement_p(doc));
+    HTMLElement copy = AS_HTMLElement(Document_createElement_p(doc));
     Node_set_textContent(copy, text);
     Node_appendChild(box, copy);
 
     // A listener called by real clicks, then removed.
-    HTMLElement button = HTMLButtonElement_as_HTMLElement(Document_createElement_button(doc));
+    HTMLElement button = AS_HTMLElement(Document_createElement_button(doc));
     Node_set_textContent(button, "press");
     Node_appendChild(box, button);
     clicks = (Counter){ box, "data-count", 0 };
