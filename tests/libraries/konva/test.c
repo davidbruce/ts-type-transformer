@@ -30,7 +30,7 @@ static void on_click(void* ctx, KonvaEventObject e) { clicks++; }
 static void shapes(void) {
     // A stage on the page's #stage, 400 by 300.
     StageConfig config = StageConfig_create();
-    StageConfig_set_container(config, Stage_container_of(JsString_from("stage")));
+    StageConfig_set_container(config, HTMLDivElementString_of(JsString_from("stage")));
     NodeConfig_set_width(config, D(400));
     NodeConfig_set_height(config, D(300));
     Stage stage = Stage_new(config);

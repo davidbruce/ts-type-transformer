@@ -6,7 +6,7 @@ import echarts/axis_label_option
 import echarts/axis_line_option
 import echarts/bar_item_style_option
 import echarts/bar_series_option
-import echarts/angle_axis_component_option_category_data as axis_data
+import echarts/category_axis_base_option_data as axis_data
 import echarts/e_charts_init_opts
 import echarts/e_charts_option
 import echarts/e_charts_type
@@ -15,8 +15,8 @@ import echarts/line_style_option
 import echarts/split_line_option
 import echarts/title_component_option
 import echarts/title_text_style_option
-import echarts/xa_xis_component_option_x_axis as category_x_axis_option
-import echarts/ya_xis_component_option_y_axis_value as value_y_axis_option
+import echarts/xa_xis_component_option_category as category_x_axis_option
+import echarts/ya_xis_component_option_value as value_y_axis_option
 import gleam/dynamic
 import gleam/float
 import gleam/int

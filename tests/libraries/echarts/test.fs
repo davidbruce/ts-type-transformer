@@ -47,7 +47,7 @@ let option =
                 ]
             ),
         grid =
-            EChartsOptionGrid.GridComponentOption (
+            MultiGridComponentOption.GridComponentOption (
                 GridComponentOption.Create (
                     show = false,
                     left = PositionSizeOption.Number 50.0,

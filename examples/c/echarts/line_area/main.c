@@ -38,11 +38,11 @@ __attribute__((export_name("start"))) void start(void) {
         .tooltip = Echarts_TooltipComponentOption_create(.trigger = Echarts_TooltipComponentOption_trigger_axis),
         .grid = Echarts_GridComponentOption_create(
             .left = 48, .right = 24, .top = 48, .bottom = 36),
-        .xAxis_category = Echarts_XAXisComponentOption_xAxis_create(
+        .xAxis_category = Echarts_XAXisComponentOption_category_create(
             .boundaryGap = false, .data_strings = js_strings("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"),
             .axisLine = Echarts_AxisLineOption_create(.lineStyle = line_color("#111111")),
             .axisLabel = label_color("#555555")),
-        .yAxis_value = Echarts_YAXisComponentOption_yAxis_value_create(
+        .yAxis_value = Echarts_YAXisComponentOption_value_create(
             .min = 0, .max = 100,
             .splitLine = Echarts_SplitLineOption_create(.lineStyle = line_color("#e5e5e5")),
             .axisLabel = label_color("#555555")),

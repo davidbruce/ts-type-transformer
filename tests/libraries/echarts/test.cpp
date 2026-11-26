@@ -24,11 +24,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     CHECK(echarts::getInstanceByDom(box).has_value());
 
     // A bar series over a category axis.
-    XAXisComponentOption_xAxis xaxis = XAXisComponentOption_xAxis::create();
-    auto days = ts::Array<AngleAxisComponentOption_category_data>::create();
-    for (const char* d : {"Mon", "Tue", "Wed"}) days.push(AngleAxisComponentOption_category_data(std::string(d)));
+    XAXisComponentOption_category xaxis = XAXisComponentOption_category::create();
+    auto days = ts::Array<CategoryAxisBaseOption_data>::create();
+    for (const char* d : {"Mon", "Tue", "Wed"}) days.push(CategoryAxisBaseOption_data(std::string(d)));
     xaxis.data(days);
-    YAXisComponentOption_yAxis_value yaxis = YAXisComponentOption_yAxis_value::create();
+    YAXisComponentOption_value yaxis = YAXisComponentOption_value::create();
 
     ts::Array<> values = ts::Array<>::create();
     for (double v : {5.0, 20.0, 36.0}) values.push(ts::Value::number(v));

@@ -578,9 +578,10 @@ pub(super) const NAME_MAX: usize = 64;
 // Tighter cap for synthetic hoisted objects, callbacks, and inline unions.
 pub(crate) const SYNTH_NAME_MAX: usize = 44;
 
-/// Trims a trailing configuration/options wrapper suffix when a >= 3-char stem remains.
-pub(crate) fn trim_wrapper_suffixes(s: &str) -> &str {
+/// Trims trailing configuration/options wrapper suffixes iteratively when a >= 3-char stem remains.
+pub(crate) fn trim_wrapper_suffixes(mut s: &str) -> &str {
     const SUFFIXES: &[&str] = &[
+        "ComponentOption",
         "Parameters",
         "Options",
         "Settings",
@@ -588,15 +589,23 @@ pub(crate) fn trim_wrapper_suffixes(s: &str) -> &str {
         "Option",
         "Params",
         "Props",
+        "Component",
     ];
-    for suffix in SUFFIXES {
-        if let Some(stem) = s.strip_suffix(suffix) {
-            if stem.len() >= 3 {
-                return stem;
+    loop {
+        let mut changed = false;
+        for suffix in SUFFIXES {
+            if let Some(stem) = s.strip_suffix(suffix)
+                && stem.len() >= 3
+            {
+                s = stem;
+                changed = true;
+                break;
             }
         }
+        if !changed {
+            return s;
+        }
     }
-    s
 }
 
 pub(super) fn unique(base: String, taken: &mut HashSet<String>) -> String {
@@ -641,12 +650,29 @@ pub(super) fn unique_with_limit(base: String, max_len: usize, taken: &mut HashSe
     name
 }
 
-// A name too long to keep: its start and a hash of it.
+// A name too long to keep: its start (snapped to an underscore or camelCase boundary) and a hash of it.
 fn hashed(base: &str, max_len: usize) -> String {
     let hash = crate::fnv1a64(base);
-    let mut cut = max_len.saturating_sub(9).min(48).min(base.len());
+    let limit = max_len.saturating_sub(9).min(48).min(base.len());
+    let mut cut = limit;
     while !base.is_char_boundary(cut) {
         cut -= 1;
     }
-    format!("{}_{:08x}", &base[..cut], hash as u32)
+    let min_cut = (limit / 2).max(8).min(cut);
+    let bytes = base.as_bytes();
+    for pos in (min_cut..=cut).rev() {
+        if !base.is_char_boundary(pos) {
+            continue;
+        }
+        let at_underscore = bytes.get(pos) == Some(&b'_') || bytes.get(pos.saturating_sub(1)) == Some(&b'_');
+        let at_camel = pos > 0
+            && bytes.get(pos).is_some_and(u8::is_ascii_uppercase)
+            && bytes.get(pos - 1).is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
+        if at_underscore || at_camel {
+            cut = pos;
+            break;
+        }
+    }
+    let prefix = base[..cut].trim_end_matches('_');
+    format!("{prefix}_{:08x}", hash as u32)
 }

@@ -15,7 +15,7 @@ static ts::Value str(std::string_view s) { return ts::Value::string(s); }
 static void exercise() {
     // A stage on the page's #stage, by its id, 400 by 300.
     StageConfig config = StageConfig::create();
-    config.container(Stage_container(std::string("stage")));
+    config.container(HTMLDivElementString(std::string("stage")));
     config.width(400);
     config.height(300);
     ::Stage stage = ::Stage::create(config);

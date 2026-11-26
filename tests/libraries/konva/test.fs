@@ -17,7 +17,7 @@ let near (a: float) (b: float) = abs (a - b) < 1e-6
 
 // A stage in the page's #stage, 400 by 300.
 let stageConfig = createEmpty<StageConfig_2>
-stageConfig.container <- Some(StageContainer.String "stage")
+stageConfig.container <- Some(HTMLDivElementString.String "stage")
 stageConfig.width <- Some 400.0
 stageConfig.height <- Some 300.0
 let stage = Stage_2.Create stageConfig

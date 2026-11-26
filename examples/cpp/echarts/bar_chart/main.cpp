@@ -12,12 +12,12 @@ TS_EXPORT(start) void start() {
         .animation = false,
         .title = TitleComponentOption({.top = 12, .left = 16, .text = "Monthly Output", .textStyle = TitleTextStyleOption({.color = "#111111", .fontSize = 13})}),
         .grid = GridComponentOption({.top = 48, .right = 24, .bottom = 36, .left = 48}),
-        .xAxis = XAXisComponentOption_xAxis({
+        .xAxis = XAXisComponentOption_category({
             .axisLabel = AxisLabelOption({.color = "#555555"}),
             .data = ts::Array<std::string>::of("Jan", "Feb", "Mar", "Apr", "May", "Jun"),
             .axisLine = AxisLineOption({.lineStyle = LineStyleOption({.color = "#111111"})}),
         }),
-        .yAxis = YAXisComponentOption_yAxis_value({
+        .yAxis = YAXisComponentOption_value({
             .axisLabel = AxisLabelOption({.color = "#555555"}),
             .splitLine = SplitLineOption({.lineStyle = LineStyleOption({.color = "#e5e5e5"})}),
             .min = 0,

@@ -5871,4 +5871,53 @@ export interface Shape {
         let xml = lower(&dts, Some("zig"), &[]);
         assert!(xml.contains("const=\"a\"") && xml.contains("const=\"e\""), "{xml}");
     }
+
+    #[test]
+    fn shared_multi_discriminated_arm_and_hash_boundary_naming() {
+        let dts = write_dts(
+            "naming-item1",
+            r#"export interface Material { id: number; }
+export interface Line { material: Material | Material[]; }
+export interface Mesh { material: Material | Material[]; }
+
+export type AxisOpt =
+    | { mainType?: "xAxis"; type?: "category"; data?: string[] }
+    | { mainType?: "xAxis"; type?: "value"; min?: number };
+
+export interface CategoryAxisBaseOption { data?: (string | number | { value: number })[]; }
+export interface OtherData { data?: (boolean | number)[]; }
+export interface AngleAxisComponentOption extends CategoryAxisBaseOption { startAngle?: number; }
+export interface AngleAxisComponentOptionLog { axisLabel?: { color?: string; fontSize?: number; veryLongPropertyNameToForceCompaction?: { nestedA?: number; nestedB?: number; nestedC?: number } }; }
+export interface XAxisHolder {
+    xAxis?: AxisOpt;
+    cat?: CategoryAxisBaseOption;
+    other?: OtherData;
+    ang?: AngleAxisComponentOption;
+    log?: AngleAxisComponentOptionLog;
+}
+"#,
+        );
+        let xml = lower(&dts, Some("c"), &[]);
+        let doc = roxmltree::Document::parse(&xml).unwrap();
+        let alias_names: Vec<&str> = doc
+            .root_element()
+            .children()
+            .filter(|n| n.has_tag_name("typeAlias"))
+            .filter_map(|n| n.attribute("name"))
+            .collect();
+        let iface_names: Vec<&str> = doc
+            .root_element()
+            .children()
+            .filter(|n| n.has_tag_name("interface"))
+            .filter_map(|n| n.attribute("name"))
+            .collect();
+        assert!(alias_names.contains(&"MultiMaterial"), "expected MultiMaterial instead of LineMaterial in {alias_names:?}\n{xml}");
+        assert!(!alias_names.contains(&"LineMaterial"), "unexpected LineMaterial in {alias_names:?}\n{xml}");
+        assert!(iface_names.contains(&"AxisOpt_category") && iface_names.contains(&"AxisOpt_value"), "expected discriminated type arms in {iface_names:?}\n{xml}");
+        assert!(!iface_names.iter().any(|n| n.contains("_xAxis")), "unexpected doubled _xAxis arm in {iface_names:?}\n{xml}");
+        assert!(iface_names.contains(&"CategoryAxisBaseOption_data_item"), "expected CategoryAxisBaseOption_data_item in {iface_names:?}\n{xml}");
+        assert!(alias_names.iter().any(|n| n.starts_with("CategoryAxisBaseOption")), "expected non-synthetic CategoryAxisBaseOption owner in {alias_names:?}\n{xml}");
+        assert!(!alias_names.iter().any(|n| n.starts_with("AngleAxisComponentOption")), "synthetic/derived AngleAxisComponentOption hijacked data union in {alias_names:?}\n{xml}");
+        assert!(!xml.contains("axisLa_"), "unexpected mid-word truncation before hash in XML:\n{xml}");
+    }
 }

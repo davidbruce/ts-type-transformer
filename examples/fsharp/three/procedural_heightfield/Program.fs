@@ -91,7 +91,7 @@ let main () =
                 flatShading = true
             )
         )
-    let surfaceMesh = Mesh.Create(geo, LineMaterial.Material surfMat)
+    let surfaceMesh = Mesh.Create(geo, MultiMaterial.Material surfMat)
     scene.add (surfaceMesh) |> ignore
 
     let wireMat =
@@ -101,7 +101,7 @@ let main () =
                 wireframe = true
             )
         )
-    let wireMesh = Mesh.Create(geo, LineMaterial.Material wireMat)
+    let wireMesh = Mesh.Create(geo, MultiMaterial.Material wireMat)
     wireMesh.position.y <- 0.015
     scene.add (wireMesh) |> ignore
 
@@ -116,7 +116,7 @@ let main () =
                 size = 0.14
             )
         )
-    let ptsObj = Points.Create(ptsGeo, LineMaterial.Material ptsMat)
+    let ptsObj = Points.Create(ptsGeo, MultiMaterial.Material ptsMat)
     scene.add (ptsObj) |> ignore
 
     let wireBtn = (document.getElementById "btn-wire").Value

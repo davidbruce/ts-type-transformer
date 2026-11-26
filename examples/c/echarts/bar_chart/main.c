@@ -20,11 +20,11 @@ __attribute__((export_name("start"))) void start(void) {
             .textStyle = Echarts_TitleTextStyleOption_create(.color = js_string("#111111"), .fontSize = 13)),
         .grid = Echarts_GridComponentOption_create(
             .left = 48, .right = 24, .top = 48, .bottom = 36),
-        .xAxis_category = Echarts_XAXisComponentOption_xAxis_create(
+        .xAxis_category = Echarts_XAXisComponentOption_category_create(
             .data_strings = js_strings("Jan", "Feb", "Mar", "Apr", "May", "Jun"),
             .axisLine = Echarts_AxisLineOption_create(.lineStyle = line_color("#111111")),
             .axisLabel = Echarts_AxisLabelOption_create(.color = js_string("#555555"))),
-        .yAxis_value = Echarts_YAXisComponentOption_yAxis_value_create(
+        .yAxis_value = Echarts_YAXisComponentOption_value_create(
             .min = 0, .max = 100,
             .splitLine = Echarts_SplitLineOption_create(.lineStyle = line_color("#e5e5e5")),
             .axisLabel = Echarts_AxisLabelOption_create(.color = js_string("#555555"))),

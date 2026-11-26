@@ -79,7 +79,7 @@ let main () =
         let m =
             Mesh.Create(
                 geos.[i],
-                LineMaterial.Material mat
+                MultiMaterial.Material mat
             )
         m.name <- names.[i]
         m.position.set (float gx * 2.1, 0.0, float gz * 2.1) |> ignore

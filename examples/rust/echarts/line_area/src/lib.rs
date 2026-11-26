@@ -20,7 +20,7 @@ pub extern "C" fn start() {
     grid.set_top(48.0);
     grid.set_bottom(36.0);
 
-    let x_axis = XAXisComponentOptionXAxis::default()
+    let x_axis = XAXisComponentOptionCategory::default()
         .with_boundary_gap(false)
         .with_data(["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"])
         .with_axis_line(
@@ -29,7 +29,7 @@ pub extern "C" fn start() {
         )
         .with_axis_label(&AxisLabelOption::default().with_color("#555555"));
 
-    let y_axis = YAXisComponentOptionYAxisValue::default()
+    let y_axis = YAXisComponentOptionValue::default()
         .with_min(0.0)
         .with_max(100.0)
         .with_split_line(

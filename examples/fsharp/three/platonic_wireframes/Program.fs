@@ -83,7 +83,7 @@ let main () =
                     flatShading = flat
                 )
             )
-        let mesh = Mesh.Create(geo, LineMaterial.Material mat)
+        let mesh = Mesh.Create(geo, MultiMaterial.Material mat)
         mesh.position.set (x, y, z) |> ignore
         mesh.rotation.set (0.25, 0.45, 0.0) |> ignore
         scene.add (mesh) |> ignore
@@ -92,7 +92,7 @@ let main () =
         let segs =
             LineSegments.Create(
                 edgesGeo,
-                LineMaterial.Material lineMat
+                MultiMaterial.Material lineMat
             )
         segs.position.set (x, y, z) |> ignore
         segs.rotation.set (0.25, 0.45, 0.0) |> ignore

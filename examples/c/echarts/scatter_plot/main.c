@@ -48,8 +48,8 @@ __attribute__((export_name("start"))) void start(void) {
             .top = 8, .textStyle = Echarts_LabelOption_create(.color = js_string("#111111"))),
         .grid = Echarts_GridComponentOption_create(
             .left = 48, .right = 24, .top = 48, .bottom = 36),
-        .xAxis_value = VALUE_AXIS(Echarts_XAXisComponentOption_xAxis_value),
-        .yAxis_value = VALUE_AXIS(Echarts_YAXisComponentOption_yAxis_value),
+        .xAxis_value = VALUE_AXIS(Echarts_XAXisComponentOption_value),
+        .yAxis_value = VALUE_AXIS(Echarts_YAXisComponentOption_value),
         .series_list = series);
     ECharts_setOption(chart, opt);
 

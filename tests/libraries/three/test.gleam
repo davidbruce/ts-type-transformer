@@ -11,7 +11,7 @@ import bindings/euler
 import bindings/euler_order
 import bindings/group
 import bindings/intersection
-import bindings/line_material
+import bindings/multi_material
 import bindings/matrix4
 import bindings/mesh
 import bindings/mesh_basic_material
@@ -339,7 +339,7 @@ pub fn main() {
   object3d.update_matrix_world_with(parent, True)
   let params = box_geometry.get_parameters(geometry)
   // A mesh's material is a Material or a list of them: this one is a MeshBasicMaterial.
-  let assert line_material.Material(cube_material) =
+  let assert multi_material.Material(cube_material) =
     mesh.get_material(cube)
   let assert Ok(cube_material) = mesh_basic_material.from(cube_material)
   let passed =

@@ -10,27 +10,106 @@ use crate::xml::type_key;
 
 use super::generics::{SYNTH_NAME_MAX, keyed_syms, mentions, trim_wrapper_suffixes, unique_with_limit};
 
+fn trim_segment_wrappers(seg: &str) -> String {
+    seg.split('_').map(trim_wrapper_suffixes).collect::<Vec<_>>().join("_")
+}
+
 pub(crate) fn compact_hoist_path(path: &[String], sep: &str) -> String {
     let joined = path.join(sep);
-    if path.len() < 3 || joined.len() <= SYNTH_NAME_MAX {
+    if joined.len() <= SYNTH_NAME_MAX {
         return joined;
     }
-    let last_idx = path.len() - 1;
-    let mut kept: Vec<String> = path
-        .iter()
-        .enumerate()
-        .filter(|(i, s)| *i == 0 || *i == last_idx || !matches!(s.as_str(), "result" | "return" | "value"))
-        .map(|(_, s)| s.clone())
-        .collect();
+    let last_idx = path.len().saturating_sub(1);
+    let mut kept: Vec<String> = if path.len() >= 3 {
+        path.iter()
+            .enumerate()
+            .filter(|(i, s)| *i == 0 || *i == last_idx || !matches!(s.as_str(), "result" | "return" | "value"))
+            .map(|(_, s)| s.clone())
+            .collect()
+    } else {
+        path.to_vec()
+    };
     if kept.join(sep).len() <= SYNTH_NAME_MAX {
         return kept.join(sep);
     }
     for i in 0..kept.len().saturating_sub(1) {
-        if i == 0 || kept[i].len() >= 18 {
-            kept[i] = trim_wrapper_suffixes(&kept[i]).to_string();
-        }
+        kept[i] = trim_segment_wrappers(&kept[i]);
     }
     kept.join(sep)
+}
+
+fn split_pascal_words(s: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let bytes = s.as_bytes();
+    let mut start = 0;
+    for i in 1..s.len() {
+        if !s.is_char_boundary(i) {
+            continue;
+        }
+        let b = bytes[i];
+        let prev = bytes[i - 1];
+        let next = bytes.get(i + 1).copied();
+        let new_word = b.is_ascii_uppercase() && (prev.is_ascii_lowercase() || prev.is_ascii_digit() || next.is_some_and(|n| n.is_ascii_lowercase()));
+        if new_word {
+            words.push(&s[start..i]);
+            start = i;
+        }
+    }
+    if start < s.len() {
+        words.push(&s[start..]);
+    }
+    words
+}
+
+pub(super) fn pick_best_path(paths: &[Vec<String>], synth_names: &HashSet<String>, _sep: &str) -> Vec<String> {
+    let non_synth: Vec<&Vec<String>> = paths.iter().filter(|p| p.first().is_some_and(|r| !synth_names.contains(r))).collect();
+    if let Some(best) = non_synth.into_iter().min_by(|a, b| (a.len(), *a).cmp(&(b.len(), *b))) {
+        return best.clone();
+    }
+    if paths.len() >= 2 && paths.iter().all(|p| p.len() >= 2 && p[1..] == paths[0][1..]) {
+        let mut distinct_roots: Vec<&str> = Vec::new();
+        for p in paths {
+            let r = p[0].as_str();
+            if !distinct_roots.contains(&r) {
+                distinct_roots.push(r);
+            }
+        }
+        if distinct_roots.len() >= 2 {
+            let split_roots: Vec<Vec<&str>> = distinct_roots.iter().map(|r| r.split('_').collect()).collect();
+            if split_roots.iter().all(|parts| parts[1..] == split_roots[0][1..]) {
+                let word_lists: Vec<Vec<&str>> = split_roots.iter().map(|parts| split_pascal_words(parts[0])).collect();
+                let first_words = &word_lists[0];
+                let mut common_len = 0usize;
+                for k in 1..=first_words.len() {
+                    let cand = first_words[first_words.len() - k];
+                    if word_lists[1..].iter().all(|ws| ws.len() >= k && ws[ws.len() - k] == cand) {
+                        common_len = k;
+                    } else {
+                        break;
+                    }
+                }
+                if common_len > 0 {
+                    let common = first_words[first_words.len() - common_len..].concat();
+                    let stem = trim_wrapper_suffixes(&common);
+                    let generic = matches!(
+                        stem,
+                        "Option" | "Options" | "Component" | "Config" | "Params" | "Props" | "Base" | "Object" | "Item" | "Type"
+                    );
+                    if stem.len() >= 3 && !generic {
+                        let root = if split_roots[0].len() > 1 {
+                            format!("{stem}_{}", split_roots[0][1..].join("_"))
+                        } else {
+                            stem.to_string()
+                        };
+                        let mut out = vec![root];
+                        out.extend(paths[0][1..].iter().cloned());
+                        return out;
+                    }
+                }
+            }
+        }
+    }
+    paths.iter().min_by(|a, b| (a.len(), *a).cmp(&(b.len(), *b))).cloned().unwrap_or_default()
 }
 use super::overloads::{describe, name_part};
 use super::unions::collect_declared_names;
@@ -96,13 +175,25 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         // A type is named after the best place it appears: the shortest path,
         // then the first in alphabetical order. Moving declarations around
         // does not rename it.
-        let mut best: HashMap<String, Vec<String>> = HashMap::new();
+        let mut all_places: HashMap<String, Vec<Vec<String>>> = HashMap::new();
         let mut order: Vec<String> = Vec::new();
         let mut sample: HashMap<String, Type> = HashMap::new();
         let mut opt_members: HashMap<String, HashSet<String>> = HashMap::new();
         // Where each callback is, and the name the library gave it anywhere, for its name.
         let mut places: HashMap<String, Vec<Vec<String>>> = HashMap::new();
         let mut given: HashMap<String, String> = HashMap::new();
+        let mut synth_names: HashSet<String> = HashSet::new();
+        for d in decls.iter() {
+            match d {
+                Decl::Interface(i) if i.synthetic => {
+                    synth_names.insert(i.name.clone());
+                }
+                Decl::Alias(a) if a.synthetic => {
+                    synth_names.insert(a.name.clone());
+                }
+                _ => {}
+            }
+        }
         walk(&mut decls[start..], &mut |t, path| {
             if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
                 *uses.entry(hoist_key(t)).or_default() += 1;
@@ -127,13 +218,14 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                         given.entry(key.clone()).or_insert_with(|| n.clone());
                     }
                 }
-                let known = best.entry(key).or_insert_with(|| path.to_vec());
-                if (path.len(), path) < (known.len(), &known[..]) {
-                    *known = path.to_vec();
-                }
+                all_places.entry(key).or_default().push(path.to_vec());
             }
             true
         });
+        let best: HashMap<String, Vec<String>> = order
+            .iter()
+            .map(|k| (k.clone(), pick_best_path(&all_places[k], &synth_names, sep)))
+            .collect();
         // Types that would have one place's name (overloads' `options`, a
         // union's object and callback) are named apart by what they are.
         let mut at_path: HashMap<&Vec<String>, Vec<&String>> = HashMap::new();

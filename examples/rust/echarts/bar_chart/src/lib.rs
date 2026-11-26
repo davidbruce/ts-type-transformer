@@ -24,7 +24,7 @@ pub extern "C" fn start() {
     grid.set_top(48.0);
     grid.set_bottom(36.0);
 
-    let x_axis = XAXisComponentOptionXAxis::default()
+    let x_axis = XAXisComponentOptionCategory::default()
         .with_data(["Jan", "Feb", "Mar", "Apr", "May", "Jun"])
         .with_axis_line(
             &AxisLineOption::default()
@@ -32,7 +32,7 @@ pub extern "C" fn start() {
         )
         .with_axis_label(&AxisLabelOption::default().with_color("#555555"));
 
-    let y_axis = YAXisComponentOptionYAxisValue::default()
+    let y_axis = YAXisComponentOptionValue::default()
         .with_min(0.0)
         .with_max(100.0)
         .with_split_line(

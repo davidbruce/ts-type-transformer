@@ -231,25 +231,47 @@ fn is_builtin_or_prelude(name: &str) -> bool {
     )
 }
 
+fn unwrap_ro(mut t: &Type) -> &Type {
+    while let Type::Readonly(inner) | Type::Tested(inner, _) = t {
+        t = inner;
+    }
+    t
+}
+
 /// Returns a human-readable, `_or_`-free name for common union shapes.
 pub(super) fn structural_union_name(parts: &[Type], names: &HashSet<String>, sep: &str) -> Option<String> {
+    let opt_arg_for = |obj: &Type| -> Option<String> {
+        let Type::Ref(r) = obj else { return None };
+        let short = r.name.rsplit('.').next().unwrap_or(&r.name);
+        let suffixes = ["Options", "Option", "Config", "Init", "Params", "Formatter", "Mode", "Constraints", "Presets", "Hint", "Signal"];
+        if suffixes.iter().any(|s| short.ends_with(s)) {
+            let cand = format!("{}Arg", pascal_ident(&r.name.replace('.', "_"), sep));
+            if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
+                return Some(cand);
+            }
+        }
+        None
+    };
+    let is_simple_prim = |t: &Type| matches!(t, Type::Primitive(p) if matches!(p.as_str(), "boolean" | "string" | "number"));
     if parts.len() == 2 {
+        let p0 = unwrap_ro(&parts[0]);
+        let p1 = unwrap_ro(&parts[1]);
         let is_promise_like = |t: &Type| matches!(t, Type::Ref(r) if r.name == "PromiseLike" || r.name.ends_with(".PromiseLike"));
-        if is_promise_like(&parts[0]) && !is_promise_like(&parts[1]) {
-            let other = describe_atom(&parts[1])?;
+        if is_promise_like(p0) && !is_promise_like(p1) {
+            let other = describe_atom(p1)?;
             let cand = format!("Async{}", pascal_ident(&other, sep));
             if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
                 return Some(cand);
             }
-        } else if is_promise_like(&parts[1]) && !is_promise_like(&parts[0]) {
-            let other = describe_atom(&parts[0])?;
+        } else if is_promise_like(p1) && !is_promise_like(p0) {
+            let other = describe_atom(p0)?;
             let cand = format!("Async{}", pascal_ident(&other, sep));
             if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
                 return Some(cand);
             }
         }
-        let array_pair = match (&parts[0], &parts[1]) {
-            (other, Type::Array(inner)) | (Type::Array(inner), other) if type_key(inner) == type_key(other) => describe_atom(other),
+        let array_pair = match (p0, p1) {
+            (other, Type::Array(inner)) | (Type::Array(inner), other) if type_key(unwrap_ro(inner)) == type_key(other) => describe_atom(other),
             _ => None,
         };
         if let Some(atom) = array_pair {
@@ -258,24 +280,22 @@ pub(super) fn structural_union_name(parts: &[Type], names: &HashSet<String>, sep
                 return Some(cand);
             }
         }
-        let opt_arg = |prim: &Type, obj: &Type| -> Option<String> {
-            let Type::Primitive(p) = prim else { return None };
-            if !matches!(p.as_str(), "boolean" | "string" | "number") {
-                return None;
-            }
-            let Type::Ref(r) = obj else { return None };
-            let short = r.name.rsplit('.').next().unwrap_or(&r.name);
-            let suffixes = ["Options", "Option", "Config", "Init", "Params", "Formatter", "Mode", "Constraints", "Presets", "Hint", "Signal"];
-            if suffixes.iter().any(|s| short.ends_with(s)) {
-                let cand = format!("{}Arg", pascal_ident(&r.name.replace('.', "_"), sep));
-                if cand.len() <= SYNTH_NAME_MAX && !cand.contains("_or_") {
-                    return Some(cand);
-                }
-            }
-            None
-        };
-        if let Some(cand) = opt_arg(&parts[0], &parts[1]).or_else(|| opt_arg(&parts[1], &parts[0])) {
+        if is_simple_prim(p0) && let Some(cand) = opt_arg_for(p1) {
             return Some(cand);
+        }
+        if is_simple_prim(p1) && let Some(cand) = opt_arg_for(p0) {
+            return Some(cand);
+        }
+    } else if parts.len() == 3 {
+        let unwrapped: Vec<&Type> = parts.iter().map(unwrap_ro).collect();
+        let ref_indices: Vec<usize> = unwrapped.iter().enumerate().filter(|(_, p)| matches!(p, Type::Ref(_))).map(|(i, _)| i).collect();
+        if ref_indices.len() == 1 {
+            let ri = ref_indices[0];
+            if unwrapped.iter().enumerate().all(|(i, p)| i == ri || is_simple_prim(p))
+                && let Some(cand) = opt_arg_for(unwrapped[ri])
+            {
+                return Some(cand);
+            }
         }
     }
     let atoms_in_order: Vec<String> = parts.iter().map(describe_atom).collect::<Option<Vec<_>>>()?;
@@ -554,6 +574,18 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
 
     // Count plain concept names across single-concept buckets and multi-concept aliases
     // so only unambiguous words claim unqualified top-level names.
+    let mut synth_names: HashSet<String> = HashSet::new();
+    for d in decls.iter() {
+        match d {
+            Decl::Interface(i) if i.synthetic => {
+                synth_names.insert(i.name.clone());
+            }
+            Decl::Alias(a) if a.synthetic => {
+                synth_names.insert(a.name.clone());
+            }
+            _ => {}
+        }
+    }
     struct Plan {
         single_plain: Option<String>,
         best_path: Vec<String>,
@@ -563,7 +595,7 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
     let mut plain_counts: HashMap<String, usize> = HashMap::new();
     for bucket in &order {
         let ps = &places[bucket];
-        let best_path = ps.iter().min_by(|a, b| (a.len(), *a).cmp(&(b.len(), *b))).cloned().unwrap_or_default();
+        let best_path = super::hoist::pick_best_path(ps, &synth_names, sep);
         let extracted: Vec<(String, bool)> = ps.iter().filter_map(|p| extract_word(p)).collect();
         let words: HashSet<String> = extracted.iter().map(|(w, _)| w.clone()).collect();
         let single = (extracted.len() == ps.len())
@@ -611,15 +643,17 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
         let base = if let Some(plain) = &plan.single_plain {
             if plain_counts.get(plain).copied() == Some(1) && !names.contains(plain) {
                 plain.clone()
+            } else if let Some(s) = structural_union_name(parts, names, sep).filter(|s| !names.contains(s)) {
+                s
             } else if !plan.best_path.is_empty() && !names.contains(&at) && !at.contains("_or_") {
                 at
             } else if let Some(s) = structural_union_name(parts, names, sep) {
                 s
             } else if !plan.best_path.is_empty() && !at.contains("_or_") {
-                format!("{at}{sep}union")
+                format!("{at}{sep}value")
             } else {
                 let mut m: String = parts.iter().take(3).map(|p| pascal_ident(&mnemonic(p), sep)).collect();
-                if m.is_empty() { m = "Union".into(); }
+                if m.is_empty() { m = "Value".into(); }
                 m
             }
         } else if let Some(s) = structural_union_name(parts, names, sep).filter(|s| !names.contains(s)) {
@@ -627,10 +661,10 @@ fn name_unions_once(decls: &mut Vec<Decl>, sep: &str, names: &mut HashSet<String
         } else if !plan.best_path.is_empty() && !names.contains(&at) && !at.contains("_or_") {
             at
         } else if !plan.best_path.is_empty() && !at.contains("_or_") {
-            format!("{at}{sep}union")
+            format!("{at}{sep}value")
         } else {
             let mut m: String = parts.iter().take(3).map(|p| pascal_ident(&mnemonic(p), sep)).collect();
-            if m.is_empty() { m = "Union".into(); }
+            if m.is_empty() { m = "Value".into(); }
             m
         };
         let backing_name = unique_with_limit(base, SYNTH_NAME_MAX, names);

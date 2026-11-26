@@ -59,7 +59,7 @@ let main () =
     let plinth =
         Mesh.Create(
             PlaneGeometry.Create(8.6, 8.6),
-            LineMaterial.Material (MeshStandardMaterial.Create(
+            MultiMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0xe5e5e5,
                     roughness = 0.85
@@ -91,7 +91,7 @@ let main () =
     let inst =
         InstancedMesh.Create(
             Some towerGeo,
-            Some (LineMaterial.Material towerMat),
+            Some (MultiMaterial.Material towerMat),
             100.0
         )
     scene.add (inst) |> ignore

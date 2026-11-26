@@ -193,15 +193,24 @@ fn arm_names(parts: &[Type]) -> Vec<Option<String>> {
     }
     let props = |ms: &Vec<Member>| ms.iter().filter(|m| m.kind == MemberKind::Property).map(|m| (m.name.clone(), m.optional, m.constant.clone())).collect::<Vec<_>>();
     let shapes: Vec<Option<PropShapes>> = objects.iter().map(|o| o.map(props)).collect();
-    // The property most of them fix, if two do.
-    let mut fixed: Vec<(String, usize)> = Vec::new();
-    for f in shapes.iter().flatten().flatten().filter(|f| f.2.is_some()) {
+    // The property with the most distinct fixed literal values (preferring `type`/`kind`).
+    let mut fixed: Vec<(String, Vec<String>)> = Vec::new();
+    for f in shapes.iter().flatten().flatten() {
+        let Some(val) = f.2.as_ref() else { continue };
         match fixed.iter_mut().find(|(n, _)| *n == f.0) {
-            Some(e) => e.1 += 1,
-            None => fixed.push((f.0.clone(), 1)),
+            Some((_, vals)) => {
+                if !vals.contains(val) {
+                    vals.push(val.clone());
+                }
+            }
+            None => fixed.push((f.0.clone(), vec![val.clone()])),
         }
     }
-    let tag = fixed.iter().filter(|f| f.1 >= 2).max_by_key(|f| f.1).map(|f| f.0.clone());
+    let tag = fixed
+        .iter()
+        .filter(|(_, vals)| vals.len() >= 2)
+        .max_by_key(|(name, vals)| (vals.len(), matches!(name.as_str(), "type" | "kind")))
+        .map(|(name, _)| name.clone());
     (0..parts.len())
         .map(|i| {
             let own = shapes[i].as_ref()?;

@@ -125,7 +125,7 @@ check (parent.children.Count = 0 && isNull (box child.parent)) "remove"
 let geometry = BoxGeometry.Create (2.0, 2.0, 2.0)
 check (geometry.parameters.width = 2.0) "BoxGeometry parameters"
 let material = MeshBasicMaterial.Create ()
-let mesh = Mesh.Create (geometry, LineMaterial.Material material)
+let mesh = Mesh.Create (geometry, MultiMaterial.Material material)
 check (mesh.isMesh && mesh.``type`` = "Mesh") "Mesh"
 check (obj.ReferenceEquals (mesh.geometry, geometry)) "mesh.geometry"
 check (material.isMeshBasicMaterial) "material"

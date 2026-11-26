@@ -93,7 +93,7 @@ fn files() {
     let sub = format!("{}/{}", dir.as_str(), "sub");
     let mk = fs::MakeDirectoryOptions::create();
     mk.set_recursive(Some(true));
-    fs::mkdir_sync_with_opt_mkdir_options_union2_with(sub.as_str(), &mk);
+    fs::mkdir_sync_with_opt_make_directory_options_arg_with(sub.as_str(), &mk);
     fs::write_file_sync(format!("{}/{}", sub.as_str(), "b.txt").as_str(), "b");
     fs::copy_file_sync(
         file.as_str(),

@@ -52,8 +52,8 @@ pub extern "C" fn start() {
     let in_dir = path::join([root.as_str(), "in"]);
     let out_dir = path::join([root.as_str(), "out"]);
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
-    fs::mkdir_sync_with_opt_mkdir_options_union2_with(&*in_dir, &mk);
-    fs::mkdir_sync_with_opt_mkdir_options_union2_with(&*out_dir, &mk);
+    fs::mkdir_sync_with_opt_make_directory_options_arg_with(&*in_dir, &mk);
+    fs::mkdir_sync_with_opt_make_directory_options_arg_with(&*out_dir, &mk);
 
     // Stage 1: seed
     fs::write_file_sync(&*path::join([in_dir.as_str(), "a.log"]), "100 OK\n");

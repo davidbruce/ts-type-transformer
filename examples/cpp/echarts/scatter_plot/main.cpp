@@ -46,8 +46,8 @@ TS_EXPORT(start) void start() {
         .backgroundColor = "#ffffff",
         .animation = false,
         .grid = GridComponentOption({.top = 48, .right = 24, .bottom = 36, .left = 48}),
-        .xAxis = make_value_axis<XAXisComponentOption_xAxis_value>(),
-        .yAxis = make_value_axis<YAXisComponentOption_yAxis_value>(),
+        .xAxis = make_value_axis<XAXisComponentOption_value>(),
+        .yAxis = make_value_axis<YAXisComponentOption_value>(),
         .legend = PlainLegendComponentOption({.textStyle = LabelOption({.color = "#111111"}), .top = 8}),
         .series = ts::Array<ScatterSeriesOption>::of(s0, s1),
     });

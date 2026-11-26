@@ -54,7 +54,7 @@ let main () =
     let pedestal =
         Mesh.Create(
             CylinderGeometry.Create(0.55, 0.75, 0.35, 24.0),
-            LineMaterial.Material (MeshStandardMaterial.Create(
+            MultiMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0x262626,
                     roughness = 0.7
@@ -67,7 +67,7 @@ let main () =
     let core =
         Mesh.Create(
             SphereGeometry.Create(0.65, 24.0, 18.0),
-            LineMaterial.Material (MeshStandardMaterial.Create(
+            MultiMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0x111111,
                     roughness = 0.45,
@@ -83,7 +83,7 @@ let main () =
     let innerTrack =
         Mesh.Create(
             TorusGeometry.Create(2.1, 0.025, 8.0, 64.0),
-            LineMaterial.Material (MeshBasicMaterial.Create(
+            MultiMaterial.Material (MeshBasicMaterial.Create(
                 MeshBasicMaterialParameters.Create(color = float 0x999999)
             ))
         )
@@ -97,7 +97,7 @@ let main () =
     let planetMesh =
         Mesh.Create(
             SphereGeometry.Create(0.36, 20.0, 16.0),
-            LineMaterial.Material (MeshStandardMaterial.Create(
+            MultiMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0x555555,
                     roughness = 0.55
@@ -112,7 +112,7 @@ let main () =
     let moon =
         Mesh.Create(
             OctahedronGeometry.Create(0.18, 0.0),
-            LineMaterial.Material (MeshStandardMaterial.Create(
+            MultiMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0xd4d4d4,
                     roughness = 0.4,
@@ -129,7 +129,7 @@ let main () =
     let outerTrack =
         Mesh.Create(
             TorusGeometry.Create(3.8, 0.025, 8.0, 80.0),
-            LineMaterial.Material (MeshBasicMaterial.Create(
+            MultiMaterial.Material (MeshBasicMaterial.Create(
                 MeshBasicMaterialParameters.Create(color = float 0xb5b5b5)
             ))
         )
@@ -143,7 +143,7 @@ let main () =
     let stationBody =
         Mesh.Create(
             IcosahedronGeometry.Create(0.42, 0.0),
-            LineMaterial.Material (MeshStandardMaterial.Create(
+            MultiMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0x404040,
                     roughness = 0.5,
@@ -156,7 +156,7 @@ let main () =
     let halo =
         Mesh.Create(
             TorusGeometry.Create(0.68, 0.06, 10.0, 32.0),
-            LineMaterial.Material (MeshStandardMaterial.Create(
+            MultiMaterial.Material (MeshStandardMaterial.Create(
                 MeshStandardMaterialParameters.Create(
                     color = float 0x111111,
                     roughness = 0.4

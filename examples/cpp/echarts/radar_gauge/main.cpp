@@ -65,7 +65,7 @@ TS_EXPORT(start) void start() {
             .pointer = PointerOption({.itemStyle = ItemStyleOption({.color = "#111111"})}),
             .title = TitleOption({.color = "#555555", .fontSize = 12}),
             .detail = DetailOption({.color = "#111111", .fontSize = 22, .formatter = "{value}%", .valueAnimation = false}),
-            .data = ts::Array<GaugeSeriesOption_data>::of(GaugeDataItemOption({.name = "Score", .value = 84})),
+            .data = ts::Array<GaugeDataItemOptionArg>::of(GaugeDataItemOption({.name = "Score", .value = 84})),
         }),
     });
     gauge.setOption(gauge_opt);

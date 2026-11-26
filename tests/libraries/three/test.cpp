@@ -183,7 +183,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     params.color(ColorRepresentation(std::string("#00ff00")));
     MeshBasicMaterial material = MeshBasicMaterial::create(params);
     CHECK(material.color().getHexString() == "00ff00");
-    Mesh mesh = Mesh::create(geometry, Line_material(material));
+    Mesh mesh = Mesh::create(geometry, MultiMaterial(material));
     mesh.name("cube");
     mesh.position().set(0, 0, 0);
     CHECK(mesh.type() == "Mesh");

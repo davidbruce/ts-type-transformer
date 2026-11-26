@@ -98,7 +98,7 @@ check (m.getMinZoom () <= m.getZoom () && m.getZoom () <= m.getMaxZoom ()) "zoom
 check (m.getBoundsZoom (LatLngBoundsExpression.LatLngBounds bounds) < 12.0) "getBoundsZoom"
 
 // Projections: Web Mercator maps the origin to the origin.
-let origin = CRS.EPSG3857.project (CRSProjectLatlng.LatLng (Leaflet.latLng (0.0, 0.0)))
+let origin = CRS.EPSG3857.project (LatLngLatLngLiteral.LatLng (Leaflet.latLng (0.0, 0.0)))
 check (origin.x = 0.0 && abs origin.y < 1e-6) "EPSG3857 project"
 check (CRS.EPSG3857.scale 0.0 = 256.0) "EPSG3857 scale"
 

@@ -45,14 +45,14 @@ export fn run() void {
     const title = ec.TitleComponentOption.create();
     title.setText("Sales");
     option.setTitle(.{ .TitleComponentOption = title });
-    const x_axis = b.XAXisComponentOption_xAxis.create();
-    const labels = b.JsArrayOf(b.AngleAxisComponentOption_category_data).new();
+    const x_axis = b.XAXisComponentOption_category.create();
+    const labels = b.JsArrayOf(b.CategoryAxisBaseOption_data).new();
     labels.push(.{ .string = b.JsString.from("A") });
     labels.push(.{ .string = b.JsString.from("B") });
     labels.push(.{ .string = b.JsString.from("C") });
     x_axis.setData(labels);
-    option.setXAxis(.{ .XAXisComponentOption_xAxis = x_axis });
-    option.setYAxis(.{ .YAXisComponentOption_yAxis_value = b.YAXisComponentOption_yAxis_value.create() });
+    option.setXAxis(.{ .XAXisComponentOption_category = x_axis });
+    option.setYAxis(.{ .YAXisComponentOption_value = b.YAXisComponentOption_value.create() });
     const bars = ec.BarSeriesOption.create();
     bars.setName(.{ .string = b.JsString.from("sales") });
     const values = b.JsArray.new();
