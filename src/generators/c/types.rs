@@ -124,29 +124,59 @@ fn union_field(t: &Ty) -> String {
     }
 }
 
+fn strip_union_prefix(union_name: &str, raw: &str) -> String {
+    if !raw.contains('_') {
+        return raw.to_string();
+    }
+    let u_segs: Vec<&str> = union_name.split('_').filter(|s| !s.is_empty()).collect();
+    let r_segs: Vec<&str> = raw.split('_').filter(|s| !s.is_empty()).collect();
+    let mut skip = 0;
+    while skip < u_segs.len()
+        && skip + 1 < r_segs.len()
+        && (u_segs[skip].eq_ignore_ascii_case(r_segs[skip])
+            || crate::generators::names::stem(u_segs[skip]) == crate::generators::names::stem(r_segs[skip]))
+    {
+        skip += 1;
+    }
+    if skip == 0 && u_segs.len() == 1 && r_segs.len() > 1 {
+        let u_words = crate::generators::names::words(union_name);
+        if u_words.first().is_some_and(|w| w.eq_ignore_ascii_case(r_segs[0])) {
+            skip = 1;
+        }
+    }
+    if skip > 0 { r_segs[skip..].join("_") } else { raw.to_string() }
+}
+
 pub(in super::super) fn union_fields(u: &NamedUnion) -> Vec<String> {
+    union_fields_for(&u.name, u)
+}
+
+pub(in super::super) fn union_fields_for(union_name: &str, u: &NamedUnion) -> Vec<String> {
     let raws: Vec<String> = u.parts.iter().map(union_field).collect();
-    let union_words: std::collections::HashSet<String> = crate::generators::names::words(&u.name)
+    let union_words: std::collections::HashSet<String> = crate::generators::names::words(union_name)
         .into_iter()
         .map(|w| w.to_lowercase())
         .collect();
     let mut out: Vec<String> = raws
         .iter()
         .map(|raw| {
-            if u.name.len() + raw.len() <= 64 || !raw.contains('_') {
+            let mut cand = strip_union_prefix(union_name, raw);
+            if union_name.len() + cand.len() > 64 && cand.contains('_') {
+                let kept: Vec<&str> = cand
+                    .split('_')
+                    .filter(|seg| !seg.is_empty())
+                    .filter(|seg| {
+                        let ws = crate::generators::names::words(seg);
+                        ws.is_empty() || !ws.iter().all(|w| union_words.contains(&w.to_lowercase()))
+                    })
+                    .collect();
+                cand = kept.join("_");
+            }
+            if cand == *raw {
                 return raw.clone();
             }
-            let kept: Vec<&str> = raw
-                .split('_')
-                .filter(|seg| !seg.is_empty())
-                .filter(|seg| {
-                    let ws = crate::generators::names::words(seg);
-                    ws.is_empty() || !ws.iter().all(|w| union_words.contains(&w.to_lowercase()))
-                })
-                .collect();
-            let mut cand = kept.join("_");
             if !cand.is_empty() {
-                while raws.iter().any(|r| *r == format!("{}_{cand}", u.name)) {
+                while raws.iter().any(|r| *r == format!("{union_name}_{cand}")) {
                     cand.push_str("_arm");
                 }
             }
@@ -154,7 +184,7 @@ pub(in super::super) fn union_fields(u: &NamedUnion) -> Vec<String> {
                 && cand.as_bytes()[0].is_ascii_alphabetic()
                 && cand.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
                 && !super::KEYWORDS.contains(&cand.as_str())
-                && !matches!(cand.as_str(), "ts_cstr" | "cstr");
+                && !matches!(cand.as_str(), "ts_cstr" | "cstr" | "ts_value" | "self" | "null" | "of" | "from_handle" | "to_handle" | "release");
             if valid { cand } else { raw.clone() }
         })
         .collect();
@@ -921,6 +951,23 @@ pub(super) fn bag(name: &str, setters: &[(&Func, &str)], cx: &Ctx, m: &Model) ->
                 entries.push(format!("F_##_N(C_, p, {cb}_fn, {fn_field}, _{fn_field})"));
             }
         }
+        if ty == "JsValue" {
+            let specs = [
+                ("string", 's', "const char*", "TsStr", "ts_raw_js_from_string(v.ptr, v.len)"),
+                ("number", 'd', "double", "double", "ts_raw_js_from_number(v)"),
+                ("bool", 'i', "int8_t", "int8_t", "ts_raw_js_from_bool(v != 0)"),
+            ];
+            for (sfx, skind, sty, sparam, make_h) in specs {
+                let sf = format!("{prop}_{sfx}");
+                if !reserved_fields.contains(&sf) && used_fields.insert(sf.clone()) {
+                    helpers += &format!(
+                        "static inline void {name}__{sf}({name} o, {sparam} v) {{ uint32_t h = {make_h}; ({setter_owner}_{})(({setter_owner}){{ o.h }}, (JsValue){{ h }}); ts_raw_js_release(h); }}\n",
+                        f.name
+                    );
+                    entries.push(format!("F_##_N(C_, {skind}, {sty}, {sf}, _{sf})"));
+                }
+            }
+        }
     }
     if entries.is_empty() {
         return String::new();
@@ -1040,6 +1087,13 @@ pub(super) fn call_macros(
         let arr = format!("JsArray_{}", element(elem, cx));
         cx.array_arg.contains_key(&arr).then_some(arr)
     };
+    let is_js_val = |t: &Ty| -> bool {
+        let inner = match t {
+            Ty::Nullable(inner, _) => &**inner,
+            t => t,
+        };
+        matches!(inner, Ty::Any) || matches!(inner, Ty::NamedUnion(n) if !cx.takes(n))
+    };
     let nullable_handle_ty = |t: &Ty| -> Option<String> {
         let Ty::Nullable(inner, _) = t else { return None };
         match &**inner {
@@ -1084,6 +1138,8 @@ pub(super) fn call_macros(
             format!("{n}_of({expr})")
         } else if let Some(arr) = array_arg_name(t) {
             format!("{arr}_arg({expr})")
+        } else if is_js_val(t) {
+            format!("TS_VAL({expr})")
         } else if *t == Ty::Str || matches!(t, Ty::Nullable(inner, _) if **inner == Ty::Str) {
             format!("TS_STR({expr})")
         } else if matches!(t, Ty::Nullable(inner, _) if matches!(**inner, Ty::Num | Ty::NumEnum(_))) {
@@ -1105,14 +1161,16 @@ pub(super) fn call_macros(
         any |= upcast_self;
         args.push(if upcast_self { format!("{}(self)", as_macro(o)) } else { "(self)".into() });
     }
-    let mut has_cb = false;
+    let mut needs_wrap = false;
     for (i, (_, t)) in f.params.iter().enumerate() {
         let a = format!("a{}", i + 1);
         params.push(a.clone());
         let is_cb = chosen != Some(i) && cb_name(t).is_some();
-        has_cb |= is_cb;
+        let is_val = chosen != Some(i) && is_js_val(t);
+        needs_wrap |= is_cb || is_val;
         any |= chosen != Some(i)
             && (is_cb
+                || is_val
                 || upcast(t).is_some()
                 || made(t).is_some()
                 || array_arg_name(t).is_some()
@@ -1163,6 +1221,10 @@ pub(super) fn call_macros(
                 w_params.push(format!("TsCb p{j}"));
                 w_args.push(format!("({cb}){{ p{j}.h }}"));
                 w_release.push(format!("if (p{j}.ts_own) ts_raw_js_release(p{j}.h);"));
+            } else if is_js_val(pt) && chosen != Some(j) {
+                w_params.push(format!("TsArgVal p{j}"));
+                w_args.push(format!("(JsValue){{ p{j}.h }}"));
+                w_release.push(format!("if (p{j}.ts_own) ts_raw_js_release(p{j}.h);"));
             } else {
                 w_params.push(format!("{} p{j}", func_param_ty(pt, cx)));
                 w_args.push(format!("p{j}"));
@@ -1200,7 +1262,7 @@ pub(super) fn call_macros(
                         emit_wrap(prefix, &js_fn, o, o_name, Some((*at, true)), release_rest);
                         choices.extend([format!("const char*: {c_fn}"), format!("char*: {c_fn}"), format!("JsString: {js_fn}")]);
                     } else {
-                        let target_fn = if release_rest || o.params.iter().enumerate().any(|(j, (_, pt))| j != *at && cb_name(pt).is_some()) {
+                        let target_fn = if release_rest || o.params.iter().enumerate().any(|(j, (_, pt))| j != *at && (cb_name(pt).is_some() || is_js_val(pt))) {
                             let w_fn = format!("{fam_prefix}_{o_name}");
                             emit_wrap(prefix, &w_fn, o, o_name, None, release_rest);
                             w_fn
@@ -1224,7 +1286,7 @@ pub(super) fn call_macros(
                     let r_fn = format!("ts_rest_{name}");
                     emit_wrap(prefix, &r_fn, f, name, None, true);
                     r_fn
-                } else if has_cb {
+                } else if needs_wrap {
                     let w_fn = format!("ts_wrap_{name}");
                     emit_wrap(prefix, &w_fn, f, name, None, false);
                     w_fn

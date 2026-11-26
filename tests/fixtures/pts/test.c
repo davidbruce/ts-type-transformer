@@ -32,7 +32,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(js_same(Pts_Pt_add(p, pair(1, 1)), p) && Pts_Pt_get_x(p) == 4);
     // A union is made from a member; a trailing optional argument may be left out.
     CHECK(Pts_Pt_equals(p, Pts_PtLike_of(moved)));
-    CHECK(Pts_Pt_equals(Pts_Pt_clone(p), Pts_PtLike_of_Pts_Pt(p), js_some_double(0.001)) && !js_same(Pts_Pt_clone(p), p));
+    CHECK(Pts_Pt_equals(Pts_Pt_clone(p), Pts_PtLike_of_Pt(p), js_some_double(0.001)) && !js_same(Pts_Pt_clone(p), p));
 
     // Statics.
     CHECK(Pts_Num_lerp(0, 10, 0.5) == 5);

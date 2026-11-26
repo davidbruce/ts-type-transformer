@@ -49,7 +49,7 @@ static int g_active_btn = 0;
 static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
-    Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
+    Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_number = 2);
     Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .toDOM_fn = heading_dom);
 
     Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM_fn = para_dom);
@@ -175,7 +175,7 @@ static void sync_meta(Pm_EditorState st) {
     }
     int inl = 0, blk = 0;
     Pm_DecorationSet dset = compute_decos(Pm_EditorState_get_doc(st), qbuf, &inl, &blk);
-    int total = (int)JsArray_Pm_Decoration_length(Pm_DecorationSet_find(dset));
+    int total = (int)js_len(Pm_DecorationSet_find(dset));
 
     char qdisp[80];
     if (qbuf[0] == 0) snprintf(qdisp, sizeof qdisp, "(none)");

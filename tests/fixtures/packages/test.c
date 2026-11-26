@@ -26,7 +26,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(pick(0).tag == PickResult_string);
     // Told apart by pb's class, not pa's.
     PbPickResult b = pb_pick(1);
-    CHECK(b.tag == PbPickResult_pb_Node && pb_Node_size(b.as.pb_Node) == 10);
+    CHECK(b.tag == PbPickResult_Node && pb_Node_size(b.as.Node) == 10);
     CHECK(pb_pick(0).tag == PbPickResult_string);
 
     // pa's own Point, and geo's, a type declared elsewhere of the same name.

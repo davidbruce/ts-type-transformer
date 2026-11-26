@@ -10,7 +10,7 @@ use std::path::Path;
 use super::model::{Model, Ty};
 use super::names::{Kind, Naming, identifiers};
 
-pub(super) use self::types::union_fields;
+pub(super) use self::types::{union_fields, union_fields_for};
 
 pub(super) const T: &str = "C";
 pub(super) const RUNTIME: &str = include_str!("../runtime/c_runtime.h");
@@ -321,7 +321,7 @@ pub const NAMING: Naming = Naming {
                     for (_, f) in u
                         .parts
                         .iter()
-                        .zip(union_fields(u))
+                        .zip(union_fields_for(candidate, u))
                         .filter(|(p, _)| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_)))
                     {
                         ids.extend([format!("{candidate}_{f}"), format!("{candidate}_of_{f}")]);

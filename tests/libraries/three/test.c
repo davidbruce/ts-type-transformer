@@ -179,7 +179,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Three_BufferGeometry_hasAttribute(geometry, "position"));
     Three_BufferGeometry_getAttribute_result pos_attr = Three_BufferGeometry_getAttribute(geometry, "position");
     CHECK(pos_attr.tag == 0);
-    Three_BufferAttribute positions = pos_attr.as.Three_BufferAttribute;
+    Three_BufferAttribute positions = pos_attr.as.BufferAttribute;
     CHECK(Three_BufferAttribute_get_count(positions) == 24 && Three_BufferAttribute_get_itemSize(positions) == 3);
     CHECK(Three_BufferGeometry_hasAttribute(geometry, "normal") && Three_BufferGeometry_hasAttribute(geometry, "uv"));
     CHECK(!Three_BufferGeometry_hasAttribute(geometry, "color"));

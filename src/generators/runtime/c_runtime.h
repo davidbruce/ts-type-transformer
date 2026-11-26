@@ -192,6 +192,9 @@ static inline JsArray js_to_array(JsValue v) { return (JsArray){ v.h }; }
 #define js_is_null(x) ((x).h == 0)
 #define js_not_null(x) ((x).h != 0)
 #define js_cast(T, x) ((T){ (x).h })
+static inline uint32_t ts_len_arr(uint32_t h) { return h ? ts_raw_js_array_length(h) : 0; }
+static inline uint32_t ts_len_str(uint32_t h) { return h ? ts_raw_js_string_len(h) : 0; }
+#define js_len(x) _Generic((x), JsString: ts_len_str, default: ts_len_arr)((x).h)
 static inline JsValue ts_get_prop(uint32_t o, const char* k) { return (JsValue){ ts_raw_js_object_get(o, k, ts_strlen(k)) }; }
 static inline void ts_set_str(uint32_t o, const char* k, TsStr v) { uint32_t h = ts_raw_js_from_string(v.ptr, v.len); ts_raw_js_object_set(o, k, ts_strlen(k), h); ts_raw_js_release(h); }
 static inline void ts_set_num(uint32_t o, const char* k, double v) { uint32_t h = ts_raw_js_from_number(v); ts_raw_js_object_set(o, k, ts_strlen(k), h); ts_raw_js_release(h); }

@@ -21,29 +21,29 @@ static bool contains(JsString s, const char* needle) {
 
 static uint32_t token_h(Marked_Token tok) {
     switch (tok.tag) {
-    case Marked_Token_Marked_Tokens_Blockquote: return tok.as.Marked_Tokens_Blockquote.h;
-    case Marked_Token_Marked_Tokens_Br: return tok.as.Marked_Tokens_Br.h;
-    case Marked_Token_Marked_Tokens_Checkbox: return tok.as.Marked_Tokens_Checkbox.h;
-    case Marked_Token_Marked_Tokens_Code: return tok.as.Marked_Tokens_Code.h;
-    case Marked_Token_Marked_Tokens_Codespan: return tok.as.Marked_Tokens_Codespan.h;
-    case Marked_Token_Marked_Tokens_Def: return tok.as.Marked_Tokens_Def.h;
-    case Marked_Token_Marked_Tokens_Del: return tok.as.Marked_Tokens_Del.h;
-    case Marked_Token_Marked_Tokens_Em: return tok.as.Marked_Tokens_Em.h;
-    case Marked_Token_Marked_Tokens_Escape: return tok.as.Marked_Tokens_Escape.h;
-    case Marked_Token_Marked_Tokens_Heading: return tok.as.Marked_Tokens_Heading.h;
-    case Marked_Token_Marked_Tokens_Hr: return tok.as.Marked_Tokens_Hr.h;
-    case Marked_Token_Marked_Tokens_HTML: return tok.as.Marked_Tokens_HTML.h;
-    case Marked_Token_Marked_Tokens_Image: return tok.as.Marked_Tokens_Image.h;
-    case Marked_Token_Marked_Tokens_Link: return tok.as.Marked_Tokens_Link.h;
-    case Marked_Token_Marked_Tokens_List: return tok.as.Marked_Tokens_List.h;
-    case Marked_Token_Marked_Tokens_ListItem: return tok.as.Marked_Tokens_ListItem.h;
-    case Marked_Token_Marked_Tokens_Paragraph: return tok.as.Marked_Tokens_Paragraph.h;
-    case Marked_Token_Marked_Tokens_Space: return tok.as.Marked_Tokens_Space.h;
-    case Marked_Token_Marked_Tokens_Strong: return tok.as.Marked_Tokens_Strong.h;
-    case Marked_Token_Marked_Tokens_Table: return tok.as.Marked_Tokens_Table.h;
-    case Marked_Token_Marked_Tokens_Tag: return tok.as.Marked_Tokens_Tag.h;
-    case Marked_Token_Marked_Tokens_Text: return tok.as.Marked_Tokens_Text.h;
-    case Marked_Token_Marked_Tokens_Generic: return tok.as.Marked_Tokens_Generic.h;
+    case Marked_Token_Blockquote: return tok.as.Blockquote.h;
+    case Marked_Token_Br: return tok.as.Br.h;
+    case Marked_Token_Checkbox: return tok.as.Checkbox.h;
+    case Marked_Token_Code: return tok.as.Code.h;
+    case Marked_Token_Codespan: return tok.as.Codespan.h;
+    case Marked_Token_Def: return tok.as.Def.h;
+    case Marked_Token_Del: return tok.as.Del.h;
+    case Marked_Token_Em: return tok.as.Em.h;
+    case Marked_Token_Escape: return tok.as.Escape.h;
+    case Marked_Token_Heading: return tok.as.Heading.h;
+    case Marked_Token_Hr: return tok.as.Hr.h;
+    case Marked_Token_HTML: return tok.as.HTML.h;
+    case Marked_Token_Image: return tok.as.Image.h;
+    case Marked_Token_Link: return tok.as.Link.h;
+    case Marked_Token_List: return tok.as.List.h;
+    case Marked_Token_ListItem: return tok.as.ListItem.h;
+    case Marked_Token_Paragraph: return tok.as.Paragraph.h;
+    case Marked_Token_Space: return tok.as.Space.h;
+    case Marked_Token_Strong: return tok.as.Strong.h;
+    case Marked_Token_Table: return tok.as.Table.h;
+    case Marked_Token_Tag: return tok.as.Tag.h;
+    case Marked_Token_Text: return tok.as.Text.h;
+    case Marked_Token_Generic: return tok.as.Generic.h;
     default: return 0;
     }
 }
@@ -151,11 +151,11 @@ __attribute__((export_name("run"))) void run(void) {
     Marked_TokensList tokens = Marked_lexer(m, "# Head\n\ntext **b**\n\n1. a\n2. b\n\n---\n");
     CHECK(Marked_TokensList_get_length(tokens) >= 4);
     Marked_Token first = Marked_TokensList_get_at(tokens, 0);
-    CHECK(first.tag == Marked_Token_Marked_Tokens_Heading);
+    CHECK(first.tag == Marked_Token_Heading);
     JsString first_type = Marked_Token_get_type(first);
     CHECK(JsString_equals(first_type, "heading"));
     js_release(first_type);
-    Marked_Tokens_Heading heading = first.as.Marked_Tokens_Heading;
+    Marked_Tokens_Heading heading = first.as.Heading;
     CHECK(Marked_Tokens_Heading_get_depth(heading) == 1);
     JsString heading_text = Marked_Tokens_Heading_get_text(heading);
     CHECK(JsString_equals(heading_text, "Head"));
@@ -167,7 +167,7 @@ __attribute__((export_name("run"))) void run(void) {
     JsArray_Marked_Token inner = Marked_Tokens_Heading_get_tokens(heading);
     CHECK(JsArray_Marked_Token_length(inner) == 1);
     Marked_Token inner0 = JsArray_Marked_Token_get(inner, 0);
-    CHECK(inner0.tag == Marked_Token_Marked_Tokens_Text);
+    CHECK(inner0.tag == Marked_Token_Text);
     js_release((JsValue){ token_h(inner0) });
     js_release(inner);
     // Walk the list for a paragraph with strong text and an ordered list.
@@ -175,16 +175,16 @@ __attribute__((export_name("run"))) void run(void) {
     uint32_t count = (uint32_t)Marked_TokensList_get_length(tokens);
     for (uint32_t i = 0; i < count; i++) {
         Marked_Token tok = Marked_TokensList_get_at(tokens, i);
-        if (tok.tag == Marked_Token_Marked_Tokens_Paragraph) paragraphs++;
-        if (tok.tag == Marked_Token_Marked_Tokens_List) {
+        if (tok.tag == Marked_Token_Paragraph) paragraphs++;
+        if (tok.tag == Marked_Token_List) {
             lists++;
-            Marked_Tokens_List list = tok.as.Marked_Tokens_List;
+            Marked_Tokens_List list = tok.as.List;
             CHECK(Marked_Tokens_List_get_ordered(list));
             JsArray_Marked_Tokens_ListItem items = Marked_Tokens_List_get_items(list);
             CHECK(JsArray_Marked_Tokens_ListItem_length(items) == 2);
             js_release(items);
         }
-        if (tok.tag == Marked_Token_Marked_Tokens_Hr) hrs++;
+        if (tok.tag == Marked_Token_Hr) hrs++;
         js_release((JsValue){ token_h(tok) });
     }
     CHECK(paragraphs == 1 && lists == 1 && hrs == 1);
@@ -196,7 +196,7 @@ __attribute__((export_name("run"))) void run(void) {
     MarkedOptions_set_gfm(opts, js_some_bool(false));
     Marked_TokensList raw_table = Marked_lexer(m, table, opts);
     Marked_Token tab0 = Marked_TokensList_get_at(raw_table, 0);
-    CHECK(tab0.tag == Marked_Token_Marked_Tokens_Paragraph);
+    CHECK(tab0.tag == Marked_Token_Paragraph);
     js_release((JsValue){ token_h(tab0) });
     js_release(raw_table);
 
@@ -244,7 +244,7 @@ __attribute__((export_name("run"))) void run(void) {
     Marked_TokensList lexed = marked_call_LexerFn(marked_get_lexer(), "# H\n\ntext *x*");
     CHECK(Marked_TokensList_get_length(lexed) >= 2);
     Marked_Token lexed0 = Marked_TokensList_get_at(lexed, 0);
-    CHECK(lexed0.tag == Marked_Token_Marked_Tokens_Heading);
+    CHECK(lexed0.tag == Marked_Token_Heading);
     js_release((JsValue){ token_h(lexed0) });
     JsString parsed = js_to_string(marked_call_ParserFn(marked_get_parser(), (JsArray_Marked_Token){ lexed.h }));
     CHECK(contains(parsed, "<h1>H</h1>") && contains(parsed, "<em>x</em>"));

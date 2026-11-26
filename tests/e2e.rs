@@ -6297,4 +6297,114 @@ __attribute__((export_name("run"))) void run(void) {
         let report = run(Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
         assert!(report.contains("13 checks passed"), "{report}");
     }
+
+    #[test]
+    fn c_union_tags_js_len_and_jsvalue_bags() {
+        let Some([clang, node]) = tools(["clang", "node"]) else { return };
+        let out = root().join("target/e2e/c_ergo");
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let dts = r#"
+export namespace Tokens {
+    export interface Heading { type: "heading"; depth: number; }
+    export interface Text { type: "text"; raw: string; }
+}
+export type Token = Tokens.Heading | Tokens.Text;
+export interface TrustContext { url: string; }
+export type Trust = boolean | TrustContext | { url: string };
+export interface WidgetOptions {
+    color?: unknown;
+    default?: unknown;
+    enabled?: unknown;
+    tags?: string[];
+}
+export class Widget {
+    value: unknown;
+    constructor(opts?: WidgetOptions);
+    setAny(v: unknown): void;
+}
+export function makeToken(kind: string): Token;
+export function inspectToken(t: Token): string;
+export function describeTrust(t: Trust): string;
+"#;
+        fs::write(out.join("api.d.ts"), dts).unwrap();
+        let js = r#"
+class Widget {
+    constructor(opts = {}) {
+        this.color = opts.color;
+        this.default = opts.default;
+        this.enabled = opts.enabled;
+        this.tags = opts.tags || [];
+        this.value = null;
+    }
+    setAny(v) { this.value = v; }
+}
+export const root = {
+    Widget,
+    makeToken: (kind) => (kind === "h" ? { type: "heading", depth: 2 } : { type: "text", raw: "hé" }),
+    inspectToken: (t) => (t.type === "heading" ? "h:" + t.depth : "t:" + t.raw),
+    describeTrust: (t) => (typeof t === "boolean" ? String(t) : t.url),
+};
+"#;
+        let xml = lower(&out.join("api.d.ts"), Some("c"), &["naming.prefix=\"widget\""]);
+        let m = model(&xml, "C");
+        let files = generators::c::files(&m).unwrap();
+        let all = joined(&files);
+        assert!(all.contains("Widget_Token_Heading = 0") && all.contains("Widget_Token_Text = 1"), "expected stripped Token tags:\n{all}");
+        assert!(all.contains("Widget_Token_of_Heading(") && all.contains("Widget_Token_of_Text("), "expected stripped Token_of_ arms:\n{all}");
+        assert!(all.contains("Widget_Trust_TrustContext = 1") && all.contains("Widget_Trust_object_arm = 2"), "expected stripped Trust tags:\n{all}");
+
+        let bdir = out.join("bindings");
+        write_files(&bdir, files);
+        let c_src = r##"#include "bindings.h"
+TS_IMPORT(check) void check(int ok, int line);
+#define CHECK(c) check((c), __LINE__)
+
+__attribute__((export_name("run"))) void run(void) {
+    uint32_t live = js_live_handles();
+    js_scope_open();
+
+    Widget_Token h = widget_makeToken("h");
+    CHECK(h.tag == Widget_Token_Heading && Widget_Tokens_Heading_get_depth(h.as.Heading) == 2);
+    CHECK(JsString_equals(widget_inspectToken(h), "h:2"));
+    Widget_Token_release(h);
+
+    Widget_Token rebuilt = Widget_Token_of_Text(Widget_Tokens_Text_create(.raw = "yo"));
+    CHECK(JsString_equals(widget_inspectToken(rebuilt), "t:yo"));
+    JsString s = JsString_from("hé!");
+    CHECK(js_len(s) == 4);
+
+    WidgetOptions opts = WidgetOptions_create(
+        .color_string = "#111111",
+        .default_number = 42,
+        .enabled_bool = true,
+        .tags = js_strings("alpha", "beta")
+    );
+    JsArray_JsString tags = WidgetOptions_get_tags(opts);
+    CHECK(js_len(tags) == 2);
+    CHECK(JsString_equals(js_to_string(WidgetOptions_get_color(opts)), "#111111"));
+    CHECK(js_to_number(WidgetOptions_get_default(opts)) == 42.0);
+    CHECK(js_to_bool(WidgetOptions_get_enabled(opts)) == true);
+
+    Widget w = Widget_new(opts);
+    Widget_setAny(w, "direct-str");
+    CHECK(JsString_equals(js_to_string(Widget_get_value(w)), "direct-str"));
+    Widget_setAny(w, 99);
+    CHECK(js_to_number(Widget_get_value(w)) == 99.0);
+    Widget_set_value(w, "via-setter");
+    CHECK(JsString_equals(js_to_string(Widget_get_value(w)), "via-setter"));
+    Widget_set_value(w, true);
+    CHECK(js_to_bool(Widget_get_value(w)) == true);
+
+    js_scope_close();
+    CHECK(js_live_handles() == live);
+}
+"##;
+        fs::write(out.join("test.c"), c_src).unwrap();
+        run(Command::new(&clang).args(CLANG_WASM).arg("-I").arg(&bdir).arg("-o").arg(out.join("test.wasm")).arg(out.join("test.c")));
+        fs::write(out.join("impl.mjs"), js).unwrap();
+        fs::write(out.join("glue.mjs"), generators::wasm::glue(&m, None)).unwrap();
+        let report = run(Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+        assert!(report.contains("13 checks passed"), "{report}");
+    }
 }

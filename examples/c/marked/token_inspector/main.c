@@ -9,35 +9,6 @@ static HTMLElement make_el(Document doc, const char* tag, const char* cls, const
     return el;
 }
 
-static uint32_t token_h(Marked_Token tok) {
-    switch (tok.tag) {
-    case Marked_Token_Marked_Tokens_Blockquote: return tok.as.Marked_Tokens_Blockquote.h;
-    case Marked_Token_Marked_Tokens_Br: return tok.as.Marked_Tokens_Br.h;
-    case Marked_Token_Marked_Tokens_Checkbox: return tok.as.Marked_Tokens_Checkbox.h;
-    case Marked_Token_Marked_Tokens_Code: return tok.as.Marked_Tokens_Code.h;
-    case Marked_Token_Marked_Tokens_Codespan: return tok.as.Marked_Tokens_Codespan.h;
-    case Marked_Token_Marked_Tokens_Def: return tok.as.Marked_Tokens_Def.h;
-    case Marked_Token_Marked_Tokens_Del: return tok.as.Marked_Tokens_Del.h;
-    case Marked_Token_Marked_Tokens_Em: return tok.as.Marked_Tokens_Em.h;
-    case Marked_Token_Marked_Tokens_Escape: return tok.as.Marked_Tokens_Escape.h;
-    case Marked_Token_Marked_Tokens_Heading: return tok.as.Marked_Tokens_Heading.h;
-    case Marked_Token_Marked_Tokens_Hr: return tok.as.Marked_Tokens_Hr.h;
-    case Marked_Token_Marked_Tokens_HTML: return tok.as.Marked_Tokens_HTML.h;
-    case Marked_Token_Marked_Tokens_Image: return tok.as.Marked_Tokens_Image.h;
-    case Marked_Token_Marked_Tokens_Link: return tok.as.Marked_Tokens_Link.h;
-    case Marked_Token_Marked_Tokens_List: return tok.as.Marked_Tokens_List.h;
-    case Marked_Token_Marked_Tokens_ListItem: return tok.as.Marked_Tokens_ListItem.h;
-    case Marked_Token_Marked_Tokens_Paragraph: return tok.as.Marked_Tokens_Paragraph.h;
-    case Marked_Token_Marked_Tokens_Space: return tok.as.Marked_Tokens_Space.h;
-    case Marked_Token_Marked_Tokens_Strong: return tok.as.Marked_Tokens_Strong.h;
-    case Marked_Token_Marked_Tokens_Table: return tok.as.Marked_Tokens_Table.h;
-    case Marked_Token_Marked_Tokens_Tag: return tok.as.Marked_Tokens_Tag.h;
-    case Marked_Token_Marked_Tokens_Text: return tok.as.Marked_Tokens_Text.h;
-    case Marked_Token_Marked_Tokens_Generic: return tok.as.Marked_Tokens_Generic.h;
-    default: return 0;
-    }
-}
-
 __attribute__((export_name("start"))) void start(void) {
     js_scope();
     Document doc = get_document();
@@ -78,10 +49,10 @@ __attribute__((export_name("start"))) void start(void) {
 
     HTMLElement tbody = make_el(doc, "tbody", 0, 0);
     for (uint32_t i = 0; i < count; i++) {
-        Marked_Tokens_Generic g = { token_h(Marked_TokensList_get_at(tokens, (double)i)) };
+        Marked_Token tok = Marked_TokensList_get_at(tokens, (double)i);
 
-        JsString raw = Marked_Tokens_Generic_get_raw(g);
-        uint32_t raw_len = JsString_len(raw);
+        JsString raw = Marked_Token_get_raw(tok);
+        uint32_t raw_len = js_len(raw);
         char raw_buf[512], snip_buf[1024];
         uint32_t rn = JsString_copy(raw, raw_buf, sizeof raw_buf);
         if (rn >= sizeof raw_buf) rn = sizeof raw_buf - 1;
@@ -105,7 +76,7 @@ __attribute__((export_name("start"))) void start(void) {
         HTMLElement tr = make_el(doc, "tr", 0, 0);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, idx_buf));
         HTMLElement td_kind = make_el(doc, "td", 0, 0);
-        HTMLElement_set_textContent(td_kind, Marked_Tokens_Generic_get_type(g));
+        HTMLElement_set_textContent(td_kind, Marked_Token_get_type(tok));
         HTMLElement_appendChild(tr, td_kind);
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, bytes_buf));
         HTMLElement_appendChild(tr, make_el(doc, "td", 0, snip_buf));

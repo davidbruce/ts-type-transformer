@@ -151,7 +151,7 @@ static void render(const char* label) {
     static char html[16384];
     HtmlOut out = { html, html + sizeof html };
     html_fmt(&out, "<table><thead><tr>");
-    uint32_t ncols = JsArray_Table_Column_Core_length(cols);
+    uint32_t ncols = js_len(cols);
     for (uint32_t c = 0; c < ncols; c++) {
         Table_Column_Core col = JsArray_Table_Column_Core_get(cols, c);
         JsString cid = Table_Column_Core_get_id(col);
@@ -166,7 +166,7 @@ static void render(const char* label) {
     }
     html_fmt(&out, "</tr></thead><tbody>");
 
-    uint32_t nrows = JsArray_Table_Row_Core_length(rows);
+    uint32_t nrows = js_len(rows);
     for (uint32_t i = 0; i < nrows; i++) {
         Table_Row_Core row = JsArray_Table_Row_Core_get(rows, i);
         html_fmt(&out, "<tr><td>");

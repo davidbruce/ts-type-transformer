@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 static Echarts_PieDataItemOption slice(const char* name, double value) {
-    return Echarts_PieDataItemOption_create(.name = name, .value = js_number(value));
+    return Echarts_PieDataItemOption_create(.name = name, .value_number = value);
 }
 
 __attribute__((export_name("start"))) void start(void) {
@@ -19,7 +19,7 @@ __attribute__((export_name("start"))) void start(void) {
         .backgroundColor = "#ffffff",
         .color_array = palette,
         .legend_plain = Echarts_PlainLegendComponentOption_create(
-            .bottom = 8, .textStyle = Echarts_LabelOption_create(.color = js_string("#111111"))),
+            .bottom = 8, .textStyle = Echarts_LabelOption_create(.color_string = "#111111")),
         .tooltip = Echarts_TooltipComponentOption_create(.trigger = Echarts_TooltipComponentOption_trigger_item),
         .series_pie = Echarts_PieSeriesOption_create(
             .name = "Subsystems",
