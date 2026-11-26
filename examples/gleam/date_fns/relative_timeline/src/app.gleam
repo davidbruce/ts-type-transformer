@@ -1,6 +1,6 @@
 import date_fns as df
+import date_fns/date_arg
 import date_fns/format_distance_options
-import date_fns/types as dt
 import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/element
@@ -113,7 +113,7 @@ pub fn main() -> Nil {
       node.append_child(tl_card, timeline)
       node.append_child(app, tl_card)
 
-      let date_args = list.map(milestones, fn(item) { dt.DateArgDate(item.0) })
+      let date_args = list.map(milestones, fn(item) { date_arg.Date(item.0) })
       let earliest = df.min(date_args)
       let latest = df.max(date_args)
       let span_days =

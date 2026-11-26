@@ -2,7 +2,7 @@
 import bindings as b
 import bindings/named
 import bindings/shape
-import bindings/types as t
+import bindings/shape_kind
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
@@ -16,15 +16,15 @@ fn check(ok: Bool, what: String) -> Nil {
 
 pub fn main() {
   // Class pairing: a constructor, a static function, a constant.
-  let s = shape.new(t.ShapeKindSquare, 3.0)
+  let s = shape.new(shape_kind.Square, 3.0)
   check(shape.area(s) == 9.0, "constructor")
   check(shape.area(shape.unit()) == 1.0, "static")
   check(shape.sides == 4.0, "constant")
 
   // A string enum is a custom type, in both directions.
-  check(shape.get_kind(s) == t.ShapeKindSquare, "enum out")
+  check(shape.get_kind(s) == shape_kind.Square, "enum out")
   check(
-    shape.get_kind(shape.new(t.ShapeKindCircle, 1.0)) == t.ShapeKindCircle,
+    shape.get_kind(shape.new(shape_kind.Circle, 1.0)) == shape_kind.Circle,
     "enum in",
   )
 

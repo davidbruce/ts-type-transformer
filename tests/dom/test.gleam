@@ -1,18 +1,20 @@
 // Drives a real page through the generated DOM bindings; every check must hold.
 import bindings/areas/core as dom
 import bindings/areas/core/add_event_listener_options
+import bindings/areas/core/boolean_or_add_event_listener_options
 import bindings/areas/core/document
 import bindings/areas/core/dom_token_list
 import bindings/areas/core/element
+import bindings/areas/core/event_listener_or_event_listener_object
 import bindings/areas/core/event_target
 import bindings/areas/core/node
+import bindings/areas/core/node_or_string
 import bindings/areas/css/css_style_declaration_base as style
 import bindings/areas/events/event
 import bindings/areas/html/html_collection_base as collection
 import bindings/areas/html/html_element
 import bindings/areas/html/html_element_event_map as ev
 import bindings/areas/html/html_element_tag_name_map as tag
-import bindings/types as t
 import cell
 import gleam/int
 import gleam/list
@@ -92,8 +94,8 @@ pub fn main() {
   html_element.add_event_listener_with_string_of_with(
     box,
     "ping",
-    t.EventListenerOrEventListenerObjectEventListener(on_ping),
-    t.BooleanOrAddEventListenerOptionsAddEventListenerOptions(once),
+    event_listener_or_event_listener_object.Fn(on_ping),
+    boolean_or_add_event_listener_options.AddEventListenerOptions(once),
   )
   event_target.dispatch_event(box, event.new("ping"))
   event_target.dispatch_event(box, event.new("ping"))
@@ -105,8 +107,8 @@ pub fn main() {
   // A union of a Node and a string: a span and a text.
   let holder = document.create_element(doc, tag.section)
   element.append(holder, [
-    t.NodeOrStringNode(node.upcast(document.create_element(doc, tag.span))),
-    t.NodeOrStringString("tail"),
+    node_or_string.node(node.upcast(document.create_element(doc, tag.span))),
+    node_or_string.String("tail"),
   ])
   check(
     element.get_text_content(holder) == "tail",

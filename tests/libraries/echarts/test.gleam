@@ -8,12 +8,13 @@ import bindings/areas/echarts/e_charts_init_opts
 import bindings/areas/echarts/e_charts_type
 import bindings/areas/echarts/ec_unit_option as unit
 import bindings/areas/echarts/eventful
+import bindings/areas/echarts/model_finder
 import bindings/areas/echarts/model_finder_object
 import bindings/areas/echarts/payload
 import bindings/areas/echarts/resize_opts
+import bindings/areas/echarts/scale_data_value
 import bindings/areas/test_page
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic
 import gleam/dynamic/decode
@@ -133,8 +134,8 @@ pub fn main() {
   let x_of = fn(c) {
     e_charts_type.convert_to_pixel_of(
       chart,
-      t.ModelFinderModelFinderObject(on_x),
-      t.ScaleDataValueString(c),
+      model_finder.model_finder_object(on_x),
+      scale_data_value.String(c),
     )
   }
   let on_y = model_finder_object.create()

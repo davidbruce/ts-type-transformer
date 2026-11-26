@@ -12,7 +12,7 @@ import bindings/areas/html/html_option_element as option_el
 import bindings/areas/html/html_select_element as select
 import bindings/areas/html/html_text_area_element as textarea
 import bindings/areas/network/form_data
-import bindings/types as t
+import bindings/areas/network/form_data_entry_value
 import cell
 import gleam/int
 import gleam/io
@@ -138,19 +138,19 @@ pub fn main() {
 
   // FormData from the form: text, number, a checked box, the select and text.
   let data = form_data.new_with(the_form, None)
-  check(form_data.get(data, "user") == Some(t.FormDataEntryValueString("alice")), "FormData user")
-  check(form_data.get(data, "age") == Some(t.FormDataEntryValueString("30")), "FormData age")
-  check(form_data.get(data, "agree") == Some(t.FormDataEntryValueString("on")), "FormData checked box")
-  check(form_data.get(data, "color") == Some(t.FormDataEntryValueString("red")), "FormData select")
-  check(form_data.get(data, "notes") == Some(t.FormDataEntryValueString("HOWDY world")), "FormData textarea")
+  check(form_data.get(data, "user") == Some(form_data_entry_value.String("alice")), "FormData user")
+  check(form_data.get(data, "age") == Some(form_data_entry_value.String("30")), "FormData age")
+  check(form_data.get(data, "agree") == Some(form_data_entry_value.String("on")), "FormData checked box")
+  check(form_data.get(data, "color") == Some(form_data_entry_value.String("red")), "FormData select")
+  check(form_data.get(data, "notes") == Some(form_data_entry_value.String("HOWDY world")), "FormData textarea")
   check(form_data.get(data, "missing") == None, "FormData missing")
   input.set_checked(agree, False)
   check(!form_data.has(form_data.new_with(the_form, None), "agree"), "unchecked box is left out")
   form_data.append_with_string(data, "extra", "1")
   form_data.append_with_string(data, "extra", "2")
-  check(form_data.get_all(data, "extra") == [t.FormDataEntryValueString("1"), t.FormDataEntryValueString("2")], "FormData getAll")
+  check(form_data.get_all(data, "extra") == [form_data_entry_value.String("1"), form_data_entry_value.String("2")], "FormData getAll")
   form_data.set_with_string(data, "extra", "3")
-  check(form_data.get_all(data, "extra") == [t.FormDataEntryValueString("3")], "FormData set replaces")
+  check(form_data.get_all(data, "extra") == [form_data_entry_value.String("3")], "FormData set replaces")
   form_data.delete(data, "extra")
   check(!form_data.has(data, "extra"), "FormData delete")
   check(list.length(form_data.to_list(data)) == 5, "FormData entries")

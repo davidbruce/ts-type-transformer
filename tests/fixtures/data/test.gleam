@@ -1,13 +1,16 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
 import bindings/box
+import bindings/either
+import bindings/field_result
+import bindings/id
 import bindings/item
 import bindings/options
+import bindings/options_mode
 import bindings/pipe
 import bindings/runtime as r
 import bindings/source
 import bindings/tagged
-import bindings/types as t
 import gleam/io
 import gleam/option.{None, Some}
 
@@ -22,7 +25,7 @@ pub fn main() {
   // Option objects: built here, read by JavaScript.
   let o = options.create()
   options.set_width(o, 3.0)
-  options.set_mode(o, t.OptionsModeFill)
+  options.set_mode(o, options_mode.Fill)
   check(b.describe(o) == "3x? fill", "option object")
   options.set_height(o, Some(2.0))
   options.set_title(o, Some("hi"))
@@ -31,7 +34,7 @@ pub fn main() {
   // Built by JavaScript, read here. A missing optional property is None.
   let d = b.defaults()
   check(
-    options.get_width(d) == 4.0 && options.get_mode(d) == t.OptionsModeFit,
+    options.get_width(d) == 4.0 && options.get_mode(d) == options_mode.Fit,
     "read",
   )
   check(
@@ -47,7 +50,7 @@ pub fn main() {
   let size = b.area_size_create()
   b.area_size_set_width(size, 3.0)
   check(b.area(size) == 9.0, "Pick")
-  check(b.field() == t.FieldResultTitle, "keyof")
+  check(b.field() == field_result.Title, "keyof")
 
   // Record<string, number>: an index.
   let table = b.lookup_table_create()
@@ -95,12 +98,12 @@ pub fn main() {
     "generic function",
   )
   // What a Box holds is converted as T is: an Id, a variant, not JavaScript's string.
-  let assert t.IdString(three) = box.get_value(b.boxed_id(), t.id_codec())
+  let assert id.String(three) = box.get_value(b.boxed_id(), id.codec())
   check(three == "three", "Box(Id)")
-  let assert [t.IdNumber(1.0), ..] =
+  let assert [id.Number(1.0), ..] =
     box.get_value(
-      b.wrap([t.IdNumber(1.0)], r.codec_list(t.id_codec())),
-      r.codec_list(t.id_codec()),
+      b.wrap([id.Number(1.0)], r.codec_list(id.codec())),
+      r.codec_list(id.codec()),
     )
   check(
     box.get_value(
@@ -112,9 +115,9 @@ pub fn main() {
   )
 
   // A generic union, and a union in an array.
-  check(b.unbox(t.EitherT(5.0), float) == 5.0, "union of T")
-  check(b.unbox(t.EitherBox(bx), float) == 21.0, "union of Box(T)")
-  check(b.ids() == [t.IdNumber(1.0), t.IdString("two")], "array of unions")
+  check(b.unbox(either.t(5.0), float) == 5.0, "union of T")
+  check(b.unbox(either.box(bx), float) == 21.0, "union of Box(T)")
+  check(b.ids() == [id.Number(1.0), id.String("two")], "array of unions")
 
   // Pipe extends Source(Float) and Sink(Float). It is a Source, and has
   // Sink's members as its own, Float for T.

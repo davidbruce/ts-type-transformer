@@ -7,11 +7,11 @@ import bindings/areas/canvas/text_metrics
 import bindings/areas/core as dom
 import bindings/areas/core/document
 import bindings/areas/core/node
+import bindings/areas/core/string_or_canvas_gradient_or_canvas_pattern as paint
 import bindings/areas/canvas/canvas_gradient
 import bindings/areas/html/html_canvas_element as canvas_el
 import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic/decode
 import gleam/float
@@ -23,7 +23,7 @@ import gleam/string
 
 // A fill or stroke style as it reads back.
 fn style(s: String) {
-  t.StringOrCanvasGradientOrCanvasPatternString(s)
+  paint.String(s)
 }
 
 // The pixel at (x, y) as [r, g, b, a]. FINDING 2 (awkward): ImageData.data is an opaque

@@ -70,7 +70,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     let mut b = Builder {
         opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], enum_docs: vec![], num_enum_docs: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new(), args_bags: HashMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], enum_docs: vec![], num_enum_docs: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), type_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new(), args_bags: HashMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -283,13 +283,23 @@ impl<'a> Builder<'a> {
     }
 
     // The folder of a module, unique even where letter case does not count.
-    fn folder(&mut self, kind: &str, module: &str) -> String {
+    pub(super) fn folder(&mut self, kind: &str, module: &str) -> String {
         if let Some(f) = self.folder_names.get(&(kind.to_string(), module.to_string())) {
             return f.clone();
         }
         let path = file_name(&format!("{kind}/{module}"), &mut self.folders);
         self.folder_names.insert((kind.to_string(), module.to_string()), path.clone());
         path
+    }
+
+    pub(super) fn node_module(&mut self, d: Node<'a, 'a>) -> String {
+        for a in d.ancestors() {
+            if let Some(m) = a.attribute("module") {
+                let kind = if a.attribute("moduleKind") == Some("namespace") { "namespaces" } else { "areas" };
+                return self.folder(kind, m);
+            }
+        }
+        self.module.clone()
     }
 
     // A type parameter, with its default and constraint: `E extends Element = Element`.
@@ -366,14 +376,16 @@ impl<'a> Builder<'a> {
                 }
                 "enum" => {
                     // Only string enums cross as an index; numeric ones are numbers.
+                    let id = self.type_ident(&path);
+                    self.model.type_modules.insert(id.clone(), self.module.clone());
                     let docs = || EnumDoc { doc: doc(d).map(str::to_string), members: named(d, "member").map(member_doc).collect() };
                     if named(d, "member").all(|m| attr(m, "type") == "string") {
                         self.model.enum_docs.push(docs());
-                        self.model.enums.push((self.type_ident(&path), named(d, "member").map(|v| attr(v, "value").to_string()).collect()));
+                        self.model.enums.push((id, named(d, "member").map(|v| attr(v, "value").to_string()).collect()));
                     } else if named(d, "member").all(|m| attr(m, "type") == "number") {
                         let members = named(d, "member").map(|v| (ident(attr(v, "name")), attr(v, "value").to_string())).collect();
                         self.model.num_enum_docs.push(docs());
-                        self.model.num_enums.push((self.type_ident(&path), members));
+                        self.model.num_enums.push((id, members));
                     }
                 }
                 // An interface that is only a call signature is a function type.

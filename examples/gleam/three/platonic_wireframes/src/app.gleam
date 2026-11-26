@@ -10,6 +10,7 @@ import three/ambient_light
 import three/box_geometry
 import three/buffer_geometry
 import three/color
+import three/color_representation
 import three/directional_light
 import three/edges_geometry
 import three/euler
@@ -121,8 +122,8 @@ pub fn main() {
     grid_helper.new_of_with(
       12.0,
       12.0,
-      t.ColorRepresentationNumber(hex(0x737373)),
-      t.ColorRepresentationNumber(hex(0xd4d4d4)),
+      color_representation.Number(hex(0x737373)),
+      color_representation.Number(hex(0xd4d4d4)),
     )
   vector3.set_y(object3d.get_position(grid), -1.2)
   object3d.add(sc, [grid])

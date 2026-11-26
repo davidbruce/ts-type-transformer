@@ -14,6 +14,7 @@ import leaflet/namespaces/crs
 import leaflet/path_options
 import leaflet/point
 import leaflet/polyline_options
+import leaflet/polyline_set_lat_lngs_latlngs as poly_pt
 import leaflet/runtime
 import leaflet/types as t
 
@@ -105,10 +106,10 @@ pub fn main() {
   )
 
   let atrium = [
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(50.0, 64.0)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(74.0, 80.0)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(50.0, 96.0)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(26.0, 80.0)),
+    poly_pt.lat_lng(leaflet.lat_lng(50.0, 64.0)),
+    poly_pt.lat_lng(leaflet.lat_lng(74.0, 80.0)),
+    poly_pt.lat_lng(leaflet.lat_lng(50.0, 96.0)),
+    poly_pt.lat_lng(leaflet.lat_lng(26.0, 80.0)),
   ]
   leaflet.polygon_with(atrium, box_opts("#111111", 2.0, None, "#555555", 0.35))
   |> layer.add_to_map(m)

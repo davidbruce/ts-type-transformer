@@ -2302,21 +2302,21 @@ fn gleam_cross_project_refs() {
         out.join("src/check.gleam"),
         "import gleam/io\n\
          import base_lib as base\n\
+         import base_lib/mode\n\
          import base_lib/surface\n\
          import base_lib/rendering_context as base_ctx\n\
-         import base_lib/types as base_types\n\
          import app_lib as app\n\
-         import app_lib/rendering_context as app_ctx\n\
-         import app_lib/types as app_types\n\n\
+         import app_lib/quality\n\
+         import app_lib/rendering_context as app_ctx\n\n\
          pub fn main() {\n\
            let s = base.make_surface(640.0, 480.0)\n\
            let assert True = surface.get_width(s) +. surface.get_height(s) == 1120.0\n\
-           let assert True = app.render(s, app_types.QualityHigh) == 1130.0\n\
+           let assert True = app.render(s, quality.High) == 1130.0\n\
            let bc = base.make_base_context(7.0)\n\
            let ac = app.make_app_context(\"gl\")\n\
            let assert True = base_ctx.get_id(bc) == 7.0 && app_ctx.get_label(ac) == \"gl\"\n\
-           let assert True = base.describe_mode(base_types.ModeFast) == \"mode:fast\"\n\
-           let assert True = app.describe_quality(app_types.QualityHigh) == \"quality:high\"\n\
+           let assert True = base.describe_mode(mode.Fast) == \"mode:fast\"\n\
+           let assert True = app.describe_quality(quality.High) == \"quality:high\"\n\
            io.println(\"5 checks passed\")\n\
          }\n",
     )

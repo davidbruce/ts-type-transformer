@@ -1,11 +1,11 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
 import bindings/clock
+import bindings/level
 import bindings/namespaces/geometry
 import bindings/namespaces/geometry/deep
 import bindings/namespaces/geometry/point
 import bindings/settings
-import bindings/types as t
 import gleam/io
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -43,7 +43,7 @@ pub fn main() {
 
   // Numeric enums.
   check(
-    b.bump(t.LevelLow) == t.LevelHigh && b.bump(t.LevelHigh) == t.LevelHigh,
+    b.bump(level.Low) == level.High && b.bump(level.High) == level.High,
     "numeric enum",
   )
 

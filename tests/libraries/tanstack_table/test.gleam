@@ -6,6 +6,7 @@
 // identity @external to runtime_ffi.mjs's `dynamic`; so are the table options
 // object and the table's TableRowSorting view (`coerce`).
 import bindings as table
+import bindings/accessor_fn_or_string
 import bindings/column_helper
 import bindings/column_helper_accessor_fn_column_header_string as header_options
 import bindings/column_sort
@@ -19,7 +20,9 @@ import bindings/table_options_core
 import bindings/table_reactivity_bindings as reactivity
 import bindings/table_row_models_core
 import bindings/table_row_sorting
+import bindings/table_state.{type TableState}
 import bindings/types as t
+import bindings/updater
 import cell
 import gleam/dynamic
 import gleam/dynamic/decode
@@ -68,10 +71,10 @@ pub fn main() {
     Some(table.get_row_pagination_feature()),
   )
   let registry = table.table_features(runtime.dynamic(features))
-  let state_dyn = fn(s: t.TableState) {
+  let state_dyn = fn(s: TableState) {
     case s {
-      t.TableStateTableStateObject(o) -> runtime.dynamic(o)
-      t.TableStateTableStateCellSelection2(o) -> runtime.dynamic(o)
+      table_state.Object(o) -> runtime.dynamic(o)
+      table_state.CellSelection(o) -> runtime.dynamic(o)
     }
   }
   let state = table.get_initial_table_state(registry)
@@ -111,7 +114,7 @@ pub fn main() {
   let name =
     column_helper.accessor(
       helper,
-      t.AccessorFnOrStringString("name"),
+      accessor_fn_or_string.String("name"),
       runtime.dynamic(name_options),
       runtime.codec_dynamic(),
     )
@@ -120,7 +123,7 @@ pub fn main() {
   let age =
     column_helper.accessor(
       helper,
-      t.AccessorFnOrStringString("age"),
+      accessor_fn_or_string.String("age"),
       runtime.dynamic(age_options),
       runtime.codec_dynamic(),
     )
@@ -156,13 +159,13 @@ pub fn main() {
       "parent name",
     )
     + check(
-      table.functional_update(t.UpdaterT(9.0), 3.0, runtime.codec_float())
+      table.functional_update(updater.T(9.0), 3.0, runtime.codec_float())
         == 9.0,
       "functional_update with a value",
     )
     + check(
       table.functional_update(
-        t.UpdaterUpdaterFnCb(fn(x) { x +. 1.0 }),
+        updater.UpdaterFnCb(fn(x) { x +. 1.0 }),
         3.0,
         runtime.codec_float(),
       )
@@ -256,7 +259,7 @@ pub fn main() {
         cell.set(
           value,
           table.functional_update(
-            t.UpdaterT(v),
+            updater.T(v),
             cell.get(value),
             runtime.codec_dynamic(),
           ),
@@ -406,7 +409,7 @@ pub fn main() {
   column_sort.set_id(by_age, "age")
   column_sort.set_desc(by_age, False)
   let sortable: t.TableRowSorting(dynamic.Dynamic, Nil) = coerce(tbl)
-  table_row_sorting.set_sorting(sortable, t.UpdaterT([by_age]))
+  table_row_sorting.set_sorting(sortable, updater.T([by_age]))
   let sorted_model = table_row_models_core.get_row_model(model_view)
   let passed =
     passed

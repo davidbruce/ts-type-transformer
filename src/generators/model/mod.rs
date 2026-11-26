@@ -536,7 +536,8 @@ impl Model {
                 Ty::Array if primary.is_none() && u.parts.iter().filter(|q| matches!(q, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() == 1 => "list".into(),
                 Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
                 _ if by_type => snake(&fixed[m].clone().unwrap_or_default().replace(['-', ' ', '.'], "_")),
-                Ty::Obj(n) | Ty::NamedUnion(n) if self.synthetic.contains(n) && n.contains('_') => snake(n.rsplit('_').next().unwrap_or(n)),
+                Ty::Obj(n) | Ty::NamedUnion(n) if self.synthetic.contains(n) && n.contains('_') => snake(n.rsplit('_').find(|s| !s.is_empty() && !s.chars().all(|c| c.is_ascii_digit())).unwrap_or(n)),
+                Ty::Param(n) => snake(n),
                 _ => match name {
                     Some(n) => {
                         let w = camel_words(n);
@@ -662,6 +663,8 @@ pub struct Model {
     // And their module (`namespaces/Stream`), with how many of the path's
     // first segments it stands for.
     pub namespace_modules: HashMap<String, (String, usize)>,
+    // Each enum, numeric enum, or named union's XML module folder (`areas/...` or `namespaces/...`).
+    pub type_modules: HashMap<String, String>,
     // A namespace's functions, and its variables' accessors, by their
     // import: the namespaces, their own name, their module, and how many of
     // the namespaces it stands for.

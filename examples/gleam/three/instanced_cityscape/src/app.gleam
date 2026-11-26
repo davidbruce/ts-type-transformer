@@ -11,6 +11,7 @@ import three/ambient_light
 import three/box_geometry
 import three/buffer_attribute
 import three/color
+import three/color_representation
 import three/directional_light
 import three/euler
 import three/grid_helper
@@ -172,8 +173,8 @@ pub fn main() {
     grid_helper.new_of_with(
       9.0,
       10.0,
-      t.ColorRepresentationNumber(hex(0x999999)),
-      t.ColorRepresentationNumber(hex(0xd4d4d4)),
+      color_representation.Number(hex(0x999999)),
+      color_representation.Number(hex(0xd4d4d4)),
     )
   object3d.add(sc, [grid])
 

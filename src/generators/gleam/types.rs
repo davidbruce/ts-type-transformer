@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use super::bounds::generic_args;
 use super::{codec_var, lower, relative, snake, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
 use super::super::comments::{Style, comment};
-use super::super::js::{call_expr, js_test, trim_trailing_undef};
+use super::super::js::{access, call_expr, js_test, trim_trailing_undef};
 use super::super::model::{mentions, subst, Absence, Call, Class, Func, Model, NamedUnion, TParam, Ty, suffixed};
 
 pub(super) struct Gen<'m> {
@@ -16,9 +16,8 @@ pub(super) struct Gen<'m> {
     // (pts' `CanvasLineJoin`, without the DOM's bindings).
     pub unmakeable: HashSet<String>,
     pub pkg: String,
-    // Gleam's name of each type the model names, and of each union's or enum's variants.
+    // Gleam's name of each type the model names.
     pub types: HashMap<String, String>,
-    pub variants: HashMap<(String, usize), String>,
     // Each callback, by the places of the type parameters it uses in Gleam, and those needing JS codecs.
     pub callbacks: HashMap<String, Vec<usize>>,
     pub callback_codecs: HashMap<String, Vec<usize>>,
@@ -32,10 +31,14 @@ pub(super) struct Gen<'m> {
     pub out: String,
     pub ffi: String,
     pub used: RefCell<BTreeSet<String>>,
+    pub ffi_used: RefCell<BTreeSet<String>>,
     pub used_key_ctor: bool,
+    pub uses_self_mjs: bool,
     pub units: BTreeMap<String, Unit>,
-    // The module each Gleam type is declared in.
+    // The module each Gleam type is declared in, and where its `_to`/`_from` FFI lives.
     pub home: HashMap<String, String>,
+    pub ffi_home: HashMap<String, String>,
+    pub module_rank: HashMap<String, usize>,
     // Each class's type parameter count; and the class its chain continues
     // from, with the arguments it gives it.
     pub classes: HashMap<String, usize>,
@@ -50,6 +53,10 @@ pub(super) struct Gen<'m> {
     // Where a value goes into JavaScript (a parameter, a setter's value): a
     // union no test tells apart is its own type there, `Dynamic` elsewhere.
     pub going_in: Cell<bool>,
+    // Inside a union module or class base args: expand callback types inline so
+    // the module never depends on `{pkg}/callbacks`.
+    pub inline_callbacks: Cell<bool>,
+    pub inline_cb_depth: Cell<usize>,
     // A function's own or class-bound type parameters bound to a class (`T extends Node`):
     // that class, open in the parameter's variable.
     pub bound: RefCell<HashMap<String, (String, Vec<Ty>)>>,
@@ -69,7 +76,9 @@ pub(super) struct Unit {
     pub out: String,
     pub ffi: String,
     pub used: BTreeSet<String>,
+    pub ffi_used: BTreeSet<String>,
     pub used_key_ctor: bool,
+    pub uses_self_mjs: bool,
 }
 
 impl<'m> Gen<'m> {
@@ -136,18 +145,93 @@ impl<'m> Gen<'m> {
             out: std::mem::take(&mut self.out),
             ffi: std::mem::take(&mut self.ffi),
             used: self.used.take(),
+            ffi_used: self.ffi_used.take(),
             used_key_ctor: std::mem::take(&mut self.used_key_ctor),
+            uses_self_mjs: std::mem::take(&mut self.uses_self_mjs),
         };
         let was = self.units.entry(std::mem::replace(&mut self.unit, unit.to_string())).or_default();
         was.out += &done.out;
         was.ffi += &done.ffi;
         was.used.extend(done.used);
+        was.ffi_used.extend(done.ffi_used);
         was.used_key_ctor |= done.used_key_ctor;
+        was.uses_self_mjs |= done.uses_self_mjs;
         let next = self.units.remove(unit).unwrap_or_default();
         self.out = next.out;
         self.ffi = next.ffi;
         *self.used.borrow_mut() = next.used;
+        *self.ffi_used.borrow_mut() = next.ffi_used;
         self.used_key_ctor = next.used_key_ctor;
+        self.uses_self_mjs = next.uses_self_mjs;
+    }
+
+    pub(super) fn ffi_alias(module: &str) -> String {
+        format!("$F_{}", module.replace('/', "_"))
+    }
+
+    pub(super) fn ffi_ref(&self, model_name: &str, suffix: &str) -> String {
+        let gname = self.tname(model_name);
+        let target = &self.ffi_home[&gname];
+        if target == &self.unit {
+            format!("{gname}_{suffix}")
+        } else {
+            self.ffi_used.borrow_mut().insert(target.clone());
+            format!("{}.{gname}_{suffix}", Self::ffi_alias(target))
+        }
+    }
+
+    pub(super) fn with_inline_callbacks<T>(&self, f: impl FnOnce() -> T) -> T {
+        let was = self.inline_callbacks.replace(true);
+        let out = f();
+        self.inline_callbacks.set(was);
+        out
+    }
+
+    fn inline_callback_resolved(&self, n: &str, args: &[Ty]) -> (&crate::generators::model::Callback, Vec<Ty>) {
+        let cb = self.m.callbacks.iter().find(|c| c.name == n).expect("missing callback");
+        let resolved: Vec<Ty> = (0..cb.type_params.len())
+            .map(|i| args.get(i).cloned().unwrap_or(Ty::Any))
+            .collect();
+        (cb, resolved)
+    }
+
+    fn can_read_field(&self, t: &Ty, self_rank: usize, seen_cb: &mut HashSet<String>) -> bool {
+        let mut ok = true;
+        visit_ty(t, &mut |sub| {
+            if !ok {
+                return;
+            }
+            let (Ty::Obj(n) | Ty::Generic(n, _) | Ty::NamedUnion(n)) = sub else {
+                return;
+            };
+            if self.is_callback(n) {
+                if !seen_cb.insert(n.clone()) {
+                    return;
+                }
+                let (cb, resolved) = self.inline_callback_resolved(n, generic_args(sub));
+                for (_, pt) in &cb.params {
+                    if !self.can_read_field(&subst(pt, &cb.type_params, &resolved), self_rank, seen_cb) {
+                        ok = false;
+                        return;
+                    }
+                }
+                if !self.can_read_field(&subst(&cb.ret, &cb.type_params, &resolved), self_rank, seen_cb) {
+                    ok = false;
+                }
+                seen_cb.remove(n);
+                return;
+            }
+            if matches!(sub, Ty::NamedUnion(_) | Ty::Generic(..)) && self.m.unions.iter().any(|u| u.name == *n) && !self.decodable(n) {
+                return;
+            }
+            if let Some(mod_path) = self.home.get(&self.tname(n))
+                && let Some(&rank) = self.module_rank.get(mod_path)
+                && rank > self_rank
+            {
+                ok = false;
+            }
+        });
+        ok
     }
 
     // The module's own JavaScript, as an external names it.
@@ -329,6 +413,14 @@ impl<'m> Gen<'m> {
                 self.note("Promise");
                 format!("Promise({})", dynamic())
             }
+            Ty::Obj(n) | Ty::Generic(n, _) if self.inline_callbacks.get() && self.is_callback(n) => {
+                let (cb, resolved) = self.inline_callback_resolved(n, generic_args(t));
+                self.closed(|| {
+                    let params: Vec<String> = cb.params.iter().map(|(_, p)| self.ty(&subst(p, &cb.type_params, &resolved))).collect();
+                    let ret = self.ty(&subst(&cb.ret, &cb.type_params, &resolved));
+                    format!("fn({}) -> {ret}", params.join(", "))
+                })
+            }
             Ty::Obj(n) => self.bare(n),
             Ty::Enum(n) | Ty::NumEnum(n) => self.gt(n),
             Ty::Nullable(inner, _) => {
@@ -388,10 +480,23 @@ impl<'m> Gen<'m> {
             Ty::Array => format!("toList(Array.from({x} ?? []))"),
             Ty::ArrayOf(e) => format!("toList(Array.from({x} ?? [], (v) => {}))", self.to_gleam(e, "v")),
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.to_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
-            Ty::Enum(n) | Ty::NumEnum(n) => format!("$T.{}_to({x})", self.tname(n)),
-            Ty::NamedUnion(n) if self.decodable(n) => format!("$T.{}_to({x})", self.tname(n)),
-            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("$T.{}_to({x}{})", self.tname(n), self.codec_args(n, args)),
-            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("$T.{}_to({x}{})", self.tname(n), self.codec_args(n, generic_args(t))),
+            Ty::Enum(n) | Ty::NumEnum(n) => format!("{}({x})", self.ffi_ref(n, "to")),
+            Ty::NamedUnion(n) if self.decodable(n) => format!("{}({x})", self.ffi_ref(n, "to")),
+            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("{}({x}{})", self.ffi_ref(n, "to"), self.codec_args(n, args)),
+            Ty::Obj(n) | Ty::Generic(n, _) if self.inline_callbacks.get() && self.is_callback(n) => {
+                let (cb, resolved) = self.inline_callback_resolved(n, generic_args(t));
+                let d = self.inline_cb_depth.get();
+                self.inline_cb_depth.set(d + 1);
+                let names: Vec<String> = (0..cb.params.len()).map(|i| format!("a{d}_{i}")).collect();
+                let mut into_js: Vec<String> = cb.params.iter().zip(&names).map(|((_, p), a)| self.from_gleam(&subst(p, &cb.type_params, &resolved), a)).collect();
+                if cb.rest && let Some(last) = into_js.last_mut() {
+                    *last = format!("...{last}");
+                }
+                let body = self.to_gleam(&subst(&cb.ret, &cb.type_params, &resolved), &format!("f({})", into_js.join(", ")));
+                self.inline_cb_depth.set(d);
+                format!("(typeof {x} === \"function\" ? ({}) => {body} : {x})", names.join(", "))
+            }
+            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("{}({x}{})", self.ffi_ref(n, "to"), self.codec_args(n, generic_args(t))),
             Ty::Generic(n, args) if (n == "Promise" || n == "PromiseLike") && args.len() == 1 => {
                 format!("Promise.resolve({x}).then((v) => {})", self.to_gleam(&args[0], "v"))
             }
@@ -462,10 +567,24 @@ impl<'m> Gen<'m> {
             Ty::Array => format!("{x}.toArray()"),
             Ty::ArrayOf(e) => format!("{x}.toArray().map((v) => {})", self.from_gleam(e, "v")),
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.from_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
-            Ty::Enum(n) | Ty::NumEnum(n) => format!("$T.{}_from({x})", self.tname(n)),
-            Ty::NamedUnion(n) if self.decodable(n) || self.made_in(n) => format!("$T.{}_from({x})", self.tname(n)),
-            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("$T.{}_from({x}{})", self.tname(n), self.codec_args(n, args)),
-            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("$T.{}_from({x}{})", self.tname(n), self.codec_args(n, generic_args(t))),
+            Ty::Enum(n) | Ty::NumEnum(n) => format!("{}({x})", self.ffi_ref(n, "from")),
+            Ty::NamedUnion(n) if self.decodable(n) || self.made_in(n) => format!("{}({x})", self.ffi_ref(n, "from")),
+            Ty::Generic(n, args) if self.decodable(n) && !args.is_empty() => format!("{}({x}{})", self.ffi_ref(n, "from"), self.codec_args(n, args)),
+            Ty::Obj(n) | Ty::Generic(n, _) if self.inline_callbacks.get() && self.is_callback(n) => {
+                let (cb, resolved) = self.inline_callback_resolved(n, generic_args(t));
+                let d = self.inline_cb_depth.get();
+                self.inline_cb_depth.set(d + 1);
+                let names: Vec<String> = (0..cb.params.len()).map(|i| format!("a{d}_{i}")).collect();
+                let into_gleam: Vec<String> = cb.params.iter().zip(&names).map(|((_, p), a)| self.to_gleam(&subst(p, &cb.type_params, &resolved), a)).collect();
+                let mut gathered = names;
+                if cb.rest && let Some(last) = gathered.last_mut() {
+                    *last = format!("...{last}");
+                }
+                let body = self.from_gleam(&subst(&cb.ret, &cb.type_params, &resolved), &format!("f({})", into_gleam.join(", ")));
+                self.inline_cb_depth.set(d);
+                format!("$wrap({x}, (f) => ({}) => {body})", gathered.join(", "))
+            }
+            Ty::Obj(n) | Ty::Generic(n, _) if self.is_callback(n) => format!("{}({x}{})", self.ffi_ref(n, "from"), self.codec_args(n, generic_args(t))),
             Ty::Generic(n, args) if (n == "Promise" || n == "PromiseLike") && args.len() == 1 => {
                 format!("Promise.resolve({x}).then((v) => {})", self.from_gleam(&args[0], "v"))
             }
@@ -819,31 +938,79 @@ impl<'m> Gen<'m> {
         (js, with)
     }
 
-    // A union as a custom type, and its conversions: told apart by its tests.
-    pub(super) fn union(&mut self, u: &NamedUnion) {
+    // A union as a custom type, its lowercase constructors, shared-field getters,
+    // and its conversions: told apart by its tests.
+    pub(super) fn union(&mut self, u: &NamedUnion, single_in_module: bool, used_variants: &mut HashSet<String>) {
+        self.uses_self_mjs = true;
+        let was_inline = self.inline_callbacks.replace(true);
         let name = self.tname(&u.name);
         // Made of a member where it goes in, never read back: no decoder.
         let decodes = u.decodable();
         let params = Self::type_params(&u.type_params);
-        let variants: Vec<String> = (0..u.parts.len()).map(|i| self.variants[&(u.name.clone(), i)].clone()).collect();
+        let (_, suffixes) = self.m.member_names(u, &|n| self.tname(n));
+        let mut variants: Vec<String> = Vec::with_capacity(u.parts.len());
+        let mut ctors: Vec<String> = Vec::with_capacity(u.parts.len());
+        for suffix in suffixes {
+            let base_v = upper(&suffix);
+            let base_c = lower(&suffix);
+            let mut variant = base_v.clone();
+            let mut ctor = base_c.clone();
+            let mut n = 2;
+            while !used_variants.insert(variant.clone()) {
+                variant = format!("{base_v}{n}");
+                ctor = format!("{base_c}_{n}");
+                n += 1;
+            }
+            variants.push(variant);
+            ctors.push(ctor);
+        }
         let cases: Vec<String> = u.parts.iter().zip(&variants).map(|(p, v)| format!("  {v}({})", if decodes { self.ty(p) } else { self.going_in(|| self.ty(p)) })).collect();
         self.out += &format!("pub type {name}{params} {{\n{}\n}}\n\n", cases.join("\n"));
-        // A variant holding a class, made of any subtype: `scene_entity_camera(cam)`,
-        // not `SceneEntityCamera(camera.upcast(cam))`.
+        // Reserve the codec name first so `codec()` is never displaced by a member constructor.
+        let codec_gleam = decodes.then(|| {
+            if single_in_module {
+                self.fresh_value("codec")
+            } else {
+                self.fresh_value(&format!("{}_codec", snake(&name)))
+            }
+        });
+        // Lowercase constructor for every variant; those holding an open class
+        // take any subtype via FFI (`bar(x)`, `heading(h)`).
+        for ((p, v), ctor_base) in u.parts.iter().zip(&variants).zip(&ctors) {
+            let payload = |g: &Self| if decodes { g.ty(p) } else { g.going_in(|| g.ty(p)) };
+            let closed = payload(self);
+            *self.open.borrow_mut() = Some(0);
+            let open = payload(self);
+            *self.open.borrow_mut() = None;
+            let id = self.fresh_value(ctor_base);
+            if open != closed {
+                let js_fn = if JS_RESERVED.contains(&id.as_str()) { format!("{id}_") } else { id.clone() };
+                self.out += &format!("@external(javascript, \"{}\", \"{js_fn}\")\npub fn {id}(value: {open}) -> {name}{params}\n\n", self.own_ffi());
+                self.ffi += &format!("export function {js_fn}(x) {{\n  return new B.{v}(x);\n}}\n");
+            } else {
+                self.out += &format!("pub fn {id}(value: {closed}) -> {name}{params} {{\n  {v}(value)\n}}\n\n");
+            }
+        }
+        // A field every member has, read without a match (marked's `token.get_type(t)`).
         if u.type_params.is_empty() {
-            for (p, v) in u.parts.iter().zip(&variants) {
-                let payload = |g: &Self| if decodes { g.ty(p) } else { g.going_in(|| g.ty(p)) };
-                let closed = payload(self);
-                *self.open.borrow_mut() = Some(0);
-                let open = payload(self);
-                *self.open.borrow_mut() = None;
-                let id = snake(v);
-                if open == closed || id.ends_with("_codec") {
+            let self_rank = self.module_rank.get(&self.unit).copied().unwrap_or(usize::MAX);
+            for (prop, ret_ty) in self.m.shared_fields(u) {
+                let mut seen_cb = HashSet::new();
+                if !self.can_read_field(&ret_ty, self_rank, &mut seen_cb) {
                     continue;
                 }
-                let id = self.fresh_value(&id);
-                self.out += &format!("@external(javascript, \"{}\", \"{id}\")\npub fn {id}(x: {open}) -> {name}\n\n", self.own_ffi());
-                self.ffi += &format!("export function {id}(x) {{\n  return new B.{v}(x);\n}}\n");
+                let raw_name = if super::super::case::starts_with_word(&prop, "get") {
+                    prop.clone()
+                } else {
+                    format!("get_{prop}")
+                };
+                let id = self.fresh_value(&raw_name);
+                let js_fn = if JS_RESERVED.contains(&id.as_str()) { format!("{id}_") } else { id.clone() };
+                let ret = self.closed(|| self.ty(&ret_ty));
+                let read = format!("self[0]{}", access(&prop));
+                let conv = self.to_gleam(&ret_ty, &read);
+                self.out += &format!("@external(javascript, \"{}\", \"{js_fn}\")\npub fn {id}(self: {name}) -> {ret}\n\n", self.own_ffi());
+                self.ffi += &format!("export function {js_fn}(self) {{\n  return {conv};\n}}\n");
             }
         }
         // A library's name for it, where that is free.
@@ -866,12 +1033,23 @@ impl<'m> Gen<'m> {
         }
         to += &fallback.unwrap_or_else(|| format!("  throw new TypeError(\"not a {name}: \" + v);\n"));
         let from: String = u.parts.iter().zip(&variants).map(|(p, v)| format!("  if (u instanceof B.{v}) return {};\n", if decodes { self.from_gleam(p, "u[0]") } else { self.going_in(|| self.from_gleam(p, "u[0]")) })).collect();
-        if !decodes {
+        if let Some(codec_gleam) = codec_gleam {
+            let codecs: String = self.union_codecs[&u.name].iter().map(|&i| format!(", {}", codec_var(&u.type_params[i].name))).collect();
+            self.ffi += &format!("export function {name}_to(v{codecs}) {{\n{to}}}\nexport function {name}_from(u{codecs}) {{\n{from}}}\n");
+            let param_vars: Vec<TParam> = self.union_codecs[&u.name].iter().map(|&i| u.type_params[i].clone()).collect();
+            let gleam_params: Vec<String> = param_vars.iter().map(|p| format!("{}_codec: Codec({})", lower(&p.name), Self::tvar(&p.name))).collect();
+            let js: String = param_vars.iter().map(|p| format!(", {}", codec_var(&p.name))).collect();
+            let js_codec = format!("{}_codec", snake(&name));
+            self.note("Codec");
+            self.out += &format!("@external(javascript, \"{}\", \"{js_codec}\")\npub fn {codec_gleam}({}) -> Codec({name}{params})\n\n", self.own_ffi(), gleam_params.join(", "));
+            self.ffi += &format!(
+                "export function {js_codec}({}) {{\n  return {{ to: (v) => {name}_to(v{js}), from: (u) => {name}_from(u{js}) }};\n}}\n",
+                js.trim_start_matches(", ")
+            );
+        } else {
             self.ffi += &format!("export function {name}_from(u) {{\n{from}}}\n");
-            return;
         }
-        let codecs: String = self.union_codecs[&u.name].iter().map(|&i| format!(", {}", codec_var(&u.type_params[i].name))).collect();
-        self.ffi += &format!("export function {name}_to(v{codecs}) {{\n{to}}}\nexport function {name}_from(u{codecs}) {{\n{from}}}\n");
+        self.inline_callbacks.set(was_inline);
     }
 }
 
@@ -886,6 +1064,19 @@ impl Gen<'_> {
             }),
             _ => false,
         }
+    }
+}
+
+pub(super) fn visit_ty(t: &Ty, f: &mut dyn FnMut(&Ty)) {
+    f(t);
+    match t {
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => visit_ty(inner, f),
+        Ty::Tuple(ts) | Ty::Union(ts) | Ty::Generic(_, ts) => {
+            for sub in ts {
+                visit_ty(sub, f);
+            }
+        }
+        _ => {}
     }
 }
 

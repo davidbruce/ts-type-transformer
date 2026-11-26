@@ -102,8 +102,7 @@ TypeScript object literal, because a Zig literal takes its type from where it go
    `token.Heading(h)`, F# `Token.Heading h`. A field every member has is read
    without a match, as any getter is: Rust `t.type_()`, C++ `t.type()`, Gleam
    `token.get_type(t)`, C `Marked_Token_get_type(t)`, F# ``t.``type`` ``. A field of string literals widens to
-   `string`. Getters only. Done but for C++ (with unions as classes, step 4)
-   and Gleam (with 9b's union modules).
+   `string`. Getters only. Done but for C++ (with unions as classes, step 4).
 
 5. **Optional arguments.**
    - C leaves out trailing ones; C++ overloads; F# optional arguments.
@@ -172,10 +171,11 @@ TypeScript object literal, because a Zig literal takes its type from where it go
 9. **Names.** A union the library named keeps that name; otherwise a short
    concept name from where it is used. The same holds for any alias the library
    named (marked's mapped `RendererObject`); `X & {}` is `X`. Never `TypeAOrTypeBOrTypeC`, never doubled.
-   Callback types too (`Rapier_DrainCollisionEventsFn`). Gleam enum members live in
-   the enum's module (`active_events.CollisionEvents`). One module per class in
-   Gleam, one prefix in C. Done but for Gleam's modules (9b) and a hoisted
-   object several owners share, which keeps the first's name
+   Callback types too (`Rapier_DrainCollisionEventsFn`). Gleam enums and unions
+   each live in their own module with short variants and `codec()`
+   (`active_events.CollisionEvents`, `token.Heading(h)`), and callbacks in
+   `callbacks`. One module per class in Gleam, one prefix in C. Done but for a
+   hoisted object several owners share, which keeps the first's name
    (`MarkSpec_attrs`; a pair list after 10). marked's callbacks are
    `RendererObjectHeadingFn` (the tokenizer has `heading` too) and
    `MarkedExtensionWalkTokensFn`.

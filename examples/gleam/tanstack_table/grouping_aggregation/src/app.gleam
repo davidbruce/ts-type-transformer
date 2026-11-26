@@ -12,6 +12,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import tanstack_table_core as tt
+import tanstack_table_core/expanded_state
 import tanstack_table_core/row_column_grouping
 import tanstack_table_core/row_core_properties
 import tanstack_table_core/row_model
@@ -23,6 +24,7 @@ import tanstack_table_core/table_core_properties
 import tanstack_table_core/table_row_expanding
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/types as t
+import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
@@ -261,18 +263,18 @@ pub fn main() {
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
-    table_column_grouping.set_grouping(grp, t.UpdaterT(["region"]))
+    table_column_grouping.set_grouping(grp, updater.T(["region"]))
     table_row_expanding.set_expanded(
       exp,
-      t.UpdaterT(t.ExpandedStateBoolean(True)),
+      updater.T(expanded_state.Boolean(True)),
     )
     render(table, doc)
   })
   wire_btn(doc, "btn-3", fn() {
-    table_column_grouping.set_grouping(grp, t.UpdaterT(["role"]))
+    table_column_grouping.set_grouping(grp, updater.T(["role"]))
     table_row_expanding.set_expanded(
       exp,
-      t.UpdaterT(t.ExpandedStateBoolean(True)),
+      updater.T(expanded_state.Boolean(True)),
     )
     render(table, doc)
   })

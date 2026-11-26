@@ -921,6 +921,8 @@ impl<'a> Builder<'a> {
                     } else {
                         type_params
                     };
+                    let umod = self.node_module(d);
+                    self.model.type_modules.insert(name.clone(), umod);
                     self.model.unions.push(NamedUnion { name: name.clone(), type_params, parts, tests, discriminant });
                     return named_type(name.clone(), self.union_kept.get(&name));
                 }

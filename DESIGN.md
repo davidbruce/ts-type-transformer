@@ -496,11 +496,14 @@ the time control returns to JavaScript is reported, not lost.
   Array has `to_list`, `get_at` and `length`. The DOM is 61,823
   functions; flattened, it was 300,398.
   Gleam modules may not import each other in a cycle, as the API's areas
-  would (`Element.ownerDocument`, `Document.body`). Every type is in
-  `bindings/types`, which imports only `bindings/runtime` (`Promise`,
-  `JsError`, `Codec`); an area's functions are in `bindings/<area>`, a
-  class's in `bindings/<area>/<class>` (`shape.area(s)`), which import
-  types only. A name JavaScript reserves is `new_` in the FFI. Each has an FFI module that calls the API and
+  would (`Element.ownerDocument`, `Document.body`), and enums, unions and
+  shared-field getters do. Handle types live in `types` (stratified with
+  `types_2` above cyclic unions), callbacks in `callbacks`, and each enum and
+  union in its own module with short variants and `codec()` (`token.Heading(h)`,
+  `token.get_type(t)`, `token.codec()`), placed in acyclic batches using
+  Tarjan SCCs; an area's functions are in `bindings/<area>`, a class's in
+  `bindings/<area>/<class>` (`shape.area(s)`). A name JavaScript reserves is
+  `new_` in the FFI. Each has an FFI module that calls the API and
   converts what Gleam holds otherwise:
   an `Option(a)` for a nullable value or optional argument, a `List(a)` for an
   array, custom types for unions and string enums (a union no test tells
@@ -575,10 +578,10 @@ handle of its own, `JsSymbol` in every target, not `any`: `string | symbol`
 stays a union (node's event names), told by `typeof`.
 
 A field every member of a union of objects has is read without a match:
-Rust `token.type_()`, C `Marked_Token_get_type(t)`, F# ``token.``type`` ``.
+Rust `token.type_()`, C `Marked_Token_get_type(t)`, Gleam `token.get_type(t)`, F# ``token.``type`` ``.
 C++ waits for unions to be classes (`token.type()`): a free function named
 for the field would meet the library's own (`min`, `name`, DOM's `onsubmit`
-type); Gleam for its union modules; Zig has none. A member's field is its own or a base's,
+type); Zig has none. A member's field is its own or a base's,
 a getter or a constant (marked's `type` is a constant on 22 tokens and a
 property on `Generic`), of one type in each or of one primitive under its
 constants and enums (`string`), nullable where any member's is. Fields whose

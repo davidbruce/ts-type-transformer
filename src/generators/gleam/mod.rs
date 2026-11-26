@@ -99,8 +99,12 @@ pub const NAMING: Naming = Naming {
         Kind::Class => vec![upper(candidate), format!("{}Tag", upper(candidate))],
         _ => vec![upper(candidate)],
     },
-    // Every type has a codec in the types module: `shape_codec`.
-    values_of: |own, _, _, _| vec![lower(&format!("{}_codec", snake(own)))],
+    // Class, callback, and opaque codecs live in the types module as `<snake>_codec`.
+    // Enums and unions live in their own modules with `codec`.
+    values_of: |own, _, kind, _| match kind {
+        Kind::Enum | Kind::NumEnum | Kind::Union => Vec::new(),
+        _ => vec![lower(&format!("{}_codec", snake(own)))],
+    },
     types_apart: true,
     overloads: false,
     // A class's functions are in its own module: `shape.area`.
@@ -230,7 +234,7 @@ pub(super) fn function_name(f: &Func, name: &str) -> String {
 // A module's Gleam path: as given out, with `areas/main` mapped to pkg root.
 pub(super) fn module_path(paths: &HashMap<String, String>, pkg: &str, module: &str) -> String {
     paths.get(module).cloned().unwrap_or_else(|| {
-        if module == "areas/main" {
+        if module == "areas/main" || module.is_empty() {
             pkg.to_string()
         } else {
             format!("{pkg}/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/"))

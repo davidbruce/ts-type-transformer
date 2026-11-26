@@ -28,6 +28,7 @@ import tanstack_table_core/table_row_models_core
 import tanstack_table_core/table_row_selection
 import tanstack_table_core/table_toggle_all_page_rows_selected_opts
 import tanstack_table_core/types as t
+import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
@@ -313,7 +314,7 @@ pub fn main() {
       column_visibility_state.create()
       |> column_visibility_state.with_at("zone", next_zone)
       |> column_visibility_state.with_at("owner", keep_owner)
-    table_column_visibility.set_column_visibility(vis, t.UpdaterT(cv))
+    table_column_visibility.set_column_visibility(vis, updater.T(cv))
     render(table, doc)
   })
   wire_btn(doc, "btn-1", fn() {
@@ -323,7 +324,7 @@ pub fn main() {
       column_visibility_state.create()
       |> column_visibility_state.with_at("zone", keep_zone)
       |> column_visibility_state.with_at("owner", next_owner)
-    table_column_visibility.set_column_visibility(vis, t.UpdaterT(cv))
+    table_column_visibility.set_column_visibility(vis, updater.T(cv))
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
@@ -347,18 +348,18 @@ pub fn main() {
       column_visibility_state.create()
       |> column_visibility_state.with_at("zone", False)
       |> column_visibility_state.with_at("owner", True)
-    table_column_visibility.set_column_visibility(vis, t.UpdaterT(cv))
+    table_column_visibility.set_column_visibility(vis, updater.T(cv))
     let cp =
       column_pinning_state.create()
       |> column_pinning_state.with_start(["id"])
       |> column_pinning_state.with_end(["status"])
-    table_column_pinning.set_column_pinning(pin, t.UpdaterT(cp))
+    table_column_pinning.set_column_pinning(pin, updater.T(cp))
     let rs =
       row_selection_state.create()
       |> row_selection_state.with_at("0", True)
       |> row_selection_state.with_at("2", True)
       |> row_selection_state.with_at("4", True)
-    table_row_selection.set_row_selection(sel, t.UpdaterT(rs))
+    table_row_selection.set_row_selection(sel, updater.T(rs))
     render(table, doc)
   })
   render(table, doc)

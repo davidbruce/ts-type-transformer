@@ -20,6 +20,7 @@ import tanstack_table_core/table_core_properties
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/table_row_pagination
 import tanstack_table_core/types as t
+import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
@@ -211,7 +212,7 @@ pub fn main() {
       True ->
         table_row_pagination.set_page_index(
           pag,
-          t.UpdaterT(int.to_float(idx - 1)),
+          updater.T(int.to_float(idx - 1)),
         )
       False -> Nil
     }
@@ -224,25 +225,25 @@ pub fn main() {
       True ->
         table_row_pagination.set_page_index(
           pag,
-          t.UpdaterT(int.to_float(idx + 1)),
+          updater.T(int.to_float(idx + 1)),
         )
       False -> Nil
     }
     render(table, doc)
   })
   wire_btn(doc, "btn-2", fn() {
-    table_row_pagination.set_page_index(pag, t.UpdaterT(0.0))
-    table_row_pagination.set_page_size(pag, t.UpdaterT(5.0))
+    table_row_pagination.set_page_index(pag, updater.T(0.0))
+    table_row_pagination.set_page_size(pag, updater.T(5.0))
     render(table, doc)
   })
   wire_btn(doc, "btn-3", fn() {
-    table_row_pagination.set_page_index(pag, t.UpdaterT(0.0))
-    table_row_pagination.set_page_size(pag, t.UpdaterT(6.0))
+    table_row_pagination.set_page_index(pag, updater.T(0.0))
+    table_row_pagination.set_page_size(pag, updater.T(6.0))
     render(table, doc)
   })
   wire_btn(doc, "btn-4", fn() {
-    table_row_pagination.set_page_index(pag, t.UpdaterT(0.0))
-    table_row_pagination.set_page_size(pag, t.UpdaterT(9.0))
+    table_row_pagination.set_page_index(pag, updater.T(0.0))
+    table_row_pagination.set_page_size(pag, updater.T(9.0))
     render(table, doc)
   })
   render(table, doc)

@@ -2,9 +2,10 @@
 import bindings as b
 import bindings/badge
 import bindings/figure
+import bindings/figure_or_badge
 import bindings/namespaces/util
+import bindings/pair_or_point
 import bindings/point
-import bindings/types as t
 import gleam/io
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -32,13 +33,13 @@ pub fn main() {
   )
 
   // A union told apart by the classes as exported.
-  let assert t.FigureOrBadgeFigure(fig) = b.pick(0.0)
+  let assert figure_or_badge.Figure(fig) = b.pick(0.0)
   check(figure.get_size(fig) == 2.0, "instanceof Figure")
-  let assert t.FigureOrBadgeBadge(_) = b.pick(1.0)
+  let assert figure_or_badge.Badge(_) = b.pick(1.0)
 
   // A tuple is told apart as an array, not by `toString`, which every object has.
-  let assert t.PairOrPointArray(_) = b.locate(0.0)
-  let assert t.PairOrPointPoint(_) = b.locate(1.0)
+  let assert pair_or_point.Array(_) = b.locate(0.0)
+  let assert pair_or_point.Point(_) = b.locate(1.0)
 
   // Rollup's namespace, by the name it is exported as: `util.half`.
   check(

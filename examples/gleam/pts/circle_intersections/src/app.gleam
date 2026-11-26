@@ -10,6 +10,8 @@ import pts/group
 import pts/i_player
 import pts/line
 import pts/pt
+import pts/pt_iterable
+import pts/pt_like
 import pts/types as t
 
 @external(javascript, "./app_ffi.mjs", "sin")
@@ -83,8 +85,8 @@ pub fn main() -> Nil {
 
           case
             line.perpendicular_from_pt_of_with(
-              t.PtIterableGroup(chord),
-              t.PtLikePt(tc),
+              pt_iterable.group(chord),
+              pt_like.pt(tc),
               False,
             )
           {
@@ -115,8 +117,8 @@ pub fn main() -> Nil {
       list.each(targets, fn(target) {
         let hits =
           circle.intersect_circle2d_of(
-            t.PtIterableGroup(probe),
-            t.PtIterableGroup(target),
+            pt_iterable.group(probe),
+            pt_iterable.group(target),
           )
         let hit_list = group.to_list(hits)
         case list.length(hit_list) == 2 {

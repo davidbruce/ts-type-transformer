@@ -15,6 +15,7 @@ import three/box3_helper
 import three/box_geometry
 import three/buffer_geometry
 import three/color
+import three/color_representation
 import three/cone_geometry
 import three/cylinder_geometry
 import three/directional_light
@@ -124,8 +125,8 @@ pub fn main() {
     grid_helper.new_of_with(
       9.0,
       9.0,
-      t.ColorRepresentationNumber(hex(0x999999)),
-      t.ColorRepresentationNumber(hex(0xd4d4d4)),
+      color_representation.Number(hex(0x999999)),
+      color_representation.Number(hex(0xd4d4d4)),
     )
   vector3.set_y(object3d.get_position(grid), -0.85)
   object3d.add(sc, [grid])

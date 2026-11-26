@@ -1,4 +1,5 @@
 import dimforge_rapier3d_compat as rapier
+import dimforge_rapier3d_compat/active_events
 import dimforge_rapier3d_compat/collider
 import dimforge_rapier3d_compat/collider_desc
 import dimforge_rapier3d_compat/event_queue
@@ -196,7 +197,7 @@ pub fn main() {
     let scd =
       collider_desc.cuboid(1.85, 0.3, 1.2)
       |> collider_desc.set_sensor(True)
-      |> collider_desc.set_active_events(rt.ActiveEventsCollisionEvents)
+      |> collider_desc.set_active_events(active_events.CollisionEvents)
     let sc = world.create_collider_with(w, scd, sbody)
     rp_rt.ref_set(sensor_handle_ref, collider.get_handle(sc))
 
@@ -218,7 +219,7 @@ pub fn main() {
           base_cd
           |> collider_desc.set_restitution(0.35)
           |> collider_desc.set_friction(0.25)
-          |> collider_desc.set_active_events(rt.ActiveEventsCollisionEvents)
+          |> collider_desc.set_active_events(active_events.CollisionEvents)
         world.create_collider_with(w, cd, rb)
         #(box_flag, rb)
       })

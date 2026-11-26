@@ -3,8 +3,8 @@
 import bindings/areas/core as dom
 import bindings/areas/core/idle_deadline
 import bindings/areas/core/performance
+import bindings/callbacks
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic
 import gleam/dynamic/decode
@@ -14,7 +14,7 @@ import gleam/io
 import gleam/option.{Some}
 import gleam/string
 
-fn callback(f: fn() -> Nil) -> t.Function {
+fn callback(f: fn() -> Nil) -> callbacks.Function {
   fn(_) {
     f()
     runtime.dynamic(Nil)

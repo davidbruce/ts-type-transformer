@@ -8,7 +8,7 @@ import gleam/option.{None, Some}
 import gleam/string
 import katex
 import katex/katex_options
-import katex/types as kt
+import katex/katex_options_output
 
 fn add_card(doc, grid, label: String, cls: String, html: String) -> Nil {
   let card = document.create_element(doc, tag.div)
@@ -60,7 +60,7 @@ pub fn main() -> Nil {
 
       let o_html =
         katex_options.create()
-        |> katex_options.with_output(kt.KatexOptionsOutputHtml)
+        |> katex_options.with_output(katex_options_output.Html)
       add_card(
         doc,
         grid,
@@ -71,7 +71,7 @@ pub fn main() -> Nil {
 
       let o_math =
         katex_options.create()
-        |> katex_options.with_output(kt.KatexOptionsOutputMathml)
+        |> katex_options.with_output(katex_options_output.Mathml)
       add_card(
         doc,
         grid,
@@ -82,7 +82,7 @@ pub fn main() -> Nil {
 
       let o_both =
         katex_options.create()
-        |> katex_options.with_output(kt.KatexOptionsOutputHtmlAndMathml)
+        |> katex_options.with_output(katex_options_output.HtmlAndMathml)
       add_card(
         doc,
         grid,

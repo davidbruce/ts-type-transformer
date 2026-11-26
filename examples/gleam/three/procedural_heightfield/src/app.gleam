@@ -13,6 +13,7 @@ import three/box3
 import three/buffer_attribute
 import three/buffer_geometry
 import three/color
+import three/color_representation
 import three/directional_light
 import three/float32_buffer_attribute
 import three/grid_helper
@@ -147,8 +148,8 @@ pub fn main() {
     grid_helper.new_of_with(
       9.0,
       12.0,
-      t.ColorRepresentationNumber(hex(0x999999)),
-      t.ColorRepresentationNumber(hex(0xe5e5e5)),
+      color_representation.Number(hex(0x999999)),
+      color_representation.Number(hex(0xe5e5e5)),
     )
   vector3.set_y(object3d.get_position(grid), -1.1)
   object3d.add(sc, [grid])

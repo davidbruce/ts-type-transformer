@@ -1,4 +1,5 @@
 import date_fns as df
+import date_fns/date_arg.{type DateArg}
 import date_fns/interval
 import date_fns/types as t
 import dom/areas/core
@@ -143,7 +144,7 @@ pub fn main() -> Nil {
 }
 
 // `each_day_of_interval` and `clamp` give back a `DateArg`; JavaScript gives a Date.
-fn as_date(x: t.DateArg) -> t.Date {
-  let assert t.DateArgDate(d) = x
+fn as_date(x: DateArg) -> t.Date {
+  let assert date_arg.Date(d) = x
   d
 }

@@ -6,6 +6,7 @@ import echarts/axis_label_option
 import echarts/axis_line_option
 import echarts/bar_item_style_option
 import echarts/bar_series_option
+import echarts/category_axis_base_data_or_string_or_number as axis_data
 import echarts/e_charts_init_opts
 import echarts/e_charts_option
 import echarts/e_charts_type
@@ -14,7 +15,6 @@ import echarts/line_style_option
 import echarts/split_line_option
 import echarts/title_component_option
 import echarts/title_text_style_option
-import echarts/types as t
 import echarts/xa_xis_component_option_x_axis as category_x_axis_option
 import echarts/ya_xis_component_option_y_axis_value as value_y_axis_option
 import gleam/dynamic
@@ -49,7 +49,7 @@ pub fn main() -> Nil {
         category_x_axis_option.create()
         |> category_x_axis_option.with_data(list.map(
           ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-          t.CategoryAxisBaseDataOrStringOrNumberString,
+          axis_data.String,
         ))
         |> category_x_axis_option.with_axis_line(
           axis_line_option.create()

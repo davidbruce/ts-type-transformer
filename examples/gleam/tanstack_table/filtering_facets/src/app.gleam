@@ -20,6 +20,7 @@ import tanstack_table_core/table_column_filtering
 import tanstack_table_core/table_global_filtering
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/types as t
+import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
@@ -217,10 +218,10 @@ pub fn main() {
   let gf: t.TableGlobalFiltering(Dynamic, Nil) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
-    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
+    table_global_filtering.set_global_filter(gf, updater.T(rt.dynamic("")))
     table_column_filtering.set_column_filters(
       cf,
-      t.UpdaterT([
+      updater.T([
         filter_spec("tier", rt.dynamic("core")),
         filter_spec("requests", rt.dynamic(400.0)),
       ]),
@@ -228,28 +229,28 @@ pub fn main() {
     render(table, doc, "Filter: tier = core & requests >= 400")
   })
   wire_btn(doc, "btn-1", fn() {
-    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
-    table_column_filtering.set_column_filters(cf, t.UpdaterT([]))
+    table_global_filtering.set_global_filter(gf, updater.T(rt.dynamic("")))
+    table_column_filtering.set_column_filters(cf, updater.T([]))
     render(table, doc, "Filter: all services")
   })
   wire_btn(doc, "btn-2", fn() {
-    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
+    table_global_filtering.set_global_filter(gf, updater.T(rt.dynamic("")))
     table_column_filtering.set_column_filters(
       cf,
-      t.UpdaterT([filter_spec("tier", rt.dynamic("edge"))]),
+      updater.T([filter_spec("tier", rt.dynamic("edge"))]),
     )
     render(table, doc, "Filter: tier = edge")
   })
   wire_btn(doc, "btn-3", fn() {
-    table_column_filtering.set_column_filters(cf, t.UpdaterT([]))
-    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("auth")))
+    table_column_filtering.set_column_filters(cf, updater.T([]))
+    table_global_filtering.set_global_filter(gf, updater.T(rt.dynamic("auth")))
     render(table, doc, "Global search: \"auth\"")
   })
   wire_btn(doc, "btn-4", fn() {
-    table_global_filtering.set_global_filter(gf, t.UpdaterT(rt.dynamic("")))
+    table_global_filtering.set_global_filter(gf, updater.T(rt.dynamic("")))
     table_column_filtering.set_column_filters(
       cf,
-      t.UpdaterT([filter_spec("errors", rt.dynamic(5.0))]),
+      updater.T([filter_spec("errors", rt.dynamic(5.0))]),
     )
     render(table, doc, "Filter: errors >= 5")
   })

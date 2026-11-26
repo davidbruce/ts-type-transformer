@@ -9,14 +9,16 @@ import bindings/areas/network/headers
 import bindings/areas/network/headers_init_map
 import bindings/areas/network/request
 import bindings/areas/network/request_init
+import bindings/areas/network/request_mode
 import bindings/areas/network/response
 import bindings/areas/network/response_init
+import bindings/areas/network/response_type
 import bindings/areas/network/url_search_params
 import bindings/areas/storage/blob
+import bindings/areas/storage/blob_part
 import bindings/areas/storage/blob_property_bag
 import bindings/areas/storage/file
 import bindings/runtime.{type JsError, type Promise}
-import bindings/types as t
 import cell
 import gleam/dynamic/decode
 import gleam/int
@@ -75,7 +77,7 @@ pub fn main() {
   check(string.ends_with(request.get_url(req), "/submit"), "request url is absolute")
   check(string.starts_with(request.get_url(req), "http"), "request url scheme")
   check(headers.get(request.get_headers(req), "accept") == Some("application/json"), "request header")
-  check(request.get_mode(req) == t.RequestModeCors, "request mode")
+  check(request.get_mode(req) == request_mode.Cors, "request mode")
   let get_req = request.new("./x")
   check(request.get_method(get_req) == "GET", "default method")
   check(request.get_method(request.clone(req)) == "POST", "request clone")
@@ -96,7 +98,7 @@ pub fn main() {
   check(headers.get(response.get_headers(made), "accept") == Some("application/json"), "response header")
   check(!body.get_body_used(made), "body not used yet")
   let failure = response.error()
-  check(failure |> response.get_type == t.ResponseTypeError, "error response type")
+  check(failure |> response.get_type == response_type.Error, "error response type")
   check(response.get_status(failure) == 0.0 && !response.get_ok(failure), "error response status")
   let moved = response.redirect_with("https://example.com/x", 301.0)
   check(response.get_status(moved) == 301.0, "redirect status")
@@ -107,12 +109,12 @@ pub fn main() {
   // A Blob and a File.
   let plain = blob_property_bag.create()
   blob_property_bag.set_type(plain, Some("text/plain"))
-  let the_blob = blob.new_with([t.BlobPartString("hello "), t.BlobPartString("blob")], plain)
+  let the_blob = blob.new_with([blob_part.String("hello "), blob_part.String("blob")], plain)
   check(blob.get_size(the_blob) == 10.0, "blob size")
   check(blob.get_type(the_blob) == "text/plain", "blob type")
   let tail = blob.slice_with(the_blob, 6.0, blob.get_size(the_blob), "")
   check(blob.get_size(tail) == 4.0, "blob slice size")
-  let the_file = file.new([t.BlobPartString("abc")], "a.txt")
+  let the_file = file.new([blob_part.String("abc")], "a.txt")
   check(file.get_name(the_file) == "a.txt", "file name")
   check(blob.get_size(the_file) == 3.0, "a file is a blob")
 
@@ -181,7 +183,7 @@ fn fetch_page(check, count) -> Nil {
         == Some(True),
       "fetch content type",
     )
-    check(response.get_type(res) == t.ResponseTypeBasic, "same-origin response type")
+    check(response.get_type(res) == response_type.Basic, "same-origin response type")
     let again = response.clone(res)
     await(body.text(res), fn(text) {
       check(string.contains(text, "<title>fetch</title>"), "page text")

@@ -21,10 +21,11 @@ import bindings/areas/leaflet/point
 import bindings/areas/leaflet/polyline
 import bindings/areas/leaflet/popup
 import bindings/areas/leaflet/popup_options
+import bindings/areas/leaflet/lat_lng_expression
+import bindings/areas/leaflet/point_expression
 import bindings/areas/leaflet/zoom_pan_options
 import bindings/areas/test_page
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic
 import gleam/float
@@ -91,8 +92,8 @@ pub fn main() {
   let km = lat_lng.distance_to(london, paris) /. 1000.0
   let box =
     leaflet.lat_lng_bounds_of(
-      t.LatLngExpressionLatLng(london),
-      t.LatLngExpressionLatLng(london),
+      lat_lng_expression.LatLng(london),
+      lat_lng_expression.LatLng(london),
     )
   let _ = lat_lng_bounds.extend(box, paris)
   let passed =
@@ -130,8 +131,8 @@ pub fn main() {
     + check(point.to_string(p) == "Point(3, 4)", "point to_string")
   let b =
     leaflet.bounds_of(
-      t.PointExpressionPoint(leaflet.point(0.0, 0.0)),
-      t.PointExpressionPoint(leaflet.point(10.0, 10.0)),
+      point_expression.Point(leaflet.point(0.0, 0.0)),
+      point_expression.Point(leaflet.point(10.0, 10.0)),
     )
   let passed =
     passed

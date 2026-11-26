@@ -7,6 +7,8 @@ import bindings/areas/pa/util
 import bindings/areas/pb
 import bindings/areas/pb/node as pb_node
 import bindings/areas/pb/util as pb_util
+import bindings/node_or_string
+import bindings/pb_node_or_string
 import bindings/types as t
 import gleam/io
 
@@ -23,12 +25,12 @@ pub fn main() {
   check(pb_node.size(pb_node.new(3.0)) == 3.0, "pb's Node")
 
   // Functions of one name: each package's, told apart by its own class.
-  let assert t.NodeOrStringNode(a) = pa.pick(True)
+  let assert node_or_string.Node(a) = pa.pick(True)
   check(node.name(a) == "a", "pa's pick")
-  let assert t.NodeOrStringString(_) = pa.pick(False)
-  let assert t.PbNodeOrStringPbNode(n) = pb.pick(True)
+  let assert node_or_string.String(_) = pa.pick(False)
+  let assert pb_node_or_string.PbNode(n) = pb.pick(True)
   check(pb_node.size(n) == 10.0, "pb's pick")
-  let assert t.PbNodeOrStringString(_) = pb.pick(False)
+  let assert pb_node_or_string.String(_) = pb.pick(False)
 
   // pa's own Point, and geo's, a type declared elsewhere of the same name.
   let own = point.new()

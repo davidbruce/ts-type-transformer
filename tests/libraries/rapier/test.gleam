@@ -2,6 +2,7 @@
 // world with gravity, bodies falling onto a fixed ground, stepped, with rays
 // and collision events. Every check must hold.
 import bindings as rapier
+import bindings/active_events
 import bindings/collider
 import bindings/collider_desc
 import bindings/event_queue
@@ -9,8 +10,8 @@ import bindings/ray
 import bindings/ray_collider_hit
 import bindings/rigid_body
 import bindings/rigid_body_desc
+import bindings/rigid_body_type
 import bindings/runtime
-import bindings/types as t
 import bindings/vector
 import bindings/world
 import cell
@@ -77,7 +78,7 @@ fn run() -> Int {
   let passed =
     passed
     + check(rigid_body.is_fixed(ground), "the ground is fixed")
-    + check(rigid_body.body_type(ground) == t.RigidBodyTypeFixed, "body type")
+    + check(rigid_body.body_type(ground) == rigid_body_type.Fixed, "body type")
     + check(rigid_body.num_colliders(ground) == 1.0, "one collider")
     + check(
       collider.shape_type(ground_collider)
@@ -94,7 +95,7 @@ fn run() -> Int {
   let box_body = world.create_rigid_body(w, box_desc)
   let box_shape =
     collider_desc.cuboid(0.5, 0.5, 0.5)
-    |> collider_desc.set_active_events(t.ActiveEventsCollisionEvents)
+    |> collider_desc.set_active_events(active_events.CollisionEvents)
   let box_collider = world.create_collider_with(w, box_shape, box_body)
   let passed =
     passed

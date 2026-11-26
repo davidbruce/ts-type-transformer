@@ -4,6 +4,7 @@
 // hold.
 import bindings/areas/prosemirror_model/attribute_spec
 import bindings/areas/prosemirror_model/attrs
+import bindings/areas/prosemirror_model/dom_output_spec.{type DOMOutputSpec}
 import bindings/areas/prosemirror_model/fragment
 import bindings/areas/prosemirror_model/mark
 import bindings/areas/prosemirror_model/mark_spec
@@ -30,7 +31,6 @@ import bindings/areas/prosemirror_view/editor_view
 import bindings/areas/test_page
 import bindings/mark_spec_attrs
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic
 import gleam/dynamic/decode
@@ -61,8 +61,8 @@ fn str(s: String) -> dynamic.Dynamic {
   dynamic.string(s)
 }
 
-fn tag_spec(tag: String) -> t.DOMOutputSpec {
-  t.DOMOutputSpecArray([str(tag), dynamic.int(0)])
+fn tag_spec(tag: String) -> DOMOutputSpec {
+  dom_output_spec.List([str(tag), dynamic.int(0)])
 }
 
 pub fn main() {

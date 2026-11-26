@@ -18,10 +18,12 @@ import tanstack_table_core/column_sort
 import tanstack_table_core/row_model
 import tanstack_table_core/row_row
 import tanstack_table_core/runtime as rt
+import tanstack_table_core/sort_direction
 import tanstack_table_core/table_columns
 import tanstack_table_core/table_row_models_core
 import tanstack_table_core/table_row_sorting
 import tanstack_table_core/types as t
+import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
 fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
@@ -111,8 +113,8 @@ fn render(table: t.TableCore(Dynamic, Nil), doc, label: String) {
       }
       let csort: t.ColumnRowSorting(Dynamic, Nil) = coerce(col)
       let mark = case column_row_sorting.get_is_sorted(csort) {
-        Some(t.SortDirectionAsc) -> " &#9650;"
-        Some(t.SortDirectionDesc) -> " &#9660;"
+        Some(sort_direction.Asc) -> " &#9650;"
+        Some(sort_direction.Desc) -> " &#9660;"
         None -> ""
       }
       let cls = case
@@ -243,30 +245,30 @@ pub fn main() {
   wire_btn(doc, "btn-0", fn() {
     table_row_sorting.set_sorting(
       tsort,
-      t.UpdaterT([sort_spec("region", False), sort_spec("latency", False)]),
+      updater.T([sort_spec("region", False), sort_spec("latency", False)]),
     )
     render(table, doc, "Sort: region asc, latency asc")
   })
   wire_btn(doc, "btn-1", fn() {
     table_row_sorting.set_sorting(
       tsort,
-      t.UpdaterT([sort_spec("latency", False)]),
+      updater.T([sort_spec("latency", False)]),
     )
     render(table, doc, "Sort: latency asc")
   })
   wire_btn(doc, "btn-2", fn() {
     table_row_sorting.set_sorting(
       tsort,
-      t.UpdaterT([sort_spec("throughput", True)]),
+      updater.T([sort_spec("throughput", True)]),
     )
     render(table, doc, "Sort: throughput desc")
   })
   wire_btn(doc, "btn-3", fn() {
-    table_row_sorting.set_sorting(tsort, t.UpdaterT([sort_spec("host", False)]))
+    table_row_sorting.set_sorting(tsort, updater.T([sort_spec("host", False)]))
     render(table, doc, "Sort: host asc")
   })
   wire_btn(doc, "btn-4", fn() {
-    table_row_sorting.set_sorting(tsort, t.UpdaterT([]))
+    table_row_sorting.set_sorting(tsort, updater.T([]))
     render(table, doc, "Sort: unsorted (data order)")
   })
   render(table, doc, "Sort: region asc, latency asc")

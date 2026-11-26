@@ -1,6 +1,7 @@
 // Konva from Gleam, in a page: a stage on the page's element, a layer, shapes,
 // groups, finding, events, JSON, destroying. Every check must hold.
 //
+import bindings/areas/konva/any_string
 import bindings/areas/konva/circle
 import bindings/areas/konva/circle_config
 import bindings/areas/konva/container
@@ -20,9 +21,9 @@ import bindings/areas/konva/stage_config
 import bindings/areas/konva/text
 import bindings/areas/konva/text_config
 import bindings/areas/konva/vector2d
+import bindings/string_or_canvas_gradient
 import bindings/node_get_absolute_position_result as pos
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic/decode
 import gleam/float
@@ -104,8 +105,8 @@ pub fn main() {
       "the width property",
     )
     + check(
-      get_set.invoke(shape.get_fill(r), t.string_or_canvas_gradient_codec())
-        == t.StringOrCanvasGradientString("red"),
+      get_set.invoke(shape.get_fill(r), string_or_canvas_gradient.codec())
+        == string_or_canvas_gradient.String("red"),
       "the fill property",
     )
     + check(node.get_parent(r) |> option.is_some, "the rect has a parent")
@@ -162,7 +163,7 @@ pub fn main() {
       "a text has a size",
     )
     + check(
-      attr_string(node.get_attr(tx, t.AnyStringString("text")), "text")
+      attr_string(node.get_attr(tx, any_string.String("text")), "text")
         == "Hello Konva",
       "the text's attr",
     )

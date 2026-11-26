@@ -12,6 +12,7 @@ import bindings/areas/core/intersection_observer_entry as io_entry
 import bindings/areas/core/mutation_observer
 import bindings/areas/core/mutation_observer_init
 import bindings/areas/core/mutation_record
+import bindings/areas/core/mutation_record_type
 import bindings/areas/core/node
 import bindings/areas/core/node_list
 import bindings/areas/core/performance
@@ -21,7 +22,6 @@ import bindings/areas/core/resize_observer_size
 import bindings/areas/html/html_element
 import bindings/areas/html/html_element_tag_name_map as tag
 import bindings/areas/css/css_style_declaration_base as decl
-import bindings/types as t
 import cell
 import gleam/dynamic/decode
 import gleam/int
@@ -49,9 +49,9 @@ fn wait(ready: fn() -> Bool, what: String, started: Float, then: fn() -> Nil) ->
 
 fn kind(r) -> String {
   case mutation_record.get_type(r) {
-    t.MutationRecordTypeAttributes -> "attributes"
-    t.MutationRecordTypeCharacterData -> "characterData"
-    t.MutationRecordTypeChildList -> "childList"
+    mutation_record_type.Attributes -> "attributes"
+    mutation_record_type.CharacterData -> "characterData"
+    mutation_record_type.ChildList -> "childList"
   }
 }
 

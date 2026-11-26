@@ -1,9 +1,12 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
+import bindings/loose
 import bindings/loose_a
+import bindings/number_or_widget
 import bindings/options
+import bindings/shape
 import bindings/square
-import bindings/types as t
+import bindings/value
 import bindings/widget
 import gleam/io
 
@@ -29,15 +32,15 @@ pub fn main() {
   )
 
   // What comes back says which member it is.
-  check(b.pick(0.0) == t.ValueString("text"), "string out")
-  check(b.pick(1.0) == t.ValueNumber(42.0), "number out")
-  let assert t.ValueWidget(w) = b.pick(2.0)
+  check(b.pick(0.0) == value.String("text"), "string out")
+  check(b.pick(1.0) == value.Number(42.0), "number out")
+  let assert value.Widget(w) = b.pick(2.0)
   check(widget.get_name(w) == "w", "instanceof out")
 
   // A tagged union, told apart by its `kind`; one given back goes in by `_of`.
-  let square = b.make_shape("square", 3.0)
-  let assert t.ShapeSquare(sq) = square
-  check(square.get_side(sq) == 3.0 && b.area_of(square) == 9.0, "tagged union")
+  let s = b.make_shape("square", 3.0)
+  let assert shape.Square(sq) = s
+  check(square.get_side(sq) == 3.0 && b.area_of(s) == 9.0, "tagged union")
 
   // An inline union.
   check(b.setup(True) == "bool true", "inline union")
@@ -45,17 +48,17 @@ pub fn main() {
     b.setup_options(options) == "options verbose=true",
     "inline union object",
   )
-  check(b.lookup("abc") == t.NumberOrWidgetNumber(3.0), "inline union out")
+  check(b.lookup("abc") == number_or_widget.Number(3.0), "inline union out")
 
   // Members no test tells apart: each goes in by name; the union, made of
   // any subtype by a function, by `_of`.
   let a = loose_a.create() |> loose_a.with_a(1.0)
   check(b.loose_a(a) == "loose {\"a\":1}", "a loose union's member")
   check(
-    b.loose_of(t.loose_loose_a(a)) == "loose {\"a\":1}",
+    b.loose_of(loose.a(a)) == "loose {\"a\":1}",
     "a loose union made of a member",
   )
-  check(b.loose_of(t.LooseLooseA(a)) == "loose {\"a\":1}", "and by its variant")
+  check(b.loose_of(loose.A(a)) == "loose {\"a\":1}", "and by its variant")
 
   io.println("checks passed")
 }

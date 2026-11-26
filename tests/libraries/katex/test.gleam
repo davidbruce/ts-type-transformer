@@ -3,9 +3,9 @@
 import bindings as katex
 import bindings/katex_options
 import bindings/katex_options_macros
+import bindings/katex_options_output
 import bindings/parse_error
 import bindings/runtime
-import bindings/types as t
 import gleam/int
 import gleam/io
 import gleam/option.{Some}
@@ -50,14 +50,14 @@ pub fn main() {
       "option read back",
     )
   let ml = katex_options.create()
-  katex_options.set_output(ml, Some(t.KatexOptionsOutputMathml))
+  katex_options.set_output(ml, Some(katex_options_output.Mathml))
   let mathml = katex.render_to_string_with("a+b", ml)
   let passed =
     passed
     + check(has(mathml, "<math"), "mathml output")
     + check(!has(mathml, "katex-html"), "no html in mathml output")
   let only_html = katex_options.create()
-  katex_options.set_output(only_html, Some(t.KatexOptionsOutputHtml))
+  katex_options.set_output(only_html, Some(katex_options_output.Html))
   let h = katex.render_to_string_with("a+b", only_html)
   let passed =
     passed + check(has(h, "katex-html") && !has(h, "<math"), "html output")

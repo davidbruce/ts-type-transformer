@@ -7,17 +7,19 @@ import bindings/buffer_attribute
 import bindings/buffer_geometry
 import bindings/color
 import bindings/euler
+import bindings/euler_order
 import bindings/group
 import bindings/intersection
+import bindings/material_or_material_array
 import bindings/matrix4
 import bindings/mesh
 import bindings/mesh_basic_material
 import bindings/normal_buffer_attributes
+import bindings/normal_buffer_attributes_index_result
 import bindings/object3d
 import bindings/quaternion
 import bindings/raycaster
 import bindings/sphere
-import bindings/types as t
 import bindings/vector3
 import gleam/dynamic/decode
 import gleam/float
@@ -144,7 +146,7 @@ pub fn main() {
   let _ =
     quaternion.set_from_euler(
       q,
-      euler.new_with(0.0, 0.0, half_pi, t.EulerOrderXYZ),
+      euler.new_with(0.0, 0.0, half_pi, euler_order.XYZ),
     )
   let composed = matrix4.new()
   let _ = matrix4.compose(composed, position, q, v3(2.0, 2.0, 2.0))
@@ -193,10 +195,10 @@ pub fn main() {
       near(euler.get_z(back), half_pi) && near(euler.get_x(back), 0.0),
       "euler from a quaternion",
     )
-    + check(euler.get_order(back) == t.EulerOrderXYZ, "default order")
-  let _ = euler.reorder(back, t.EulerOrderZYX)
+    + check(euler.get_order(back) == euler_order.XYZ, "default order")
+  let _ = euler.reorder(back, euler_order.ZYX)
   let passed =
-    passed + check(euler.get_order(back) == t.EulerOrderZYX, "reorder")
+    passed + check(euler.get_order(back) == euler_order.ZYX, "reorder")
   let halfway = quaternion.new()
   let _ = quaternion.slerp_quaternions(halfway, quaternion.new(), q, 0.5)
   let passed =
@@ -338,7 +340,7 @@ pub fn main() {
   object3d.update_matrix_world_with(parent, True)
   let params = box_geometry.get_parameters(geometry)
   // A mesh's material is a Material or a list of them: this one is a MeshBasicMaterial.
-  let assert t.MaterialOrMaterialArrayMaterial(cube_material) =
+  let assert material_or_material_array.Material(cube_material) =
     mesh.get_material(cube)
   let assert Ok(cube_material) = mesh_basic_material.from(cube_material)
   let passed =
@@ -390,9 +392,9 @@ pub fn main() {
 
   // Attributes: positions of 24 vertices, 36 indices.
   let attributes = buffer_geometry.get_attributes(geometry)
-  let assert Some(t.NormalBufferAttributesIndexResultBufferAttribute(position)) =
+  let assert Some(normal_buffer_attributes_index_result.BufferAttribute(position)) =
     normal_buffer_attributes.get_at(attributes, "position")
-  let assert Some(t.NormalBufferAttributesIndexResultBufferAttribute(uv)) =
+  let assert Some(normal_buffer_attributes_index_result.BufferAttribute(uv)) =
     normal_buffer_attributes.get_at(attributes, "uv")
   let assert Some(index) = buffer_geometry.get_index(geometry)
   let passed =

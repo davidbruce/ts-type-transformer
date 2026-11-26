@@ -13,6 +13,7 @@ import leaflet/map_options
 import leaflet/path_options
 import leaflet/polyline
 import leaflet/polyline_options
+import leaflet/polyline_set_lat_lngs_latlngs as poly_pt
 import leaflet/types as t
 
 fn poly_opts(
@@ -45,18 +46,18 @@ pub fn main() {
   let m = leaflet.map_with("map", m_opts)
 
   let mid_pts = [
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.2, 7.6)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(48.0, 8.6)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.5, 9.7)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.8, 9.5)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.6, 8.4)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.9, 7.3)),
+    poly_pt.lat_lng(leaflet.lat_lng(47.2, 7.6)),
+    poly_pt.lat_lng(leaflet.lat_lng(48.0, 8.6)),
+    poly_pt.lat_lng(leaflet.lat_lng(47.5, 9.7)),
+    poly_pt.lat_lng(leaflet.lat_lng(46.8, 9.5)),
+    poly_pt.lat_lng(leaflet.lat_lng(46.6, 8.4)),
+    poly_pt.lat_lng(leaflet.lat_lng(46.9, 7.3)),
   ]
   let core_pts = [
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.35, 8.2)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.55, 8.75)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(47.15, 9.0)),
-    t.PolylineSetLatLngsLatlngsLatLng(leaflet.lat_lng(46.95, 8.4)),
+    poly_pt.lat_lng(leaflet.lat_lng(47.35, 8.2)),
+    poly_pt.lat_lng(leaflet.lat_lng(47.55, 8.75)),
+    poly_pt.lat_lng(leaflet.lat_lng(47.15, 9.0)),
+    poly_pt.lat_lng(leaflet.lat_lng(46.95, 8.4)),
   ]
 
   let mid_poly =

@@ -8,9 +8,9 @@ import bindings/areas/path
 import bindings/areas/path/format_input_path_object as path_format
 import bindings/areas/path/parsed_path
 import bindings/buffer
+import bindings/buffer_encoding
 import bindings/mkdir_options
 import bindings/runtime
-import bindings/types as t
 import cell
 import gleam/dynamic/decode
 import gleam/int
@@ -69,7 +69,7 @@ pub fn main() {
   let read = fn(p) {
     fs.read_file_sync_with_read_file_sync_options_buffer_encoding(
       p,
-      t.BufferEncodingUtf8,
+      buffer_encoding.Utf8,
     )
   }
   let read_buf = fn(p) { buffer.to_string(fs.read_file_sync(p)) }

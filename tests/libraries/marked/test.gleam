@@ -5,13 +5,13 @@ import bindings/hooks_object
 import bindings/lexer
 import bindings/marked as marked_class
 import bindings/marked_extension
-import bindings/namespaces/tokens/generic as token_generic
 import bindings/namespaces/tokens/heading as token_heading
 import bindings/namespaces/tokens/paragraph as token_paragraph
 import bindings/renderer_object
 import bindings/runtime
+import bindings/string_or_promise
+import bindings/token
 import bindings/tokens_list
-import bindings/types as t
 import cell
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
@@ -37,34 +37,6 @@ fn field_string(token: Dynamic, name: String) -> String {
 fn field_float(token: Dynamic, name: String) -> Float {
   let assert Ok(s) = decode.run(token, decode.at([name], decode.float))
   s
-}
-
-fn token_type(tok: t.Token) -> String {
-  case tok {
-    t.TokenTokensBlockquote(_) -> "blockquote"
-    t.TokenTokensBr(_) -> "br"
-    t.TokenTokensCheckbox(_) -> "checkbox"
-    t.TokenTokensCode(_) -> "code"
-    t.TokenTokensCodespan(_) -> "codespan"
-    t.TokenTokensDef(_) -> "def"
-    t.TokenTokensDel(_) -> "del"
-    t.TokenTokensEm(_) -> "em"
-    t.TokenTokensEscape(_) -> "escape"
-    t.TokenTokensHeading(_) -> "heading"
-    t.TokenTokensHr(_) -> "hr"
-    t.TokenTokensHTML(_) -> "html"
-    t.TokenTokensImage(_) -> "image"
-    t.TokenTokensLink(_) -> "link"
-    t.TokenTokensList2(_) -> "list"
-    t.TokenTokensListItem(_) -> "list_item"
-    t.TokenTokensParagraph(_) -> "paragraph"
-    t.TokenTokensSpace(_) -> "space"
-    t.TokenTokensStrong(_) -> "strong"
-    t.TokenTokensTable(_) -> "table"
-    t.TokenTokensTag(_) -> "html"
-    t.TokenTokensText(_) -> "text"
-    t.TokenTokensGeneric(g) -> token_generic.get_type(g)
-  }
 }
 
 pub fn main() {
@@ -154,7 +126,7 @@ pub fn main() {
   // The lexer: tokens, their types and fields.
   let tokens = lexer.lex_2("# Head\n\nSome *text*.\n\n- one\n- two\n")
   let list_of = tokens_list.to_list(tokens)
-  let types = list.map(list_of, token_type)
+  let types = list.map(list_of, token.get_type)
   let passed =
     passed
     + check(tokens_list.get_length(tokens) == 5.0, "token count")
@@ -162,25 +134,26 @@ pub fn main() {
       types == ["heading", "space", "paragraph", "space", "list"],
       "token types",
     )
-  let assert [t.TokenTokensHeading(heading), ..] = list_of
+  let assert [token.Heading(heading), ..] = list_of
   let passed =
     passed
     + check(token_heading.get_depth(heading) == 1.0, "heading depth")
     + check(token_heading.get_text(heading) == "Head", "heading text")
     + check(token_heading.get_raw(heading) == "# Head", "heading raw")
-  let assert Ok(t.TokenTokensParagraph(paragraph)) =
+  let assert Ok(token.Paragraph(paragraph)) =
     list.drop(list_of, 2) |> list.first
   let inner = token_paragraph.get_tokens(paragraph)
   let passed =
     passed
     + check(
-      list.map(inner, token_type) == ["text", "em", "text"],
+      list.map(inner, token.get_type) == ["text", "em", "text"],
       "inline tokens",
     )
   let assert Some(first) = tokens_list.get_at(tokens, 0.0)
   let passed =
     passed
-    + check(token_type(first) == "heading", "get_at")
+    + check(token.get_type(first) == "heading", "get_at")
+    + check(token.get_raw(first) == "# Head", "shared get_raw")
     + check(list.length(lexer.lex_inline("a *b* c")) == 3, "lex_inline")
     + check(
       tokens_list.get_length(marked.get_lexer()("a\n\nb", None)) == 3.0,
@@ -242,7 +215,7 @@ pub fn main() {
   hooks_object.set_preprocess(
     hooks,
     Some(fn(text) {
-      t.StringOrPromiseString(string.replace(text, "foo", "bar"))
+      string_or_promise.String(string.replace(text, "foo", "bar"))
     }),
   )
   let pre = marked_extension.create()
@@ -262,7 +235,7 @@ pub fn main() {
   marked_extension.set_walk_tokens(
     walker,
     Some(fn(token) {
-      cell.set(seen, [token_type(token), ..cell.get(seen)])
+      cell.set(seen, [token.get_type(token), ..cell.get(seen)])
       None
     }),
   )

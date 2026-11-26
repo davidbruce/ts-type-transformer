@@ -1,12 +1,13 @@
 // date-fns from Gleam, in Node: dates made, moved, compared and formatted.
 // Every check must hold.
 import bindings as date_fns
+import bindings/date_arg
 import bindings/duration
 import bindings/format_iso_options
 import bindings/interval
 import bindings/iso_format_options
+import bindings/iso_string_representation
 import bindings/runtime
-import bindings/types as t
 import gleam/int
 import gleam/io
 import gleam/list
@@ -26,7 +27,7 @@ pub fn main() {
   let date_only = format_iso_options.create()
   iso_format_options.set_representation(
     date_only,
-    Some(t.ISOStringRepresentationDate),
+    Some(iso_string_representation.Date),
   )
   let passed =
     check(fmt(friday) == "2024-03-15", "format_date")
@@ -89,7 +90,7 @@ pub fn main() {
 
   // Compared: dates, ISO strings and timestamps alike. A string or a
   // timestamp beside a Date goes in by `_of`, each a `DateArg`.
-  let day = t.DateArgDate
+  let day = date_arg.Date
   let time = date_fns.get_time(monday)
   let passed =
     passed
@@ -98,20 +99,20 @@ pub fn main() {
       "difference_in_days",
     )
     + check(
-      date_fns.is_after_of(day(monday), t.DateArgString("2024-03-15")),
+      date_fns.is_after_of(day(monday), date_arg.String("2024-03-15")),
       "is_after a string",
     )
     + check(
-      date_fns.is_before_of(day(friday), t.DateArgNumber(time)),
+      date_fns.is_before_of(day(friday), date_arg.Number(time)),
       "is_before a timestamp",
     )
     + check(
-      date_fns.is_same_day_of(day(friday), t.DateArgString("2024-03-15")),
+      date_fns.is_same_day_of(day(friday), date_arg.String("2024-03-15")),
       "is_same_day",
     )
     + check(!date_fns.is_same_day(friday, monday), "not the same day")
     + check(
-      date_fns.compare_asc_of(day(friday), t.DateArgNumber(time)) == -1.0,
+      date_fns.compare_asc_of(day(friday), date_arg.Number(time)) == -1.0,
       "compare_asc",
     )
     + check(

@@ -28,12 +28,13 @@ import prosemirror/areas/prosemirror_transform
 import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
+import prosemirror/areas/prosemirror_model/dom_output_spec
 import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
-fn hole_spec(tag: String) -> t.DOMOutputSpec {
-  t.DOMOutputSpecArray([dynamic.string(tag), dynamic.int(0)])
+fn hole_spec(tag: String) -> dom_output_spec.DOMOutputSpec {
+  dom_output_spec.List([dynamic.string(tag), dynamic.int(0)])
 }
 
 fn build_schema() -> t.Schema(Nil) {
@@ -89,7 +90,7 @@ fn build_schema() -> t.Schema(Nil) {
     |> node_spec.with_group("block")
     |> node_spec.with_atom(True)
     |> node_spec.with_to_dom(fn(_) {
-      t.DOMOutputSpecArray([dynamic.string("hr")])
+      dom_output_spec.List([dynamic.string("hr")])
     })
 
   let text_spec =

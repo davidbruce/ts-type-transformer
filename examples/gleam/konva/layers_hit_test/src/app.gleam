@@ -6,6 +6,7 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
+import konva/any_string
 import konva/circle
 import konva/circle_config
 import konva/container
@@ -180,7 +181,7 @@ pub fn main() -> Nil {
       None -> "none"
       Some(s) ->
         case
-          decode.run(node.get_attr(s, t.AnyStringString("id")), decode.string)
+          decode.run(node.get_attr(s, any_string.String("id")), decode.string)
         {
           Ok(id_str) -> id_str
           Error(_) -> "unknown"

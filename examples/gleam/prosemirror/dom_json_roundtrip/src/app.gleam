@@ -15,7 +15,9 @@ import gleam/option.{None, Some}
 import gleam/string
 import prosemirror/areas/prosemirror_model/attribute_spec
 import prosemirror/areas/prosemirror_model/attrs
+import prosemirror/areas/prosemirror_model/dom_output_spec
 import prosemirror/areas/prosemirror_model/dom_parser
+import prosemirror/areas/prosemirror_model/parse_rule
 import prosemirror/areas/prosemirror_model/dom_serializer
 import prosemirror/areas/prosemirror_model/generic_parse_rule
 import prosemirror/areas/prosemirror_model/mark_spec
@@ -34,8 +36,8 @@ import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
-fn hole_spec(tag: String) -> t.DOMOutputSpec {
-  t.DOMOutputSpecArray([dynamic.string(tag), dynamic.int(0)])
+fn hole_spec(tag: String) -> dom_output_spec.DOMOutputSpec {
+  dom_output_spec.List([dynamic.string(tag), dynamic.int(0)])
 }
 
 fn tag_rule(tag: String, level: Int) -> t.TagParseRule(Nil) {
@@ -111,7 +113,7 @@ fn build_schema() -> t.Schema(Nil) {
 
   let make_mark = fn(tag: String) {
     mark_spec.create()
-    |> mark_spec.with_parse_dom([t.ParseRuleTagParseRule(tag_rule(tag, 0))])
+    |> mark_spec.with_parse_dom([parse_rule.Tag(tag_rule(tag, 0))])
     |> mark_spec.with_to_dom(fn(_, _) { hole_spec(tag) })
   }
   let marks =

@@ -1,9 +1,9 @@
 // Calls the generated Gleam bindings; every check must hold.
 import bindings as b
 import bindings/counter
+import bindings/id
 import bindings/runtime as r
 import bindings/scaler
-import bindings/types as t
 import cell
 import gleam/int
 import gleam/io
@@ -92,7 +92,7 @@ pub fn main() {
     "union callback",
   )
   check(
-    cell.get(seen) == [t.IdString("two"), t.IdNumber(1.0)],
+    cell.get(seen) == [id.String("two"), id.Number(1.0)],
     "union argument",
   )
 
