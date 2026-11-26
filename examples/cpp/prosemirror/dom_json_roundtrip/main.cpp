@@ -20,7 +20,7 @@ static TagParseRule tag_rule(std::string_view tag, int level = 0) {
 
 static Sch make_schema() {
     NodeSpec doc({.content = "block+"});
-    MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
+    ts::Record<AttributeSpec> hattrs = ts::Record<AttributeSpec>::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
     NodeSpec heading({
         .content = "inline*",
@@ -40,7 +40,7 @@ static Sch make_schema() {
 
     NodeSpec text({.group = "inline"});
 
-    auto nodes = SchemaSpec_nodes::create()
+    auto nodes = ts::Record<NodeSpec>::create()
         .set_at("doc", doc)
         .set_at("heading", heading)
         .set_at("paragraph", para)
@@ -50,7 +50,7 @@ static Sch make_schema() {
     auto mark_spec = [](const char* tag) {
         return MarkSpec({.toDOM = [tag](Mark, bool) { return hole_spec(tag); }, .parseDOM = ts::Array<ParseRule>::of(tag_rule(tag))});
     };
-    auto marks = SchemaSpec_marks::create()
+    auto marks = ts::Record<MarkSpec>::create()
         .set_at("strong", mark_spec("strong"))
         .set_at("em", mark_spec("em"))
         .set_at("code", mark_spec("code"));
@@ -84,7 +84,7 @@ struct AppState {
 static Node parse_html(const std::shared_ptr<AppState>& app, const char* html) {
     dom::HTMLElement div = app->doc.createElement("div");
     div.innerHTML(html);
-    return app->parser.parse(div.unsafe_as<Node_2>());
+    return app->parser.parse(div.unsafe_as<DomNode>());
 }
 
 static void refresh_output(const std::shared_ptr<AppState>& app, Node doc) {
@@ -139,7 +139,7 @@ TS_EXPORT(start) void start() {
         },
     });
 
-    app->view = EditorView(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
+    app->view = EditorView(app->doc.getElementById("editor")->unsafe_as<DomNode>(), props);
     app->status = "Parsed Spec HTML via DOMParser";
     refresh_output(app, app->view.state().doc());
 
@@ -170,7 +170,7 @@ TS_EXPORT(start) void start() {
             } else {
                 dom::HTMLElement div = app->doc.createElement("div");
                 app->serializer.serializeFragment(doc.content(), DOMSerializer_serializeFragment_options::create(), div);
-                Node reparsed = app->parser.parse(div.unsafe_as<Node_2>());
+                Node reparsed = app->parser.parse(div.unsafe_as<DomNode>());
                 bool ok = doc.eq(reparsed);
                 app->status = ok ? "DOM serializeFragment->parse eq() = true" : "DOM serializeFragment->parse eq() = false";
                 EditorState next = EditorState::create({{.schema = app->schema, .doc = reparsed}});

@@ -29,8 +29,8 @@ TS_EXPORT(start) void start() {
     auto ev_stage = ts::Value::string("stage");
     auto ev_done = ts::Value::string("done");
 
-    ts::Scoped<any_array_fn> on_stage = [&](ts::Array<>) { stages++; };
-    ts::Scoped<any_array_fn> on_done = [&](ts::Array<>) { done_count++; };
+    ts::Scoped<Listener> on_stage = [&](ts::Array<>) { stages++; };
+    ts::Scoped<Listener> on_done = [&](ts::Array<>) { done_count++; };
     bus.on(ev_stage, on_stage);
     bus.once(ev_done, on_done);
 

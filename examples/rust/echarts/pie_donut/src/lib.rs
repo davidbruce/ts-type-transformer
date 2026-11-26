@@ -5,7 +5,7 @@ use echarts::*;
 fn slice(name: &str, value: f64) -> PieDataItemOption {
     let item = PieDataItemOption::default();
     item.set_name(name);
-    item.set_value(TArrayOrT::T(OptionDataValueNumeric::Number(value)));
+    item.set_value(MultiT::T(OptionDataValueNumeric::Number(value)));
     item
 }
 

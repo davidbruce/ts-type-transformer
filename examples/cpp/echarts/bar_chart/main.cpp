@@ -14,7 +14,7 @@ TS_EXPORT(start) void start() {
         .grid = GridComponentOption({.top = 48, .right = 24, .bottom = 36, .left = 48}),
         .xAxis = XAXisComponentOption_category({
             .axisLabel = AxisLabelOption({.color = "#555555"}),
-            .data = ts::Array<std::string>::of("Jan", "Feb", "Mar", "Apr", "May", "Jun"),
+            .data = {"Jan", "Feb", "Mar", "Apr", "May", "Jun"},
             .axisLine = AxisLineOption({.lineStyle = LineStyleOption({.color = "#111111"})}),
         }),
         .yAxis = YAXisComponentOption_value({
@@ -24,7 +24,7 @@ TS_EXPORT(start) void start() {
             .max = 100,
         }),
         .series = BarSeriesOption({
-            .data = ts::Array<double>::of(42, 68, 55, 84, 71, 93),
+            .data = {42, 68, 55, 84, 71, 93},
             .name = "Units",
             .barWidth = "46%",
             .itemStyle = BarItemStyleOption({.color = "#111111"}),

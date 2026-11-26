@@ -28,7 +28,7 @@ struct AppState {
     int sensor_crossings = 0;
     int active_in_sensor = 0;
     bool paused = false;
-    EventQueue_drainCollisionEvents_f col_cb;
+    DrainCollisionEventsFn col_cb;
     dom::FrameRequestCallback raf_cb;
 };
 

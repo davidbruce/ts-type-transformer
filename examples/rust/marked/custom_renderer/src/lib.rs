@@ -2,8 +2,8 @@
 
 use dom::{Document, HTMLElement};
 use marked::{
-    BoolString, Marked, MarkedExtension, MarkedExtensionRenderer, MarkedExtensionRendererHeading,
-    MarkedExtensionWalkTokens, StringPromise, Token, tokens,
+    Marked, MarkedExtension, MarkedExtensionWalkTokensFn, RendererObject,
+    RendererObjectHeadingFn, Token, tokens,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -23,34 +23,6 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn token_type(t: &Token) -> String {
-    match t {
-        Token::Blockquote(_) => tokens::Blockquote::TYPE.into(),
-        Token::Br(_) => tokens::Br::TYPE.into(),
-        Token::Checkbox(_) => tokens::Checkbox::TYPE.into(),
-        Token::Code(_) => tokens::Code::TYPE.into(),
-        Token::Codespan(_) => tokens::Codespan::TYPE.into(),
-        Token::Def(_) => tokens::Def::TYPE.into(),
-        Token::Del(_) => tokens::Del::TYPE.into(),
-        Token::Em(_) => tokens::Em::TYPE.into(),
-        Token::Escape(_) => tokens::Escape::TYPE.into(),
-        Token::Heading(_) => tokens::Heading::TYPE.into(),
-        Token::Hr(_) => tokens::Hr::TYPE.into(),
-        Token::HTML(_) => tokens::HTML::TYPE.into(),
-        Token::Image(_) => tokens::Image::TYPE.into(),
-        Token::Link(_) => tokens::Link::TYPE.into(),
-        Token::List(_) => tokens::List::TYPE.into(),
-        Token::ListItem(_) => tokens::ListItem::TYPE.into(),
-        Token::Paragraph(_) => tokens::Paragraph::TYPE.into(),
-        Token::Space(_) => tokens::Space::TYPE.into(),
-        Token::Strong(_) => tokens::Strong::TYPE.into(),
-        Token::Table(_) => tokens::Table::TYPE.into(),
-        Token::Tag(_) => tokens::Tag::TYPE.into(),
-        Token::Text(_) => tokens::Text::TYPE.into(),
-        Token::Generic(g) => g.type_(),
-    }
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
@@ -60,19 +32,19 @@ pub extern "C" fn start() {
 
     let seen: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
-    let heading = MarkedExtensionRendererHeading::new(|h: tokens::Heading| {
-        BoolString::String(format!(
+    let heading = RendererObjectHeadingFn::new(|h: tokens::Heading| {
+        Some(format!(
             "<h{0} class=\"wire-h\">\u{00A7} {1}</h{0}>\n",
             h.depth() as u32,
             h.text()
         ))
     });
-    let renderer = MarkedExtensionRenderer::default().with_heading(&heading);
+    let renderer = RendererObject::default().with_heading(&heading);
 
-    let walk = MarkedExtensionWalkTokens::new({
+    let walk = MarkedExtensionWalkTokensFn::new({
         let seen = seen.clone();
         move |t: Token| {
-            seen.borrow_mut().push(token_type(&t));
+            seen.borrow_mut().push(t.type_());
             None
         }
     });
@@ -81,14 +53,8 @@ pub extern "C" fn start() {
         .with_walk_tokens(&walk);
 
     let custom_m = Marked::new(vec![ext]);
-    let def_html = match marked::marked_with_opt_marked_options(md) {
-        StringPromise::String(s) => s,
-        StringPromise::JsPromise(_) => String::new(),
-    };
-    let cust_html = match custom_m.parse().invoke_2(md) {
-        StringPromise::String(s) => s,
-        StringPromise::JsPromise(_) => String::new(),
-    };
+    let def_html = marked::marked(md);
+    let cust_html = custom_m.parse(md);
 
     let visited = seen.borrow();
 

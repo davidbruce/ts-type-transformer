@@ -11,7 +11,7 @@ TS_EXPORT(start) void start() {
         .lineStyle = LineStyleOption({.width = 2, .color = "#111111"}),
         .areaStyle = LineSeriesOption_areaStyle({.color = "rgba(17,17,17,0.12)"}),
         .smooth = true,
-        .data = ts::Array<double>::of(28, 44, 39, 62, 58, 76, 81, 89),
+        .data = {28, 44, 39, 62, 58, 76, 81, 89},
         .name = "Throughput",
         .itemStyle = ItemStyleOption({.color = "#111111"}),
     });
@@ -19,7 +19,7 @@ TS_EXPORT(start) void start() {
     auto s1 = LineSeriesOption({
         .lineStyle = LineStyleOption({.width = 1.5, .color = "#737373", .type = "dashed"}),
         .smooth = false,
-        .data = ts::Array<double>::of(35, 38, 42, 46, 50, 54, 58, 62),
+        .data = {35, 38, 42, 46, 50, 54, 58, 62},
         .name = "Baseline",
         .itemStyle = ItemStyleOption({.color = "#737373"}),
     });
@@ -31,7 +31,7 @@ TS_EXPORT(start) void start() {
         .xAxis = XAXisComponentOption_category({
             .boundaryGap = false,
             .axisLabel = AxisLabelOption({.color = "#555555"}),
-            .data = ts::Array<std::string>::of("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"),
+            .data = {"W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"},
             .axisLine = AxisLineOption({.lineStyle = LineStyleOption({.color = "#111111"})}),
         }),
         .yAxis = YAXisComponentOption_value({
@@ -42,7 +42,7 @@ TS_EXPORT(start) void start() {
         }),
         .tooltip = TooltipComponentOption({.trigger = TooltipComponentOption_trigger::axis}),
         .legend = PlainLegendComponentOption({.textStyle = LabelOption({.color = "#111111"}), .top = 8}),
-        .series = ts::Array<LineSeriesOption>::of(s0, s1),
+        .series = {s0, s1},
     });
     chart.setOption(opt);
 

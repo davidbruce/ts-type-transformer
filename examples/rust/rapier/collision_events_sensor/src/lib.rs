@@ -167,7 +167,7 @@ fn step_sim(st: &mut AppState) {
     let mut contacts = st.solid_contacts;
     if let (Some(w), Some(q)) = (st.world.as_ref(), st.queue.as_ref()) {
         w.step_with(q, None);
-        EventQueueDrainCollisionEventsF::scoped(
+        DrainCollisionEventsFn::scoped(
             |h1: f64, h2: f64, started: bool| {
                 if h1 == sh || h2 == sh {
                     if started {

@@ -6207,4 +6207,94 @@ pub export fn run() void {
             assert!(report.contains("10 checks passed"), "{report}");
         }
     }
+
+    #[test]
+    fn cpp_class_unions_and_shared_getters() {
+        let Some(clang) = wasi_clang() else { return };
+        let Some([node]) = tools(["node"]) else { return };
+        let out = root().join("target/e2e/item5-cpp");
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let dts = r#"
+export interface Heading {
+    type: "heading";
+    text: string;
+    depth: number;
+}
+export interface Para {
+    type: "paragraph";
+    text: string;
+}
+export type Token = Heading | Para;
+export type Width = string | number;
+export type Height = string | number;
+export declare class Item {
+    name: string;
+    constructor(name: string);
+}
+export interface Options {
+    items?: Item | Item[];
+}
+export declare function getToken(isHeading: boolean): Token;
+export declare function getWidth(): Width;
+export declare function getHeight(): Height;
+export declare function takeItems(items: Item | Item[]): string;
+export declare function takeOptions(opts: Options): string;
+"#;
+        let js = r#"
+class Item {
+    constructor(name) { this.name = name; }
+}
+export const root = {
+    Item,
+    getToken: (h) => (h ? { type: "heading", text: "Hi", depth: 2 } : { type: "paragraph", text: "Body" }),
+    getWidth: () => "100%",
+    getHeight: () => 42,
+    takeItems: (x) => (Array.isArray(x) ? x.map((i) => i.name).join(",") : x.name),
+    takeOptions: (o) => {
+        const x = o.items;
+        return !x ? "none" : Array.isArray(x) ? x.map((i) => i.name).join("+") : x.name;
+    },
+};
+"#;
+        fs::write(out.join("api.d.ts"), dts).unwrap();
+        let xml = lower(&out.join("api.d.ts"), Some("cpp"), &[]);
+        let m = model(&xml, "C++");
+        let cpp_src = r#"
+#include "bindings.hpp"
+TS_IMPORT(check) void check(int ok, int line);
+#define CHECK(c) check((c), __LINE__)
+__attribute__((export_name("run"))) void run(void) {
+    Token h = getToken(true);
+    Token p = getToken(false);
+    CHECK(h.type() == "heading");
+    CHECK(h.text() == "Hi");
+    CHECK(h.is<Heading>());
+    CHECK(h.as<Heading>().depth() == 2);
+    CHECK(std::holds_alternative<Para>(p));
+    CHECK(std::get<Para>(p).text() == "Body");
+    CHECK(p.type() == "paragraph");
+    std::string visited = std::visit([](const auto& tok) { return tok.text(); }, h);
+    CHECK(visited == "Hi");
+
+    Width w = getWidth();
+    Height ht = getHeight();
+    CHECK(w.is<std::string>() && w.as<std::string>() == "100%");
+    CHECK(ht.is<double>() && ht.as<double>() == 42.0);
+
+    Item a("alpha");
+    Item b("beta");
+    CHECK(takeItems(a) == "alpha");
+    CHECK(takeItems({a, b}) == "alpha,beta");
+    CHECK(takeOptions(Options({.items = {a, b}})) == "alpha+beta");
+}
+"#;
+        fs::write(out.join("test.cpp"), cpp_src).unwrap();
+        let c = Case { fixture: out.clone(), out: out.clone(), xml };
+        build_cpp(&clang, &c, &m);
+        fs::write(out.join("impl.mjs"), js).unwrap();
+        fs::write(out.join("glue.mjs"), generators::wasm::glue(&m, None)).unwrap();
+        let report = run(Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
+        assert!(report.contains("13 checks passed"), "{report}");
+    }
 }

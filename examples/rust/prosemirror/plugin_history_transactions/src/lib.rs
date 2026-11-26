@@ -17,37 +17,37 @@ fn build_schema() -> Schema {
     let doc = NodeSpec::default().with_content("block+");
 
     let lvl = <AttributeSpec as Default>::default().with_default(2.0);
-    let hattrs = MarkSpecAttrs::default();
+    let hattrs = JsRecord::<AttributeSpec>::new();
     hattrs.set_at("level", &lvl);
 
     let heading = NodeSpec::default()
         .with_attrs(&hattrs)
         .with_content("inline*")
         .with_group("block")
-        .with_to_dom(&NodeToDOMOutputSpecFn::new(|n: Node| {
-            let l = n.attrs().at("level").as_f64() as i32;
+        .with_to_dom(&NodeSpecToDOMFn::new(|n: Node| {
+            let l = n.attrs().at("level").expect("missing level").as_f64() as i32;
             hole_spec(if l == 1 { "h1" } else { "h2" })
         }));
 
     let para = NodeSpec::default()
         .with_content("inline*")
         .with_group("block")
-        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| hole_spec("p")));
+        .with_to_dom(&NodeSpecToDOMFn::new(|_: Node| hole_spec("p")));
 
     let text = NodeSpec::default().with_group("inline");
 
-    let nodes = SchemaSpecNodes::default();
+    let nodes = JsRecord::<NodeSpec>::new();
     nodes.set_at("doc", &doc);
     nodes.set_at("heading", &heading);
     nodes.set_at("paragraph", &para);
     nodes.set_at("text", &text);
 
     let make_mark = |tag: &'static str| {
-        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(
+        MarkSpec::default().with_to_dom(&MarkSpecToDOMFn::new(
             move |_: Mark, _: bool| hole_spec(tag),
         ))
     };
-    let marks = SchemaSpecMarks::default();
+    let marks = JsRecord::<MarkSpec>::new();
     marks.set_at("strong", &make_mark("strong"));
     marks.set_at("code", &make_mark("code"));
 
@@ -139,15 +139,15 @@ pub extern "C" fn start() {
     }));
 
     let field = StateField::<JsValue>::default()
-        .with_init(&StateFieldInit::new(|_, _| JsValue::from(0.0)))
-        .with_apply(&StateFieldApply::new(|tr, prev: JsValue, _, _| {
+        .with_init(&StateFieldInitFn::new(|_, _| JsValue::from(0.0)))
+        .with_apply(&StateFieldApplyFn::new(|tr, prev: JsValue, _, _| {
             JsValue::from(prev.as_f64() + if tr.doc_changed() { 1.0 } else { 0.0 })
         }));
 
     let pspec = PluginSpec::<JsValue>::default()
         .with_key(&audit_key)
         .with_state(&field)
-        .with_filter_transaction(&PluginSpecFilterTransaction::new({
+        .with_filter_transaction(&FilterTransactionFn::new({
             let app = app.clone();
             move |tr: Transaction, _| {
                 let mut st = app.borrow_mut();
@@ -169,7 +169,7 @@ pub extern "C" fn start() {
 
     let props = DirectEditorProps::default()
         .with_state(&EditorState::create(&scfg))
-        .with_dispatch_transaction(&TransactionFn::new({
+        .with_dispatch_transaction(&DispatchTransactionFn::new({
             let app = app.clone();
             move |tr: Transaction| {
                 let view = app.borrow().view.clone();
@@ -204,7 +204,7 @@ pub extern "C" fn start() {
     let mount = dom_doc
         .get_element_by_id("editor")
         .expect("missing #editor");
-    let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
+    let place = Place::from(AsRef::<dom::Node>::as_ref(&mount));
     let view = EditorView::new(place, &props);
     {
         let mut st = app.borrow_mut();

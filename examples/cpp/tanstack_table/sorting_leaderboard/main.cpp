@@ -8,7 +8,7 @@
 
 using namespace tanstack_table_core;
 using V = ts::Value;
-using Obj = RowData_map;
+using Obj = ts::Record<ts::Value>;
 using TableT = Table_Core<Obj>;
 using RowT = Row_Core<Obj>;
 using ColT = Column_Core<Obj, V>;
@@ -21,13 +21,13 @@ static V w_atom(V initial) {
     auto state = std::make_shared<V>(initial);
     return Obj::create()
         .set_at("get", void_to_T_fn<V>([state] { return *state; }))
-        .set_at("set", Updater_fn2<V>([state](V u) { *state = functionalUpdate<V>(u, *state); return V(); }))
-        .set_at("subscribe", Updater_fn2<V>([](V) { return unsub_obj(); }));
+        .set_at("set", UpdaterFn<V>([state](V u) { *state = functionalUpdate<V>(u, *state); return V(); }))
+        .set_at("subscribe", UpdaterFn<V>([](V) { return unsub_obj(); }));
 }
 static V r_atom(void_to_T_fn<V> compute) {
     return Obj::create()
         .set_at("get", void_to_T_fn<V>([compute] { return compute(); }))
-        .set_at("subscribe", Updater_fn2<V>([](V) { return unsub_obj(); }));
+        .set_at("subscribe", UpdaterFn<V>([](V) { return unsub_obj(); }));
 }
 static V make_reactivity() {
     return TableReactivityBindings::create()
@@ -90,8 +90,8 @@ static void render(const std::shared_ptr<AppState>& st, const std::string& label
         html += is_num ? "<th class=\"num\">" : "<th>";
         html += esc_html(hdr);
         auto sd = col.unsafe_as<Column_RowSorting<Obj>>().getIsSorted();
-        if (std::holds_alternative<SortDirection>(sd)) {
-            html += (std::get<SortDirection>(sd) == SortDirection::asc) ? " &#9650;" : " &#9660;";
+        if (sd) {
+            html += (*sd == SortDirection::asc) ? " &#9650;" : " &#9660;";
         }
         html += "</th>";
     }

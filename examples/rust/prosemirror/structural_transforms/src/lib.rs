@@ -17,7 +17,7 @@ fn build_schema() -> Schema {
     let doc = NodeSpec::default().with_content("block+");
 
     let lvl = <AttributeSpec as Default>::default().with_default(2.0);
-    let hattrs = MarkSpecAttrs::default();
+    let hattrs = JsRecord::<AttributeSpec>::new();
     hattrs.set_at("level", &lvl);
 
     let heading = NodeSpec::default()
@@ -25,8 +25,8 @@ fn build_schema() -> Schema {
         .with_content("inline*")
         .with_group("block")
         .with_defining(true)
-        .with_to_dom(&NodeToDOMOutputSpecFn::new(|n: Node| {
-            let l = n.attrs().at("level").as_f64() as i32;
+        .with_to_dom(&NodeSpecToDOMFn::new(|n: Node| {
+            let l = n.attrs().at("level").expect("missing level").as_f64() as i32;
             hole_spec(if l == 1 { "h1" } else { "h2" })
         }));
 
@@ -38,19 +38,19 @@ fn build_schema() -> Schema {
         if defining {
             s = s.with_defining(true);
         }
-        s.with_to_dom(&NodeToDOMOutputSpecFn::new(move |_: Node| hole_spec(tag)))
+        s.with_to_dom(&NodeSpecToDOMFn::new(move |_: Node| hole_spec(tag)))
     };
 
     let hr = NodeSpec::default()
         .with_group("block")
         .with_atom(true)
-        .with_to_dom(&NodeToDOMOutputSpecFn::new(|_: Node| {
+        .with_to_dom(&NodeSpecToDOMFn::new(|_: Node| {
             DOMOutputSpec::Array(JsArray::from(["hr"]))
         }));
 
     let text = NodeSpec::default().with_group("inline");
 
-    let nodes = SchemaSpecNodes::default();
+    let nodes = JsRecord::<NodeSpec>::new();
     nodes.set_at("doc", &doc);
     nodes.set_at("heading", &heading);
     nodes.set_at("paragraph", &tag_node("inline*", Some("block"), "p", false));
@@ -67,11 +67,11 @@ fn build_schema() -> Schema {
     nodes.set_at("text", &text);
 
     let make_mark = |tag: &'static str| {
-        MarkSpec::default().with_to_dom(&MarkBooleanToDOMOutputSpecFn::new(
+        MarkSpec::default().with_to_dom(&MarkSpecToDOMFn::new(
             move |_: Mark, _: bool| hole_spec(tag),
         ))
     };
-    let marks = SchemaSpecMarks::default();
+    let marks = JsRecord::<MarkSpec>::new();
     marks.set_at("strong", &make_mark("strong"));
     marks.set_at("code", &make_mark("code"));
 
@@ -184,7 +184,7 @@ pub extern "C" fn start() {
 
     let props = DirectEditorProps::default()
         .with_state(&make_state(&app.borrow().schema))
-        .with_dispatch_transaction(&TransactionFn::new({
+        .with_dispatch_transaction(&DispatchTransactionFn::new({
             let app = app.clone();
             move |tr: Transaction| {
                 let view = app.borrow().view.clone();
@@ -201,7 +201,7 @@ pub extern "C" fn start() {
     let mount = dom_doc
         .get_element_by_id("editor")
         .expect("missing #editor");
-    let place = EditorViewNewPlaceOrDistDOMNode::from(AsRef::<dom::Node>::as_ref(&mount));
+    let place = Place::from(AsRef::<dom::Node>::as_ref(&mount));
     let view = EditorView::new(place, &props);
     {
         let mut st = app.borrow_mut();

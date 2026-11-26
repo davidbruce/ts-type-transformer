@@ -157,6 +157,56 @@ template <class U>
 struct Exact;
 template <class T>
 struct OptExact;
+template <class T = struct Value>
+struct Array;
+template <class T = struct Value>
+struct Record;
+
+template <class... Ts>
+struct Union : std::variant<Ts...> {
+    using variant_type = std::variant<Ts...>;
+    using variant_type::variant;
+    using variant_type::operator=;
+    const variant_type& variant() const noexcept { return *this; }
+    variant_type& variant() noexcept { return *this; }
+    template <class T>
+    bool is() const noexcept { return std::holds_alternative<T>(*this); }
+    template <class T>
+    const T& as() const { return std::get<T>(*this); }
+    template <class T>
+    T& as() { return std::get<T>(*this); }
+    template <class T>
+    const T* get_if() const noexcept { return std::get_if<T>(this); }
+    template <class T>
+    T* get_if() noexcept { return std::get_if<T>(this); }
+};
+
+template <class T>
+inline constexpr bool is_variant = false;
+template <class... Ts>
+inline constexpr bool is_variant<std::variant<Ts...>> = true;
+
+template <class T>
+struct union_parts {};
+template <class... Ts>
+struct union_parts<std::variant<Ts...>> {
+    using type = std::variant<Ts...>;
+};
+template <class... Ts>
+struct union_parts<Union<Ts...>> {
+    using type = std::variant<Ts...>;
+};
+
+template <class T>
+inline constexpr bool is_union = requires { typename union_parts<std::decay_t<T>>::type; };
+template <class T>
+using union_variant_t = typename union_parts<std::decay_t<T>>::type;
+
+template <class... Ts>
+inline const std::variant<Ts...>& union_as_variant(const std::variant<Ts...>& v) noexcept { return v; }
+template <class U>
+    requires (is_union<U> && !is_variant<std::decay_t<U>>)
+inline const auto& union_as_variant(const U& v) noexcept { return v.variant(); }
 
 // A value lent to JavaScript as a handle, for one call: an object's own
 // handle, or a new one for a number, flag or string, released after the call.
@@ -178,6 +228,11 @@ struct Arg {
     template <class... T>
     Arg(const std::variant<T...>& v) {
         std::visit([this](const auto& x) { take(Arg(x)); }, v);
+    }
+    template <class U>
+        requires (is_union<U> && !is_variant<std::decay_t<U>>)
+    Arg(const U& v) {
+        std::visit([this](const auto& x) { take(Arg(x)); }, v.variant());
     }
     template <class T>
     Arg(const std::optional<T>& v) {
@@ -248,10 +303,7 @@ T from_handle(uint32_t h) {
     } else return T(handle, h);
 }
 
-template <class T = struct Value>
-struct Array;
-template <class T = struct Value>
-struct Record;
+// Forward-declared above before Arg.
 
 // A JavaScript value of no particular type.
 struct Value : Handle {
@@ -323,23 +375,31 @@ template <class U, class L>
 struct any_extends : std::false_type {};
 template <class U, class B, class... R>
 struct any_extends<U, list<B, R...>> : std::bool_constant<extends_t<B, U>::value || any_extends<U, list<R...>>::value> {};
-template <class T>
-inline constexpr bool is_variant = false;
-template <class... Ts>
-inline constexpr bool is_variant<std::variant<Ts...>> = true;
 template <class T, class U>
 struct extends_t : std::bool_constant<std::same_as<T, U> || std::same_as<T, Value> || std::same_as<U, Value> || any_extends<U, typename bases<T>::type>::value> {};
 template <template <class...> class G, class... A, class... B>
-    requires (!is_variant<G<A...>> && sizeof...(A) == sizeof...(B) && (extends_t<A, B>::value && ...))
+    requires (!is_union<G<A...>> && sizeof...(A) == sizeof...(B) && (extends_t<A, B>::value && ...))
 struct extends_t<G<A...>, G<B...>> : std::true_type {};
-template <class... A, class U>
-struct extends_t<std::variant<A...>, U> : std::bool_constant<(extends_t<A, U>::value && ...)> {};
+template <class T, class U>
+    requires (is_union<T> && !is_union<U>)
+struct extends_t<T, U> : std::bool_constant<[]<size_t... Is>(std::index_sequence<Is...>) {
+    using V = union_variant_t<T>;
+    return (extends_t<std::variant_alternative_t<Is, V>, U>::value && ...);
+}(std::make_index_sequence<std::variant_size_v<union_variant_t<T>>>{})> {};
 // A type extends a union it is, or extends, a member of; a union, one whose
 // members each do.
-template <class T, class... B>
-struct extends_t<T, std::variant<B...>> : std::bool_constant<(extends_t<T, B>::value || ...)> {};
-template <class... A, class... B>
-struct extends_t<std::variant<A...>, std::variant<B...>> : std::bool_constant<(extends_t<A, std::variant<B...>>::value && ...)> {};
+template <class T, class U>
+    requires (!is_union<T> && is_union<U>)
+struct extends_t<T, U> : std::bool_constant<[]<size_t... Is>(std::index_sequence<Is...>) {
+    using V = union_variant_t<U>;
+    return (extends_t<T, std::variant_alternative_t<Is, V>>::value || ...);
+}(std::make_index_sequence<std::variant_size_v<union_variant_t<U>>>{})> {};
+template <class T, class U>
+    requires (is_union<T> && is_union<U>)
+struct extends_t<T, U> : std::bool_constant<[]<size_t... Is>(std::index_sequence<Is...>) {
+    using VA = union_variant_t<T>;
+    return (extends_t<std::variant_alternative_t<Is, VA>, U>::value && ...);
+}(std::make_index_sequence<std::variant_size_v<union_variant_t<T>>>{})> {};
 template <class T, class U>
 concept extends = extends_t<T, U>::value;
 
@@ -358,7 +418,7 @@ inline constexpr bool callable_candidate =
     !std::same_as<std::decay_t<F>, bool> &&
     !is_string_arg<F> &&
     !std::is_enum_v<std::decay_t<F>> &&
-    !is_variant<std::decay_t<F>> &&
+    !is_union<std::decay_t<F>> &&
     !is_optional<std::decay_t<F>>::value &&
     !std::same_as<std::decay_t<F>, std::nullopt_t> &&
     !std::same_as<std::decay_t<F>, std::nullptr_t>;
@@ -366,14 +426,16 @@ inline constexpr bool callable_candidate =
 template <class M, class X>
 constexpr bool in_match_v() {
     using D = std::decay_t<X>;
-    if constexpr (is_variant<D>) {
+    if constexpr (is_union<D>) {
+        using V = union_variant_t<D>;
         return []<size_t... Is>(std::index_sequence<Is...>) {
-            return (in_match_v<M, const std::variant_alternative_t<Is, D>&>() && ...);
-        }(std::make_index_sequence<std::variant_size_v<D>>{});
-    } else if constexpr (is_variant<M>) {
+            return (in_match_v<M, const std::variant_alternative_t<Is, V>&>() && ...);
+        }(std::make_index_sequence<std::variant_size_v<V>>{});
+    } else if constexpr (is_union<M>) {
+        using V = union_variant_t<M>;
         return []<size_t... Is>(std::index_sequence<Is...>) {
-            return (in_match_v<std::variant_alternative_t<Is, M>, X>() || ...);
-        }(std::make_index_sequence<std::variant_size_v<M>>{});
+            return (in_match_v<std::variant_alternative_t<Is, V>, X>() || ...);
+        }(std::make_index_sequence<std::variant_size_v<V>>{});
     } else if constexpr (std::same_as<M, double>) {
         return is_number_arg<X>;
     } else if constexpr (std::same_as<M, bool>) {
@@ -396,7 +458,7 @@ concept in_accepts = in_match_v<U, X>();
 
 template <class M, class X>
 uint32_t in_make_cb(X&& x) {
-    if constexpr (is_variant<M>) {
+    if constexpr (is_union<M>) {
         return [&]<class... Ms>(std::type_identity<std::variant<Ms...>>) -> uint32_t {
             uint32_t res = 0;
             bool done = false;
@@ -410,7 +472,7 @@ uint32_t in_make_cb(X&& x) {
             };
             (try_one.template operator()<Ms>(), ...);
             return res;
-        }(std::type_identity<M>{});
+        }(std::type_identity<union_variant_t<M>>{});
     } else if constexpr (is_callback<M> && std::constructible_from<M, X>) {
         M cb(std::forward<X>(x));
         return std::exchange(cb.h, 0);
@@ -418,6 +480,47 @@ uint32_t in_make_cb(X&& x) {
         return 0;
     }
 }
+
+template <class A>
+inline constexpr bool is_array = false;
+template <class U>
+inline constexpr bool is_array<Array<U>> = true;
+
+template <class A>
+struct array_elem {};
+template <class U>
+struct array_elem<Array<U>> {
+    using type = U;
+};
+
+template <class V>
+struct variant_array_elem_impl {};
+template <class... Ts>
+    requires (((is_array<Ts> ? 1 : 0) + ...) == 1)
+struct variant_array_elem_impl<std::variant<Ts...>> {
+    using arr = std::tuple_element_t<0, decltype(std::tuple_cat(std::conditional_t<is_array<Ts>, std::tuple<Ts>, std::tuple<>>{}...))>;
+    using type = typename array_elem<arr>::type;
+};
+
+template <class V>
+struct variant_array_elem {};
+template <class V>
+    requires is_union<V>
+struct variant_array_elem<V> : variant_array_elem_impl<union_variant_t<V>> {};
+
+template <class T>
+struct field_array_elem {};
+template <class U>
+struct field_array_elem<Array<U>> {
+    using type = U;
+};
+template <class V>
+struct field_array_elem<In<V>> : variant_array_elem<V> {};
+template <class T>
+struct field_array_elem<Opt<T>> : field_array_elem<T> {};
+template <class V>
+    requires is_union<V>
+struct field_array_elem<V> : variant_array_elem<V> {};
 
 template <class T>
 inline constexpr bool is_record = false;
@@ -432,13 +535,19 @@ struct record_elem<Record<U>> {
 };
 
 template <class V>
-struct variant_record_elem {};
+struct variant_record_elem_impl {};
 template <class... Ts>
     requires (((is_record<Ts> ? 1 : 0) + ...) == 1)
-struct variant_record_elem<std::variant<Ts...>> {
+struct variant_record_elem_impl<std::variant<Ts...>> {
     using rec = std::tuple_element_t<0, decltype(std::tuple_cat(std::conditional_t<is_record<Ts>, std::tuple<Ts>, std::tuple<>>{}...))>;
     using type = typename record_elem<rec>::type;
 };
+
+template <class V>
+struct variant_record_elem {};
+template <class V>
+    requires is_union<V>
+struct variant_record_elem<V> : variant_record_elem_impl<union_variant_t<V>> {};
 
 template <class T>
 struct field_record_elem {};
@@ -450,8 +559,9 @@ template <class V>
 struct field_record_elem<In<V>> : variant_record_elem<V> {};
 template <class T>
 struct field_record_elem<Opt<T>> : field_record_elem<T> {};
-template <class... Ts>
-struct field_record_elem<std::variant<Ts...>> : variant_record_elem<std::variant<Ts...>> {};
+template <class V>
+    requires is_union<V>
+struct field_record_elem<V> : variant_record_elem<V> {};
 
 template <class U>
 struct In {
@@ -459,6 +569,12 @@ struct In {
     bool own = false;
     In(const In&) = delete;
     In& operator=(const In&) = delete;
+    template <class A = U>
+    In(std::initializer_list<typename variant_array_elem<A>::type> xs) {
+        h = ts_raw_js_array_new();
+        for (const auto& x : xs) ts_raw_js_array_push(h, Arg(x).h);
+        own = true;
+    }
     template <class V = U>
     In(std::initializer_list<std::pair<std::string_view, typename variant_record_elem<V>::type>> entries) {
         h = ts_raw_js_object_new();
@@ -469,12 +585,12 @@ struct In {
         requires (!std::same_as<std::decay_t<X>, In> && in_accepts<U, X>)
     In(X&& x) {
         using D = std::decay_t<X>;
-        if constexpr (is_variant<D>) {
+        if constexpr (is_union<D>) {
             std::visit([this](const auto& v) {
                 In tmp(v);
                 h = tmp.h;
                 own = std::exchange(tmp.own, false);
-            }, x);
+            }, union_as_variant(x));
         } else if constexpr (is_string_arg<D>) {
             if constexpr (std::is_pointer_v<D>) {
                 std::string_view sv = x ? std::string_view(x) : std::string_view();
@@ -508,8 +624,8 @@ struct In {
 
 template <class T, class X>
 concept opt_elem_accepts =
-    (is_variant<T> && in_accepts<T, X>) ||
-    (!is_variant<T> && is_handle<X> && extends<std::decay_t<X>, T>) ||
+    (is_union<T> && in_accepts<T, X>) ||
+    (!is_union<T> && is_handle<X> && extends<std::decay_t<X>, T>) ||
     (is_callback<T> && callable_candidate<X> && std::constructible_from<T, X>);
 
 template <class T>
@@ -519,6 +635,12 @@ struct Opt {
     Opt(const Opt&) = delete;
     Opt& operator=(const Opt&) = delete;
     Opt(std::nullopt_t) noexcept {}
+    template <class A = T>
+    Opt(std::initializer_list<typename field_array_elem<A>::type> xs) {
+        h = ts_raw_js_array_new();
+        for (const auto& x : xs) ts_raw_js_array_push(h, Arg(x).h);
+        own = true;
+    }
     template <class V = T>
     Opt(std::initializer_list<std::pair<std::string_view, typename field_record_elem<V>::type>> entries) {
         h = ts_raw_js_object_new();
@@ -531,14 +653,14 @@ struct Opt {
         if (o) init(*o);
     }
     template <class X>
-        requires (is_variant<T> && !std::same_as<std::decay_t<X>, Opt> && !is_optional<std::decay_t<X>>::value && !std::same_as<std::decay_t<X>, std::nullopt_t> && in_accepts<T, X>)
+        requires (is_union<T> && !std::same_as<std::decay_t<X>, Opt> && !is_optional<std::decay_t<X>>::value && !std::same_as<std::decay_t<X>, std::nullopt_t> && in_accepts<T, X>)
     Opt(X&& x) {
         In<T> tmp(std::forward<X>(x));
         h = tmp.h;
         own = std::exchange(tmp.own, false);
     }
     template <class H>
-        requires (!is_variant<T> && !std::same_as<std::decay_t<H>, Opt> && is_handle<H> && extends<std::decay_t<H>, T>)
+        requires (!is_union<T> && !std::same_as<std::decay_t<H>, Opt> && is_handle<H> && extends<std::decay_t<H>, T>)
     Opt(const H& x) noexcept : h(x.h) {}
     template <class F>
         requires (is_callback<T> && callable_candidate<F> && std::constructible_from<T, F>)
@@ -554,7 +676,7 @@ struct Opt {
   private:
     template <class X>
     void init(const X& x) {
-        if constexpr (is_variant<T>) {
+        if constexpr (is_union<T>) {
             In<T> tmp(x);
             h = tmp.h;
             own = std::exchange(tmp.own, false);
@@ -566,13 +688,6 @@ struct Opt {
             own = true;
         }
     }
-};
-
-template <class A>
-struct array_elem {};
-template <class U>
-struct array_elem<Array<U>> {
-    using type = U;
 };
 
 // A field of an aggregate that may be left out: `X({.a = 1})` sets only what it names.
@@ -590,11 +705,11 @@ struct Field {
         T v(std::forward<X0>(x0), std::forward<X>(xs)...);
         h = Arg(v).give();
     }
-    // A braced list of the elements of an array (`{1, 2, 3}`).
+    // A braced list of the elements of an array or a multi-union holding one (`{1, 2, 3}`).
     template <class A = T>
-    Field(std::initializer_list<typename array_elem<A>::type> xs) {
-        T v(xs);
-        h = Arg(v).give();
+    Field(std::initializer_list<typename field_array_elem<A>::type> xs) {
+        h = ts_raw_js_array_new();
+        for (const auto& x : xs) ts_raw_js_array_push(h, Arg(x).h);
     }
     // A braced list of key-value pairs for a record (`{{"a", x}}`).
     template <class R = T>
@@ -661,8 +776,8 @@ template <class Elem, class X>
 inline constexpr bool rest_accepts_v = [] {
     using D = std::decay_t<X>;
     if constexpr (std::same_as<Elem, Value>) {
-        return is_handle<X> || is_string_arg<X> || is_number_arg<X> || std::same_as<D, bool> || std::is_enum_v<D> || is_variant<D> || is_optional<D>::value;
-    } else if constexpr (is_variant<Elem>) {
+        return is_handle<X> || is_string_arg<X> || is_number_arg<X> || std::same_as<D, bool> || std::is_enum_v<D> || is_union<D> || is_optional<D>::value;
+    } else if constexpr (is_union<Elem>) {
         return in_accepts<Elem, X>;
     } else if constexpr (std::same_as<Elem, std::string>) {
         return is_string_arg<X>;
@@ -678,11 +793,6 @@ inline constexpr bool rest_accepts_v = [] {
 }();
 template <class Elem, class X>
 concept rest_accepts = rest_accepts_v<Elem, X>;
-
-template <class A>
-inline constexpr bool is_array = false;
-template <class U>
-inline constexpr bool is_array<Array<U>> = true;
 
 // An array given alone is the argument list, of whatever it holds.
 template <class Elem, bool CheckExtends, class R0, class... Rest>
@@ -708,7 +818,7 @@ struct Array : virtual Handle {
     // and an array of a class one of its subclass, as TypeScript has it (`Sub[]` is a `Base[]`).
     // Not a type that extends Array: it is also taken where another parameter would take it.
     template <class A, class U = typename array_elem<A>::type>
-        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_variant<T> && in_accepts<T, U>) || std::is_base_of_v<T, U>))
+        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_union<T> && in_accepts<T, U>) || std::is_base_of_v<T, U>))
     Array(const A& o) : Handle(o) {}
     static Array create() { return Array(handle, ts_raw_js_array_new()); }
     template <class... Us>
@@ -725,7 +835,7 @@ struct Array : virtual Handle {
         requires (!std::same_as<std::decay_t<U>, T> && (rest_accepts<T, U> || std::convertible_to<const U&, T>))
     void push(U&& v) const {
         if constexpr (std::same_as<T, Value>) ts_raw_js_array_push(h, Arg(v).h);
-        else if constexpr (is_variant<T>) ts_raw_js_array_push(h, In<T>(std::forward<U>(v)).h);
+        else if constexpr (is_union<T>) ts_raw_js_array_push(h, In<T>(std::forward<U>(v)).h);
         else if constexpr (std::same_as<T, std::string>) {
             using D = std::decay_t<U>;
             if constexpr (std::is_pointer_v<D>) {
@@ -754,7 +864,7 @@ struct Record : virtual Handle {
         for (const auto& [k, v] : entries) set_at(k, v);
     }
     template <class R, class U = typename record_elem<R>::type>
-        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_variant<T> && in_accepts<T, U>) || std::is_base_of_v<T, U>))
+        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_union<T> && in_accepts<T, U>) || std::is_base_of_v<T, U>))
     Record(const R& o) : Handle(o) {}
     static Record create() { return Record(handle, ts_raw_js_object_new()); }
     bool has(std::string_view key) const { return ts_raw_js_object_has(h, key.data(), key.size()) != 0; }
@@ -774,7 +884,7 @@ struct Record : virtual Handle {
         requires (!std::same_as<std::decay_t<U>, T> && (rest_accepts<T, U> || std::convertible_to<const U&, T>))
     const Record& set_at(std::string_view key, U&& v) const {
         if constexpr (std::same_as<T, Value>) ts_raw_js_object_set(h, key.data(), key.size(), Arg(v).h);
-        else if constexpr (is_variant<T>) ts_raw_js_object_set(h, key.data(), key.size(), In<T>(std::forward<U>(v)).h);
+        else if constexpr (is_union<T>) ts_raw_js_object_set(h, key.data(), key.size(), In<T>(std::forward<U>(v)).h);
         else if constexpr (std::same_as<T, std::string>) {
             using D = std::decay_t<U>;
             if constexpr (std::is_pointer_v<D>) {

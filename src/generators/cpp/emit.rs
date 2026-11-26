@@ -64,7 +64,26 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         })
         .collect();
     let classes: BTreeSet<&str> = m.classes.iter().map(|c| c.name.as_str()).collect();
-    // First the structs of the classes used, and of those the unions used
+    let union_names: BTreeSet<&str> = unions.iter().map(|u| u.name.as_str()).collect();
+    let callback_names: BTreeSet<&str> = m.callbacks.iter().map(|c| c.name.as_str()).collect();
+    fn direct_named_types(t: &Ty, union_names: &BTreeSet<&str>, out: &mut BTreeSet<String>) {
+        match t {
+            Ty::Obj(n) | Ty::NamedUnion(n) => {
+                out.insert(n.clone());
+            }
+            Ty::Generic(n, args) => {
+                out.insert(n.clone());
+                if union_names.contains(n.as_str()) {
+                    for a in args {
+                        direct_named_types(a, union_names, out);
+                    }
+                }
+            }
+            Ty::Nullable(inner, _) => direct_named_types(inner, union_names, out),
+            _ => {}
+        }
+    }
+    // First the structs of the classes, unions, and callbacks used, and of those the unions used
     // hold: declarations include only declarations, so each is complete
     // before any definition, however the full headers include each other.
     // Then the full headers.
@@ -78,7 +97,11 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 }
             }
         }
-        let decls = all.iter().filter(|t| classes.contains(t.as_str())).filter_map(|t| home.get(t)).map(|h| format!("{h}.decl.hpp"));
+        let decls = all
+            .iter()
+            .filter(|t| classes.contains(t.as_str()) || union_names.contains(t.as_str()) || callback_names.contains(t.as_str()))
+            .filter_map(|t| home.get(t))
+            .map(|h| format!("{h}.decl.hpp"));
         let full = types.iter().filter_map(|t| home.get(t)).map(|h| format!("{h}.hpp"));
         decls.chain(full).filter(|h| h != from).map(|h| include(from, &h)).collect()
     };
@@ -102,17 +125,88 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     let types = declarations(m, pkg_name, refs, &resolved_opaque, &cx) + &wrap_ns(ns, &namespaces);
     let mut out = vec![("ts_runtime.hpp".to_string(), RUNTIME.to_string()), ("ts_types.hpp".to_string(), types)];
 
-    // A union: its alternatives, and how to tell which one came back.
+    // A union: its struct (derived from `ts::Union<...>`), shared-field getters,
+    // and how to tell which alternative came back.
+    const UNION_RESERVED: &[&str] = &[
+        "index",
+        "emplace",
+        "swap",
+        "valueless_by_exception",
+        "is",
+        "as",
+        "get_if",
+        "variant",
+        "variant_type",
+    ];
     for u in unions {
-        let path = format!("{}.hpp", home[&u.name]);
+        let base = &home[&u.name];
+        let (decl_path, path) = (format!("{base}.decl.hpp"), format!("{base}.hpp"));
+        let shared: Vec<(String, Ty)> = if u.type_params.is_empty() {
+            m.shared_fields(u)
+                .into_iter()
+                .filter(|(p, _)| {
+                    let id = ident(p);
+                    id != u.name && !UNION_RESERVED.contains(&id.as_str())
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let mut direct_parts = BTreeSet::new();
+        u.parts.iter().for_each(|p| direct_named_types(p, &union_names, &mut direct_parts));
+        direct_parts.remove(&u.name);
+        let decl_includes: String = direct_parts
+            .iter()
+            .filter(|t| classes.contains(t.as_str()) || union_names.contains(t.as_str()) || callback_names.contains(t.as_str()))
+            .filter_map(|t| home.get(t))
+            .map(|h| include(&decl_path, &format!("{h}.decl.hpp")))
+            .collect();
+        let parts_list: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions, &cx)).collect();
+        let tpl = head(&u.type_params, false, &cx);
+        let base_type = format!("ts::Union<{}>", parts_list.join(", "));
+        let mut struct_body = format!(
+            "{tpl}struct {} : {base_type} {{\n    using {base_type}::Union;\n    using {base_type}::operator=;\n",
+            u.name
+        );
+        for (prop, ty) in &shared {
+            let ret = ty_out(ty, unions, &cx);
+            struct_body += &format!("    {ret} {}() const;\n", ident(prop));
+        }
+        struct_body += "};\n";
+        let decl_text = format!(
+            "// Generated.\n#pragma once\n{}{}\n{}",
+            include(&decl_path, "ts_types.hpp"),
+            decl_includes,
+            wrap_ns(ns, &struct_body)
+        );
+        out.push((decl_path.clone(), decl_text));
+
         let mut parts = BTreeSet::new();
         u.parts.iter().for_each(|p| named_types(p, &mut parts));
+        for (_, ty) in &shared {
+            named_types(ty, &mut parts);
+        }
         parts.remove(&u.name);
         let tag_raw = raw_fn(&raw_prefix, &format!("{}_tag", u.name));
         let tag_attr = import_attr(wasm_module, &format!("{}_tag", u.name));
-        let mut text = format!("// Generated.\n#pragma once\n{}{}", include(&path, "ts_types.hpp"), includes(&path, &parts));
+        let mut text = format!(
+            "// Generated.\n#pragma once\n{}{}{}",
+            include(&path, &decl_path),
+            include(&path, "ts_types.hpp"),
+            includes(&path, &parts)
+        );
         text += &format!("extern \"C\" {tag_attr} int32_t {tag_raw}(uint32_t, int32_t);\n");
         let mut decode_ns = String::new();
+        for (prop, ty) in &shared {
+            let ret = ty_out(ty, unions, &cx);
+            let mname = ident(prop);
+            decode_ns += &format!(
+                "inline {ret} {}::{mname}() const {{\n    uint32_t obj = std::visit([](const auto& x) -> uint32_t {{ return x.h; }}, this->variant());\n    return ts::from_handle<{ret}>(ts_raw_js_object_get(obj, {prop:?}, {}));\n}}\n",
+                u.name,
+                prop.len()
+            );
+        }
         let mut decoder_ext = String::new();
         if u.decodable() {
             let name = union_type(u);
@@ -170,7 +264,8 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     // A callback, made from a lambda. Its arguments are made only once the
     // lambda's type is known, so the types they name need not be complete yet.
     for c in &m.callbacks {
-        let path = format!("{}.hpp", home[&c.name]);
+        let base = &home[&c.name];
+        let (decl_path, path) = (format!("{base}.decl.hpp"), format!("{base}.hpp"));
         let mut used = BTreeSet::new();
         c.params.iter().for_each(|p| named_types(&p.1, &mut used));
         named_types(&c.ret, &mut used);
@@ -253,10 +348,16 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
                 constructors(name, false),
             ),
         );
-        let mut text = format!(
-            "// Generated.\n#pragma once\n{}{}\n{body}\n{}",
-            include(&path, "ts_types.hpp"),
+        let decl_text = format!(
+            "// Generated.\n#pragma once\n{}{}\n{body}",
+            include(&decl_path, "ts_types.hpp"),
             cb_imports.into_iter().collect::<String>(),
+        );
+        out.push((decl_path.clone(), decl_text));
+        let mut text = format!(
+            "// Generated.\n#pragma once\n{}{}{}",
+            include(&path, &decl_path),
+            include(&path, "ts_types.hpp"),
             includes(&path, &used)
         );
         if !op_header_defs.is_empty() {
@@ -588,10 +689,8 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         let bases: Vec<String> = if c.bases.is_empty() { vec!["virtual ts::Handle".into()] } else { c.bases.iter().map(|b| format!("virtual {}", ty_in(b, &cx))).collect() };
         let mut decl = format!("// Generated.\n#pragma once\n{}", include(&decl_path, "ts_types.hpp"));
         for a in &c.ancestors {
-            // A class's declaration; a callback's (a call signature) one file.
-            let class = m.classes.iter().any(|k| k.name == *a);
             if let Some(h) = home.get(a) {
-                decl += &include(&decl_path, &format!("{h}{}", if class { ".decl.hpp" } else { ".hpp" }));
+                decl += &include(&decl_path, &format!("{h}.decl.hpp"));
             }
         }
         let class_doc = c.doc.as_deref().map(|d| comment(d, "///", "", Style::C)).unwrap_or_default();
@@ -721,6 +820,9 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         out.push((format!("{module}.hpp"), format!("// Generated.\n#pragma once\n{includes}")));
         all += &format!("#include \"{inc_prefix}{module}.hpp\"\n");
     }
+    for u in unions {
+        all += &format!("#include \"{inc_prefix}{}.hpp\"\n", home[&u.name]);
+    }
     out.push(("bindings.hpp".into(), all.clone()));
     if pkg_name != "bindings" {
         out.push((format!("{pkg_name}.hpp"), all));
@@ -735,7 +837,7 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         .chain(m.num_enums.iter().map(|(n, _)| n.as_str()))
         .chain(m.unions.iter().filter(|u| u.type_params.is_empty()).map(|u| u.name.as_str()))
         .chain(resolved_opaque.keys().map(String::as_str))
-        .filter(|n| !n.is_empty() && !n.contains(':') && !n.starts_with("ts_bases_of_") && !is_builtin_cpp_type(n))
+        .filter(|n| !n.is_empty() && !n.contains(':') && !n.starts_with("ts_bases_of_") && !n.starts_with("ts_parts_") && !is_builtin_cpp_type(n))
         .map(str::to_string)
         .collect();
     let entry = if pkg_name != "bindings" { format!("{pkg_name}.hpp") } else { "bindings.hpp".into() };

@@ -33,14 +33,14 @@ TS_EXPORT(start) void start() {
     auto ev_shutdown = ts::Value::string("shutdown");
     auto ev_idle = ts::Value::string("idle");
 
-    ts::Scoped<any_array_fn> on_metric = [&](ts::Array<> args) {
+    ts::Scoped<Listener> on_metric = [&](ts::Array<> args) {
         metric_calls++;
         if (args.size() > 0) {
             metric_sum += args[0].to_number();
         }
     };
-    ts::Scoped<any_array_fn> on_once = [&](ts::Array<>) { once_calls++; };
-    ts::Scoped<any_array_fn> on_shutdown = [&](ts::Array<>) { shutdown_calls++; };
+    ts::Scoped<Listener> on_once = [&](ts::Array<>) { once_calls++; };
+    ts::Scoped<Listener> on_shutdown = [&](ts::Array<>) { shutdown_calls++; };
 
     emitter.on(ev_metric, on_metric);
     emitter.once(ev_metric, on_once);

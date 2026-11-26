@@ -1,7 +1,7 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use marked::{MarkedOptions, StringPromise};
+use marked::{Marked, MarkedExtension};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -18,11 +18,8 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn render_with(src: &str, opts: &MarkedOptions) -> String {
-    match marked::marked_with_opt_marked_options_with(src, opts) {
-        StringPromise::String(s) => s,
-        StringPromise::JsPromise(_) => String::new(),
-    }
+fn render_with(src: &str, ext: &MarkedExtension) -> String {
+    Marked::new([ext.clone()]).parse(src)
 }
 
 fn make_pane(doc: &Document, title: &str, html: &str) -> HTMLElement {
@@ -49,8 +46,8 @@ pub extern "C" fn start() {
     append(&app, head);
 
     let gfm_src = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n";
-    let gfm_on = MarkedOptions::default().with_gfm(true);
-    let gfm_off = MarkedOptions::default().with_gfm(false);
+    let gfm_on = MarkedExtension::default().with_gfm(true);
+    let gfm_off = MarkedExtension::default().with_gfm(false);
 
     let gfm_sec = make_el(&doc, "div", "section", None);
     append(
@@ -70,8 +67,8 @@ pub extern "C" fn start() {
     append(&app, gfm_sec);
 
     let breaks_src = "Line one\nLine two\nLine three";
-    let br_off = MarkedOptions::default().with_breaks(false);
-    let br_on = MarkedOptions::default().with_breaks(true);
+    let br_off = MarkedExtension::default().with_breaks(false);
+    let br_on = MarkedExtension::default().with_breaks(true);
 
     let br_sec = make_el(&doc, "div", "section", None);
     append(

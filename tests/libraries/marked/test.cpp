@@ -56,6 +56,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     std::string types;
     for (const Token& v : list) types += token_type(v) + " ";
     CHECK(types == "heading space paragraph space list space code space table ");
+    for (const Token& v : list) CHECK(v.type() == token_type(v));
 
     Tokens_Heading heading = std::get<Tokens_Heading>(*list.at(0));
     CHECK(heading.depth() == 1);

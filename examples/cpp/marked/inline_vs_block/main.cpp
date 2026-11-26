@@ -42,8 +42,8 @@ TS_EXPORT(start) void start() {
         row.appendChild(make_el(doc, "pre", "src", s));
 
         dom::HTMLElement grid = make_el(doc, "div", "grid", "");
-        std::string block_html = std::get<std::string>(md.parse()(s));
-        std::string inl_html = std::get<std::string>(md.parseInline()(s));
+        std::string block_html = md.parse(s);
+        std::string inl_html = md.parseInline(s);
         grid.appendChild(make_result_card(doc, "Block (parse)", block_html));
         grid.appendChild(make_result_card(doc, "Inline (parseInline)", inl_html));
         row.appendChild(grid);

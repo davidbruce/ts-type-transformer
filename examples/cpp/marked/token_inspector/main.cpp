@@ -51,11 +51,8 @@ TS_EXPORT(start) void start() {
     auto tbody = make_el(doc, "tbody", "", "");
     int idx = 0;
     for (const marked::Token& v : tokens) {
-        auto [kind, raw] = std::visit([](const auto& x) -> std::pair<std::string, std::string> {
-            using X = std::decay_t<decltype(x)>;
-            if constexpr (std::is_same_v<X, marked::Tokens_Generic>) return { x.type(), x.raw() };
-            else return { std::string(X::type), x.raw() };
-        }, v);
+        std::string kind = v.type();
+        std::string raw = v.raw();
         dom::HTMLElement tr = make_el(doc, "tr", "", "");
         tr.appendChild(make_el(doc, "td", "", std::to_string(idx)));
         tr.appendChild(make_el(doc, "td", "", kind));

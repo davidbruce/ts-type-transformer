@@ -19,10 +19,10 @@ fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsValue {
 }
 
 fn make_reactivity() -> JsValue {
-    let writable = TableReactivityBindingsCreateWritableAtom::new(|initial: JsValue, _| {
+    let writable = CreateWritableAtomFn::new(|initial: JsValue, _| {
         let value = Rc::new(RefCell::new(initial));
         let (read, write) = (value.clone(), value);
-        let get = ColumnColumnFilteringGetFilterValue::new(move || read.borrow().clone());
+        let get = GetFilterValueFn::new(move || read.borrow().clone());
         atom(
             JsValue::from(&get),
             Some(Box::new(move |v| {
@@ -33,14 +33,14 @@ fn make_reactivity() -> JsValue {
         .unchecked_into::<Atom<JsValue>>()
     });
     let readonly =
-        TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| {
+        CreateReadonlyAtomFn::new(|compute: VoidToTFn<JsValue>, _| {
             atom(JsValue::from(&compute), None).unchecked_into::<ReadonlyAtom<JsValue>>()
         });
-    let untrack = TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| f.call());
+    let untrack = UntrackFn::new(|f: VoidToTFn<JsValue>| f.call());
     let run_it = FnFn::new(|f: VoidFn| {
         f.call();
     });
-    let noop = TableReactivityBindingsAddSubscription::new(|_| {});
+    let noop = AddSubscriptionFn::new(|_| {});
     let bindings = TableReactivityBindings::default()
         .with_create_options_store(false)
         .with_wrap_external_atoms(false)
@@ -97,7 +97,7 @@ fn render(st: &State, label: &str) {
     let mut html = String::from("<table><thead><tr>");
     for col in cols.iter() {
         let cid = col.id();
-        let hdr = js::unchecked_cast::<MakeObjectMapResult<JsValue>>(&col.column_def())
+        let hdr = js::unchecked_cast::<JsRecord<JsValue>>(&col.column_def())
             .at("header")
             .expect("missing column header")
             .as_string();
@@ -106,9 +106,9 @@ fn render(st: &State, label: &str) {
         esc_html(&hdr, &mut html);
         let csort: ColumnRowSorting<JsValue> = js::unchecked_cast(&col);
         match csort.get_is_sorted() {
-            BooleanOrSortDirection::SortDirection(SortDirection::Asc) => html.push_str(" &#9650;"),
-            BooleanOrSortDirection::SortDirection(SortDirection::Desc) => html.push_str(" &#9660;"),
-            _ => {}
+            Some(SortDirection::Asc) => html.push_str(" &#9650;"),
+            Some(SortDirection::Desc) => html.push_str(" &#9660;"),
+            None => {}
         }
         html.push_str("</th>");
     }

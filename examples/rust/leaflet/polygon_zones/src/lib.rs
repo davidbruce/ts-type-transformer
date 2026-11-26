@@ -30,7 +30,7 @@ pub extern "C" fn start() {
         .with_marker_zoom_animation(false);
     let m = map_with("map", &m_opts);
 
-    let mid_pts = JsArray::<PolylineSetLatLngsLatlngs>::from([
+    let mid_pts = JsArray::<PolygonLatlngs>::from([
         lat_lng(47.2, 7.6),
         lat_lng(48.0, 8.6),
         lat_lng(47.5, 9.7),
@@ -39,7 +39,7 @@ pub extern "C" fn start() {
         lat_lng(46.9, 7.3),
     ]);
 
-    let core_pts = JsArray::<PolylineSetLatLngsLatlngs>::from([
+    let core_pts = JsArray::<PolygonLatlngs>::from([
         lat_lng(47.35, 8.2),
         lat_lng(47.55, 8.75),
         lat_lng(47.15, 9.0),

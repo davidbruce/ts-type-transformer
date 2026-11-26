@@ -7,103 +7,14 @@ use super::{ident, import_attr, is_builtin_cpp_type, raw_fn, Ctx, ProjectRef};
 use super::super::comments::{Style, comment};
 use super::super::model::{EnumDoc, Model, NamedUnion, TParam, Ty};
 
-// Whether `u` declares the decoder of its variant: unions with the same
-// members are the same type, and the first one does.
-pub(super) fn decoder_owner(u: &NamedUnion, unions: &[NamedUnion], cx: &Ctx) -> bool {
-    // As C++ sees it, through other unions' aliases: `ts::Array<OptionId>`
-    // and `ts::Array<OrdinalRawValue>` are one type where both are one variant.
-    let aliases: HashMap<&str, String> = unions.iter().filter(|o| o.type_params.is_empty()).map(|o| (o.name.as_str(), format!("std::variant<{}>", o.parts.iter().map(|p| ty_out(p, unions, cx)).collect::<Vec<_>>().join(", ")))).collect();
-    let expand = |text: String| {
-        let mut out = text;
-        for _ in 0..8 {
-            let mut next = String::new();
-            let mut word = String::new();
-            for c in out.chars().chain(['\0']) {
-                if c.is_alphanumeric() || c == '_' {
-                    word.push(c);
-                    continue;
-                }
-                next += aliases.get(word.as_str()).map_or(word.as_str(), String::as_str);
-                word.clear();
-                if c != '\0' {
-                    next.push(c);
-                }
-            }
-            if next == out {
-                break;
-            }
-            out = next;
-        }
-        out
-    };
-    let key = |u: &NamedUnion| u.parts.iter().map(|p| expand(ty_out(p, unions, cx))).collect::<Vec<_>>();
-    u.type_params.is_empty() && u.decodable() && unions.iter().find(|o| o.type_params.is_empty() && o.decodable() && key(o) == key(u)).is_some_and(|o| o.name == u.name)
+// Every non-generic decodable union struct is a distinct C++ type and owns its decoder.
+pub(super) fn decoder_owner(u: &NamedUnion, _unions: &[NamedUnion], _cx: &Ctx) -> bool {
+    u.type_params.is_empty() && u.decodable()
 }
 
-pub(super) fn decoder_guard_id(u: &NamedUnion, m: &Model, pkg_name: &str, resolved_opaque: &HashMap<String, (usize, String)>, refs: &[ProjectRef], cx: &Ctx) -> String {
-    let unions = &m.unions;
-    let aliases: HashMap<&str, String> = unions
-        .iter()
-        .filter(|o| o.type_params.is_empty())
-        .map(|o| (o.name.as_str(), format!("std::variant<{}>", o.parts.iter().map(|p| ty_out(p, unions, cx)).collect::<Vec<_>>().join(", "))))
-        .collect();
-    let mut expanded = format!("std::variant<{}>", u.parts.iter().map(|p| ty_out(p, unions, cx)).collect::<Vec<_>>().join(", "));
-    for _ in 0..8 {
-        let mut next = String::new();
-        let mut word = String::new();
-        for c in expanded.chars().chain(['\0']) {
-            if c.is_alphanumeric() || c == '_' {
-                word.push(c);
-                continue;
-            }
-            next += aliases.get(word.as_str()).map_or(word.as_str(), String::as_str);
-            word.clear();
-            if c != '\0' {
-                next.push(c);
-            }
-        }
-        if next == expanded {
-            break;
-        }
-        expanded = next;
-    }
-    let local_types: HashSet<&str> = m
-        .classes
-        .iter()
-        .map(|c| c.name.as_str())
-        .chain(m.callbacks.iter().map(|c| c.name.as_str()))
-        .chain(m.enums.iter().map(|e| e.0.as_str()))
-        .chain(m.num_enums.iter().map(|e| e.0.as_str()))
-        .chain(m.opaque.iter().map(String::as_str).filter(|n| !matches!(*n, "Promise" | "PromiseLike")))
-        .collect();
-    let mut canonical = String::new();
-    let mut word = String::new();
-    let mut preceded_by_colon = false;
-    for c in expanded.chars().chain(['\0']) {
-        if c.is_alphanumeric() || c == '_' {
-            word.push(c);
-            continue;
-        }
-        if !word.is_empty() {
-            let tok = word.as_str();
-            let is_std = matches!(tok, "std" | "variant" | "string" | "optional" | "double" | "bool" | "ts" | "Array" | "Record" | "Tuple" | "Value" | "Promise" | "PromiseLike");
-            if preceded_by_colon || is_std {
-                canonical.push_str(tok);
-            } else if let Some((idx, orig)) = resolved_opaque.get(tok) {
-                canonical += &format!("::{}::{orig}", refs[*idx].pkg_name);
-            } else if pkg_name != "bindings" && local_types.contains(tok) {
-                canonical += &format!("::{pkg_name}::{tok}");
-            } else {
-                canonical.push_str(tok);
-            }
-            word.clear();
-        }
-        if c != '\0' {
-            preceded_by_colon = c == ':';
-            canonical.push(c);
-        }
-    }
-    format!("{:016x}", crate::fnv1a64(&canonical))
+pub(super) fn decoder_guard_id(u: &NamedUnion, _m: &Model, pkg_name: &str, _resolved_opaque: &HashMap<String, (usize, String)>, _refs: &[ProjectRef], _cx: &Ctx) -> String {
+    let ns_prefix = if pkg_name == "bindings" { String::new() } else { format!("{pkg_name}::") };
+    format!("{:016x}", crate::fnv1a64(&format!("::{ns_prefix}{}", u.name)))
 }
 
 // An enum with its documentation: on one line, but where its members have some.
@@ -313,19 +224,52 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
         .chain(m.funcs.iter().map(|f| f.name.clone()))
         .collect();
     for u in unions {
-        let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions, cx)).collect();
-        let mut text = format!("{}using {} = std::variant<{}>;\n", head(&u.type_params, true, cx), u.name, parts.join(", "));
+        let mut decl_text = format!("{}struct {};\n", head(&u.type_params, true, cx), u.name);
         if u.type_params.is_empty() {
             for (alias, _) in m.type_aliases.iter().filter(|(_, to)| *to == u.name) {
                 if !is_builtin_cpp_type(alias) && ident(alias) == *alias && cpp_taken.insert(alias.clone()) {
-                    text += &format!("using {alias} = {};\n", u.name);
+                    decl_text += &format!("using {alias} = {};\n", u.name);
                 }
             }
         }
+        let mut decl_needs = BTreeSet::new();
+        param_types(&u.type_params, &mut decl_needs);
+        decl_needs.remove(&u.name);
+        templates.push((u.name.clone(), decl_text, decl_needs));
+
+        let parts: Vec<String> = u.parts.iter().map(|p| ty_out(p, unions, cx)).collect();
+        let tpl_head = if u.type_params.is_empty() {
+            String::new()
+        } else {
+            format!("template <{}>\n", u.type_params.iter().map(|p| format!("class {}", p.name)).collect::<Vec<_>>().join(", "))
+        };
+        let (spec_head, spec_args) = if u.type_params.is_empty() {
+            ("template <>\n".to_string(), String::new())
+        } else {
+            let ps: Vec<String> = (0..u.type_params.len()).map(|i| format!("B{i}__")).collect();
+            (
+                format!("template <{}>\n", ps.iter().map(|p| format!("class {p}")).collect::<Vec<_>>().join(", ")),
+                format!("<{}>", ps.join(", ")),
+            )
+        };
+        let mut parts_text = if let Some(pkg) = ns {
+            format!(
+                "{tpl_head}using ts_parts_{0}_ = std::variant<{1}>;\n\
+                 }}  // namespace {pkg}\n\
+                 {spec_head}struct ts::union_parts<::{pkg}::{0}{spec_args}> {{\n    using type = ::{pkg}::ts_parts_{0}_{spec_args};\n}};\n\
+                 namespace {pkg} {{\n",
+                u.name, parts.join(", ")
+            )
+        } else {
+            format!(
+                "{tpl_head}using ts_parts_{0}_ = std::variant<{1}>;\n\
+                 {spec_head}struct ts::union_parts<::{0}{spec_args}> {{\n    using type = ::ts_parts_{0}_{spec_args};\n}};\n",
+                u.name, parts.join(", ")
+            )
+        };
         // Defined with the union, used wherever one comes back.
         if u.decodable() {
-            text += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false, cx), union_type(u), u.name);
-            // Unions with the same members are the same variant: one decoder.
+            parts_text += &format!("{}{} decode_{}(uint32_t h);\n", head(&u.type_params, false, cx), union_type(u), u.name);
             if decoder_owner(u, unions, cx) {
                 let guard = decoder_guard_id(u, m, pkg_name, resolved_opaque, refs, cx);
                 let spec = format!(
@@ -335,21 +279,19 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
                     u.name
                 );
                 if let Some(pkg) = ns {
-                    text += &format!("}}  // namespace {pkg}\n{spec}namespace {pkg} {{\n");
+                    parts_text += &format!("}}  // namespace {pkg}\n{spec}namespace {pkg} {{\n");
                 } else {
-                    text += &spec;
+                    parts_text += &spec;
                 }
             }
         }
         let mut needs = BTreeSet::new();
         u.parts.iter().for_each(|p| named_types(p, &mut needs));
         param_types(&u.type_params, &mut needs);
-        needs.remove(&u.name);
-        // Naming a constrained template (`Path<PathProps>`) checks its
-        // constraint there: the bases of what it names come first.
+        needs.insert(u.name.clone());
         let bases: Vec<String> = needs.iter().filter(|n| m.classes.iter().any(|c| c.name == **n && !c.bases.is_empty())).map(|n| format!("bases:{n}")).collect();
         needs.extend(bases);
-        templates.push((u.name.clone(), text, needs));
+        templates.push((format!("union_parts:{}", u.name), parts_text, needs));
     }
     // What each type extends, for constraints: see `ts::bases`. After the
     // types its bases name, theirs first.

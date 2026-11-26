@@ -42,7 +42,7 @@ TS_EXPORT(start) void start() {
     dom::HTMLElement out_card = make_el(doc, "div", "card", "");
     out_card.appendChild(make_el(doc, "div", "label", "Rendered HTML"));
     dom::HTMLElement md_out = make_el(doc, "div", "md-out", "");
-    std::string html = marked::marked(markdown_src, marked::marked_options_no_async::create());
+    std::string html = marked::marked(markdown_src);
     md_out.innerHTML(html);
     out_card.appendChild(md_out);
 

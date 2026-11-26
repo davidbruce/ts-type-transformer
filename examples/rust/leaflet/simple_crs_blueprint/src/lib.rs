@@ -59,7 +59,7 @@ pub extern "C" fn start() {
         rectangle_with(&b, &box_opts("#404040", 1.5, None, fill, 0.85)).add_to(&m);
     }
 
-    let atrium = JsArray::<PolylineSetLatLngsLatlngs>::from([
+    let atrium = JsArray::<PolygonLatlngs>::from([
         lat_lng(50.0, 64.0),
         lat_lng(74.0, 80.0),
         lat_lng(50.0, 96.0),

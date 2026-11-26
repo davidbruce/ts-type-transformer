@@ -1,7 +1,7 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use katex::{KatexOptions, KatexOptionsMacros};
+use katex::{JsRecord, JsValue, KatexOptions};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -31,7 +31,7 @@ pub extern "C" fn start() {
     );
     append(&app, head);
 
-    let macros = KatexOptionsMacros::default();
+    let macros = JsRecord::<JsValue>::new();
     macros.set_at(r"\RR", r"\mathbb{R}");
     macros.set_at(r"\NN", r"\mathbb{N}");
     macros.set_at(r"\dd", r"\mathrm{d}");

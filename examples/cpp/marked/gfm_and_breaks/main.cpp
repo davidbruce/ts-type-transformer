@@ -28,26 +28,26 @@ TS_EXPORT(start) void start() {
     app.appendChild(head);
 
     std::string gfm_src = "| Flag | Mode |\n|---|---|\n| gfm | table |\n\n~~deprecated~~\n";
-    auto gfm_on = marked::marked_options_no_async({.gfm = true});
-    auto gfm_off = marked::marked_options_no_async({.gfm = false});
+    auto gfm_on = marked::Marked::create({marked::MarkedExtension({.gfm = true})});
+    auto gfm_off = marked::Marked::create({marked::MarkedExtension({.gfm = false})});
 
     auto gfm_sec = make_el(doc, "div", "section", "");
     gfm_sec.appendChild(make_el(doc, "div", "label", "GitHub Flavored Markdown (gfm)"));
     auto gfm_grid = make_el(doc, "div", "grid", "");
-    gfm_grid.appendChild(make_pane(doc, "gfm: true", marked::marked(gfm_src, gfm_on)));
-    gfm_grid.appendChild(make_pane(doc, "gfm: false", marked::marked(gfm_src, gfm_off)));
+    gfm_grid.appendChild(make_pane(doc, "gfm: true", gfm_on.parse(gfm_src)));
+    gfm_grid.appendChild(make_pane(doc, "gfm: false", gfm_off.parse(gfm_src)));
     gfm_sec.appendChild(gfm_grid);
     app.appendChild(gfm_sec);
 
     std::string breaks_src = "Line one\nLine two\nLine three";
-    auto br_off = marked::marked_options_no_async({.breaks = false});
-    auto br_on = marked::marked_options_no_async({.breaks = true});
+    auto br_off = marked::Marked::create({marked::MarkedExtension({.breaks = false})});
+    auto br_on = marked::Marked::create({marked::MarkedExtension({.breaks = true})});
 
     dom::HTMLElement br_sec = make_el(doc, "div", "section", "");
     br_sec.appendChild(make_el(doc, "div", "label", "Soft Line Breaks (breaks)"));
     dom::HTMLElement br_grid = make_el(doc, "div", "grid", "");
-    br_grid.appendChild(make_pane(doc, "breaks: false", marked::marked(breaks_src, br_off)));
-    br_grid.appendChild(make_pane(doc, "breaks: true", marked::marked(breaks_src, br_on)));
+    br_grid.appendChild(make_pane(doc, "breaks: false", br_off.parse(breaks_src)));
+    br_grid.appendChild(make_pane(doc, "breaks: true", br_on.parse(breaks_src)));
     br_sec.appendChild(br_grid);
     app.appendChild(br_sec);
 }

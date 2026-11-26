@@ -22,7 +22,7 @@ static std::string to_lower_ascii(std::string s) {
 
 static Sch make_schema() {
     NodeSpec doc({.content = "block+"});
-    MarkSpec_attrs hattrs = MarkSpec_attrs::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
+    ts::Record<AttributeSpec> hattrs = ts::Record<AttributeSpec>::create().set_at("level", AttributeSpec::create().default_(ts::Value::number(2)));
 
     NodeSpec heading({
         .content = "inline*",
@@ -46,7 +46,7 @@ static Sch make_schema() {
 
     NodeSpec text({.group = "inline"});
 
-    auto nodes = SchemaSpec_nodes::create()
+    auto nodes = ts::Record<NodeSpec>::create()
         .set_at("doc", doc)
         .set_at("heading", heading)
         .set_at("paragraph", para)
@@ -56,7 +56,7 @@ static Sch make_schema() {
     auto make_mark = [](const char* tag) {
         return MarkSpec({.toDOM = [tag](Mark, bool) { return hole_spec(tag); }});
     };
-    auto marks = SchemaSpec_marks::create()
+    auto marks = ts::Record<MarkSpec>::create()
         .set_at("strong", make_mark("strong"))
         .set_at("code", make_mark("code"));
 
@@ -195,7 +195,7 @@ TS_EXPORT(start) void start() {
         },
     });
 
-    app->view = EditorView(app->doc.getElementById("editor")->unsafe_as<Node_2>(), props);
+    app->view = EditorView(app->doc.getElementById("editor")->unsafe_as<DomNode>(), props);
     sync_meta(app, app->view.state());
 
     const char* ids[5] = { "btn-0", "btn-1", "btn-2", "btn-3", "btn-4" };

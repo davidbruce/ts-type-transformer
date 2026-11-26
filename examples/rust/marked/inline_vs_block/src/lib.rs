@@ -1,7 +1,7 @@
 #![no_main]
 
 use dom::{Document, HTMLElement};
-use marked::{Marked, MarkedExtension, StringPromise};
+use marked::{Marked, MarkedExtension};
 
 fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElement {
     let el = doc.create_element(tag, None);
@@ -16,13 +16,6 @@ fn make_el(doc: &Document, tag: &str, cls: &str, text: Option<&str>) -> HTMLElem
 
 fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
-}
-
-fn html_of(r: StringPromise) -> String {
-    match r {
-        StringPromise::String(s) => s,
-        StringPromise::JsPromise(_) => String::new(),
-    }
 }
 
 fn make_result_card(doc: &Document, title: &str, html: &str) -> HTMLElement {
@@ -68,8 +61,8 @@ pub extern "C" fn start() {
         append(&row, make_el(&doc, "pre", "src", Some(s)));
 
         let grid = make_el(&doc, "div", "grid", None);
-        let block_html = html_of(m.parse().invoke_2(s));
-        let inl_html = html_of(m.parse_inline().invoke_2(s));
+        let block_html = m.parse(s);
+        let inl_html = m.parse_inline(s);
         append(&grid, make_result_card(&doc, "Block (parse)", &block_html));
         append(
             &grid,

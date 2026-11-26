@@ -17,13 +17,6 @@ fn append(parent: &HTMLElement, child: HTMLElement) {
     parent.append_child(child);
 }
 
-fn unwrap_html(r: marked::StringPromise) -> String {
-    match r {
-        marked::StringPromise::String(s) => s,
-        marked::StringPromise::JsPromise(_) => String::new(),
-    }
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn start() {
     let doc = dom::document();
@@ -69,7 +62,7 @@ pub extern "C" fn start() {
         make_el(&doc, "div", "label", Some("Rendered HTML")),
     );
     let md_out = make_el(&doc, "div", "md-out", None);
-    let html = unwrap_html(marked::marked_with_opt_marked_options(markdown_src));
+    let html = marked::marked(markdown_src);
     md_out.set_inner_html(&html);
     append(&out_card, md_out);
 

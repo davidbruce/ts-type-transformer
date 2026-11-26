@@ -21,23 +21,18 @@ TS_EXPORT(start) void start() {
     std::vector<std::string> visited;
 
     using Mk = marked::Marked;
-    auto rend = marked::MarkedExtension_renderer({.heading = [](ts::Tuple<marked::Tokens_Heading> args) {
-        auto h = args.get<0>();
+    auto rend = marked::RendererObject({.heading = [](marked::Tokens_Heading h) {
         auto d = std::to_string(int(h.depth()));
         return std::string("<h") + d + " class=\"wire-h\">\xC2\xA7 " + h.text() + "</h" + d + ">\n";
     }});
-    ts::Scoped<marked::MarkedExtension_walkTokens> on_token = [&](const marked::Token& token) {
-        std::visit([&](const auto& x) {
-            using X = std::decay_t<decltype(x)>;
-            if constexpr (std::is_same_v<X, marked::Tokens_Generic>) visited.push_back(x.type());
-            else visited.push_back(std::string(X::type));
-        }, token);
+    ts::Scoped<marked::MarkedExtensionWalkTokensFn> on_token = [&](const marked::Token& token) {
+        visited.push_back(token.type());
     };
     auto ext = marked::MarkedExtension({.renderer = rend, .walkTokens = on_token});
 
     Mk custom_m = Mk(ext);
-    std::string def_html = marked::marked(md, marked::marked_options_no_async::create());
-    std::string cust_html = std::get<std::string>(custom_m.parse()(md));
+    std::string def_html = marked::marked(md);
+    std::string cust_html = custom_m.parse(md);
 
     dom::HTMLElement head = make_el(doc, "div", "head", "");
     head.appendChild(make_el(doc, "h1", "", "Marked Custom Renderer & Walker (C++)"));

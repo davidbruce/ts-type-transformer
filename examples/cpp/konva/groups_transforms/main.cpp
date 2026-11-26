@@ -7,7 +7,7 @@
 using namespace konva;
 
 static Line make_line(double x1, double y1, double x2, double y2, const char* stroke, double sw) {
-    return Line::create({{.stroke = stroke, .strokeWidth = sw, .points = ts::Array<double>::of(x1, y1, x2, y2)}});
+    return Line::create({{.stroke = stroke, .strokeWidth = sw, .points = {x1, y1, x2, y2}}});
 }
 
 static Rect make_rect(double x, double y, double w, double h, const char* fill, const char* stroke, double sw) {
@@ -50,7 +50,7 @@ TS_EXPORT(start) void start() {
     Group group_b = Group::create({{.x = 340, .y = 75, .rotation = 24}});
     group_b.add(
         make_rect(0, 0, 150, 110, "#efefef", "#111111", 2),
-        Rect::create({{.x = 22, .y = 22, .width = 106, .height = 66, .fill = "#ffffff", .stroke = "#555555", .strokeWidth = 1.5, .dash = ts::Array<double>::of(4.0, 3.0)}}),
+        Rect::create({{.x = 22, .y = 22, .width = 106, .height = 66, .fill = "#ffffff", .stroke = "#555555", .strokeWidth = 1.5, .dash = {4.0, 3.0}}}),
         Circle::create({{.x = 75, .y = 55, .fill = "#404040", .radius = 14}}),
         make_text(10, 8, "Group B \xC2\xB7 24\xC2\xB0", 11, "#111111")
     );
