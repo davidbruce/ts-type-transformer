@@ -44,7 +44,7 @@ fn mk_std(
   diff: Float,
   spec: Float,
   power: Float,
-) -> bt.StandardMaterialProps(Nil) {
+) -> bt.StandardMaterialProps {
   let mat = b.create_standard_material()
   standard_material_props.set_diffuse_color(mat, #(diff, diff, diff))
   standard_material_props.set_specular_color(mat, #(spec, spec, spec))

@@ -81,13 +81,13 @@ fn layout_name(mode: Int) -> String {
 }
 
 fn update_towers(
-  inst: t.InstancedMesh(Nil),
+  inst: t.InstancedMesh,
   mode: Int,
-  pos: t.Vector3(Nil),
-  rot_q: t.Quaternion(Nil),
-  scale: t.Vector3(Nil),
-  mtx: t.Matrix4(Nil),
-  axis_y: t.Vector3(Nil),
+  pos: t.Vector3,
+  rot_q: t.Quaternion,
+  scale: t.Vector3,
+  mtx: t.Matrix4,
+  axis_y: t.Vector3,
   col: t.Color(Nil),
 ) -> Float {
   int.range(from: 0, to: 100, with: 0.0, run: fn(max_h, idx) {

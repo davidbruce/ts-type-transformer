@@ -3,9 +3,9 @@
 // disposal. Every check must hold.
 import bindings/areas/echarts
 import bindings/areas/echarts/bar_series_option
-import bindings/areas/echarts/e_charts_core_option as raw
-import bindings/areas/echarts/e_charts_init_opts
-import bindings/areas/echarts/e_charts_type
+import bindings/areas/echarts/echarts_core_option as raw
+import bindings/areas/echarts/echarts_init_opts
+import bindings/areas/echarts/echarts_type
 import bindings/areas/echarts/ec_unit_option as unit
 import bindings/areas/echarts/eventful
 import bindings/areas/echarts/model_finder
@@ -47,22 +47,22 @@ pub fn main() {
     echarts.init_with(
       Some(test_page.element("chart")),
       dynamic.nil(),
-      e_charts_init_opts.create(),
+      echarts_init_opts.create(),
     )
   let passed =
-    check(!e_charts_type.is_disposed(chart), "not disposed")
+    check(!echarts_type.is_disposed(chart), "not disposed")
     + check(
-      e_charts_type.get_width(chart) == 400.0
-        && e_charts_type.get_height(chart) == 300.0,
+      echarts_type.get_width(chart) == 400.0
+        && echarts_type.get_height(chart) == 300.0,
       "size of the element",
     )
-    + check(string.length(e_charts_type.get_id(chart)) > 0, "an id")
+    + check(string.length(echarts_type.get_id(chart)) > 0, "an id")
     + check(
       option.is_some(echarts.get_instance_by_dom(test_page.element("chart"))),
       "found by its element",
     )
     + check(
-      option.is_some(echarts.get_instance_by_id(e_charts_type.get_id(chart))),
+      option.is_some(echarts.get_instance_by_id(echarts_type.get_id(chart))),
       "found by its id",
     )
 
@@ -94,10 +94,10 @@ pub fn main() {
     "title",
     object([#("text", dynamic.string("Sales"))]),
   )
-  e_charts_type.set_option(chart, option_object)
+  echarts_type.set_option(chart, option_object)
 
   // Read back.
-  let read = e_charts_type.get_option(chart)
+  let read = echarts_type.get_option(chart)
   let first_series = fn() {
     let assert Ok([s]) =
       decode.run(unit.get_at(read, "series"), decode.list(decode.dynamic))
@@ -132,7 +132,7 @@ pub fn main() {
   let on_x = model_finder_object.create()
   model_finder_object.set_x_axis_index(on_x, runtime.dynamic(0.0))
   let x_of = fn(c) {
-    e_charts_type.convert_to_pixel_of(
+    echarts_type.convert_to_pixel_of(
       chart,
       model_finder.model_finder_object(on_x),
       scale_data_value.String(c),
@@ -141,7 +141,7 @@ pub fn main() {
   let on_y = model_finder_object.create()
   model_finder_object.set_y_axis_index(on_y, runtime.dynamic(0.0))
   let y_of = fn(v) {
-    e_charts_type.convert_to_pixel_model_finder_object(chart, on_y, v)
+    echarts_type.convert_to_pixel_model_finder_object(chart, on_y, v)
   }
   let passed =
     passed
@@ -164,7 +164,7 @@ pub fn main() {
   let seen = cell.new(0)
   let _ =
     eventful.on(
-      e_charts_type.upcast(chart) |> chart_as_eventful,
+      chart |> chart_as_eventful,
       "highlight",
       fn(_) {
         cell.set(seen, cell.get(seen) + 1)
@@ -172,13 +172,13 @@ pub fn main() {
       },
     )
   let action = payload_of("highlight")
-  e_charts_type.dispatch_action(chart, action)
+  echarts_type.dispatch_action(chart, action)
   let passed =
     passed
     + check(cell.get(seen) >= 1, "the highlight event reached the listener")
 
   // A data URL of the rendered chart.
-  let url = e_charts_type.get_data_url(chart)
+  let url = echarts_type.get_data_url(chart)
   let passed =
     passed
     + check(string.starts_with(url, "data:image/png;base64,"), "get_data_url")
@@ -187,18 +187,18 @@ pub fn main() {
   let size = resize_opts.create()
   resize_opts.set_width(size, 200.0)
   resize_opts.set_height(size, 150.0)
-  e_charts_type.resize_with(chart, size)
+  echarts_type.resize_with(chart, size)
   let passed =
     passed
     + check(
-      e_charts_type.get_width(chart) == 200.0
-        && e_charts_type.get_height(chart) == 150.0,
+      echarts_type.get_width(chart) == 200.0
+        && echarts_type.get_height(chart) == 150.0,
       "resized",
     )
 
   // Cleared, then disposed.
-  e_charts_type.clear(chart)
-  let after_clear = e_charts_type.get_option(chart)
+  echarts_type.clear(chart)
+  let after_clear = echarts_type.get_option(chart)
   let passed =
     passed
     + check(
@@ -209,10 +209,10 @@ pub fn main() {
         == Ok([]),
       "clear removes the series",
     )
-  e_charts_type.dispose(chart)
+  echarts_type.dispose(chart)
   let passed =
     passed
-    + check(e_charts_type.is_disposed(chart), "disposed")
+    + check(echarts_type.is_disposed(chart), "disposed")
     + check(
       option.is_none(echarts.get_instance_by_dom(test_page.element("chart"))),
       "no instance on the element any more",

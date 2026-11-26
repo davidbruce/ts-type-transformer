@@ -48,7 +48,7 @@ fn hex(value: Int) -> Float {
 }
 
 fn add_solid(
-  sc: t.Scene(Nil),
+  sc: t.Scene,
   wire_grp: t.Group(Nil),
   geo: t.BufferGeometry(Nil),
   color_hex: Int,

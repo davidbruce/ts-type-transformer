@@ -17,6 +17,8 @@ pub struct PkgMeta {
     pub entry: Option<String>,
     /// Exported top-level type / symbol names (C `all_names`, C++ `types`, Zig `types`, Gleam `classes`).
     pub types: Vec<String>,
+    /// Gleam classes/interfaces whose subtyping phantom parameter `(sub)` is kept (base classes with subclasses).
+    pub gleam_open: Vec<String>,
     /// C handle struct names defined by this package (not external opaque stubs).
     pub structs: Vec<String>,
     /// C external opaque handle struct names emitted as stubs in this package.
@@ -105,6 +107,7 @@ impl PkgMeta {
             out += &format!("entry = {}\n", toml_str(entry));
         }
         write_str_list(&mut out, "types", &self.types);
+        write_str_list(&mut out, "gleam_open", &self.gleam_open);
         write_str_list(&mut out, "structs", &self.structs);
         write_str_list(&mut out, "external_structs", &self.external_structs);
         if !self.c_structs.is_empty() {
@@ -171,6 +174,7 @@ impl PkgMeta {
             None => None,
         };
         let types = get_opt_str_list(&root, "types", path)?;
+        let gleam_open = get_opt_str_list(&root, "gleam_open", path)?;
         let structs = get_opt_str_list(&root, "structs", path)?;
         let external_structs = get_opt_str_list(&root, "external_structs", path)?;
 
@@ -241,6 +245,7 @@ impl PkgMeta {
             package,
             entry,
             types,
+            gleam_open,
             structs,
             external_structs,
             c_structs,

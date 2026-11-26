@@ -7,7 +7,7 @@ use super::bounds::{break_cycles, compute_class_bound, generic_args, parent, pla
 use super::classes::emit_class_and_func_modules;
 use super::types::{visit_ty, Gen};
 use super::{
-    codec_var, lower, module_path, relative, snake, upper, upper_variant, Output, ProjectRef,
+    codec_var, lower, module_lower, module_path, module_snake, relative, snake, upper, upper_variant, Output, ProjectRef,
     KEYWORDS, MODEL_OPTIONS, NAMING, OPAQUE_BUILTINS, OWN, OWN_RUNTIME, PHANTOM,
 };
 use super::super::comments::{Style, comment};
@@ -29,6 +29,7 @@ fn assign_type_path(
     tname: &str,
     model_name: &str,
     xml_module: &str,
+    collision_suffix: &str,
     paths: &HashMap<String, String>,
     pkg: &str,
     taken: &mut HashSet<String>,
@@ -37,9 +38,9 @@ fn assign_type_path(
     // A namespace's declaration by its own name: `ns.Node`'s is `namespaces/ns/node`.
     let own = m.namespaced.get(model_name).map(|p| {
         let depth = m.namespace_modules.get(model_name).map_or(1, |(_, d)| *d).min(p.len() - 1);
-        p[depth..].iter().map(|s| snake(&upper(s))).collect::<Vec<_>>().join("/")
+        p[depth..].iter().map(|s| module_snake(&upper(s))).collect::<Vec<_>>().join("/")
     });
-    let mut segment = own.unwrap_or_else(|| snake(tname));
+    let mut segment = own.unwrap_or_else(|| module_snake(tname));
     if KEYWORDS.contains(&segment.as_str()) {
         segment.push('_');
     }
@@ -47,10 +48,13 @@ fn assign_type_path(
     let module = m.namespace_modules.get(model_name).map_or(xml_module, |(m, _)| m.as_str());
     let base = format!("{}/{segment}", module_path(paths, pkg, module));
     let mut path = base.clone();
-    let mut n = 2;
-    while !taken.insert(path.clone()) {
-        path = format!("{base}_{n}");
-        n += 1;
+    if !taken.insert(path.clone()) {
+        path = format!("{base}_{collision_suffix}");
+        let mut n = 2;
+        while !taken.insert(path.clone()) {
+            path = format!("{base}_{n}");
+            n += 1;
+        }
     }
     out_paths.insert(model_name.to_string(), path);
 }
@@ -158,9 +162,38 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
     let root_import = doc.root_element().attribute("import").map(str::to_string);
     let mut m = model_with_options(xml, MODEL_OPTIONS)?;
     take_secondary(&mut m);
-    // Give explicit methods priority over synthesized property setters when names collide.
+    // Give explicit methods priority over synthesized property setters when names collide,
+    // and un-number static members that `build_types` numbered against an instance member
+    // so `names::settle` gives them a clean `static_` prefix instead of `_2`.
     for c in &mut m.classes {
         c.funcs.sort_by_key(|f| matches!(f.call, Call::Set(_) | Call::StaticSet(_)));
+        let inst_names: HashSet<String> = c
+            .funcs
+            .iter()
+            .filter(|f| !matches!(f.call, Call::Static(_) | Call::StaticGet(_) | Call::StaticSet(_)))
+            .map(|f| f.name.clone())
+            .collect();
+        for f in &mut c.funcs {
+            let js_leaf = match &f.call {
+                Call::Static(js) | Call::StaticGet(js) | Call::StaticSet(js) => js.rsplit('.').next(),
+                _ => None,
+            };
+            if let Some(js_leaf) = js_leaf
+                && let Some((stem, num)) = f.name.rsplit_once('_')
+                && num.parse::<usize>().is_ok_and(|n| n >= 2)
+                && inst_names.contains(stem)
+            {
+                let matches_js = match &f.call {
+                    Call::Static(_) => js_leaf == stem,
+                    Call::StaticGet(_) => stem == format!("get_{js_leaf}"),
+                    Call::StaticSet(_) => stem == format!("set_{js_leaf}"),
+                    _ => false,
+                };
+                if matches_js {
+                    f.name = stem.to_string();
+                }
+            }
+        }
     }
     super::super::names::settle(&mut m, &NAMING);
     break_cycles(&mut m);
@@ -186,6 +219,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         module_rank: HashMap::new(),
         classes: m.classes.iter().map(|c| (c.name.clone(), c.type_params.len())).collect(),
         parents: m.classes.iter().filter_map(|c| parent(&m, c).map(|p| (c.name.clone(), p))).collect(),
+        open_classes: HashSet::new(),
         class_bound: HashMap::new(),
         open: RefCell::new(None),
         going_in: Cell::new(false),
@@ -279,6 +313,9 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
                     let mod_path = format!("{}/types", r.package_name);
                     resolved_opaque.insert(o.clone(), idx);
                     g.classes.insert(o.clone(), 0);
+                    if r.open_classes.contains(&ref_gname) {
+                        g.open_classes.insert(o.clone());
+                    }
                     g.home.insert(gname.clone(), mod_path.clone());
                     if gname != ref_gname {
                         ref_aliases.insert(gname.clone(), (mod_path, ref_gname));
@@ -288,6 +325,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
             }
         }
     }
+    g.open_classes.extend(g.parents.values().map(|(p, _)| p.clone()));
     // Nor does anything here give one back (echarts' `getDom()` gives an `HTMLElement`).
     let returned = returned_types(&m);
     g.unmakeable = m.opaque.iter().filter(|o| !resolved_opaque.contains_key(*o) && !OPAQUE_BUILTINS.contains(&o.as_str()) && !returned.contains(*o)).cloned().collect();
@@ -338,19 +376,55 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         .chain(m.type_modules.values())
         .chain(m.namespace_modules.values().map(|(mod_name, _)| mod_name))
         .collect();
-    for area in areas {
-        let base = if *area == "areas/main" || area.is_empty() {
+    let area_base = |area: &str| {
+        if area == "areas/main" || area.is_empty() {
             pkg.to_string()
         } else {
-            let segments: Vec<String> = area.split('/').filter(|s| !s.is_empty()).map(lower).collect();
+            let segments: Vec<String> = area.split('/').filter(|s| !s.is_empty()).map(module_lower).collect();
             format!("{pkg}/{}", segments.join("/"))
-        };
-        let mut path = base.clone();
-        let mut n = 2;
-        while !taken.insert(path.clone()) {
-            path = format!("{base}_{n}");
-            n += 1;
         }
+    };
+    let mut plain_bases: HashSet<String> = HashSet::new();
+    for area in &areas {
+        if *area != "areas/main" && !area.is_empty() {
+            let last = area.rsplit('/').next().unwrap_or("");
+            let is_num_suffix = last.rsplit_once('_').is_some_and(|(_, num)| num.parse::<usize>().is_ok_and(|n| n >= 2));
+            if !is_num_suffix {
+                plain_bases.insert(area_base(area));
+            }
+        }
+    }
+    let mut area_by_base: HashMap<String, String> = HashMap::new();
+    for area in areas {
+        let mut base = area_base(area);
+        if *area != "areas/main"
+            && !area.is_empty()
+            && let Some((prefix, last)) = area.rsplit_once('/').map_or_else(|| Some(("", area.as_str())), |(p, l)| Some((p, l)))
+            && let Some((stem, num)) = last.rsplit_once('_')
+            && num.parse::<usize>().is_ok_and(|n| n >= 2)
+        {
+            let stripped_seg = module_lower(stem);
+            let mut segs: Vec<String> = prefix.split('/').filter(|s| !s.is_empty()).map(module_lower).collect();
+            segs.push(stripped_seg);
+            let stripped_base = format!("{pkg}/{}", segs.join("/"));
+            if plain_bases.contains(&stripped_base) {
+                base = stripped_base;
+            }
+        }
+        if let Some(existing) = area_by_base.get(&base) {
+            paths.insert(area.clone(), existing.clone());
+            continue;
+        }
+        let mut path = base.clone();
+        if !taken.insert(path.clone()) {
+            path = format!("{base}_area");
+            let mut n = 2;
+            while !taken.insert(path.clone()) {
+                path = format!("{base}_{n}");
+                n += 1;
+            }
+        }
+        area_by_base.insert(base, path.clone());
         paths.insert(area.clone(), path);
     }
     // Step A: assign module paths for all non-synthetic classes.
@@ -358,7 +432,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
     for c in &m.classes {
         if !m.synthetic.contains(&c.name) {
             let tname = g.tname(&c.name);
-            assign_type_path(&m, &tname, &c.name, &c.module, &paths, pkg, &mut taken, &mut class_paths);
+            assign_type_path(&m, &tname, &c.name, &c.module, "type", &paths, pkg, &mut taken, &mut class_paths);
         }
     }
     // Step B: fold eligible synthetic micro-modules into their sole owning class/area module.
@@ -367,7 +441,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
     for c in &m.classes {
         if m.synthetic.contains(&c.name) && !folded.contains_key(&c.name) {
             let tname = g.tname(&c.name);
-            assign_type_path(&m, &tname, &c.name, &c.module, &paths, pkg, &mut taken, &mut class_paths);
+            assign_type_path(&m, &tname, &c.name, &c.module, "opts", &paths, pkg, &mut taken, &mut class_paths);
         }
     }
     // Assign per-type module paths for enums and emitted unions.
@@ -375,7 +449,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
     for e in m.enums.iter().map(|e| &e.0).chain(m.num_enums.iter().map(|e| &e.0)) {
         let tname = g.tname(e);
         let xml_mod = m.type_modules.get(e).map(String::as_str).unwrap_or("areas/main");
-        assign_type_path(&m, &tname, e, xml_mod, &paths, pkg, &mut taken, &mut enum_paths);
+        assign_type_path(&m, &tname, e, xml_mod, "enum", &paths, pkg, &mut taken, &mut enum_paths);
     }
     let emitted_unions: BTreeSet<String> = m
         .unions
@@ -387,7 +461,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
     for u in m.unions.iter().filter(|u| emitted_unions.contains(&u.name)) {
         let tname = g.tname(&u.name);
         let xml_mod = m.type_modules.get(&u.name).map(String::as_str).unwrap_or("areas/main");
-        assign_type_path(&m, &tname, &u.name, xml_mod, &paths, pkg, &mut taken, &mut union_paths);
+        assign_type_path(&m, &tname, &u.name, xml_mod, "union", &paths, pkg, &mut taken, &mut union_paths);
     }
 
     // Classes. A class with no class for a base is an opaque type, its last
@@ -510,11 +584,15 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
 
     let mut class_group_mods: HashMap<usize, String> = HashMap::new();
     for &grp in class_groups.keys() {
+        let mut cand = if grp == 1 {
+            format!("{pkg}/extended_types")
+        } else {
+            format!("{pkg}/types_{}", grp + 1)
+        };
         let mut n = grp + 1;
-        let mut cand = format!("{pkg}/types_{n}");
         while !taken.insert(cand.clone()) {
-            n += 1;
             cand = format!("{pkg}/types_{n}");
+            n += 1;
         }
         class_group_mods.insert(grp, cand);
     }
@@ -551,11 +629,12 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
                     let mod_path = if scc.len() == 1 {
                         union_paths[&scc[0]].clone()
                     } else {
+                        let lead = module_snake(&g.tname(&scc[0]));
                         let mut k = 1usize;
-                        let mut cand = format!("{pkg}/types_scc_{k}");
+                        let mut cand = format!("{pkg}/{lead}_types");
                         while !taken.insert(cand.clone()) {
                             k += 1;
-                            cand = format!("{pkg}/types_scc_{k}");
+                            cand = format!("{pkg}/{lead}_types_{k}");
                         }
                         cand
                     };
@@ -744,12 +823,15 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
 
     let emit_class_decl = |g: &mut Gen<'_>, c: &Class, mod_path: &str, codecs: &mut Vec<CodecSpec>| {
         let name = g.tname(&c.name);
+        let is_open = g.open_classes.contains(&c.name);
         let mut vars: Vec<String> = c.type_params.iter().map(|p| Gen::tvar(&p.name)).collect();
-        vars.push(PHANTOM.into());
-        let vars = vars.join(", ");
+        if is_open {
+            vars.push(PHANTOM.into());
+        }
+        let vars_suffix = if vars.is_empty() { String::new() } else { format!("({})", vars.join(", ")) };
         g.out += &c.doc.as_deref().map(|d| comment(d, "///", "", Style::Plain)).unwrap_or_default();
         match g.parents.get(&c.name).cloned() {
-            None => g.out += &format!("pub type {name}({vars})\n\n"),
+            None => g.out += &format!("pub type {name}{vars_suffix}\n\n"),
             Some((base, args)) => {
                 let own = &below[&c.name];
                 let args: Vec<Ty> = args.iter().map(|a| walk(a, &|t| matches!(t, Ty::Obj(n) | Ty::Generic(n, _) if own.contains(n)).then_some(Ty::Any))).collect();
@@ -758,12 +840,14 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
                     g.note("Dynamic");
                     parts.push("Dynamic".into());
                 }
-                parts.push(format!("{name}Tag({vars})"));
-                g.out += &format!("pub type {name}Tag({vars})\n\npub type {name}({vars}) = {}({})\n\n", g.gt(&base), parts.join(", "));
+                parts.push(format!("{name}Tag{vars_suffix}"));
+                g.out += &format!("pub type {name}Tag{vars_suffix}\n\npub type {name}{vars_suffix} = {}({})\n\n", g.gt(&base), parts.join(", "));
             }
         }
         let mut params = c.type_params.clone();
-        params.push(TParam { name: PHANTOM.into(), default: None, constraint: None });
+        if is_open {
+            params.push(TParam { name: PHANTOM.into(), default: None, constraint: None });
+        }
         codecs.push(CodecSpec { name: c.name.clone(), return_vars: params, param_vars: Vec::new(), converts: false, unit: mod_path.to_string() });
     };
 
@@ -880,7 +964,7 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         let Some(params) = headers.get(&gleam) else { continue };
         let base = module_path(&paths, pkg, module);
         // Past what its module stands for: a namespace's own module.
-        let unit = std::iter::once(base).chain(path[(*depth).min(path.len() - 1)..path.len() - 1].iter().map(|s| snake(&upper(s)))).collect::<Vec<_>>().join("/");
+        let unit = std::iter::once(base).chain(path[(*depth).min(path.len() - 1)..path.len() - 1].iter().map(|s| module_snake(&upper(s)))).collect::<Vec<_>>().join("/");
         aliases.entry(unit).or_default().push((upper(path.last().unwrap()), gleam, params.clone()));
     }
     for (unit, mut list) in aliases {
@@ -982,10 +1066,17 @@ pub(super) fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -
         .filter(|c| c.type_params.is_empty() && g.home.get(&g.tname(&c.name)) == Some(&types_mod))
         .map(|c| g.tname(&c.name))
         .collect();
+    let meta_open: Vec<String> = m
+        .classes
+        .iter()
+        .filter(|c| c.type_params.is_empty() && g.home.get(&g.tname(&c.name)) == Some(&types_mod) && g.open_classes.contains(&c.name))
+        .map(|c| g.tname(&c.name))
+        .collect();
     let meta = super::super::pkg_meta::PkgMeta {
         target: "gleam".into(),
         package: pkg.to_string(),
         types: meta_classes,
+        gleam_open: meta_open,
         ..Default::default()
     };
     Ok(Output { name: pkg.to_string(), files, project_refs, skipped: g.skipped, manifest: super::super::model::manifest(&m), meta_toml: meta.to_toml() })

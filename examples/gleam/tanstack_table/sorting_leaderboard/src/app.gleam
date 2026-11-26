@@ -26,7 +26,7 @@ import tanstack_table_core/types as t
 import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
-fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
+fn store_reactivity_bindings() -> t.TableReactivityBindings
 
 // Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
@@ -64,7 +64,7 @@ fn node_row(
   ])
 }
 
-fn sort_spec(id: String, desc: Bool) -> t.ColumnSort(Nil) {
+fn sort_spec(id: String, desc: Bool) -> t.ColumnSort {
   column_sort.create()
   |> column_sort.with_id(id)
   |> column_sort.with_desc(desc)
@@ -92,11 +92,11 @@ fn decode_num(v: Dynamic) -> Float {
   }
 }
 
-fn render(table: t.TableCore(Dynamic, Nil), doc, label: String) {
-  let rows_view: t.TableRowModelsCore(Dynamic, Nil) = coerce(table)
+fn render(table: t.TableCore(Dynamic), doc, label: String) {
+  let rows_view: t.TableRowModelsCore(Dynamic) = coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
 
-  let cols_view: t.TableColumns(Dynamic, Nil) = coerce(table)
+  let cols_view: t.TableColumns(Dynamic) = coerce(table)
   let cols = table_columns.get_all_leaf_columns(cols_view)
 
   let header_cells =
@@ -111,7 +111,7 @@ fn render(table: t.TableCore(Dynamic, Nil), doc, label: String) {
         Some(h) -> decode_str(h, cid)
         None -> cid
       }
-      let csort: t.ColumnRowSorting(Dynamic, Nil) = coerce(col)
+      let csort: t.ColumnRowSorting(Dynamic) = coerce(col)
       let mark = case column_row_sorting.get_is_sorted(csort) {
         Some(sort_direction.Asc) -> " &#9650;"
         Some(sort_direction.Desc) -> " &#9660;"
@@ -240,7 +240,7 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let tsort: t.TableRowSorting(Dynamic, Nil) = coerce(table)
+  let tsort: t.TableRowSorting(Dynamic) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     table_row_sorting.set_sorting(

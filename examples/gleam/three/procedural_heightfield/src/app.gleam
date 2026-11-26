@@ -81,7 +81,7 @@ fn build_indices() -> List(Float) {
   |> list.reverse
 }
 
-fn fill_grid(pos_attr: t.Float32BufferAttribute(Nil), mode: Int) -> Nil {
+fn fill_grid(pos_attr: t.Float32BufferAttribute, mode: Int) -> Nil {
   let span = 7.6
   let half = span /. 2.0
   let denom = int.to_float(grid_n - 1)
@@ -96,7 +96,7 @@ fn fill_grid(pos_attr: t.Float32BufferAttribute(Nil), mode: Int) -> Nil {
   })
 }
 
-fn fill_pts(pts_attr: t.Float32BufferAttribute(Nil), mode: Int) -> Nil {
+fn fill_pts(pts_attr: t.Float32BufferAttribute, mode: Int) -> Nil {
   let span = 7.6
   let half = span /. 2.0
   let denom = int.to_float(grid_n - 1)

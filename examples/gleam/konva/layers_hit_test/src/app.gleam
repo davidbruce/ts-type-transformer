@@ -35,7 +35,7 @@ fn make_line(pts: List(Float), col: String, sw: Float) -> t.Node(Nil) {
   node.upcast(line.new_with(lc))
 }
 
-fn make_card(id: String, x: Float, y: Float, fill_hex: String) -> t.Rect(Nil) {
+fn make_card(id: String, x: Float, y: Float, fill_hex: String) -> t.Rect {
   let rc =
     rect_config.create()
     |> rect_config.with_id(id)
@@ -167,7 +167,7 @@ pub fn main() -> Nil {
 
   let counter = runtime.ref_new(0)
   let doc = core.get_document()
-  let handle_click = fn(card: t.Rect(Nil), card_id: String) {
+  let handle_click = fn(card: t.Rect, card_id: String) {
     node.move_to_top(card)
     node.move_to_top(overlay)
     node.draw(fg_layer)

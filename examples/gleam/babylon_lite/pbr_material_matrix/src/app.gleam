@@ -45,7 +45,7 @@ fn mk_pbr(
   v: Float,
   metallic: Float,
   roughness: Float,
-) -> bt.PbrMaterialProps(Nil) {
+) -> bt.PbrMaterialProps {
   let props =
     create_pbr_material_props.create()
     |> create_pbr_material_props.with_base_color_factor(#(v, v, v, 1.0))

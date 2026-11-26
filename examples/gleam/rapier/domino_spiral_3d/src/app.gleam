@@ -89,7 +89,7 @@ fn mk_pbr(
   bl: Float,
   metallic: Float,
   roughness: Float,
-) -> bt.PbrMaterialProps(Nil) {
+) -> bt.PbrMaterialProps {
   let props =
     create_pbr_material_props.create()
     |> create_pbr_material_props.with_base_color_factor(#(r, g, bl, 1.0))
@@ -98,7 +98,7 @@ fn mk_pbr(
   b.create_pbr_material_with(props)
 }
 
-fn body_ke(rb: rt.RigidBody(Nil)) -> Float {
+fn body_ke(rb: rt.RigidBody) -> Float {
   let v = rigid_body.linvel(rb)
   let vx = vector.get_x(v)
   let vy = vector.get_y(v)
@@ -115,18 +115,18 @@ pub fn main() -> Nil {
   let assert Some(meta_el) = document.get_element_by_id(doc, "meta")
   let assert Some(pause_btn) = document.get_element_by_id(doc, "btn-pause")
 
-  let world_ref: rp_rt.Ref(Option(rt.World(Nil))) = rp_rt.ref_new(None)
-  let marble_ref: rp_rt.Ref(Option(rt.RigidBody(Nil))) = rp_rt.ref_new(None)
-  let doms_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
-  let cyls_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
+  let world_ref: rp_rt.Ref(Option(rt.World)) = rp_rt.ref_new(None)
+  let marble_ref: rp_rt.Ref(Option(rt.RigidBody)) = rp_rt.ref_new(None)
+  let doms_ref: rp_rt.Ref(List(rt.RigidBody)) = rp_rt.ref_new([])
+  let cyls_ref: rp_rt.Ref(List(rt.RigidBody)) = rp_rt.ref_new([])
   let marble_handle_ref: rp_rt.Ref(
-    Option(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+    Option(#(bt.ObservableVec3, bt.ObservableQuat)),
   ) = rp_rt.ref_new(None)
   let dom_handles_ref: rp_rt.Ref(
-    List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+    List(#(bt.ObservableVec3, bt.ObservableQuat)),
   ) = rp_rt.ref_new([])
   let cyl_handles_ref: rp_rt.Ref(
-    List(#(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil))),
+    List(#(bt.ObservableVec3, bt.ObservableQuat)),
   ) = rp_rt.ref_new([])
   let paused_ref = rp_rt.ref_new(False)
   let step_ref = rp_rt.ref_new(0)
@@ -244,8 +244,8 @@ pub fn main() -> Nil {
   }
 
   let sync_pair = fn(
-    rb: rt.RigidBody(Nil),
-    pair: #(bt.ObservableVec3(Nil), bt.ObservableQuat(Nil)),
+    rb: rt.RigidBody,
+    pair: #(bt.ObservableVec3, bt.ObservableQuat),
   ) {
     let #(pos, rot) = pair
     let p = rigid_body.translation(rb)

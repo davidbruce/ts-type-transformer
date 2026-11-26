@@ -3,27 +3,15 @@ import dom/areas/core/document
 import dom/areas/core/element
 import dom/areas/core/node
 import dom/areas/html/html_element_tag_name_map as tag
-import gleam/dynamic.{type Dynamic}
-import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/option.{None, Some}
 import marked
 import marked/marked as marked_class
 import marked/marked_extension
+import marked/namespaces/tokens/heading as tok_heading
 import marked/renderer_object
-import marked/runtime as mr
 import marked/token
-
-fn field_string(tok: Dynamic, name: String) -> String {
-  let assert Ok(s) = decode.run(tok, decode.at([name], decode.string))
-  s
-}
-
-fn field_float(tok: Dynamic, name: String) -> Float {
-  let assert Ok(n) = decode.run(tok, decode.at([name], decode.float))
-  n
-}
 
 pub fn main() -> Nil {
   let doc = core.get_document()
@@ -38,14 +26,13 @@ pub fn main() -> Nil {
 
       let renderer =
         renderer_object.create()
-        |> renderer_object.with_heading(fn(heading) {
-          let tok = mr.dynamic(heading)
-          let d = int.to_string(float.round(field_float(tok, "depth")))
+        |> renderer_object.with_heading(fn(h) {
+          let d = int.to_string(float.round(tok_heading.get_depth(h)))
           Some(
             "<h"
             <> d
             <> " class=\"wire-h\">§ "
-            <> field_string(tok, "text")
+            <> tok_heading.get_text(h)
             <> "</h"
             <> d
             <> ">\n",

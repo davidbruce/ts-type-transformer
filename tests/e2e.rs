@@ -6407,4 +6407,181 @@ __attribute__((export_name("run"))) void run(void) {
         let report = run(Command::new(&node).arg(root().join("tests/run_wasm.mjs")).arg(out.join("impl.mjs")).arg(out.join("glue.mjs")).arg(out.join("test.wasm")));
         assert!(report.contains("13 checks passed"), "{report}");
     }
+
+    #[test]
+    fn gleam_leaf_types_no_suffixes_and_module_snake() {
+        let Some([gleam, node]) = tools(["gleam", "node"]) else { return };
+        let out = root().join("target/e2e/gleam_ergo");
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        let dts = r#"
+export class Leaf {
+    constructor(value: number);
+    readonly value: number;
+}
+export function echoLeaf<T extends Leaf>(x: T): T;
+export class Base {
+    constructor(name: string);
+    readonly name: string;
+}
+export class Child extends Base {
+    constructor(name: string, tag: number);
+    readonly tag: number;
+}
+export class Lexer {
+    constructor();
+    lex(input: string): string;
+    static lex(input: string): string;
+}
+export class EChartsOption {
+    constructor();
+    title: string;
+}
+export class XAXisOption {
+    constructor();
+    show: boolean;
+}
+export class YAXisOption {
+    constructor();
+    min: number;
+}
+export class IRect {
+    constructor();
+    x: number;
+}
+export class IPlayer {
+    constructor();
+    play(): void;
+}
+export class ZRenderType {
+    constructor();
+    id: string;
+}
+export class HTMLElement {
+    constructor();
+    tagName: string;
+}
+export interface Item { id: string; }
+export class Priority { constructor(); readonly level: number; }
+export type priority = string | number;
+export function setPriority(x: priority): string;
+export function getPriority(): priority;
+export namespace Control {
+    export function zoom(): number;
+}
+export namespace control {
+    export function scale(): number;
+}
+"#;
+        fs::write(out.join("api.d.ts"), dts).unwrap();
+        let js = r#"
+class Leaf { constructor(v) { this.value = v; } }
+function echoLeaf(x) { return x; }
+class Base { constructor(n) { this.name = n; } }
+class Child extends Base { constructor(n, t) { super(n); this.tag = t; } }
+class Lexer {
+    lex(input) { return "inst:" + input; }
+    static lex(input) { return "static:" + input; }
+}
+class EChartsOption { constructor() { this.title = "chart"; } }
+class XAXisOption { constructor() { this.show = true; } }
+class YAXisOption { constructor() { this.min = 0; } }
+class IRect { constructor() { this.x = 7; } }
+class IPlayer { play() {} }
+class ZRenderType { constructor() { this.id = "zr"; } }
+class HTMLElement { constructor() { this.tagName = "DIV"; } }
+class Priority { constructor() { this.level = 1; } }
+function setPriority(x) { return String(x); }
+function getPriority() { return "ok"; }
+const Control = { zoom: () => 2 };
+const control = { scale: () => 3 };
+Object.assign(globalThis, {
+    Leaf, echoLeaf, Base, Child, Lexer, EChartsOption, XAXisOption, YAXisOption,
+    IRect, IPlayer, ZRenderType, HTMLElement, Priority, setPriority, getPriority,
+    Control, control,
+});
+"#;
+        fs::write(out.join("impl.mjs"), js).unwrap();
+        let xml = lower(&out.join("api.d.ts"), Some("gleam"), &[]);
+        let bindings = generators::gleam::module(&xml).unwrap_or_else(|p| panic!("{}", p.join("\n")));
+        let paths: Vec<&str> = bindings.files.iter().map(|(p, _)| p.as_str()).collect();
+        for expected in [
+            "bindings/echarts_option.gleam",
+            "bindings/x_axis_option.gleam",
+            "bindings/y_axis_option.gleam",
+            "bindings/irect.gleam",
+            "bindings/iplayer.gleam",
+            "bindings/zrender_type.gleam",
+            "bindings/html_element.gleam",
+            "bindings/priority_union.gleam",
+        ] {
+            assert!(paths.contains(&expected), "missing {expected} in:\n{paths:#?}");
+        }
+        assert!(!paths.iter().any(|p| p.contains("control_2") || p.contains("priority_2")), "unexpected _2 module:\n{paths:#?}");
+
+        let types_gl = bindings.files.iter().find(|(p, _)| p == "bindings/types.gleam").map(|(_, s)| s.as_str()).unwrap();
+        assert!(types_gl.contains("pub type Leaf\n"), "Leaf should drop phantom:\n{types_gl}");
+        assert!(types_gl.contains("pub type Base(sub)\n"), "Base should keep phantom:\n{types_gl}");
+        assert!(types_gl.contains("pub type ChildTag\n") && types_gl.contains("pub type Child = Base(ChildTag)"), "Child leaf should drop phantom:\n{types_gl}");
+
+        let b_gl = bindings.files.iter().find(|(p, _)| p == "bindings.gleam").map(|(_, s)| s.as_str()).unwrap();
+        assert!(b_gl.contains("pub fn echo_leaf(x: Leaf) -> Leaf"), "bounded leaf param should be bare Leaf:\n{b_gl}");
+
+        let leaf_gl = bindings.files.iter().find(|(p, _)| p == "bindings/leaf.gleam").map(|(_, s)| s.as_str()).unwrap();
+        assert!(!leaf_gl.contains("pub fn upcast"), "closed leaf should not emit upcast:\n{leaf_gl}");
+        let base_gl = bindings.files.iter().find(|(p, _)| p == "bindings/base.gleam").map(|(_, s)| s.as_str()).unwrap();
+        assert!(base_gl.contains("pub fn upcast"), "open base should emit upcast:\n{base_gl}");
+        let lexer_gl = bindings.files.iter().find(|(p, _)| p == "bindings/lexer.gleam").map(|(_, s)| s.as_str()).unwrap();
+        assert!(lexer_gl.contains("pub fn lex(") && lexer_gl.contains("pub fn static_lex(") && !lexer_gl.contains("lex_2"), "expected static_lex:\n{lexer_gl}");
+
+        write_gleam_project(&out, &bindings);
+        let check_gl = r#"import bindings as b
+import bindings/base
+import bindings/child
+import bindings/echarts_option
+import bindings/html_element
+import bindings/iplayer
+import bindings/irect
+import bindings/leaf
+import bindings/lexer
+import bindings/namespaces/control
+import bindings/priority_union
+import bindings/types as t
+import bindings/x_axis_option
+import bindings/y_axis_option
+import bindings/zrender_type
+import gleam/io
+
+fn check(ok: Bool, what: String) -> Nil {
+  case ok {
+    True -> Nil
+    False -> panic as what
+  }
+}
+
+pub fn main() {
+  let l: t.Leaf = leaf.new(5.0)
+  check(leaf.get_value(b.echo_leaf(l)) == 5.0, "leaf without (Nil)")
+  let bs: t.Base(Nil) = base.upcast(child.new("c", 9.0))
+  check(base.get_name(bs) == "c", "open base upcast")
+  let lx = lexer.new()
+  check(lexer.lex(lx, "a") == "inst:a" && lexer.static_lex("b") == "static:b", "static_lex")
+  let r: t.IRect = irect.new()
+  let _ = iplayer.new()
+  let e = echarts_option.new()
+  let _ = x_axis_option.new()
+  let _ = y_axis_option.new()
+  let zr = zrender_type.new()
+  let el = html_element.new()
+  check(irect.get_x(r) == 7.0 && echarts_option.get_title(e) == "chart" && zrender_type.get_id(zr) == "zr" && html_element.get_tag_name(el) == "DIV", "clean module names")
+  check(b.set_priority("ok") == "ok" && b.get_priority() == priority_union.String("ok"), "priority_union")
+  check(control.zoom() == 2.0 && control.scale() == 3.0, "merged case-only area")
+  io.println("5 checks passed")
+}
+"#;
+        fs::write(out.join("src/check.gleam"), check_gl).unwrap();
+        run(Command::new(gleam).current_dir(&out).args(["build", "--warnings-as-errors"]));
+        let report = run(Command::new(node).arg(root().join("tests/run_gleam.mjs")).arg(out.join("impl.mjs")).arg(out.join("build/dev/javascript/check/check.mjs")));
+        assert!(report.contains("5 checks passed"), "{report}");
+    }
 }

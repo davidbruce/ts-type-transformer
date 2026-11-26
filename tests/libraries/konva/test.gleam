@@ -8,7 +8,7 @@ import bindings/areas/konva/container
 import bindings/areas/konva/get_set
 import bindings/areas/konva/group
 import bindings/areas/konva/group_config
-import bindings/areas/konva/i_rect
+import bindings/areas/konva/irect
 import bindings/areas/konva/konva_event_object
 import bindings/areas/konva/layer
 import bindings/areas/konva/node
@@ -84,11 +84,11 @@ pub fn main() {
     passed
     + check(pos.get_x(at) == 20.0 && pos.get_y(at) == 30.0, "position")
     + check(
-      i_rect.get_x(client) == 20.0 && i_rect.get_y(client) == 30.0,
+      irect.get_x(client) == 20.0 && irect.get_y(client) == 30.0,
       "client rect position",
     )
     + check(
-      i_rect.get_width(client) == 100.0 && i_rect.get_height(client) == 50.0,
+      irect.get_width(client) == 100.0 && irect.get_height(client) == 50.0,
       "client rect size",
     )
     + check(node.get_class_name(r) == "Rect", "class name of a rect")
@@ -158,8 +158,8 @@ pub fn main() {
     )
     + check(pos.get_x(node.get_position(c)) == 10.0, "own position does not")
     + check(
-      i_rect.get_width(text_rect) >. 20.0
-        && i_rect.get_height(text_rect) >. 10.0,
+      irect.get_width(text_rect) >. 20.0
+        && irect.get_height(text_rect) >. 10.0,
       "a text has a size",
     )
     + check(
@@ -229,9 +229,10 @@ pub fn main() {
 
   // Visibility.
   let _ = node.hide(r)
-  let hidden = !node.is_visible_2(r)
+  let hidden = !node.call_is_visible(r)
   let _ = node.show(r)
-  let passed = passed + check(hidden && node.is_visible_2(r), "hide and show")
+  let passed =
+    passed + check(hidden && node.call_is_visible(r), "hide and show")
 
   // Drawing, then the hit canvas finds the shape under a point.
   let _ = node.draw(l)

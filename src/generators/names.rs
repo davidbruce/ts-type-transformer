@@ -84,6 +84,19 @@ pub struct Naming {
     // A namespace's types are in a scope of their own (Rust's
     // `stream::PipeOptions`, Zig's `stream.PipeOptions`), not the top level's.
     pub nests: bool,
+    // Prefer semantic fallback names (`FooUnion`, `read_x`, `assign_x`, `static_x`)
+    // before numeric `_2` suffixes on identifier collisions.
+    pub semantic_fallbacks: bool,
+}
+
+fn func_semantic_fallback(f: &Func) -> String {
+    match &f.call {
+        Call::Static(_) | Call::StaticGet(_) | Call::StaticSet(_) => format!("static_{}", f.name),
+        Call::Get(_) | Call::GetBound(_) => format!("read_{}", f.name.strip_prefix("get_").unwrap_or(&f.name)),
+        Call::Set(_) => format!("assign_{}", f.name.strip_prefix("set_").unwrap_or(&f.name)),
+        Call::New(_) => "create".to_string(),
+        _ => format!("call_{}", f.name),
+    }
 }
 
 // Renames the model so that `naming` makes each identifier once.
@@ -127,6 +140,14 @@ pub fn settle_with(m: &mut Model, naming: &Naming, extra_reserved: &[String]) {
                 if *kind == Kind::Callback && !name.ends_with("_cb") {
                     fallbacks.push(format!("{name}_cb"));
                 }
+                if naming.semantic_fallbacks {
+                    match kind {
+                        Kind::Union => fallbacks.push(format!("{name}Union")),
+                        Kind::Enum | Kind::NumEnum => fallbacks.push(format!("{name}Enum")),
+                        Kind::Class | Kind::Opaque => fallbacks.push(format!("{name}Type")),
+                        Kind::Callback => {}
+                    }
+                }
                 let chosen = claim_as(name, &fallbacks, &mut |candidate| {
                     let ids = (naming.type_names)(candidate, name, *kind, m);
                     let values = ids.first().map(|own| (naming.values_of)(own, name, *kind, m)).unwrap_or_default();
@@ -153,7 +174,13 @@ pub fn settle_with(m: &mut Model, naming: &Naming, extra_reserved: &[String]) {
                     }
                     // A static the instance's member of that name has taken is
                     // the class's (node's `EventEmitter.once(emitter, name)`: `static_once`).
-                    let fallbacks: Vec<String> = if matches!(f.call, Call::Static(_)) { vec![format!("static_{}", f.name)] } else { Vec::new() };
+                    let fallbacks: Vec<String> = if naming.semantic_fallbacks {
+                        vec![func_semantic_fallback(f)]
+                    } else if matches!(f.call, Call::Static(_)) {
+                        vec![format!("static_{}", f.name)]
+                    } else {
+                        Vec::new()
+                    };
                     let chosen = claim_as(&f.name, &fallbacks, &mut |candidate| {
                         let id = (naming.func_name)(Some(&owner), candidate, f).unwrap_or_default();
                         if naming.funcs_flat {
@@ -174,7 +201,12 @@ pub fn settle_with(m: &mut Model, naming: &Naming, extra_reserved: &[String]) {
         claim_types(false, &mut top, &mut type_renames);
         claim_funcs(false, &mut top, &type_renames, &mut func_renames);
         for (fi, f) in m.funcs.iter().enumerate().filter(|(_, f)| (naming.func_name)(None, &f.name, f).is_some()) {
-            let chosen = claim(&f.name, &mut |candidate| top.take_value(vec![(naming.func_name)(None, candidate, f).unwrap_or_default()]));
+            let fallbacks: Vec<String> = if naming.semantic_fallbacks {
+                vec![func_semantic_fallback(f)]
+            } else {
+                Vec::new()
+            };
+            let chosen = claim_as(&f.name, &fallbacks, &mut |candidate| top.take_value(vec![(naming.func_name)(None, candidate, f).unwrap_or_default()]));
             if chosen != f.name {
                 func_renames.push((None, fi, chosen));
             }
@@ -227,13 +259,8 @@ fn take(scope: &mut Scope, ids: Vec<String>) -> bool {
     free
 }
 
-// `name`, or `name_2`, `name_3`, ...: the first `try_take` takes. A naming
+// `name`, then `others`, or `name_2`, `name_3`, ...: the first `try_take` takes. A naming
 // whose identifier does not follow the name would never find one.
-fn claim(name: &str, try_take: &mut dyn FnMut(&str) -> bool) -> String {
-    claim_as(name, &[], try_take)
-}
-
-// As `claim`, trying the `others` after `name`, before numbers.
 fn claim_as(name: &str, others: &[String], try_take: &mut dyn FnMut(&str) -> bool) -> String {
     if let Some(o) = std::iter::once(name).chain(others.iter().map(String::as_str)).find(|c| try_take(c)) {
         return o.to_string();

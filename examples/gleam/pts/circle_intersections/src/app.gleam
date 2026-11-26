@@ -7,7 +7,7 @@ import pts/canvas_space
 import pts/canvas_space_options
 import pts/circle
 import pts/group
-import pts/i_player
+import pts/iplayer
 import pts/line
 import pts/pt
 import pts/pt_iterable
@@ -40,8 +40,8 @@ pub fn main() -> Nil {
   let form = canvas_space.get_form(cs)
 
   let player =
-    i_player.create()
-    |> i_player.with_animate(fn(time_ms, _ftime, _space) {
+    iplayer.create()
+    |> iplayer.with_animate(fn(time_ms, _ftime, _space) {
       let c = canvas_space.get_center(cs)
       let size = canvas_space.get_size(cs)
       let pointer = canvas_space.get_pointer(cs)

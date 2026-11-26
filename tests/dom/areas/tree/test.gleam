@@ -1,7 +1,6 @@
 // The DOM tree from Gleam: nodes made, attached, moved, cloned, searched and
 // walked. Every check must hold; a failed one panics with its name.
 import bindings/areas/core as dom
-import bindings/areas/core/child_node
 import bindings/areas/core/document
 import bindings/areas/core/document_fragment
 import bindings/areas/core/dom_token_list
@@ -156,7 +155,7 @@ pub fn main() {
   check(node.get_node_type(zero_text) == node.text_node, "text node type")
   check(node.get_node_name(zero) == "LI", "node name")
   check(option.is_none(node.get_next_sibling(zero_text)), "no next sibling in zero")
-  check(child_node.upcast(zero_text) |> node.get_text_content == Some("zero"), "text node content")
+  check(zero_text |> node.get_text_content == Some("zero"), "text node content")
 
   // A walk over the list's elements.
   let walker = document.create_tree_walker_fn_with(doc, list_el, 1.0, None)

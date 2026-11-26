@@ -38,7 +38,7 @@ fn hole_spec(tag: String) -> dom_output_spec.DOMOutputSpec {
   dom_output_spec.List([dynamic.string(tag), dynamic.int(0)])
 }
 
-fn tag_rule(tag: String, level: Int) -> t.TagParseRule(Nil) {
+fn tag_rule(tag: String, level: Int) -> t.TagParseRule {
   let rule =
     tag_parse_rule.create()
     |> tag_parse_rule.with_tag(tag)
@@ -48,7 +48,7 @@ fn tag_rule(tag: String, level: Int) -> t.TagParseRule(Nil) {
   }
 }
 
-fn build_schema() -> t.Schema(Nil) {
+fn build_schema() -> t.Schema {
   let doc_spec =
     node_spec.create()
     |> node_spec.with_content("block+")
@@ -124,13 +124,13 @@ const spec_html =
 const changelog_html =
   "<h2>Release 1.4 Notes</h2><p>Added <strong>typed bindings</strong> for <code>DOMParser</code> and <em>DOMSerializer</em>.</p><blockquote><p>All round-trips verified with Node.eq().</p></blockquote><p>Edit directly above to watch HTML output update live.</p>"
 
-fn parse_html(doc, parser, html: String) -> t.Node(Nil) {
+fn parse_html(doc, parser, html: String) -> t.Node {
   let div = document.create_element(doc, tag.div)
   element.set_inner_html(div, html)
   dom_parser.parse(parser, div)
 }
 
-fn describe_doc(d: t.Node(Nil)) -> String {
+fn describe_doc(d: t.Node) -> String {
   let nb = float.round(node.get_child_count(d))
   let nsz = float.round(node.get_node_size(d))
   let header =
@@ -171,7 +171,7 @@ fn describe_doc(d: t.Node(Nil)) -> String {
 fn refresh_output(
   doc,
   serializer,
-  d: t.Node(Nil),
+  d: t.Node,
   status_ref: pm_rt.Ref(String),
 ) {
   let div = document.create_element(doc, tag.div)

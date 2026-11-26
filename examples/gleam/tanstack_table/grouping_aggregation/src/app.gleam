@@ -27,7 +27,7 @@ import tanstack_table_core/types as t
 import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
-fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
+fn store_reactivity_bindings() -> t.TableReactivityBindings
 
 // Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
@@ -81,7 +81,7 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
   }
 }
 
-fn current_grp_col(table: t.TableCore(Dynamic, Nil)) -> String {
+fn current_grp_col(table: t.TableCore(Dynamic)) -> String {
   let store = table_core_properties.get_store(coerce(table))
   case
     decode.run(
@@ -94,8 +94,8 @@ fn current_grp_col(table: t.TableCore(Dynamic, Nil)) -> String {
   }
 }
 
-fn render(table: t.TableCore(Dynamic, Nil), doc) {
-  let rows_view: t.TableRowModelsCore(Dynamic, Nil) = coerce(table)
+fn render(table: t.TableCore(Dynamic), doc) {
+  let rows_view: t.TableRowModelsCore(Dynamic) = coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
   let grp_col = current_grp_col(table)
 
@@ -251,8 +251,8 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let grp: t.TableColumnGrouping(Dynamic, Nil) = coerce(table)
-  let exp: t.TableRowExpanding(Dynamic, Nil) = coerce(table)
+  let grp: t.TableColumnGrouping(Dynamic) = coerce(table)
+  let exp: t.TableRowExpanding(Dynamic) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     table_row_expanding.toggle_all_rows_expanded_with(exp, True)

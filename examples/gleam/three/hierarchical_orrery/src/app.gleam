@@ -52,7 +52,7 @@ fn std_mat(
   |> mesh_standard_material.new_with
 }
 
-fn fmt_v3(v: t.Vector3(Nil)) -> String {
+fn fmt_v3(v: t.Vector3) -> String {
   "("
   <> rt.to_fixed(vector3.get_x(v), 2)
   <> ", "

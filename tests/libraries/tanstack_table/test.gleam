@@ -74,7 +74,7 @@ pub fn main() {
   let state_dyn = fn(s: TableState) {
     case s {
       table_state.Object(o) -> runtime.dynamic(o)
-      table_state.CellSelection(o) -> runtime.dynamic(o)
+      table_state.CellSelectionType(o) -> runtime.dynamic(o)
     }
   }
   let state = table.get_initial_table_state(registry)
@@ -333,7 +333,7 @@ pub fn main() {
       list.map(row_model.get_rows(core_model), name_of) == ["bo", "al", "cy"],
       "createCoreRowModel lists rows",
     )
-  let model_view: t.TableRowModelsCore(dynamic.Dynamic, Nil) = coerce(tbl)
+  let model_view: t.TableRowModelsCore(dynamic.Dynamic) = coerce(tbl)
   let unsorted_model = table_row_models_core.get_row_model(model_view)
   let passed =
     passed
@@ -347,7 +347,7 @@ pub fn main() {
   let by_age = column_sort.create()
   column_sort.set_id(by_age, "age")
   column_sort.set_desc(by_age, False)
-  let sortable: t.TableRowSorting(dynamic.Dynamic, Nil) = coerce(tbl)
+  let sortable: t.TableRowSorting(dynamic.Dynamic) = coerce(tbl)
   table_row_sorting.set_sorting(sortable, updater.T([by_age]))
   let sorted_model = table_row_models_core.get_row_model(model_view)
   let passed =

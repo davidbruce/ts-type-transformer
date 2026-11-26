@@ -35,7 +35,7 @@ fn hole_spec(tag: String) -> dom_output_spec.DOMOutputSpec {
   dom_output_spec.List([dynamic.string(tag), dynamic.int(0)])
 }
 
-fn build_schema() -> t.Schema(Nil) {
+fn build_schema() -> t.Schema {
   let doc_spec =
     node_spec.create()
     |> node_spec.with_content("block+")
@@ -118,15 +118,15 @@ fn build_schema() -> t.Schema(Nil) {
   schema.new(spec)
 }
 
-fn p_node(sch, txt: String) -> t.Node(Nil) {
+fn p_node(sch, txt: String) -> t.Node {
   schema.node_with(sch, "paragraph", None, schema.text(sch, txt), [])
 }
 
-fn li_node(sch, txt: String) -> t.Node(Nil) {
+fn li_node(sch, txt: String) -> t.Node {
   schema.node_with(sch, "list_item", None, p_node(sch, txt), [])
 }
 
-fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
+fn make_initial_doc(sch: t.Schema) -> t.Node {
   let h =
     schema.node_with(
       sch,
@@ -179,7 +179,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   )
 }
 
-fn make_state(sch: t.Schema(Nil)) -> t.EditorState(Nil) {
+fn make_state(sch: t.Schema) -> t.EditorState {
   editor_state_config.create()
   |> editor_state_config.with_schema(sch)
   |> editor_state_config.with_doc(make_initial_doc(sch))
@@ -188,7 +188,7 @@ fn make_state(sch: t.Schema(Nil)) -> t.EditorState(Nil) {
 
 fn update_meta(
   doc,
-  d: t.Node(Nil),
+  d: t.Node,
   steps_ref: pm_rt.Ref(Int),
   op_ref: pm_rt.Ref(String),
 ) {
@@ -223,8 +223,8 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 }
 
 fn find_para_split(
-  children: List(t.Node(Nil)),
-  d: t.Node(Nil),
+  children: List(t.Node),
+  d: t.Node,
   pos: Float,
 ) -> option.Option(Float) {
   case children {
@@ -250,11 +250,11 @@ fn find_para_split(
 }
 
 fn find_para_wrap(
-  children: List(t.Node(Nil)),
-  d: t.Node(Nil),
+  children: List(t.Node),
+  d: t.Node,
   qtype,
   pos: Float,
-) -> option.Option(t.NodeRange(Nil)) {
+) -> option.Option(t.NodeRange) {
   case children {
     [] -> None
     [ch, ..rest] ->
@@ -278,10 +278,10 @@ fn find_para_wrap(
 }
 
 fn find_quote_lift(
-  children: List(t.Node(Nil)),
-  d: t.Node(Nil),
+  children: List(t.Node),
+  d: t.Node,
   pos: Float,
-) -> option.Option(#(t.NodeRange(Nil), Float)) {
+) -> option.Option(#(t.NodeRange, Float)) {
   case children {
     [] -> None
     [ch, ..rest] ->

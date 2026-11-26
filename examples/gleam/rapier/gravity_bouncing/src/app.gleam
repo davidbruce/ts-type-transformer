@@ -46,7 +46,7 @@ fn start_loop(tick: fn() -> Nil) -> Nil {
 }
 
 fn draw_dashed(
-  ctx: CanvasRenderingContext2D(Nil),
+  ctx: CanvasRenderingContext2D,
   x1: Float,
   y1: Float,
   x2: Float,
@@ -87,7 +87,7 @@ pub fn main() {
   let assert Some(pause_btn) = document.get_element_by_id(doc, "btn-pause")
 
   let world_ref = rp_rt.ref_new(None)
-  let balls_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
+  let balls_ref: rp_rt.Ref(List(rt.RigidBody)) = rp_rt.ref_new([])
   let trails_ref: rp_rt.Ref(List(#(Int, Float, Float))) = rp_rt.ref_new([])
   let step_ref = rp_rt.ref_new(0)
   let earth_ref = rp_rt.ref_new(True)

@@ -159,6 +159,7 @@ pub const NAMING: Naming = Naming {
     funcs_flat: false,
     nests: false,
     members: |c, _| vec![c.name.clone(), "h".into()],
+    semantic_fallbacks: false,
 };
 
 pub(super) const RUNTIME: &str = include_str!("../runtime/cpp_runtime.hpp");

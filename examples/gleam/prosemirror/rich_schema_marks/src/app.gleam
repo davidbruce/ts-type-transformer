@@ -34,7 +34,7 @@ fn hole_spec(tag: String) -> dom_output_spec.DOMOutputSpec {
   dom_output_spec.List([dynamic.string(tag), dynamic.int(0)])
 }
 
-fn build_schema() -> t.Schema(Nil) {
+fn build_schema() -> t.Schema {
   let doc_spec =
     node_spec.create()
     |> node_spec.with_content("block+")
@@ -124,7 +124,7 @@ fn build_schema() -> t.Schema(Nil) {
   schema.new(spec)
 }
 
-fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
+fn make_initial_doc(sch: t.Schema) -> t.Node {
   let h =
     schema.node_with(
       sch,
@@ -195,14 +195,14 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
   )
 }
 
-fn make_state(sch: t.Schema(Nil)) -> t.EditorState(Nil) {
+fn make_state(sch: t.Schema) -> t.EditorState {
   editor_state_config.create()
   |> editor_state_config.with_schema(sch)
   |> editor_state_config.with_doc(make_initial_doc(sch))
   |> editor_state.create
 }
 
-fn target_range(st: t.EditorState(Nil)) -> #(Float, Float) {
+fn target_range(st: t.EditorState) -> #(Float, Float) {
   let sel = editor_state.get_selection(st)
   case selection.get_empty(sel) {
     False -> #(selection.get_from(sel), selection.get_to(sel))
@@ -242,7 +242,7 @@ fn set_btn_active(doc, id: String, on: Bool) {
 fn update_meta(
   sch,
   doc,
-  st: t.EditorState(Nil),
+  st: t.EditorState,
   dispatches_ref: pm_rt.Ref(Int),
   action_ref: pm_rt.Ref(String),
 ) {

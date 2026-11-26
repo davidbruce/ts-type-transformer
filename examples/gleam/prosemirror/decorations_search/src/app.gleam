@@ -38,7 +38,7 @@ fn hole_spec(tag: String) -> dom_output_spec.DOMOutputSpec {
   dom_output_spec.List([dynamic.string(tag), dynamic.int(0)])
 }
 
-fn build_schema() -> t.Schema(Nil) {
+fn build_schema() -> t.Schema {
   let doc_spec =
     node_spec.create()
     |> node_spec.with_content("block+")
@@ -108,11 +108,11 @@ fn build_schema() -> t.Schema(Nil) {
   schema.new(spec)
 }
 
-fn p_node(sch, txt: String) -> t.Node(Nil) {
+fn p_node(sch, txt: String) -> t.Node {
   schema.node_with(sch, "paragraph", None, schema.text(sch, txt), [])
 }
 
-fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
+fn make_initial_doc(sch: t.Schema) -> t.Node {
   let h =
     schema.node_with(
       sch,
@@ -161,9 +161,9 @@ fn find_matches_loop(
   qlen: Int,
   inline_pos: Float,
   inl_attr,
-  acc: List(t.Decoration(Nil)),
+  acc: List(t.Decoration),
   hits: Int,
-) -> #(List(t.Decoration(Nil)), Int) {
+) -> #(List(t.Decoration), Int) {
   case parts {
     [] | [_] -> #(acc, hits)
     [before, ..rest] -> {
@@ -176,15 +176,15 @@ fn find_matches_loop(
 }
 
 fn scan_block_children(
-  children: List(t.Node(Nil)),
+  children: List(t.Node),
   q: String,
   qlen: Int,
   inline_pos: Float,
   inl_attr,
-  acc: List(t.Decoration(Nil)),
+  acc: List(t.Decoration),
   hits: Int,
   matched: Bool,
-) -> #(List(t.Decoration(Nil)), Int, Bool) {
+) -> #(List(t.Decoration), Int, Bool) {
   case children {
     [] -> #(acc, hits, matched)
     [ch, ..rest] -> {
@@ -213,16 +213,16 @@ fn scan_block_children(
 }
 
 fn scan_doc_blocks(
-  blocks: List(t.Node(Nil)),
+  blocks: List(t.Node),
   q: String,
   qlen: Int,
   block_pos: Float,
   inl_attr,
   blk_attr,
-  acc: List(t.Decoration(Nil)),
+  acc: List(t.Decoration),
   inl_hits: Int,
   blk_hits: Int,
-) -> #(List(t.Decoration(Nil)), Int, Int) {
+) -> #(List(t.Decoration), Int, Int) {
   case blocks {
     [] -> #(list.reverse(acc), inl_hits, blk_hits)
     [blk, ..rest] -> {
@@ -261,9 +261,9 @@ fn scan_doc_blocks(
 }
 
 fn compute_decorations(
-  d: t.Node(Nil),
+  d: t.Node,
   raw_q: String,
-) -> #(t.DecorationSet(Nil), Int, Int) {
+) -> #(t.DecorationSet, Int, Int) {
   let q = string.lowercase(string.trim(raw_q))
   case string.length(q) {
     0 -> #(decoration_set.get_empty(), 0, 0)
@@ -291,7 +291,7 @@ fn compute_decorations(
   }
 }
 
-fn get_query(search_key, st: t.EditorState(Nil)) -> String {
+fn get_query(search_key, st: t.EditorState) -> String {
   case plugin_key.get_state(search_key, st, pm_rt.codec_dynamic()) {
     Some(v) ->
       case decode.run(v, decode.string) {
@@ -302,7 +302,7 @@ fn get_query(search_key, st: t.EditorState(Nil)) -> String {
   }
 }
 
-fn sync_meta(doc, search_key, st: t.EditorState(Nil), active_id: String) {
+fn sync_meta(doc, search_key, st: t.EditorState, active_id: String) {
   let q = get_query(search_key, st)
   let #(dset, ih, bh) = compute_decorations(editor_state.get_doc(st), q)
   let total = list.length(decoration_set.find(dset))

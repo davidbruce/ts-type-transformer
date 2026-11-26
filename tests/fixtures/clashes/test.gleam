@@ -17,10 +17,10 @@ fn check(ok: Bool, what: String) -> Nil {
 
 pub fn main() {
   let g = gizmo.new()
-  check(!gizmo.is_transforming_2(), "static")
+  check(!gizmo.static_is_transforming(), "static")
   check(gizmo.is_transforming(g), "method")
   // `fooBar` and `foo_bar` are one `foo_bar`.
-  check(gizmo.foo_bar(g) == 1.0 && gizmo.foo_bar_2(g) == 2.0, "foo_bar")
+  check(gizmo.foo_bar(g) == 1.0 && gizmo.call_foo_bar(g) == 2.0, "foo_bar")
 
   // The function `shape_area` and the method `Shape.area` are in modules
   // of their own: neither gives way.
@@ -34,7 +34,7 @@ pub fn main() {
   check(ns_node.id(ns_node.new()) == 2.0, "class")
   // The namespace's class: its functions in a module of its own name, its
   // type by its own name in the namespace's.
-  let n: ns.Node(Nil) = node.new()
+  let n: ns.Node = node.new()
   check(node.id(n) == 1.0, "namespace's class")
 
   io.println("checks passed")

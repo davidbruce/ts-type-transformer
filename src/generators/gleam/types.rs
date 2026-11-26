@@ -39,10 +39,11 @@ pub(super) struct Gen<'m> {
     pub home: HashMap<String, String>,
     pub ffi_home: HashMap<String, String>,
     pub module_rank: HashMap<String, usize>,
-    // Each class's type parameter count; and the class its chain continues
-    // from, with the arguments it gives it.
+    // Each class's type parameter count; the class its chain continues
+    // from, with the arguments it gives it; and classes that keep a phantom `(sub)`.
     pub classes: HashMap<String, usize>,
     pub parents: HashMap<String, (String, Vec<Ty>)>,
+    pub open_classes: HashSet<String>,
     // Class type parameters proven strictly class-bound across the entire model.
     pub class_bound: HashMap<(String, usize), (String, Vec<Ty>)>,
     // Where a class's type is open, `Element(a)`, any subtype (a function's
@@ -334,8 +335,14 @@ impl<'m> Gen<'m> {
             resolved.push(Ty::Any);
             parts.push("Dynamic".to_string());
         }
-        parts.push(self.phantom());
-        format!("{}({})", self.gt(n), parts.join(", "))
+        if self.open_classes.contains(n) {
+            parts.push(self.phantom());
+        }
+        if parts.is_empty() {
+            self.gt(n)
+        } else {
+            format!("{}({})", self.gt(n), parts.join(", "))
+        }
     }
 
     fn decodable(&self, n: &str) -> bool {
@@ -378,8 +385,14 @@ impl<'m> Gen<'m> {
                 _ => format!("{tvar}_a{i}"),
             })
             .collect();
-        parts.push(tvar);
-        format!("{}({})", self.gt(class), parts.join(", "))
+        if self.open_classes.contains(class) {
+            parts.push(tvar);
+        }
+        if parts.is_empty() {
+            self.gt(class)
+        } else {
+            format!("{}({})", self.gt(class), parts.join(", "))
+        }
     }
 
     // Gleam's type of a value.
@@ -967,9 +980,29 @@ impl<'m> Gen<'m> {
         let (_, suffixes) = self.m.member_names(u, &|n| self.tname(n));
         let mut variants: Vec<String> = Vec::with_capacity(u.parts.len());
         let mut ctors: Vec<String> = Vec::with_capacity(u.parts.len());
-        for suffix in suffixes {
-            let base_v = upper(&suffix);
-            let base_c = lower(&suffix);
+        for (i, (part, suffix)) in u.parts.iter().zip(&suffixes).enumerate() {
+            let mut base_v = upper(suffix);
+            let mut base_c = lower(suffix);
+            if let Ty::Obj(n) | Ty::Generic(n, _) = part
+                && let Some(path) = self.m.namespaced.get(n)
+                && let Some(leaf) = path.last()
+            {
+                let leaf_v = upper(leaf);
+                let leaf_c = lower(leaf);
+                let other_uses_leaf = u.parts.iter().zip(&suffixes).enumerate().any(|(j, (op, os))| {
+                    j != i
+                        && (upper(os) == leaf_v
+                            || matches!(op, Ty::Obj(on) | Ty::Generic(on, _) if self.m.namespaced.get(on).and_then(|p| p.last()).is_some_and(|ol| upper(ol) == leaf_v)))
+                });
+                if base_v != leaf_v
+                    && (base_v.starts_with(&leaf_v) || base_v.ends_with(&leaf_v))
+                    && !used_variants.contains(&leaf_v)
+                    && !other_uses_leaf
+                {
+                    base_v = leaf_v;
+                    base_c = leaf_c;
+                }
+            }
             let mut variant = base_v.clone();
             let mut ctor = base_c.clone();
             let mut n = 2;

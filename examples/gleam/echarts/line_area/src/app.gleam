@@ -2,9 +2,9 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node
 import echarts as ec
-import echarts/e_charts_core_option as raw
-import echarts/e_charts_init_opts
-import echarts/e_charts_type
+import echarts/echarts_core_option as raw
+import echarts/echarts_init_opts
+import echarts/echarts_type
 import echarts/ec_unit_option as unit
 import echarts/runtime
 import gleam/dynamic.{type Dynamic}
@@ -22,7 +22,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "chart") {
     None -> Nil
     Some(box) -> {
-      let chart = ec.init_with(Some(box), dynamic.nil(), e_charts_init_opts.create())
+      let chart = ec.init_with(Some(box), dynamic.nil(), echarts_init_opts.create())
       let opt =
         raw.create()
         |> unit.with_animation(False)
@@ -126,13 +126,13 @@ pub fn main() -> Nil {
             ]),
           ]),
         )
-      e_charts_type.set_option(chart, opt)
+      echarts_type.set_option(chart, opt)
 
       case document.get_element_by_id(doc, "meta") {
         None -> Nil
         Some(meta) -> {
-          let w = int.to_string(float.round(e_charts_type.get_width(chart)))
-          let h = int.to_string(float.round(e_charts_type.get_height(chart)))
+          let w = int.to_string(float.round(echarts_type.get_width(chart)))
+          let h = int.to_string(float.round(echarts_type.get_height(chart)))
           node.set_text_content(
             meta,
             Some(

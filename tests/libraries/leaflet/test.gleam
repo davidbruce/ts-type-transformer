@@ -197,7 +197,7 @@ pub fn main() {
   path_options.set_color(style, Some("#ff0000"))
   path_options.set_weight(style, Some(5.0))
   let styled = leaflet.circle_marker(london)
-  let _ = circle.set_style(circle.upcast(ring), style)
+  let _ = circle.set_style(ring, style)
   let passed =
     passed
     + check(

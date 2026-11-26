@@ -23,7 +23,7 @@ import tanstack_table_core/types as t
 import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
-fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
+fn store_reactivity_bindings() -> t.TableReactivityBindings
 
 // Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
@@ -63,7 +63,7 @@ fn at(xs: List(String), i: Int) -> String {
 }
 
 fn store_field(
-  table: t.TableCore(Dynamic, Nil),
+  table: t.TableCore(Dynamic),
   path: List(String),
   decoder: decode.Decoder(a),
 ) -> a {
@@ -81,8 +81,8 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
   }
 }
 
-fn render(table: t.TableCore(Dynamic, Nil), doc) {
-  let rows_view: t.TableRowModelsCore(Dynamic, Nil) = coerce(table)
+fn render(table: t.TableCore(Dynamic), doc) {
+  let rows_view: t.TableRowModelsCore(Dynamic) = coerce(table)
   let rows = row_model.get_rows(table_row_models_core.get_row_model(rows_view))
   let total =
     list.length(
@@ -139,7 +139,7 @@ fn render(table: t.TableCore(Dynamic, Nil), doc) {
 
   let page_idx = store_field(table, ["pagination", "pageIndex"], decode.int)
   let page_size = store_field(table, ["pagination", "pageSize"], decode.int)
-  let pag: t.TableRowPagination(Dynamic, Nil) = coerce(table)
+  let pag: t.TableRowPagination(Dynamic) = coerce(table)
   let page_cnt = float.round(table_row_pagination.get_page_count(pag))
   let msg =
     "Page "
@@ -204,7 +204,7 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let pag: t.TableRowPagination(Dynamic, Nil) = coerce(table)
+  let pag: t.TableRowPagination(Dynamic) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     let idx = store_field(table, ["pagination", "pageIndex"], decode.int)

@@ -36,7 +36,7 @@ fn hole_spec(tag: String) -> dom_output_spec.DOMOutputSpec {
   dom_output_spec.List([dynamic.string(tag), dynamic.int(0)])
 }
 
-fn build_schema() -> t.Schema(Nil) {
+fn build_schema() -> t.Schema {
   let doc_spec =
     node_spec.create()
     |> node_spec.with_content("block+")
@@ -92,11 +92,11 @@ fn build_schema() -> t.Schema(Nil) {
   schema.new(spec)
 }
 
-fn p_node(sch, txt: String) -> t.Node(Nil) {
+fn p_node(sch, txt: String) -> t.Node {
   schema.node_with(sch, "paragraph", None, schema.text(sch, txt), [])
 }
 
-fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
+fn make_initial_doc(sch: t.Schema) -> t.Node {
   let h =
     schema.node_with(
       sch,
@@ -131,7 +131,7 @@ fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
 fn update_meta(
   doc,
   audit_key,
-  st: t.EditorState(Nil),
+  st: t.EditorState,
   undo_ref: pm_rt.Ref(List(List(t.Step(Nil)))),
   redo_ref: pm_rt.Ref(List(List(t.Step(Nil)))),
   locked_ref: pm_rt.Ref(Bool),

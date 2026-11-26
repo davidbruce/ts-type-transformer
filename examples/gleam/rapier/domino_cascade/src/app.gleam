@@ -47,7 +47,7 @@ fn start_loop(tick: fn() -> Nil) -> Nil {
 }
 
 fn draw_rot_box(
-  ctx: CanvasRenderingContext2D(Nil),
+  ctx: CanvasRenderingContext2D,
   cx: Float,
   cy: Float,
   qx: Float,
@@ -105,8 +105,8 @@ pub fn main() {
   let assert Some(pause_btn) = document.get_element_by_id(doc, "btn-pause")
 
   let world_ref = rp_rt.ref_new(None)
-  let dominoes_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
-  let striker_ref: rp_rt.Ref(Option(rt.RigidBody(Nil))) = rp_rt.ref_new(None)
+  let dominoes_ref: rp_rt.Ref(List(rt.RigidBody)) = rp_rt.ref_new([])
+  let striker_ref: rp_rt.Ref(Option(rt.RigidBody)) = rp_rt.ref_new(None)
   let trail_ref: rp_rt.Ref(List(#(Float, Float))) = rp_rt.ref_new([])
   let step_ref = rp_rt.ref_new(0)
   let paused_ref = rp_rt.ref_new(False)

@@ -224,6 +224,7 @@ pub const NAMING: Naming = Naming {
         }
         own
     },
+    semantic_fallbacks: false,
 };
 
 pub(super) const RUNTIME: &str = include_str!("../runtime/zig_runtime.zig");

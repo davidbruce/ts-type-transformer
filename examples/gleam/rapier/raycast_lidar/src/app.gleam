@@ -63,7 +63,7 @@ fn start_loop(tick: fn() -> Nil) -> Nil {
 }
 
 fn draw_box(
-  ctx: CanvasRenderingContext2D(Nil),
+  ctx: CanvasRenderingContext2D,
   cx: Float,
   cy: Float,
   theta: Float,
@@ -103,7 +103,7 @@ fn draw_box(
 }
 
 fn draw_circle(
-  ctx: CanvasRenderingContext2D(Nil),
+  ctx: CanvasRenderingContext2D,
   wx: Float,
   wy: Float,
   r: Float,

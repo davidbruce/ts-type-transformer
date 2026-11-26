@@ -2,9 +2,9 @@ import dom/areas/core
 import dom/areas/core/document
 import dom/areas/core/node
 import echarts as ec
-import echarts/e_charts_core_option as raw
-import echarts/e_charts_init_opts
-import echarts/e_charts_type
+import echarts/echarts_core_option as raw
+import echarts/echarts_init_opts
+import echarts/echarts_type
 import echarts/ec_unit_option as unit
 import echarts/runtime
 import gleam/dynamic.{type Dynamic}
@@ -29,9 +29,9 @@ pub fn main() -> Nil {
   {
     Some(r_box), Some(g_box) -> {
       let radar =
-        ec.init_with(Some(r_box), dynamic.nil(), e_charts_init_opts.create())
+        ec.init_with(Some(r_box), dynamic.nil(), echarts_init_opts.create())
       let gauge =
-        ec.init_with(Some(g_box), dynamic.nil(), e_charts_init_opts.create())
+        ec.init_with(Some(g_box), dynamic.nil(), echarts_init_opts.create())
 
       let r_opt =
         raw.create()
@@ -140,7 +140,7 @@ pub fn main() -> Nil {
             ]),
           ]),
         )
-      e_charts_type.set_option(radar, r_opt)
+      echarts_type.set_option(radar, r_opt)
 
       let g_opt =
         raw.create()
@@ -228,15 +228,15 @@ pub fn main() -> Nil {
             ]),
           ]),
         )
-      e_charts_type.set_option(gauge, g_opt)
+      echarts_type.set_option(gauge, g_opt)
 
       case document.get_element_by_id(doc, "meta") {
         None -> Nil
         Some(meta) -> {
-          let w1 = int.to_string(float.round(e_charts_type.get_width(radar)))
-          let h1 = int.to_string(float.round(e_charts_type.get_height(radar)))
-          let w2 = int.to_string(float.round(e_charts_type.get_width(gauge)))
-          let h2 = int.to_string(float.round(e_charts_type.get_height(gauge)))
+          let w1 = int.to_string(float.round(echarts_type.get_width(radar)))
+          let h1 = int.to_string(float.round(echarts_type.get_height(radar)))
+          let w2 = int.to_string(float.round(echarts_type.get_width(gauge)))
+          let h2 = int.to_string(float.round(echarts_type.get_height(gauge)))
           node.set_text_content(
             meta,
             Some(

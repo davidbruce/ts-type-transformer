@@ -358,6 +358,7 @@ pub const NAMING: Naming = Naming {
     funcs_flat: true,
     nests: false,
     members: |_, _| Vec::new(),
+    semantic_fallbacks: false,
 };
 
 pub fn files(m: &Model) -> Result<Vec<(String, String)>, Vec<String>> {

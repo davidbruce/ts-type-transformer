@@ -7,16 +7,16 @@ import echarts/axis_line_option
 import echarts/bar_item_style_option
 import echarts/bar_series_option
 import echarts/category_axis_base_option_data as axis_data
-import echarts/e_charts_init_opts
-import echarts/e_charts_option
-import echarts/e_charts_type
+import echarts/echarts_init_opts
+import echarts/echarts_option
+import echarts/echarts_type
 import echarts/grid_component_option
 import echarts/line_style_option
 import echarts/split_line_option
 import echarts/title_component_option
 import echarts/title_text_style_option
-import echarts/xa_xis_component_option_category as category_x_axis_option
-import echarts/ya_xis_component_option_value as value_y_axis_option
+import echarts/x_axis_component_option_category as category_x_axis_option
+import echarts/y_axis_component_option_value as value_y_axis_option
 import gleam/dynamic
 import gleam/float
 import gleam/int
@@ -28,7 +28,7 @@ pub fn main() -> Nil {
   case document.get_element_by_id(doc, "chart") {
     None -> Nil
     Some(box) -> {
-      let chart = ec.init_with(Some(box), dynamic.nil(), e_charts_init_opts.create())
+      let chart = ec.init_with(Some(box), dynamic.nil(), echarts_init_opts.create())
       let title =
         title_component_option.create()
         |> title_component_option.with_text("Monthly Output")
@@ -90,21 +90,21 @@ pub fn main() -> Nil {
           |> bar_item_style_option.with_color("#111111"),
         )
       let opt =
-        e_charts_option.create()
-        |> e_charts_option.with_animation(False)
-        |> e_charts_option.with_background_color("#ffffff")
-        |> e_charts_option.with_title(title)
-        |> e_charts_option.with_grid(grid)
-        |> e_charts_option.with_x_axis_category(x_axis)
-        |> e_charts_option.with_y_axis_value(y_axis)
-        |> e_charts_option.with_series_bar(bars)
-      e_charts_type.set_option(chart, opt)
+        echarts_option.create()
+        |> echarts_option.with_animation(False)
+        |> echarts_option.with_background_color("#ffffff")
+        |> echarts_option.with_title(title)
+        |> echarts_option.with_grid(grid)
+        |> echarts_option.with_x_axis_category(x_axis)
+        |> echarts_option.with_y_axis_value(y_axis)
+        |> echarts_option.with_series_bar(bars)
+      echarts_type.set_option(chart, opt)
 
       case document.get_element_by_id(doc, "meta") {
         None -> Nil
         Some(meta) -> {
-          let w = int.to_string(float.round(e_charts_type.get_width(chart)))
-          let h = int.to_string(float.round(e_charts_type.get_height(chart)))
+          let w = int.to_string(float.round(echarts_type.get_width(chart)))
+          let h = int.to_string(float.round(echarts_type.get_height(chart)))
           node.set_text_content(
             meta,
             Some(

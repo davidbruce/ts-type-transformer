@@ -28,7 +28,7 @@ pub fn main() {
   let assert pick_result.Node(a) = pa.pick(True)
   check(node.name(a) == "a", "pa's pick")
   let assert pick_result.String(_) = pa.pick(False)
-  let assert pb_pick_result.PbNode(n) = pb.pick(True)
+  let assert pb_pick_result.Node(n) = pb.pick(True)
   check(pb_node.size(n) == 10.0, "pb's pick")
   let assert pb_pick_result.String(_) = pb.pick(False)
 

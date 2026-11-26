@@ -47,7 +47,7 @@ fn start_loop(tick: fn() -> Nil) -> Nil {
 }
 
 fn draw_rot_box(
-  ctx: CanvasRenderingContext2D(Nil),
+  ctx: CanvasRenderingContext2D,
   cx: Float,
   cy: Float,
   qx: Float,
@@ -92,7 +92,7 @@ fn draw_rot_box(
   ctx2d.stroke(ctx)
 }
 
-fn draw_pivot(ctx: CanvasRenderingContext2D(Nil), wx: Float, wy: Float) -> Nil {
+fn draw_pivot(ctx: CanvasRenderingContext2D, wx: Float, wy: Float) -> Nil {
   let cx = to_cx(wx)
   let cy = to_cy(wy)
   ctx2d.set_fill_style(ctx, "#ffffff")
@@ -119,9 +119,9 @@ pub fn main() {
   let assert Some(pause_btn) = document.get_element_by_id(doc, "btn-pause")
 
   let world_ref = rp_rt.ref_new(None)
-  let chain_ref: rp_rt.Ref(List(rt.RigidBody(Nil))) = rp_rt.ref_new([])
-  let arm_ref: rp_rt.Ref(Option(rt.RigidBody(Nil))) = rp_rt.ref_new(None)
-  let bob_ref: rp_rt.Ref(Option(rt.RigidBody(Nil))) = rp_rt.ref_new(None)
+  let chain_ref: rp_rt.Ref(List(rt.RigidBody)) = rp_rt.ref_new([])
+  let arm_ref: rp_rt.Ref(Option(rt.RigidBody)) = rp_rt.ref_new(None)
+  let bob_ref: rp_rt.Ref(Option(rt.RigidBody)) = rp_rt.ref_new(None)
   let trail_a_ref: rp_rt.Ref(List(#(Float, Float))) = rp_rt.ref_new([])
   let trail_b_ref: rp_rt.Ref(List(#(Float, Float))) = rp_rt.ref_new([])
   let step_ref = rp_rt.ref_new(0)

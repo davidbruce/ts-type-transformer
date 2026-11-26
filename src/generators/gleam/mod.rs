@@ -36,8 +36,10 @@ mod types;
 pub struct ProjectRef {
     pub package_name: String,
     pub dep_path: String,
-    /// Non-generic class/interface phantom types (`Name(sub)`) exported in `<pkg>/types.gleam`.
+    /// Non-generic class/interface types exported in `<pkg>/types.gleam`.
     pub classes: HashSet<String>,
+    /// Non-generic class/interface types exported with a phantom `(sub)` parameter.
+    pub open_classes: HashSet<String>,
 }
 
 /// Loads a previously generated Gleam binding package (via `tsrs-meta.toml`)
@@ -48,6 +50,7 @@ pub fn load_project_ref(pkg_or_toml: &Path, from_dir: &Path) -> Result<ProjectRe
         package_name: loaded.meta.package,
         dep_path: loaded.rel_dir,
         classes: loaded.meta.types.into_iter().collect(),
+        open_classes: loaded.meta.gleam_open.into_iter().collect(),
     })
 }
 
@@ -115,7 +118,9 @@ pub const NAMING: Naming = Naming {
     // Beside its functions there: its constants, list helpers and casts.
     members: |c, m| {
         let mut out: Vec<String> = c.consts.iter().map(|(k, _)| lower(k)).collect();
-        out.push("upcast".into());
+        if m.classes.iter().any(|k| bounds::parent(m, k).is_some_and(|(p, _)| p == c.name)) {
+            out.push("upcast".into());
+        }
         if c.iterates.is_some() || c.elements.is_some() {
             out.push("to_list".into());
         }
@@ -134,6 +139,7 @@ pub const NAMING: Naming = Naming {
         out.extend(bounds::secondary(m, c).iter().map(|a| lower(&format!("as_{}", snake(&upper(a))))));
         out
     },
+    semantic_fallbacks: true,
 };
 
 pub struct Output {
@@ -168,6 +174,47 @@ impl Output {
 // `getElementById` -> `get_element_by_id`, `HTMLElement` -> `html_element`.
 pub(super) fn snake(name: &str) -> String {
     super::case::snake_case_alnum(name)
+}
+
+/// Module-path snake_case preserving short 2-letter prefixes (`IRect` -> `irect`,
+/// `IPlayer` -> `iplayer`, `ZRenderType` -> `zrender_type`, `XPathResult` -> `xpath_result`)
+/// and normalizing quirky mixed-caps library names (`ECharts` -> `echarts`,
+/// `XAXis` -> `x_axis`, `YAXis` -> `y_axis`), while splitting multi-letter acronyms
+/// (`HTMLElement` -> `html_element`, `DOMRect` -> `dom_rect`, `WebGLProgram` -> `web_gl_program`).
+pub(super) fn module_snake(name: &str) -> String {
+    let norm = name
+        .replace("XAXis", "X_Axis")
+        .replace("YAXis", "Y_Axis")
+        .replace("ECharts", "Echarts");
+    let chars: Vec<char> = norm.chars().collect();
+    let mut out = String::new();
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_uppercase() {
+            let prev = i.checked_sub(1).map(|j| chars[j]);
+            let prev_prev = i.checked_sub(2).map(|j| chars[j]);
+            let next = chars.get(i + 1);
+            let after_digit = next.is_some_and(|n| n.is_lowercase());
+            let after_word = prev.is_some_and(|p| p.is_lowercase() || (p.is_ascii_digit() && after_digit));
+            let ends_acronym = prev.is_some_and(|p| p.is_uppercase())
+                && prev_prev.is_some_and(|pp| pp.is_uppercase())
+                && next.is_some_and(|n| n.is_lowercase());
+            if (after_word || ends_acronym) && !out.is_empty() && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.extend(c.to_lowercase());
+        } else if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('_') {
+            out.push('_');
+        }
+    }
+    out
+}
+
+pub(super) fn module_lower(name: &str) -> String {
+    let s = module_snake(name).trim_matches('_').to_string();
+    let s = if s.starts_with(|c: char| c.is_ascii_lowercase()) { s } else { format!("x{s}") };
+    if KEYWORDS.contains(&s.as_str()) { format!("{s}_") } else { s }
 }
 
 // A Gleam name for a value: snake_case, starting with a letter, not a keyword.
@@ -238,7 +285,7 @@ pub(super) fn module_path(paths: &HashMap<String, String>, pkg: &str, module: &s
         if module == "areas/main" || module.is_empty() {
             pkg.to_string()
         } else {
-            format!("{pkg}/{}", module.split('/').map(lower).collect::<Vec<_>>().join("/"))
+            format!("{pkg}/{}", module.split('/').map(module_lower).collect::<Vec<_>>().join("/"))
         }
     })
 }
@@ -246,7 +293,7 @@ pub(super) fn module_path(paths: &HashMap<String, String>, pkg: &str, module: &s
 pub(super) fn func_unit(m: &Model, paths: &HashMap<String, String>, pkg: &str, f: &Func) -> String {
     match m.func_namespaces.get(&f.import) {
         Some((path, _, module, depth)) => std::iter::once(module_path(paths, pkg, module))
-            .chain(path[(*depth).min(path.len())..].iter().map(|s| snake(&upper(s))))
+            .chain(path[(*depth).min(path.len())..].iter().map(|s| module_snake(&upper(s))))
             .collect::<Vec<_>>()
             .join("/"),
         None => paths[&f.module].clone(),
@@ -274,4 +321,25 @@ pub fn module(xml: &str) -> Result<Output, Vec<String>> {
 
 pub fn module_named(xml: &str, package_name: &str, refs: &[ProjectRef]) -> Result<Output, Vec<String>> {
     emit::module_named(xml, package_name, refs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::module_snake;
+
+    #[test]
+    fn module_snake_handles_short_prefixes_and_acronyms() {
+        assert_eq!(module_snake("IRect"), "irect");
+        assert_eq!(module_snake("IPlayer"), "iplayer");
+        assert_eq!(module_snake("ZRender"), "zrender");
+        assert_eq!(module_snake("ZRenderType"), "zrender_type");
+        assert_eq!(module_snake("XPathResult"), "xpath_result");
+        assert_eq!(module_snake("HTMLElement"), "html_element");
+        assert_eq!(module_snake("DOMRect"), "dom_rect");
+        assert_eq!(module_snake("WebGLProgram"), "web_gl_program");
+        assert_eq!(module_snake("IDBDatabase"), "idb_database");
+        assert_eq!(module_snake("EChartsOption"), "echarts_option");
+        assert_eq!(module_snake("XAXisComponentOption"), "x_axis_component_option");
+        assert_eq!(module_snake("YAXisComponentOption"), "y_axis_component_option");
+    }
 }

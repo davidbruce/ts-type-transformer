@@ -22,7 +22,7 @@ fn poly_opts(
   dash: Option(String),
   fill_color: String,
   fill_opacity: Float,
-) -> t.PolylineOptions(Nil) {
+) -> t.PolylineOptions {
   let opts =
     polyline_options.create()
     |> polyline_options.with_smooth_factor(1.0)

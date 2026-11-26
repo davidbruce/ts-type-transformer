@@ -452,16 +452,17 @@ pub(super) fn emit_class_and_func_modules<'m>(
         if c.iterates_async.is_some() {
             g.skip("async iteration");
         }
-        // Upcasts. Along the chain a subtype is its base already; this closes
-        // the type at this class, for a list or a branch of several subtypes:
-        // `element.upcast(div)` is an `Element(Nil)`.
-        let id = g.value_name("upcast");
-        let (this, closed) = (open(g), g.class_type(&c.name, &own));
-        g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
+        // Upcasts for open classes (those with primary subclasses). Along the chain a
+        // subtype is its base already; this closes the type at this class, for a list
+        // or a branch of several subtypes: `element.upcast(div)` is an `Element(Nil)`.
+        if g.open_classes.contains(&c.name) {
+            let id = g.value_name("upcast");
+            let (this, closed) = (open(g), g.class_type(&c.name, &own));
+            g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
+        }
         // Covariant widening for generic classes with class-typed defaults:
         // `shape.widen(rect)` turns `Shape(RectConfig(Nil), RectTag(Nil))` into `Shape(ShapeConfig(Nil), Nil)`.
         if c.type_params.iter().any(|p| matches!(&p.default, Some(Ty::Obj(dn) | Ty::Generic(dn, _)) if g.classes.contains_key(dn))) {
-            let wid = g.value_name("widen");
             let mut n = 0usize;
             let mut in_parts: Vec<String> = Vec::new();
             let mut out_parts: Vec<String> = Vec::new();
@@ -470,9 +471,12 @@ pub(super) fn emit_class_and_func_modules<'m>(
                     Some(Ty::Obj(dn)) if g.classes.contains_key(dn) => {
                         let count = g.classes[dn];
                         let mut sub_parts: Vec<String> = (0..count).map(|_| { n += 1; format!("w{n}_") }).collect();
-                        n += 1;
-                        sub_parts.push(format!("w{n}_"));
-                        in_parts.push(format!("{}({})", g.gt(dn), sub_parts.join(", ")));
+                        if g.open_classes.contains(dn) {
+                            n += 1;
+                            sub_parts.push(format!("w{n}_"));
+                        }
+                        let dn_ty = g.gt(dn);
+                        in_parts.push(if sub_parts.is_empty() { dn_ty } else { format!("{dn_ty}({})", sub_parts.join(", ")) });
                         out_parts.push(g.class_type(dn, &[]));
                     }
                     Some(Ty::Generic(dn, dargs)) if g.classes.contains_key(dn) => {
@@ -481,9 +485,12 @@ pub(super) fn emit_class_and_func_modules<'m>(
                             Some(Ty::Any) | None => { n += 1; format!("w{n}_") }
                             Some(a) => g.closed(|| g.ty(a)),
                         }).collect();
-                        n += 1;
-                        sub_parts.push(format!("w{n}_"));
-                        in_parts.push(format!("{}({})", g.gt(dn), sub_parts.join(", ")));
+                        if g.open_classes.contains(dn) {
+                            n += 1;
+                            sub_parts.push(format!("w{n}_"));
+                        }
+                        let dn_ty = g.gt(dn);
+                        in_parts.push(if sub_parts.is_empty() { dn_ty } else { format!("{dn_ty}({})", sub_parts.join(", ")) });
                         out_parts.push(g.class_type(dn, dargs));
                     }
                     _ => {
@@ -493,12 +500,17 @@ pub(super) fn emit_class_and_func_modules<'m>(
                     }
                 }
             }
-            n += 1;
-            in_parts.push(format!("w{n}_"));
-            out_parts.push("Nil".into());
-            let from = format!("{}({})", g.gt(&c.name), in_parts.join(", "));
-            let to = format!("{}({})", g.gt(&c.name), out_parts.join(", "));
-            g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {wid}(value: {from}) -> {to}\n\n", g.runtime_ffi());
+            if g.open_classes.contains(&c.name) {
+                n += 1;
+                in_parts.push(format!("w{n}_"));
+                out_parts.push("Nil".into());
+            }
+            if in_parts != out_parts {
+                let wid = g.value_name("widen");
+                let from = format!("{}({})", g.gt(&c.name), in_parts.join(", "));
+                let to = format!("{}({})", g.gt(&c.name), out_parts.join(", "));
+                g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {wid}(value: {from}) -> {to}\n\n", g.runtime_ffi());
+            }
         }
         // A base off the chain, whose members it has taken: `html_element.as_global_event_handlers(e)`.
         for a in secondary(m, c) {
@@ -565,7 +577,10 @@ pub(super) fn emit_class_and_func_modules<'m>(
                     let name = function_name(f, own);
                     g.fresh_value_or(&name, &format!("static_{name}"))
                 }
-                None => g.value_name(&function_name(f, &f.name)),
+                None => {
+                    let name = function_name(f, &f.name);
+                    g.fresh_value_or(&name, &format!("static_{name}"))
+                }
             };
             (unit, id)
         })
@@ -610,9 +625,11 @@ pub(super) fn emit_class_and_func_modules<'m>(
             };
             g.function(id, &f, Some((&c.name, &c.type_params)), with_as.as_deref());
         }
-        let id = g.fresh_value(&format!("{prefix}_upcast"));
-        let (this, closed) = (open(g), g.class_type(&c.name, &own));
-        g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
+        if g.open_classes.contains(&c.name) {
+            let id = g.fresh_value(&format!("{prefix}_upcast"));
+            let (this, closed) = (open(g), g.class_type(&c.name, &own));
+            g.out += &format!("@external(javascript, \"{}\", \"dynamic\")\npub fn {id}(value: {this}) -> {closed}\n\n", g.runtime_ffi());
+        }
         g.emit_with_builders(c, Some(prefix));
     }
     // Pass 2: zero-JS primary-chain inherited method & `with_*` builder aliases.

@@ -211,6 +211,7 @@ pub const NAMING: Naming = Naming {
     funcs_flat: false,
     nests: true,
     members: |_, _| TAKEN.iter().map(|t| t.to_string()).collect(),
+    semantic_fallbacks: false,
 };
 
 // A function's Rust name, were its model name `name`: what every handle has

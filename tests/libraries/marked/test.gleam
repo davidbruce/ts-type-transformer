@@ -124,7 +124,7 @@ pub fn main() {
     )
 
   // The lexer: tokens, their types and fields.
-  let tokens = lexer.lex_2("# Head\n\nSome *text*.\n\n- one\n- two\n")
+  let tokens = lexer.static_lex("# Head\n\nSome *text*.\n\n- one\n- two\n")
   let list_of = tokens_list.to_list(tokens)
   let types = list.map(list_of, token.get_type)
   let passed =

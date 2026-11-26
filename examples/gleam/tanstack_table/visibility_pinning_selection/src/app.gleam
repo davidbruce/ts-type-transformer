@@ -29,7 +29,7 @@ import tanstack_table_core/types as t
 import tanstack_table_core/updater
 
 @external(javascript, "@tanstack/table-core/store-reactivity-bindings", "storeReactivityBindings")
-fn store_reactivity_bindings() -> t.TableReactivityBindings(Nil)
+fn store_reactivity_bindings() -> t.TableReactivityBindings
 
 // Used strictly for TanStack v9 structural feature-mixin intersection views and construct_table options.
 @external(javascript, "./app_ffi.mjs", "coerce")
@@ -76,7 +76,7 @@ fn wire_btn(doc, id: String, action: fn() -> Nil) {
 }
 
 fn is_col_visible(
-  table: t.TableCore(Dynamic, Nil),
+  table: t.TableCore(Dynamic),
   col_id: String,
   default: Bool,
 ) -> Bool {
@@ -99,12 +99,12 @@ fn decode_str(v: Dynamic, fallback: String) -> String {
   }
 }
 
-fn render(table: t.TableCore(Dynamic, Nil), doc) {
-  let pin: t.TableColumnPinning(Dynamic, Nil) = coerce(table)
-  let vis: t.TableColumnVisibility(Dynamic, Nil) = coerce(table)
-  let sel: t.TableRowSelection(Dynamic, Nil) = coerce(table)
-  let cols_view: t.TableColumns(Dynamic, Nil) = coerce(table)
-  let rm_view: t.TableRowModelsCore(Dynamic, Nil) = coerce(table)
+fn render(table: t.TableCore(Dynamic), doc) {
+  let pin: t.TableColumnPinning(Dynamic) = coerce(table)
+  let vis: t.TableColumnVisibility(Dynamic) = coerce(table)
+  let sel: t.TableRowSelection(Dynamic) = coerce(table)
+  let cols_view: t.TableColumns(Dynamic) = coerce(table)
+  let rm_view: t.TableRowModelsCore(Dynamic) = coerce(table)
 
   let start_cols = table_column_pinning.get_start_visible_leaf_columns(pin)
   let center_cols = table_column_pinning.get_center_visible_leaf_columns(pin)
@@ -300,9 +300,9 @@ pub fn main() {
     ])
   let table = tt.construct_table(coerce(options))
   let doc = core.get_document()
-  let pin: t.TableColumnPinning(Dynamic, Nil) = coerce(table)
-  let vis: t.TableColumnVisibility(Dynamic, Nil) = coerce(table)
-  let sel: t.TableRowSelection(Dynamic, Nil) = coerce(table)
+  let pin: t.TableColumnPinning(Dynamic) = coerce(table)
+  let vis: t.TableColumnVisibility(Dynamic) = coerce(table)
+  let sel: t.TableRowSelection(Dynamic) = coerce(table)
 
   wire_btn(doc, "btn-0", fn() {
     let next_zone = !is_col_visible(table, "zone", False)

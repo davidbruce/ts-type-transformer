@@ -18,7 +18,7 @@ import leaflet/polyline_options
 import leaflet/runtime
 import leaflet/types as t
 
-fn make_map_opts() -> t.MapOptions(Nil) {
+fn make_map_opts() -> t.MapOptions {
   map_options.create()
   |> map_options.with_attribution_control(False)
   |> map_options.with_zoom_animation(False)
@@ -31,7 +31,7 @@ fn poly_opts(
   weight: Float,
   dash: Option(String),
   fill_opacity: Float,
-) -> t.PolylineOptions(Nil) {
+) -> t.PolylineOptions {
   let opts =
     polyline_options.create()
     |> polyline_options.with_smooth_factor(1.0)
@@ -44,7 +44,7 @@ fn poly_opts(
   }
 }
 
-fn pair_distances_km(pts: List(t.LatLng(Nil))) -> Float {
+fn pair_distances_km(pts: List(t.LatLng)) -> Float {
   case pts {
     [a, b, ..rest] ->
       lat_lng.distance_to(a, b) /. 1000.0 +. pair_distances_km([b, ..rest])

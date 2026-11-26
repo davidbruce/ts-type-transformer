@@ -10,7 +10,7 @@ import konva/circle_config
 import konva/container
 import konva/group
 import konva/group_config
-import konva/i_rect
+import konva/irect
 import konva/layer
 import konva/line
 import konva/line_config
@@ -196,8 +196,8 @@ pub fn main() -> Nil {
   let bbox = node.get_client_rect(group_b)
   let ax = int.to_string(float.round(pos.get_x(abs)))
   let ay = int.to_string(float.round(pos.get_y(abs)))
-  let bw = int.to_string(float.round(i_rect.get_width(bbox)))
-  let bh = int.to_string(float.round(i_rect.get_height(bbox)))
+  let bw = int.to_string(float.round(irect.get_width(bbox)))
+  let bh = int.to_string(float.round(irect.get_height(bbox)))
   let strip_txt =
     "Marker abs=(" <> ax <> ", " <> ay <> ") · Group B bbox=" <> bw <> "x" <> bh
 

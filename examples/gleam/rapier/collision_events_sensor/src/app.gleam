@@ -63,7 +63,7 @@ fn start_loop(tick: fn() -> Nil) -> Nil {
 }
 
 fn draw_rot_box(
-  ctx: CanvasRenderingContext2D(Nil),
+  ctx: CanvasRenderingContext2D,
   cx: Float,
   cy: Float,
   qx: Float,
@@ -109,7 +109,7 @@ fn draw_rot_box(
 }
 
 fn draw_segs(
-  ctx: CanvasRenderingContext2D(Nil),
+  ctx: CanvasRenderingContext2D,
   x1: Float,
   y1: Float,
   x2: Float,
@@ -147,7 +147,7 @@ pub fn main() {
 
   let world_ref = rp_rt.ref_new(None)
   let queue_ref = rp_rt.ref_new(None)
-  let bodies_ref: rp_rt.Ref(List(#(Bool, rt.RigidBody(Nil)))) =
+  let bodies_ref: rp_rt.Ref(List(#(Bool, rt.RigidBody))) =
     rp_rt.ref_new([])
   let sensor_handle_ref = rp_rt.ref_new(0.0)
   let step_ref = rp_rt.ref_new(0)
