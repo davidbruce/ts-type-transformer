@@ -30,7 +30,7 @@ fn walk_dir(dir: &str, dirs: &mut u32, files: &mut u32, total_bytes: &mut f64) {
     entries.sort();
     for name in entries {
         let full = path::join([dir, &name]);
-        let st = fs::stat_sync(&*full);
+        let st = fs::stat_sync(&full);
         if st.is_directory() {
             *dirs += 1;
             walk_dir(&full, dirs, files, total_bytes);
@@ -46,33 +46,33 @@ pub extern "C" fn start() {
     let mut c = Checks(0);
 
     let root = fs::mkdtemp_sync("/tmp/tsrs-node-tree-");
-    c.check(fs::exists_sync(&*root));
+    c.check(fs::exists_sync(&root));
 
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
     fs::mkdir_sync_with_make_directory_options(
-        &*path::join([root.as_str(), "src", "core"]),
+        &path::join([root.as_str(), "src", "core"]),
         &mk,
     );
     fs::mkdir_sync_with_make_directory_options(
-        &*path::join([root.as_str(), "src", "cli"]),
+        &path::join([root.as_str(), "src", "cli"]),
         &mk,
     );
     fs::mkdir_sync_with_make_directory_options(
-        &*path::join([root.as_str(), "docs"]),
+        &path::join([root.as_str(), "docs"]),
         &mk,
     );
 
-    fs::write_file_sync(&*path::join([root.as_str(), "README.md"]), "node tree demo");
+    fs::write_file_sync(&path::join([root.as_str(), "README.md"]), "node tree demo");
     fs::write_file_sync(
-        &*path::join([root.as_str(), "src", "core", "engine.txt"]),
+        &path::join([root.as_str(), "src", "core", "engine.txt"]),
         "engine core module!\n",
     );
     fs::write_file_sync(
-        &*path::join([root.as_str(), "src", "cli", "args.txt"]),
+        &path::join([root.as_str(), "src", "cli", "args.txt"]),
         "cli args parser\n",
     );
     fs::write_file_sync(
-        &*path::join([root.as_str(), "docs", "guide.md"]),
+        &path::join([root.as_str(), "docs", "guide.md"]),
         "monochrome documentation\n",
     );
 
@@ -88,8 +88,8 @@ pub extern "C" fn start() {
     let rm = fs::RmOptions::default()
         .with_recursive(true)
         .with_force(true);
-    fs::rm_sync_with(&*root, &rm);
-    c.check(!fs::exists_sync(&*root));
+    fs::rm_sync_with(&root, &rm);
+    c.check(!fs::exists_sync(&root));
     c.check(dir_count + file_count == 8);
     c.check(true);
 

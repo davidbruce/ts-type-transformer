@@ -152,6 +152,11 @@ impl<T: ?Sized, U: AsRef<T> + ?Sized> Nullable<T> for &U {
         Some((**self).as_ref())
     }
 }
+impl Nullable<str> for String {
+    fn arg(&self) -> Option<&str> {
+        Some(self.as_str())
+    }
+}
 impl<T: ?Sized> Nullable<T> for Option<&T> {
     fn arg(&self) -> Option<&T> {
         *self

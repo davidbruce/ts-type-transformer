@@ -221,7 +221,12 @@ fn scene() {
     check!(group.children().is_empty() && child.parent().is_none());
 
     // A mesh: a unit box with a basic material, hit by a ray from +Z.
-    let geometry = BoxGeometry::new_with(Some(2.0), Some(2.0), Some(2.0), None, None, None);
+    let geometry = BoxGeometry::new_with(
+        &BoxGeometryArgs::default()
+            .with_width(2.0)
+            .with_height(2.0)
+            .with_depth(2.0),
+    );
     let params = MeshBasicMaterialParameters::create();
     params.set_color(ColorRepresentation::Number(f64::from(0x00ff00)));
     let material = MeshBasicMaterial::new_with(Some(&params));

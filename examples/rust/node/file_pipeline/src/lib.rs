@@ -52,18 +52,18 @@ pub extern "C" fn start() {
     let in_dir = path::join([root.as_str(), "in"]);
     let out_dir = path::join([root.as_str(), "out"]);
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
-    fs::mkdir_sync_with_make_directory_options(&*in_dir, &mk);
-    fs::mkdir_sync_with_make_directory_options(&*out_dir, &mk);
+    fs::mkdir_sync_with_make_directory_options(&in_dir, &mk);
+    fs::mkdir_sync_with_make_directory_options(&out_dir, &mk);
 
     // Stage 1: seed
-    fs::write_file_sync(&*path::join([in_dir.as_str(), "a.log"]), "100 OK\n");
-    fs::write_file_sync(&*path::join([in_dir.as_str(), "b.log"]), "200 OK\n");
-    fs::write_file_sync(&*path::join([in_dir.as_str(), "c.log"]), "300 OK\n");
+    fs::write_file_sync(path::join([in_dir.as_str(), "a.log"]), "100 OK\n");
+    fs::write_file_sync(path::join([in_dir.as_str(), "b.log"]), "200 OK\n");
+    fs::write_file_sync(path::join([in_dir.as_str(), "c.log"]), "300 OK\n");
     bus.emit("stage", ["seed"]);
     c.check(stages.get() == 1);
 
     // Stage 2: bundle
-    let mut logs: Vec<String> = fs::readdir_sync(&*in_dir).iter().collect();
+    let mut logs: Vec<String> = fs::readdir_sync(&in_dir).iter().collect();
     logs.sort();
     c.check(logs == ["a.log", "b.log", "c.log"]);
 
@@ -71,21 +71,21 @@ pub extern "C" fn start() {
     for name in &logs {
         c.check(path::extname(name) == ".log");
         let chunk = fs::read_file_sync_string(
-            &*path::join([in_dir.as_str(), name.as_str()]),
+            path::join([in_dir.as_str(), name.as_str()]),
             BufferEncoding::Utf8,
         );
-        fs::append_file_sync(&*combined, &*chunk);
+        fs::append_file_sync(&combined, &chunk);
     }
     bus.emit("stage", ["bundle"]);
     c.check(stages.get() == 2);
 
     // Stage 3: verify
     let comb_text =
-        fs::read_file_sync_string(&*combined, BufferEncoding::Utf8);
-    c.check(fs::stat_sync(&*combined).size() == 21.0 && comb_text.contains("200 OK"));
+        fs::read_file_sync_string(&combined, BufferEncoding::Utf8);
+    c.check(fs::stat_sync(&combined).size() == 21.0 && comb_text.contains("200 OK"));
 
     let missing =
-        js::attempt(|| fs::read_file_sync(&*path::join([out_dir.as_str(), "missing.log"])));
+        js::attempt(|| fs::read_file_sync(path::join([out_dir.as_str(), "missing.log"])));
     let enoent_caught = missing.is_err_and(|e| e.message().contains("ENOENT"));
     c.check(enoent_caught);
 
@@ -96,8 +96,8 @@ pub extern "C" fn start() {
     let rm = fs::RmOptions::default()
         .with_recursive(true)
         .with_force(true);
-    fs::rm_sync_with(&*root, &rm);
-    c.check(!fs::exists_sync(&*root));
+    fs::rm_sync_with(&root, &rm);
+    c.check(!fs::exists_sync(&root));
 
     println(&format!(
         "pipeline_root={root} combined_bytes={}",

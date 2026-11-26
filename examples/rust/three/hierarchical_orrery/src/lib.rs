@@ -102,14 +102,25 @@ pub extern "C" fn start() {
     scene.add([grid]);
 
     let pedestal = Mesh::new_with(
-        &CylinderGeometry::new_with(0.55, 0.75, 0.35, 24.0, None, None, None, None),
+        &CylinderGeometry::new_with(
+            &CylinderGeometryArgs::default()
+                .with_radius_top(0.55)
+                .with_radius_bottom(0.75)
+                .with_height(0.35)
+                .with_radial_segments(24.0),
+        ),
         std_mat(0x262626, 0.7, 0.05, false),
     );
     pedestal.position().set_y(-1.3);
     scene.add([pedestal]);
 
     let core = Mesh::new_with(
-        &SphereGeometry::new_with(0.65, 24.0, 18.0, None, None, None, None),
+        &SphereGeometry::new_with(
+            &SphereGeometryArgs::default()
+                .with_radius(0.65)
+                .with_width_segments(24.0)
+                .with_height_segments(18.0),
+        ),
         std_mat(0x111111, 0.45, 0.2, false),
     );
     scene.add([core]);
@@ -119,7 +130,13 @@ pub extern "C" fn start() {
 
     let tp1 = MeshBasicMaterialParameters::default().with_color(0x999999 as f64);
     let inner_track = Mesh::new_with(
-        &TorusGeometry::new_with(2.1, 0.025, 8.0, 64.0, None, None, None),
+        &TorusGeometry::new_with(
+            &TorusGeometryArgs::default()
+                .with_radius(2.1)
+                .with_tube(0.025)
+                .with_radial_segments(8.0)
+                .with_tubular_segments(64.0),
+        ),
         MeshBasicMaterial::new_with(&tp1),
     );
     inner_track.rotation().set_x(std::f64::consts::FRAC_PI_2);
@@ -130,7 +147,12 @@ pub extern "C" fn start() {
     inner_pivot.add([inner_planet.clone()]);
 
     let planet = Mesh::new_with(
-        &SphereGeometry::new_with(0.36, 20.0, 16.0, None, None, None, None),
+        &SphereGeometry::new_with(
+            &SphereGeometryArgs::default()
+                .with_radius(0.36)
+                .with_width_segments(20.0)
+                .with_height_segments(16.0),
+        ),
         std_mat(0x555555, 0.55, 0.1, false),
     );
     inner_planet.add([planet]);
@@ -149,7 +171,13 @@ pub extern "C" fn start() {
 
     let tp2 = MeshBasicMaterialParameters::default().with_color(0xb5b5b5 as f64);
     let outer_track = Mesh::new_with(
-        &TorusGeometry::new_with(3.8, 0.025, 8.0, 80.0, None, None, None),
+        &TorusGeometry::new_with(
+            &TorusGeometryArgs::default()
+                .with_radius(3.8)
+                .with_tube(0.025)
+                .with_radial_segments(8.0)
+                .with_tubular_segments(80.0),
+        ),
         MeshBasicMaterial::new_with(&tp2),
     );
     outer_track.rotation().set_x(std::f64::consts::FRAC_PI_2);
@@ -166,7 +194,13 @@ pub extern "C" fn start() {
     outer_station.add([station_body.clone()]);
 
     let halo = Mesh::new_with(
-        &TorusGeometry::new_with(0.68, 0.06, 10.0, 32.0, None, None, None),
+        &TorusGeometry::new_with(
+            &TorusGeometryArgs::default()
+                .with_radius(0.68)
+                .with_tube(0.06)
+                .with_radial_segments(10.0)
+                .with_tubular_segments(32.0),
+        ),
         std_mat(0x111111, 0.4, 0.1, false),
     );
     halo.rotation().set_x(0.8);

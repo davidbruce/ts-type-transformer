@@ -130,8 +130,15 @@ pub extern "C" fn start() {
 
     let scene = Scene::new();
     scene.set_background(Color::new_with(0xf7f7f7 as f64));
-    let ortho_cam =
-        OrthographicCamera::new_with(-5.4 * aspect, 5.4 * aspect, 5.4, -5.4, 0.1, 100.0);
+    let ortho_cam = OrthographicCamera::new_with(
+        &OrthographicCameraArgs::default()
+            .with_left(-5.4 * aspect)
+            .with_right(5.4 * aspect)
+            .with_top(5.4)
+            .with_bottom(-5.4)
+            .with_near(0.1)
+            .with_far(100.0),
+    );
     let persp_cam = PerspectiveCamera::new_with(40.0, aspect, 0.1, 100.0);
 
     scene.add([AmbientLight::new_with(
@@ -159,7 +166,12 @@ pub extern "C" fn start() {
     let grid = GridHelper::new_with(9.0, 10.0, 0x999999 as f64, 0xd4d4d4 as f64);
     scene.add([grid]);
 
-    let tgeo = BoxGeometry::new_with(0.54, 1.0, 0.54, None, None, None);
+    let tgeo = BoxGeometry::new_with(
+        &BoxGeometryArgs::default()
+            .with_width(0.54)
+            .with_height(1.0)
+            .with_depth(0.54),
+    );
     let tmp = MeshStandardMaterialParameters::default()
         .with_color(0xffffff as f64)
         .with_roughness(0.65)

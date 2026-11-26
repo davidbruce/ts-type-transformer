@@ -5,7 +5,7 @@
 // `any`) is an integer handle into a table the glue keeps; 0 is null.
 // A callback is a handle made from a wasm function pointer and a context pointer.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::js::{call_expr, global, js_test, trim_trailing_undef};
 use super::model::{Absence, Call, Class, Func, Model, Shared, Ty, ident};
@@ -88,14 +88,14 @@ pub fn share_imports(m: &mut Model) {
     let mut groups: BTreeMap<String, Vec<(usize, usize)>> = BTreeMap::new();
     for (ci, c) in m.classes.iter().enumerate() {
         for (fi, f) in c.funcs.iter().enumerate().filter(|(_, f)| !f.fixed.is_empty()) {
-            let (params, body) = entry(f, &|j, _| format!("$F{j}"));
+            let (params, body) = entry(f, &m.args_bags, &|j, _| format!("$F{j}"));
             groups.entry(format!("{}|{body}", params.join(","))).or_default().push((ci, fi));
         }
     }
     for (_, members) in groups.into_iter().filter(|g| g.1.len() > 1) {
         let (ci, fi) = members[0];
         let first = &m.classes[ci].funcs[fi];
-        let (params, body) = entry(first, &|j, _| format!("$F{j}"));
+        let (params, body) = entry(first, &m.args_bags, &|j, _| format!("$F{j}"));
         // Named after what it calls: `addEventListener_keyed`.
         let what = match &first.call {
             Call::Method(js) => js.clone(),
@@ -164,7 +164,7 @@ fn to_wasm(x: &str, t: &Ty) -> String {
 
 // The glue of one import: its parameters and body. `fixed` writes the j-th
 // fixed argument, given its literal.
-fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, String) {
+fn entry(f: &Func, args_bags: &HashMap<String, Vec<String>>, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, String) {
     let mut wasm_params = Vec::new();
     let mut args = Vec::new();
     let mut may_undef = Vec::new();
@@ -173,6 +173,14 @@ fn entry(f: &Func, fixed: &dyn Fn(usize, &str) -> String) -> (Vec<String>, Strin
     }
     for (i, (_, t)) in f.params.iter().enumerate() {
         let p = format!("a{i}");
+        if let Some(props) = args_bags.get(&f.import).filter(|_| i == f.params.len() - 1) {
+            wasm_params.push(p);
+            for prop in props {
+                args.push(format!("(a{i} === 0 ? undefined : get(a{i})[{prop:?}])"));
+                may_undef.push(true);
+            }
+            continue;
+        }
         // A string is a pointer and a length; everything else is one value.
         if *t == Ty::Str {
             wasm_params.push(format!("{p}_ptr"));
@@ -427,7 +435,7 @@ pub fn glue_for_module(m: &Model, used: Option<&HashSet<String>>, wasm_module: &
         None => format!("{{ try {{ return {body}; }} catch (e) {{ return fail(e); }} }}"),
     };
     for f in m.all_funcs().filter(|f| f.shared.is_none() && wanted(&f.import)) {
-        let (params, body) = entry(f, &|_, literal| literal.to_string());
+        let (params, body) = entry(f, &m.args_bags, &|_, literal| literal.to_string());
         out += &format!("    {}: ({}) => {},\n", f.import, params.join(", "), guarded(&body));
     }
     // A shared import takes the index of the fixed arguments after `self`.

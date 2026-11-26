@@ -1056,6 +1056,16 @@ fn absent(t: Ty, a: Absence) -> Ty {
     }
 }
 
+fn has_unsupported_bag_ty(t: &Ty) -> bool {
+    match t {
+        Ty::Param(_) | Ty::Key(_) | Ty::Mapped(_) | Ty::Listener(_) => true,
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Record(inner) => has_unsupported_bag_ty(inner),
+        Ty::Tuple(es) | Ty::Union(es) => es.iter().any(has_unsupported_bag_ty),
+        Ty::Generic(_, args) => args.iter().any(has_unsupported_bag_ty),
+        _ => false,
+    }
+}
+
 impl Builder<'_> {
     // More than four optional arguments are an option bag of them, made as
     // any is (three's `CylinderGeometry(radiusTop?, .., thetaLength?)`):
@@ -1063,7 +1073,19 @@ impl Builder<'_> {
     // The function takes the bag, optional, for them; `Model::args_bags` says
     // how it spreads.
     pub(super) fn args_bags(&mut self) {
-        let mut taken: HashSet<String> = self.model.classes.iter().map(|c| c.name.clone()).chain(self.model.callbacks.iter().map(|c| c.name.clone())).collect();
+        let mut taken: HashSet<String> = self
+            .model
+            .classes
+            .iter()
+            .map(|c| c.name.clone())
+            .chain(self.model.callbacks.iter().map(|c| c.name.clone()))
+            .chain(self.model.enums.iter().map(|(n, _)| n.clone()))
+            .chain(self.model.num_enums.iter().map(|(n, _)| n.clone()))
+            .chain(self.model.unions.iter().map(|u| u.name.clone()))
+            .chain(self.model.opaque.iter().cloned())
+            .chain(self.model.type_aliases.iter().map(|(a, _)| a.clone()))
+            .chain(self.model.record_aliases.iter().map(|(a, _)| a.clone()))
+            .collect();
         let mut bags = Vec::new();
         for ci in 0..self.model.classes.len() {
             let (owner, module) = (self.model.classes[ci].name.clone(), self.model.classes[ci].module.clone());
@@ -1089,6 +1111,10 @@ impl Builder<'_> {
     fn args_bag(&mut self, owner: &str, module: &str, f: &mut Func, taken: &mut HashSet<String>) -> Option<Class> {
         let start = super::tail_start(f);
         if f.rest || f.params.len() - start <= 4 || !matches!(f.call, Call::Method(_) | Call::Static(_) | Call::New(_)) {
+            return None;
+        }
+        let mut seen_props = HashSet::new();
+        if f.params[start..].iter().any(|(p, t)| has_unsupported_bag_ty(t) || !seen_props.insert(ident(p))) {
             return None;
         }
         let pascal = |s: &str| s.chars().take(1).flat_map(char::to_uppercase).chain(s.chars().skip(1)).collect::<String>();

@@ -32,10 +32,10 @@ pub extern "C" fn start() {
                 let alpha = 0.25 + 0.75 * t;
                 let color = format!("hsla(0, 0%, {light:.0}%, {alpha:.2})");
 
-                form.stroke_only_with(&*color, 1.5 + 2.5 * t, None, None)
+                form.stroke_only_with(&color, 1.5 + 2.5 * t, None, None)
                     .line(&seg);
                 let dot = Circle::from_center(&pt, 1.5 + 4.5 * t * t);
-                form.fill_only(&*color).circle(&dot);
+                form.fill_only(&color).circle(&dot);
             }
 
             let ring_radius = 18.0 + 6.0 * (time * 0.004).sin();

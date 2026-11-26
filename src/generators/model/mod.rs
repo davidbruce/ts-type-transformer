@@ -741,7 +741,7 @@ impl<'a> ModelOptions<'a> {
             overloading: target == "C++",
             retain_opaque_constraints: target == "Gleam",
             typed_union_arrays: target == "Gleam",
-            args_bags: target == "Gleam",
+            args_bags: matches!(target, "Gleam" | "Rust"),
             records: matches!(target, "C" | "C++" | "Rust" | "Gleam"),
         }
     }

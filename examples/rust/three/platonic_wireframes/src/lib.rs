@@ -114,7 +114,13 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        BoxGeometry::new_with(1.45, 1.45, 1.45, None, None, None).into(),
+        BoxGeometry::new_with(
+            &BoxGeometryArgs::default()
+                .with_width(1.45)
+                .with_height(1.45)
+                .with_depth(1.45),
+        )
+        .into(),
         0x262626,
         0.65,
         0.1,
@@ -142,7 +148,14 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        TorusKnotGeometry::new_with(0.72, 0.24, 96.0, 16.0, None, None).into(),
+        TorusKnotGeometry::new_with(
+            &TorusKnotGeometryArgs::default()
+                .with_radius(0.72)
+                .with_tube(0.24)
+                .with_tubular_segments(96.0)
+                .with_radial_segments(16.0),
+        )
+        .into(),
         0x737373,
         0.45,
         0.15,
@@ -170,7 +183,14 @@ pub extern "C" fn start() {
     add_solid(
         &scene,
         &wire_group,
-        TorusGeometry::new_with(0.72, 0.23, 16.0, 48.0, None, None, None).into(),
+        TorusGeometry::new_with(
+            &TorusGeometryArgs::default()
+                .with_radius(0.72)
+                .with_tube(0.23)
+                .with_radial_segments(16.0)
+                .with_tubular_segments(48.0),
+        )
+        .into(),
         0x404040,
         0.55,
         0.12,

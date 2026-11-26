@@ -5994,4 +5994,89 @@ export declare function intlFormat(date: number): string;
             }
         }
     }
+
+    #[test]
+    fn rust_string_and_args_builder() {
+        let Some(rustc) = rustc_wasm() else { return };
+        let Some([node]) = tools(["node"]) else { return };
+        let dts = write_dts(
+            "rust-ergo-item3",
+            r#"export type StrOrNum = string | number;
+export declare function optStr(prefix: string, suffix?: string): string;
+export declare function unionArg(x: StrOrNum): string;
+export declare class CylinderGeometry {
+    radiusTop: number;
+    radialSegments: number;
+    constructor(
+        radiusTop?: number,
+        radiusBottom?: number,
+        height?: number,
+        radialSegments?: number,
+        heightSegments?: number,
+        openEnded?: boolean,
+        thetaStart?: number,
+        thetaLength?: number
+    );
+}
+"#,
+        );
+        let js = r#"
+export const root = {
+    optStr: (p, s) => p + ":" + (s ?? "none"),
+    unionArg: (x) => String(x),
+    CylinderGeometry: class CylinderGeometry {
+        constructor(rt = 1, rb = 1, h = 1, rs = 32) {
+            this.radiusTop = rt;
+            this.radialSegments = rs;
+        }
+    },
+};
+"#;
+        let xml = lower(&dts, Some("rust"), &[]);
+        let m = model(&xml, "Rust");
+        let out = root().join("target/e2e/rust-ergo-item3");
+        let _ = fs::remove_dir_all(&out);
+        fs::create_dir_all(&out).unwrap();
+        rust_bindings(&rustc, &out, &m);
+        let rs = r#"#![no_main]
+use bindings::*;
+
+#[link(wasm_import_module = "env")]
+unsafe extern "C" {
+    #[link_name = "check"]
+    fn check_at(ok: i32, line: u32);
+}
+
+macro_rules! check {
+    ($ok:expr) => { unsafe { check_at(i32::from($ok), line!()) } };
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn run() {
+    let owned = String::from("ok");
+    check!(opt_str_with("a", owned) == "a:ok");
+    check!(opt_str_with("a", None) == "a:none");
+    let ref_str = String::from("hi");
+    check!(union_arg(&ref_str) == "hi");
+    check!(union_arg(ref_str) == "hi");
+    let def_cyl = CylinderGeometry::new();
+    check!(def_cyl.radius_top() == 1.0);
+    let args = CylinderGeometryArgs::default()
+        .with_radius_top(0.55)
+        .with_radial_segments(16.0);
+    let cyl = CylinderGeometry::new_with(&args);
+    check!(cyl.radius_top() == 0.55);
+    check!(cyl.radial_segments() == 16.0);
+}
+"#;
+        fs::write(out.join("test.rs"), rs).unwrap();
+        run(Command::new(&rustc).current_dir(&out).args(RUSTC_WASM).args(RUSTC_PROGRAM).args(["-o", "test.wasm", "test.rs"]));
+        fs::write(out.join("impl.mjs"), js).unwrap();
+        fs::write(out.join("glue.mjs"), generators::wasm::glue(&m, None)).unwrap();
+        run(Command::new(&node)
+            .arg(root().join("tests/run_wasm.mjs"))
+            .arg(out.join("impl.mjs"))
+            .arg(out.join("glue.mjs"))
+            .arg(out.join("test.wasm")));
+    }
 }

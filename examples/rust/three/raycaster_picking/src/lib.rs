@@ -148,13 +148,45 @@ pub extern "C" fn start() {
     scene.add([grid]);
 
     let geos: Vec<BufferGeometry> = vec![
-        BoxGeometry::new_with(1.05, 1.05, 1.05, None, None, None).into(),
-        ConeGeometry::new_with(0.62, 1.25, 20.0, None, None, None, None).into(),
-        CylinderGeometry::new_with(0.48, 0.48, 1.2, 24.0, None, None, None, None).into(),
-        SphereGeometry::new_with(0.62, 24.0, 18.0, None, None, None, None).into(),
+        BoxGeometry::new_with(
+            &BoxGeometryArgs::default()
+                .with_width(1.05)
+                .with_height(1.05)
+                .with_depth(1.05),
+        )
+        .into(),
+        ConeGeometry::new_with(
+            &ConeGeometryArgs::default()
+                .with_radius(0.62)
+                .with_height(1.25)
+                .with_radial_segments(20.0),
+        )
+        .into(),
+        CylinderGeometry::new_with(
+            &CylinderGeometryArgs::default()
+                .with_radius_top(0.48)
+                .with_radius_bottom(0.48)
+                .with_height(1.2)
+                .with_radial_segments(24.0),
+        )
+        .into(),
+        SphereGeometry::new_with(
+            &SphereGeometryArgs::default()
+                .with_radius(0.62)
+                .with_width_segments(24.0)
+                .with_height_segments(18.0),
+        )
+        .into(),
         OctahedronGeometry::new_with(0.68, 0.0).into(),
         DodecahedronGeometry::new_with(0.62, 0.0).into(),
-        TorusGeometry::new_with(0.5, 0.18, 14.0, 36.0, None, None, None).into(),
+        TorusGeometry::new_with(
+            &TorusGeometryArgs::default()
+                .with_radius(0.5)
+                .with_tube(0.18)
+                .with_radial_segments(14.0)
+                .with_tubular_segments(36.0),
+        )
+        .into(),
         IcosahedronGeometry::new_with(0.64, 0.0).into(),
         TetrahedronGeometry::new_with(0.72, 0.0).into(),
     ];

@@ -108,8 +108,12 @@ fn physics() {
     );
     check!(near(ray.point_at(2.0).y(), 8.0, 1e-9));
     // Excluding the ball, the ray reaches the slab's top at 0.5.
-    let ground_hit =
-        world.cast_ray_with(&ray, 100.0, true, None, None, Some(&collider), None, None);
+    let ground_hit = world.cast_ray_with(
+        &ray,
+        100.0,
+        true,
+        &WorldCastRayArgs::default().with_filter_exclude_collider(&collider),
+    );
     check!(ground_hit.is_some_and(|h| near(h.time_of_impact(), 9.5, 1e-6)));
     // A ray aimed away, or too short, hits nothing.
     check!(
