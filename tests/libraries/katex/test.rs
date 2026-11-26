@@ -85,13 +85,11 @@ pub extern "C" fn run() {
     check!(lenient.error_color().as_deref() == Some("#00ff00"));
 
     // User macros.
-    let macros = KatexOptionsMacros::create();
-    macros.set_at("\\RR", JsValue::from("\\mathbb{R}"));
     let custom = KatexOptions::create();
-    custom.set_macros(Some(&macros));
+    custom.set_macros([("\\RR", "\\mathbb{R}")]);
     let r = render_to_string_with("x \\in \\RR", Some(&custom));
     check!(r.contains("mathbb"));
-    check!(macros.at("\\RR").as_string() == "\\mathbb{R}");
+    check!(custom.macros().unwrap().at("\\RR").unwrap().as_string() == "\\mathbb{R}");
 
     // Strict mode: a Unicode letter in math mode is only a warning unless strict.
     let strict = KatexOptions::create();

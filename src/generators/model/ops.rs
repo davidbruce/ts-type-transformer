@@ -70,6 +70,7 @@ pub fn walk(t: &Ty, f: &dyn Fn(&Ty) -> Option<Ty>) -> Ty {
         Ty::Nullable(inner, u) => Ty::Nullable(Box::new(walk(inner, f)), *u),
         Ty::Listener(inner) => Ty::Listener(Box::new(walk(inner, f))),
         Ty::ArrayOf(inner) => Ty::ArrayOf(Box::new(walk(inner, f))),
+        Ty::Record(inner) => Ty::Record(Box::new(walk(inner, f))),
         Ty::Tuple(es) => Ty::Tuple(es.iter().map(|e| walk(e, f)).collect()),
         Ty::Generic(n, args) => Ty::Generic(n.clone(), args.iter().map(|a| walk(a, f)).collect()),
         t => t.clone(),
@@ -120,7 +121,7 @@ pub fn each_type(m: &Model, f: &mut dyn FnMut(&str, &Ty)) {
     fn visit(at: &str, t: &Ty, f: &mut dyn FnMut(&str, &Ty)) {
         f(at, t);
         match t {
-            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => visit(at, inner, f),
+            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => visit(at, inner, f),
             Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().for_each(|a| visit(at, a, f)),
             _ => {}
         }
@@ -151,6 +152,9 @@ pub fn each_type(m: &Model, f: &mut dyn FnMut(&str, &Ty)) {
     for k in &m.maps {
         k.values.iter().for_each(|v| visit(&k.name, v, f));
     }
+    for (a, t) in &m.record_aliases {
+        visit(a, t, f);
+    }
 }
 
 // Whether a function type's result is an `any` the library declared, not
@@ -163,7 +167,7 @@ pub fn listener_result(f: Node) -> bool {
 pub fn mentions(t: &Ty, p: &str) -> bool {
     match t {
         Ty::Param(n) => n == p,
-        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => mentions(inner, p),
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) | Ty::Record(inner) => mentions(inner, p),
         Ty::Tuple(es) | Ty::Union(es) | Ty::Generic(_, es) => es.iter().any(|e| mentions(e, p)),
         _ => false,
     }

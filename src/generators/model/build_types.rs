@@ -762,7 +762,7 @@ impl<'a> Builder<'a> {
                 }
                 let ts: Vec<Ty> = elems.iter().map(|e| self.ty(only_child(*e), owner)).collect();
                 let crosses = |t: &Ty| match t {
-                    Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_) | Ty::Array | Ty::Tuple(_) => true,
+                    Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_) | Ty::Array | Ty::Tuple(_) | Ty::Record(_) => true,
                     Ty::Generic(..) | Ty::Param(_) => self.generics,
                     Ty::NamedUnion(u) => self.model.unions.iter().any(|x| x.name == *u && x.decodable()),
                     _ => false,
@@ -790,17 +790,72 @@ impl<'a> Builder<'a> {
     // flag, a string, a handle or a union that can be told apart.
     fn array_of(&mut self, elem: Ty) -> Ty {
         match elem {
-            e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_)) => Ty::ArrayOf(Box::new(e)),
+            e @ (Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::ArrayOf(_) | Ty::Record(_)) => Ty::ArrayOf(Box::new(e)),
             e @ (Ty::Generic(..) | Ty::Param(_)) if self.generics => Ty::ArrayOf(Box::new(e)),
             Ty::NamedUnion(u) if self.model.unions.iter().any(|x| x.name == u && x.decodable()) => Ty::ArrayOf(Box::new(Ty::NamedUnion(u))),
             _ => Ty::Array,
         }
     }
 
+    fn record_of(&mut self, val: Ty) -> Ty {
+        let val = match val {
+            Ty::Nullable(inner, Absence::Undefined) => return self.record_of(*inner),
+            other => other,
+        };
+        let inner = match val {
+            e @ (Ty::Any | Ty::Num | Ty::Bool | Ty::Str | Ty::Obj(_) | Ty::Enum(_) | Ty::NumEnum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_)) => e,
+            e @ Ty::Param(_) if self.generics => e,
+            Ty::Generic(n, args) if self.generics && !self.model.unions.iter().any(|u| u.name == n && !u.decodable()) => Ty::Generic(n, args),
+            Ty::NamedUnion(u) if self.model.unions.iter().any(|x| x.name == u && x.decodable()) => Ty::NamedUnion(u),
+            _ => Ty::Any,
+        };
+        Ty::Record(Box::new(inner))
+    }
+
+    pub(super) fn resolve_pure_record(&mut self, key: &str, arg_nodes: &[Node<'a, 'a>], owner: &str) -> Option<Ty> {
+        let &(decl, ret_node) = self.pure_records.get(key)?;
+        if self.resolving.contains(&key.to_string()) || self.resolving.len() > 8 {
+            return Some(Ty::Record(Box::new(Ty::Any)));
+        }
+        let args: Vec<Ty> = arg_nodes.iter().map(|a| self.ty(*a, owner)).collect();
+        self.resolving.push(key.to_string());
+        let saved_bad = self.bad.take();
+        let saved = (self.erased.clone(), self.keyed.clone(), self.key_strings.clone(), self.last_type_params.clone());
+        self.erased.clear();
+        self.keyed.clear();
+        self.key_strings.clear();
+        let tparams: Vec<TParam> = named(decl, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
+        let mut val = self.ty(ret_node, "");
+        if self.bad.is_some() {
+            self.bad = None;
+            val = Ty::Any;
+        } else if !tparams.is_empty() {
+            val = super::ops::subst(&val, &tparams, &args);
+        }
+        (self.erased, self.keyed, self.key_strings, self.last_type_params) = saved;
+        self.bad = saved_bad;
+        self.resolving.pop();
+        Some(self.record_of(val))
+    }
+
     // `owner` is what `this` is, in a type argument (`GetSet<number, this>`).
     fn reference(&mut self, n: Node<'a, 'a>, owner: &str) -> Ty {
         let key = self.ref_key(n);
         let declared = self.decls.get(&key).copied();
+        if self.opts.records && declared.is_none() && external(&key) == "Record" {
+            let mut args = elements(n);
+            if let (Some(k), Some(v)) = (args.next(), args.next())
+                && k.has_tag_name("primitive") && attr(k, "name") == "string"
+                && args.next().is_none()
+            {
+                let val = self.ty(v, owner);
+                return self.record_of(val);
+            }
+        }
+        if self.pure_records.contains_key(&key) {
+            let arg_nodes: Vec<Node> = elements(n).collect();
+            return self.resolve_pure_record(&key, &arg_nodes, owner).unwrap_or_else(|| Ty::Record(Box::new(Ty::Any)));
+        }
         // `Array<T>` is `T[]`.
         if declared.is_none() && matches!(external(&key), "Array" | "ReadonlyArray") {
             return match elements(n).next() {
@@ -902,7 +957,7 @@ impl<'a> Builder<'a> {
                     if let [only] = parts.as_slice() {
                         return if has_void { absent(only.clone(), Absence::Undefined) } else { only.clone() };
                     }
-                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
+                    let simple = |p: &Ty| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_)) || self.generics && matches!(p, Ty::Generic(..) | Ty::Param(_));
                     if !parts.iter().all(simple) || !distinct(&parts) {
                         if std::env::var_os("TS_UNION_DEBUG").is_some() {
                             eprintln!("UNION {name}: distinct={} {:?}", distinct(&parts), parts);
@@ -961,8 +1016,9 @@ pub(super) fn is_function_interface(d: Node) -> bool {
 }
 
 // No two members alike. Arrays are alike whatever they hold: a test sees only an array.
+// Pure string-keyed records are alike whatever they hold.
 fn distinct(parts: &[Ty]) -> bool {
-    let shape = |p: &Ty| if matches!(p, Ty::ArrayOf(_) | Ty::Tuple(_)) { Ty::Array } else { p.clone() };
+    let shape = |p: &Ty| if matches!(p, Ty::ArrayOf(_) | Ty::Tuple(_)) { Ty::Array } else if matches!(p, Ty::Record(_)) { Ty::Record(Box::new(Ty::Any)) } else { p.clone() };
     let shapes: Vec<Ty> = parts.iter().map(shape).collect();
     shapes.iter().enumerate().all(|(i, p)| !shapes[..i].contains(p))
 }
@@ -976,7 +1032,7 @@ pub(super) fn value(t: Ty) -> Ty {
 fn rename_param(t: &mut Ty, from: &str, to: &str) {
     match t {
         Ty::Param(n) if n == from => *n = to.to_string(),
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => rename_param(inner, from, to),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => rename_param(inner, from, to),
         Ty::Generic(_, args) | Ty::Tuple(args) => args.iter_mut().for_each(|a| rename_param(a, from, to)),
         _ => {}
     }
@@ -987,7 +1043,7 @@ fn rename_param(t: &mut Ty, from: &str, to: &str) {
 // in, and a handle coming back; a flag or an enum is -1 when absent.
 fn absent(t: Ty, a: Absence) -> Ty {
     match t {
-        Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), a),
+        Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_) | Ty::Str | Ty::Param(_) | Ty::Generic(..) => Ty::Nullable(Box::new(t), a),
         Ty::Num | Ty::NumEnum(_) | Ty::Bool | Ty::Enum(_) | Ty::Mapped(_) | Ty::NamedUnion(_) | Ty::Listener(_) => Ty::Nullable(Box::new(t), a),
         // `x?: T | null`: omitted too, as `x?: T` is.
         Ty::Nullable(inner, u) => Ty::Nullable(inner, match (a, u) {

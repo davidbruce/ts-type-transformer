@@ -173,6 +173,7 @@ pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::Mod
     retain_opaque_constraints: false,
     typed_union_arrays: false,
     args_bags: false,
+    records: true,
 };
 
 // A tuple struct is also a function of its name: types and functions share

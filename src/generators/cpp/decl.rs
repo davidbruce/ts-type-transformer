@@ -86,7 +86,7 @@ pub(super) fn decoder_guard_id(u: &NamedUnion, m: &Model, pkg_name: &str, resolv
         }
         if !word.is_empty() {
             let tok = word.as_str();
-            let is_std = matches!(tok, "std" | "variant" | "string" | "optional" | "double" | "bool" | "ts" | "Array" | "Tuple" | "Value" | "Promise" | "PromiseLike");
+            let is_std = matches!(tok, "std" | "variant" | "string" | "optional" | "double" | "bool" | "ts" | "Array" | "Record" | "Tuple" | "Value" | "Promise" | "PromiseLike");
             if preceded_by_colon || is_std {
                 canonical.push_str(tok);
             } else if let Some((idx, orig)) = resolved_opaque.get(tok) {
@@ -385,6 +385,22 @@ pub(super) fn declarations(m: &Model, pkg_name: &str, refs: &[ProjectRef], resol
         let (name, text, _) = templates.remove(ready);
         types += &text;
         done.insert(name);
+    }
+    let taken: HashSet<&str> = m
+        .classes
+        .iter()
+        .map(|c| c.name.as_str())
+        .chain(m.callbacks.iter().map(|c| c.name.as_str()))
+        .chain(m.unions.iter().map(|u| u.name.as_str()))
+        .chain(m.enums.iter().map(|e| e.0.as_str()))
+        .chain(m.num_enums.iter().map(|e| e.0.as_str()))
+        .chain(m.opaque.iter().map(String::as_str))
+        .collect();
+    let mut record_seen = HashSet::new();
+    for (alias, t) in &m.record_aliases {
+        if !taken.contains(alias.as_str()) && record_seen.insert(alias.as_str()) {
+            types += &format!("using {alias} = {};\n", ty_in(t, cx));
+        }
     }
     // A map's keys, each typed by the value it selects.
     for k in &m.maps {

@@ -174,16 +174,36 @@ TypeScript object literal, because a Zig literal takes its type from where it go
    Callback types too (`Rapier_DrainCollisionEventsFn`). Gleam enums and unions
    each live in their own module with short variants and `codec()`
    (`active_events.CollisionEvents`, `token.Heading(h)`), and callbacks in
-   `callbacks`. One module per class in Gleam, one prefix in C. Done but for a
-   hoisted object several owners share, which keeps the first's name
-   (`MarkSpec_attrs`; a pair list after 10). marked's callbacks are
+   `callbacks`. One module per class in Gleam, one prefix in C. Done: hoisted
+   pure string-keyed objects several owners share (`MarkSpec_attrs`) become
+   ordered pair lists under convention 10. marked's callbacks are
    `RendererObjectHeadingFn` (the tokenizer has `heading` too) and
    `MarkedExtensionWalkTokensFn`.
 
-10. **String-keyed maps whose order matters** (ProseMirror `nodes`, `marks`,
-    `attrs`) are ordered pair lists: C `Pm_X_record({ k, v }, ..)`, C++
-    `{{"k", v}, ..}`, Rust `[("k", v), ..]`, Gleam `[#("k", v), ..]`, F#
-    `[ "k", v; .. ]`.
+10. **String-keyed maps whose order matters** (`{ [k: string]: V }` and
+    `Record<string, V>`, including ProseMirror `nodes`, `marks`, `attrs`,
+    KaTeX `macros`, TanStack visibility/selection maps) are lowered to
+    `Ty::Record` and ordered pair lists (with named non-generic aliases kept
+    in `record_aliases`; Zig opts out via `records: false`):
+    - C: `JsRecord_<E>` with `<T>_record({ k, v }, ..)` (`js_record`,
+      `js_string_record`, `js_number_record`, `js_bool_record`), `_new` /
+      `_create` / `_has` / `_get` / `_set` / `_from` / `_from_z` / `_of`, and
+      typedef/macro aliases (`Pm_Attrs_record`, `Pm_Attrs_create`).
+    - C++: `ts::Record<T>` with `std::initializer_list<std::pair<std::string_view, T>>`
+      plus pair-list ctors on `ts::In`, `ts::Opt`, and `ts::Field`
+      (`{{"k", v}, ..}`), and `using` aliases for named record type aliases.
+    - Rust: `JsRecord<T>` with `From` for pair arrays `[("k", v), ..]`,
+      `Vec`, slices, and `FromIterator`, `impl Into<JsRecord<..>>` /
+      `impl Optional<JsRecord<..>>` on parameters, pair-list `From` impls on
+      union enums, and `pub type` aliases.
+    - Gleam: `List(#(String, V))` converted via `Object.entries` /
+      `Object.fromEntries`, with `codec_record(c)` for generics.
+    - F#: `JsRecord<'Key, 'Value>` and non-generic unions containing a
+      string-keyed `JsRecord` emit `[<Emit("Object.fromEntries($0)")>] static
+      member op_Implicit` for `('Key * 'Value) list` and `('Key * 'Value)[]`.
+      Because Fable 5.27.0 ignores `[<Emit(...)>]` on `op_ErasedCast` (`!^`),
+      bound pair lists (`let pairs = [ "k", v; .. ]`) convert implicitly while
+      inline expressions without a `let` binding use `JsRecord.Create [ .. ]`.
 
 11. **Smaller.**
     - `T | false`, with literal `false` and no null member, is an option
@@ -3019,5 +3039,5 @@ Needs: 1 (`Type.Create(a = ..)`), 2 (`"heading"`, `schema.text ..` and `mountEl`
 #### Notes
 - **Did not fit, Rust's plain `node`.** HEADER's example `schema.node("doc")` contradicts its own rule that a union counts as its primary member. The primary member of `content: Fragment | Node | readonly Node[]` is `Node`, a class, so `content` is not left out of the plain name, and neither is `attrs` before it. The target follows the rule: `schema.node("doc", None, [..])`, and `node_with` adds only `marks`. This reads better than the example, since every call here passes content.
 - (?) **Gleam `[]` for null and absent.** `node_with` takes its whole tail bare, and Gleam has no bare "absent", so `[]` stands for TS's `null` `attrs` (null is absent here) and for the left-out `marks`. ProseMirror treats them the same (`computeAttrs` gives equal attrs for `{}` and `null`; `Mark.setFrom([])` is `Mark.none`), but in general the generator cannot know that an empty pair list or list means the same as no argument.
-- (?) F#: `!^` is erased, so the union's conversion from the pair list must itself build the JS object (`Object.fromEntries`), or `nodes` reaches JS as an F# list. `attrs` is typed as the pair list itself and needs no `!^`. A one-pair `[ "level", 2 ]` draws F#'s info FS3886 ("did you mean `;`").
+- F#: Fable 5.27.0 erases `op_ErasedCast` (`!^`) unconditionally and ignores `[<Emit(...)>]` on it, so `[<Emit("Object.fromEntries($0)")>] static member op_Implicit` is generated on `JsRecord<'Key, 'Value>` and non-generic unions containing a string-keyed `JsRecord` instead. A bound pair list (`let pairs = [ "k", v; .. ]`) converts implicitly; inline expressions without a `let` binding use `JsRecord.Create [ .. ]` (which implicitly converts to unions). `attrs` is typed as `JsRecord<string, obj>` and accepts a bound pair list or `JsRecord.Create`. A one-pair `[ "level", 2 ]` draws F#'s info FS3886 ("did you mean `;`").
 - `DOMOutputSpec`'s tuple member `readonly [string, ...any[]]` has no name: it is `array` in Gleam and `Array` holding a `Vec<JsValue>` in Rust (name TBD). In C++, `return {tag, 0};` needs an `std::initializer_list<ts::Value>` constructor for that member, and the nested tuple is written `ts::Array<>{"code", 0}` (checked with clang against a mock).

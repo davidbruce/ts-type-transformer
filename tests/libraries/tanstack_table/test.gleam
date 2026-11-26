@@ -227,29 +227,20 @@ pub fn main() {
   let bindings = reactivity.create()
   reactivity.set_create_options_store(bindings, False)
   reactivity.set_wrap_external_atoms(bindings, False)
+  let obj = runtime.js_object
   let atom = fn(
     get: dynamic.Dynamic,
     set: option.Option(fn(dynamic.Dynamic) -> Nil),
   ) {
-    let o = table.make_object_map_result_create()
-    table.make_object_map_result_set_at(o, "get", get, runtime.codec_dynamic())
+    let base = [
+      #("get", get),
+      #("subscribe", runtime.dynamic(fn(_) { Nil })),
+    ]
     case set {
-      Some(f) ->
-        table.make_object_map_result_set_at(
-          o,
-          "set",
-          runtime.dynamic(f),
-          runtime.codec_dynamic(),
-        )
-      None -> Nil
+      Some(f) -> [#("set", runtime.dynamic(f)), ..base]
+      None -> base
     }
-    table.make_object_map_result_set_at(
-      o,
-      "subscribe",
-      runtime.dynamic(fn(_) { Nil }),
-      runtime.codec_dynamic(),
-    )
-    runtime.dynamic(o)
+    |> obj
   }
   reactivity.set_create_writable_atom(bindings, fn(initial, _) {
     let value = cell.new(initial)
@@ -280,75 +271,23 @@ pub fn main() {
   reactivity.set_add_subscription(bindings, fn(_) { Nil })
 
   let person = fn(name: String, age: Float) {
-    let o = table.make_object_map_result_create()
-    table.make_object_map_result_set_at(
-      o,
-      "name",
-      dynamic.string(name),
-      runtime.codec_dynamic(),
-    )
-    table.make_object_map_result_set_at(
-      o,
-      "age",
-      dynamic.float(age),
-      runtime.codec_dynamic(),
-    )
-    runtime.dynamic(o)
+    obj([#("name", dynamic.string(name)), #("age", dynamic.float(age))])
   }
   let column = fn(key: String, header: String) {
-    let o = table.make_object_map_result_create()
-    table.make_object_map_result_set_at(
-      o,
-      "accessorKey",
-      dynamic.string(key),
-      runtime.codec_dynamic(),
-    )
-    table.make_object_map_result_set_at(
-      o,
-      "header",
-      dynamic.string(header),
-      runtime.codec_dynamic(),
-    )
-    runtime.dynamic(o)
+    obj([#("accessorKey", dynamic.string(key)), #("header", dynamic.string(header))])
   }
-  let feature_map = table.make_object_map_result_create()
-  table.make_object_map_result_set_at(
-    feature_map,
-    "coreReactivityFeature",
-    runtime.dynamic(bindings),
-    runtime.codec_dynamic(),
-  )
-  table.make_object_map_result_set_at(
-    feature_map,
-    "rowSortingFeature",
-    runtime.dynamic(table.get_row_sorting_feature()),
-    runtime.codec_dynamic(),
-  )
-  table.make_object_map_result_set_at(
-    feature_map,
-    "sortedRowModel",
-    runtime.dynamic(table.create_sorted_row_model()),
-    runtime.codec_dynamic(),
-  )
-  let options = table.make_object_map_result_create()
-  table.make_object_map_result_set_at(
-    options,
-    "features",
-    runtime.dynamic(feature_map),
-    runtime.codec_dynamic(),
-  )
-  table.make_object_map_result_set_at(
-    options,
-    "data",
-    dynamic.array([person("bo", 30.0), person("al", 20.0), person("cy", 25.0)]),
-    runtime.codec_dynamic(),
-  )
-  table.make_object_map_result_set_at(
-    options,
-    "columns",
-    dynamic.array([column("name", "Name"), column("age", "Age")]),
-    runtime.codec_dynamic(),
-  )
+  let feature_map =
+    obj([
+      #("coreReactivityFeature", runtime.dynamic(bindings)),
+      #("rowSortingFeature", runtime.dynamic(table.get_row_sorting_feature())),
+      #("sortedRowModel", runtime.dynamic(table.create_sorted_row_model())),
+    ])
+  let options =
+    obj([
+      #("features", feature_map),
+      #("data", dynamic.array([person("bo", 30.0), person("al", 20.0), person("cy", 25.0)])),
+      #("columns", dynamic.array([column("name", "Name"), column("age", "Age")])),
+    ])
   let tbl = table.construct_table(coerce(options))
   let initial = table_core_properties.get_initial_state(tbl)
   let passed =

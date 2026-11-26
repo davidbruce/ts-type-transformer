@@ -350,7 +350,7 @@ impl<'m> Gen<'m> {
     pub(super) fn shows(&self, t: &Ty, param: &str) -> bool {
         match t {
             Ty::Param(n) => n == param,
-            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => self.shows(inner, param),
+            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) | Ty::Record(inner) => self.shows(inner, param),
             Ty::Tuple(es) => es.iter().any(|e| self.shows(e, param)),
             Ty::Generic(n, _) if self.m.unions.iter().any(|u| u.name == *n) && !self.decodable(n) => false,
             Ty::Generic(n, args) if self.callbacks.contains_key(n) => self.callbacks[n].iter().filter_map(|&i| args.get(i)).any(|a| self.shows(a, param)),
@@ -407,6 +407,7 @@ impl<'m> Gen<'m> {
             }
             Ty::Array => format!("List({})", dynamic()),
             Ty::ArrayOf(e) => format!("List({})", self.ty(e)),
+            Ty::Record(v) => format!("List(#(String, {}))", self.ty(v)),
             Ty::Tuple(es) => format!("#({})", es.iter().map(|e| self.ty(e)).collect::<Vec<_>>().join(", ")),
             // A promise of what the model does not say.
             Ty::Obj(n) if n == "Promise" || n == "PromiseLike" => {
@@ -479,6 +480,14 @@ impl<'m> Gen<'m> {
             Ty::Nullable(inner, _) => format!("((v) => v == null ? new None() : new Some({}))({x})", self.to_gleam(inner, "v")),
             Ty::Array => format!("toList(Array.from({x} ?? []))"),
             Ty::ArrayOf(e) => format!("toList(Array.from({x} ?? [], (v) => {}))", self.to_gleam(e, "v")),
+            Ty::Record(v) => {
+                let conv = self.to_gleam(v, "v");
+                if conv == "v" {
+                    format!("toList(Object.entries({x} ?? {{}}))")
+                } else {
+                    format!("toList(Object.entries({x} ?? {{}}).map(([k, v]) => [k, {conv}]))")
+                }
+            }
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.to_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
             Ty::Enum(n) | Ty::NumEnum(n) => format!("{}({x})", self.ffi_ref(n, "to")),
             Ty::NamedUnion(n) if self.decodable(n) => format!("{}({x})", self.ffi_ref(n, "to")),
@@ -537,7 +546,7 @@ impl<'m> Gen<'m> {
         }
         match t {
             Ty::Param(n) => n == p,
-            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => self.crosses(inner, p),
+            Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) | Ty::Record(inner) => self.crosses(inner, p),
             Ty::Tuple(es) => es.iter().any(|e| self.crosses(e, p)),
             Ty::Generic(n, args) if n == "Promise" || n == "PromiseLike" => args.first().is_some_and(|a| self.crosses(a, p)),
             Ty::Generic(n, args) if self.is_callback(n) => self.callback_codecs.get(n).is_some_and(|used| used.iter().filter_map(|&i| args.get(i)).any(|a| self.crosses(a, p))),
@@ -566,6 +575,14 @@ impl<'m> Gen<'m> {
             Ty::Nullable(inner, absent) => format!("((v) => v instanceof Some ? {} : {})({x})", self.from_gleam(inner, "v[0]"), absent.js()),
             Ty::Array => format!("{x}.toArray()"),
             Ty::ArrayOf(e) => format!("{x}.toArray().map((v) => {})", self.from_gleam(e, "v")),
+            Ty::Record(v) => {
+                let conv = self.from_gleam(v, "v");
+                if conv == "v" {
+                    format!("Object.fromEntries({x}.toArray())")
+                } else {
+                    format!("Object.fromEntries({x}.toArray().map(([k, v]) => [k, {conv}]))")
+                }
+            }
             Ty::Tuple(es) => format!("((v) => [{}])({x})", es.iter().enumerate().map(|(i, e)| self.from_gleam(e, &format!("v[{i}]"))).collect::<Vec<_>>().join(", ")),
             Ty::Enum(n) | Ty::NumEnum(n) => format!("{}({x})", self.ffi_ref(n, "from")),
             Ty::NamedUnion(n) if self.decodable(n) || self.made_in(n) => format!("{}({x})", self.ffi_ref(n, "from")),
@@ -1070,7 +1087,7 @@ impl Gen<'_> {
 pub(super) fn visit_ty(t: &Ty, f: &mut dyn FnMut(&Ty)) {
     f(t);
     match t {
-        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => visit_ty(inner, f),
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) | Ty::Record(inner) => visit_ty(inner, f),
         Ty::Tuple(ts) | Ty::Union(ts) | Ty::Generic(_, ts) => {
             for sub in ts {
                 visit_ty(sub, f);

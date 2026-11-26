@@ -49,13 +49,14 @@ __attribute__((export_name("run"))) void run(void) {
     // keyof Options.
     CHECK(field() == field_result_title);
 
-    // Record<string, number>.
-    lookup_table table = lookup_table_create();
-    lookup_table_set_at(table, "a", 7);
+    // Record<string, number>: ordered pair list and get/set/has.
+    JsRecord_double table = js_number_record({ "a", 7 });
     CHECK(lookup(table, "a") == 7);
     CHECK(lookup(table, "b") == -1);
-    CHECK(lookup_table_get_at(table, "a").value == 7);
-    CHECK(!lookup_table_get_at(table, "b").has);
+    CHECK(JsRecord_double_get(table, "a").value == 7);
+    CHECK(!JsRecord_double_get(table, "b").has);
+    JsRecord_double_set(table, "c", 9);
+    CHECK(JsRecord_double_get(table, "c").value == 9);
 
     // An intersection of object types.
     Tagged tagged = Tagged_create();

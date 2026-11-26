@@ -50,10 +50,7 @@ static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
     Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
-    Pm_MarkSpec_attrs hattrs = Pm_MarkSpec_attrs_create();
-    Pm_MarkSpec_attrs_set_at(hattrs, "level", lvl);
-
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = hattrs, .content = "inline*", .group = "block", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
 
     Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"p"));
 
@@ -65,25 +62,14 @@ static Pm_Schema make_schema(void) {
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
-    Pm_SchemaSpec_nodes nodes = Pm_SchemaSpec_nodes_create();
-    Pm_SchemaSpec_nodes_set_at(nodes, "doc", doc);
-    Pm_SchemaSpec_nodes_set_at(nodes, "heading", heading);
-    Pm_SchemaSpec_nodes_set_at(nodes, "paragraph", para);
-    Pm_SchemaSpec_nodes_set_at(nodes, "blockquote", quote);
-    Pm_SchemaSpec_nodes_set_at(nodes, "code_block", cblock);
-    Pm_SchemaSpec_nodes_set_at(nodes, "horizontal_rule", hr);
-    Pm_SchemaSpec_nodes_set_at(nodes, "text", text);
-
     Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"strong"));
     Pm_MarkSpec em = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"em"));
     Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"code"));
 
-    Pm_SchemaSpec_marks marks = Pm_SchemaSpec_marks_create();
-    Pm_SchemaSpec_marks_set_at(marks, "strong", strong);
-    Pm_SchemaSpec_marks_set_at(marks, "em", em);
-    Pm_SchemaSpec_marks_set_at(marks, "code", code);
-
-    return Pm_Schema_new(Pm_SchemaSpec_create(.nodes = nodes, .marks = marks));
+    return Pm_Schema_new(Pm_SchemaSpec_create(
+        .nodes = Pm_NodeSpec_record({ "doc", doc }, { "heading", heading }, { "paragraph", para }, { "blockquote", quote }, { "code_block", cblock }, { "horizontal_rule", hr }, { "text", text }),
+        .marks = Pm_MarkSpec_record({ "strong", strong }, { "em", em }, { "code", code })
+    ));
 }
 
 static Pm_Node t_node(const char* t) {
@@ -166,10 +152,10 @@ static void update_meta(Pm_EditorState st) {
     double f = 0, t = 0;
     target_range(st, &f, &t);
     Pm_Node doc = Pm_EditorState_get_doc(st);
-    Pm_Schema_marks marks = Pm_Schema_get_marks(g_schema);
-    bool has_b = Pm_Node_rangeHasMark(doc, f, t, Pm_Schema_marks_get_at(marks, "strong"));
-    bool has_e = Pm_Node_rangeHasMark(doc, f, t, Pm_Schema_marks_get_at(marks, "em"));
-    bool has_c = Pm_Node_rangeHasMark(doc, f, t, Pm_Schema_marks_get_at(marks, "code"));
+    JsRecord_Pm_MarkType marks = Pm_Schema_get_marks(g_schema);
+    bool has_b = Pm_Node_rangeHasMark(doc, f, t, JsRecord_Pm_MarkType_get(marks, "strong"));
+    bool has_e = Pm_Node_rangeHasMark(doc, f, t, JsRecord_Pm_MarkType_get(marks, "em"));
+    bool has_c = Pm_Node_rangeHasMark(doc, f, t, JsRecord_Pm_MarkType_get(marks, "code"));
 
     HTMLElement_set_className(Document_getElementById(g_doc, "btn-0"), has_b ? "active" : "");
     HTMLElement_set_className(Document_getElementById(g_doc, "btn-1"), has_e ? "active" : "");
@@ -207,7 +193,7 @@ static void toggle_mark(const char* name, const char* added_msg, const char* rem
     double f = 0, t = 0;
     target_range(st, &f, &t);
     if (t > f) {
-        Pm_MarkType mt = Pm_Schema_marks_get_at(Pm_Schema_get_marks(g_schema), name);
+        Pm_MarkType mt = JsRecord_Pm_MarkType_get(Pm_Schema_get_marks(g_schema), name);
         Pm_Transaction tr = Pm_EditorState_get_tr(st);
         if (Pm_Node_rangeHasMark(Pm_EditorState_get_doc(st), f, t, mt)) {
             Pm_Transaction_removeMark(tr, f, t, mt);
@@ -234,14 +220,14 @@ static void on_click(void* ctx, PointerEvent ev) {
         Pm_Selection sel = Pm_EditorState_get_selection(st);
         JsString pname = Pm_NodeType_get_name(Pm_Node_get_type(Pm_ResolvedPos_get_parent(Pm_Selection_get__from(sel))));
         Pm_Transaction tr = Pm_EditorState_get_tr(st);
-        Pm_Schema_nodes nodes = Pm_Schema_get_nodes(g_schema);
+        JsRecord_Pm_NodeType nodes = Pm_Schema_get_nodes(g_schema);
         if (JsString_equals(pname, "heading")) {
-            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), Pm_Schema_nodes_get_at(nodes, "paragraph"));
+            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), JsRecord_Pm_NodeType_get(nodes, "paragraph"));
             g_last_action = "Converted heading -> paragraph";
         } else {
             Pm_Attrs ha = Pm_Attrs_create();
             js_set_num(ha, "level", 2);
-            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), Pm_Schema_nodes_get_at(nodes, "heading"), ha);
+            Pm_Transaction_setBlockType(tr, Pm_Selection_get_from(sel), Pm_Selection_get_to(sel), JsRecord_Pm_NodeType_get(nodes, "heading"), ha);
             g_last_action = "Converted block -> heading[level=2]";
         }
         Pm_EditorView_dispatch(g_view, tr);

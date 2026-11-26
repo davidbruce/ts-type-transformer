@@ -15,7 +15,7 @@ static const JsValue NONE = { 0 };
 // An Updater<T> is a value or a function of the old value: functionalUpdate
 // resolves it.
 static JsValue call(JsValue f, JsValue arg) { return table_functionalUpdate(f, arg); }
-static JsValue get(JsValue obj, const char* key) { return Table_RowData_map_get_at((Table_RowData_map){ obj.h }, key); }
+static JsValue get(JsValue obj, const char* key) { return JsRecord_JsValue_get((JsRecord_JsValue){ obj.h }, key); }
 // The table's methods are function-typed properties: read bound to the table,
 // called with call_<Type>.
 // ReadonlyStore is opaque in the bindings (no methods): its `get` is read as a
@@ -52,16 +52,16 @@ static JsValue atom_set(void* ctx, JsValue updater) {
 }
 static void no_unsubscribe(void* ctx) { (void)ctx; }
 static JsValue atom_subscribe(void* ctx, JsValue observer) {
-    Table_RowData_map subscription = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(subscription, "unsubscribe", (JsValue){ Table_void_fn_from(no_unsubscribe, 0).h });
+    JsRecord_JsValue subscription = (JsRecord_JsValue){ table_makeObjectMap().h };
+    JsRecord_JsValue_set(subscription, "unsubscribe", (JsValue){ Table_void_fn_from(no_unsubscribe, 0).h });
     return (JsValue){ subscription.h };
 }
 
 static JsValue make_atom(AtomState* a) {
-    Table_RowData_map atom = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(atom, "get", (JsValue){ Table_Getter_from(atom_get, a).h });
-    if (!a->readonly) Table_RowData_map_set_at(atom, "set", (JsValue){ Table_UpdaterFn_from(atom_set, a).h });
-    Table_RowData_map_set_at(atom, "subscribe", (JsValue){ Table_UpdaterFn_from(atom_subscribe, 0).h });
+    JsRecord_JsValue atom = (JsRecord_JsValue){ table_makeObjectMap().h };
+    JsRecord_JsValue_set(atom, "get", (JsValue){ Table_Getter_from(atom_get, a).h });
+    if (!a->readonly) JsRecord_JsValue_set(atom, "set", (JsValue){ Table_UpdaterFn_from(atom_set, a).h });
+    JsRecord_JsValue_set(atom, "subscribe", (JsValue){ Table_UpdaterFn_from(atom_subscribe, 0).h });
     return (JsValue){ atom.h };
 }
 
@@ -92,22 +92,15 @@ static void on_sorting_change(void* ctx, JsValue updater) {
     table_call_Updater_fn(default_sorting_update, updater);
 }
 
-static JsValue person(const char* name, double age) {
-    Table_RowData_map p = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(p, "name", js_string(name));
-    Table_RowData_map_set_at(p, "age", js_number(age));
-    return (JsValue){ p.h };
+static JsRecord_JsValue person(const char* name, double age) {
+    return js_record({ "name", js_string(name) }, { "age", js_number(age) });
 }
 static JsValue column(const char* key, const char* header) {
-    Table_RowData_map c = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(c, "accessorKey", js_string(key));
-    Table_RowData_map_set_at(c, "header", js_string(header));
+    JsRecord_JsValue c = js_record({ "accessorKey", js_string(key) }, { "header", js_string(header) });
     return (JsValue){ c.h };
 }
 static JsValue sort_by(const char* id, bool desc) {
-    Table_RowData_map s = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(s, "id", js_string(id));
-    Table_RowData_map_set_at(s, "desc", js_bool(desc));
+    JsRecord_JsValue s = js_record({ "id", js_string(id) }, { "desc", js_bool(desc) });
     JsArray list = JsArray_new();
     JsArray_push(list, (JsValue){ s.h });
     return (JsValue){ list.h };
@@ -166,25 +159,27 @@ __attribute__((export_name("run"))) void run(void) {
     // `readonly` in the d.ts), so a table's options cannot be filled in
     // through the typed API: they are a plain object made with makeObjectMap
     // and cast to the options type.
-    Table_RowData_map features = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(features, "coreReactivityFeature", (JsValue){ reactivity.h });
-    Table_RowData_map_set_at(features, "rowSortingFeature", (JsValue){ table_get_rowSortingFeature().h });
-    Table_RowData_map_set_at(features, "sortedRowModel", (JsValue){ table_createSortedRowModel().h });
+    JsRecord_JsValue features = js_record(
+        { "coreReactivityFeature", (JsValue){ reactivity.h } },
+        { "rowSortingFeature", (JsValue){ table_get_rowSortingFeature().h } },
+        { "sortedRowModel", (JsValue){ table_createSortedRowModel().h } }
+    );
 
     JsArray_Table_ColumnDefBase_Core columns = (JsArray_Table_ColumnDefBase_Core){ JsArray_new().h };
     JsArray_Table_ColumnDefBase_Core_push(columns, (Table_ColumnDefBase_Core){ column("name", "Name").h });
     JsArray_Table_ColumnDefBase_Core_push(columns, (Table_ColumnDefBase_Core){ column("age", "Age").h });
     JsArray_Table_RowData data = (JsArray_Table_RowData){ JsArray_new().h };
-    JsArray_Table_RowData_push(data, Table_RowData_of_Table_RowData_map((Table_RowData_map){ person("Bob", 30).h }));
-    JsArray_Table_RowData_push(data, Table_RowData_of_Table_RowData_map((Table_RowData_map){ person("Alice", 25).h }));
-    JsArray_Table_RowData_push(data, Table_RowData_of_Table_RowData_map((Table_RowData_map){ person("Carol", 35).h }));
-    JsArray_Table_RowData_push(data, Table_RowData_of_Table_RowData_map((Table_RowData_map){ person("Dave", 25).h }));
+    JsArray_Table_RowData_push(data, person("Bob", 30));
+    JsArray_Table_RowData_push(data, person("Alice", 25));
+    JsArray_Table_RowData_push(data, person("Carol", 35));
+    JsArray_Table_RowData_push(data, person("Dave", 25));
 
-    Table_RowData_map options = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(options, "features", (JsValue){ features.h });
-    Table_RowData_map_set_at(options, "columns", (JsValue){ columns.h });
-    Table_RowData_map_set_at(options, "data", (JsValue){ data.h });
-    Table_RowData_map_set_at(options, "onSortingChange", (JsValue){ Table_OnChangeFn_from(on_sorting_change, 0).h });
+    JsRecord_JsValue options = js_record(
+        { "features", (JsValue){ features.h } },
+        { "columns", (JsValue){ columns.h } },
+        { "data", (JsValue){ data.h } },
+        { "onSortingChange", (JsValue){ Table_OnChangeFn_from(on_sorting_change, 0).h } }
+    );
 
     Table_Core table_handle = table_constructTable((TableOptions_Core){ options.h });
     CHECK(table_handle.h != 0);

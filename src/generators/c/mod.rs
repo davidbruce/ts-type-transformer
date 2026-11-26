@@ -61,6 +61,7 @@ pub(super) fn is_builtin_c_type(name: &str) -> bool {
     ) || super::model::buffer_spec(name).is_some()
         || name.starts_with("JsArray_")
         || name.starts_with("JsTuple_")
+        || name.starts_with("JsRecord_")
 }
 
 /// Loads a previously generated C binding directory (via `tsrs-meta.toml`)
@@ -123,6 +124,7 @@ pub const MODEL_OPTIONS: super::model::ModelOptions<'static> = super::model::Mod
     retain_opaque_constraints: false,
     typed_union_arrays: false,
     args_bags: false,
+    records: true,
 };
 
 fn default_c_prefix(import: &str) -> Option<String> {
@@ -194,6 +196,7 @@ fn apply_prefix(m: &mut Model, pfx: &str, opaque_kept: &mut HashSet<String>) {
         .chain(m.callbacks.iter().map(|c| c.name.clone()))
         .chain(m.unions.iter().map(|u| u.name.clone()))
         .chain(m.type_aliases.iter().map(|a| a.0.clone()))
+        .chain(m.record_aliases.iter().map(|a| a.0.clone()))
         .chain(m.enums.iter().map(|e| e.0.clone()))
         .chain(m.num_enums.iter().map(|e| e.0.clone()))
         .chain(m.opaque.iter().cloned())
@@ -314,7 +317,7 @@ pub const NAMING: Naming = Naming {
                         .parts
                         .iter()
                         .zip(union_fields(u))
-                        .filter(|(p, _)| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)))
+                        .filter(|(p, _)| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_)))
                     {
                         ids.extend([format!("{candidate}_{f}"), format!("{candidate}_of_{f}")]);
                     }

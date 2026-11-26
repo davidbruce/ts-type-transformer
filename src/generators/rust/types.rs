@@ -16,6 +16,7 @@ pub(super) fn ty(t: &Ty, cx: &Context) -> String {
         Ty::Any | Ty::Union(_) => VALUE.into(),
         Ty::Array => "JsArray".into(),
         Ty::ArrayOf(e) => format!("JsArray<{}>", ty(e, cx)),
+        Ty::Record(v) => format!("JsRecord<{}>", ty(v, cx)),
         Ty::Tuple(es) if (2..=4).contains(&es.len()) => format!("JsTuple{}<{}>", es.len(), es.iter().map(|e| ty(e, cx)).collect::<Vec<_>>().join(", ")),
         Ty::Tuple(_) => "JsArray".into(),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => cx.tn(n),
@@ -54,6 +55,10 @@ pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
                 let u = if cx.decodable(n) { ty(inner, cx) } else { cx.tn(n) };
                 (format!("impl Optional<{u}>"), vec![format!("Optional::<{u}>::into_option({x}).lend().h")])
             }
+            Ty::Record(_) => {
+                let r = ty(inner, cx);
+                (format!("impl Optional<{r}>"), vec![format!("Optional::<{r}>::into_option({x}).lend().h")])
+            }
             Ty::Param(_) => (ty(t, cx), lend(x)),
             // Any value, or None: `JsValue::from(None)` is null. So for a union
             // nothing types: `fill(0x111111 as f64)`, `fill("red")`, `fill(None)`.
@@ -65,7 +70,7 @@ pub(super) fn param(t: &Ty, x: &str, cx: &Context) -> (String, Vec<String>) {
         // Any value that is one: `name_of(&shape)` where a Named is wanted.
         Ty::Obj(n) => (format!("&impl AsRef<{}>", cx.tn(n)), vec![format!("AsRef::<{}>::as_ref({x}).lend().h", cx.tn(n))]),
         Ty::Generic(n, _) if !cx.is_union(n) => (format!("&impl AsRef<{}>", ty(t, cx)), vec![format!("AsRef::<{}>::as_ref({x}).lend().h", ty(t, cx))]),
-        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => into(ty(t, cx)),
+        Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_) => into(ty(t, cx)),
         Ty::NamedUnion(n) if cx.takes(n) && !cx.decodable(n) => into(cx.tn(n)),
         Ty::NamedUnion(n) | Ty::Generic(n, _) if cx.is_union(n) => into(ty(t, cx)),
         Ty::Any | Ty::Union(_) | Ty::NamedUnion(_) => into(VALUE.into()),
@@ -390,7 +395,7 @@ fn nameable(written: &str, i: usize) -> (Vec<String>, String) {
 pub(super) fn uses_key(t: &Ty) -> bool {
     match t {
         Ty::Key(_) | Ty::Mapped(_) => true,
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => uses_key(inner),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => uses_key(inner),
         Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => args.iter().any(uses_key),
         _ => false,
     }
@@ -646,7 +651,7 @@ fn mentions_type(t: &Ty, name: &str) -> bool {
     match t {
         Ty::Obj(n) | Ty::NamedUnion(n) | Ty::Enum(n) | Ty::NumEnum(n) => n == name,
         Ty::Generic(n, args) => n == name || args.iter().any(|a| mentions_type(a, name)),
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => mentions_type(inner, name),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => mentions_type(inner, name),
         Ty::Tuple(args) | Ty::Union(args) => args.iter().any(|a| mentions_type(a, name)),
         _ => false,
     }

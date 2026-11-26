@@ -14,7 +14,6 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import prosemirror/areas/prosemirror_model/attribute_spec
-import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/dom_output_spec
 import prosemirror/areas/prosemirror_model/dom_parser
 import prosemirror/areas/prosemirror_model/parse_rule
@@ -32,7 +31,6 @@ import prosemirror/areas/prosemirror_state/editor_state_config
 import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
-import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
@@ -45,12 +43,7 @@ fn tag_rule(tag: String, level: Int) -> t.TagParseRule(Nil) {
     tag_parse_rule.create()
     |> tag_parse_rule.with_tag(tag)
   case level > 0 {
-    True -> {
-      let a =
-        attrs.create()
-        |> attrs.with_at("level", dynamic.int(level))
-      generic_parse_rule.with_attrs(rule, a)
-    }
+    True -> generic_parse_rule.with_attrs(rule, [#("level", dynamic.int(level))])
     False -> rule
   }
 }
@@ -63,23 +56,22 @@ fn build_schema() -> t.Schema(Nil) {
   let lvl_spec =
     attribute_spec.create()
     |> attribute_spec.with_default(dynamic.int(2))
-  let h_attrs =
-    mark_spec_attrs.create()
-    |> mark_spec_attrs.with_at("level", lvl_spec)
 
   let heading_spec =
     node_spec.create()
-    |> node_spec.with_attrs(h_attrs)
+    |> node_spec.with_attrs([#("level", lvl_spec)])
     |> node_spec.with_content("inline*")
     |> node_spec.with_group("block")
     |> node_spec.with_defining(True)
     |> node_spec.with_parse_dom([tag_rule("h1", 1), tag_rule("h2", 2)])
     |> node_spec.with_to_dom(fn(n) {
-      let lvl = case
-        decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int)
-      {
-        Ok(1) -> "h1"
-        _ -> "h2"
+      let lvl = case list.key_find(node.get_attrs(n), "level") {
+        Ok(v) ->
+          case decode.run(v, decode.int) {
+            Ok(1) -> "h1"
+            _ -> "h2"
+          }
+        Error(_) -> "h2"
       }
       hole_spec(lvl)
     })
@@ -103,29 +95,26 @@ fn build_schema() -> t.Schema(Nil) {
     node_spec.create()
     |> node_spec.with_group("inline")
 
-  let nodes =
-    schema_spec.nodes_create()
-    |> schema_spec.nodes_with_at("doc", doc_spec)
-    |> schema_spec.nodes_with_at("heading", heading_spec)
-    |> schema_spec.nodes_with_at("paragraph", para_spec)
-    |> schema_spec.nodes_with_at("blockquote", quote_spec)
-    |> schema_spec.nodes_with_at("text", text_spec)
-
   let make_mark = fn(tag: String) {
     mark_spec.create()
     |> mark_spec.with_parse_dom([parse_rule.Tag(tag_rule(tag, 0))])
     |> mark_spec.with_to_dom(fn(_, _) { hole_spec(tag) })
   }
-  let marks =
-    schema_spec.marks_create()
-    |> schema_spec.marks_with_at("strong", make_mark("strong"))
-    |> schema_spec.marks_with_at("em", make_mark("em"))
-    |> schema_spec.marks_with_at("code", make_mark("code"))
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(nodes)
-    |> schema_spec.with_marks(marks)
+    |> schema_spec.with_nodes([
+      #("doc", doc_spec),
+      #("heading", heading_spec),
+      #("paragraph", para_spec),
+      #("blockquote", quote_spec),
+      #("text", text_spec),
+    ])
+    |> schema_spec.with_marks([
+      #("strong", make_mark("strong")),
+      #("em", make_mark("em")),
+      #("code", make_mark("code")),
+    ])
   schema.new(spec)
 }
 
@@ -155,10 +144,12 @@ fn describe_doc(d: t.Node(Nil)) -> String {
       let tname = node_type.get_name(node.get_type(b))
       let kind = case tname {
         "heading" -> {
-          let lvl = case
-            decode.run(attrs.get_at(node.get_attrs(b), "level"), decode.int)
-          {
-            Ok(k) -> k
+          let lvl = case list.key_find(node.get_attrs(b), "level") {
+            Ok(v) ->
+              case decode.run(v, decode.int) {
+                Ok(k) -> k
+                Error(_) -> 2
+              }
             Error(_) -> 2
           }
           "heading[level=" <> int.to_string(lvl) <> "]"

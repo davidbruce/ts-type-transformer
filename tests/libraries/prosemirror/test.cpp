@@ -36,11 +36,6 @@ static Sch make_schema() {
     }));
     NodeSpec text = NodeSpec::create();
     text.group("inline");
-    SchemaSpec_nodes nodes = SchemaSpec_nodes::create();
-    nodes.set_at("doc", doc);
-    nodes.set_at("paragraph", paragraph);
-    nodes.set_at("text", text);
-
     MarkSpec strong = MarkSpec::create();
     strong.toDOM(MarkSpecToDOMFn([](Mark, bool) {
         ts::Array<> spec = ts::Array<>::create();
@@ -48,12 +43,10 @@ static Sch make_schema() {
         spec.push(ts::Value::number(0));
         return DOMOutputSpec(spec);
     }));
-    SchemaSpec_marks marks = SchemaSpec_marks::create();
-    marks.set_at("strong", strong);
 
     SchemaSpec spec = SchemaSpec::create();
-    spec.nodes(nodes);
-    spec.marks(marks);
+    spec.nodes({{"doc", doc}, {"paragraph", paragraph}, {"text", text}});
+    spec.marks({{"strong", strong}});
     return Sch::create(spec);
 }
 

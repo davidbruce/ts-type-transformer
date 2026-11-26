@@ -24,6 +24,7 @@ fn ty_in_as(t: &Ty, cx: &Ctx, put: bool) -> String {
         Ty::Any => "ts::Value".into(),
         Ty::Array => "ts::Array<>".into(),
         Ty::ArrayOf(e) => format!("ts::Array<{}>", ty_arg_as("", e, cx, put)),
+        Ty::Record(v) => format!("ts::Record<{}>", ty_arg_as("", v, cx, put)),
         Ty::Tuple(es) => format!("ts::Tuple<{}>", es.iter().map(|e| ty_arg_as("", e, cx, put)).collect::<Vec<_>>().join(", ")),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => cx.tn(n),
         Ty::Nullable(inner, _) if matches!(**inner, Ty::NamedUnion(_)) => format!("std::optional<{}>", ty_in_as(inner, cx, put).trim_start_matches("const ").trim_end_matches('&')),
@@ -44,7 +45,7 @@ pub(super) fn is_adapted_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSe
         Ty::NamedUnion(_) => true,
         Ty::Generic(n, _) => is_union(n, unions),
         Ty::Nullable(inner, _) => match &**inner {
-            Ty::NamedUnion(_) | Ty::Tuple(_) => true,
+            Ty::NamedUnion(_) | Ty::Tuple(_) | Ty::Record(_) => true,
             Ty::Generic(n, _) => is_union(n, unions) || callbacks.contains(n.as_str()),
             Ty::Obj(n) => callbacks.contains(n.as_str()),
             _ => false,
@@ -56,7 +57,7 @@ pub(super) fn is_adapted_param(t: &Ty, unions: &[NamedUnion], callbacks: &HashSe
 fn contains_param(t: &Ty) -> bool {
     match t {
         Ty::Param(_) => true,
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => contains_param(inner),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => contains_param(inner),
         Ty::Tuple(es) | Ty::Union(es) => es.iter().any(contains_param),
         Ty::Generic(_, args) => args.iter().any(contains_param),
         _ => false,
@@ -83,7 +84,7 @@ fn ty_param_with_exact(t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>,
             Ty::Generic(n, _) if is_union(n, unions) => wrap(format!("{opt_tpl}<{}>", ty_in(inner, cx))),
             Ty::Generic(n, _) if callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner, cx))),
             Ty::Obj(n) if callbacks.contains(n.as_str()) => wrap(format!("ts::Opt<{}>", ty_in(inner, cx))),
-            Ty::Tuple(_) => wrap(format!("ts::Opt<{}>", ty_in(inner, cx))),
+            Ty::Tuple(_) | Ty::Record(_) => wrap(format!("ts::Opt<{}>", ty_in(inner, cx))),
             _ => ty_put(t, cx),
         },
         _ => ty_put(t, cx),
@@ -238,7 +239,7 @@ fn lower_param(t: &Ty, x: &str, unions: &[NamedUnion], callbacks: &HashSet<&str>
 fn is_deducible(param: &str, t: &Ty, unions: &[NamedUnion], callbacks: &HashSet<&str>) -> bool {
     match t {
         Ty::Param(n) => n == param,
-        Ty::ArrayOf(e) => is_deducible(param, e, unions, callbacks),
+        Ty::ArrayOf(e) | Ty::Record(e) => is_deducible(param, e, unions, callbacks),
         Ty::Tuple(es) => es.iter().any(|e| is_deducible(param, e, unions, callbacks)),
         Ty::Nullable(inner, _) => {
             !is_adapted_param(t, unions, callbacks) && is_deducible(param, inner, unions, callbacks)
@@ -358,7 +359,7 @@ pub(super) fn constructors(name: &str, made_of_nothing: bool) -> String {
 // A type parameter's constraint, where C++ can state it.
 fn constraint(name: &str, c: &Ty, cx: &Ctx) -> Option<String> {
     match c {
-        Ty::Obj(_) | Ty::Generic(..) | Ty::Param(_) | Ty::Str | Ty::Num | Ty::Bool | Ty::ArrayOf(_) | Ty::Array => Some(format!("ts::extends<{name}, {}>", ty_arg(c, cx))),
+        Ty::Obj(_) | Ty::Generic(..) | Ty::Param(_) | Ty::Str | Ty::Num | Ty::Bool | Ty::ArrayOf(_) | Ty::Array | Ty::Record(_) => Some(format!("ts::extends<{name}, {}>", ty_arg(c, cx))),
         _ => None,
     }
 }
@@ -431,7 +432,7 @@ pub(super) fn raise(t: &Ty, r: &str, unions: &[NamedUnion], cx: &Ctx) -> String 
         Ty::Obj(n) => format!("{}(ts::handle, {r})", cx.tn(n)),
         Ty::Mapped(_) => format!("V(ts::handle, {r})"),
         Ty::Param(n) => format!("ts::from_handle<{n}>({r})"),
-        Ty::Generic(..) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => format!("{}(ts::handle, {r})", ty_in(t, cx)),
+        Ty::Generic(..) | Ty::Array | Ty::ArrayOf(_) | Ty::Record(_) | Ty::Tuple(_) => format!("{}(ts::handle, {r})", ty_in(t, cx)),
         _ => format!("ts::Value(ts::handle, {r})"),
     }
 }
@@ -486,7 +487,7 @@ pub(super) struct Function {
 fn mentions_param(t: &Ty, name: &str) -> bool {
     match t {
         Ty::Param(n) => n == name,
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => mentions_param(inner, name),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => mentions_param(inner, name),
         Ty::Tuple(es) | Ty::Union(es) => es.iter().any(|e| mentions_param(e, name)),
         Ty::Generic(_, args) => args.iter().any(|a| mentions_param(a, name)),
         _ => false,
@@ -769,7 +770,7 @@ pub(super) fn named_types(t: &Ty, out: &mut BTreeSet<String>) {
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) | Ty::Key(n) | Ty::Mapped(n) => {
             out.insert(n.clone());
         }
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => named_types(inner, out),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => named_types(inner, out),
         Ty::Tuple(es) => es.iter().for_each(|e| named_types(e, out)),
         Ty::Generic(n, args) => {
             out.insert(n.clone());

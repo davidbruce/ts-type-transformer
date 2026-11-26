@@ -19,8 +19,8 @@ macro_rules! check {
     };
 }
 
-fn object(entries: &[(&str, &JsValue)]) -> MakeObjectMapResult<JsValue> {
-    let o = MakeObjectMapResult::<JsValue>::create();
+fn object(entries: &[(&str, &JsValue)]) -> JsRecord<JsValue> {
+    let o = JsRecord::<JsValue>::create();
     for (k, v) in entries {
         o.set_at(k, (*v).clone());
     }
@@ -30,7 +30,7 @@ fn object(entries: &[(&str, &JsValue)]) -> MakeObjectMapResult<JsValue> {
 // An atom for the table's reactivity: a plain object with a `get` function,
 // and a `set` if writable.
 fn atom(get: JsValue, set: Option<Box<dyn FnMut(JsValue)>>) -> JsHandle {
-    let o = MakeObjectMapResult::<JsValue>::create();
+    let o = JsRecord::<JsValue>::create();
     o.set_at("get", get);
     if let Some(mut set) = set {
         o.set_at(
@@ -187,11 +187,7 @@ pub extern "C" fn run() {
     };
     check!(state_h.0 != 0);
     check!(
-        as_array(
-            &MakeObjectMapResult::<JsValue>(state_h, PhantomData)
-                .at("sorting")
-                .unwrap()
-        )
+        as_array(&JsValue(state_h).get("sorting"))
         .len()
             == 0
     );
@@ -202,12 +198,7 @@ pub extern "C" fn run() {
     let model = table.get_core_row_model();
     let rows = model.rows();
     check!(rows.len() == 3);
-    let name_of = |r: &RowCore<JsValue>| {
-        MakeObjectMapResult::<JsValue>(r.original().0.clone(), PhantomData)
-            .at("name")
-            .unwrap()
-            .as_string()
-    };
+    let name_of = |r: &RowCore<JsValue>| r.original().get("name").as_string();
     let names: Vec<String> = rows.iter().map(|r| name_of(&r)).collect();
     check!(names == ["bo", "al", "cy"]);
     check!(rows.get(1).id() == "1" && rows.get(1).index() == 1.0 && rows.get(1).depth() == 0.0);

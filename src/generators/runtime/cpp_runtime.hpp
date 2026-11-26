@@ -250,6 +250,8 @@ T from_handle(uint32_t h) {
 
 template <class T = struct Value>
 struct Array;
+template <class T = struct Value>
+struct Record;
 
 // A JavaScript value of no particular type.
 struct Value : Handle {
@@ -417,12 +419,52 @@ uint32_t in_make_cb(X&& x) {
     }
 }
 
+template <class T>
+inline constexpr bool is_record = false;
+template <class U>
+inline constexpr bool is_record<Record<U>> = true;
+
+template <class R>
+struct record_elem {};
+template <class U>
+struct record_elem<Record<U>> {
+    using type = U;
+};
+
+template <class V>
+struct variant_record_elem {};
+template <class... Ts>
+    requires (((is_record<Ts> ? 1 : 0) + ...) == 1)
+struct variant_record_elem<std::variant<Ts...>> {
+    using rec = std::tuple_element_t<0, decltype(std::tuple_cat(std::conditional_t<is_record<Ts>, std::tuple<Ts>, std::tuple<>>{}...))>;
+    using type = typename record_elem<rec>::type;
+};
+
+template <class T>
+struct field_record_elem {};
+template <class U>
+struct field_record_elem<Record<U>> {
+    using type = U;
+};
+template <class V>
+struct field_record_elem<In<V>> : variant_record_elem<V> {};
+template <class T>
+struct field_record_elem<Opt<T>> : field_record_elem<T> {};
+template <class... Ts>
+struct field_record_elem<std::variant<Ts...>> : variant_record_elem<std::variant<Ts...>> {};
+
 template <class U>
 struct In {
     uint32_t h = 0;
     bool own = false;
     In(const In&) = delete;
     In& operator=(const In&) = delete;
+    template <class V = U>
+    In(std::initializer_list<std::pair<std::string_view, typename variant_record_elem<V>::type>> entries) {
+        h = ts_raw_js_object_new();
+        for (const auto& [k, v] : entries) ts_raw_js_object_set(h, k.data(), k.size(), Arg(v).h);
+        own = true;
+    }
     template <class X>
         requires (!std::same_as<std::decay_t<X>, In> && in_accepts<U, X>)
     In(X&& x) {
@@ -477,6 +519,12 @@ struct Opt {
     Opt(const Opt&) = delete;
     Opt& operator=(const Opt&) = delete;
     Opt(std::nullopt_t) noexcept {}
+    template <class V = T>
+    Opt(std::initializer_list<std::pair<std::string_view, typename field_record_elem<V>::type>> entries) {
+        h = ts_raw_js_object_new();
+        for (const auto& [k, v] : entries) ts_raw_js_object_set(h, k.data(), k.size(), Arg(v).h);
+        own = true;
+    }
     template <class X>
         requires opt_elem_accepts<T, const X&>
     Opt(const std::optional<X>& o) {
@@ -547,6 +595,12 @@ struct Field {
     Field(std::initializer_list<typename array_elem<A>::type> xs) {
         T v(xs);
         h = Arg(v).give();
+    }
+    // A braced list of key-value pairs for a record (`{{"a", x}}`).
+    template <class R = T>
+    Field(std::initializer_list<std::pair<std::string_view, typename field_record_elem<R>::type>> entries) {
+        h = ts_raw_js_object_new();
+        for (const auto& [k, v] : entries) ts_raw_js_object_set(h, k.data(), k.size(), Arg(v).h);
     }
     Field(const Field&) = delete;
     Field& operator=(const Field&) = delete;
@@ -689,6 +743,54 @@ struct Array : virtual Handle {
     }
     Iterator<T> begin() const;
     IterationEnd end() const { return {}; }
+};
+
+// A JavaScript object used as a string-keyed map: `Record<T>`; `Record<>` of any values.
+template <class T>
+struct Record : virtual Handle {
+    Record() = default;
+    Record(handle_t, uint32_t h) : Handle(handle, h) {}
+    Record(std::initializer_list<std::pair<std::string_view, T>> entries) : Handle(handle, ts_raw_js_object_new()) {
+        for (const auto& [k, v] : entries) set_at(k, v);
+    }
+    template <class R, class U = typename record_elem<R>::type>
+        requires (!std::same_as<U, T> && (std::same_as<T, Value> || (is_variant<T> && in_accepts<T, U>) || std::is_base_of_v<T, U>))
+    Record(const R& o) : Handle(o) {}
+    static Record create() { return Record(handle, ts_raw_js_object_new()); }
+    bool has(std::string_view key) const { return ts_raw_js_object_has(h, key.data(), key.size()) != 0; }
+    auto at(std::string_view key) const {
+        if constexpr (std::same_as<T, Value>) {
+            return Value(handle, ts_raw_js_object_get(h, key.data(), key.size()));
+        } else {
+            if (!has(key)) return std::optional<T>{};
+            return std::optional<T>(from_handle<T>(ts_raw_js_object_get(h, key.data(), key.size())));
+        }
+    }
+    const Record& set_at(std::string_view key, const T& v) const {
+        ts_raw_js_object_set(h, key.data(), key.size(), Arg(v).h);
+        return *this;
+    }
+    template <class U>
+        requires (!std::same_as<std::decay_t<U>, T> && (rest_accepts<T, U> || std::convertible_to<const U&, T>))
+    const Record& set_at(std::string_view key, U&& v) const {
+        if constexpr (std::same_as<T, Value>) ts_raw_js_object_set(h, key.data(), key.size(), Arg(v).h);
+        else if constexpr (is_variant<T>) ts_raw_js_object_set(h, key.data(), key.size(), In<T>(std::forward<U>(v)).h);
+        else if constexpr (std::same_as<T, std::string>) {
+            using D = std::decay_t<U>;
+            if constexpr (std::is_pointer_v<D>) {
+                std::string_view sv = v ? std::string_view(v) : std::string_view();
+                ts_raw_js_object_set(h, key.data(), key.size(), Arg(sv).h);
+            } else {
+                std::string_view sv(v);
+                ts_raw_js_object_set(h, key.data(), key.size(), Arg(sv).h);
+            }
+        } else if constexpr (std::same_as<T, double>) ts_raw_js_object_set(h, key.data(), key.size(), Arg(double(v)).h);
+        else if constexpr (std::same_as<T, bool>) ts_raw_js_object_set(h, key.data(), key.size(), Arg(bool(v)).h);
+        else if constexpr (std::is_enum_v<T>) ts_raw_js_object_set(h, key.data(), key.size(), Arg(T(v)).h);
+        else if constexpr (is_handle<std::decay_t<U>>) ts_raw_js_object_set(h, key.data(), key.size(), v.h);
+        else ts_raw_js_object_set(h, key.data(), key.size(), Arg(T(std::forward<U>(v))).h);
+        return *this;
+    }
 };
 
 template <class T>

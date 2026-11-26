@@ -288,7 +288,7 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
                 to(n);
                 args.iter_mut().for_each(|a| ty(a, to));
             }
-            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => ty(inner, to),
+            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => ty(inner, to),
             Ty::Union(parts) | Ty::Tuple(parts) => parts.iter_mut().for_each(|p| ty(p, to)),
             Ty::Void | Ty::Num | Ty::Bool | Ty::Str | Ty::Any | Ty::Array | Ty::Param(_) => {}
         }
@@ -325,6 +325,10 @@ pub fn rename_types(m: &mut Model, renames: &HashMap<String, String>) {
     for (a, u) in &mut m.type_aliases {
         to(a);
         to(u);
+    }
+    for (a, t) in &mut m.record_aliases {
+        to(a);
+        ty(t, &to);
     }
     for k in &mut m.maps {
         to(&mut k.name);

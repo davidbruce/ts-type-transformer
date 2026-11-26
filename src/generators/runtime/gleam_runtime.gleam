@@ -99,6 +99,9 @@ pub fn codec_option(of: Codec(a)) -> Codec(Option(a))
 @external(javascript, "./runtime_ffi.mjs", "codec_list")
 pub fn codec_list(of: Codec(a)) -> Codec(List(a))
 
+@external(javascript, "./runtime_ffi.mjs", "codec_record")
+pub fn codec_record(of: Codec(a)) -> Codec(List(#(String, a)))
+
 @external(javascript, "./runtime_ffi.mjs", "codec_tuple2")
 pub fn codec_tuple2(a: Codec(a), b: Codec(b)) -> Codec(#(a, b))
 

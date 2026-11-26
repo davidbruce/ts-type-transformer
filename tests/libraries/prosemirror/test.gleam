@@ -3,7 +3,6 @@
 // plugin with state, and an editor view on the page's element. Every check must
 // hold.
 import bindings/areas/prosemirror_model/attribute_spec
-import bindings/areas/prosemirror_model/attrs
 import bindings/areas/prosemirror_model/dom_output_spec.{type DOMOutputSpec}
 import bindings/areas/prosemirror_model/fragment
 import bindings/areas/prosemirror_model/mark
@@ -29,7 +28,6 @@ import bindings/areas/prosemirror_transform/transform
 import bindings/areas/prosemirror_view/direct_editor_props
 import bindings/areas/prosemirror_view/editor_view
 import bindings/areas/test_page
-import bindings/mark_spec_attrs
 import bindings/runtime
 import cell
 import gleam/dynamic
@@ -75,34 +73,31 @@ pub fn main() {
   node_spec.set_to_dom(para_spec, Some(fn(_) { tag_spec("p") }))
   let text_spec = node_spec.create()
   node_spec.set_group(text_spec, Some("inline"))
-  let nodes = schema_spec.nodes_create()
-  schema_spec.nodes_set_at(nodes, "doc", doc_spec)
-  schema_spec.nodes_set_at(nodes, "paragraph", para_spec)
-  schema_spec.nodes_set_at(nodes, "text", text_spec)
-
   let strong_spec = mark_spec.create()
   mark_spec.set_to_dom(strong_spec, Some(fn(_, _) { tag_spec("strong") }))
   let em_spec = mark_spec.create()
   mark_spec.set_to_dom(em_spec, Some(fn(_, _) { tag_spec("em") }))
   let link_spec = mark_spec.create()
-  let link_attrs = mark_spec_attrs.create()
   let href = attribute_spec.create()
   attribute_spec.set_default(href, dynamic.nil())
-  mark_spec_attrs.set_at(link_attrs, "href", href)
-  mark_spec.set_attrs(link_spec, Some(link_attrs))
+  mark_spec.set_attrs(link_spec, Some([#("href", href)]))
   mark_spec.set_to_dom(link_spec, Some(fn(_, _) { tag_spec("a") }))
-  let marks = schema_spec.marks_create()
-  schema_spec.marks_set_at(marks, "strong", strong_spec)
-  schema_spec.marks_set_at(marks, "em", em_spec)
-  schema_spec.marks_set_at(marks, "link", link_spec)
 
   let spec = schema_spec.create()
-  schema_spec.set_nodes(spec, nodes)
-  schema_spec.set_marks(spec, marks)
+  schema_spec.set_nodes(spec, [
+    #("doc", doc_spec),
+    #("paragraph", para_spec),
+    #("text", text_spec),
+  ])
+  schema_spec.set_marks(spec, [
+    #("strong", strong_spec),
+    #("em", em_spec),
+    #("link", link_spec),
+  ])
   let sch = schema.new(spec)
-  let assert Some(paragraph_type) =
-    schema.nodes_get_at(schema.get_nodes(sch), "paragraph")
-  let assert Some(strong) = schema.marks_get_at(schema.get_marks(sch), "strong")
+  let assert Ok(paragraph_type) =
+    list.key_find(schema.get_nodes(sch), "paragraph")
+  let assert Ok(strong) = list.key_find(schema.get_marks(sch), "strong")
   let passed =
     check(
       node_type.get_name(schema.get_top_node_type(sch)) == "doc",
@@ -114,7 +109,7 @@ pub fn main() {
     )
     + check(mark_type.get_name(strong) == "strong", "a mark type by name")
     + check(
-      option.is_none(schema.nodes_get_at(schema.get_nodes(sch), "nothing")),
+      list.key_find(schema.get_nodes(sch), "nothing") == Error(Nil),
       "an unknown node type",
     )
 
@@ -246,8 +241,8 @@ pub fn main() {
       "schema.node and schema.text",
     )
     + check(
-      attrs.get_at(mark.get_attrs(linked), "href")
-        == dynamic.string("https://example.com"),
+      list.key_find(mark.get_attrs(linked), "href")
+        == Ok(dynamic.string("https://example.com")),
       "a mark's attrs",
     )
     + check(
@@ -545,9 +540,7 @@ pub fn main() {
 }
 
 fn href_attrs(url: String) {
-  let a = attrs.create()
-  attrs.set_at(a, "href", dynamic.string(url))
-  a
+  [#("href", dynamic.string(url))]
 }
 
 fn result_unwrap(r: Result(a, Nil)) -> a {

@@ -2,12 +2,12 @@
 // and a ParseError for bad input. Every check must hold.
 import bindings as katex
 import bindings/katex_options
-import bindings/katex_options_macros
 import bindings/katex_options_output
 import bindings/parse_error
 import bindings/runtime
 import gleam/int
 import gleam/io
+import gleam/list
 import gleam/option.{Some}
 import gleam/string
 
@@ -86,8 +86,8 @@ pub fn main() {
       "macro expands",
     )
     + check(
-      katex_options_macros.get_at(macros, "\\RR")
-        == runtime.dynamic("\\mathbb{R}"),
+      list.key_find(macros, "\\RR")
+        == Ok(runtime.dynamic("\\mathbb{R}")),
       "macro read back",
     )
 
@@ -137,7 +137,5 @@ pub fn main() {
 }
 
 fn katex_macros() {
-  let m = katex_options_macros.create()
-  katex_options_macros.set_at(m, "\\RR", runtime.dynamic("\\mathbb{R}"))
-  m
+  [#("\\RR", runtime.dynamic("\\mathbb{R}"))]
 }

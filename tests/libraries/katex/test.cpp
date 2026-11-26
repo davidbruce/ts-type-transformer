@@ -117,8 +117,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // Macros: an object of name to expansion.
     KatexOptions withMacros = KatexOptions::create();
-    KatexOptions_macros macros = KatexOptions_macros::create();
-    macros.set_at("\\RR", ts::Value::string("\\mathbb{R}"));
+    ts::Record<ts::Value> macros{{"\\RR", ts::Value::string("\\mathbb{R}")}};
     withMacros.macros(macros);
     std::string real = renderToString("x \\in \\RR", withMacros);
     CHECK(!ts::take_error());

@@ -158,9 +158,8 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(Request_new(RequestInfo_of(JsString_from("http://"))).h == 0 && js_failed());
     JsValue bad_url = js_take_error();
     CHECK(bad_url.h != 0 && STR(js_error_name(bad_url), "TypeError"));
-    // HeadersInit_map builds a plain record of headers.
-    HeadersInit_map hmap = HeadersInit_map_create();
-    HeadersInit_map_set_at(hmap, "x-from-map", "yes");
+    // js_string_record builds a plain record of headers.
+    JsRecord_JsString hmap = js_string_record({ "x-from-map", "yes" });
     Headers from_map = Headers_new(HeadersInit_of(hmap));
     CHECK(STR(Headers_get(from_map, "x-from-map"), "yes"));
 

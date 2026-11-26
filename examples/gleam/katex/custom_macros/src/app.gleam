@@ -7,7 +7,6 @@ import gleam/list
 import gleam/option.{None, Some}
 import katex
 import katex/katex_options
-import katex/katex_options_macros
 import katex/runtime as kr
 
 pub fn main() -> Nil {
@@ -26,15 +25,12 @@ pub fn main() -> Nil {
       node.append_child(head, badge)
       node.append_child(app, head)
 
-      let macros =
-        katex_options_macros.create()
-        |> katex_options_macros.with_at("\\RR", kr.dynamic("\\mathbb{R}"))
-        |> katex_options_macros.with_at("\\NN", kr.dynamic("\\mathbb{N}"))
-        |> katex_options_macros.with_at("\\dd", kr.dynamic("\\mathrm{d}"))
-        |> katex_options_macros.with_at(
-          "\\norm",
-          kr.dynamic("\\left\\| #1 \\right\\|"),
-        )
+      let macros = [
+        #("\\RR", kr.dynamic("\\mathbb{R}")),
+        #("\\NN", kr.dynamic("\\mathbb{N}")),
+        #("\\dd", kr.dynamic("\\mathrm{d}")),
+        #("\\norm", kr.dynamic("\\left\\| #1 \\right\\|")),
+      ]
 
       let opts =
         katex_options.create()

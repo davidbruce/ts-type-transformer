@@ -59,9 +59,7 @@ pub extern "C" fn run() {
     let pairs: Vec<(String, String)> = headers.iter().map(|p| (p.get0(), p.get1())).collect();
     check!(pairs == [("accept".to_string(), "*/*".to_string()), ("content-type".to_string(), "text/plain".to_string())]);
     check!(headers.keys().iter().collect::<Vec<_>>() == ["accept", "content-type"]);
-    let map = HeadersInitMap::create();
-    map.set_at("x-a", "1");
-    let from_map = Headers::new_with(&map);
+    let from_map = Headers::new_with([("x-a", "1")]);
     check!(from_map.get("x-a").as_deref() == Some("1"));
     check!(Headers::new_with(&headers).get("accept").as_deref() == Some("*/*"));
 
@@ -92,7 +90,7 @@ pub extern "C" fn run() {
     let rinit = ResponseInit::create();
     rinit.set_status(Some(201.0));
     rinit.set_status_text(Some("Made"));
-    rinit.set_headers(&map);
+    rinit.set_headers([("x-a", "1")]);
     let made = Response::new_with("hello body", &rinit);
     check!(made.status() == 201.0 && made.ok() && made.status_text() == "Made");
     check!(made.headers().get("x-a").as_deref() == Some("1"));

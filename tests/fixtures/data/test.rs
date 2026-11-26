@@ -59,13 +59,14 @@ pub extern "C" fn run() {
     // keyof Options.
     check!(field() == FieldResult::Title);
 
-    // Record<string, number>.
-    let table = LookupTable::create();
-    table.set_at("a", 7.0);
-    check!(lookup(&table, "a") == 7.0);
+    // Record<string, number>: ordered pair list.
+    let table = JsRecord::from([("a", 7.0)]);
+    check!(lookup([("a", 7.0)], "a") == 7.0);
     check!(lookup(&table, "b") == -1.0);
     check!(table.at("a") == Some(7.0));
     check!(table.at("b").is_none());
+    table.set_at("c", 9.0);
+    check!(table.at("c") == Some(9.0));
 
     // An intersection of object types.
     let tagged = Tagged::create();

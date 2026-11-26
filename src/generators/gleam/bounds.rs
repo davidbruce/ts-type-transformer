@@ -94,7 +94,7 @@ pub(super) fn break_cycles(m: &mut Model) {
                 }
                 args.iter().for_each(|a| refs(a, names, out));
             }
-            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => refs(inner, names, out),
+            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => refs(inner, names, out),
             Ty::Tuple(es) | Ty::Union(es) => es.iter().for_each(|e| refs(e, names, out)),
             _ => {}
         }
@@ -103,7 +103,7 @@ pub(super) fn break_cycles(m: &mut Model) {
         match t {
             Ty::Obj(n) | Ty::Generic(n, _) if cyclic.contains(n) => *t = Ty::Any,
             Ty::Generic(_, args) => args.iter_mut().for_each(|a| cut(a, cyclic)),
-            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => cut(inner, cyclic),
+            Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => cut(inner, cyclic),
             Ty::Tuple(es) | Ty::Union(es) => es.iter_mut().for_each(|e| cut(e, cyclic)),
             _ => {}
         }
@@ -322,7 +322,7 @@ fn check_bound_target(
         Ty::Generic(_, args) | Ty::Tuple(args) | Ty::Union(args) => {
             args.iter().all(|a| check_bound_target(target, q, a, scope_tparams, owner_alias, needed_aliases))
         }
-        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) => {
+        Ty::Nullable(inner, _) | Ty::ArrayOf(inner) | Ty::Listener(inner) | Ty::Record(inner) => {
             check_bound_target(target, q, inner, scope_tparams, owner_alias, needed_aliases)
         }
         _ => true,
@@ -482,7 +482,7 @@ fn collect_ty_names(t: &Ty, out: &mut HashSet<String>) {
                 collect_ty_names(a, out);
             }
         }
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => collect_ty_names(inner, out),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => collect_ty_names(inner, out),
         Ty::Tuple(es) | Ty::Union(es) => {
             for e in es {
                 collect_ty_names(e, out);

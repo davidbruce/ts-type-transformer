@@ -451,7 +451,8 @@ impl Gen {
             let mut seen = HashSet::new();
             for ((case, payload, _), m) in cases.iter().zip(&members) {
                 // An anonymous record is one type whatever its fields' order.
-                let seen_as = record_fields_sorted(&expand(&self.through_aliases(*m), &self.abbrevs));
+                let expanded = expand(&self.through_aliases(*m), &self.abbrevs);
+                let seen_as = record_fields_sorted(&expanded);
                 if payload.contains('\'') || matches!(payload.as_str(), "obj" | "unit") || payload == name || !seen.insert(seen_as) {
                     continue;
                 }
@@ -461,6 +462,16 @@ impl Gen {
                 let path = if self.cur_prefix.is_empty() { name.to_string() } else { format!("global.{}.{}.{name}", self.namespace, self.cur_prefix.split('.').map(type_ident).collect::<Vec<_>>().join(".")) };
                 for op in ["op_Implicit", "op_ErasedCast"] {
                     self.out += &format!("{indent}    static member inline {op} (x: {payload}) : {name} = {path}.{case} x\n");
+                }
+                if let Some(val_ty) = js_record_value_ty(&expanded) {
+                    for (pair_ty, seen_key) in [
+                        (format!("(string * {val_ty}) list"), format!("(string * {val_ty}) list")),
+                        (format!("(string * {val_ty})[]"), format!("(string * {val_ty})[]")),
+                    ] {
+                        if seen.insert(seen_key) {
+                            self.out += &format!("{indent}    [<Emit(\"Object.fromEntries($0)\")>] static member op_Implicit (x: {pair_ty}) : {name} = jsNative\n");
+                        }
+                    }
                 }
             }
         }
@@ -511,6 +522,24 @@ impl Gen {
         }
         self.out += "\n";
     }
+}
+
+fn js_record_value_ty(expanded: &str) -> Option<&str> {
+    let rest = expanded.strip_prefix("JsRecord<")?.strip_suffix('>')?;
+    let mut depth = 0usize;
+    for (i, ch) in rest.char_indices() {
+        match ch {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                let key = rest[..i].trim();
+                let val = rest[i + 1..].trim();
+                return (key == "string" && !val.is_empty() && val != "unit" && !val.contains('\'')).then_some(val);
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 // `{| b: B; a: A |}` as `{| a: A; b: B |}`: its fields at the top, sorted.

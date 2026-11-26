@@ -18,13 +18,15 @@ __attribute__((export_name("start"))) void start(void) {
     HTMLElement_appendChild(head, make_el(doc, "span", "badge", "\\RR, \\NN, \\dd, \\norm"));
     HTMLElement_appendChild(app, head);
 
-    KatexOptions_macros macros = KatexOptions_macros_create();
-    js_set_str(macros, "\\RR", "\\mathbb{R}");
-    js_set_str(macros, "\\NN", "\\mathbb{N}");
-    js_set_str(macros, "\\dd", "\\mathrm{d}");
-    js_set_str(macros, "\\norm", "\\left\\| #1 \\right\\|");
-
-    KatexOptions opts = KatexOptions_create(.displayMode = true, .macros = macros);
+    KatexOptions opts = KatexOptions_create(
+        .displayMode = true,
+        .macros = js_record(
+            { "\\RR", js_string("\\mathbb{R}") },
+            { "\\NN", js_string("\\mathbb{N}") },
+            { "\\dd", js_string("\\mathrm{d}") },
+            { "\\norm", js_string("\\left\\| #1 \\right\\|") }
+        )
+    );
 
     HTMLElement legend = make_el(doc, "div", "card", 0);
     HTMLElement_appendChild(legend, make_el(doc, "div", "label", "Defined Macros"));

@@ -998,7 +998,7 @@ fn given_back(m: &Model) -> HashSet<String> {
             Ty::NamedUnion(n) => {
                 out.insert(n.clone());
             }
-            Ty::Nullable(t, _) | Ty::ArrayOf(t) | Ty::Listener(t) => add(t, out),
+            Ty::Nullable(t, _) | Ty::ArrayOf(t) | Ty::Listener(t) | Ty::Record(t) => add(t, out),
             Ty::Tuple(ts) | Ty::Union(ts) | Ty::Generic(_, ts) => ts.iter().for_each(|t| add(t, out)),
             _ => {}
         }
@@ -1025,7 +1025,7 @@ fn returned_types(m: &Model) -> HashSet<String> {
                 out.insert(n.clone());
                 ts.iter().for_each(|t| add(t, out));
             }
-            Ty::Nullable(t, _) | Ty::ArrayOf(t) | Ty::Listener(t) => add(t, out),
+            Ty::Nullable(t, _) | Ty::ArrayOf(t) | Ty::Listener(t) | Ty::Record(t) => add(t, out),
             Ty::Tuple(ts) | Ty::Union(ts) => ts.iter().for_each(|t| add(t, out)),
             _ => {}
         }

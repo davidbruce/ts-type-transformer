@@ -37,13 +37,14 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // keyof Options.
     CHECK(field() == field_result::title);
 
-    // Record<string, number>.
-    lookup_table table = lookup_table::create();
-    table.set_at("a", 7);
-    CHECK(lookup(table, "a") == 7);
+    // Record<string, number>: ordered pair list.
+    ts::Record<double> table{{"a", 7.0}};
+    CHECK(lookup({{"a", 7.0}}, "a") == 7);
     CHECK(lookup(table, "b") == -1);
     CHECK(table.at("a") == 7.0);
     CHECK(!table.at("b"));
+    table.set_at("c", 9.0);
+    CHECK(table.at("c") == 9.0);
 
     // An intersection of object types.
     Tagged tagged = Tagged::create();

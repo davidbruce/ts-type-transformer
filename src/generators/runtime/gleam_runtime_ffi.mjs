@@ -65,6 +65,12 @@ export function codec_option(c) {
 export function codec_list(c) {
   return { to: (v) => toList(Array.from(v ?? [], (x) => c.to(x))), from: (v) => v.toArray().map((x) => c.from(x)) };
 }
+export function codec_record(c) {
+  return {
+    to: (o) => toList(Object.entries(o ?? {}).map(([k, v]) => [k, c.to(v)])),
+    from: (xs) => Object.fromEntries(xs.toArray().map(([k, v]) => [k, c.from(v)])),
+  };
+}
 export function codec_tuple2(a, b) {
   return { to: (v) => [a.to(v[0]), b.to(v[1])], from: (v) => [a.from(v[0]), b.from(v[1])] };
 }

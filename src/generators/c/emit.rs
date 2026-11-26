@@ -4,7 +4,7 @@ use super::super::model::{Call, Class, Func, Model, Ty};
 use super::super::names::Kind;
 use super::super::comments::{Style, comment};
 use super::types::{
-    all_ancestors, array_type, arrays, bag, call_macros, check, family, func, of_choices, tuple_type, typable, typed, union_type, with_doc,
+    all_ancestors, array_type, arrays, bag, call_macros, check, family, func, of_choices, record_type, tuple_type, typable, typed, union_type, with_doc,
 };
 use super::{
     Ctx, KEYWORDS, LIBC_NAMES, NAMING, ProjectRef, RUNTIME, c_elem, ident, import_attr, is_builtin_c_type, raw_fn, runtime_names,
@@ -265,13 +265,24 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
     for c in m.classes.iter().filter(|c| c.elements.is_some()) {
         arrays(&Ty::ArrayOf(Box::new(c.elements.clone().unwrap())), &mut elements);
     }
-    // The structs first, then unions, which may hold arrays, then the
-    // functions, which may read unions out of arrays.
+    for (_, t) in &m.record_aliases {
+        arrays(t, &mut elements);
+    }
+    // The structs first, then unions, which may hold arrays or records, then the
+    // functions, which may read unions out of arrays or records.
+    let short_macro_ok = |t: &Ty| match t {
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) => {
+            !m.classes.iter().any(|c| c.name == *n && c.funcs.iter().any(|f| f.name == "record"))
+                && !m.funcs.iter().any(|f| f.name == format!("{n}_record"))
+        }
+        _ => false,
+    };
     let containers: Vec<String> = elements
         .iter()
         .map(|t| match t {
             Ty::ArrayOf(e) => array_type(e, &cx),
             Ty::Tuple(es) => tuple_type(es, &cx),
+            Ty::Record(v) => record_type(v, m, &raw_prefix, &cx, short_macro_ok(v)),
             _ => unreachable!(),
         })
         .collect();
@@ -306,6 +317,30 @@ pub(super) fn files_named(m: &Model, pkg_name: &str, refs: &[ProjectRef]) -> Res
         let cname = first.rsplit_once("} ").and_then(|(_, r)| r.strip_suffix(';')).unwrap_or("JsContainer").trim();
         let rest: String = c.lines().skip(1).map(|l| format!("{l}\n")).collect();
         types += &format!("#ifndef TS_DEFINED_{cname}_FN\n#define TS_DEFINED_{cname}_FN\n{rest}#endif\n");
+    }
+    for (alias, t) in &m.record_aliases {
+        if !all_names.contains(alias) && let Ty::Record(_) = t {
+            let rty = typed(t, false, &cx);
+            types += &format!(
+                "typedef {rty} {alias};\n\
+                 #ifndef {alias}_record\n\
+                 #define {alias}_record(...) TS_RECORD({rty}, __VA_ARGS__)\n\
+                 #endif\n\
+                 #ifndef {alias}_create\n\
+                 #define {alias}_create() {rty}_new()\n\
+                 #endif\n\
+                 #ifndef {alias}_get_at\n\
+                 #define {alias}_get_at(r, k) {rty}_get((r), k)\n\
+                 #endif\n\
+                 #ifndef {alias}_set_at\n\
+                 #define {alias}_set_at(r, k, v) {rty}_set((r), k, v)\n\
+                 #endif\n\
+                 #ifndef {alias}_has\n\
+                 #define {alias}_has(r, k) {rty}_has((r), k)\n\
+                 #endif\n"
+            );
+            all_names.push(alias.clone());
+        }
     }
     for c in &m.callbacks {
         let mut params = vec!["void* ctx".to_string()];

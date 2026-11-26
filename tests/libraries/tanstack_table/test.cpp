@@ -14,15 +14,15 @@ extern "C" TS_IMPORT(check) void check(int ok, int line);
 #define CHECK(c) check((c), __LINE__)
 
 using V = ts::Value;
-using Obj = RowData_map;  // a plain JavaScript object: `{}` with set_at
-using Table = Table_Core<RowData_map>;
-using Model = RowModel<RowData_map>;
-using RowC = Row_Core<RowData_map>;
-using RowP = Row_CoreProperties<RowData_map>;
-using ColC = Column_Core<RowData_map, ts::Value>;
-using ColP = Column_CoreProperties<RowData_map>;
-using ColSort = Column_RowSorting<RowData_map>;
-using TabSort = Table_RowSorting<RowData_map>;
+using Obj = ts::Record<ts::Value>;  // a plain JavaScript object: `{}` with set_at
+using Table = Table_Core<Obj>;
+using Model = RowModel<Obj>;
+using RowC = Row_Core<Obj>;
+using RowP = Row_CoreProperties<Obj>;
+using ColC = Column_Core<Obj, ts::Value>;
+using ColP = Column_CoreProperties<Obj>;
+using ColSort = Column_RowSorting<Obj>;
+using TabSort = Table_RowSorting<Obj>;
 
 static V val(const ts::Handle& h) {
     V v;
@@ -113,7 +113,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     features.set_at("coreReactivityFeature", reactivity());
     features.set_at("rowSortingFeature", val(get_rowSortingFeature()));
     features.set_at("sortFns", val(sortFns));
-    features.set_at("sortedRowModel", val(createSortedRowModel<RowData_map>()));
+    features.set_at("sortedRowModel", val(createSortedRowModel<Obj>()));
 
     ts::Array<Obj> data{person("Cy", 30, "red"), person("Al", 25, "blue"), person("Bo", 41, "red")};
     ts::Array<Obj> columns{column("name", "Name"), column("age", "Age"), column("team", "Team")};
@@ -124,11 +124,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     options.set_at("columns", val(columns));
     options.set_at("data", val(data));
     // Row ids from the data: a function of the row, the index and the parent.
-    options.set_at("getRowId", val(TableOptionsRowsGetRowIdFn<RowData_map>([](RowData_map row, double index, std::optional<RowC>) {
+    options.set_at("getRowId", val(TableOptionsRowsGetRowIdFn<Obj>([](Obj row, double index, std::optional<RowC>) {
                        return row.at("name").to_string() + "#" + std::to_string(int(index));
                    })));
 
-    Table table = constructTable<RowData_map>(as<TableOptions_Core<RowData_map>>(options));
+    Table table = constructTable<Obj>(as<TableOptions_Core<Obj>>(options));
     CHECK(table.h != 0);
 
     // The row model: three rows, by index as ids.
@@ -148,7 +148,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // The cells of a row, one per column, ids from row and column.
     auto cells = model.rows()[0].getAllCells();
     CHECK(cells.size() == 3);
-    using CellP = Cell_CoreProperties<RowData_map>;
+    using CellP = Cell_CoreProperties<Obj>;
     CHECK(as<CellP>(cells[1]).id() == "Cy#0_age");
 
     // Columns.

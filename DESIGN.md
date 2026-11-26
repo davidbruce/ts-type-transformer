@@ -276,7 +276,9 @@ names each XML path apart first (`cluster.Worker` beside a class
 
 C, C++, Zig, Rust and Gleam write from one binding model (`model.rs`):
 functions for properties, option bags and overloads, each saying how
-JavaScript is called. `wasm.rs` is the wasm boundary and its glue; `js.rs`
+JavaScript is called (plus first-class `Ty::Record` and `record_aliases`
+for pure string-keyed maps when `records` is enabled, opted out by Zig).
+`wasm.rs` is the wasm boundary and its glue; `js.rs`
 the JavaScript that reaches the API, which Gleam's FFI uses too. F# reads
 the XML itself: it has methods, overloads and subtyping.
 
@@ -326,8 +328,11 @@ the time control returns to JavaScript is reported, not lost.
   call is one line that makes the next longer one, and is written once
   where several overloads share it. Optional values are `JsOptionalDouble`,
   `JsOptionalBool`, null handles and `E_absent`; unions tagged structs made
-  from a member (`Value_of(widget)`, `Value_of_number(42)`); arrays and
-  tuples typed (`JsArray_double`, `JsTuple_double_JsString`). A union
+  from a member (`Value_of(widget)`, `Value_of_number(42)`); arrays,
+  tuples and string-keyed records typed (`JsArray_double`,
+  `JsTuple_double_JsString`, `JsRecord_<E>` with `<T>_record({ "k", v }, ..)`,
+  `js_record`, `js_string_record`, `js_number_record`, `js_bool_record`, plus
+  typedef/macro aliases such as `Pm_Attrs_record`). A union
   parameter, a setter, an array's `push` and a family's overload take the
   union or any member whose C type tells it apart (`leaflet_marker(ll, opts)`,
   `Popup_setContent(note, "text")`): the macro applies `U_of`, and a value
@@ -364,7 +369,9 @@ the time control returns to JavaScript is reported, not lost.
   unset or `std::make_shared` of a struct holding one do not compile, where
   they would be null. lib.dom's globals keep `X()`: it declares `new()` on
   nearly all of them, most illegal. Overloads,
-  `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`, lambdas
+  `std::optional`, `std::variant`, `ts::Array<T>`, `ts::Tuple<...>`,
+  `ts::Record<T>` (pair-list initializers `{{"k", v}, ..}` directly and through
+  `ts::In`, `ts::Opt`, and `ts::Field`), lambdas
   (`release()`, `ts::Scoped`), class templates with defaults and
   `requires`-clauses (a default its constraint does not take by name drops
   the constraint: three's `Points<>`; a method's type parameter no argument
@@ -416,6 +423,9 @@ the time control returns to JavaScript is reported, not lost.
   `ShapeKind::Square`, `HTMLElementEventMap::CLICK`. Arguments are borrowed:
   an object is `&impl AsRef<T>`, so any subtype goes in; a union or an array
   is `impl Into<..>`, so `describe(42.0)` and `join("-", ["a", "b"])` work, and
+  `JsRecord<T>` takes pair arrays `[("k", v), ..]`, `Vec`, slices, and
+  iterators via `impl Into<JsRecord<..>>` / `impl Optional<JsRecord<..>>`
+  (and on union parameters via pair-list `From` impls), and
   so does a union whose members no test tells apart (`loose(&a)`), which only
   a value goes into and a getter gives as a `JsValue`; a parameter of `any`,
   or of a union nothing types (Pixi's `fill`, of colors another package
@@ -506,7 +516,8 @@ the time control returns to JavaScript is reported, not lost.
   `new_` in the FFI. Each has an FFI module that calls the API and
   converts what Gleam holds otherwise:
   an `Option(a)` for a nullable value or optional argument, a `List(a)` for an
-  array, custom types for unions and string enums (a union no test tells
+  array, a `List(#(String, a))` for a string-keyed record (`Object.entries` /
+  `Object.fromEntries`), custom types for unions and string enums (a union no test tells
   apart is one where a value goes in, a parameter or a setter's, and
   `Dynamic` where one comes out; a variant holding a class is made of any
   subtype, `scene_entity_camera(cam)`), a Gleam function for a
@@ -517,7 +528,7 @@ the time control returns to JavaScript is reported, not lost.
   erases types: so a function whose type parameter crosses takes a codec for
   it, `box_get_value(b, mode_codec())`, which the type checker ties to the
   `t` of `Box(t)`. Each type has one (`shape_codec()`), with `codec_float()`,
-  `codec_option(c)`, `codec_list(c)`; a handle crosses as it is (`Box(t)` as
+  `codec_option(c)`, `codec_list(c)`, `codec_record(c)`; a handle crosses as it is (`Box(t)` as
   an argument needs none). `to_fixed(x, 2)` in the runtime is JavaScript's `toFixed`. A `$` method is `add_new`. The DOM runs in
   Chrome, as the other targets' does.
 - F#: files must not refer to each other in cycles: they are ordered by what
@@ -526,7 +537,10 @@ the time control returns to JavaScript is reported, not lost.
   `JsAsyncIterator<'T>`, a subclass of Array a `seq<T>` with an indexer;
   constraints of methods, functions and interfaces are F# constraints, kept
   through keyed values (`getElementsByTagName<'K when 'K :> Element>`). An
-  index signature is `JsRecord<string, T>`. In an erased union a function of
+  index signature is `JsRecord<string, T>`, with `[<Emit("Object.fromEntries($0)")>]`
+  `op_Implicit` conversions from `(string * T) list` and `(string * T)[]`
+  on `JsRecord` and non-generic unions containing it (Fable ignores `[<Emit>]`
+  on `op_ErasedCast`). In an erased union a function of
   two or more arguments is a `System.Func`: Fable keeps a function value
   curried (TanStack's `AccessorFn<'TData> | string`). `f(a, b?, ...rest)` is two
   overloads. A union argument is an overload of each member too, a generic
@@ -665,7 +679,7 @@ A member's suffix said after a name that ends with its words drops them
 (Gleam's `schema.node_type`, not `node_node_type`). Where one hoisted object
 serves several owners it keeps the first's name (`MarkSpec_attrs` for
 `NodeSpec.attrs`); named by its word alone it would meet the library's own
-(`Attrs`), and the record it is becomes pairs (convention 10).
+(`Attrs`), and the record it is is lowered to ordered pairs (convention 10).
 
 Bundled declarations take their exported names: rollup's
 `BarSeriesOption$1`, exported as `BarSeriesOption`, swaps names with the

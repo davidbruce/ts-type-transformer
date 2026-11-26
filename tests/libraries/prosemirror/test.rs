@@ -57,19 +57,13 @@ fn make_schema() -> Schema {
     paragraph.set_to_dom(Some(&NodeSpecToDOMFn::new(move |_: Node| tag("p"))));
     let text = NodeSpec::create();
     text.set_group(Some("inline"));
-    let nodes = SchemaSpecNodes::create();
-    nodes.set_at("doc", &doc);
-    nodes.set_at("paragraph", &paragraph);
-    nodes.set_at("text", &text);
     let strong = MarkSpec::create();
     strong.set_to_dom(Some(&MarkSpecToDOMFn::new(
         move |_: Mark, _: bool| tag("strong"),
     )));
-    let marks = SchemaSpecMarks::create();
-    marks.set_at("strong", &strong);
     let spec = SchemaSpec::create();
-    spec.set_nodes(&nodes);
-    spec.set_marks(&marks);
+    spec.set_nodes([("doc", &doc), ("paragraph", &paragraph), ("text", &text)]);
+    spec.set_marks([("strong", &strong)]);
     Schema::new(&spec)
 }
 

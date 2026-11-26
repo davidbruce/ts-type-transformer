@@ -68,11 +68,9 @@ __attribute__((export_name("run"))) void run(void) {
 
     // A user macro, from an options object that is a string-keyed record.
     KatexOptions with_macro = KatexOptions_create();
-    KatexOptions_macros macros = KatexOptions_macros_create();
     JsValue replacement = js_string("\\mathbb{R}");
-    KatexOptions_macros_set_at(macros, "\\RR", replacement);
+    KatexOptions_set_macros(with_macro, js_record({ "\\RR", replacement }));
     js_release(replacement);
-    KatexOptions_set_macros(with_macro, macros);
     JsString real = katex_renderToString("x \\in \\RR", with_macro);
     CHECK(contains(real, "mathbb"));
     CHECK(contains(real, "x \\in \\RR"));

@@ -36,17 +36,11 @@ static Schema make_schema(void) {
     NodeSpec_set_toDOM(paragraph, NodeSpecToDOMFn_from(paragraph_dom, 0));
     NodeSpec text = NodeSpec_create();
     NodeSpec_set_group(text, "inline");
-    SchemaSpec_nodes nodes = SchemaSpec_nodes_create();
-    SchemaSpec_nodes_set_at(nodes, "doc", doc);
-    SchemaSpec_nodes_set_at(nodes, "paragraph", paragraph);
-    SchemaSpec_nodes_set_at(nodes, "text", text);
     MarkSpec strong = MarkSpec_create();
     MarkSpec_set_toDOM(strong, MarkSpecToDOMFn_from(strong_dom, 0));
-    SchemaSpec_marks marks = SchemaSpec_marks_create();
-    SchemaSpec_marks_set_at(marks, "strong", strong);
     SchemaSpec spec = SchemaSpec_create();
-    SchemaSpec_set_nodes(spec, nodes);
-    SchemaSpec_set_marks(spec, marks);
+    SchemaSpec_set_nodes(spec, NodeSpec_record({ "doc", doc }, { "paragraph", paragraph }, { "text", text }));
+    SchemaSpec_set_marks(spec, MarkSpec_record({ "strong", strong }));
     return Schema_new(spec);
 }
 
@@ -88,12 +82,12 @@ __attribute__((export_name("run"))) void run(void) {
     Schema schema = make_schema();
 
     // ---- schema ----
-    NodeType paragraph_type = Schema_nodes_get_at(Schema_get_nodes(schema), "paragraph");
+    NodeType paragraph_type = JsRecord_NodeType_get(Schema_get_nodes(schema), "paragraph");
     CHECK(str_is(NodeType_get_name(paragraph_type), "paragraph"));
     CHECK(NodeType_get_isBlock(paragraph_type) && NodeType_get_isTextblock(paragraph_type));
-    NodeType text_type = Schema_nodes_get_at(Schema_get_nodes(schema), "text");
+    NodeType text_type = JsRecord_NodeType_get(Schema_get_nodes(schema), "text");
     CHECK(NodeType_get_isText(text_type) && NodeType_get_isInline(text_type));
-    MarkType strong_type = Schema_marks_get_at(Schema_get_marks(schema), "strong");
+    MarkType strong_type = JsRecord_MarkType_get(Schema_get_marks(schema), "strong");
     CHECK(str_is(MarkType_get_name(strong_type), "strong"));
     CHECK(str_is(NodeType_get_name(Schema_get_topNodeType(schema)), "doc"));
 

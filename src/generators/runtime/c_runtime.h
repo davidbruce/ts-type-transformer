@@ -229,4 +229,9 @@ static inline bool ts_absent_num(double x) { union { double d; uint64_t u; } a =
 #define TS_BAG_0(c, ...) (c##_create)()
 #define TS_BAG_1(c, ...) TS_OVERRIDE_ON c##_from_fields((c##_fields){ c##_FIELDS(TS_FIELD_NO, c) __VA_ARGS__ }) TS_OVERRIDE_OFF
 
+// Ordered string-keyed record literals: `R_of({ "a", x }, { "b", y })` or empty `R_of()`.
+#define TS_RECORD_0(R, ...) R##_new()
+#define TS_RECORD_1(R, ...) R##_from_z((const R##_entry[]){ __VA_ARGS__, { .key = (const char*)0 } })
+#define TS_RECORD(R, ...) TS_PASTE2(TS_RECORD_, TS_FILLED(__VA_ARGS__))(R, __VA_ARGS__)
+
 #endif

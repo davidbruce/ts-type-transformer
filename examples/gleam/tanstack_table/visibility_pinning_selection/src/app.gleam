@@ -14,11 +14,9 @@ import gleam/string
 import tanstack_table_core as tt
 import tanstack_table_core/column_core_properties
 import tanstack_table_core/column_pinning_state
-import tanstack_table_core/column_visibility_state
 import tanstack_table_core/row_model
 import tanstack_table_core/row_row
 import tanstack_table_core/row_row_selection
-import tanstack_table_core/row_selection_state
 import tanstack_table_core/runtime as rt
 import tanstack_table_core/table_column_pinning
 import tanstack_table_core/table_column_visibility
@@ -276,23 +274,22 @@ pub fn main() {
       col_def("cpu", "CPU %"),
       col_def("status", "Status"),
     ])
-  let cv0 =
-    column_visibility_state.create()
-    |> column_visibility_state.with_at("zone", False)
+  let cv0 = rt.js_object([#("zone", dynamic.bool(False))])
   let cp0 =
     column_pinning_state.create()
     |> column_pinning_state.with_start(["id"])
     |> column_pinning_state.with_end(["status"])
   let rs0 =
-    row_selection_state.create()
-    |> row_selection_state.with_at("0", True)
-    |> row_selection_state.with_at("2", True)
-    |> row_selection_state.with_at("4", True)
+    rt.js_object([
+      #("0", dynamic.bool(True)),
+      #("2", dynamic.bool(True)),
+      #("4", dynamic.bool(True)),
+    ])
   let init_state =
     rt.js_object([
-      #("columnVisibility", rt.dynamic(cv0)),
+      #("columnVisibility", cv0),
       #("columnPinning", rt.dynamic(cp0)),
-      #("rowSelection", rt.dynamic(rs0)),
+      #("rowSelection", rs0),
     ])
   let options =
     rt.js_object([
@@ -310,20 +307,14 @@ pub fn main() {
   wire_btn(doc, "btn-0", fn() {
     let next_zone = !is_col_visible(table, "zone", False)
     let keep_owner = is_col_visible(table, "owner", True)
-    let cv =
-      column_visibility_state.create()
-      |> column_visibility_state.with_at("zone", next_zone)
-      |> column_visibility_state.with_at("owner", keep_owner)
+    let cv = [#("zone", next_zone), #("owner", keep_owner)]
     table_column_visibility.set_column_visibility(vis, updater.T(cv))
     render(table, doc)
   })
   wire_btn(doc, "btn-1", fn() {
     let keep_zone = is_col_visible(table, "zone", False)
     let next_owner = !is_col_visible(table, "owner", True)
-    let cv =
-      column_visibility_state.create()
-      |> column_visibility_state.with_at("zone", keep_zone)
-      |> column_visibility_state.with_at("owner", next_owner)
+    let cv = [#("zone", keep_zone), #("owner", next_owner)]
     table_column_visibility.set_column_visibility(vis, updater.T(cv))
     render(table, doc)
   })
@@ -344,21 +335,14 @@ pub fn main() {
     render(table, doc)
   })
   wire_btn(doc, "btn-4", fn() {
-    let cv =
-      column_visibility_state.create()
-      |> column_visibility_state.with_at("zone", False)
-      |> column_visibility_state.with_at("owner", True)
+    let cv = [#("zone", False), #("owner", True)]
     table_column_visibility.set_column_visibility(vis, updater.T(cv))
     let cp =
       column_pinning_state.create()
       |> column_pinning_state.with_start(["id"])
       |> column_pinning_state.with_end(["status"])
     table_column_pinning.set_column_pinning(pin, updater.T(cp))
-    let rs =
-      row_selection_state.create()
-      |> row_selection_state.with_at("0", True)
-      |> row_selection_state.with_at("2", True)
-      |> row_selection_state.with_at("4", True)
+    let rs = [#("0", True), #("2", True), #("4", True)]
     table_row_selection.set_row_selection(sel, updater.T(rs))
     render(table, doc)
   })

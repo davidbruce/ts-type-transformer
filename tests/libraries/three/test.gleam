@@ -14,7 +14,6 @@ import bindings/material_or_material_array
 import bindings/matrix4
 import bindings/mesh
 import bindings/mesh_basic_material
-import bindings/normal_buffer_attributes
 import bindings/normal_buffer_attributes_index_result
 import bindings/object3d
 import bindings/quaternion
@@ -392,10 +391,10 @@ pub fn main() {
 
   // Attributes: positions of 24 vertices, 36 indices.
   let attributes = buffer_geometry.get_attributes(geometry)
-  let assert Some(normal_buffer_attributes_index_result.BufferAttribute(position)) =
-    normal_buffer_attributes.get_at(attributes, "position")
-  let assert Some(normal_buffer_attributes_index_result.BufferAttribute(uv)) =
-    normal_buffer_attributes.get_at(attributes, "uv")
+  let assert Ok(normal_buffer_attributes_index_result.BufferAttribute(position)) =
+    list.key_find(attributes, "position")
+  let assert Ok(normal_buffer_attributes_index_result.BufferAttribute(uv)) =
+    list.key_find(attributes, "uv")
   let assert Some(index) = buffer_geometry.get_index(geometry)
   let passed =
     passed

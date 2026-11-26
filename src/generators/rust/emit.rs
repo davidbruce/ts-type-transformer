@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::classes::{callback, emit_classes, union_enum};
-use super::types::{function, names_of, ns_module, rust_elem, Site};
+use super::types::{function, names_of, ns_module, rust_elem, ty, Site};
 use super::{camel, camel_variant, rust_function, rust_type, snake, Context, ProjectRef, PRELUDE, RUNTIME_TYPES};
 use super::super::comments::{Style, comment};
 use super::super::model::{Call, Model, NamedUnion, Ty};
@@ -23,7 +23,9 @@ fn variant_list<'a>(variants: impl Iterator<Item = (String, Option<&'a str>)>) -
 // A union only a value goes into is typed where a member says which it is:
 // two arrays would be one variant.
 fn inputs_only(u: &NamedUnion) -> bool {
-    u.typable() && u.parts.iter().filter(|p| matches!(p, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() <= 1
+    u.typable()
+        && u.parts.iter().filter(|p| matches!(p, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() <= 1
+        && u.parts.iter().filter(|p| matches!(p, Ty::Record(_))).count() <= 1
 }
 
 // A module's file: `areas/core` is `src/areas_core.rs`.
@@ -275,6 +277,12 @@ pub(super) fn files_named(m: &Model, crate_name: &str, refs: &[ProjectRef]) -> R
         match module_of.get(&u.name) {
             Some(path) => *namespaces.entry(path.clone()).or_default() += &text,
             None => types_file += &text,
+        }
+    }
+    for (alias, t) in &m.record_aliases {
+        let a = rust_type(alias);
+        if !declared.iter().any(|d| cx.def_name(d) == a) && alias_names.insert(a.clone()) {
+            types_file += &format!("pub type {a} = {};\n", ty(t, &cx));
         }
     }
     for c in &m.callbacks {

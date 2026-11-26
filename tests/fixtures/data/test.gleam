@@ -12,6 +12,7 @@ import bindings/runtime as r
 import bindings/source
 import bindings/tagged
 import gleam/io
+import gleam/list
 import gleam/option.{None, Some}
 
 fn check(ok: Bool, what: String) -> Nil {
@@ -52,13 +53,12 @@ pub fn main() {
   check(b.area(size) == 9.0, "Pick")
   check(b.field() == field_result.Title, "keyof")
 
-  // Record<string, number>: an index.
-  let table = b.lookup_table_create()
-  b.lookup_table_set_at(table, "a", 7.0)
+  // Record<string, number>: ordered pair list.
+  let table = [#("a", 7.0)]
   check(b.lookup(table, "a") == 7.0 && b.lookup(table, "b") == -1.0, "Record")
   check(
-    b.lookup_table_get_at(table, "a") == Some(7.0)
-      && b.lookup_table_get_at(table, "b") == None,
+    list.key_find(table, "a") == Ok(7.0)
+      && list.key_find(table, "b") == Error(Nil),
     "index",
   )
 

@@ -313,6 +313,11 @@ macro_rules! handle {
     };
     (@custom_debug $name:ident) => {
         $crate::handle!(@common [] $name);
+        impl From<&$name> for $name {
+            fn from(x: &$name) -> Self {
+                x.clone()
+            }
+        }
         impl From<$name> for $crate::JsValue {
             fn from(x: $name) -> Self {
                 $crate::JsValue(x.0)
@@ -321,6 +326,11 @@ macro_rules! handle {
     };
     ($(#[$meta:meta])* $name:ident $(<$($p:ident $(= $d:ty)?),*>)?) => {
         $crate::handle!(@common [$(#[$meta])*] $name $(<$($p $(= $d)?),*>)?);
+        impl $(<$($p),*>)? From<&$name $(<$($p),*>)?> for $name $(<$($p),*>)? {
+            fn from(x: &$name $(<$($p),*>)?) -> Self {
+                x.clone()
+            }
+        }
         impl $(<$($p),*>)? From<$name $(<$($p),*>)?> for $crate::JsValue {
             fn from(x: $name $(<$($p),*>)?) -> Self {
                 $crate::JsValue(x.0)
@@ -524,6 +534,128 @@ impl<T: JsType, A: Into<T> + Clone> From<&[A]> for JsArray<T> {
 impl<T> From<&JsArray<T>> for JsArray<T> {
     fn from(a: &JsArray<T>) -> Self {
         a.clone()
+    }
+}
+
+// A JavaScript object used as a string-keyed map: `Record<string, T>` / `{ [k: string]: T }`.
+// Made from pair arrays, slices, Vecs, or iterators: `[("a", 1.0), ("b", 2.0)]`.
+pub struct JsRecord<T = JsValue>(pub JsHandle, PhantomData<fn() -> T>);
+impl<T> Clone for JsRecord<T> {
+    fn clone(&self) -> Self {
+        JsRecord(self.0.clone(), PhantomData)
+    }
+}
+impl<T> AsRef<JsHandle> for JsRecord<T> {
+    fn as_ref(&self) -> &JsHandle {
+        &self.0
+    }
+}
+impl<T> AsRef<JsRecord<T>> for JsRecord<T> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+impl<T> PartialEq for JsRecord<T> {
+    fn eq(&self, o: &Self) -> bool {
+        js::same(&self.0, &o.0)
+    }
+}
+impl<T> core::fmt::Debug for JsRecord<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "JsRecord(#{})", self.0 .0)
+    }
+}
+impl<T> From<JsRecord<T>> for JsValue {
+    fn from(r: JsRecord<T>) -> Self {
+        JsValue(r.0)
+    }
+}
+impl<T> ToJs for JsRecord<T> {
+    fn lend(&self) -> Lent {
+        Lent::borrow(self.0 .0)
+    }
+}
+impl<T> FromJs for JsRecord<T> {
+    fn from_handle(h: u32) -> Self {
+        JsRecord(JsHandle(h), PhantomData)
+    }
+}
+impl<T> Is<JsRecord<T>> for JsRecord<T> {}
+impl<T> Optional<JsRecord<T>> for Option<JsRecord<T>> {
+    fn into_option(self) -> Option<JsRecord<T>> {
+        self
+    }
+}
+impl<T> Optional<JsRecord<T>> for JsNone {
+    fn into_option(self) -> Option<JsRecord<T>> {
+        None
+    }
+}
+impl<T> From<&JsRecord<T>> for JsRecord<T> {
+    fn from(r: &JsRecord<T>) -> Self {
+        r.clone()
+    }
+}
+impl<T: JsType> JsRecord<T> {
+    pub fn new() -> Self {
+        JsRecord(JsHandle(unsafe { rt::js_object_new() }), PhantomData)
+    }
+    pub fn create() -> Self {
+        Self::new()
+    }
+    pub fn has(&self, key: &str) -> bool {
+        unsafe { rt::js_object_has(self.0 .0, key.as_ptr(), key.len()) != 0 }
+    }
+    pub fn at(&self, key: &str) -> Option<T> {
+        if !self.has(key) {
+            return None;
+        }
+        Some(T::from_handle(unsafe { rt::js_object_get(self.0 .0, key.as_ptr(), key.len()) }))
+    }
+    pub fn set_at(&self, key: &str, v: impl Into<T>) {
+        let v: T = v.into();
+        unsafe { rt::js_object_set(self.0 .0, key.as_ptr(), key.len(), v.lend().h) }
+    }
+    pub fn with_at(self, key: &str, v: impl Into<T>) -> Self {
+        self.set_at(key, v);
+        self
+    }
+    pub fn any(&self) -> JsRecord {
+        JsRecord(self.0.clone(), PhantomData)
+    }
+}
+impl JsRecord<JsValue> {
+    pub fn get(&self, key: &str) -> JsValue {
+        JsValue(JsHandle(unsafe { rt::js_object_get(self.0 .0, key.as_ptr(), key.len()) }))
+    }
+}
+impl<T: JsType> Default for JsRecord<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl<T: JsType, K: AsRef<str>, V: Into<T>> FromIterator<(K, V)> for JsRecord<T> {
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(items: I) -> Self {
+        let r = JsRecord::new();
+        for (k, v) in items {
+            r.set_at(k.as_ref(), v);
+        }
+        r
+    }
+}
+impl<T: JsType, K: AsRef<str>, V: Into<T>, const N: usize> From<[(K, V); N]> for JsRecord<T> {
+    fn from(items: [(K, V); N]) -> Self {
+        items.into_iter().collect()
+    }
+}
+impl<T: JsType, K: AsRef<str>, V: Into<T>> From<Vec<(K, V)>> for JsRecord<T> {
+    fn from(items: Vec<(K, V)>) -> Self {
+        items.into_iter().collect()
+    }
+}
+impl<T: JsType, K: AsRef<str> + Clone, V: Into<T> + Clone> From<&[(K, V)]> for JsRecord<T> {
+    fn from(items: &[(K, V)]) -> Self {
+        items.iter().cloned().collect()
     }
 }
 

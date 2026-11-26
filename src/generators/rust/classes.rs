@@ -547,6 +547,7 @@ fn variant(t: &Ty, cx: &Context) -> String {
         Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) => cx.def_name(n),
         Ty::Param(n) => n.clone(),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "Array".into(),
+        Ty::Record(_) => "Record".into(),
         t => panic!("Rust generator: a union member it cannot hold: {t:?}"),
     }
 }
@@ -620,6 +621,7 @@ pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<Strin
         out += &format!("impl From<{VALUE}> for {n} {{ fn from(x: {VALUE}) -> Self {{ {n}::{VALUE}(x) }} }}\nimpl From<&{VALUE}> for {n} {{ fn from(x: &{VALUE}) -> Self {{ {n}::{VALUE}(Clone::clone(x)) }} }}\n");
     }
     // Made from a member. A bare type parameter cannot be: it could be the union itself.
+    let single_record = u.parts.iter().filter(|q| matches!(q, Ty::Record(_))).count() == 1;
     for p in u.parts.iter().filter(|p| !matches!(p, Ty::Param(_))) {
         let (v, t) = (variant(p), ty(p, cx));
         out += &format!("impl{bounds} From<{t}> for {n}{args} {{ fn from(x: {t}) -> Self {{ {n}::{v}(x) }} }}\n");
@@ -628,6 +630,27 @@ pub(super) fn union_enum(u: &NamedUnion, m: &Model, imports: &mut BTreeMap<Strin
                 "impl{bounds} From<&str> for {n}{args} {{ fn from(x: &str) -> Self {{ {n}::{v}(x.to_string()) }} }}\n\
                  impl{bounds} From<&::std::string::String> for {n}{args} {{ fn from(x: &::std::string::String) -> Self {{ {n}::{v}(x.clone()) }} }}\n"
             ),
+            Ty::Record(inner) if single_record => {
+                let vt = ty(inner, cx);
+                let extra_bounds = |tail: String| {
+                    if u.type_params.is_empty() {
+                        format!("<{tail}>")
+                    } else {
+                        let bs: Vec<String> = u.type_params.iter().map(|tp| bound(tp, cx)).collect();
+                        format!("<{}, {tail}>", bs.join(", "))
+                    }
+                };
+                let where_js = if u.type_params.is_empty() { String::new() } else { format!(" where {vt}: JsType") };
+                let b_arr = extra_bounds(format!("K_: AsRef<str>, V_: Into<{vt}>, const N_: usize"));
+                let b_vec = extra_bounds(format!("K_: AsRef<str>, V_: Into<{vt}>"));
+                let b_slice = extra_bounds(format!("K_: AsRef<str> + Clone, V_: Into<{vt}> + Clone"));
+                out += &format!(
+                    "impl{bounds} From<&{t}> for {n}{args} {{ fn from(x: &{t}) -> Self {{ {n}::{v}(Clone::clone(x)) }} }}\n\
+                     impl{b_arr} From<[(K_, V_); N_]> for {n}{args}{where_js} {{ fn from(x: [(K_, V_); N_]) -> Self {{ {n}::{v}(x.into()) }} }}\n\
+                     impl{b_vec} From<::std::vec::Vec<(K_, V_)>> for {n}{args}{where_js} {{ fn from(x: ::std::vec::Vec<(K_, V_)>) -> Self {{ {n}::{v}(x.into()) }} }}\n\
+                     impl{b_slice} From<&[(K_, V_)]> for {n}{args}{where_js} {{ fn from(x: &[(K_, V_)]) -> Self {{ {n}::{v}(x.into()) }} }}\n"
+                );
+            }
             Ty::Num | Ty::Bool | Ty::Enum(_) => {}
             _ => out += &format!("impl{bounds} From<&{t}> for {n}{args} {{ fn from(x: &{t}) -> Self {{ {n}::{v}(Clone::clone(x)) }} }}\n"),
         }

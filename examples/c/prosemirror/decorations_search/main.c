@@ -61,10 +61,7 @@ static Pm_Schema make_schema(void) {
     Pm_NodeSpec doc = Pm_NodeSpec_create(.content = "block+");
 
     Pm_AttributeSpec lvl = Pm_AttributeSpec_create(.default_ = js_number(2));
-    Pm_MarkSpec_attrs hattrs = Pm_MarkSpec_attrs_create();
-    Pm_MarkSpec_attrs_set_at(hattrs, "level", lvl);
-
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = hattrs, .content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = Pm_AttributeSpec_record({ "level", lvl }), .content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
 
     Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(para_dom, NULL));
 
@@ -72,20 +69,13 @@ static Pm_Schema make_schema(void) {
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
-    Pm_SchemaSpec_nodes nodes = Pm_SchemaSpec_nodes_create();
-    Pm_SchemaSpec_nodes_set_at(nodes, "doc", doc);
-    Pm_SchemaSpec_nodes_set_at(nodes, "heading", heading);
-    Pm_SchemaSpec_nodes_set_at(nodes, "paragraph", para);
-    Pm_SchemaSpec_nodes_set_at(nodes, "code_block", cblock);
-    Pm_SchemaSpec_nodes_set_at(nodes, "text", text);
-
     Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"strong"));
     Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"code"));
-    Pm_SchemaSpec_marks marks = Pm_SchemaSpec_marks_create();
-    Pm_SchemaSpec_marks_set_at(marks, "strong", strong);
-    Pm_SchemaSpec_marks_set_at(marks, "code", code);
 
-    return Pm_Schema_new(Pm_SchemaSpec_create(.nodes = nodes, .marks = marks));
+    return Pm_Schema_new(Pm_SchemaSpec_create(
+        .nodes = Pm_NodeSpec_record({ "doc", doc }, { "heading", heading }, { "paragraph", para }, { "code_block", cblock }, { "text", text }),
+        .marks = Pm_MarkSpec_record({ "strong", strong }, { "code", code })
+    ));
 }
 
 static Pm_Node t_node(const char* t) {

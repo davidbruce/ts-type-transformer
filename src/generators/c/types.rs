@@ -22,6 +22,7 @@ pub(super) fn typed(t: &Ty, param: bool, cx: &Ctx) -> String {
         Ty::Any => "JsValue".into(),
         Ty::Array => "JsArray".into(),
         Ty::ArrayOf(e) => format!("JsArray_{}", element(e, cx)),
+        Ty::Record(v) => format!("JsRecord_{}", element(v, cx)),
         Ty::Tuple(es) => tuple_name(es, cx),
         Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) => n.clone(),
         // An optional number or flag says whether it is there; an optional enum is `E_absent` when it is not.
@@ -47,10 +48,10 @@ fn element(t: &Ty, cx: &Ctx) -> String {
     }
 }
 
-// The typed arrays and tuples a type names, innermost first.
+// The typed arrays, records and tuples a type names, innermost first.
 pub(super) fn arrays(t: &Ty, out: &mut Vec<Ty>) {
     match t {
-        Ty::ArrayOf(e) => arrays(e, out),
+        Ty::ArrayOf(e) | Ty::Record(e) => arrays(e, out),
         Ty::Tuple(es) => es.iter().for_each(|e| arrays(e, out)),
         Ty::Nullable(inner, _) => return arrays(inner, out),
         _ => return,
@@ -87,6 +88,7 @@ fn union_field(t: &Ty) -> String {
         Ty::Bool => "boolean".into(),
         Ty::Obj(n) | Ty::Enum(n) => n.clone(),
         Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
+        Ty::Record(_) => "record".into(),
         t => panic!("{T} generator: a union member it cannot hold: {t:?}"),
     }
 }
@@ -245,7 +247,7 @@ pub(super) fn union_type(u: &NamedUnion, m: &Model, wasm_module: &str, raw_prefi
     // A field every member has, read without a switch (marked's `Marked_Token_get_type(t)`).
     for (p, t) in m.shared_fields(u) {
         // A handle's type is none at a null handle.
-        let handle = |t: &Ty| matches!(t, Ty::Str | Ty::Any | Ty::Array | Ty::ArrayOf(_) | Ty::Obj(_));
+        let handle = |t: &Ty| matches!(t, Ty::Str | Ty::Any | Ty::Array | Ty::ArrayOf(_) | Ty::Record(_) | Ty::Obj(_));
         let ret = typed(&t, false, cx);
         let tail = match &t {
             Ty::Num => "double v = ts_raw_js_to_number(r); ts_raw_js_release(r); return v;".to_string(),
@@ -319,7 +321,7 @@ pub(super) fn subtype_arms(u: &NamedUnion, cx: &Ctx) -> Vec<(String, String, Str
 
 // A union a value can be made of: its members have C types and names of their own.
 pub(super) fn typable(u: &NamedUnion) -> bool {
-    if !u.type_params.is_empty() || !u.parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))) {
+    if !u.type_params.is_empty() || !u.parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_))) {
         return false;
     }
     let fields = union_fields(u);
@@ -399,6 +401,107 @@ pub(super) fn array_type(e: &Ty, cx: &Ctx) -> String {
     // A union element is pushed as any member: `push(a, widget)`.
     if let Ty::NamedUnion(n) = e && cx.decodable(n) && cx.of.contains_key(n) {
         lines.push(format!("#define {name}_push(a, v) {name}_push((a), {n}_of(v))"));
+    }
+    lines.into_iter().map(|l| l + "\n").collect()
+}
+
+// A typed record: `JsRecord_double`, with `_new`, `_create`, `_get`, `_set`, `_has`, `_from`, `_from_z` and `_of(...)`.
+pub(super) fn record_type(v: &Ty, m: &Model, raw_prefix: &str, cx: &Ctx, short_macro_ok: bool) -> String {
+    let name = format!("JsRecord_{}", element(v, cx));
+    let elem = typed(v, false, cx);
+    let enum_value_fn = raw_fn(raw_prefix, "js_enum_value");
+    let enum_index_fn = raw_fn(raw_prefix, "js_enum_index");
+    let enum_id = |e: &str| m.enums.iter().position(|x| x.0 == e).unwrap_or(0);
+    let entry_val = if *v == Ty::Str { "const char*".to_string() } else { elem.clone() };
+    let (get_ret, get_body) = match v {
+        Ty::Num => (
+            "JsOptionalDouble".to_string(),
+            "if (!ts_raw_js_object_has(r.h, k.ptr, k.len)) return js_none_double(); uint32_t h = ts_raw_js_object_get(r.h, k.ptr, k.len); double x = ts_raw_js_to_number(h); ts_raw_js_release(h); return js_some_double(x);".to_string(),
+        ),
+        Ty::Bool => (
+            "JsOptionalBool".to_string(),
+            "if (!ts_raw_js_object_has(r.h, k.ptr, k.len)) return js_none_bool(); uint32_t h = ts_raw_js_object_get(r.h, k.ptr, k.len); bool x = ts_raw_js_to_bool(h) != 0; ts_raw_js_release(h); return js_some_bool(x);".to_string(),
+        ),
+        Ty::Enum(e) => (
+            e.clone(),
+            format!("if (!ts_raw_js_object_has(r.h, k.ptr, k.len)) return {e}_absent; uint32_t h = ts_raw_js_object_get(r.h, k.ptr, k.len); {e} x = ({e}){enum_index_fn}({}, h); ts_raw_js_release(h); return x;", enum_id(e)),
+        ),
+        Ty::NumEnum(e) => (
+            e.clone(),
+            format!("if (!ts_raw_js_object_has(r.h, k.ptr, k.len)) return ({e})0; uint32_t h = ts_raw_js_object_get(r.h, k.ptr, k.len); {e} x = ({e})(int32_t)ts_raw_js_to_number(h); ts_raw_js_release(h); return x;"),
+        ),
+        Ty::NamedUnion(u) if cx.decodable(u) => (
+            u.clone(),
+            format!("return {u}_from_handle(ts_raw_js_object_get(r.h, k.ptr, k.len));"),
+        ),
+        _ => (
+            elem.clone(),
+            format!("return ({elem}){{ ts_raw_js_object_get(r.h, k.ptr, k.len) }};"),
+        ),
+    };
+    let (set_param, set_body) = match v {
+        Ty::Str => (
+            "TsStr v".to_string(),
+            "uint32_t h = ts_raw_js_from_string(v.ptr, v.len); ts_raw_js_object_set(r.h, k.ptr, k.len, h); ts_raw_js_release(h);".to_string(),
+        ),
+        Ty::Num => (
+            "double v".to_string(),
+            "uint32_t h = ts_raw_js_from_number(v); ts_raw_js_object_set(r.h, k.ptr, k.len, h); ts_raw_js_release(h);".to_string(),
+        ),
+        Ty::Bool => (
+            "bool v".to_string(),
+            "uint32_t h = ts_raw_js_from_bool(v); ts_raw_js_object_set(r.h, k.ptr, k.len, h); ts_raw_js_release(h);".to_string(),
+        ),
+        Ty::Enum(e) => (
+            format!("{e} v"),
+            format!("uint32_t h = {enum_value_fn}({}, v); ts_raw_js_object_set(r.h, k.ptr, k.len, h); ts_raw_js_release(h);", enum_id(e)),
+        ),
+        Ty::NumEnum(e) => (
+            format!("{e} v"),
+            "uint32_t h = ts_raw_js_from_number((double)(int32_t)v); ts_raw_js_object_set(r.h, k.ptr, k.len, h); ts_raw_js_release(h);".to_string(),
+        ),
+        Ty::NamedUnion(u) if cx.decodable(u) => (
+            format!("{u} v"),
+            format!("uint32_t h = {u}_to_handle(v); ts_raw_js_object_set(r.h, k.ptr, k.len, h); ts_raw_js_release(h);"),
+        ),
+        _ => (
+            format!("{elem} v"),
+            "ts_raw_js_object_set(r.h, k.ptr, k.len, v.h);".to_string(),
+        ),
+    };
+    let item_val = if *v == Ty::Str { "ts_str_c(items[i].value)" } else { "items[i].value" };
+    let set_macro = match v {
+        Ty::Str => format!("#define {name}_set(r, k, v) ({name}_set)((r), TS_STR(k), TS_STR(v))"),
+        Ty::NamedUnion(u) if cx.decodable(u) && cx.of.contains_key(u) => {
+            format!("#define {name}_set(r, k, v) ({name}_set)((r), TS_STR(k), {u}_of(v))")
+        }
+        _ => format!("#define {name}_set(r, k, v) ({name}_set)((r), TS_STR(k), (v))"),
+    };
+    let mut lines = vec![
+        format!("typedef struct {{ uint32_t h; }} {name};"),
+        format!("typedef struct {{ const char* key; {entry_val} value; }} {name}_entry;"),
+        format!("static inline {name} {name}_new(void) {{ return ({name}){{ ts_raw_js_object_new() }}; }}"),
+        format!("static inline {name} {name}_create(void) {{ return {name}_new(); }}"),
+        format!("static inline bool {name}_has({name} r, TsStr k) {{ return ts_raw_js_object_has(r.h, k.ptr, k.len) != 0; }}"),
+        format!("#define {name}_has(r, k) ({name}_has)((r), TS_STR(k))"),
+        format!("static inline {get_ret} {name}_get({name} r, TsStr k) {{ {get_body} }}"),
+        format!("#define {name}_get(r, k) ({name}_get)((r), TS_STR(k))"),
+        format!("static inline void {name}_set({name} r, TsStr k, {set_param}) {{ {set_body} }}"),
+        set_macro,
+        format!("static inline {name} {name}_from(const {name}_entry* items, uint32_t len) {{ {name} r = {name}_new(); for (uint32_t i = 0; i < len; i++) ({name}_set)(r, ts_str_c(items[i].key), {item_val}); return r; }}"),
+        format!("static inline {name} {name}_from_z(const {name}_entry* items) {{ {name} r = {name}_new(); for (uint32_t i = 0; items[i].key; i++) ({name}_set)(r, ts_str_c(items[i].key), {item_val}); return r; }}"),
+        format!("static inline JsValue {name}_any({name} r) {{ return (JsValue){{ r.h }}; }}"),
+        format!("#define {name}_of(...) TS_RECORD({name}, __VA_ARGS__)"),
+    ];
+    match v {
+        Ty::Any => lines.push(format!("#ifndef js_record\n#define js_record(...) TS_RECORD({name}, __VA_ARGS__)\n#endif")),
+        Ty::Str => lines.push(format!("#ifndef js_string_record\n#define js_string_record(...) TS_RECORD({name}, __VA_ARGS__)\n#endif")),
+        Ty::Num => lines.push(format!("#ifndef js_number_record\n#define js_number_record(...) TS_RECORD({name}, __VA_ARGS__)\n#endif")),
+        Ty::Bool => lines.push(format!("#ifndef js_bool_record\n#define js_bool_record(...) TS_RECORD({name}, __VA_ARGS__)\n#endif")),
+        Ty::Obj(n) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) if short_macro_ok && !super::is_builtin_c_type(n) => {
+            lines.push(format!("#ifndef {n}_record\n#define {n}_record(...) TS_RECORD({name}, __VA_ARGS__)\n#endif"));
+        }
+        _ => {}
     }
     lines.into_iter().map(|l| l + "\n").collect()
 }
@@ -568,7 +671,7 @@ fn field(t: &Ty, cx: &Ctx) -> Option<(char, String)> {
         Ty::Str => ('s', "const char*".into()),
         Ty::Enum(e) => ('i', e.clone()),
         Ty::NamedUnion(n) if cx.takes(n) => ('u', n.clone()),
-        Ty::NamedUnion(_) | Ty::Any | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => ('h', typed(t, true, cx)),
+        Ty::NamedUnion(_) | Ty::Any | Ty::Obj(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_) => ('h', typed(t, true, cx)),
         _ => return None,
     })
 }

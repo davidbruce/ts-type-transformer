@@ -46,6 +46,10 @@ check (lookup (table, "b") = -1.0) "Record miss"
 check (table["a"] = 7.0) "Record read"
 let table2 = JsRecord.Create [ "k", 9.0 ]
 check (lookup (table2, "k") = 9.0) "Record from entries"
+let pairs = [ "k2", 11.0 ]
+check (lookup (pairs, "k2") = 11.0) "Record from pair list"
+let arr = [| "k3", 13.0 |]
+check (lookup (arr, "k3") = 13.0) "Record from pair array"
 
 // An intersection of object types.
 check (show {| name = "x"; id = 5.0 |} = "x#5") "intersection"

@@ -58,6 +58,30 @@ pub(super) struct Builder<'a> {
     pub key_strings: HashSet<String>,
     // Interfaces / classes extended (directly or transitively) by at least one `class`.
     pub extended_by_class: HashSet<String>,
+    // Pure string-keyed maps/records (`{ [k: string]: V }`): XML key -> `(decl_node, ret_node)`.
+    pub pure_records: HashMap<String, (Node<'a, 'a>, Node<'a, 'a>)>,
+}
+
+pub(super) fn pure_record_index<'a>(obj: Node<'a, 'a>) -> Option<Node<'a, 'a>> {
+    let mut non_tp = elements(obj).filter(|e| !e.has_tag_name("typeParameter"));
+    let idx = non_tp.next()?;
+    if non_tp.next().is_some() || !idx.has_tag_name("index") || flag(idx, "static") {
+        return None;
+    }
+    let mut params = named(idx, "parameter");
+    let key_param = params.next()?;
+    if params.next().is_some() || flag(key_param, "rest") {
+        return None;
+    }
+    let key_ty = only_child(key_param);
+    if !(key_ty.has_tag_name("primitive") && attr(key_ty, "name") == "string") {
+        return None;
+    }
+    let ret = named(idx, "returns").next().map(only_child)?;
+    if ret.has_tag_name("primitive") && matches!(attr(ret, "name"), "void" | "undefined" | "never") {
+        return None;
+    }
+    Some(ret)
 }
 
 // The model of the XML for a target, or what the target cannot express.
@@ -70,7 +94,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
     let mut b = Builder {
         opts,
         decls: HashMap::new(),
-        model: Model { enums: vec![], num_enums: vec![], enum_docs: vec![], num_enum_docs: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), type_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new(), args_bags: HashMap::new() },
+        model: Model { enums: vec![], num_enums: vec![], enum_docs: vec![], num_enum_docs: vec![], classes: vec![], callbacks: vec![], unions: vec![], type_aliases: vec![], record_aliases: vec![], maps: vec![], shared: vec![], funcs: vec![], opaque: vec![], opaque_names: BTreeMap::new(), opaque_arity: BTreeMap::new(), skipped: BTreeMap::new(), counted: opts.counted, trap_uncaught: opts.trap_uncaught, packages: BTreeMap::new(), js_refs: BTreeMap::new(), synthetic: HashSet::new(), origins: HashMap::new(), namespaced: HashMap::new(), namespace_modules: HashMap::new(), type_modules: HashMap::new(), func_namespaces: HashMap::new(), requested_packages: Vec::new(), prefix: doc.root_element().attribute("prefix").map(str::to_string), root_import: doc.root_element().attribute("import").map(str::to_string), original_type_names: BTreeMap::new(), args_bags: HashMap::new() },
         opaque: HashSet::new(),
         imports: HashSet::new(),
         resolving: Vec::new(),
@@ -96,6 +120,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
         erased: HashSet::new(),
         key_strings: HashSet::new(),
         extended_by_class: HashSet::new(),
+        pure_records: HashMap::new(),
     };
     b.index(doc.root_element(), "");
     let mut extended = HashSet::new();
@@ -136,9 +161,43 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
             }
         }
     }
+    let mut extended_by_any = HashSet::new();
+    if opts.records {
+        for &d in b.decls.values() {
+            let mut edges = Vec::new();
+            collect_edges(d, &mut edges);
+            extended_by_any.extend(edges);
+        }
+    }
     b.extended_by_class = extended;
+    if opts.records {
+        for (key, &d) in &b.decls {
+            if extended_by_any.contains(key) {
+                continue;
+            }
+            if d.has_tag_name("interface") && flag(d, "synthetic") {
+                if (opts.generics || named(d, "typeParameter").next().is_none())
+                    && !elements(d).any(|e| e.has_tag_name("extends") || e.has_tag_name("ancestor"))
+                    && let Some(ret) = pure_record_index(d)
+                {
+                    b.pure_records.insert(key.clone(), (d, ret));
+                }
+            } else if d.has_tag_name("typeAlias")
+                && (opts.generics || named(d, "typeParameter").next().is_none())
+                && !elements(d).any(|c| c.has_tag_name("extends") || c.has_tag_name("ancestor"))
+                && let Some(body) = elements(d).find(|c| !c.has_tag_name("typeParameter") && !c.has_tag_name("extends"))
+                && body.has_tag_name("object")
+                && let Some(ret) = pure_record_index(body)
+            {
+                b.pure_records.insert(key.clone(), (d, ret));
+            }
+        }
+    }
     for nested in [false, true] {
         for path in b.declared.iter().filter(|p| p.contains('.') == nested) {
+            if b.pure_records.contains_key(path.as_str()) && b.decls.get(path.as_str()).is_some_and(|d| flag(*d, "synthetic")) {
+                continue;
+            }
             b.type_ident(path);
         }
     }
@@ -345,12 +404,13 @@ impl<'a> Builder<'a> {
                 let js = self.js(d, &path);
                 self.model.js_refs.insert(path.clone(), js);
             }
-            if flag(d, "synthetic") {
+            if flag(d, "synthetic") && !self.pure_records.contains_key(&path) {
                 self.model.synthetic.insert(self.type_ident(&path));
             }
             // Declared in a namespace (`Stream.PipeOptions`): it gives way to a
             // top-level declaration a target would name the same.
             if !flag(d, "synthetic")
+                && !self.pure_records.contains_key(&path)
                 && matches!(d.tag_name().name(), "interface" | "class" | "typeAlias" | "enum")
                 && let Some((full, depth, module)) = self.scope(&path)
             {
@@ -358,7 +418,7 @@ impl<'a> Builder<'a> {
                 self.model.namespaced.insert(self.type_ident(&path), full);
                 self.model.namespace_modules.insert(self.type_ident(&path), (module, depth));
             }
-            if let Some(origin) = d.attribute("origin") {
+            if !self.pure_records.contains_key(&path) && let Some(origin) = d.attribute("origin") {
                 self.model.origins.insert(self.type_ident(&path), origin.to_string());
             }
             match d.tag_name().name() {
@@ -398,11 +458,23 @@ impl<'a> Builder<'a> {
                     self.model.callbacks.push(Callback { name: owner, params, ret, type_params, rest });
                 }
                 "interface" | "class" => {
+                    if d.has_tag_name("interface") && self.pure_records.contains_key(&path) {
+                        continue;
+                    }
                     let mut c = self.class_at(d, &path, &self.js(d, &path));
                     c.doc = doc(d).map(str::to_string);
                     self.model.classes.push(c);
                 }
                 "typeAlias" => {
+                    if self.pure_records.contains_key(&path) {
+                        if prefix.is_empty() && !flag(d, "synthetic") && named(d, "typeParameter").next().is_none() {
+                            let alias = self.type_ident(&path);
+                            if let Some(rec) = self.resolve_pure_record(&path, &[], "") {
+                                self.model.record_aliases.push((alias, rec));
+                            }
+                        }
+                        continue;
+                    }
                     let body = self.alias_body(d);
                     let alias_params: Vec<TParam> = named(d, "typeParameter").collect::<Vec<_>>().into_iter().map(|p| self.tparam(p)).collect();
                     if body.has_tag_name("functionType") {
@@ -542,6 +614,9 @@ impl<'a> Builder<'a> {
         }
         for d in &generated {
             let id = d.attribute("id").unwrap_or_default();
+            if self.pure_records.contains_key(id) {
+                continue;
+            }
             let Some(ns) = owner.get(id).filter(|ns| !ns.is_empty()) else { continue };
             let Some(own) = id.strip_prefix(&format!("{}_", ns.join("_"))) else { continue };
             // In the namespace's module, as its own declarations are; with

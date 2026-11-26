@@ -110,7 +110,7 @@ pub(super) fn typed(t: &Ty, is_param: bool) -> String {
         Ty::Key(m) => format!("{m}.Key"),
         Ty::Mapped(m) => format!("{m}.Type(KEY)"),
         Ty::Listener(ev) => format!("JsListener({})", typed(ev, false)),
-        Ty::Param(_) | Ty::Generic(..) => panic!("Zig generator cannot express generics: the target config must erase them"),
+        Ty::Param(_) | Ty::Generic(..) | Ty::Record(_) => panic!("Zig generator cannot express generics or records: the target config must erase them"),
         Ty::Any | Ty::Union(_) => "JsValue".into(),
     }
 }
@@ -268,7 +268,7 @@ fn describe(t: &Ty, unions: &[NamedUnion], callbacks: &[Callback]) -> String {
         Ty::Mapped(m) => format!("the type `{m}` selects"),
         Ty::Nullable(inner, _) => describe(inner, unions, callbacks),
         Ty::Key(m) => format!("a `{m}.Key`"),
-        Ty::Void | Ty::Param(_) | Ty::Generic(..) => String::new(),
+        Ty::Void | Ty::Param(_) | Ty::Generic(..) | Ty::Record(_) => String::new(),
     }
 }
 
@@ -497,7 +497,7 @@ pub(super) fn type_refs(t: &Ty, out: &mut BTreeSet<String>) {
             out.insert(n.clone());
             args.iter().for_each(|a| type_refs(a, out));
         }
-        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) => type_refs(inner, out),
+        Ty::Nullable(inner, _) | Ty::Listener(inner) | Ty::ArrayOf(inner) | Ty::Record(inner) => type_refs(inner, out),
         Ty::Union(parts) | Ty::Tuple(parts) => parts.iter().for_each(|p| type_refs(p, out)),
         Ty::Void | Ty::Num | Ty::Bool | Ty::Str | Ty::Any | Ty::Array | Ty::Param(_) => {}
     }

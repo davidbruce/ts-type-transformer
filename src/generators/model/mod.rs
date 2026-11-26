@@ -142,6 +142,8 @@ pub enum Ty {
     ArrayOf(Box<Ty>),
     // An array of fixed length and element types: `[number, string]`.
     Tuple(Vec<Ty>),
+    // A plain JavaScript object used as a string-keyed map: `{ [k: string]: V }` / `Record<string, V>`.
+    Record(Box<Ty>),
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -273,7 +275,7 @@ impl NamedUnion {
         if let Some(i) = self.parts.iter().position(|p| self.parts.iter().any(|q| matches!(q, Ty::ArrayOf(e) if **e == *p))) {
             return Some(i);
         }
-        let records: Vec<usize> = self.parts.iter().enumerate().filter(|(_, p)| matches!(p, Ty::Obj(n) if record(n))).map(|(i, _)| i).collect();
+        let records: Vec<usize> = self.parts.iter().enumerate().filter(|(_, p)| matches!(p, Ty::Record(_)) || matches!(p, Ty::Obj(n) if record(n))).map(|(i, _)| i).collect();
         if let [i] = records.as_slice()
             && self.parts.iter().all(object)
         {
@@ -298,9 +300,9 @@ impl NamedUnion {
     }
 
     // A value can be made of a member without telling members apart: each is a
-    // number, a flag, a string, a handle, an array or a tuple.
+    // number, a flag, a string, a handle, an array, a tuple or a record.
     pub fn typable(&self) -> bool {
-        self.type_params.is_empty() && self.parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_)))
+        self.type_params.is_empty() && self.parts.iter().all(|p| matches!(p, Ty::Num | Ty::Str | Ty::Bool | Ty::Obj(_) | Ty::Enum(_) | Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) | Ty::Record(_)))
     }
 }
 
@@ -535,6 +537,7 @@ impl Model {
                 // Untyped, the only array beside objects: `T | T[]` of a union `T`, flattened.
                 Ty::Array if primary.is_none() && u.parts.iter().filter(|q| matches!(q, Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_))).count() == 1 => "list".into(),
                 Ty::Array | Ty::ArrayOf(_) | Ty::Tuple(_) => "array".into(),
+                Ty::Record(_) => "record".into(),
                 _ if by_type => snake(&fixed[m].clone().unwrap_or_default().replace(['-', ' ', '.'], "_")),
                 Ty::Obj(n) | Ty::NamedUnion(n) if self.synthetic.contains(n) && n.contains('_') => snake(n.rsplit('_').find(|s| !s.is_empty() && !s.chars().all(|c| c.is_ascii_digit())).unwrap_or(n)),
                 Ty::Param(n) => snake(n),
@@ -629,6 +632,8 @@ pub struct Model {
     pub unions: Vec<NamedUnion>,
     // A library's name for a union, and the union.
     pub type_aliases: Vec<(String, String)>,
+    // A library's name for a pure string-keyed record (`Attrs`, `ColumnVisibilityState`), and its `Ty::Record`.
+    pub record_aliases: Vec<(String, Ty)>,
     pub maps: Vec<KeyMap>,
     pub shared: Vec<Shared>,
     pub funcs: Vec<Func>,
@@ -722,6 +727,8 @@ pub struct ModelOptions<'a> {
     pub typed_union_arrays: bool,
     // More than four optional arguments are an option bag of them (see `Builder::args_bags`).
     pub args_bags: bool,
+    // Pure string-keyed maps/records (`{ [k: string]: V }`, `Record<string, V>`) lower to `Ty::Record`.
+    pub records: bool,
 }
 
 impl<'a> ModelOptions<'a> {
@@ -735,6 +742,7 @@ impl<'a> ModelOptions<'a> {
             retain_opaque_constraints: target == "Gleam",
             typed_union_arrays: target == "Gleam",
             args_bags: target == "Gleam",
+            records: matches!(target, "C" | "C++" | "Rust" | "Gleam"),
         }
     }
 }

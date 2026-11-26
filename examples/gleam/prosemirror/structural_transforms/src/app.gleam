@@ -11,7 +11,6 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import prosemirror/areas/prosemirror_model/attribute_spec
-import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
 import prosemirror/areas/prosemirror_model/mark_spec
 import prosemirror/areas/prosemirror_model/node
@@ -29,7 +28,6 @@ import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
 import prosemirror/areas/prosemirror_model/dom_output_spec
-import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
@@ -45,22 +43,21 @@ fn build_schema() -> t.Schema(Nil) {
   let lvl_spec =
     attribute_spec.create()
     |> attribute_spec.with_default(dynamic.int(2))
-  let h_attrs =
-    mark_spec_attrs.create()
-    |> mark_spec_attrs.with_at("level", lvl_spec)
 
   let heading_spec =
     node_spec.create()
-    |> node_spec.with_attrs(h_attrs)
+    |> node_spec.with_attrs([#("level", lvl_spec)])
     |> node_spec.with_content("inline*")
     |> node_spec.with_group("block")
     |> node_spec.with_defining(True)
     |> node_spec.with_to_dom(fn(n) {
-      let lvl = case
-        decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int)
-      {
-        Ok(1) -> "h1"
-        _ -> "h2"
+      let lvl = case list.key_find(node.get_attrs(n), "level") {
+        Ok(v) ->
+          case decode.run(v, decode.int) {
+            Ok(1) -> "h1"
+            _ -> "h2"
+          }
+        Error(_) -> "h2"
       }
       hole_spec(lvl)
     })
@@ -97,42 +94,27 @@ fn build_schema() -> t.Schema(Nil) {
     node_spec.create()
     |> node_spec.with_group("inline")
 
-  let nodes =
-    schema_spec.nodes_create()
-    |> schema_spec.nodes_with_at("doc", doc_spec)
-    |> schema_spec.nodes_with_at("heading", heading_spec)
-    |> schema_spec.nodes_with_at(
-      "paragraph",
-      tag_node("inline*", Some("block"), "p", False),
-    )
-    |> schema_spec.nodes_with_at(
-      "blockquote",
-      tag_node("block+", Some("block"), "blockquote", True),
-    )
-    |> schema_spec.nodes_with_at(
-      "bullet_list",
-      tag_node("list_item+", Some("block"), "ul", False),
-    )
-    |> schema_spec.nodes_with_at(
-      "list_item",
-      tag_node("paragraph block*", None, "li", True),
-    )
-    |> schema_spec.nodes_with_at("horizontal_rule", hr_spec)
-    |> schema_spec.nodes_with_at("text", text_spec)
-
   let make_mark = fn(tag: String) {
     mark_spec.create()
     |> mark_spec.with_to_dom(fn(_, _) { hole_spec(tag) })
   }
-  let marks =
-    schema_spec.marks_create()
-    |> schema_spec.marks_with_at("strong", make_mark("strong"))
-    |> schema_spec.marks_with_at("code", make_mark("code"))
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(nodes)
-    |> schema_spec.with_marks(marks)
+    |> schema_spec.with_nodes([
+      #("doc", doc_spec),
+      #("heading", heading_spec),
+      #("paragraph", tag_node("inline*", Some("block"), "p", False)),
+      #("blockquote", tag_node("block+", Some("block"), "blockquote", True)),
+      #("bullet_list", tag_node("list_item+", Some("block"), "ul", False)),
+      #("list_item", tag_node("paragraph block*", None, "li", True)),
+      #("horizontal_rule", hr_spec),
+      #("text", text_spec),
+    ])
+    |> schema_spec.with_marks([
+      #("strong", make_mark("strong")),
+      #("code", make_mark("code")),
+    ])
   schema.new(spec)
 }
 
@@ -145,14 +127,11 @@ fn li_node(sch, txt: String) -> t.Node(Nil) {
 }
 
 fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
-  let ha =
-    attrs.create()
-    |> attrs.with_at("level", dynamic.int(2))
   let h =
     schema.node_with(
       sch,
       "heading",
-      Some(ha),
+      Some([#("level", dynamic.int(2))]),
       schema.text(sch, "Structural Transform Pipeline"),
       [],
     )
@@ -390,8 +369,8 @@ pub fn main() {
   wire_btn(doc, "btn-1", fn() {
     let st = editor_view.get_state(view)
     let d = editor_state.get_doc(st)
-    let assert Some(qtype) =
-      schema.nodes_get_at(schema.get_nodes(sch), "blockquote")
+    let assert Ok(qtype) =
+      list.key_find(schema.get_nodes(sch), "blockquote")
     let sel = editor_state.get_selection(st)
     let sf = selection.get_dollar_from(sel)
     let from_sel = case

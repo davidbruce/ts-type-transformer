@@ -12,7 +12,6 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import prosemirror/areas/prosemirror_model/attribute_spec
-import prosemirror/areas/prosemirror_model/attrs
 import prosemirror/areas/prosemirror_model/fragment
 import prosemirror/areas/prosemirror_model/mark_spec
 import prosemirror/areas/prosemirror_model/node
@@ -28,7 +27,6 @@ import prosemirror/areas/prosemirror_transform/transform
 import prosemirror/areas/prosemirror_view/direct_editor_props
 import prosemirror/areas/prosemirror_view/editor_view
 import prosemirror/areas/prosemirror_model/dom_output_spec
-import prosemirror/mark_spec_attrs
 import prosemirror/runtime as pm_rt
 import prosemirror/types as t
 
@@ -44,22 +42,21 @@ fn build_schema() -> t.Schema(Nil) {
   let lvl_spec =
     attribute_spec.create()
     |> attribute_spec.with_default(dynamic.int(2))
-  let h_attrs =
-    mark_spec_attrs.create()
-    |> mark_spec_attrs.with_at("level", lvl_spec)
 
   let heading_spec =
     node_spec.create()
-    |> node_spec.with_attrs(h_attrs)
+    |> node_spec.with_attrs([#("level", lvl_spec)])
     |> node_spec.with_content("inline*")
     |> node_spec.with_group("block")
     |> node_spec.with_defining(True)
     |> node_spec.with_to_dom(fn(n) {
-      let lvl = case
-        decode.run(attrs.get_at(node.get_attrs(n), "level"), decode.int)
-      {
-        Ok(1) -> "h1"
-        _ -> "h2"
+      let lvl = case list.key_find(node.get_attrs(n), "level") {
+        Ok(v) ->
+          case decode.run(v, decode.int) {
+            Ok(1) -> "h1"
+            _ -> "h2"
+          }
+        Error(_) -> "h2"
       }
       hole_spec(lvl)
     })
@@ -103,42 +100,36 @@ fn build_schema() -> t.Schema(Nil) {
     node_spec.create()
     |> node_spec.with_group("inline")
 
-  let nodes =
-    schema_spec.nodes_create()
-    |> schema_spec.nodes_with_at("doc", doc_spec)
-    |> schema_spec.nodes_with_at("heading", heading_spec)
-    |> schema_spec.nodes_with_at("paragraph", para_spec)
-    |> schema_spec.nodes_with_at("blockquote", quote_spec)
-    |> schema_spec.nodes_with_at("code_block", cb_spec)
-    |> schema_spec.nodes_with_at("horizontal_rule", hr_spec)
-    |> schema_spec.nodes_with_at("text", text_spec)
-
   let make_mark = fn(tag: String) {
     mark_spec.create()
     |> mark_spec.with_to_dom(fn(_, _) { hole_spec(tag) })
   }
-  let marks =
-    schema_spec.marks_create()
-    |> schema_spec.marks_with_at("strong", make_mark("strong"))
-    |> schema_spec.marks_with_at("em", make_mark("em"))
-    |> schema_spec.marks_with_at("code", make_mark("code"))
 
   let spec =
     schema_spec.create()
-    |> schema_spec.with_nodes(nodes)
-    |> schema_spec.with_marks(marks)
+    |> schema_spec.with_nodes([
+      #("doc", doc_spec),
+      #("heading", heading_spec),
+      #("paragraph", para_spec),
+      #("blockquote", quote_spec),
+      #("code_block", cb_spec),
+      #("horizontal_rule", hr_spec),
+      #("text", text_spec),
+    ])
+    |> schema_spec.with_marks([
+      #("strong", make_mark("strong")),
+      #("em", make_mark("em")),
+      #("code", make_mark("code")),
+    ])
   schema.new(spec)
 }
 
 fn make_initial_doc(sch: t.Schema(Nil)) -> t.Node(Nil) {
-  let ha =
-    attrs.create()
-    |> attrs.with_at("level", dynamic.int(2))
   let h =
     schema.node_with(
       sch,
       "heading",
-      Some(ha),
+      Some([#("level", dynamic.int(2))]),
       schema.text(sch, "ProseMirror Document Schema"),
       [],
     )
@@ -258,9 +249,9 @@ fn update_meta(
   let #(f, t) = target_range(st)
   let d = editor_state.get_doc(st)
   let marks = schema.get_marks(sch)
-  let assert Some(ms) = schema.marks_get_at(marks, "strong")
-  let assert Some(me) = schema.marks_get_at(marks, "em")
-  let assert Some(mc) = schema.marks_get_at(marks, "code")
+  let assert Ok(ms) = list.key_find(marks, "strong")
+  let assert Ok(me) = list.key_find(marks, "em")
+  let assert Ok(mc) = list.key_find(marks, "code")
   let hb = node.range_has_mark_type(d, f, t, ms)
   let he = node.range_has_mark_type(d, f, t, me)
   let hc = node.range_has_mark_type(d, f, t, mc)
@@ -362,7 +353,7 @@ pub fn main() {
     let #(f, t) = target_range(st)
     case t >. f {
       True -> {
-        let assert Some(mt) = schema.marks_get_at(schema.get_marks(sch), mkey)
+        let assert Ok(mt) = list.key_find(schema.get_marks(sch), mkey)
         let tr = editor_state.get_tr(st)
         case node.range_has_mark_type(editor_state.get_doc(st), f, t, mt) {
           True -> {
@@ -395,7 +386,7 @@ pub fn main() {
     let nodes = schema.get_nodes(sch)
     case pname == "heading" {
       True -> {
-        let assert Some(pt) = schema.nodes_get_at(nodes, "paragraph")
+        let assert Ok(pt) = list.key_find(nodes, "paragraph")
         transform.set_block_type(
           tr,
           selection.get_from(sel),
@@ -405,16 +396,13 @@ pub fn main() {
         pm_rt.ref_set(action_ref, "Converted heading -> paragraph")
       }
       False -> {
-        let assert Some(ht) = schema.nodes_get_at(nodes, "heading")
-        let ha =
-          attrs.create()
-          |> attrs.with_at("level", dynamic.int(2))
+        let assert Ok(ht) = list.key_find(nodes, "heading")
         transform.set_block_type_with(
           tr,
           selection.get_from(sel),
           Some(selection.get_to(sel)),
           ht,
-          Some(ha),
+          Some([#("level", dynamic.int(2))]),
         )
         pm_rt.ref_set(action_ref, "Converted block -> heading[level=2]")
       }

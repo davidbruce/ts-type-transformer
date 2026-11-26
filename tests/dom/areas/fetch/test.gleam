@@ -6,7 +6,6 @@ import bindings/areas/core/abort_controller
 import bindings/areas/core/abort_signal
 import bindings/areas/network/body
 import bindings/areas/network/headers
-import bindings/areas/network/headers_init_map
 import bindings/areas/network/request
 import bindings/areas/network/request_init
 import bindings/areas/network/request_mode
@@ -60,8 +59,7 @@ pub fn main() {
   check(headers.to_list(h) == [#("content-type", "text/plain"), #("x-tag", "a, b")], "entries sorted and lowercased")
   headers.delete(h, "x-tag")
   check(!headers.has(h, "X-Tag"), "deleted")
-  let map = headers_init_map.create()
-  headers_init_map.set_at(map, "Accept", "application/json")
+  let map = [#("Accept", "application/json")]
   let from_map = headers.new_with(map)
   check(headers.get(from_map, "accept") == Some("application/json"), "headers from a record")
   let copy = headers.new_headers_with(from_map)
