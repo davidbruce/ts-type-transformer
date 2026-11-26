@@ -100,6 +100,9 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         let mut order: Vec<String> = Vec::new();
         let mut sample: HashMap<String, Type> = HashMap::new();
         let mut opt_members: HashMap<String, HashSet<String>> = HashMap::new();
+        // Where each callback is, and the name the library gave it anywhere, for its name.
+        let mut places: HashMap<String, Vec<Vec<String>>> = HashMap::new();
+        let mut given: HashMap<String, String> = HashMap::new();
         walk(&mut decls[start..], &mut |t, path| {
             if matches!(t, Type::Function(_) | Type::Constructor(_)) && !bodies.contains(&(t as *const Type)) {
                 *uses.entry(hoist_key(t)).or_default() += 1;
@@ -118,6 +121,12 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                     order.push(key.clone());
                     sample.insert(key.clone(), t.clone());
                 }
+                if let Type::Function(s) = t {
+                    places.entry(key.clone()).or_default().push(path.to_vec());
+                    if let Some(n) = &s.name {
+                        given.entry(key.clone()).or_insert_with(|| n.clone());
+                    }
+                }
                 let known = best.entry(key).or_insert_with(|| path.to_vec());
                 if (path.len(), path) < (known.len(), &known[..]) {
                     *known = path.to_vec();
@@ -131,6 +140,7 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
         for k in &order {
             at_path.entry(&best[k]).or_default().push(k);
         }
+        let concepts = concept_names(&order, &places, sep);
         let mut apart: HashMap<String, String> = HashMap::new();
         for keys in at_path.values().filter(|ks| ks.len() > 1) {
             let types: Vec<&Type> = keys.iter().map(|k| &sample[*k]).collect();
@@ -171,6 +181,11 @@ pub(super) fn hoist(decls: &mut Vec<Decl>, sep: &str) {
                         // `(height, localHeight)`): where it is.
                         Type::Function(s) | Type::Constructor(s) if shared => callback_name(s, sep).filter(|n| n.len() <= SYNTH_NAME_MAX && !names.contains(n)).unwrap_or(at),
                         _ => at,
+                    };
+                    let given = given.get(&key).filter(|n| !names.contains(*n)).cloned();
+                    let base = match given.or_else(|| concepts.get(&key).filter(|c| !names.contains(*c)).cloned()) {
+                        Some(c) => c,
+                        None => base,
                     };
                     let name = unique_with_limit(base, SYNTH_NAME_MAX, &mut names);
                     // Enclosing type parameters the type mentions become its own.
@@ -247,6 +262,80 @@ pub(super) fn cut_recursive_dictionary(t: &mut Type) {
 }
 
 // What an inline type is, in a word.
+// A callback's name by what it is for, from where it is: the member it is
+// (`NodeSpec.toDOM`), or the method it is given to where its parameter's
+// name says nothing (`drainCollisionEvents(f)`): `ToDOMFn`,
+// `DrainCollisionEventsFn`. Its places in a record count only where it has
+// no others; their word is one, or one that says the others
+// (`dispatchTransaction`, `dispatch`), else it has none (`onmessage`,
+// `onmessageerror`); the nearest place with it names the owner. Two callbacks of one name
+// are each their owner's (`NodeSpecToDOMFn`, `MarkSpecToDOMFn`), and so are
+// their owners' others (`RendererObjectHeadingFn` beside
+// `RendererObjectCodeFn`, as the tokenizer has `code` too), but where
+// that is too long and the plain name is its own. One with no such word
+// (the DOM's `MouseEvent` handlers) is named by what it takes, as before.
+fn concept_names(order: &[String], places: &HashMap<String, Vec<Vec<String>>>, sep: &str) -> HashMap<String, String> {
+    const GENERIC: &[&str] = &["f", "fn", "func", "cb", "callback", "callbackfn", "handler", "pred", "predicate", "iteratee"];
+    let word = |path: &[String]| -> Option<(String, String)> {
+        let mut segs = path.iter().rev().filter(|s| !matches!(s.as_str(), "index" | "result" | "return" | "value" | "new") && !s.chars().all(|c| c.is_ascii_digit()));
+        let last = segs.next()?;
+        let w = if GENERIC.contains(&last.as_str()) { segs.next().unwrap_or(last) } else { last };
+        // A hoisted owner's last word (`DOMSerializer_nodes`: `nodes`).
+        let w = w.rsplit(sep).next().unwrap_or(w);
+        Some((w.to_string(), path.first()?.clone()))
+    };
+    let pascal = |s: &str| s.split(sep).flat_map(|p| p.split('_')).map(|p| {
+        let mut cs = p.chars();
+        cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()
+    }).collect::<String>();
+    let fn_name = |w: &str| if w.to_ascii_lowercase().ends_with("fn") { pascal(w) } else { format!("{}Fn", pascal(w)) };
+    let mut chosen: Vec<(&String, String, String, String)> = Vec::new();
+    for key in order {
+        let Some(ps) = places.get(key) else { continue };
+        // A record's values say what holds them, not what they are (`DOMSerializer.nodes`).
+        let own: Vec<&Vec<String>> = ps.iter().filter(|p| !p.iter().any(|s| s == "index")).collect();
+        let ps: Vec<&Vec<String>> = if own.is_empty() { ps.iter().collect() } else { own };
+        let words: HashSet<String> = ps.iter().filter_map(|p| word(p)).map(|(w, _)| w).collect();
+        // One word, or one that says the others (`dispatchTransaction`, `dispatch`):
+        // not one of several (`onmessage`, `onmessageerror`).
+        let camel = |s: &str| -> Vec<String> {
+            let mut out: Vec<String> = Vec::new();
+            for c in s.chars() {
+                if c.is_ascii_uppercase() || out.is_empty() {
+                    out.push(String::new());
+                }
+                out.last_mut().unwrap().push(c.to_ascii_lowercase());
+            }
+            out
+        };
+        let Some(w) = words.iter().find(|w| words.iter().all(|o| camel(w).starts_with(&camel(o)))).cloned() else { continue };
+        let Some((_, (_, owner))) = ps.iter().filter_map(|p| word(p).filter(|(x, _)| *x == w).map(|x| (*p, x))).min_by(|(a, _), (b, _)| (a.len(), *a).cmp(&(b.len(), *b))) else { continue };
+        chosen.push((key, fn_name(&w), format!("{}{}", pascal(&owner), fn_name(&w)), owner));
+    }
+    let mut count: HashMap<&str, usize> = HashMap::new();
+    for (_, plain, ..) in &chosen {
+        *count.entry(plain.as_str()).or_default() += 1;
+    }
+    let mut owned: HashMap<&str, usize> = HashMap::new();
+    for (_, _, full, _) in &chosen {
+        *owned.entry(full.as_str()).or_default() += 1;
+    }
+    let qualified: HashSet<&str> = chosen.iter().filter(|(_, plain, ..)| count[plain.as_str()] > 1).map(|(.., owner)| owner.as_str()).collect();
+    chosen
+        .iter()
+        .filter_map(|(key, plain, full, owner)| {
+            let plain_only = count[plain.as_str()] == 1;
+            if full.len() > SYNTH_NAME_MAX && plain_only {
+                Some(((*key).clone(), plain.clone()))
+            } else if qualified.contains(owner.as_str()) || !plain_only {
+                (owned[full.as_str()] == 1 && full.len() <= SYNTH_NAME_MAX).then(|| ((*key).clone(), full.clone()))
+            } else {
+                Some(((*key).clone(), plain.clone()))
+            }
+        })
+        .collect()
+}
+
 fn kind_word(t: &Type) -> &'static str {
     match t {
         Type::Object(ms) if !ms.is_empty() && ms.iter().all(|m| m.kind == MemberKind::Index) => "map",

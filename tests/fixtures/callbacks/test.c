@@ -67,7 +67,7 @@ __attribute__((export_name("run"))) void run(void) {
     Promise_then(q, on_rejected, 0);
     js_release(q);
     CHECK(awaited == 0);
-    CHECK(eachId(eachId_f_from(on_id, 0)) == 2);
+    CHECK(eachId(EachIdFn_from(on_id, 0)) == 2);
     CHECK(ids_seen == 2 && first_is_one);
     Ticker tk = ticker(3);
     tick_it = Ticker_iterate_async(tk);
@@ -106,7 +106,7 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(last == 5 && calls == 2);
 
     // A callback that takes an object and returns a value.
-    CHECK(Counter_visit(c, Counter_visit_f_from(is_five, 0)));
+    CHECK(Counter_visit(c, VisitFn_from(is_five, 0)));
 
     // The same function and context is the same JavaScript function.
     Counter_unsubscribe(c, Listener_from(on_value, &last));
@@ -125,12 +125,12 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(prop == 7);
 
     // Several arguments, a string among them, and a result.
-    CHECK(Counter_fold(c, Counter_fold_f_from(fold, 0)) == 8 * 2 + 5);
+    CHECK(Counter_fold(c, FoldFn_from(fold, 0)) == 8 * 2 + 5);
 
     // A callback kept and called later.
     int ran = 0;
-    later(later_f_from(bump, &ran));
-    later(later_f_from(bump, &ran));
+    later(LaterFn_from(bump, &ran));
+    later(LaterFn_from(bump, &ran));
     CHECK(ran == 0);
     CHECK(flush() == 2);
     CHECK(ran == 2);

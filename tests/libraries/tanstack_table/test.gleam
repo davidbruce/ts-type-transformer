@@ -7,7 +7,7 @@
 // object and the table's TableRowSorting view (`coerce`).
 import bindings as table
 import bindings/column_helper
-import bindings/column_helper_accessor_column_header_string as header_options
+import bindings/column_helper_accessor_fn_column_header_string as header_options
 import bindings/column_sort
 import bindings/core_features
 import bindings/row_core_properties
@@ -162,7 +162,7 @@ pub fn main() {
     )
     + check(
       table.functional_update(
-        t.UpdaterUpdaterFn2(fn(x) { x +. 1.0 }),
+        t.UpdaterUpdaterFnCb(fn(x) { x +. 1.0 }),
         3.0,
         runtime.codec_float(),
       )

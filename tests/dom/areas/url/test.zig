@@ -146,7 +146,7 @@ export fn run() void {
         count += 1;
     }
     expect(count == 3, @src());
-    sorted.forEach(b.URLSearchParams_forEach_callbackfn.from(onEach, null), .{});
+    sorted.forEach(b.URLSearchParamsForEachFn.from(onEach, null), .{});
     expect(std.mem.eql(u8, joined[0..joined_len], "a=1;m=3;z=1;"), @src());
 
     // Made from a plain object, from another set of params, and empty.

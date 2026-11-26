@@ -109,7 +109,7 @@ __attribute__((export_name("run"))) void run(void) {
     // Generics are erased: values are untyped.
     Box b = wrap(js_number(21));
     CHECK(js_to_number(Box_get_value(b)) == 21);
-    CHECK(js_to_number(Box_get_value(Box_map(b, Box_map_f_from(doubled, 0)))) == 42);
+    CHECK(js_to_number(Box_get_value(Box_map(b, MapFn_from(doubled, 0)))) == 42);
     CHECK(js_to_number(first(JsArray_double_any(r))) == 0);
     CHECK(first(JsArray_new()).h == 0);
 

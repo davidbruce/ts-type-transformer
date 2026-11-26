@@ -49,6 +49,8 @@ pub(super) struct Builder<'a> {
     pub has_ids: bool,
     pub idents: std::cell::RefCell<HashMap<String, String>>,
     pub ident_taken: std::cell::RefCell<HashSet<String>>,
+    // An external type's TypeScript library, by key: `dom` for `lib.dom.d.ts`.
+    pub lib_of: std::cell::RefCell<HashMap<String, String>>,
     // A generic callback's own type parameters, bound as untyped values: a
     // closure cannot be generic.
     pub erased: HashSet<String>,
@@ -90,6 +92,7 @@ pub fn model_with_options(xml: &str, opts: ModelOptions<'_>) -> Result<Model, Ve
         has_ids: doc.descendants().any(|d| d.has_attribute("id")),
         idents: Default::default(),
         ident_taken: Default::default(),
+        lib_of: Default::default(),
         erased: HashSet::new(),
         key_strings: HashSet::new(),
         extended_by_class: HashSet::new(),
@@ -230,23 +233,36 @@ impl<'a> Builder<'a> {
     // (GeoJSON's `Point` beside leaflet's). XML without ids is by name.
     pub(super) fn ref_key(&self, n: Node) -> String {
         let name = n.attribute("qualified").unwrap_or(attr(n, "name"));
-        match n.attribute("to") {
-            Some(to) => to.to_string(),
+        let key = match n.attribute("to") {
+            Some(to) => return to.to_string(),
             None if self.has_ids => format!("{EXTERNAL}{name}"),
             None => name.to_string(),
+        };
+        if let Some(lib) = n.attribute("file").and_then(|f| f.strip_prefix("lib.")?.strip_suffix(".d.ts")) {
+            self.lib_of.borrow_mut().entry(key.clone()).or_insert_with(|| lib.to_string());
         }
+        key
     }
 
     // A type's identifier, by its path in the XML: the path flattened
     // (`cluster_Worker` for `cluster.Worker`), numbered where another path
     // flattens alike. Declared types have theirs first: a top-level one its
-    // own name, before a namespace's flattened.
+    // own name, before a namespace's flattened. An external one from
+    // TypeScript's own library is named by it before it is numbered: the
+    // DOM's `Node` beside ProseMirror's is `DomNode`.
     pub(super) fn type_ident(&self, path: &str) -> String {
         if let Some(i) = self.idents.borrow().get(path) {
             return i.clone();
         }
         let base = ident(external(path));
         let mut name = base.clone();
+        if self.ident_taken.borrow().contains(&name)
+            && let Some(lib) = self.lib_of.borrow().get(path)
+            && let Some(by_lib) = super::super::names::origin_name(lib, &base)
+            && !self.ident_taken.borrow().contains(&by_lib)
+        {
+            name = by_lib;
+        }
         let mut n = 2;
         while !self.ident_taken.borrow_mut().insert(name.clone()) {
             name = format!("{base}_{n}");

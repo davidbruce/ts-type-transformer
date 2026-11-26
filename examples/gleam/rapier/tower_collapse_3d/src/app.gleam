@@ -382,7 +382,7 @@ pub fn main() -> Nil {
             |> box_options.with_width(w_box)
             |> box_options.with_height(half_height *. 2.0)
             |> box_options.with_depth(d_box)
-          let m = b.create_box_box_options_with(engine, bopts)
+          let m = b.create_box_options_with(engine, bopts)
           let mat = case layer % 3 {
             0 -> mat0
             1 -> mat1

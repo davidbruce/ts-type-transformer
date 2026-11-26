@@ -15,7 +15,7 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->is_ro) return table_call_void_to_any_fn((Table_void_to_any_fn){ a->derive.h });
+    if (a->is_ro) return table_call_Getter((Table_Getter){ a->derive.h });
     js_retain(a->value);
     return a->value;
 }
@@ -39,15 +39,15 @@ static JsValue atom_sub(void* ctx, JsValue obs) {
 }
 static JsValue make_atom(AtomState* a) {
     JsValue atom = js_object();
-    Table_void_to_any_fn get_fn = Table_void_to_any_fn_from(atom_get, a);
+    Table_Getter get_fn = Table_Getter_from(atom_get, a);
     js_set_val(atom, "get", get_fn);
     js_release(get_fn);
     if (!a->is_ro) {
-        Table_Updater_fn2 set_fn = Table_Updater_fn2_from(atom_set, a);
+        Table_UpdaterFn set_fn = Table_UpdaterFn_from(atom_set, a);
         js_set_val(atom, "set", set_fn);
         js_release(set_fn);
     }
-    Table_Updater_fn2 sub_fn = Table_Updater_fn2_from(atom_sub, NULL);
+    Table_UpdaterFn sub_fn = Table_UpdaterFn_from(atom_sub, NULL);
     js_set_val(atom, "subscribe", sub_fn);
     js_release(sub_fn);
     return atom;
@@ -60,7 +60,7 @@ static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions o
     js_retain(initial);
     return (Table_Atom){ make_atom(a).h };
 }
-static Table_ReadonlyAtom create_readonly(void* ctx, Table_void_to_any_fn fn, TableAtomOptions opts) {
+static Table_ReadonlyAtom create_readonly(void* ctx, Table_Getter fn, TableAtomOptions opts) {
     (void)ctx; (void)opts;
     if (atom_count >= (int)(sizeof(atoms) / sizeof(atoms[0]))) __builtin_trap();
     AtomState* a = &atoms[atom_count++];
@@ -72,19 +72,19 @@ static Table_ReadonlyAtom create_readonly(void* ctx, Table_void_to_any_fn fn, Ta
 static void add_sub(void* ctx, Table_Subscription s) { (void)ctx; (void)s; }
 static void unmount_cb(void* ctx) { (void)ctx; }
 static void batch_cb(void* ctx, Table_void_fn fn) { (void)ctx; table_call_void_fn(fn); }
-static JsValue untrack_cb(void* ctx, Table_void_to_any_fn fn) { (void)ctx; return table_call_void_to_any_fn(fn); }
+static JsValue untrack_cb(void* ctx, Table_Getter fn) { (void)ctx; return table_call_Getter(fn); }
 
 static TableReactivityBindings make_reactivity(void) {
     TableReactivityBindings r = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(r, false);
     TableReactivityBindings_set_wrapExternalAtoms(r, false);
-    TableReactivityBindings_set_addSubscription(r, TableReactivityBindings_addSubscription_cb_from(add_sub, NULL));
+    TableReactivityBindings_set_addSubscription(r, Table_AddSubscriptionFn_from(add_sub, NULL));
     TableReactivityBindings_set_unmount(r, Table_void_fn_from(unmount_cb, NULL));
     TableReactivityBindings_set_batch(r, Table_fn_fn_from(batch_cb, NULL));
     TableReactivityBindings_set_schedule(r, Table_fn_fn_from(batch_cb, NULL));
-    TableReactivityBindings_set_untrack(r, TableReactivityBindings_untrack_cb_from(untrack_cb, NULL));
-    TableReactivityBindings_set_createWritableAtom(r, TableReactivityBindings_createWritableAtom_cb_from(create_writable, NULL));
-    TableReactivityBindings_set_createReadonlyAtom(r, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, NULL));
+    TableReactivityBindings_set_untrack(r, Table_UntrackFn_from(untrack_cb, NULL));
+    TableReactivityBindings_set_createWritableAtom(r, Table_CreateWritableAtomFn_from(create_writable, NULL));
+    TableReactivityBindings_set_createReadonlyAtom(r, Table_CreateReadonlyAtomFn_from(create_readonly, NULL));
     return r;
 }
 

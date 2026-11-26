@@ -56,27 +56,27 @@ static V writable_atom(V initial) {
     auto state = std::make_shared<V>(initial);
     Obj atom = Obj::create();
     atom.set_at("get", val(void_to_T_fn<V>([state] { return *state; })));
-    atom.set_at("set", val(Updater_fn2<V>([state](V update) {
+    atom.set_at("set", val(UpdaterFn<V>([state](V update) {
                     *state = apply_update(update, *state);
                     return V();
                 })));
-    atom.set_at("subscribe", val(Updater_fn2<V>([](V) { return unsubscribe_object(); })));
+    atom.set_at("subscribe", val(UpdaterFn<V>([](V) { return unsubscribe_object(); })));
     return val(atom);
 }
 static V readonly_atom(void_to_T_fn<V> compute) {
     Obj atom = Obj::create();
     atom.set_at("get", val(void_to_T_fn<V>([compute] { return compute(); })));
-    atom.set_at("subscribe", val(Updater_fn2<V>([](V) { return unsubscribe_object(); })));
+    atom.set_at("subscribe", val(UpdaterFn<V>([](V) { return unsubscribe_object(); })));
     return val(atom);
 }
 static V reactivity() {
     TableReactivityBindings r = TableReactivityBindings::create();
     r.createOptionsStore(false);
     r.wrapExternalAtoms(false);
-    r.addSubscription(TableReactivityBindings_addSubscription([](Subscription) {}));
-    r.createWritableAtom(TableReactivityBindings_createWritableAtom([](V initial, std::optional<TableAtomOptions<V>>) { return writable_atom(initial); }));
-    r.createReadonlyAtom(TableReactivityBindings_createReadonlyAtom([](void_to_T_fn<V> compute, std::optional<TableAtomOptions<V>>) { return readonly_atom(compute); }));
-    r.untrack(TableReactivityBindings_untrack([](void_to_T_fn<V> fn) { return fn(); }));
+    r.addSubscription(AddSubscriptionFn([](Subscription) {}));
+    r.createWritableAtom(CreateWritableAtomFn([](V initial, std::optional<TableAtomOptions<V>>) { return writable_atom(initial); }));
+    r.createReadonlyAtom(CreateReadonlyAtomFn([](void_to_T_fn<V> compute, std::optional<TableAtomOptions<V>>) { return readonly_atom(compute); }));
+    r.untrack(UntrackFn([](void_to_T_fn<V> fn) { return fn(); }));
     r.batch(fn_fn([](void_fn fn) { fn(); }));
     r.schedule(fn_fn([](void_fn fn) { fn(); }));
     return val(r);
@@ -124,7 +124,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     options.set_at("columns", val(columns));
     options.set_at("data", val(data));
     // Row ids from the data: a function of the row, the index and the parent.
-    options.set_at("getRowId", val(TableOptions_Rows_getRowId<RowData_map>([](RowData_map row, double index, std::optional<RowC>) {
+    options.set_at("getRowId", val(TableOptionsRowsGetRowIdFn<RowData_map>([](RowData_map row, double index, std::optional<RowC>) {
                        return row.at("name").to_string() + "#" + std::to_string(int(index));
                    })));
 

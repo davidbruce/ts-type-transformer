@@ -100,7 +100,7 @@ pub extern "C" fn run() {
     // A walkTokens extension sees every token, and may change them.
     let seen = Rc::new(Cell::new(0));
     let ext = MarkedExtension::create();
-    let walk = MarkedExtensionWalkTokens::new({
+    let walk = MarkedExtensionWalkTokensFn::new({
         let seen = seen.clone();
         move |t: Token| {
             seen.set(seen.get() + 1);
@@ -118,8 +118,8 @@ pub extern "C" fn run() {
 
     // A renderer extension replaces how one token is written.
     let ext = MarkedExtension::create();
-    let renderer = MarkedExtensionRenderer::create();
-    let heading = MarkedExtensionRendererHeading::new(|h: tokens::Heading| {
+    let renderer = RendererObject::create();
+    let heading = RendererObjectHeadingFn::new(|h: tokens::Heading| {
         Some(format!(
             "<h{0} class=\"x\">{1}</h{0}>",
             h.depth() as u32,

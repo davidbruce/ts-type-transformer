@@ -352,7 +352,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view = editor_view.new_node2(mount, props)
+  let view = editor_view.new_dom_node(mount, props)
   pm_rt.ref_set(view_ref, Some(view))
   update_meta(sch, doc, editor_view.get_state(view), dispatches_ref, action_ref)
 
@@ -369,7 +369,7 @@ pub fn main() {
             pm_rt.ref_set(action_ref, "Removed " <> label)
           }
           False -> {
-            let m = schema.mark_mark_type(sch, mt)
+            let m = schema.mark_type(sch, mt)
             transform.add_mark(tr, f, t, m)
             pm_rt.ref_set(action_ref, "Added " <> label)
           }

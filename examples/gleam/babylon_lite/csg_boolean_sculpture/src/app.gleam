@@ -127,7 +127,7 @@ pub fn main() -> Nil {
       let sbopts =
         box_options.create()
         |> box_options.with_size(2.1)
-      let src_box = b.create_box_box_options_with(engine, sbopts)
+      let src_box = b.create_box_options_with(engine, sbopts)
       let copts =
         cylinder_options.create()
         |> cylinder_options.with_height(3.0)
@@ -171,7 +171,7 @@ pub fn main() -> Nil {
       let cbopts =
         box_options.create()
         |> box_options.with_size(0.82)
-      let core_box = b.create_box_box_options_with(engine, cbopts)
+      let core_box = b.create_box_options_with(engine, cbopts)
       let csopts =
         sphere_options.create()
         |> sphere_options.with_diameter(1.02)

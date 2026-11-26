@@ -120,7 +120,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // forEach with a callback.
     std::string each;
-    ts::Scoped<URLSearchParams_forEach_callbackfn> cb = [&](std::string value, std::string key, URLSearchParams) { each += key + "=" + value + ","; };
+    ts::Scoped<URLSearchParamsForEachFn> cb = [&](std::string value, std::string key, URLSearchParams) { each += key + "=" + value + ","; };
     q.forEach(cb);
     CHECK(each == "a=1,m=a b&c,z=last,");
 

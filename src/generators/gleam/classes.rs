@@ -7,7 +7,7 @@ use super::{
     JS_RESERVED, MAX_INHERITED_ALIASES,
 };
 use super::super::js::{access, global};
-use super::super::model::{base_args, map_types, subst, with_self_args, Call, Class, Func, Model, TParam, TailRole, Ty};
+use super::super::model::{base_args, map_types, subst, with_self_args, Call, Class, Func, Model, TParam, TailRole, Ty, suffixed};
 
 // In a module's noted names: a module it imports whole (an ancestor's, for its aliases).
 pub(super) const MODULE_MARK: &str = "module:";
@@ -227,7 +227,7 @@ impl<'m> Gen<'m> {
                     }
                     for (suffix, val_ty) in forms {
                         let base = match &suffix {
-                            Some(s) => format!("{with_base}_{s}"),
+                            Some(s) => suffixed(&with_base, s),
                             None => with_base.clone(),
                         };
                         let with_id = match (prefix, &suffix) {
@@ -559,7 +559,12 @@ pub(super) fn emit_class_and_func_modules<'m>(
             let unit = func_unit(m, paths, pkg, f);
             g.switch(&unit);
             let id = match m.func_namespaces.get(&f.import) {
-                Some((_, own, _, _)) => g.fresh_value(&function_name(f, own)),
+                // A class's namespace's function beside the class's own of that name
+                // (node's `EventEmitter.once(emitter, name)`): `static_once`.
+                Some((_, own, _, _)) => {
+                    let name = function_name(f, own);
+                    g.fresh_value_or(&name, &format!("static_{name}"))
+                }
                 None => g.value_name(&function_name(f, &f.name)),
             };
             (unit, id)

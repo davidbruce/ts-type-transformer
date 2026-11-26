@@ -15,6 +15,28 @@ use super::walk::{each_member_list, walk, walk_signature, walk_type};
 
 pub(super) fn evaluate(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     if o.typeops {
+        let mut objects = HashSet::new();
+        object_aliases(front, decls, &mut objects);
+        if !objects.is_empty() {
+            let mut used = HashSet::new();
+            walk(decls, &mut |t, _| {
+                if let Type::Ref(r) = t
+                    && let Some(s) = r.sym.filter(|s| objects.contains(s))
+                {
+                    r.computed = false;
+                    used.insert(s);
+                }
+                true
+            });
+            // One only another's body named is still a function over types (`RendererApi`).
+            for_each_alias(decls, &mut |a| {
+                if a.sym.is_some_and(|s| objects.contains(&s) && !used.contains(&s)) {
+                    a.computed = true;
+                } else if a.sym.is_some_and(|s| used.contains(&s)) {
+                    front.count("kept: generic alias of an object");
+                }
+            });
+        }
         drop_type_functions(decls);
     }
     // An alias body is evaluated without folding back into the alias itself.
@@ -105,7 +127,17 @@ pub(super) fn evaluate(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
                 (_, None) => Type::Erased("type-level expression"),
             }),
             Type::Ref(r) if o.typeops && r.computed => Some(match r.node {
-                Some(node) => front.eval(node),
+                Some(node) => {
+                    let mut t = front.eval(node);
+                    // A callback keeps the name the library gave it.
+                    if let Type::Function(s) = &mut t
+                        && r.kind == "typeAlias"
+                        && r.file.is_none()
+                    {
+                        s.name.get_or_insert_with(|| r.name.clone());
+                    }
+                    t
+                }
                 None => Type::Erased("type function"),
             }),
             Type::Intersection(_, Some(node)) if o.intersections => Some(front.eval(*node)),
@@ -128,6 +160,40 @@ fn for_each_alias(decls: &mut [Decl], f: &mut dyn FnMut(&mut Alias)) {
         match d {
             Decl::Alias(a) => f(a),
             Decl::Namespace(n) => for_each_alias(&mut n.decls, f),
+            _ => {}
+        }
+    }
+}
+
+// A generic mapped alias whose keys do not depend on its parameters is an
+// object of its own, under the library's name (marked's `RendererObject<P, R>
+// = { [K in keyof RendererApi<P, R>]?: .. }`); one whose keys do (`Partial<T>`)
+// stays a function over types, as does any other computed alias: a
+// conditional one would take a branch for parameters it does not know.
+fn object_aliases(front: &mut Front, decls: &mut [Decl], out: &mut HashSet<P<Symbol>>) {
+    for d in decls {
+        match d {
+            Decl::Alias(a) if a.computed && !a.type_params.is_empty() => {
+                let Type::Op(op, Some(node)) = &a.ty else { continue };
+                if !matches!(**op, Op::Mapped { .. }) {
+                    continue;
+                }
+                let node = Some(*node);
+                let (Some(node), Some(sym)) = (node, a.sym) else { continue };
+                let t = front.eval_alias_body(node, sym);
+                let mut erased = false;
+                let mut probe = t.clone();
+                walk_type(&mut probe, &mut Vec::new(), &mut |x, _| {
+                    erased |= matches!(x, Type::Erased(_));
+                    true
+                });
+                if matches!(&t, Type::Object(ms) if !ms.is_empty()) && !erased {
+                    a.ty = t;
+                    a.computed = false;
+                    out.insert(sym);
+                }
+            }
+            Decl::Namespace(n) => object_aliases(front, &mut n.decls, out),
             _ => {}
         }
     }

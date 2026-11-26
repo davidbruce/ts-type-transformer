@@ -19,7 +19,7 @@ fn stroke_g(
   width: Float,
   color_hex: Int,
 ) -> t.Graphics(Nil) {
-  graphics.stroke_stroke_style_with(
+  graphics.stroke_style_with(
     g,
     stroke_style.create()
       |> stroke_style.with_width(width)

@@ -18,7 +18,7 @@ const App = struct {
     meta: dom.HTMLElement = undefined,
     pause_btn: dom.HTMLElement = undefined,
     raf_cb: dom.FrameRequestCallback = undefined,
-    col_cb: rp.EventQueue_drainCollisionEvents_f = undefined,
+    col_cb: rp.DrainCollisionEventsFn = undefined,
     world: ?rp.World = null,
     queue: ?rp.EventQueue = null,
     bodies: [BODY_COUNT]rp.RigidBody = undefined,
@@ -289,7 +289,7 @@ fn onInit(app: *App, ok: bool, _: rp.JsValue) void {
     app.ctx = canvas.getContext2d(null).?.retain();
     app.meta = doc.getElementById("meta").?.retain();
     app.pause_btn = doc.getElementById("btn-pause").?.retain();
-    app.col_cb = rp.EventQueue_drainCollisionEvents_f.from(onCollision, app).retain();
+    app.col_cb = rp.DrainCollisionEventsFn.from(onCollision, app).retain();
 
     buildScene(app);
     for (0..40) |_| stepSim(app);

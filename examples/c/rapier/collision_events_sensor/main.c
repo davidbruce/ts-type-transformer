@@ -13,7 +13,7 @@ static CanvasRenderingContext2D g_ctx;
 static HTMLElement g_meta;
 static HTMLElement g_pause_btn;
 static FrameRequestCallback g_raf_cb;
-static Rapier_EventQueue_drainCollisionEvents_f g_col_cb;
+static Rapier_DrainCollisionEventsFn g_col_cb;
 
 static Rapier_World g_world = { 0 };
 static Rapier_EventQueue g_queue = { 0 };
@@ -280,7 +280,7 @@ static void on_init(void* ctx, bool ok, JsValue v) {
     js_retain(g_meta);
     g_pause_btn = Document_getElementById(doc, "btn-pause");
     js_retain(g_pause_btn);
-    g_col_cb = Rapier_EventQueue_drainCollisionEvents_f_from(on_collision, NULL);
+    g_col_cb = Rapier_DrainCollisionEventsFn_from(on_collision, NULL);
     js_retain(g_col_cb);
 
     build_scene();

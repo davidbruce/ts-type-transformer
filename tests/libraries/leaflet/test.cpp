@@ -103,7 +103,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // eachLayer visits what is on the map.
     int layers = 0;
-    m.eachLayer(Layer_fn([&](Layer) { layers++; }));
+    m.eachLayer(EachLayerFn([&](Layer) { layers++; }));
     CHECK(layers >= 2);
 
     // Fitting the bounds zooms out to show both cities.

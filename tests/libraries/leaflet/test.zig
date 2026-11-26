@@ -111,7 +111,7 @@ export fn run() void {
 
     // Layers can be walked.
     var seen: u32 = 0;
-    _ = m.eachLayer(b.Layer_fn.from(visit, &seen), .{});
+    _ = m.eachLayer(b.EachLayerFn.from(visit, &seen), .{});
     expect(seen >= 2, @src());
 
     // Fitting the bounds zooms out to show both cities.

@@ -614,9 +614,18 @@ before `createEngine(canvas, options)`.
 
 An inline type is named by where it first is, by its shortest path
 (`Renderer_getAnimationLoop_result`), keeping the owner: a name stays put
-when a library adds an unrelated one. A callback used in several places is
-named by what it takes and gives, if that is short and free
-(`HTMLElement_MouseEvent_fn`, `Token_to_boolean_fn`). A union by its members
+when a library adds an unrelated one. A callback has the name of the
+library's alias it was evaluated from (node's `Listener<Events, E>`, where
+its 216 uses are written inline elsewhere), else of what it is for: the
+member it is (`NodeSpec.toDOM`) or the method it is given to, where its
+parameter's name says nothing (`drainCollisionEvents(f)`), and `Fn`. Of its
+places, the nearest, then the longest word (`DispatchTransactionFn`, not
+`Command.dispatch`'s). Two callbacks of one such name are their owners'
+(`NodeSpecToDOMFn`, `MarkSpecToDOMFn`), and so are those owners' other
+callbacks (`RendererObjectHeadingFn` beside `RendererObjectCodeFn`); one
+whose places say more than four words (the DOM's handlers) is named by
+what it takes and gives, if that is short and free
+(`HTMLElement_MouseEvent_fn`), as is one no such name fits. A union by its members
 when a few short ones say it (`string_or_number`, member order aside), else
 by its place; a place another union has, with what else it holds
 (`FileHandle_readFile_options_or_string`), or `_union`. A declared alias keeps
@@ -638,6 +647,22 @@ makes optional (`ColumnHelper_accessor_column_opt_id`), a parameter or result
 by a member of the first: in C `{Type}_{member}` is the first's own. Enums
 of strings by their first value (`Evented_addEventListener_type_click`).
 Names too long are cut in the middle; a number is the last resort.
+
+A generic alias of a mapped type whose keys are not its parameters' is an
+object under its own name (marked's `RendererObject<P, R> = { [K in keyof
+RendererApi<P, R>]?: .. }`), where something still names it; any other
+computed alias is evaluated where it is used. A class extending an interface
+of its own name from a namespace is that interface too: node's
+`events.EventEmitter` and the global `NodeJS.EventEmitter` are one type, the
+class, with the members (C `Node_EventEmitter_on`, not `NodeJS_`); what
+extended the interface extends the class. A type from TypeScript's own
+library that meets a declared name is named by that library before it is
+numbered: the DOM's `Node` beside ProseMirror's is `DomNode`, not `Node_2`.
+A member's suffix said after a name that ends with its words drops them
+(Gleam's `schema.node_type`, not `node_node_type`). Where one hoisted object
+serves several owners it keeps the first's name (`MarkSpec_attrs` for
+`NodeSpec.attrs`); named by its word alone it would meet the library's own
+(`Attrs`), and the record it is becomes pairs (convention 10).
 
 Bundled declarations take their exported names: rollup's
 `BarSeriesOption$1`, exported as `BarSeriesOption`, swaps names with the

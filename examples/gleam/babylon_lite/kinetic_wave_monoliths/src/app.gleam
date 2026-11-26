@@ -141,7 +141,7 @@ pub fn main() -> Nil {
             let fz = int.to_float(row) -. 2.5
             let x = fx *. 1.15
             let z = fz *. 1.15
-            let m = b.create_box_box_options_with(engine, bopts)
+            let m = b.create_box_options_with(engine, bopts)
             let pos = scene_node.get_position(m)
             observable_vec3.set(pos, x, 0.5, z)
             let mat = case { row + col } % 4 {

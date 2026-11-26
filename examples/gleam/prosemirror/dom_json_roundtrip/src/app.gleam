@@ -256,7 +256,7 @@ pub fn main() {
     })
 
   let assert Some(mount) = document.get_element_by_id(doc, "editor")
-  let view = editor_view.new_node2(mount, props)
+  let view = editor_view.new_dom_node(mount, props)
   pm_rt.ref_set(view_ref, Some(view))
   refresh_output(
     doc,

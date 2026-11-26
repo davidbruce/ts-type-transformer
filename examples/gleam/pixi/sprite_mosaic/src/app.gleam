@@ -54,7 +54,7 @@ pub fn main() {
   let frame =
     graphics.new()
     |> graphics.rect(32.0, 20.0, 616.0, 360.0)
-    |> graphics.stroke_stroke_style_with(
+    |> graphics.stroke_style_with(
       stroke_style.create()
       |> stroke_style.with_width(1.5)
       |> stroke_style.with_color(int.to_float(0xd4d4d4)),

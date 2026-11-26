@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 use crate::front::Front;
 use crate::ir::*;
 
-use classes::{flatten, mark_class_refs, pair_classes, structural_extends};
+use classes::{flatten, fold_namesake_bases, mark_class_refs, pair_classes, structural_extends};
 use eval::{drop_unreachable_overloads, evaluate, expand_aliases, expand_keyed, inline_object_bases, nominal_constraints, split_literal_overloads, splice_union_aliases};
 use generics::{erase_generics, literals, nullable};
 use hoist::{cut_recursive_dictionary, hoist};
@@ -132,6 +132,7 @@ pub fn lower(front: &mut Front, decls: &mut Vec<Decl>, o: Options) {
     }
     if o.classes {
         pair_classes(decls);
+        fold_namesake_bases(decls);
     }
     if o.inheritance {
         flatten(front, decls);

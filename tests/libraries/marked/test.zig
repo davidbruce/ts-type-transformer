@@ -105,7 +105,7 @@ export fn run() void {
     // A renderer extension: headings rendered here.
     const ext = b.MarkedExtension.create();
     const renderer = b.MarkedExtension_renderer.create();
-    renderer.setHeading(b.MarkedExtension_renderer_heading.from(renderHeading, null));
+    renderer.setHeading(b.MarkedExtensionRendererHeadingFn.from(renderHeading, null));
     ext.setRenderer(renderer);
     const custom = b.Marked.new(b.JsArrayOf(b.MarkedExtension).of(&.{ext}));
     const styled = custom.parse("# Hi\n\ntext");
@@ -114,7 +114,7 @@ export fn run() void {
     // A codespan renderer on an existing instance, via use(); the instance is returned for chaining.
     const ext2 = b.MarkedExtension.create();
     const r2 = b.MarkedExtension_renderer.create();
-    r2.setCodespan(b.MarkedExtension_renderer_codespan.from(renderCodespan, null));
+    r2.setCodespan(b.MarkedExtensionRendererCodespanFn.from(renderCodespan, null));
     ext2.setRenderer(r2);
     const chained = custom.use(b.JsArrayOf(b.MarkedExtension).of(&.{ext2}));
     expect(chained.h == custom.h or b.jsSame(chained, custom), @src());
@@ -124,7 +124,7 @@ export fn run() void {
     // A preprocess hook sees the markdown first.
     const ext3 = b.MarkedExtension.create();
     const hooks = b.MarkedExtension_hooks.create();
-    hooks.setPreprocess(b.MarkedExtension_hooks_preprocess.from(preprocess, null));
+    hooks.setPreprocess(b.MarkedExtensionHooksPreprocessFn.from(preprocess, null));
     ext3.setHooks(hooks);
     const hooked = b.Marked.new(b.JsArrayOf(b.MarkedExtension).of(&.{ext3}));
     const hr = hooked.parse("original");

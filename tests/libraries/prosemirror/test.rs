@@ -50,11 +50,11 @@ fn make_schema() -> Schema {
     };
     let doc = NodeSpec::create();
     doc.set_content(Some("paragraph+"));
-    doc.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(move |_: Node| tag("div"))));
+    doc.set_to_dom(Some(&NodeSpecToDOMFn::new(move |_: Node| tag("div"))));
     let paragraph = NodeSpec::create();
     paragraph.set_content(Some("text*"));
     paragraph.set_group(Some("block"));
-    paragraph.set_to_dom(Some(&NodeToDOMOutputSpecFn::new(move |_: Node| tag("p"))));
+    paragraph.set_to_dom(Some(&NodeSpecToDOMFn::new(move |_: Node| tag("p"))));
     let text = NodeSpec::create();
     text.set_group(Some("inline"));
     let nodes = SchemaSpecNodes::create();
@@ -62,7 +62,7 @@ fn make_schema() -> Schema {
     nodes.set_at("paragraph", &paragraph);
     nodes.set_at("text", &text);
     let strong = MarkSpec::create();
-    strong.set_to_dom(Some(&MarkBooleanToDOMOutputSpecFn::new(
+    strong.set_to_dom(Some(&MarkSpecToDOMFn::new(
         move |_: Mark, _: bool| tag("strong"),
     )));
     let marks = SchemaSpecMarks::create();
@@ -245,8 +245,8 @@ fn state_and_transactions(schema: &Schema, doc: &Node) {
     // A plugin with state: counts the transactions applied.
     let key = PluginKey::<JsValue>::new_with(Some("counter"));
     let field = StateField::<JsValue>::create();
-    field.set_init(&StateFieldInit::new(|_, _| JsValue::from(0.0)));
-    field.set_apply(&StateFieldApply::new(|_tr, count: JsValue, _old, _new| {
+    field.set_init(&StateFieldInitFn::new(|_, _| JsValue::from(0.0)));
+    field.set_apply(&StateFieldApplyFn::new(|_tr, count: JsValue, _old, _new| {
         JsValue::from(count.as_f64() + 1.0)
     }));
     let spec = PluginSpec::<JsValue>::create();
@@ -283,7 +283,7 @@ fn editor_view(doc: &Node) {
     let state = EditorState::create(&config);
     let seen = Rc::new(Cell::new(0));
     let view_cell: Rc<RefCell<Option<EditorView>>> = Rc::new(RefCell::new(None));
-    let dispatch = TransactionFn::new({
+    let dispatch = DispatchTransactionFn::new({
         let (seen, view_cell) = (seen.clone(), view_cell.clone());
         move |tr: Transaction| {
             seen.set(seen.get() + 1);
@@ -297,7 +297,7 @@ fn editor_view(doc: &Node) {
     props.set_state(&state);
     props.set_dispatch_transaction(Some(&dispatch));
     let place = EditorViewNewPlaceObject::create().with_mount(&test_page::element("stage"));
-    let view = EditorView::new(Some(EditorViewNewPlaceOrDistDOMNode::from(place)), &props);
+    let view = EditorView::new(Some(EditorViewNewPlace::from(place)), &props);
     *view_cell.borrow_mut() = Some(view.clone());
     check!(view.state().doc().js_eq(doc));
     check!(view.editable() && !view.is_destroyed());

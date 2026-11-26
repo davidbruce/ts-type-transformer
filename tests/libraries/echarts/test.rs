@@ -113,7 +113,7 @@ pub extern "C" fn run() {
     // Events: a handler on a custom event, triggered with an argument.
     let heard = Rc::new(Cell::new(0.0));
     let count = Rc::new(Cell::new(0));
-    let handler = AnyAnyArrayToVoidOrBooleanFn::new({
+    let handler = WithThisType::new({
         let heard = heard.clone();
         let count = count.clone();
         move |args: JsArray| {

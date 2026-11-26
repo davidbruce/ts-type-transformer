@@ -49,9 +49,9 @@ static Pm_Schema make_schema(void) {
     Pm_MarkSpec_attrs hattrs = Pm_MarkSpec_attrs_create();
     Pm_MarkSpec_attrs_set_at(hattrs, "level", lvl);
 
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = hattrs, .content = "inline*", .group = "block", .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = hattrs, .content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
 
-    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(para_dom, NULL));
+    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(para_dom, NULL));
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
@@ -61,8 +61,8 @@ static Pm_Schema make_schema(void) {
     Pm_SchemaSpec_nodes_set_at(nodes, "paragraph", para);
     Pm_SchemaSpec_nodes_set_at(nodes, "text", text);
 
-    Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"strong"));
-    Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"code"));
+    Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"strong"));
+    Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"code"));
     Pm_SchemaSpec_marks marks = Pm_SchemaSpec_marks_create();
     Pm_SchemaSpec_marks_set_at(marks, "strong", strong);
     Pm_SchemaSpec_marks_set_at(marks, "code", code);
@@ -227,15 +227,15 @@ __attribute__((export_name("start"))) void start(void) {
     js_retain(g_audit_key);
 
     Pm_StateField field = Pm_StateField_create();
-    Pm_StateField_set_init(field, Pm_StateField_init_cb_from(audit_init, NULL));
-    Pm_StateField_set_apply(field, Pm_StateField_apply_cb_from(audit_apply, NULL));
+    Pm_StateField_set_init(field, Pm_StateFieldInitFn_from(audit_init, NULL));
+    Pm_StateField_set_apply(field, Pm_StateFieldApplyFn_from(audit_apply, NULL));
 
-    Pm_PluginSpec pspec = Pm_PluginSpec_create(.key = g_audit_key, .state = field, .filterTransaction = Pm_PluginSpec_filterTransaction_from(filter_tr, NULL));
+    Pm_PluginSpec pspec = Pm_PluginSpec_create(.key = g_audit_key, .state = field, .filterTransaction = Pm_FilterTransactionFn_from(filter_tr, NULL));
     Pm_Plugin plugin = Pm_Plugin_new(pspec);
 
     Pm_EditorStateConfig scfg = Pm_EditorStateConfig_create(.schema = g_schema, .doc = make_initial_doc(), .plugins = JsArray_Pm_Plugin_from(&plugin, 1));
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = Pm_EditorState_create(scfg), .dispatchTransaction = Pm_Transaction_fn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = Pm_EditorState_create(scfg), .dispatchTransaction = Pm_DispatchTransactionFn_from(on_dispatch, NULL));
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
     g_view = Pm_EditorView_new(AS_Node(mount), props);

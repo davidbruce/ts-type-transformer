@@ -101,7 +101,7 @@ check (m.parser (ResizeArray [ tl.[0.0] ]) = "<p>x <em>y</em></p>\n") "instance 
 let seen = ResizeArray<string>()
 let ext = createEmpty<MarkedExtension>
 ext.renderer <- Some (
-    MarkedExtensionRenderer.Create (
+    RendererObject.Create (
         heading = (fun (h: Tokens.Heading) ->
             !^ (sprintf "<h%d class=\"custom\">%s</h%d>\n" (int h.depth) h.text (int h.depth)))
     )

@@ -174,7 +174,11 @@ TypeScript object literal, because a Zig literal takes its type from where it go
    named (marked's mapped `RendererObject`); `X & {}` is `X`. Never `TypeAOrTypeBOrTypeC`, never doubled.
    Callback types too (`Rapier_DrainCollisionEventsFn`). Gleam enum members live in
    the enum's module (`active_events.CollisionEvents`). One module per class in
-   Gleam, one prefix in C.
+   Gleam, one prefix in C. Done but for Gleam's modules (9b) and a hoisted
+   object several owners share, which keeps the first's name
+   (`MarkSpec_attrs`; a pair list after 10). marked's callbacks are
+   `RendererObjectHeadingFn` (the tokenizer has `heading` too) and
+   `MarkedExtensionWalkTokensFn`.
 
 10. **String-keyed maps whose order matters** (ProseMirror `nodes`, `marks`,
     `attrs`) are ordered pair lists: C `Pm_X_record({ k, v }, ..)`, C++

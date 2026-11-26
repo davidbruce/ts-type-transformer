@@ -211,8 +211,8 @@ __attribute__((export_name("run"))) void run(void) {
 
     // `use` with a renderer: headings made by a function here.
     MarkedExtension ext = MarkedExtension_create();
-    MarkedExtension_renderer rend = MarkedExtension_renderer_create();
-    MarkedExtension_renderer_set_heading(rend, MarkedExtension_renderer_heading_from(render_heading, 0));
+    Marked_RendererObject rend = Marked_RendererObject_create();
+    Marked_RendererObject_set_heading(rend, Marked_RendererObjectHeadingFn_from(render_heading, 0));
     MarkedExtension_set_renderer(ext, rend);
     JsArray_MarkedExtension exts = JsArray_MarkedExtension_new();
     JsArray_MarkedExtension_push(exts, ext);
@@ -229,7 +229,7 @@ __attribute__((export_name("run"))) void run(void) {
 
     // `use` with walkTokens: every token is visited, headings change.
     MarkedExtension walker = MarkedExtension_create();
-    MarkedExtension_set_walkTokens(walker, MarkedExtension_walkTokens_from(demote, 0));
+    MarkedExtension_set_walkTokens(walker, MarkedExtensionWalkTokensFn_from(demote, 0));
     JsArray_MarkedExtension wexts = JsArray_MarkedExtension_new();
     JsArray_MarkedExtension_push(wexts, walker);
     Marked walking = Marked_new(wexts);
@@ -259,12 +259,12 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(MarkedOptions_get_breaks(defaults).has && !MarkedOptions_get_breaks(defaults).value);
 
     // The top-level lexer and parser are function values: call_<Type> calls them.
-    Marked_TokensList lexed = marked_call_string_MarkedOptions_to_TokensList_fn(marked_get_lexer(), "# H\n\ntext *x*");
+    Marked_TokensList lexed = marked_call_LexerFn(marked_get_lexer(), "# H\n\ntext *x*");
     CHECK(Marked_TokensList_get_length(lexed) >= 2);
     Marked_Token lexed0 = Marked_TokensList_get_at(lexed, 0);
     CHECK(lexed0.tag == Marked_Token_Marked_Tokens_Heading);
     js_release((JsValue){ token_h(lexed0) });
-    JsString parsed = js_to_string(marked_call_Token_array_MarkedOptions_fn(marked_get_parser(), (JsArray_Marked_Token){ lexed.h }));
+    JsString parsed = js_to_string(marked_call_ParserFn(marked_get_parser(), (JsArray_Marked_Token){ lexed.h }));
     CHECK(contains(parsed, "<h1>H</h1>") && contains(parsed, "<em>x</em>"));
     js_release(parsed);
 

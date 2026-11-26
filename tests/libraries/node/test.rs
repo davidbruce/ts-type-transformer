@@ -126,7 +126,7 @@ fn files() {
 fn emitter() {
     let em = EventEmitter::new();
     let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
-    let on_greet = AnyArrayFn::new({
+    let on_greet = Listener::new({
         let log = log.clone();
         move |args: JsArray| {
             log.borrow_mut()
@@ -140,7 +140,7 @@ fn emitter() {
 
     // once fires one time only; emit says whether anyone listened.
     let once_count = Rc::new(Cell::new(0));
-    let once = AnyArrayFn::new({
+    let once = Listener::new({
         let c = once_count.clone();
         move |_: JsArray| c.set(c.get() + 1)
     });

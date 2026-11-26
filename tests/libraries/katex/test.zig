@@ -145,8 +145,8 @@ export fn run() void {
     expect(has(link, "<a href=\"https://example.com\""), @src());
 
     const trust_opts = b.KatexOptions.create();
-    const cb = b.TrustContext_to_boolean_fn.from(onTrust, null);
-    trust_opts.setTrust(.{ .TrustContext_to_boolean_fn = cb });
+    const cb = b.TrustFn.from(onTrust, null);
+    trust_opts.setTrust(.{ .TrustFn = cb });
     expect(has(render(href, trust_opts), "<a href=\"https://example.com\""), @src());
     expect(!has(render("\\href{https://other.org}{link}", trust_opts), "<a href"), @src());
 

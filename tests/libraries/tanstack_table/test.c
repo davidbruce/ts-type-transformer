@@ -40,7 +40,7 @@ static int atom_count;
 
 static JsValue atom_get(void* ctx) {
     AtomState* a = ctx;
-    if (a->readonly) return table_call_void_to_any_fn((Table_void_to_any_fn){ a->derive.h });
+    if (a->readonly) return table_call_Getter((Table_Getter){ a->derive.h });
     js_retain(a->value);
     return a->value;
 }
@@ -59,9 +59,9 @@ static JsValue atom_subscribe(void* ctx, JsValue observer) {
 
 static JsValue make_atom(AtomState* a) {
     Table_RowData_map atom = (Table_RowData_map){ table_makeObjectMap().h };
-    Table_RowData_map_set_at(atom, "get", (JsValue){ Table_void_to_any_fn_from(atom_get, a).h });
-    if (!a->readonly) Table_RowData_map_set_at(atom, "set", (JsValue){ Table_Updater_fn2_from(atom_set, a).h });
-    Table_RowData_map_set_at(atom, "subscribe", (JsValue){ Table_Updater_fn2_from(atom_subscribe, 0).h });
+    Table_RowData_map_set_at(atom, "get", (JsValue){ Table_Getter_from(atom_get, a).h });
+    if (!a->readonly) Table_RowData_map_set_at(atom, "set", (JsValue){ Table_UpdaterFn_from(atom_set, a).h });
+    Table_RowData_map_set_at(atom, "subscribe", (JsValue){ Table_UpdaterFn_from(atom_subscribe, 0).h });
     return (JsValue){ atom.h };
 }
 
@@ -71,7 +71,7 @@ static Table_Atom create_writable(void* ctx, JsValue initial, TableAtomOptions o
     js_retain(initial);
     return (Table_Atom){ make_atom(a).h };
 }
-static Table_ReadonlyAtom create_readonly(void* ctx, Table_void_to_any_fn fn, TableAtomOptions options) {
+static Table_ReadonlyAtom create_readonly(void* ctx, Table_Getter fn, TableAtomOptions options) {
     AtomState* a = &atoms[atom_count++];
     a->readonly = true;
     a->derive = (JsValue){ fn.h };
@@ -81,7 +81,7 @@ static Table_ReadonlyAtom create_readonly(void* ctx, Table_void_to_any_fn fn, Ta
 static void add_subscription(void* ctx, Table_Subscription s) {}
 static void unmount(void* ctx) {}
 static void batch(void* ctx, Table_void_fn fn) { table_call_void_fn(fn); }
-static JsValue untrack(void* ctx, Table_void_to_any_fn fn) { return table_call_void_to_any_fn(fn); }
+static JsValue untrack(void* ctx, Table_Getter fn) { return table_call_Getter(fn); }
 
 // ---- the table ----
 
@@ -138,9 +138,9 @@ __attribute__((export_name("run"))) void run(void) {
     JsValue five = js_number(5);
     CHECK(js_to_number(table_functionalUpdate(five, NONE)) == 5);
     CHECK(table_isFunction(five) == false);
-    CHECK(table_isFunction((JsValue){ Table_void_to_any_fn_from(atom_get, &atoms[255]).h }));
+    CHECK(table_isFunction((JsValue){ Table_Getter_from(atom_get, &atoms[255]).h }));
     atoms[255].value = js_number(9);
-    CHECK(js_to_number(table_functionalUpdate((JsValue){ Table_void_to_any_fn_from(atom_get, &atoms[255]).h }, NONE)) == 9);
+    CHECK(js_to_number(table_functionalUpdate((JsValue){ Table_Getter_from(atom_get, &atoms[255]).h }, NONE)) == 9);
     CHECK(table_stateSlicesEqual(js_number(1), js_number(1)) && !table_stateSlicesEqual(js_number(1), js_number(2)));
     CHECK(table_stateSlicesEqual(sort_by("a", false), sort_by("a", false)));
     CHECK(!table_stateSlicesEqual(sort_by("a", false), sort_by("a", true)));
@@ -152,13 +152,13 @@ __attribute__((export_name("run"))) void run(void) {
     TableReactivityBindings reactivity = TableReactivityBindings_create();
     TableReactivityBindings_set_createOptionsStore(reactivity, true);
     TableReactivityBindings_set_wrapExternalAtoms(reactivity, false);
-    TableReactivityBindings_set_addSubscription(reactivity, TableReactivityBindings_addSubscription_cb_from(add_subscription, 0));
+    TableReactivityBindings_set_addSubscription(reactivity, Table_AddSubscriptionFn_from(add_subscription, 0));
     TableReactivityBindings_set_unmount(reactivity, Table_void_fn_from(unmount, 0));
     TableReactivityBindings_set_batch(reactivity, Table_fn_fn_from(batch, 0));
     TableReactivityBindings_set_schedule(reactivity, Table_fn_fn_from(batch, 0));
-    TableReactivityBindings_set_untrack(reactivity, TableReactivityBindings_untrack_cb_from(untrack, 0));
-    TableReactivityBindings_set_createWritableAtom(reactivity, TableReactivityBindings_createWritableAtom_cb_from(create_writable, 0));
-    TableReactivityBindings_set_createReadonlyAtom(reactivity, TableReactivityBindings_createReadonlyAtom_cb_from(create_readonly, 0));
+    TableReactivityBindings_set_untrack(reactivity, Table_UntrackFn_from(untrack, 0));
+    TableReactivityBindings_set_createWritableAtom(reactivity, Table_CreateWritableAtomFn_from(create_writable, 0));
+    TableReactivityBindings_set_createReadonlyAtom(reactivity, Table_CreateReadonlyAtomFn_from(create_readonly, 0));
     CHECK(TableReactivityBindings_get_createOptionsStore(reactivity) && !TableReactivityBindings_get_wrapExternalAtoms(reactivity));
 
     // ---- features, columns, data ----

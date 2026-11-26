@@ -102,7 +102,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // Events: handlers by name; trigger calls them at once.
     int heard = 0;
     std::string seen;
-    any_any_array_to_void_or_boolean_fn handler = [&](ts::Array<> args) -> std::optional<bool> {
+    WithThisType handler = [&](ts::Array<> args) -> std::optional<bool> {
         heard++;
         seen += std::to_string(args.size()) + ":";
         return std::nullopt;

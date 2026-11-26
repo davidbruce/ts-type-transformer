@@ -5,7 +5,6 @@ import gleam/int
 import gleam/io
 import gleam/list
 import node/areas/events/event_emitter as events
-import node/namespaces/node_js/event_emitter as emitter
 import node/runtime
 
 fn check(ok: Bool, what: String) -> Int {
@@ -18,8 +17,8 @@ fn check(ok: Bool, what: String) -> Int {
 pub fn main() -> Nil {
   let bus =
     events.new()
-    |> emitter.set_max_listeners(12.0)
-  let passed = check(emitter.get_max_listeners(bus) == 12.0, "maxListeners")
+    |> events.set_max_listeners(12.0)
+  let passed = check(events.get_max_listeners(bus) == 12.0, "maxListeners")
 
   let metric_calls = runtime.ref_new(0)
   let metric_sum = runtime.ref_new(0.0)
@@ -42,12 +41,12 @@ pub fn main() -> Nil {
     }
   }
 
-  emitter.on(bus, "metric", on_metric)
-  emitter.once(bus, "metric", fn(_) {
+  events.on(bus, "metric", on_metric)
+  events.once(bus, "metric", fn(_) {
     runtime.ref_update(once_calls, fn(n) { n + 1 })
     Nil
   })
-  emitter.on(bus, "shutdown", fn(_) {
+  events.on(bus, "shutdown", fn(_) {
     runtime.ref_update(shutdown_calls, fn(n) { n + 1 })
     Nil
   })
@@ -55,13 +54,13 @@ pub fn main() -> Nil {
   let passed =
     passed
     + check(
-      emitter.listener_count(bus, "metric") == 2.0,
+      events.listener_count(bus, "metric") == 2.0,
       "initial listenerCount",
     )
-    + check(list.length(emitter.event_names(bus)) == 2, "eventNames")
+    + check(list.length(events.event_names(bus)) == 2, "eventNames")
 
   let emitted1 =
-    emitter.emit(bus, "metric", [
+    events.emit(bus, "metric", [
       dynamic.float(101.0),
       dynamic.string("ok"),
     ])
@@ -73,10 +72,10 @@ pub fn main() -> Nil {
         && runtime.ref_get(once_calls) == 1,
       "first metric emit",
     )
-    + check(emitter.listener_count(bus, "metric") == 1.0, "once removes itself")
+    + check(events.listener_count(bus, "metric") == 1.0, "once removes itself")
 
   let emitted2 =
-    emitter.emit(bus, "metric", [
+    events.emit(bus, "metric", [
       dynamic.float(202.0),
       dynamic.string("ok"),
     ])
@@ -89,29 +88,29 @@ pub fn main() -> Nil {
         && runtime.ref_get(once_calls) == 1,
       "second metric emit",
     )
-    + check(!emitter.emit(bus, "idle", []), "idle emit false")
+    + check(!events.emit(bus, "idle", []), "idle emit false")
 
-  emitter.remove_listener(bus, "metric", on_metric)
+  events.remove_listener(bus, "metric", on_metric)
   let passed =
     passed
     + check(
-      emitter.listener_count(bus, "metric") == 0.0
-        && !emitter.emit(bus, "metric", [dynamic.float(1.0)]),
+      events.listener_count(bus, "metric") == 0.0
+        && !events.emit(bus, "metric", [dynamic.float(1.0)]),
       "removeListener",
     )
     + check(runtime.ref_get(metric_calls) == 2, "metric count unchanged")
 
-  emitter.remove_all_listeners_with(bus, "shutdown")
+  events.remove_all_listeners_with(bus, "shutdown")
   let passed =
     passed
     + check(
-      emitter.event_names(bus) == [] && runtime.ref_get(shutdown_calls) == 0,
+      events.event_names(bus) == [] && runtime.ref_get(shutdown_calls) == 0,
       "removeAllListeners",
     )
 
   io.println(
     "maxListeners="
-    <> int.to_string(float.round(emitter.get_max_listeners(bus)))
+    <> int.to_string(float.round(events.get_max_listeners(bus)))
     <> " metricCalls="
     <> int.to_string(runtime.ref_get(metric_calls))
     <> " metricSum="

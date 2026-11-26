@@ -33,7 +33,7 @@ static Schema make_schema(void) {
     NodeSpec paragraph = NodeSpec_create();
     NodeSpec_set_content(paragraph, "text*");
     NodeSpec_set_group(paragraph, "block");
-    NodeSpec_set_toDOM(paragraph, Node_to_DOMOutputSpec_fn_from(paragraph_dom, 0));
+    NodeSpec_set_toDOM(paragraph, NodeSpecToDOMFn_from(paragraph_dom, 0));
     NodeSpec text = NodeSpec_create();
     NodeSpec_set_group(text, "inline");
     SchemaSpec_nodes nodes = SchemaSpec_nodes_create();
@@ -41,7 +41,7 @@ static Schema make_schema(void) {
     SchemaSpec_nodes_set_at(nodes, "paragraph", paragraph);
     SchemaSpec_nodes_set_at(nodes, "text", text);
     MarkSpec strong = MarkSpec_create();
-    MarkSpec_set_toDOM(strong, Mark_boolean_to_DOMOutputSpec_fn_from(strong_dom, 0));
+    MarkSpec_set_toDOM(strong, MarkSpecToDOMFn_from(strong_dom, 0));
     SchemaSpec_marks marks = SchemaSpec_marks_create();
     SchemaSpec_marks_set_at(marks, "strong", strong);
     SchemaSpec spec = SchemaSpec_create();
@@ -133,8 +133,8 @@ __attribute__((export_name("run"))) void run(void) {
     // The plugin: its state starts at 0.
     PluginKey key = PluginKey_new("counter");
     StateField field = StateField_create();
-    StateField_set_init(field, StateField_init_cb_from(counter_init, 0));
-    StateField_set_apply(field, StateField_apply_cb_from(counter_apply, 0));
+    StateField_set_init(field, StateFieldInitFn_from(counter_init, 0));
+    StateField_set_apply(field, StateFieldApplyFn_from(counter_apply, 0));
     PluginSpec plugin_spec = PluginSpec_create();
     PluginSpec_set_state(plugin_spec, field);
     PluginSpec_set_key(plugin_spec, key);
@@ -237,8 +237,8 @@ __attribute__((export_name("run"))) void run(void) {
     EditorState view_state = EditorState_create(view_config);
     DirectEditorProps props = DirectEditorProps_create();
     DirectEditorProps_set_state(props, view_state);
-    DirectEditorProps_set_dispatchTransaction(props, Transaction_fn_from(on_dispatch, 0));
-    view = EditorView_new((Node_2){ element("stage").h }, props);
+    DirectEditorProps_set_dispatchTransaction(props, DispatchTransactionFn_from(on_dispatch, 0));
+    view = EditorView_new((DomNode){ element("stage").h }, props);
     CHECK(view.h != 0 && !EditorView_get_isDestroyed(view));
     CHECK(EditorView_get_editable(view));
     CHECK(EditorView_get_dom(view).h != 0);

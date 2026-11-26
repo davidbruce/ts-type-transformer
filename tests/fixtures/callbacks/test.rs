@@ -115,14 +115,14 @@ pub extern "C" fn run() {
     check!(last.get() == 5.0 && calls.get() == 2);
 
     // A callback that takes an object and returns a value.
-    check!(c.visit(&CounterVisitF::new(
+    check!(c.visit(&VisitFn::new(
         |counter: Counter| counter.count() == 5.0
     )));
 
     // For the length of a call a closure may borrow, and nothing is kept.
     let live = js::live_handles();
     let mut seen = Vec::new();
-    let folded = CounterFoldF::scoped(
+    let folded = FoldFn::scoped(
         |total, label: String| {
             seen.push(label);
             total
@@ -154,7 +154,7 @@ pub extern "C" fn run() {
 
     // Several arguments, a string among them, and a result.
     check!(
-        c.fold(&CounterFoldF::new(
+        c.fold(&FoldFn::new(
             |total: f64, label: String| total * 2.0 + label.len() as f64
         )) == 8.0 * 2.0 + 5.0
     );
@@ -163,7 +163,7 @@ pub extern "C" fn run() {
     let ran = Rc::new(Cell::new(0));
     for _ in 0..2 {
         let ran = ran.clone();
-        later(&LaterF::new(move || ran.set(ran.get() + 1)));
+        later(&LaterFn::new(move || ran.set(ran.get() + 1)));
     }
     check!(ran.get() == 0);
     check!(flush() == 2.0);
@@ -172,7 +172,7 @@ pub extern "C" fn run() {
     // A union argument arrives as the enum.
     let number = Rc::new(Cell::new(0.0));
     let text = Rc::new(Cell::new(0usize));
-    let each = EachIdF::new({
+    let each = EachIdFn::new({
         let (number, text) = (number.clone(), text.clone());
         move |id: Id| match id {
             Id::Number(n) => number.set(n),

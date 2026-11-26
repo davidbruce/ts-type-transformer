@@ -11,7 +11,6 @@ import node/areas/fs/stats
 import node/areas/path
 import node/buffer
 import node/mkdir_options
-import node/namespaces/node_js/event_emitter as emitter
 import node/runtime
 
 fn check(ok: Bool, what: String) -> Int {
@@ -30,11 +29,11 @@ pub fn main() -> Nil {
   let stages = runtime.ref_new(0)
   let done_count = runtime.ref_new(0)
 
-  emitter.on(bus, "stage", fn(_) {
+  events.on(bus, "stage", fn(_) {
     runtime.ref_update(stages, fn(n) { n + 1 })
     Nil
   })
-  emitter.once(bus, "done", fn(_) {
+  events.once(bus, "done", fn(_) {
     runtime.ref_update(done_count, fn(n) { n + 1 })
     Nil
   })
@@ -50,7 +49,7 @@ pub fn main() -> Nil {
   fs.write_file_sync(path.join([in_dir, "a.log"]), "100 OK\n")
   fs.write_file_sync(path.join([in_dir, "b.log"]), "200 OK\n")
   fs.write_file_sync(path.join([in_dir, "c.log"]), "300 OK\n")
-  emitter.emit(bus, "stage", [dynamic.string("seed")])
+  events.emit(bus, "stage", [dynamic.string("seed")])
   let passed = check(runtime.ref_get(stages) == 1, "seed stage")
 
   // Stage 2: bundle
@@ -65,7 +64,7 @@ pub fn main() -> Nil {
       fs.append_file_sync(combined, chunk)
       acc + c
     })
-  emitter.emit(bus, "stage", [dynamic.string("bundle")])
+  events.emit(bus, "stage", [dynamic.string("bundle")])
   let passed = passed + check(runtime.ref_get(stages) == 2, "bundle stage")
 
   // Stage 3: verify
@@ -86,8 +85,8 @@ pub fn main() -> Nil {
   }
   let passed = passed + check(enoent_caught, "missing file raised ENOENT")
 
-  emitter.emit(bus, "stage", [dynamic.string("verify")])
-  emitter.emit(bus, "done", [
+  events.emit(bus, "stage", [dynamic.string("verify")])
+  events.emit(bus, "done", [
     dynamic.float(int.to_float(string.length(comb_text))),
   ])
   let passed =

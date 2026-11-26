@@ -151,7 +151,10 @@ pub fn settle_with(m: &mut Model, naming: &Naming, extra_reserved: &[String]) {
                     if (naming.func_name)(Some(&owner), &f.name, f).is_none() {
                         continue;
                     }
-                    let chosen = claim(&f.name, &mut |candidate| {
+                    // A static the instance's member of that name has taken is
+                    // the class's (node's `EventEmitter.once(emitter, name)`: `static_once`).
+                    let fallbacks: Vec<String> = if matches!(f.call, Call::Static(_)) { vec![format!("static_{}", f.name)] } else { Vec::new() };
+                    let chosen = claim_as(&f.name, &fallbacks, &mut |candidate| {
                         let id = (naming.func_name)(Some(&owner), candidate, f).unwrap_or_default();
                         if naming.funcs_flat {
                             top.take_value(vec![id])
@@ -382,7 +385,7 @@ pub(crate) fn has_prefix_word(prefix: &str, name: &str) -> bool {
 // `StreamPipeOptions` `WebStreamPipeOptions`, `GlContextSystem` and
 // `ContextSystemOptions` `GlContextSystemOptions`. None where the name says
 // all of it (`AddDaysOptions` of addDays.d.ts): the origin adds nothing.
-fn origin_name(origin: &str, name: &str) -> Option<String> {
+pub(crate) fn origin_name(origin: &str, name: &str) -> Option<String> {
     let upper = |w: &str| {
         let mut cs = w.chars();
         cs.next().map(|c| c.to_uppercase().collect::<String>() + cs.as_str()).unwrap_or_default()

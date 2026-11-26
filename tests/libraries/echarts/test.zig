@@ -124,7 +124,7 @@ export fn run() void {
     expect(c.getWidth() == 200 and c.getHeight() == 150, @src());
 
     // Events: a listener on a custom event is called by trigger, and not after off.
-    const handler = b.any_unknown_array_to_void_or_boolean_fn.from(onPing, &fired);
+    const handler = b.OnFn.from(onPing, &fired);
     _ = c.on(.{ .string = b.JsString.from("ping") }, handler, .{});
     _ = c.trigger(.{ .string = b.JsString.from("ping") }, b.JsArray.new());
     const payload = b.JsArray.new();

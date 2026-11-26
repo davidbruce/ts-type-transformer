@@ -28,7 +28,7 @@ static Sch make_schema() {
     NodeSpec paragraph = NodeSpec::create();
     paragraph.content("inline*");
     paragraph.group("block");
-    paragraph.toDOM(Node_to_DOMOutputSpec_fn([](Node) {
+    paragraph.toDOM(NodeSpecToDOMFn([](Node) {
         ts::Array<> spec = ts::Array<>::create();
         spec.push(str("p"));
         spec.push(ts::Value::number(0));
@@ -42,7 +42,7 @@ static Sch make_schema() {
     nodes.set_at("text", text);
 
     MarkSpec strong = MarkSpec::create();
-    strong.toDOM(Mark_boolean_to_DOMOutputSpec_fn([](Mark, bool) {
+    strong.toDOM(MarkSpecToDOMFn([](Mark, bool) {
         ts::Array<> spec = ts::Array<>::create();
         spec.push(str("strong"));
         spec.push(ts::Value::number(0));
@@ -199,8 +199,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // ---- a plugin with state: counts the transactions that changed the doc ----
     int applied = 0;
     StateField<ts::Value> field = StateField<ts::Value>::create();
-    field.init(StateField_init<ts::Value>([](EditorStateConfig, EditorState) { return ts::Value::number(0); }));
-    field.apply(StateField_apply<ts::Value>([&](Transaction t, ts::Value old, EditorState, EditorState) {
+    field.init(StateFieldInitFn<ts::Value>([](EditorStateConfig, EditorState) { return ts::Value::number(0); }));
+    field.apply(StateFieldApplyFn<ts::Value>([&](Transaction t, ts::Value old, EditorState, EditorState) {
         applied++;
         return ts::Value::number(old.to_number() + (t.docChanged() ? 1 : 0));
     }));
@@ -234,7 +234,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     EditorView* view_ref = nullptr;
     DirectEditorProps props = DirectEditorProps::create();
     props.state(state);
-    props.dispatchTransaction(Transaction_fn([&](Transaction t) {
+    props.dispatchTransaction(DispatchTransactionFn([&](Transaction t) {
         dispatched++;
         current = current.apply(t);
         if (view_ref) view_ref->updateState(current);
@@ -242,11 +242,11 @@ extern "C" __attribute__((export_name("run"))) void run() {
     HTMLElement stage = test_page::element("stage");
     // FINDING 23: HTMLElement is an empty struct in this package set (lib.dom is
     // not bound here), so the rendered DOM cannot be read from C++; and the
-    // place the view mounts in, `Node_2` (also empty), takes no conversion
+    // place the view mounts in, `DomNode` (also empty), takes no conversion
     // from an HTMLElement: the handle is rewrapped.
-    Node_2 place;
+    DomNode place;
     static_cast<ts::Handle&>(place) = stage;
-    EditorView view = EditorView::create(EditorView_new_place_or_dist_DOMNode(place), props);
+    EditorView view = EditorView::create(EditorView_new_place(place), props);
     view_ref = &view;
     CHECK(!view.isDestroyed());
     CHECK(view.state().doc().eq(doc));

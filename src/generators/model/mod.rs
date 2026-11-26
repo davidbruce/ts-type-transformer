@@ -735,3 +735,26 @@ impl<'a> ModelOptions<'a> {
         }
     }
 }
+
+// A function's name with a member's suffix, the words they share said once:
+// `node` with `node_type` is `node_type`, not `node_node_type`. A suffix all
+// of whose words the name ends with is kept whole (`set_node` with `node`).
+pub fn suffixed(name: &str, suffix: &str) -> String {
+    let n: Vec<&str> = name.split('_').collect();
+    let s: Vec<&str> = suffix.split('_').collect();
+    let shared = (1..s.len()).rev().find(|&k| k <= n.len() && n[n.len() - k..] == s[..k]).unwrap_or(0);
+    format!("{name}_{}", s[shared..].join("_"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::suffixed;
+
+    #[test]
+    fn suffixes_say_shared_words_once() {
+        assert_eq!(suffixed("node", "node_type"), "node_type");
+        assert_eq!(suffixed("create_mark", "mark_type"), "create_mark_type");
+        assert_eq!(suffixed("set_node", "node"), "set_node_node");
+        assert_eq!(suffixed("add_days", "string"), "add_days_string");
+    }
+}

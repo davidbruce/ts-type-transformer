@@ -107,8 +107,8 @@ pub extern "C" fn run() {
     // Generics are generic: a T crosses as a handle and comes back a T.
     let b = wrap(21.0);
     check!(b.value() == 21.0);
-    check!(b.map(&BoxMapF::new(|v: f64| v * 2.0)).value() == 42.0);
-    let text: Box<String> = b.map(&BoxMapF::new(|v: f64| (v as i32).to_string()));
+    check!(b.map(&MapFn::new(|v: f64| v * 2.0)).value() == 42.0);
+    let text: Box<String> = b.map(&MapFn::new(|v: f64| (v as i32).to_string()));
     check!(text.value() == "21");
     check!(first(&r) == Some(0.0));
     check!(first(JsArray::<f64>::new()).is_none());

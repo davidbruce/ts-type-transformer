@@ -119,7 +119,7 @@ pub fn main() -> Nil {
         |> box_options.with_width(8.4)
         |> box_options.with_height(0.08)
         |> box_options.with_depth(8.4)
-      let plinth = b.create_box_box_options_with(engine, plinth_opts)
+      let plinth = b.create_box_options_with(engine, plinth_opts)
       observable_vec3.set(scene_node.get_position(plinth), 0.0, 0.04, 0.0)
       mesh.set_material(plinth, mk_pbr(0.17, 0.12, 0.78))
       b.add_to_scene_mesh(scene, plinth)

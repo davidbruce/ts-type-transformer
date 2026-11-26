@@ -9,7 +9,6 @@ import bindings/areas/path/format_input_path_object as path_format
 import bindings/areas/path/parsed_path
 import bindings/buffer
 import bindings/mkdir_options
-import bindings/namespaces/node_js/event_emitter as emitter
 import bindings/runtime
 import bindings/types as t
 import cell
@@ -182,50 +181,47 @@ pub fn main() {
       })
     cell.set(log, [string.join(words, "+"), ..cell.get(log)])
   }
-  emitter.on(bus, name, on_greet)
+  events.on(bus, name, on_greet)
   let count = cell.new(0)
   let on_once = fn(_) { cell.set(count, cell.get(count) + 1) }
-  emitter.once(bus, name, on_once)
+  events.once(bus, name, on_once)
   let passed =
     passed
-    + check(emitter.listener_count(bus, name) == 2.0, "two listeners")
+    + check(events.listener_count(bus, name) == 2.0, "two listeners")
     + check(
-      emitter.emit(bus, name, [runtime.dynamic("hi"), runtime.dynamic("there")]),
+      events.emit(bus, name, [runtime.dynamic("hi"), runtime.dynamic("there")]),
       "emit reports listeners",
     )
     + check(cell.get(log) == ["hi+there"], "the listener got every argument")
     + check(cell.get(count) == 1, "once ran")
     + check(
-      emitter.listener_count(bus, name) == 1.0,
+      events.listener_count(bus, name) == 1.0,
       "once is gone after one emit",
     )
-  let _ = emitter.emit(bus, name, [runtime.dynamic("again")])
+  let _ = events.emit(bus, name, [runtime.dynamic("again")])
   let passed =
     passed
     + check(cell.get(log) == ["again", "hi+there"], "emit again")
     + check(cell.get(count) == 1, "once ran only once")
-    + check(
-      !emitter.emit(bus, "nobody", []),
-      "emit with no listener",
-    )
-    + check(list.length(emitter.event_names(bus)) == 1, "event_names")
-  let _ = emitter.remove_listener(bus, name, on_greet)
+    + check(!events.emit(bus, "nobody", []), "emit with no listener")
+    + check(list.length(events.event_names(bus)) == 1, "event_names")
+  let _ = events.remove_listener(bus, name, on_greet)
   let passed =
     passed
-    + check(emitter.listener_count(bus, name) == 0.0, "removeListener")
-    + check(!emitter.emit(bus, name, []), "no listeners left")
+    + check(events.listener_count(bus, name) == 0.0, "removeListener")
+    + check(!events.emit(bus, name, []), "no listeners left")
     + check(
       cell.get(log) == ["again", "hi+there"],
       "the removed listener was not called",
     )
-  let _ = emitter.set_max_listeners(bus, 3.0)
+  let _ = events.set_max_listeners(bus, 3.0)
   let passed =
-    passed + check(emitter.get_max_listeners(bus) == 3.0, "max listeners")
+    passed + check(events.get_max_listeners(bus) == 3.0, "max listeners")
 
   // events.once: a promise of the arguments of the next emit.
-  let promise = events.once(bus, "ready")
+  let promise = events.static_once(bus, "ready")
   let _ =
-    emitter.emit(bus, "ready", [
+    events.emit(bus, "ready", [
       runtime.dynamic("go"),
       runtime.dynamic("now"),
     ])

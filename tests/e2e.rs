@@ -5152,7 +5152,7 @@ export declare function makeHolder(): Holder;
         let c_gen_xml = lower(&dts, Some("c"), &[]);
         let c_gen_all = joined(&generators::c::files(&model(&c_gen_xml, "C")).unwrap());
         assert!(c_gen_all.contains("Holder_emitGeneric("), "expected callable emitGeneric in C:\n{c_gen_all}");
-        assert!(c_gen_all.contains("Holder_emitGeneric_cb;") && c_gen_all.contains("Holder_emitGeneric_cb_from(") && !c_gen_all.contains("Holder_emitGeneric_2;") && !c_gen_all.contains("Holder_emitGeneric_2_from("), "expected colliding C callback to use _cb instead of _2:\n{c_gen_all}");
+        assert!(c_gen_all.contains("EmitGenericFn;") && c_gen_all.contains("EmitGenericFn_from(") && !c_gen_all.contains("Holder_emitGeneric_2;"), "expected the callback named for its member, apart from the method:\n{c_gen_all}");
 
         let zig_xml = lower(&dts, Some("zig"), &[]);
         let zig_all = joined(&generators::zig::files(&model(&zig_xml, "Zig")).unwrap());

@@ -5,7 +5,7 @@ use super::bounds::generic_args;
 use super::{codec_var, lower, relative, snake, upper, JS_RESERVED, KEYWORDS, OPAQUE_BUILTINS, OWN};
 use super::super::comments::{Style, comment};
 use super::super::js::{call_expr, js_test, trim_trailing_undef};
-use super::super::model::{mentions, subst, Absence, Call, Class, Func, Model, NamedUnion, TParam, Ty};
+use super::super::model::{mentions, subst, Absence, Call, Class, Func, Model, NamedUnion, TParam, Ty, suffixed};
 
 pub(super) struct Gen<'m> {
     pub m: &'m Model,
@@ -88,6 +88,18 @@ impl<'m> Gen<'m> {
 
     // A value's name in the module being written, the first of `base`,
     // `base_2`, ... it has not given out, and no keyword.
+    // `base`, else `other` where `base` is taken and it is not, else `base` numbered.
+    pub(super) fn fresh_value_or(&mut self, base: &str, other: &str) -> String {
+        let taken = |g: &Self, n: &str| {
+            let mut n = lower(n);
+            if KEYWORDS.contains(&n.as_str()) {
+                n.push('_');
+            }
+            g.reserved_values.contains(&n) || g.values.contains(&(g.unit.clone(), n))
+        };
+        if taken(self, base) && !taken(self, other) { self.fresh_value(other) } else { self.fresh_value(base) }
+    }
+
     pub(super) fn fresh_value(&mut self, base: &str) -> String {
         let mut base = lower(base);
         if KEYWORDS.contains(&base.as_str()) {
@@ -573,11 +585,11 @@ impl<'m> Gen<'m> {
             }
             let n = match &form.suffix {
                 None => name.to_string(),
-                Some(s) => self.fresh_value(&format!("{name}_{s}")),
+                Some(s) => self.fresh_value(&suffixed(name, s)),
             };
             let with_name = with_as.map(|w| match &form.suffix {
                 None => w.to_string(),
-                Some(s) => format!("{w}_{s}"),
+                Some(s) => suffixed(w, s),
             });
             let with_only = form.with_only || with_as.is_some();
             let (js, with) = self.function_form(&n, &g, owner, with_only, &nulls, with_name.as_deref());

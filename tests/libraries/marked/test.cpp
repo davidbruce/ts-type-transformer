@@ -103,8 +103,8 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // use with a renderer: heading is given its token.
     MarkedExtension ext = MarkedExtension::create();
-    MarkedExtension_renderer rend = MarkedExtension_renderer::create();
-    rend.heading(MarkedExtension_renderer_heading([](ts::Tuple<Tokens_Heading> args) {
+    RendererObject rend = RendererObject::create();
+    rend.heading(RendererObjectHeadingFn([](ts::Tuple<Tokens_Heading> args) {
         Tokens_Heading t = args.get<0>();
         return std::string("H") + std::to_string(int(t.depth())) + ":" + t.text() + "|";
     }));
@@ -115,7 +115,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     // walkTokens visits every token, nested ones too.
     int visited = 0;
     MarkedExtension walker = MarkedExtension::create();
-    walker.walkTokens(MarkedExtension_walkTokens([&](const Token& token) {
+    walker.walkTokens(MarkedExtensionWalkTokensFn([&](const Token& token) {
         visited++;
         (void)token;
     }));

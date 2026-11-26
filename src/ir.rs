@@ -133,6 +133,9 @@ pub struct Signature {
     // On an overload: what tells it apart where a target loses it, as words
     // (`Dictionary`, `async`). See `lower::mark_overloads`.
     pub marks: Vec<String>,
+    // Of a function type: the name of the library's alias it was evaluated
+    // from (node's `Listener<Events, E>`), for its declaration once hoisted.
+    pub name: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

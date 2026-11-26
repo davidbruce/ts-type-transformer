@@ -1,13 +1,14 @@
 // marked from Gleam, in Node: Markdown to HTML, inline Markdown, the lexer's
 // tokens, and a Marked instance with options and an extension.
 import bindings as marked
+import bindings/hooks_object
 import bindings/lexer
 import bindings/marked as marked_class
 import bindings/marked_extension
-import bindings/marked_extension_renderer
 import bindings/namespaces/tokens/generic as token_generic
 import bindings/namespaces/tokens/heading as token_heading
 import bindings/namespaces/tokens/paragraph as token_paragraph
+import bindings/renderer_object
 import bindings/runtime
 import bindings/tokens_list
 import bindings/types as t
@@ -203,8 +204,8 @@ pub fn main() {
 
   // A renderer function: called with the heading's token.
   let rendered = cell.new([])
-  let renderer = marked_extension_renderer.create()
-  marked_extension_renderer.set_heading(
+  let renderer = renderer_object.create()
+  renderer_object.set_heading(
     renderer,
     Some(fn(heading) {
       let token = runtime.dynamic(heading)
@@ -237,8 +238,8 @@ pub fn main() {
     )
 
   // A preprocess hook: the markdown arrives as the one argument.
-  let hooks = marked_extension.hooks_create()
-  marked_extension.hooks_set_preprocess(
+  let hooks = hooks_object.create()
+  hooks_object.set_preprocess(
     hooks,
     Some(fn(text) {
       t.StringOrPromiseString(string.replace(text, "foo", "bar"))

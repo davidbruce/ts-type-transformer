@@ -33,7 +33,7 @@ let emitter = Events.EventEmitter.Create ()
 let mutable calls = 0
 let mutable seen: string list = []
 let listener =
-    NodeJS.AddListenerListener.Create(fun args ->
+    Events.EventEmitterAddListenerListener.Create(fun args ->
         calls <- calls + 1
         seen <- seen @ [ args |> Seq.map string |> String.concat "," ])
 emitter.on ("ping", listener) |> ignore
@@ -45,7 +45,7 @@ check (not (emitter.emit "nobody")) "emit without a listener is false"
 emitter.emit ("ping", box "two") |> ignore
 check (calls = 2 && seen = [ "one,extra"; "two" ]) "twice"
 let mutable onceCalls = 0
-emitter.once ("once", NodeJS.AddListenerListener.Create(fun _ -> onceCalls <- onceCalls + 1)) |> ignore
+emitter.once ("once", Events.EventEmitterAddListenerListener.Create(fun _ -> onceCalls <- onceCalls + 1)) |> ignore
 emitter.emit "once" |> ignore
 emitter.emit "once" |> ignore
 check (onceCalls = 1) "once"

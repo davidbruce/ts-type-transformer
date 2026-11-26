@@ -64,17 +64,17 @@ static Pm_Schema make_schema(void) {
     Pm_MarkSpec_attrs hattrs = Pm_MarkSpec_attrs_create();
     Pm_MarkSpec_attrs_set_at(hattrs, "level", lvl);
 
-    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = hattrs, .content = "inline*", .group = "block", .defining = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(heading_dom, NULL));
+    Pm_NodeSpec heading = Pm_NodeSpec_create(.attrs = hattrs, .content = "inline*", .group = "block", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(heading_dom, NULL));
 
-    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"p"));
+    Pm_NodeSpec para = Pm_NodeSpec_create(.content = "inline*", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"p"));
 
-    Pm_NodeSpec quote = Pm_NodeSpec_create(.content = "block+", .group = "block", .defining = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"blockquote"));
+    Pm_NodeSpec quote = Pm_NodeSpec_create(.content = "block+", .group = "block", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"blockquote"));
 
-    Pm_NodeSpec ulist = Pm_NodeSpec_create(.content = "list_item+", .group = "block", .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"ul"));
+    Pm_NodeSpec ulist = Pm_NodeSpec_create(.content = "list_item+", .group = "block", .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"ul"));
 
-    Pm_NodeSpec li = Pm_NodeSpec_create(.content = "paragraph block*", .defining = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(tag_dom, (void*)"li"));
+    Pm_NodeSpec li = Pm_NodeSpec_create(.content = "paragraph block*", .defining = true, .toDOM = Pm_NodeSpecToDOMFn_from(tag_dom, (void*)"li"));
 
-    Pm_NodeSpec hr = Pm_NodeSpec_create(.group = "block", .atom = true, .toDOM = Pm_Node_to_DOMOutputSpec_fn_from(hr_dom, NULL));
+    Pm_NodeSpec hr = Pm_NodeSpec_create(.group = "block", .atom = true, .toDOM = Pm_NodeSpecToDOMFn_from(hr_dom, NULL));
 
     Pm_NodeSpec text = Pm_NodeSpec_create(.group = "inline");
 
@@ -88,8 +88,8 @@ static Pm_Schema make_schema(void) {
     Pm_SchemaSpec_nodes_set_at(nodes, "horizontal_rule", hr);
     Pm_SchemaSpec_nodes_set_at(nodes, "text", text);
 
-    Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"strong"));
-    Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_Mark_boolean_to_DOMOutputSpec_fn_from(mark_dom, (void*)"code"));
+    Pm_MarkSpec strong = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"strong"));
+    Pm_MarkSpec code = Pm_MarkSpec_create(.toDOM = Pm_MarkSpecToDOMFn_from(mark_dom, (void*)"code"));
     Pm_SchemaSpec_marks marks = Pm_SchemaSpec_marks_create();
     Pm_SchemaSpec_marks_set_at(marks, "strong", strong);
     Pm_SchemaSpec_marks_set_at(marks, "code", code);
@@ -286,7 +286,7 @@ __attribute__((export_name("start"))) void start(void) {
     g_schema = make_schema();
     js_retain(g_schema);
 
-    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = make_state(), .dispatchTransaction = Pm_Transaction_fn_from(on_dispatch, NULL));
+    Pm_DirectEditorProps props = Pm_DirectEditorProps_create(.state = make_state(), .dispatchTransaction = Pm_DispatchTransactionFn_from(on_dispatch, NULL));
 
     HTMLElement mount = Document_getElementById(g_doc, "editor");
     g_view = Pm_EditorView_new(AS_Node(mount), props);

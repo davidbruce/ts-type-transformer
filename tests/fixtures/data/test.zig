@@ -99,7 +99,7 @@ export fn run() void {
     // Generics are erased: values are untyped.
     const bx = b.wrap(b.JsValue.number(21));
     expect(bx.getValue().toNumber() == 21, @src());
-    expect(bx.map(b.Box_map_f.from(doubled, null)).getValue().toNumber() == 42, @src());
+    expect(bx.map(b.MapFn.from(doubled, null)).getValue().toNumber() == 42, @src());
     expect(b.first(r.any()).toNumber() == 0, @src());
     expect(b.first(b.JsArray.new()).isNull(), @src());
 

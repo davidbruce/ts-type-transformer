@@ -47,8 +47,8 @@ static void emit_stage(Node_EventEmitter bus, const char* name, const char* labe
 __attribute__((export_name("start"))) void start(void) {
     js_scope();
     Node_EventEmitter bus = Node_EventEmitter_new();
-    NodeJS_EventEmitter_on(bus, "stage", Node_any_array_fn_from(on_stage, 0));
-    NodeJS_EventEmitter_once(bus, "done", Node_any_array_fn_from(on_done, 0));
+    Node_EventEmitter_on(bus, "stage", Node_Listener_from(on_stage, 0));
+    Node_EventEmitter_once(bus, "done", Node_Listener_from(on_done, 0));
 
     char root[256], in_dir[320], out_dir[320], fp[384], combined[384];
     JsString_copy(node_mkdtempSync("/tmp/tsrs-node-pipe-"), root, sizeof root);

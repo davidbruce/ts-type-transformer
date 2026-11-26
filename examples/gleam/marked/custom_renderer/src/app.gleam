@@ -11,8 +11,8 @@ import gleam/option.{None, Some}
 import marked
 import marked/marked as marked_class
 import marked/marked_extension
-import marked/marked_extension_renderer
 import marked/namespaces/tokens/generic as token_generic
+import marked/renderer_object
 import marked/runtime as mr
 import marked/types as mt
 
@@ -66,8 +66,8 @@ pub fn main() -> Nil {
       element.set_class_name(strip, "tok-strip")
 
       let renderer =
-        marked_extension_renderer.create()
-        |> marked_extension_renderer.with_heading(fn(heading) {
+        renderer_object.create()
+        |> renderer_object.with_heading(fn(heading) {
           let tok = mr.dynamic(heading)
           let d = int.to_string(float.round(field_float(tok, "depth")))
           Some(

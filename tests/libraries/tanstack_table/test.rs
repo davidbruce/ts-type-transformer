@@ -72,8 +72,8 @@ pub extern "C" fn run() {
     // functionalUpdate: a value, or a function of the previous value.
     let five: JsValue = functional_update(Updater::T(JsValue::from(5.0)), JsValue::from(1.0));
     check!(five.as_f64() == 5.0);
-    let bump = UpdaterFn2::<JsValue>::new(|prev: JsValue| JsValue::from(prev.as_f64() + 1.0));
-    check!(functional_update(Updater::UpdaterFn2(bump), JsValue::from(41.0)).as_f64() == 42.0);
+    let bump = UpdaterFnCb::<JsValue>::new(|prev: JsValue| JsValue::from(prev.as_f64() + 1.0));
+    check!(functional_update(Updater::UpdaterFnCb(bump), JsValue::from(41.0)).as_f64() == 42.0);
 
     // Names of table functions, split into parent and key.
     let info = get_function_name_info("column_toggleSorting");
@@ -103,10 +103,10 @@ pub extern "C" fn run() {
     let bindings = TableReactivityBindings::create();
     bindings.set_create_options_store(false);
     bindings.set_wrap_external_atoms(false);
-    let writable = TableReactivityBindingsCreateWritableAtom::new(|initial: JsValue, _| {
+    let writable = CreateWritableAtomFn::new(|initial: JsValue, _| {
         let value = Rc::new(RefCell::new(initial));
         let (read, write) = (value.clone(), value);
-        let get = ColumnColumnFilteringGetFilterValue::new(move || read.borrow().clone());
+        let get = GetFilterValueFn::new(move || read.borrow().clone());
         Atom(
             atom(
                 JsValue(get.0.clone()),
@@ -122,19 +122,19 @@ pub extern "C" fn run() {
     bindings.set_create_writable_atom(&writable);
     // `compute` is made the atom's `get` itself.
     let readonly =
-        TableReactivityBindingsCreateReadonlyAtom::new(|compute: VoidToTFn<JsValue>, _| {
+        CreateReadonlyAtomFn::new(|compute: VoidToTFn<JsValue>, _| {
             ReadonlyAtom(atom(JsValue(compute.0.clone()), None), PhantomData)
         });
     bindings.set_create_readonly_atom(&readonly);
     let untrack =
-        TableReactivityBindingsUntrack::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
+        UntrackFn::new(|f: VoidToTFn<JsValue>| call_void_to_t_fn(&f));
     bindings.set_untrack(&untrack);
     let run_it = FnFn::new(move |f: VoidFn| {
         call_void_fn(&f);
     });
     bindings.set_batch(&run_it);
     bindings.set_schedule(&run_it);
-    let noop = TableReactivityBindingsAddSubscription::new(|_| {});
+    let noop = AddSubscriptionFn::new(|_| {});
     bindings.set_add_subscription(&noop);
     check!(bindings.create_options_store() == false);
 

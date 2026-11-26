@@ -45,7 +45,7 @@ static void shapes(void) {
 
     Layer layer = Layer_new(LayerConfig_create());
     Stage_add(stage, layer, JsArray_new());
-    CHECK(JsArray_Node_length(Container_getChildren(stage, (Container_getChildren_filterFunc){ 0 })) == 1);
+    CHECK(JsArray_Node_length(Container_getChildren(stage, (FilterFuncFn){ 0 })) == 1);
     CHECK(js_same((JsValue){ Node_getStage(layer).h }, (JsValue){ stage.h }));
     CHECK(JsString_equals(Node_getType(layer), "Layer"));
 
@@ -70,7 +70,7 @@ static void shapes(void) {
     CHECK(num(Shape_get_strokeWidth(rect)) == 4);
     CHECK(JsString_equals(Node_getClassName(rect), "Rect"));
     Container_add(layer, nodes1(AS_Node(rect)));
-    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 1);
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (FilterFuncFn){ 0 })) == 1);
     CHECK(js_same((JsValue){ Node_getLayer(rect).h }, (JsValue){ layer.h }) && js_same((JsValue){ Node_getStage(rect).h }, (JsValue){ stage.h }));
 
     // A Circle and a Text, from their configs.
@@ -108,8 +108,8 @@ static void shapes(void) {
     JsArray_Node_push(inside, AS_Node(label));
     Container_add(group, inside);
     Container_add(layer, nodes1(AS_Node(group)));
-    CHECK(JsArray_Node_length(Container_getChildren(group, (Container_getChildren_filterFunc){ 0 })) == 2);
-    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 2);
+    CHECK(JsArray_Node_length(Container_getChildren(group, (FilterFuncFn){ 0 })) == 2);
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (FilterFuncFn){ 0 })) == 2);
     CHECK(js_same((JsValue){ Node_getParent(circle).h }, (JsValue){ group.h }));
 
     // Positions: a node's own and its absolute one.
@@ -181,9 +181,9 @@ static void shapes(void) {
 
     // Removing and destroying.
     Node_destroy(group);
-    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 1);
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (FilterFuncFn){ 0 })) == 1);
     Node_remove(rect);
-    CHECK(JsArray_Node_length(Container_getChildren(layer, (Container_getChildren_filterFunc){ 0 })) == 0);
+    CHECK(JsArray_Node_length(Container_getChildren(layer, (FilterFuncFn){ 0 })) == 0);
     Node_destroy(stage);
     CHECK(JsArray_Stage_length(Konva_get_stages()) == 0);
 }

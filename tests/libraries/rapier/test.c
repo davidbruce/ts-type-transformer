@@ -77,7 +77,7 @@ static void physics(void) {
     CHECK(near(Rapier3d_Vector_get_y(Rapier3d_RayColliderIntersection_get_normal(with_normal)), 1, 1e-6));
     // Every intersection through a callback: the ball and the ground.
     Rapier3d_Ray through = Rapier3d_Ray_new(Rapier3d_Vector3_new(0, 10, 0), Rapier3d_Vector3_new(0, -1, 0));
-    Rapier3d_World_intersectionsWithRay(world, through, 100, true, Rapier3d_RayColliderIntersection_to_boolean_fn_from(on_hit, 0), js_none_double(), js_none_double(), (Rapier3d_Collider){ 0 }, (Rapier3d_RigidBody){ 0 }, (Rapier3d_Collider_to_boolean_fn){ 0 });
+    Rapier3d_World_intersectionsWithRay(world, through, 100, true, Rapier3d_IntersectionsWithRayFn_from(on_hit, 0), js_none_double(), js_none_double(), (Rapier3d_Collider){ 0 }, (Rapier3d_RigidBody){ 0 }, (Rapier3d_Collider_to_boolean_fn){ 0 });
     CHECK(hit_count == 2);
 
     // An impulse on a ball floating in gravity-free space: v = impulse / mass.

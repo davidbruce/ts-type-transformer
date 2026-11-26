@@ -9,7 +9,7 @@ use crate::front::Front;
 use crate::ir::*;
 
 use super::eval::split_members;
-use super::walk::walk;
+use super::walk::{walk, walk_type};
 
 // `interface X` + `var X: { prototype: X; new(): X; statics }` is a class.
 pub(super) fn pair_classes(decls: &mut Vec<Decl>) {
@@ -53,6 +53,129 @@ pub(super) fn pair_classes(decls: &mut Vec<Decl>) {
             _ => {}
         }
     }
+}
+
+// A class with no members of its own that extends an interface of its own
+// name from a namespace is that interface: node's `events.EventEmitter`
+// (a constructor and statics) and the global `NodeJS.EventEmitter`,
+// declared apart so a module and the globals can each name it. One type
+// has the members, under the class's name; what extended or named the
+// interface extends or names the class. A class of its own that a
+// namespace's interface adds to (pixi's `Container` and
+// `PixiMixins.Container`) stays apart.
+pub(super) fn fold_namesake_bases(decls: &mut Vec<Decl>) {
+    struct Base {
+        name: String,
+        params: Vec<Sym>,
+        members: Vec<Member>,
+        extends: Vec<Type>,
+    }
+    fn bases(decls: &[Decl], nested: bool, out: &mut HashMap<P<Symbol>, Base>) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) if nested && i.class.is_none() => {
+                    if let Some(s) = i.sym {
+                        out.insert(s, Base { name: i.name.clone(), params: i.type_params.iter().map(|p| p.sym).collect(), members: i.members.clone(), extends: i.extends.clone() });
+                    }
+                }
+                Decl::Namespace(n) => bases(&n.decls, true, out),
+                _ => {}
+            }
+        }
+    }
+    let mut found = HashMap::new();
+    bases(decls, false, &mut found);
+    // Each folded interface's symbol: the class's name, symbol and type parameters.
+    let mut folded: HashMap<P<Symbol>, (String, Sym, Vec<TypeParam>)> = HashMap::new();
+    fn fold(decls: &mut [Decl], found: &HashMap<P<Symbol>, Base>, folded: &mut HashMap<P<Symbol>, (String, Sym, Vec<TypeParam>)>) {
+        for d in decls {
+            match d {
+                Decl::Interface(c) if c.class.is_some() && c.members.is_empty() => {
+                    let Some(pos) = c.extends.iter().position(|e| matches!(e, Type::Ref(r) if r.sym.is_some_and(|s| found.get(&s).is_some_and(|b| b.name == c.name && b.params.len() == c.type_params.len())))) else { continue };
+                    let Type::Ref(r) = c.extends.remove(pos) else { continue };
+                    let sym = r.sym.unwrap();
+                    let base = &found[&sym];
+                    // Its type parameters are the class's.
+                    let to: HashMap<Sym, &TypeParam> = base.params.iter().copied().zip(&c.type_params).collect();
+                    let mut t = Type::Object(base.members.clone());
+                    walk_type(&mut t, &mut Vec::new(), &mut |x, _| {
+                        if let Type::Ref(p) = x
+                            && p.kind == "typeParameter"
+                            && let Some(tp) = to.get(&p.sym)
+                        {
+                            p.name = tp.name.clone();
+                            p.sym = tp.sym;
+                            p.tid = tp.tid;
+                        }
+                        true
+                    });
+                    let Type::Object(members) = t else { unreachable!() };
+                    let own: Vec<(String, MemberKind)> = c.members.iter().map(|m| (m.name.clone(), m.kind)).collect();
+                    c.members.extend(members.into_iter().filter(|m| !own.contains(&(m.name.clone(), m.kind))));
+                    for e in &base.extends {
+                        c.extends.insert(pos, e.clone());
+                    }
+                    folded.insert(sym, (c.name.clone(), c.sym, c.type_params.clone()));
+                }
+                Decl::Namespace(n) => fold(&mut n.decls, found, folded),
+                _ => {}
+            }
+        }
+    }
+    fold(decls, &found, &mut folded);
+    if folded.is_empty() {
+        return;
+    }
+    fn drop(decls: &mut Vec<Decl>, folded: &HashMap<P<Symbol>, (String, Sym, Vec<TypeParam>)>) {
+        decls.retain_mut(|d| match d {
+            Decl::Interface(i) => !i.sym.is_some_and(|s| folded.contains_key(&s)),
+            Decl::Namespace(n) => {
+                drop(&mut n.decls, folded);
+                true
+            }
+            _ => true,
+        });
+    }
+    drop(decls, &folded);
+    walk(decls, &mut |t, _| {
+        if let Type::Ref(r) = t
+            && let Some((name, sym, _)) = r.sym.and_then(|s| folded.get(&s))
+        {
+            r.name = name.clone();
+            r.sym = *sym;
+            r.qualified = None;
+            r.tid = None;
+        }
+        true
+    });
+    fn ancestors(decls: &mut [Decl], folded: &HashMap<P<Symbol>, (String, Sym, Vec<TypeParam>)>) {
+        for d in decls {
+            match d {
+                Decl::Interface(i) => {
+                    for k in 0..i.ancestor_syms.len() {
+                        if let Some((name, sym, _)) = i.ancestor_syms[k].and_then(|s| folded.get(&s)) {
+                            i.ancestor_syms[k] = *sym;
+                            if let Some(a) = i.ancestors.get_mut(k) {
+                                *a = name.clone();
+                            }
+                        }
+                    }
+                    let own = i.sym;
+                    let mut seen = HashSet::new();
+                    let keep: Vec<bool> = i.ancestor_syms.iter().map(|s| *s != own && seen.insert(*s)).collect();
+                    let mut it = keep.iter();
+                    i.ancestor_syms.retain(|_| *it.next().unwrap());
+                    if i.ancestors.len() == keep.len() {
+                        let mut it = keep.iter();
+                        i.ancestors.retain(|_| *it.next().unwrap());
+                    }
+                }
+                Decl::Namespace(n) => ancestors(&mut n.decls, folded),
+                _ => {}
+            }
+        }
+    }
+    ancestors(decls, &folded);
 }
 
 // References to a paired interface are references to a class. Runs last:

@@ -176,43 +176,42 @@ __attribute__((export_name("run"))) void run(void) {
     // -std=c11 -pedantic (an empty variadic macro argument), so the options
     // object is given, empty.
     EventEmitter emitter = EventEmitter_new((EventEmitterOptions){ 0 });
-    NodeJS_EventEmitter em = EventEmitter_as_NodeJS_EventEmitter(emitter);
     int on_count = 0, once_count = 0, other_count = 0;
-    any_array_fn on_cb = any_array_fn_from(on_event, &on_count);
-    any_array_fn once_cb = any_array_fn_from(on_event, &once_count);
-    any_array_fn other_cb = any_array_fn_from(on_event, &other_count);
-    NodeJS_EventEmitter_on(em, "data", on_cb);
-    NodeJS_EventEmitter_once(em, "data", once_cb);
-    NodeJS_EventEmitter_on(em, "other", other_cb);
-    CHECK(NodeJS_EventEmitter_listenerCount(em, "data") == 2);
-    CHECK(NodeJS_EventEmitter_listenerCount(em, "other") == 1);
+    Listener on_cb = Listener_from(on_event, &on_count);
+    Listener once_cb = Listener_from(on_event, &once_count);
+    Listener other_cb = Listener_from(on_event, &other_count);
+    EventEmitter_on(emitter, "data", on_cb);
+    EventEmitter_once(emitter, "data", once_cb);
+    EventEmitter_on(emitter, "other", other_cb);
+    CHECK(EventEmitter_listenerCount(emitter, "data") == 2);
+    CHECK(EventEmitter_listenerCount(emitter, "other") == 1);
 
     // Emit with arguments: the listeners get them.
     JsArray args = JsArray_new();
     JsValue n42 = js_number(42), word = js_string("payload");
     JsArray_push(args, n42);
     JsArray_push(args, word);
-    CHECK(NodeJS_EventEmitter_emit(em, "data", args));
+    CHECK(EventEmitter_emit(emitter, "data", args));
     CHECK(on_count == 1 && once_count == 1 && other_count == 0);
     // Both listeners got both arguments.
     CHECK(well_formed == 2 && last_number == 42);
     // The once listener is gone after the first emit.
-    CHECK(NodeJS_EventEmitter_listenerCount(em, "data") == 1);
-    NodeJS_EventEmitter_emit(em, "data", args);
+    CHECK(EventEmitter_listenerCount(emitter, "data") == 1);
+    EventEmitter_emit(emitter, "data", args);
     CHECK(on_count == 2 && once_count == 1 && hits == 3);
 
     // No listener: emit says so.
-    CHECK(!NodeJS_EventEmitter_emit(em, "nobody", JsArray_new()));
+    CHECK(!EventEmitter_emit(emitter, "nobody", JsArray_new()));
 
     // The event names, and a removed listener.
-    JsArray_string_or_symbol names_of = NodeJS_EventEmitter_eventNames(em);
+    JsArray_string_or_symbol names_of = EventEmitter_eventNames(emitter);
     CHECK(JsArray_string_or_symbol_length(names_of) == 2);
-    NodeJS_EventEmitter_removeListener(em, "data", on_cb);
-    CHECK(NodeJS_EventEmitter_listenerCount(em, "data") == 0);
-    CHECK(!NodeJS_EventEmitter_emit(em, "data", args));
+    EventEmitter_removeListener(emitter, "data", on_cb);
+    CHECK(EventEmitter_listenerCount(emitter, "data") == 0);
+    CHECK(!EventEmitter_emit(emitter, "data", args));
     CHECK(on_count == 2);
-    NodeJS_EventEmitter_removeAllListeners(em, "other");
-    CHECK(NodeJS_EventEmitter_listenerCount(em, "other") == 0);
-    NodeJS_EventEmitter_setMaxListeners(em, 3);
-    CHECK(NodeJS_EventEmitter_getMaxListeners(em) == 3);
+    EventEmitter_removeAllListeners(emitter, "other");
+    CHECK(EventEmitter_listenerCount(emitter, "other") == 0);
+    EventEmitter_setMaxListeners(emitter, 3);
+    CHECK(EventEmitter_getMaxListeners(emitter) == 3);
 }

@@ -110,7 +110,7 @@ export fn run() void {
     expect(last == 5 and calls == 2, @src());
 
     // A callback that takes an object and returns a value.
-    expect(c.visit(b.Counter_visit_f.from(isFive, null)), @src());
+    expect(c.visit(b.VisitFn.from(isFive, null)), @src());
 
     // The same function and context is the same JavaScript function.
     c.unsubscribe(b.Listener.from(onValue, &last));
@@ -129,16 +129,16 @@ export fn run() void {
     expect(prop == 7, @src());
 
     // Several arguments, a string among them, and a result.
-    expect(c.fold(b.Counter_fold_f.from(fold, null)) == 8 * 2 + 5, @src());
+    expect(c.fold(b.FoldFn.from(fold, null)) == 8 * 2 + 5, @src());
 
     // A callback kept and called later.
     var ran: u32 = 0;
-    b.later(b.later_f.from(bump, &ran));
-    b.later(b.later_f.from(bump, &ran));
+    b.later(b.LaterFn.from(bump, &ran));
+    b.later(b.LaterFn.from(bump, &ran));
     expect(ran == 0, @src());
     expect(b.flush() == 2, @src());
     expect(ran == 2, @src());
 
-    expect(b.eachId(b.eachId_f.from(onId, null)) == 2, @src());
+    expect(b.eachId(b.EachIdFn.from(onId, null)) == 2, @src());
     expect(number == 1 and text_len == 3, @src());
 }

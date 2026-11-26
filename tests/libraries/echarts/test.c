@@ -57,8 +57,8 @@ __attribute__((export_name("run"))) void run(void) {
     CHECK(JsString_len(EChartsType_getId(chart)) > 0);
 
     // The listener for `finished`, which comes after a render.
-    Eventful_on(chart, "finished", any_any_array_to_void_or_boolean_fn_from(on_finished, 0), (JsValue){ 0 });
-    Eventful_on(chart, "highlight", any_any_array_to_void_or_boolean_fn_from(on_highlight, 0), (JsValue){ 0 });
+    Eventful_on(chart, "finished", WithThisType_from(on_finished, 0), (JsValue){ 0 });
+    Eventful_on(chart, "highlight", WithThisType_from(on_highlight, 0), (JsValue){ 0 });
 
     // The option: a category axis, a value axis, one bar series.
     Dictionary x_axis = Dictionary_create();

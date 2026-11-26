@@ -434,7 +434,7 @@ pub fn main() -> Nil {
         |> box_options.with_width(3.5)
         |> box_options.with_height(0.2)
         |> box_options.with_depth(1.3)
-      let ramp_mesh = b.create_box_box_options_with(engine, ramp_opts)
+      let ramp_mesh = b.create_box_options_with(engine, ramp_opts)
       observable_vec3.set(
         scene_node.get_position(ramp_mesh),
         ramp_x,
@@ -475,7 +475,7 @@ pub fn main() -> Nil {
         |> box_options.with_depth(dom_hz *. 2.0)
       let dom_handles =
         int.range(from: 0, to: dom_count, with: [], run: fn(acc, i) {
-          let m = b.create_box_box_options_with(engine, dom_opts)
+          let m = b.create_box_options_with(engine, dom_opts)
           mesh.set_material(m, case i % 2 == 0 {
             True -> mat_a
             False -> mat_b

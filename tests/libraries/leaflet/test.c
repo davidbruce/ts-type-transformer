@@ -66,7 +66,7 @@ __attribute__((export_name("run"))) void run(void) {
     Map_removeLayer(m, pin);
     CHECK(!Map_hasLayer(m, pin) && Map_hasLayer(m, group));
     layers_seen = 0;
-    Map_eachLayer(m, Layer_fn_from(count_layer, 0), (JsValue){ 0 });
+    Map_eachLayer(m, EachLayerFn_from(count_layer, 0), (JsValue){ 0 });
     CHECK(layers_seen >= 2);
 
     // A circle's bounds reach about 500 metres out.

@@ -51,11 +51,11 @@ fn strongToDOM(_: ?*anyopaque, _: pm.Mark, _: bool) pm.DOMOutputSpec {
 fn makeSchema() pm.Schema {
     const doc = pm.NodeSpec.create();
     doc.setContent("block+");
-    doc.setToDOM(b.Node_to_DOMOutputSpec_fn.from(docToDOM, null));
+    doc.setToDOM(b.NodeSpecToDOMFn.from(docToDOM, null));
     const paragraph = pm.NodeSpec.create();
     paragraph.setContent("inline*");
     paragraph.setGroup("block");
-    paragraph.setToDOM(b.Node_to_DOMOutputSpec_fn.from(paragraphToDOM, null));
+    paragraph.setToDOM(b.NodeSpecToDOMFn.from(paragraphToDOM, null));
     const text = pm.NodeSpec.create();
     text.setGroup("inline");
     const nodes = dict(pm.NodeSpec, &.{
@@ -64,7 +64,7 @@ fn makeSchema() pm.Schema {
         .{ "text", .{ .h = text.h } },
     });
     const strong = pm.MarkSpec.create();
-    strong.setToDOM(b.Mark_boolean_to_DOMOutputSpec_fn.from(strongToDOM, null));
+    strong.setToDOM(b.MarkSpecToDOMFn.from(strongToDOM, null));
     const marks = dict(pm.MarkSpec, &.{.{ "strong", .{ .h = strong.h } }});
     const spec = pm.SchemaSpec.create();
     spec.setNodes(nodes);
@@ -153,8 +153,8 @@ export fn run() void {
     // An editor state with a plugin that counts changing transactions.
     const key = ps.PluginKey.new("counter");
     const field = ps.StateField.create();
-    field.setInit(b.StateField_init.from(stateInit, null));
-    field.setApply(b.StateField_apply.from(stateApply, null));
+    field.setInit(b.StateFieldInitFn.from(stateInit, null));
+    field.setApply(b.StateFieldApplyFn.from(stateApply, null));
     const plugin_spec = ps.PluginSpec.create();
     plugin_spec.setKey(key);
     plugin_spec.setState(field);
@@ -214,8 +214,8 @@ export fn run() void {
     // An editor view on the page's #stage. Its dispatchTransaction applies each transaction.
     const props = pv.DirectEditorProps.create();
     props.setState(state0);
-    props.setDispatchTransaction(b.Transaction_fn.from(onDispatch, null));
-    view = pv.EditorView.new(.{ .Node_2 = .{ .h = b.test_page.element("stage").h } }, props);
+    props.setDispatchTransaction(b.DispatchTransactionFn.from(onDispatch, null));
+    view = pv.EditorView.new(.{ .DomNode = .{ .h = b.test_page.element("stage").h } }, props);
     expect(view.getState().getDoc().eq(doc), @src());
     expect(view.getEditable() and !view.getComposing(), @src());
 

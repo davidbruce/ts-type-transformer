@@ -52,13 +52,13 @@ fn makeAtom(a: *AtomState) tt.JsValue {
     if (!a.is_ro) {
         return tt.JsValue.obj(.{
             .get = tt.void_to_any_fn.from(atomGet, a),
-            .set = tt.Updater_fn2.from(atomSet, a),
-            .subscribe = tt.Updater_fn2.fromFn(atomSub),
+            .set = tt.UpdaterFn.from(atomSet, a),
+            .subscribe = tt.UpdaterFn.fromFn(atomSub),
         }).retain();
     }
     return tt.JsValue.obj(.{
         .get = tt.void_to_any_fn.from(atomGet, a),
-        .subscribe = tt.Updater_fn2.fromFn(atomSub),
+        .subscribe = tt.UpdaterFn.fromFn(atomSub),
     }).retain();
 }
 

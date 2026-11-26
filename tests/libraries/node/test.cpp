@@ -116,7 +116,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
     int pings = 0;
     // A rest-parameter listener is given all the arguments, gathered.
     std::string heard;
-    any_array_fn onPing = [&](ts::Array<> args) {
+    Listener onPing = [&](ts::Array<> args) {
         pings++;
         heard += std::to_string(args.size()) + ":";
         if (args.size() == 2) CHECK(ts::Value(args[0]).to_number() == 5 && ts::Value(args[1]).to_string() == "x");
@@ -131,7 +131,7 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // once: heard one time only.
     int onces = 0;
-    any_array_fn onOnce = [&](ts::Array<>) { onces++; };
+    Listener onOnce = [&](ts::Array<>) { onces++; };
     ts::Value shot = ts::Value::string("shot");
     emitter.once(shot, onOnce);
     CHECK(emitter.listenerCount(shot) == 1);
@@ -148,9 +148,9 @@ extern "C" __attribute__((export_name("run"))) void run() {
 
     // Several listeners, in the order added; prependListener goes first.
     std::string order;
-    any_array_fn a = [&](ts::Array<>) { order += "a"; };
-    any_array_fn b = [&](ts::Array<>) { order += "b"; };
-    any_array_fn c = [&](ts::Array<>) { order += "c"; };
+    Listener a = [&](ts::Array<>) { order += "a"; };
+    Listener b = [&](ts::Array<>) { order += "b"; };
+    Listener c = [&](ts::Array<>) { order += "c"; };
     ts::Value ev = ts::Value::string("ev");
     emitter.on(ev, a);
     emitter.on(ev, b);
