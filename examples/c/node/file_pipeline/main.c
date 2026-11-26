@@ -49,8 +49,8 @@ __attribute__((export_name("start"))) void start(void) {
     join2(in_dir, sizeof in_dir, root, "in");
     join2(out_dir, sizeof out_dir, root, "out");
     Node_MakeDirectoryOptions mk = Node_MakeDirectoryOptions_create(.recursive = true);
-    node_mkdirSync_with_opt_MakeDirectoryOptions(in_dir, mk);
-    node_mkdirSync_with_opt_MakeDirectoryOptions(out_dir, mk);
+    node_mkdirSync_with_MakeDirectoryOptions(in_dir, mk);
+    node_mkdirSync_with_MakeDirectoryOptions(out_dir, mk);
 
     join2(fp, sizeof fp, in_dir, "a.log");
     node_writeFileSync(fp, "100 OK\n");
@@ -68,7 +68,7 @@ __attribute__((export_name("start"))) void start(void) {
     for (int i = 0; i < 3; i++) {
         check(JsString_equals(node_path_extname(log_names[i]), ".log"));
         join2(fp, sizeof fp, in_dir, log_names[i]);
-        JsString chunk = node_readFileSync_with_ReadFileSyncArg(fp, Node_BufferEncoding_utf8);
+        JsString chunk = node_readFileSync_string(fp, Node_BufferEncoding_utf8);
         node_appendFileSync(combined, chunk);
     }
     Node_EventEmitter_emit(bus, "stage", "bundle");
@@ -77,11 +77,11 @@ __attribute__((export_name("start"))) void start(void) {
     Node_Stats comb_st = node_statSync(combined);
     int comb_size = (int)js_to_number(Node_Stats_get_size(comb_st));
     char comb_buf[128];
-    JsString_copy(node_readFileSync_with_ReadFileSyncArg(combined, Node_BufferEncoding_utf8), comb_buf, sizeof comb_buf);
+    JsString_copy(node_readFileSync_string(combined, Node_BufferEncoding_utf8), comb_buf, sizeof comb_buf);
     check(comb_size == 21 && strstr(comb_buf, "200 OK") != 0);
 
     join2(fp, sizeof fp, out_dir, "missing.log");
-    JsString missing = node_readFileSync_with_ReadFileSyncArg(fp, Node_BufferEncoding_utf8);
+    JsString missing = node_readFileSync_string(fp, Node_BufferEncoding_utf8);
     check(missing.h == 0 && js_failed());
     char mbuf[256];
     JsString_copy(js_error_message(js_take_error()), mbuf, sizeof mbuf);

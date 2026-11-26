@@ -52,8 +52,8 @@ pub extern "C" fn start() {
     let in_dir = path::join([root.as_str(), "in"]);
     let out_dir = path::join([root.as_str(), "out"]);
     let mk = fs::MakeDirectoryOptions::default().with_recursive(true);
-    fs::mkdir_sync_with_opt_make_directory_options_arg_with(&*in_dir, &mk);
-    fs::mkdir_sync_with_opt_make_directory_options_arg_with(&*out_dir, &mk);
+    fs::mkdir_sync_with_make_directory_options(&*in_dir, &mk);
+    fs::mkdir_sync_with_make_directory_options(&*out_dir, &mk);
 
     // Stage 1: seed
     fs::write_file_sync(&*path::join([in_dir.as_str(), "a.log"]), "100 OK\n");
@@ -70,7 +70,7 @@ pub extern "C" fn start() {
     let combined = path::join([out_dir.as_str(), "combined.log"]);
     for name in &logs {
         c.check(path::extname(name) == ".log");
-        let chunk = fs::read_file_sync_with_read_file_sync_arg(
+        let chunk = fs::read_file_sync_string(
             &*path::join([in_dir.as_str(), name.as_str()]),
             BufferEncoding::Utf8,
         );
@@ -81,7 +81,7 @@ pub extern "C" fn start() {
 
     // Stage 3: verify
     let comb_text =
-        fs::read_file_sync_with_read_file_sync_arg(&*combined, BufferEncoding::Utf8);
+        fs::read_file_sync_string(&*combined, BufferEncoding::Utf8);
     c.check(fs::stat_sync(&*combined).size() == 21.0 && comb_text.contains("200 OK"));
 
     let missing =

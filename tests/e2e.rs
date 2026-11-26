@@ -5920,4 +5920,78 @@ export interface XAxisHolder {
         assert!(!alias_names.iter().any(|n| n.starts_with("AngleAxisComponentOption")), "synthetic/derived AngleAxisComponentOption hijacked data union in {alias_names:?}\n{xml}");
         assert!(!xml.contains("axisLa_"), "unexpected mid-word truncation before hash in XML:\n{xml}");
     }
+
+    #[test]
+    fn overload_suffix_cleanup_and_no_double_with() {
+        let dts = write_dts(
+            "naming-item2",
+            r#"export interface MakeDirectoryOptions { recursive?: boolean; }
+export type MkdirOptionsValue = string | number;
+export type MakeDirectoryOptionsArg = boolean | MakeDirectoryOptions;
+export declare function mkdirSync(path: string, options?: MkdirOptionsValue): void;
+export declare function mkdirSync(path: string, options?: MakeDirectoryOptionsArg): string | undefined;
+
+export type BufferEncoding = "ascii" | "utf8" | "hex";
+export type ReadFileSyncArg = BufferEncoding | { encoding: BufferEncoding };
+export interface ReadFileSyncOptions { encoding?: BufferEncoding | null; flag?: string; }
+export declare function readFileSync(path: string, options?: { encoding?: null }): number;
+export declare function readFileSync(path: string, options: ReadFileSyncArg): string;
+export declare function readFileSync(path: string, options: ReadFileSyncOptions): string | number;
+
+export interface CircleOptions { radius?: number; color?: string; }
+export declare function circle(lat: number, radius: number, options?: CircleOptions): void;
+export declare function circle(lat: number, options?: CircleOptions): void;
+
+export interface IntlFormatLocaleOptions { locale?: string; }
+export interface IntlFormatOptions { weekday?: string; }
+export declare function intlFormat(date: number, formatOptions: IntlFormatOptions, localeOptions: IntlFormatLocaleOptions): string;
+export declare function intlFormat(date: number, localeOptions?: IntlFormatLocaleOptions): string;
+export declare function intlFormat(date: number): string;
+"#,
+        );
+        for target in ["c", "zig", "rust", "gleam"] {
+            let xml = lower(&dts, Some(target), &[]);
+            let code = match target {
+                "c" => joined(&generators::c::files(&model(&xml, "C")).unwrap()),
+                "zig" => joined(&generators::zig::files(&model(&xml, "Zig")).unwrap()),
+                "rust" => joined(&generators::rust::files(&model(&xml, "Rust")).unwrap()),
+                _ => joined(&generators::gleam::module(&xml).unwrap().files),
+            };
+            assert!(
+                !xml.contains("_with_opt_") && !code.contains("_with_opt_"),
+                "{target} still has opt_ in overload name:\n{code}"
+            );
+            assert!(
+                code.contains("mkdirSync_with_MakeDirectoryOptions")
+                    || code.contains("mkdirSyncWithMakeDirectoryOptions")
+                    || code.contains("mkdir_sync_with_make_directory_options"),
+                "{target} missing cleaned MakeDirectoryOptions overload:\n{code}"
+            );
+            assert!(
+                code.contains("readFileSync_string")
+                    || code.contains("readFileSyncString")
+                    || code.contains("read_file_sync_string"),
+                "{target} missing readFileSync_string return-type overload:\n{code}"
+            );
+            assert!(
+                code.contains("readFileSync_with_Options")
+                    || code.contains("readFileSyncWithOptions")
+                    || code.contains("read_file_sync_with_options"),
+                "{target} missing cleaned readFileSync_with_Options overload:\n{code}"
+            );
+            if target == "rust" {
+                assert!(
+                    !code.contains("fn mkdir_sync_with_make_directory_options_with(")
+                        && !code.contains("circle_with_radius_with"),
+                    "rust still has double _with_..._with:\n{code}"
+                );
+                assert!(
+                    code.contains("pub fn mkdir_sync_with_make_directory_options(")
+                        && code.contains("pub fn circle_with_radius(")
+                        && code.contains("pub fn circle_with_radius_full("),
+                    "rust missing expected mkdir_sync_with_make_directory_options / circle_with_radius_full:\n{code}"
+                );
+            }
+        }
+    }
 }

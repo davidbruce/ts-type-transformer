@@ -350,7 +350,19 @@ fn family_names_from(
             out.push(unique(direct, taken));
             continue;
         }
-        let varying: Vec<String> = varying_at.iter().map(|&i| param_mnemonic(s, &s.params[i].ty, synth_enums)).collect();
+        let raw_varying: Vec<String> = varying_at.iter().map(|&i| param_mnemonic(s, &s.params[i].ty, synth_enums)).collect();
+        let mut collapsed = false;
+        let cleaned_varying: Vec<String> = varying_at
+            .iter()
+            .zip(&raw_varying)
+            .map(|(&i, raw)| match clean_overload_mnemonic(base, raw) {
+                Some(c) => c,
+                None => {
+                    collapsed = true;
+                    s.params[i].name.clone()
+                }
+            })
+            .collect();
         let leads = std::ptr::eq(group[0], *s);
         // Parameters the plain overload does not have. When they only extend
         // it (`f(a)`, `f(a, b, c)`), the last one says it: `f_with_c`.
@@ -365,7 +377,7 @@ fn family_names_from(
             Type::Nullable(inner, _) => type_key(inner),
             t => type_key(t),
         };
-        let retyped: Vec<String> = s
+        let raw_retyped: Vec<String> = s
             .params
             .iter()
             .enumerate()
@@ -375,21 +387,50 @@ fn family_names_from(
                 _ => param_mnemonic(s, &p.ty, synth_enums),
             })
             .collect();
+        let retyped: Vec<String> = s
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| first.params.get(*i).is_none_or(|q| type_key(&q.ty) != type_key(&p.ty)))
+            .map(|(i, p)| match first.params.get(i) {
+                Some(q) if unwrapped(&q.ty) == unwrapped(&p.ty) => p.name.clone(),
+                _ => clean_overload_mnemonic(base, &param_mnemonic(s, &p.ty, synth_enums)).unwrap_or_else(|| p.name.clone()),
+            })
+            .collect();
+        // When stripping generic/self-referential type noise collapsed the param
+        // mnemonic to nothing and this overload returns a distinct simple type
+        // among all overloads (`readFileSync(path, ReadFileSyncArg): string`),
+        // name it directly by its return type: `readFileSync_string`.
+        let ret_candidate = (collapsed && !leads && added.is_empty()).then(|| {
+            let ret = s.ret.as_ref()?;
+            let rk = type_key(ret);
+            if sigs.iter().filter(|t| t.ret.as_ref().map(type_key).as_deref() == Some(rk.as_str())).count() == 1 {
+                clean_return_name(ret, true).map(|rn| format!("{base}{sep}{rn}"))
+            } else {
+                None
+            }
+        }).flatten();
         // Named by the first type that sets it apart, plus what it adds:
         // `addEventListener_with_string_and_options`.
         let first_name = varying_at.first().map(|&i| s.params[i].name.clone());
-        let first_varying: Vec<String> = varying.first().cloned().into_iter().chain(added.iter().filter(|a| Some(*a) != first_name.as_ref()).cloned()).collect();
+        let first_varying: Vec<String> = cleaned_varying.first().cloned().into_iter().chain(added.iter().filter(|a| Some(*a) != first_name.as_ref()).cloned()).collect();
+        let raw_first_varying: Vec<String> = raw_varying.first().cloned().into_iter().chain(added.iter().filter(|a| Some(*a) != first_name.as_ref()).cloned()).collect();
         let mut candidates: Vec<Option<String>> = vec![
+            ret_candidate,
             (leads && !added.is_empty()).then(|| with(added.clone())),
-            (!leads && !varying.is_empty()).then(|| with(first_varying.clone())),
-            (!leads && !varying.is_empty()).then(|| with(varying.clone())),
+            (!leads && !cleaned_varying.is_empty()).then(|| with(first_varying.clone())),
+            (!leads && !cleaned_varying.is_empty()).then(|| with(cleaned_varying.clone())),
+            (!leads && !raw_varying.is_empty()).then(|| with(raw_first_varying.clone())),
+            (!leads && !raw_varying.is_empty()).then(|| with(raw_varying.clone())),
             (!added.is_empty()).then(|| with(added.clone())),
             retyped.last().map(|t| with(vec![t.clone()])),
             (!retyped.is_empty()).then(|| with(retyped.clone())),
+            raw_retyped.last().map(|t| with(vec![t.clone()])),
             // Too long to say all it adds (`compressedTexImage2D(…, srcData,
             // srcOffset, srcLengthOverride)`): the first.
             added.first().map(|a| with(vec![a.clone()])),
-            varying.first().map(|v| with(vec![v.clone()])),
+            cleaned_varying.first().map(|v| with(vec![v.clone()])),
+            raw_varying.first().map(|v| with(vec![v.clone()])),
         ];
         if s.params.len() < first.params.len() {
             if s.params.is_empty() {
@@ -401,11 +442,79 @@ fn family_names_from(
                 candidates.push(Some(with(mnemonics)));
             }
         }
-        let free: Vec<String> = candidates.into_iter().flatten().filter(|c| !taken.contains(c)).collect();
+        let free: Vec<String> = candidates
+            .into_iter()
+            .flatten()
+            .filter(|c| !taken.iter().any(|t| t.eq_ignore_ascii_case(c)))
+            .collect();
         let name = free.iter().find(|c| c.len() <= NAME_MAX).or(free.first()).cloned().unwrap_or_else(|| format!("{base}{sep}{}", n + 1));
         out.push(unique(name, taken));
     }
     out
+}
+
+/// Cleans an overload disambiguation mnemonic by stripping synthesized owner/method
+/// prefixes, redundant leading `{base}` prefixes, and generic `Arg`/`_value` suffixes.
+fn clean_overload_mnemonic(base: &str, raw: &str) -> Option<String> {
+    let mut s = raw;
+    if s.is_ascii() && base.is_ascii() && !base.is_empty() {
+        let sb = s.as_bytes();
+        let bb = base.as_bytes();
+        if sb.len() > bb.len() + 2 {
+            for idx in 0..=sb.len() - (bb.len() + 2) {
+                if sb[idx] == b'_' && sb[idx + 1 + bb.len()] == b'_' && sb[idx + 1..idx + 1 + bb.len()].eq_ignore_ascii_case(bb) {
+                    s = &s[idx + bb.len() + 2..];
+                    break;
+                }
+            }
+        }
+        if s.len() >= base.len() && s[..base.len()].eq_ignore_ascii_case(base) {
+            let rest = &s[base.len()..];
+            let strip = rest.is_empty() || rest.starts_with('_') || (base.len() >= 3 && rest.as_bytes()[0].is_ascii_uppercase());
+            if strip {
+                s = rest.trim_start_matches('_');
+            }
+        }
+    }
+    if s == "Arg" {
+        s = "";
+    } else if let Some(stem) = s.strip_suffix("Arg")
+        && stem.ends_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+    {
+        s = stem;
+    }
+    if s.len() > 6
+        && let Some(stem) = s.strip_suffix("_value")
+    {
+        s = stem;
+    }
+    let s = s.trim_matches('_');
+    (!s.is_empty()).then(|| s.to_string())
+}
+
+/// Extracts a short, clean return-type name for overload disambiguation when a
+/// collapsed parameter mnemonic carries no useful distinction.
+fn clean_return_name(mut ret: &Type, allow_ref: bool) -> Option<String> {
+    while let Type::Readonly(inner) | Type::Tested(inner, _) = ret {
+        ret = inner;
+    }
+    match ret {
+        Type::Primitive(p) if matches!(p.as_str(), "string" | "number" | "boolean") => Some(p.clone()),
+        Type::Array(inner) => match inner.as_ref() {
+            Type::Primitive(p) if matches!(p.as_str(), "string" | "number" | "boolean") => Some(format!("{p}_array")),
+            _ => None,
+        },
+        Type::Ref(r)
+            if allow_ref
+                && r.kind != "typeParameter"
+                && !r.name.contains('.')
+                && !r.name.contains('_')
+                && !matches!(r.name.as_str(), "Promise" | "Object" | "Function" | "Array") =>
+        {
+            Some(r.name.clone())
+        }
+        _ => None,
+    }
 }
 
 // A value as part of a name: `2d`, `image_png`.
@@ -418,6 +527,10 @@ pub(super) fn name_part(value: &str) -> String {
 
 // A parameter's type in a name; a key of a map is named by its map.
 fn param_mnemonic(s: &Signature, t: &Type, synth_enums: &std::collections::HashMap<String, String>) -> String {
+    let mut t = t;
+    while let Type::Nullable(inner, _) | Type::Readonly(inner) | Type::Tested(inner, _) = t {
+        t = inner;
+    }
     if let Some(lit) = synth_enum_lit(t, synth_enums) {
         return lit.to_string();
     }

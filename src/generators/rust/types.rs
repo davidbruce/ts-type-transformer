@@ -198,6 +198,24 @@ pub(super) fn function(f: &Func, name: &str, vis: &str, imports: &mut BTreeMap<S
 // How many trailing optional arguments a form leaves out: `World::new(&g)` is
 // `World::new_with(&g, None, ..)`. None before a rest, or where one names the
 // function's type parameter, which a `None` could not fix.
+fn param_matches_part(p_name: &str, mut p_ty: &Ty, part: &str) -> bool {
+    if p_name.eq_ignore_ascii_case(part) {
+        return true;
+    }
+    while let Ty::Nullable(inner, _) | Ty::ArrayOf(inner) = p_ty {
+        p_ty = inner;
+    }
+    match p_ty {
+        Ty::Obj(n) | Ty::Generic(n, _) | Ty::Enum(n) | Ty::NumEnum(n) | Ty::NamedUnion(n) => {
+            n.rsplit('.').next().unwrap_or(n).to_ascii_lowercase().contains(&part.to_ascii_lowercase())
+        }
+        Ty::Str => part.eq_ignore_ascii_case("string"),
+        Ty::Num => part.eq_ignore_ascii_case("number"),
+        Ty::Bool => part.eq_ignore_ascii_case("boolean"),
+        _ => false,
+    }
+}
+
 pub(super) fn left_out(f: &Func) -> usize {
     // A setter's value is what it sets: `set_x()` would set `undefined`.
     if f.rest || matches!(f.call, Call::Set(_) | Call::IndexSet) {
@@ -207,12 +225,31 @@ pub(super) fn left_out(f: &Func) -> usize {
     let (kept, dropped) = f.params.split_at(f.params.len() - k);
     // One it alone names is its default there (date-fns' `ResultDate = DateType`), else unknown.
     let unknown = |p: &TParam| p.default.is_none() && !kept.iter().any(|(_, t)| mentions(t, &p.name));
-    if dropped.iter().any(|(_, t)| f.type_params.iter().any(|p| unknown(p) && mentions(t, &p.name))) { 0 } else { k }
+    if dropped.iter().any(|(_, t)| f.type_params.iter().any(|p| unknown(p) && mentions(t, &p.name))) {
+        return 0;
+    }
+    // Suppress redundant short form when an overload already names the trailing optional parameter.
+    if k > 0
+        && let Some((_, suffix)) = f.name.split_once("_with_")
+        && suffix.split("_and_").any(|part| {
+            dropped.iter().any(|(pn, pt)| param_matches_part(pn, pt, part))
+                && !kept.iter().any(|(pn, pt)| param_matches_part(pn, pt, part))
+        })
+    {
+        return 0;
+    }
+    k
 }
 
-// Its form with every argument, by `_with`, else `_full`: ProseMirror's `can_replace_with` is a method.
+// Its form with every argument, by `_with` (or `_full` when `name` already
+// carries an overload disambiguator `_with_`/`_with`).
 fn full_name(name: &str, site: &Site) -> Option<String> {
-    [format!("{name}_with"), format!("{name}_full")].into_iter().find(|n| !site.taken.contains(n) && !site.taken.contains(&format!("{n}_as")))
+    let candidates: Vec<String> = if name.contains("_with_") || name.ends_with("_with") {
+        vec![format!("{name}_full")]
+    } else {
+        vec![format!("{name}_with"), format!("{name}_full")]
+    };
+    candidates.into_iter().find(|n| !site.taken.contains(n) && !site.taken.contains(&format!("{n}_as")))
 }
 
 // The form without its trailing optional arguments: it calls the one with them.

@@ -67,7 +67,7 @@ pub fn main() {
   let dir = fs.mkdtemp_sync("target/e2e/gleam-node-")
   let file = path.join([dir, "hello.txt"])
   let read = fn(p) {
-    fs.read_file_sync_with_read_file_sync_arg_buffer_encoding(
+    fs.read_file_sync_string_buffer_encoding(
       p,
       buffer_encoding.Utf8,
     )

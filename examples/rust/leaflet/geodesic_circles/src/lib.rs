@@ -27,7 +27,7 @@ pub extern "C" fn start() {
             .with_weight(1.5)
             .with_fill_color(fill)
             .with_fill_opacity(op);
-        let c = circle_with_radius_with(&zurich, r, &c_opts);
+        let c = circle_with_radius_full(&zurich, r, &c_opts);
         c.add_to(&m);
         if outer_bounds.is_none() {
             outer_bounds = Some(c.get_bounds());
@@ -52,7 +52,7 @@ pub extern "C" fn start() {
             .with_dash_array("3 3")
             .with_fill_color("#737373")
             .with_fill_opacity(0.18);
-        circle_with_radius_with(pt, 18000.0, &b_opts).add_to(&m);
+        circle_with_radius_full(pt, 18000.0, &b_opts).add_to(&m);
 
         let d_opts = CircleMarkerOptions::default()
             .with_radius(4.5)

@@ -58,9 +58,9 @@ __attribute__((export_name("start"))) void start(void) {
     join2(core_dir, sizeof core_dir, src_dir, "core");
     join2(cli_dir, sizeof cli_dir, src_dir, "cli");
     join2(docs_dir, sizeof docs_dir, root, "docs");
-    node_mkdirSync_with_opt_MakeDirectoryOptions(core_dir, mk);
-    node_mkdirSync_with_opt_MakeDirectoryOptions(cli_dir, mk);
-    node_mkdirSync_with_opt_MakeDirectoryOptions(docs_dir, mk);
+    node_mkdirSync_with_MakeDirectoryOptions(core_dir, mk);
+    node_mkdirSync_with_MakeDirectoryOptions(cli_dir, mk);
+    node_mkdirSync_with_MakeDirectoryOptions(docs_dir, mk);
 
     join2(file_path, sizeof file_path, root, "README.md");
     node_writeFileSync(file_path, "node tree demo");

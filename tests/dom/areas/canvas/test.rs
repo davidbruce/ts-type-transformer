@@ -90,7 +90,7 @@ pub extern "C" fn run() {
 
     // putImageData: pixels written are the pixels read.
     let data = Uint8ClampedArray::<ArrayBuffer>::from_slice(&[1, 2, 3, 255, 10, 20, 30, 255]);
-    let image = ImageData::new_with_data_with(&data, 2.0, 1.0, None);
+    let image = ImageData::new_with_data_full(&data, 2.0, 1.0, None);
     check!(image.width() == 2.0 && image.height() == 1.0 && image.data().len() == 8);
     ctx.put_image_data(&image, 80.0, 60.0);
     check!(pixel(&ctx, 80.0, 60.0) == [1, 2, 3, 255]);

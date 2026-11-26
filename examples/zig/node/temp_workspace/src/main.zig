@@ -28,7 +28,7 @@ export fn start() void {
     check(b.fs.existsSync(notes) and st1.isFile() and st1.getSize() == 11);
 
     b.fs.appendFileSync(notes, "gamma\n", null);
-    const text = b.fs.readFileSyncWithReadFileSyncArg(notes, .{ .BufferEncoding = .utf8 });
+    const text = b.fs.readFileSyncString(notes, .{ .BufferEncoding = .utf8 });
     const st2 = b.fs.statSync(notes);
     check(text.eql("alpha\nbeta\ngamma\n") and st2.getSize() == 17);
 
@@ -40,7 +40,7 @@ export fn start() void {
     b.fs.renameSync(backup, archive);
     check(!b.fs.existsSync(backup) and b.fs.existsSync(archive));
 
-    const arch_text = b.fs.readFileSyncWithReadFileSyncArg(archive, .{ .BufferEncoding = .utf8 });
+    const arch_text = b.fs.readFileSyncString(archive, .{ .BufferEncoding = .utf8 });
     check(b.jsSame(arch_text, text));
 
     b.fs.unlinkSync(archive);
